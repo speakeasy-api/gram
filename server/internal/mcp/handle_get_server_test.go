@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
@@ -21,20 +22,19 @@ func TestHandleGetServer_ContentNegotiation(t *testing.T) {
 	t.Parallel()
 	ctx, testInstance := newTestMCPService(t)
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
 	// Create metadata service using the same dependencies
 	metadataService := mcpmetadata.NewService(
 		testInstance.logger,
 		testInstance.tracerProvider,
+		testenv.NewMeterProvider(t),
 		testInstance.conn,
 		testInstance.sessionManager,
 		testInstance.serverURL,
 		testInstance.siteURL,
 		testInstance.cacheAdapter,
-		authz.NewEngine(testInstance.logger, testInstance.conn, chConn, nil, workos.NewStubClient()),
+		authz.NewEngine(testInstance.logger, testInstance.conn, nil, workos.NewStubClient()),
 		testInstance.audit,
+		nil,
 	)
 
 	tests := []struct {

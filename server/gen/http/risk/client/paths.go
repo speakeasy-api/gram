@@ -37,6 +37,16 @@ func DeleteRiskPolicyRiskPath() string {
 	return "/rpc/risk.deletePolicy"
 }
 
+// ListSessionQuarantinesRiskPath returns the URL path to the risk service listSessionQuarantines HTTP endpoint.
+func ListSessionQuarantinesRiskPath() string {
+	return "/rpc/risk.listSessionQuarantines"
+}
+
+// ReleaseSessionQuarantineRiskPath returns the URL path to the risk service releaseSessionQuarantine HTTP endpoint.
+func ReleaseSessionQuarantineRiskPath() string {
+	return "/rpc/risk.releaseSessionQuarantine"
+}
+
 // ListRiskResultsRiskPath returns the URL path to the risk service listRiskResults HTTP endpoint.
 func ListRiskResultsRiskPath() string {
 	return "/rpc/risk.listResults"

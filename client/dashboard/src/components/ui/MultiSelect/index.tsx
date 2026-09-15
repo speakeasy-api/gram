@@ -11,7 +11,6 @@ import {
 
 import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/Separator";
-import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import {
   Popover,
@@ -92,6 +91,8 @@ interface MultiSelectOption {
   description?: string;
   /** Whether this option is disabled */
   disabled?: boolean;
+  /** Optional presentation class for the option row. */
+  className?: string;
   /** Custom styling for the option */
   style?: {
     /** Custom badge color */
@@ -109,6 +110,8 @@ interface MultiSelectOption {
 interface MultiSelectGroup {
   /** Group heading */
   heading: string;
+  /** Optional icon shown beside the group heading. */
+  icon?: React.ComponentType<{ className?: string }>;
   /** Options in this group */
   options: MultiSelectOption[];
 }
@@ -132,6 +135,13 @@ interface MultiSelectProps
 
   /** The default selected values when the component mounts. */
   defaultValue?: string[];
+
+  /**
+   * The selected values when the component is controlled by its caller.
+   * When omitted, the component manages its own selection initialized from
+   * `defaultValue`.
+   */
+  value?: string[];
 
   /**
    * Placeholder text to be displayed when no values are selected.
@@ -222,6 +232,15 @@ interface MultiSelectProps
    * Optional.
    */
   badgeClassName?: string;
+
+  /**
+   * Optionally replace a related set of selected values with one compact
+   * summary in the trigger. The values remain selected and available in the
+   * menu; only their trigger representation changes.
+   */
+  collapseSelectedValues?: (
+    selectedValues: string[],
+  ) => { values: string[]; summary: React.ReactNode } | null;
 
   /**
    * If true, disables the component completely.
@@ -351,7 +370,8 @@ function MultiSelectOptionItem({
       }`}
       className={cn(
         "cursor-pointer",
-        option.disabled && "cursor-not-allowed opacity-50",
+        option.disabled && "cursor-not-allowed opacity-60",
+        option.className,
       )}
       disabled={option.disabled}
     >
@@ -391,6 +411,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
       onValueChange,
       variant,
       defaultValue = [],
+      value,
       placeholder = "Select options",
       animation = 0,
       animationConfig,
@@ -404,6 +425,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
       singleLine = false,
       popoverClassName,
       badgeClassName,
+      collapseSelectedValues,
       disabled = false,
       responsive,
       minWidth,
@@ -416,8 +438,20 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
     },
     ref,
   ) => {
-    const [selectedValues, setSelectedValues] =
+    const [uncontrolledSelectedValues, setUncontrolledSelectedValues] =
       React.useState<string[]>(defaultValue);
+    const isControlled = value !== undefined;
+    const selectedValues = value ?? uncontrolledSelectedValues;
+
+    const updateSelectedValues = React.useCallback(
+      (next: string[]) => {
+        if (!isControlled) {
+          setUncontrolledSelectedValues(next);
+        }
+        onValueChange(next);
+      },
+      [isControlled, onValueChange],
+    );
     const [isPopoverOpen, setIsPopoverOpen] = React.useState(false);
     const [isAnimating, setIsAnimating] = React.useState(false);
     const [searchValue, setSearchValue] = React.useState("");
@@ -485,11 +519,13 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
     );
 
     const resetToDefault = React.useCallback(() => {
-      setSelectedValues(defaultValue);
+      if (!isControlled) {
+        setUncontrolledSelectedValues(defaultValue);
+      }
       setIsPopoverOpen(false);
       setSearchValue("");
       onValueChange(defaultValue);
-    }, [defaultValue, onValueChange]);
+    }, [defaultValue, isControlled, onValueChange]);
 
     const buttonRef = React.useRef<HTMLButtonElement>(null);
 
@@ -499,12 +535,10 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
         reset: resetToDefault,
         getSelectedValues: () => selectedValues,
         setSelectedValues: (values: string[]) => {
-          setSelectedValues(values);
-          onValueChange(values);
+          updateSelectedValues(values);
         },
         clear: () => {
-          setSelectedValues([]);
-          onValueChange([]);
+          updateSelectedValues([]);
         },
         focus: () => {
           if (buttonRef.current) {
@@ -522,7 +556,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
           }
         },
       }),
-      [resetToDefault, selectedValues, onValueChange],
+      [resetToDefault, selectedValues, updateSelectedValues],
     );
 
     const [screenSize, setScreenSize] = React.useState<
@@ -743,8 +777,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
       } else if (event.key === "Backspace" && !event.currentTarget.value) {
         const newSelectedValues = [...selectedValues];
         newSelectedValues.pop();
-        setSelectedValues(newSelectedValues);
-        onValueChange(newSelectedValues);
+        updateSelectedValues(newSelectedValues);
       }
     };
 
@@ -755,11 +788,21 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
       const newSelectedValues = selectedValues.includes(optionValue)
         ? selectedValues.filter((value) => value !== optionValue)
         : [...selectedValues, optionValue];
-      setSelectedValues(newSelectedValues);
-      onValueChange(newSelectedValues);
+      updateSelectedValues(newSelectedValues);
       if (closeOnSelect) {
         setIsPopoverOpen(false);
       }
+    };
+
+    // A disabled option cannot be newly selected from the menu, but an
+    // already-selected option must still be removable. This lets callers show
+    // legacy or unavailable values without making them permanent selections.
+    const removeOption = (optionValue: string) => {
+      if (disabled) return;
+      const newSelectedValues = selectedValues.filter(
+        (value) => value !== optionValue,
+      );
+      updateSelectedValues(newSelectedValues);
     };
 
     const trimmedSearchValue = searchValue.trim();
@@ -778,8 +821,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
     const handleCreate = () => {
       if (disabled || !canCreateFromSearch) return;
       const newSelectedValues = [...selectedValues, trimmedSearchValue];
-      setSelectedValues(newSelectedValues);
-      onValueChange(newSelectedValues);
+      updateSelectedValues(newSelectedValues);
       setSearchValue("");
       if (closeOnSelect) {
         setIsPopoverOpen(false);
@@ -788,23 +830,42 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
 
     const handleClear = () => {
       if (disabled) return;
-      setSelectedValues([]);
-      onValueChange([]);
+      updateSelectedValues([]);
     };
+
+    const collapsedSelection = collapseSelectedValues?.(selectedValues);
+    const collapsedValues = new Set(collapsedSelection?.values);
+    const visibleSelectedValues = selectedValues.filter(
+      (value) => !collapsedValues.has(value),
+    );
 
     const handleTogglePopover = () => {
       if (disabled) return;
       setIsPopoverOpen((prev) => !prev);
     };
 
+    const handleTriggerKeyDown = (event: React.KeyboardEvent) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      handleTogglePopover();
+    };
+
+    const stopNestedActionKeyDown = (event: React.KeyboardEvent) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.stopPropagation();
+      }
+    };
+
     const clearExtraOptions = () => {
       if (disabled) return;
-      const newSelectedValues = selectedValues.slice(
-        0,
-        responsiveSettings.maxCount,
+      const retainedVisibleValues = new Set(
+        visibleSelectedValues.slice(0, responsiveSettings.maxCount),
       );
-      setSelectedValues(newSelectedValues);
-      onValueChange(newSelectedValues);
+      const newSelectedValues = selectedValues.filter(
+        (value) =>
+          collapsedValues.has(value) || retainedVisibleValues.has(value),
+      );
+      updateSelectedValues(newSelectedValues);
     };
 
     const toggleAll = () => {
@@ -814,8 +875,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
         handleClear();
       } else {
         const allValues = allOptions.map((option) => option.value);
-        setSelectedValues(allValues);
-        onValueChange(allValues);
+        updateSelectedValues(allValues);
       }
 
       if (closeOnSelect) {
@@ -824,15 +884,21 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
     };
 
     React.useEffect(() => {
-      if (!resetOnDefaultValueChange) return;
+      if (isControlled || !resetOnDefaultValueChange) return;
       const prevDefaultValue = prevDefaultValueRef.current;
       if (!arraysEqual(prevDefaultValue, defaultValue)) {
         if (!arraysEqual(selectedValues, defaultValue)) {
-          setSelectedValues(defaultValue);
+          setUncontrolledSelectedValues(defaultValue);
         }
         prevDefaultValueRef.current = [...defaultValue];
       }
-    }, [defaultValue, selectedValues, arraysEqual, resetOnDefaultValueChange]);
+    }, [
+      defaultValue,
+      selectedValues,
+      arraysEqual,
+      isControlled,
+      resetOnDefaultValueChange,
+    ]);
 
     const getWidthConstraints = () => {
       const defaultMinWidth = screenSize === "mobile" ? "0px" : "200px";
@@ -947,40 +1013,46 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                   .join(", ")}`}
           </div>
 
-          <PopoverTrigger asChild>
-            <Button
-              ref={buttonRef}
-              // The trigger is a field, not a filled button: without an explicit
-              // variant it falls back to `primary`, whose active state flashes
-              // the solid dark fill through the bg-inherit override on click.
-              variant="secondary"
-              {...props}
+          <div
+            className={cn(
+              "relative flex h-auto min-h-[42px] items-center justify-between border bg-inherit p-1 hover:bg-inherit",
+              autoSize ? "w-auto" : "w-full",
+              singleLine && "h-[42px] min-h-0",
+              responsiveSettings.compactMode && "min-h-8 text-sm",
+              screenSize === "mobile" && "min-h-12 text-base",
+              disabled && "cursor-not-allowed opacity-50",
+              className,
+            )}
+            style={{
+              ...widthConstraints,
+              maxWidth: `min(${widthConstraints.maxWidth}, 100%)`,
+            }}
+          >
+            <PopoverTrigger asChild>
+              <button
+                ref={buttonRef}
+                type="button"
+                {...props}
+                onKeyDown={handleTriggerKeyDown}
+                role="combobox"
+                disabled={disabled}
+                aria-expanded={isPopoverOpen}
+                aria-haspopup="listbox"
+                aria-controls={isPopoverOpen ? listboxId : undefined}
+                aria-describedby={`${triggerDescriptionId} ${selectedCountId}`}
+                aria-label={`Multi-select: ${selectedValues.length} of ${
+                  getAllOptions().length
+                } options selected. ${placeholder}`}
+                inert={disabled || undefined}
+                className="absolute inset-0 z-0 cursor-pointer focus:ring-2 focus:ring-inset focus:outline-none disabled:cursor-not-allowed"
+              />
+            </PopoverTrigger>
+            <div
+              className="pointer-events-none relative z-10 flex w-full items-center justify-between"
               onClick={handleTogglePopover}
-              disabled={disabled}
-              role="combobox"
-              aria-expanded={isPopoverOpen}
-              aria-haspopup="listbox"
-              aria-controls={isPopoverOpen ? listboxId : undefined}
-              aria-describedby={`${triggerDescriptionId} ${selectedCountId}`}
-              aria-label={`Multi-select: ${selectedValues.length} of ${
-                getAllOptions().length
-              } options selected. ${placeholder}`}
-              className={cn(
-                "flex h-auto min-h-[42px] items-center justify-between border bg-inherit p-1 hover:bg-inherit [&_svg]:pointer-events-auto",
-                autoSize ? "w-auto" : "w-full",
-                singleLine && "h-[42px] min-h-0",
-                responsiveSettings.compactMode && "min-h-8 text-sm",
-                screenSize === "mobile" && "min-h-12 text-base",
-                disabled && "cursor-not-allowed opacity-50",
-                className,
-              )}
-              style={{
-                ...widthConstraints,
-                maxWidth: `min(${widthConstraints.maxWidth}, 100%)`,
-              }}
             >
               {selectedValues.length > 0 ? (
-                <div className="flex w-full items-center justify-between">
+                <>
                   <div
                     className={cn(
                       "flex min-w-0 flex-1 items-center gap-1",
@@ -991,7 +1063,12 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                     )}
                     style={{}}
                   >
-                    {selectedValues
+                    {collapsedSelection?.summary && (
+                      <div className="pointer-events-auto">
+                        {collapsedSelection.summary}
+                      </div>
+                    )}
+                    {visibleSelectedValues
                       .slice(0, responsiveSettings.maxCount)
                       .map((value) => {
                         const option = getOptionByValue(value);
@@ -1028,7 +1105,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                                 : "min-w-0 max-w-full shrink",
                               screenSize === "mobile" &&
                                 "max-w-[120px] truncate",
-                              "[&>svg]:pointer-events-auto",
+                              "pointer-events-none",
                               badgeClassName,
                             )}
                             style={{
@@ -1055,25 +1132,16 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                             <span className="min-w-0 truncate">
                               {option.label}
                             </span>
-                            <div
-                              role="button"
-                              tabIndex={0}
+                            <button
+                              type="button"
+                              disabled={disabled}
                               onClick={(event) => {
                                 event.stopPropagation();
-                                toggleOption(value);
+                                removeOption(value);
                               }}
-                              onKeyDown={(event) => {
-                                if (
-                                  event.key === "Enter" ||
-                                  event.key === " "
-                                ) {
-                                  event.preventDefault();
-                                  event.stopPropagation();
-                                  toggleOption(value);
-                                }
-                              }}
+                              onKeyDown={stopNestedActionKeyDown}
                               aria-label={`Remove ${option.label} from selection`}
-                              className="flex h-4 w-4 shrink-0 cursor-pointer hover:bg-white/20 focus:ring-1 focus:ring-white/50 focus:outline-none"
+                              className="pointer-events-auto flex h-4 w-4 shrink-0 cursor-pointer hover:bg-white/20 focus:ring-1 focus:ring-white/50 focus:outline-none"
                             >
                               <XIcon
                                 className={cn(
@@ -1082,12 +1150,13 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                                     "h-2.5 w-2.5",
                                 )}
                               />
-                            </div>
+                            </button>
                           </Badge>
                         );
                       })
                       .filter(Boolean)}
-                    {selectedValues.length > responsiveSettings.maxCount && (
+                    {visibleSelectedValues.length >
+                      responsiveSettings.maxCount && (
                       <Badge
                         className={cn(
                           "text-foreground border-foreground/1 bg-transparent hover:bg-transparent",
@@ -1096,7 +1165,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                           responsiveSettings.compactMode &&
                             "px-1.5 py-0.5 text-xs",
                           singleLine && "shrink-0 whitespace-nowrap",
-                          "[&>svg]:pointer-events-auto",
+                          "pointer-events-none",
                           badgeClassName,
                         )}
                         style={{
@@ -1107,41 +1176,47 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                         }}
                       >
                         {`+ ${
-                          selectedValues.length - responsiveSettings.maxCount
+                          visibleSelectedValues.length -
+                          responsiveSettings.maxCount
                         } more`}
-                        <XIcon
-                          className={cn(
-                            "ml-2 h-4 w-4 cursor-pointer",
-                            responsiveSettings.compactMode && "ml-1 h-3 w-3",
-                          )}
+                        <button
+                          type="button"
+                          disabled={disabled}
+                          aria-label={`Remove ${
+                            visibleSelectedValues.length -
+                            responsiveSettings.maxCount
+                          } extra selected options`}
+                          className="pointer-events-auto ml-2 flex shrink-0 disabled:cursor-not-allowed"
                           onClick={(event) => {
                             event.stopPropagation();
                             clearExtraOptions();
                           }}
-                        />
+                          onKeyDown={stopNestedActionKeyDown}
+                        >
+                          <XIcon
+                            className={cn(
+                              "h-4 w-4 cursor-pointer",
+                              responsiveSettings.compactMode && "ml-1 h-3 w-3",
+                            )}
+                          />
+                        </button>
                       </Badge>
                     )}
                   </div>
                   <div className="flex shrink-0 items-center justify-between">
-                    <div
-                      role="button"
-                      tabIndex={0}
+                    <button
+                      type="button"
+                      disabled={disabled}
                       onClick={(event) => {
                         event.stopPropagation();
                         handleClear();
                       }}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" || event.key === " ") {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          handleClear();
-                        }
-                      }}
+                      onKeyDown={stopNestedActionKeyDown}
                       aria-label={`Clear all ${selectedValues.length} selected options`}
-                      className="text-muted-foreground hover:text-foreground focus:ring-ring mx-2 flex h-4 w-4 cursor-pointer items-center justify-center focus:ring-2 focus:ring-offset-1 focus:outline-none"
+                      className="text-muted-foreground hover:text-foreground focus:ring-ring pointer-events-auto mx-2 flex h-4 w-4 cursor-pointer items-center justify-center focus:ring-2 focus:ring-offset-1 focus:outline-none"
                     >
                       <XIcon className="h-4 w-4" />
-                    </div>
+                    </button>
                     <Separator
                       orientation="vertical"
                       className="flex h-full min-h-6"
@@ -1151,7 +1226,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                       aria-hidden="true"
                     />
                   </div>
-                </div>
+                </>
               ) : (
                 <div className="mx-auto flex w-full items-center justify-between">
                   <span className="text-muted-foreground mx-3 text-sm">
@@ -1160,8 +1235,8 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                   <ChevronDown className="text-muted-foreground mx-2 h-4 cursor-pointer" />
                 </div>
               )}
-            </Button>
-          </PopoverTrigger>
+            </div>
+          </div>
           <PopoverContent
             id={listboxId}
             role="listbox"
@@ -1279,18 +1354,29 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                   </CommandGroup>
                 )}
                 {isGroupedOptions(filteredOptions) ? (
-                  filteredOptions.map((group) => (
-                    <CommandGroup key={group.heading} heading={group.heading}>
-                      {group.options.map((option) => (
-                        <MultiSelectOptionItem
-                          key={option.value}
-                          option={option}
-                          isSelected={selectedValues.includes(option.value)}
-                          onToggle={() => toggleOption(option.value)}
-                        />
-                      ))}
-                    </CommandGroup>
-                  ))
+                  filteredOptions.map((group) => {
+                    const GroupIcon = group.icon;
+                    return (
+                      <CommandGroup
+                        key={group.heading}
+                        heading={
+                          <span className="flex items-center gap-1.5">
+                            {GroupIcon && <GroupIcon className="h-3.5 w-3.5" />}
+                            {group.heading}
+                          </span>
+                        }
+                      >
+                        {group.options.map((option) => (
+                          <MultiSelectOptionItem
+                            key={option.value}
+                            option={option}
+                            isSelected={selectedValues.includes(option.value)}
+                            onToggle={() => toggleOption(option.value)}
+                          />
+                        ))}
+                      </CommandGroup>
+                    );
+                  })
                 ) : (
                   <CommandGroup>
                     {filteredOptions.map((option) => (

@@ -106,8 +106,8 @@ func (q *Queries) ListActorSpendForRules(ctx context.Context, projectIDs []strin
 		Where(squirrel.Eq{"gram_project_id": projectIDs}).
 		Where("time_bucket >= toStartOfMinute(fromUnixTimestamp64Nano(?))", timeStart).
 		Where("time_bucket <= toStartOfMinute(fromUnixTimestamp64Nano(?))", timeEnd).
-		Where("user_email != ''").
-		GroupBy("user_email")
+		Where("user_email != ''"). //nolint:glint // fold-neutral emptiness check; spend enforcement identity semantics pending a product decision (DNO-857 tail)
+		GroupBy("user_email")      //nolint:glint // actor rows keyed by literal email; casing collapsed in Go after read - enforcement fold pending decision (DNO-857 tail)
 
 	query, args, err := sb.ToSql()
 	if err != nil {
@@ -136,8 +136,8 @@ func (q *Queries) ListActorWindowSpendForRules(
 		Where(squirrel.Eq{"gram_project_id": projectIDs}).
 		Where("time_bucket >= toStartOfMinute(fromUnixTimestamp64Nano(?))", timeStart).
 		Where("time_bucket <= toStartOfMinute(fromUnixTimestamp64Nano(?))", timeEnd).
-		Where("user_email != ''").
-		GroupBy("user_email")
+		Where("user_email != ''"). //nolint:glint // fold-neutral emptiness check; spend enforcement identity semantics pending a product decision (DNO-857 tail)
+		GroupBy("user_email")      //nolint:glint // actor rows keyed by literal email; casing collapsed in Go after read - enforcement fold pending decision (DNO-857 tail)
 
 	query, args, err := sb.ToSql()
 	if err != nil {
@@ -185,8 +185,8 @@ func (q *Queries) ListActorWindowSpendForRulesByEmail(
 		Where(squirrel.Eq{"gram_project_id": projectIDs}).
 		Where("time_bucket >= toStartOfMinute(fromUnixTimestamp64Nano(?))", timeStart).
 		Where("time_bucket <= toStartOfMinute(fromUnixTimestamp64Nano(?))", timeEnd).
-		Where("lowerUTF8(user_email) = ?", email).
-		GroupBy("user_email")
+		Where("lowerUTF8(user_email) = ?", email). //nolint:glint // spend ENFORCEMENT matches the literal actor email deliberately - folding changes blocking semantics and needs its own decision (DNO-857 tail)
+		GroupBy("user_email")                      //nolint:glint // actor rows keyed by literal email; casing collapsed in Go after read - enforcement fold pending decision (DNO-857 tail)
 
 	query, args, err := sb.ToSql()
 	if err != nil {

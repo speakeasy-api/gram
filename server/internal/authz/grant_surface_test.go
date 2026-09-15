@@ -19,6 +19,10 @@ func TestValidateGrantSurface(t *testing.T) {
 		// granted at all.
 		{Scope: string(ScopeChatRead)},
 		{Scope: string(ScopeChatWrite)},
+		{Scope: string(ScopeAgentRead)},
+		{Scope: string(ScopeAgentWrite)},
+		{Scope: string(ScopeAgentAuthorize)},
+		{Scope: string(ScopeAgentTransfer)},
 	}))
 	require.NoError(t, ValidateGrantSurface(GrantSurfaceRiskPolicy, []*RoleGrant{
 		{Scope: string(ScopeRiskPolicyEvaluate)},

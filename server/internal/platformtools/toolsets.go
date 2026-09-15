@@ -18,6 +18,12 @@ const ManagedAssistantPlatformToolsetSlug = "managed-assistant"
 // organization.
 const PlatformMCPReadToolsetSlug = "platform"
 
+// ResearchToolsetSlug is the reserved slug for the MCP research agent's web
+// tools (search and page fetch). No assistant is granted it by default; the
+// research-agent runner attaches it explicitly, and its tools are gated on
+// the mcp_approval feature.
+const ResearchToolsetSlug = "research"
+
 // Toolset is a virtual collection of platform tools exposed at runtime via a
 // dedicated MCP endpoint. Platform toolsets are not persisted; the slug is
 // hardcoded per consumer and wired in code at process startup.

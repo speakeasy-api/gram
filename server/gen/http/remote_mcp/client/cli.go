@@ -60,6 +60,51 @@ func BuildCreateServerPayload(remoteMcpCreateServerBody string, remoteMcpCreateS
 	return v, nil
 }
 
+// BuildCreateServerAndMcpServerPayload builds the payload for the remoteMcp
+// createServerAndMcpServer endpoint from CLI flags.
+func BuildCreateServerAndMcpServerPayload(remoteMcpCreateServerAndMcpServerBody string, remoteMcpCreateServerAndMcpServerSessionToken string, remoteMcpCreateServerAndMcpServerApikeyToken string, remoteMcpCreateServerAndMcpServerProjectSlugInput string) (*remotemcp.CreateServerAndMcpServerPayload, error) {
+	var err error
+	var body CreateServerAndMcpServerRequestBody
+	{
+		err = json.Unmarshal([]byte(remoteMcpCreateServerAndMcpServerBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"abc123\",\n      \"transport_type\": \"abc123\",\n      \"url\": \"https://example.com/foo\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.url", body.URL, goa.FormatURI))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if remoteMcpCreateServerAndMcpServerSessionToken != "" {
+			sessionToken = &remoteMcpCreateServerAndMcpServerSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if remoteMcpCreateServerAndMcpServerApikeyToken != "" {
+			apikeyToken = &remoteMcpCreateServerAndMcpServerApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if remoteMcpCreateServerAndMcpServerProjectSlugInput != "" {
+			projectSlugInput = &remoteMcpCreateServerAndMcpServerProjectSlugInput
+		}
+	}
+	v := &remotemcp.CreateServerAndMcpServerPayload{
+		Name:          body.Name,
+		URL:           body.URL,
+		TransportType: body.TransportType,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildListServersPayload builds the payload for the remoteMcp listServers
 // endpoint from CLI flags.
 func BuildListServersPayload(remoteMcpListServersSessionToken string, remoteMcpListServersApikeyToken string, remoteMcpListServersProjectSlugInput string) (*remotemcp.ListServersPayload, error) {

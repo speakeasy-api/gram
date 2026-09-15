@@ -14,19 +14,17 @@ import {
 import { cn } from "@/lib/utils";
 import { Check, ChevronDown } from "lucide-react";
 import { useState } from "react";
-import { BREAKDOWN_GROUPS, breakdownLabel } from "./breakdown-options";
+import { type MeterBreakdownOption } from "./meter-breakdown-options";
 
-/**
- * Compact, searchable picker for the token-usage panel's breakdown: a small
- * "By …" trigger opening a grouped command palette (Usage / Organization /
- * People / …) instead of one very long flat dropdown.
- */
 export function BreakdownPicker({
   value,
+  groups,
+  label,
   onChange,
 }: {
-  // The selected breakdown: a Dimension value or a special-mode sentinel.
   value: string;
+  groups: { heading: string; options: MeterBreakdownOption[] }[];
+  label: string;
   onChange: (value: string) => void;
 }): JSX.Element {
   const [open, setOpen] = useState(false);
@@ -40,7 +38,7 @@ export function BreakdownPicker({
           aria-expanded={open}
           className="border-border hover:bg-muted data-[state=open]:bg-muted inline-flex items-center gap-1 border bg-transparent px-2 py-0.5 text-xs transition-colors"
         >
-          By {breakdownLabel(value).toLowerCase()}
+          By {label.toLowerCase()}
           <ChevronDown className="!size-3 opacity-50" />
         </button>
       </PopoverTrigger>
@@ -49,7 +47,7 @@ export function BreakdownPicker({
           <CommandInput placeholder="Search breakdowns…" className="h-9" />
           <CommandList>
             <CommandEmpty>No breakdowns found.</CommandEmpty>
-            {BREAKDOWN_GROUPS.map((group) => {
+            {groups.map((group) => {
               const options = group.options;
               if (options.length === 0) return null;
               return (

@@ -1,7 +1,6 @@
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { Page } from "@/components/page-layout";
 import { InsightsConfig } from "@/components/insights-dock";
-import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { ErrorAlert } from "@/components/ui/Alert";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Button } from "@/components/ui/Button";
@@ -18,6 +17,7 @@ import {
   TOOL_USAGE_VALID_TYPES,
   USER_EMAIL_FILTER_PATH,
   buildServerOptionGroups,
+  encodeGatewayServerFilter,
   encodeHostedServerFilter,
   encodeShadowServerFilter,
   parseTargetFilter,
@@ -54,7 +54,7 @@ import { Icon } from "@/components/ui/Icon";
 import { ChartCard } from "@/components/chart/ChartCard";
 import { ACCENT_RED, TOOLTIP } from "@/components/chart/palette";
 import { useSeriesColors } from "@/components/chart/useSeriesColors";
-import { MetricCard, MetricCardGroup } from "@/components/chart/MetricCard";
+import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
 import { formatChartZoomRangeLabel } from "@/components/chart/chartUtils";
 import { useChartZoom } from "@/components/chart/useChartZoom";
 import { useExpandedChart } from "@/hooks/useExpandedChart";
@@ -294,6 +294,13 @@ export function InsightsToolsContent(): JSX.Element {
         .map((filter) => filter.id),
     [serverFilters],
   );
+  const metaMcpServerIds = useMemo(
+    () =>
+      serverFilters
+        .filter((filter) => filter.type === "gateway")
+        .map((filter) => filter.id),
+    [serverFilters],
+  );
   const userFilters = useMemo(() => {
     const emails = [
       ...new Set([...selectedUserEmails(activeFilters), ...roleEmails]),
@@ -317,6 +324,8 @@ export function InsightsToolsContent(): JSX.Element {
         hostedToolsetSlugs.length > 0 ? hostedToolsetSlugs : undefined,
       shadowServerNames:
         shadowServerNames.length > 0 ? shadowServerNames : undefined,
+      metaMcpServerIds:
+        metaMcpServerIds.length > 0 ? metaMcpServerIds : undefined,
       targetTypes: toTargetTypes(selectedHookTypes),
       userFilters: userFilters.length > 0 ? userFilters : undefined,
       hookSources: hookSourceFilters.length > 0 ? hookSourceFilters : undefined,
@@ -327,6 +336,7 @@ export function InsightsToolsContent(): JSX.Element {
       to,
       hostedToolsetSlugs,
       shadowServerNames,
+      metaMcpServerIds,
       selectedHookTypes,
       userFilters,
       hookSourceFilters,
@@ -339,6 +349,7 @@ export function InsightsToolsContent(): JSX.Element {
     to.toISOString(),
     hostedToolsetSlugs,
     shadowServerNames,
+    metaMcpServerIds,
     userFilters,
     hookSourceFilters,
     selectedHookTypes,
@@ -531,6 +542,7 @@ export function InsightsToolsContent(): JSX.Element {
       buildServerOptionGroups({
         hostedServers: filterOptionsData?.hostedServers ?? [],
         shadowServers: filterOptionsData?.shadowServers ?? [],
+        gateways: filterOptionsData?.gateways ?? [],
         activeFilters,
         serverNameMappings,
       }),
@@ -538,6 +550,7 @@ export function InsightsToolsContent(): JSX.Element {
       activeFilters,
       filterOptionsData?.hostedServers,
       filterOptionsData?.shadowServers,
+      filterOptionsData?.gateways,
       serverNameMappings,
     ],
   );
@@ -598,14 +611,12 @@ export function InsightsToolsContent(): JSX.Element {
               your project
             </p>
           </div>
-          <div className="relative flex-1">
-            <div
-              className="pointer-events-none h-full select-none"
-              aria-hidden="true"
-            >
-              <ObservabilitySkeleton />
-            </div>
-            <EnableLoggingOverlay onEnabled={refetch} />
+          <div className="flex-1">
+            <EnableLoggingOverlay
+              onEnabled={refetch}
+              screenshotSrc="/empty-states/mcp_insights_empty.png"
+              screenshotAlt="MCP and Tools insights dashboard with usage data"
+            />
           </div>
         </div>
       ) : (
@@ -1940,6 +1951,10 @@ function HooksAnalytics({
 
   const targetFiltersByLabel = useMemo(() => {
     const filters = new Map<string, string[]>();
+    // Targets sharing a display label share a chart row; clicking it filters to all of them.
+    const addServerFilter = (label: string, value: string) => {
+      filters.set(label, [...(filters.get(label) ?? []), value]);
+    };
     for (const target of targets ?? []) {
       const label = displayTargetLabel(
         target.targetLabel,
@@ -1947,9 +1962,11 @@ function HooksAnalytics({
         serverNameMappings,
       );
       if (target.targetType === "hosted_mcp_server") {
-        filters.set(label, [encodeHostedServerFilter(target.targetId)]);
+        addServerFilter(label, encodeHostedServerFilter(target.targetId));
+      } else if (target.targetType === "meta_mcp_server") {
+        addServerFilter(label, encodeGatewayServerFilter(target.targetId));
       } else if (target.targetType === "shadow_mcp_server") {
-        filters.set(label, [encodeShadowServerFilter(target.targetId)]);
+        addServerFilter(label, encodeShadowServerFilter(target.targetId));
       } else if (target.targetType === "local_tool") {
         filters.set(label, ["local_tool"]);
       } else if (target.targetType === "skill") {
@@ -2019,7 +2036,7 @@ function HooksAnalytics({
 
   return (
     <div className="space-y-4">
-      <MetricCardGroup className={cn(expandedChart && "hidden")}>
+      <StatTileGroup className={cn(expandedChart && "hidden")}>
         {summaryIsError && !summaryData ? (
           <div className="w-full">
             <ErrorAlert
@@ -2035,45 +2052,40 @@ function HooksAnalytics({
           </>
         ) : (
           <>
-            <MetricCard
+            <StatTile
               title="Avg Success Rate"
               value={kpis?.avgSuccessRate ?? 0}
               tone="success"
               format="percent"
               icon="circle-check"
-              accentColor="green"
             />
-            <MetricCard
+            <StatTile
               title="Total Events"
               value={kpis?.totalEvents ?? 0}
               tone="information"
               icon="activity"
-              accentColor="purple"
             />
-            <MetricCard
+            <StatTile
               title="Active Users"
               value={kpis?.activeUsers ?? 0}
               tone="information"
               icon="users"
-              accentColor="yellow"
             />
-            <MetricCard
+            <StatTile
               title="Active Targets"
               value={kpis?.activeTargets ?? 0}
               tone="information"
               icon="monitor"
-              accentColor="blue"
             />
-            <MetricCard
+            <StatTile
               title="Unique Tools"
               value={kpis?.uniqueTools ?? 0}
               tone="information"
               icon="wrench"
-              accentColor="orange"
             />
           </>
         )}
-      </MetricCardGroup>
+      </StatTileGroup>
 
       <div
         className={cn(

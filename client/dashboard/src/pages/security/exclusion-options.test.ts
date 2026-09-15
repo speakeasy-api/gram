@@ -75,6 +75,27 @@ describe("exclusionOptions", () => {
     });
   });
 
+  it("offers a preset rule before any findings load", () => {
+    const options = exclusionOptions([], undefined, "pii.email_address");
+    expect(options.map((o) => o.value)).toEqual(["rule", "custom"]);
+    expect(options[0]?.fields).toMatchObject({
+      matchType: "rule_id",
+      matchValue: "pii.email_address",
+    });
+  });
+
+  it("lets the selection's shared rule win over a preset", () => {
+    const options = exclusionOptions(
+      [result({ ruleId: "generic-api-key" })],
+      undefined,
+      "pii.email_address",
+    );
+    expect(options.find((o) => o.value === "rule")?.fields).toMatchObject({
+      matchType: "rule_id",
+      matchValue: "generic-api-key",
+    });
+  });
+
   it("offers only custom when rows share neither rule nor source", () => {
     expect(
       values([

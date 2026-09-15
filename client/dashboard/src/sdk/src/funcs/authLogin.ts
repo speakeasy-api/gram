@@ -103,6 +103,7 @@ async function $do(
     "email": payload?.email,
     "org_name": payload?.org_name,
     "redirect": payload?.redirect,
+    "support_handoff": payload?.support_handoff,
   });
 
   const headers = new Headers(compactMap({

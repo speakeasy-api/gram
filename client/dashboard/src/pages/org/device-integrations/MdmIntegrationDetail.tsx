@@ -124,18 +124,16 @@ function MdmIntegrationDetailInner({
 
   const scheduleRows = useMemo(
     () =>
-      provider.schedules.map(
-        (schedule): DeviceIntegrationScheduleRow => ({
-          key: `${provider.id}:${schedule.schedule}`,
-          schedule,
-          runtime: runtimeOrDefault(runtimes, schedule.schedule),
-          configured: form.isConfigured,
-          connectionEnabled: form.enabled,
-          role,
-          toggle,
-          retry,
-        }),
-      ),
+      provider.schedules.map((schedule): DeviceIntegrationScheduleRow => ({
+        key: `${provider.id}:${schedule.schedule}`,
+        schedule,
+        runtime: runtimeOrDefault(runtimes, schedule.schedule),
+        configured: form.isConfigured,
+        connectionEnabled: form.enabled,
+        role,
+        toggle,
+        retry,
+      })),
     [provider, runtimes, form.isConfigured, form.enabled, role, toggle, retry],
   );
 

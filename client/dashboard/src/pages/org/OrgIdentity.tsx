@@ -1,4 +1,4 @@
-import { Page } from "@/components/page-layout";
+import { SettingsPage } from "@/components/page-templates";
 import { RequireScope } from "@/components/require-scope";
 import { Heading } from "@/components/ui/Heading";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
@@ -79,16 +79,16 @@ function ConfigureButton({ sectionId }: { sectionId: IdentitySectionId }) {
  * of bouncing them straight to the WorkOS admin portal. Used when SSO / Directory
  * Sync has not been configured yet so first-run setup happens in-product.
  */
-function SetupStepButton({ step }: { step: "connect-idp" | "directory-sync" }) {
+function SetupStepButton() {
   const orgRoutes = useOrgRoutes();
 
   return (
     <RequireScope scope="org:admin" level="component">
-      <orgRoutes.setup.Link queryParams={{ step }}>
+      <orgRoutes.setupTask.Link params={["idp"]}>
         <Button variant="secondary" size="sm">
           Configure
         </Button>
-      </orgRoutes.setup.Link>
+      </orgRoutes.setupTask.Link>
     </RequireScope>
   );
 }
@@ -209,7 +209,7 @@ function SSOConfigureControl({
 }) {
   if (!featureEnabled) return <ConfigureButton sectionId="sso" />;
   if (active) return <SSOConfigureButton />;
-  return <SetupStepButton step="connect-idp" />;
+  return <SetupStepButton />;
 }
 
 /**
@@ -225,7 +225,7 @@ function DirectorySyncConfigureControl({
 }) {
   if (!featureEnabled) return <ConfigureButton sectionId="directory_sync" />;
   if (active) return <DirectorySyncConfigureButton />;
-  return <SetupStepButton step="directory-sync" />;
+  return <SetupStepButton />;
 }
 
 function IdentitySection({
@@ -286,23 +286,14 @@ function IdentitySection({
 }
 
 export default function OrgIdentity(): JSX.Element {
-  return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <RequireScope scope={["org:read", "org:admin"]} level="page">
-          <OrgIdentityInner />
-        </RequireScope>
-      </Page.Body>
-    </Page>
-  );
+  return <OrgIdentityInner />;
 }
 
 function OrgIdentityInner() {
   const organization = useOrganization();
-  const { data: features } = useProductFeatures();
+  const { data: features } = useProductFeatures({
+    organizationId: organization.id,
+  });
 
   const ssoFeatureEnabled = features?.ssoEnabled ?? false;
   const scimFeatureEnabled = features?.scimEnabled ?? false;
@@ -310,69 +301,66 @@ function OrgIdentityInner() {
   const scimActive = organization.scimEnabled === true;
 
   return (
-    <Page.Section>
-      <Page.Section.Title>Identity</Page.Section.Title>
-      <Page.Section.Body>
-        <div className="flex flex-col gap-6">
-          <IdentitySection
-            sectionId="sso"
-            heading="Single Sign-On"
-            description="Set up Single Sign-On (SSO) to allow your team to sign in to Speakeasy with your identity provider."
-            providerIcon={<Lock className="text-muted-foreground h-5 w-5" />}
-            providerTitle="SSO"
-            providerSubtitle={
-              ssoActive
-                ? "Your identity provider is connected."
-                : "Choose an identity provider to get started."
-            }
-            learnMoreText="Learn more about SSO"
-            learnMoreHref="https://www.speakeasy.com/docs"
-            active={ssoActive}
-            configureButton={
-              <SSOConfigureControl
-                featureEnabled={ssoFeatureEnabled}
-                active={ssoActive}
-              />
-            }
-          />
+    <SettingsPage scope={["org:read", "org:admin"]} title="Identity">
+      <div className="flex flex-col gap-6">
+        <IdentitySection
+          sectionId="sso"
+          heading="Single Sign-On"
+          description="Set up Single Sign-On (SSO) to allow your team to sign in to Speakeasy with your identity provider."
+          providerIcon={<Lock className="text-muted-foreground h-5 w-5" />}
+          providerTitle="SSO"
+          providerSubtitle={
+            ssoActive
+              ? "Your identity provider is connected."
+              : "Choose an identity provider to get started."
+          }
+          learnMoreText="Learn more about SSO"
+          learnMoreHref="https://www.speakeasy.com/docs"
+          active={ssoActive}
+          configureButton={
+            <SSOConfigureControl
+              featureEnabled={ssoFeatureEnabled}
+              active={ssoActive}
+            />
+          }
+        />
 
-          <IdentitySection
-            sectionId="directory_sync"
-            heading="Directory Sync"
-            description={
-              <>
-                Sync members and roles directly from your identity provider:
-                <ul className="mt-1.5 list-disc space-y-0.5 pl-5">
-                  <li>
-                    Members are provisioned automatically from your directory
-                  </li>
-                  <li>Roles are assigned from your IDP group mappings</li>
-                  <li>Members can&apos;t be invited manually</li>
-                  <li>Roles can&apos;t be assigned to members manually</li>
-                </ul>
-              </>
-            }
-            providerIcon={
-              <FolderSync className="text-muted-foreground h-5 w-5" />
-            }
-            providerTitle="SCIM"
-            providerSubtitle={
-              scimActive
-                ? "Your directory provider is connected."
-                : "Choose an identity provider to get started."
-            }
-            learnMoreText="Learn more about SCIM Directory Sync"
-            learnMoreHref="https://www.speakeasy.com/docs"
-            active={scimActive}
-            configureButton={
-              <DirectorySyncConfigureControl
-                featureEnabled={scimFeatureEnabled}
-                active={scimActive}
-              />
-            }
-          />
-        </div>
-      </Page.Section.Body>
-    </Page.Section>
+        <IdentitySection
+          sectionId="directory_sync"
+          heading="Directory Sync"
+          description={
+            <>
+              Sync members and roles directly from your identity provider:
+              <ul className="mt-1.5 list-disc space-y-0.5 pl-5">
+                <li>
+                  Members are provisioned automatically from your directory
+                </li>
+                <li>Roles are assigned from your IDP group mappings</li>
+                <li>Members can&apos;t be invited manually</li>
+                <li>Roles can&apos;t be assigned to members manually</li>
+              </ul>
+            </>
+          }
+          providerIcon={
+            <FolderSync className="text-muted-foreground h-5 w-5" />
+          }
+          providerTitle="SCIM"
+          providerSubtitle={
+            scimActive
+              ? "Your directory provider is connected."
+              : "Choose an identity provider to get started."
+          }
+          learnMoreText="Learn more about SCIM Directory Sync"
+          learnMoreHref="https://www.speakeasy.com/docs"
+          active={scimActive}
+          configureButton={
+            <DirectorySyncConfigureControl
+              featureEnabled={scimFeatureEnabled}
+              active={scimActive}
+            />
+          }
+        />
+      </div>
+    </SettingsPage>
   );
 }

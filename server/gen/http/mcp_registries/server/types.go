@@ -39,16 +39,12 @@ type GetServerDetailsResponseBody struct {
 	Version string `form:"version" json:"version" xml:"version"`
 	// Description of what the server does
 	Description string `form:"description" json:"description" xml:"description"`
-	// ID of the attached toolset when this server is listed from a Collection
-	// (toolset-backed attachment)
+	// ID of the attached toolset backing this server
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
-	// ID of the attached MCP server when this server is listed from a Collection
-	// (mcp_server-backed attachment)
+	// ID of the attached MCP server backing this server
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// ID of the external MCP registry this server came from
 	RegistryID *string `form:"registry_id,omitempty" json:"registry_id,omitempty" xml:"registry_id,omitempty"`
-	// ID of the internal collection registry this server came from
-	OrganizationMcpCollectionRegistryID *string `form:"organization_mcp_collection_registry_id,omitempty" json:"organization_mcp_collection_registry_id,omitempty" xml:"organization_mcp_collection_registry_id,omitempty"`
 	// Display name for the server
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// URL to the server's icon
@@ -1022,16 +1018,12 @@ type ExternalMCPServerEntryResponseBody struct {
 	Version string `form:"version" json:"version" xml:"version"`
 	// Description of what the server does
 	Description string `form:"description" json:"description" xml:"description"`
-	// ID of the attached toolset when this server is listed from a Collection
-	// (toolset-backed attachment)
+	// ID of the attached toolset backing this server
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
-	// ID of the attached MCP server when this server is listed from a Collection
-	// (mcp_server-backed attachment)
+	// ID of the attached MCP server backing this server
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// ID of the external MCP registry this server came from
 	RegistryID *string `form:"registry_id,omitempty" json:"registry_id,omitempty" xml:"registry_id,omitempty"`
-	// ID of the internal collection registry this server came from
-	OrganizationMcpCollectionRegistryID *string `form:"organization_mcp_collection_registry_id,omitempty" json:"organization_mcp_collection_registry_id,omitempty" xml:"organization_mcp_collection_registry_id,omitempty"`
 	// Display name for the server
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// URL to the server's icon
@@ -1048,6 +1040,11 @@ type ExternalMCPServerEntryResponseBody struct {
 	SupportsDcr bool `form:"supports_dcr" json:"supports_dcr" xml:"supports_dcr"`
 	// Available remote endpoints for the server
 	Remotes []*ExternalMCPRemoteResponseBody `form:"remotes,omitempty" json:"remotes,omitempty" xml:"remotes,omitempty"`
+	// The source repository the registry links for this server, when it declares
+	// one
+	Repository *ExternalMCPRepositoryResponseBody `form:"repository,omitempty" json:"repository,omitempty" xml:"repository,omitempty"`
+	// Published packages that run this server, when the registry declares any
+	Packages []*ExternalMCPPackageResponseBody `form:"packages,omitempty" json:"packages,omitempty" xml:"packages,omitempty"`
 }
 
 // ExternalMCPRemoteResponseBody is used to define fields on response body
@@ -1092,6 +1089,53 @@ type ExternalMCPRemoteVariableResponseBody struct {
 	Default *string `form:"default,omitempty" json:"default,omitempty" xml:"default,omitempty"`
 	// Allowed values for the variable
 	Choices []string `form:"choices,omitempty" json:"choices,omitempty" xml:"choices,omitempty"`
+}
+
+// ExternalMCPRepositoryResponseBody is used to define fields on response body
+// types.
+type ExternalMCPRepositoryResponseBody struct {
+	// Repository URL
+	URL string `form:"url" json:"url" xml:"url"`
+	// Hosting service the repository lives on, such as github
+	Source *string `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
+	// Path within the repository holding the server, for monorepos
+	Subfolder *string `form:"subfolder,omitempty" json:"subfolder,omitempty" xml:"subfolder,omitempty"`
+}
+
+// ExternalMCPPackageResponseBody is used to define fields on response body
+// types.
+type ExternalMCPPackageResponseBody struct {
+	// Package registry the artifact is published to, such as npm or pypi
+	RegistryType string `form:"registry_type" json:"registry_type" xml:"registry_type"`
+	// Registry base URL when the package lives outside the default public registry
+	RegistryBaseURL *string `form:"registry_base_url,omitempty" json:"registry_base_url,omitempty" xml:"registry_base_url,omitempty"`
+	// Package identifier, scope included
+	Identifier string `form:"identifier" json:"identifier" xml:"identifier"`
+	// Published version
+	Version string `form:"version" json:"version" xml:"version"`
+	// Launcher the publisher suggests, such as npx or uvx
+	RuntimeHint *string `form:"runtime_hint,omitempty" json:"runtime_hint,omitempty" xml:"runtime_hint,omitempty"`
+	// Execution transport the package declares, such as stdio
+	TransportType *string `form:"transport_type,omitempty" json:"transport_type,omitempty" xml:"transport_type,omitempty"`
+	// Environment variables the package asks an install to supply. What a server
+	// demands — a required secret named here is an approval signal in its own
+	// right.
+	EnvironmentVariables []*ExternalMCPPackageEnvironmentVariableResponseBody `form:"environment_variables,omitempty" json:"environment_variables,omitempty" xml:"environment_variables,omitempty"`
+	// SHA-256 of the packaged artifact, when the registry publishes one
+	FileSha256 *string `form:"file_sha256,omitempty" json:"file_sha256,omitempty" xml:"file_sha256,omitempty"`
+}
+
+// ExternalMCPPackageEnvironmentVariableResponseBody is used to define fields
+// on response body types.
+type ExternalMCPPackageEnvironmentVariableResponseBody struct {
+	// Variable name the install must populate
+	Name string `form:"name" json:"name" xml:"name"`
+	// The publisher's explanation of the variable. Untrusted text.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Whether the publisher marked the value sensitive
+	IsSecret bool `form:"is_secret" json:"is_secret" xml:"is_secret"`
+	// Whether an install cannot proceed without it
+	IsRequired bool `form:"is_required" json:"is_required" xml:"is_required"`
 }
 
 // ExternalMCPToolResponseBody is used to define fields on response body types.
@@ -1193,16 +1237,15 @@ func NewListCatalogResponseBody(res *mcpregistries.ListCatalogResult) *ListCatal
 // result of the "getServerDetails" endpoint of the "mcpRegistries" service.
 func NewGetServerDetailsResponseBody(res *types.ExternalMCPServer) *GetServerDetailsResponseBody {
 	body := &GetServerDetailsResponseBody{
-		RegistrySpecifier:                   res.RegistrySpecifier,
-		Version:                             res.Version,
-		Description:                         res.Description,
-		ToolsetID:                           res.ToolsetID,
-		McpServerID:                         res.McpServerID,
-		RegistryID:                          res.RegistryID,
-		OrganizationMcpCollectionRegistryID: res.OrganizationMcpCollectionRegistryID,
-		Title:                               res.Title,
-		IconURL:                             res.IconURL,
-		Meta:                                res.Meta,
+		RegistrySpecifier: res.RegistrySpecifier,
+		Version:           res.Version,
+		Description:       res.Description,
+		ToolsetID:         res.ToolsetID,
+		McpServerID:       res.McpServerID,
+		RegistryID:        res.RegistryID,
+		Title:             res.Title,
+		IconURL:           res.IconURL,
+		Meta:              res.Meta,
 	}
 	if res.Tools != nil {
 		body.Tools = make([]*ExternalMCPToolResponseBody, len(res.Tools))

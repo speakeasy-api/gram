@@ -5,9 +5,28 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type contextKey string
+
+// APIKeyAuthorizationMode selects the authorization profile established from
+// a loaded API-key row. Credential provenance alone must never select a mode.
+type APIKeyAuthorizationMode uint8
+
+// PrincipalCredential describes the immutable authorization state loaded from
+// a principal-backed credential row. The current owner is resolved separately
+// during live admission and is never accepted from the credential.
+type PrincipalCredential struct {
+	AuthorizerUserID       string
+	DelegatedGrants        []byte
+	DelegatedGrantsVersion int32
+}
+
+const (
+	APIKeyAuthorizationModeLegacy APIKeyAuthorizationMode = iota + 1
+	APIKeyAuthorizationModePrincipal
+)
 
 type AuthContext struct {
 	ActiveOrganizationID  string
@@ -26,6 +45,161 @@ type AuthContext struct {
 	ProjectSlug           *string
 	APIKeyScopes          []string
 	IsAdmin               bool
+	// SupportOrganizationID is set only after session authentication validates
+	// a time-bounded platform-admin support session for this organization.
+	SupportOrganizationID     string
+	actor                     urn.Principal
+	apiKeyAuthorizationMode   APIKeyAuthorizationMode
+	principalCredential       *PrincipalCredential
+	principalCredentialOwner  string
+	gramSessionValidated      bool
+	supportSessionValidated   bool
+	legacySessionImpersonated bool
+}
+
+// WithAuthenticatedActor records the canonical actor established by a trusted
+// authentication path. Attribution consumers never infer this from public
+// provenance fields on AuthContext.
+func WithAuthenticatedActor(ctx context.Context, authCtx *AuthContext, actor urn.Principal) context.Context {
+	validated := *authCtx
+	validated.actor = actor
+	return SetAuthContext(ctx, &validated)
+}
+
+// WithValidatedGramSession records provenance established by sessions.Authenticate.
+// Other authentication paths must not call this function.
+func WithValidatedGramSession(ctx context.Context, authCtx *AuthContext, legacyImpersonated bool) context.Context {
+	validated := *authCtx
+	validated.actor = urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
+	validated.gramSessionValidated = true
+	validated.legacySessionImpersonated = legacyImpersonated
+	return SetAuthContext(ctx, &validated)
+}
+
+// HasValidatedGramSession reports whether ordinary Gram session authentication
+// positively validated the request credential.
+func HasValidatedGramSession(ctx context.Context) bool {
+	authCtx, ok := GetAuthContext(ctx)
+	return ok && authCtx != nil && authCtx.gramSessionValidated
+}
+
+// WithLegacyAPIKeyAuthorization records the legacy authorization profile from
+// a loaded API-key row. It keeps the key ID as credential provenance and the
+// creating user as the existing canonical actor.
+func WithLegacyAPIKeyAuthorization(ctx context.Context, authCtx *AuthContext) context.Context {
+	validated := *authCtx
+	validated.actor = urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
+	validated.apiKeyAuthorizationMode = APIKeyAuthorizationModeLegacy
+	return SetAuthContext(ctx, &validated)
+}
+
+// WithPrincipalAPIKeyAuthorization records a principal-backed profile selected
+// from authoritative credential state. Authentication code must pass the
+// parsed and validated credential subject as actor.
+func WithPrincipalAPIKeyAuthorization(ctx context.Context, authCtx *AuthContext, actor urn.Principal, credential PrincipalCredential) context.Context {
+	ctx = WithPrincipalCredentialAuthorization(ctx, authCtx, actor, credential)
+	validated, _ := GetAuthContext(ctx)
+	cloned := *validated
+	cloned.apiKeyAuthorizationMode = APIKeyAuthorizationModePrincipal
+	return SetAuthContext(ctx, &cloned)
+}
+
+// WithPrincipalCredentialAuthorization records the canonical actor and
+// immutable policy loaded by any principal-backed transport. Transport-specific
+// wrappers retain their own direct-revocation and credential provenance state.
+func WithPrincipalCredentialAuthorization(ctx context.Context, authCtx *AuthContext, actor urn.Principal, credential PrincipalCredential) context.Context {
+	validated := *authCtx
+	validated.actor = actor
+	credential.DelegatedGrants = append([]byte(nil), credential.DelegatedGrants...)
+	validated.principalCredential = &credential
+	validated.principalCredentialOwner = ""
+	return SetAuthContext(ctx, &validated)
+}
+
+// PrincipalCredentialAuthorization returns immutable credential policy and
+// authorizer provenance established by a trusted authentication path.
+func PrincipalCredentialAuthorization(ctx context.Context) (PrincipalCredential, bool) {
+	authCtx, ok := GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.principalCredential == nil {
+		return PrincipalCredential{AuthorizerUserID: "", DelegatedGrants: nil, DelegatedGrantsVersion: 0}, false
+	}
+	credential := *authCtx.principalCredential
+	credential.DelegatedGrants = append([]byte(nil), credential.DelegatedGrants...)
+	return credential, true
+}
+
+// WithPrincipalCredentialOwner records the current owner resolved by live
+// admission. It does not change the canonical actor or immutable authorizer.
+func WithPrincipalCredentialOwner(ctx context.Context, ownerUserID string) context.Context {
+	authCtx, ok := GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.principalCredential == nil {
+		return ctx
+	}
+	validated := *authCtx
+	validated.principalCredentialOwner = ownerUserID
+	return SetAuthContext(ctx, &validated)
+}
+
+// PrincipalCredentialProvenance returns trusted immutable-authorizer and
+// current-owner attribution after successful live admission.
+func PrincipalCredentialProvenance(ctx context.Context) (authorizerUserID, ownerUserID string, ok bool) {
+	authCtx, found := GetAuthContext(ctx)
+	if !found || authCtx == nil || authCtx.principalCredential == nil || authCtx.principalCredentialOwner == "" {
+		return "", "", false
+	}
+	return authCtx.principalCredential.AuthorizerUserID, authCtx.principalCredentialOwner, true
+}
+
+// AuthenticatedActor returns the canonical actor established by a trusted
+// authentication path. Public AuthContext fields are never used as fallbacks.
+func AuthenticatedActor(ctx context.Context) (urn.Principal, bool) {
+	authCtx, ok := GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.actor.IsZero() {
+		var zero urn.Principal
+		return zero, false
+	}
+	actor, err := urn.ParsePrincipal(authCtx.actor.String())
+	return actor, err == nil
+}
+
+// APIKeyAuthorization returns the profile selected by trusted API-key
+// authentication. APIKeyID remains independent credential provenance.
+func APIKeyAuthorization(ctx context.Context) (APIKeyAuthorizationMode, bool) {
+	authCtx, ok := GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return 0, false
+	}
+	switch authCtx.apiKeyAuthorizationMode {
+	case APIKeyAuthorizationModeLegacy, APIKeyAuthorizationModePrincipal:
+		return authCtx.apiKeyAuthorizationMode, true
+	default:
+		return 0, false
+	}
+}
+
+// IsLegacyImpersonatedSession reports legacy WorkOS impersonation propagated by
+// sessions.Authenticate without exposing the impersonator identity.
+func IsLegacyImpersonatedSession(ctx context.Context) bool {
+	authCtx, ok := GetAuthContext(ctx)
+	return ok && authCtx != nil && authCtx.gramSessionValidated && authCtx.legacySessionImpersonated
+}
+
+// WithValidatedSupportSession records the support decision made during session
+// authentication. Keeping this immutable for the request ensures grants and
+// support safeguards cannot disagree when the session expires mid-request.
+func WithValidatedSupportSession(ctx context.Context, authCtx *AuthContext) context.Context {
+	validated := *authCtx
+	validated.supportSessionValidated = true
+	return SetAuthContext(ctx, &validated)
+}
+
+// IsSupportSession is the single trusted predicate for support-only behavior.
+// Request headers and legacy cookies never satisfy it directly.
+func IsSupportSession(ctx context.Context) bool {
+	authCtx, ok := GetAuthContext(ctx)
+	return ok && authCtx != nil && authCtx.supportSessionValidated && authCtx.IsAdmin &&
+		authCtx.SupportOrganizationID != "" &&
+		authCtx.SupportOrganizationID == authCtx.ActiveOrganizationID
 }
 
 type RequestContext struct {
@@ -50,22 +224,43 @@ type AdminAuthContext struct {
 	HD          string
 }
 
+// RPCContext is the mutable holder an MCP/JSON-RPC error wrapper installs
+// before invoking its handler, so that state the handler discovers while
+// serving the request is visible to the wrapper afterwards. A plain context
+// value cannot serve that purpose here: the wrapper reads the request context
+// it captured before dispatch, where anything the handler added is absent.
 type RPCContext struct {
+	// ID is the JSON-RPC id of the request being served, so that an error
+	// serialized after the handler returns echoes the id the client sent
+	// rather than a null one.
 	ID mcpjsonrpc.ID
+
+	// ProtocolVersion is the MCP protocol revision in effect for the request,
+	// which selects the revision-conditional wire mappings. It stays empty
+	// until the handler resolves it, which cannot happen before the request
+	// body is decoded, so errors raised earlier are answered on the legacy
+	// mappings.
+	//
+	// It carries the resolved revision rather than the raw declaration,
+	// because whether a declaration is honored depends on the supported set
+	// of the surface serving the request, and the wrapper reading this is
+	// shared across surfaces with sets of their own.
+	ProtocolVersion string
 }
 
 const (
-	SessionTokenContextKey      contextKey = "sessionTokenKey"
-	SessionValueContextKey      contextKey = "sessionValueKey"
-	AdminOverrideContextKey     contextKey = "adminOverrideKey"
-	RequestContextKey           contextKey = "requestContextKey"
-	RBACScopeOverrideContextKey contextKey = "rbacScopeOverrideKey"
-	AssistantPrincipalKey       contextKey = "assistantPrincipalKey"
-	AdminSessionTokenContextKey contextKey = "adminSessionTokenKey"
-	AdminAuthContextKey         contextKey = "adminAuthKey"
-	RPCContextKey               contextKey = "rpcContextKey"
-	pubsubSubscriberContextKey  contextKey = "pubsubSubscriberKey"
-	oauthClientIDContextKey     contextKey = "oauthClientIDKey"
+	SessionTokenContextKey         contextKey = "sessionTokenKey"
+	sessionCookieRefreshContextKey contextKey = "sessionCookieRefreshKey"
+	SessionValueContextKey         contextKey = "sessionValueKey"
+	RequestContextKey              contextKey = "requestContextKey"
+	RBACScopeOverrideContextKey    contextKey = "rbacScopeOverrideKey"
+	AssistantPrincipalKey          contextKey = "assistantPrincipalKey"
+	AdminSessionTokenContextKey    contextKey = "adminSessionTokenKey"
+	AdminAuthContextKey            contextKey = "adminAuthKey"
+	RPCContextKey                  contextKey = "rpcContextKey"
+	pubsubSubscriberContextKey     contextKey = "pubsubSubscriberKey"
+	oauthClientIDContextKey        contextKey = "oauthClientIDKey"
+	actingSurfaceContextKey        contextKey = "actingSurfaceKey"
 )
 
 func SetSessionTokenInContext(ctx context.Context, value string) context.Context {
@@ -77,13 +272,14 @@ func GetSessionTokenFromContext(ctx context.Context) (string, bool) {
 	return value, ok
 }
 
-func SetAdminOverrideInContext(ctx context.Context, value string) context.Context {
-	return context.WithValue(ctx, AdminOverrideContextKey, value)
+func WithSessionCookieRefresh(ctx context.Context, refresh func(sessionID string)) context.Context {
+	return context.WithValue(ctx, sessionCookieRefreshContextKey, refresh)
 }
 
-func GetAdminOverrideFromContext(ctx context.Context) (string, bool) {
-	value, ok := ctx.Value(AdminOverrideContextKey).(string)
-	return value, ok
+func RefreshSessionCookie(ctx context.Context, sessionID string) {
+	if refresh, ok := ctx.Value(sessionCookieRefreshContextKey).(func(string)); ok && refresh != nil {
+		refresh(sessionID)
+	}
 }
 
 func SetAuthContext(ctx context.Context, value *AuthContext) context.Context {
@@ -158,6 +354,36 @@ func SetOAuthClientID(ctx context.Context, value string) context.Context {
 // `client_id` claim existed.
 func GetOAuthClientID(ctx context.Context) (string, bool) {
 	value, ok := ctx.Value(oauthClientIDContextKey).(string)
+	return value, ok && value != ""
+}
+
+// SetActingSurface marks the surface a request arrives through, for surfaces
+// that cannot be told apart from the auth context alone.
+//
+// Audit derives most surfaces from signals it can already see — a session, an
+// API key, an assistant principal. A surface that authenticates its own way,
+// such as Platform MCP, has no such signal and says so explicitly here.
+//
+// The value is a plain string so that packages carrying a surface do not have
+// to depend on the audit package. Audit accepts only the values on its own
+// allowlist, so an unrecognized one records an unknown surface rather than
+// widening what the column can hold.
+// ActingSurfacePlatformMCP marks a call arriving through the OAuth-authenticated
+// Platform MCP endpoint. It is named here rather than only in that package
+// because authorization has to recognize the surface: a Platform MCP call
+// carries a real user but no browser session, and the session is what tells
+// RBAC to enforce for every other human-driven surface.
+const ActingSurfacePlatformMCP = "platform_mcp"
+
+func SetActingSurface(ctx context.Context, value string) context.Context {
+	return context.WithValue(ctx, actingSurfaceContextKey, value)
+}
+
+// GetActingSurface returns the explicitly marked acting surface. The second
+// result is false when nothing marked one, which is the ordinary case for
+// requests whose surface audit can derive on its own.
+func GetActingSurface(ctx context.Context) (string, bool) {
+	value, ok := ctx.Value(actingSurfaceContextKey).(string)
 	return value, ok && value != ""
 }
 

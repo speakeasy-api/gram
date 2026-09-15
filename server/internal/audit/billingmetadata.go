@@ -12,7 +12,11 @@ import (
 )
 
 const (
-	ActionBillingMetadataUpdate Action = "billing_metadata:update"
+	ActionBillingMetadataCancelStripeSubscription Action = "billing_metadata:cancel_stripe_subscription"
+	ActionBillingMetadataCreateStripeCheckout     Action = "billing_metadata:create_stripe_checkout"
+	ActionBillingMetadataCreateStripePortal       Action = "billing_metadata:create_stripe_portal"
+	ActionBillingMetadataResumeStripeSubscription Action = "billing_metadata:resume_stripe_subscription"
+	ActionBillingMetadataUpdate                   Action = "billing_metadata:update"
 )
 
 // BillingMetadataSnapshot captures an organization's billing contract terms
@@ -35,6 +39,103 @@ type LogBillingMetadataUpdateEvent struct {
 
 	BillingMetadataSnapshotBefore *BillingMetadataSnapshot
 	BillingMetadataSnapshotAfter  *BillingMetadataSnapshot
+}
+
+type LogBillingMetadataCreateStripeCheckoutEvent struct {
+	// OrganizationID is the organization starting PAYG billing.
+	OrganizationID string
+
+	// Actor is the user who requested the Checkout session.
+	Actor urn.Principal
+
+	// ActorDisplayName is the user's display label.
+	ActorDisplayName *string
+
+	// ActorSlug is the user's audit-log slug, when available.
+	ActorSlug *string
+
+	// BillingMetadataURN identifies the organization billing metadata subject.
+	BillingMetadataURN urn.BillingMetadata
+}
+
+type LogBillingMetadataCreateStripePortalEvent struct {
+	OrganizationID string
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	BillingMetadataURN urn.BillingMetadata
+}
+
+type LogBillingMetadataCancelStripeSubscriptionEvent struct {
+	OrganizationID string
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	BillingMetadataURN urn.BillingMetadata
+}
+
+type LogBillingMetadataResumeStripeSubscriptionEvent struct {
+	OrganizationID string
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	BillingMetadataURN urn.BillingMetadata
+}
+
+func (l *Logger) LogBillingMetadataCreateStripeCheckout(ctx context.Context, dbtx repo.DBTX, event LogBillingMetadataCreateStripeCheckoutEvent) error {
+	return l.logBillingMetadataAction(ctx, dbtx, event.OrganizationID, event.Actor, event.ActorDisplayName, event.ActorSlug, event.BillingMetadataURN, ActionBillingMetadataCreateStripeCheckout)
+}
+
+func (l *Logger) LogBillingMetadataCreateStripePortal(ctx context.Context, dbtx repo.DBTX, event LogBillingMetadataCreateStripePortalEvent) error {
+	return l.logBillingMetadataAction(ctx, dbtx, event.OrganizationID, event.Actor, event.ActorDisplayName, event.ActorSlug, event.BillingMetadataURN, ActionBillingMetadataCreateStripePortal)
+}
+
+func (l *Logger) LogBillingMetadataCancelStripeSubscription(ctx context.Context, dbtx repo.DBTX, event LogBillingMetadataCancelStripeSubscriptionEvent) error {
+	return l.logBillingMetadataAction(ctx, dbtx, event.OrganizationID, event.Actor, event.ActorDisplayName, event.ActorSlug, event.BillingMetadataURN, ActionBillingMetadataCancelStripeSubscription)
+}
+
+func (l *Logger) LogBillingMetadataResumeStripeSubscription(ctx context.Context, dbtx repo.DBTX, event LogBillingMetadataResumeStripeSubscriptionEvent) error {
+	return l.logBillingMetadataAction(ctx, dbtx, event.OrganizationID, event.Actor, event.ActorDisplayName, event.ActorSlug, event.BillingMetadataURN, ActionBillingMetadataResumeStripeSubscription)
+}
+
+func (l *Logger) logBillingMetadataAction(
+	ctx context.Context,
+	dbtx repo.DBTX,
+	organizationID string,
+	actor urn.Principal,
+	actorDisplayName *string,
+	actorSlug *string,
+	billingMetadataURN urn.BillingMetadata,
+	action Action,
+) error {
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: organizationID,
+		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+
+		ActorID:          actor.ID,
+		ActorType:        string(actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(actorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(actorSlug),
+
+		Action: string(action),
+
+		SubjectID:          billingMetadataURN.ID.String(),
+		SubjectType:        string(subjectTypeBillingMetadata),
+		SubjectDisplayName: conv.ToPGTextEmpty("Billing metadata"),
+		SubjectSlug:        conv.ToPGTextEmpty(""),
+
+		Metadata:       nil,
+		BeforeSnapshot: nil,
+		AfterSnapshot:  nil,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.BillingMetadataV1})
 }
 
 func (l *Logger) LogBillingMetadataUpdate(ctx context.Context, dbtx repo.DBTX, event LogBillingMetadataUpdateEvent) error {

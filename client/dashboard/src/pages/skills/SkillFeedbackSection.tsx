@@ -1,4 +1,4 @@
-import { MetricCard, MetricCardGroup } from "@/components/chart/MetricCard";
+import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
 import { RequireScope } from "@/components/require-scope";
 import { ErrorAlert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
@@ -11,7 +11,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import { cn } from "@/lib/utils";
-import { SettingsSection } from "@/pages/mcp/x/tabs/settings/SettingsSection";
+import { SettingsSection } from "@/components/detail/settings-section";
 import type { SkillFeedback } from "@gram/client/models/components/skillfeedback.js";
 import type { SkillFeedbackCounts } from "@gram/client/models/components/skillfeedbackcounts.js";
 import type { SkillFeedbackMetrics } from "@gram/client/models/components/skillfeedbackmetrics.js";
@@ -113,7 +113,7 @@ export function SkillFeedbackSection({
   skillId: string;
   projectId: string;
 }): JSX.Element {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
   const query = useSkillFeedbackInfinite(
     { id: skillId, limit: 50 },
     undefined,
@@ -152,7 +152,7 @@ export function SkillFeedbackSection({
           <CollapsibleTrigger className="hover:bg-muted/30 flex w-full items-center justify-between gap-4 p-5 text-left">
             <span className="block">
               <Text as="span" variant="subheading" className="block">
-                All agent reviews
+                Agent Feedback
               </Text>
               <Text as="span" small muted className="block">
                 See collection health, recurring findings, and the evidence used
@@ -246,22 +246,22 @@ function FeedbackOverview({
 
   return (
     <>
-      <MetricCardGroup>
-        <MetricCard
+      <StatTileGroup>
+        <StatTile
           title="30-day feedback"
           value={metrics.feedbackInWindow}
           tone="information"
           format="number"
           subtext="Reports collected"
         />
-        <MetricCard
+        <StatTile
           title="Unreviewed"
           value={metrics.unreviewed}
           tone={metrics.unreviewed > 0 ? "warning" : "neutral"}
           format="number"
           subtext="Awaiting suggestion analysis"
         />
-        <MetricCard
+        <StatTile
           title="Activation coverage"
           value={coverage}
           tone="success"
@@ -273,7 +273,7 @@ function FeedbackOverview({
           }
           subtext={`${metrics.feedbackActivationsInWindow.toLocaleString()} of ${metrics.activationsInWindow.toLocaleString()} activations produced feedback`}
         />
-        <MetricCard
+        <StatTile
           title="Suggestion conversion"
           value={conversion}
           tone="success"
@@ -283,7 +283,7 @@ function FeedbackOverview({
           }
           subtext={`${metrics.converted.toLocaleString()} of ${counts.total.toLocaleString()} reports cited`}
         />
-      </MetricCardGroup>
+      </StatTileGroup>
 
       <OutcomeDistribution counts={counts} />
       <FeedbackTimeline timeline={timeline} />

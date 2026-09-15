@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/speakeasy-api/gram/server/internal/agentownership"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/database"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -30,6 +31,7 @@ type deprovisionOrganizationAccessParams struct {
 	workosMembershipID string
 	eventID            string
 	eventUpdatedAt     time.Time
+	ownerLossReason    agentownership.OwnerReassignmentReason
 }
 
 // deprovisionOrganizationAccess is the single teardown routine for every
@@ -37,20 +39,39 @@ type deprovisionOrganizationAccessParams struct {
 // status=inactive, and directory user deactivation. It marks the organization
 // relationship and the user's role assignments deleted, and requests a
 // user-info cache invalidation so org-access checks observe the change
-// without waiting out the cache TTL.
+// without waiting out the cache TTL, plus an identity map refresh so the
+// ClickHouse fold stops resolving the departed member's emails before the
+// sync schedule's next tick.
 func deprovisionOrganizationAccess(ctx context.Context, dbtx database.DBTX, p deprovisionOrganizationAccessParams) (postCommitEffects, error) {
 	var effects postCommitEffects
 
 	repo := orgrepo.New(dbtx)
-	if err := repo.MarkWorkOSMembershipDeleted(ctx, orgrepo.MarkWorkOSMembershipDeletedParams{
+	ownerUserIDs, err := repo.MarkWorkOSMembershipDeleted(ctx, orgrepo.MarkWorkOSMembershipDeletedParams{
 		OrganizationID:     p.organizationID,
 		UserID:             conv.ToPGTextEmpty(p.gramUserID),
 		WorkosUserID:       conv.ToPGTextEmpty(p.workosUserID),
 		WorkosMembershipID: conv.ToPGTextEmpty(p.workosMembershipID),
 		WorkosUpdatedAt:    conv.ToPGTimestamptz(p.eventUpdatedAt),
 		WorkosLastEventID:  conv.ToPGText(p.eventID),
-	}); err != nil {
+	})
+	if err != nil {
 		return effects, fmt.Errorf("mark organization membership deleted for workos user %q: %w", p.workosUserID, err)
+	}
+	owners := make(map[string]struct{}, len(ownerUserIDs)+1)
+	if p.gramUserID != "" {
+		owners[p.gramUserID] = struct{}{}
+	}
+	for _, candidate := range ownerUserIDs {
+		if candidate.Valid && candidate.String != "" {
+			owners[candidate.String] = struct{}{}
+		}
+	}
+	for ownerUserID := range owners {
+		if err := agentownership.LatchOwnerLossByMembership(
+			ctx, dbtx, p.organizationID, ownerUserID, p.ownerLossReason, agentownership.SystemActor, nil,
+		); err != nil {
+			return effects, fmt.Errorf("latch agent owner membership loss: %w", err)
+		}
 	}
 
 	workosUserID := p.workosUserID
@@ -76,5 +97,6 @@ func deprovisionOrganizationAccess(ctx context.Context, dbtx database.DBTX, p de
 	}
 
 	effects.invalidateUserInfoCacheUserID = p.gramUserID
+	effects.refreshIdentityMap = true
 	return effects, nil
 }

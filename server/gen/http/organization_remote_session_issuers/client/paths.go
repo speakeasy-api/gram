@@ -27,6 +27,11 @@ func GetIssuerDeletePreflightOrganizationRemoteSessionIssuersPath() string {
 	return "/rpc/organizationRemoteSessionIssuers.getDeletePreflight"
 }
 
+// GetIssuerDuplicatePreflightOrganizationRemoteSessionIssuersPath returns the URL path to the organizationRemoteSessionIssuers service getIssuerDuplicatePreflight HTTP endpoint.
+func GetIssuerDuplicatePreflightOrganizationRemoteSessionIssuersPath() string {
+	return "/rpc/organizationRemoteSessionIssuers.getDuplicatePreflight"
+}
+
 // UpdateIssuerOrganizationRemoteSessionIssuersPath returns the URL path to the organizationRemoteSessionIssuers service updateIssuer HTTP endpoint.
 func UpdateIssuerOrganizationRemoteSessionIssuersPath() string {
 	return "/rpc/organizationRemoteSessionIssuers.update"

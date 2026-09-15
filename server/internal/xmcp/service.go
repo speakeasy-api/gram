@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
+	"github.com/speakeasy-api/gram/server/internal/netingress"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -55,6 +56,46 @@ func NewService(
 		db:         db,
 		enc:        enc,
 		mcpService: mcpService,
+	}
+}
+
+// AttachPrivate registers the slug-scoped /x/mcp routes accepted by private
+// network ingress. Global callbacks stay exclusively on the public listener.
+func AttachPrivate(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Service) {
+	for _, route := range netingress.PrivateRoutes(netingress.RouteSurfaceXMCP) {
+		var handler http.Handler
+		switch route.ID {
+		case netingress.RouteRuntime:
+			handler = oops.MCPErrHandle(service.logger, service.ServeMCP)
+		case netingress.RouteInstall:
+			handler = oops.ErrHandle(service.logger, metadataService.ServeInstallPage)
+		case netingress.RouteProtectedResource:
+			handler = oops.ErrHandle(service.logger, service.HandleWellKnownOAuthProtectedResourceMetadata)
+		case netingress.RouteAuthorizationServer:
+			handler = oops.ErrHandle(service.logger, service.HandleWellKnownOAuthServerMetadata)
+		case netingress.RouteRegister:
+			handler = oops.ErrHandle(service.logger, service.handleOAuthRegister)
+		case netingress.RouteAuthorize:
+			handler = oops.ErrHandle(service.logger, service.handleOAuthAuthorize)
+		case netingress.RouteConnect:
+			handler = oops.ErrHandle(service.logger, service.handleOAuthConsent)
+		case netingress.RouteConnectRemoteSession:
+			handler = oops.ErrHandle(service.logger, service.handleOAuthConsentAction)
+		case netingress.RouteConnectMCP:
+			handler = oops.ErrHandle(service.logger, service.handleOAuthConsentMCP)
+		case netingress.RouteConnectFirstParty:
+			handler = oops.ErrHandle(service.logger, service.handleFirstPartyConnect)
+		case netingress.RouteToken:
+			handler = oops.ErrHandle(service.logger, service.handleOAuthToken)
+		case netingress.RouteRevoke:
+			handler = oops.ErrHandle(service.logger, service.handleOAuthRevoke)
+		default:
+			panic(fmt.Sprintf("unsupported private xMCP route id %q", route.ID))
+		}
+		if handler == nil {
+			panic(fmt.Sprintf("private xMCP route %s %s has no handler", route.Method, route.Path))
+		}
+		o11y.AttachHandler(mux, route.Method, route.Path, handler.ServeHTTP)
 	}
 }
 
@@ -103,6 +144,8 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, http.MethodGet, "/x/mcp/{mcpSlug}/connect", oops.ErrHandle(service.logger, service.handleOAuthConsent).ServeHTTP)
 	o11y.AttachHandler(mux, http.MethodPost, "/x/mcp/{mcpSlug}/connect", oops.ErrHandle(service.logger, service.handleOAuthConsent).ServeHTTP)
 	o11y.AttachHandler(mux, http.MethodPost, "/x/mcp/{mcpSlug}/connect/remote-session", oops.ErrHandle(service.logger, service.handleOAuthConsentAction).ServeHTTP)
+	o11y.AttachHandler(mux, http.MethodPost, "/x/mcp/{mcpSlug}/connect/mcp", oops.ErrHandle(service.logger, service.handleOAuthConsentMCP).ServeHTTP)
+	o11y.AttachHandler(mux, http.MethodDelete, "/x/mcp/{mcpSlug}/connect/mcp", oops.ErrHandle(service.logger, service.handleOAuthConsentMCP).ServeHTTP)
 	o11y.AttachHandler(mux, http.MethodGet, "/x/mcp/{mcpSlug}/connect/first-party", oops.ErrHandle(service.logger, service.handleFirstPartyConnect).ServeHTTP)
 	o11y.AttachHandler(mux, http.MethodPost, "/x/mcp/{mcpSlug}/token", oops.ErrHandle(service.logger, service.handleOAuthToken).ServeHTTP)
 	o11y.AttachHandler(mux, http.MethodPost, "/x/mcp/{mcpSlug}/revoke", oops.ErrHandle(service.logger, service.handleOAuthRevoke).ServeHTTP)
@@ -160,6 +203,19 @@ func (s *Service) handleOAuthConsentAction(w http.ResponseWriter, r *http.Reques
 	}
 	if err := s.mcpService.ServeConsentAction(w, r, endpoint); err != nil {
 		return fmt.Errorf("serve oauth consent action: %w", err)
+	}
+	return nil
+}
+
+// handleOAuthConsentMCP adapts the chi /x/mcp/{mcpSlug}/connect/mcp
+// route to mcp.Service.ServeConsentMCP.
+func (s *Service) handleOAuthConsentMCP(w http.ResponseWriter, r *http.Request) error {
+	endpoint, err := s.resolveOAuthEndpoint(r)
+	if err != nil {
+		return err
+	}
+	if err := s.mcpService.ServeConsentMCP(w, r, endpoint); err != nil {
+		return fmt.Errorf("serve oauth consent mcp: %w", err)
 	}
 	return nil
 }

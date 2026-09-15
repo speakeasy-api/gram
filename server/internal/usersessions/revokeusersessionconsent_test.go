@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 func TestRevokeUserSessionConsent(t *testing.T) {
@@ -113,4 +114,27 @@ func TestRevokeUserSessionConsent_RBACForbidden(t *testing.T) {
 		ProjectSlugInput: nil,
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestRevokeUserSessionConsent_SiblingProjectNotFound(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	sp := seedSiblingProject(t, ctx, ti, "revoke-consent-sibling")
+
+	err := ti.service.RevokeUserSessionConsent(ctx, &gen.RevokeUserSessionConsentPayload{
+		ID:               sp.consentID.String(),
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	requireOopsCode(t, err, oops.CodeNotFound)
+
+	live, err := repo.New(ti.conn).GetUserSessionConsentByID(ctx, repo.GetUserSessionConsentByIDParams{
+		ID:             sp.consentID,
+		ProjectID:      sp.projectID,
+		OrganizationID: "",
+	})
+	require.NoError(t, err, "sibling project's consent must survive the caller's revoke")
+	require.False(t, live.Deleted)
 }

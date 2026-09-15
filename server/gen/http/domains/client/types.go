@@ -36,8 +36,12 @@ type UpdateDomainRequestBody struct {
 type SetRootMcpEndpointRequestBody struct {
 	// The custom domain whose root mapping to change
 	CustomDomainID string `form:"custom_domain_id" json:"custom_domain_id" xml:"custom_domain_id"`
-	// The MCP endpoint to map to the domain root. Omit to clear the mapping.
+	// The MCP endpoint to map to the domain root. Omit both ids to clear the
+	// mapping.
 	McpEndpointID *string `form:"mcp_endpoint_id,omitempty" json:"mcp_endpoint_id,omitempty" xml:"mcp_endpoint_id,omitempty"`
+	// An MCP server to map to the domain root; its domain endpoint is created when
+	// missing. Mutually exclusive with mcp_endpoint_id.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 }
 
 // GetDomainResponseBody is the type of the "domains" service "getDomain"
@@ -82,12 +86,65 @@ type GetDomainResponseBody struct {
 	RootMcpEndpointID *string `form:"root_mcp_endpoint_id,omitempty" json:"root_mcp_endpoint_id,omitempty" xml:"root_mcp_endpoint_id,omitempty"`
 	// The token served for OpenAI app-submission domain verification, if configured
 	OpenaiAppsChallengeToken *string `form:"openai_apps_challenge_token,omitempty" json:"openai_apps_challenge_token,omitempty" xml:"openai_apps_challenge_token,omitempty"`
+	// The suggested DNS record type for this domain. A suggestion only — delegated
+	// subzones can make an apex-looking domain CNAME-capable.
+	SuggestedRecordType *string `form:"suggested_record_type,omitempty" json:"suggested_record_type,omitempty" xml:"suggested_record_type,omitempty"`
 }
 
 // ListDomainsResponseBody is the type of the "domains" service "listDomains"
 // endpoint HTTP response body.
 type ListDomainsResponseBody struct {
 	Domains []*CustomDomainResponseBody `form:"domains,omitempty" json:"domains,omitempty" xml:"domains,omitempty"`
+	// The DNS targets custom domains must point at. Present even when no domain is
+	// configured yet, so setup instructions can be shown before registration.
+	DNSConfig *DomainDNSConfigResponseBody `form:"dns_config,omitempty" json:"dns_config,omitempty" xml:"dns_config,omitempty"`
+}
+
+// CreateDomainResponseBody is the type of the "domains" service "createDomain"
+// endpoint HTTP response body.
+type CreateDomainResponseBody struct {
+	// The ID of the custom domain
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The ID of the organization this domain belongs to
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// The custom domain name
+	Domain *string `form:"domain,omitempty" json:"domain,omitempty" xml:"domain,omitempty"`
+	// Whether the domain is verified
+	Verified *bool `form:"verified,omitempty" json:"verified,omitempty" xml:"verified,omitempty"`
+	// Whether the domain is activated in ingress
+	Activated *bool `form:"activated,omitempty" json:"activated,omitempty" xml:"activated,omitempty"`
+	// When the custom domain was created.
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// When the custom domain was last updated.
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// The custom domain is actively being registered
+	IsUpdating *bool `form:"is_updating,omitempty" json:"is_updating,omitempty" xml:"is_updating,omitempty"`
+	// IP addresses or CIDR ranges allowed to access this domain. Empty list means
+	// unrestricted.
+	IPAllowlist []string `form:"ip_allowlist,omitempty" json:"ip_allowlist,omitempty" xml:"ip_allowlist,omitempty"`
+	// The latest observed domain health status. One of: unknown, healthy,
+	// unhealthy.
+	HealthStatus *string `form:"health_status,omitempty" json:"health_status,omitempty" xml:"health_status,omitempty"`
+	// The reason the domain was last observed as unhealthy. One of: dns_not_found,
+	// dns_target_mismatch, resource_missing, certificate_missing,
+	// certificate_not_ready, certificate_expired, certificate_invalid,
+	// check_failed.
+	HealthIssue *string `form:"health_issue,omitempty" json:"health_issue,omitempty" xml:"health_issue,omitempty"`
+	// When the domain health was last checked.
+	HealthCheckedAt *string `form:"health_checked_at,omitempty" json:"health_checked_at,omitempty" xml:"health_checked_at,omitempty"`
+	// When the current unhealthy period began.
+	UnhealthySince *string `form:"unhealthy_since,omitempty" json:"unhealthy_since,omitempty" xml:"unhealthy_since,omitempty"`
+	// When the currently observed TLS certificate expires.
+	CertificateExpiresAt *string `form:"certificate_expires_at,omitempty" json:"certificate_expires_at,omitempty" xml:"certificate_expires_at,omitempty"`
+	// The number of consecutive failed health checks
+	ConsecutiveFailures *int32 `form:"consecutive_failures,omitempty" json:"consecutive_failures,omitempty" xml:"consecutive_failures,omitempty"`
+	// The MCP endpoint currently mapped to the domain root, if any
+	RootMcpEndpointID *string `form:"root_mcp_endpoint_id,omitempty" json:"root_mcp_endpoint_id,omitempty" xml:"root_mcp_endpoint_id,omitempty"`
+	// The token served for OpenAI app-submission domain verification, if configured
+	OpenaiAppsChallengeToken *string `form:"openai_apps_challenge_token,omitempty" json:"openai_apps_challenge_token,omitempty" xml:"openai_apps_challenge_token,omitempty"`
+	// The suggested DNS record type for this domain. A suggestion only — delegated
+	// subzones can make an apex-looking domain CNAME-capable.
+	SuggestedRecordType *string `form:"suggested_record_type,omitempty" json:"suggested_record_type,omitempty" xml:"suggested_record_type,omitempty"`
 }
 
 // UpdateDomainResponseBody is the type of the "domains" service "updateDomain"
@@ -132,6 +189,9 @@ type UpdateDomainResponseBody struct {
 	RootMcpEndpointID *string `form:"root_mcp_endpoint_id,omitempty" json:"root_mcp_endpoint_id,omitempty" xml:"root_mcp_endpoint_id,omitempty"`
 	// The token served for OpenAI app-submission domain verification, if configured
 	OpenaiAppsChallengeToken *string `form:"openai_apps_challenge_token,omitempty" json:"openai_apps_challenge_token,omitempty" xml:"openai_apps_challenge_token,omitempty"`
+	// The suggested DNS record type for this domain. A suggestion only — delegated
+	// subzones can make an apex-looking domain CNAME-capable.
+	SuggestedRecordType *string `form:"suggested_record_type,omitempty" json:"suggested_record_type,omitempty" xml:"suggested_record_type,omitempty"`
 }
 
 // SetRootMcpEndpointResponseBody is the type of the "domains" service
@@ -176,6 +236,15 @@ type SetRootMcpEndpointResponseBody struct {
 	RootMcpEndpointID *string `form:"root_mcp_endpoint_id,omitempty" json:"root_mcp_endpoint_id,omitempty" xml:"root_mcp_endpoint_id,omitempty"`
 	// The token served for OpenAI app-submission domain verification, if configured
 	OpenaiAppsChallengeToken *string `form:"openai_apps_challenge_token,omitempty" json:"openai_apps_challenge_token,omitempty" xml:"openai_apps_challenge_token,omitempty"`
+	// The suggested DNS record type for this domain. A suggestion only — delegated
+	// subzones can make an apex-looking domain CNAME-capable.
+	SuggestedRecordType *string `form:"suggested_record_type,omitempty" json:"suggested_record_type,omitempty" xml:"suggested_record_type,omitempty"`
+}
+
+// ListRootMcpServersResponseBody is the type of the "domains" service
+// "listRootMcpServers" endpoint HTTP response body.
+type ListRootMcpServersResponseBody struct {
+	McpServers []*RootMcpServerOptionResponseBody `form:"mcp_servers,omitempty" json:"mcp_servers,omitempty" xml:"mcp_servers,omitempty"`
 }
 
 // CheckHealthResponseBody is the type of the "domains" service "checkHealth"
@@ -220,6 +289,9 @@ type CheckHealthResponseBody struct {
 	RootMcpEndpointID *string `form:"root_mcp_endpoint_id,omitempty" json:"root_mcp_endpoint_id,omitempty" xml:"root_mcp_endpoint_id,omitempty"`
 	// The token served for OpenAI app-submission domain verification, if configured
 	OpenaiAppsChallengeToken *string `form:"openai_apps_challenge_token,omitempty" json:"openai_apps_challenge_token,omitempty" xml:"openai_apps_challenge_token,omitempty"`
+	// The suggested DNS record type for this domain. A suggestion only — delegated
+	// subzones can make an apex-looking domain CNAME-capable.
+	SuggestedRecordType *string `form:"suggested_record_type,omitempty" json:"suggested_record_type,omitempty" xml:"suggested_record_type,omitempty"`
 }
 
 // ListMcpEndpointsResponseBody is the type of the "domains" service
@@ -1139,6 +1211,192 @@ type SetRootMcpEndpointGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// ListRootMcpServersUnauthorizedResponseBody is the type of the "domains"
+// service "listRootMcpServers" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListRootMcpServersUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRootMcpServersForbiddenResponseBody is the type of the "domains" service
+// "listRootMcpServers" endpoint HTTP response body for the "forbidden" error.
+type ListRootMcpServersForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRootMcpServersBadRequestResponseBody is the type of the "domains"
+// service "listRootMcpServers" endpoint HTTP response body for the
+// "bad_request" error.
+type ListRootMcpServersBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRootMcpServersNotFoundResponseBody is the type of the "domains" service
+// "listRootMcpServers" endpoint HTTP response body for the "not_found" error.
+type ListRootMcpServersNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRootMcpServersConflictResponseBody is the type of the "domains" service
+// "listRootMcpServers" endpoint HTTP response body for the "conflict" error.
+type ListRootMcpServersConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRootMcpServersUnsupportedMediaResponseBody is the type of the "domains"
+// service "listRootMcpServers" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListRootMcpServersUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRootMcpServersInvalidResponseBody is the type of the "domains" service
+// "listRootMcpServers" endpoint HTTP response body for the "invalid" error.
+type ListRootMcpServersInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRootMcpServersInvariantViolationResponseBody is the type of the
+// "domains" service "listRootMcpServers" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListRootMcpServersInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRootMcpServersUnexpectedResponseBody is the type of the "domains"
+// service "listRootMcpServers" endpoint HTTP response body for the
+// "unexpected" error.
+type ListRootMcpServersUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRootMcpServersGatewayErrorResponseBody is the type of the "domains"
+// service "listRootMcpServers" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListRootMcpServersGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // CheckHealthUnauthorizedResponseBody is the type of the "domains" service
 // "checkHealth" endpoint HTTP response body for the "unauthorized" error.
 type CheckHealthUnauthorizedResponseBody struct {
@@ -1727,6 +1985,39 @@ type CustomDomainResponseBody struct {
 	RootMcpEndpointID *string `form:"root_mcp_endpoint_id,omitempty" json:"root_mcp_endpoint_id,omitempty" xml:"root_mcp_endpoint_id,omitempty"`
 	// The token served for OpenAI app-submission domain verification, if configured
 	OpenaiAppsChallengeToken *string `form:"openai_apps_challenge_token,omitempty" json:"openai_apps_challenge_token,omitempty" xml:"openai_apps_challenge_token,omitempty"`
+	// The suggested DNS record type for this domain. A suggestion only — delegated
+	// subzones can make an apex-looking domain CNAME-capable.
+	SuggestedRecordType *string `form:"suggested_record_type,omitempty" json:"suggested_record_type,omitempty" xml:"suggested_record_type,omitempty"`
+}
+
+// DomainDNSConfigResponseBody is used to define fields on response body types.
+type DomainDNSConfigResponseBody struct {
+	// The CNAME target subdomain custom domains should point at, if configured
+	CnameTarget *string `form:"cname_target,omitempty" json:"cname_target,omitempty" xml:"cname_target,omitempty"`
+	// The static IP addresses apex custom domains should point A records at
+	ARecords []string `form:"a_records,omitempty" json:"a_records,omitempty" xml:"a_records,omitempty"`
+}
+
+// RootMcpServerOptionResponseBody is used to define fields on response body
+// types.
+type RootMcpServerOptionResponseBody struct {
+	// The MCP server
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// The MCP server's display name, if set
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The MCP server's slug, if set
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// The project the server belongs to
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The project's display name
+	ProjectName *string `form:"project_name,omitempty" json:"project_name,omitempty" xml:"project_name,omitempty"`
+	// The server's endpoint on this custom domain, when one exists
+	AttachedEndpointID *string `form:"attached_endpoint_id,omitempty" json:"attached_endpoint_id,omitempty" xml:"attached_endpoint_id,omitempty"`
+	// The attached endpoint's slug (its /mcp/<slug> path on the domain), when one
+	// exists
+	AttachedEndpointSlug *string `form:"attached_endpoint_slug,omitempty" json:"attached_endpoint_slug,omitempty" xml:"attached_endpoint_slug,omitempty"`
+	// Whether this server currently serves the domain root
+	IsDomainRoot *bool `form:"is_domain_root,omitempty" json:"is_domain_root,omitempty" xml:"is_domain_root,omitempty"`
 }
 
 // CustomDomainMcpEndpointResponseBody is used to define fields on response
@@ -1742,13 +2033,15 @@ type CustomDomainMcpEndpointResponseBody struct {
 	ProjectName *string `form:"project_name,omitempty" json:"project_name,omitempty" xml:"project_name,omitempty"`
 	// The url-friendly slug of the project the endpoint belongs to
 	ProjectSlug *string `form:"project_slug,omitempty" json:"project_slug,omitempty" xml:"project_slug,omitempty"`
-	// The ID of the parent MCP server
+	// The ID of the parent MCP server. Null for meta-MCP-backed endpoints.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
-	// The display name of the parent MCP server. May be empty if the parent has no
+	// The ID of the parent meta MCP server. Null for MCP-server-backed endpoints.
+	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`
+	// The display name of the parent server. May be empty if the parent has no
 	// configured name.
 	McpServerName *string `form:"mcp_server_name,omitempty" json:"mcp_server_name,omitempty" xml:"mcp_server_name,omitempty"`
 	// The url-friendly slug of the parent MCP server. May be empty if the parent
-	// has no configured slug.
+	// has no configured slug or is a meta MCP server.
 	McpServerSlug *string `form:"mcp_server_slug,omitempty" json:"mcp_server_slug,omitempty" xml:"mcp_server_slug,omitempty"`
 	// Whether this endpoint is mapped to the custom-domain root
 	IsDomainRoot *bool `form:"is_domain_root,omitempty" json:"is_domain_root,omitempty" xml:"is_domain_root,omitempty"`
@@ -1790,6 +2083,7 @@ func NewSetRootMcpEndpointRequestBody(p *domains.SetRootMcpEndpointPayload) *Set
 	body := &SetRootMcpEndpointRequestBody{
 		CustomDomainID: p.CustomDomainID,
 		McpEndpointID:  p.McpEndpointID,
+		McpServerID:    p.McpServerID,
 	}
 	return body
 }
@@ -1814,6 +2108,7 @@ func NewGetDomainCustomDomainOK(body *GetDomainResponseBody) *domains.CustomDoma
 		ConsecutiveFailures:      body.ConsecutiveFailures,
 		RootMcpEndpointID:        body.RootMcpEndpointID,
 		OpenaiAppsChallengeToken: body.OpenaiAppsChallengeToken,
+		SuggestedRecordType:      *body.SuggestedRecordType,
 	}
 	v.IPAllowlist = make([]string, len(body.IPAllowlist))
 	for i, val := range body.IPAllowlist {
@@ -1985,6 +2280,7 @@ func NewListDomainsListCustomDomainsResultOK(body *ListDomainsResponseBody) *dom
 		}
 		v.Domains[i] = unmarshalCustomDomainResponseBodyToDomainsCustomDomain(val)
 	}
+	v.DNSConfig = unmarshalDomainDNSConfigResponseBodyToDomainsDomainDNSConfig(body.DNSConfig)
 
 	return v
 }
@@ -2134,6 +2430,36 @@ func NewListDomainsGatewayError(body *ListDomainsGatewayErrorResponseBody) *goa.
 		Temporary: *body.Temporary,
 		Timeout:   *body.Timeout,
 		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateDomainCustomDomainOK builds a "domains" service "createDomain"
+// endpoint result from a HTTP "OK" response.
+func NewCreateDomainCustomDomainOK(body *CreateDomainResponseBody) *domains.CustomDomain {
+	v := &domains.CustomDomain{
+		ID:                       *body.ID,
+		OrganizationID:           *body.OrganizationID,
+		Domain:                   *body.Domain,
+		Verified:                 *body.Verified,
+		Activated:                *body.Activated,
+		CreatedAt:                *body.CreatedAt,
+		UpdatedAt:                *body.UpdatedAt,
+		IsUpdating:               *body.IsUpdating,
+		HealthStatus:             body.HealthStatus,
+		HealthIssue:              body.HealthIssue,
+		HealthCheckedAt:          body.HealthCheckedAt,
+		UnhealthySince:           body.UnhealthySince,
+		CertificateExpiresAt:     body.CertificateExpiresAt,
+		ConsecutiveFailures:      body.ConsecutiveFailures,
+		RootMcpEndpointID:        body.RootMcpEndpointID,
+		OpenaiAppsChallengeToken: body.OpenaiAppsChallengeToken,
+		SuggestedRecordType:      *body.SuggestedRecordType,
+	}
+	v.IPAllowlist = make([]string, len(body.IPAllowlist))
+	for i, val := range body.IPAllowlist {
+		v.IPAllowlist[i] = val
 	}
 
 	return v
@@ -2309,6 +2635,7 @@ func NewUpdateDomainCustomDomainOK(body *UpdateDomainResponseBody) *domains.Cust
 		ConsecutiveFailures:      body.ConsecutiveFailures,
 		RootMcpEndpointID:        body.RootMcpEndpointID,
 		OpenaiAppsChallengeToken: body.OpenaiAppsChallengeToken,
+		SuggestedRecordType:      *body.SuggestedRecordType,
 	}
 	v.IPAllowlist = make([]string, len(body.IPAllowlist))
 	for i, val := range body.IPAllowlist {
@@ -2488,6 +2815,7 @@ func NewSetRootMcpEndpointCustomDomainOK(body *SetRootMcpEndpointResponseBody) *
 		ConsecutiveFailures:      body.ConsecutiveFailures,
 		RootMcpEndpointID:        body.RootMcpEndpointID,
 		OpenaiAppsChallengeToken: body.OpenaiAppsChallengeToken,
+		SuggestedRecordType:      *body.SuggestedRecordType,
 	}
 	v.IPAllowlist = make([]string, len(body.IPAllowlist))
 	for i, val := range body.IPAllowlist {
@@ -2647,6 +2975,172 @@ func NewSetRootMcpEndpointGatewayError(body *SetRootMcpEndpointGatewayErrorRespo
 	return v
 }
 
+// NewListRootMcpServersResultOK builds a "domains" service
+// "listRootMcpServers" endpoint result from a HTTP "OK" response.
+func NewListRootMcpServersResultOK(body *ListRootMcpServersResponseBody) *domains.ListRootMcpServersResult {
+	v := &domains.ListRootMcpServersResult{}
+	v.McpServers = make([]*domains.RootMcpServerOption, len(body.McpServers))
+	for i, val := range body.McpServers {
+		if val == nil {
+			v.McpServers[i] = nil
+			continue
+		}
+		v.McpServers[i] = unmarshalRootMcpServerOptionResponseBodyToDomainsRootMcpServerOption(val)
+	}
+
+	return v
+}
+
+// NewListRootMcpServersUnauthorized builds a domains service
+// listRootMcpServers endpoint unauthorized error.
+func NewListRootMcpServersUnauthorized(body *ListRootMcpServersUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRootMcpServersForbidden builds a domains service listRootMcpServers
+// endpoint forbidden error.
+func NewListRootMcpServersForbidden(body *ListRootMcpServersForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRootMcpServersBadRequest builds a domains service listRootMcpServers
+// endpoint bad_request error.
+func NewListRootMcpServersBadRequest(body *ListRootMcpServersBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRootMcpServersNotFound builds a domains service listRootMcpServers
+// endpoint not_found error.
+func NewListRootMcpServersNotFound(body *ListRootMcpServersNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRootMcpServersConflict builds a domains service listRootMcpServers
+// endpoint conflict error.
+func NewListRootMcpServersConflict(body *ListRootMcpServersConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRootMcpServersUnsupportedMedia builds a domains service
+// listRootMcpServers endpoint unsupported_media error.
+func NewListRootMcpServersUnsupportedMedia(body *ListRootMcpServersUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRootMcpServersInvalid builds a domains service listRootMcpServers
+// endpoint invalid error.
+func NewListRootMcpServersInvalid(body *ListRootMcpServersInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRootMcpServersInvariantViolation builds a domains service
+// listRootMcpServers endpoint invariant_violation error.
+func NewListRootMcpServersInvariantViolation(body *ListRootMcpServersInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRootMcpServersUnexpected builds a domains service listRootMcpServers
+// endpoint unexpected error.
+func NewListRootMcpServersUnexpected(body *ListRootMcpServersUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRootMcpServersGatewayError builds a domains service
+// listRootMcpServers endpoint gateway_error error.
+func NewListRootMcpServersGatewayError(body *ListRootMcpServersGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewCheckHealthCustomDomainOK builds a "domains" service "checkHealth"
 // endpoint result from a HTTP "OK" response.
 func NewCheckHealthCustomDomainOK(body *CheckHealthResponseBody) *domains.CustomDomain {
@@ -2667,6 +3161,7 @@ func NewCheckHealthCustomDomainOK(body *CheckHealthResponseBody) *domains.Custom
 		ConsecutiveFailures:      body.ConsecutiveFailures,
 		RootMcpEndpointID:        body.RootMcpEndpointID,
 		OpenaiAppsChallengeToken: body.OpenaiAppsChallengeToken,
+		SuggestedRecordType:      *body.SuggestedRecordType,
 	}
 	v.IPAllowlist = make([]string, len(body.IPAllowlist))
 	for i, val := range body.IPAllowlist {
@@ -3172,6 +3667,9 @@ func ValidateGetDomainResponseBody(body *GetDomainResponseBody) (err error) {
 	if body.IPAllowlist == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("ip_allowlist", "body"))
 	}
+	if body.SuggestedRecordType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("suggested_record_type", "body"))
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
@@ -3190,6 +3688,11 @@ func ValidateGetDomainResponseBody(body *GetDomainResponseBody) (err error) {
 	if body.RootMcpEndpointID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.root_mcp_endpoint_id", *body.RootMcpEndpointID, goa.FormatUUID))
 	}
+	if body.SuggestedRecordType != nil {
+		if !(*body.SuggestedRecordType == "cname" || *body.SuggestedRecordType == "a") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.suggested_record_type", *body.SuggestedRecordType, []any{"cname", "a"}))
+		}
+	}
 	return
 }
 
@@ -3199,11 +3702,78 @@ func ValidateListDomainsResponseBody(body *ListDomainsResponseBody) (err error) 
 	if body.Domains == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("domains", "body"))
 	}
+	if body.DNSConfig == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("dns_config", "body"))
+	}
 	for _, e := range body.Domains {
 		if e != nil {
 			if err2 := ValidateCustomDomainResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	if body.DNSConfig != nil {
+		if err2 := ValidateDomainDNSConfigResponseBody(body.DNSConfig); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateCreateDomainResponseBody runs the validations defined on
+// CreateDomainResponseBody
+func ValidateCreateDomainResponseBody(body *CreateDomainResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.Domain == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("domain", "body"))
+	}
+	if body.Verified == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("verified", "body"))
+	}
+	if body.Activated == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("activated", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.IsUpdating == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("is_updating", "body"))
+	}
+	if body.IPAllowlist == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("ip_allowlist", "body"))
+	}
+	if body.SuggestedRecordType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("suggested_record_type", "body"))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	if body.HealthCheckedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.health_checked_at", *body.HealthCheckedAt, goa.FormatDateTime))
+	}
+	if body.UnhealthySince != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.unhealthy_since", *body.UnhealthySince, goa.FormatDateTime))
+	}
+	if body.CertificateExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.certificate_expires_at", *body.CertificateExpiresAt, goa.FormatDateTime))
+	}
+	if body.RootMcpEndpointID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.root_mcp_endpoint_id", *body.RootMcpEndpointID, goa.FormatUUID))
+	}
+	if body.SuggestedRecordType != nil {
+		if !(*body.SuggestedRecordType == "cname" || *body.SuggestedRecordType == "a") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.suggested_record_type", *body.SuggestedRecordType, []any{"cname", "a"}))
 		}
 	}
 	return
@@ -3239,6 +3809,9 @@ func ValidateUpdateDomainResponseBody(body *UpdateDomainResponseBody) (err error
 	if body.IPAllowlist == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("ip_allowlist", "body"))
 	}
+	if body.SuggestedRecordType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("suggested_record_type", "body"))
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
@@ -3256,6 +3829,11 @@ func ValidateUpdateDomainResponseBody(body *UpdateDomainResponseBody) (err error
 	}
 	if body.RootMcpEndpointID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.root_mcp_endpoint_id", *body.RootMcpEndpointID, goa.FormatUUID))
+	}
+	if body.SuggestedRecordType != nil {
+		if !(*body.SuggestedRecordType == "cname" || *body.SuggestedRecordType == "a") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.suggested_record_type", *body.SuggestedRecordType, []any{"cname", "a"}))
+		}
 	}
 	return
 }
@@ -3290,6 +3868,9 @@ func ValidateSetRootMcpEndpointResponseBody(body *SetRootMcpEndpointResponseBody
 	if body.IPAllowlist == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("ip_allowlist", "body"))
 	}
+	if body.SuggestedRecordType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("suggested_record_type", "body"))
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
@@ -3307,6 +3888,27 @@ func ValidateSetRootMcpEndpointResponseBody(body *SetRootMcpEndpointResponseBody
 	}
 	if body.RootMcpEndpointID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.root_mcp_endpoint_id", *body.RootMcpEndpointID, goa.FormatUUID))
+	}
+	if body.SuggestedRecordType != nil {
+		if !(*body.SuggestedRecordType == "cname" || *body.SuggestedRecordType == "a") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.suggested_record_type", *body.SuggestedRecordType, []any{"cname", "a"}))
+		}
+	}
+	return
+}
+
+// ValidateListRootMcpServersResponseBody runs the validations defined on
+// ListRootMcpServersResponseBody
+func ValidateListRootMcpServersResponseBody(body *ListRootMcpServersResponseBody) (err error) {
+	if body.McpServers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_servers", "body"))
+	}
+	for _, e := range body.McpServers {
+		if e != nil {
+			if err2 := ValidateRootMcpServerOptionResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	return
 }
@@ -3341,6 +3943,9 @@ func ValidateCheckHealthResponseBody(body *CheckHealthResponseBody) (err error) 
 	if body.IPAllowlist == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("ip_allowlist", "body"))
 	}
+	if body.SuggestedRecordType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("suggested_record_type", "body"))
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
@@ -3358,6 +3963,11 @@ func ValidateCheckHealthResponseBody(body *CheckHealthResponseBody) (err error) 
 	}
 	if body.RootMcpEndpointID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.root_mcp_endpoint_id", *body.RootMcpEndpointID, goa.FormatUUID))
+	}
+	if body.SuggestedRecordType != nil {
+		if !(*body.SuggestedRecordType == "cname" || *body.SuggestedRecordType == "a") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.suggested_record_type", *body.SuggestedRecordType, []any{"cname", "a"}))
+		}
 	}
 	return
 }
@@ -4578,6 +5188,246 @@ func ValidateSetRootMcpEndpointGatewayErrorResponseBody(body *SetRootMcpEndpoint
 	return
 }
 
+// ValidateListRootMcpServersUnauthorizedResponseBody runs the validations
+// defined on listRootMcpServers_unauthorized_response_body
+func ValidateListRootMcpServersUnauthorizedResponseBody(body *ListRootMcpServersUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRootMcpServersForbiddenResponseBody runs the validations defined
+// on listRootMcpServers_forbidden_response_body
+func ValidateListRootMcpServersForbiddenResponseBody(body *ListRootMcpServersForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRootMcpServersBadRequestResponseBody runs the validations
+// defined on listRootMcpServers_bad_request_response_body
+func ValidateListRootMcpServersBadRequestResponseBody(body *ListRootMcpServersBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRootMcpServersNotFoundResponseBody runs the validations defined
+// on listRootMcpServers_not_found_response_body
+func ValidateListRootMcpServersNotFoundResponseBody(body *ListRootMcpServersNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRootMcpServersConflictResponseBody runs the validations defined
+// on listRootMcpServers_conflict_response_body
+func ValidateListRootMcpServersConflictResponseBody(body *ListRootMcpServersConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRootMcpServersUnsupportedMediaResponseBody runs the validations
+// defined on listRootMcpServers_unsupported_media_response_body
+func ValidateListRootMcpServersUnsupportedMediaResponseBody(body *ListRootMcpServersUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRootMcpServersInvalidResponseBody runs the validations defined
+// on listRootMcpServers_invalid_response_body
+func ValidateListRootMcpServersInvalidResponseBody(body *ListRootMcpServersInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRootMcpServersInvariantViolationResponseBody runs the
+// validations defined on listRootMcpServers_invariant_violation_response_body
+func ValidateListRootMcpServersInvariantViolationResponseBody(body *ListRootMcpServersInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRootMcpServersUnexpectedResponseBody runs the validations
+// defined on listRootMcpServers_unexpected_response_body
+func ValidateListRootMcpServersUnexpectedResponseBody(body *ListRootMcpServersUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRootMcpServersGatewayErrorResponseBody runs the validations
+// defined on listRootMcpServers_gateway_error_response_body
+func ValidateListRootMcpServersGatewayErrorResponseBody(body *ListRootMcpServersGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateCheckHealthUnauthorizedResponseBody runs the validations defined on
 // checkHealth_unauthorized_response_body
 func ValidateCheckHealthUnauthorizedResponseBody(body *CheckHealthUnauthorizedResponseBody) (err error) {
@@ -5328,6 +6178,9 @@ func ValidateCustomDomainResponseBody(body *CustomDomainResponseBody) (err error
 	if body.IPAllowlist == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("ip_allowlist", "body"))
 	}
+	if body.SuggestedRecordType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("suggested_record_type", "body"))
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
@@ -5345,6 +6198,47 @@ func ValidateCustomDomainResponseBody(body *CustomDomainResponseBody) (err error
 	}
 	if body.RootMcpEndpointID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.root_mcp_endpoint_id", *body.RootMcpEndpointID, goa.FormatUUID))
+	}
+	if body.SuggestedRecordType != nil {
+		if !(*body.SuggestedRecordType == "cname" || *body.SuggestedRecordType == "a") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.suggested_record_type", *body.SuggestedRecordType, []any{"cname", "a"}))
+		}
+	}
+	return
+}
+
+// ValidateDomainDNSConfigResponseBody runs the validations defined on
+// DomainDNSConfigResponseBody
+func ValidateDomainDNSConfigResponseBody(body *DomainDNSConfigResponseBody) (err error) {
+	if body.ARecords == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("a_records", "body"))
+	}
+	return
+}
+
+// ValidateRootMcpServerOptionResponseBody runs the validations defined on
+// RootMcpServerOptionResponseBody
+func ValidateRootMcpServerOptionResponseBody(body *RootMcpServerOptionResponseBody) (err error) {
+	if body.McpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.ProjectName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_name", "body"))
+	}
+	if body.IsDomainRoot == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("is_domain_root", "body"))
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.AttachedEndpointID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.attached_endpoint_id", *body.AttachedEndpointID, goa.FormatUUID))
 	}
 	return
 }
@@ -5367,9 +6261,6 @@ func ValidateCustomDomainMcpEndpointResponseBody(body *CustomDomainMcpEndpointRe
 	if body.ProjectSlug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("project_slug", "body"))
 	}
-	if body.McpServerID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "body"))
-	}
 	if body.IsDomainRoot == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("is_domain_root", "body"))
 	}
@@ -5381,6 +6272,9 @@ func ValidateCustomDomainMcpEndpointResponseBody(body *CustomDomainMcpEndpointRe
 	}
 	if body.McpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+	}
+	if body.MetaMcpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.meta_mcp_server_id", *body.MetaMcpServerID, goa.FormatUUID))
 	}
 	return
 }

@@ -1,7 +1,7 @@
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { EventMatchDialog, RuleLabel } from "./risk-ui";
+import { EventMatchDialog, MaskedMatch, RuleLabel } from "./risk-ui";
 
 const hasScope = vi.fn<(scope: string) => boolean>();
 
@@ -78,11 +78,46 @@ describe("EventMatchDialog", () => {
     expect(screen.getByRole("img", { name: /chat:read/ })).toBeTruthy();
   });
 
-  it("falls back to visible Hidden text without chat:read and no rationale", () => {
+  it("falls back to the redacted match without chat:read and no rationale", () => {
     hasScope.mockReturnValue(false);
     renderCell(undefined);
 
-    expect(screen.getByText("Hidden")).toBeTruthy();
+    expect(screen.getByText("<redacted len=42 sha=deadbeef>")).toBeTruthy();
+    expect(screen.queryByText("Hidden")).toBeNull();
+    expect(screen.queryByRole("button")).toBeNull();
+    expect(screen.getByRole("img", { name: /chat:read/ })).toBeTruthy();
+  });
+});
+
+function renderMasked(matchRedacted = "<redacted len=42 sha=deadbeef>") {
+  render(
+    <TooltipProvider>
+      <MaskedMatch
+        resultId="00000000-0000-0000-0000-000000000001"
+        matchRedacted={matchRedacted}
+      />
+    </TooltipProvider>,
+  );
+}
+
+describe("MaskedMatch", () => {
+  it("shows the redacted match without chat:read, and offers no reveal", () => {
+    hasScope.mockReturnValue(false);
+    renderMasked();
+
+    expect(screen.getByText("<redacted len=42 sha=deadbeef>")).toBeTruthy();
+    expect(screen.queryByText("Hidden")).toBeNull();
+    expect(screen.queryByText("Click to reveal")).toBeNull();
+    expect(screen.queryByRole("button")).toBeNull();
+    expect(screen.getByRole("img", { name: /chat:read/ })).toBeTruthy();
+  });
+
+  it("keeps the reveal affordance when chat:read is granted", () => {
+    hasScope.mockReturnValue(true);
+    renderMasked();
+
+    expect(screen.getByText("Click to reveal")).toBeTruthy();
+    expect(screen.queryByText("<redacted len=42 sha=deadbeef>")).toBeNull();
   });
 });
 

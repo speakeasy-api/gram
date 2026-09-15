@@ -5,8 +5,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
+
+// Redis survives every -count iteration, so t.Name alone is not a unique bucket.
+func redisTestNamespace(t *testing.T) string {
+	t.Helper()
+	return t.Name() + "-" + uuid.NewString()
+}
 
 func newRedisStore(t *testing.T) Store {
 	t.Helper()
@@ -18,7 +25,7 @@ func newRedisStore(t *testing.T) Store {
 func TestRedisStoreBurstThenThrottle(t *testing.T) {
 	t.Parallel()
 
-	limiter := New(newRedisStore(t), t.Name(), Rate{Tokens: 60, Interval: time.Minute, Burst: 5})
+	limiter := New(newRedisStore(t), redisTestNamespace(t), Rate{Tokens: 60, Interval: time.Minute, Burst: 5})
 
 	for i := range 5 {
 		res, err := limiter.Allow(t.Context(), "k")
@@ -40,7 +47,7 @@ func TestRedisStoreConcurrentRespectsBurst(t *testing.T) {
 
 	const burst = 10
 	// 10/min == one token per 6s, so no meaningful refill during the burst.
-	limiter := New(newRedisStore(t), t.Name(), Rate{Tokens: 10, Interval: time.Minute, Burst: burst})
+	limiter := New(newRedisStore(t), redisTestNamespace(t), Rate{Tokens: 10, Interval: time.Minute, Burst: burst})
 
 	var (
 		mu      sync.Mutex
@@ -70,7 +77,7 @@ func TestRedisStoreConcurrentRespectsBurst(t *testing.T) {
 func TestLimiterInvalidRateErrors(t *testing.T) {
 	t.Parallel()
 
-	limiter := New(newRedisStore(t), t.Name(), Rate{Tokens: 0, Interval: time.Minute, Burst: 0})
+	limiter := New(newRedisStore(t), redisTestNamespace(t), Rate{Tokens: 0, Interval: time.Minute, Burst: 0})
 	res, err := limiter.Allow(t.Context(), "k")
 	require.Error(t, err)
 	require.False(t, res.Allowed)
@@ -79,7 +86,7 @@ func TestLimiterInvalidRateErrors(t *testing.T) {
 func TestAllowNRejectsNonPositive(t *testing.T) {
 	t.Parallel()
 
-	limiter := New(newRedisStore(t), t.Name(), Rate{Tokens: 60, Interval: time.Minute, Burst: 10})
+	limiter := New(newRedisStore(t), redisTestNamespace(t), Rate{Tokens: 60, Interval: time.Minute, Burst: 10})
 	for _, n := range []int{0, -1} {
 		res, err := limiter.AllowN(t.Context(), "k", n)
 		require.Error(t, err, "n=%d must be rejected", n)
@@ -90,7 +97,7 @@ func TestAllowNRejectsNonPositive(t *testing.T) {
 func TestAllowNBeyondBurstNeverSucceeds(t *testing.T) {
 	t.Parallel()
 
-	limiter := New(newRedisStore(t), t.Name(), Rate{Tokens: 60, Interval: time.Minute, Burst: 5})
+	limiter := New(newRedisStore(t), redisTestNamespace(t), Rate{Tokens: 60, Interval: time.Minute, Burst: 5})
 	res, err := limiter.AllowN(t.Context(), "k", 6)
 	require.NoError(t, err)
 	require.False(t, res.Allowed)
@@ -101,8 +108,9 @@ func TestRedisStoreNamespaceIsolation(t *testing.T) {
 	t.Parallel()
 
 	store := newRedisStore(t)
-	a := New(store, t.Name()+"-a", Rate{Tokens: 60, Interval: time.Minute, Burst: 1})
-	b := New(store, t.Name()+"-b", Rate{Tokens: 60, Interval: time.Minute, Burst: 1})
+	namespace := redisTestNamespace(t)
+	a := New(store, namespace+"-a", Rate{Tokens: 60, Interval: time.Minute, Burst: 1})
+	b := New(store, namespace+"-b", Rate{Tokens: 60, Interval: time.Minute, Burst: 1})
 
 	res, err := a.Allow(t.Context(), "shared")
 	require.NoError(t, err)
@@ -120,7 +128,7 @@ func TestRedisStoreNamespaceIsolation(t *testing.T) {
 func TestRedisStoreAllowNChargesBatch(t *testing.T) {
 	t.Parallel()
 
-	limiter := New(newRedisStore(t), t.Name(), Rate{Tokens: 60, Interval: time.Minute, Burst: 10})
+	limiter := New(newRedisStore(t), redisTestNamespace(t), Rate{Tokens: 60, Interval: time.Minute, Burst: 10})
 
 	res, err := limiter.AllowN(t.Context(), "k", 8)
 	require.NoError(t, err)

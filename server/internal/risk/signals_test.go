@@ -17,10 +17,10 @@ import (
 )
 
 // TestGetRiskSignals_ClickHouse seeds ClickHouse findings across the current
-// window, the previous comparison window, and the trailing 24h KPI windows,
-// plus rows every signal query must ignore (redelivered duplicate id,
-// excluded, false positive, dead letter, foreign tenant), and asserts the
-// clustered signals, KPI splits, and exposure rollup.
+// window and the previous comparison window, plus rows every signal query
+// must ignore (redelivered duplicate id, excluded, false positive, dead
+// letter, foreign tenant), and asserts the clustered signals, KPI splits, and
+// exposure rollup.
 func TestGetRiskSignals_ClickHouse(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
@@ -41,9 +41,8 @@ func TestGetRiskSignals_ClickHouse(t *testing.T) {
 	chatB := uuid.Must(uuid.NewV7())
 	msg := func() uuid.UUID { return uuid.Must(uuid.NewV7()) }
 
-	// Current window: three secret findings (alice x2, bob x1; one inside the
-	// trailing 24h), three pii findings (alice; one inside the previous-24h KPI
-	// bucket at to-30h).
+	// Current window: three secret findings (alice x2, bob x1) and three pii
+	// findings (alice).
 	rows := []chrepo.RiskFindingRow{
 		chOverviewFinding(t, projectID, orgID, chatA, msg(), from.Add(36*time.Hour), "gitleaks", "secret.github_pat", "alice@example.com"),
 		chOverviewFinding(t, projectID, orgID, chatB, msg(), from.Add(38*time.Hour), "gitleaks", "secret.github_pat", "bob@example.com"),
@@ -120,8 +119,9 @@ func TestGetRiskSignals_ClickHouse(t *testing.T) {
 	require.Equal(t, int64(1), secrets.PreviousFindings)
 	require.Equal(t, int64(2), secrets.Users)
 	require.Equal(t, int64(1), secrets.Teams)
-	require.Equal(t, "critical", secrets.Severity)
-	require.InDelta(t, 9.9, secrets.RiskScore, 0.001)
+	// Unattributed rows score at the category weight verbatim: secrets 8.5.
+	require.Equal(t, "high", secrets.Severity)
+	require.InDelta(t, 8.5, secrets.RiskScore, 0.001)
 	require.Equal(t, from.Add(36*time.Hour).Format(time.RFC3339), secrets.FirstSeen)
 	require.Equal(t, to.Add(-2*time.Hour).Format(time.RFC3339), secrets.LastSeen)
 	// Sparkline covers the window and sums to the deduplicated finding count;
@@ -155,11 +155,11 @@ func TestGetRiskSignals_ClickHouse(t *testing.T) {
 	require.Equal(t, int64(3), pii.TopUsers[0].Findings)
 
 	require.Equal(t, int64(2), result.OpenSignals)
-	require.Equal(t, int64(1), result.CriticalSignals)
+	require.Equal(t, int64(0), result.CriticalSignals)
 	require.Equal(t, int64(2), result.UsersExposed)
 	require.Equal(t, int64(1), result.PreviousUsersExposed)
-	require.Equal(t, int64(1), result.Findings24h)
-	require.Equal(t, int64(1), result.PreviousFindings24h)
+	require.Equal(t, int64(6), result.Findings)
+	require.Equal(t, int64(1), result.PreviousFindings)
 
 	require.Greater(t, result.OrgRiskScore, 0.0)
 	require.LessOrEqual(t, result.OrgRiskScore, 10.0)
@@ -194,7 +194,7 @@ func TestGetRiskSignals_EmptyWindow(t *testing.T) {
 	require.Equal(t, int64(0), result.OpenSignals)
 	require.Equal(t, int64(0), result.CriticalSignals)
 	require.Equal(t, int64(0), result.UsersExposed)
-	require.Equal(t, int64(0), result.Findings24h)
+	require.Equal(t, int64(0), result.Findings)
 	require.InDelta(t, 0, result.OrgRiskScore, 0.001)
 	require.InDelta(t, 0, result.PreviousOrgRiskScore, 0.001)
 }
@@ -254,4 +254,71 @@ func TestGetRiskSignals_InvalidWindow(t *testing.T) {
 		To:   new(now.Format(time.RFC3339)),
 	})
 	require.Error(t, err)
+}
+
+// TestGetRiskSignals_PolicyScoreDrivesBase asserts a matched policy's
+// configured score replaces the category base weight in the signal score,
+// while rules without policy attribution keep the category default.
+func TestGetRiskSignals_PolicyScoreDrivesBase(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+	ti.flags.SetFlag(feature.FlagRiskWatchdog, authCtx.ActiveOrganizationID, true)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	// A deliberately low configured score — far from the secrets category
+	// weight (8.5) — so the score's base source is unambiguous below.
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Watchdog Scored"), Score: 2})
+	require.NoError(t, err)
+
+	now := time.Now().UTC()
+	from := now.AddDate(0, 0, -30).Truncate(24 * time.Hour)
+	to := from.AddDate(0, 0, 7)
+	chat := uuid.Must(uuid.NewV7())
+	msg := func() uuid.UUID { return uuid.Must(uuid.NewV7()) }
+
+	attributed := chOverviewFinding(t, projectID, orgID, chat, msg(), from.Add(36*time.Hour), "gitleaks", "secret.github_pat", "alice@example.com")
+	attributed.RiskPolicyID = policy.ID
+	bare := chOverviewFinding(t, projectID, orgID, chat, msg(), from.Add(37*time.Hour), "gitleaks", "secret.aws_access_key", "alice@example.com")
+	// Previous-window finding for the SAME rule, without policy attribution:
+	// the policy that matched only the current window must not leak into the
+	// previous-window baseline.
+	prevBare := chOverviewFinding(t, projectID, orgID, chat, msg(), from.Add(-24*time.Hour), "gitleaks", "secret.github_pat", "alice@example.com")
+
+	chQueries := chrepo.New(ti.chConn)
+	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{attributed, bare, prevBare}))
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	result, err := ti.service.GetRiskSignals(ctx, &gen.GetRiskSignalsPayload{
+		From: new(from.Format(time.RFC3339)),
+		To:   new(to.Format(time.RFC3339)),
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Signals, 2)
+
+	byRule := map[string]*gen.RiskSignal{}
+	for _, s := range result.Signals {
+		byRule[s.RuleID] = s
+	}
+
+	// Policy-scored rule: the configured score, verbatim.
+	scored := byRule["secret.github_pat"]
+	require.NotNil(t, scored)
+	require.InDelta(t, 2.0, scored.RiskScore, 0.001)
+
+	// The unattributed rule keeps the secrets category weight, verbatim.
+	fallback := byRule["secret.aws_access_key"]
+	require.NotNil(t, fallback)
+	require.InDelta(t, 8.5, fallback.RiskScore, 0.001)
+
+	// The previous-window baseline scores its unattributed finding at the
+	// category weight (8.5) — not the 2.0 policy that only matched the
+	// current window: 0.5*8.5 + 0.3*8.5 + 0.2*1.2*log10(2) = 6.87 -> 6.9.
+	// A window-union policy leak would drag this down to 1.7.
+	require.InDelta(t, 6.9, result.PreviousOrgRiskScore, 0.001)
 }

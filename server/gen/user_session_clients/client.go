@@ -16,18 +16,20 @@ import (
 
 // Client is the "userSessionClients" service client.
 type Client struct {
-	ListUserSessionClientsEndpoint  goa.Endpoint
-	GetUserSessionClientEndpoint    goa.Endpoint
-	RevokeUserSessionClientEndpoint goa.Endpoint
+	ListUserSessionClientsEndpoint       goa.Endpoint
+	GetUserSessionClientEndpoint         goa.Endpoint
+	RefreshUserSessionClientCIMDEndpoint goa.Endpoint
+	RevokeUserSessionClientEndpoint      goa.Endpoint
 }
 
 // NewClient initializes a "userSessionClients" service client given the
 // endpoints.
-func NewClient(listUserSessionClients, getUserSessionClient, revokeUserSessionClient goa.Endpoint) *Client {
+func NewClient(listUserSessionClients, getUserSessionClient, refreshUserSessionClientCIMD, revokeUserSessionClient goa.Endpoint) *Client {
 	return &Client{
-		ListUserSessionClientsEndpoint:  listUserSessionClients,
-		GetUserSessionClientEndpoint:    getUserSessionClient,
-		RevokeUserSessionClientEndpoint: revokeUserSessionClient,
+		ListUserSessionClientsEndpoint:       listUserSessionClients,
+		GetUserSessionClientEndpoint:         getUserSessionClient,
+		RefreshUserSessionClientCIMDEndpoint: refreshUserSessionClientCIMD,
+		RevokeUserSessionClientEndpoint:      revokeUserSessionClient,
 	}
 }
 
@@ -71,6 +73,29 @@ func (c *Client) ListUserSessionClients(ctx context.Context, p *ListUserSessionC
 func (c *Client) GetUserSessionClient(ctx context.Context, p *GetUserSessionClientPayload) (res *types.UserSessionClient, err error) {
 	var ires any
 	ires, err = c.GetUserSessionClientEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.UserSessionClient), nil
+}
+
+// RefreshUserSessionClientCIMD calls the "refreshUserSessionClientCIMD"
+// endpoint of the "userSessionClients" service.
+// RefreshUserSessionClientCIMD may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) RefreshUserSessionClientCIMD(ctx context.Context, p *RefreshUserSessionClientCIMDPayload) (res *types.UserSessionClient, err error) {
+	var ires any
+	ires, err = c.RefreshUserSessionClientCIMDEndpoint(ctx, p)
 	if err != nil {
 		return
 	}

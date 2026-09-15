@@ -104,7 +104,7 @@ type VerifyResult struct {
 func VerifySigningKey(ctx context.Context, client SigningClient, resourceName string, want jose.SignatureAlgorithm) VerifyResult {
 	public, err := client.GetPublicKey(ctx, resourceName)
 	if err != nil {
-		return failedVerify(verifyReasonFor(err), "", err)
+		return failedVerify(ReasonForError(err), "", err)
 	}
 
 	// The stored algorithm drives how Gram advertises and signs with this key, so
@@ -124,12 +124,12 @@ func VerifySigningKey(ctx context.Context, client SigningClient, resourceName st
 
 	digest, err := digestPayload(public.Algorithm, []byte(ProbePayload))
 	if err != nil {
-		return failedVerify(verifyReasonFor(err), public.Algorithm, err)
+		return failedVerify(ReasonForError(err), public.Algorithm, err)
 	}
 
 	signature, err := client.AsymmetricSign(ctx, resourceName, public.Algorithm, digest)
 	if err != nil {
-		return failedVerify(verifyReasonFor(err), public.Algorithm, err)
+		return failedVerify(ReasonForError(err), public.Algorithm, err)
 	}
 
 	if err := verifySignature(public.Key, digest, signature); err != nil {
@@ -145,11 +145,13 @@ func failedVerify(reason VerifyReason, alg jose.SignatureAlgorithm, err error) V
 	return VerifyResult{Verified: false, Reason: reason, Algorithm: alg, Detail: err.Error()}
 }
 
-// verifyReasonFor maps a probe failure onto the reason a caller acts on. Google
-// API errors arrive as gRPC statuses even through the REST transport, so the
-// status code carries the distinction between "the customer must fix something"
-// and "try again".
-func verifyReasonFor(err error) VerifyReason {
+// ReasonForError maps a KMS call failure onto the reason a caller acts on.
+// Google API errors arrive as gRPC statuses even through the REST transport, so
+// the status code carries the distinction between "the customer must fix
+// something" and "try again". Exported because callers beyond the verify probe
+// (such as the JWKS mint path reading a key's public half) need the same
+// classification to pick an error code.
+func ReasonForError(err error) VerifyReason {
 	switch {
 	case errors.Is(err, ErrInvalidResourceName):
 		return ReasonInvalidResourceName

@@ -6,12 +6,14 @@ import { remoteSessionIssuersCreate } from "../funcs/remoteSessionIssuersCreate.
 import { remoteSessionIssuersDelete } from "../funcs/remoteSessionIssuersDelete.js";
 import { remoteSessionIssuersFetchMetadata } from "../funcs/remoteSessionIssuersFetchMetadata.js";
 import { remoteSessionIssuersGet } from "../funcs/remoteSessionIssuersGet.js";
+import { remoteSessionIssuersGetDuplicatePreflight } from "../funcs/remoteSessionIssuersGetDuplicatePreflight.js";
 import { remoteSessionIssuersList } from "../funcs/remoteSessionIssuersList.js";
 import { remoteSessionIssuersRefreshMetadata } from "../funcs/remoteSessionIssuersRefreshMetadata.js";
 import { remoteSessionIssuersUpdate } from "../funcs/remoteSessionIssuersUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { RemoteSessionIssuer } from "../models/components/remotesessionissuer.js";
 import { RemoteSessionIssuerDraft } from "../models/components/remotesessionissuerdraft.js";
+import { RemoteSessionIssuerDuplicatePreflight } from "../models/components/remotesessionissuerduplicatepreflight.js";
 import { RemoteSessionIssuerRefresh } from "../models/components/remotesessionissuerrefresh.js";
 import {
   CreateRemoteSessionIssuerRequest,
@@ -29,6 +31,10 @@ import {
   GetRemoteSessionIssuerRequest,
   GetRemoteSessionIssuerSecurity,
 } from "../models/operations/getremotesessionissuer.js";
+import {
+  GetRemoteSessionIssuerDuplicatePreflightRequest,
+  GetRemoteSessionIssuerDuplicatePreflightSecurity,
+} from "../models/operations/getremotesessionissuerduplicatepreflight.js";
 import {
   ListRemoteSessionIssuersRequest,
   ListRemoteSessionIssuersResponse,
@@ -119,6 +125,29 @@ export class RemoteSessionIssuers extends ClientSDK {
     options?: RequestOptions,
   ): Promise<RemoteSessionIssuer> {
     return unwrapAsync(remoteSessionIssuersGet(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getRemoteSessionIssuerDuplicatePreflight remoteSessionIssuers
+   *
+   * @remarks
+   * Report the existing remote_session_issuers that already describe an upstream issuer URL, so a create or edit form can warn before it duplicates one. Covers this project's own issuers plus those inherited from the organization and the platform catalog.
+   *
+   * Advisory only. Duplicating an issuer URL is legitimate — a project may want its own record so it can attach different documentation, branding or scopes — so nothing here blocks a write, and no lock is taken. A create that races another create still produces two records, which is a supported state.
+   *
+   * Matching uses the same canonicalization as getRemoteSessionIssuer. A URL that cannot be parsed as an issuer identifier returns no matches rather than an error, because a partially typed URL is the normal state of a form field.
+   */
+  async getDuplicatePreflight(
+    request?: GetRemoteSessionIssuerDuplicatePreflightRequest | undefined,
+    security?: GetRemoteSessionIssuerDuplicatePreflightSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<RemoteSessionIssuerDuplicatePreflight> {
+    return unwrapAsync(remoteSessionIssuersGetDuplicatePreflight(
       this,
       request,
       security,

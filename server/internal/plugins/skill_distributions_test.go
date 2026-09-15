@@ -184,4 +184,10 @@ func TestListPluginSkillsForProjectResolvesContent(t *testing.T) {
 	}
 	require.NotNil(t, skillCount)
 	require.EqualValues(t, 2, *skillCount)
+
+	// GetPlugin also returns the correct skill count (AGE-3333)
+	gotPlugin, err := ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: plugin.ID})
+	require.NoError(t, err)
+	require.NotNil(t, gotPlugin.SkillCount)
+	require.EqualValues(t, 2, *gotPlugin.SkillCount)
 }

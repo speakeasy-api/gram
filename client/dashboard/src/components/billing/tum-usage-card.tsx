@@ -3,7 +3,7 @@ import { Info } from "lucide-react";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
-import { ToggleButton } from "@/components/ui/ToggleButton";
+import { ToggleButton } from "@/components/ui/SegmentedControl";
 import { useOrganization } from "@/contexts/Auth";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useQuery } from "@tanstack/react-query";

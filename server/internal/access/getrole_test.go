@@ -8,7 +8,6 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func TestService_GetRole(t *testing.T) {
@@ -29,9 +28,10 @@ func TestService_GetRole(t *testing.T) {
 	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_2", mockMember("", "membership_2", "user_2", "custom-builder"))
 	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_3", mockMember("", "membership_3", "user_3", "admin"))
 	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "", mockMember("", "membership_workos_only", "user_workos_only", "custom-builder"))
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeProjectRead, "project-1")
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeMCPConnect, authz.WildcardResource)
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeRiskPolicyEvaluate, "policy-1")
+	customRolePrincipal := seededRolePrincipal(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "custom-builder")
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, customRolePrincipal, authz.ScopeProjectRead, "project-1")
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, customRolePrincipal, authz.ScopeMCPConnect, authz.WildcardResource)
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, customRolePrincipal, authz.ScopeRiskPolicyEvaluate, "policy-1")
 
 	role, err := ti.service.GetRole(ctx, &gen.GetRolePayload{ID: customID})
 	require.NoError(t, err)

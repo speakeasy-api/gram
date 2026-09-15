@@ -21,6 +21,8 @@ const (
 	ActionPluginServerRemove   Action = "plugin:server_remove"
 	ActionPluginAssignmentsSet Action = "plugin:assignments_set"
 	ActionPluginPublish        Action = "plugin:publish"
+
+	ActionPluginMarketplaceSettingsUpdate Action = "plugin:marketplace_settings_update"
 )
 
 // PluginSnapshot captures the user-meaningful state of a plugin row for
@@ -441,6 +443,70 @@ func (l *Logger) LogPluginPublish(ctx context.Context, dbtx repo.DBTX, event Log
 		BeforeSnapshot: nil,
 		AfterSnapshot:  nil,
 		Metadata:       metadata,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.PluginV1})
+}
+
+// MarketplaceSettingsSnapshot captures a project's marketplace settings for
+// before/after comparisons. ObservabilityEnabled reflects the effective value:
+// an unset column reads as enabled, the historical default.
+type MarketplaceSettingsSnapshot struct {
+	MarketplaceName      *string `json:"marketplace_name,omitempty"`
+	ObservabilityEnabled bool    `json:"observability_enabled"`
+}
+
+// LogPluginMarketplaceSettingsUpdateEvent records a change to a project's
+// marketplace settings — the marketplace name override and whether the
+// observability plugin is published and installed. Like plugin:publish it is
+// project-scoped, because the settings govern the project's single marketplace
+// rather than any one plugin.
+type LogPluginMarketplaceSettingsUpdateEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	ProjectName    string
+	ProjectSlug    string
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	SnapshotBefore *MarketplaceSettingsSnapshot
+	SnapshotAfter  *MarketplaceSettingsSnapshot
+}
+
+func (l *Logger) LogPluginMarketplaceSettingsUpdate(ctx context.Context, dbtx repo.DBTX, event LogPluginMarketplaceSettingsUpdateEvent) error {
+	action := ActionPluginMarketplaceSettingsUpdate
+
+	beforeSnapshot, err := marshalAuditPayload(event.SnapshotBefore)
+	if err != nil {
+		return fmt.Errorf("marshal %s before snapshot: %w", action, err)
+	}
+
+	afterSnapshot, err := marshalAuditPayload(event.SnapshotAfter)
+	if err != nil {
+		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(action),
+
+		SubjectID:          event.ProjectID.String(),
+		SubjectType:        string(subjectTypeProject),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.ProjectName),
+		SubjectSlug:        conv.ToPGTextEmpty(event.ProjectSlug),
+
+		BeforeSnapshot: beforeSnapshot,
+		AfterSnapshot:  afterSnapshot,
+		Metadata:       nil,
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.PluginV1})

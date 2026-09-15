@@ -603,7 +603,7 @@ func (f *FlyRunner) reap(ctx context.Context, logger *slog.Logger, appsRepo *rep
 	if err != nil {
 		return fmt.Errorf("send delete app request: %w", err)
 	}
-	defer o11y.LogDefer(ctx, logger, func() error { return res.Body.Close() })
+	defer o11y.LogDefer(ctx, logger, "failed to close fly delete app response body", func() error { return res.Body.Close() })
 
 	if res.StatusCode == http.StatusNotFound {
 		logger.InfoContext(ctx, "app not found during delete, assuming already deleted")
@@ -863,7 +863,7 @@ func (f *FlyRunner) setSecrets(ctx context.Context, logger *slog.Logger, appName
 		if err != nil {
 			return nil, fmt.Errorf("%s: send set secret request: %w", k, err)
 		}
-		defer o11y.LogDefer(ctx, logger, func() error { return res.Body.Close() })
+		defer o11y.LogDefer(ctx, logger, "failed to close fly set secret response body", func() error { return res.Body.Close() })
 
 		if res.StatusCode != http.StatusOK && res.StatusCode != http.StatusCreated {
 			return nil, fmt.Errorf("%s: unexpected set secret response code: %d", k, res.StatusCode)
@@ -914,7 +914,7 @@ func (f *FlyRunner) serializeAssets(
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch function asset").LogError(ctx, logger)
 		}
-		defer o11y.LogDefer(ctx, f.logger, func() error {
+		defer o11y.LogDefer(ctx, f.logger, "failed to close function asset reader", func() error {
 			if cerr := rdr.Close(); cerr != nil {
 				return fmt.Errorf("close function asset reader: %w", cerr)
 			}
@@ -927,7 +927,7 @@ func (f *FlyRunner) serializeAssets(
 			if err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "failed to create writer for function asset").LogError(ctx, logger)
 			}
-			defer o11y.LogDefer(ctx, f.logger, func() error {
+			defer o11y.LogDefer(ctx, f.logger, "failed to close function asset tigris writer", func() error {
 				if werr := wr.Close(); werr != nil {
 					return fmt.Errorf("close function asset tigris writer: %w", werr)
 				}

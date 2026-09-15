@@ -1,4 +1,5 @@
 import { RequireScope } from "@/components/require-scope";
+import { useOrganization } from "@/contexts/Auth";
 import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
 import { handleAPIError } from "@/lib/errors";
@@ -11,21 +12,45 @@ import {
 import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { FileText } from "lucide-react";
+import { useIsCurrentOrganization } from "@/hooks/useIsCurrentOrganization";
 
 export function SkillContentUploadSetting({
   className,
 }: {
   className?: string;
 } = {}): JSX.Element | null {
+  const organization = useOrganization();
+  const isCurrentOrganization = useIsCurrentOrganization(organization.id);
+  return (
+    <SkillContentUploadSettingInner
+      key={organization.id}
+      organizationId={organization.id}
+      isCurrentOrganization={isCurrentOrganization}
+      className={className}
+    />
+  );
+}
+
+function SkillContentUploadSettingInner({
+  organizationId,
+  isCurrentOrganization,
+  className,
+}: {
+  organizationId: string;
+  isCurrentOrganization: () => boolean;
+  className?: string;
+}): JSX.Element | null {
   const queryClient = useQueryClient();
-  const { data: features } = useProductFeatures(undefined, undefined, {
+  const { data: features } = useProductFeatures({ organizationId }, undefined, {
     throwOnError: false,
   });
   const mutation = useFeaturesSetMutation({
     onSuccess: async () => {
+      if (!isCurrentOrganization()) return;
       await invalidateAllProductFeatures(queryClient);
     },
     onError: (error) => {
+      if (!isCurrentOrganization()) return;
       handleAPIError(error, "Failed to update setting");
     },
   });
@@ -63,6 +88,7 @@ export function SkillContentUploadSetting({
             mutation.mutate({
               request: {
                 setProductFeatureRequestBody: {
+                  organizationId,
                   featureName: FeatureName.SkillCaptureMetadataOnly,
                   enabled: !enabled,
                 },

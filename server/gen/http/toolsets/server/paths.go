@@ -42,6 +42,11 @@ func ListToolFiltersToolsetsPath() string {
 	return "/rpc/toolsets.listToolFilters"
 }
 
+// ListToolSchemaStaticValuesToolsetsPath returns the URL path to the toolsets service listToolSchemaStaticValues HTTP endpoint.
+func ListToolSchemaStaticValuesToolsetsPath() string {
+	return "/rpc/toolsets.listToolSchemaStaticValues"
+}
+
 // CheckMCPSlugAvailabilityToolsetsPath returns the URL path to the toolsets service checkMCPSlugAvailability HTTP endpoint.
 func CheckMCPSlugAvailabilityToolsetsPath() string {
 	return "/rpc/toolsets.checkMCPSlugAvailability"
@@ -55,6 +60,11 @@ func CloneToolsetToolsetsPath() string {
 // AddExternalOAuthServerToolsetsPath returns the URL path to the toolsets service addExternalOAuthServer HTTP endpoint.
 func AddExternalOAuthServerToolsetsPath() string {
 	return "/rpc/toolsets.addExternalOAuthServer"
+}
+
+// UpdateExternalOAuthServerToolsetsPath returns the URL path to the toolsets service updateExternalOAuthServer HTTP endpoint.
+func UpdateExternalOAuthServerToolsetsPath() string {
+	return "/rpc/toolsets.updateExternalOAuthServer"
 }
 
 // RemoveOAuthServerToolsetsPath returns the URL path to the toolsets service removeOAuthServer HTTP endpoint.

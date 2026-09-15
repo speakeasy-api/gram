@@ -2,10 +2,12 @@ package activities
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
 	"go.opentelemetry.io/otel/trace"
+	"go.temporal.io/sdk/temporal"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -15,7 +17,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/rag"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
+
+const GenerateToolsetEmbeddingsPermanentErrorType = "GenerateToolsetEmbeddingsPermanent"
+const GenerateToolsetEmbeddingsSupersededErrorType = "GenerateToolsetEmbeddingsSuperseded"
+const GenerateToolsetEmbeddingsKeyDisabledErrorType = "GenerateToolsetEmbeddingsKeyDisabled"
 
 type GenerateToolsetEmbeddings struct {
 	logger     *slog.Logger
@@ -25,8 +32,11 @@ type GenerateToolsetEmbeddings struct {
 }
 
 type GenerateToolsetEmbeddingsInput struct {
-	ToolsetSlug types.Slug
-	ProjectID   uuid.UUID
+	ProjectID      uuid.UUID
+	ToolsetID      uuid.UUID
+	ToolsetSlug    types.Slug
+	ToolsetVersion int64
+	DeploymentID   uuid.UUID
 }
 
 func NewGenerateToolsetEmbeddingsActivity(
@@ -34,9 +44,7 @@ func NewGenerateToolsetEmbeddingsActivity(
 	db *pgxpool.Pool,
 	ragService *rag.ToolsetVectorStore,
 	logger *slog.Logger,
-
 ) *GenerateToolsetEmbeddings {
-
 	return &GenerateToolsetEmbeddings{
 		logger:     logger,
 		tracer:     tracerProvider,
@@ -70,13 +78,39 @@ func (a *GenerateToolsetEmbeddings) Do(
 		return getToolsetErr
 	}
 
-	err := a.ragService.IndexToolset(
-		ctx,
-		*toolset,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to index toolset: %w", err)
+	if err := a.ragService.IndexToolset(ctx, *toolset, rag.ToolsetIndexRevision{
+		ToolsetID:      input.ToolsetID,
+		ToolsetVersion: input.ToolsetVersion,
+		DeploymentID:   input.DeploymentID,
+	}); err != nil {
+		return newGenerateToolsetEmbeddingsError(err)
 	}
 
 	return nil
+}
+
+func newGenerateToolsetEmbeddingsError(err error) error {
+	wrapped := fmt.Errorf("failed to index toolset: %w", err)
+	if errors.Is(err, rag.ErrToolsetIndexRevisionSuperseded) {
+		return temporal.NewNonRetryableApplicationError(
+			wrapped.Error(),
+			GenerateToolsetEmbeddingsSupersededErrorType,
+			wrapped,
+		)
+	}
+	if openrouter.IsPlatformKeyDisabled(err) {
+		return temporal.NewNonRetryableApplicationError(
+			wrapped.Error(),
+			GenerateToolsetEmbeddingsKeyDisabledErrorType,
+			wrapped,
+		)
+	}
+	if openrouter.IsPermanentError(err) {
+		return temporal.NewNonRetryableApplicationError(
+			wrapped.Error(),
+			GenerateToolsetEmbeddingsPermanentErrorType,
+			wrapped,
+		)
+	}
+	return wrapped
 }

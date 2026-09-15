@@ -76,7 +76,7 @@ func (q *Queries) GetRiskFindingForUnmask(ctx context.Context, p GetRiskFindingF
 		Where("organization_id = ?", p.OrganizationID).
 		Where("project_id = ?", p.ProjectID).
 		Where("id = ?", p.ID).
-		OrderBy("inserted_at DESC").
+		OrderBy(latestCopyOrderSQL).
 		Limit(1)
 
 	sb := sq.Select(
@@ -100,6 +100,9 @@ func (q *Queries) GetRiskFindingForUnmask(ctx context.Context, p GetRiskFindingF
 		FromSelect(latest, "latest").
 		Where("dead_letter_reason = ''").
 		Where("excluded_at IS NULL").
+		// Legacy suppression column, still filtered until the
+		// false_positive_at-only rows written before the suppression
+		// convergence age out under the table's 90-day TTL.
 		Where("false_positive_at IS NULL")
 
 	query, args, err := sb.ToSql()

@@ -528,17 +528,26 @@ func DecodeListMcpEndpointsRequest(mux goahttp.Muxer, decoder func(*http.Request
 		var payload *mcpendpoints.ListMcpEndpointsPayload
 		var (
 			mcpServerID      *string
+			metaMcpServerID  *string
 			sessionToken     *string
 			apikeyToken      *string
 			projectSlugInput *string
 			err              error
 		)
-		mcpServerIDRaw := r.URL.Query().Get("mcp_server_id")
+		qp := r.URL.Query()
+		mcpServerIDRaw := qp.Get("mcp_server_id")
 		if mcpServerIDRaw != "" {
 			mcpServerID = &mcpServerIDRaw
 		}
 		if mcpServerID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("mcp_server_id", *mcpServerID, goa.FormatUUID))
+		}
+		metaMcpServerIDRaw := qp.Get("meta_mcp_server_id")
+		if metaMcpServerIDRaw != "" {
+			metaMcpServerID = &metaMcpServerIDRaw
+		}
+		if metaMcpServerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("meta_mcp_server_id", *metaMcpServerID, goa.FormatUUID))
 		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
@@ -555,7 +564,7 @@ func DecodeListMcpEndpointsRequest(mux goahttp.Muxer, decoder func(*http.Request
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListMcpEndpointsPayload(mcpServerID, sessionToken, apikeyToken, projectSlugInput)
+		payload = NewListMcpEndpointsPayload(mcpServerID, metaMcpServerID, sessionToken, apikeyToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -1443,14 +1452,15 @@ func EncodeDeleteMcpEndpointError(encoder func(context.Context, http.ResponseWri
 // *McpEndpointResponseBody from a value of type *types.McpEndpoint.
 func marshalTypesMcpEndpointToMcpEndpointResponseBody(v *types.McpEndpoint) *McpEndpointResponseBody {
 	res := &McpEndpointResponseBody{
-		ID:             v.ID,
-		ProjectID:      v.ProjectID,
-		CustomDomainID: v.CustomDomainID,
-		McpServerID:    v.McpServerID,
-		Slug:           string(v.Slug),
-		IsDomainRoot:   v.IsDomainRoot,
-		CreatedAt:      v.CreatedAt,
-		UpdatedAt:      v.UpdatedAt,
+		ID:              v.ID,
+		ProjectID:       v.ProjectID,
+		CustomDomainID:  v.CustomDomainID,
+		McpServerID:     v.McpServerID,
+		MetaMcpServerID: v.MetaMcpServerID,
+		Slug:            string(v.Slug),
+		IsDomainRoot:    v.IsDomainRoot,
+		CreatedAt:       v.CreatedAt,
+		UpdatedAt:       v.UpdatedAt,
 	}
 
 	return res

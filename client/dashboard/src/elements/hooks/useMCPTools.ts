@@ -166,6 +166,9 @@ export function useMCPTools({
     },
     enabled: !auth.isLoading && servers.length > 0,
     staleTime: () => (partialFailureRef.current ? 0 : Infinity),
+    // Errors surface inline via mcpToolsError, not an error boundary, even
+    // under a host QueryClient that defaults to throwing.
+    throwOnError: false,
     gcTime: Infinity,
   });
 

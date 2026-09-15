@@ -22,7 +22,7 @@ type stubResultScanner struct {
 	recordedChallenge bool
 }
 
-func (s *stubResultScanner) ScanForEnforcement(_ context.Context, _ string, _ uuid.UUID, _ string, _ string, _ string, _ string) (*risk.ScanResult, error) {
+func (s *stubResultScanner) ScanForEnforcement(_ context.Context, _ risk.RealtimeScanRequest) (*risk.ScanResult, error) {
 	return s.result, nil
 }
 
@@ -316,7 +316,7 @@ func TestIngest_CanonicalWarnChallengesEveryAdapterAndEvent(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestHooksService(t)
-	adapters := []string{"claude", "cursor", "codex", "opencode", "pi"}
+	adapters := []string{"claude", "cursor", "codex", "opencode", "copilot", "pi"}
 	eventKinds := []string{"prompt", "tool", "mcp", "permission"}
 
 	for _, adapter := range adapters {

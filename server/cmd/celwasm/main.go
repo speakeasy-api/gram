@@ -3,11 +3,12 @@
 // Command celwasm exposes the risk CEL engine to the browser (the same celenv
 // the server runs), built for GOOS=js GOARCH=wasm. It sets globals
 // __celEngineReady (or __celInitError) and the funcs __celReference /
-// __celCompile / __celComplete / __celEval.
+// __celCompile / __celComplete / __celEval / __celRegexCompile.
 package main
 
 import (
 	"encoding/json"
+	"regexp"
 	"syscall/js"
 
 	"github.com/google/cel-go/cel"
@@ -31,6 +32,7 @@ func main() {
 	js.Global().Set("__celComplete", js.FuncOf(h.complete))
 	js.Global().Set("__celCompile", js.FuncOf(h.compile))
 	js.Global().Set("__celEval", js.FuncOf(h.eval))
+	js.Global().Set("__celRegexCompile", js.FuncOf(regexCompile))
 	js.Global().Set("__celEngineReady", js.ValueOf(true))
 
 	select {} // keep the Go runtime alive so the exported funcs stay callable
@@ -74,6 +76,18 @@ func (h *handle) compile(_ js.Value, args []js.Value) any {
 		return js.ValueOf(map[string]any{"ok": false, "error": err.Error()})
 	}
 	h.put(expr, prg)
+	return js.ValueOf(map[string]any{"ok": true})
+}
+
+// regexCompile(pattern) -> {ok} | {ok:false, error}. Validates a regex with
+// the same Go RE2 regexp the server and analyzers compile, so the browser
+// rejects exactly what the runtime rejects. JS RegExp is the wrong dialect
+// for this: it lacks RE2's inline flags ("(?i)") and "(?P<name>)" groups and
+// accepts lookarounds RE2 rejects.
+func regexCompile(_ js.Value, args []js.Value) any {
+	if _, err := regexp.Compile(arg(args, 0)); err != nil {
+		return js.ValueOf(map[string]any{"ok": false, "error": err.Error()})
+	}
 	return js.ValueOf(map[string]any{"ok": true})
 }
 

@@ -34,6 +34,15 @@ func (id ID) IsSet() bool {
 	return id.format != 0
 }
 
+// IsNull reports whether id serializes as JSON null, which happens both when
+// the request carried no id at all — as a notification does — and when it
+// carried an explicit null. Either way a response bearing this id answers no
+// particular request, so callers deciding how to answer one treat the two the
+// same.
+func (id ID) IsNull() bool {
+	return !id.IsSet() || id.format == idFormatNull
+}
+
 func (id ID) Value() string {
 	switch id.format {
 	case idFormatNumber:
@@ -46,7 +55,7 @@ func (id ID) Value() string {
 }
 
 func (id ID) MarshalJSON() ([]byte, error) {
-	if !id.IsSet() || id.format == idFormatNull {
+	if id.IsNull() {
 		return []byte("null"), nil
 	}
 

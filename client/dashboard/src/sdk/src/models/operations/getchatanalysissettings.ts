@@ -11,6 +11,10 @@ export type GetChatAnalysisSettingsSecurity = {
 
 export type GetChatAnalysisSettingsRequest = {
   /**
+   * Organization whose settings to read.
+   */
+  organizationId: string;
+  /**
    * Session header
    */
   gramSession?: string | undefined;
@@ -48,6 +52,7 @@ export function getChatAnalysisSettingsSecurityToJSON(
 
 /** @internal */
 export type GetChatAnalysisSettingsRequest$Outbound = {
+  organization_id: string;
   "Gram-Session"?: string | undefined;
 };
 
@@ -57,10 +62,12 @@ export const GetChatAnalysisSettingsRequest$outboundSchema: z.ZodMiniType<
   GetChatAnalysisSettingsRequest
 > = z.pipe(
   z.object({
+    organizationId: z.string(),
     gramSession: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      organizationId: "organization_id",
       gramSession: "Gram-Session",
     });
   }),

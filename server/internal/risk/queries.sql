@@ -11,9 +11,6 @@ INSERT INTO risk_policies (
   , prompt_injection_rules
   , disabled_rules
   , custom_rule_ids
-  , message_types
-  , scope_include
-  , scope_exempt
   , enabled
   , action
   , audience_type
@@ -37,9 +34,6 @@ VALUES (
   , @prompt_injection_rules
   , @disabled_rules
   , COALESCE(sqlc.arg(custom_rule_ids)::text[], '{}'::text[])
-  , sqlc.arg(message_types)::text[]
-  , sqlc.narg(scope_include)::text
-  , sqlc.narg(scope_exempt)::text
   , @enabled
   , @action
   , @audience_type
@@ -68,6 +62,12 @@ WHERE id = @id
   AND deleted IS FALSE
 FOR UPDATE;
 
+-- name: LockRiskPolicyMutations :exec
+-- Serialize all policy writes in one project. The single enabled blocking
+-- Shadow MCP policy invariant spans multiple rows, so a row lock alone cannot
+-- protect concurrent creates or enable/disable transitions.
+SELECT pg_advisory_xact_lock(hashtextextended('risk-policy:' || @project_id::text, 0));
+
 -- name: GetRiskPolicyNameIncludingDeleted :one
 SELECT name
 FROM risk_policies
@@ -80,6 +80,34 @@ FROM risk_policies
 WHERE project_id = @project_id
   AND deleted IS FALSE
 ORDER BY created_at DESC;
+
+-- name: ListRiskPolicyCreateCandidates :many
+-- Platform MCP create convergence narrows by the stable public identity before
+-- loading sensitive policy definitions for exact canonical comparison.
+SELECT *
+FROM risk_policies
+WHERE project_id = @project_id
+  AND name = @name
+  AND policy_type = @policy_type
+  AND deleted IS FALSE
+ORDER BY id;
+
+-- name: ListRiskPoliciesPage :many
+-- Platform MCP keyset page. The existing unbounded query remains the Goa
+-- compatibility path.
+SELECT *
+FROM risk_policies
+WHERE project_id = @project_id
+  AND deleted IS FALSE
+  AND (
+    sqlc.narg(cursor_created_at)::timestamptz IS NULL
+    OR (created_at, id) < (
+      sqlc.narg(cursor_created_at)::timestamptz,
+      sqlc.narg(cursor_id)::uuid
+    )
+  )
+ORDER BY created_at DESC, id DESC
+LIMIT @page_limit;
 
 -- name: ListEnabledRiskPoliciesByProject :many
 SELECT *
@@ -97,9 +125,6 @@ SET name = @name
   , prompt_injection_rules = @prompt_injection_rules
   , disabled_rules = @disabled_rules
   , custom_rule_ids = COALESCE(sqlc.arg(custom_rule_ids)::text[], '{}'::text[])
-  , message_types = sqlc.arg(message_types)::text[]
-  , scope_include = sqlc.narg(scope_include)::text
-  , scope_exempt = sqlc.narg(scope_exempt)::text
   , enabled = @enabled
   , action = @action
   , audience_type = @audience_type
@@ -116,9 +141,6 @@ SET name = @name
         OR prompt_injection_rules IS DISTINCT FROM @prompt_injection_rules
         OR disabled_rules IS DISTINCT FROM @disabled_rules
         OR custom_rule_ids IS DISTINCT FROM COALESCE(sqlc.arg(custom_rule_ids)::text[], '{}'::text[])
-        OR message_types IS DISTINCT FROM sqlc.arg(message_types)::text[]
-        OR scope_include IS DISTINCT FROM sqlc.narg(scope_include)::text
-        OR scope_exempt IS DISTINCT FROM sqlc.narg(scope_exempt)::text
         OR enabled IS DISTINCT FROM @enabled
         OR action IS DISTINCT FROM @action
         OR prompt IS DISTINCT FROM sqlc.narg(prompt)::text
@@ -421,6 +443,23 @@ WHERE id = @id
   AND deleted IS FALSE
 RETURNING *;
 
+-- name: ResolveRequestedRiskPolicyBypassRequest :one
+-- Resolves a bypass request only while it still awaits a decision. Used when
+-- a promoted approval review is decided: a row already decided through the
+-- legacy queue keeps its recorded outcome instead of being overwritten by
+-- the review's.
+UPDATE risk_policy_bypass_requests
+SET status = @status
+  , decided_by = @decided_by
+  , granted_principal_urns = @granted_principal_urns
+  , decided_at = clock_timestamp()
+  , updated_at = clock_timestamp()
+WHERE id = @id
+  AND project_id = @project_id
+  AND status = 'requested'
+  AND deleted IS FALSE
+RETURNING *;
+
 -- name: CreateCustomDetectionRule :one
 INSERT INTO risk_custom_detection_rules (
     project_id
@@ -489,6 +528,9 @@ WHERE rr.project_id = @project_id
   AND rr.risk_policy_version = @risk_policy_version;
 
 -- name: CountFindingsByPolicy :one
+-- Reported next to CountAnalyzedMessages, so it stays message-scoped: a
+-- skill-anchored finding has no message behind it and would inflate the
+-- numerator over a denominator that never counted it. (cubic)
 SELECT COUNT(*)::BIGINT
 FROM risk_results
 WHERE project_id = @project_id
@@ -496,14 +538,18 @@ WHERE project_id = @project_id
   AND risk_policy_version = @risk_policy_version
   AND found IS TRUE
   AND excluded_at IS NULL
-  AND false_positive_at IS NULL;
+  AND false_positive_at IS NULL
+  AND skill_version_id IS NULL;
 
 -- name: CountAllFindings :one
+-- Total for ListRiskResultsByProjectFound, which drops skill-anchored rows;
+-- counting them here would page an empty list against a non-zero total.
 SELECT COUNT(*)::BIGINT
 FROM risk_results rr
 JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
 WHERE rr.project_id = @project_id
-  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL;
+  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
+  AND rr.skill_version_id IS NULL;
 
 -- name: CountRiskResultsByProjectAndPolicy :one
 -- Matches the filter semantics of ListRiskResultsByProjectAndPolicy: a
@@ -514,7 +560,8 @@ FROM risk_results rr
 JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE
 WHERE rr.project_id = @project_id
   AND rr.risk_policy_id = @risk_policy_id
-  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL;
+  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
+  AND rr.skill_version_id IS NULL;
 
 -- name: GetRiskOverviewScanCounts :one
 -- messages_scanned counts every scanned message in the window regardless of
@@ -562,6 +609,7 @@ SELECT
 FROM risk_results rr
 WHERE rr.project_id = @project_id
   AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
+  AND rr.skill_version_id IS NULL
   AND rr.created_at >= @from_time
   AND rr.created_at < @to_time
 GROUP BY rr.rule_id, rr.source
@@ -706,6 +754,7 @@ WITH categorized AS (
   FROM risk_results rr
   WHERE rr.project_id = @project_id
     AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
+    AND rr.skill_version_id IS NULL
     AND rr.created_at >= @from_time
     AND rr.created_at < @to_time
 )
@@ -799,6 +848,7 @@ categorized AS (
   FROM risk_results rr
   WHERE rr.project_id = sqlc.arg(project_id)::uuid
     AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
+    AND rr.skill_version_id IS NULL
     AND rr.created_at >= @from_time
     AND rr.created_at < @to_time
 ),
@@ -828,13 +878,17 @@ ORDER BY buckets.bucket_start ASC, categories.category ASC;
 -- (project_id, id WHERE risk_analyzed_at IS NULL), which shrinks toward
 -- zero at steady state. The id >= @id_lower_bound bound (a UUIDv7 lower
 -- bound computed from the configured lookback) further limits the scan to
--- recent messages, reusing the same partial index ordering.
+-- recent messages, reusing the same partial index ordering. Oldest-first:
+-- under a backlog above the batch limit, newest-first would keep serving
+-- fresh messages while units nearing the lookback's edge age out without a
+-- retry; ascending order drains the window fairly and costs at most the
+-- lookback in added freshness latency.
 SELECT cm.id
 FROM chat_messages cm
 WHERE cm.project_id = @project_id
   AND cm.risk_analyzed_at IS NULL
   AND cm.id >= @id_lower_bound
-ORDER BY cm.id DESC
+ORDER BY cm.id ASC
 LIMIT @batch_limit;
 
 -- name: MarkMessagesRiskAnalyzed :exec
@@ -846,13 +900,14 @@ WHERE id = ANY(@message_ids::uuid[])
 -- name: FetchUnanalyzedContentPartIDs :many
 -- Scans the partial index chat_content_parts_risk_analyzed_at_null_idx
 -- (project_id, id WHERE risk_analyzed_at IS NULL), mirroring the chat_messages
--- unanalyzed sweep for non-turn content.
+-- unanalyzed sweep for non-turn content, including its oldest-first order so
+-- a backlog cannot starve units nearing the lookback's edge.
 SELECT ccp.id
 FROM chat_content_parts ccp
 WHERE ccp.project_id = @project_id
   AND ccp.risk_analyzed_at IS NULL
   AND ccp.id >= @id_lower_bound
-ORDER BY ccp.id DESC
+ORDER BY ccp.id ASC
 LIMIT @batch_limit;
 
 -- name: MarkContentPartsRiskAnalyzed :exec
@@ -866,7 +921,11 @@ WHERE id = ANY(@content_part_ids::uuid[])
 -- can attribute scanning volume to whose traffic was analyzed. Same
 -- attribution rule as ListRiskOverviewTopUsers: the message's own user_id
 -- wins, the chat owner's is the fallback — and a soft-deleted chat's owner
--- never is (LEFT JOIN so the message still gets scanned, just unattributed).
+-- never is, while its messages remain eligible for scanning.
+-- The lateral probes capture bounded causal context at the same event read:
+-- the latest preceding user request and the latest tool result strictly after
+-- that request. chat_messages_chat_id_created_at_idx supports both reverse
+-- time probes; seq deterministically orders equal timestamps.
 --
 -- created_at bounds the shadow-MCP scanner's ClickHouse provenance lookup to
 -- the batch's own time range, keeping that query on the telemetry table's
@@ -877,19 +936,51 @@ WHERE id = ANY(@content_part_ids::uuid[])
 -- metric to it, which is the one attribution available when the call resolved
 -- to no telemetry row at all — precisely the population that metric exists to
 -- measure.
-SELECT cm.id, cm.role, cm.content, cm.tool_calls, cm.created_at, cm.source,
-  COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''), '')::TEXT AS chat_user_id
+-- Both message queries validate their chat against the row's project before
+-- returning linkage. Content-part parents additionally must belong to the
+-- content part's chat, so corrupt cross-tenant or cross-chat ids never leave
+-- this boundary.
+SELECT cm.id, cm.chat_id, cm.role, cm.content, cm.tool_calls, cm.created_at, cm.source,
+  COALESCE(NULLIF(cm.user_id, ''), CASE WHEN c.deleted IS FALSE THEN NULLIF(c.user_id, '') END, '')::TEXT AS chat_user_id,
+  COALESCE(prior_user_request.content, '')::TEXT AS prior_user_request,
+  COALESCE(recent_tool.content, '')::TEXT AS recent_untrusted_content
 FROM chat_messages cm
-LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
+JOIN chats c ON c.id = cm.chat_id
+  AND c.project_id = cm.project_id
+LEFT JOIN LATERAL (
+  SELECT LEFT(prev.content, 4000) AS content, prev.created_at, prev.seq
+  FROM chat_messages prev
+  WHERE prev.chat_id = cm.chat_id
+    AND prev.project_id = cm.project_id
+    AND prev.role = 'user'
+    AND (prev.created_at, prev.seq) < (cm.created_at, cm.seq)
+  ORDER BY prev.created_at DESC, prev.seq DESC
+  LIMIT 1
+) prior_user_request ON TRUE
+LEFT JOIN LATERAL (
+  SELECT LEFT(prev.content, 4000) AS content
+  FROM chat_messages prev
+  WHERE prev.chat_id = cm.chat_id
+    AND prev.project_id = cm.project_id
+    AND prev.role = 'tool'
+    AND (prev.created_at, prev.seq) < (cm.created_at, cm.seq)
+    AND (prev.created_at, prev.seq) > (prior_user_request.created_at, prior_user_request.seq)
+  ORDER BY prev.created_at DESC, prev.seq DESC
+  LIMIT 1
+) recent_tool ON TRUE
 WHERE cm.id = ANY(@ids::uuid[])
   AND cm.project_id = @project_id;
 
 -- name: GetContentPartBatch :many
-SELECT ccp.id, ccp.kind AS message_type, ccp.content_asset_url, ccp.created_at, ccp.source,
-  COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''), '')::TEXT AS chat_user_id
+SELECT ccp.id, c.id AS chat_id, cm.id AS parent_chat_message_id, ccp.kind AS message_type,
+  ccp.content_asset_url, ccp.created_at, ccp.source,
+  COALESCE(NULLIF(cm.user_id, ''), CASE WHEN c.deleted IS FALSE THEN NULLIF(c.user_id, '') END, '')::TEXT AS chat_user_id
 FROM chat_content_parts ccp
+JOIN chats c ON c.id = ccp.chat_id
+  AND c.project_id = ccp.project_id
 LEFT JOIN chat_messages cm ON cm.id = ccp.parent_chat_message_id
-LEFT JOIN chats c ON c.id = ccp.chat_id AND c.deleted IS FALSE
+  AND cm.project_id = ccp.project_id
+  AND cm.chat_id = ccp.chat_id
 WHERE ccp.id = ANY(@ids::uuid[])
   AND ccp.project_id = @project_id
   AND ccp.deleted IS FALSE;
@@ -1004,17 +1095,106 @@ VALUES (
   , @dead_letter_reason
 );
 
--- name: DeleteRiskResultsForMessages :exec
-DELETE FROM risk_results
-WHERE risk_policy_id = @risk_policy_id
-  AND project_id = @project_id
-  AND chat_message_id = ANY(@message_ids::uuid[]);
+-- name: SkillVersionNeedsPromptInjectionScan :one
+-- True when some enabled prompt-injection policy has no recorded scan of this
+-- skill version under the current policy version yet. Gates the judge call:
+-- content is immutable per version, but policy configuration can change.
+SELECT EXISTS (
+  SELECT 1
+  FROM risk_policies p
+  WHERE p.project_id = @project_id
+    AND p.enabled IS TRUE
+    AND p.deleted IS FALSE
+    AND 'prompt_injection' = ANY (p.sources)
+    AND NOT EXISTS (
+      SELECT 1
+      FROM risk_results rr
+      WHERE rr.skill_version_id = @skill_version_id
+        AND rr.risk_policy_id = p.id
+        AND rr.risk_policy_version = p.version
+    )
+    -- Same anchor/project pin as RecordSkillPromptInjectionScan. Without it a
+    -- foreign version id opens the gate and burns a judge call on content the
+    -- record query will refuse to write. (cubic)
+    AND EXISTS (
+      SELECT 1
+      FROM skill_versions sv
+      JOIN skills sk ON sk.id = sv.skill_id
+      WHERE sv.id = @skill_version_id
+        AND sk.project_id = p.project_id
+    )
+);
 
--- name: DeleteRiskResultsForContentParts :exec
+-- name: RecordSkillPromptInjectionScan :exec
+-- Records one row per enabled prompt-injection policy, anchored on the version
+-- rather than a chat message.
+-- Called for any completed judgement: a found = FALSE row is the coverage
+-- record, mirroring the empty result rows the chat batch path writes.
+-- Concurrent scans can race after the state check. A finding upgrades a clean
+-- row, while a clean result can never erase a finding.
+INSERT INTO risk_results (project_id, organization_id, risk_policy_id, risk_policy_version, skill_version_id, source, found, rule_id, description, match, confidence)
+SELECT p.project_id, p.organization_id, p.id, p.version, @skill_version_id, @source::text, @found::boolean, sqlc.narg(rule_id)::text, sqlc.narg(description)::text, sqlc.narg(match)::text, sqlc.narg(confidence)::double precision
+FROM risk_policies p
+WHERE p.project_id = @project_id
+  AND p.enabled IS TRUE
+  AND p.deleted IS FALSE
+  AND 'prompt_injection' = ANY (p.sources)
+  -- Pin the anchor to the same project as the policy. The caller passes a
+  -- version id it just captured under the authed project, so this is
+  -- defence in depth: it keeps a foreign version id from being anchored
+  -- under a local policy if a future caller is less careful.
+  AND EXISTS (
+    SELECT 1
+    FROM skill_versions sv
+    JOIN skills sk ON sk.id = sv.skill_id
+    WHERE sv.id = @skill_version_id
+      AND sk.project_id = p.project_id
+  )
+ON CONFLICT (skill_version_id, risk_policy_id, risk_policy_version) WHERE skill_version_id IS NOT NULL
+DO UPDATE SET
+  source = EXCLUDED.source,
+  found = TRUE,
+  rule_id = EXCLUDED.rule_id,
+  description = EXCLUDED.description,
+  match = EXCLUDED.match,
+  confidence = EXCLUDED.confidence
+WHERE EXCLUDED.found IS TRUE
+  AND risk_results.found IS FALSE;
+
+-- name: DeleteRiskResultsForUnits :many
+-- Replaces a batch's rows across both anchor kinds in one statement.
+-- Returns the identity and dismissal columns of what the re-analysis
+-- replaced: the writer recomputes each row's deterministic id from the
+-- identity columns to learn which findings an earlier committed attempt
+-- already announced (their webhook outbox events must not be re-emitted) and
+-- which carried a manual dismissal to re-stamp onto the reinserted rows.
+-- Recomputing from identity rather than trusting the stored id keeps rows
+-- written before ids became deterministic (random UUIDs) on the same footing
+-- as new ones. Heavy payload columns (match aside, which is identity) stay
+-- out of the RETURNING set.
 DELETE FROM risk_results
 WHERE risk_policy_id = @risk_policy_id
   AND project_id = @project_id
-  AND chat_content_part_id = ANY(@content_part_ids::uuid[]);
+  AND (chat_message_id = ANY(@message_ids::uuid[])
+    OR chat_content_part_id = ANY(@content_part_ids::uuid[]))
+RETURNING id, risk_policy_version, chat_message_id, chat_content_part_id,
+  found, source, rule_id, description, match, start_pos, end_pos,
+  dead_letter_reason, false_positive_at, false_positive_reason;
+
+-- name: RestoreRiskResultFalsePositiveState :exec
+-- Re-stamps manual dismissals onto re-analyzed rows in the same transaction
+-- that replaced them. Ids that were not reinserted (the finding disappeared)
+-- match nothing, so a vanished finding's dismissal dies with it.
+UPDATE risk_results
+SET false_positive_at = v.false_positive_at
+  , false_positive_reason = NULLIF(v.false_positive_reason, '')
+FROM (
+    SELECT UNNEST(@ids::uuid[]) AS id
+         , UNNEST(@false_positive_ats::timestamptz[]) AS false_positive_at
+         , UNNEST(@false_positive_reasons::text[]) AS false_positive_reason
+) v
+WHERE risk_results.id = v.id
+  AND risk_results.project_id = @project_id;
 
 -- name: GetRiskResultByID :one
 -- Single-row lookup backing risk.results.unmask: fetch a result's raw match
@@ -1030,7 +1210,10 @@ WHERE rr.id = @id
   AND rr.project_id = @project_id
   AND rr.found IS TRUE
   AND rr.excluded_at IS NULL
-  AND rr.false_positive_at IS NULL;
+  AND rr.false_positive_at IS NULL
+  -- Skill-anchored findings have no chat, so chat_id would come back NULL and
+  -- fail the non-null scan. They need their own read path, not this one.
+  AND rr.skill_version_id IS NULL;
 
 -- name: ListRiskResultsByProjectFound :many
 -- Sort by the underlying chat message's created_at (the event time), NOT
@@ -1095,11 +1278,20 @@ FROM (
   ) blk ON TRUE
   WHERE rr.project_id = @project_id
     AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
+    -- Skill-anchored findings have no chat, so chat_id would come back NULL and
+    -- fail the non-null scan. They need their own read path, not this one.
+    AND rr.skill_version_id IS NULL
     AND (sqlc.narg(policy_id)::uuid IS NULL OR rr.risk_policy_id = sqlc.narg(policy_id)::uuid)
     AND (sqlc.narg(from_time)::timestamptz IS NULL OR COALESCE(cm.created_at, ccp.created_at) >= sqlc.narg(from_time)::timestamptz)
     AND (sqlc.narg(to_time)::timestamptz IS NULL OR COALESCE(cm.created_at, ccp.created_at) < sqlc.narg(to_time)::timestamptz)
     AND (@rule_id::text = '' OR rr.rule_id ILIKE '%' || @rule_id::text || '%')
     AND (@user_id::text = '' OR c.external_user_id ILIKE '%' || @user_id::text || '%')
+    -- Whole-id matching, unlike @user_id above: one subject's findings, not
+    -- everyone whose id happens to contain theirs as a substring.
+    AND (
+      COALESCE(cardinality(@external_user_ids::text[]), 0) = 0
+      OR lower(c.external_user_id) = ANY(ARRAY(SELECT lower(e) FROM unnest(@external_user_ids::text[]) AS e))
+    )
     AND (NOT @non_assistant::boolean OR NOT EXISTS (
       SELECT 1 FROM assistant_threads at
       WHERE at.chat_id = COALESCE(cm.chat_id, ccp.chat_id) AND at.deleted IS FALSE
@@ -1187,6 +1379,9 @@ LEFT JOIN LATERAL (
 WHERE rr.project_id = @project_id
   AND rr.risk_policy_id = @risk_policy_id
   AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
+  -- Skill-anchored findings have no chat, so chat_id would come back NULL and
+  -- fail the non-null scan. They need their own read path, not this one.
+  AND rr.skill_version_id IS NULL
   AND (
     sqlc.narg(cursor_message_created_at)::timestamptz IS NULL
     OR (COALESCE(cm.created_at, ccp.created_at), rr.id) < (sqlc.narg(cursor_message_created_at)::timestamptz, sqlc.narg(cursor_id)::uuid)
@@ -1237,14 +1432,83 @@ ORDER BY cm.chat_id DESC
 LIMIT @page_limit;
 
 -- name: ListEnabledEnforcingPoliciesByProject :many
--- Enforcing actions are block (hard deny) and warn (challenge: deny + ack link,
--- allowed after acknowledgement). flag is non-enforcing and excluded.
+-- Enforcing actions are block (hard deny), warn (challenge: deny + ack link,
+-- allowed after acknowledgement), and quarantine (hard deny + session circuit).
+-- flag is non-enforcing and excluded.
 SELECT *
 FROM risk_policies
 WHERE project_id = @project_id
   AND enabled IS TRUE
-  AND action IN ('block', 'warn')
+  AND action IN ('block', 'warn', 'quarantine')
   AND deleted IS FALSE;
+
+-- name: IsOrganizationHooksFailOpenEnabled :one
+SELECT EXISTS (
+  SELECT 1
+  FROM organization_features
+  WHERE organization_id = @organization_id
+    AND feature_name = 'hooks_fail_open'
+    AND deleted IS FALSE
+) AS enabled;
+
+-- name: CreateSessionQuarantine :one
+INSERT INTO session_quarantines (
+    organization_id
+  , project_id
+  , session_id
+  , risk_policy_id
+  , risk_policy_name
+  , user_id
+  , reason
+) VALUES (
+    @organization_id
+  , @project_id
+  , @session_id
+  , @risk_policy_id
+  , @risk_policy_name
+  , @user_id
+  , @reason
+)
+ON CONFLICT (organization_id, project_id, session_id) WHERE released_at IS NULL DO NOTHING
+RETURNING *;
+
+-- name: GetActiveSessionQuarantineBySession :one
+SELECT *
+FROM session_quarantines
+WHERE session_id = @session_id
+  AND organization_id = @organization_id
+  AND project_id = @project_id
+  AND released_at IS NULL;
+
+-- name: ListActiveSessionQuarantines :many
+SELECT *
+FROM session_quarantines
+WHERE organization_id = @organization_id
+  AND project_id = @project_id
+  AND released_at IS NULL
+ORDER BY created_at DESC, id DESC;
+
+-- name: ListActiveSessionQuarantinesPage :many
+SELECT *
+FROM session_quarantines
+WHERE released_at IS NULL
+  AND (
+    sqlc.narg(after_created_at)::timestamptz IS NULL
+    OR (created_at, id) > (sqlc.narg(after_created_at)::timestamptz, sqlc.narg(after_id)::uuid)
+  )
+ORDER BY created_at, id
+LIMIT @page_limit;
+
+-- name: ReleaseSessionQuarantine :one
+UPDATE session_quarantines
+SET released_at = clock_timestamp()
+  , released_by = @released_by
+  , updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND project_id = @project_id
+  AND released_at IS NULL
+RETURNING *;
 
 -- name: GetProjectFlagGroups :one
 -- Resolves the org and project slugs used to build PostHog flag-evaluation
@@ -1317,6 +1581,19 @@ WHERE id = @id
   AND project_id = @project_id
   AND deleted IS FALSE;
 
+-- name: GetRiskExclusionForUpdate :one
+SELECT *
+FROM risk_exclusions
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+FOR UPDATE;
+
+-- name: LockRiskExclusionMutations :exec
+-- Serialize exclusion writes per project. Regex limits span rows and include the
+-- empty global scope, so row locks alone cannot protect the count-and-write.
+SELECT pg_advisory_xact_lock(hashtextextended('risk-exclusion:' || @project_id::text, 0));
+
 -- name: GetRiskExclusionForReconcile :one
 -- Fetches an exclusion regardless of deleted/enabled state so the reconcile
 -- sweep can decide whether to apply (enabled) or only reverse (deleted/disabled).
@@ -1337,6 +1614,24 @@ WHERE project_id = @project_id
   AND (sqlc.narg(risk_policy_id)::uuid IS NULL OR risk_policy_id = sqlc.narg(risk_policy_id))
 ORDER BY created_at DESC;
 
+-- name: ListRiskExclusionsByProjectPage :many
+-- Platform MCP keyset page. The existing unbounded query remains the Goa
+-- compatibility path.
+SELECT *
+FROM risk_exclusions
+WHERE project_id = @project_id
+  AND deleted IS FALSE
+  AND (sqlc.narg(risk_policy_id)::uuid IS NULL OR risk_policy_id = sqlc.narg(risk_policy_id))
+  AND (
+    sqlc.narg(cursor_created_at)::timestamptz IS NULL
+    OR (created_at, id) < (
+      sqlc.narg(cursor_created_at)::timestamptz,
+      sqlc.narg(cursor_id)::uuid
+    )
+  )
+ORDER BY created_at DESC, id DESC
+LIMIT @page_limit;
+
 -- name: ListEnabledExclusionsForPolicy :many
 -- Exclusions that apply when analyzing/enforcing a given policy: the policy's
 -- own plus every global one. Used to build the going-forward ExclusionSet.
@@ -1350,14 +1645,16 @@ ORDER BY created_at;
 
 -- name: CountEnabledRegexExclusionsInScope :one
 -- Enforces the per-scope regex cap. Counts enabled regex exclusions sharing the
--- same scope (same risk_policy_id, treating NULL/global as its own bucket).
+-- same scope (same risk_policy_id, treating NULL/global as its own bucket),
+-- optionally excluding the row currently being updated.
 SELECT COUNT(*)::BIGINT
 FROM risk_exclusions
 WHERE project_id = @project_id
   AND match_type = 'regex'
   AND enabled IS TRUE
   AND deleted IS FALSE
-  AND risk_policy_id IS NOT DISTINCT FROM sqlc.narg(risk_policy_id);
+  AND risk_policy_id IS NOT DISTINCT FROM sqlc.narg(risk_policy_id)
+  AND (sqlc.narg(exclude_id)::uuid IS NULL OR id <> sqlc.narg(exclude_id));
 
 -- name: UpdateRiskExclusion :one
 UPDATE risk_exclusions
@@ -1402,9 +1699,10 @@ WHERE project_id = @project_id
   AND id = ANY(@ids::uuid[]);
 
 -- name: MarkRiskResultsFalsePositive :many
--- Returns full rows (not just id): the caller republishes each one onto the
--- findings topic to append a ClickHouse state-change row, and needs the
--- finding content (source/rule_id/match/...) to build that message.
+-- Returns the full rows the UPDATE actually changed: they drive audit logging
+-- and the ClickHouse mirror's outbox enqueue, both inside the same
+-- transaction as this UPDATE, so a retry that changes nothing correctly
+-- audits and mirrors nothing.
 UPDATE risk_results
 SET false_positive_at = clock_timestamp()
   , false_positive_reason = sqlc.narg(reason)
@@ -1444,6 +1742,9 @@ LEFT JOIN chat_content_parts ccp ON ccp.id = rr.chat_content_part_id
 LEFT JOIN chats c ON c.id = COALESCE(cm.chat_id, ccp.chat_id) AND c.deleted IS FALSE
 WHERE rr.project_id = @project_id
   AND rr.false_positive_at IS NOT NULL
+  -- Skill-anchored findings have no chat, so chat_id would come back NULL and
+  -- fail the non-null scan. They need their own read path, not this one.
+  AND rr.skill_version_id IS NULL
   AND (
     sqlc.narg(cursor_false_positive_at)::timestamptz IS NULL
     OR (rr.false_positive_at, rr.id) < (sqlc.narg(cursor_false_positive_at)::timestamptz, sqlc.narg(cursor_id)::uuid)
@@ -1452,10 +1753,12 @@ ORDER BY rr.false_positive_at DESC, rr.id DESC
 LIMIT @page_limit;
 
 -- name: CountFalsePositiveRiskResults :one
+-- Total for ListFalsePositiveRiskResults, which drops skill-anchored rows.
 SELECT COUNT(*)::BIGINT
 FROM risk_results
 WHERE project_id = @project_id
-  AND false_positive_at IS NOT NULL;
+  AND false_positive_at IS NOT NULL
+  AND skill_version_id IS NULL;
 
 -- Exclusion reconcile sweep -------------------------------------------------
 -- All batches are keyset-paginated by id (id > @cursor, ORDER BY id, LIMIT
@@ -1571,6 +1874,7 @@ SELECT
     b.project_id,
     b.reason,
     b.tool_name,
+    b.provider,
     b.feedback,
     b.created_at,
     b.user_id,
@@ -1610,7 +1914,7 @@ WHERE tool_call_blocks.id = sqlc.arg(id)
       AND our.deleted_at IS NULL
   )
 RETURNING tool_call_blocks.id, tool_call_blocks.project_id, tool_call_blocks.reason, tool_call_blocks.tool_name,
-  tool_call_blocks.feedback, tool_call_blocks.created_at,
+  tool_call_blocks.provider, tool_call_blocks.feedback, tool_call_blocks.created_at,
   COALESCE((SELECT rp.name FROM risk_policies rp WHERE rp.id = tool_call_blocks.risk_policy_id AND rp.deleted IS FALSE), '')::text AS policy_name;
 
 

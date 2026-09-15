@@ -38,6 +38,10 @@ func rootPath(elem ...string) string {
 // a function to create test databases from the template. All clone databases
 // are automatically dropped when the test ends using t.Cleanup hooks.
 func NewTestPostgres(ctx context.Context) (*postgres.PostgresContainer, PostgresDBCloneFunc, error) {
+	if err := ensureDockerReady(ctx); err != nil {
+		return nil, nil, fmt.Errorf("wait for docker: %w", err)
+	}
+
 	container, err := postgres.Run(
 		ctx,
 		"pgvector/pgvector:pg17",
@@ -67,7 +71,7 @@ func NewTestPostgres(ctx context.Context) (*postgres.PostgresContainer, Postgres
 
 	conn, err := pgx.Connect(ctx, uri)
 	if err != nil {
-		return nil, nil, fmt.Errorf("connect to template database: %w", err)
+		return nil, nil, fmt.Errorf("connect to maintenance database: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error { return conn.Close(ctx) })
 
@@ -83,7 +87,9 @@ func postgresURI(ctx context.Context, container *postgres.PostgresContainer) (st
 	if err != nil {
 		return "", fmt.Errorf("resolve postgres address: %w", err)
 	}
-	return fmt.Sprintf("postgres://gotest:gotest@%s/gotestdb?sslmode=disable", addr), nil
+	// Keep clone creation and cleanup connections off the template: PostgreSQL
+	// cannot clone it while another session (including cleanup) is connected.
+	return fmt.Sprintf("postgres://gotest:gotest@%s/postgres?sslmode=disable", addr), nil
 }
 
 func newPostgresCloneFunc(container *postgres.PostgresContainer) PostgresDBCloneFunc {
@@ -101,7 +107,7 @@ func newPostgresCloneFunc(container *postgres.PostgresContainer) PostgresDBClone
 
 		conn, err := pgx.Connect(ctx, uri)
 		if err != nil {
-			return nil, fmt.Errorf("connect to template database: %w", err)
+			return nil, fmt.Errorf("connect to maintenance database: %w", err)
 		}
 		defer o11y.NoLogDefer(func() error { return conn.Close(ctx) })
 
@@ -110,7 +116,7 @@ func newPostgresCloneFunc(container *postgres.PostgresContainer) PostgresDBClone
 			return nil, fmt.Errorf("create test database: %w", err)
 		}
 
-		cloneURI := uri[:len(uri)-len("gotestdb?sslmode=disable")] + cloneName + "?sslmode=disable"
+		cloneURI := uri[:len(uri)-len("postgres?sslmode=disable")] + cloneName + "?sslmode=disable"
 		pool, err := pgxpool.New(ctx, cloneURI)
 		if err != nil {
 			return nil, fmt.Errorf("create pgx pool: %w", err)

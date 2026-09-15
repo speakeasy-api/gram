@@ -107,7 +107,7 @@ After publishing, the dashboard shows a GitHub repo link and marketplace install
 ## Running tests
 
 ```bash
-mise test:server -- ./server/internal/plugins/...
+mise run test:server ./internal/plugins/...
 ```
 
 Plugin tests live in `server/internal/plugins/` alongside the implementation. They use `testenv` for a real Postgres instance — no mocks. The GitHub publisher is stubbed for unit tests via the `GitHubPublisher` interface.

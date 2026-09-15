@@ -1240,10 +1240,12 @@ func unmarshalUserSessionIssuerResponseBodyToTypesUserSessionIssuer(v *UserSessi
 	res := &types.UserSessionIssuer{
 		ID:                            *v.ID,
 		ProjectID:                     *v.ProjectID,
+		OrganizationID:                *v.OrganizationID,
 		Slug:                          *v.Slug,
 		AuthnChallengeMode:            *v.AuthnChallengeMode,
 		SessionDurationHours:          *v.SessionDurationHours,
 		ClientIDMetadataAdmissionMode: *v.ClientIDMetadataAdmissionMode,
+		TrustedRemoteSessionIssuerID:  v.TrustedRemoteSessionIssuerID,
 		CreatedAt:                     *v.CreatedAt,
 		UpdatedAt:                     *v.UpdatedAt,
 	}

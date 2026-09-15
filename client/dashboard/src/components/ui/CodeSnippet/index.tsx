@@ -46,6 +46,10 @@ export interface CodeSnippetProps {
    */
   showLineNumbers?: boolean;
   /**
+   * Whether to wrap long lines within the available width.
+   */
+  wordWrap?: boolean;
+  /**
    * The callback to call when the code is selected or copied.
    */
   onSelectOrCopy?: () => void;
@@ -89,6 +93,7 @@ export function CodeSnippet({
   className,
   snippetClassName,
   showLineNumbers = false,
+  wordWrap = false,
 }: CodeSnippetProps): React.JSX.Element {
   const [copying, setCopying] = useState(false);
   const [containerWidth, setContainerWidth] = useState(0);
@@ -137,9 +142,9 @@ export function CodeSnippet({
   const handleCopy = useCallback(() => {
     setCopying(true);
     void navigator.clipboard.writeText(highlightedCodeState?.code ?? code);
+    onSelectOrCopy?.();
     setTimeout(() => {
       setCopying(false);
-      onSelectOrCopy?.();
     }, 1000);
   }, [highlightedCodeState?.code, code, onSelectOrCopy]);
 
@@ -155,7 +160,7 @@ export function CodeSnippet({
       style={{ "--width": `${containerWidth}px` } as React.CSSProperties}
       ref={containerRef}
     >
-      <div className="snippet-inner flex w-full flex-row gap-2 bg-card p-4">
+      <div className="snippet-inner flex min-w-0 w-full flex-row gap-2 bg-card p-4">
         {language === "bash" && (
           <div className="self-center font-mono font-light text-body select-none">
             {promptSymbol ?? "$"}
@@ -173,6 +178,7 @@ export function CodeSnippet({
             )}
             onBeforeInput={preventDefault}
             showLineNumbers={showLineNumbers}
+            wordWrap={wordWrap}
           />
         )}
 

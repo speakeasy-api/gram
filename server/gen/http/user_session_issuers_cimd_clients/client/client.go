@@ -25,6 +25,10 @@ type Client struct {
 	// requests to the createUserSessionIssuerCimdClient endpoint.
 	CreateUserSessionIssuerCimdClientDoer goahttp.Doer
 
+	// VerifyURL Doer is the HTTP client used to make requests to the verifyURL
+	// endpoint.
+	VerifyURLDoer goahttp.Doer
+
 	// ListUserSessionIssuerCimdClients Doer is the HTTP client used to make
 	// requests to the listUserSessionIssuerCimdClients endpoint.
 	ListUserSessionIssuerCimdClientsDoer goahttp.Doer
@@ -60,6 +64,7 @@ func NewClient(
 	return &Client{
 		ListPresetsDoer:                       doer,
 		CreateUserSessionIssuerCimdClientDoer: doer,
+		VerifyURLDoer:                         doer,
 		ListUserSessionIssuerCimdClientsDoer:  doer,
 		GetUserSessionIssuerCimdClientDoer:    doer,
 		DeleteUserSessionIssuerCimdClientDoer: doer,
@@ -115,6 +120,30 @@ func (c *Client) CreateUserSessionIssuerCimdClient() goa.Endpoint {
 		resp, err := c.CreateUserSessionIssuerCimdClientDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("userSessionIssuersCimdClients", "createUserSessionIssuerCimdClient", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// VerifyURL returns an endpoint that makes HTTP requests to the
+// userSessionIssuersCimdClients service verifyURL server.
+func (c *Client) VerifyURL() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeVerifyURLRequest(c.encoder)
+		decodeResponse = DecodeVerifyURLResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildVerifyURLRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.VerifyURLDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("userSessionIssuersCimdClients", "verifyURL", err)
 		}
 		return decodeResponse(resp)
 	}

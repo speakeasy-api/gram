@@ -208,6 +208,22 @@ func (sbs *S3BlobStore) Write(ctx context.Context, subpath string, contentType s
 	return pw, uri, nil
 }
 
+// Delete removes the object; a missing key is success (S3 DeleteObject is
+// idempotent by contract), matching the BlobStore burn-after-read semantics.
+func (sbs *S3BlobStore) Delete(ctx context.Context, u *url.URL) error {
+	subpath, err := sbs.getPath(u)
+	if err != nil {
+		return fmt.Errorf("generate asset path: %w", err)
+	}
+	if _, err := sbs.client.DeleteObject(ctx, &s3.DeleteObjectInput{
+		Bucket: aws.String(sbs.bucket),
+		Key:    aws.String(subpath),
+	}); err != nil {
+		return fmt.Errorf("delete object: %w", err)
+	}
+	return nil
+}
+
 func (sbs *S3BlobStore) PresignRead(ctx context.Context, subpath string, ttl time.Duration) (*url.URL, error) {
 	uri, err := sbs.getBucketURI(subpath)
 	if err != nil {
@@ -255,7 +271,7 @@ func (s *s3ChunkReader) ReadAt(p []byte, offset int64) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("get object with range: %w", err)
 	}
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.LogDefer(ctx, s.logger, "failed to close s3 object body", func() error {
 		return result.Body.Close()
 	})
 
@@ -276,14 +292,12 @@ func (s *s3ChunkReader) Close() error {
 
 func isS3NotFoundError(err error) bool {
 	// Check if the error is a "not found" error
-	var notFound *types.NotFound
-	if errors.As(err, &notFound) {
+	if _, ok := errors.AsType[*types.NotFound](err); ok {
 		return true
 	}
 
 	// Also check for NoSuchKey (some S3-compatible services use this)
-	var noSuchKey *types.NoSuchKey
-	if errors.As(err, &noSuchKey) {
+	if _, ok := errors.AsType[*types.NoSuchKey](err); ok {
 		return true
 	}
 

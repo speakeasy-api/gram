@@ -22,6 +22,7 @@ type Server struct {
 	Mounts                            []*MountPoint
 	ListPresets                       http.Handler
 	CreateUserSessionIssuerCimdClient http.Handler
+	VerifyURL                         http.Handler
 	ListUserSessionIssuerCimdClients  http.Handler
 	GetUserSessionIssuerCimdClient    http.Handler
 	DeleteUserSessionIssuerCimdClient http.Handler
@@ -56,12 +57,14 @@ func New(
 		Mounts: []*MountPoint{
 			{"ListPresets", "GET", "/rpc/userSessionIssuersCimdClients.listPresets"},
 			{"CreateUserSessionIssuerCimdClient", "POST", "/rpc/userSessionIssuersCimdClients.create"},
+			{"VerifyURL", "POST", "/rpc/userSessionIssuersCimdClients.verifyURL"},
 			{"ListUserSessionIssuerCimdClients", "GET", "/rpc/userSessionIssuersCimdClients.list"},
 			{"GetUserSessionIssuerCimdClient", "GET", "/rpc/userSessionIssuersCimdClients.get"},
 			{"DeleteUserSessionIssuerCimdClient", "DELETE", "/rpc/userSessionIssuersCimdClients.delete"},
 		},
 		ListPresets:                       NewListPresetsHandler(e.ListPresets, mux, decoder, encoder, errhandler, formatter),
 		CreateUserSessionIssuerCimdClient: NewCreateUserSessionIssuerCimdClientHandler(e.CreateUserSessionIssuerCimdClient, mux, decoder, encoder, errhandler, formatter),
+		VerifyURL:                         NewVerifyURLHandler(e.VerifyURL, mux, decoder, encoder, errhandler, formatter),
 		ListUserSessionIssuerCimdClients:  NewListUserSessionIssuerCimdClientsHandler(e.ListUserSessionIssuerCimdClients, mux, decoder, encoder, errhandler, formatter),
 		GetUserSessionIssuerCimdClient:    NewGetUserSessionIssuerCimdClientHandler(e.GetUserSessionIssuerCimdClient, mux, decoder, encoder, errhandler, formatter),
 		DeleteUserSessionIssuerCimdClient: NewDeleteUserSessionIssuerCimdClientHandler(e.DeleteUserSessionIssuerCimdClient, mux, decoder, encoder, errhandler, formatter),
@@ -75,6 +78,7 @@ func (s *Server) Service() string { return "userSessionIssuersCimdClients" }
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListPresets = m(s.ListPresets)
 	s.CreateUserSessionIssuerCimdClient = m(s.CreateUserSessionIssuerCimdClient)
+	s.VerifyURL = m(s.VerifyURL)
 	s.ListUserSessionIssuerCimdClients = m(s.ListUserSessionIssuerCimdClients)
 	s.GetUserSessionIssuerCimdClient = m(s.GetUserSessionIssuerCimdClient)
 	s.DeleteUserSessionIssuerCimdClient = m(s.DeleteUserSessionIssuerCimdClient)
@@ -88,6 +92,7 @@ func (s *Server) MethodNames() []string { return usersessionissuerscimdclients.M
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountListPresetsHandler(mux, h.ListPresets)
 	MountCreateUserSessionIssuerCimdClientHandler(mux, h.CreateUserSessionIssuerCimdClient)
+	MountVerifyURLHandler(mux, h.VerifyURL)
 	MountListUserSessionIssuerCimdClientsHandler(mux, h.ListUserSessionIssuerCimdClients)
 	MountGetUserSessionIssuerCimdClientHandler(mux, h.GetUserSessionIssuerCimdClient)
 	MountDeleteUserSessionIssuerCimdClientHandler(mux, h.DeleteUserSessionIssuerCimdClient)
@@ -184,6 +189,59 @@ func NewCreateUserSessionIssuerCimdClientHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "createUserSessionIssuerCimdClient")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "userSessionIssuersCimdClients")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountVerifyURLHandler configures the mux to serve the
+// "userSessionIssuersCimdClients" service "verifyURL" endpoint.
+func MountVerifyURLHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/userSessionIssuersCimdClients.verifyURL", f)
+}
+
+// NewVerifyURLHandler creates a HTTP handler which loads the HTTP request and
+// calls the "userSessionIssuersCimdClients" service "verifyURL" endpoint.
+func NewVerifyURLHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeVerifyURLRequest(mux, decoder)
+		encodeResponse = EncodeVerifyURLResponse(encoder)
+		encodeError    = EncodeVerifyURLError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "verifyURL")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "userSessionIssuersCimdClients")
 		payload, err := decodeRequest(r)
 		if err != nil {

@@ -1,16 +1,14 @@
 import { cn } from "@/lib/utils";
-import Editor, { loader, OnMount } from "@monaco-editor/react";
+import Editor, { loader } from "@monaco-editor/react";
 import { useConfig as useMoonshineConfig } from "@/components/ui/hooks/useConfig";
-import type * as Monaco from "monaco-editor";
 import * as monaco from "monaco-editor";
-import { useEffect, useRef } from "react";
 
 // oxlint-disable import/default -- Vite ?worker URL imports lack named defaults
-import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
-import jsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker";
-import cssWorker from "monaco-editor/esm/vs/language/css/css.worker?worker";
-import htmlWorker from "monaco-editor/esm/vs/language/html/html.worker?worker";
-import tsWorker from "monaco-editor/esm/vs/language/typescript/ts.worker?worker";
+import editorWorker from "monaco-editor/editor/editor.worker.js?worker";
+import jsonWorker from "monaco-editor/language/json/json.worker.js?worker";
+import cssWorker from "monaco-editor/language/css/css.worker.js?worker";
+import htmlWorker from "monaco-editor/language/html/html.worker.js?worker";
+import tsWorker from "monaco-editor/language/typescript/ts.worker.js?worker";
 
 self.MonacoEnvironment = {
   getWorker(_, label) {
@@ -34,7 +32,15 @@ self.MonacoEnvironment = {
   },
 };
 
-loader.config({ monaco });
+// Point @monaco-editor/react at the bundled monaco. Guarded: a second call after
+// init throws, but it's the same instance, so swallow the duplicate. The CEL
+// editor on the security pages configures the same loader and carries the
+// same guard, so either may load first.
+try {
+  loader.config({ monaco });
+} catch {
+  // already configured by another Monaco entry point this session
+}
 
 interface MonacoEditorProps {
   value: string;
@@ -61,33 +67,6 @@ export function MonacoEditor({
   wordWrap = "off",
 }: MonacoEditorProps): JSX.Element {
   const { theme } = useMoonshineConfig();
-  const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
-
-  const handleEditorDidMount: OnMount = (editor, _monaco) => {
-    editorRef.current = editor;
-
-    // Configure editor options for better UX
-    editor.updateOptions({
-      readOnly,
-      minimap: { enabled: true },
-      scrollBeyondLastLine: false,
-      renderWhitespace: "selection",
-      fontSize: 12,
-      fontFamily:
-        'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
-      lineNumbers: "on",
-      folding: true,
-      automaticLayout: true,
-      wordWrap,
-    });
-  };
-
-  // Update editor theme when Moonshine theme changes
-  useEffect(() => {
-    if (editorRef.current) {
-      monaco.editor.setTheme(theme === "dark" ? "vs-dark" : "vs");
-    }
-  }, [theme]);
 
   return (
     <div className={cn("overflow-hidden", className)}>
@@ -96,7 +75,6 @@ export function MonacoEditor({
         language={language}
         value={value}
         theme={theme === "dark" ? "vs-dark" : "vs"}
-        onMount={handleEditorDidMount}
         options={{
           readOnly,
           minimap: { enabled: true },
@@ -109,6 +87,9 @@ export function MonacoEditor({
           folding: true,
           automaticLayout: true,
           wordWrap,
+          // Embedded in a page that scrolls: once the editor reaches its own
+          // end, hand the wheel back to the page rather than trapping it.
+          scrollbar: { alwaysConsumeMouseWheel: false },
         }}
         loading={
           <div className="flex h-full items-center justify-center">

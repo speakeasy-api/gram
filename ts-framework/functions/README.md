@@ -464,13 +464,7 @@ Generate a manifest of all registered tools:
 ```typescript
 import { Gram } from "@gram-ai/functions";
 
-const gram = new Gram()
-  .tool({
-    /* ... */
-  })
-  .tool({
-    /* ... */
-  });
+const gram = new Gram().tool({/* ... */}).tool({/* ... */});
 
 const manifest = g.manifest();
 // {
@@ -495,13 +489,7 @@ Gram to handle tool calls automatically when deployed:
 ```typescript
 import { Gram } from "@gram-ai/functions";
 
-const gram = new Gram()
-  .tool({
-    /* ... */
-  })
-  .tool({
-    /* ... */
-  });
+const gram = new Gram().tool({/* ... */}).tool({/* ... */});
 
 export default gram;
 ```

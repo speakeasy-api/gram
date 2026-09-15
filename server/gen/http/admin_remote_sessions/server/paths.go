@@ -12,6 +12,11 @@ func CreateGlobalIssuerAdminRemoteSessionsPath() string {
 	return "/rpc/adminRemoteSessions.createGlobalIssuer"
 }
 
+// GetGlobalIssuerDuplicatePreflightAdminRemoteSessionsPath returns the URL path to the adminRemoteSessions service getGlobalIssuerDuplicatePreflight HTTP endpoint.
+func GetGlobalIssuerDuplicatePreflightAdminRemoteSessionsPath() string {
+	return "/rpc/adminRemoteSessions.getGlobalIssuerDuplicatePreflight"
+}
+
 // ListGlobalIssuersAdminRemoteSessionsPath returns the URL path to the adminRemoteSessions service listGlobalIssuers HTTP endpoint.
 func ListGlobalIssuersAdminRemoteSessionsPath() string {
 	return "/rpc/adminRemoteSessions.listGlobalIssuers"

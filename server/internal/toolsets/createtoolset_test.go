@@ -516,7 +516,7 @@ func TestToolsetsService_CreateToolset_LegacyProject_TriggersInitialPublish(t *t
 	})
 	require.NoError(t, err)
 
-	workflowID := fmt.Sprintf("v1:plugin-initial-publish/%s", authCtx.ProjectID.String())
+	workflowID := fmt.Sprintf("v1:plugin-publish:%s", authCtx.ProjectID.String())
 	waitCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	require.NoError(t, ti.temporalEnv.Client().GetWorkflow(waitCtx, workflowID, "").Get(waitCtx, nil), "initial publish workflow did not complete")

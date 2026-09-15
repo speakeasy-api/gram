@@ -1,4 +1,5 @@
 import { Eye, EyeOff, Loader2, Lock } from "lucide-react";
+import { cn } from "@/lib/utils";
 import {
   useCallback,
   useEffect,
@@ -50,7 +51,14 @@ export function CategoryLabel({
       title={`${meta.label}: ${meta.description}`}
     >
       <Badge variant="neutral" className="max-w-full">
-        <Badge.Text className="min-w-0 truncate">{meta.label}</Badge.Text>
+        {/* The ellipsis needs overflow:hidden, but Badge.Text's default box
+            hugs the glyph ink (leading-none plus cap/alphabetic
+            text-box-trim), so clipping there shaves the letters themselves.
+            Disable the trim and open up the line box on this truncating
+            instance so the ink never crosses the clip edge. */}
+        <Badge.Text className="min-w-0 truncate leading-normal [text-box-trim:none]">
+          {meta.label}
+        </Badge.Text>
       </Badge>
     </span>
   );
@@ -173,10 +181,25 @@ export function RevealAllToggle({
 export function MaskedMatch({
   resultId,
   matchRedacted,
+  tone = "default",
+  wrap = false,
 }: {
   resultId: string | undefined;
   matchRedacted: string | undefined;
+  /**
+   * "contrast" renders for a dark code-block backdrop (the Watchdog drawer's
+   * evidence card): the masked state becomes a red redaction chip and the
+   * revealed value flips to the backdrop's inverse text color.
+   */
+  tone?: "default" | "contrast";
+  /**
+   * Soft-wrap the revealed value instead of scrolling it horizontally. Use in
+   * detail surfaces (drawers) where the full value should stay visible; table
+   * cells keep the default single-line scroll so row heights stay stable.
+   */
+  wrap?: boolean;
 }): JSX.Element {
+  const contrast = tone === "contrast";
   const { hasScope } = useRBAC();
   const canReveal = hasScope(REVEAL_SCOPE);
   const ctx = useRevealAll();
@@ -202,16 +225,16 @@ export function MaskedMatch({
 
   if (!resultId || !matchRedacted) return <span>-</span>;
 
-  // Without chat:read the value can never be revealed — render a static,
-  // non-interactive placeholder so reveal-all can't flip it open either.
+  // Without chat:read the plaintext can never be revealed — keep the
+  // fingerprint on screen so a reviewer can still correlate and inspect the
+  // finding before suppressing it. Reveal-all must not flip this open.
   if (!canReveal) {
     return (
-      <SimpleTooltip tooltip={REVEAL_DENIED_REASON}>
-        <span className="text-muted-foreground inline-flex items-center gap-1 text-xs">
-          <Lock className="h-3 w-3" />
-          <span>Hidden</span>
-        </span>
-      </SimpleTooltip>
+      <LockedRedactedMatch
+        matchRedacted={matchRedacted}
+        contrast={contrast}
+        wrap={wrap}
+      />
     );
   }
 
@@ -219,7 +242,12 @@ export function MaskedMatch({
     return (
       <button
         type="button"
-        className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs disabled:opacity-60"
+        className={cn(
+          "inline-flex items-center gap-1 text-xs disabled:opacity-60",
+          contrast
+            ? "bg-destructive px-2 py-0.5 font-mono tracking-wide text-white uppercase hover:bg-destructive/80"
+            : "text-muted-foreground hover:text-foreground",
+        )}
         disabled={isLoading}
         onClick={(e) => {
           e.stopPropagation();
@@ -238,15 +266,33 @@ export function MaskedMatch({
   }
 
   return (
-    <span className="inline-flex max-w-full min-w-0 items-center gap-1">
+    <span
+      className={cn(
+        "inline-flex max-w-full min-w-0 gap-1",
+        wrap ? "items-start" : "items-center",
+      )}
+    >
       <SimpleTooltip tooltip={value}>
-        <span className="min-w-0 overflow-x-auto font-mono text-xs whitespace-nowrap">
+        <span
+          className={cn(
+            "min-w-0 font-mono text-xs",
+            wrap
+              ? "break-all whitespace-pre-wrap"
+              : "overflow-x-auto whitespace-nowrap",
+            contrast && "text-background",
+          )}
+        >
           {value}
         </span>
       </SimpleTooltip>
       <button
         type="button"
-        className="text-muted-foreground hover:text-foreground shrink-0"
+        className={cn(
+          "shrink-0",
+          contrast
+            ? "text-background/60 hover:text-background"
+            : "text-muted-foreground hover:text-foreground",
+        )}
         onClick={(e) => {
           e.stopPropagation();
           setRevealed(false);
@@ -264,6 +310,47 @@ function prettyJSON(s: string): string {
   } catch {
     return s;
   }
+}
+
+// Static fingerprint for callers who lack chat:read. The lock explains why
+// the plaintext stays withheld; the fingerprint itself is the reviewable
+// token the list endpoints already ship as match_redacted.
+function LockedRedactedMatch({
+  matchRedacted,
+  contrast = false,
+  wrap = false,
+}: {
+  matchRedacted: string;
+  contrast?: boolean;
+  wrap?: boolean;
+}): JSX.Element {
+  return (
+    <SimpleTooltip tooltip={REVEAL_DENIED_REASON}>
+      <span
+        className={cn(
+          "inline-flex max-w-full min-w-0 gap-1 text-xs",
+          wrap ? "items-start" : "items-center",
+          contrast ? "text-background/70" : "text-muted-foreground",
+        )}
+      >
+        <Lock
+          role="img"
+          aria-label={REVEAL_DENIED_REASON}
+          className="h-3 w-3 shrink-0"
+        />
+        <span
+          className={cn(
+            "min-w-0 font-mono",
+            wrap
+              ? "break-all whitespace-pre-wrap"
+              : "overflow-x-auto whitespace-nowrap",
+          )}
+        >
+          {matchRedacted}
+        </span>
+      </span>
+    </SimpleTooltip>
+  );
 }
 
 // A judge rationale rendered for a cell that has no reveal affordance. Clamped
@@ -302,32 +389,29 @@ export function EventMatchDialog({
 
   const summary = rationale?.trim() ? rationale.trim() : null;
 
-  if (!resultId || !hasRevealableEvent(matchRedacted)) {
+  if (!resultId || !matchRedacted || !hasRevealableEvent(matchRedacted)) {
     return summary ? <RationaleText text={summary} /> : <span>-</span>;
   }
 
   // Without chat:read the event payload can never be revealed, so there's no
-  // trigger to render. The rationale still stands on its own.
+  // trigger to render. The rationale still stands on its own; with none, the
+  // redacted fingerprint is the reviewable token (same as MaskedMatch).
   if (!canReveal) {
-    return (
-      <span className="flex min-w-0 items-center gap-1.5">
-        <SimpleTooltip tooltip={REVEAL_DENIED_REASON}>
-          <Lock
-            role="img"
-            aria-label={REVEAL_DENIED_REASON}
-            className="text-muted-foreground h-3 w-3 shrink-0"
-          />
-        </SimpleTooltip>
-        {/* The rationale reads as ordinary text, so without a label the lock is
-         * the only signal that the event itself is withheld. With no rationale
-         * to show, fall back to the same "Hidden" text MaskedMatch uses. */}
-        {summary ? (
+    if (summary) {
+      return (
+        <span className="flex min-w-0 items-center gap-1.5">
+          <SimpleTooltip tooltip={REVEAL_DENIED_REASON}>
+            <Lock
+              role="img"
+              aria-label={REVEAL_DENIED_REASON}
+              className="text-muted-foreground h-3 w-3 shrink-0"
+            />
+          </SimpleTooltip>
           <RationaleText text={summary} />
-        ) : (
-          <span className="text-muted-foreground text-xs">Hidden</span>
-        )}
-      </span>
-    );
+        </span>
+      );
+    }
+    return <LockedRedactedMatch matchRedacted={matchRedacted} />;
   }
 
   return (

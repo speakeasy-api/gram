@@ -14,17 +14,17 @@ export type PeriodUsage = {
    */
   actualEnabledServerCount: number;
   /**
-   * The number of credits used
+   * The number of credits used. Only populated for platform admins.
    */
-  credits: number;
+  credits?: number | undefined;
   /**
    * Whether the project has an active subscription
    */
   hasActiveSubscription: boolean;
   /**
-   * The number of credits included in the tier
+   * The number of credits included in the tier. Only populated for platform admins.
    */
-  includedCredits: number;
+  includedCredits?: number | undefined;
   /**
    * The number of servers included in the tier
    */
@@ -48,9 +48,9 @@ export const PeriodUsage$inboundSchema: z.ZodMiniType<PeriodUsage, unknown> = z
   .pipe(
     z.object({
       actual_enabled_server_count: z.int(),
-      credits: z.int(),
+      credits: z.optional(z.int()),
       has_active_subscription: z.boolean(),
-      included_credits: z.int(),
+      included_credits: z.optional(z.int()),
       included_servers: z.int(),
       included_tool_calls: z.int(),
       servers: z.int(),

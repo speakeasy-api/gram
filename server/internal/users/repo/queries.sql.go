@@ -11,7 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const disableUser = `-- name: DisableUser :exec
+const disableUser = `-- name: DisableUser :many
 UPDATE users
 SET workos_updated_at = $1,
   workos_deleted_at = $2,
@@ -19,6 +19,7 @@ SET workos_updated_at = $1,
   updated_at = clock_timestamp()
 WHERE workos_id = $3
   AND (workos_updated_at IS NULL OR $1 >= workos_updated_at)
+RETURNING id
 `
 
 type DisableUserParams struct {
@@ -27,9 +28,24 @@ type DisableUserParams struct {
 	WorkosID        pgtype.Text
 }
 
-func (q *Queries) DisableUser(ctx context.Context, arg DisableUserParams) error {
-	_, err := q.db.Exec(ctx, disableUser, arg.WorkosUpdatedAt, arg.WorkosDeletedAt, arg.WorkosID)
-	return err
+func (q *Queries) DisableUser(ctx context.Context, arg DisableUserParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, disableUser, arg.WorkosUpdatedAt, arg.WorkosDeletedAt, arg.WorkosID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getConnectedUserByEmail = `-- name: GetConnectedUserByEmail :one
@@ -76,6 +92,7 @@ const getConnectedUsersByEmails = `-- name: GetConnectedUsersByEmails :many
 SELECT DISTINCT ON (lower(u.email)) u.id, u.email, u.display_name, u.photo_url, u.admin, u.last_login, u.workos_id, u.workos_created_at, u.workos_updated_at, u.workos_deleted_at, u.deleted_at, u.created_at, u.updated_at FROM users u
 JOIN organization_user_relationships our ON our.user_id = u.id
 WHERE lower(u.email) = ANY(ARRAY(SELECT lower(e) FROM unnest($1::text[]) AS e))
+  AND u.deleted_at IS NULL
   AND our.organization_id = $2
   AND our.deleted_at IS NULL
 ORDER BY lower(u.email), (u.email = lower(u.email)) DESC, u.created_at, u.id
@@ -124,6 +141,57 @@ func (q *Queries) GetConnectedUsersByEmails(ctx context.Context, arg GetConnecte
 	return items, nil
 }
 
+const getConnectedUsersByIDs = `-- name: GetConnectedUsersByIDs :many
+SELECT u.id, u.email, u.display_name, u.photo_url, u.admin, u.last_login, u.workos_id, u.workos_created_at, u.workos_updated_at, u.workos_deleted_at, u.deleted_at, u.created_at, u.updated_at FROM users u
+JOIN organization_user_relationships our ON our.user_id = u.id
+WHERE u.id = ANY($1::text[])
+  AND our.organization_id = $2
+  AND our.deleted_at IS NULL
+`
+
+type GetConnectedUsersByIDsParams struct {
+	Ids            []string
+	OrganizationID string
+}
+
+// The org-scoped counterpart to GetConnectedUsersByEmails: resolves gram user
+// ids to the directory rows they own. Callers hold a user id from a client
+// payload, so the org join is what keeps one org's ids from resolving against
+// another org's directory.
+func (q *Queries) GetConnectedUsersByIDs(ctx context.Context, arg GetConnectedUsersByIDsParams) ([]User, error) {
+	rows, err := q.db.Query(ctx, getConnectedUsersByIDs, arg.Ids, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []User
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.DisplayName,
+			&i.PhotoUrl,
+			&i.Admin,
+			&i.LastLogin,
+			&i.WorkosID,
+			&i.WorkosCreatedAt,
+			&i.WorkosUpdatedAt,
+			&i.WorkosDeletedAt,
+			&i.DeletedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getConnectedUsersByWorkosIDs = `-- name: GetConnectedUsersByWorkosIDs :many
 SELECT u.id, u.email, u.display_name, u.photo_url, u.admin, u.last_login, u.workos_id, u.workos_created_at, u.workos_updated_at, u.workos_deleted_at, u.deleted_at, u.created_at, u.updated_at FROM users u
 JOIN organization_user_relationships our ON our.user_id = u.id
@@ -139,6 +207,57 @@ type GetConnectedUsersByWorkosIDsParams struct {
 
 func (q *Queries) GetConnectedUsersByWorkosIDs(ctx context.Context, arg GetConnectedUsersByWorkosIDsParams) ([]User, error) {
 	rows, err := q.db.Query(ctx, getConnectedUsersByWorkosIDs, arg.WorkosIds, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []User
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.DisplayName,
+			&i.PhotoUrl,
+			&i.Admin,
+			&i.LastLogin,
+			&i.WorkosID,
+			&i.WorkosCreatedAt,
+			&i.WorkosUpdatedAt,
+			&i.WorkosDeletedAt,
+			&i.DeletedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getConnectedUsersMatchingEmails = `-- name: GetConnectedUsersMatchingEmails :many
+SELECT u.id, u.email, u.display_name, u.photo_url, u.admin, u.last_login, u.workos_id, u.workos_created_at, u.workos_updated_at, u.workos_deleted_at, u.deleted_at, u.created_at, u.updated_at FROM users u
+JOIN organization_user_relationships our ON our.user_id = u.id
+WHERE lower(u.email) = ANY(ARRAY(SELECT lower(e) FROM unnest($1::text[]) AS e))
+  AND u.deleted_at IS NULL
+  AND our.organization_id = $2
+  AND our.deleted_at IS NULL
+ORDER BY lower(u.email), u.created_at, u.id
+`
+
+type GetConnectedUsersMatchingEmailsParams struct {
+	Emails         []string
+	OrganizationID string
+}
+
+// Returns every connected row matching the emails case-insensitively. Callers
+// that assign ownership use this to reject ambiguous case-variant identities.
+func (q *Queries) GetConnectedUsersMatchingEmails(ctx context.Context, arg GetConnectedUsersMatchingEmailsParams) ([]User, error) {
+	rows, err := q.db.Query(ctx, getConnectedUsersMatchingEmails, arg.Emails, arg.OrganizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -314,6 +433,33 @@ func (q *Queries) GetUsersByWorkosIDs(ctx context.Context, workosIds []string) (
 	return items, nil
 }
 
+const lockUserForPlatformAdminCheck = `-- name: LockUserForPlatformAdminCheck :one
+SELECT id, email, display_name, photo_url, admin, last_login, workos_id, workos_created_at, workos_updated_at, workos_deleted_at, deleted_at, created_at, updated_at FROM users
+WHERE id = $1
+FOR SHARE
+`
+
+func (q *Queries) LockUserForPlatformAdminCheck(ctx context.Context, id string) (User, error) {
+	row := q.db.QueryRow(ctx, lockUserForPlatformAdminCheck, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.DisplayName,
+		&i.PhotoUrl,
+		&i.Admin,
+		&i.LastLogin,
+		&i.WorkosID,
+		&i.WorkosCreatedAt,
+		&i.WorkosUpdatedAt,
+		&i.WorkosDeletedAt,
+		&i.DeletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const overwriteUserWorkosID = `-- name: OverwriteUserWorkosID :exec
 UPDATE users
 SET workos_id = $1,
@@ -400,7 +546,9 @@ ON CONFLICT (id) DO UPDATE SET
   photo_url = EXCLUDED.photo_url,
   admin = EXCLUDED.admin,
   last_login = clock_timestamp(),
-  updated_at = clock_timestamp()
+  updated_at = clock_timestamp(),
+  workos_deleted_at = NULL,
+  deleted_at = NULL
 RETURNING id, email, display_name, photo_url, admin, last_login, workos_id, workos_created_at, workos_updated_at, workos_deleted_at, deleted_at, created_at, updated_at, (xmax = 0) AS was_created
 `
 
@@ -429,6 +577,9 @@ type UpsertUserRow struct {
 	WasCreated      bool
 }
 
+// Login and other IDP upserts mean the user is authenticating now, so clear
+// WorkOS soft-delete markers left by a prior user.deleted event. Without this,
+// email reuse after WorkOS deletion leaves the Gram user RBAC-inactive.
 func (q *Queries) UpsertUser(ctx context.Context, arg UpsertUserParams) (UpsertUserRow, error) {
 	row := q.db.QueryRow(ctx, upsertUser,
 		arg.ID,

@@ -1,22 +1,22 @@
+import { claudeTagMetadata, projectClaudeTagRows } from "./claudeTag";
+import { IdentityLink } from "@/components/identity-link";
 import { format, formatDistanceToNow } from "date-fns";
 import {
   ArrowLeft,
   ChevronDown,
   ChevronsDown,
   ChevronUp,
+  GitBranch,
   Info,
   Loader2,
   Pin,
   Search,
-  Sparkles,
   SlidersHorizontal,
+  Sparkles,
   TriangleAlert,
-  User,
-  Wrench,
   X,
 } from "lucide-react";
 import {
-  type ComponentType,
   type ReactNode,
   useCallback,
   useEffect,
@@ -41,6 +41,7 @@ import { useSearchLogsMutation } from "@gram/client/react-query/searchLogs.js";
 import { useRiskListResults } from "@gram/client/react-query/riskListResults.js";
 import { useChatSetPinnedMutation } from "@gram/client/react-query/chatSetPinned.js";
 import { invalidateAllListChats } from "@gram/client/react-query/listChats.js";
+import { useListChatSessionLinks } from "@gram/client/react-query/listChatSessionLinks.js";
 import { useSummarizeChatMutation } from "@gram/client/react-query/summarizeChat.js";
 import { QueryErrorResetBoundary, useQueryClient } from "@tanstack/react-query";
 import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
@@ -61,14 +62,14 @@ import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Switch } from "@/components/ui/Switch";
 import { AccountTypeBadge } from "@/components/account-type-badge";
 import { personalAccountEmail } from "@/components/observe/account-display-utils";
-import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
+import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useIsPlatformAdmin, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { ChatOwnerLabel } from "@/components/chat-owner-label";
 import { chatOwnerLabel } from "@/lib/chat-owner";
 import { handleError, toError } from "@/lib/errors";
-import { formatPlatform } from "@/lib/formatPlatform";
+import { formatChatSource, formatPlatform } from "@/lib/formatPlatform";
 import {
   ExclusionEditor,
   type ExclusionSheetState,
@@ -87,8 +88,6 @@ import {
   buildTranscript,
   displayItemContainsMessage,
   displayItemRows,
-  type MessageCategory,
-  rowCategory,
   rowHasRiskFlag,
   rowIsFlagged,
   rowSearchFields,
@@ -106,6 +105,7 @@ import { filterPanelTelemetryLogs, filterToolLogs } from "./chatLogFilters";
 import { WorkUnitsHeaderMetrics } from "./WorkUnitsMetrics";
 import { formatWorkUnits, workUnitsEfficiency } from "./workUnits";
 import { ToolCallsView } from "./chatLogViews";
+import { EffectsView } from "./EffectsView";
 import { exportTraceDataAsJson } from "./chatExport";
 
 const PANEL_TELEMETRY_LOG_LIMIT = 100;
@@ -127,13 +127,16 @@ interface ChatDetailPanelProps {
   /** Dim non-flagged rows to spotlight findings, without the risk windowing.
    * Use from risk-filtered lists (e.g. Agent Sessions filtered to has_risk). */
   dimNonRisk?: boolean;
+  /** Open a different chat in the panel — used by the Linked-sessions section
+   * to hop to a move's other end. Omitted, linked sessions render unlinked. */
+  onOpenChat?: (chatId: string) => void;
 }
 
 interface ChatDetailSheetProps extends Omit<ChatDetailPanelProps, "chatId"> {
   chatId: string | null;
 }
 
-type ViewMode = "chat" | "tools" | "exclusion";
+type ViewMode = "chat" | "effects" | "tools" | "exclusion";
 
 /** One navigable search hit: a single query occurrence within one field of one
  * display row. `key` is stable across pagination (built from the row id, not its
@@ -208,6 +211,7 @@ export function ChatDetailSheet({
   focusedMessageTurn,
   riskFocus,
   dimNonRisk,
+  onOpenChat,
 }: ChatDetailSheetProps): JSX.Element {
   return (
     <Sheet
@@ -234,6 +238,7 @@ export function ChatDetailSheet({
                   focusedMessageTurn={focusedMessageTurn}
                   riskFocus={riskFocus}
                   dimNonRisk={dimNonRisk}
+                  onOpenChat={onOpenChat}
                 />
               </ErrorBoundary>
             )}
@@ -267,6 +272,9 @@ function SessionSummary({
     accountType?: string;
     accountEmail?: string;
     source?: string;
+    channelNames?: string[];
+    originatingClient?: string;
+    litellmProxied?: boolean;
     createdAt: Date;
     totalCost?: number;
     totalInputTokens?: number;
@@ -340,7 +348,9 @@ function SessionSummary({
             {accountEmail && (
               <MetaRow label="Account">
                 <span className="inline-flex flex-wrap items-center justify-end gap-1.5">
-                  {accountEmail}
+                  <IdentityLink identifier={{ email: accountEmail }}>
+                    {accountEmail}
+                  </IdentityLink>
                   <AccountTypeBadge accountType={chat.accountType} noTooltip />
                 </span>
               </MetaRow>
@@ -348,10 +358,16 @@ function SessionSummary({
             {chat.source && (
               <MetaRow label="Source">
                 <span className="inline-flex items-center gap-1.5">
-                  <HookSourceIcon source={chat.source} className="size-3.5" />
-                  {formatPlatform(chat.source)}
+                  <AgentProviderIcon
+                    source={chat.source}
+                    className="size-3.5"
+                  />
+                  {formatChatSource(chat.source, chat)}
                 </span>
               </MetaRow>
+            )}
+            {chat.channelNames && chat.channelNames.length > 0 && (
+              <MetaRow label="Channel">{chat.channelNames.join(", ")}</MetaRow>
             )}
             <MetaRow label="Duration">{duration}s</MetaRow>
             <MetaRow label="Messages">{messageCount}</MetaRow>
@@ -431,12 +447,17 @@ function ChatDetailMetadataBadges({
         <Badge variant="neutral" className="shrink-0 text-[10px]">
           <Badge.Text>
             <span className="inline-flex items-center gap-1.5">
-              <HookSourceIcon source={chat.source} className="size-3" />
-              {formatPlatform(chat.source)}
+              <AgentProviderIcon source={chat.source} className="size-3" />
+              {formatChatSource(chat.source, chat)}
             </span>
           </Badge.Text>
         </Badge>
       )}
+      {chat.channelNames?.map((channel) => (
+        <HeaderMetadataBadge key={channel}>
+          Channel: {channel}
+        </HeaderMetadataBadge>
+      ))}
       {hasCost && (
         <HeaderMetadataBadge>
           {formatUsageCost(chat.totalCost!)}
@@ -451,70 +472,41 @@ function ChatDetailMetadataBadges({
   );
 }
 
-const MESSAGE_TYPES: ReadonlyArray<{
-  key: MessageCategory;
-  label: string;
-  icon: ComponentType<{ className?: string }>;
-}> = [
-  { key: "user", label: "User", icon: User },
-  { key: "assistant", label: "Assistant", icon: Sparkles },
-  { key: "tool", label: "Tool calls", icon: Wrench },
-];
-
-const ALL_CATEGORIES: ReadonlySet<MessageCategory> = new Set(
-  MESSAGE_TYPES.map((t) => t.key),
-);
-
-/** A single toggle in the header filter bar. */
-/** Header filter bar: a multi-select segmented control over message types and a
- * "Risky only" switch, separated by a hairline. Right-aligned on its own row. */
+/** Header filter bar: condensed-view toggle + optional "Risky only" switch. */
 function MessageFilterBar({
-  typeFilter,
-  onTypeFilterChange,
+  condensed,
+  onCondensedChange,
   riskyOnly,
   onRiskyOnlyChange,
   showRiskyOnly,
+  rawView,
+  onRawViewChange,
+  isClaudeTag,
+  showRawView,
 }: {
-  typeFilter: ReadonlySet<MessageCategory>;
-  onTypeFilterChange: (next: Set<MessageCategory>) => void;
+  condensed: boolean;
+  onCondensedChange: (next: boolean) => void;
   riskyOnly: boolean;
   onRiskyOnlyChange: (next: boolean) => void;
-  /** The "Risky only" view is driven by risk findings, which are an org-admin
-   * resource (risk.results.list). Hide the toggle for everyone else. */
   showRiskyOnly: boolean;
+  rawView: boolean;
+  onRawViewChange: (next: boolean) => void;
+  isClaudeTag: boolean;
+  /** When false, the Raw View toggle is hidden — the switch is ineffective
+   * outside the normal readable transcript (risk or search mode). */
+  showRawView: boolean;
 }) {
-  const toggleType = (key: MessageCategory) => {
-    const next = new Set(typeFilter);
-    if (next.has(key)) next.delete(key);
-    else next.add(key);
-    // Never leave the transcript fully empty — clearing the last type resets.
-    if (next.size === 0) for (const t of MESSAGE_TYPES) next.add(t.key);
-    onTypeFilterChange(next);
-  };
-
   return (
     <div className="flex items-center justify-end gap-3">
-      <div className="border-border bg-card divide-border inline-flex items-center divide-x border">
-        {MESSAGE_TYPES.map(({ key, label, icon: Glyph }) => {
-          const on = typeFilter.has(key);
-          return (
-            <button
-              key={key}
-              type="button"
-              aria-pressed={on}
-              onClick={() => toggleType(key)}
-              className={cn(
-                "inline-flex items-center gap-2 px-3 py-1.5 font-mono text-xs tracking-[0.08em] uppercase transition-colors",
-                on
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              <Glyph className="size-3.5" />
-              {label}
-            </button>
-          );
-        })}
+      <div className="flex items-center gap-2">
+        <Switch
+          checked={condensed}
+          onCheckedChange={onCondensedChange}
+          aria-label="Condensed view"
+        />
+        <span className="text-muted-foreground text-xs font-medium">
+          Condensed
+        </span>
       </div>
       {showRiskyOnly && (
         <>
@@ -531,6 +523,18 @@ function MessageFilterBar({
             </span>
           </div>
         </>
+      )}
+      {isClaudeTag && showRawView && (
+        <div className="flex items-center gap-2">
+          <Switch
+            checked={rawView}
+            onCheckedChange={onRawViewChange}
+            aria-label="Raw view"
+          />
+          <span className="text-muted-foreground text-xs font-medium">
+            Raw view
+          </span>
+        </div>
       )}
     </div>
   );
@@ -660,11 +664,15 @@ function ChatDetailHeader({
   canManageChat,
   compactMetadata,
   showFilter,
-  typeFilter,
-  onTypeFilterChange,
+  condensed,
+  onCondensedChange,
   riskyOnly,
   onRiskyOnlyChange,
   showRiskyOnly,
+  rawView,
+  onRawViewChange,
+  isClaudeTag,
+  showRawView,
   searchBar,
   pinned,
   onTogglePinned,
@@ -682,11 +690,15 @@ function ChatDetailHeader({
   canManageChat: boolean;
   compactMetadata: boolean;
   showFilter: boolean;
-  typeFilter: ReadonlySet<MessageCategory>;
-  onTypeFilterChange: (next: Set<MessageCategory>) => void;
+  condensed: boolean;
+  onCondensedChange: (next: boolean) => void;
   riskyOnly: boolean;
   onRiskyOnlyChange: (next: boolean) => void;
   showRiskyOnly: boolean;
+  rawView: boolean;
+  onRawViewChange: (next: boolean) => void;
+  isClaudeTag: boolean;
+  showRawView: boolean;
   /** Optional find-in-conversation bar (normal view only). */
   searchBar?: ReactNode;
   pinned: boolean;
@@ -800,8 +812,12 @@ function ChatDetailHeader({
           <div className="min-w-0 flex-1">{searchBar}</div>
           <div className="shrink-0">
             <MessageFilterBar
-              typeFilter={typeFilter}
-              onTypeFilterChange={onTypeFilterChange}
+              rawView={rawView}
+              onRawViewChange={onRawViewChange}
+              isClaudeTag={isClaudeTag}
+              showRawView={showRawView}
+              condensed={condensed}
+              onCondensedChange={onCondensedChange}
               riskyOnly={riskyOnly}
               onRiskyOnlyChange={onRiskyOnlyChange}
               showRiskyOnly={showRiskyOnly}
@@ -824,6 +840,115 @@ function SubViewBar({ title, onBack }: { title: string; onBack: () => void }) {
       <span className="font-medium">Back to chat</span>
       <span className="text-muted-foreground/70">· {title}</span>
     </button>
+  );
+}
+
+// SessionLinksSection lists session-lineage edges touching this chat: moves
+// and recalls out of it ("Moved to …", "Recalled into …") and moves that
+// produced it ("Derived from …").
+// Presence-gated — chats with no edges render nothing, so there is no feature
+// flag and no empty state.
+function SessionLinksSection({
+  chatId,
+  onOpenChat,
+}: {
+  chatId: string;
+  onOpenChat?: (chatId: string) => void;
+}) {
+  // throwOnError stays off: this section is optional, and a lineage-endpoint
+  // failure must not take down the whole transcript panel's error boundary.
+  const { data } = useListChatSessionLinks({ chatIds: [chatId] }, undefined, {
+    throwOnError: false,
+  });
+  const links = data?.links ?? [];
+  if (links.length === 0) {
+    return null;
+  }
+
+  const outbound = links.filter((l) => l.parentChatId === chatId);
+  const inbound = links.filter((l) => l.childChatId === chatId);
+
+  const hop = (target: string | undefined, navigable: boolean) =>
+    onOpenChat && navigable && target ? () => onOpenChat(target) : undefined;
+
+  const row = (
+    key: string,
+    label: ReactNode,
+    when: Date,
+    onHop: (() => void) | undefined,
+    detail?: ReactNode,
+  ) => (
+    <div key={key} className="flex items-baseline justify-between gap-3 py-1">
+      <span className="min-w-0 truncate text-xs">
+        {onHop ? (
+          <button
+            type="button"
+            onClick={onHop}
+            className="text-foreground cursor-pointer font-medium underline-offset-2 hover:underline"
+          >
+            {label}
+          </button>
+        ) : (
+          <span className="text-foreground font-medium">{label}</span>
+        )}
+        {detail && <span className="text-muted-foreground"> · {detail}</span>}
+      </span>
+      <span
+        className="text-muted-foreground shrink-0 text-xs"
+        title={format(when, "PPpp")}
+      >
+        {formatDistanceToNow(when, { addSuffix: true })}
+      </span>
+    </div>
+  );
+
+  return (
+    <div className="border-b px-4 py-3">
+      <div className="text-foreground inline-flex items-center gap-1.5 text-sm font-medium">
+        <GitBranch className="size-3.5" aria-hidden />
+        Linked sessions
+      </div>
+      <div className="mt-1">
+        {inbound.map((link, i) =>
+          row(
+            `in-${i}-${link.createdAt.toISOString()}`,
+            <>Derived from {link.parentTitle ?? "an earlier session"}</>,
+            link.createdAt,
+            hop(link.parentChatId, link.parentCaptured),
+            link.parentCaptured ? (
+              link.actorEmail ? (
+                <IdentityLink identifier={{ email: link.actorEmail }}>
+                  {link.actorEmail}
+                </IdentityLink>
+              ) : undefined
+            ) : (
+              "not yet captured"
+            ),
+          ),
+        )}
+        {outbound.map((link, i) =>
+          // Recall edges never carry a child chat (the continuation is
+          // unknowable at recall time), so there is nothing to hop to and
+          // "not yet captured" would wrongly imply one is expected.
+          link.kind === "recall"
+            ? row(
+                `out-${i}-${link.createdAt.toISOString()}`,
+                <>Recalled into a later session</>,
+                link.createdAt,
+                undefined,
+              )
+            : row(
+                `out-${i}-${link.createdAt.toISOString()}`,
+                <>Moved to {formatPlatform(link.targetHarness)}</>,
+                link.createdAt,
+                hop(link.childChatId, link.childCaptured),
+                link.childCaptured
+                  ? (link.childTitle ?? undefined)
+                  : "not yet captured",
+              ),
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -955,6 +1080,7 @@ function ChatDetailPanel({
   focusedMessageTurn,
   riskFocus = false,
   dimNonRisk: dimNonRiskProp = false,
+  onOpenChat,
 }: ChatDetailPanelProps) {
   const client = useSdkClient();
   const { user } = useSession();
@@ -966,11 +1092,8 @@ function ChatDetailPanel({
   const canViewRisk = isPlatformAdmin || hasScope("org:admin");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [view, setView] = useState<ViewMode>("chat");
-  // Header transcript filter — which message types to show (all on by default)
-  // plus an optional "risky only" toggle.
-  const [typeFilter, setTypeFilter] = useState<ReadonlySet<MessageCategory>>(
-    () => new Set(ALL_CATEGORIES),
-  );
+  const [rawView, setRawView] = useState(false);
+  useEffect(() => setRawView(false), [chatId]);
   const [riskyOnly, setRiskyOnly] = useState(false);
   const [exclusionState, setExclusionState] =
     useState<ExclusionSheetState | null>(null);
@@ -1044,8 +1167,29 @@ function ChatDetailPanel({
   // Prefer the enriched (cost/usage) normal-load chat, but fall back to the
   // active transcript's chat so a windowed view still renders if only that load
   // resolved (otherwise the panel would show "Not found" despite having data).
-  const chat = transcript.chat ?? active.chat;
+  const capturedChat = transcript.chat ?? active.chat;
   const chatMessages = active.messages;
+  const tagMetadata = useMemo(
+    () => claudeTagMetadata(transcript.messages),
+    [transcript.messages],
+  );
+  const isClaudeTag =
+    capturedChat?.source === "claude-tag" ||
+    ((capturedChat?.source === "claude-code" ||
+      capturedChat?.source === "claude") &&
+      tagMetadata.detected);
+  const chat = useMemo(() => {
+    if (!capturedChat || !isClaudeTag) return capturedChat;
+    const title = capturedChat.title?.startsWith("<wake")
+      ? tagMetadata.title
+      : capturedChat.title;
+    return {
+      ...capturedChat,
+      source: "claude-tag",
+      channelNames: tagMetadata.channels,
+      title: title || "Claude Tag session",
+    };
+  }, [capturedChat, isClaudeTag, tagMetadata.title, tagMetadata.channels]);
   const validFocusedMessageTurn =
     focusedMessageTurn !== undefined &&
     Number.isInteger(focusedMessageTurn) &&
@@ -1135,7 +1279,6 @@ function ChatDetailPanel({
   // Reset transient UI state when the panel is pointed at a new session.
   useEffect(() => {
     setView("chat");
-    setTypeFilter(new Set(ALL_CATEGORIES));
     setRiskyOnly(false);
     setExclusionState(null);
     setPendingExclusionKey(null);
@@ -1192,30 +1335,29 @@ function ChatDetailPanel({
     return buildClaudeTurnByPromptId(turns);
   }, [chat?.agentUsage]);
 
-  const transcriptRows = useMemo(
-    () => buildTranscript(chatMessages, chat?.contentParts ?? []),
-    [chatMessages, chat?.contentParts],
-  );
-  // Apply the header filters at the row level so generation dividers and risk
-  // gaps recompute against exactly what's shown (no orphaned dividers).
-  const filterActive = typeFilter.size < ALL_CATEGORIES.size || riskyOnly;
-  const visibleRows = useMemo(() => {
-    let rows = transcriptRows;
-    if (typeFilter.size < ALL_CATEGORIES.size) {
-      rows = rows.filter((r) => typeFilter.has(rowCategory(r)));
-    }
-    if (riskyOnly) {
-      // `is_risk` on each windowed message is the authorized "which messages are
-      // risky" signal — it rides chat.load (no internal seq exposed), so the
-      // filter works even when the org-admin-only risk.results.list (which powers
-      // the match-detail badges) is forbidden. Fall back to per-message risk
-      // results for safety.
-      rows = rows.filter(
-        (r) => rowHasRiskFlag(r) || rowIsFlagged(r, riskResultsByMessage),
-      );
-    }
+  const readableTag =
+    isClaudeTag &&
+    !rawView &&
+    !riskWindowed &&
+    !searchActive &&
+    !validFocusedMessageTurn;
+  const transcriptRows = useMemo(() => {
+    const rows = buildTranscript(chatMessages, chat?.contentParts ?? []);
+    if (readableTag) return projectClaudeTagRows(rows);
     return rows;
-  }, [transcriptRows, typeFilter, riskyOnly, riskResultsByMessage]);
+  }, [chatMessages, chat?.contentParts, readableTag]);
+  const filterActive = riskyOnly;
+  const visibleRows = useMemo(() => {
+    if (!riskyOnly) return transcriptRows;
+    // `is_risk` on each windowed message is the authorized "which messages are
+    // risky" signal — it rides chat.load (no internal seq exposed), so the
+    // filter works even when the org-admin-only risk.results.list (which powers
+    // the match-detail badges) is forbidden. Fall back to per-message risk
+    // results for safety.
+    return transcriptRows.filter(
+      (r) => rowHasRiskFlag(r) || rowIsFlagged(r, riskResultsByMessage),
+    );
+  }, [transcriptRows, riskyOnly, riskResultsByMessage]);
   const hasMoreBefore = active.hasMoreBefore;
   const hasMoreAfter = active.hasMoreAfter;
   const windowGaps = windowed?.gaps;
@@ -1380,7 +1522,26 @@ function ChatDetailPanel({
     else transcript.loadRest();
   }, [windowed, transcript]);
 
-  const userLabelOverride = chat ? userLabel : undefined;
+  useEffect(() => {
+    if (view === "effects" && !fullyLoaded && !loadingAllMessages) {
+      loadAllMessages();
+    }
+  }, [view, fullyLoaded, loadingAllMessages, loadAllMessages]);
+
+  const userLabelOverride = chat && !readableTag ? userLabel : undefined;
+  // The same key ChatOwnerLabel uses: a chat carries the Gram user when the
+  // owner is a member and the reported agent id otherwise. Memoized because a
+  // fresh object each render would invalidate the row context below on every
+  // pass, re-rendering the whole transcript.
+  const ownerIdentifier = useMemo(
+    () =>
+      chat?.userId
+        ? { userId: chat.userId }
+        : chat?.externalUserId
+          ? { externalUserId: chat.externalUserId }
+          : null,
+    [chat?.userId, chat?.externalUserId],
+  );
 
   const rowCtx = useMemo<RowContext>(
     () => ({
@@ -1392,6 +1553,7 @@ function ChatDetailPanel({
       searchQuery: searchActive ? searchQuery : undefined,
       userLabel: chat?.externalUserId,
       userLabelOverride,
+      ownerIdentifier: readableTag ? null : ownerIdentifier,
     }),
     [
       riskResultsByMessage,
@@ -1403,6 +1565,8 @@ function ChatDetailPanel({
       searchQuery,
       chat?.externalUserId,
       userLabelOverride,
+      ownerIdentifier,
+      readableTag,
     ],
   );
 
@@ -1491,6 +1655,13 @@ function ChatDetailPanel({
   return (
     <div className="bg-background flex h-full flex-col">
       <ChatDetailHeader
+        rawView={rawView}
+        onRawViewChange={(on) => {
+          setRawView(on);
+          setView("chat");
+        }}
+        isClaudeTag={isClaudeTag}
+        showRawView={readableTag || rawView}
         chatId={chatId}
         chat={chat}
         userLabel={userLabelNode}
@@ -1498,14 +1669,14 @@ function ChatDetailPanel({
         toolCount={toolLogs.length}
         canManageChat={canManageChat}
         compactMetadata={riskFocus}
-        showFilter={view === "chat"}
-        typeFilter={typeFilter}
-        onTypeFilterChange={setTypeFilter}
+        showFilter={view === "chat" || view === "effects"}
+        condensed={view === "effects"}
+        onCondensedChange={(on) => setView(on ? "effects" : "chat")}
         riskyOnly={riskyOnly}
         onRiskyOnlyChange={setRiskyOnly}
         showRiskyOnly={canViewRisk}
         searchBar={
-          riskWindowed ? undefined : (
+          riskWindowed || view === "effects" ? undefined : (
             <ThreadSearchBar
               value={searchInput}
               onChange={setSearchInput}
@@ -1570,6 +1741,12 @@ function ChatDetailPanel({
         }}
       />
 
+      <SessionLinksSection
+        key={`links-${chatId}`}
+        chatId={chatId}
+        onOpenChat={onOpenChat}
+      />
+
       {chatLoadHasErrors && (
         <div className="border-destructive/30 bg-destructive/10 text-destructive border-b px-4 py-2 text-xs">
           Some messages failed to load. The transcript below may be incomplete.
@@ -1619,6 +1796,20 @@ function ChatDetailPanel({
                     : "No messages to display."
             }
           />
+          {view === "effects" && (
+            <div className="bg-background absolute inset-0 z-10 flex flex-col">
+              <EffectsView
+                chatId={chatId}
+                rows={visibleRows}
+                riskResultsByMessage={riskResultsByMessage}
+                claudeToolUsageByToolUseId={claudeToolUsageByToolUseId}
+                claudeTurnByPromptId={claudeTurnByPromptId}
+                userLabel={chat?.externalUserId}
+                userLabelOverride={userLabelOverride}
+                isLoading={chatLoading || loadingAllMessages}
+              />
+            </div>
+          )}
         </CreateExclusionContext.Provider>
 
         {view === "tools" && (

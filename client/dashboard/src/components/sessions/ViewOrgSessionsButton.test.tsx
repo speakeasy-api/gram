@@ -21,9 +21,9 @@ vi.mock("@/hooks/useRBAC", () => ({
 // Link; stubbing it keeps this test off the router.
 vi.mock("@/routes", () => ({
   useOrgRoutes: () => ({
-    userSessions: {
+    mcpSessions: {
       Link: ({ children }: { children: React.ReactNode }) => (
-        <a href="/org-slug/user-sessions">{children}</a>
+        <a href="/org-slug/mcp-sessions">{children}</a>
       ),
     },
   }),
@@ -46,10 +46,10 @@ describe("ViewOrgSessionsButton", () => {
     vi.clearAllMocks();
   });
 
-  it("links to the org MCP Connections page when the flag and scopes allow it", () => {
+  it("links to the org MCP Sessions page when the flag and scopes allow it", () => {
     render(<ViewOrgSessionsButton />);
 
-    expect(link()?.getAttribute("href")).toBe("/org-slug/user-sessions");
+    expect(link()?.getAttribute("href")).toBe("/org-slug/mcp-sessions");
     expect(hasAnyScope).toHaveBeenCalledWith(["org:read", "org:admin"]);
   });
 

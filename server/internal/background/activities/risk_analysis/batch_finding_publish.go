@@ -44,22 +44,24 @@ var batchOnlyFindingSources = map[string]struct{}{
 }
 
 // publishBatchOnlyFindings mirrors allowlisted batch findings onto the
-// findings topic after a committed Postgres write. Best-effort like the
-// ClickHouse finding writer: a publish failure logs and never fails the
-// activity — the Postgres write already succeeded and redriving the whole
-// batch for an analytics publish would re-run the scanners.
+// findings topic after a committed Postgres write. A publish failure fails
+// the activity so Temporal redrives the batch: the topic feeds the ClickHouse
+// findings store, whose delivery contract is at-least-once. The redrive
+// re-runs the scanners, but every write it repeats is idempotent — the
+// Postgres write replaces per message set and the published finding ids are
+// deterministic, so replays converge instead of duplicating.
 //
 // ids and findings are the message-aligned pair buildRows consumed, so the
 // published set matches what was written (exclusions and disabled rules
 // already applied). Dead-letter sentinels are skipped, mirroring the outbox
-// emission (findingCreatedPayloads). Publishes are issued for the whole batch
+// emission (findingCreatedEvents). Publishes are issued for the whole batch
 // first and the acks drained through drainPublishAcks, which caps each ack,
 // survives activity cancellation, and heartbeats between acks — the same
 // discipline every other publish in this activity uses.
 // anchors carries one entry per findings slot, so the two stay index aligned.
 // An anchor is either a chat message or a content part, so exactly one of the
 // two published ids is set per finding.
-func (a *AnalyzeBatch) publishBatchOnlyFindings(ctx context.Context, args AnalyzeBatchArgs, anchors []batchMessage, findings [][]scanners.Finding) {
+func (a *AnalyzeBatch) publishBatchOnlyFindings(ctx context.Context, args AnalyzeBatchArgs, anchors []batchMessage, findings [][]scanners.Finding) error {
 	var results []gcp.PublishResult
 	for i, anchor := range anchors {
 		chatMessageID, contentPartID := anchor.anchorIDStrings()
@@ -87,7 +89,7 @@ func (a *AnalyzeBatch) publishBatchOnlyFindings(ctx context.Context, args Analyz
 		results = append(results, messageResults...)
 	}
 
-	drainPublishAcks(ctx, a.logger, "failed to publish batch-only finding", results)
+	return drainPublishAcks(ctx, "publish batch-only findings", results)
 }
 
 func derefOrEmpty(s *string) string {

@@ -4,10 +4,13 @@
 
 import { ClientSDK } from "../lib/sdks.js";
 import { Access } from "./access.js";
+import { AdminAssets } from "./adminassets.js";
 import { AdminChatAnalysis } from "./adminchatanalysis.js";
 import { AdminExternalCredentials } from "./adminexternalcredentials.js";
+import { AdminOpenRouterKeys } from "./adminopenrouterkeys.js";
 import { AdminRemoteSessions } from "./adminremotesessions.js";
 import { Agent } from "./agent.js";
+import { Agents } from "./agents.js";
 import { AiIntegrations } from "./aiintegrations.js";
 import { Assets } from "./assets.js";
 import { AssistantMemories } from "./assistantmemories.js";
@@ -18,7 +21,7 @@ import { BusinessMemories } from "./businessmemories.js";
 import { Chat } from "./chat.js";
 import { ChatSessions } from "./chatsessions.js";
 import { CliAuth } from "./cliauth.js";
-import { Collections } from "./collections.js";
+import { DataExports } from "./dataexports.js";
 import { Deployments } from "./deployments.js";
 import { DeviceIntegrations } from "./deviceintegrations.js";
 import { Domains } from "./domains.js";
@@ -29,21 +32,31 @@ import { ExternalKeys } from "./externalkeys.js";
 import { Features } from "./features.js";
 import { Hooks } from "./hooks.js";
 import { HooksServerNames } from "./hooksservernames.js";
+import { Identity } from "./identity.js";
 import { Instances } from "./instances.js";
 import { Integrations } from "./integrations.js";
+import { JsonWebKeySets } from "./jsonwebkeysets.js";
 import { Keys } from "./keys.js";
+import { Killswitches } from "./killswitches.js";
 import { Litellm } from "./litellm.js";
+import { McpApproval } from "./mcpapproval.js";
 import { McpEndpoints } from "./mcpendpoints.js";
 import { McpMetadata } from "./mcpmetadata.js";
 import { McpRegistries } from "./mcpregistries.js";
 import { McpServers } from "./mcpservers.js";
+import { MetaMcp } from "./metamcp.js";
 import { ModelKeys } from "./modelkeys.js";
+import { NetworkIngress } from "./networkingress.js";
+import { OrganizationAssets } from "./organizationassets.js";
 import { OrganizationRemoteSessionClients } from "./organizationremotesessionclients.js";
 import { OrganizationRemoteSessionIssuers } from "./organizationremotesessionissuers.js";
 import { OrganizationRemoteSessions } from "./organizationremotesessions.js";
 import { Organizations } from "./organizations.js";
-import { OtelForwarding } from "./otelforwarding.js";
+import { OrganizationUserSessionIssuers } from "./organizationusersessionissuers.js";
+import { Otel } from "./otel.js";
 import { Packages } from "./packages.js";
+import { PlatformKillswitches } from "./platformkillswitches.js";
+import { PlatformMcp } from "./platformmcp.js";
 import { Plugins } from "./plugins.js";
 import { Projects } from "./projects.js";
 import { RemoteMcp } from "./remotemcp.js";
@@ -72,9 +85,19 @@ import { UserSessions } from "./usersessions.js";
 import { Variations } from "./variations.js";
 
 export class Gram extends ClientSDK {
+  private _otel?: Otel;
+  get otel(): Otel {
+    return (this._otel ??= new Otel(this._options));
+  }
+
   private _access?: Access;
   get access(): Access {
     return (this._access ??= new Access(this._options));
+  }
+
+  private _adminAssets?: AdminAssets;
+  get adminAssets(): AdminAssets {
+    return (this._adminAssets ??= new AdminAssets(this._options));
   }
 
   private _adminChatAnalysis?: AdminChatAnalysis;
@@ -89,6 +112,13 @@ export class Gram extends ClientSDK {
     ));
   }
 
+  private _adminOpenRouterKeys?: AdminOpenRouterKeys;
+  get adminOpenRouterKeys(): AdminOpenRouterKeys {
+    return (this._adminOpenRouterKeys ??= new AdminOpenRouterKeys(
+      this._options,
+    ));
+  }
+
   private _adminRemoteSessions?: AdminRemoteSessions;
   get adminRemoteSessions(): AdminRemoteSessions {
     return (this._adminRemoteSessions ??= new AdminRemoteSessions(
@@ -99,6 +129,11 @@ export class Gram extends ClientSDK {
   private _agent?: Agent;
   get agent(): Agent {
     return (this._agent ??= new Agent(this._options));
+  }
+
+  private _agents?: Agents;
+  get agents(): Agents {
+    return (this._agents ??= new Agents(this._options));
   }
 
   private _aiIntegrations?: AiIntegrations;
@@ -151,9 +186,9 @@ export class Gram extends ClientSDK {
     return (this._cliAuth ??= new CliAuth(this._options));
   }
 
-  private _collections?: Collections;
-  get collections(): Collections {
-    return (this._collections ??= new Collections(this._options));
+  private _dataExports?: DataExports;
+  get dataExports(): DataExports {
+    return (this._dataExports ??= new DataExports(this._options));
   }
 
   private _deployments?: Deployments;
@@ -203,6 +238,11 @@ export class Gram extends ClientSDK {
     return (this._hooksServerNames ??= new HooksServerNames(this._options));
   }
 
+  private _identity?: Identity;
+  get identity(): Identity {
+    return (this._identity ??= new Identity(this._options));
+  }
+
   private _instances?: Instances;
   get instances(): Instances {
     return (this._instances ??= new Instances(this._options));
@@ -213,14 +253,29 @@ export class Gram extends ClientSDK {
     return (this._integrations ??= new Integrations(this._options));
   }
 
+  private _jsonWebKeySets?: JsonWebKeySets;
+  get jsonWebKeySets(): JsonWebKeySets {
+    return (this._jsonWebKeySets ??= new JsonWebKeySets(this._options));
+  }
+
   private _keys?: Keys;
   get keys(): Keys {
     return (this._keys ??= new Keys(this._options));
   }
 
+  private _killswitches?: Killswitches;
+  get killswitches(): Killswitches {
+    return (this._killswitches ??= new Killswitches(this._options));
+  }
+
   private _litellm?: Litellm;
   get litellm(): Litellm {
     return (this._litellm ??= new Litellm(this._options));
+  }
+
+  private _mcpApproval?: McpApproval;
+  get mcpApproval(): McpApproval {
+    return (this._mcpApproval ??= new McpApproval(this._options));
   }
 
   private _mcpEndpoints?: McpEndpoints;
@@ -243,9 +298,24 @@ export class Gram extends ClientSDK {
     return (this._mcpServers ??= new McpServers(this._options));
   }
 
+  private _metaMcp?: MetaMcp;
+  get metaMcp(): MetaMcp {
+    return (this._metaMcp ??= new MetaMcp(this._options));
+  }
+
   private _modelKeys?: ModelKeys;
   get modelKeys(): ModelKeys {
     return (this._modelKeys ??= new ModelKeys(this._options));
+  }
+
+  private _networkIngress?: NetworkIngress;
+  get networkIngress(): NetworkIngress {
+    return (this._networkIngress ??= new NetworkIngress(this._options));
+  }
+
+  private _organizationAssets?: OrganizationAssets;
+  get organizationAssets(): OrganizationAssets {
+    return (this._organizationAssets ??= new OrganizationAssets(this._options));
   }
 
   private _organizationRemoteSessionClients?: OrganizationRemoteSessionClients;
@@ -267,19 +337,32 @@ export class Gram extends ClientSDK {
     ));
   }
 
+  private _organizationUserSessionIssuers?: OrganizationUserSessionIssuers;
+  get organizationUserSessionIssuers(): OrganizationUserSessionIssuers {
+    return (this._organizationUserSessionIssuers ??=
+      new OrganizationUserSessionIssuers(this._options));
+  }
+
   private _organizations?: Organizations;
   get organizations(): Organizations {
     return (this._organizations ??= new Organizations(this._options));
   }
 
-  private _otelForwarding?: OtelForwarding;
-  get otelForwarding(): OtelForwarding {
-    return (this._otelForwarding ??= new OtelForwarding(this._options));
-  }
-
   private _packages?: Packages;
   get packages(): Packages {
     return (this._packages ??= new Packages(this._options));
+  }
+
+  private _platformKillswitches?: PlatformKillswitches;
+  get platformKillswitches(): PlatformKillswitches {
+    return (this._platformKillswitches ??= new PlatformKillswitches(
+      this._options,
+    ));
+  }
+
+  private _platformMcp?: PlatformMcp;
+  get platformMcp(): PlatformMcp {
+    return (this._platformMcp ??= new PlatformMcp(this._options));
   }
 
   private _plugins?: Plugins;

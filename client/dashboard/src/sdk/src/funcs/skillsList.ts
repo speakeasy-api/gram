@@ -117,6 +117,7 @@ async function $do(
   const path = pathToFunc("/rpc/skills.list")();
 
   const query = encodeFormQuery({
+    "accessible_by": payload?.accessible_by,
     "classifications": payload?.classifications,
     "cursor": payload?.cursor,
     "limit": payload?.limit,

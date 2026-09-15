@@ -1,7 +1,9 @@
-// Package bootstrap opens dev-idp's SQLite database and applies the
-// embedded schema on every start. The schema is fully idempotent
-// (CREATE TABLE / CREATE INDEX IF NOT EXISTS), so re-applying is a no-op
-// once the tables exist.
+// Package bootstrap opens dev-idp's SQLite database and applies the embedded
+// schema on every start.
+//
+// The schema is idempotent (CREATE TABLE / CREATE INDEX IF NOT EXISTS), which
+// creates anything missing but never alters an existing table. Destructive
+// drift repair is an explicit operation performed by git:worksync.
 package bootstrap
 
 import (
@@ -17,9 +19,26 @@ import (
 	"github.com/speakeasy-api/gram/dev-idp/internal/database"
 )
 
+// schemaSQL is indirected so evolve.go can derive the expected shape.
+func schemaSQL() string { return database.Schema }
+
 // Open returns a *sql.DB ready for use. For in-memory mode, the caller
 // must keep MaxOpenConns at 1 because sqlite ":memory:" is per-connection.
 func Open(ctx context.Context, cfg config.DB) (*sql.DB, error) {
+	db, err := openSQLite(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := db.ExecContext(ctx, database.Schema); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("apply schema: %w", err)
+	}
+
+	return db, nil
+}
+
+func openSQLite(ctx context.Context, cfg config.DB) (*sql.DB, error) {
 	dsn, err := buildDSN(cfg)
 	if err != nil {
 		return nil, err
@@ -46,11 +65,6 @@ func Open(ctx context.Context, cfg config.DB) (*sql.DB, error) {
 			_ = db.Close()
 			return nil, fmt.Errorf("apply %s: %w", p, err)
 		}
-	}
-
-	if _, err := db.ExecContext(ctx, database.Schema); err != nil {
-		_ = db.Close()
-		return nil, fmt.Errorf("apply schema: %w", err)
 	}
 
 	return db, nil

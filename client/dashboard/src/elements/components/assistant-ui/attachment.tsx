@@ -1,7 +1,13 @@
 "use client";
 
-import { PropsWithChildren, useEffect, useState, type FC } from "react";
-import { XIcon, PlusIcon, FileText } from "lucide-react";
+import {
+  PropsWithChildren,
+  useCallback,
+  useEffect,
+  useState,
+  type FC,
+} from "react";
+import { XIcon, Paperclip, FileText } from "lucide-react";
 import {
   AttachmentPrimitive,
   ComposerPrimitive,
@@ -27,6 +33,9 @@ import {
   AvatarFallback,
 } from "@/elements/components/ui/avatar";
 import { TooltipIconButton } from "@/elements/components/assistant-ui/tooltip-icon-button";
+import { getApiUrl } from "@/elements/lib/api";
+import { useAuth } from "@/elements/hooks/useAuth";
+import { useElements } from "@/elements/hooks/useElements";
 import { cn } from "@/lib/utils";
 import { attachmentTypeLabel } from "./attachment.helpers";
 
@@ -50,19 +59,73 @@ const useFileSrc = (file: File | undefined) => {
   return src;
 };
 
+/**
+ * Resolves an image attachment that lives behind Gram's authenticated serve
+ * endpoint. A replayed thread has no `File` to make an object URL from, and the
+ * stored URL cannot be used as an image source directly because the request
+ * needs session headers — so fetch it and hand the preview a blob URL instead.
+ */
+const useAuthenticatedSrc = (url: string | undefined) => {
+  const { config } = useElements();
+  const apiUrl = getApiUrl(config);
+  const auth = useAuth({ auth: config.api, projectSlug: config.projectSlug });
+  const [src, setSrc] = useState<string | undefined>(undefined);
+  const ensureValidHeaders = auth.ensureValidHeaders;
+
+  useEffect(() => {
+    if (!url || !url.startsWith(`${apiUrl}/rpc/assets.serveChatAttachment`)) {
+      setSrc(undefined);
+      return;
+    }
+
+    let objectUrl: string | undefined;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await fetch(url, {
+          headers: await ensureValidHeaders(),
+        });
+        if (!response.ok) return;
+        const blob = await response.blob();
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setSrc(objectUrl);
+      } catch {
+        // Preview is best-effort: the card falls back to its file icon.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [url, apiUrl, ensureValidHeaders]);
+
+  return src;
+};
+
 const useAttachmentSrc = () => {
-  const { file, src } = useAuiState(
-    useShallow(({ attachment }): { file?: File; src?: string } => {
-      if (attachment.type !== "image") return {};
-      if (attachment.file) return { file: attachment.file };
-      const src = attachment.content?.filter((c) => c.type === "image")[0]
-        ?.image;
-      if (!src) return {};
-      return { src };
-    }),
+  const { file, src, fileUrl } = useAuiState(
+    useShallow(
+      ({ attachment }): { file?: File; src?: string; fileUrl?: string } => {
+        if (attachment.type !== "image") return {};
+        if (attachment.file) return { file: attachment.file };
+        const src = attachment.content?.filter((c) => c.type === "image")[0]
+          ?.image;
+        if (src) return { src };
+        // Replayed attachments carry the asset's serve URL on a file part.
+        const fileUrl = attachment.content?.filter((c) => c.type === "file")[0]
+          ?.data;
+        if (!fileUrl) return {};
+        return { fileUrl };
+      },
+    ),
   );
 
-  return useFileSrc(file) ?? src;
+  // Both hooks run unconditionally — `??` would short-circuit the second.
+  const objectSrc = useFileSrc(file);
+  const authenticatedSrc = useAuthenticatedSrc(fileUrl);
+  return objectSrc ?? src ?? authenticatedSrc;
 };
 
 type AttachmentPreviewProps = {
@@ -107,17 +170,67 @@ const AttachmentPreviewDialog: FC<PropsWithChildren> = ({ children }) => {
   );
 };
 
+/**
+ * Opens an attachment that has no inline preview — a PDF, a spec, an audio
+ * file. Composer-stage files open straight from the picked `File`; a stored one
+ * is fetched with session headers first, because the serve endpoint rejects an
+ * unauthenticated `window.open`.
+ */
+const useOpenAttachment = () => {
+  const { config } = useElements();
+  const apiUrl = getApiUrl(config);
+  const auth = useAuth({ auth: config.api, projectSlug: config.projectSlug });
+  const ensureValidHeaders = auth.ensureValidHeaders;
+  const { file, fileUrl } = useAuiState(
+    useShallow(({ attachment }): { file?: File; fileUrl?: string } => {
+      const url = attachment.content?.filter((c) => c.type === "file")[0]?.data;
+      return {
+        ...(attachment.file ? { file: attachment.file } : {}),
+        ...(url ? { fileUrl: url } : {}),
+      };
+    }),
+  );
+
+  const open = useCallback(async () => {
+    let objectUrl: string | undefined;
+    if (file) {
+      objectUrl = URL.createObjectURL(file);
+    } else if (fileUrl?.startsWith(apiUrl)) {
+      const response = await fetch(fileUrl, {
+        headers: await ensureValidHeaders(),
+      });
+      if (!response.ok) return;
+      objectUrl = URL.createObjectURL(await response.blob());
+    } else if (fileUrl) {
+      window.open(fileUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+    if (!objectUrl) return;
+    const opened = objectUrl;
+    window.open(opened, "_blank", "noopener,noreferrer");
+    // The new tab has loaded it by now; keeping the URL alive leaks the blob.
+    setTimeout(() => URL.revokeObjectURL(opened), 60_000);
+  }, [file, fileUrl, apiUrl, ensureValidHeaders]);
+
+  return { open };
+};
+
 const AttachmentThumb: FC = () => {
   const isImage = useAuiState(({ attachment }) => attachment.type === "image");
   const src = useAttachmentSrc();
 
   return (
     <Avatar className="aui-attachment-tile-avatar h-full w-full rounded-none">
-      <AvatarImage
-        src={src}
-        alt="Attachment preview"
-        className="aui-attachment-tile-image object-cover"
-      />
+      {/* Only once a source resolves: a replayed image is fetched
+          asynchronously, and an image element with no source renders as a
+          broken-image box instead of the fallback icon. */}
+      {src && (
+        <AvatarImage
+          src={src}
+          alt="Attachment preview"
+          className="aui-attachment-tile-image object-cover"
+        />
+      )}
       <AvatarFallback delayMs={isImage ? 200 : 0}>
         <FileText className="aui-attachment-tile-fallback-icon size-8 text-muted-foreground" />
       </AvatarFallback>
@@ -130,6 +243,7 @@ const AttachmentUI: FC = () => {
   const isComposer = aui.attachment.source === "composer";
 
   const isImage = useAuiState(({ attachment }) => attachment.type === "image");
+  const { open: openAttachment } = useOpenAttachment();
   const typeLabel = useAuiState(({ attachment }) => {
     const type = attachment.type;
     switch (type) {
@@ -157,15 +271,42 @@ const AttachmentUI: FC = () => {
           <TooltipTrigger asChild>
             <div
               className={cn(
-                "aui-attachment-tile size-14 cursor-pointer overflow-hidden rounded-[14px] border bg-muted transition-opacity hover:opacity-75",
+                "aui-attachment-tile cursor-pointer overflow-hidden rounded-[14px] border bg-muted transition-opacity hover:opacity-75",
+                // An image is its own label; anything else is an icon that
+                // only reads as a specific file once the name is on the card.
+                isImage
+                  ? "size-14"
+                  : "aui-attachment-tile-file flex w-36 flex-col",
                 isComposer &&
                   "aui-attachment-tile-composer border-foreground/20",
               )}
               role="button"
               id="attachment-tile"
               aria-label={`${typeLabel} attachment`}
+              tabIndex={isImage ? undefined : 0}
+              onClick={isImage ? undefined : () => void openAttachment()}
+              onKeyDown={
+                isImage
+                  ? undefined
+                  : (event) => {
+                      if (event.key !== "Enter" && event.key !== " ") return;
+                      event.preventDefault();
+                      void openAttachment();
+                    }
+              }
             >
-              <AttachmentThumb />
+              {isImage ? (
+                <AttachmentThumb />
+              ) : (
+                <>
+                  <div className="aui-attachment-tile-file-icon flex h-14 items-center justify-center">
+                    <FileText className="size-7 text-muted-foreground" />
+                  </div>
+                  <div className="aui-attachment-tile-name truncate border-t bg-background/70 px-2 py-1 text-center text-[11px] leading-4 text-muted-foreground">
+                    <AttachmentPrimitive.Name />
+                  </div>
+                </>
+              )}
             </div>
           </TooltipTrigger>
         </AttachmentPreviewDialog>
@@ -214,15 +355,15 @@ export const ComposerAddAttachment: FC = () => {
   return (
     <ComposerPrimitive.AddAttachment asChild>
       <TooltipIconButton
-        tooltip="Add Attachment"
+        tooltip="Attach files"
         side="top"
         variant="ghost"
         size="icon"
         align="start"
         className="aui-composer-add-attachment size-[34px] rounded-full p-1 text-xs font-semibold hover:bg-muted-foreground/15 dark:border-muted-foreground/15 dark:hover:bg-muted-foreground/30"
-        aria-label="Add Attachment"
+        aria-label="Attach files"
       >
-        <PlusIcon className="aui-attachment-add-icon size-5 stroke-[1.5px]" />
+        <Paperclip className="aui-attachment-add-icon size-[18px] stroke-[1.5px]" />
       </TooltipIconButton>
     </ComposerPrimitive.AddAttachment>
   );

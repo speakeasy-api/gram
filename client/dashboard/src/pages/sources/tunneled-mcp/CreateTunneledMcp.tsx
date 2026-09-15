@@ -1,7 +1,5 @@
 import { CodeBlock } from "@/components/code";
-import { Page } from "@/components/page-layout";
-import { RequireScope } from "@/components/require-scope";
-import { Heading } from "@/components/ui/Heading";
+import { FormPage } from "@/components/page-templates";
 import { Input } from "@/components/ui/Input";
 import { Text } from "@/components/ui/Text";
 import { useTelemetry } from "@/contexts/Telemetry";
@@ -13,10 +11,11 @@ import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { TunneledMcpServer } from "@gram/client/models/components/tunneledmcpserver.js";
-import { AlertCircle, Loader2, Network } from "lucide-react";
+import { AlertCircle, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { Navigate } from "react-router";
 import { toast } from "sonner";
+import { RESOURCE_IDENTIFIER_EXPLAINER } from "./copy";
 import { useCreateTunneledMcpSource } from "./hooks";
 import { TunneledMcpSetupTabs } from "./TunneledMcpSetupTabs";
 
@@ -43,27 +42,17 @@ export default function CreateTunneledMcp(): JSX.Element | null {
   }
 
   if (!isTunneledMcpEnabled) {
-    return <Navigate to={routes.sources.href()} replace />;
+    return <Navigate to={routes.mcp.add.href()} replace />;
   }
 
-  return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <RequireScope scope="mcp:write" level="page">
-          <CreateTunneledMcpForm />
-        </RequireScope>
-      </Page.Body>
-    </Page>
-  );
+  return <CreateTunneledMcpForm />;
 }
 
 function CreateTunneledMcpForm() {
   const routes = useRoutes();
   const createSource = useCreateTunneledMcpSource();
   const [name, setName] = useState("");
+  const [resourceIdentifier, setResourceIdentifier] = useState("");
   const [touched, setTouched] = useState(false);
   const [created, setCreated] = useState<CreatedState | null>(null);
 
@@ -77,7 +66,10 @@ function CreateTunneledMcpForm() {
     if (validateDisplayName(name) !== null) return;
 
     try {
-      const result = await createSource.mutateAsync({ name: name.trim() });
+      const result = await createSource.mutateAsync({
+        name: name.trim(),
+        resourceIdentifier: resourceIdentifier.trim() || undefined,
+      });
       setCreated(result);
       toast.success("Tunneled MCP server added");
     } catch (error) {
@@ -91,20 +83,12 @@ function CreateTunneledMcpForm() {
 
   if (created) {
     return (
-      <div className="max-w-6xl">
-        <Stack gap={3} className="mb-8">
-          <Stack direction="horizontal" gap={3} align="center">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center bg-cyan-500/10 dark:bg-cyan-500/20">
-              <Network className="h-5 w-5 text-cyan-700 dark:text-cyan-300" />
-            </div>
-            <Heading variant="h3">Tunneled MCP server added</Heading>
-          </Stack>
-          <Text muted>
-            Use this tunnel key to connect an MCP server running in your own
-            network.
-          </Text>
-        </Stack>
-
+      <FormPage
+        scope="mcp:write"
+        width="wide"
+        title="Tunneled MCP server added"
+        description="Use this tunnel key to connect an MCP server running in your own network."
+      >
         <Stack gap={6}>
           <div className="border p-5">
             <Text variant="subheading" className="mb-3">
@@ -138,8 +122,7 @@ function CreateTunneledMcpForm() {
             <Button
               variant="secondary"
               onClick={() =>
-                routes.sources.source.goTo(
-                  "tunneledmcp",
+                routes.mcp.x.overview.goTo(
                   tunneledMcpRouteParam(created.tunneledMcpServer),
                 )
               }
@@ -148,25 +131,16 @@ function CreateTunneledMcpForm() {
             </Button>
           </Stack>
         </Stack>
-      </div>
+      </FormPage>
     );
   }
 
   return (
-    <div className="max-w-2xl">
-      <Stack gap={3} className="mb-8">
-        <Stack direction="horizontal" gap={3} align="center">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center bg-cyan-500/10 dark:bg-cyan-500/20">
-            <Network className="h-5 w-5 text-cyan-700 dark:text-cyan-300" />
-          </div>
-          <Heading variant="h3">Add a tunneled MCP server</Heading>
-        </Stack>
-        <Text muted>
-          Register an MCP server that runs in your private network and connects
-          outbound to Speakeasy through a tunnel.
-        </Text>
-      </Stack>
-
+    <FormPage
+      scope="mcp:write"
+      title="New tunneled MCP server"
+      description="Register an MCP server that runs in your private network and connects outbound to Speakeasy through a tunnel."
+    >
       <form
         onSubmit={(e) => {
           void handleSubmit(e);
@@ -209,6 +183,27 @@ function CreateTunneledMcpForm() {
           </Stack>
 
           <Stack gap={1}>
+            <label
+              htmlFor="tunneled-mcp-resource-identifier"
+              className="text-sm leading-none font-medium"
+            >
+              Resource identifier{" "}
+              <span className="text-muted-foreground font-normal">
+                (optional)
+              </span>
+            </label>
+            <Input
+              id="tunneled-mcp-resource-identifier"
+              placeholder="https://mcp.internal.example.com/mcp"
+              value={resourceIdentifier}
+              onChange={(value) => setResourceIdentifier(value)}
+            />
+            <Text muted small>
+              {`${RESOURCE_IDENTIFIER_EXPLAINER} Leave blank if unknown — it can be recorded later in the source settings.`}
+            </Text>
+          </Stack>
+
+          <Stack gap={1}>
             <label className="text-sm leading-none font-medium">
               Transport
             </label>
@@ -238,13 +233,13 @@ function CreateTunneledMcpForm() {
               type="button"
               variant="secondary"
               disabled={createSource.isPending}
-              onClick={() => routes.sources.goTo()}
+              onClick={() => routes.mcp.add.goTo()}
             >
               <Button.Text>Cancel</Button.Text>
             </Button>
           </Stack>
         </Stack>
       </form>
-    </div>
+    </FormPage>
   );
 }

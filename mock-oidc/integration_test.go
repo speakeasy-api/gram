@@ -93,7 +93,7 @@ func TestDiscoveryAndIDToken(t *testing.T) {
 		Scopes:       []string{oidc.ScopeOpenID, "email", "profile"},
 	}
 
-	authURL := oauth2Cfg.AuthCodeURL("xyz", oauth2.AccessTypeOnline)
+	authURL := oauth2Cfg.AuthCodeURL("xyz", oauth2.AccessTypeOffline)
 
 	// Disable redirect-following so we can extract the code.
 	jar, _ := cookiejar.New(nil)
@@ -151,6 +151,23 @@ func TestDiscoveryAndIDToken(t *testing.T) {
 	token, err := oauth2Cfg.Exchange(ctx, code)
 	if err != nil {
 		t.Fatalf("token exchange: %v", err)
+	}
+	if token.RefreshToken == "" {
+		t.Fatal("token exchange did not return a refresh token")
+	}
+
+	refreshed, err := oauth2Cfg.TokenSource(ctx, &oauth2.Token{
+		RefreshToken: token.RefreshToken,
+		Expiry:       time.Now().Add(-time.Minute),
+	}).Token()
+	if err != nil {
+		t.Fatalf("refresh token exchange: %v", err)
+	}
+	if refreshed.AccessToken == "" || refreshed.AccessToken == token.AccessToken {
+		t.Fatal("refresh did not return a new access token")
+	}
+	if refreshed.RefreshToken != token.RefreshToken {
+		t.Fatalf("refresh token changed: got %q, want %q", refreshed.RefreshToken, token.RefreshToken)
 	}
 
 	rawIDToken, ok := token.Extra("id_token").(string)

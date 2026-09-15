@@ -20,25 +20,19 @@ specific category of applications.
 
 ```typescript
 import { GramCore } from "@gram/client/core.js";
-import { accessBlockShadowMCPInventoryServer } from "@gram/client/funcs/accessBlockShadowMCPInventoryServer.js";
+import { otelUploadLogs } from "@gram/client/funcs/otelUploadLogs.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
 const gram = new GramCore();
 
 async function run() {
-  const res = await accessBlockShadowMCPInventoryServer(gram, {
-    blockShadowMCPInventoryServerRequestBody: {
-      policyId: "446d5683-43ea-4800-8767-001f86921785",
-      projectId: "944297fa-368e-419d-9a2b-8879726d9d0b",
-      serverUrl: "https://numb-mortise.name/",
-    },
-  });
+  const res = await otelUploadLogs(gram);
   if (res.ok) {
     const { value: result } = res;
-    console.log(result);
+    
   } else {
-    console.log("accessBlockShadowMCPInventoryServer failed:", res.error);
+    console.log("otelUploadLogs failed:", res.error);
   }
 }
 

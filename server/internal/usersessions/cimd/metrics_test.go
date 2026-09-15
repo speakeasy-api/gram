@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
@@ -90,7 +91,7 @@ func TestResolverMetrics_Success(t *testing.T) {
 	require.NoError(t, err)
 	origin := srvURL.Host
 
-	_, err = resolver.Resolve(t.Context(), clientID)
+	_, err = resolver.Resolve(t.Context(), clientID, noCache)
 	require.NoError(t, err)
 
 	rm := collectMetrics(t, reader)
@@ -127,7 +128,7 @@ func TestResolverMetrics_FetchError(t *testing.T) {
 		http.NotFound(w, r)
 	})
 
-	_, err := resolver.Resolve(t.Context(), srv.URL+"/client.json")
+	_, err := resolver.Resolve(t.Context(), srv.URL+"/client.json", noCache)
 	require.Error(t, err)
 
 	rm := collectMetrics(t, reader)
@@ -158,7 +159,7 @@ func TestResolverMetrics_ParseError(t *testing.T) {
 		}
 	})
 
-	_, err := resolver.Resolve(t.Context(), srv.URL+"/client.json")
+	_, err := resolver.Resolve(t.Context(), srv.URL+"/client.json", noCache)
 	require.Error(t, err)
 
 	rm := collectMetrics(t, reader)
@@ -186,7 +187,7 @@ func TestResolverMetrics_OversizedDocumentRecordsCap(t *testing.T) {
 		}
 	})
 
-	_, err := resolver.Resolve(t.Context(), srv.URL+"/client.json")
+	_, err := resolver.Resolve(t.Context(), srv.URL+"/client.json", noCache)
 	require.Error(t, err)
 
 	rm := collectMetrics(t, reader)
@@ -217,7 +218,7 @@ func TestResolverMetrics_ValidationErrorWithReason(t *testing.T) {
 	})
 	clientID = srv.URL + "/client.json"
 
-	_, err := resolver.Resolve(t.Context(), clientID)
+	_, err := resolver.Resolve(t.Context(), clientID, noCache)
 	require.Error(t, err)
 
 	rm := collectMetrics(t, reader)
@@ -243,7 +244,7 @@ func TestResolverMetrics_URLSyntaxFailure(t *testing.T) {
 		t.Error("syntactically invalid client_id must never be fetched")
 	})
 
-	_, err := resolver.Resolve(t.Context(), srv.URL) // no path component
+	_, err := resolver.Resolve(t.Context(), srv.URL, noCache) // no path component
 	require.Error(t, err)
 
 	rm := collectMetrics(t, reader)
@@ -261,6 +262,80 @@ func TestResolverMetrics_URLSyntaxFailure(t *testing.T) {
 	requireAttr(t, failures[0].Attributes, attr.CIMDValidationReasonKey, string(reasonClientIDMissingPath))
 }
 
+// TestResolverMetrics_CacheHit pins the short-circuit shape: the attempt is
+// counted with its origin, but no duration point exists, so cache hits never
+// skew the latency percentiles of the requests that actually left the
+// process.
+func TestResolverMetrics_CacheHit(t *testing.T) {
+	t.Parallel()
+
+	srv, resolver, reader := newObservedResolver(t, func(w http.ResponseWriter, r *http.Request) {
+		t.Error("a fresh cache must not reach the document host")
+	})
+	srvURL, err := url.Parse(srv.URL)
+	require.NoError(t, err)
+
+	_, err = resolver.Resolve(t.Context(), srv.URL+"/client.json", CacheState{
+		ExpiresAt: time.Now().Add(time.Hour),
+		ETag:      `"v1"`,
+	})
+	require.NoError(t, err)
+
+	rm := collectMetrics(t, reader)
+
+	attempts := counterPoints(t, rm, meterFetchAttempts)
+	require.Len(t, attempts, 1)
+	require.Equal(t, int64(1), attempts[0].Value)
+	requireAttr(t, attempts[0].Attributes, attr.OutcomeKey, string(fetchResultCached))
+	requireAttr(t, attempts[0].Attributes, attr.CIMDOriginKey, srvURL.Host)
+
+	_, ok := findMetric(rm, meterFetchDurationSeconds)
+	require.False(t, ok, "no upstream request ran, so no duration is recorded")
+
+	_, ok = findMetric(rm, meterFetchResponseSize)
+	require.False(t, ok)
+}
+
+// TestResolverMetrics_ConditionalNotModified pins the revalidation shape: an
+// upstream request ran, so it is timed, but no body was read, so no size is
+// recorded.
+func TestResolverMetrics_ConditionalNotModified(t *testing.T) {
+	t.Parallel()
+
+	srv, resolver, reader := newObservedResolver(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("If-None-Match") != `"v1"` {
+			t.Errorf("expected a conditional request, got If-None-Match %q", r.Header.Get("If-None-Match"))
+		}
+		w.WriteHeader(http.StatusNotModified)
+	})
+	srvURL, err := url.Parse(srv.URL)
+	require.NoError(t, err)
+
+	result, err := resolver.Resolve(t.Context(), srv.URL+"/client.json", CacheState{
+		ExpiresAt: time.Now().Add(-time.Minute),
+		ETag:      `"v1"`,
+	})
+	require.NoError(t, err)
+	require.Equal(t, CacheOutcomeNotModified, result.Outcome)
+
+	rm := collectMetrics(t, reader)
+
+	attempts := counterPoints(t, rm, meterFetchAttempts)
+	require.Len(t, attempts, 1)
+	requireAttr(t, attempts[0].Attributes, attr.OutcomeKey, string(fetchResultConditionalNotModified))
+	requireAttr(t, attempts[0].Attributes, attr.CIMDOriginKey, srvURL.Host)
+
+	durationMetric, ok := findMetric(rm, meterFetchDurationSeconds)
+	require.True(t, ok, "a request left the process, so it is timed")
+	durationHistogram, ok := durationMetric.Data.(metricdata.Histogram[float64])
+	require.True(t, ok)
+	require.Len(t, durationHistogram.DataPoints, 1)
+	requireAttr(t, durationHistogram.DataPoints[0].Attributes, attr.OutcomeKey, string(fetchResultConditionalNotModified))
+
+	_, ok = findMetric(rm, meterFetchResponseSize)
+	require.False(t, ok, "a 304 reads no body, so no size is recorded")
+}
+
 // TestMetrics_NamesPinned pins the wire spellings of the metric names so a
 // const rename cannot silently break dashboards built on them.
 func TestMetrics_NamesPinned(t *testing.T) {
@@ -269,46 +344,76 @@ func TestMetrics_NamesPinned(t *testing.T) {
 	require.Equal(t, "cimd.fetch.attempts", meterFetchAttempts)
 	require.Equal(t, "cimd.fetch.duration_seconds", meterFetchDurationSeconds)
 	require.Equal(t, "cimd.fetch.response_size", meterFetchResponseSize)
-	require.Equal(t, "cimd.cache.hits", meterCacheHits)
 	require.Equal(t, "cimd.validation.failures", meterValidationFailures)
+	require.Equal(t, "cimd.redirect_uris.cross_origin", meterCrossOriginRedirects)
 }
 
-// TestMetrics_ReservedResultLabels pins the provisional label spellings that
-// follow-up issues will emit — cached / conditional_not_modified (AIS-216),
-// rate_limited (AIS-215) — plus the reserved cimd.cache.hits instrument, so
-// dashboards built on this vocabulary stay valid when the emitting code
-// lands. AIS-371's admission_denied is deliberately absent: admission
-// records to its own cimd.admission.decisions counter, since a denial means
-// no fetch ran and so has no place under fetch.attempts.
-func TestMetrics_ReservedResultLabels(t *testing.T) {
+// TestResolverMetrics_CrossOriginRedirects pins the observability that
+// replaced the redirect-URI same-origin binding (AIS-597): a document that
+// validates with a cross-origin redirect_uri resolves successfully and
+// records one cimd.redirect_uris.cross_origin point carrying only the
+// bounded client_id origin — the redirect origins themselves stay out of
+// metric labels.
+func TestResolverMetrics_CrossOriginRedirects(t *testing.T) {
 	t.Parallel()
 
-	ctx := t.Context()
-	reader := sdkmetric.NewManualReader()
-	meterProvider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
-	m := newMetrics(meterProvider, testenv.NewLogger(t))
+	var clientID string
+	srv, resolver, reader := newObservedResolver(t, func(w http.ResponseWriter, r *http.Request) {
+		doc := validDocumentJSON(clientID)
+		doc["redirect_uris"] = []string{"https://api.other.example/callback"}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(doc); err != nil {
+			t.Errorf("encode document: %v", err)
+		}
+	})
+	clientID = srv.URL + "/client.json"
+	srvURL, err := url.Parse(srv.URL)
+	require.NoError(t, err)
 
-	reserved := []struct {
-		result fetchResult
-		want   string
-	}{
-		{result: fetchResultCached, want: "cached"},
-		{result: fetchResultConditionalNotModified, want: "conditional_not_modified"},
-		{result: fetchResultRateLimited, want: "rate_limited"},
-	}
-	for _, r := range reserved {
-		require.Equal(t, r.want, string(r.result))
-		m.RecordAttempt(ctx, "client.example.com", r.result)
-	}
-	m.RecordCacheHit(ctx, "client.example.com")
+	result, err := resolver.Resolve(t.Context(), clientID, noCache)
+	require.NoError(t, err)
+	require.NotNil(t, result.Document)
 
 	rm := collectMetrics(t, reader)
 
-	attempts := counterPoints(t, rm, meterFetchAttempts)
-	require.Len(t, attempts, len(reserved))
+	crossOrigin := counterPoints(t, rm, meterCrossOriginRedirects)
+	require.Len(t, crossOrigin, 1)
+	require.Equal(t, int64(1), crossOrigin[0].Value)
+	requireAttr(t, crossOrigin[0].Attributes, attr.CIMDOriginKey, srvURL.Host)
+	require.Equal(t, 1, crossOrigin[0].Attributes.Len(), "only the client_id origin may label this counter")
+}
 
-	hits := counterPoints(t, rm, meterCacheHits)
-	require.Len(t, hits, 1)
-	require.Equal(t, int64(1), hits[0].Value)
-	requireAttr(t, hits[0].Attributes, attr.CIMDOriginKey, "client.example.com")
+// TestResolverMetrics_SameOriginRecordsNoCrossOrigin pins the counter's
+// absence on the ordinary case: a document whose redirect_uris are loopback
+// or same-origin records no cimd.redirect_uris.cross_origin point at all, so
+// the instrument stays silent until the event it watches for occurs.
+func TestResolverMetrics_SameOriginRecordsNoCrossOrigin(t *testing.T) {
+	t.Parallel()
+
+	var clientID string
+	srv, resolver, reader := newObservedResolver(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(validDocumentJSON(clientID)); err != nil {
+			t.Errorf("encode document: %v", err)
+		}
+	})
+	clientID = srv.URL + "/client.json"
+
+	_, err := resolver.Resolve(t.Context(), clientID, noCache)
+	require.NoError(t, err)
+
+	rm := collectMetrics(t, reader)
+
+	_, ok := findMetric(rm, meterCrossOriginRedirects)
+	require.False(t, ok)
+}
+
+// TestMetrics_CacheResultLabelsPinned pins the wire spellings of the two
+// cache outcomes, which dashboards use both to read cache effectiveness and
+// to restrict fetch-failure ratios to the attempts that actually fetched.
+func TestMetrics_CacheResultLabelsPinned(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "cached", string(fetchResultCached))
+	require.Equal(t, "conditional_not_modified", string(fetchResultConditionalNotModified))
 }

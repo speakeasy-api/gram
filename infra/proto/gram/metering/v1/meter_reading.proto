@@ -1,0 +1,61 @@
+edition = "2024";
+
+package gram.metering.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1;meteringv1";
+
+// MeterReading is the canonical immutable s-token workload event. ClickHouse
+// and other consumers project this domain contract into their own storage.
+message MeterReading {
+  // Kind distinguishes ordinary usage from a signed adjustment.
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    KIND_USAGE = 1;
+    KIND_ADJUSTMENT = 2;
+  }
+
+  string id = 1;
+  string organization_id = 2;
+  string project_id = 3;
+  string meter_id = 4;
+  string operation_id = 5;
+  string unit = 6;
+
+  // Value is signed. Usage is positive; adjustments may add or subtract.
+  int64 value = 7;
+
+  // OccurredAt is the billing-effective UTC timestamp in RFC3339Nano format.
+  string occurred_at = 8;
+
+  // Attributes are non-authoritative diagnostic dimensions. Rating must use
+  // the typed fields above and below, never values stored in this map.
+  map<string, string> attributes = 9;
+
+  // CorrectsReadingId identifies the reading corrected by an adjustment.
+  string corrects_reading_id = 10;
+
+  // MeterVersion identifies the versioned meter definition used for rating.
+  uint32 meter_version = 11;
+  Kind kind = 12;
+
+  // ProducedAt is the producer's UTC emission time in RFC3339Nano format. It is
+  // distinct from billing-effective occurred_at and consumer-owned inserted_at.
+  string produced_at = 13;
+
+  // MeasurementMethod is the rating-critical measurement implementation.
+  string measurement_method = 14;
+
+  // AdjustmentReason is a machine-readable reason for an adjustment.
+  string adjustment_reason = 15;
+
+  // Source is an optional diagnostic origin and must not affect rating.
+  string source = 16;
+
+  option (gcp.pubsub.v1.topic) = {
+    retention_hint: {
+      seconds: 2678400 /* 31 days */
+    }
+  };
+}

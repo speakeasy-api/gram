@@ -5,14 +5,14 @@
 
 #USAGE flag "--local" help="Always use local plugin directory instead of published plugin"
 #USAGE flag "--project <slug>" help="Project slug for OTEL session validation (enables blocking)" default="default"
-#USAGE flag "--agent <agent>" help="Agent to launch with the dev hooks installed: claude or opencode" default="claude"
+#USAGE flag "--agent <agent>" help="Agent to launch with the dev hooks installed: claude, opencode or copilot" default="claude"
 
 set -euo pipefail
 
 case "${usage_agent:-claude}" in
-  claude|opencode) ;;
+  claude|opencode|copilot) ;;
   *)
-    echo "hooks:test: --agent must be claude or opencode, got '${usage_agent}'" >&2
+    echo "hooks:test: --agent must be claude, opencode or copilot, got '${usage_agent}'" >&2
     exit 2
     ;;
 esac
@@ -175,6 +175,30 @@ if [ "${usage_agent:-claude}" = "opencode" ]; then
 EOF
   echo ""
   OPENCODE_CONFIG="${plugin_out}/opencode.json" exec opencode
+elif [ "${usage_agent:-claude}" = "copilot" ]; then
+  # Copilot needs no install/uninstall cycle: --plugin-dir loads the package
+  # for the session, so both paths just render into a temp dir and point at it.
+  # Hooks only run in Copilot CLI — VS Code and the Copilot app load the plugin
+  # but never fire its hooks.
+  plugin_out="$(mktemp -d)"
+  if [ "${usage_local:-}" = "true" ]; then
+    hooks_binary="${plugin_out}/speakeasy-hooks"
+    echo "Building local hooks binary: ${hooks_binary}"
+    go build -o "$hooks_binary" ./hooks/cmd/speakeasy-hooks
+    "$hooks_binary" install \
+      --provider=copilot \
+      --dir="${plugin_out}/plugin-copilot" \
+      --server-url="$GRAM_SERVER_URL" \
+      --site-url="$GRAM_SITE_URL" \
+      --project="$project_slug" \
+      --browser-login \
+      --binary="$hooks_binary"
+  else
+    echo "Rendering local plugin into: ${plugin_out}"
+    (cd server && go run ./cmd/export-hook-plugin -out "$plugin_out" >/dev/null)
+  fi
+  echo ""
+  exec copilot --plugin-dir "${plugin_out}/plugin-copilot"
 elif [ "${usage_local:-}" = "true" ]; then
   plugin_out="$(mktemp -d)"
   hooks_binary="${plugin_out}/speakeasy-hooks"

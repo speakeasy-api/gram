@@ -1,0 +1,63 @@
+{
+  "id": "gen-1786487779-5fMLVb6tbyWx4RUX83Uf",
+  "object": "chat.completion",
+  "created": 1786487779,
+  "model": "anthropic/claude-sonnet-5",
+  "provider": "Amazon Bedrock",
+  "system_fingerprint": null,
+  "service_tier": "default",
+  "choices": [
+    {
+      "index": 0,
+      "logprobs": null,
+      "finish_reason": "length",
+      "native_finish_reason": "max_tokens",
+      "message": {
+        "role": "assistant",
+        "content": "The **MCP Inspector** is the official developer tool for testing and debugging servers built on the Model Context Protocol (MCP). Here's an overview:\n\n## What it does\n\nThe MCP Inspector is an interact",
+        "refusal": null,
+        "reasoning": null,
+        "reasoning_details": [
+          {
+            "type": "reasoning.text",
+            "signature": "EqIDCokBCBAYAipAN2xWaYMcTrZBIu4rqCtfhQ2zSj2WdhA1ZHsnkvvLFslDrJNGtmHQIQsvwxG3Z6fZcU450o68lhD5io4v7Mx5ljIPY2xhdWRlLXNvbm5ldC01OABCCHRoaW5raW5nWiQ0YzBmMDQ2Zi0yNWZkLTQ1ZmItYmZiMy1hMDhhOGUyNDljYTcSDCtKt0J78B6mKuj1PRoMSISf1yOFEnF6RhLZIjCfIAPjh2SJ8tL25tH8NAhibmAE3TWvx1xVj2Yz86c7uXEiPPO8KUG0F2eEalr4DbIqxQFjcw7dAWOV4iaimEFQjsCjgyu/yBoCFJ74Io4tgZO8dABMo2IJi2SJ5Ya9qjYGm8P01b4NRMMDcxCTLisvT0NhtnFpo5xiw9LN2pdQOqLMTwQw5g0/oh3PCA9Po26x45D8+o3AUWfOMPfh+rUra88zFfO3gPSm6ArK6wcgPJGbNpXu3aPVs+pdRRDEwL6E/hKIvW5ZcO/PmvT9OMSCZ7Ydx8fKCQZyhV+qj0xQK9z7pLMg+UXCxla4HAR/pOabBK6ElxTd4xgB",
+            "format": "anthropic-claude-v1",
+            "index": 0
+          }
+        ],
+        "annotations": [
+          {
+            "type": "url_citation",
+            "url_citation": {
+              "url": "https://modelcontextprotocol.io/docs/tools/inspector",
+              "title": "MCP Inspector - Model Context Protocol",
+              "start_index": 0,
+              "end_index": 0,
+              "content": "The MCP Inspector is an interactive developer tool for testing and debugging MCP servers. "
+            }
+          },
+          {
+            "type": "url_citation",
+            "url_citation": {
+              "url": "https://www.stainless.com/mcp/mcp-inspector-testing-and-debugging-mcp-servers/",
+              "title": "MCP Inspector \u2013 Testing and Debugging for MCP Servers - Stainless MCP Portal",
+              "start_index": 0,
+              "end_index": 0,
+              "content": "Think of it as a Postman equivalent for the MCP world, giving you a direct window into your server's behavior without needing a full-fledged AI client..."
+            }
+          },
+          {
+            "type": "url_citation",
+            "url_citation": {
+              "url": "https://www.stainless.com/mcp/mcp-inspector-testing-and-debugging-mcp-servers/",
+              "title": "MCP Inspector \u2013 Testing and Debugging for MCP Servers - Stainless MCP Portal",
+              "start_index": 0,
+              "end_index": 0,
+              "content": "It allows you to connect to a local or remote MCP server, view the tools it exposes, and call them with specific parameters to see the raw JSON respon..."
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

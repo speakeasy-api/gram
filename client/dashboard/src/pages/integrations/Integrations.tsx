@@ -1,4 +1,3 @@
-import { AddButton } from "@/components/add-button";
 import { AssetImage } from "@/components/asset-image";
 import { CreateThingCard } from "@/components/create-thing-card";
 import { InputDialog } from "@/components/input-dialog";
@@ -48,9 +47,9 @@ export default function Integrations(): JSX.Element {
       <Page.Body>
         <Page.Section>
           {/* The integrations slug isn't in the nav-area map, so the eyebrow
-              can't auto-derive; the page distributes packages, so it reads as
-              Distribute. */}
-          <Page.Section.Title area="Distribute">
+              can't auto-derive; the page belongs to the gateway, so it names
+              that group. */}
+          <Page.Section.Title area="MCP Gateway">
             Integrations
           </Page.Section.Title>
           <Page.Section.Description>
@@ -59,7 +58,14 @@ export default function Integrations(): JSX.Element {
           </Page.Section.Description>
           {isAdmin ? (
             <Page.Section.CTA>
-              <AddButton onClick={() => setCreateIntegrationDialogOpen(true)} />
+              <Button
+                variant="tertiary"
+                icon="plus"
+                className="text-muted-foreground hover:text-foreground"
+                onClick={() => setCreateIntegrationDialogOpen(true)}
+              >
+                <Button.Text className="sr-only">Add</Button.Text>
+              </Button>
             </Page.Section.CTA>
           ) : null}
           <Page.Section.Body>

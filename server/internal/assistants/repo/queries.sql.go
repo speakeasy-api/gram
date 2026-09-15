@@ -197,6 +197,44 @@ func (q *Queries) CallerOwnsDashboardChat(ctx context.Context, arg CallerOwnsDas
 	return ok, err
 }
 
+const cancelPendingAssistantThreadEvents = `-- name: CancelPendingAssistantThreadEvents :execrows
+UPDATE assistant_thread_events
+SET
+  status = $1,
+  processed_at = clock_timestamp(),
+  updated_at = clock_timestamp()
+WHERE project_id = $2
+  AND assistant_thread_id = $3
+  AND status = $4
+  AND deleted IS FALSE
+`
+
+type CancelPendingAssistantThreadEventsParams struct {
+	CancelledStatus string
+	ProjectID       uuid.UUID
+	ThreadID        uuid.UUID
+	PendingStatus   string
+}
+
+// Drops every turn queued on a thread that no runner has claimed yet. Used by
+// the stop button: a turn still waiting on a cold runtime has no in-flight
+// generation to cancel, so unless it is taken out of the queue here it starts
+// generating moments after the user asked it not to. Claimed ('processing')
+// events are deliberately untouched — those are already dispatched, and the
+// runner's own interrupt is what stops them.
+func (q *Queries) CancelPendingAssistantThreadEvents(ctx context.Context, arg CancelPendingAssistantThreadEventsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, cancelPendingAssistantThreadEvents,
+		arg.CancelledStatus,
+		arg.ProjectID,
+		arg.ThreadID,
+		arg.PendingStatus,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const claimAssistantMCPOAuthClientRegistration = `-- name: ClaimAssistantMCPOAuthClientRegistration :execrows
 INSERT INTO assistant_mcp_oauth_clients AS clients (
   project_id,
@@ -1769,6 +1807,56 @@ func (q *Queries) ListAssistants(ctx context.Context, projectID uuid.UUID) ([]Li
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listChatAttachmentAssets = `-- name: ListChatAttachmentAssets :many
+SELECT id, name, url, content_type, content_length
+FROM assets
+WHERE project_id = $1::uuid
+  AND id = ANY($2::uuid[])
+  AND kind = 'chat_attachment'
+  AND deleted IS FALSE
+`
+
+type ListChatAttachmentAssetsParams struct {
+	ProjectID uuid.UUID
+	Ids       []uuid.UUID
+}
+
+type ListChatAttachmentAssetsRow struct {
+	ID            uuid.UUID
+	Name          string
+	Url           string
+	ContentType   string
+	ContentLength int64
+}
+
+// Resolves the chat attachments a dashboard turn carries, scoped to the
+// project so a leaked asset id from another project cannot be attached.
+func (q *Queries) ListChatAttachmentAssets(ctx context.Context, arg ListChatAttachmentAssetsParams) ([]ListChatAttachmentAssetsRow, error) {
+	rows, err := q.db.Query(ctx, listChatAttachmentAssets, arg.ProjectID, arg.Ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListChatAttachmentAssetsRow
+	for rows.Next() {
+		var i ListChatAttachmentAssetsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Url,
+			&i.ContentType,
+			&i.ContentLength,
 		); err != nil {
 			return nil, err
 		}

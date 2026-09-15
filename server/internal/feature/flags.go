@@ -19,9 +19,20 @@ const (
 	// cannot see the feature. Targeted by PostHog organization group (org
 	// slug), the same way the dashboard evaluates it.
 	FlagBudgets Flag = "gram-budgets"
-	// FlagRiskRecommendedScopes gates per-project composition of recommended
-	// per-category detection scopes. Default off during rollout.
-	FlagRiskRecommendedScopes Flag = "risk-recommended-scopes"
+	// FlagRiskEnforcementPubsub routes realtime gitleaks and Presidio scans over Pub/Sub.
+	FlagRiskEnforcementPubsub Flag = "risk-enforcement-pubsub"
+
+	// FlagAgentManagement gates the first-class agent management API. It is
+	// evaluated per organization and fails closed unless explicitly on.
+	FlagAgentManagement Flag = "agent-management"
+	// FlagAgentIdentityCredentials gates agent credential issuance and management.
+	// It is evaluated per organization and fails closed unless explicitly on.
+	FlagAgentIdentityCredentials Flag = "agent-identity-credentials"
+
+	// FlagAgentMCPAuthorizationM2 gates selecting an existing agent in the MCP
+	// authorization challenge. It remains independently default-off until the M2
+	// credential and authorization safety gate is promoted.
+	FlagAgentMCPAuthorizationM2 Flag = "gram-agent-mcp-authorization-m2"
 
 	// FlagDeviceLevelCoverage switches device-agent coverage from matching a
 	// device's assigned-user email against user-keyed heartbeats to matching
@@ -36,20 +47,32 @@ const (
 	FlagRiskFindingAnalytics Flag = "risk-finding-analytics"
 	FlagRiskAsyncScanShadow  Flag = "risk-async-scan-shadow"
 
-	// FlagUserSessionCIMD gates inbound OAuth Client ID Metadata Document
-	// (CIMD) support on the user-session authorization server: URL-shaped
-	// client_id values on /mcp/{slug}/authorize are resolved by fetching the
-	// metadata document instead of requiring RFC 7591 DCR. Evaluated
-	// server-side per organization with distinctID = the issuer's org ID and
-	// no groups.
-	FlagUserSessionCIMD Flag = "gram-user-session-cimd"
-	// FlagPlatformMCPRollout gates the organization-targeted Platform MCP rollout.
-	// It is evaluated in addition to the durable Platform MCP product capability.
-	FlagPlatformMCPRollout Flag = "platform-mcp-rollout"
-	// FlagPlatformMCPCatalogRegistration independently gates Platform MCP catalog
-	// registration and provider-setup handoffs. It is evaluated after the main
-	// Platform MCP gate and is default-off during the mutation rollout.
-	FlagPlatformMCPCatalogRegistration Flag = "platform-mcp-catalog-registration"
+	// FlagPlatformMCPRiskMutations is the exact-project kill switch for risk
+	// policy and exclusion writes exposed through Platform MCP. It is evaluated
+	// at invocation time and fails closed when absent, disabled, or indeterminate.
+	FlagPlatformMCPRiskMutations Flag = "platform-mcp-risk-mutations"
+	// FlagPlatformMCPPluginAssignmentMutations is the exact-project kill switch for
+	// replacing a plugin's complete audience assignment set through Platform MCP.
+	// It is evaluated at invocation time and fails closed.
+	FlagPlatformMCPPluginAssignmentMutations Flag = "platform-mcp-plugin-assignment-mutations"
+	// FlagPlatformMCPAccessRoleMutations is the exact-project kill switch for
+	// creating and updating custom MCP-only access roles through Platform MCP.
+	// It is evaluated at invocation time and fails closed.
+	FlagPlatformMCPAccessRoleMutations Flag = "platform-mcp-access-role-mutations"
+	// FlagPlatformMCPShadowAccessDecisions is the exact-project kill switch for
+	// approval decisions exposed through Platform MCP. It is evaluated at
+	// invocation time and fails closed independently of the dashboard workflow.
+	FlagPlatformMCPShadowAccessDecisions Flag = "platform-mcp-shadow-access-decisions"
+	// FlagPlatformMCPShadowAudienceEnforcement selects legacy, report, or enforce
+	// behavior for direct-remote distribution. An enabled flag must carry a closed
+	// mode payload; missing or invalid configuration fails closed for expanding
+	// writes.
+	FlagPlatformMCPShadowAudienceEnforcement Flag = "platform-mcp-shadow-audience-enforcement"
+	// FlagPlatformMCPDirectRemoteDistributionDisabled is the emergency stop for
+	// expanding direct-remote distribution. Cleanup, audience narrowing, and
+	// disable paths remain available while it is enabled.
+	FlagPlatformMCPDirectRemoteDistributionDisabled Flag = "platform-mcp-direct-remote-distribution-disabled"
+
 	// FlagAssistantPlatformMCP grants a project's managed (dashboard)
 	// assistant the Platform MCP read toolset — the "platform" platform
 	// toolset re-serving the Platform MCP read tools over the assistant
@@ -72,6 +95,55 @@ const (
 	// controls both the UI and the API surface.
 	FlagRiskWatchdog Flag = "gram-risk-watchdog"
 
+	// FlagCanonicalIdentityFold serves cost analytics (telemetry.query /
+	// telemetry.listSessions) email filters and group-bys through the
+	// ClickHouse identity_map fold, so one employee's directory, personal,
+	// and case-variant emails read as one identity. Targeted by PostHog
+	// organization group (org slug), like FlagBudgets. Removed once the fold
+	// is GA (DNO-856).
+	FlagCanonicalIdentityFold Flag = "canonical-identity-fold"
+	// FlagCanonicalIdentityFoldShadow runs the folded variant of the
+	// telemetry.query table read alongside the literal one — serving the
+	// literal result — and logs divergence, validating the fold on real
+	// traffic before FlagCanonicalIdentityFold enables it anywhere. Ignored
+	// when the fold flag is on. Same targeting; removed with the fold flag.
+	FlagCanonicalIdentityFoldShadow Flag = "canonical-identity-fold-shadow"
+
+	// FlagPaygSelfServeBilling gates the self-serve Stripe Checkout rollout.
+	// Targeted by PostHog organization group (org slug) and removed once PAYG
+	// billing is generally available.
+	FlagPaygSelfServeBilling Flag = "gram-payg-self-serve-billing"
+
+	// FlagMCPApproval gates the MCP approval workflow end to end: the
+	// approval queue, evidence gathering, deciding, and the promotion of
+	// blocked-server redemptions into approval requests (orgs off the flag
+	// fall back to legacy bypass requests). Targeted by PostHog organization
+	// group (org slug), like FlagBudgets. A rollout gate while the workflow
+	// is dogfooded; if approval becomes a sold capability the durable
+	// entitlement returns through productfeatures alongside this flag.
+	FlagMCPApproval Flag = "gram-mcp-approval"
+
+	// FlagMCPResearch gates the MCP research agent within an approval-enabled
+	// organization: starting runs and executing queued ones. Targeted by
+	// PostHog organization group like FlagMCPApproval, and separate from it
+	// so research — the spend-heavy, web-facing piece — rolls out to a
+	// narrower set than the approval workflow. Fails closed: a flag-service
+	// error reads as off.
+	FlagMCPResearch Flag = "gram-mcp-research"
+
+	// FlagMCPResearchKill is the research kill switch: affirmatively on means
+	// no research runs anywhere, checked before the rollout flag. It exists
+	// apart from FlagMCPResearch so an emergency stop never touches the
+	// rollout flag's org targeting — un-killing restores exactly the release
+	// state from before. Fails closed: research must not run while the state
+	// of its stop control is unknown.
+	FlagMCPResearchKill Flag = "gram-mcp-research-kill"
+
+	// FlagNetworkIngressRollout is temporary release clearance for private
+	// network expansion. It is evaluated against the canonical organization
+	// group and never substitutes for RBAC or the durable product entitlement.
+	FlagNetworkIngressRollout Flag = "gram-network-ingress-rollout"
+
 	// FlagHooksRollout gates the phased rollout of new observability (hooks)
 	// plugin generator versions. Unlike the other flags it is consulted via its
 	// PAYLOAD, not its boolean state: the flag carries a JSON payload
@@ -84,3 +156,29 @@ const (
 	// can't strand it on stale hooks.
 	FlagHooksRollout Flag = "hooks-rollout"
 )
+
+// Variants of FlagAssistantPlatformMCP. Anything else — no variant, an
+// unrecognized key, an unavailable provider, or an evaluation error — resolves
+// to VariantAssistantToolsLegacy, which is the pre-rollout behaviour, so a
+// PostHog outage can never strip the managed assistant's tools.
+const (
+	// VariantAssistantToolsLegacy serves the managed assistant the
+	// "managed-assistant" platform toolset (logs, chats, users, risk,
+	// deployments, skills, plugins, docs, changelog).
+	VariantAssistantToolsLegacy Variant = "legacy"
+	// VariantAssistantToolsPlatformMCP serves the managed assistant the
+	// "platform" toolset — the Platform MCP read tools — INSTEAD of the
+	// legacy toolset, not in addition to it.
+	VariantAssistantToolsPlatformMCP Variant = "platformmcp"
+)
+
+// AssistantToolsVariant normalizes a resolved variant to one of the two known
+// keys, collapsing everything unrecognized onto the legacy default. Both the
+// attach path (assistants service) and the serve path (mcp service) must agree
+// on this mapping or a toolset would be attached and then 404 at request time.
+func AssistantToolsVariant(variant Variant) Variant {
+	if variant == VariantAssistantToolsPlatformMCP {
+		return VariantAssistantToolsPlatformMCP
+	}
+	return VariantAssistantToolsLegacy
+}

@@ -7,8 +7,8 @@ type CustomDomainUnhealthy struct {
 	DomainLink   string
 }
 
-func (t CustomDomainUnhealthy) TransactionalID() TransactionalID {
-	return transactionalIDCustomDomainUnhealthy
+func (t CustomDomainUnhealthy) Key() TemplateKey {
+	return TemplateKeyCustomDomainUnhealthy
 }
 
 func (t CustomDomainUnhealthy) AddToAudience() bool { return false }

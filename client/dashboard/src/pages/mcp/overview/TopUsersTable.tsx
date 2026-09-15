@@ -1,3 +1,5 @@
+import { IdentityLink } from "@/components/identity-link";
+import { identityRefForKind } from "@/lib/identity-urn";
 import { WidgetEmptyState } from "@/components/chart/WidgetEmptyState";
 import { Heading } from "@/components/ui/Heading";
 import { SkeletonTable } from "@/components/ui/Skeleton";
@@ -17,7 +19,15 @@ const columns: Column<UserRow>[] = [
   {
     key: "userLabel",
     header: "User",
-    render: (row) => <Text className="truncate">{row.userLabel}</Text>,
+    render: (row) => (
+      <Text className="truncate">
+        <IdentityLink
+          identifier={identityRefForKind(row.userKind, row.userKey)}
+        >
+          {row.userLabel}
+        </IdentityLink>
+      </Text>
+    ),
   },
   {
     key: "eventCount",

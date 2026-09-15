@@ -74,10 +74,10 @@ func TestHTTPClient_SendTransactional_SendsExpectedRequest(t *testing.T) {
 		readErr:     nil,
 		decodeErr:   nil,
 	}
-	var calls int32
+	var calls atomic.Int32
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		atomic.AddInt32(&calls, 1)
+		calls.Add(1)
 		body, err := io.ReadAll(r.Body)
 		captured.mu.Lock()
 		captured.authHeader = r.Header.Get("Authorization")
@@ -103,7 +103,7 @@ func TestHTTPClient_SendTransactional_SendsExpectedRequest(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	require.Equal(t, int32(1), atomic.LoadInt32(&calls))
+	require.Equal(t, int32(1), calls.Load())
 	captured.mu.Lock()
 	defer captured.mu.Unlock()
 	require.NoError(t, captured.readErr, "handler failed reading body")

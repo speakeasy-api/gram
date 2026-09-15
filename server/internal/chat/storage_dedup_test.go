@@ -73,6 +73,13 @@ func (c *countingBlobStore) Write(ctx context.Context, p string, ct string, cl i
 	return w, u, nil
 }
 
+func (c *countingBlobStore) Delete(ctx context.Context, u *url.URL) error {
+	if err := c.inner.Delete(ctx, u); err != nil {
+		return fmt.Errorf("countingBlobStore delete: %w", err)
+	}
+	return nil
+}
+
 func (c *countingBlobStore) PresignRead(ctx context.Context, p string, ttl time.Duration) (*url.URL, error) {
 	u, err := c.inner.PresignRead(ctx, p, ttl)
 	if err != nil {

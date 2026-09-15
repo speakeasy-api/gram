@@ -42,6 +42,7 @@ func TestingNewPoisonedSession(
 		ExternalUserID: externalUserID,
 		HTTPMetadata:   nil,
 		Tools:          nil,
+		ToolChoice:     nil,
 		Temperature:    nil,
 		Stream:         false,
 		UserEmail:      "",

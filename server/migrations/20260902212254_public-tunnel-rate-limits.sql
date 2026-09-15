@@ -1,0 +1,2 @@
+-- Modify "tunneled_mcp_servers" table
+ALTER TABLE "tunneled_mcp_servers" ADD CONSTRAINT "tunneled_mcp_servers_public_request_burst_check" CHECK ((public_request_burst IS NULL) OR ((public_request_burst > 0) AND (public_request_burst <= 1000000))), ADD CONSTRAINT "tunneled_mcp_servers_public_request_rate_per_second_check" CHECK ((public_request_rate_per_second IS NULL) OR ((public_request_rate_per_second > 0) AND (public_request_rate_per_second <= 100000))), ADD COLUMN "public_request_rate_per_second" integer NULL, ADD COLUMN "public_request_burst" integer NULL;

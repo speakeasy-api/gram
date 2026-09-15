@@ -1,0 +1,22 @@
+import type { ComponentProps, JSX } from "react";
+
+// The Speakeasy mark from the dashboard favicon, without the tile and the
+// gradient border of the full app icon. The viewBox crops to the artwork, and
+// the fill follows currentColor, so this sits beside the lucide icons.
+export function SpeakeasyMark(props: ComponentProps<"svg">): JSX.Element {
+  return (
+    <svg
+      viewBox="74 76 152 148"
+      fill="currentColor"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      {...props}
+    >
+      <path d="M181.781 215.464L81.7665 201.253L74.0996 207.903L181.781 223.198L225.901 184.921L218.244 183.837L181.781 215.464Z" />
+      <path d="M181.781 192.261L225.901 153.984L218.244 152.899L181.781 184.517L146.095 179.45L97.0809 172.494L81.7665 170.315L74.0996 176.965L89.4237 179.134L74.0996 192.424L181.781 207.719L225.901 169.452L218.244 168.367L181.79 199.995L130.771 192.74L138.428 186.1L181.781 192.261Z" />
+      <path d="M181.781 169.045L81.7665 154.834L74.0996 161.484L181.781 176.779L225.901 138.512L218.244 137.428L181.781 169.045Z" />
+      <path d="M218.244 106.478L202.92 119.767L181.781 138.105L140.443 132.232L81.7665 123.894L74.0996 130.543L132.776 138.872L125.119 145.522L81.7569 139.362L74.0996 146.011L181.781 161.307L225.901 123.04L210.577 120.861L225.901 107.562L218.244 106.478Z" />
+      <path d="M225.901 92.0971L118.22 76.8018L74.0996 115.069L181.781 130.374L225.901 92.0971Z" />
+    </svg>
+  );
+}

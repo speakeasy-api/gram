@@ -19,7 +19,10 @@ workinit = "mise run git:workinit"
 
 # Background: brings the worktree's stack up on the ports workinit just
 # assigned — compose infra, migrations, dev-idp, the pitchfork daemons, then
-# seed. Non-blocking, so worktree creation returns without waiting on it;
+# seed — and then PAUSES it (`mise run pause`): daemons stopped, containers
+# stopped but not removed. A worktree is therefore handed over complete but
+# idle; `mise run wake` restarts it in seconds when you (or your agent) want
+# it. Non-blocking, so worktree creation returns without waiting on it;
 # `wt config state logs` has the output. The task also publishes a pid marker
 # while it runs, which is what lets `wt status` say "booting" rather than
 # "down". Keep the hook key `stack` — the log file is named after it.
@@ -34,9 +37,10 @@ stack = "mise run git:workboot"
 # Runs inside the worktree before deletion — nuke needs this worktree's
 # COMPOSE_PROJECT_NAME (mise.local.toml) and local/ dir to tear down the right
 # compose stack. post-remove would run in the primary worktree instead.
-# --keep-shared leaves the shared Presidio stack up for the other worktrees.
+# --keep-shared leaves the shared containers up for the other worktrees;
+# --delete-namespace removes only this departing worktree's Temporal state.
 [[pre-remove]]
-nuke = "mise run nuke --keep-shared"
+nuke = "mise run nuke --keep-shared --delete-namespace"
 
 # Dashboard URL in the `wt list` URL column, dimmed when the port isn't
 # listening — so it doubles as a "is this worktree's stack up?" indicator.

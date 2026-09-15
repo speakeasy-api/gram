@@ -38,6 +38,11 @@ func BuildRemoteSessionClientView(row repo.RemoteSessionClient, userSessionIssue
 		s := row.ClientSecretExpiresAt.Time.Format(time.RFC3339)
 		expiresAt = &s
 	}
+	var upstreamRejectedAt *string
+	if row.UpstreamRejectedAt.Valid {
+		s := row.UpstreamRejectedAt.Time.Format(time.RFC3339)
+		upstreamRejectedAt = &s
+	}
 	issuerIDs := make([]string, 0, len(userSessionIssuerIDs))
 	for _, id := range userSessionIssuerIDs {
 		issuerIDs = append(issuerIDs, id.String())
@@ -52,7 +57,9 @@ func BuildRemoteSessionClientView(row repo.RemoteSessionClient, userSessionIssue
 		ClientIDMetadataURI:     conv.FromPGText[string](row.ClientIDMetadataUri),
 		ClientIDIssuedAt:        issuedAt,
 		ClientSecretExpiresAt:   expiresAt,
+		UpstreamRejectedAt:      upstreamRejectedAt,
 		TokenEndpointAuthMethod: conv.FromPGText[string](row.TokenEndpointAuthMethod),
+		JSONWebKeySetID:         conv.FromNullableUUID(row.JsonWebKeySetID),
 		Scope:                   row.Scope,
 		Audience:                conv.FromPGText[string](row.Audience),
 		CreatedAt:               row.CreatedAt.Time.Format(time.RFC3339),
@@ -85,6 +92,11 @@ func BuildGlobalRemoteSessionClientView(row repo.RemoteSessionClient) *types.Rem
 		s := row.ClientSecretExpiresAt.Time.Format(time.RFC3339)
 		expiresAt = &s
 	}
+	var upstreamRejectedAt *string
+	if row.UpstreamRejectedAt.Valid {
+		s := row.UpstreamRejectedAt.Time.Format(time.RFC3339)
+		upstreamRejectedAt = &s
+	}
 
 	return &types.RemoteSessionClient{
 		ID:                      row.ID.String(),
@@ -96,7 +108,9 @@ func BuildGlobalRemoteSessionClientView(row repo.RemoteSessionClient) *types.Rem
 		ClientIDMetadataURI:     conv.FromPGText[string](row.ClientIDMetadataUri),
 		ClientIDIssuedAt:        issuedAt,
 		ClientSecretExpiresAt:   expiresAt,
+		UpstreamRejectedAt:      upstreamRejectedAt,
 		TokenEndpointAuthMethod: conv.FromPGText[string](row.TokenEndpointAuthMethod),
+		JSONWebKeySetID:         conv.FromNullableUUID(row.JsonWebKeySetID),
 		Scope:                   row.Scope,
 		Audience:                conv.FromPGText[string](row.Audience),
 		CreatedAt:               row.CreatedAt.Time.Format(time.RFC3339),

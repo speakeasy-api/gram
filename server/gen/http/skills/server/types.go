@@ -33,6 +33,9 @@ type AddVersionRequestBody struct {
 	Content *string `form:"content,omitempty" json:"content,omitempty" xml:"content,omitempty"`
 	// The optional source version this new version was derived from.
 	DerivedFromVersionID *string `form:"derived_from_version_id,omitempty" json:"derived_from_version_id,omitempty" xml:"derived_from_version_id,omitempty"`
+	// The version the caller believes is current. When set, the write is rejected
+	// as a conflict if the skill has moved on.
+	ExpectedLatestVersionID *string `form:"expected_latest_version_id,omitempty" json:"expected_latest_version_id,omitempty" xml:"expected_latest_version_id,omitempty"`
 }
 
 // RestoreVersionRequestBody is the type of the "skills" service
@@ -57,6 +60,9 @@ type UpdateRequestBody struct {
 	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
 	// Registry tags for categorizing the skill. At most 40 tags.
 	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
+	// The version the caller believes is current. When set, the write is rejected
+	// as a conflict if the skill has moved on.
+	ExpectedLatestVersionID *string `form:"expected_latest_version_id,omitempty" json:"expected_latest_version_id,omitempty" xml:"expected_latest_version_id,omitempty"`
 }
 
 // TriggerSuggestionRequestBody is the type of the "skills" service
@@ -342,6 +348,8 @@ type GetResponseBody struct {
 	Drift *SkillDriftResponseBody `form:"drift" json:"drift" xml:"drift"`
 	// The number of active, non-deleted assistants using the skill.
 	AssistantCount int64 `form:"assistant_count" json:"assistant_count" xml:"assistant_count"`
+	// Open prompt-injection findings for the current skill version.
+	PromptInjectionFindings []*SkillPromptInjectionFindingResponseBody `form:"prompt_injection_findings" json:"prompt_injection_findings" xml:"prompt_injection_findings"`
 }
 
 // ListUnknownActivationsResponseBody is the type of the "skills" service
@@ -4889,6 +4897,17 @@ type SkillDriftResponseBody struct {
 	IndeterminateMachines int64 `form:"indeterminate_machines" json:"indeterminate_machines" xml:"indeterminate_machines"`
 }
 
+// SkillPromptInjectionFindingResponseBody is used to define fields on response
+// body types.
+type SkillPromptInjectionFindingResponseBody struct {
+	// The rule that produced the finding.
+	RuleID string `form:"rule_id" json:"rule_id" xml:"rule_id"`
+	// Why the current skill version was flagged.
+	Description string `form:"description" json:"description" xml:"description"`
+	// The classifier confidence from 0 to 1.
+	Confidence float64 `form:"confidence" json:"confidence" xml:"confidence"`
+}
+
 // UnknownSkillActivationResponseBody is used to define fields on response body
 // types.
 type UnknownSkillActivationResponseBody struct {
@@ -5235,6 +5254,18 @@ func NewGetResponseBody(res *skills.GetSkillResult) *GetResponseBody {
 	}
 	if res.Drift != nil {
 		body.Drift = marshalSkillsSkillDriftToSkillDriftResponseBody(res.Drift)
+	}
+	if res.PromptInjectionFindings != nil {
+		body.PromptInjectionFindings = make([]*SkillPromptInjectionFindingResponseBody, len(res.PromptInjectionFindings))
+		for i, val := range res.PromptInjectionFindings {
+			if val == nil {
+				body.PromptInjectionFindings[i] = nil
+				continue
+			}
+			body.PromptInjectionFindings[i] = marshalSkillsSkillPromptInjectionFindingToSkillPromptInjectionFindingResponseBody(val)
+		}
+	} else {
+		body.PromptInjectionFindings = []*SkillPromptInjectionFindingResponseBody{}
 	}
 	return body
 }
@@ -8623,9 +8654,10 @@ func NewCreatePayload(body *CreateRequestBody, sessionToken *string, apikeyToken
 // NewAddVersionPayload builds a skills service addVersion endpoint payload.
 func NewAddVersionPayload(body *AddVersionRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *skills.AddVersionPayload {
 	v := &skills.AddVersionPayload{
-		ID:                   *body.ID,
-		Content:              *body.Content,
-		DerivedFromVersionID: body.DerivedFromVersionID,
+		ID:                      *body.ID,
+		Content:                 *body.Content,
+		DerivedFromVersionID:    body.DerivedFromVersionID,
+		ExpectedLatestVersionID: body.ExpectedLatestVersionID,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -8651,10 +8683,11 @@ func NewRestoreVersionPayload(body *RestoreVersionRequestBody, sessionToken *str
 // NewUpdatePayload builds a skills service update endpoint payload.
 func NewUpdatePayload(body *UpdateRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *skills.UpdatePayload {
 	v := &skills.UpdatePayload{
-		ID:          *body.ID,
-		Name:        *body.Name,
-		DisplayName: *body.DisplayName,
-		Summary:     body.Summary,
+		ID:                      *body.ID,
+		Name:                    *body.Name,
+		DisplayName:             *body.DisplayName,
+		Summary:                 body.Summary,
+		ExpectedLatestVersionID: body.ExpectedLatestVersionID,
 	}
 	v.Tags = make([]string, len(body.Tags))
 	for i, val := range body.Tags {
@@ -8668,7 +8701,7 @@ func NewUpdatePayload(body *UpdateRequestBody, sessionToken *string, apikeyToken
 }
 
 // NewListPayload builds a skills service list endpoint payload.
-func NewListPayload(cursor *string, limit int, search *string, sourceKinds []string, classifications []string, tags []string, sort string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *skills.ListPayload {
+func NewListPayload(cursor *string, limit int, search *string, sourceKinds []string, classifications []string, tags []string, accessibleBy []string, sort string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *skills.ListPayload {
 	v := &skills.ListPayload{}
 	v.Cursor = cursor
 	v.Limit = limit
@@ -8676,6 +8709,7 @@ func NewListPayload(cursor *string, limit int, search *string, sourceKinds []str
 	v.SourceKinds = sourceKinds
 	v.Classifications = classifications
 	v.Tags = tags
+	v.AccessibleBy = accessibleBy
 	v.Sort = sort
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -8945,6 +8979,9 @@ func ValidateAddVersionRequestBody(body *AddVersionRequestBody) (err error) {
 	if body.DerivedFromVersionID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.derived_from_version_id", *body.DerivedFromVersionID, goa.FormatUUID))
 	}
+	if body.ExpectedLatestVersionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.expected_latest_version_id", *body.ExpectedLatestVersionID, goa.FormatUUID))
+	}
 	return
 }
 
@@ -9005,6 +9042,9 @@ func ValidateUpdateRequestBody(body *UpdateRequestBody) (err error) {
 		if utf8.RuneCountInString(e) > 64 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.tags[*]", e, utf8.RuneCountInString(e), 64, false))
 		}
+	}
+	if body.ExpectedLatestVersionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.expected_latest_version_id", *body.ExpectedLatestVersionID, goa.FormatUUID))
 	}
 	return
 }

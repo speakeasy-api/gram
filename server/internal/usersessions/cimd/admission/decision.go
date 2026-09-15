@@ -23,8 +23,9 @@ func denyDecision(reason DenialReason) Decision {
 }
 
 // checkCustomDecision defers the decision to the caller's database lookup.
-// It carries no reason: a custom-URL hit becomes AdmitCustom and a miss
-// becomes DenialNotListed, and only the caller can tell which.
+// It carries no reason: only the caller can tell a custom-URL hit from a
+// miss, and only the caller knows whether a miss refuses the client or
+// merely records that nothing covered it.
 func checkCustomDecision() Decision {
 	return Decision{Outcome: OutcomeCheckCustom, Admit: "", Denial: ""}
 }

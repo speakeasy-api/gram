@@ -5,8 +5,23 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+
+/**
+ * What the client must present to authenticate: 'public' (nothing), 'secret' (a client secret), 'key' (an assertion signed by its published key), or 'misconfigured'. Derived by the same rule the token endpoint enforces, so it reads what the client will actually be held to rather than what it declared. 'misconfigured' means the registration contradicts itself and the client cannot authenticate at all.
+ */
+export const CredentialKind = {
+  Public: "public",
+  Secret: "secret",
+  Key: "key",
+  Misconfigured: "misconfigured",
+} as const;
+/**
+ * What the client must present to authenticate: 'public' (nothing), 'secret' (a client secret), 'key' (an assertion signed by its published key), or 'misconfigured'. Derived by the same rule the token endpoint enforces, so it reads what the client will actually be held to rather than what it declared. 'misconfigured' means the registration contradicts itself and the client cannot authenticate at all.
+ */
+export type CredentialKind = ClosedEnum<typeof CredentialKind>;
 
 /**
  * An MCP client registered against a user-session issuer. client_secret_hash is never returned.
@@ -22,6 +37,18 @@ export type UserSessionClient = {
   clientId: string;
   clientIdIssuedAt: Date;
   /**
+   * When the cached metadata document lapses and the next /authorize revalidates it against the host. Null for DCR clients, and null after a refresh purge until the re-read lands.
+   */
+  clientIdMetadataCacheExpiresAt?: Date | undefined;
+  /**
+   * ETag the document host returned on the last full read; sent as If-None-Match when revalidating. Null when the host offers no validator, and null for DCR clients.
+   */
+  clientIdMetadataEtag?: string | undefined;
+  /**
+   * When the metadata document was last successfully read. A 304 revalidation counts as a read, so this is not necessarily when the body was last fetched. Null for DCR clients.
+   */
+  clientIdMetadataFetchedAt?: Date | undefined;
+  /**
    * When set, the client was resolved from a Client ID Metadata Document (CIMD) hosted at this URL rather than registered via RFC 7591 DCR. Null for DCR clients. The URL is the client's identity, so its origin -- not client_name, which the client chooses -- is the trustworthy label.
    */
   clientIdMetadataUri?: string | undefined;
@@ -35,6 +62,10 @@ export type UserSessionClient = {
   clientSecretExpiresAt?: Date | undefined;
   createdAt: Date;
   /**
+   * What the client must present to authenticate: 'public' (nothing), 'secret' (a client secret), 'key' (an assertion signed by its published key), or 'misconfigured'. Derived by the same rule the token endpoint enforces, so it reads what the client will actually be held to rather than what it declared. 'misconfigured' means the registration contradicts itself and the client cannot authenticate at all.
+   */
+  credentialKind: CredentialKind;
+  /**
    * The user_session_client id.
    */
   id: string;
@@ -42,12 +73,21 @@ export type UserSessionClient = {
    * Validated on every /authorize.
    */
   redirectUris: Array<string>;
+  /**
+   * The raw RFC 7591 token_endpoint_auth_method the client declared, for debugging against the spec. Null for a client registered before the value was recorded, which is not the same as declaring 'none' -- credential_kind resolves both cases and is what should be displayed.
+   */
+  tokenEndpointAuthMethod?: string | undefined;
   updatedAt: Date;
   /**
    * The owning user_session_issuer id.
    */
   userSessionIssuerId: string;
 };
+
+/** @internal */
+export const CredentialKind$inboundSchema: z.ZodMiniEnum<
+  typeof CredentialKind
+> = z.enum(CredentialKind);
 
 /** @internal */
 export const UserSessionClient$inboundSchema: z.ZodMiniType<
@@ -61,6 +101,13 @@ export const UserSessionClient$inboundSchema: z.ZodMiniType<
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
+    client_id_metadata_cache_expires_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    ),
+    client_id_metadata_etag: z.optional(z.string()),
+    client_id_metadata_fetched_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    ),
     client_id_metadata_uri: z.optional(z.string()),
     client_name: z.string(),
     client_secret_expires_at: z.optional(
@@ -70,8 +117,10 @@ export const UserSessionClient$inboundSchema: z.ZodMiniType<
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
+    credential_kind: CredentialKind$inboundSchema,
     id: z.string(),
     redirect_uris: z.array(z.string()),
+    token_endpoint_auth_method: z.optional(z.string()),
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
@@ -83,11 +132,16 @@ export const UserSessionClient$inboundSchema: z.ZodMiniType<
       "active_session_count": "activeSessionCount",
       "client_id": "clientId",
       "client_id_issued_at": "clientIdIssuedAt",
+      "client_id_metadata_cache_expires_at": "clientIdMetadataCacheExpiresAt",
+      "client_id_metadata_etag": "clientIdMetadataEtag",
+      "client_id_metadata_fetched_at": "clientIdMetadataFetchedAt",
       "client_id_metadata_uri": "clientIdMetadataUri",
       "client_name": "clientName",
       "client_secret_expires_at": "clientSecretExpiresAt",
       "created_at": "createdAt",
+      "credential_kind": "credentialKind",
       "redirect_uris": "redirectUris",
+      "token_endpoint_auth_method": "tokenEndpointAuthMethod",
       "updated_at": "updatedAt",
       "user_session_issuer_id": "userSessionIssuerId",
     });

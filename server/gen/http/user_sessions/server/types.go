@@ -15,15 +15,21 @@ import (
 // MintUserSessionRequestBody is the type of the "userSessions" service
 // "mintUserSession" endpoint HTTP request body.
 type MintUserSessionRequestBody struct {
-	// Bind the JWT to this toolset's /mcp/{slug} audience. Mutually exclusive with
-	// mcp_server_id; exactly one must be set. Must be issuer-gated and live in the
-	// caller's project.
+	// Bind the JWT to this toolset's audience. When the toolset has an mcp_servers
+	// wrapper the mint resolves to that server (identical to passing its
+	// mcp_server_id); otherwise the JWT is bound to the legacy toolset audience.
+	// Mutually exclusive with the other targets; exactly one must be set. Must be
+	// issuer-gated and live in the caller's project.
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
-	// Bind the JWT to this remote MCP server's user_session_issuer audience (the
-	// /x/mcp convention, since remote servers have no toolset). Mutually exclusive
-	// with toolset_id; exactly one must be set. Must be issuer-gated and live in
-	// the caller's project.
+	// Bind the JWT to this MCP server's user_session_issuer audience (any
+	// issuer-gated backend, hosted servers included). Mutually exclusive with the
+	// other targets; exactly one must be set. Must be issuer-gated and live in the
+	// caller's project.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// Bind the JWT to this meta MCP server's user_session_issuer audience.
+	// Mutually exclusive with the other targets; exactly one must be set. Must be
+	// issuer-gated and live in the caller's project.
+	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`
 }
 
 // ListUserSessionsResponseBody is the type of the "userSessions" service
@@ -836,6 +842,18 @@ type UserSessionResponseBody struct {
 	// ID Metadata Document (CIMD) hosted at this URL, rather than registered via
 	// RFC 7591 DCR. Null for DCR clients and for sessions with no bound client.
 	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
+	// What the client that established this session must present to authenticate:
+	// 'public' (nothing), 'secret' (a client secret), 'key' (an assertion signed
+	// by its published key), or 'misconfigured'. Derived by the same rule the
+	// token endpoint enforces. Null only when the session has no bound client,
+	// which is the case for API key and anonymous subjects; a bound client always
+	// resolves to one of the four.
+	ClientCredentialKind *string `form:"client_credential_kind,omitempty" json:"client_credential_kind,omitempty" xml:"client_credential_kind,omitempty"`
+	// The raw RFC 7591 token_endpoint_auth_method the client declared, for
+	// debugging against the spec. Null both for a session with no bound client and
+	// for a client registered before the value was recorded;
+	// client_credential_kind separates those cases and is what should be displayed.
+	ClientTokenEndpointAuthMethod *string `form:"client_token_endpoint_auth_method,omitempty" json:"client_token_endpoint_auth_method,omitempty" xml:"client_token_endpoint_auth_method,omitempty"`
 	// Subject kind: 'user', 'apikey', or 'anonymous'.
 	SubjectType string `form:"subject_type" json:"subject_type" xml:"subject_type"`
 	// Resolved human-readable name of the subject, if known.
@@ -845,6 +863,48 @@ type UserSessionResponseBody struct {
 	SubjectPhotoURL *string `form:"subject_photo_url,omitempty" json:"subject_photo_url,omitempty" xml:"subject_photo_url,omitempty"`
 	// When the session was revoked, if it has been.
 	RevokedAt *string `form:"revoked_at,omitempty" json:"revoked_at,omitempty" xml:"revoked_at,omitempty"`
+	// When this session last carried an MCP request. Recorded on the request path
+	// and coalesced to a five-minute resolution, so treat it as accurate to within
+	// that. Null means the session has not been used since the column was
+	// introduced — unknown, not never.
+	LastUsedAt *string `form:"last_used_at,omitempty" json:"last_used_at,omitempty" xml:"last_used_at,omitempty"`
+	// The upstream providers Gram holds tokens for on this session's subject,
+	// through the same issuer. Empty when the session reaches only Gram-native
+	// tools. A session can have several: an issuer may have more than one
+	// remote_session_client attached.
+	Upstreams []*UserSessionUpstreamResponseBody `form:"upstreams" json:"upstreams" xml:"upstreams"`
+}
+
+// UserSessionUpstreamResponseBody is used to define fields on response body
+// types.
+type UserSessionUpstreamResponseBody struct {
+	// The remote_session id. Target for revoke and force-refresh.
+	RemoteSessionID string `form:"remote_session_id" json:"remote_session_id" xml:"remote_session_id"`
+	// The remote_session_client the session was minted against.
+	RemoteSessionClientID string `form:"remote_session_client_id" json:"remote_session_client_id" xml:"remote_session_client_id"`
+	// The remote_session_issuer the client belongs to.
+	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
+	// Display slug of the upstream provider, e.g. 'mcp.linear.app'.
+	IssuerSlug string `form:"issuer_slug" json:"issuer_slug" xml:"issuer_slug"`
+	// Upstream access-token expiry. Null when the upstream issued a non-expiring
+	// token.
+	AccessExpiresAt *string `form:"access_expires_at,omitempty" json:"access_expires_at,omitempty" xml:"access_expires_at,omitempty"`
+	// Upstream refresh-token expiry. Null when the session holds no refresh token
+	// or the upstream issued a non-expiring one.
+	RefreshExpiresAt *string `form:"refresh_expires_at,omitempty" json:"refresh_expires_at,omitempty" xml:"refresh_expires_at,omitempty"`
+	// Absolute upstream authorization deadline. Unlike refresh_expires_at,
+	// exchanging a token does not extend this.
+	AuthorizationExpiresAt *string `form:"authorization_expires_at,omitempty" json:"authorization_expires_at,omitempty" xml:"authorization_expires_at,omitempty"`
+	// Whether a refresh grant is held. Gates 'refresh now'; refresh_expires_at is
+	// insufficient because an upstream may issue a non-expiring refresh token.
+	HasRefreshToken bool `form:"has_refresh_token" json:"has_refresh_token" xml:"has_refresh_token"`
+	// Whether the subject opted this connection into automated keepalive.
+	AutoRefresh bool `form:"auto_refresh" json:"auto_refresh" xml:"auto_refresh"`
+	// When this upstream token was last spent on a proxied call. Same five-minute
+	// resolution as the inbound leg, so the two are directly comparable.
+	LastUsedAt *string `form:"last_used_at,omitempty" json:"last_used_at,omitempty" xml:"last_used_at,omitempty"`
+	// Scopes held by this upstream session.
+	Scopes []string `form:"scopes" json:"scopes" xml:"scopes"`
 }
 
 // UserSessionFacetOptionResponseBody is used to define fields on response body
@@ -1538,8 +1598,9 @@ func NewListFacetsPayload(sessionToken *string, apikeyToken *string, projectSlug
 // endpoint payload.
 func NewMintUserSessionPayload(body *MintUserSessionRequestBody, sessionToken *string, projectSlugInput *string) *usersessions.MintUserSessionPayload {
 	v := &usersessions.MintUserSessionPayload{
-		ToolsetID:   body.ToolsetID,
-		McpServerID: body.McpServerID,
+		ToolsetID:       body.ToolsetID,
+		McpServerID:     body.McpServerID,
+		MetaMcpServerID: body.MetaMcpServerID,
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -1567,6 +1628,9 @@ func ValidateMintUserSessionRequestBody(body *MintUserSessionRequestBody) (err e
 	}
 	if body.McpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+	}
+	if body.MetaMcpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.meta_mcp_server_id", *body.MetaMcpServerID, goa.FormatUUID))
 	}
 	return
 }

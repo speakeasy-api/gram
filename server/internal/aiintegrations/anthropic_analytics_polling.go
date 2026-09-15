@@ -11,7 +11,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	anthropicapi "github.com/speakeasy-api/gram/server/internal/thirdparty/anthropic"
 )
@@ -128,7 +127,7 @@ func newAnthropicAnalyticsPoller(
 
 func (p *AnthropicAnalyticsPoller) Sync(ctx context.Context, cfg Config, endTime time.Time) error {
 	if cfg.Provider != ProviderAnthropicCompliance {
-		return oops.E(oops.CodeInvalid, nil, "unsupported ai integration provider for anthropic analytics: %s", cfg.Provider)
+		return fmt.Errorf("unsupported ai integration provider for anthropic analytics: %s", cfg.Provider)
 	}
 
 	source, err := p.newSource(p.guardianPolicy, cfg, p.telemetryLogger.LogBulk, p.baseURL, p.pageLimit)

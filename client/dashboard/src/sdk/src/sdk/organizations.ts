@@ -9,22 +9,26 @@ import { organizationsGenerateWorkOSAdminPortalLink } from "../funcs/organizatio
 import { organizationsGet } from "../funcs/organizationsGet.js";
 import { organizationsGetOnboardingStatus } from "../funcs/organizationsGetOnboardingStatus.js";
 import { organizationsListInvites } from "../funcs/organizationsListInvites.js";
+import { organizationsListSetupTasks } from "../funcs/organizationsListSetupTasks.js";
 import { organizationsListUsers } from "../funcs/organizationsListUsers.js";
 import { organizationsRemoveUser } from "../funcs/organizationsRemoveUser.js";
 import { organizationsRevokeInvite } from "../funcs/organizationsRevokeInvite.js";
 import { organizationsSendEnterpriseAdminOnboardingEmail } from "../funcs/organizationsSendEnterpriseAdminOnboardingEmail.js";
 import { organizationsSendInvite } from "../funcs/organizationsSendInvite.js";
 import { organizationsUpdateInviteRole } from "../funcs/organizationsUpdateInviteRole.js";
+import { organizationsUpdateSetupTask } from "../funcs/organizationsUpdateSetupTask.js";
 import { organizationsVerifyOnboardingHooksSetup } from "../funcs/organizationsVerifyOnboardingHooksSetup.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { CreatePortalSessionResult } from "../models/components/createportalsessionresult.js";
 import { GenerateWorkOSAdminPortalLinkResult } from "../models/components/generateworkosadminportallinkresult.js";
 import { ListInvitesResult } from "../models/components/listinvitesresult.js";
+import { ListSetupTasksResult } from "../models/components/listsetuptasksresult.js";
 import { ListUsersResult } from "../models/components/listusersresult.js";
 import { OnboardingStatusResult } from "../models/components/onboardingstatusresult.js";
 import { Organization } from "../models/components/organization.js";
 import { OrganizationInvitation } from "../models/components/organizationinvitation.js";
 import { SendEnterpriseAdminOnboardingEmailResult } from "../models/components/sendenterpriseadminonboardingemailresult.js";
+import { SetupTask } from "../models/components/setuptask.js";
 import { VerifyOnboardingHooksSetupResult } from "../models/components/verifyonboardinghookssetupresult.js";
 import {
   CreatePortalSessionRequest,
@@ -59,6 +63,10 @@ import {
   ListOrganizationUsersSecurity,
 } from "../models/operations/listorganizationusers.js";
 import {
+  ListSetupTasksRequest,
+  ListSetupTasksSecurity,
+} from "../models/operations/listsetuptasks.js";
+import {
   RemoveOrganizationUserRequest,
   RemoveOrganizationUserSecurity,
 } from "../models/operations/removeorganizationuser.js";
@@ -78,6 +86,10 @@ import {
   UpdateInviteRoleRequest,
   UpdateInviteRoleSecurity,
 } from "../models/operations/updateinviterole.js";
+import {
+  UpdateSetupTaskRequest,
+  UpdateSetupTaskSecurity,
+} from "../models/operations/updatesetuptask.js";
 import {
   VerifyOnboardingHooksSetupRequest,
   VerifyOnboardingHooksSetupSecurity,
@@ -219,6 +231,25 @@ export class Organizations extends ClientSDK {
   }
 
   /**
+   * listSetupTasks organizations
+   *
+   * @remarks
+   * List the fixed setup task catalog projected with organization state and completion evidence.
+   */
+  async listSetupTasks(
+    request?: ListSetupTasksRequest | undefined,
+    security?: ListSetupTasksSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListSetupTasksResult> {
+    return unwrapAsync(organizationsListSetupTasks(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * listUsers organizations
    *
    * @remarks
@@ -325,6 +356,25 @@ export class Organizations extends ClientSDK {
     options?: RequestOptions,
   ): Promise<OrganizationInvitation> {
     return unwrapAsync(organizationsUpdateInviteRole(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * updateSetupTask organizations
+   *
+   * @remarks
+   * Update one fixed setup task. The request must include at least one effective update: status, assignee, hidden, or clear_assignee=true. Assignee is mutually exclusive with clear_assignee=true.
+   */
+  async updateSetupTask(
+    request: UpdateSetupTaskRequest,
+    security?: UpdateSetupTaskSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<SetupTask> {
+    return unwrapAsync(organizationsUpdateSetupTask(
       this,
       request,
       security,

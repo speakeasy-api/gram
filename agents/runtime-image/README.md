@@ -5,14 +5,21 @@ The container image assistant runtimes run in: the Rust runner
 
 ## Local development
 
-Local development uses the `local` assistant runtime provider (the default,
-`GRAM_ASSISTANT_RUNTIME_PROVIDER=local`): the Gram server starts one runtime
-container per assistant on your machine's Docker daemon, on demand. No Fly.io
-credentials, apps, or registry pushes are involved.
+Local development uses the `local` assistant runtime provider. `./zero`
+(including `./zero --agent`) runs `mise run zero:assistants`, which writes
+`GRAM_ASSISTANT_RUNTIME_PROVIDER=local` and
+`GRAM_ASSISTANT_RUNTIME_OCI_IMAGE=gram-assistant-runtime` into `mise.local.toml`
+when those vars are unset, and builds `gram-assistant-runtime:dev` if the image
+is missing. The Gram server then starts one runtime container per assistant on
+your machine's Docker daemon, on demand. No Fly.io credentials, apps, or
+registry pushes are involved.
+
+`mise run zero:assistants --restart` rewrites those keys and rebuilds the image.
 
 ### Workflow
 
-1. Build the image:
+1. First-time setup is `./zero` (or `mise run zero:assistants`). To rebuild
+   the image later:
 
    ```sh
    mise run build:assistants-runtime-image
@@ -57,7 +64,7 @@ mise run assistants:local-clean
 
 ### Smoke test
 
-1. `mise run build:assistants-runtime-image`
+1. `mise run zero:assistants` (or `mise run build:assistants-runtime-image`)
 2. Start the stack and send a turn to any assistant.
 3. `mise run assistants:local-status` — the assistant's container is `Up` with
    a `127.0.0.1:<port>->8081/tcp` publish, and the turn produces a reply.
@@ -68,5 +75,6 @@ mise run assistants:local-clean
 
 If your `mise.local.toml` still pins `GRAM_ASSISTANT_RUNTIME_PROVIDER=flyio`
 (or a `registry.fly.io/...` value for `GRAM_ASSISTANT_RUNTIME_OCI_IMAGE`),
-remove those keys along with `GRAM_ASSISTANT_RUNTIME_FLYIO_*` to pick up the
-local defaults.
+`mise run zero:assistants --restart` overwrites those two keys with the local
+defaults and rebuilds the image. Remove any leftover `GRAM_ASSISTANT_RUNTIME_FLYIO_*`
+keys yourself.

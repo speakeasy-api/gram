@@ -24,7 +24,7 @@ func TestUpdateRiskPolicyHTTPTransport_ExplicitEmptyShadowMCPAllowedURLs(t *test
 	require.NoError(t, err)
 	encoded, err := io.ReadAll(req.Body)
 	require.NoError(t, err)
-	require.JSONEq(t, `{"id":"policy-id","name":"Shadow MCP","shadow_mcp_allowed_urls":[],"shadow_mcp_blocked_urls":null}`, string(encoded))
+	require.JSONEq(t, `{"id":"policy-id","name":"Shadow MCP","shadow_mcp_allowed_urls":[],"shadow_mcp_blocked_urls":null,"supersede_decisions":null}`, string(encoded))
 }
 
 func TestUpdateRiskPolicyHTTPTransport_ExplicitEmptyShadowMCPBlockedURLs(t *testing.T) {
@@ -39,7 +39,7 @@ func TestUpdateRiskPolicyHTTPTransport_ExplicitEmptyShadowMCPBlockedURLs(t *test
 	require.NoError(t, err)
 	encoded, err := io.ReadAll(req.Body)
 	require.NoError(t, err)
-	require.JSONEq(t, `{"id":"policy-id","name":"Shadow MCP","shadow_mcp_allowed_urls":null,"shadow_mcp_blocked_urls":[]}`, string(encoded))
+	require.JSONEq(t, `{"id":"policy-id","name":"Shadow MCP","shadow_mcp_allowed_urls":null,"shadow_mcp_blocked_urls":[],"supersede_decisions":null}`, string(encoded))
 }
 
 func TestUpdateRiskPolicyHTTPTransport_NilShadowMCPAllowedURLs(t *testing.T) {
@@ -53,5 +53,5 @@ func TestUpdateRiskPolicyHTTPTransport_NilShadowMCPAllowedURLs(t *testing.T) {
 	require.NoError(t, err)
 	encoded, err := io.ReadAll(req.Body)
 	require.NoError(t, err)
-	require.JSONEq(t, `{"id":"policy-id","name":"Shadow MCP","shadow_mcp_allowed_urls":null,"shadow_mcp_blocked_urls":null}`, string(encoded))
+	require.JSONEq(t, `{"id":"policy-id","name":"Shadow MCP","shadow_mcp_allowed_urls":null,"shadow_mcp_blocked_urls":null,"supersede_decisions":null}`, string(encoded))
 }

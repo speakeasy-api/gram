@@ -1,0 +1,318 @@
+// Package agents declares the human-only first-class agent management API.
+package agents
+
+import (
+	"fmt"
+
+	. "goa.design/goa/v3/dsl"
+
+	"github.com/speakeasy-api/gram/server/design/security"
+	"github.com/speakeasy-api/gram/server/design/shared"
+)
+
+var Lifecycle = Type("AgentLifecycle", String, func() {
+	Enum("active", "suspended", "revoked")
+})
+
+var Permissions = Type("AgentPermissions", func() {
+	Required("read", "write", "authorize", "transfer")
+	Attribute("read", Boolean, "Whether the current human may read this agent")
+	Attribute("write", Boolean, "Whether the current human may configure or change this agent")
+	Attribute("authorize", Boolean, "Whether the current human may manage credentials for this agent")
+	Attribute("transfer", Boolean, "Whether the current human may transfer or reassign this agent")
+})
+
+var CreateForm = Type("CreateAgentForm", func() {
+	Attribute("name", String, func() { MinLength(1); MaxLength(120) })
+	Attribute("owner_user_id", String, "Eligible same-organization human owner; defaults to the caller")
+	Attribute("policy_grants", ArrayOf(PolicyGrantForm), "Optional initial allow-only agent policy ceilings, created atomically with the agent. Effective credential permissions remain limited by the live owner and authorizer.")
+	Required("name")
+})
+
+var RenameForm = Type("RenameAgentForm", func() {
+	Attribute("id", String, func() { Format(FormatUUID) })
+	Attribute("name", String, func() { MinLength(1); MaxLength(120) })
+	Required("id", "name")
+})
+
+var AgentIDForm = Type("AgentIDForm", func() {
+	Attribute("agent_id", String, "First-class agent identifier", func() { Format(FormatUUID) })
+	Required("agent_id")
+})
+
+var PolicySelector = Type("AgentPolicySelector", func() {
+	Description("A constraint that narrows which resources an agent grant applies to.")
+	Required("resource_kind", "resource_id")
+	Attribute("resource_kind", String, "The kind of resource this selector targets.", func() {
+		Enum("project", "mcp", "org", "environment", "skill", "risk_policy", "chat", "agent", "*")
+	})
+	Attribute("resource_id", String, "The resource identifier, or '*' for all resources of this kind.")
+	Attribute("disposition", String, "Tool disposition filter (MCP scopes only).", func() {
+		Enum("read_only", "destructive", "idempotent", "open_world")
+	})
+	Attribute("tool", String, "Specific tool name filter (MCP scopes only).")
+	Attribute("project_id", String, "Project filter (MCP scopes only).")
+	Attribute("server_url", String, "Server URL filter (risk policy scopes only).", func() { Format(FormatURI) })
+	Attribute("server_identity", String, "Server identity filter (risk policy scopes only).")
+})
+
+var PolicyGrantForm = Type("AgentPolicyGrantForm", func() {
+	Required("scope", "effect", "selector")
+	Attribute("scope", String, "Agent-runtime-safe scope to grant", func() { MinLength(1) })
+	Attribute("effect", String, "Grant effect; direct agent policy is allow-only", func() { Enum("allow") })
+	Attribute("selector", PolicySelector)
+})
+
+var PolicyGrant = Type("AgentPolicyGrant", func() {
+	Required("id", "scope", "effect", "selector", "created_at", "updated_at")
+	Attribute("id", String, func() { Format(FormatUUID) })
+	Attribute("scope", String)
+	Attribute("effect", String, func() { Enum("allow") })
+	Attribute("selector", PolicySelector)
+	Attribute("created_at", String, func() { Format(FormatDateTime) })
+	Attribute("updated_at", String, func() { Format(FormatDateTime) })
+})
+
+var PolicyGrantIDForm = Type("AgentPolicyGrantIDForm", func() {
+	Extend(AgentIDForm)
+	Attribute("grant_id", String, "Direct policy grant identifier", func() { Format(FormatUUID) })
+	Required("grant_id")
+})
+
+var OwnerAssignmentForm = Type("AgentOwnerAssignmentForm", func() {
+	Attribute("agent_id", String, "First-class agent identifier", func() { Format(FormatUUID) })
+	Attribute("owner_user_id", String, "Eligible same-organization human replacement owner")
+	Required("agent_id", "owner_user_id")
+})
+
+var CreatePolicyGrantForm = Type("CreateAgentPolicyGrantForm", func() {
+	Extend(AgentIDForm)
+	Extend(PolicyGrantForm)
+})
+
+var UpdatePolicyGrantForm = Type("UpdateAgentPolicyGrantForm", func() {
+	Extend(PolicyGrantIDForm)
+	Extend(PolicyGrantForm)
+})
+
+var OwnerProfile = Type("AgentOwnerProfile", func() {
+	Required("display_name")
+	Attribute("display_name", String)
+	Attribute("photo_url", String)
+
+})
+
+var Agent = Type("ManagedAgent", func() {
+	Required("id", "owner_user_id", "name", "lifecycle", "permissions", "created_at", "updated_at")
+	Attribute("id", String, func() { Format(FormatUUID) })
+	Attribute("owner_user_id", String)
+	Attribute("owner_profile", OwnerProfile, "Safe profile of the active same-organization owner; does not require directory access")
+	Attribute("owner_reassignment_required_at", String, "When owner loss durably blocked this agent", func() { Format(FormatDateTime) })
+	Attribute("owner_reassignment_reason", String, "Stable reason that explicit reassignment is required")
+	Attribute("name", String)
+	Attribute("lifecycle", Lifecycle)
+	Attribute("permissions", Permissions)
+	Attribute("created_at", String, func() { Format(FormatDateTime) })
+	Attribute("updated_at", String, func() { Format(FormatDateTime) })
+})
+
+var _ = Service("agents", func() {
+	Description("Human-only management of first-class agent principals.")
+	Security(security.Session)
+	shared.DeclareErrorResponses()
+	sessionMethods()
+
+	Method("list", func() {
+		Meta("openapi:operationId", "listAgents")
+		Meta("openapi:extension:x-speakeasy-name-override", "list")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "Agents"}`)
+		Payload(func() { security.SessionPayload() })
+		Result(ArrayOf(Agent))
+		HTTP(func() {
+			GET("/rpc/agents.list")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+	})
+
+	Method("create", func() {
+		Meta("openapi:operationId", "createAgent")
+		Meta("openapi:extension:x-speakeasy-name-override", "create")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateAgent"}`)
+		Payload(func() {
+			security.SessionPayload()
+			Extend(CreateForm)
+		})
+		Result(Agent)
+		HTTP(func() {
+			POST("/rpc/agents.create")
+			security.SessionHeader()
+			Body(CreateForm)
+			Response(StatusCreated)
+		})
+	})
+
+	Method("get", func() {
+		Meta("openapi:operationId", "getAgent")
+		Meta("openapi:extension:x-speakeasy-name-override", "get")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "Agent"}`)
+		Payload(func() {
+			security.SessionPayload()
+			Attribute("id", String, func() { Format(FormatUUID) })
+			Required("id")
+		})
+		Result(Agent)
+		HTTP(func() {
+			GET("/rpc/agents.get")
+			Param("id")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+	})
+
+	Method("rename", func() {
+		Meta("openapi:operationId", "renameAgent")
+		Meta("openapi:extension:x-speakeasy-name-override", "rename")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RenameAgent"}`)
+		Payload(func() {
+			security.SessionPayload()
+			Extend(RenameForm)
+		})
+		Result(Agent)
+		HTTP(func() {
+			POST("/rpc/agents.rename")
+			security.SessionHeader()
+			Body(RenameForm)
+			Response(StatusOK)
+		})
+	})
+
+	Method("listDelegableGrants", func() {
+		Description("List safe allow-only credential grant candidates shared by the live agent, owner, and current authorizer. Candidates with unrepresentable exclusions are conservatively omitted. Issuance revalidates every grant.")
+		Meta("openapi:operationId", "listAgentDelegableGrants")
+		Meta("openapi:extension:x-speakeasy-name-override", "listDelegableGrants")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListAgentDelegableGrants"}`)
+		Payload(func() {
+			security.SessionPayload()
+			Extend(AgentIDForm)
+		})
+		Result(ArrayOf(PolicyGrantForm))
+		HTTP(func() {
+			GET("/rpc/agents.listDelegableGrants")
+			Param("agent_id")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+	})
+
+	Method("listPolicyGrants", func() {
+		Meta("openapi:operationId", "listAgentPolicyGrants")
+		Meta("openapi:extension:x-speakeasy-name-override", "listPolicyGrants")
+		Payload(func() {
+			security.SessionPayload()
+			Extend(AgentIDForm)
+		})
+		Result(ArrayOf(PolicyGrant))
+		HTTP(func() {
+			GET("/rpc/agents.listPolicyGrants")
+			Param("agent_id")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+	})
+
+	Method("createPolicyGrant", func() {
+		Meta("openapi:operationId", "createAgentPolicyGrant")
+		Meta("openapi:extension:x-speakeasy-name-override", "createPolicyGrant")
+		Payload(func() {
+			security.SessionPayload()
+			Extend(CreatePolicyGrantForm)
+		})
+		Result(PolicyGrant)
+		HTTP(func() {
+			POST("/rpc/agents.createPolicyGrant")
+			security.SessionHeader()
+			Body(CreatePolicyGrantForm)
+			Response(StatusCreated)
+		})
+	})
+
+	Method("updatePolicyGrant", func() {
+		Meta("openapi:operationId", "updateAgentPolicyGrant")
+		Meta("openapi:extension:x-speakeasy-name-override", "updatePolicyGrant")
+		Payload(func() {
+			security.SessionPayload()
+			Extend(UpdatePolicyGrantForm)
+		})
+		Result(PolicyGrant)
+		HTTP(func() {
+			POST("/rpc/agents.updatePolicyGrant")
+			security.SessionHeader()
+			Body(UpdatePolicyGrantForm)
+			Response(StatusOK)
+		})
+	})
+
+	Method("deletePolicyGrant", func() {
+		Meta("openapi:operationId", "deleteAgentPolicyGrant")
+		Meta("openapi:extension:x-speakeasy-name-override", "deletePolicyGrant")
+		Payload(func() {
+			security.SessionPayload()
+			Extend(PolicyGrantIDForm)
+		})
+		HTTP(func() {
+			POST("/rpc/agents.deletePolicyGrant")
+			security.SessionHeader()
+			Body(PolicyGrantIDForm)
+			Response(StatusNoContent)
+		})
+	})
+	for _, operation := range []struct {
+		name string
+		hook string
+	}{
+		{name: "transfer", hook: "TransferAgent"},
+		{name: "reassign", hook: "ReassignAgent"},
+	} {
+		Method(operation.name, func() {
+			Meta("openapi:operationId", operation.name+"Agent")
+			Meta("openapi:extension:x-speakeasy-name-override", operation.name)
+			Meta("openapi:extension:x-speakeasy-react-hook", fmt.Sprintf(`{"name": %q}`, operation.hook))
+			Payload(func() {
+				security.SessionPayload()
+				Extend(OwnerAssignmentForm)
+			})
+			Result(Agent)
+			HTTP(func() {
+				POST("/rpc/agents." + operation.name)
+				security.SessionHeader()
+				Body(OwnerAssignmentForm)
+				Response(StatusOK)
+			})
+		})
+	}
+
+	for _, operation := range []string{"suspend", "resume", "revoke", "delete"} {
+		Method(operation, func() {
+			Meta("openapi:operationId", operation+"Agent")
+			Meta("openapi:extension:x-speakeasy-name-override", operation)
+			Payload(func() {
+				security.SessionPayload()
+				Extend(AgentIDForm)
+			})
+			if operation != "delete" {
+				Result(Agent)
+			}
+			HTTP(func() {
+				POST("/rpc/agents." + operation)
+				security.SessionHeader()
+				Body(AgentIDForm)
+				if operation == "delete" {
+					Response(StatusNoContent)
+				} else {
+					Response(StatusOK)
+				}
+			})
+		})
+	}
+})

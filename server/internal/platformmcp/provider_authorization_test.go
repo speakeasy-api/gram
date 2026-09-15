@@ -36,6 +36,18 @@ func TestProviderAuthorizationFingerprintUsesOnlyDurableIdentity(t *testing.T) {
 	require.NotEqual(t, first, changed, "token refresh or reauthorization updates the durable session timestamp")
 }
 
+func TestAssistantReadinessFingerprintBindsTheActor(t *testing.T) {
+	t.Parallel()
+
+	providerFingerprint := "provider-fingerprint"
+	first := assistantReadinessFingerprint(providerFingerprint, "user-one", SurfaceProjectAssistant)
+
+	require.Len(t, first, 64)
+	require.Equal(t, first, assistantReadinessFingerprint(providerFingerprint, "user-one", SurfaceProjectAssistant))
+	require.NotEqual(t, first, assistantReadinessFingerprint(providerFingerprint, "user-two", SurfaceProjectAssistant))
+	require.NotEqual(t, first, assistantReadinessFingerprint(providerFingerprint, "user-one", SurfaceDashboard))
+}
+
 func TestProviderAuthorizationFingerprintUsesDistinctAbsenceDomains(t *testing.T) {
 	t.Parallel()
 
@@ -59,5 +71,20 @@ func TestProviderAuthorizationFingerprintRejectsIncompleteIdentity(t *testing.T)
 	t.Parallel()
 
 	_, err := ProviderAuthorizationFingerprint(ProviderAuthorizationIdentity{})
+	require.ErrorIs(t, err, ErrReadinessInvalid)
+}
+
+func TestProviderAuthorizationFingerprintRejectsActiveSessionWithoutIssuer(t *testing.T) {
+	t.Parallel()
+
+	_, err := ProviderAuthorizationFingerprint(ProviderAuthorizationIdentity{
+		OrganizationID:         "organization",
+		Subject:                urn.NewUserSubject("user"),
+		RegistrationID:         uuid.New(),
+		RemoteSessionID:        uuid.New(),
+		RemoteSessionUpdatedAt: time.Now().UTC(),
+		RemoteSessionClientID:  uuid.New(),
+	})
+
 	require.ErrorIs(t, err, ErrReadinessInvalid)
 }

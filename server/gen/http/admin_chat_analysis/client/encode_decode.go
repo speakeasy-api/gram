@@ -45,6 +45,9 @@ func EncodeGetSettingsRequest(encoder func(*http.Request) goahttp.Encoder) func(
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
+		values := req.URL.Query()
+		values.Add("organization_id", p.OrganizationID)
+		req.URL.RawQuery = values.Encode()
 		return nil
 	}
 }
@@ -747,6 +750,10 @@ func EncodeTriggerAnalysisRequest(encoder func(*http.Request) goahttp.Encoder) f
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
+		}
+		body := NewTriggerAnalysisRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("adminChatAnalysis", "triggerAnalysis", err)
 		}
 		return nil
 	}

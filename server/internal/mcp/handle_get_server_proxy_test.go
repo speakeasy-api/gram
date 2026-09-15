@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
@@ -148,19 +149,18 @@ func TestRuntimeMethods_MountedOnMux(t *testing.T) {
 
 	ctx, ti := newTestMCPService(t)
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
 	metadataService := mcpmetadata.NewService(
 		ti.logger,
 		ti.tracerProvider,
+		testenv.NewMeterProvider(t),
 		ti.conn,
 		ti.sessionManager,
 		ti.serverURL,
 		ti.siteURL,
 		ti.cacheAdapter,
-		authz.NewEngine(ti.logger, ti.conn, chConn, nil, workos.NewStubClient()),
+		authz.NewEngine(ti.logger, ti.conn, nil, workos.NewStubClient()),
 		ti.audit,
+		nil,
 	)
 
 	mux := goahttp.NewMuxer()

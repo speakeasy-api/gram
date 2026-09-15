@@ -360,6 +360,7 @@ func (m *Manager) Authorize(ctx context.Context, tokenString string) (context.Co
 		HasActiveSubscription: false,
 		APIKeyScopes:          []string{auth.APIKeyScopeChat.String(), auth.APIKeyScopeConsumer.String()},
 		IsAdmin:               false,
+		SupportOrganizationID: "",
 	})
 	ctx = contextvalues.SetAssistantPrincipal(ctx, contextvalues.AssistantPrincipal{
 		AssistantID: assistantID,

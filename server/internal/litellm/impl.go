@@ -2,8 +2,10 @@ package litellm
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
@@ -33,6 +35,7 @@ import (
 const (
 	genericBlockedReason = "Request blocked by policy."
 	callCacheTimeout     = time.Second
+	agentTurnPrefix      = "agent-turn:v1:"
 )
 
 type HookIngester interface {
@@ -155,7 +158,8 @@ func (s *Service) ingestRequest(ctx context.Context, payload *gen.IngestPayload,
 	authCopy := strippedAuthContext(authCtx)
 
 	traceID := strings.TrimSpace(conv.PtrValOr(payload.LitellmTraceID, ""))
-	sessionID := sessionHeader(payload.RequestHeaders)
+	attribution := agentAttributionFromHeaders(payload.RequestHeaders)
+	sessionID := attribution.SessionID
 	if sessionID == "" {
 		sessionID = conv.Default(traceID, callID)
 	}
@@ -163,6 +167,10 @@ func (s *Service) ingestRequest(ctx context.Context, payload *gen.IngestPayload,
 	version := strings.TrimSpace(conv.PtrValOr(payload.LitellmVersion, ""))
 	email := conv.NormalizeEmail(conv.PtrValOr(payload.RequestData.UserAPIKeyUserEmail, ""))
 	idempotencyKey := "litellm:" + callID + ":request"
+	turnID := callID
+	if attribution.TurnID != "" {
+		turnID = agentTurnPrefix + attribution.TurnProvider + ":" + attribution.TurnID
+	}
 
 	hookPayload := &hooksgen.IngestPayload{
 		ApikeyToken:      nil,
@@ -179,7 +187,7 @@ func (s *Service) ingestRequest(ctx context.Context, payload *gen.IngestPayload,
 		},
 		Session: &hooksgen.HookIngestSession{
 			ID:     &sessionID,
-			TurnID: &callID,
+			TurnID: &turnID,
 			Cwd:    nil,
 			Model:  conv.PtrEmpty(model),
 		},
@@ -207,6 +215,7 @@ func (s *Service) ingestRequest(ctx context.Context, payload *gen.IngestPayload,
 		AllowSessionIdentityFallback: false,
 		SourceAttributes:             sourceAttributes(payload),
 		OutputToolCalls:              nil,
+		OriginatingClient:            attribution.OriginatingClient,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("ingest LiteLLM hook: %w", err)
@@ -227,12 +236,13 @@ func (s *Service) ingestRequest(ctx context.Context, payload *gen.IngestPayload,
 	}
 	cacheCtx, cancel := context.WithTimeout(ctx, callCacheTimeout)
 	err = s.calls.Store(cacheCtx, callcache.Record{
-		ProjectID: *authCtx.ProjectID,
-		CallID:    callID,
-		TraceID:   traceID,
-		SessionID: sessionID,
-		UserID:    outcome.Actor.UserID,
-		Email:     outcome.Actor.Email,
+		ProjectID:         *authCtx.ProjectID,
+		CallID:            callID,
+		TraceID:           traceID,
+		SessionID:         sessionID,
+		UserID:            outcome.Actor.UserID,
+		Email:             outcome.Actor.Email,
+		OriginatingClient: attribution.OriginatingClient,
 	})
 	cancel()
 	if err != nil {
@@ -258,10 +268,8 @@ func (s *Service) ingestResponse(ctx context.Context, payload *gen.IngestPayload
 	}
 	authCopy := strippedAuthContext(authCtx)
 	traceID := strings.TrimSpace(conv.PtrValOr(payload.LitellmTraceID, ""))
-	sessionID := sessionHeader(payload.RequestHeaders)
-	if sessionID == "" {
-		sessionID = conv.Default(traceID, callID)
-	}
+	sessionID := conv.Default(traceID, callID)
+	originatingClient := ""
 	email := conv.NormalizeEmail(conv.PtrValOr(payload.RequestData.UserAPIKeyUserEmail, ""))
 
 	cacheCtx, cancel := context.WithTimeout(ctx, callCacheTimeout)
@@ -272,12 +280,22 @@ func (s *Service) ingestResponse(ctx context.Context, payload *gen.IngestPayload
 		authCopy.UserID = cached.UserID
 		authCopy.Email = conv.PtrEmpty(cached.Email)
 		email = cached.Email
-	} else if !callcache.IsMiss(err) {
-		s.logger.WarnContext(ctx, "failed to read cached LiteLLM call",
-			attr.SlogError(err),
-			attr.SlogProjectID(authCtx.ProjectID.String()),
-			attr.SlogLiteLLMCallID(callID),
-		)
+		if cached.OriginatingClient != "" {
+			originatingClient = cached.OriginatingClient
+		} else {
+			originatingClient = agentAttributionFromHeaders(payload.RequestHeaders).OriginatingClient
+		}
+	} else {
+		attribution := agentAttributionFromHeaders(payload.RequestHeaders)
+		sessionID = conv.Default(attribution.SessionID, sessionID)
+		originatingClient = attribution.OriginatingClient
+		if !callcache.IsMiss(err) {
+			s.logger.WarnContext(ctx, "failed to read cached LiteLLM call",
+				attr.SlogError(err),
+				attr.SlogProjectID(authCtx.ProjectID.String()),
+				attr.SlogLiteLLMCallID(callID),
+			)
+		}
 	}
 
 	model := strings.TrimSpace(conv.PtrValOr(payload.Model, ""))
@@ -327,6 +345,7 @@ func (s *Service) ingestResponse(ctx context.Context, payload *gen.IngestPayload
 		AllowSessionIdentityFallback: false,
 		SourceAttributes:             sourceAttributes(payload),
 		OutputToolCalls:              payload.ToolCalls,
+		OriginatingClient:            originatingClient,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("ingest LiteLLM hook: %w", err)
@@ -355,8 +374,8 @@ func noneResult() *gen.LitellmIngestResult {
 }
 
 func latestUserPrompt(messages []*gen.LiteLLMStructuredMessage) string {
-	for i := len(messages) - 1; i >= 0; i-- {
-		message := messages[i]
+	for _, message := range slices.Backward(messages) {
+
 		if message != nil && strings.EqualFold(strings.TrimSpace(message.Role), "user") {
 			return messageText(message.Content)
 		}
@@ -408,25 +427,76 @@ func joinedTexts(texts []string) string {
 	return strings.Join(joined, "\n")
 }
 
-func sessionHeader(headers map[string]string) string {
-	for _, header := range []string{
-		"x-gram-session-id",
-		"x-claude-code-session-id",
-		"session-id",
-		"thread-id",
-		"x-session-id",
-	} {
-		for key, value := range headers {
-			if !strings.EqualFold(strings.TrimSpace(key), header) {
-				continue
-			}
-			value = strings.TrimSpace(value)
-			if value != "" && !strings.EqualFold(value, "[present]") {
-				return value
-			}
+type codexTurnMetadata struct {
+	SessionID string `json:"session_id"`
+	TurnID    string `json:"turn_id"`
+}
+
+type agentAttribution struct {
+	SessionID         string
+	OriginatingClient string
+	TurnProvider      string
+	TurnID            string
+}
+
+func agentAttributionFromHeaders(headers map[string]string) agentAttribution {
+	normalized := make(map[string]string, len(headers))
+	for key, value := range headers {
+		value = strings.TrimSpace(value)
+		if value != "" && !strings.EqualFold(value, "[present]") {
+			normalized[strings.ToLower(strings.TrimSpace(key))] = value
 		}
 	}
-	return ""
+
+	metadata := codexTurnMetadata{SessionID: "", TurnID: ""}
+	if json.Unmarshal([]byte(normalized["x-codex-turn-metadata"]), &metadata) != nil {
+		metadata = codexTurnMetadata{SessionID: "", TurnID: ""}
+	}
+	metadata.SessionID = strings.TrimSpace(metadata.SessionID)
+	metadata.TurnID = strings.TrimSpace(metadata.TurnID)
+
+	sessionID := ""
+	for _, header := range []string{"x-gram-agent-session-id", "x-gram-session-id", "x-claude-code-session-id", "x-session-id", "x-opencode-session", "session-id", "thread-id"} {
+		if normalized[header] != "" {
+			sessionID = normalized[header]
+			break
+		}
+	}
+	sessionID = conv.Default(sessionID, metadata.SessionID)
+
+	provider := strings.ToLower(normalized["x-gram-agent-provider"])
+	supportedProvider := provider == "codex" || provider == "opencode"
+	originatingClient := ""
+	switch {
+	case normalized["x-gram-agent-session-id"] != "" && supportedProvider:
+		originatingClient = provider
+	case normalized["x-claude-code-session-id"] != "":
+		originatingClient = "claude-code"
+	case normalized["x-session-id"] != "" || normalized["x-opencode-session"] != "":
+		originatingClient = "opencode"
+	case normalized["session-id"] != "" || normalized["thread-id"] != "" || metadata.SessionID != "" || metadata.TurnID != "":
+		originatingClient = "codex"
+	case normalized["x-opencode-request"] != "":
+		originatingClient = "opencode"
+	}
+
+	turnProvider := ""
+	turnID := ""
+	switch {
+	case supportedProvider && normalized["x-gram-agent-turn-id"] != "":
+		turnProvider, turnID = provider, normalized["x-gram-agent-turn-id"]
+	case metadata.TurnID != "":
+		turnProvider, turnID = "codex", metadata.TurnID
+	case normalized["x-opencode-request"] != "":
+		turnProvider, turnID = "opencode", normalized["x-opencode-request"]
+	}
+
+	return agentAttribution{
+		SessionID:         sessionID,
+		OriginatingClient: originatingClient,
+		TurnProvider:      turnProvider,
+		TurnID:            turnID,
+	}
 }
 
 func sourceAttributes(payload *gen.IngestPayload) map[attr.Key]any {

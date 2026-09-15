@@ -42,6 +42,7 @@ export const ResourceType = {
   Skill: "skill",
   RiskPolicy: "risk_policy",
   Chat: "chat",
+  Agent: "agent",
 } as const;
 /**
  * The type of resource this scope applies to.
@@ -79,6 +80,10 @@ export const Slug = {
   RiskPolicyBlock: "risk_policy:block",
   ChatRead: "chat:read",
   ChatWrite: "chat:write",
+  AgentRead: "agent:read",
+  AgentWrite: "agent:write",
+  AgentAuthorize: "agent:authorize",
+  AgentTransfer: "agent:transfer",
 } as const;
 /**
  * Unique scope identifier.
@@ -98,6 +103,10 @@ export const Visibility = {
 export type Visibility = ClosedEnum<typeof Visibility>;
 
 export type ScopeDefinition = {
+  /**
+   * Whether an agent principal can hold this scope. Roles may carry scopes agents cannot hold; those are ignored for the role's agent members rather than granted.
+   */
+  agentEligible: boolean;
   /**
    * What this scope protects.
    */
@@ -142,6 +151,7 @@ export const ScopeDefinition$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    agent_eligible: z.boolean(),
     description: z.string(),
     exclusion_scope: z.optional(ExclusionScope$inboundSchema),
     resource_type: ResourceType$inboundSchema,
@@ -150,6 +160,7 @@ export const ScopeDefinition$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "agent_eligible": "agentEligible",
       "exclusion_scope": "exclusionScope",
       "resource_type": "resourceType",
     });

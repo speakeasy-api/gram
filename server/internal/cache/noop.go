@@ -47,6 +47,22 @@ func (s *noopCache) Set(ctx context.Context, key string, value any, ttl time.Dur
 	return nil
 }
 
+// AcquireLease implements [LeaseCache].
+func (s *noopCache) AcquireLease(ctx context.Context, key, owner string, ttl time.Duration) (bool, error) {
+	return true, nil
+}
+
+// ReleaseLeaseIfOwner implements [LeaseCache].
+func (s *noopCache) ReleaseLeaseIfOwner(ctx context.Context, key, owner string) (bool, error) {
+	return true, nil
+}
+
+// SetIfAbsent implements [ConditionalCache]. With no backing store every
+// caller wins, matching Add's graceful degradation semantics.
+func (s *noopCache) SetIfAbsent(ctx context.Context, key string, value any, ttl time.Duration) (bool, error) {
+	return true, nil
+}
+
 // Add implements [Cache]. With no backing store there is nothing to dedupe
 // against, so every caller "wins" and persistence proceeds — dedup degrades
 // to a no-op rather than silently dropping every write.

@@ -129,6 +129,11 @@ func New(ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Poli
 	}
 }
 
+// IsConfigured reports whether an API key enables real Loops calls.
+func IsConfigured(apiKey string) bool {
+	return apiKey != "" && apiKey != "unset"
+}
+
 // NewWorkflowClient returns a WorkflowClient that is always safe to call.
 //
 // When apiKey is empty or the placeholder value "unset", the returned client

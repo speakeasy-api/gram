@@ -63,6 +63,27 @@ type testInstance struct {
 	authContext    *contextvalues.AuthContext
 	projectID      uuid.UUID
 	signaler       *captureSuggestionSignaler
+	publisher      *capturePublishSignaler
+}
+
+// capturePublishSignaler records the marketplace republishes a plugin-channel
+// distribution enqueues, in place of the real Temporal signal.
+type capturePublishSignaler struct {
+	mu      sync.Mutex
+	signals []uuid.UUID
+}
+
+func (c *capturePublishSignaler) SignalPluginPublish(_ context.Context, projectID uuid.UUID, _ string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.signals = append(c.signals, projectID)
+	return nil
+}
+
+func (c *capturePublishSignaler) recorded() []uuid.UUID {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([]uuid.UUID(nil), c.signals...)
 }
 
 type suggestionSignal struct {
@@ -129,14 +150,13 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	authContext.ProjectSlug = &project.Slug
 	ctx = contextvalues.SetAuthContext(ctx, authContext)
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
 	signaler := &captureSuggestionSignaler{signals: nil, err: nil}
+	publisher := &capturePublishSignaler{mu: sync.Mutex{}, signals: nil}
 	siteURL, err := url.Parse("https://app.getgram.test")
 	require.NoError(t, err)
-	service := skills.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, features, audit.NewLogger(), signaler, siteURL)
+	service := skills.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, features, audit.NewLogger(), signaler, publisher, siteURL)
 
 	ti := &testInstance{
 		service:        service,
@@ -147,6 +167,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		authContext:    authContext,
 		projectID:      *authContext.ProjectID,
 		signaler:       signaler,
+		publisher:      publisher,
 	}
 	enableSkills(t, ctx, ti)
 	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeSkillWrite, ti.projectID.String()))

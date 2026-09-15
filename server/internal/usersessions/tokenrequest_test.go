@@ -13,11 +13,13 @@ func TestAuthCodeTokenRequestFromForm(t *testing.T) {
 	form.Set("code", "auth_code_123")
 	form.Set("redirect_uri", "https://app.acme.test/callback")
 	form.Set("code_verifier", "verifier_xyz")
+	form.Set("resource", "https://acme.example.com/mcp/support-bot")
 
 	req := AuthCodeTokenRequestFromForm(form)
 	require.Equal(t, "auth_code_123", req.Code)
 	require.Equal(t, "https://app.acme.test/callback", req.RedirectURI)
 	require.Equal(t, "verifier_xyz", req.CodeVerifier)
+	require.Equal(t, []string{"https://acme.example.com/mcp/support-bot"}, req.Resources)
 }
 
 func TestAuthCodeTokenRequest_Validate(t *testing.T) {
@@ -62,8 +64,10 @@ func TestRefreshTokenRequestFromForm(t *testing.T) {
 	t.Parallel()
 	form := url.Values{}
 	form.Set("refresh_token", "refresh_xyz")
+	form.Set("resource", "https://acme.example.com/mcp/support-bot")
 	req := RefreshTokenRequestFromForm(form)
 	require.Equal(t, "refresh_xyz", req.RefreshToken)
+	require.Equal(t, []string{"https://acme.example.com/mcp/support-bot"}, req.Resources)
 }
 
 func TestRefreshTokenRequest_Validate(t *testing.T) {

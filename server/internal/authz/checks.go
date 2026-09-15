@@ -91,11 +91,12 @@ func ChatReadCheck(resourceID string) Check {
 	return Check{Scope: ScopeChatRead, ResourceKind: "", ResourceID: resourceID, Dimensions: nil, selectorMatch: selectorMatchNormal}
 }
 
-// ChatWriteCheck builds a Check authorizing mutation of agent chat sessions —
-// pinning, renaming, attaching feedback, and deleting. It is deliberately
+// ChatWriteCheck builds a Check authorizing destructive mutation of agent chat
+// sessions — renaming, attaching feedback, and deleting. It is deliberately
 // separate from ChatReadCheck: a session reviewer granted chat:read can read
-// every transcript but must not be able to destroy one. Owner-matching in the
-// chat handlers still lets anyone mutate their own sessions without a grant.
+// every transcript (and pin one as a shared bookmark) but must not be able to
+// destroy one. Owner-matching in the chat handlers still lets anyone mutate
+// their own sessions without a grant.
 func ChatWriteCheck(resourceID string) Check {
 	return Check{Scope: ScopeChatWrite, ResourceKind: "", ResourceID: resourceID, Dimensions: nil, selectorMatch: selectorMatchNormal}
 }

@@ -14,10 +14,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	workosrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/workos/repo"
 	userrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
@@ -61,7 +61,7 @@ func seedDirectorySnapshotData(t *testing.T, ctx context.Context, conn *pgxpool.
 	})
 	require.NoError(t, err)
 
-	directoryUserID, err := workosrepo.New(conn).UpsertDirectoryUser(ctx, workosrepo.UpsertDirectoryUserParams{
+	directoryUserID, err := directoryrepo.New(conn).UpsertDirectoryUser(ctx, directoryrepo.UpsertDirectoryUserParams{
 		OrganizationID:        orgID,
 		UserID:                conv.ToPGText(userID),
 		WorkosDirectoryUserID: "directory_user_" + suffix,
@@ -76,7 +76,7 @@ func seedDirectorySnapshotData(t *testing.T, ctx context.Context, conn *pgxpool.
 	})
 	require.NoError(t, err)
 
-	directoryGroupID, err := workosrepo.New(conn).UpsertDirectoryGroup(ctx, workosrepo.UpsertDirectoryGroupParams{
+	directoryGroupID, err := directoryrepo.New(conn).UpsertDirectoryGroup(ctx, directoryrepo.UpsertDirectoryGroupParams{
 		OrganizationID:         orgID,
 		WorkosDirectoryGroupID: "directory_group_" + suffix,
 		Name:                   "Developers",
@@ -87,7 +87,7 @@ func seedDirectorySnapshotData(t *testing.T, ctx context.Context, conn *pgxpool.
 	})
 	require.NoError(t, err)
 
-	_, err = workosrepo.New(conn).OpenDirectoryUserGroupMembership(ctx, workosrepo.OpenDirectoryUserGroupMembershipParams{
+	_, err = directoryrepo.New(conn).OpenDirectoryUserGroupMembership(ctx, directoryrepo.OpenDirectoryUserGroupMembershipParams{
 		DirectoryUserID:        directoryUserID,
 		DirectoryGroupID:       directoryGroupID,
 		WorkosDirectoryUserID:  "directory_user_" + suffix,
@@ -214,7 +214,7 @@ func TestUserInfoResolver_HydratesAndCachesUntilExpiry(t *testing.T) {
 
 	// Change the persisted attributes; within the TTL the cached snapshot
 	// is still served.
-	_, err = workosrepo.New(conn).UpsertDirectoryUser(ctx, workosrepo.UpsertDirectoryUserParams{
+	_, err = directoryrepo.New(conn).UpsertDirectoryUser(ctx, directoryrepo.UpsertDirectoryUserParams{
 		OrganizationID:        seed.orgID,
 		UserID:                conv.ToPGText(seed.userID),
 		WorkosDirectoryUserID: "directory_user_" + suffix,

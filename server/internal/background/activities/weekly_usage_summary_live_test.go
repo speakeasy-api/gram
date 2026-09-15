@@ -131,6 +131,10 @@ func TestWeeklyUsageSummary_LiveSendThroughLoops(t *testing.T) {
 		TunneledMcpServerLimit: pgtype.Int4{},
 	})
 	require.NoError(t, err)
+	require.NoError(t, orgrepo.New(conn).SetAccountType(ctx, orgrepo.SetAccountTypeParams{
+		GramAccountType: "enterprise",
+		ID:              orgID,
+	}))
 
 	// Seed usage in the current cycle and at the comparable elapsed point of
 	// the previous cycle so the total renders a change badge. The cache read
@@ -145,7 +149,9 @@ func TestWeeklyUsageSummary_LiveSendThroughLoops(t *testing.T) {
 	insertWeeklyUsageComponents(t, ctx, chConn, project.ID.String(), previous.Start.Add(elapsed/2), 24_910_230, 9_441_006, 3_531_174, 0)
 
 	guardianPolicy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
-	emails := email.NewService(testenv.NewLogger(t), loops.New(ctx, testenv.NewLogger(t), guardianPolicy, apiKey))
+	emails := email.NewService(testenv.NewLogger(t), loops.New(ctx, testenv.NewLogger(t), guardianPolicy, apiKey), email.NewTemplateIDs(map[string]string{
+		"weekly_usage_summary": transactionalID,
+	}), true)
 	siteURL, err := url.Parse("https://app.getgram.ai")
 	require.NoError(t, err)
 

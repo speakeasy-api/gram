@@ -5,6 +5,7 @@ export type ProductTier =
   | "base"
   | "base_PAID"
   | "__deprecated__pro"
+  | "payg"
   | "enterprise";
 
 export const useProductTier = (): ProductTier => {
@@ -16,6 +17,9 @@ export const useProductTier = (): ProductTier => {
     }
     if (session.rawGramAccountType === "pro") {
       return "__deprecated__pro";
+    }
+    if (session.rawGramAccountType === "payg") {
+      return "payg";
     }
 
     if (session.hasActiveSubscription) {

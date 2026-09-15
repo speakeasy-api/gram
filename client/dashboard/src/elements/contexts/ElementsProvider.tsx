@@ -7,6 +7,11 @@ import {
 import { useMCPTools } from "@/elements/hooks/useMCPTools";
 import { useToolApproval } from "@/elements/hooks/useToolApproval";
 import { getApiUrl } from "@/elements/lib/api";
+import {
+  CHAT_ATTACHMENT_ACCEPT,
+  CHAT_ATTACHMENT_MAX_BYTES,
+  createChatAttachmentAdapter,
+} from "@/elements/lib/attachmentUpload";
 import { initErrorTracking, trackError } from "@/elements/lib/errorTracking";
 import { DEFAULT_MODEL } from "@/elements/lib/models";
 import {
@@ -19,6 +24,7 @@ import {
   type ApprovalHelpers,
 } from "@/elements/lib/tools";
 import { compactForModel } from "@/elements/lib/contextCompaction";
+import { dictationAdapter } from "@/elements/lib/dictation";
 import { describeStreamError } from "@/elements/lib/streamErrorMessage";
 import { cn } from "@/lib/utils";
 import { recommended } from "@/elements/plugins";
@@ -28,6 +34,7 @@ import { Plugin } from "@/elements/types/plugins";
 import {
   AssistantRuntimeProvider,
   AssistantTool,
+  type AttachmentAdapter,
   useAuiState,
   useRemoteThreadListRuntime,
 } from "@assistant-ui/react";
@@ -36,7 +43,11 @@ import {
   useChatRuntime,
 } from "@assistant-ui/react-ai-sdk";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  QueryClient,
+  QueryClientContext,
+  QueryClientProvider,
+} from "@tanstack/react-query";
 import {
   convertToModelMessages,
   createUIMessageStream,
@@ -55,6 +66,7 @@ type UIMessagePart = UIMessage["parts"][number];
 import {
   ReactNode,
   useCallback,
+  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -238,6 +250,7 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
     data: mcpTools,
     mcpHeaders,
     isLoading: mcpQueryLoading,
+    error: mcpToolsQueryError,
   } = useMCPTools({
     auth,
     mcp: config.mcp,
@@ -251,6 +264,7 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
   // tool-list consumer would briefly see an empty, settled state before tools
   // arrive.
   const mcpToolsLoading = auth.isLoading || mcpQueryLoading;
+  const mcpToolsError = mcpToolsQueryError ?? null;
 
   // Store approval helpers in ref so they can be used in async contexts
   const approvalHelpersRef = useRef<ApprovalHelpers>({
@@ -612,11 +626,62 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
       plugins,
       mcpTools,
       mcpToolsLoading,
+      mcpToolsError,
     }),
-    [config, model, isExpanded, isOpen, plugins, mcpTools, mcpToolsLoading],
+    [
+      config,
+      model,
+      isExpanded,
+      isOpen,
+      plugins,
+      mcpTools,
+      mcpToolsLoading,
+      mcpToolsError,
+    ],
   );
 
   const frontendTools = config.tools?.frontendTools ?? {};
+
+  // Composer attachments upload to Gram as soon as they are picked; the
+  // transport turns the resulting assets into turn attachments. `false`
+  // disables them (the composer also hides the button in that case).
+  const attachmentsConfig = config.composer?.attachments ?? true;
+  // Normalised to primitives before the memo: a host that rebuilds an
+  // equivalent config object on every render would otherwise mint a new
+  // adapter, change the runtime hook's identity, and rebuild the thread
+  // runtimes — taking any in-flight optimistic message with them.
+  const attachmentsEnabled = attachmentsConfig !== false;
+  const attachmentAccept =
+    typeof attachmentsConfig === "object" && attachmentsConfig.accept?.length
+      ? attachmentsConfig.accept.join(",")
+      : CHAT_ATTACHMENT_ACCEPT;
+  // A host asking for more than the endpoint accepts would let the user pick a
+  // file that only fails once uploaded, so the configured size is clamped to
+  // the server's cap (and a nonsense value ignored).
+  const configuredMaxSize =
+    typeof attachmentsConfig === "object"
+      ? attachmentsConfig.maxSize
+      : undefined;
+  const attachmentMaxBytes =
+    configuredMaxSize && configuredMaxSize > 0
+      ? Math.min(configuredMaxSize, CHAT_ATTACHMENT_MAX_BYTES)
+      : undefined;
+
+  const attachmentAdapter = useMemo(() => {
+    if (!attachmentsEnabled) return undefined;
+    return createChatAttachmentAdapter({
+      apiUrl,
+      getHeaders: getValidHeaders,
+      accept: attachmentAccept,
+      ...(attachmentMaxBytes ? { maxBytes: attachmentMaxBytes } : {}),
+    });
+  }, [
+    attachmentsEnabled,
+    attachmentAccept,
+    attachmentMaxBytes,
+    apiUrl,
+    getValidHeaders,
+  ]);
 
   // Create combined executable tools for direct tool execution (ActionButton)
   // Uses a simplified type that focuses on the execute function
@@ -658,6 +723,7 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
         localIdToUuidMap={localIdToUuidMapRef.current}
         currentRemoteIdRef={currentRemoteIdRef}
         executableTools={executableTools}
+        attachmentAdapter={attachmentAdapter}
         currentChatId={currentChatId}
         setCurrentChatId={setCurrentChatId}
       >
@@ -673,6 +739,7 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
       runtimeRef={runtimeRef}
       frontendTools={frontendTools}
       executableTools={executableTools}
+      attachmentAdapter={attachmentAdapter}
       currentChatId={currentChatId}
     >
       {children}
@@ -700,6 +767,7 @@ interface ElementsProviderWithHistoryProps {
   localIdToUuidMap: Map<string, string>;
   currentRemoteIdRef: React.RefObject<string | null>;
   executableTools: ExecutableToolSet;
+  attachmentAdapter: AttachmentAdapter | undefined;
   currentChatId: string | null;
   setCurrentChatId: (chatId: string | null) => void;
 }
@@ -737,6 +805,7 @@ const ElementsProviderWithHistory = ({
   localIdToUuidMap,
   currentRemoteIdRef,
   executableTools,
+  attachmentAdapter,
   currentChatId,
   setCurrentChatId,
 }: ElementsProviderWithHistoryProps) => {
@@ -761,8 +830,12 @@ const ElementsProviderWithHistory = ({
     return useChatRuntime({
       transport,
       sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
+      adapters: {
+        dictation: dictationAdapter,
+        ...(attachmentAdapter ? { attachments: attachmentAdapter } : {}),
+      },
     });
-  }, [transport]);
+  }, [transport, attachmentAdapter]);
 
   const runtime = useRemoteThreadListRuntime({
     adapter: threadListAdapter,
@@ -836,6 +909,7 @@ interface ElementsProviderWithoutHistoryProps {
   runtimeRef: React.RefObject<ReturnType<typeof useChatRuntime> | null>;
   frontendTools: Record<string, AssistantTool>;
   executableTools: ExecutableToolSet;
+  attachmentAdapter: AttachmentAdapter | undefined;
   currentChatId: string | null;
 }
 
@@ -846,11 +920,16 @@ const ElementsProviderWithoutHistory = ({
   runtimeRef,
   frontendTools,
   executableTools,
+  attachmentAdapter,
   currentChatId,
 }: ElementsProviderWithoutHistoryProps) => {
   const runtime = useChatRuntime({
     transport,
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
+    adapters: {
+      dictation: dictationAdapter,
+      ...(attachmentAdapter ? { attachments: attachmentAdapter } : {}),
+    },
   });
 
   // Populate runtimeRef so transport can access thread context
@@ -881,13 +960,17 @@ const ElementsProviderWithoutHistory = ({
   );
 };
 
-const queryClient = new QueryClient();
+const standaloneQueryClient = new QueryClient();
 
 export const ElementsProvider = (
   props: ElementsProviderProps,
 ): React.JSX.Element => {
+  // Share a host app's QueryClient so content rendered inside this provider
+  // (the dashboard mounts it around the page outlet) stays in one cache with
+  // the rest of the app. Standalone embeds get their own.
+  const hostQueryClient = useContext(QueryClientContext);
   return (
-    <QueryClientProvider client={queryClient}>
+    <QueryClientProvider client={hostQueryClient ?? standaloneQueryClient}>
       <ConnectionStatusProvider>
         <ToolApprovalProvider>
           <MarkdownLinkProvider

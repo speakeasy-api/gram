@@ -19,6 +19,8 @@ import (
 type Service interface {
 	// List all chats for a project
 	ListChats(context.Context, *ListChatsPayload) (res *ListChatsResult, err error)
+	// Get assistant session activity totals for a time range.
+	GetAssistantSessionSummary(context.Context, *GetAssistantSessionSummaryPayload) (res *AssistantSessionSummary, err error)
 	// Aggregate work-units analysis results over time for the project: work done
 	// and cost/token efficiency per UTC day.
 	GetWorkUnitsTrend(context.Context, *GetWorkUnitsTrendPayload) (res *WorkUnitsTrendResult, err error)
@@ -49,11 +51,20 @@ type Service interface {
 	// When a summary already exists and regenerate is false, returns the cached
 	// summary without calling the model.
 	Summarize(context.Context, *SummarizePayload) (res *SummarizeChatResult, err error)
+	// Generate or return a persisted two-sentence summary of one tool call.
+	// Concurrent requests share the same cached result.
+	SummarizeToolCall(context.Context, *SummarizeToolCallPayload) (res *SummarizeToolCallResult, err error)
 	// Submit user feedback for a chat (success/failure)
 	SubmitFeedback(context.Context, *SubmitFeedbackPayload) (res *SubmitFeedbackResult, err error)
 	// List the distinct agent sources present in this project's chats, for
 	// populating the agent-type filter on the Agent Sessions page.
 	ListSources(context.Context, *ListSourcesPayload) (res *ListSourcesResult, err error)
+	// List session-lineage links touching the given chats (session portability). A
+	// link records that a session was moved to another harness; the child side is
+	// present when the continuation's session id was known at move time. Returns
+	// every link where a requested chat is either the parent or the child,
+	// honoring the same visibility scoping as listChats.
+	ListSessionLinks(context.Context, *ListSessionLinksPayload) (res *ListSessionLinksResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -78,13 +89,26 @@ const ServiceName = "chat"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [10]string{"listChats", "getWorkUnitsTrend", "loadChat", "generateTitle", "creditUsage", "deleteChat", "setPinned", "summarize", "submitFeedback", "listSources"}
+var MethodNames = [13]string{"listChats", "getAssistantSessionSummary", "getWorkUnitsTrend", "loadChat", "generateTitle", "creditUsage", "deleteChat", "setPinned", "summarize", "summarizeToolCall", "submitFeedback", "listSources", "listSessionLinks"}
 
 type AgentUsage struct {
 	// The agent usage payload discriminator.
 	Type string
 	// Claude Code usage details.
 	Claude *ClaudeAgentUsage
+}
+
+// AssistantSessionSummary is the result type of the chat service
+// getAssistantSessionSummary method.
+type AssistantSessionSummary struct {
+	// Number of sessions with activity in the range
+	Sessions int64
+	// Number of messages created in the range
+	Messages int64
+	// Tokens consumed in the range
+	TotalTokens int64
+	// Cost in USD incurred in the range
+	TotalCost float64
 }
 
 // Chat is the result type of the chat service loadChat method.
@@ -142,6 +166,12 @@ type Chat struct {
 	// The source of the chat: Elements, Playground, ClaudeCode (inferred from
 	// messages)
 	Source *string
+	// The supported client that originated a chat routed through the source, when
+	// known
+	OriginatingClient *string
+	// True when the session's traffic was observed by the LiteLLM proxy, including
+	// sessions whose transcript is owned by the agent's own hook stream
+	LitellmProxied *bool
 	// When the chat was created.
 	CreatedAt string
 	// When the chat was last updated.
@@ -250,6 +280,12 @@ type ChatOverview struct {
 	// The source of the chat: Elements, Playground, ClaudeCode (inferred from
 	// messages)
 	Source *string
+	// The supported client that originated a chat routed through the source, when
+	// known
+	OriginatingClient *string
+	// True when the session's traffic was observed by the LiteLLM proxy, including
+	// sessions whose transcript is owned by the agent's own hook stream
+	LitellmProxied *bool
 	// When the chat was created.
 	CreatedAt string
 	// When the chat was last updated.
@@ -284,6 +320,42 @@ type ChatOverview struct {
 	Summary *string
 	// When the session summary was last generated.
 	SummaryGeneratedAt *string
+}
+
+type ChatSessionLink struct {
+	// Chat id of the session the move originated from. Absent when the caller's
+	// visibility scope cannot read the parent — a masked end exposes no identity,
+	// matching parent_captured.
+	ParentChatID *string
+	// Chat id derived for the continuation. Absent when the continuation's session
+	// id was unknowable at move time (e.g. Cursor mints ids server-side) — or when
+	// the caller's visibility scope cannot read the child, which is deliberately
+	// indistinguishable.
+	ChildChatID *string
+	// Title of the parent chat, when it has been captured and titled and the
+	// caller's visibility scope can read it.
+	ParentTitle *string
+	// Title of the child chat, when it has been captured and titled and the
+	// caller's visibility scope can read it.
+	ChildTitle *string
+	// Whether the parent exists as a captured chat the caller can read, i.e.
+	// whether the parent side is navigable.
+	ParentCaptured bool
+	// Whether the continuation exists as a captured chat the caller can read, i.e.
+	// whether the child side is navigable.
+	ChildCaptured bool
+	// Link kind. Currently always 'move'.
+	Kind string
+	// Harness the session was moved to (e.g. cursor, codex, claude-code).
+	TargetHarness string
+	// Harness the session originated in, when known.
+	SourceSurface *string
+	// Email of the person who initiated the move, when known.
+	ActorEmail *string
+	// Hostname of the machine the move happened on, when known.
+	DeviceHostname *string
+	// When the move was recorded.
+	CreatedAt string
 }
 
 // Trace-entry counts across the entire returned generation, independent of
@@ -397,6 +469,19 @@ type GenerateTitleResult struct {
 	Title string
 }
 
+// GetAssistantSessionSummaryPayload is the payload type of the chat service
+// getAssistantSessionSummary method.
+type GetAssistantSessionSummaryPayload struct {
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The assistant whose activity to summarize
+	AssistantID string
+	// Start of the activity range (ISO 8601)
+	From string
+	// End of the activity range (ISO 8601)
+	To string
+}
+
 // GetWorkUnitsTrendPayload is the payload type of the chat service
 // getWorkUnitsTrend method.
 type GetWorkUnitsTrendPayload struct {
@@ -417,6 +502,8 @@ type ListChatsPayload struct {
 	Search *string
 	// Filter by external user ID
 	ExternalUserID *string
+	// Filter by Gram user ID
+	UserID *string
 	// Filter by agent source. Comma-separated list of exact source values (e.g.
 	// 'claude-code,Codex,playground') matched against each session's inferred
 	// source; empty for no filter. Use chat.listSources to discover the available
@@ -463,6 +550,23 @@ type ListChatsResult struct {
 	Chats []*ChatOverview
 	// Total number of chats (before pagination)
 	Total int
+}
+
+// ListSessionLinksPayload is the payload type of the chat service
+// listSessionLinks method.
+type ListSessionLinksPayload struct {
+	SessionToken      *string
+	ProjectSlugInput  *string
+	ChatSessionsToken *string
+	// Chat ids to resolve links for.
+	ChatIds []string
+}
+
+// ListSessionLinksResult is the result type of the chat service
+// listSessionLinks method.
+type ListSessionLinksResult struct {
+	// Links touching the requested chats, newest first.
+	Links []*ChatSessionLink
 }
 
 // ListSourcesPayload is the payload type of the chat service listSources
@@ -597,6 +701,30 @@ type SummarizePayload struct {
 	ID string
 	// When true, regenerate and overwrite any existing summary. Defaults to false.
 	Regenerate bool
+}
+
+// SummarizeToolCallPayload is the payload type of the chat service
+// summarizeToolCall method.
+type SummarizeToolCallPayload struct {
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The ID of the chat containing the tool call
+	ID string
+	// The ID of the assistant message containing the tool call
+	MessageID string
+	// The provider-assigned ID of the tool call
+	ToolCallID string
+}
+
+// SummarizeToolCallResult is the result type of the chat service
+// summarizeToolCall method.
+type SummarizeToolCallResult struct {
+	// A concise two-sentence description of the tool call and its effect
+	Summary string
+	// Whether the tool call only read data or could change state
+	Impact string
+	// True when a stored summary was returned without calling the model
+	Cached bool
 }
 
 type WorkUnitsTrendBucket struct {

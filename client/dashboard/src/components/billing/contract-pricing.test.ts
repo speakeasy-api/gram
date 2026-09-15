@@ -6,6 +6,7 @@ import {
   effectiveRatePerMillion,
   formatTokensCompact,
   overageLines,
+  paygDeltaMessage,
   paygLines,
   sumLines,
   type VolumeBasisOption,
@@ -64,6 +65,72 @@ describe("pay-as-you-go pricing", () => {
     // Exactly at a boundary the next band contributes nothing, so it must not
     // appear as a zero-token line.
     expect(paygLines(10 * B)).toHaveLength(1);
+  });
+});
+
+describe("pay-as-you-go rate adjustment", () => {
+  it("scales every band rate up by an uplift percentage", () => {
+    const adjusted = paygLines(80 * B, 10);
+    const list = paygLines(80 * B);
+    // The uplift moves rates, never band boundaries — same slices, dearer.
+    expect(adjusted.map((l) => l.tokens)).toEqual(list.map((l) => l.tokens));
+    adjusted.forEach((line, i) => {
+      expect(line.ratePerMillion).toBeCloseTo(
+        (list[i]?.ratePerMillion ?? 0) * 1.1,
+        9,
+      );
+    });
+    expect(sumLines(adjusted)).toBeCloseTo(22850 * 1.1, 6);
+  });
+
+  it("scales every band rate down by a discount percentage", () => {
+    expect(sumLines(paygLines(80 * B, -15))).toBeCloseTo(22850 * 0.85, 6);
+  });
+
+  it("leaves list rates untouched at zero adjustment", () => {
+    expect(paygLines(80 * B, 0)).toEqual(paygLines(80 * B));
+  });
+
+  it("ignores swings at or past -100% and prices at list rates", () => {
+    // -100% would zero every rate and anything past it would go negative.
+    // Both are invalid input, and the pure function applies the same
+    // fallback as the estimator's input field — list rates — so no layer
+    // ever prices PAYG as free.
+    expect(paygLines(80 * B, -100)).toEqual(paygLines(80 * B));
+    expect(paygLines(80 * B, -150)).toEqual(paygLines(80 * B));
+  });
+});
+
+describe("paygDeltaMessage", () => {
+  it("frames a dearer PAYG as the case for committing", () => {
+    expect(paygDeltaMessage(5000, 0)).toMatch(/costs \$5,000\/yr more/);
+  });
+
+  it("flags a cheaper PAYG at list rates as a modelling error", () => {
+    expect(paygDeltaMessage(-5000, 0)).toMatch(/check the platform fee/);
+  });
+
+  it("attributes a cheaper PAYG under a discount to the discount", () => {
+    const message = paygDeltaMessage(-5000, -15);
+    expect(message).toMatch(/adjusted rates \(-15% vs list\)/);
+    expect(message).not.toMatch(/check the platform fee/);
+  });
+
+  it("keeps the modelling-error warning under an uplift", () => {
+    // An uplift only raises PAYG above list, so PAYG still undercutting the
+    // committed model is a stronger anomaly signal, not a discount story.
+    expect(paygDeltaMessage(-5000, 10)).toMatch(/check the platform fee/);
+  });
+
+  it("keeps the modelling-error warning for out-of-window swings", () => {
+    // paygLines ignores swings at or past -100% and prices at list rates,
+    // so the message must not credit an adjustment that was never applied.
+    expect(paygDeltaMessage(-5000, -100)).toMatch(/check the platform fee/);
+    expect(paygDeltaMessage(-5000, -150)).toMatch(/check the platform fee/);
+  });
+
+  it("reports an exact tie as identical pricing", () => {
+    expect(paygDeltaMessage(0, 0)).toMatch(/identically/);
   });
 });
 

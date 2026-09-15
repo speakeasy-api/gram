@@ -8,6 +8,8 @@
 package client
 
 import (
+	"unicode/utf8"
+
 	assistants "github.com/speakeasy-api/gram/server/gen/assistants"
 	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
@@ -62,7 +64,7 @@ type UpdateAssistantRequestBody struct {
 type SendMessageRequestBody struct {
 	// The assistant to send the message to.
 	AssistantID string `form:"assistant_id" json:"assistant_id" xml:"assistant_id"`
-	// The user's message text.
+	// The user's message text. May be empty when the turn carries attachments.
 	Message string `form:"message" json:"message" xml:"message"`
 	// The conversation to continue (from listChats or a prior sendMessage). Omit
 	// to start a new conversation; the server mints and returns a fresh chat id.
@@ -72,6 +74,17 @@ type SendMessageRequestBody struct {
 	IdempotencyKey *string `form:"idempotency_key,omitempty" json:"idempotency_key,omitempty" xml:"idempotency_key,omitempty"`
 	// Project skills to make available for this turn.
 	SkillIds []string `form:"skill_ids,omitempty" json:"skill_ids,omitempty" xml:"skill_ids,omitempty"`
+	// Files uploaded through assets.uploadChatAttachment that this turn carries.
+	Attachments []*SendMessageAttachmentRequestBody `form:"attachments,omitempty" json:"attachments,omitempty" xml:"attachments,omitempty"`
+}
+
+// InterruptTurnRequestBody is the type of the "assistants" service
+// "interruptTurn" endpoint HTTP request body.
+type InterruptTurnRequestBody struct {
+	// The assistant whose conversation should stop generating.
+	AssistantID string `form:"assistant_id" json:"assistant_id" xml:"assistant_id"`
+	// The conversation to stop, as returned by sendMessage.
+	ChatID string `form:"chat_id" json:"chat_id" xml:"chat_id"`
 }
 
 // ListAssistantsResponseBody is the type of the "assistants" service
@@ -190,6 +203,19 @@ type SendMessageResponseBody struct {
 	ThreadID *string `form:"thread_id,omitempty" json:"thread_id,omitempty" xml:"thread_id,omitempty"`
 	// Whether the message was accepted and enqueued for processing.
 	Accepted *bool `form:"accepted,omitempty" json:"accepted,omitempty" xml:"accepted,omitempty"`
+}
+
+// InterruptTurnResponseBody is the type of the "assistants" service
+// "interruptTurn" endpoint HTTP response body.
+type InterruptTurnResponseBody struct {
+	// Whether the call stopped anything. False means nothing was generating — the
+	// reply had already finished, or the conversation never started a turn.
+	Stopped *bool `form:"stopped,omitempty" json:"stopped,omitempty" xml:"stopped,omitempty"`
+	// Whether a turn in flight on the assistant runtime was cancelled.
+	Interrupted *bool `form:"interrupted,omitempty" json:"interrupted,omitempty" xml:"interrupted,omitempty"`
+	// How many turns were dropped from the conversation's queue before any runtime
+	// claimed them.
+	CancelledQueued *int `form:"cancelled_queued,omitempty" json:"cancelled_queued,omitempty" xml:"cancelled_queued,omitempty"`
 }
 
 // GetManagedAssistantResponseBody is the type of the "assistants" service
@@ -1364,6 +1390,190 @@ type SendMessageGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// InterruptTurnUnauthorizedResponseBody is the type of the "assistants"
+// service "interruptTurn" endpoint HTTP response body for the "unauthorized"
+// error.
+type InterruptTurnUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// InterruptTurnForbiddenResponseBody is the type of the "assistants" service
+// "interruptTurn" endpoint HTTP response body for the "forbidden" error.
+type InterruptTurnForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// InterruptTurnBadRequestResponseBody is the type of the "assistants" service
+// "interruptTurn" endpoint HTTP response body for the "bad_request" error.
+type InterruptTurnBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// InterruptTurnNotFoundResponseBody is the type of the "assistants" service
+// "interruptTurn" endpoint HTTP response body for the "not_found" error.
+type InterruptTurnNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// InterruptTurnConflictResponseBody is the type of the "assistants" service
+// "interruptTurn" endpoint HTTP response body for the "conflict" error.
+type InterruptTurnConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// InterruptTurnUnsupportedMediaResponseBody is the type of the "assistants"
+// service "interruptTurn" endpoint HTTP response body for the
+// "unsupported_media" error.
+type InterruptTurnUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// InterruptTurnInvalidResponseBody is the type of the "assistants" service
+// "interruptTurn" endpoint HTTP response body for the "invalid" error.
+type InterruptTurnInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// InterruptTurnInvariantViolationResponseBody is the type of the "assistants"
+// service "interruptTurn" endpoint HTTP response body for the
+// "invariant_violation" error.
+type InterruptTurnInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// InterruptTurnUnexpectedResponseBody is the type of the "assistants" service
+// "interruptTurn" endpoint HTTP response body for the "unexpected" error.
+type InterruptTurnUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// InterruptTurnGatewayErrorResponseBody is the type of the "assistants"
+// service "interruptTurn" endpoint HTTP response body for the "gateway_error"
+// error.
+type InterruptTurnGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // GetManagedAssistantUnauthorizedResponseBody is the type of the "assistants"
 // service "getManagedAssistant" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -1833,6 +2043,15 @@ type AssistantMCPServerRefRequestBody struct {
 	EndpointSlug *string `form:"endpoint_slug,omitempty" json:"endpoint_slug,omitempty" xml:"endpoint_slug,omitempty"`
 }
 
+// SendMessageAttachmentRequestBody is used to define fields on request body
+// types.
+type SendMessageAttachmentRequestBody struct {
+	// The chat attachment asset returned by assets.uploadChatAttachment.
+	AssetID string `form:"asset_id" json:"asset_id" xml:"asset_id"`
+	// The file name to show the assistant. Falls back to the stored asset name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+}
+
 // NewCreateAssistantRequestBody builds the HTTP request body from the payload
 // of the "createAssistant" endpoint of the "assistants" service.
 func NewCreateAssistantRequestBody(p *assistants.CreateAssistantPayload) *CreateAssistantRequestBody {
@@ -1918,6 +2137,26 @@ func NewSendMessageRequestBody(p *assistants.SendMessagePayload) *SendMessageReq
 		for i, val := range p.SkillIds {
 			body.SkillIds[i] = val
 		}
+	}
+	if p.Attachments != nil {
+		body.Attachments = make([]*SendMessageAttachmentRequestBody, len(p.Attachments))
+		for i, val := range p.Attachments {
+			if val == nil {
+				body.Attachments[i] = nil
+				continue
+			}
+			body.Attachments[i] = marshalAssistantsSendMessageAttachmentToSendMessageAttachmentRequestBody(val)
+		}
+	}
+	return body
+}
+
+// NewInterruptTurnRequestBody builds the HTTP request body from the payload of
+// the "interruptTurn" endpoint of the "assistants" service.
+func NewInterruptTurnRequestBody(p *assistants.InterruptTurnPayload) *InterruptTurnRequestBody {
+	body := &InterruptTurnRequestBody{
+		AssistantID: p.AssistantID,
+		ChatID:      p.ChatID,
 	}
 	return body
 }
@@ -2982,6 +3221,168 @@ func NewSendMessageGatewayError(body *SendMessageGatewayErrorResponseBody) *goa.
 	return v
 }
 
+// NewInterruptTurnResultOK builds a "assistants" service "interruptTurn"
+// endpoint result from a HTTP "OK" response.
+func NewInterruptTurnResultOK(body *InterruptTurnResponseBody) *assistants.InterruptTurnResult {
+	v := &assistants.InterruptTurnResult{
+		Stopped:         *body.Stopped,
+		Interrupted:     *body.Interrupted,
+		CancelledQueued: *body.CancelledQueued,
+	}
+
+	return v
+}
+
+// NewInterruptTurnUnauthorized builds a assistants service interruptTurn
+// endpoint unauthorized error.
+func NewInterruptTurnUnauthorized(body *InterruptTurnUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewInterruptTurnForbidden builds a assistants service interruptTurn endpoint
+// forbidden error.
+func NewInterruptTurnForbidden(body *InterruptTurnForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewInterruptTurnBadRequest builds a assistants service interruptTurn
+// endpoint bad_request error.
+func NewInterruptTurnBadRequest(body *InterruptTurnBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewInterruptTurnNotFound builds a assistants service interruptTurn endpoint
+// not_found error.
+func NewInterruptTurnNotFound(body *InterruptTurnNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewInterruptTurnConflict builds a assistants service interruptTurn endpoint
+// conflict error.
+func NewInterruptTurnConflict(body *InterruptTurnConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewInterruptTurnUnsupportedMedia builds a assistants service interruptTurn
+// endpoint unsupported_media error.
+func NewInterruptTurnUnsupportedMedia(body *InterruptTurnUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewInterruptTurnInvalid builds a assistants service interruptTurn endpoint
+// invalid error.
+func NewInterruptTurnInvalid(body *InterruptTurnInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewInterruptTurnInvariantViolation builds a assistants service interruptTurn
+// endpoint invariant_violation error.
+func NewInterruptTurnInvariantViolation(body *InterruptTurnInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewInterruptTurnUnexpected builds a assistants service interruptTurn
+// endpoint unexpected error.
+func NewInterruptTurnUnexpected(body *InterruptTurnUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewInterruptTurnGatewayError builds a assistants service interruptTurn
+// endpoint gateway_error error.
+func NewInterruptTurnGatewayError(body *InterruptTurnGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewGetManagedAssistantAssistantOK builds a "assistants" service
 // "getManagedAssistant" endpoint result from a HTTP "OK" response.
 func NewGetManagedAssistantAssistantOK(body *GetManagedAssistantResponseBody) *types.Assistant {
@@ -3649,6 +4050,21 @@ func ValidateSendMessageResponseBody(body *SendMessageResponseBody) (err error) 
 	}
 	if body.ThreadID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.thread_id", *body.ThreadID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateInterruptTurnResponseBody runs the validations defined on
+// InterruptTurnResponseBody
+func ValidateInterruptTurnResponseBody(body *InterruptTurnResponseBody) (err error) {
+	if body.Stopped == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("stopped", "body"))
+	}
+	if body.Interrupted == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("interrupted", "body"))
+	}
+	if body.CancelledQueued == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cancelled_queued", "body"))
 	}
 	return
 }
@@ -5259,6 +5675,246 @@ func ValidateSendMessageGatewayErrorResponseBody(body *SendMessageGatewayErrorRe
 	return
 }
 
+// ValidateInterruptTurnUnauthorizedResponseBody runs the validations defined
+// on interruptTurn_unauthorized_response_body
+func ValidateInterruptTurnUnauthorizedResponseBody(body *InterruptTurnUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateInterruptTurnForbiddenResponseBody runs the validations defined on
+// interruptTurn_forbidden_response_body
+func ValidateInterruptTurnForbiddenResponseBody(body *InterruptTurnForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateInterruptTurnBadRequestResponseBody runs the validations defined on
+// interruptTurn_bad_request_response_body
+func ValidateInterruptTurnBadRequestResponseBody(body *InterruptTurnBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateInterruptTurnNotFoundResponseBody runs the validations defined on
+// interruptTurn_not_found_response_body
+func ValidateInterruptTurnNotFoundResponseBody(body *InterruptTurnNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateInterruptTurnConflictResponseBody runs the validations defined on
+// interruptTurn_conflict_response_body
+func ValidateInterruptTurnConflictResponseBody(body *InterruptTurnConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateInterruptTurnUnsupportedMediaResponseBody runs the validations
+// defined on interruptTurn_unsupported_media_response_body
+func ValidateInterruptTurnUnsupportedMediaResponseBody(body *InterruptTurnUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateInterruptTurnInvalidResponseBody runs the validations defined on
+// interruptTurn_invalid_response_body
+func ValidateInterruptTurnInvalidResponseBody(body *InterruptTurnInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateInterruptTurnInvariantViolationResponseBody runs the validations
+// defined on interruptTurn_invariant_violation_response_body
+func ValidateInterruptTurnInvariantViolationResponseBody(body *InterruptTurnInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateInterruptTurnUnexpectedResponseBody runs the validations defined on
+// interruptTurn_unexpected_response_body
+func ValidateInterruptTurnUnexpectedResponseBody(body *InterruptTurnUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateInterruptTurnGatewayErrorResponseBody runs the validations defined
+// on interruptTurn_gateway_error_response_body
+func ValidateInterruptTurnGatewayErrorResponseBody(body *InterruptTurnGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateGetManagedAssistantUnauthorizedResponseBody runs the validations
 // defined on getManagedAssistant_unauthorized_response_body
 func ValidateGetManagedAssistantUnauthorizedResponseBody(body *GetManagedAssistantUnauthorizedResponseBody) (err error) {
@@ -5858,6 +6514,18 @@ func ValidateAssistantSkillRefResponseBody(body *AssistantSkillRefResponseBody) 
 	}
 	if body.ResolvedVersionID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.resolved_version_id", *body.ResolvedVersionID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateSendMessageAttachmentRequestBody runs the validations defined on
+// SendMessageAttachmentRequestBody
+func ValidateSendMessageAttachmentRequestBody(body *SendMessageAttachmentRequestBody) (err error) {
+	err = goa.MergeErrors(err, goa.ValidateFormat("body.asset_id", body.AssetID, goa.FormatUUID))
+	if body.Name != nil {
+		if utf8.RuneCountInString(*body.Name) > 255 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 255, false))
+		}
 	}
 	return
 }

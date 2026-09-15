@@ -23,8 +23,9 @@ func TestSetProductFeatureHooksFailOpenEnableRecordsAudit(t *testing.T) {
 	require.NoError(t, err)
 
 	err = ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
-		FeatureName: "hooks_fail_open",
-		Enabled:     true,
+		OrganizationID: requestedOrganizationID(ctx),
+		FeatureName:    "hooks_fail_open",
+		Enabled:        true,
 	})
 	require.NoError(t, err)
 
@@ -47,8 +48,9 @@ func TestSetProductFeatureHooksFailOpenDisableRecordsAudit(t *testing.T) {
 	ctx, ti := newTestProductFeaturesService(t)
 
 	err := ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
-		FeatureName: "hooks_fail_open",
-		Enabled:     true,
+		OrganizationID: requestedOrganizationID(ctx),
+		FeatureName:    "hooks_fail_open",
+		Enabled:        true,
 	})
 	require.NoError(t, err)
 
@@ -56,8 +58,9 @@ func TestSetProductFeatureHooksFailOpenDisableRecordsAudit(t *testing.T) {
 	require.NoError(t, err)
 
 	err = ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
-		FeatureName: "hooks_fail_open",
-		Enabled:     false,
+		OrganizationID: requestedOrganizationID(ctx),
+		FeatureName:    "hooks_fail_open",
+		Enabled:        false,
 	})
 	require.NoError(t, err)
 
@@ -73,8 +76,9 @@ func TestSetProductFeatureHooksFailOpenNoOpSkipsAudit(t *testing.T) {
 	ctx, ti := newTestProductFeaturesService(t)
 
 	err := ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
-		FeatureName: "hooks_fail_open",
-		Enabled:     true,
+		OrganizationID: requestedOrganizationID(ctx),
+		FeatureName:    "hooks_fail_open",
+		Enabled:        true,
 	})
 	require.NoError(t, err)
 
@@ -82,8 +86,9 @@ func TestSetProductFeatureHooksFailOpenNoOpSkipsAudit(t *testing.T) {
 	require.NoError(t, err)
 
 	err = ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
-		FeatureName: "hooks_fail_open",
-		Enabled:     true,
+		OrganizationID: requestedOrganizationID(ctx),
+		FeatureName:    "hooks_fail_open",
+		Enabled:        true,
 	})
 	require.NoError(t, err)
 
@@ -103,8 +108,9 @@ func TestSetProductFeatureDisableWhenNeverEnabledIsNoOp(t *testing.T) {
 	require.NoError(t, err)
 
 	err = ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
-		FeatureName: "hooks_fail_open",
-		Enabled:     false,
+		OrganizationID: requestedOrganizationID(ctx),
+		FeatureName:    "hooks_fail_open",
+		Enabled:        false,
 	})
 	require.NoError(t, err)
 
@@ -121,8 +127,9 @@ func TestSetProductFeatureOtherFeatureSkipsHooksFailOpenAudit(t *testing.T) {
 	require.NoError(t, err)
 
 	err = ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
-		FeatureName: "logs",
-		Enabled:     true,
+		OrganizationID: requestedOrganizationID(ctx),
+		FeatureName:    "logs",
+		Enabled:        true,
 	})
 	require.NoError(t, err)
 
@@ -135,17 +142,20 @@ func TestGetProductFeaturesHooksFailOpen(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestProductFeaturesService(t)
 
-	result, err := ti.service.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{})
+	result, err := ti.service.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{
+		OrganizationID: requestedOrganizationID(ctx)})
 	require.NoError(t, err)
 	require.False(t, result.HooksFailOpenEnabled, "fail open must default to off")
 
 	err = ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
-		FeatureName: "hooks_fail_open",
-		Enabled:     true,
+		OrganizationID: requestedOrganizationID(ctx),
+		FeatureName:    "hooks_fail_open",
+		Enabled:        true,
 	})
 	require.NoError(t, err)
 
-	result, err = ti.service.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{})
+	result, err = ti.service.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{
+		OrganizationID: requestedOrganizationID(ctx)})
 	require.NoError(t, err)
 	require.True(t, result.HooksFailOpenEnabled)
 }

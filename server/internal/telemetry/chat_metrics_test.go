@@ -42,6 +42,31 @@ func TestGetChatMetricsByIDs_UsesMaterializedChatID(t *testing.T) {
 	}, 10*time.Second, 200*time.Millisecond)
 }
 
+func TestGetChatMetricsSummaryByIDs_RangeBounded(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := authCtx.ProjectID.String()
+	chatID := uuid.NewString()
+	now := time.Now().UTC()
+
+	insertChatCompletionMetricLog(t, ctx, projectID, chatID, now.Add(-2*time.Hour), 100, 50, 150, 1.5)
+	insertChatCompletionMetricLog(t, ctx, projectID, chatID, now, 12, 8, 20, 0.42)
+
+	got, err := ti.chClient.GetChatMetricsSummaryByIDs(ctx, repo.GetChatMetricsSummaryByIDsParams{
+		ProjectID: projectID,
+		ChatIDs:   []string{chatID},
+		From:      now.Add(-time.Hour),
+		To:        now.Add(time.Hour),
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(20), got.TotalTokens)
+	require.Less(t, math.Abs(got.TotalCost-0.42), 1e-9)
+}
+
 func insertChatCompletionMetricLog(t *testing.T, ctx context.Context, projectID, chatID string, timestamp time.Time, inputTokens, outputTokens, totalTokens int, cost float64) {
 	t.Helper()
 

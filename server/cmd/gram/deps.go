@@ -3,9 +3,11 @@ package gram
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/csv"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"io/fs"
 	"log/slog"
 	"net/url"
@@ -35,7 +37,7 @@ import (
 	"github.com/workos/workos-go/v6/pkg/webhooks"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
-	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.41.0"
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/contrib/opentelemetry"
@@ -44,7 +46,10 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
+	jose "github.com/go-jose/go-jose/v4"
 	"github.com/speakeasy-api/gram/infra/gen"
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
+	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
@@ -59,6 +64,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
@@ -66,21 +72,47 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/inv"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
+	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 	sv "github.com/speakeasy-api/gram/server/internal/thirdparty/svix"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/tracking"
+	"golang.org/x/oauth2"
+
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpauth"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpkms"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func noopShutdown(context.Context) error { return nil }
+
+func newEmailService(ctx context.Context, c *cli.Context, logger *slog.Logger, guardianPolicy *guardian.Policy) (*email.Service, error) {
+	ids, err := email.ParseTemplateIDs(c.String("email-template-ids"))
+	if err != nil {
+		return nil, fmt.Errorf("load email template IDs: %w", err)
+	}
+
+	enabled := loops.IsConfigured(c.String("loops-api-key"))
+	if enabled {
+		if err := ids.ValidateRegistered(); err != nil {
+			return nil, fmt.Errorf("validate email template IDs: %w", err)
+		}
+	}
+
+	sender := loops.New(ctx, logger, guardianPolicy, c.String("loops-api-key"))
+	return email.NewService(logger, sender, ids, enabled), nil
+}
 
 func loadConfigFromFile(c *cli.Context, flags []cli.Flag) error {
 	var cfgLoader cli.BeforeFunc = func(ctx *cli.Context) error { return nil }
@@ -132,47 +164,104 @@ func newGuardianPolicy(c *cli.Context, logger *slog.Logger, tracerProvider trace
 	return policy, nil
 }
 
+type clickhouseClientOptions struct {
+	component    string
+	host         string
+	database     string
+	username     string
+	password     string
+	nativePort   string
+	insecure     bool
+	rootCAFile   string
+	maxOpenConns int
+	maxIdleConns int
+}
+
 func newClickhouseClient(ctx context.Context, logger *slog.Logger, c *cli.Context) (clickhouse.Conn, func(context.Context) error, error) {
-	logger = logger.With(attr.SlogComponent("clickhouse"))
+	return openClickhouseClient(ctx, logger, clickhouseClientOptions{
+		component:    "clickhouse",
+		host:         c.String("clickhouse-host"),
+		database:     c.String("clickhouse-database"),
+		username:     c.String("clickhouse-username"),
+		password:     c.String("clickhouse-password"),
+		nativePort:   c.String("clickhouse-native-port"),
+		insecure:     c.Bool("clickhouse-insecure"),
+		maxOpenConns: 32,
+		maxIdleConns: 16,
+		rootCAFile:   "",
+	})
+}
+
+func newClickhouseReadClient(ctx context.Context, logger *slog.Logger, c *cli.Context) (clickhouse.Conn, func(context.Context) error, error) {
+	return openClickhouseClient(ctx, logger, clickhouseClientOptions{
+		component:    "clickhouse-reader",
+		host:         c.String("clickhouse-read-host"),
+		database:     c.String("clickhouse-read-database"),
+		username:     c.String("clickhouse-read-username"),
+		password:     c.String("clickhouse-read-password"),
+		nativePort:   c.String("clickhouse-read-native-port"),
+		rootCAFile:   c.Path("clickhouse-read-ca-file"),
+		maxOpenConns: 8,
+		maxIdleConns: 4,
+		insecure:     false,
+	})
+}
+
+func openClickhouseClient(ctx context.Context, logger *slog.Logger, opts clickhouseClientOptions) (clickhouse.Conn, func(context.Context) error, error) {
+	logger = logger.With(attr.SlogComponent(opts.component))
 	nilFunc := noopShutdown
 
-	host := c.String("clickhouse-host")
-	database := c.String("clickhouse-database")
-	username := c.String("clickhouse-username")
-	password := c.String("clickhouse-password")
-	nativePort := c.String("clickhouse-native-port")
-	insecure := c.Bool("clickhouse-insecure")
-
-	// validate cli args
 	err := inv.Check("clickhouse config options",
-		"clickhouse host must be set", host != "",
-		"clickhouse database must be set", database != "",
-		"clickhouse username must be set", username != "",
-		"clickhouse password must be set", password != "",
-		"clickhouse native port must be set", nativePort != "",
+		"clickhouse host must be set", opts.host != "",
+		"clickhouse database must be set", opts.database != "",
+		"clickhouse username must be set", opts.username != "",
+		"clickhouse password must be set", opts.password != "",
+		"clickhouse native port must be set", opts.nativePort != "",
+		"clickhouse max open connections must be positive", opts.maxOpenConns > 0,
+		"clickhouse max idle connections must not be negative", opts.maxIdleConns >= 0,
+		"clickhouse max idle connections must not exceed max open connections", opts.maxIdleConns <= opts.maxOpenConns,
 	)
 	if err != nil {
 		return nil, nilFunc, fmt.Errorf("invalid clickhouse config: %w", err)
 	}
 
-	opts := &clickhouse.Options{
+	var rootCAs *x509.CertPool
+	if opts.rootCAFile != "" {
+		rootCAs, err = x509.SystemCertPool()
+		if err != nil {
+			return nil, nilFunc, fmt.Errorf("load system certificate pool: %w", err)
+		}
+		caPEM, err := os.ReadFile(opts.rootCAFile)
+		if err != nil {
+			return nil, nilFunc, fmt.Errorf("read clickhouse CA file: %w", err)
+		}
+		if ok := rootCAs.AppendCertsFromPEM(caPEM); !ok {
+			return nil, nilFunc, errors.New("clickhouse CA file contains no certificates")
+		}
+	}
+
+	driverOpts := &clickhouse.Options{
 		Protocol: clickhouse.Native,
-		Addr:     []string{fmt.Sprintf("%s:%s", host, nativePort)},
+		Addr:     []string{fmt.Sprintf("%s:%s", opts.host, opts.nativePort)},
 		Auth: clickhouse.Auth{
-			Database: database,
-			Username: username,
-			Password: password,
+			Database: opts.database,
+			Username: opts.username,
+			Password: opts.password,
 		},
 		Settings: clickhouse.Settings{
 			"max_execution_time": 60, // query timeout
 		},
+		MaxOpenConns: opts.maxOpenConns,
+		MaxIdleConns: opts.maxIdleConns,
+		DialTimeout:  10 * time.Second,
 		TLS: &tls.Config{
-			// #nosec G402 -- we're reading the value from an environment variable.
-			InsecureSkipVerify: insecure,
+			RootCAs: rootCAs,
+			// #nosec G402 -- only the existing writer flag can enable this.
+			InsecureSkipVerify: opts.insecure,
 		},
 	}
 
-	conn, err := clickhouse.Open(opts)
+	conn, err := clickhouse.Open(driverOpts)
 	if err != nil {
 		return nil, nilFunc, fmt.Errorf("failed to open clickhouse connection: %w", err)
 	}
@@ -209,6 +298,11 @@ func newClickhouseClient(ctx context.Context, logger *slog.Logger, c *cli.Contex
 	}
 
 	if pingErr != nil {
+		closeErr := conn.Close()
+		if closeErr != nil {
+			logger.ErrorContext(ctx, "failed to close clickhouse client after ping failure", attr.SlogError(closeErr))
+			pingErr = errors.Join(pingErr, fmt.Errorf("close clickhouse client connection: %w", closeErr))
+		}
 		return nil, nilFunc, fmt.Errorf("failed to ping clickhouse after %d attempts: %w", maxRetries+1, pingErr)
 	}
 
@@ -334,8 +428,8 @@ func newRedisClient(ctx context.Context, opts redisClientOptions) (*redis.Client
 
 	if opts.enableTracing {
 		attrs := redisotel.WithAttributes(
-			semconv.DBSystemRedis,
-			semconv.DBRedisDBIndex(db),
+			semconv.DBSystemNameRedis,
+			semconv.DBNamespace(fmt.Sprintf("%d", db)),
 		)
 		if err := redisotel.InstrumentTracing(redisClient, redisotel.WithDBStatement(false), attrs); err != nil {
 			return nil, fmt.Errorf("failed to instrument redis client: %w", err)
@@ -430,9 +524,11 @@ func newLocalFeatureFlags(ctx context.Context, logger *slog.Logger, csvPath stri
 		logger.ErrorContext(ctx, "newLocalFeatureFlags: error opening local feature flags csv file", attr.SlogError(err), attr.SlogFilePath(csvPath))
 		return inmem
 	}
-	defer o11y.LogDefer(ctx, logger, func() error { return file.Close() })
+	defer o11y.LogDefer(ctx, logger, "failed to close local feature flags csv file", func() error { return file.Close() })
 
 	rdr := csv.NewReader(file)
+	rdr.FieldsPerRecord = -1
+	rdr.Comment = '#'
 	records, err := rdr.ReadAll()
 	if err != nil {
 		logger.ErrorContext(ctx, "newLocalFeatureFlags: failed to read local feature flags csv file", attr.SlogError(err))
@@ -447,7 +543,7 @@ func newLocalFeatureFlags(ctx context.Context, logger *slog.Logger, csvPath stri
 			continue
 		}
 
-		if len(record) != 3 {
+		if len(record) != 3 && len(record) != 4 {
 			logger.ErrorContext(ctx, "newLocalFeatureFlags: invalid record in local feature flags csv file at row "+rowid)
 			continue
 		}
@@ -459,6 +555,10 @@ func newLocalFeatureFlags(ctx context.Context, logger *slog.Logger, csvPath stri
 		}
 
 		inmem.SetFlag(feature.Flag(record[1]), record[0], enabled)
+
+		if len(record) == 4 && record[3] != "" {
+			inmem.SetFlagVariant(feature.Flag(record[1]), record[0], feature.Variant(record[3]))
+		}
 	}
 
 	return inmem
@@ -471,6 +571,7 @@ func newBillingProvider(
 	guardianPolicy *guardian.Policy,
 	redisClient *redis.Client,
 	posthogClient *posthog.Posthog,
+	stripeClient stripeclient.Client,
 	c *cli.Context,
 ) (billing.Repository, billing.Tracker, error) {
 	switch {
@@ -511,15 +612,157 @@ func newBillingProvider(
 		logger.WarnContext(ctx, "using stub billing client: polar not configured")
 		stub := billing.NewStubClient(logger, tracerProvider)
 		return stub, stub, nil
+	case stripeClient != nil:
+		logger.InfoContext(ctx, "using Stripe billing provider with legacy billing operations disabled")
+		unavailable := billing.NewUnavailableClient(logger)
+		return unavailable, tracking.New(unavailable, posthogClient, logger), nil
 	default:
 		return nil, nil, fmt.Errorf("billing provider is not configured")
 	}
 }
 
+func newStripeClient(
+	ctx context.Context,
+	logger *slog.Logger,
+	guardianPolicy *guardian.Policy,
+	c *cli.Context,
+) (stripeclient.Client, error) {
+	apiKey := c.String("stripe-api-key")
+	if !stripeclient.IsConfigured(apiKey) {
+		if c.String("environment") == "local" {
+			logger.WarnContext(ctx, "using stub Stripe client: Stripe not configured")
+			return stripeclient.NewStubClient(logger), nil
+		}
+
+		logger.InfoContext(ctx, "Stripe client not configured")
+		return nil, nil
+	}
+
+	catalog := stripeclient.Catalog{
+		PriceIDTUM:            c.String("stripe-price-id-tum"),
+		MeterIDTUM:            c.String("stripe-meter-id-tum"),
+		MeterEventName:        c.String("stripe-meter-event-name"),
+		PortalConfigurationID: c.String("stripe-portal-configuration-id"),
+	}
+	if err := catalog.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid Stripe catalog configuration: %w", err)
+	}
+
+	return stripeclient.NewClient(
+		guardianPolicy,
+		apiKey,
+		c.String("stripe-webhook-secret"),
+		catalog,
+	), nil
+}
+
+func newStripeMeterEventClient(
+	guardianPolicy *guardian.Policy,
+	c *cli.Context,
+) (stripeclient.V2MeterEventClient, error) {
+	if !c.Bool(stripeTUMMeterStreamingFlagName) && !c.Bool(stripeMeterEventExportFlagName) {
+		return stripeclient.NewNoopV2MeterEventClient(), nil
+	}
+
+	apiKey := c.String("stripe-api-key")
+	switch {
+	case stripeclient.IsConfigured(apiKey):
+		return stripeclient.NewV2MeterEventClient(guardianPolicy, apiKey), nil
+	case c.String("environment") == "local":
+		return stripeclient.NewNoopV2MeterEventClient(), nil
+	default:
+		return nil, errors.New("stripe API key is required")
+	}
+}
+
+func newStripeCatalog(c *cli.Context) metering.StripeCatalog {
+	tumMeterEventName := c.String("stripe-meter-event-name")
+	tumMeterStreamingEnabled := c.Bool(stripeTUMMeterStreamingFlagName)
+	meterExportEnabled := c.Bool(stripeMeterEventExportFlagName)
+	return metering.StripeCatalogFunc(func(definition metering.Definition) (string, error) {
+		switch definition {
+		case metering.AgentSessionStorage():
+			if !tumMeterStreamingEnabled {
+				return "", nil
+			}
+			if !stripeclient.IsConfigured(tumMeterEventName) {
+				return "", errors.New("stripe TUM meter event name is not configured")
+			}
+			return tumMeterEventName, nil
+		case metering.MCPBandwidthIngress():
+			if !meterExportEnabled {
+				return "", nil
+			}
+			return c.String("stripe-meter-event-name-mcp-bandwidth-ingress"), nil
+		case metering.MCPBandwidthEgress():
+			if !meterExportEnabled {
+				return "", nil
+			}
+			return c.String("stripe-meter-event-name-mcp-bandwidth-egress"), nil
+		case metering.RiskGitleaks():
+			if !meterExportEnabled {
+				return "", nil
+			}
+			name := c.String("stripe-meter-event-name-risk-gitleaks")
+			if !stripeclient.IsConfigured(name) {
+				return "", nil
+			}
+			return name, nil
+		case metering.RiskPresidio():
+			if !meterExportEnabled {
+				return "", nil
+			}
+			name := c.String("stripe-meter-event-name-risk-presidio")
+			if !stripeclient.IsConfigured(name) {
+				return "", nil
+			}
+			return name, nil
+		case metering.RiskPromptInjection():
+			if !meterExportEnabled {
+				return "", nil
+			}
+			name := c.String("stripe-meter-event-name-risk-prompt-injection")
+			if !stripeclient.IsConfigured(name) {
+				return "", nil
+			}
+			return name, nil
+		case metering.RiskPromptPolicy():
+			if !meterExportEnabled {
+				return "", nil
+			}
+			name := c.String("stripe-meter-event-name-risk-prompt-policy")
+			if !stripeclient.IsConfigured(name) {
+				return "", nil
+			}
+			return name, nil
+		case metering.RiskCustomRules():
+			if !meterExportEnabled {
+				return "", nil
+			}
+			name := c.String("stripe-meter-event-name-risk-custom-rules")
+			if !stripeclient.IsConfigured(name) {
+				return "", nil
+			}
+			return name, nil
+		case metering.RiskCLIDestructive():
+			if !meterExportEnabled {
+				return "", nil
+			}
+			name := c.String("stripe-meter-event-name-risk-cli-destructive")
+			if !stripeclient.IsConfigured(name) {
+				return "", nil
+			}
+			return name, nil
+		default:
+			return "", errors.New("meter definition is not mapped to Stripe")
+		}
+	})
+}
+
 // workosClientOpts builds the ClientOpts threaded into every workos.NewClient
 // call site below. Pulls the optional --workos-endpoint override (env:
 // WORKOS_API_URL) so local dev can point both real-WorkOS callers at
-// the dev-idp's mock-workos emulator without changing any wiring.
+// the dev-idp's WorkOS emulator without changing any wiring.
 func workosClientOpts(c *cli.Context) workos.ClientOpts {
 	return workos.ClientOpts{
 		Endpoint: c.String("workos-endpoint"),
@@ -528,53 +771,133 @@ func workosClientOpts(c *cli.Context) workos.ClientOpts {
 }
 
 func newAccessRoleProvider(ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Policy, c *cli.Context) (access.RoleProvider, error) {
-	apiKey := c.String("idp-client-secret")
+	idpClientSecret := c.String("idp-client-secret")
 
-	// Local dev: when a real GRAM_IDP_CLIENT_SECRET is configured (GRAM_IDP_MODE=workos),
-	// use it so the access role provider proxies through dev-idp to real WorkOS.
-	// Otherwise fall back to the mock-workos emulator or a stub.
+	// Local callers authenticate to dev-idp with its client secret; dev-idp owns
+	// any upstream WorkOS API key needed by the selected backend.
 	if c.String("environment") == "local" {
-		haveRealKey := apiKey != "" && apiKey != "unset"
 		opts := workosClientOpts(c)
 
-		if haveRealKey {
-			logger.InfoContext(ctx, "using real WorkOS API key as access role provider")
-			return workos.NewClient(guardianPolicy, apiKey, opts), nil
-		}
-		if opts.Endpoint != "" {
-			logger.InfoContext(ctx, "using dev-idp mock-workos as access role provider")
-			return workos.NewClient(guardianPolicy, "dev-idp-mock", opts), nil
+		if opts.Endpoint != "" && idpClientSecret != "" && idpClientSecret != "unset" {
+			logger.InfoContext(ctx, "using dev-idp WorkOS emulator as access role provider")
+			return workos.NewClient(guardianPolicy, idpClientSecret, opts), nil
 		}
 		logger.WarnContext(ctx, "using stub access role provider: WorkOS not configured")
 		return workos.NewStubClient(), nil
 	}
 
 	switch {
-	case apiKey != "" && apiKey != "unset":
-		return workos.NewClient(guardianPolicy, apiKey, workosClientOpts(c)), nil
+	case idpClientSecret != "" && idpClientSecret != "unset":
+		return workos.NewClient(guardianPolicy, idpClientSecret, workosClientOpts(c)), nil
 	default:
 		return nil, errors.New("WorkOS API key not provided")
 	}
 }
 
+// newAdminWorkOSOrganizationCreator builds the WorkOS surface the admin server
+// uses to create organizations. With nothing configured it returns
+// orgprovision.Unavailable, so the create-organization endpoint reports that the
+// deployment cannot do this rather than inventing a local-only organization.
+//
+// It never fails. A missing key degrades one endpoint, and taking the admin
+// server down over it would take login, the organizations list, the detail page
+// and every update endpoint with it. The condition is logged at Error on
+// startup, which is what makes it visible before an operator goes looking.
+func newAdminWorkOSOrganizationCreator(ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Policy, c *cli.Context) orgprovision.WorkOSOrganizationCreator {
+	apiKey := c.String("workos-api-key")
+	haveRealKey := apiKey != "" && apiKey != "unset"
+	opts := workosClientOpts(c)
+	idpClientSecret := c.String("idp-client-secret")
+
+	switch {
+	case c.String("environment") == "local" && opts.Endpoint != "" && idpClientSecret != "" && idpClientSecret != "unset":
+		logger.InfoContext(ctx, "using dev-idp to create organizations")
+		return workos.NewClient(guardianPolicy, idpClientSecret, opts)
+	case haveRealKey:
+		logger.InfoContext(ctx, "using real WorkOS API key to create organizations")
+		return workos.NewClient(guardianPolicy, apiKey, opts)
+	case c.String("environment") != "local":
+		logger.ErrorContext(ctx, "organization creation is unavailable: no WorkOS API key configured")
+		return orgprovision.Unavailable{}
+	case opts.Endpoint != "":
+		logger.ErrorContext(ctx, "organization creation is unavailable: no dev-idp client secret configured")
+		return orgprovision.Unavailable{}
+	default:
+		logger.WarnContext(ctx, "organization creation is unavailable: WorkOS not configured")
+		return orgprovision.Unavailable{}
+	}
+}
+
+// newAdminOpenRouter builds the OpenRouter client used for live key usage and
+// trial re-arm operations. It degrades rather than refusing to boot, because
+// other admin endpoints work without OpenRouter; the unavailable case is logged
+// at Error on startup.
+//
+// The nil arguments are a billing tracker and a key refresher, neither reached.
+func newAdminOpenRouter(
+	ctx context.Context,
+	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
+	guardianPolicy *guardian.Policy,
+	db *pgxpool.Pool,
+	redisClient *redis.Client,
+	c *cli.Context,
+) admin.AdminOpenRouter {
+	env := c.String("environment")
+	if env == "local" {
+		return openrouter.NewDevelopment(c.String("openrouter-dev-key"))
+	}
+
+	provisioningKey := c.String("openrouter-provisioning-key")
+	if provisioningKey == "" {
+		logger.ErrorContext(ctx, "admin OpenRouter operations are unavailable: no provisioning key configured")
+		return admin.TrialKeysUnavailable{}
+	}
+
+	encryptionClient, err := encryption.New(c.String("encryption-key"))
+	if err != nil {
+		logger.ErrorContext(ctx, "admin OpenRouter operations are unavailable: no usable encryption key configured", attr.SlogError(err))
+		return admin.TrialKeysUnavailable{}
+	}
+
+	return openrouter.New(
+		logger,
+		tracerProvider,
+		guardianPolicy,
+		db,
+		env,
+		provisioningKey,
+		nil,
+		productfeatures.NewClient(logger, tracerProvider, db, redisClient),
+		nil,
+		encryptionClient,
+	)
+}
+
 func newWorkOSClient(guardianPolicy *guardian.Policy, c *cli.Context) (client *workos.Client, workosAvailable bool, err error) {
 	env := c.String("environment")
-	apiKey := c.String("idp-client-secret")
+	credential := c.String("idp-client-secret")
 
-	haveAPIKey := apiKey != "" && apiKey != "unset"
-	if env != "local" && !haveAPIKey {
+	haveCredential := credential != "" && credential != "unset"
+	if env != "local" && !haveCredential {
 		return nil, false, errors.New("WorkOS API key not provided")
 	}
 
-	return workos.NewClient(guardianPolicy, apiKey, workosClientOpts(c)), haveAPIKey, nil
+	available := haveCredential
+	if env == "local" {
+		available = c.String("devidp-backend") == "workos"
+	}
+	return workos.NewClient(guardianPolicy, credential, workosClientOpts(c)), available, nil
 }
 
 // newIDPUserManagementClient creates a WorkOS user-management SDK client
-// scoped to the IDP application key. Returns nil only when the key is empty.
-// In mock-workos mode the key can be any non-empty string (e.g. "unset") —
-// the mock endpoint accepts it.
+// scoped to the IDP application key. Returns nil when the key is unset, which
+// is both an empty value and the "unset" sentinel mise defaults it to — a
+// checkout that never configured a key would otherwise look configured.
+// Under the local backend any other non-empty string works, because the
+// dev-idp endpoint accepts whatever key it is handed.
 func newIDPUserManagementClient(guardianPolicy *guardian.Policy, apiKey string, c *cli.Context) *usermanagement.Client {
-	if apiKey == "" {
+	if apiKey == "" || apiKey == "unset" {
 		return nil
 	}
 
@@ -1030,9 +1353,9 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 	}
 	pubs = append(pubs, labelledStop{label: "riskFindings", pub: riskFindings})
 
-	// The telemetry shadow dual-write is best-effort and must stay bounded
-	// during a Pub/Sub outage: cap how long a publish may take and fail fast
-	// at enqueue once the buffer fills, instead of buffering unboundedly.
+	// Request-path telemetry and meter publishing must stay bounded during a
+	// Pub/Sub outage: cap how long a publish may take and fail fast at enqueue
+	// once the buffer fills instead of buffering unboundedly.
 	telemetryPublishSettings := pubsub.DefaultPublishSettings
 	telemetryPublishSettings.Timeout = 10 * time.Second
 	telemetryPublishSettings.FlowControlSettings.MaxOutstandingMessages = 10_000
@@ -1046,6 +1369,47 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for telemetry logs: %w", err)
 	}
 	pubs = append(pubs, labelledStop{label: "telemetryLogs", pub: telemetryLogs})
+
+	meterReadings, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &meteringv1.MeterReading{},
+		gcp.WithPubSubPublishSettings(&telemetryPublishSettings),
+	)
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for meter readings: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "meterReadings", pub: meterReadings})
+
+	// OTLP ingest publishes on the request path and waits for the result before
+	// answering the exporter. Bound buffering so Pub/Sub stalls reject exports
+	// that clients can retry instead of holding requests open indefinitely.
+	otelPublishSettings := pubsub.DefaultPublishSettings
+	otelPublishSettings.Timeout = 10 * time.Second
+	otelPublishSettings.FlowControlSettings.MaxOutstandingMessages = 10_000
+	otelPublishSettings.FlowControlSettings.MaxOutstandingBytes = 128 * 1024 * 1024
+	otelPublishSettings.FlowControlSettings.LimitExceededBehavior = pubsub.FlowControlSignalError
+
+	otelLogs, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &otelv1.InboundLogRecord{},
+		gcp.WithPubSubPublishSettings(&otelPublishSettings),
+	)
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for otel logs: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "otelLogs", pub: otelLogs})
+
+	otelMetrics, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &otelv1.InboundMetric{},
+		gcp.WithPubSubPublishSettings(&otelPublishSettings),
+	)
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for otel metrics: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "otelMetrics", pub: otelMetrics})
+
+	otelSpans, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &otelv1.InboundSpan{},
+		gcp.WithPubSubPublishSettings(&otelPublishSettings),
+	)
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for otel spans: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "otelSpans", pub: otelSpans})
 
 	// The outbox drain runs inside a Temporal activity, so a Pub/Sub stall must
 	// surface as a failed batch rather than as unbounded buffering behind an
@@ -1087,6 +1451,85 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 		PromptPolicyAnalysis:    promptPolicyAnalysis,
 		CustomRulesAnalysis:     customRulesAnalysis,
 		RiskFindings:            riskFindings,
+		MeterReadings:           meterReadings,
 		TelemetryLogs:           telemetryLogs,
+		OTELLogs:                otelLogs,
+		OTELMetrics:             otelMetrics,
+		OTELSpans:               otelSpans,
 	}, shutdown, nil
+}
+
+// newGCPIdentity returns the GCP identity the services that reach a customer's
+// cloud account authenticate through.
+//
+// Local development gets a stub. The real resolver screens every customer
+// supplied service account against Gram's own project, which requires Gram to be
+// running as a user managed service account. A developer machine authenticates
+// with a personal Google login instead, so the screening cannot be evaluated and
+// every credential and key write fails closed. Stubbing the resolver is what
+// makes the feature exercisable locally at all.
+func newGCPIdentity(ctx context.Context, logger *slog.Logger, c *cli.Context) *gcpauth.Identity {
+	if c.String("environment") == "local" {
+		logger.WarnContext(ctx, "using stub gcp identity resolver: local development cannot run as a service account")
+		return gcpauth.NewIdentity(gcpauth.NewStubResolver())
+	}
+
+	return gcpauth.NewIdentity(gcpauth.NewResolver())
+}
+
+// defaultLocalSigningAlgorithm is what the local KMS stand-in signs with when
+// nothing else is configured. RS256 because it is the algorithm every verifier
+// implements, matching the default the key creation form offers.
+const defaultLocalSigningAlgorithm = jose.RS256
+
+// newKMSSigningClients returns the factory the external keys service builds a
+// KMS client from.
+//
+// Local development gets an in-process signer rather than a real KMS client:
+// there is no GCP project to reach, and the stub identity above cannot mint a
+// token that would authenticate against one. The stand-in still generates a real
+// key and produces real signatures, so the probe verifies them for real.
+//
+// The algorithm it signs with is configurable, and deliberately independent of
+// what any key records. Reporting back whatever the caller expected would make
+// the stand-in agree with Gram by construction, and agreeing by construction is
+// precisely what the verify probe exists to disprove: comparing the key's real
+// algorithm against the recorded one is the check that catches a key pointed at
+// the wrong row. Keeping the two independent is what leaves the mismatch outcome
+// reachable locally, by recording a key with the other algorithm.
+func newKMSSigningClients(ctx context.Context, logger *slog.Logger, c *cli.Context) (gcpkms.SigningClientFactory, error) {
+	if c.String("environment") != "local" {
+		return gcpkms.NewSigningClient, nil
+	}
+
+	alg := defaultLocalSigningAlgorithm
+	if configured := strings.TrimSpace(c.String("local-kms-signing-algorithm")); configured != "" {
+		parsed, err := gcpkms.ParseSignatureAlgorithm(configured)
+		if err != nil {
+			return nil, fmt.Errorf("parse local kms signing algorithm: %w", err)
+		}
+		alg = parsed
+	}
+
+	logger.WarnContext(ctx, fmt.Sprintf("using in-process kms signing client signing %s: local development has no cloud kms to reach", alg))
+
+	return func(_ context.Context, _ oauth2.TokenSource) (gcpkms.SigningClient, error) {
+		client, err := gcpkms.NewLocalSigningClient(alg)
+		if err != nil {
+			return nil, fmt.Errorf("build local signing client: %w", err)
+		}
+		return client, nil
+	}, nil
+}
+
+// newGrowthSignalsEmitter builds the emitter that reports notable moments to
+// PostHog.
+//
+// It enriches against the read replica. The lookups are display names for an
+// ops notification, not authority for anything, and a miss degrades the event
+// by omitting a property rather than dropping it — so replication lag costs at
+// most a missing slug on a very fresh row, which is not worth the primary's
+// capacity.
+func newGrowthSignalsEmitter(logger *slog.Logger, posthogClient *posthog.Posthog, replicaDB *pgxpool.Pool, siteURL *url.URL) *growthsignals.Emitter {
+	return growthsignals.NewEmitter(logger, posthogClient, growthsignals.NewDatabaseEnricher(replicaDB), siteURL)
 }

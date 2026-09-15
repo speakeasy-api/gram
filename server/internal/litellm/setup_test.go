@@ -14,6 +14,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
+	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -25,6 +28,7 @@ import (
 	keysservice "github.com/speakeasy-api/gram/server/internal/keys"
 	"github.com/speakeasy-api/gram/server/internal/litellm/callcache"
 	"github.com/speakeasy-api/gram/server/internal/litellm/repo"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
@@ -59,6 +63,7 @@ func TestMain(m *testing.M) {
 type realTestInstance struct {
 	service   *Service
 	hooks     *hooks.Service
+	cache     cache.Cache
 	conn      *pgxpool.Pool
 	chConn    clickhouse.Conn
 	telemetry *telemetry.Logger
@@ -106,7 +111,7 @@ func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgx
 	redisClient, err := testInfra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 	billingClient := billing.NewStubClient(logger, tracerProvider)
-	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("litellm-test-"+uuid.NewString()), billingClient)
+	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("litellm-test"), billingClient)
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 	chConn, err := testInfra.NewClickhouseClient(t)
 	require.NoError(t, err)
@@ -121,7 +126,7 @@ func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgx
 		telemetry.NewUserInfoResolver(logger, conn, cache.NewRedisCacheAdapter(redisClient)),
 		telemetry.NewNoopLogPublisher(logger),
 	)
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
 	assetStorage := assetstest.NewTestBlobStore(t)
 	chatWriter, shutdownWriter := chat.NewChatMessageWriter(logger, conn, assetStorage)
@@ -142,23 +147,28 @@ func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgx
 		tracerProvider,
 		meterProvider,
 		nil,
+		gcp.NewNoopPublisher[*otelv1.InboundLogRecord](),
 		sessionManager,
 		cacheAdapter,
 		nil,
 		nil,
 		authzEngine,
+		audit.NewLogger(),
 		captureEnabledFeatures{},
 		nil,
 		scanner,
+		nil,
 		risk.NewPolicyBypassEvaluator(logger, conn),
 		spendGate,
 		shadowmcp.NewClient(logger, conn, cacheAdapter, serverURL),
 		chatWriter,
 		nil,
 		nil,
+		nil,
 		serverURL,
 		siteURL,
 		"test-jwt-secret",
+		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
 	)
 	calls := callcache.New(cacheAdapter)
 	traceProcessor := NewTraceProcessor(logger, meterProvider, telemetryLogger, calls)
@@ -182,6 +192,7 @@ func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgx
 	return ctx, &realTestInstance{
 		service:   service,
 		hooks:     hookService,
+		cache:     cacheAdapter,
 		conn:      conn,
 		chConn:    chConn,
 		telemetry: telemetryLogger,

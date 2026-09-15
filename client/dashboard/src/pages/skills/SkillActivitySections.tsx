@@ -2,7 +2,7 @@ import { ChartCard } from "@/components/chart/ChartCard";
 import { useSeriesColors } from "@/components/chart/useSeriesColors";
 import { Text } from "@/components/ui/Text";
 import { HumanizeDateTime } from "@/lib/dates";
-import { SettingsSection } from "@/pages/mcp/x/tabs/settings/SettingsSection";
+import { SettingsSection } from "@/components/detail/settings-section";
 import type { GetSkillResult } from "@gram/client/models/components/getskillresult.js";
 import {
   CategoryScale,
@@ -24,9 +24,6 @@ ChartJS.register(
   Tooltip,
   Legend,
 );
-
-export const SKILL_ADOPTION_SECTION_ID = "adoption";
-export const SKILL_TIMELINE_SECTION_ID = "timeline";
 
 const utcMonthDayFormatter = new Intl.DateTimeFormat(undefined, {
   month: "short",
@@ -123,7 +120,7 @@ export function SkillActivitySections({
 
   return (
     <>
-      <SettingsSection id={SKILL_ADOPTION_SECTION_ID}>
+      <SettingsSection>
         <SettingsSection.Header>
           <SettingsSection.Title>Adoption and drift</SettingsSection.Title>
           <SettingsSection.Description>
@@ -181,7 +178,7 @@ export function SkillActivitySections({
         </div>
       </SettingsSection>
 
-      <SettingsSection id={SKILL_TIMELINE_SECTION_ID}>
+      <SettingsSection>
         <SettingsSection.Header>
           <SettingsSection.Title>Activation timeline</SettingsSection.Title>
           <SettingsSection.Description>

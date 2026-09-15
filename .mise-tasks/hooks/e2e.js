@@ -2,7 +2,7 @@
 //MISE description="Run provider hook E2E checks against a local Gram server"
 //MISE dir="{{ config_root }}"
 //USAGE flag "--project <slug>" default="default" help="Project slug to test against."
-//USAGE flag "--providers <list>" default="claude,cursor,codex,opencode" help="Comma-separated providers to drive: claude,cursor,codex,opencode."
+//USAGE flag "--providers <list>" default="claude,cursor,codex,opencode,copilot" help="Comma-separated providers to drive: claude,cursor,codex,opencode,copilot."
 //USAGE flag "--suites <list>" default="capture,shadow-mcp,ratchet" help="Comma-separated feature suites to run: capture,shadow-mcp,ratchet."
 //USAGE flag "--timeout-seconds <seconds>" default="180" help="Timeout per provider scenario."
 //USAGE flag "--poll-seconds <seconds>" default="90" help="How long to poll Gram telemetry and database evidence."
@@ -23,13 +23,20 @@ import { intro, log, outro } from "@clack/prompts";
 import { GramCore } from "#gram/client/core.js";
 import { authInfo } from "#gram/client/funcs/authInfo.js";
 import { keysCreate } from "#gram/client/funcs/keysCreate.js";
-const VALID_PROVIDERS = new Set(["claude", "cursor", "codex", "opencode"]);
+const VALID_PROVIDERS = new Set([
+  "claude",
+  "cursor",
+  "codex",
+  "opencode",
+  "copilot",
+]);
 const VALID_SUITES = new Set(["capture", "shadow-mcp", "ratchet"]);
 const SOURCE_ALIASES = {
   claude: ["claude", "claude-code"],
   cursor: ["cursor"],
   codex: ["codex"],
   opencode: ["opencode"],
+  copilot: ["copilot"],
 };
 function parseArgs(argv) {
   const args = {};
@@ -52,7 +59,9 @@ function parseArgs(argv) {
     args[key] = next;
     i++;
   }
-  const providers = String(args.providers ?? "claude,cursor,codex,opencode")
+  const providers = String(
+    args.providers ?? "claude,cursor,codex,opencode,copilot",
+  )
     .split(",")
     .map((p) => p.trim())
     .filter(Boolean);
@@ -63,7 +72,7 @@ function parseArgs(argv) {
   for (const p of providers) {
     if (!VALID_PROVIDERS.has(p)) {
       throw new Error(
-        `Unsupported provider "${p}". Use claude,cursor,codex,opencode.`,
+        `Unsupported provider "${p}". Use claude,cursor,codex,opencode,copilot.`,
       );
     }
   }
@@ -1329,6 +1338,31 @@ async function runProviderScenario(args) {
     res.provider = args.provider;
     return res;
   }
+  if (args.provider === "copilot") {
+    // --plugin-dir loads the rendered Copilot package for the session, with no
+    // install/uninstall cycle or config file to overlay. --allow-all is required
+    // for non-interactive runs
+    // (hooks still fire under it) and --no-ask-user keeps a headless turn from
+    // stalling on a question. JSON output is JSONL, one event per line.
+    const res = await runProcess(
+      "copilot",
+      [
+        "-p",
+        prompt,
+        "--allow-all",
+        "--no-ask-user",
+        "--no-color",
+        "--disable-builtin-mcps",
+        "--output-format",
+        "json",
+        "--plugin-dir",
+        args.pluginDir,
+      ],
+      { cwd: args.workdir, env: args.env, timeoutMs: args.timeoutMs },
+    );
+    res.provider = args.provider;
+    return res;
+  }
   const res = await runProcess(
     await resolveCodexBinary(),
     [
@@ -2197,7 +2231,10 @@ function outputHasFinalMarker(res, marker, verdict) {
     }
     try {
       const parsed = JSON.parse(trimmed);
-      if (parsed?.type === "user") {
+      // The prompt itself names the marker, so any echo of the user turn is a
+      // false positive. Claude calls that event "user", Copilot
+      // "user.message"; match the whole family rather than either spelling.
+      if (String(parsed?.type ?? "").split(".")[0] === "user") {
         continue;
       }
       if (JSON.stringify(parsed).includes(target)) {
@@ -2642,65 +2679,73 @@ async function runSkillScenario(args) {
   return res;
 }
 // runRatchetSuite verifies the never-authenticated fail-open ratchet: with no
-// cached credentials, no key env vars, and local browser auth disabled, a
-// Claude session must complete normally (hooks pass through instead of
-// blocking) and no hook events for the run may reach Gram.
+// cached credentials, no key env vars, and local browser auth disabled, the
+// session must complete normally (hooks pass through instead of blocking) and
+// no hook events for the run may reach Gram.
+//
+// Copilot is driven alongside Claude because it is the provider where getting
+// this wrong is a total outage rather than lost telemetry: Copilot denies a
+// tool call on ANY non-zero exit from a preToolUse hook, whatever stdout says,
+// so an unauthenticated developer would have every tool call blocked.
 async function runRatchetSuite(args) {
   const checks = [];
   const commandResults = [];
-  if (!args.providers.includes("claude")) {
-    return { checks, commandResults };
-  }
   const runId = `${args.runId}-ratchet`;
   const missingAuthFile = path.join(
     args.rootDir,
     "ratchet-missing",
     "hooks-auth.env",
   );
-  log.info("claude: running unauthenticated ratchet scenario");
-  const res = await runProviderScenario({
-    provider: "claude",
-    pluginDir: args.pluginDirs.get("claude"),
-    workdir: args.workdir,
-    runId,
-    scenario: "success",
-    env: {
-      GRAM_HOOKS_AUTH_FILE: missingAuthFile,
-      GRAM_HOOKS_DISABLE_LOCAL_AUTH: "1",
-    },
-    timeoutMs: args.timeoutSeconds * 1000,
-  });
-  commandResults.push(res);
-  await writeCommandArtifacts(
-    args.artifactsDir,
-    "claude",
-    "ratchet-unauthenticated",
-    res,
-  );
-  checks.push({
-    provider: "claude",
-    feature: "ratchet: unauthenticated session is not blocked",
-    status: res.exitCode === 0 ? "PASS" : "FAIL",
-    detail:
-      res.exitCode === 0
-        ? "claude completed without credentials"
-        : `claude exited ${res.exitCode}${res.timedOut ? " (timed out)" : ""}`,
-  });
-  const evidence = await listHookEvidence(
-    args.session.projectId,
-    "claude",
-    args.startedUnixNano,
-  );
-  const leaked = evidence.filter((row) => JSON.stringify(row).includes(runId));
-  checks.push({
-    provider: "claude",
-    feature: "ratchet: no events ingested without credentials",
-    status: leaked.length === 0 ? "PASS" : "FAIL",
-    detail:
-      leaked.length === 0
-        ? "no hook telemetry for the unauthenticated run"
-        : `${leaked.length} events reached Gram without credentials`,
-  });
+  for (const provider of args.providers.filter((p) =>
+    ["claude", "copilot"].includes(p),
+  )) {
+    log.info(`${provider}: running unauthenticated ratchet scenario`);
+    const res = await runProviderScenario({
+      provider,
+      pluginDir: args.pluginDirs.get(provider),
+      workdir: args.workdir,
+      runId,
+      scenario: "success",
+      env: {
+        GRAM_HOOKS_AUTH_FILE: missingAuthFile,
+        GRAM_HOOKS_DISABLE_LOCAL_AUTH: "1",
+      },
+      timeoutMs: args.timeoutSeconds * 1000,
+    });
+    commandResults.push(res);
+    await writeCommandArtifacts(
+      args.artifactsDir,
+      provider,
+      "ratchet-unauthenticated",
+      res,
+    );
+    checks.push({
+      provider,
+      feature: "ratchet: unauthenticated session is not blocked",
+      status: res.exitCode === 0 ? "PASS" : "FAIL",
+      detail:
+        res.exitCode === 0
+          ? `${provider} completed without credentials`
+          : `${provider} exited ${res.exitCode}${res.timedOut ? " (timed out)" : ""}`,
+    });
+    const evidence = await listHookEvidence(
+      args.session.projectId,
+      provider,
+      args.startedUnixNano,
+    );
+    const leaked = evidence.filter((row) =>
+      JSON.stringify(row).includes(runId),
+    );
+    checks.push({
+      provider,
+      feature: "ratchet: no events ingested without credentials",
+      status: leaked.length === 0 ? "PASS" : "FAIL",
+      detail:
+        leaked.length === 0
+          ? "no hook telemetry for the unauthenticated run"
+          : `${leaked.length} events reached Gram without credentials`,
+    });
+  }
   return { checks, commandResults };
 }
 
@@ -3074,6 +3119,24 @@ async function runShadowMCPSuite(args) {
       `Created hosted MCP fixture ${hostedMCP.url} backed by ${hostedHTTP.url}`,
     );
     for (const provider of args.providers) {
+      // Copilot routes MCP tools as "<server>-<tool>", which neither
+      // agenthooks' ParseMCPName nor the server's toolref.IsMCPToolName
+      // recognises by name. agenthooks resolves them from config instead
+      // (resolveCopilotMCP matches the "<server>-" prefix against
+      // ~/.copilot/mcp-config.json plus the workspace .github/mcp.json and
+      // .mcp.json), so a call carries a data.mcp block only when the shadow
+      // server is on disk where agenthooks looks. This harness does not put
+      // it there yet, so the scenario is skipped rather than asserted.
+      if (provider === "copilot") {
+        checks.push({
+          provider,
+          feature: "shadow_mcp.blocked",
+          status: "SKIP",
+          detail:
+            "Copilot MCP identity depends on agenthooks resolving <server>-<tool> against on-disk MCP config; this harness does not seed the shadow server there yet",
+        });
+        continue;
+      }
       const providerFixture = {
         ...fixture,
         shadowServerName: `${provider}shadowe2e`,

@@ -234,6 +234,207 @@ func EncodeCreateGlobalIssuerError(encoder func(context.Context, http.ResponseWr
 	}
 }
 
+// EncodeGetGlobalIssuerDuplicatePreflightResponse returns an encoder for
+// responses returned by the adminRemoteSessions
+// getGlobalIssuerDuplicatePreflight endpoint.
+func EncodeGetGlobalIssuerDuplicatePreflightResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*types.RemoteSessionIssuerDuplicatePreflight)
+		enc := encoder(ctx, w)
+		body := NewGetGlobalIssuerDuplicatePreflightResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeGetGlobalIssuerDuplicatePreflightRequest returns a decoder for
+// requests sent to the adminRemoteSessions getGlobalIssuerDuplicatePreflight
+// endpoint.
+func DecodeGetGlobalIssuerDuplicatePreflightRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*adminremotesessions.GetGlobalIssuerDuplicatePreflightPayload, error) {
+	return func(r *http.Request) (*adminremotesessions.GetGlobalIssuerDuplicatePreflightPayload, error) {
+		var payload *adminremotesessions.GetGlobalIssuerDuplicatePreflightPayload
+		var (
+			issuer       *string
+			sessionToken *string
+		)
+		issuerRaw := r.URL.Query().Get("issuer")
+		if issuerRaw != "" {
+			issuer = &issuerRaw
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		payload = NewGetGlobalIssuerDuplicatePreflightPayload(issuer, sessionToken)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeGetGlobalIssuerDuplicatePreflightError returns an encoder for errors
+// returned by the getGlobalIssuerDuplicatePreflight adminRemoteSessions
+// endpoint.
+func EncodeGetGlobalIssuerDuplicatePreflightError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetGlobalIssuerDuplicatePreflightUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetGlobalIssuerDuplicatePreflightForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetGlobalIssuerDuplicatePreflightBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetGlobalIssuerDuplicatePreflightNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetGlobalIssuerDuplicatePreflightConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetGlobalIssuerDuplicatePreflightUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetGlobalIssuerDuplicatePreflightInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetGlobalIssuerDuplicatePreflightInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetGlobalIssuerDuplicatePreflightUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetGlobalIssuerDuplicatePreflightGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeListGlobalIssuersResponse returns an encoder for responses returned by
 // the adminRemoteSessions listGlobalIssuers endpoint.
 func EncodeListGlobalIssuersResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -3189,13 +3390,30 @@ func EncodeMigrateToGlobalIssuerError(encoder func(context.Context, http.Respons
 	}
 }
 
+// marshalTypesRemoteSessionIssuerDuplicateMatchToRemoteSessionIssuerDuplicateMatchResponseBody
+// builds a value of type *RemoteSessionIssuerDuplicateMatchResponseBody from a
+// value of type *types.RemoteSessionIssuerDuplicateMatch.
+func marshalTypesRemoteSessionIssuerDuplicateMatchToRemoteSessionIssuerDuplicateMatchResponseBody(v *types.RemoteSessionIssuerDuplicateMatch) *RemoteSessionIssuerDuplicateMatchResponseBody {
+	res := &RemoteSessionIssuerDuplicateMatchResponseBody{
+		ID:          v.ID,
+		Slug:        v.Slug,
+		Name:        v.Name,
+		Issuer:      v.Issuer,
+		Tier:        v.Tier,
+		ProjectName: v.ProjectName,
+	}
+
+	return res
+}
+
 // marshalAdminremotesessionsGlobalRemoteSessionIssuerToGlobalRemoteSessionIssuerResponseBody
 // builds a value of type *GlobalRemoteSessionIssuerResponseBody from a value
 // of type *adminremotesessions.GlobalRemoteSessionIssuer.
 func marshalAdminremotesessionsGlobalRemoteSessionIssuerToGlobalRemoteSessionIssuerResponseBody(v *adminremotesessions.GlobalRemoteSessionIssuer) *GlobalRemoteSessionIssuerResponseBody {
 	res := &GlobalRemoteSessionIssuerResponseBody{
-		GlobalClientCount: v.GlobalClientCount,
-		TenantClientCount: v.TenantClientCount,
+		GlobalClientCount:             v.GlobalClientCount,
+		TenantClientCount:             v.TenantClientCount,
+		TrustedUserSessionIssuerCount: v.TrustedUserSessionIssuerCount,
 	}
 	if v.Issuer != nil {
 		res.Issuer = marshalTypesRemoteSessionIssuerToRemoteSessionIssuerResponseBody(v.Issuer)
@@ -3219,16 +3437,24 @@ func marshalTypesRemoteSessionIssuerToRemoteSessionIssuerResponseBody(v *types.R
 		ClientSetupDocumentationURL:       v.ClientSetupDocumentationURL,
 		AuthorizationEndpoint:             v.AuthorizationEndpoint,
 		TokenEndpoint:                     v.TokenEndpoint,
+		RevocationEndpoint:                v.RevocationEndpoint,
 		RegistrationEndpoint:              v.RegistrationEndpoint,
 		JwksURI:                           v.JwksURI,
+		JwksFetchedAt:                     v.JwksFetchedAt,
+		JwksCacheExpiresAt:                v.JwksCacheExpiresAt,
 		ServiceDocumentation:              v.ServiceDocumentation,
 		OpPolicyURI:                       v.OpPolicyURI,
 		OpTosURI:                          v.OpTosURI,
 		Oidc:                              v.Oidc,
 		Passthrough:                       v.Passthrough,
 		ClientIDMetadataDocumentSupported: v.ClientIDMetadataDocumentSupported,
-		CreatedAt:                         v.CreatedAt,
-		UpdatedAt:                         v.UpdatedAt,
+		UserinfoEndpoint:                  v.UserinfoEndpoint,
+		IntrospectionEndpoint:             v.IntrospectionEndpoint,
+		BackchannelLogoutSupported:        v.BackchannelLogoutSupported,
+		AuthorizationResponseIssParameterSupported: v.AuthorizationResponseIssParameterSupported,
+		ResourceIndicatorSupported:                 v.ResourceIndicatorSupported,
+		CreatedAt:                                  v.CreatedAt,
+		UpdatedAt:                                  v.UpdatedAt,
 	}
 	if v.ScopesSupported != nil {
 		res.ScopesSupported = make([]string, len(v.ScopesSupported))
@@ -3254,6 +3480,36 @@ func marshalTypesRemoteSessionIssuerToRemoteSessionIssuerResponseBody(v *types.R
 			res.TokenEndpointAuthMethodsSupported[i] = val
 		}
 	}
+	if v.CodeChallengeMethodsSupported != nil {
+		res.CodeChallengeMethodsSupported = make([]string, len(v.CodeChallengeMethodsSupported))
+		for i, val := range v.CodeChallengeMethodsSupported {
+			res.CodeChallengeMethodsSupported[i] = val
+		}
+	}
+	if v.IntrospectionEndpointAuthMethodsSupported != nil {
+		res.IntrospectionEndpointAuthMethodsSupported = make([]string, len(v.IntrospectionEndpointAuthMethodsSupported))
+		for i, val := range v.IntrospectionEndpointAuthMethodsSupported {
+			res.IntrospectionEndpointAuthMethodsSupported[i] = val
+		}
+	}
+	if v.IDTokenSigningAlgValuesSupported != nil {
+		res.IDTokenSigningAlgValuesSupported = make([]string, len(v.IDTokenSigningAlgValuesSupported))
+		for i, val := range v.IDTokenSigningAlgValuesSupported {
+			res.IDTokenSigningAlgValuesSupported[i] = val
+		}
+	}
+	if v.ClaimsSupported != nil {
+		res.ClaimsSupported = make([]string, len(v.ClaimsSupported))
+		for i, val := range v.ClaimsSupported {
+			res.ClaimsSupported[i] = val
+		}
+	}
+	if v.ScopeOverride != nil {
+		res.ScopeOverride = make([]string, len(v.ScopeOverride))
+		for i, val := range v.ScopeOverride {
+			res.ScopeOverride[i] = val
+		}
+	}
 
 	return res
 }
@@ -3271,7 +3527,9 @@ func marshalTypesRemoteSessionClientToRemoteSessionClientResponseBody(v *types.R
 		ClientIDMetadataURI:     v.ClientIDMetadataURI,
 		ClientIDIssuedAt:        v.ClientIDIssuedAt,
 		ClientSecretExpiresAt:   v.ClientSecretExpiresAt,
+		UpstreamRejectedAt:      v.UpstreamRejectedAt,
 		TokenEndpointAuthMethod: v.TokenEndpointAuthMethod,
+		JSONWebKeySetID:         v.JSONWebKeySetID,
 		Audience:                v.Audience,
 		CreatedAt:               v.CreatedAt,
 		UpdatedAt:               v.UpdatedAt,
@@ -3307,20 +3565,53 @@ func marshalAdminremotesessionsIssuerConvergenceCandidateToIssuerConvergenceCand
 		res.Issuer = marshalTypesRemoteSessionIssuerToRemoteSessionIssuerResponseBody(v.Issuer)
 	}
 	if v.EndpointMismatches != nil {
-		res.EndpointMismatches = make([]string, len(v.EndpointMismatches))
+		res.EndpointMismatches = make([]*IssuerFieldMismatchResponseBody, len(v.EndpointMismatches))
 		for i, val := range v.EndpointMismatches {
-			res.EndpointMismatches[i] = val
+			if val == nil {
+				res.EndpointMismatches[i] = nil
+				continue
+			}
+			res.EndpointMismatches[i] = marshalTypesIssuerFieldMismatchToIssuerFieldMismatchResponseBody(val)
 		}
 	} else {
-		res.EndpointMismatches = []string{}
+		res.EndpointMismatches = []*IssuerFieldMismatchResponseBody{}
 	}
 	if v.Warnings != nil {
-		res.Warnings = make([]string, len(v.Warnings))
+		res.Warnings = make([]*IssuerFieldMismatchResponseBody, len(v.Warnings))
 		for i, val := range v.Warnings {
-			res.Warnings[i] = val
+			if val == nil {
+				res.Warnings[i] = nil
+				continue
+			}
+			res.Warnings[i] = marshalTypesIssuerFieldMismatchToIssuerFieldMismatchResponseBody(val)
 		}
 	} else {
-		res.Warnings = []string{}
+		res.Warnings = []*IssuerFieldMismatchResponseBody{}
+	}
+
+	return res
+}
+
+// marshalTypesIssuerFieldMismatchToIssuerFieldMismatchResponseBody builds a
+// value of type *IssuerFieldMismatchResponseBody from a value of type
+// *types.IssuerFieldMismatch.
+func marshalTypesIssuerFieldMismatchToIssuerFieldMismatchResponseBody(v *types.IssuerFieldMismatch) *IssuerFieldMismatchResponseBody {
+	res := &IssuerFieldMismatchResponseBody{
+		Field:       v.Field,
+		SourceValue: v.SourceValue,
+		TargetValue: v.TargetValue,
+	}
+	if v.SourceValues != nil {
+		res.SourceValues = make([]string, len(v.SourceValues))
+		for i, val := range v.SourceValues {
+			res.SourceValues[i] = val
+		}
+	}
+	if v.TargetValues != nil {
+		res.TargetValues = make([]string, len(v.TargetValues))
+		for i, val := range v.TargetValues {
+			res.TargetValues[i] = val
+		}
 	}
 
 	return res

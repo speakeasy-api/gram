@@ -264,6 +264,14 @@ func TestServePublic_RBAC_ToolsList_PublicMCPSkipsFiltering(t *testing.T) {
 	require.Len(t, names, 2)
 	require.Contains(t, names, "pub_tool_a")
 	require.Contains(t, names, "pub_tool_b")
+
+	// Skipping the authorization filter does not make the catalog shareable.
+	// A hosted tools/list still turns on the Gram-Mode header, the session's
+	// tool selection, the ?tags= filter, and any upstream listing made with
+	// the caller's own credentials, none of which a public MCP rules out.
+	var envelope map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &envelope))
+	requireCacheHints(t, envelope["result"], "private")
 }
 
 // ---------------------------------------------------------------------------
@@ -280,9 +288,7 @@ func TestServePublic_RBAC_ToolsList_FiltersToGrantedTools(t *testing.T) {
 	ctx, ti := newTestMCPService(t)
 	toolset := createPrivateMCPToolset(t, ctx, ti, "list-rbac-filter-"+uuid.NewString()[:8])
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-	authzEngine := authz.NewEngine(ti.logger, ti.conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(ti.logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	// Grant mcp:connect only for "allowed_tool".
 	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
@@ -295,7 +301,7 @@ func TestServePublic_RBAC_ToolsList_FiltersToGrantedTools(t *testing.T) {
 	})
 
 	// allowed_tool should pass.
-	err = authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{
+	err := authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{
 		Tool:        "allowed_tool",
 		Disposition: "",
 	}))
@@ -317,9 +323,7 @@ func TestServePublic_RBAC_ToolsList_ServerLevelGrantReturnsAll(t *testing.T) {
 	ctx, ti := newTestMCPService(t)
 	toolset := createPrivateMCPToolset(t, ctx, ti, "list-rbac-all-"+uuid.NewString()[:8])
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-	authzEngine := authz.NewEngine(ti.logger, ti.conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(ti.logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	// Server-level grant (no tool dimension) — all tools allowed.
 	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
@@ -328,7 +332,7 @@ func TestServePublic_RBAC_ToolsList_ServerLevelGrantReturnsAll(t *testing.T) {
 	})
 
 	// Any tool should pass with a server-level grant.
-	err = authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{
+	err := authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{
 		Tool:        "tool_one",
 		Disposition: "",
 	}))
@@ -347,9 +351,7 @@ func TestServePublic_RBAC_ToolsList_NoGrantsDenied(t *testing.T) {
 	ctx, ti := newTestMCPService(t)
 	toolset := createPrivateMCPToolset(t, ctx, ti, "list-rbac-empty-"+uuid.NewString()[:8])
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-	authzEngine := authz.NewEngine(ti.logger, ti.conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(ti.logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	// mcp:connect grant for a DIFFERENT toolset — should not match.
 	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
@@ -357,7 +359,7 @@ func TestServePublic_RBAC_ToolsList_NoGrantsDenied(t *testing.T) {
 		Selector: authz.NewSelector(authz.ScopeMCPConnect, uuid.NewString()),
 	})
 
-	err = authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{
+	err := authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{
 		Tool:        "tool_x",
 		Disposition: "",
 	}))
@@ -372,9 +374,7 @@ func TestServePublic_RBAC_ToolsList_MultipleToolGrants(t *testing.T) {
 	ctx, ti := newTestMCPService(t)
 	toolset := createPrivateMCPToolset(t, ctx, ti, "list-rbac-multi-"+uuid.NewString()[:8])
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-	authzEngine := authz.NewEngine(ti.logger, ti.conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(ti.logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	// Grant access to tool_a and tool_c but not tool_b.
 	ctx = authztest.WithExactGrants(t, ctx,
@@ -401,7 +401,7 @@ func TestServePublic_RBAC_ToolsList_MultipleToolGrants(t *testing.T) {
 	require.NoError(t, authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{Tool: "tool_c", Disposition: ""})))
 
 	// tool_b denied.
-	err = authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{Tool: "tool_b", Disposition: ""}))
+	err := authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{Tool: "tool_b", Disposition: ""}))
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
@@ -417,9 +417,7 @@ func TestServePublic_RBAC_ToolsList_DispositionGrant_AllowsMatchingDisposition(t
 	ctx, ti := newTestMCPService(t)
 	toolset := createPrivateMCPToolset(t, ctx, ti, "rbac-disp-allow-"+uuid.NewString()[:8])
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-	authzEngine := authz.NewEngine(ti.logger, ti.conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(ti.logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	// Grant mcp:connect scoped to read_only disposition only.
 	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
@@ -432,7 +430,7 @@ func TestServePublic_RBAC_ToolsList_DispositionGrant_AllowsMatchingDisposition(t
 	})
 
 	// read_only tool should pass.
-	err = authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{
+	err := authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{
 		Tool:        "safe_tool",
 		Disposition: "read_only",
 	}))
@@ -454,9 +452,7 @@ func TestServePublic_RBAC_ToolsList_DispositionGrant_ServerLevelAllowsAll(t *tes
 	ctx, ti := newTestMCPService(t)
 	toolset := createPrivateMCPToolset(t, ctx, ti, "rbac-disp-server-"+uuid.NewString()[:8])
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-	authzEngine := authz.NewEngine(ti.logger, ti.conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(ti.logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	// Server-level grant (no disposition key) — all dispositions allowed.
 	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
@@ -464,7 +460,7 @@ func TestServePublic_RBAC_ToolsList_DispositionGrant_ServerLevelAllowsAll(t *tes
 		Selector: authz.NewSelector(authz.ScopeMCPConnect, toolset.ID.String()),
 	})
 
-	err = authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{
+	err := authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{
 		Tool:        "any_tool",
 		Disposition: "destructive",
 	}))

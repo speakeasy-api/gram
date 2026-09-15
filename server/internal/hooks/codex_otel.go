@@ -456,6 +456,7 @@ func (s *Service) codexOTELSessionAttribution(ctx context.Context, memo map[stri
 		ExternalAccountID:   "",
 		DeviceID:            "",
 		Hostname:            cached.Hostname,
+		Cwd:                 cached.Cwd,
 		AccountType:         "",
 		BillingMode:         "",
 		UserAccountID:       "",

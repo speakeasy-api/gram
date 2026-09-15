@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -19,6 +21,7 @@ import (
 	goahttp "goa.design/goa/v3/http"
 	"google.golang.org/protobuf/encoding/protojson"
 
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	hooksgen "github.com/speakeasy-api/gram/server/gen/hooks"
@@ -31,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/message"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
@@ -68,8 +72,8 @@ func requireChatMessages(t *testing.T, ctx context.Context, conn *pgxpool.Pool, 
 	return messages
 }
 
-func (s *recordingScanner) ScanForEnforcement(_ context.Context, _ string, _ uuid.UUID, userID string, _ string, _ message.Type, _ string) (*risk.ScanResult, error) {
-	s.seenUserIDs = append(s.seenUserIDs, userID)
+func (s *recordingScanner) ScanForEnforcement(_ context.Context, request risk.RealtimeScanRequest) (*risk.ScanResult, error) {
+	s.seenUserIDs = append(s.seenUserIDs, request.Provenance.UserID)
 	return s.result, nil
 }
 
@@ -353,6 +357,391 @@ func TestRealHooksCapturesResponseWithCachedActorAndDedupesRetry(t *testing.T) {
 	}, 2*time.Second, 10*time.Millisecond)
 }
 
+func TestRealHooksCorrelatesAgentTurnsAcrossNativeHooksAndLiteLLM(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newRealTestService(t, nil)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	prompt := "summarize this repository"
+	ingestNativePrompt := func(adapter, sessionID, turn string) {
+		t.Helper()
+		var turnID *string
+		if turn != "" {
+			turnID = new("agent-turn:v1:" + adapter + ":" + turn)
+		}
+		_, err := ti.hooks.IngestAuthenticated(ctx, authCtx, &hooksgen.IngestPayload{
+			ApikeyToken:      nil,
+			ProjectSlugInput: nil,
+			Replayed:         nil,
+			SchemaVersion:    "hook.ingest.v1",
+			IdempotencyKey:   new("native-" + uuid.NewString()),
+			Source: &hooksgen.HookIngestSource{
+				Adapter:        adapter,
+				AdapterVersion: nil,
+				RawEventName:   nil,
+				Hostname:       nil,
+				UserEmail:      nil,
+			},
+			Session: &hooksgen.HookIngestSession{ID: &sessionID, TurnID: turnID, Cwd: nil, Model: nil},
+			Event:   &hooksgen.HookIngestEvent{Type: "prompt.submitted", OccurredAt: nil},
+			Data:    &hooksgen.HookIngestData{Prompt: &hooksgen.HookPromptData{Text: &prompt}},
+			Raw:     nil,
+		})
+		require.NoError(t, err)
+	}
+	ingestLiteLLMPrompt := func(sessionID string, extraHeaders map[string]string) {
+		t.Helper()
+		payload := testPayload()
+		payload.LitellmCallID = new("call-" + uuid.NewString())
+		payload.Texts = []string{prompt}
+		payload.RequestHeaders = map[string]string{}
+		if sessionID != "" {
+			payload.RequestHeaders["x-session-id"] = sessionID
+		}
+		maps.Copy(payload.RequestHeaders, extraHeaders)
+		result, err := ti.service.Ingest(ctx, payload)
+		require.NoError(t, err)
+		require.Equal(t, gen.LiteLLMGuardrailAction("NONE"), result.Action)
+	}
+
+	openCodeFirstSession := "ses_" + uuid.NewString()
+	openCodeFirstMessage := "msg_" + uuid.NewString()
+	openCodeHeaders := map[string]string{
+		"x-gram-agent-provider": "opencode",
+		"x-gram-agent-turn-id":  openCodeFirstMessage,
+	}
+	ingestNativePrompt("opencode", openCodeFirstSession, openCodeFirstMessage)
+	ingestLiteLLMPrompt(openCodeFirstSession, openCodeHeaders)
+	ingestLiteLLMPrompt(openCodeFirstSession, openCodeHeaders)
+
+	messages := requireChatMessages(t, ctx, ti.conn, chatrepo.ListChatMessagesParams{
+		ChatID:    chat.SessionIDToChatID(openCodeFirstSession),
+		ProjectID: *authCtx.ProjectID,
+	}, 1)
+	require.Equal(t, "opencode", messages[0].Source.String)
+
+	liteLLMFirstSession := uuid.NewString()
+	liteLLMFirstTurn := uuid.NewString()
+	codexHeaders := map[string]string{
+		"x-codex-turn-metadata": fmt.Sprintf(`{"session_id":%q,"turn_id":%q}`, liteLLMFirstSession, liteLLMFirstTurn),
+	}
+	ingestLiteLLMPrompt("", codexHeaders)
+	ingestLiteLLMPrompt("", codexHeaders)
+	ingestNativePrompt("codex", liteLLMFirstSession, liteLLMFirstTurn)
+
+	messages = requireChatMessages(t, ctx, ti.conn, chatrepo.ListChatMessagesParams{
+		ChatID:    chat.SessionIDToChatID(liteLLMFirstSession),
+		ProjectID: *authCtx.ProjectID,
+	}, 1)
+	require.Equal(t, "codex", messages[0].Source.String)
+
+	repeatedSession := "ses_" + uuid.NewString()
+	ingestNativePrompt("opencode", repeatedSession, "msg_"+uuid.NewString())
+	ingestNativePrompt("opencode", repeatedSession, "msg_"+uuid.NewString())
+	messages = requireChatMessages(t, ctx, ti.conn, chatrepo.ListChatMessagesParams{
+		ChatID:    chat.SessionIDToChatID(repeatedSession),
+		ProjectID: *authCtx.ProjectID,
+	}, 2)
+	for _, msg := range messages {
+		require.Equal(t, "user", msg.Role)
+		require.Equal(t, prompt, msg.Content)
+		require.Equal(t, "opencode", msg.Source.String)
+	}
+
+	claudeSession := uuid.NewString()
+	ingestNativePrompt("claude", claudeSession, "prompt_"+uuid.NewString())
+	require.NoError(t, ti.cache.Delete(ctx, fmt.Sprintf("session:native-prompt:v1:%s:%s", authCtx.ProjectID.String(), claudeSession)))
+	ingestLiteLLMPrompt(claudeSession, nil)
+	messages = requireChatMessages(t, ctx, ti.conn, chatrepo.ListChatMessagesParams{
+		ChatID:    chat.SessionIDToChatID(claudeSession),
+		ProjectID: *authCtx.ProjectID,
+	}, 1)
+	// The bare "claude" adapter slug resolves to the claude-code surface, so
+	// that — not the slug — is what the row and the repaired marker carry.
+	require.Equal(t, "claude-code", messages[0].Source.String)
+	var repairedMarker string
+	require.NoError(t, ti.cache.Get(ctx, fmt.Sprintf("session:native-prompt:v1:%s:%s", authCtx.ProjectID.String(), claudeSession), &repairedMarker))
+	require.Equal(t, "claude-code", repairedMarker)
+
+	cursorSession := uuid.NewString()
+	ingestNativePrompt("cursor", cursorSession, "generation_"+uuid.NewString())
+	ingestLiteLLMPrompt(cursorSession, nil)
+	messages = requireChatMessages(t, ctx, ti.conn, chatrepo.ListChatMessagesParams{
+		ChatID:    chat.SessionIDToChatID(cursorSession),
+		ProjectID: *authCtx.ProjectID,
+	}, 1)
+	require.Equal(t, "cursor", messages[0].Source.String)
+
+	liteLLMFirstFallbackSession := uuid.NewString()
+	ingestLiteLLMPrompt(liteLLMFirstFallbackSession, nil)
+	ingestNativePrompt("claude", liteLLMFirstFallbackSession, "")
+	ingestNativePrompt("claude", liteLLMFirstFallbackSession, "")
+	messages = requireChatMessages(t, ctx, ti.conn, chatrepo.ListChatMessagesParams{
+		ChatID:    chat.SessionIDToChatID(liteLLMFirstFallbackSession),
+		ProjectID: *authCtx.ProjectID,
+	}, 3)
+	// Claude has no turn ID shared with LiteLLM. LiteLLM-first therefore keeps
+	// both observations, and repeated identical native prompts remain distinct.
+	require.Equal(t, "litellm", messages[0].Source.String)
+	require.Equal(t, "claude-code", messages[1].Source.String)
+	require.Equal(t, "claude-code", messages[2].Source.String)
+
+	startedOnlySession := uuid.NewString()
+	_, err := ti.hooks.IngestAuthenticated(ctx, authCtx, &hooksgen.IngestPayload{
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		Replayed:         nil,
+		SchemaVersion:    "hook.ingest.v1",
+		IdempotencyKey:   new("native-start-" + uuid.NewString()),
+		Source: &hooksgen.HookIngestSource{
+			Adapter:        "claude",
+			AdapterVersion: nil,
+			RawEventName:   nil,
+			Hostname:       nil,
+			UserEmail:      nil,
+		},
+		Session: &hooksgen.HookIngestSession{ID: &startedOnlySession, TurnID: nil, Cwd: nil, Model: nil},
+		Event:   &hooksgen.HookIngestEvent{Type: "session.started", OccurredAt: nil},
+		Data:    nil,
+		Raw:     nil,
+	})
+	require.NoError(t, err)
+	ingestLiteLLMPrompt(startedOnlySession, nil)
+	messages = requireChatMessages(t, ctx, ti.conn, chatrepo.ListChatMessagesParams{
+		ChatID:    chat.SessionIDToChatID(startedOnlySession),
+		ProjectID: *authCtx.ProjectID,
+	}, 1)
+	require.Equal(t, "litellm", messages[0].Source.String)
+}
+
+// A Claude Code session routed through LiteLLM reports every turn twice: the
+// proxy sees the completion the moment the model returns it, and Claude's Stop
+// hook reports the same text when the turn ends. Prompts collapse onto a single
+// row through the session's native marker, but assistant turns share no
+// identity across the two observers, so the proxied row has to be dropped or
+// the transcript shows every answer twice.
+func TestRealHooksProxiedAssistantTurnDoesNotDuplicateNativeClaudeStop(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newRealTestService(t, nil)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	prompt := "hey again"
+	answer := "Hey! What are you working on today?"
+	role := "assistant"
+	ingestNativeEvent := func(sessionID, eventType string, data *hooksgen.HookIngestData) {
+		t.Helper()
+		_, err := ti.hooks.IngestAuthenticated(ctx, authCtx, &hooksgen.IngestPayload{
+			ApikeyToken:      nil,
+			ProjectSlugInput: nil,
+			Replayed:         nil,
+			SchemaVersion:    "hook.ingest.v1",
+			IdempotencyKey:   new("native-" + uuid.NewString()),
+			Source: &hooksgen.HookIngestSource{
+				Adapter:        "claude",
+				AdapterVersion: nil,
+				RawEventName:   nil,
+				Hostname:       nil,
+				UserEmail:      nil,
+			},
+			Session: &hooksgen.HookIngestSession{ID: &sessionID, TurnID: nil, Cwd: nil, Model: nil},
+			Event:   &hooksgen.HookIngestEvent{Type: eventType, OccurredAt: nil},
+			Data:    data,
+			Raw:     nil,
+		})
+		require.NoError(t, err)
+	}
+	ingestLiteLLMResponse := func(sessionID string) {
+		t.Helper()
+		response := testPayload()
+		response.InputType = "response"
+		response.LitellmCallID = new("call-" + uuid.NewString())
+		response.Texts = []string{answer}
+		response.RequestHeaders = map[string]string{"x-session-id": sessionID}
+		result, err := ti.service.Ingest(ctx, response)
+		require.NoError(t, err)
+		require.Equal(t, gen.LiteLLMGuardrailAction("NONE"), result.Action)
+	}
+
+	sessionID := "claude-litellm-" + uuid.NewString()
+	ingestNativeEvent(sessionID, "prompt.submitted", &hooksgen.HookIngestData{Prompt: &hooksgen.HookPromptData{Text: &prompt}})
+	ingestLiteLLMResponse(sessionID)
+	ingestNativeEvent(sessionID, "assistant.responded", &hooksgen.HookIngestData{
+		Message: &hooksgen.HookMessageData{Text: &answer, Role: &role, DurationMs: nil},
+	})
+
+	messages := requireChatMessages(t, ctx, ti.conn, chatrepo.ListChatMessagesParams{
+		ChatID:    chat.SessionIDToChatID(sessionID),
+		ProjectID: *authCtx.ProjectID,
+	}, 2)
+	require.Equal(t, "user", messages[0].Role)
+	require.Equal(t, prompt, messages[0].Content)
+	require.Equal(t, "assistant", messages[1].Role)
+	require.Equal(t, answer, messages[1].Content)
+	for _, message := range messages {
+		require.Equal(t, "claude-code", message.Source.String,
+			"the native hook stream owns a proxied Claude session's transcript")
+	}
+	requireChatLiteLLMProxied(t, ctx, ti.conn, chat.SessionIDToChatID(sessionID), *authCtx.ProjectID, true,
+		"the suppressed proxied turn must still flag the session as LiteLLM routed")
+
+	// The marker the native prompt wrote is a cache, not the contract: a
+	// session whose marker is gone must still resolve ownership from the
+	// transcript rather than duplicating the turn.
+	expiredMarkerSession := "claude-litellm-expired-" + uuid.NewString()
+	ingestNativeEvent(expiredMarkerSession, "prompt.submitted", &hooksgen.HookIngestData{Prompt: &hooksgen.HookPromptData{Text: &prompt}})
+	require.NoError(t, ti.cache.Delete(ctx, fmt.Sprintf("session:native-prompt:v1:%s:%s", authCtx.ProjectID.String(), expiredMarkerSession)))
+	ingestLiteLLMResponse(expiredMarkerSession)
+	ingestNativeEvent(expiredMarkerSession, "assistant.responded", &hooksgen.HookIngestData{
+		Message: &hooksgen.HookMessageData{Text: &answer, Role: &role, DurationMs: nil},
+	})
+
+	messages = requireChatMessages(t, ctx, ti.conn, chatrepo.ListChatMessagesParams{
+		ChatID:    chat.SessionIDToChatID(expiredMarkerSession),
+		ProjectID: *authCtx.ProjectID,
+	}, 2)
+	require.Equal(t, "user", messages[0].Role)
+	require.Equal(t, "assistant", messages[1].Role)
+
+	// A session no native stream captured keeps the proxy's assistant turn:
+	// dropping it there would leave the transcript with no answer at all.
+	proxyOnlySession := "litellm-only-" + uuid.NewString()
+	ingestLiteLLMResponse(proxyOnlySession)
+	messages = requireChatMessages(t, ctx, ti.conn, chatrepo.ListChatMessagesParams{
+		ChatID:    chat.SessionIDToChatID(proxyOnlySession),
+		ProjectID: *authCtx.ProjectID,
+	}, 1)
+	require.Equal(t, "assistant", messages[0].Role)
+	require.Equal(t, answer, messages[0].Content)
+	require.Equal(t, "litellm", messages[0].Source.String)
+	requireChatLiteLLMProxied(t, ctx, ti.conn, chat.SessionIDToChatID(proxyOnlySession), *authCtx.ProjectID, true,
+		"proxy-only sessions carry the marker too")
+
+	// A session the proxy never observed must not carry the marker.
+	nativeOnlySession := "claude-native-only-" + uuid.NewString()
+	ingestNativeEvent(nativeOnlySession, "prompt.submitted", &hooksgen.HookIngestData{Prompt: &hooksgen.HookPromptData{Text: &prompt}})
+	requireChatLiteLLMProxied(t, ctx, ti.conn, chat.SessionIDToChatID(nativeOnlySession), *authCtx.ProjectID, false,
+		"native-only sessions must not be flagged as LiteLLM routed")
+}
+
+func requireChatLiteLLMProxied(t *testing.T, ctx context.Context, conn *pgxpool.Pool, chatID uuid.UUID, projectID uuid.UUID, want bool, msg string) {
+	t.Helper()
+	row, err := chatrepo.New(conn).GetChat(ctx, chatrepo.GetChatParams{ID: chatID, ProjectID: projectID})
+	require.NoError(t, err)
+	require.Equal(t, want, row.LitellmProxied, msg)
+}
+
+func TestRealHooksConcurrentUncorrelatedPromptsPreserveNative(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newRealTestService(t, nil)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	const sessions = 16
+	start := make(chan struct{})
+	errs := make(chan error, sessions*2)
+	var wg sync.WaitGroup
+	sessionIDs := make([]string, sessions)
+	for i := range sessions {
+		sessionID := "concurrent-uncorrelated-" + uuid.NewString()
+		sessionIDs[i] = sessionID
+		prompt := fmt.Sprintf("concurrent prompt %d", i)
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			<-start
+			_, err := ti.hooks.IngestAuthenticated(ctx, authCtx, &hooksgen.IngestPayload{
+				ApikeyToken:      nil,
+				ProjectSlugInput: nil,
+				Replayed:         nil,
+				SchemaVersion:    "hook.ingest.v1",
+				IdempotencyKey:   new("native-concurrent-" + uuid.NewString()),
+				Source: &hooksgen.HookIngestSource{
+					Adapter:        "claude",
+					AdapterVersion: nil,
+					RawEventName:   nil,
+					Hostname:       nil,
+					UserEmail:      nil,
+				},
+				Session: &hooksgen.HookIngestSession{ID: &sessionID, TurnID: nil, Cwd: nil, Model: nil},
+				Event:   &hooksgen.HookIngestEvent{Type: "prompt.submitted", OccurredAt: nil},
+				Data:    &hooksgen.HookIngestData{Prompt: &hooksgen.HookPromptData{Text: &prompt}},
+				Raw:     nil,
+			})
+			errs <- err
+		}()
+		go func() {
+			defer wg.Done()
+			<-start
+			payload := testPayload()
+			payload.LitellmCallID = new("litellm-concurrent-" + uuid.NewString())
+			payload.Texts = []string{prompt}
+			payload.RequestHeaders = map[string]string{"x-session-id": sessionID}
+			_, err := ti.service.Ingest(ctx, payload)
+			errs <- err
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		require.NoError(t, err)
+	}
+
+	for _, sessionID := range sessionIDs {
+		messages, err := chatrepo.New(ti.conn).ListChatMessages(ctx, chatrepo.ListChatMessagesParams{
+			ChatID:    chat.SessionIDToChatID(sessionID),
+			ProjectID: *authCtx.ProjectID,
+		})
+		require.NoError(t, err)
+		require.NotEmpty(t, messages)
+		require.LessOrEqual(t, len(messages), 2)
+		nativeCount := 0
+		liteLLMCount := 0
+		for _, message := range messages {
+			switch message.Source.String {
+			case "claude-code":
+				nativeCount++
+			case "litellm":
+				liteLLMCount++
+			}
+		}
+		require.Equal(t, 1, nativeCount)
+		require.LessOrEqual(t, liteLLMCount, 1)
+		require.Equal(t, len(messages), nativeCount+liteLLMCount)
+	}
+}
+
+func TestRealHooksLiteLLMOnlyLongSessionPersistsEveryPrompt(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newRealTestService(t, nil)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	const promptCount = 128
+	sessionID := "litellm-long-session-" + uuid.NewString()
+	for i := range promptCount {
+		payload := testPayload()
+		payload.LitellmCallID = new(fmt.Sprintf("long-session-call-%d-%s", i, uuid.NewString()))
+		payload.Texts = []string{fmt.Sprintf("long session prompt %d", i)}
+		payload.RequestHeaders = map[string]string{"x-session-id": sessionID}
+		_, err := ti.service.Ingest(ctx, payload)
+		require.NoError(t, err)
+	}
+
+	messages := requireChatMessages(t, ctx, ti.conn, chatrepo.ListChatMessagesParams{
+		ChatID:    chat.SessionIDToChatID(sessionID),
+		ProjectID: *authCtx.ProjectID,
+	}, promptCount)
+	require.Equal(t, "long session prompt 0", messages[0].Content)
+	require.Equal(t, "long session prompt 127", messages[len(messages)-1].Content)
+}
+
 func TestRealHooksPersistsToolCallOnlyResponse(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newRealTestService(t, nil)
@@ -396,13 +785,26 @@ func TestRealHooksFixtureToolsNeverBecomeExecutions(t *testing.T) {
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
 
+	// Preserve correlation without reusing Redis session state.
+	sessionID := uuid.NewString()
+	callID := uuid.NewString()
+	traceID := uuid.NewString()
 	for _, raw := range readJSONLines(t, "openai-chat-tools.jsonl") {
+		var callback map[string]any
+		require.NoError(t, json.Unmarshal(raw, &callback))
+		callback["litellm_call_id"] = callID
+		callback["litellm_trace_id"] = traceID
+		headers, ok := callback["request_headers"].(map[string]any)
+		require.True(t, ok, "fixture request_headers must be an object")
+		headers["x-gram-session-id"] = sessionID
+		raw, err := json.Marshal(callback)
+		require.NoError(t, err)
 		_, response := postContractFixture(t, server.Client(), server.URL, raw)
 		require.Equal(t, map[string]any{"action": "NONE"}, response)
 	}
 
 	messages := requireChatMessages(t, ctx, ti.conn, chatrepo.ListChatMessagesParams{
-		ChatID:    chat.SessionIDToChatID("fixture-chat-session"),
+		ChatID:    chat.SessionIDToChatID(sessionID),
 		ProjectID: *authCtx.ProjectID,
 	}, 2)
 	require.Equal(t, []string{"user", "assistant"}, []string{messages[0].Role, messages[1].Role})
@@ -474,9 +876,6 @@ func TestRealHooksPureTextResponseProducesAssistantPolicyFinding(t *testing.T) {
 		PromptInjectionRules: nil,
 		DisabledRules:        nil,
 		CustomRuleIds:        nil,
-		MessageTypes:         []string{message.Assistant},
-		ScopeInclude:         pgtype.Text{},
-		ScopeExempt:          pgtype.Text{},
 		Enabled:              true,
 		Action:               "flag",
 		AudienceType:         "everyone",
@@ -518,14 +917,12 @@ func TestRealHooksPureTextResponseProducesAssistantPolicyFinding(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []uuid.UUID{messages[0].ID}, fetched.MessageIDs)
 	require.Len(t, fetched.Policies, 1)
-	require.Equal(t, []string{message.Assistant}, fetched.Policies[0].MessageTypes)
 
 	customRules, err := customruleanalyzer.NewScanner(ti.conn)
 	require.NoError(t, err)
 	celEngine, err := riskcelenv.New()
 	require.NoError(t, err)
 	flags := &feature.InMemory{}
-	flags.SetFlag(feature.FlagRiskRecommendedScopes, authCtx.ActiveOrganizationID, true)
 	shadowMCPClient := shadowmcp.NewClient(testenv.NewLogger(t), ti.conn, cache.NoopCache, nil)
 	analyze, err := riskanalysis.NewAnalyzeBatch(
 		testenv.NewLogger(t),
@@ -549,6 +946,7 @@ func TestRealHooksPureTextResponseProducesAssistantPolicyFinding(t *testing.T) {
 		celEngine,
 		nil,
 		nil,
+		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
 	)
 	require.NoError(t, err)
 
@@ -563,7 +961,6 @@ func TestRealHooksPureTextResponseProducesAssistantPolicyFinding(t *testing.T) {
 		MessageIDs:             fetched.MessageIDs,
 		ContentPartIDs:         nil,
 		Sources:                policy.Sources,
-		MessageTypes:           policy.MessageTypes,
 		PresidioEntities:       nil,
 		PresidioScoreThreshold: 0,
 		CustomRuleIds:          nil,

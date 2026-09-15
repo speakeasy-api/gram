@@ -1,8 +1,0 @@
-<!-- Pi (pi.dev)  the agent's name is the letter, so the mark is a geometric
-     pi glyph drawn as paths (no font dependency). Monochrome ink, so it
-     inverts to white via INVERT_LOGO_IN_DARK. -->
-<svg width="300" height="300" viewBox="0 0 300 300" fill="none" xmlns="http://www.w3.org/2000/svg">
-<path d="M42 72H258V114H42V72Z" fill="#211E1E"/>
-<path d="M78 114H120V258H78V114Z" fill="#211E1E"/>
-<path d="M180 114H222V258H180V114Z" fill="#211E1E"/>
-</svg>

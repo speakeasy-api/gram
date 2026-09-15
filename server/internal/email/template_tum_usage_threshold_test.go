@@ -6,10 +6,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestTumUsageThreshold_TransactionalID(t *testing.T) {
+func TestTumUsageThreshold_Key(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, transactionalIDTumUsageThreshold, TumUsageThreshold{}.TransactionalID())
+	require.Equal(t, TemplateKeyTumUsageThreshold, TumUsageThreshold{}.Key())
 }
 
 func TestTumUsageThreshold_Variables_RendersExpectedKeys(t *testing.T) {

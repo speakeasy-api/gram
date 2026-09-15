@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	testidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	"github.com/speakeasy-api/gram/server/gen/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -41,13 +42,14 @@ func TestService_ServeFunction_Success(t *testing.T) {
 
 	// Create asset in database using the URI from storage
 	asset, err := ti.repo.CreateAsset(ctx, repo.CreateAssetParams{
-		Name:          filename,
-		Url:           uri.String(),
-		ProjectID:     projectID,
-		Sha256:        "abc123",
-		Kind:          "functions",
-		ContentType:   contentType,
-		ContentLength: contentLength,
+		Name:           filename,
+		Url:            uri.String(),
+		ProjectID:      projectID,
+		OrganizationID: testidp.MockOrgID,
+		Sha256:         "abc123",
+		Kind:           "functions",
+		ContentType:    contentType,
+		ContentLength:  contentLength,
 	})
 	require.NoError(t, err)
 
@@ -175,13 +177,14 @@ func TestService_ServeFunction_WrongProject(t *testing.T) {
 	differentProjectID := uuid.New()
 
 	asset, err := ti.repo.CreateAsset(ctx, repo.CreateAssetParams{
-		Name:          "test-functions.zip",
-		Url:           "file://test-functions.zip",
-		ProjectID:     differentProjectID,
-		Sha256:        "abc123",
-		Kind:          "functions",
-		ContentType:   "application/zip",
-		ContentLength: 1024,
+		Name:           "test-functions.zip",
+		Url:            "file://test-functions.zip",
+		ProjectID:      differentProjectID,
+		OrganizationID: testidp.MockOrgID,
+		Sha256:         "abc123",
+		Kind:           "functions",
+		ContentType:    "application/zip",
+		ContentLength:  1024,
 	})
 	require.NoError(t, err)
 
@@ -209,13 +212,14 @@ func TestService_ServeFunction_FileNotInStorage(t *testing.T) {
 
 	// Create asset in database but don't put file in storage
 	asset, err := ti.repo.CreateAsset(ctx, repo.CreateAssetParams{
-		Name:          "missing-functions.zip",
-		Url:           "file://missing-asset.zip",
-		ProjectID:     projectID,
-		Sha256:        "abc123",
-		Kind:          "functions",
-		ContentType:   "application/zip",
-		ContentLength: 1024,
+		Name:           "missing-functions.zip",
+		Url:            "file://missing-asset.zip",
+		ProjectID:      projectID,
+		OrganizationID: testidp.MockOrgID,
+		Sha256:         "abc123",
+		Kind:           "functions",
+		ContentType:    "application/zip",
+		ContentLength:  1024,
 	})
 	require.NoError(t, err)
 
@@ -243,13 +247,14 @@ func TestService_ServeFunction_InvalidAssetURL(t *testing.T) {
 
 	// Create asset with invalid URL that will fail url.Parse
 	asset, err := ti.repo.CreateAsset(ctx, repo.CreateAssetParams{
-		Name:          "invalid-url.zip",
-		Url:           "ht\\ttp://invalid-url",
-		ProjectID:     projectID,
-		Sha256:        "abc123",
-		Kind:          "functions",
-		ContentType:   "application/zip",
-		ContentLength: 1024,
+		Name:           "invalid-url.zip",
+		Url:            "ht\\ttp://invalid-url",
+		ProjectID:      projectID,
+		OrganizationID: testidp.MockOrgID,
+		Sha256:         "abc123",
+		Kind:           "functions",
+		ContentType:    "application/zip",
+		ContentLength:  1024,
 	})
 	require.NoError(t, err)
 
@@ -303,13 +308,14 @@ func TestService_ServeFunction_CrossProjectAccess(t *testing.T) {
 	require.NoError(t, err)
 
 	asset, err := ti.repo.CreateAsset(ctx1, repo.CreateAssetParams{
-		Name:          filename,
-		Url:           uri.String(),
-		ProjectID:     project1ID,
-		Sha256:        "project1hash",
-		Kind:          "functions",
-		ContentType:   contentType,
-		ContentLength: contentLength,
+		Name:           filename,
+		Url:            uri.String(),
+		ProjectID:      project1ID,
+		OrganizationID: testidp.MockOrgID,
+		Sha256:         "project1hash",
+		Kind:           "functions",
+		ContentType:    contentType,
+		ContentLength:  contentLength,
 	})
 	require.NoError(t, err)
 

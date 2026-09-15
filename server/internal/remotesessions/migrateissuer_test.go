@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -135,9 +136,9 @@ func TestMigrateIssuer_PreservesRemoteSessionWithoutReauth(t *testing.T) {
 	require.NoError(t, err)
 
 	// Before: the token resolves under the source issuer's id.
-	tokens, err := mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject, "")
+	tokens, err := mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject)
 	require.NoError(t, err)
-	require.Equal(t, map[uuid.UUID]string{sourceUUID: "upstream-access-token"}, tokens)
+	require.Equal(t, map[uuid.UUID]remotesessions.UpstreamToken{sourceUUID: {Token: "upstream-access-token", Resource: "", RemoteSessionClientID: clientUUID}}, tokenCredentials(tokens))
 
 	auditBefore, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionIssuerMigrate)
 	require.NoError(t, err)
@@ -150,9 +151,9 @@ func TestMigrateIssuer_PreservesRemoteSessionWithoutReauth(t *testing.T) {
 
 	// After: the same token value resolves, now keyed by the target issuer.
 	// Nothing re-authenticated; only the client's foreign key moved.
-	tokens, err = mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject, "")
+	tokens, err = mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject)
 	require.NoError(t, err)
-	require.Equal(t, map[uuid.UUID]string{targetID: "upstream-access-token"}, tokens)
+	require.Equal(t, map[uuid.UUID]remotesessions.UpstreamToken{targetID: {Token: "upstream-access-token", Resource: "", RemoteSessionClientID: clientUUID}}, tokenCredentials(tokens))
 
 	// The session row itself was neither deleted nor rewritten.
 	q := repo.New(ti.conn)
@@ -163,7 +164,7 @@ func TestMigrateIssuer_PreservesRemoteSessionWithoutReauth(t *testing.T) {
 	client, err := q.GetRemoteSessionClientByID(ctx, repo.GetRemoteSessionClientByIDParams{
 		ProjectID:      *authCtx.ProjectID,
 		ID:             clientUUID,
-		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
+		OrganizationID: authCtx.ActiveOrganizationID,
 	})
 	require.NoError(t, err)
 	require.Equal(t, targetID, client.RemoteSessionClient.RemoteSessionIssuerID, "the client should now point at the target issuer")
@@ -213,6 +214,56 @@ func TestMigrateIssuer_EmptySourceIsIdempotentSuccess(t *testing.T) {
 	_, err = ti.service.MigrateIssuer(ctx, migratePayload(sourceID, targetID.String()))
 	require.Error(t, err)
 	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+func TestMigrateIssuer_BlockedByTrustedUserSessionIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	source, err := ti.service.CreateIssuer(ctx, newCreateIssuerPayload("migrate-trusted-source", nil))
+	require.NoError(t, err)
+	target, err := ti.service.CreateIssuer(ctx, newCreateIssuerPayload("migrate-trusted-target", nil))
+	require.NoError(t, err)
+	sourceID, err := uuid.Parse(source.ID)
+	require.NoError(t, err)
+	trustedIssuerID := createTrustedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "migrate-trusted-usi", sourceID)
+
+	preflight, err := ti.service.GetIssuerMigratePreflight(ctx, migratePreflightPayload(source.ID, target.ID))
+	require.NoError(t, err)
+	require.False(t, preflight.CanMigrate)
+	require.Equal(t, []*orgissuersgen.TrustedUserSessionIssuerReference{{ID: trustedIssuerID.String(), Slug: "migrate-trusted-usi"}}, preflight.TrustedUserSessionIssuers)
+
+	_, err = ti.service.MigrateIssuer(ctx, migratePayload(source.ID, target.ID))
+	requireOopsCode(t, err, oops.CodeConflict)
+
+	_, err = repo.New(ti.conn).GetOrganizationRemoteSessionIssuerByID(ctx, repo.GetOrganizationRemoteSessionIssuerByIDParams{
+		ID:             sourceID,
+		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
+		IncludeGlobal:  false,
+	})
+	require.NoError(t, err, "blocked migration must leave the source issuer active")
+}
+
+func TestMigrateIssuer_BlockedByOutOfScopeTrustedUserSessionIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	sourceID := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "migrate-foreign-trust-source")
+	targetID := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "migrate-foreign-trust-target")
+	otherOrgID := createOrganization(t, ctx, ti.conn, "migrate-foreign-trust-org")
+	createTrustedOrganizationTierUserSessionIssuerForOrganization(t, ctx, ti.conn, otherOrgID, "migrate-foreign-trust-usi", sourceID)
+
+	preflight, err := ti.service.GetIssuerMigratePreflight(ctx, migratePreflightPayload(sourceID.String(), targetID.String()))
+	require.NoError(t, err)
+	require.False(t, preflight.CanMigrate)
+	require.Empty(t, preflight.TrustedUserSessionIssuers, "preflight must not disclose another organization's issuer")
+
+	_, err = ti.service.MigrateIssuer(ctx, migratePayload(sourceID.String(), targetID.String()))
+	requireOopsCode(t, err, oops.CodeConflict)
 }
 
 // TestMigrateIssuer_EndpointMismatchConflict proves the parity guard blocks a
@@ -400,7 +451,7 @@ func TestGetIssuerMigratePreflight_ReportsEndpointMismatch(t *testing.T) {
 	preflight, err := ti.service.GetIssuerMigratePreflight(ctx, migratePreflightPayload(sourceID, targetID.String()))
 	require.NoError(t, err)
 	require.False(t, preflight.CanMigrate)
-	require.ElementsMatch(t, []string{"issuer", "token_endpoint", "authorization_endpoint"}, preflight.EndpointMismatches)
+	require.ElementsMatch(t, []string{"issuer", "token_endpoint", "authorization_endpoint"}, mismatchedFields(preflight.EndpointMismatches))
 }
 
 // TestGetIssuerMigratePreflight_ReportsConflictingBindings proves the preflight

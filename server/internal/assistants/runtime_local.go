@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
@@ -199,10 +200,6 @@ func (l *LocalRuntimeBackend) ServerURL() *url.URL { return l.config.ServerURL }
 
 func (l *LocalRuntimeBackend) ImageRef() string { return l.desiredImageRef() }
 
-// ReusesIdleRuntimes is true: Stop leaves the container and its workspace
-// volume in place, and the next admission restarts the same container.
-func (l *LocalRuntimeBackend) ReusesIdleRuntimes() bool { return true }
-
 func (l *LocalRuntimeBackend) desiredImageRef() string {
 	return runtimeImageRef(l.config.OCIImage, l.config.ImageTag)
 }
@@ -301,8 +298,7 @@ func (l *LocalRuntimeBackend) runnerBusy(ctx context.Context, info localContaine
 	if err != nil {
 		return true
 	}
-	idle := state.minThreadIdle()
-	return idle != nil && *idle == 0
+	return state.turnInFlight()
 }
 
 // startContainer converges the named container onto a running, healthy state
@@ -471,6 +467,21 @@ func (l *LocalRuntimeBackend) RunTurn(ctx context.Context, runtime assistantRunt
 	}
 
 	return l.runner.turn(ctx, localRuntimeEndpoint(metadata.HostPort), runtime, turn, localRuntimeTurnTimeout)
+}
+
+func (l *LocalRuntimeBackend) InterruptTurn(ctx context.Context, runtime assistantRuntimeRecord, threadID uuid.UUID) (bool, error) {
+	if err := validateRuntimeBackend(l, runtime.Backend); err != nil {
+		return false, err
+	}
+	metadata, err := decodeLocalRuntimeMetadata(runtime.BackendMetadataJSON)
+	if err != nil {
+		return false, err
+	}
+	if metadata.HostPort == 0 {
+		return false, fmt.Errorf("%w: local runtime host port is not available", ErrRuntimeUnhealthy)
+	}
+
+	return l.runner.interrupt(ctx, localRuntimeEndpoint(metadata.HostPort), threadID)
 }
 
 func (l *LocalRuntimeBackend) Status(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendStatus, error) {

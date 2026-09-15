@@ -323,21 +323,22 @@ If there are no tool calls, return an empty array.`, userPromptText)
 	response, err := a.chatClient.GetObjectCompletion(
 		analysisCtx,
 		openrouter.ObjectCompletionRequest{
-			OrgID:          orgID,
-			ProjectID:      projectID.String(),
-			Model:          "", // Use default model
-			SystemPrompt:   systemPrompt,
-			Prompt:         userPrompt,
-			Temperature:    nil,
-			JSONSchema:     &jsonSchemaConfig,
-			UsageSource:    billing.ModelUsageSourceGram,
-			KeyType:        openrouter.KeyTypeInternal,
-			KeySlot:        "",
-			UserID:         "",
-			ExternalUserID: "",
-			UserEmail:      "",
-			HTTPMetadata:   nil,
-			Reasoning:      nil,
+			OrgID:                  orgID,
+			ProjectID:              projectID.String(),
+			Model:                  "", // Use default model
+			SystemPrompt:           systemPrompt,
+			Prompt:                 userPrompt,
+			Temperature:            nil,
+			JSONSchema:             &jsonSchemaConfig,
+			UsageSource:            billing.ModelUsageSourceGram,
+			KeyType:                openrouter.KeyTypeInternal,
+			KeySlot:                "",
+			UserID:                 "",
+			ExternalUserID:         "",
+			UserEmail:              "",
+			HTTPMetadata:           nil,
+			Reasoning:              nil,
+			DisableResponseHealing: false,
 		},
 	)
 	if err != nil {

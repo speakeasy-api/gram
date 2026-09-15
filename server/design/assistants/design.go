@@ -136,8 +136,7 @@ var _ = Service("assistants", func() {
 			Attribute("assistant_id", String, "The assistant to send the message to.", func() {
 				Format(FormatUUID)
 			})
-			Attribute("message", String, "The user's message text.", func() {
-				MinLength(1)
+			Attribute("message", String, "The user's message text. May be empty when the turn carries attachments.", func() {
 				MaxLength(10000)
 			})
 			Attribute("chat_id", String, "The conversation to continue (from listChats or a prior sendMessage). Omit to start a new conversation; the server mints and returns a fresh chat id.", func() {
@@ -150,6 +149,9 @@ var _ = Service("assistants", func() {
 				Format(FormatUUID)
 			}), "Project skills to make available for this turn.", func() {
 				MaxLength(10)
+			})
+			Attribute("attachments", ArrayOf(SendMessageAttachment), "Files uploaded through assets.uploadChatAttachment that this turn carries.", func() {
+				MaxLength(5)
 			})
 			Required("assistant_id", "message")
 
@@ -169,6 +171,36 @@ var _ = Service("assistants", func() {
 		Meta("openapi:operationId", "sendAssistantMessage")
 		Meta("openapi:extension:x-speakeasy-name-override", "sendMessage")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SendAssistantMessage"}`)
+	})
+
+	Method("interruptTurn", func() {
+		Description("Stop whatever a conversation is currently generating. Cancels turns still queued on the conversation's thread and interrupts the turn in flight on the assistant runtime, so the reply stops where it is rather than finishing in the background. Idempotent and safe to call when nothing is running: `stopped` is false when the reply had already finished.")
+
+		Payload(func() {
+			Attribute("assistant_id", String, "The assistant whose conversation should stop generating.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("chat_id", String, "The conversation to stop, as returned by sendMessage.", func() {
+				Format(FormatUUID)
+			})
+			Required("assistant_id", "chat_id")
+
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(InterruptTurnResult)
+
+		HTTP(func() {
+			POST("/rpc/assistants.interruptTurn")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "interruptAssistantTurn")
+		Meta("openapi:extension:x-speakeasy-name-override", "interruptTurn")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "InterruptAssistantTurn", "type": "mutation"}`)
 	})
 
 	Method("getManagedAssistant", func() {
@@ -248,9 +280,27 @@ var UpdateAssistantForm = Type("UpdateAssistantForm", func() {
 	})
 })
 
+var SendMessageAttachment = Type("SendMessageAttachment", func() {
+	Required("asset_id")
+
+	Attribute("asset_id", String, "The chat attachment asset returned by assets.uploadChatAttachment.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "The file name to show the assistant. Falls back to the stored asset name.", func() {
+		MaxLength(255)
+	})
+})
+
 var ListAssistantsResult = Type("ListAssistantsResult", func() {
 	Attribute("assistants", ArrayOf(shared.Assistant), "Assistants for the current project.")
 	Required("assistants")
+})
+
+var InterruptTurnResult = Type("InterruptTurnResult", func() {
+	Attribute("stopped", Boolean, "Whether the call stopped anything. False means nothing was generating — the reply had already finished, or the conversation never started a turn.")
+	Attribute("interrupted", Boolean, "Whether a turn in flight on the assistant runtime was cancelled.")
+	Attribute("cancelled_queued", Int, "How many turns were dropped from the conversation's queue before any runtime claimed them.")
+	Required("stopped", "interrupted", "cancelled_queued")
 })
 
 var SendMessageResult = Type("SendMessageResult", func() {

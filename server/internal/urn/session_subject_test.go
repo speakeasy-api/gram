@@ -47,8 +47,24 @@ func TestNewSessionSubject(t *testing.T) {
 			wantErr: urn.ErrInvalid,
 		},
 		{
-			name:    "id too long",
-			build:   func() urn.SessionSubject { return urn.NewUserSubject(strings.Repeat("a", 129)) },
+			name: "id at byte limit",
+			build: func() urn.SessionSubject {
+				return urn.NewUserSubject(strings.Repeat("é", urn.MaxSessionSubjectIDLength/2))
+			},
+			wantErr: nil,
+		},
+		{
+			name: "ASCII id over byte limit",
+			build: func() urn.SessionSubject {
+				return urn.NewUserSubject(strings.Repeat("a", urn.MaxSessionSubjectIDLength+1))
+			},
+			wantErr: urn.ErrInvalid,
+		},
+		{
+			name: "multibyte id over byte limit",
+			build: func() urn.SessionSubject {
+				return urn.NewUserSubject(strings.Repeat("é", urn.MaxSessionSubjectIDLength/2+1))
+			},
 			wantErr: urn.ErrInvalid,
 		},
 	}
@@ -115,6 +131,7 @@ func TestParseSessionSubject(t *testing.T) {
 	t.Parallel()
 
 	apikeyID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	agentID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
 
 	tests := []struct {
 		name    string
@@ -135,6 +152,12 @@ func TestParseSessionSubject(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name:    "valid agent",
+			input:   "agent:22222222-2222-2222-2222-222222222222",
+			want:    urn.NewAgentSubject(agentID),
+			wantErr: false,
+		},
+		{
 			name:    "valid anonymous",
 			input:   "anonymous:mcp-session-id",
 			want:    urn.NewAnonymousSubject("mcp-session-id"),
@@ -148,6 +171,16 @@ func TestParseSessionSubject(t *testing.T) {
 		{
 			name:    "apikey non-uuid rejected",
 			input:   "apikey:not-a-uuid",
+			wantErr: true,
+		},
+		{
+			name:    "agent non-uuid rejected",
+			input:   "agent:not-a-uuid",
+			wantErr: true,
+		},
+		{
+			name:    "agent non-canonical uuid rejected",
+			input:   "agent:22222222222222222222222222222222",
 			wantErr: true,
 		},
 		{

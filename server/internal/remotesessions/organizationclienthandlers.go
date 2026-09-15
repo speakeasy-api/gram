@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net/http"
 	"strings"
 	"time"
 
@@ -309,14 +310,23 @@ func (s *Service) CreateClient(ctx context.Context, payload *orgclientsgen.Creat
 		return nil, err
 	}
 
+	if err := requirePrivateKeyJWTKeySet(payload.TokenEndpointAuthMethod, uuid.NullUUID{UUID: uuid.Nil, Valid: false}); err != nil {
+		return nil, err
+	}
+
+	provenance, err := parseRegistrationProvenance(ctx, logger, payload.ClientIDIssuedAt, payload.ClientSecretExpiresAt)
+	if err != nil {
+		return nil, err
+	}
+
 	created, err := txRepo.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
 		ProjectID:               clientProjectID,
 		OrganizationID:          conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
 		RemoteSessionIssuerID:   issuerID,
 		ClientID:                clientID,
 		ClientSecretEncrypted:   secretCiphertext,
-		ClientIDIssuedAt:        conv.ToPGTimestamptz(time.Now().UTC()),
-		ClientSecretExpiresAt:   pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+		ClientIDIssuedAt:        provenance.clientIDIssuedAt,
+		ClientSecretExpiresAt:   provenance.clientSecretExpiresAt,
 		TokenEndpointAuthMethod: conv.PtrToPGText(payload.TokenEndpointAuthMethod),
 		Scope:                   payload.Scope,
 		Audience:                conv.PtrToPGText(payload.Audience),
@@ -540,6 +550,12 @@ func (s *Service) UpdateClient(ctx context.Context, payload *orgclientsgen.Updat
 
 	txRepo := repo.New(dbtx)
 
+	// Locked before the read: this handler evaluates the private_key_jwt rule
+	// against the client's json_web_key_set_id, which detachKeySet writes.
+	if err := lockOrganizationClientForAuthMethodWrite(ctx, logger, txRepo, clientID, authCtx.ActiveOrganizationID); err != nil {
+		return nil, err
+	}
+
 	existing, err := txRepo.GetOrganizationRemoteSessionClientByID(ctx, repo.GetOrganizationRemoteSessionClientByIDParams{
 		ID:             clientID,
 		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
@@ -556,6 +572,10 @@ func (s *Service) UpdateClient(ctx context.Context, payload *orgclientsgen.Updat
 	beforeView, err := mv.BuildRemoteSessionClientView(existing.RemoteSessionClient, existing.UserSessionIssuerIds)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "build remote session client view").LogError(ctx, logger)
+	}
+
+	if err := requirePrivateKeyJWTKeySet(payload.TokenEndpointAuthMethod, existing.RemoteSessionClient.JsonWebKeySetID); err != nil {
+		return nil, err
 	}
 
 	updated, err := txRepo.UpdateOrganizationRemoteSessionClient(ctx, repo.UpdateOrganizationRemoteSessionClientParams{
@@ -599,6 +619,79 @@ func (s *Service) UpdateClient(ctx context.Context, payload *orgclientsgen.Updat
 	return afterView, nil
 }
 
+// RotateClient re-registers a client with its issuer in place, replacing the
+// upstream client_id and secret while the row, its bindings, and its
+// attachments stay. Every remote session minted against the old client_id is
+// revoked, so users reconnect once. The administrator's request is the
+// confirmation, so the issuer is not probed first the way an automatic
+// rotation is. The replacement is registered at the issuer's published
+// registration endpoint.
+func (s *Service) RotateClient(ctx context.Context, payload *orgclientsgen.RotateClientPayload) (*types.RemoteSessionClient, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+
+	clientID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid remote_session_client id").LogError(ctx, logger)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	// Reachability is decided here, on the organization's own view of the
+	// client, so the rotator only ever runs against a row the caller manages.
+	existing, err := repo.New(s.db).GetOrganizationRemoteSessionClientByID(ctx, repo.GetOrganizationRemoteSessionClientByIDParams{
+		ID:             clientID,
+		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "remote session client not found").LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get organization admin remote session client").LogError(ctx, logger)
+	}
+
+	rotated, err := s.rotator.Rotate(ctx, RotateClientRegistrationParams{
+		ClientID:                 existing.RemoteSessionClient.ID,
+		Trigger:                  RotationTriggerManual,
+		ExpectedClientID:         "",
+		Actor:                    urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:         authCtx.Email,
+		ConfirmUpstreamRejection: false,
+		OrganizationID:           authCtx.ActiveOrganizationID,
+	})
+	if err != nil {
+		var registrationErr *DynamicClientRegistrationError
+		switch {
+		case errors.Is(err, ErrClientNotRotatable):
+			return nil, oops.E(oops.CodeBadRequest, err, "only dynamically registered clients using a client secret or no client authentication can be rotated").LogWarn(ctx, logger)
+		case errors.Is(err, ErrIssuerHasNoRegistrationEndpoint):
+			return nil, oops.E(oops.CodeBadRequest, err, "the identity provider publishes no registration endpoint to re-register the client at").LogWarn(ctx, logger)
+		case errors.Is(err, ErrClientRotationInProgress):
+			return nil, oops.E(oops.CodeConflict, err, "the client is already being rotated; reload to see the result").LogWarn(ctx, logger)
+		case errors.Is(err, ErrInvalidDynamicClientRegistrationEndpoint):
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid identity provider registration endpoint").LogWarn(ctx, logger)
+		case errors.As(err, &registrationErr) && registrationErr.StatusCode >= http.StatusBadRequest && registrationErr.StatusCode < http.StatusInternalServerError:
+			return nil, oops.E(oops.CodeBadRequest, err, "identity provider rejected the client registration: %s", registrationErr.Detail).LogWarn(ctx, logger)
+		case errors.As(err, &registrationErr):
+			return nil, oops.E(oops.CodeGatewayError, err, "failed to re-register the client with the identity provider").LogError(ctx, logger)
+		default:
+			return nil, oops.E(oops.CodeUnexpected, err, "rotate remote session client registration").LogError(ctx, logger)
+		}
+	}
+
+	view, err := mv.BuildRemoteSessionClientView(rotated, existing.UserSessionIssuerIds)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "build remote session client view").LogError(ctx, logger)
+	}
+	return view, nil
+}
+
 // DeleteClient soft-deletes a client in the caller's organization and
 // cascades the sessions minted against it.
 func (s *Service) DeleteClient(ctx context.Context, payload *orgclientsgen.DeleteClientPayload) error {
@@ -637,7 +730,8 @@ func (s *Service) DeleteClient(ctx context.Context, payload *orgclientsgen.Delet
 		return oops.E(oops.CodeUnexpected, err, "delete organization admin remote session client").LogError(ctx, logger)
 	}
 
-	if _, err := txRepo.SoftDeleteRemoteSessionsByClientID(ctx, deleted.ID); err != nil {
+	cascaded, err := txRepo.SoftDeleteRemoteSessionsByClientID(ctx, deleted.ID)
+	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "soft-delete dependent remote sessions").LogError(ctx, logger)
 	}
 
@@ -656,6 +750,11 @@ func (s *Service) DeleteClient(ctx context.Context, payload *orgclientsgen.Delet
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
+
+	// Deleting the client cascaded a soft-delete to its sessions, so their
+	// upstream tokens are revoked on the same best-effort terms as an explicit
+	// revoke: post-commit, bounded, never surfaced to the caller.
+	s.revoker.RevokeAllDetached(ctx, revokedCredentials(cascaded))
 
 	return nil
 }

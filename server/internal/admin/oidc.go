@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
@@ -76,6 +77,14 @@ func (g *OIDCClient) AuthCodeURL(state, pkceChallenge, prompt string) string {
 		oauth2.SetAuthURLParam("code_challenge", pkceChallenge),
 		oauth2.SetAuthURLParam("code_challenge_method", "S256"),
 	}
+	// Google generally issues a refresh token only when consent is explicit.
+	// Silent re-authentication must remain silent, but every interactive flow
+	// should obtain a refresh token so the one-hour access token can be renewed.
+	promptTokens := strings.Fields(prompt)
+	if !slices.Contains(promptTokens, "none") && !slices.Contains(promptTokens, "consent") {
+		promptTokens = append(promptTokens, "consent")
+	}
+	prompt = strings.Join(promptTokens, " ")
 	if prompt != "" {
 		opts = append(opts, oauth2.SetAuthURLParam("prompt", prompt))
 	}
@@ -164,8 +173,12 @@ func ExtractIDToken(tok *oauth2.Token) (string, error) {
 	return raw, nil
 }
 
+func isInvalidGrant(err error) bool {
+	var retrieveErr *oauth2.RetrieveError
+	return errors.As(err, &retrieveErr) && retrieveErr.ErrorCode == "invalid_grant"
+}
+
 // Refresh obtains a new access token using the stored refresh token.
-// Failure is treated as an authentication failure by the caller.
 func (g *OIDCClient) Refresh(ctx context.Context, refreshToken string) (*oauth2.Token, error) {
 	ctx = context.WithValue(ctx, oauth2.HTTPClient, g.httpClient)
 	ts := g.oauth2Config.TokenSource(ctx, &oauth2.Token{
@@ -177,7 +190,7 @@ func (g *OIDCClient) Refresh(ctx context.Context, refreshToken string) (*oauth2.
 	})
 	tok, err := ts.Token()
 	if err != nil {
-		return nil, fmt.Errorf("refresh  token: %w", err)
+		return nil, fmt.Errorf("refresh token: %w", err)
 	}
 	return tok, nil
 }

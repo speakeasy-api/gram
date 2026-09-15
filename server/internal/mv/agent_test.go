@@ -27,6 +27,7 @@ func marketplaceRow(orgSlug, orgName, projectSlug string, isDefault bool, token 
 		OrganizationName:     orgName,
 		MarketplaceToken:     pgtype.Text{String: token, Valid: true},
 		MarketplaceUpdatedAt: pgtype.Timestamptz{Time: now, Valid: true},
+		ObservabilityEnabled: true,
 		IsDefaultProject:     isDefault,
 		PluginID:             uuid.NullUUID{},
 		PluginSlug:           pgtype.Text{},
@@ -167,6 +168,28 @@ func TestBuildAgentPluginsView_SameNameRowsCollapseToDefault(t *testing.T) {
 	require.Len(t, result.Marketplaces, 1, "same-named rows collapse to one")
 	require.Equal(t, "acme-corp-speakeasy", result.Marketplaces[0].Name)
 	require.Equal(t, "https://app.getgram.ai/marketplace/tokA.git", result.Marketplaces[0].URL, "first row's token wins")
+}
+
+func TestBuildAgentPluginsView_OmitsObservabilityWhenDisabled(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 5, 29, 12, 0, 0, 0, time.UTC)
+	row := marketplaceRow("acme", "Acme Corp", "default", true, "tokA", now)
+	row.ObservabilityEnabled = false
+	rows := []repo.GetAgentPluginSetRow{
+		withPlugin(row, "engineering-tools", now),
+	}
+
+	result := mv.BuildAgentPluginsView(rows, testMarketplaceURL)
+
+	require.Len(t, result.Marketplaces, 1)
+	slugs := make([]string, 0, len(result.Plugins))
+	for _, p := range result.Plugins {
+		slugs = append(slugs, p.Slug)
+	}
+	require.Equal(t, []string{"engineering-tools"}, slugs,
+		"a disabled observability plugin must not be synthesized for the device agent")
+	require.NotContains(t, slugs, "acme-corp-observability")
 }
 
 func TestBuildAgentPluginsView_EmptyRows(t *testing.T) {

@@ -1,4 +1,5 @@
 import { Page } from "@/components/page-layout";
+import { TabbedPage } from "@/components/page-templates";
 import { RequireScope } from "@/components/require-scope";
 import { AssistantActivitySparkline } from "@/components/assistants/activity-sparkline";
 import { AssistantOwner } from "@/components/assistants/assistant-owner";
@@ -12,12 +13,6 @@ import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { Action, MoreActions } from "@/components/ui/MoreActions";
 import { SearchBar } from "@/components/ui/SearchBar";
-import {
-  PageTabsTrigger,
-  Tabs,
-  TabsContent,
-  PageTabsList,
-} from "@/components/ui/Tabs";
 import { Text } from "@/components/ui/Text";
 import { UpdatedAt } from "@/components/updated-at";
 import { useRoutes } from "@/routes";
@@ -37,16 +32,10 @@ import { MouseEvent, useMemo, useState } from "react";
 import { Outlet } from "react-router";
 
 import { AssistantsAuditLog } from "./AssistantAuditLog";
+import { assistantAttachedServerSlugs } from "./assistantServers";
 import { TriggersPanel } from "../triggers/Triggers";
 
 const TOP_LEVEL_TABS = ["assistants", "triggers", "audit"] as const;
-type TopLevelTab = (typeof TOP_LEVEL_TABS)[number];
-
-function toTopLevelTab(value: string): TopLevelTab {
-  return (TOP_LEVEL_TABS as readonly string[]).includes(value)
-    ? (value as TopLevelTab)
-    : "assistants";
-}
 
 function stopLinkNavigation(e: MouseEvent<HTMLDivElement>) {
   e.preventDefault();
@@ -88,7 +77,7 @@ function AssistantsEmptyState({ onCreate }: { onCreate: () => void }) {
 
 export default function AssistantsIndex(): JSX.Element {
   const routes = useRoutes();
-  const [activeTab, setActiveTab] = useQueryState(
+  const [activeTab] = useQueryState(
     "tab",
     parseAsStringLiteral(TOP_LEVEL_TABS).withDefault("assistants"),
   );
@@ -164,40 +153,26 @@ export default function AssistantsIndex(): JSX.Element {
     );
 
   return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <Tabs
-          value={activeTab}
-          onValueChange={(value) => void setActiveTab(toTopLevelTab(value))}
-          className="flex w-full flex-col"
-        >
-          <div className="border-b">
-            <PageTabsList className="h-auto gap-6 bg-transparent p-0">
-              <PageTabsTrigger value="assistants">Assistants</PageTabsTrigger>
-              <PageTabsTrigger value="triggers">Triggers</PageTabsTrigger>
-              <PageTabsTrigger value="audit">Activity</PageTabsTrigger>
-            </PageTabsList>
-          </div>
-          <TabsContent
-            value="assistants"
-            className="mt-6 flex w-full flex-col gap-4"
-          >
-            {content}
-          </TabsContent>
-          <TabsContent value="triggers" className="mt-6 w-full">
-            <TriggersPanel />
-          </TabsContent>
-          <TabsContent value="audit" className="mt-6 w-full">
-            <RequireScope scope="org:read" level="section">
-              <AssistantsAuditLog />
-            </RequireScope>
-          </TabsContent>
-        </Tabs>
-      </Page.Body>
-    </Page>
+    <TabbedPage
+      activeTab={activeTab}
+      tabs={[
+        { value: "assistants", label: "Assistants", href: "?tab=assistants" },
+        { value: "triggers", label: "Triggers", href: "?tab=triggers" },
+        { value: "audit", label: "Activity", href: "?tab=audit" },
+      ]}
+    >
+      {activeTab === "assistants" && content}
+      {activeTab === "triggers" && (
+        <RequireScope scope="project:write" level="section">
+          <TriggersPanel />
+        </RequireScope>
+      )}
+      {activeTab === "audit" && (
+        <RequireScope scope="org:read" level="section">
+          <AssistantsAuditLog />
+        </RequireScope>
+      )}
+    </TabbedPage>
   );
 }
 
@@ -251,7 +226,8 @@ function AssistantIcon() {
 const MAX_VISIBLE_TOOLSETS = 3;
 
 function AssistantToolsets({ assistant }: { assistant: Assistant }) {
-  if (assistant.toolsets.length === 0) {
+  const slugs = assistantAttachedServerSlugs(assistant);
+  if (slugs.length === 0) {
     return (
       <div className="flex items-center gap-1.5">
         <Boxes className="text-muted-foreground/70 size-3.5 shrink-0" />
@@ -262,21 +238,21 @@ function AssistantToolsets({ assistant }: { assistant: Assistant }) {
     );
   }
 
-  const visible = assistant.toolsets.slice(0, MAX_VISIBLE_TOOLSETS);
-  const overflow = assistant.toolsets.length - visible.length;
+  const visible = slugs.slice(0, MAX_VISIBLE_TOOLSETS);
+  const overflow = slugs.length - visible.length;
 
   return (
     <div className="flex min-w-0 items-center gap-1.5">
       <Boxes className="text-muted-foreground/70 size-3.5 shrink-0" />
       <div className="flex min-w-0 flex-wrap items-center gap-1">
-        {visible.map((toolset) => (
+        {visible.map((slug, index) => (
           <Badge
-            key={toolset.toolsetSlug}
+            key={`${index}:${slug}`}
             variant="neutral"
             className="max-w-[10rem]"
-            title={toolset.toolsetSlug}
+            title={slug}
           >
-            <span className="min-w-0 truncate">{toolset.toolsetSlug}</span>
+            <span className="min-w-0 truncate">{slug}</span>
           </Badge>
         ))}
         {overflow > 0 && <Badge variant="neutral">+{overflow}</Badge>}

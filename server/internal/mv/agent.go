@@ -18,14 +18,14 @@ import (
 // agent.GetAgentPluginSet into the tool-agnostic marketplaces + plugins view
 // the agent endpoint returns.
 //
-// For every marketplace the query returns it emits the marketplace and its
-// always-required observability plugin, then layers on the user's assigned
-// plugins (the non-null plugin rows). The query already scopes which projects
-// appear — the org's default project always, non-default projects only where the
-// caller has a matching assignment — so this builder emits a marketplace for
-// every row it receives. Rows arrive grouped by project (`ORDER BY pr.id,
-// p.slug`); the default project can still yield one row with null plugin columns
-// when the caller has no assignment there.
+// For every marketplace the query returns it emits the marketplace and, when
+// the project has not disabled it, its observability plugin, then layers on the
+// user's assigned plugins (the non-null plugin rows). The query already scopes
+// which projects appear — the org's default project always, non-default
+// projects only where the caller has a matching assignment — so this builder
+// emits a marketplace for every row it receives. Rows arrive grouped by
+// project (`ORDER BY pr.id, p.slug`); the default project can still yield one
+// row with null plugin columns when the caller has no assignment there.
 //
 // Each project's marketplace name is resolved the same way the publish path
 // resolves it: the per-project override (project_marketplace_settings) when set,
@@ -86,18 +86,20 @@ func BuildAgentPluginsView(rows []repo.GetAgentPluginSetRow, marketplaceURL func
 				row.MarketplaceToken.String,
 				row.MarketplaceUpdatedAt.Time.UnixNano(),
 			)
-			// Observability is required on every published marketplace,
-			// independent of assignments. The slug must name the plugin as it
-			// exists in the published repo: the hooks rollout gate can pin the
+			// Observability ships with every published marketplace unless the
+			// project disabled it. The slug must name the plugin as it exists
+			// in the published repo: the hooks rollout gate can pin the
 			// subtree under a pre-rename org name, recorded in the published
 			// hooks config snapshot.
-			hooksOrgName := conv.Default(naming.PublishedHooksOrgName(row.PublishedHooksConfig), row.OrganizationName)
-			observabilitySlug := naming.ObservabilitySlug(hooksOrgName)
-			plugins = append(plugins, &gen.AgentPlugin{
-				Slug:            observabilitySlug,
-				MarketplaceName: name,
-			})
-			writeAgentPluginsETag(etag, "plugin\x00%s\x00%s\x00%d\n", name, observabilitySlug, int64(0))
+			if row.ObservabilityEnabled {
+				hooksOrgName := conv.Default(naming.PublishedHooksOrgName(row.PublishedHooksConfig), row.OrganizationName)
+				observabilitySlug := naming.ObservabilitySlug(hooksOrgName)
+				plugins = append(plugins, &gen.AgentPlugin{
+					Slug:            observabilitySlug,
+					MarketplaceName: name,
+				})
+				writeAgentPluginsETag(etag, "plugin\x00%s\x00%s\x00%d\n", name, observabilitySlug, int64(0))
+			}
 		}
 
 		// Assigned plugin for this project, if the LEFT JOIN matched one — but
@@ -123,8 +125,8 @@ func BuildAgentPluginsView(rows []repo.GetAgentPluginSetRow, marketplaceURL func
 
 // writeAgentPluginsETag hashes only the contributions emitted into the result:
 // the first marketplace for each rendered marketplace name, its observability
-// plugin, and each rendered assigned plugin. Deployment config (e.g. the server
-// URL) is deliberately excluded so it does not bust the cache.
+// plugin when enabled, and each rendered assigned plugin. Deployment config
+// (e.g. the server URL) is deliberately excluded so it does not bust the cache.
 func writeAgentPluginsETag(etag io.Writer, format string, args ...any) {
 	// sha256.Hash never errors from Write; assign to _ to satisfy errcheck.
 	_, _ = fmt.Fprintf(etag, format, args...)

@@ -43,6 +43,18 @@ func TestNewPrincipal(t *testing.T) {
 			wantErr: nil,
 		},
 		{
+			name:    "valid agent principal",
+			typ:     urn.PrincipalTypeAgent,
+			id:      "018f8d7b-58d7-7cc4-bb16-9f8c6b99a001",
+			wantErr: nil,
+		},
+		{
+			name:    "invalid agent principal id",
+			typ:     urn.PrincipalTypeAgent,
+			id:      "not-a-uuid",
+			wantErr: urn.ErrInvalid,
+		},
+		{
 			name:    "empty type",
 			typ:     "",
 			id:      "some-id",
@@ -175,6 +187,48 @@ func TestParsePrincipal(t *testing.T) {
 			input:   "role:admin",
 			want:    urn.NewPrincipal(urn.PrincipalTypeRole, "admin"),
 			wantErr: false,
+		},
+		{
+			name:    "valid email",
+			input:   "email:dev@example.com",
+			want:    urn.NewPrincipal(urn.PrincipalTypeEmail, "dev@example.com"),
+			wantErr: false,
+		},
+		{
+			name:    "valid canonical agent",
+			input:   "agent:018f8d7b-58d7-7cc4-bb16-9f8c6b99a001",
+			want:    urn.NewPrincipal(urn.PrincipalTypeAgent, "018f8d7b-58d7-7cc4-bb16-9f8c6b99a001"),
+			wantErr: false,
+		},
+		{
+			name:    "malformed agent UUID",
+			input:   "agent:not-a-uuid",
+			wantErr: true,
+		},
+		{
+			name:    "non-canonical uppercase agent UUID",
+			input:   "agent:018F8D7B-58D7-7CC4-BB16-9F8C6B99A001",
+			wantErr: true,
+		},
+		{
+			name:    "non-canonical compact agent UUID",
+			input:   "agent:018f8d7b58d77cc4bb169f8c6b99a001",
+			wantErr: true,
+		},
+		{
+			name:    "non-canonical braced agent UUID",
+			input:   "agent:{018f8d7b-58d7-7cc4-bb16-9f8c6b99a001}",
+			wantErr: true,
+		},
+		{
+			name:    "bare agent UUID",
+			input:   "018f8d7b-58d7-7cc4-bb16-9f8c6b99a001",
+			wantErr: true,
+		},
+		{
+			name:    "unsupported agent form",
+			input:   "agent:018f8d7b-58d7-7cc4-bb16-9f8c6b99a001:child",
+			wantErr: true,
 		},
 		{
 			name:    "empty string",
@@ -439,37 +493,45 @@ func TestPrincipal_IsZero(t *testing.T) {
 
 func TestPrincipal_roundTrip(t *testing.T) {
 	t.Parallel()
-	original := urn.NewPrincipal(urn.PrincipalTypeUser, "user_01abc")
 
-	// JSON round trip
-	jsonData, err := json.Marshal(original)
-	require.NoError(t, err)
+	tests := []urn.Principal{
+		urn.NewPrincipal(urn.PrincipalTypeUser, "user_01abc"),
+		urn.NewPrincipal(urn.PrincipalTypeAgent, "018f8d7b-58d7-7cc4-bb16-9f8c6b99a001"),
+	}
 
-	var fromJSON urn.Principal
-	err = json.Unmarshal(jsonData, &fromJSON)
-	require.NoError(t, err)
-	require.Equal(t, original.Type, fromJSON.Type)
-	require.Equal(t, original.ID, fromJSON.ID)
+	for _, original := range tests {
+		principal := original
+		t.Run(string(principal.Type), func(t *testing.T) {
+			t.Parallel()
 
-	// Text round trip
-	textData, err := original.MarshalText()
-	require.NoError(t, err)
+			jsonData, err := json.Marshal(principal)
+			require.NoError(t, err)
 
-	var fromText urn.Principal
-	err = fromText.UnmarshalText(textData)
-	require.NoError(t, err)
-	require.Equal(t, original.Type, fromText.Type)
-	require.Equal(t, original.ID, fromText.ID)
+			var fromJSON urn.Principal
+			err = json.Unmarshal(jsonData, &fromJSON)
+			require.NoError(t, err)
+			require.Equal(t, principal.Type, fromJSON.Type)
+			require.Equal(t, principal.ID, fromJSON.ID)
 
-	// Database round trip
-	value, err := original.Value()
-	require.NoError(t, err)
+			textData, err := principal.MarshalText()
+			require.NoError(t, err)
 
-	var fromDB urn.Principal
-	err = fromDB.Scan(value)
-	require.NoError(t, err)
-	require.Equal(t, original.Type, fromDB.Type)
-	require.Equal(t, original.ID, fromDB.ID)
+			var fromText urn.Principal
+			err = fromText.UnmarshalText(textData)
+			require.NoError(t, err)
+			require.Equal(t, principal.Type, fromText.Type)
+			require.Equal(t, principal.ID, fromText.ID)
+
+			value, err := principal.Value()
+			require.NoError(t, err)
+
+			var fromDB urn.Principal
+			err = fromDB.Scan(value)
+			require.NoError(t, err)
+			require.Equal(t, principal.Type, fromDB.Type)
+			require.Equal(t, principal.ID, fromDB.ID)
+		})
+	}
 }
 
 func TestPrincipal_validationCaching(t *testing.T) {

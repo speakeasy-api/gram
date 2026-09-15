@@ -25,6 +25,8 @@ type Server struct {
 	GetRiskPolicy                  http.Handler
 	UpdateRiskPolicy               http.Handler
 	DeleteRiskPolicy               http.Handler
+	ListSessionQuarantines         http.Handler
+	ReleaseSessionQuarantine       http.Handler
 	ListRiskResults                http.Handler
 	ListRiskResultsForAgent        http.Handler
 	UnmaskRiskResult               http.Handler
@@ -101,6 +103,8 @@ func New(
 			{"GetRiskPolicy", "GET", "/rpc/risk.getPolicy"},
 			{"UpdateRiskPolicy", "PUT", "/rpc/risk.updatePolicy"},
 			{"DeleteRiskPolicy", "DELETE", "/rpc/risk.deletePolicy"},
+			{"ListSessionQuarantines", "GET", "/rpc/risk.listSessionQuarantines"},
+			{"ReleaseSessionQuarantine", "POST", "/rpc/risk.releaseSessionQuarantine"},
 			{"ListRiskResults", "GET", "/rpc/risk.listResults"},
 			{"ListRiskResultsForAgent", "GET", "/rpc/risk.listResultsForAgent"},
 			{"UnmaskRiskResult", "POST", "/rpc/risk.unmaskResult"},
@@ -149,6 +153,8 @@ func New(
 		GetRiskPolicy:                  NewGetRiskPolicyHandler(e.GetRiskPolicy, mux, decoder, encoder, errhandler, formatter),
 		UpdateRiskPolicy:               NewUpdateRiskPolicyHandler(e.UpdateRiskPolicy, mux, decoder, encoder, errhandler, formatter),
 		DeleteRiskPolicy:               NewDeleteRiskPolicyHandler(e.DeleteRiskPolicy, mux, decoder, encoder, errhandler, formatter),
+		ListSessionQuarantines:         NewListSessionQuarantinesHandler(e.ListSessionQuarantines, mux, decoder, encoder, errhandler, formatter),
+		ReleaseSessionQuarantine:       NewReleaseSessionQuarantineHandler(e.ReleaseSessionQuarantine, mux, decoder, encoder, errhandler, formatter),
 		ListRiskResults:                NewListRiskResultsHandler(e.ListRiskResults, mux, decoder, encoder, errhandler, formatter),
 		ListRiskResultsForAgent:        NewListRiskResultsForAgentHandler(e.ListRiskResultsForAgent, mux, decoder, encoder, errhandler, formatter),
 		UnmaskRiskResult:               NewUnmaskRiskResultHandler(e.UnmaskRiskResult, mux, decoder, encoder, errhandler, formatter),
@@ -204,6 +210,8 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetRiskPolicy = m(s.GetRiskPolicy)
 	s.UpdateRiskPolicy = m(s.UpdateRiskPolicy)
 	s.DeleteRiskPolicy = m(s.DeleteRiskPolicy)
+	s.ListSessionQuarantines = m(s.ListSessionQuarantines)
+	s.ReleaseSessionQuarantine = m(s.ReleaseSessionQuarantine)
 	s.ListRiskResults = m(s.ListRiskResults)
 	s.ListRiskResultsForAgent = m(s.ListRiskResultsForAgent)
 	s.UnmaskRiskResult = m(s.UnmaskRiskResult)
@@ -258,6 +266,8 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetRiskPolicyHandler(mux, h.GetRiskPolicy)
 	MountUpdateRiskPolicyHandler(mux, h.UpdateRiskPolicy)
 	MountDeleteRiskPolicyHandler(mux, h.DeleteRiskPolicy)
+	MountListSessionQuarantinesHandler(mux, h.ListSessionQuarantines)
+	MountReleaseSessionQuarantineHandler(mux, h.ReleaseSessionQuarantine)
 	MountListRiskResultsHandler(mux, h.ListRiskResults)
 	MountListRiskResultsForAgentHandler(mux, h.ListRiskResultsForAgent)
 	MountUnmaskRiskResultHandler(mux, h.UnmaskRiskResult)
@@ -601,6 +611,113 @@ func NewDeleteRiskPolicyHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "deleteRiskPolicy")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListSessionQuarantinesHandler configures the mux to serve the "risk"
+// service "listSessionQuarantines" endpoint.
+func MountListSessionQuarantinesHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/risk.listSessionQuarantines", f)
+}
+
+// NewListSessionQuarantinesHandler creates a HTTP handler which loads the HTTP
+// request and calls the "risk" service "listSessionQuarantines" endpoint.
+func NewListSessionQuarantinesHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListSessionQuarantinesRequest(mux, decoder)
+		encodeResponse = EncodeListSessionQuarantinesResponse(encoder)
+		encodeError    = EncodeListSessionQuarantinesError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listSessionQuarantines")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountReleaseSessionQuarantineHandler configures the mux to serve the "risk"
+// service "releaseSessionQuarantine" endpoint.
+func MountReleaseSessionQuarantineHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/risk.releaseSessionQuarantine", f)
+}
+
+// NewReleaseSessionQuarantineHandler creates a HTTP handler which loads the
+// HTTP request and calls the "risk" service "releaseSessionQuarantine"
+// endpoint.
+func NewReleaseSessionQuarantineHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeReleaseSessionQuarantineRequest(mux, decoder)
+		encodeResponse = EncodeReleaseSessionQuarantineResponse(encoder)
+		encodeError    = EncodeReleaseSessionQuarantineError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "releaseSessionQuarantine")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
 		payload, err := decodeRequest(r)
 		if err != nil {

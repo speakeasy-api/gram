@@ -1,8 +1,10 @@
 # Generated files - exclude from language stats and diffs
 client/dashboard/src/sdk/** linguist-generated
+client/admin/src/sdk/** linguist-generated -whitespace
 server/gen/** linguist-generated
 server/internal/**/*.sql.go linguist-generated
 openrouter/** linguist-generated
 .speakeasy/*.lock linguist-generated
 .speakeasy/out.openapi.yaml linguist-generated
+.speakeasy/out.admin.openapi.yaml linguist-generated
 **/descriptors.pb linguist-generated

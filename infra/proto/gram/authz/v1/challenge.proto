@@ -1,0 +1,60 @@
+edition = "2024";
+
+package gram.authz.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/authz/v1;authzv1";
+
+// Challenge is one authorization decision destined for the authz_challenges
+// ClickHouse event log. The id is stable across Pub/Sub redelivery.
+message Challenge {
+  message RequestedCheck {
+    string scope = 1;
+    string resource_kind = 2;
+    string resource_id = 3;
+    string selector = 4;
+  }
+
+  message MatchedGrant {
+    string principal_urn = 1;
+    string scope = 2;
+    string selector = 3;
+    string matched_via_check_scope = 4;
+  }
+
+  string id = 1;
+  string timestamp = 2; // UTC timestamp in RFC3339Nano format
+  string organization_id = 3;
+  string project_id = 4;
+  string trace_id = 5;
+  string span_id = 6;
+  string request_id = 7;
+  string principal_urn = 8;
+  string principal_type = 9;
+  string user_id = 10;
+  string user_external_id = 11;
+  string user_email = 12;
+  string api_key_id = 13;
+  string session_id = 14;
+  repeated string role_slugs = 15;
+  string operation = 16;
+  string outcome = 17;
+  string reason = 18;
+  string scope = 19;
+  string resource_kind = 20;
+  string resource_id = 21;
+  string selector = 22;
+  repeated string expanded_scopes = 23;
+  repeated RequestedCheck requested_checks = 24;
+  repeated MatchedGrant matched_grants = 25;
+  uint32 evaluated_grant_count = 26;
+  uint32 filter_candidate_count = 27;
+  uint32 filter_allowed_count = 28;
+
+  option (gcp.pubsub.v1.topic) = {
+    retention_hint: {
+      seconds: 604800 /* 7 days */
+    }
+  };
+}

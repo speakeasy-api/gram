@@ -10,6 +10,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_endpoints"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -46,7 +47,7 @@ func TestCheckMcpEndpointSlugAvailability_PlatformDomainTaken(t *testing.T) {
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 		CustomDomainID:   nil,
-		McpServerID:      mcpServerID,
+		McpServerID:      conv.PtrEmpty(mcpServerID),
 		Slug:             types.McpEndpointSlug(slug),
 	})
 	require.NoError(t, err)
@@ -117,7 +118,7 @@ func TestCheckMcpEndpointSlugAvailability_CustomDomainTaken(t *testing.T) {
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 		CustomDomainID:   &customDomainID,
-		McpServerID:      mcpServerID,
+		McpServerID:      conv.PtrEmpty(mcpServerID),
 		Slug:             types.McpEndpointSlug(slug),
 	})
 	require.NoError(t, err)
@@ -153,7 +154,7 @@ func TestCheckMcpEndpointSlugAvailability_NamespacesAreSeparate(t *testing.T) {
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 		CustomDomainID:   nil,
-		McpServerID:      mcpServerID,
+		McpServerID:      conv.PtrEmpty(mcpServerID),
 		Slug:             types.McpEndpointSlug(platformSlug),
 	})
 	require.NoError(t, err)

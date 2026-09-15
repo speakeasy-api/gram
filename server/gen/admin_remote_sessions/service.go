@@ -23,6 +23,21 @@ type Service interface {
 	// Create a global remote_session_issuer (project_id NULL, organization_id
 	// NULL). Requires platform admin.
 	CreateGlobalIssuer(context.Context, *CreateGlobalIssuerPayload) (res *types.RemoteSessionIssuer, err error)
+	// Report the global remote_session_issuers that already describe an upstream
+	// issuer URL, so the catalog create and edit forms can warn before curating a
+	// second entry for the same authorization server. Requires platform admin.
+
+	// Scoped to the global partition only. Tenant issuers naming the same URL are
+	// deliberately not reported here — listGlobalIssuerConvergenceCandidates is
+	// the surface for those, and it is keyed on a global issuer that already
+	// exists.
+
+	// The global tier is unique on slug but not on issuer, so nothing prevents a
+	// duplicate catalog entry and this warning is the only thing that will catch
+	// one. Advisory all the same: it never blocks the write. Matching uses the
+	// same canonicalization as the tenant-facing preflights, and an unparseable
+	// URL returns no matches rather than an error.
+	GetGlobalIssuerDuplicatePreflight(context.Context, *GetGlobalIssuerDuplicatePreflightPayload) (res *types.RemoteSessionIssuerDuplicatePreflight, err error)
 	// List global remote_session_issuers. Requires platform admin.
 	ListGlobalIssuers(context.Context, *ListGlobalIssuersPayload) (res *ListGlobalRemoteSessionIssuersResult, err error)
 	// Get a global remote_session_issuer by id. Requires platform admin.
@@ -103,7 +118,7 @@ const ServiceName = "adminRemoteSessions"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [15]string{"createGlobalIssuer", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "createGlobalClient", "listGlobalClients", "getGlobalClient", "updateGlobalClient", "deleteGlobalClient", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer"}
+var MethodNames = [16]string{"createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "createGlobalClient", "listGlobalClients", "getGlobalClient", "updateGlobalClient", "deleteGlobalClient", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer"}
 
 // CreateGlobalClientPayload is the payload type of the adminRemoteSessions
 // service createGlobalClient method.
@@ -146,6 +161,9 @@ type CreateGlobalIssuerPayload struct {
 	AuthorizationEndpoint *string
 	// Upstream token endpoint.
 	TokenEndpoint *string
+	// Upstream RFC 7009 revocation endpoint; absent for issuers that advertise
+	// none.
+	RevocationEndpoint *string
 	// Upstream RFC 7591 registration endpoint; absent for issuers without DCR.
 	RegistrationEndpoint *string
 	// Upstream JWKS URI.
@@ -168,6 +186,11 @@ type CreateGlobalIssuerPayload struct {
 	ResponseTypesSupported []string
 	// Token endpoint auth methods advertised by the issuer.
 	TokenEndpointAuthMethodsSupported []string
+	// PKCE code challenge methods advertised by the issuer (RFC 8414
+	// code_challenge_methods_supported). Omitting the field stores null ("not
+	// captured"), distinct from an empty array ("the issuer advertises no
+	// methods").
+	CodeChallengeMethodsSupported []string
 	// When true, may unlock OIDC-aware behaviour. Default false.
 	Oidc *bool
 	// When true, the MCP client registers and transacts directly with this issuer.
@@ -177,6 +200,38 @@ type CreateGlobalIssuerPayload struct {
 	// (OAuth CIMD draft). Discovered from the issuer metadata document and used to
 	// pre-flight outbound CIMD. Default false.
 	ClientIDMetadataDocumentSupported *bool
+	// OpenID Connect userinfo endpoint. Discovered from the issuer metadata
+	// document; rejected unless an absolute https URL, or http on loopback.
+	UserinfoEndpoint *string
+	// RFC 7662 token introspection endpoint. Discovered from the issuer metadata
+	// document; rejected unless an absolute https URL, or http on loopback.
+	IntrospectionEndpoint *string
+	// Client authentication methods the introspection endpoint accepts. Omitting
+	// the field stores null ("not captured"), distinct from an empty array ("the
+	// issuer advertises none").
+	IntrospectionEndpointAuthMethodsSupported []string
+	// JWS algorithms the issuer signs ID tokens with. Omitting the field stores
+	// null ("not captured"), distinct from an empty array ("the issuer advertises
+	// none").
+	IDTokenSigningAlgValuesSupported []string
+	// Claims the issuer can return in ID tokens and from userinfo. Omitting the
+	// field stores null ("not captured"), distinct from an empty array ("the
+	// issuer advertises none").
+	ClaimsSupported []string
+	// Whether the issuer supports OpenID Connect Back-Channel Logout. Omitting the
+	// field stores null ("not captured").
+	BackchannelLogoutSupported *bool
+	// Whether the issuer includes the RFC 9207 iss parameter in authorization
+	// responses. Omitting the field stores null ("not captured").
+	AuthorizationResponseIssParameterSupported *bool
+	// Operator-pinned scope request. When set, it is sent verbatim on the upstream
+	// authorize redirect in place of the resolved scope set. Omit or send an empty
+	// array to leave it unset.
+	ScopeOverride []string
+	// Whether the issuer accepts the RFC 8707 resource parameter. Omit to leave it
+	// unset: the parameter is then sent, and a login or refresh the issuer answers
+	// with invalid_target is retried once without it. Set false to never send it.
+	ResourceIndicatorSupported *bool
 }
 
 // DeleteGlobalClientPayload is the payload type of the adminRemoteSessions
@@ -208,6 +263,15 @@ type FetchGlobalIssuerMetadataPayload struct {
 type GetGlobalClientPayload struct {
 	// The remote_session_client id.
 	ID           string
+	SessionToken *string
+}
+
+// GetGlobalIssuerDuplicatePreflightPayload is the payload type of the
+// adminRemoteSessions service getGlobalIssuerDuplicatePreflight method.
+type GetGlobalIssuerDuplicatePreflightPayload struct {
+	// The upstream issuer URL being entered (e.g. https://login.linear.app). Empty
+	// or unparseable returns no matches.
+	Issuer       *string
 	SessionToken *string
 }
 
@@ -243,6 +307,9 @@ type GlobalRemoteSessionIssuer struct {
 	// project that are registered with this issuer. These block a delete but only
 	// their owning organization can remove them.
 	TenantClientCount int
+	// Number of active tenant-owned user_session_issuers that trust this issuer.
+	// These block deletion and must be unlinked by their owning organizations.
+	TrustedUserSessionIssuerCount int
 }
 
 // An organization- or project-level remote_session_issuer that names the same
@@ -260,13 +327,14 @@ type IssuerConvergenceCandidate struct {
 	// Number of non-deleted remote_session_clients that would move onto the target
 	// issuer.
 	ClientCount int
-	// Names of the authorization-server metadata fields (issuer, token_endpoint,
-	// authorization_endpoint) that differ from the target. Non-empty blocks the
-	// migration.
-	EndpointMismatches []string
-	// Non-blocking divergences (oidc, passthrough, scopes_supported). The target
-	// issuer's values become authoritative for the migrated clients.
-	Warnings []string
+	// The authorization-server metadata fields (issuer, token_endpoint,
+	// authorization_endpoint) that differ from the target, with both sides'
+	// values. Non-empty blocks the migration.
+	EndpointMismatches []*types.IssuerFieldMismatch
+	// Non-blocking divergences (oidc, passthrough, scopes_supported), with both
+	// sides' values. The target issuer's values become authoritative for the
+	// migrated clients.
+	Warnings []*types.IssuerFieldMismatch
 }
 
 // IssuerMigratePreflight is the result type of the adminRemoteSessions service
@@ -277,19 +345,23 @@ type IssuerMigratePreflight struct {
 	ClientCount int
 	// Display names of MCP servers attached to the source issuer's clients.
 	McpServerNames []string
-	// Names of the authorization-server metadata fields (issuer, token_endpoint,
-	// authorization_endpoint) that differ between source and target. Non-empty
-	// blocks the migration.
-	EndpointMismatches []string
+	// The authorization-server metadata fields (issuer, token_endpoint,
+	// authorization_endpoint) that differ between source and target, with both
+	// sides' values. Non-empty blocks the migration.
+	EndpointMismatches []*types.IssuerFieldMismatch
 	// Display names of MCP servers where both the source and the target issuer
 	// already have a client bound. Non-empty blocks the migration; detach one
 	// client per listed server and retry.
 	ConflictingMcpServerNames []string
-	// Non-blocking divergences (oidc, passthrough, scopes_supported). The target
-	// issuer's values become authoritative for the migrated clients.
-	Warnings []string
-	// TRUE when the migration would succeed: no endpoint mismatches and no
-	// conflicting MCP-server bindings.
+	// Non-blocking divergences (oidc, passthrough, scopes_supported), with both
+	// sides' values. The target issuer's values become authoritative for the
+	// migrated clients.
+	Warnings []*types.IssuerFieldMismatch
+	// Number of user_session_issuers that trust the source. Any non-zero value
+	// blocks migration.
+	TrustedUserSessionIssuerCount int
+	// TRUE when the migration would succeed: no endpoint mismatches, conflicting
+	// MCP-server bindings, or user-session issuers that trust the source.
 	CanMigrate bool
 	// Number of tenant-owned remote_session_clients already registered with the
 	// target issuer, BEFORE this migration. Any non-zero value blocks deleting the
@@ -418,7 +490,8 @@ type UpdateGlobalIssuerPayload struct {
 	Issuer *string
 	// Set or clear the display name. An empty string clears it to NULL.
 	Name *string
-	// Set the logo asset id.
+	// Set or clear the logo asset id. An empty string clears it to NULL; any other
+	// value must be a uuid.
 	LogoAssetID *string
 	// Set or clear the URL of OAuth client setup documentation shown when creating
 	// clients. An empty string clears it to NULL; any other value must be an
@@ -428,6 +501,8 @@ type UpdateGlobalIssuerPayload struct {
 	AuthorizationEndpoint *string
 	// Upstream token endpoint.
 	TokenEndpoint *string
+	// Upstream RFC 7009 revocation endpoint.
+	RevocationEndpoint *string
 	// Upstream RFC 7591 registration endpoint.
 	RegistrationEndpoint *string
 	// Upstream JWKS URI.
@@ -445,11 +520,47 @@ type UpdateGlobalIssuerPayload struct {
 	GrantTypesSupported               []string
 	ResponseTypesSupported            []string
 	TokenEndpointAuthMethodsSupported []string
-	Oidc                              *bool
-	Passthrough                       *bool
+	// PKCE code challenge methods advertised by the issuer (RFC 8414
+	// code_challenge_methods_supported). Omitting the field leaves the stored
+	// value unchanged; an empty array records that the issuer advertises no
+	// methods.
+	CodeChallengeMethodsSupported []string
+	Oidc                          *bool
+	Passthrough                   *bool
 	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
 	// (OAuth CIMD draft).
 	ClientIDMetadataDocumentSupported *bool
+	// Set or clear the OpenID Connect userinfo endpoint. An empty string clears it
+	// to NULL; any other value must be an absolute https URL, or http on loopback.
+	UserinfoEndpoint *string
+	// Set or clear the RFC 7662 token introspection endpoint. An empty string
+	// clears it to NULL; any other value must be an absolute https URL, or http on
+	// loopback.
+	IntrospectionEndpoint *string
+	// Client authentication methods the introspection endpoint accepts. Omitting
+	// the field leaves the stored value unchanged; an empty array records that the
+	// issuer advertises none.
+	IntrospectionEndpointAuthMethodsSupported []string
+	// JWS algorithms the issuer signs ID tokens with. Omitting the field leaves
+	// the stored value unchanged; an empty array records that the issuer
+	// advertises none.
+	IDTokenSigningAlgValuesSupported []string
+	// Claims the issuer can return in ID tokens and from userinfo. Omitting the
+	// field leaves the stored value unchanged; an empty array records that the
+	// issuer advertises none.
+	ClaimsSupported []string
+	// Whether the issuer supports OpenID Connect Back-Channel Logout. Omitting the
+	// field leaves the stored value unchanged.
+	BackchannelLogoutSupported *bool
+	// Whether the issuer includes the RFC 9207 iss parameter in authorization
+	// responses. Omitting the field leaves the stored value unchanged.
+	AuthorizationResponseIssParameterSupported *bool
+	// Set or clear the operator-pinned scope request. Omitting the field (or
+	// sending null) leaves the stored value unchanged; an empty array clears it.
+	ScopeOverride []string `json:"scope_override"`
+	// Whether the issuer accepts the RFC 8707 resource parameter. Omitting the
+	// field leaves the stored value unchanged.
+	ResourceIndicatorSupported *bool
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

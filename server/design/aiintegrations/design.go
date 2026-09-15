@@ -39,6 +39,15 @@ var Config = Type("AIIntegrationConfig", func() {
 	})
 })
 
+var AnthropicInferenceConfig = Type("AnthropicInferenceConfig", func() {
+	Description("Organization-owned Anthropic inference hook. Signing secrets are write-only and encrypted at rest.")
+	Attribute("id", String, "Integration identifier. Omitted before setup.", func() { Format(FormatUUID) })
+	Attribute("webhook_path", String, "Webhook path on the API server. Omitted before setup.")
+	Attribute("has_signing_secret", Boolean)
+	Attribute("enabled", Boolean)
+	Required("has_signing_secret", "enabled")
+})
+
 var ScheduleState = Type("AIIntegrationScheduleState", func() {
 	Description("Scheduler state for one sync schedule (stream) of a provider integration.")
 	Required("schedule", "enabled", "status", "consecutive_failures")
@@ -79,6 +88,68 @@ var _ = Service("aiIntegrations", func() {
 	Description("Manage organization-level AI provider integrations.")
 
 	shared.DeclareErrorResponses()
+
+	Method("getAnthropicInferenceConfig", func() {
+		Description("Get the organization Anthropic inference hook setup.")
+		Security(security.ByKey, func() { Scope("consumer") })
+		Security(security.Session)
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+		Result(AnthropicInferenceConfig)
+		HTTP(func() {
+			GET("/rpc/aiIntegrations.getAnthropicInferenceConfig")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "getAnthropicInferenceConfig")
+		Meta("openapi:extension:x-speakeasy-name-override", "getAnthropicInferenceConfig")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AnthropicInferenceConfig"}`)
+	})
+
+	Method("upsertAnthropicInferenceConfig", func() {
+		Description("Prepare a webhook URL or update its signing secret and enabled state.")
+		Security(security.ByKey, func() { Scope("producer") })
+		Security(security.Session)
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			Attribute("signing_secret", String, "New Anthropic signing secret. Omit to preserve the saved secret.", func() { MaxLength(4096) })
+			Attribute("enabled", Boolean, "Enable inspection. Requires a saved signing secret.")
+		})
+		Result(AnthropicInferenceConfig)
+		HTTP(func() {
+			POST("/rpc/aiIntegrations.upsertAnthropicInferenceConfig")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "upsertAnthropicInferenceConfig")
+		Meta("openapi:extension:x-speakeasy-name-override", "upsertAnthropicInferenceConfig")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpsertAnthropicInferenceConfig"}`)
+	})
+
+	Method("deleteAnthropicInferenceConfig", func() {
+		Description("Disconnect the organization Anthropic inference hook and revoke its URL.")
+		Security(security.ByKey, func() { Scope("producer") })
+		Security(security.Session)
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+		Result(Empty)
+		HTTP(func() {
+			POST("/rpc/aiIntegrations.deleteAnthropicInferenceConfig")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusNoContent)
+		})
+		Meta("openapi:operationId", "deleteAnthropicInferenceConfig")
+		Meta("openapi:extension:x-speakeasy-name-override", "deleteAnthropicInferenceConfig")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteAnthropicInferenceConfig"}`)
+	})
 
 	Method("getConfig", func() {
 		Description("Get the org-wide AI integration config for a provider. Returns an empty config (enabled=false, has_api_key=false) when none is set.")

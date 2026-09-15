@@ -53,7 +53,7 @@ export type DeleteAwsIamCredentialMutationError =
  * deleteAwsIamCredential externalCredentials
  *
  * @remarks
- * Soft-delete an AWS IAM external credential by ID. Requires org:admin.
+ * Soft-delete an AWS IAM external credential by ID. Requires org:admin. Refused with a conflict while any live external key still names the credential, since deleting it would leave those keys unable to reach the key material they sign with.
  */
 export function useDeleteAwsIamCredentialMutation(
   options?: MutationHookOptions<

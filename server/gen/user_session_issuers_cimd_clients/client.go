@@ -18,6 +18,7 @@ import (
 type Client struct {
 	ListPresetsEndpoint                       goa.Endpoint
 	CreateUserSessionIssuerCimdClientEndpoint goa.Endpoint
+	VerifyURLEndpoint                         goa.Endpoint
 	ListUserSessionIssuerCimdClientsEndpoint  goa.Endpoint
 	GetUserSessionIssuerCimdClientEndpoint    goa.Endpoint
 	DeleteUserSessionIssuerCimdClientEndpoint goa.Endpoint
@@ -25,10 +26,11 @@ type Client struct {
 
 // NewClient initializes a "userSessionIssuersCimdClients" service client given
 // the endpoints.
-func NewClient(listPresets, createUserSessionIssuerCimdClient, listUserSessionIssuerCimdClients, getUserSessionIssuerCimdClient, deleteUserSessionIssuerCimdClient goa.Endpoint) *Client {
+func NewClient(listPresets, createUserSessionIssuerCimdClient, verifyURL, listUserSessionIssuerCimdClients, getUserSessionIssuerCimdClient, deleteUserSessionIssuerCimdClient goa.Endpoint) *Client {
 	return &Client{
 		ListPresetsEndpoint:                       listPresets,
 		CreateUserSessionIssuerCimdClientEndpoint: createUserSessionIssuerCimdClient,
+		VerifyURLEndpoint:                         verifyURL,
 		ListUserSessionIssuerCimdClientsEndpoint:  listUserSessionIssuerCimdClients,
 		GetUserSessionIssuerCimdClientEndpoint:    getUserSessionIssuerCimdClient,
 		DeleteUserSessionIssuerCimdClientEndpoint: deleteUserSessionIssuerCimdClient,
@@ -80,6 +82,29 @@ func (c *Client) CreateUserSessionIssuerCimdClient(ctx context.Context, p *Creat
 		return
 	}
 	return ires.(*CreateUserSessionIssuerCimdClientResult), nil
+}
+
+// VerifyURL calls the "verifyURL" endpoint of the
+// "userSessionIssuersCimdClients" service.
+// VerifyURL may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) VerifyURL(ctx context.Context, p *VerifyURLPayload) (res *VerifyCimdURLResult, err error) {
+	var ires any
+	ires, err = c.VerifyURLEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*VerifyCimdURLResult), nil
 }
 
 // ListUserSessionIssuerCimdClients calls the

@@ -64,6 +64,7 @@ export const AVAILABLE_MODELS: AvailableModel[] = [
   { value: "x-ai/grok-4.20", label: "Grok 4.20" },
   { value: "qwen/qwen3.7-max", label: "Qwen3.7 Max" },
   { value: "qwen/qwen3-coder", label: "Qwen3 Coder" },
+  { value: "z-ai/glm-5.3-flash", label: "GLM-5.3 Flash" },
   { value: "moonshotai/kimi-k2.6", label: "Kimi K2.6" },
   { value: "moonshotai/kimi-k2.5", label: "Kimi K2.5" },
   { value: "mistralai/mistral-medium-3-5", label: "Mistral Medium 3.5" },

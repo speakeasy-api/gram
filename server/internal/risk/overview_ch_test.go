@@ -202,7 +202,7 @@ func TestGetRiskOverview_ClickHouseParity(t *testing.T) {
 }
 
 // TestGetRiskOverview_ClickHouseDedupesAppendedDismissRow covers the case
-// mirrorFalsePositiveToClickHouse actually produces: a finding's original row
+// enqueueFalsePositiveMirror actually produces: a finding's original row
 // (false_positive_at NULL) plus a later-inserted row sharing the SAME id with
 // false_positive_at set. A naive "row satisfies false_positive_at IS NULL"
 // filter would still count the id via the stale original row; only picking

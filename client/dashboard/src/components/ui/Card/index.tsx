@@ -1,6 +1,7 @@
 import { cn } from "@/lib/utils";
 import React, { FC, PropsWithChildren, ReactNode } from "react";
 import { Icon } from "../Icon";
+import { SimpleTooltip } from "../Tooltip";
 import { Stack } from "../Stack";
 import { Button } from "../Button";
 import { Grid } from "../Grid";
@@ -237,6 +238,8 @@ type CardEntityProps = {
   icon?: ReactNode;
   /** Additional styling for the icon rail surface. */
   iconRailClassName?: string;
+  /** Additional styling for the bordered tile the icon sits in. */
+  iconTileClassName?: string;
   /** Extra content layered on the icon rail (e.g. an "Added" badge). */
   overlay?: ReactNode;
   className?: string;
@@ -252,6 +255,7 @@ const CardEntity: FC<CardEntityProps> = ({
   children,
   icon,
   iconRailClassName,
+  iconTileClassName,
   className,
   overlay,
   onClick,
@@ -273,6 +277,10 @@ const CardEntity: FC<CardEntityProps> = ({
     className={cn(
       "group flex h-full min-h-[156px] flex-row overflow-hidden border bg-card text-card-foreground transition-colors",
       "hover:border-neutral-hover",
+      // A clickable card takes focus, so it has to show it: without a ring the
+      // keyboard user tabbing through a grid has no idea which card is theirs.
+      onClick &&
+        "focus-visible:ring-ring focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none",
       className,
     )}
   >
@@ -284,7 +292,9 @@ const CardEntity: FC<CardEntityProps> = ({
     >
       {icon && (
         <div className="absolute inset-0 flex items-center justify-center">
-          <div className="border bg-card p-3">{icon}</div>
+          <div className={cn("border bg-card p-3", iconTileClassName)}>
+            {icon}
+          </div>
         </div>
       )}
       {overlay}
@@ -293,6 +303,67 @@ const CardEntity: FC<CardEntityProps> = ({
   </div>
 );
 CardEntity.displayName = "CardEntity";
+
+type CardDashboardProps = {
+  title: string;
+  action?: ReactNode;
+  children: ReactNode;
+  tooltip?: string;
+  /** Body classes, e.g. `p-0` for content that should reach the card edges. */
+  bodyClassName?: string;
+  /** Root classes, e.g. `h-auto` for a panel that should not stretch. */
+  className?: string;
+  /** Title-bar classes, e.g. tighter padding above a dense list. */
+  headerClassName?: string;
+};
+
+/**
+ * Card.Dashboard — a titled dashboard panel: an eyebrow title bar (with an
+ * optional info tooltip and a right-aligned action) over a divider and a body.
+ * Formerly the standalone DashboardCard.
+ */
+function CardDashboard({
+  title,
+  action,
+  children,
+  tooltip,
+  bodyClassName,
+  headerClassName,
+  className,
+}: CardDashboardProps): JSX.Element {
+  return (
+    <div
+      className={cn(
+        "bg-card text-card-foreground relative flex h-full w-full flex-col border",
+        className,
+      )}
+    >
+      <div
+        className={cn(
+          "flex w-full flex-row items-center justify-between gap-4 border-b px-6 py-4",
+          headerClassName,
+        )}
+      >
+        <div className="flex items-center gap-1.5">
+          <h3 className="text-eyebrow">{title}</h3>
+          {tooltip && (
+            <SimpleTooltip tooltip={tooltip}>
+              <button
+                type="button"
+                aria-label={`About ${title}`}
+                className="text-muted-foreground hover:text-foreground inline-flex cursor-help items-center"
+              >
+                <Icon name="info" className="size-3.5" />
+              </button>
+            </SimpleTooltip>
+          )}
+        </div>
+        {action}
+      </div>
+      <div className={cn("px-6 py-5", bodyClassName)}>{children}</div>
+    </div>
+  );
+}
 
 const CardWithSubcomponents = Object.assign(Card, {
   Entity: CardEntity,
@@ -303,6 +374,7 @@ const CardWithSubcomponents = Object.assign(Card, {
   Actions: CardActions,
   Content: CardContent,
   Footer: CardFooter,
+  Dashboard: CardDashboard,
 });
 
 export { CardWithSubcomponents as Card };

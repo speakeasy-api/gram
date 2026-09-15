@@ -20,17 +20,34 @@ import (
 const (
 	pluginGeneratorRolloutScheduleID = "v1:plugin-generator-rollout-schedule"
 	pluginGeneratorRolloutWorkflowID = pluginGeneratorRolloutScheduleID + "/scheduled"
-	// The schedule cadence determines how long a generator or plugin-config
-	// change takes to propagate, since nothing else triggers the rollout. The
-	// fingerprint check keeps unchanged projects from doing any GitHub/key work,
-	// so each tick is cheap apart from the per-project scan (resolve + in-memory
-	// generate + fingerprint compare). SKIP overlap (below) gives us the
-	// "trigger every interval unless one is already running" behaviour without a
-	// separate triggering workflow: a run that outlasts the interval just defers
-	// the next tick.
-	pluginGeneratorRolloutInterval         = 10 * time.Second
+	// This sweep is the safety net, not the primary trigger: plugin and plugin
+	// membership changes signal a per-project publish directly (see
+	// plugin_publish.go), so the cadence here only bounds how long a change with
+	// NO database write takes to propagate — a hooks generator-version bump or a
+	// hooks-rollout pin advance in PostHog, neither of which any callsite can
+	// signal. At 10s this workflow dominated the Temporal action bill for work
+	// that was a no-op on almost every tick.
+	//
+	// The fingerprint check keeps unchanged projects from doing any GitHub/key
+	// work, so each tick is cheap apart from the per-project scan (resolve +
+	// in-memory generate + fingerprint compare). SKIP overlap (below) gives us
+	// the "trigger every interval unless one is already running" behaviour
+	// without a separate triggering workflow: a run that outlasts the interval
+	// just defers the next tick.
+	pluginGeneratorRolloutInterval         = 1 * time.Hour
 	pluginGeneratorRolloutDefaultBatchSize = int32(100)
 	pluginGeneratorRolloutConcurrency      = 5
+
+	// pluginGeneratorRolloutRepairChangeID versions the orphaned-key repair
+	// activity that now runs at the start of a fresh sweep. In-flight
+	// executions started before this change have ListPluginPublishCandidates
+	// as their first recorded command; GetVersion returns DefaultVersion on
+	// those replays so they keep that sequence.
+	pluginGeneratorRolloutRepairChangeID = "plugin-rollout-repair-orphaned-creators"
+
+	// pluginGeneratorRolloutRepairVersion is the current command sequence:
+	// repair once on a fresh sweep, then list candidates.
+	pluginGeneratorRolloutRepairVersion = 1
 )
 
 type PluginGeneratorRolloutInput struct {
@@ -114,6 +131,12 @@ func PluginGeneratorRolloutWorkflow(ctx workflow.Context, input PluginGeneratorR
 		}
 	}
 
+	if workflow.GetVersion(ctx, pluginGeneratorRolloutRepairChangeID, workflow.DefaultVersion, pluginGeneratorRolloutRepairVersion) == pluginGeneratorRolloutRepairVersion && input.AfterProjectID == nil {
+		if err := workflow.ExecuteActivity(ctx, a.RepairOrphanedAPIKeyCreators).Get(ctx, nil); err != nil {
+			return nil, fmt.Errorf("repair orphaned api key creators: %w", err)
+		}
+	}
+
 	after := input.AfterProjectID
 	for {
 		if workflow.GetInfo(ctx).GetContinueAsNewSuggested() {
@@ -144,6 +167,14 @@ func PluginGeneratorRolloutWorkflow(ctx workflow.Context, input PluginGeneratorR
 
 			futures := make([]workflow.Future, 0, end-start)
 			for _, candidate := range candidates.Candidates[start:end] {
+				if !plugins.UsableAPIKeyCreatorID(candidate.CreatedByUserID) {
+					result.Skipped++
+					workflow.GetLogger(ctx).Warn("plugin project publish skipped: no real actor",
+						"project_id", candidate.ProjectID.String(),
+						"created_by_user_id", candidate.CreatedByUserID,
+					)
+					continue
+				}
 				futures = append(futures, workflow.ExecuteActivity(ctx, a.PublishPluginProject, plugins.PublishProjectInput{
 					ProjectID:       candidate.ProjectID,
 					CreatedByUserID: candidate.CreatedByUserID,

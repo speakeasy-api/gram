@@ -526,3 +526,49 @@ func TestAssistantSkillDistributionTargetValidationAndRBAC(t *testing.T) {
 	_, err = ti.service.Distribute(ctx, &gen.DistributePayload{ID: created.Skill.ID, PluginID: new(plugin.ID.String()), SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	require.NoError(t, err)
 }
+
+// A skill distributed to a plugin changes that plugin's package contents, so
+// the distribution must enqueue a republish for its project rather than wait
+// for the hourly rollout sweep. Assistant-channel distributions publish
+// nothing and must stay silent.
+func TestSkillDistributionSignalsPluginRepublish(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	created := createSkill(t, ctx, ti, "republished-skill", "First valid version.")
+	plugin := createPlugin(t, ctx, ti, ti.projectID, "republish-plugin")
+
+	_, err := ti.service.Distribute(ctx, &gen.DistributePayload{
+		ID: created.Skill.ID, PluginID: new(plugin.ID.String()), PinnedVersionID: nil,
+		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{ti.projectID}, ti.publisher.recorded())
+
+	// Re-distributing with a pin rewrites the distribution, so the package
+	// content moves and the republish must fire again.
+	_, err = ti.service.Distribute(ctx, &gen.DistributePayload{
+		ID: created.Skill.ID, PluginID: new(plugin.ID.String()), PinnedVersionID: &created.Version.ID,
+		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, ti.publisher.recorded(), 2)
+
+	require.NoError(t, ti.service.Undistribute(ctx, &gen.UndistributePayload{
+		ID: created.Skill.ID, PluginID: new(plugin.ID.String()),
+		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	}))
+	require.Len(t, ti.publisher.recorded(), 3)
+
+	assistantCtx := authztest.WithExactGrants(t, ctx,
+		authz.NewGrant(authz.ScopeSkillRead, ti.projectID.String()),
+		authz.NewGrant(authz.ScopeProjectWrite, ti.projectID.String()),
+	)
+	assistant := createAssistant(t, assistantCtx, ti, ti.projectID, "Assistant target")
+	_, err = ti.service.Distribute(assistantCtx, &gen.DistributePayload{
+		ID: created.Skill.ID, AssistantID: new(assistant.ID.String()), PinnedVersionID: nil,
+		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, ti.publisher.recorded(), 3, "an assistant distribution publishes no package")
+}

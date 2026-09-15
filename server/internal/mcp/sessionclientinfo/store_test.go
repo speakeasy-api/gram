@@ -39,6 +39,63 @@ func TestLoadUnknownSessionIsNotFound(t *testing.T) {
 	require.ErrorIs(t, err, ErrNotFound)
 }
 
+func TestStoreLoadRoundTripsProtocolVersion(t *testing.T) {
+	t.Parallel()
+
+	store := newTestStore(t, 0)
+	projectID := uuid.New()
+
+	require.NoError(t, store.Store(t.Context(), projectID, "widgets", "session-1", Info{
+		Name:            "claude-code",
+		Version:         "2.1",
+		ProtocolVersion: "2025-06-18",
+	}, 1))
+
+	got, err := store.Load(t.Context(), projectID, "widgets", "session-1", 2)
+	require.NoError(t, err)
+	require.Equal(t, "2025-06-18", got.ProtocolVersion)
+}
+
+// TestLoadReturnsRecordCarryingOnlyAProtocolVersion covers a client that omits
+// clientInfo.name: the record still attributes its session to a protocol
+// generation, so it must survive the round trip rather than reporting absent.
+func TestLoadReturnsRecordCarryingOnlyAProtocolVersion(t *testing.T) {
+	t.Parallel()
+
+	store := newTestStore(t, 0)
+	projectID := uuid.New()
+
+	require.NoError(t, store.Store(t.Context(), projectID, "widgets", "session-1", Info{
+		Name:            "",
+		Version:         "",
+		ProtocolVersion: "2025-06-18",
+	}, 1))
+
+	got, err := store.Load(t.Context(), projectID, "widgets", "session-1", 2)
+	require.NoError(t, err)
+	require.Empty(t, got.Name)
+	require.Equal(t, "2025-06-18", got.ProtocolVersion)
+}
+
+// TestLoadTreatsAnEmptyRecordAsAbsent pins the other side of that boundary: a
+// record with neither a name nor a protocol version tells a caller nothing a
+// missing record would not.
+func TestLoadTreatsAnEmptyRecordAsAbsent(t *testing.T) {
+	t.Parallel()
+
+	store := newTestStore(t, 0)
+	projectID := uuid.New()
+
+	require.NoError(t, store.Store(t.Context(), projectID, "widgets", "session-1", Info{
+		Name:            "",
+		Version:         "",
+		ProtocolVersion: "",
+	}, 1))
+
+	_, err := store.Load(t.Context(), projectID, "widgets", "session-1", 2)
+	require.ErrorIs(t, err, ErrNotFound)
+}
+
 // TestRecordsAreScopedPerMCPServer covers the tenancy boundary: session ids
 // arrive on a client-supplied header, so a record must not be reachable from
 // another project or toolset.

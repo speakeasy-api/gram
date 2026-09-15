@@ -1,4 +1,5 @@
 import { useTelemetry } from "@/contexts/Telemetry";
+import { safeSameOriginUrl } from "@/lib/safe-external-url";
 import { cn } from "@/lib/utils";
 import { authInfo } from "@gram/client/funcs/authInfo";
 import { useGramContext } from "@gram/client/react-query/_context.js";
@@ -10,12 +11,17 @@ import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { AUTH_BUTTON_CLASSES } from "./auth-constants";
 import { AuthErrorText, SigninErrorNotice } from "./auth-errors";
+import {
+  MAX_ORG_NAME_LENGTH,
+  normalizeOrgName,
+  validateOrgName,
+} from "./org-name";
 
-const VALID_ORG_NAME_REGEX = /^[a-zA-Z0-9\s-_]+$/;
-const INVALID_ORG_NAME_MESSAGE =
-  "Company name contains invalid characters. Only letters, numbers, spaces, hyphens, and underscores are allowed.";
-
-export function RegisterPanel(): JSX.Element {
+export function RegisterPanel({
+  redirectTo,
+}: {
+  redirectTo?: string | null;
+}): JSX.Element {
   const telemetry = useTelemetry();
   const [companyName, setCompanyName] = useState("");
   const [validationError, setValidationError] = useState("");
@@ -46,7 +52,8 @@ export function RegisterPanel(): JSX.Element {
         company_name: companyName,
         is_gram: true,
       });
-      window.location.replace("/");
+      const destination = safeSameOriginUrl(redirectTo) ?? "/";
+      window.location.replace(destination);
     },
     onError: (error) => {
       setValidationError(error.message);
@@ -57,33 +64,24 @@ export function RegisterPanel(): JSX.Element {
     const value = e.target.value;
     setCompanyName(value);
 
-    // Clear previous errors
-    setValidationError("");
-
-    // Validate using the regex on type
-    if (value.trim() && !VALID_ORG_NAME_REGEX.test(value)) {
-      setValidationError(INVALID_ORG_NAME_MESSAGE);
-    }
+    // An empty field is the pristine state, not an error: the CTA is disabled
+    // until something is typed, and submitting reports it as required.
+    setValidationError(value.trim() ? (validateOrgName(value) ?? "") : "");
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!companyName.trim()) {
-      setValidationError("Company name is required");
+    const error = validateOrgName(companyName);
+    if (error) {
+      setValidationError(error);
       return;
     }
 
-    if (!VALID_ORG_NAME_REGEX.test(companyName)) {
-      setValidationError(INVALID_ORG_NAME_MESSAGE);
-      return;
-    }
-
-    // Call the register mutation
     registerMutation.mutate({
       request: {
         registerRequestBody: {
-          orgName: companyName.trim(),
+          orgName: normalizeOrgName(companyName),
         },
       },
     });
@@ -121,7 +119,7 @@ export function RegisterPanel(): JSX.Element {
             disabled={registerMutation.isPending}
           />
           <p className="text-[12px] text-[var(--muted)]">
-            Letters, numbers, spaces, hyphens, and underscores.
+            Any language, up to {MAX_ORG_NAME_LENGTH} characters.
           </p>
         </div>
 

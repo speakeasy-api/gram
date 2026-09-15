@@ -17,9 +17,11 @@ import {
   BASELINE_RATE_PER_MILLION,
   derivedAnnualPlatformFee,
   effectiveRatePerMillion,
+  formatSignedPct,
   formatTokensCompact,
   formatUSD,
   overageLines,
+  paygDeltaMessage,
   paygLines,
   sumLines,
   type TierLine,
@@ -188,6 +190,7 @@ export function ContractPriceEstimator({
   const [basisOverride, setBasisOverride] = useState<VolumeBasis | null>(null);
   const [customVolume, setCustomVolume] = useState("");
   const [feeOverride, setFeeOverride] = useState("");
+  const [paygAdjustment, setPaygAdjustment] = useState("");
 
   // Deliberately not memoized on `cycles`. Whether the projection is even
   // offered depends on how much of the cycle has elapsed, so a `now` captured
@@ -230,6 +233,17 @@ export function ContractPriceEstimator({
       ? parsedFee
       : derivedFee;
 
+  // Negotiated swing on the PAYG list rates. Bounded below at -100% — past
+  // that a rate would go negative — and an invalid or out-of-range entry
+  // falls back to list rates rather than blanking the card mid-keystroke.
+  const parsedAdjust = Number(paygAdjustment);
+  const paygRateAdjustPct =
+    paygAdjustment.trim() !== "" &&
+    Number.isFinite(parsedAdjust) &&
+    parsedAdjust > -100
+      ? parsedAdjust
+      : 0;
+
   const committed = useMemo(() => {
     if (
       monthlyTokens == null ||
@@ -258,7 +272,7 @@ export function ContractPriceEstimator({
 
   const payg = useMemo(() => {
     if (monthlyTokens == null) return null;
-    const lines = paygLines(monthlyTokens);
+    const lines = paygLines(monthlyTokens, paygRateAdjustPct);
     const monthly = sumLines(lines);
     const annual = monthly * 12;
     return {
@@ -267,7 +281,7 @@ export function ContractPriceEstimator({
       annual,
       rate: effectiveRatePerMillion(annual, monthlyTokens),
     };
-  }, [monthlyTokens]);
+  }, [monthlyTokens, paygRateAdjustPct]);
 
   const signal =
     committed?.share != null ? overageSignal(committed.share) : null;
@@ -353,6 +367,26 @@ export function ContractPriceEstimator({
             How is the fee defaulted?
           </span>
         </SimpleTooltip>
+
+        <Stack gap={2}>
+          <Label htmlFor="contract-payg-adjustment">
+            PAYG rate adjustment (%)
+          </Label>
+          <Input
+            id="contract-payg-adjustment"
+            type="number"
+            min={-100}
+            placeholder="e.g. 10 or -15"
+            value={paygAdjustment}
+            onChange={setPaygAdjustment}
+          />
+        </Stack>
+
+        <SimpleTooltip tooltip="Scales every pay-as-you-go band rate by this percentage — positive for an uplift, negative for a discount. Band boundaries don't move, and the committed model is unaffected. Estimate only.">
+          <span className="text-muted-foreground pb-2.5 text-xs">
+            How does the adjustment apply?
+          </span>
+        </SimpleTooltip>
       </div>
 
       {/* What the selected basis actually measures. Load-bearing for the
@@ -416,7 +450,11 @@ export function ContractPriceEstimator({
 
             <ModelCard
               title="Pay As You Go"
-              subtitle="No commitment — every token billed by volume tier"
+              subtitle={
+                paygRateAdjustPct === 0
+                  ? "No commitment — every token billed by volume tier"
+                  : `No commitment — volume-tier rates ${formatSignedPct(paygRateAdjustPct)} vs list`
+              }
             >
               {payg && (
                 <>
@@ -449,11 +487,7 @@ export function ContractPriceEstimator({
 
           {delta != null && (
             <Text muted small>
-              {delta > 0
-                ? `Pay-as-you-go costs ${formatUSD(delta)}/yr more than the committed contract at this volume — the number to point at in a "should we commit?" conversation.`
-                : delta < 0
-                  ? `Pay-as-you-go is ${formatUSD(-delta)}/yr cheaper here, which the model isn't meant to allow — check the platform fee against the baseline.`
-                  : "Both models price identically at this volume."}
+              {paygDeltaMessage(delta, paygRateAdjustPct)}
             </Text>
           )}
         </>

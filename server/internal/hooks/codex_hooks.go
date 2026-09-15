@@ -208,6 +208,7 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 						ToolName:        toolName,
 						ToolInput:       ev.ToolInput,
 						RiskPolicyID:    policy.ID,
+						PolicyName:      policy.Name,
 					})
 					isToolCallBlock = true
 					blockToolName = toolName
@@ -387,6 +388,7 @@ func (s *Service) codexSessionMetadata(ctx context.Context, payload *gen.CodexPa
 		ExternalAccountID:   "",
 		DeviceID:            "",
 		Hostname:            strings.TrimSpace(conv.PtrValOr(payload.HookHostname, "")),
+		Cwd:                 strings.TrimSpace(conv.PtrValOr(payload.Cwd, "")),
 		AccountType:         "",
 		BillingMode:         "",
 		UserAccountID:       "",
@@ -406,6 +408,9 @@ func (s *Service) codexSessionMetadata(ctx context.Context, payload *gen.CodexPa
 			}
 			if metadata.Hostname == "" {
 				metadata.Hostname = cached.Hostname
+			}
+			if metadata.Cwd == "" {
+				metadata.Cwd = cached.Cwd
 			}
 		}
 	}
@@ -629,6 +634,7 @@ func (s *Service) writeCodexToolCallRequestToPG(ctx context.Context, payload *ge
 	}
 
 	msgParams := chatRepo.CreateChatMessageParams{
+		ID:               uuid.Nil,
 		Replayed:         false,
 		CreatedAt:        conv.PtrToPGTimestamptz(nil),
 		ChatID:           chatID,
@@ -676,6 +682,7 @@ func (s *Service) writeCodexToolCallResultToPG(ctx context.Context, payload *gen
 	chatID := sessionIDToUUID(metadata.SessionID)
 
 	msgParams := chatRepo.CreateChatMessageParams{
+		ID:               uuid.Nil,
 		Replayed:         false,
 		CreatedAt:        conv.PtrToPGTimestamptz(nil),
 		ChatID:           chatID,
@@ -724,6 +731,7 @@ func (s *Service) writeCodexUserPromptToPG(ctx context.Context, payload *gen.Cod
 	chatID := sessionIDToUUID(metadata.SessionID)
 
 	msgParams := chatRepo.CreateChatMessageParams{
+		ID:               uuid.Nil,
 		Replayed:         false,
 		CreatedAt:        conv.PtrToPGTimestamptz(nil),
 		ChatID:           chatID,
@@ -772,6 +780,7 @@ func (s *Service) writeCodexAssistantResponseToPG(ctx context.Context, payload *
 	chatID := sessionIDToUUID(metadata.SessionID)
 
 	msgParams := chatRepo.CreateChatMessageParams{
+		ID:               uuid.Nil,
 		Replayed:         false,
 		CreatedAt:        conv.PtrToPGTimestamptz(nil),
 		ChatID:           chatID,

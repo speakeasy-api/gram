@@ -113,6 +113,37 @@ func isTerminalAssistantRow(msg repo.CreateChatMessageParams) bool {
 	return isTerminalRow(nil, msg.FinishReason.String)
 }
 
+// TurnInterruptedFinishReason is the finish reason carried by the terminal
+// frame a user interrupt publishes. Distinct from the model's own reasons so a
+// watcher can tell "the user stopped this" from "the model finished".
+const TurnInterruptedFinishReason = "interrupted"
+
+// PublishTurnInterrupted ends a chat's turn stream because the user asked the
+// assistant to stop.
+//
+// The persisted rows cannot do this on their own: an interrupted turn's last
+// assistant row is whatever the proxy managed to capture before the runner
+// dropped the upstream stream, and a partial row carries no natural finish
+// reason — so nothing in the write path ever looks terminal, and a watcher
+// would tail the stream until its own timeout. Publishing the terminal frame
+// here is what actually settles every client watching the chat, including the
+// tabs that did not press the button.
+func (w *ChatMessageWriter) PublishTurnInterrupted(ctx context.Context, chatID uuid.UUID) {
+	if w == nil || w.turnStream == nil || chatID == uuid.Nil {
+		return
+	}
+	w.publishTurnFrame(ctx, chatID, TurnFrame{
+		Kind:         TurnFrameDone,
+		Cursor:       "",
+		Text:         "",
+		MessageID:    "",
+		ToolCalls:    nil,
+		FinishReason: TurnInterruptedFinishReason,
+		ToolCallID:   "",
+		Output:       nil,
+	})
+}
+
 func (w *ChatMessageWriter) publishTurnFrame(ctx context.Context, chatID uuid.UUID, frame TurnFrame) {
 	if _, err := w.turnStream.Publish(ctx, chatID, frame); err != nil {
 		w.logger.WarnContext(ctx, "publish turn frame",

@@ -43,6 +43,10 @@ export type RiskBlock = {
    */
   projectId: string;
   /**
+   * Agent surface that reported the blocked call (adapter slug, e.g. "openclaw"), when known.
+   */
+  provider?: string | undefined;
+  /**
    * Human-readable reason the tool call was blocked.
    */
   reason: string;
@@ -69,6 +73,7 @@ export const RiskBlock$inboundSchema: z.ZodMiniType<RiskBlock, unknown> = z
       id: z.string(),
       policy_name: z.string(),
       project_id: z.string(),
+      provider: z.optional(z.string()),
       reason: z.string(),
       tool_name: z.optional(z.string()),
     }),

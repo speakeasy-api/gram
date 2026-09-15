@@ -171,6 +171,22 @@ func TestOAuthHTTPExpiredAccessTokenPreservesLiveRefreshToken(t *testing.T) {
 	require.Equal(t, http.StatusOK, refresh.Code)
 }
 
+func TestOAuthHTTPRestoresValidatedPersistedClient(t *testing.T) {
+	t.Parallel()
+
+	origin, err := url.Parse("https://localhost:8080")
+	require.NoError(t, err)
+	config, err := NewConfig(origin)
+	require.NoError(t, err)
+	oauth := NewOAuthHTTP(config)
+	handler := oauth.Handler()
+
+	require.NoError(t, oauth.RestoreRegisteredClient("persisted-local-client"))
+	code := authorizeFixtureClient(t, handler, config, "persisted-local-client", "restored-client-verifier")
+	tokens := exchangeFixtureCode(t, handler, config, "persisted-local-client", code, "restored-client-verifier")
+	require.NotEmpty(t, tokens["access_token"])
+}
+
 func TestOAuthHTTPRejectsInvalidAuthorizationAndVerifier(t *testing.T) {
 	t.Parallel()
 

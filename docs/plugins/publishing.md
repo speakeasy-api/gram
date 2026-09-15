@@ -110,8 +110,17 @@ If `configured` is false, the Publish button should be hidden (the server isn't 
 
 ## Observability plugin
 
-Every publish includes two observability plugins (one for Claude, one for Cursor) that forward hook events to Gram. These are automatically added at the top of the marketplace so they appear first.
+Every publish includes one observability plugin per supported platform, forwarding hook events to Gram. Those with a marketplace are automatically added at the top so they appear first.
 
-The observability plugin slug is `<org-slug>-observability` (Claude) or `<org-slug>-observability-cursor` (Cursor). Users are shown a notice in the README that this plugin is required alongside any MCP server plugins.
+| Platform | Slug                                |
+| -------- | ----------------------------------- |
+| Claude   | `<org-slug>-observability`          |
+| Cursor   | `<org-slug>-observability-cursor`   |
+| Codex    | `<org-slug>-observability-codex`    |
+| OpenCode | `<org-slug>-observability-opencode` |
+| OpenClaw | `<org-slug>-observability-openclaw` |
+| Copilot  | `<org-slug>-observability-copilot`  |
+
+OpenCode and OpenClaw have no marketplace track, so their packages are installed directly rather than listed. Users are shown a notice in the README that the observability plugin is required alongside any MCP server plugins.
 
 See [Package Format — observability plugin](./package-format.md#observability-plugin) for the hook events registered and the hook script contents.

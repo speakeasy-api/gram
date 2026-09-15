@@ -23,7 +23,9 @@ type Service interface {
 	// of the authenticated dashboard user. Resolves the target project (given
 	// slug, else the org's default/first project) and records {user, org, project,
 	// scopes:[agent,hooks], challenge} against the code with a ~5 minute TTL.
-	// Requires a member-available session (org:read); NOT org-admin.
+	// Requires a member-available session (org:read); NOT org-admin. Refused (403)
+	// while impersonating an organization or user, or without membership in the
+	// active org.
 	Authorize(context.Context, *AuthorizePayload) (res *AuthorizeResult, err error)
 	// Exchange a one-time code plus its PKCE code_verifier for a freshly minted
 	// per-user [agent,hooks] API key. No session or API-key auth: proving

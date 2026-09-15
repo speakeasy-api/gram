@@ -6,15 +6,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestCustomDomainUnhealthy_TransactionalID(t *testing.T) {
+func TestCustomDomainUnhealthy_Key(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, transactionalIDCustomDomainUnhealthy, CustomDomainUnhealthy{
+	require.Equal(t, TemplateKeyCustomDomainUnhealthy, CustomDomainUnhealthy{
 		Email:        "",
 		Domain:       "",
 		IssueMessage: "",
 		DomainLink:   "",
-	}.TransactionalID())
+	}.Key())
 }
 
 func TestCustomDomainUnhealthy_Variables_RendersExpectedKeys(t *testing.T) {

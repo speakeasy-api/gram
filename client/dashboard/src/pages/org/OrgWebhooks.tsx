@@ -1,6 +1,4 @@
-import { PageEyebrow } from "@/components/page-eyebrow";
-import { Page } from "@/components/page-layout";
-import { ReleaseStageBadge } from "@/components/release-stage-badge";
+import { SettingsPage } from "@/components/page-templates";
 import { RequireScope } from "@/components/require-scope";
 import { Heading } from "@/components/ui/Heading";
 import { Switch } from "@/components/ui/Switch";
@@ -19,16 +17,9 @@ import "svix-react/style.css";
 
 export default function OrgWebhooks(): React.JSX.Element {
   return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <RequireScope scope={["org:read"]} level="page">
-          <OrgWebhooksInner />
-        </RequireScope>
-      </Page.Body>
-    </Page>
+    <RequireScope scope={["org:read"]} level="page">
+      <OrgWebhooksInner />
+    </RequireScope>
   );
 }
 
@@ -47,19 +38,11 @@ function OrgWebhooksInner() {
     disableWebhooks.status !== "pending";
 
   return (
-    <>
-      <div className="mb-6">
-        <PageEyebrow className="mb-2" />
-        <Stack direction="horizontal" align="center" gap={2}>
-          <Heading variant="h4" className="text-display-sm font-thin">
-            Webhooks
-          </Heading>
-          <ReleaseStageBadge stage="beta" />
-        </Stack>
-        <Text muted small className="mt-1">
-          Configure webhook delivery for various platform events.
-        </Text>
-      </div>
+    <SettingsPage
+      title="Webhooks"
+      stage="beta"
+      description="Configure webhook delivery for various platform events."
+    >
       <div className="border-border bg-card border p-4">
         <Stack gap={4}>
           <Stack direction="horizontal" justify="space-between" align="center">
@@ -97,7 +80,7 @@ function OrgWebhooksInner() {
         </Stack>
       </div>
       {orgResult.data?.webhooksOnboarded && <WebhookConfigPortal />}
-    </>
+    </SettingsPage>
   );
 }
 
@@ -131,7 +114,7 @@ function WebhookConfigPortal() {
 
   return (
     <>
-      <Heading variant="h4" className="mt-8 mb-4 text-display-xs font-thin">
+      <Heading variant="h4" className="mb-4 text-display-xs font-thin">
         Webhook Configuration
       </Heading>
       <AppPortal

@@ -175,7 +175,7 @@ func BuildCreateClientPayload(organizationRemoteSessionClientsCreateClientBody s
 	{
 		err = json.Unmarshal([]byte(organizationRemoteSessionClientsCreateClientBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"audience\": \"aaa\",\n      \"client_id\": \"abc123\",\n      \"client_secret\": \"abc123\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_method\": \"client_secret_post\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"audience\": \"aaa\",\n      \"client_id\": \"abc123\",\n      \"client_id_issued_at\": \"1970-01-01T00:00:01Z\",\n      \"client_secret\": \"abc123\",\n      \"client_secret_expires_at\": \"1970-01-01T00:00:01Z\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_method\": \"client_secret_post\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", body.RemoteSessionIssuerID, goa.FormatUUID))
 		if body.ProjectID != nil {
@@ -200,6 +200,12 @@ func BuildCreateClientPayload(organizationRemoteSessionClientsCreateClientBody s
 				err = goa.MergeErrors(err, goa.InvalidLengthError("body.audience", *body.Audience, utf8.RuneCountInString(*body.Audience), 512, false))
 			}
 		}
+		if body.ClientIDIssuedAt != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.client_id_issued_at", *body.ClientIDIssuedAt, goa.FormatDateTime))
+		}
+		if body.ClientSecretExpiresAt != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.client_secret_expires_at", *body.ClientSecretExpiresAt, goa.FormatDateTime))
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -223,6 +229,8 @@ func BuildCreateClientPayload(organizationRemoteSessionClientsCreateClientBody s
 		ClientSecret:            body.ClientSecret,
 		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
 		Audience:                body.Audience,
+		ClientIDIssuedAt:        body.ClientIDIssuedAt,
+		ClientSecretExpiresAt:   body.ClientSecretExpiresAt,
 	}
 	if body.Scope != nil {
 		v.Scope = make([]string, len(body.Scope))
@@ -354,6 +362,112 @@ func BuildUpdateClientPayload(organizationRemoteSessionClientsUpdateClientBody s
 		for i, val := range body.Scope {
 			v.Scope[i] = val
 		}
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}
+
+// BuildAttachClientKeySetPayload builds the payload for the
+// organizationRemoteSessionClients attachClientKeySet endpoint from CLI flags.
+func BuildAttachClientKeySetPayload(organizationRemoteSessionClientsAttachClientKeySetBody string, organizationRemoteSessionClientsAttachClientKeySetSessionToken string, organizationRemoteSessionClientsAttachClientKeySetApikeyToken string) (*organizationremotesessionclients.AttachClientKeySetPayload, error) {
+	var err error
+	var body AttachClientKeySetRequestBody
+	{
+		err = json.Unmarshal([]byte(organizationRemoteSessionClientsAttachClientKeySetBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"json_web_key_set_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.json_web_key_set_id", body.JSONWebKeySetID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationRemoteSessionClientsAttachClientKeySetSessionToken != "" {
+			sessionToken = &organizationRemoteSessionClientsAttachClientKeySetSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if organizationRemoteSessionClientsAttachClientKeySetApikeyToken != "" {
+			apikeyToken = &organizationRemoteSessionClientsAttachClientKeySetApikeyToken
+		}
+	}
+	v := &organizationremotesessionclients.AttachClientKeySetPayload{
+		ID:              body.ID,
+		JSONWebKeySetID: body.JSONWebKeySetID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}
+
+// BuildDetachClientKeySetPayload builds the payload for the
+// organizationRemoteSessionClients detachClientKeySet endpoint from CLI flags.
+func BuildDetachClientKeySetPayload(organizationRemoteSessionClientsDetachClientKeySetID string, organizationRemoteSessionClientsDetachClientKeySetSessionToken string, organizationRemoteSessionClientsDetachClientKeySetApikeyToken string) (*organizationremotesessionclients.DetachClientKeySetPayload, error) {
+	var err error
+	var id string
+	{
+		id = organizationRemoteSessionClientsDetachClientKeySetID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationRemoteSessionClientsDetachClientKeySetSessionToken != "" {
+			sessionToken = &organizationRemoteSessionClientsDetachClientKeySetSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if organizationRemoteSessionClientsDetachClientKeySetApikeyToken != "" {
+			apikeyToken = &organizationRemoteSessionClientsDetachClientKeySetApikeyToken
+		}
+	}
+	v := &organizationremotesessionclients.DetachClientKeySetPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}
+
+// BuildRotateClientPayload builds the payload for the
+// organizationRemoteSessionClients rotateClient endpoint from CLI flags.
+func BuildRotateClientPayload(organizationRemoteSessionClientsRotateClientBody string, organizationRemoteSessionClientsRotateClientSessionToken string, organizationRemoteSessionClientsRotateClientApikeyToken string) (*organizationremotesessionclients.RotateClientPayload, error) {
+	var err error
+	var body RotateClientRequestBody
+	{
+		err = json.Unmarshal([]byte(organizationRemoteSessionClientsRotateClientBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationRemoteSessionClientsRotateClientSessionToken != "" {
+			sessionToken = &organizationRemoteSessionClientsRotateClientSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if organizationRemoteSessionClientsRotateClientApikeyToken != "" {
+			apikeyToken = &organizationRemoteSessionClientsRotateClientApikeyToken
+		}
+	}
+	v := &organizationremotesessionclients.RotateClientPayload{
+		ID: body.ID,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken

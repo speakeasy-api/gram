@@ -1,4 +1,5 @@
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
+import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 
 type OriginalPolicy = Pick<RiskPolicy, "action" | "enabled" | "sources">;
 
@@ -105,6 +106,86 @@ export function shadowMCPSelectionIsInitialized(
   return (
     !targetIsShadowMCPBlock || initializedEditorIdentity === editorIdentity
   );
+}
+
+export interface ShadowMCPDecisionConflict {
+  canonicalServerUrl: string;
+  serverName?: string;
+  decision: "approved" | "denied";
+}
+
+/**
+ * The standing review decisions this edit's URL toggles contradict. Mirrors
+ * the server's conflict check so the confirm dialog opens before the save
+ * round-trips; the server independently rejects an unconfirmed contradicting
+ * save, so a miss here degrades to an error toast, never a silent
+ * supersession.
+ */
+export function shadowMCPDecisionConflicts({
+  servers,
+  originalURLs,
+  selectedURLs,
+  disposition,
+}: {
+  servers: readonly ShadowMCPInventoryServer[];
+  originalURLs: ReadonlySet<string> | null;
+  selectedURLs: ReadonlySet<string>;
+  disposition: ShadowMCPDisposition;
+}): ShadowMCPDecisionConflict[] {
+  if (originalURLs === null) return [];
+
+  const conflicts: ShadowMCPDecisionConflict[] = [];
+  for (const server of servers) {
+    const decision = standingDecisionOf(server.approvalRequest);
+    if (decision === undefined) continue;
+
+    const url = server.canonicalServerUrl;
+    const has = originalURLs.has(url);
+    const wants = selectedURLs.has(url);
+    if (has === wants) continue;
+
+    // On an allow list (block_all) removing revokes access and adding grants
+    // it; on a block list (allow_all) the directions invert.
+    let removingAllow = has && !wants;
+    if (disposition === "allow_all") removingAllow = !removingAllow;
+
+    const contradicted =
+      (removingAllow && decision === "approved") ||
+      (!removingAllow && decision === "denied");
+    if (!contradicted) continue;
+
+    conflicts.push({
+      canonicalServerUrl: url,
+      serverName: server.serverName,
+      decision,
+    });
+  }
+
+  return conflicts.sort((a, b) =>
+    a.canonicalServerUrl.localeCompare(b.canonicalServerUrl),
+  );
+}
+
+/**
+ * The decision still standing for a review, independent of lifecycle status
+ * (a reopened request's prior decision keeps enforcing). Prefers the
+ * server-computed standing_decision, falling back to status for a server one
+ * release behind.
+ */
+function standingDecisionOf(
+  request: ShadowMCPInventoryServer["approvalRequest"],
+): "approved" | "denied" | undefined {
+  if (!request) return undefined;
+  if (
+    request.standingDecision === "approved" ||
+    request.standingDecision === "denied"
+  ) {
+    return request.standingDecision;
+  }
+  if (request.status === "approved" || request.status === "denied") {
+    return request.status;
+  }
+  return undefined;
 }
 
 export function shadowMCPSelectionBaselineForUpdate(body: {

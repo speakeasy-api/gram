@@ -238,3 +238,37 @@ func TestListUserSessionClients_RBACForbidden(t *testing.T) {
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
+
+func TestListUserSessionClients_ExcludesSiblingProject(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	sp := seedSiblingProject(t, ctx, ti, "list-cli-sibling")
+
+	listed, err := ti.service.ListUserSessionClients(ctx, &gen.ListUserSessionClientsPayload{
+		UserSessionIssuerID: nil,
+		Cursor:              nil,
+		Limit:               nil,
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+	})
+	require.NoError(t, err)
+	for _, item := range listed.Items {
+		require.NotEqual(t, sp.clientID.String(), item.ID)
+	}
+
+	// Naming the sibling issuer explicitly is the sharper case: the filter is
+	// satisfied, so only the tenancy predicate keeps the row out.
+	issuerID := sp.issuerID.String()
+	filtered, err := ti.service.ListUserSessionClients(ctx, &gen.ListUserSessionClientsPayload{
+		UserSessionIssuerID: &issuerID,
+		Cursor:              nil,
+		Limit:               nil,
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+	})
+	require.NoError(t, err)
+	require.Empty(t, filtered.Items)
+}

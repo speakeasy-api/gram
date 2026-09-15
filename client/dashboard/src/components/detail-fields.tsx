@@ -46,6 +46,33 @@ export function InfoField({
   );
 }
 
+// columnClasses is a static lookup rather than an interpolated class name,
+// because Tailwind extracts classes by scanning source text and would not emit a
+// class built at runtime.
+const columnClasses = {
+  2: "sm:grid-cols-2",
+  3: "sm:grid-cols-3",
+} as const;
+
+// InfoFieldGrid lays short fields out side by side instead of giving each one a
+// full-width stacked block, which is what turns a handful of scalar values into
+// a long scroll.
+//
+// Long machine values (resource names, service account emails, URLs) belong
+// outside it: they wrap badly in a narrow column, so they read better left at
+// full width.
+export function InfoFieldGrid({
+  children,
+  columns = 3,
+}: {
+  children: ReactNode;
+  columns?: keyof typeof columnClasses;
+}): JSX.Element {
+  return (
+    <div className={`grid gap-4 ${columnClasses[columns]}`}>{children}</div>
+  );
+}
+
 // InfoSection is a titled group of fields stacked below a section heading.
 export function InfoSection({
   title,

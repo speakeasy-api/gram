@@ -1,6 +1,7 @@
+import { IdentityLink } from "@/components/identity-link";
 import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
-import { Page } from "@/components/page-layout";
+import { ResourceListPage } from "@/components/page-templates";
 import { Dialog } from "@/components/ui/Dialog";
 import {
   Select,
@@ -69,9 +70,13 @@ import {
 } from "@/components/ui/ContextMenu";
 import { useOrgRoutes } from "@/routes";
 import { cn } from "@/lib/utils";
-import { getIdentityTint } from "@/components/gradient-colors";
+import { getIdentityTint, useIsDarkTheme } from "@/components/gradient-colors";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import { ChangeRoleDialog } from "@/pages/access/ChangeRoleDialog";
+import { KillswitchUserStatusIcon } from "@/components/killswitch/KillswitchUserStatusIcon";
+import { killswitchCreateHref } from "@/components/killswitch/killswitch-routing";
+import { useKillswitchUserBadges } from "@/components/killswitch/KillswitchUserStatus";
+import { useIdentityHrefBuilder } from "@/lib/useIdentityHref";
 
 /**
  * Everything from TeamInner's scope that the member actions menu needs,
@@ -83,6 +88,9 @@ type MemberMenuDeps = {
   adminCount: number;
   adminRoleId: string | undefined;
   challengesHref: string;
+  /** This member's access tab, where their killswitches are managed. */
+  identityAccessHref: (userId: string) => string | null;
+  canUseKillswitch: boolean;
   navigate: ReturnType<typeof useNavigate>;
   roleIdsByUserId: Map<string, string[]>;
   scimManaged: boolean;
@@ -95,10 +103,13 @@ type MemberMenuModel = {
   accessMember: AccessMember | undefined;
   canRemove: boolean;
   openChallenges: () => void;
+  openKillswitch: () => void;
   openManageRoles: () => void;
+  openViewKillswitches: () => void;
   openRemove: () => void;
   scimManaged: boolean;
   showChallenges: boolean;
+  showKillswitch: boolean;
   showManageRoles: boolean;
 };
 
@@ -112,6 +123,7 @@ function getMemberMenuModel(
   deps: MemberMenuDeps,
 ): MemberMenuModel {
   const memberRoleIds = deps.roleIdsByUserId.get(member.userId) ?? [];
+  const identityAccessHref = deps.identityAccessHref(member.userId);
   const isLastAdmin =
     deps.adminRoleId != null &&
     memberRoleIds.includes(deps.adminRoleId) &&
@@ -141,6 +153,14 @@ function getMemberMenuModel(
         );
       }, 0);
     },
+    openKillswitch: () => {
+      if (identityAccessHref) {
+        void deps.navigate(killswitchCreateHref(identityAccessHref));
+      }
+    },
+    openViewKillswitches: () => {
+      if (identityAccessHref) void deps.navigate(identityAccessHref);
+    },
     openManageRoles: () => {
       if (!accessMember) return;
       void setTimeout(() => deps.setChangingMember(accessMember), 0);
@@ -150,6 +170,7 @@ function getMemberMenuModel(
     },
     scimManaged: deps.scimManaged,
     showChallenges: true,
+    showKillswitch: deps.canUseKillswitch && identityAccessHref !== null,
     showManageRoles: true,
   };
 }
@@ -169,11 +190,14 @@ function MemberRowContextMenu({
   children: React.ReactElement;
 }): React.JSX.Element {
   const model = getMemberMenuModel(member, deps);
+  const identityHref = useIdentityHrefBuilder();
+  const profileHref = identityHref({ userId: member.userId });
   const hasManageRoles =
     model.showManageRoles && (model.scimManaged || model.accessMember != null);
-  const hasItemsAbove = hasManageRoles || model.showChallenges;
+  const hasItemsAbove =
+    hasManageRoles || model.showChallenges || model.showKillswitch;
 
-  if (!hasItemsAbove && !model.canRemove) {
+  if (!profileHref && !hasItemsAbove && !model.canRemove) {
     return <>{children}</>;
   }
 
@@ -181,6 +205,11 @@ function MemberRowContextMenu({
     <ContextMenu>
       <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
       <ContextMenuContent className="min-w-[10rem]">
+        {profileHref && (
+          <ContextMenuItem asChild>
+            <Link to={profileHref}>View profile</Link>
+          </ContextMenuItem>
+        )}
         {model.showManageRoles &&
           (model.scimManaged ? (
             <ContextMenuItem disabled>Manage roles</ContextMenuItem>
@@ -198,9 +227,19 @@ function MemberRowContextMenu({
             View challenges
           </ContextMenuItem>
         )}
+        {model.showKillswitch && (
+          <>
+            <ContextMenuItem onSelect={model.openViewKillswitches}>
+              View killswitches
+            </ContextMenuItem>
+            <ContextMenuItem onSelect={model.openKillswitch}>
+              New killswitch…
+            </ContextMenuItem>
+          </>
+        )}
         {model.canRemove && (
           <>
-            {hasItemsAbove && <ContextMenuSeparator />}
+            <ContextMenuSeparator />
             <RequireScope scope="org:admin" level="component">
               <ContextMenuItem
                 variant="destructive"
@@ -218,24 +257,19 @@ function MemberRowContextMenu({
 
 export default function Team(): JSX.Element {
   return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <RequireScope scope="org:admin" level="page">
-          <TeamInner />
-        </RequireScope>
-      </Page.Body>
-    </Page>
+    <RequireScope scope="org:admin" level="page">
+      <TeamInner />
+    </RequireScope>
   );
 }
 
 function TeamInner() {
+  const isDark = useIsDarkTheme();
   const organization = useOrganization();
   const user = useUser();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const identityHref = useIdentityHrefBuilder();
   const orgRoutes = useOrgRoutes();
 
   const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
@@ -283,6 +317,13 @@ function TeamInner() {
   const visibleMembers = members.slice(
     safePage * MEMBERS_PAGE_SIZE,
     (safePage + 1) * MEMBERS_PAGE_SIZE,
+  );
+  // Killswitches are managed on the person's own access tab, so every entry
+  // point here — the mark on the row, both menu items — goes to the same page.
+  const identityAccessHref = useIdentityHrefBuilder("access");
+  const memberAccessHref = (userId: string) => identityAccessHref({ userId });
+  const killswitchBadges = useKillswitchUserBadges(
+    visibleMembers.map((member) => member.userId),
   );
   const invites = invitesData?.invitations ?? [];
   const roles = rolesData?.roles ?? [];
@@ -506,6 +547,8 @@ function TeamInner() {
     adminCount,
     adminRoleId,
     challengesHref: orgRoutes.access.challenges.href(),
+    identityAccessHref: memberAccessHref,
+    canUseKillswitch: killswitchBadges.canAccess,
     navigate,
     roleIdsByUserId,
     scimManaged: Boolean(organization.scimEnabled),
@@ -530,7 +573,7 @@ function TeamInner() {
           ) : (
             <div
               className="flex h-8 w-8 items-center justify-center rounded-full text-xs font-medium"
-              style={getIdentityTint(member.id)}
+              style={getIdentityTint(member.id, isDark)}
             >
               {member.name
                 .split(" ")
@@ -541,9 +584,24 @@ function TeamInner() {
             </div>
           )}
           <Stack direction="vertical" gap={0}>
-            <Text variant="body" className="font-medium">
-              {member.name}
-            </Text>
+            <div className="flex flex-wrap items-center gap-2">
+              {/* The row click opens the same page, but a handler is not a
+                  link: no cmd+click, no middle-click, no copy-link, and nothing
+                  a screen reader announces as navigation. Keyed on userId, the
+                  same field the row click uses. */}
+              <Text variant="body" className="font-medium">
+                <IdentityLink identifier={{ userId: member.userId }}>
+                  {member.name}
+                </IdentityLink>
+              </Text>
+              <KillswitchUserStatusIcon
+                badge={killswitchBadges.badges.get(member.userId)}
+                unavailable={killswitchBadges.unavailableUserIds.has(
+                  member.userId,
+                )}
+                href={memberAccessHref(member.userId)}
+              />
+            </div>
             <Text variant="body" className="text-muted-foreground text-sm">
               {member.email}
             </Text>
@@ -628,6 +686,7 @@ function TeamInner() {
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
+                aria-label={`Actions for ${member.name}`}
                 className={cn(
                   "text-muted-foreground hover:bg-accent hover:text-foreground flex h-8 w-8 cursor-pointer items-center justify-center transition-colors",
                 )}
@@ -636,6 +695,13 @@ function TeamInner() {
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              {identityHref({ userId: member.userId }) && (
+                <DropdownMenuItem asChild>
+                  <Link to={identityHref({ userId: member.userId }) ?? ""}>
+                    View profile
+                  </Link>
+                </DropdownMenuItem>
+              )}
               {model.showManageRoles &&
                 (model.scimManaged ? (
                   <SimpleTooltip tooltip="Role assignments are managed by your identity provider. Configure them under SSO → SCIM in identity settings.">
@@ -659,9 +725,19 @@ function TeamInner() {
                   View challenges
                 </DropdownMenuItem>
               )}
+              {model.showKillswitch && (
+                <>
+                  <DropdownMenuItem onSelect={model.openViewKillswitches}>
+                    View killswitches
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={model.openKillswitch}>
+                    New killswitch…
+                  </DropdownMenuItem>
+                </>
+              )}
               {model.canRemove && (
                 <>
-                  {model.showManageRoles && <DropdownMenuSeparator />}
+                  <DropdownMenuSeparator />
                   <RequireScope scope="org:admin" level="component">
                     <DropdownMenuItem
                       className="text-destructive focus:text-destructive"
@@ -695,7 +771,7 @@ function TeamInner() {
           >
             <div
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-medium"
-              style={getIdentityTint(invite.email)}
+              style={getIdentityTint(invite.email, isDark)}
             >
               {invite.email
                 .split("@")[0]
@@ -753,25 +829,27 @@ function TeamInner() {
         if (!inviter) return <span className="text-muted-foreground">—</span>;
         return (
           <SimpleTooltip tooltip={inviter.email}>
-            {inviter.photoUrl ? (
-              <img
-                src={inviter.photoUrl}
-                alt={inviter.name}
-                className="h-7 w-7 rounded-full"
-              />
-            ) : (
-              <div
-                className="flex h-7 w-7 items-center justify-center rounded-full text-xs font-medium"
-                style={getIdentityTint(inviter.id)}
-              >
-                {inviter.name
-                  .split(" ")
-                  .map((n) => n[0])
-                  .join("")
-                  .toUpperCase()
-                  .slice(0, 2)}
-              </div>
-            )}
+            <IdentityLink identifier={{ userId: inviter.userId }}>
+              {inviter.photoUrl ? (
+                <img
+                  src={inviter.photoUrl}
+                  alt={inviter.name}
+                  className="h-7 w-7 rounded-full"
+                />
+              ) : (
+                <div
+                  className="flex h-7 w-7 items-center justify-center rounded-full text-xs font-medium"
+                  style={getIdentityTint(inviter.id, isDark)}
+                >
+                  {inviter.name
+                    .split(" ")
+                    .map((n) => n[0])
+                    .join("")
+                    .toUpperCase()
+                    .slice(0, 2)}
+                </div>
+              )}
+            </IdentityLink>
           </SimpleTooltip>
         );
       },
@@ -852,205 +930,208 @@ function TeamInner() {
     },
   ];
 
+  const inviteButton = (
+    <RequireScope scope="org:admin" level="component">
+      {organization.scimEnabled ? (
+        <SimpleTooltip tooltip="Managed by your identity provider">
+          <span className="inline-flex">
+            <Button onClick={() => setIsInviteDialogOpen(true)} disabled>
+              <Button.LeftIcon>
+                <UserPlus className="h-4 w-4" />
+              </Button.LeftIcon>
+              <Button.Text>Invite Member</Button.Text>
+            </Button>
+          </span>
+        </SimpleTooltip>
+      ) : (
+        <Button onClick={() => setIsInviteDialogOpen(true)}>
+          <Button.LeftIcon>
+            <UserPlus className="h-4 w-4" />
+          </Button.LeftIcon>
+          <Button.Text>Invite Member</Button.Text>
+        </Button>
+      )}
+    </RequireScope>
+  );
+
   return (
     <>
-      <Stack direction="vertical" gap={8}>
-        {/* Members Section */}
-        <div>
-          <Stack
-            direction="horizontal"
-            justify="space-between"
-            align="center"
-            className="mb-4"
-          >
-            <Stack direction="vertical" gap={1}>
-              <Page.Section.Title>Team Members</Page.Section.Title>
-              <Text variant="body" className="text-muted-foreground">
-                Manage who has access to {organization.name}
-              </Text>
-            </Stack>
-            <RequireScope scope="org:admin" level="component">
-              {organization.scimEnabled ? (
-                <SimpleTooltip tooltip="Managed by your identity provider">
-                  <span className="inline-flex">
-                    <Button
-                      onClick={() => setIsInviteDialogOpen(true)}
-                      disabled
-                    >
-                      <Button.LeftIcon>
-                        <UserPlus className="h-4 w-4" />
-                      </Button.LeftIcon>
-                      <Button.Text>Invite Member</Button.Text>
-                    </Button>
-                  </span>
-                </SimpleTooltip>
-              ) : (
-                <Button onClick={() => setIsInviteDialogOpen(true)}>
-                  <Button.LeftIcon>
-                    <UserPlus className="h-4 w-4" />
-                  </Button.LeftIcon>
-                  <Button.Text>Invite Member</Button.Text>
-                </Button>
-              )}
-            </RequireScope>
-          </Stack>
-
-          {organization.scimEnabled && (
-            <Alert variant="info" dismissible={false} className="mb-8 text-sm">
-              Directory Sync (SCIM) is enabled. Members are provisioned and
-              roles assigned from your identity provider, not here.{" "}
-              <Link
-                to={orgRoutes.identity.href()}
-                className="underline underline-offset-2"
-              >
-                Manage identity settings
-              </Link>
-            </Alert>
-          )}
-
-          <div className="relative">
-            <Icon
-              name="search"
-              className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
-            />
-            <Input
-              type="text"
-              placeholder="Search members..."
-              value={search}
-              onChange={(value) => {
-                setSearch(value);
-                setPage(0);
-              }}
-              className="mb-4 w-full py-2 pl-9 text-sm"
-            />
-          </div>
-
-          <Table
-            columns={memberColumns}
-            data={visibleMembers}
-            rowKey={(row) => row.userId}
-            renderRow={(row, rowElement) => (
-              <MemberRowContextMenu
-                key={row.userId}
-                member={row}
-                deps={memberMenuDeps}
-              >
-                {rowElement}
-              </MemberRowContextMenu>
-            )}
-            className="min-h-fit"
-            noResultsMessage={
-              <Stack
-                gap={2}
-                className="bg-background h-full p-8"
-                align="center"
-                justify="center"
-              >
-                <Users className="text-muted-foreground h-12 w-12" />
-                <Text variant="body" className="text-muted-foreground">
-                  {search
-                    ? "No members matching your search"
-                    : "No team members yet"}
-                </Text>
-              </Stack>
-            }
-          />
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between border-t px-4 py-3">
-              <Text variant="body" className="text-muted-foreground text-sm">
-                {safePage * MEMBERS_PAGE_SIZE + 1}–
-                {Math.min((safePage + 1) * MEMBERS_PAGE_SIZE, members.length)}{" "}
-                of {members.length}
-              </Text>
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="tertiary"
-                  size="sm"
-                  onClick={() => setPage((p) => p - 1)}
-                  disabled={safePage === 0}
-                >
-                  <Button.LeftIcon>
-                    <ChevronLeft className="size-4" />
-                  </Button.LeftIcon>
-                  <Button.Text className="sr-only">Previous page</Button.Text>
-                </Button>
-                <Button
-                  variant="tertiary"
-                  size="sm"
-                  onClick={() => setPage((p) => p + 1)}
-                  disabled={safePage >= totalPages - 1}
-                >
-                  <Button.LeftIcon>
-                    <ChevronRight className="size-4" />
-                  </Button.LeftIcon>
-                  <Button.Text className="sr-only">Next page</Button.Text>
-                </Button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Pending Invites Section */}
-        {invites.length > 0 && (
+      {killswitchBadges.loader}
+      <ResourceListPage
+        title="Team Members"
+        description={`Manage who has access to ${organization.name}`}
+        primaryAction={inviteButton}
+      >
+        <Stack direction="vertical" gap={8}>
+          {/* Members Section */}
           <div>
-            <Stack direction="vertical" gap={1} className="mb-4">
-              <h3 className="text-eyebrow">Pending Invites</h3>
-              <Text variant="body" className="text-muted-foreground">
-                Invitations that haven't been accepted yet
-              </Text>
-            </Stack>
+            {organization.scimEnabled && (
+              <Alert
+                variant="info"
+                dismissible={false}
+                className="mb-8 text-sm"
+              >
+                Directory Sync (SCIM) is enabled. Members are provisioned and
+                roles assigned from your identity provider, not here.{" "}
+                <Link
+                  to={orgRoutes.identity.href()}
+                  className="underline underline-offset-2"
+                >
+                  Manage identity settings
+                </Link>
+              </Alert>
+            )}
+
+            <div className="relative">
+              <Icon
+                name="search"
+                className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
+              />
+              <Input
+                type="text"
+                placeholder="Search members..."
+                value={search}
+                onChange={(value) => {
+                  setSearch(value);
+                  setPage(0);
+                }}
+                className="mb-4 w-full py-2 pl-9 text-sm"
+              />
+            </div>
 
             <Table
-              columns={inviteColumns}
-              data={invites}
-              rowKey={(row) => row.id}
+              columns={memberColumns}
+              data={visibleMembers}
+              rowKey={(row) => row.userId}
+              // The row is where most people first look for someone, so the
+              // whole row opens their profile rather than one link inside it.
+              onRowClick={(row) => {
+                const href = identityHref({ userId: row.userId });
+                if (href) void navigate(href);
+              }}
+              renderRow={(row, rowElement) => (
+                <MemberRowContextMenu
+                  key={row.userId}
+                  member={row}
+                  deps={memberMenuDeps}
+                >
+                  {rowElement}
+                </MemberRowContextMenu>
+              )}
               className="min-h-fit"
+              noResultsMessage={
+                <Stack
+                  gap={2}
+                  className="bg-background -mx-4 -my-6 h-full p-8"
+                  align="center"
+                  justify="center"
+                >
+                  <Users className="text-muted-foreground h-12 w-12" />
+                  <Text variant="body" className="text-muted-foreground">
+                    {search
+                      ? "No members matching your search"
+                      : "No team members yet"}
+                  </Text>
+                </Stack>
+              }
             />
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between border-t px-4 py-3">
+                <Text variant="body" className="text-muted-foreground text-sm">
+                  {safePage * MEMBERS_PAGE_SIZE + 1}–
+                  {Math.min((safePage + 1) * MEMBERS_PAGE_SIZE, members.length)}{" "}
+                  of {members.length}
+                </Text>
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="tertiary"
+                    size="sm"
+                    onClick={() => setPage((p) => p - 1)}
+                    disabled={safePage === 0}
+                  >
+                    <Button.LeftIcon>
+                      <ChevronLeft className="size-4" />
+                    </Button.LeftIcon>
+                    <Button.Text className="sr-only">Previous page</Button.Text>
+                  </Button>
+                  <Button
+                    variant="tertiary"
+                    size="sm"
+                    onClick={() => setPage((p) => p + 1)}
+                    disabled={safePage >= totalPages - 1}
+                  >
+                    <Button.LeftIcon>
+                      <ChevronRight className="size-4" />
+                    </Button.LeftIcon>
+                    <Button.Text className="sr-only">Next page</Button.Text>
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
-        )}
-        {/* Identity signpost */}
-        <div className="border-border border-t pt-8">
-          {organization.scimEnabled ? (
-            <div className="border-border bg-muted/30 flex items-start gap-3 border px-4 py-3">
-              <FolderSync className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
-              <div className="min-w-0 flex-1">
-                <Text variant="body" className="text-sm font-medium">
-                  Directory Sync is enabled
+
+          {/* Pending Invites Section */}
+          {invites.length > 0 && (
+            <div>
+              <Stack direction="vertical" gap={1} className="mb-4">
+                <h3 className="text-eyebrow">Pending Invites</h3>
+                <Text variant="body" className="text-muted-foreground">
+                  Invitations that haven't been accepted yet
                 </Text>
-                <Text muted small className="mt-0.5">
-                  Team membership and role assignments are managed by your
-                  identity provider.{" "}
-                  <Link
-                    to={orgRoutes.identity.href()}
-                    className="text-foreground underline underline-offset-4"
-                  >
-                    Manage identity settings
-                  </Link>
-                </Text>
-              </div>
-            </div>
-          ) : (
-            <div className="border-border bg-muted/30 flex items-start gap-3 border px-4 py-3">
-              <Shield className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
-              <div className="min-w-0 flex-1">
-                <Text variant="body" className="text-sm font-medium">
-                  SSO & Directory Sync
-                </Text>
-                <Text muted small className="mt-0.5">
-                  Automate member provisioning and enforce identity provider
-                  authentication.{" "}
-                  <Link
-                    to={orgRoutes.identity.href()}
-                    className="text-foreground underline underline-offset-4"
-                  >
-                    Set up SSO & SCIM
-                  </Link>
-                </Text>
-              </div>
+              </Stack>
+
+              <Table
+                columns={inviteColumns}
+                data={invites}
+                rowKey={(row) => row.id}
+                className="min-h-fit"
+              />
             </div>
           )}
-        </div>
-      </Stack>
+          {/* Identity signpost */}
+          <div className="border-border border-t pt-8">
+            {organization.scimEnabled ? (
+              <div className="border-border bg-muted/30 flex items-start gap-3 border px-4 py-3">
+                <FolderSync className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <Text variant="body" className="text-sm font-medium">
+                    Directory Sync is enabled
+                  </Text>
+                  <Text muted small className="mt-0.5">
+                    Team membership and role assignments are managed by your
+                    identity provider.{" "}
+                    <Link
+                      to={orgRoutes.identity.href()}
+                      className="text-foreground underline underline-offset-4"
+                    >
+                      Manage identity settings
+                    </Link>
+                  </Text>
+                </div>
+              </div>
+            ) : (
+              <div className="border-border bg-muted/30 flex items-start gap-3 border px-4 py-3">
+                <Shield className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <Text variant="body" className="text-sm font-medium">
+                    SSO & Directory Sync
+                  </Text>
+                  <Text muted small className="mt-0.5">
+                    Automate member provisioning and enforce identity provider
+                    authentication.{" "}
+                    <Link
+                      to={orgRoutes.identity.href()}
+                      className="text-foreground underline underline-offset-4"
+                    >
+                      Set up SSO & SCIM
+                    </Link>
+                  </Text>
+                </div>
+              </div>
+            )}
+          </div>
+        </Stack>
+      </ResourceListPage>
 
       {/* Invite Dialog */}
       <Dialog open={isInviteDialogOpen} onOpenChange={setIsInviteDialogOpen}>

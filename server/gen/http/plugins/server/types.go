@@ -81,9 +81,13 @@ type PublishPluginsRequestBody struct {
 // "updateMarketplaceSettings" endpoint HTTP request body.
 type UpdateMarketplaceSettingsRequestBody struct {
 	// Override for the marketplace name (the identifier users type as
-	// `<plugin>@<marketplace>`). Pass an empty string or omit to clear the
-	// override and fall back to the default.
+	// `<plugin>@<marketplace>`). Pass an empty string to clear the override and
+	// fall back to the default. Omit to leave the current override unchanged.
 	MarketplaceName *string `form:"marketplace_name,omitempty" json:"marketplace_name,omitempty" xml:"marketplace_name,omitempty"`
+	// Whether this project's observability plugin is included in the published
+	// marketplace and installed by the device agent. Omit to leave the current
+	// value unchanged.
+	ObservabilityEnabled *bool `form:"observability_enabled,omitempty" json:"observability_enabled,omitempty" xml:"observability_enabled,omitempty"`
 }
 
 // ListPluginsResponseBody is the type of the "plugins" service "listPlugins"
@@ -230,6 +234,13 @@ type SetPluginAssignmentsResponseBody struct {
 	Assignments []*PluginAssignmentResponseBody `form:"assignments" json:"assignments" xml:"assignments"`
 }
 
+// ListAudiencesResponseBody is the type of the "plugins" service
+// "listAudiences" endpoint HTTP response body.
+type ListAudiencesResponseBody struct {
+	// Audiences that can be assigned to plugins.
+	Audiences []*PluginAudienceResponseBody `form:"audiences" json:"audiences" xml:"audiences"`
+}
+
 // GetPublishStatusResponseBody is the type of the "plugins" service
 // "getPublishStatus" endpoint HTTP response body.
 type GetPublishStatusResponseBody struct {
@@ -254,6 +265,10 @@ type GetPublishStatusResponseBody struct {
 	// Slug of the generated Codex observability plugin in the published
 	// marketplace — install as `<slug>@<marketplace name>`. Present when connected.
 	CodexObservabilityPlugin *string `form:"codex_observability_plugin,omitempty" json:"codex_observability_plugin,omitempty" xml:"codex_observability_plugin,omitempty"`
+	// Slug of the generated Cursor observability plugin in the published
+	// marketplace — the value to mark required in Cursor's team marketplace.
+	// Present when connected.
+	CursorObservabilityPlugin *string `form:"cursor_observability_plugin,omitempty" json:"cursor_observability_plugin,omitempty" xml:"cursor_observability_plugin,omitempty"`
 	// Whether the repo has at least one directly-added GitHub collaborator
 	// (excludes access granted via org membership/teams). Absent when the project
 	// is not connected.
@@ -290,6 +305,9 @@ type GetMarketplaceSettingsResponseBody struct {
 	// The marketplace name that will be used at publish time (override if set,
 	// otherwise default).
 	EffectiveName string `form:"effective_name" json:"effective_name" xml:"effective_name"`
+	// Whether this project's observability plugin is included in the published
+	// marketplace and installed by the device agent. Defaults to true when unset.
+	ObservabilityEnabled bool `form:"observability_enabled" json:"observability_enabled" xml:"observability_enabled"`
 }
 
 // UpdateMarketplaceSettingsResponseBody is the type of the "plugins" service
@@ -488,6 +506,24 @@ type ListPluginsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListPluginsUnavailableResponseBody is the type of the "plugins" service
+// "listPlugins" endpoint HTTP response body for the "unavailable" error.
+type ListPluginsUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // GetPluginUnauthorizedResponseBody is the type of the "plugins" service
 // "getPlugin" endpoint HTTP response body for the "unauthorized" error.
 type GetPluginUnauthorizedResponseBody struct {
@@ -653,6 +689,24 @@ type GetPluginUnexpectedResponseBody struct {
 // GetPluginGatewayErrorResponseBody is the type of the "plugins" service
 // "getPlugin" endpoint HTTP response body for the "gateway_error" error.
 type GetPluginGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetPluginUnavailableResponseBody is the type of the "plugins" service
+// "getPlugin" endpoint HTTP response body for the "unavailable" error.
+type GetPluginUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -850,6 +904,24 @@ type CreatePluginGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// CreatePluginUnavailableResponseBody is the type of the "plugins" service
+// "createPlugin" endpoint HTTP response body for the "unavailable" error.
+type CreatePluginUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // UpdatePluginUnauthorizedResponseBody is the type of the "plugins" service
 // "updatePlugin" endpoint HTTP response body for the "unauthorized" error.
 type UpdatePluginUnauthorizedResponseBody struct {
@@ -1017,6 +1089,24 @@ type UpdatePluginUnexpectedResponseBody struct {
 // UpdatePluginGatewayErrorResponseBody is the type of the "plugins" service
 // "updatePlugin" endpoint HTTP response body for the "gateway_error" error.
 type UpdatePluginGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdatePluginUnavailableResponseBody is the type of the "plugins" service
+// "updatePlugin" endpoint HTTP response body for the "unavailable" error.
+type UpdatePluginUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1214,6 +1304,24 @@ type DeletePluginGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// DeletePluginUnavailableResponseBody is the type of the "plugins" service
+// "deletePlugin" endpoint HTTP response body for the "unavailable" error.
+type DeletePluginUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // AddPluginServerUnauthorizedResponseBody is the type of the "plugins" service
 // "addPluginServer" endpoint HTTP response body for the "unauthorized" error.
 type AddPluginServerUnauthorizedResponseBody struct {
@@ -1381,6 +1489,24 @@ type AddPluginServerUnexpectedResponseBody struct {
 // AddPluginServerGatewayErrorResponseBody is the type of the "plugins" service
 // "addPluginServer" endpoint HTTP response body for the "gateway_error" error.
 type AddPluginServerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// AddPluginServerUnavailableResponseBody is the type of the "plugins" service
+// "addPluginServer" endpoint HTTP response body for the "unavailable" error.
+type AddPluginServerUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1582,6 +1708,25 @@ type UpdatePluginServerGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// UpdatePluginServerUnavailableResponseBody is the type of the "plugins"
+// service "updatePluginServer" endpoint HTTP response body for the
+// "unavailable" error.
+type UpdatePluginServerUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // RemovePluginServerUnauthorizedResponseBody is the type of the "plugins"
 // service "removePluginServer" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -1753,6 +1898,25 @@ type RemovePluginServerUnexpectedResponseBody struct {
 // service "removePluginServer" endpoint HTTP response body for the
 // "gateway_error" error.
 type RemovePluginServerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RemovePluginServerUnavailableResponseBody is the type of the "plugins"
+// service "removePluginServer" endpoint HTTP response body for the
+// "unavailable" error.
+type RemovePluginServerUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1942,6 +2106,225 @@ type SetPluginAssignmentsUnexpectedResponseBody struct {
 // service "setPluginAssignments" endpoint HTTP response body for the
 // "gateway_error" error.
 type SetPluginAssignmentsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetPluginAssignmentsUnavailableResponseBody is the type of the "plugins"
+// service "setPluginAssignments" endpoint HTTP response body for the
+// "unavailable" error.
+type SetPluginAssignmentsUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAudiencesUnauthorizedResponseBody is the type of the "plugins" service
+// "listAudiences" endpoint HTTP response body for the "unauthorized" error.
+type ListAudiencesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAudiencesForbiddenResponseBody is the type of the "plugins" service
+// "listAudiences" endpoint HTTP response body for the "forbidden" error.
+type ListAudiencesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAudiencesBadRequestResponseBody is the type of the "plugins" service
+// "listAudiences" endpoint HTTP response body for the "bad_request" error.
+type ListAudiencesBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAudiencesNotFoundResponseBody is the type of the "plugins" service
+// "listAudiences" endpoint HTTP response body for the "not_found" error.
+type ListAudiencesNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAudiencesConflictResponseBody is the type of the "plugins" service
+// "listAudiences" endpoint HTTP response body for the "conflict" error.
+type ListAudiencesConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAudiencesUnsupportedMediaResponseBody is the type of the "plugins"
+// service "listAudiences" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListAudiencesUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAudiencesInvalidResponseBody is the type of the "plugins" service
+// "listAudiences" endpoint HTTP response body for the "invalid" error.
+type ListAudiencesInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAudiencesInvariantViolationResponseBody is the type of the "plugins"
+// service "listAudiences" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListAudiencesInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAudiencesUnexpectedResponseBody is the type of the "plugins" service
+// "listAudiences" endpoint HTTP response body for the "unexpected" error.
+type ListAudiencesUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAudiencesGatewayErrorResponseBody is the type of the "plugins" service
+// "listAudiences" endpoint HTTP response body for the "gateway_error" error.
+type ListAudiencesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAudiencesUnavailableResponseBody is the type of the "plugins" service
+// "listAudiences" endpoint HTTP response body for the "unavailable" error.
+type ListAudiencesUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2166,6 +2549,25 @@ type DownloadPluginPackageGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// DownloadPluginPackageUnavailableResponseBody is the type of the "plugins"
+// service "downloadPluginPackage" endpoint HTTP response body for the
+// "unavailable" error.
+type DownloadPluginPackageUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // DownloadObservabilityPluginUnauthorizedResponseBody is the type of the
 // "plugins" service "downloadObservabilityPlugin" endpoint HTTP response body
 // for the "unauthorized" error.
@@ -2341,6 +2743,25 @@ type DownloadObservabilityPluginUnexpectedResponseBody struct {
 // "plugins" service "downloadObservabilityPlugin" endpoint HTTP response body
 // for the "gateway_error" error.
 type DownloadObservabilityPluginGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DownloadObservabilityPluginUnavailableResponseBody is the type of the
+// "plugins" service "downloadObservabilityPlugin" endpoint HTTP response body
+// for the "unavailable" error.
+type DownloadObservabilityPluginUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2546,6 +2967,25 @@ type DownloadCodexInstallScriptGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// DownloadCodexInstallScriptUnavailableResponseBody is the type of the
+// "plugins" service "downloadCodexInstallScript" endpoint HTTP response body
+// for the "unavailable" error.
+type DownloadCodexInstallScriptUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // GetPublishStatusUnauthorizedResponseBody is the type of the "plugins"
 // service "getPublishStatus" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -2730,6 +3170,24 @@ type GetPublishStatusGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetPublishStatusUnavailableResponseBody is the type of the "plugins" service
+// "getPublishStatus" endpoint HTTP response body for the "unavailable" error.
+type GetPublishStatusUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // PublishPluginsUnauthorizedResponseBody is the type of the "plugins" service
 // "publishPlugins" endpoint HTTP response body for the "unauthorized" error.
 type PublishPluginsUnauthorizedResponseBody struct {
@@ -2897,6 +3355,24 @@ type PublishPluginsUnexpectedResponseBody struct {
 // PublishPluginsGatewayErrorResponseBody is the type of the "plugins" service
 // "publishPlugins" endpoint HTTP response body for the "gateway_error" error.
 type PublishPluginsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PublishPluginsUnavailableResponseBody is the type of the "plugins" service
+// "publishPlugins" endpoint HTTP response body for the "unavailable" error.
+type PublishPluginsUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3102,6 +3578,25 @@ type GetMarketplaceSettingsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetMarketplaceSettingsUnavailableResponseBody is the type of the "plugins"
+// service "getMarketplaceSettings" endpoint HTTP response body for the
+// "unavailable" error.
+type GetMarketplaceSettingsUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // UpdateMarketplaceSettingsUnauthorizedResponseBody is the type of the
 // "plugins" service "updateMarketplaceSettings" endpoint HTTP response body
 // for the "unauthorized" error.
@@ -3292,6 +3787,25 @@ type UpdateMarketplaceSettingsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// UpdateMarketplaceSettingsUnavailableResponseBody is the type of the
+// "plugins" service "updateMarketplaceSettings" endpoint HTTP response body
+// for the "unavailable" error.
+type UpdateMarketplaceSettingsUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // PluginResponseBody is used to define fields on response body types.
 type PluginResponseBody struct {
 	// Unique plugin identifier.
@@ -3344,9 +3858,21 @@ type PluginServerResponseBody struct {
 type PluginAssignmentResponseBody struct {
 	// Unique assignment identifier.
 	ID string `form:"id" json:"id" xml:"id"`
-	// Principal URN (e.g. role:engineering, user:id, or *).
+	// Principal URN (e.g. role:organization:<uuid>, user:id, or *).
 	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
 	CreatedAt    string `form:"created_at" json:"created_at" xml:"created_at"`
+}
+
+// PluginAudienceResponseBody is used to define fields on response body types.
+type PluginAudienceResponseBody struct {
+	// Audience kind.
+	Kind string `form:"kind" json:"kind" xml:"kind"`
+	// Display name for the audience.
+	DisplayName string `form:"display_name" json:"display_name" xml:"display_name"`
+	// Number of current members, when the audience has an enumerable membership.
+	MemberCount *int64 `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
+	// Principal URN used to assign the audience to a plugin.
+	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
 }
 
 // MarketplaceSettingsResultResponseBody is used to define fields on response
@@ -3360,6 +3886,9 @@ type MarketplaceSettingsResultResponseBody struct {
 	// The marketplace name that will be used at publish time (override if set,
 	// otherwise default).
 	EffectiveName string `form:"effective_name" json:"effective_name" xml:"effective_name"`
+	// Whether this project's observability plugin is included in the published
+	// marketplace and installed by the device agent. Defaults to true when unset.
+	ObservabilityEnabled bool `form:"observability_enabled" json:"observability_enabled" xml:"observability_enabled"`
 }
 
 // NewListPluginsResponseBody builds the HTTP response body from the result of
@@ -3547,6 +4076,25 @@ func NewSetPluginAssignmentsResponseBody(res *plugins.SetPluginAssignmentsResult
 	return body
 }
 
+// NewListAudiencesResponseBody builds the HTTP response body from the result
+// of the "listAudiences" endpoint of the "plugins" service.
+func NewListAudiencesResponseBody(res *plugins.ListAudiencesResult) *ListAudiencesResponseBody {
+	body := &ListAudiencesResponseBody{}
+	if res.Audiences != nil {
+		body.Audiences = make([]*PluginAudienceResponseBody, len(res.Audiences))
+		for i, val := range res.Audiences {
+			if val == nil {
+				body.Audiences[i] = nil
+				continue
+			}
+			body.Audiences[i] = marshalPluginsPluginAudienceToPluginAudienceResponseBody(val)
+		}
+	} else {
+		body.Audiences = []*PluginAudienceResponseBody{}
+	}
+	return body
+}
+
 // NewGetPublishStatusResponseBody builds the HTTP response body from the
 // result of the "getPublishStatus" endpoint of the "plugins" service.
 func NewGetPublishStatusResponseBody(res *plugins.PublishStatusResult) *GetPublishStatusResponseBody {
@@ -3559,6 +4107,7 @@ func NewGetPublishStatusResponseBody(res *plugins.PublishStatusResult) *GetPubli
 		MarketplaceURL:            res.MarketplaceURL,
 		ClaudeObservabilityPlugin: res.ClaudeObservabilityPlugin,
 		CodexObservabilityPlugin:  res.CodexObservabilityPlugin,
+		CursorObservabilityPlugin: res.CursorObservabilityPlugin,
 		HasCollaborators:          res.HasCollaborators,
 		UpToDate:                  res.UpToDate,
 		LastPublishedAt:           res.LastPublishedAt,
@@ -3580,9 +4129,10 @@ func NewPublishPluginsResponseBody(res *plugins.PublishPluginsResult) *PublishPl
 // result of the "getMarketplaceSettings" endpoint of the "plugins" service.
 func NewGetMarketplaceSettingsResponseBody(res *plugins.MarketplaceSettingsResult) *GetMarketplaceSettingsResponseBody {
 	body := &GetMarketplaceSettingsResponseBody{
-		MarketplaceName: res.MarketplaceName,
-		DefaultName:     res.DefaultName,
-		EffectiveName:   res.EffectiveName,
+		MarketplaceName:      res.MarketplaceName,
+		DefaultName:          res.DefaultName,
+		EffectiveName:        res.EffectiveName,
+		ObservabilityEnabled: res.ObservabilityEnabled,
 	}
 	return body
 }
@@ -3741,6 +4291,20 @@ func NewListPluginsGatewayErrorResponseBody(res *goa.ServiceError) *ListPluginsG
 	return body
 }
 
+// NewListPluginsUnavailableResponseBody builds the HTTP response body from the
+// result of the "listPlugins" endpoint of the "plugins" service.
+func NewListPluginsUnavailableResponseBody(res *goa.ServiceError) *ListPluginsUnavailableResponseBody {
+	body := &ListPluginsUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetPluginUnauthorizedResponseBody builds the HTTP response body from the
 // result of the "getPlugin" endpoint of the "plugins" service.
 func NewGetPluginUnauthorizedResponseBody(res *goa.ServiceError) *GetPluginUnauthorizedResponseBody {
@@ -3871,6 +4435,20 @@ func NewGetPluginUnexpectedResponseBody(res *goa.ServiceError) *GetPluginUnexpec
 // result of the "getPlugin" endpoint of the "plugins" service.
 func NewGetPluginGatewayErrorResponseBody(res *goa.ServiceError) *GetPluginGatewayErrorResponseBody {
 	body := &GetPluginGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetPluginUnavailableResponseBody builds the HTTP response body from the
+// result of the "getPlugin" endpoint of the "plugins" service.
+func NewGetPluginUnavailableResponseBody(res *goa.ServiceError) *GetPluginUnavailableResponseBody {
+	body := &GetPluginUnavailableResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -4021,6 +4599,20 @@ func NewCreatePluginGatewayErrorResponseBody(res *goa.ServiceError) *CreatePlugi
 	return body
 }
 
+// NewCreatePluginUnavailableResponseBody builds the HTTP response body from
+// the result of the "createPlugin" endpoint of the "plugins" service.
+func NewCreatePluginUnavailableResponseBody(res *goa.ServiceError) *CreatePluginUnavailableResponseBody {
+	body := &CreatePluginUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewUpdatePluginUnauthorizedResponseBody builds the HTTP response body from
 // the result of the "updatePlugin" endpoint of the "plugins" service.
 func NewUpdatePluginUnauthorizedResponseBody(res *goa.ServiceError) *UpdatePluginUnauthorizedResponseBody {
@@ -4151,6 +4743,20 @@ func NewUpdatePluginUnexpectedResponseBody(res *goa.ServiceError) *UpdatePluginU
 // the result of the "updatePlugin" endpoint of the "plugins" service.
 func NewUpdatePluginGatewayErrorResponseBody(res *goa.ServiceError) *UpdatePluginGatewayErrorResponseBody {
 	body := &UpdatePluginGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdatePluginUnavailableResponseBody builds the HTTP response body from
+// the result of the "updatePlugin" endpoint of the "plugins" service.
+func NewUpdatePluginUnavailableResponseBody(res *goa.ServiceError) *UpdatePluginUnavailableResponseBody {
+	body := &UpdatePluginUnavailableResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -4301,6 +4907,20 @@ func NewDeletePluginGatewayErrorResponseBody(res *goa.ServiceError) *DeletePlugi
 	return body
 }
 
+// NewDeletePluginUnavailableResponseBody builds the HTTP response body from
+// the result of the "deletePlugin" endpoint of the "plugins" service.
+func NewDeletePluginUnavailableResponseBody(res *goa.ServiceError) *DeletePluginUnavailableResponseBody {
+	body := &DeletePluginUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewAddPluginServerUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "addPluginServer" endpoint of the "plugins" service.
 func NewAddPluginServerUnauthorizedResponseBody(res *goa.ServiceError) *AddPluginServerUnauthorizedResponseBody {
@@ -4432,6 +5052,20 @@ func NewAddPluginServerUnexpectedResponseBody(res *goa.ServiceError) *AddPluginS
 // from the result of the "addPluginServer" endpoint of the "plugins" service.
 func NewAddPluginServerGatewayErrorResponseBody(res *goa.ServiceError) *AddPluginServerGatewayErrorResponseBody {
 	body := &AddPluginServerGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewAddPluginServerUnavailableResponseBody builds the HTTP response body from
+// the result of the "addPluginServer" endpoint of the "plugins" service.
+func NewAddPluginServerUnavailableResponseBody(res *goa.ServiceError) *AddPluginServerUnavailableResponseBody {
+	body := &AddPluginServerUnavailableResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -4589,6 +5223,21 @@ func NewUpdatePluginServerGatewayErrorResponseBody(res *goa.ServiceError) *Updat
 	return body
 }
 
+// NewUpdatePluginServerUnavailableResponseBody builds the HTTP response body
+// from the result of the "updatePluginServer" endpoint of the "plugins"
+// service.
+func NewUpdatePluginServerUnavailableResponseBody(res *goa.ServiceError) *UpdatePluginServerUnavailableResponseBody {
+	body := &UpdatePluginServerUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewRemovePluginServerUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "removePluginServer" endpoint of the "plugins"
 // service.
@@ -4726,6 +5375,21 @@ func NewRemovePluginServerUnexpectedResponseBody(res *goa.ServiceError) *RemoveP
 // service.
 func NewRemovePluginServerGatewayErrorResponseBody(res *goa.ServiceError) *RemovePluginServerGatewayErrorResponseBody {
 	body := &RemovePluginServerGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRemovePluginServerUnavailableResponseBody builds the HTTP response body
+// from the result of the "removePluginServer" endpoint of the "plugins"
+// service.
+func NewRemovePluginServerUnavailableResponseBody(res *goa.ServiceError) *RemovePluginServerUnavailableResponseBody {
+	body := &RemovePluginServerUnavailableResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -4876,6 +5540,175 @@ func NewSetPluginAssignmentsUnexpectedResponseBody(res *goa.ServiceError) *SetPl
 // service.
 func NewSetPluginAssignmentsGatewayErrorResponseBody(res *goa.ServiceError) *SetPluginAssignmentsGatewayErrorResponseBody {
 	body := &SetPluginAssignmentsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetPluginAssignmentsUnavailableResponseBody builds the HTTP response body
+// from the result of the "setPluginAssignments" endpoint of the "plugins"
+// service.
+func NewSetPluginAssignmentsUnavailableResponseBody(res *goa.ServiceError) *SetPluginAssignmentsUnavailableResponseBody {
+	body := &SetPluginAssignmentsUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAudiencesUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "listAudiences" endpoint of the "plugins" service.
+func NewListAudiencesUnauthorizedResponseBody(res *goa.ServiceError) *ListAudiencesUnauthorizedResponseBody {
+	body := &ListAudiencesUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAudiencesForbiddenResponseBody builds the HTTP response body from the
+// result of the "listAudiences" endpoint of the "plugins" service.
+func NewListAudiencesForbiddenResponseBody(res *goa.ServiceError) *ListAudiencesForbiddenResponseBody {
+	body := &ListAudiencesForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAudiencesBadRequestResponseBody builds the HTTP response body from
+// the result of the "listAudiences" endpoint of the "plugins" service.
+func NewListAudiencesBadRequestResponseBody(res *goa.ServiceError) *ListAudiencesBadRequestResponseBody {
+	body := &ListAudiencesBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAudiencesNotFoundResponseBody builds the HTTP response body from the
+// result of the "listAudiences" endpoint of the "plugins" service.
+func NewListAudiencesNotFoundResponseBody(res *goa.ServiceError) *ListAudiencesNotFoundResponseBody {
+	body := &ListAudiencesNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAudiencesConflictResponseBody builds the HTTP response body from the
+// result of the "listAudiences" endpoint of the "plugins" service.
+func NewListAudiencesConflictResponseBody(res *goa.ServiceError) *ListAudiencesConflictResponseBody {
+	body := &ListAudiencesConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAudiencesUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "listAudiences" endpoint of the "plugins" service.
+func NewListAudiencesUnsupportedMediaResponseBody(res *goa.ServiceError) *ListAudiencesUnsupportedMediaResponseBody {
+	body := &ListAudiencesUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAudiencesInvalidResponseBody builds the HTTP response body from the
+// result of the "listAudiences" endpoint of the "plugins" service.
+func NewListAudiencesInvalidResponseBody(res *goa.ServiceError) *ListAudiencesInvalidResponseBody {
+	body := &ListAudiencesInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAudiencesInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "listAudiences" endpoint of the "plugins" service.
+func NewListAudiencesInvariantViolationResponseBody(res *goa.ServiceError) *ListAudiencesInvariantViolationResponseBody {
+	body := &ListAudiencesInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAudiencesUnexpectedResponseBody builds the HTTP response body from
+// the result of the "listAudiences" endpoint of the "plugins" service.
+func NewListAudiencesUnexpectedResponseBody(res *goa.ServiceError) *ListAudiencesUnexpectedResponseBody {
+	body := &ListAudiencesUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAudiencesGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "listAudiences" endpoint of the "plugins" service.
+func NewListAudiencesGatewayErrorResponseBody(res *goa.ServiceError) *ListAudiencesGatewayErrorResponseBody {
+	body := &ListAudiencesGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAudiencesUnavailableResponseBody builds the HTTP response body from
+// the result of the "listAudiences" endpoint of the "plugins" service.
+func NewListAudiencesUnavailableResponseBody(res *goa.ServiceError) *ListAudiencesUnavailableResponseBody {
+	body := &ListAudiencesUnavailableResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -5051,6 +5884,21 @@ func NewDownloadPluginPackageGatewayErrorResponseBody(res *goa.ServiceError) *Do
 	return body
 }
 
+// NewDownloadPluginPackageUnavailableResponseBody builds the HTTP response
+// body from the result of the "downloadPluginPackage" endpoint of the
+// "plugins" service.
+func NewDownloadPluginPackageUnavailableResponseBody(res *goa.ServiceError) *DownloadPluginPackageUnavailableResponseBody {
+	body := &DownloadPluginPackageUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewDownloadObservabilityPluginUnauthorizedResponseBody builds the HTTP
 // response body from the result of the "downloadObservabilityPlugin" endpoint
 // of the "plugins" service.
@@ -5191,6 +6039,21 @@ func NewDownloadObservabilityPluginUnexpectedResponseBody(res *goa.ServiceError)
 // of the "plugins" service.
 func NewDownloadObservabilityPluginGatewayErrorResponseBody(res *goa.ServiceError) *DownloadObservabilityPluginGatewayErrorResponseBody {
 	body := &DownloadObservabilityPluginGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDownloadObservabilityPluginUnavailableResponseBody builds the HTTP
+// response body from the result of the "downloadObservabilityPlugin" endpoint
+// of the "plugins" service.
+func NewDownloadObservabilityPluginUnavailableResponseBody(res *goa.ServiceError) *DownloadObservabilityPluginUnavailableResponseBody {
+	body := &DownloadObservabilityPluginUnavailableResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -5351,6 +6214,21 @@ func NewDownloadCodexInstallScriptGatewayErrorResponseBody(res *goa.ServiceError
 	return body
 }
 
+// NewDownloadCodexInstallScriptUnavailableResponseBody builds the HTTP
+// response body from the result of the "downloadCodexInstallScript" endpoint
+// of the "plugins" service.
+func NewDownloadCodexInstallScriptUnavailableResponseBody(res *goa.ServiceError) *DownloadCodexInstallScriptUnavailableResponseBody {
+	body := &DownloadCodexInstallScriptUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetPublishStatusUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "getPublishStatus" endpoint of the "plugins" service.
 func NewGetPublishStatusUnauthorizedResponseBody(res *goa.ServiceError) *GetPublishStatusUnauthorizedResponseBody {
@@ -5493,6 +6371,20 @@ func NewGetPublishStatusGatewayErrorResponseBody(res *goa.ServiceError) *GetPubl
 	return body
 }
 
+// NewGetPublishStatusUnavailableResponseBody builds the HTTP response body
+// from the result of the "getPublishStatus" endpoint of the "plugins" service.
+func NewGetPublishStatusUnavailableResponseBody(res *goa.ServiceError) *GetPublishStatusUnavailableResponseBody {
+	body := &GetPublishStatusUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewPublishPluginsUnauthorizedResponseBody builds the HTTP response body from
 // the result of the "publishPlugins" endpoint of the "plugins" service.
 func NewPublishPluginsUnauthorizedResponseBody(res *goa.ServiceError) *PublishPluginsUnauthorizedResponseBody {
@@ -5624,6 +6516,20 @@ func NewPublishPluginsUnexpectedResponseBody(res *goa.ServiceError) *PublishPlug
 // the result of the "publishPlugins" endpoint of the "plugins" service.
 func NewPublishPluginsGatewayErrorResponseBody(res *goa.ServiceError) *PublishPluginsGatewayErrorResponseBody {
 	body := &PublishPluginsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPublishPluginsUnavailableResponseBody builds the HTTP response body from
+// the result of the "publishPlugins" endpoint of the "plugins" service.
+func NewPublishPluginsUnavailableResponseBody(res *goa.ServiceError) *PublishPluginsUnavailableResponseBody {
+	body := &PublishPluginsUnavailableResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -5784,6 +6690,21 @@ func NewGetMarketplaceSettingsGatewayErrorResponseBody(res *goa.ServiceError) *G
 	return body
 }
 
+// NewGetMarketplaceSettingsUnavailableResponseBody builds the HTTP response
+// body from the result of the "getMarketplaceSettings" endpoint of the
+// "plugins" service.
+func NewGetMarketplaceSettingsUnavailableResponseBody(res *goa.ServiceError) *GetMarketplaceSettingsUnavailableResponseBody {
+	body := &GetMarketplaceSettingsUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewUpdateMarketplaceSettingsUnauthorizedResponseBody builds the HTTP
 // response body from the result of the "updateMarketplaceSettings" endpoint of
 // the "plugins" service.
@@ -5934,6 +6855,21 @@ func NewUpdateMarketplaceSettingsGatewayErrorResponseBody(res *goa.ServiceError)
 	return body
 }
 
+// NewUpdateMarketplaceSettingsUnavailableResponseBody builds the HTTP response
+// body from the result of the "updateMarketplaceSettings" endpoint of the
+// "plugins" service.
+func NewUpdateMarketplaceSettingsUnavailableResponseBody(res *goa.ServiceError) *UpdateMarketplaceSettingsUnavailableResponseBody {
+	body := &UpdateMarketplaceSettingsUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListPluginsPayload builds a plugins service listPlugins endpoint payload.
 func NewListPluginsPayload(sessionToken *string, projectSlugInput *string) *plugins.ListPluginsPayload {
 	v := &plugins.ListPluginsPayload{}
@@ -6074,6 +7010,16 @@ func NewSetPluginAssignmentsPayload(body *SetPluginAssignmentsRequestBody, sessi
 	return v
 }
 
+// NewListAudiencesPayload builds a plugins service listAudiences endpoint
+// payload.
+func NewListAudiencesPayload(sessionToken *string, projectSlugInput *string) *plugins.ListAudiencesPayload {
+	v := &plugins.ListAudiencesPayload{}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewDownloadPluginPackagePayload builds a plugins service
 // downloadPluginPackage endpoint payload.
 func NewDownloadPluginPackagePayload(pluginID string, platform string, sessionToken *string, projectSlugInput *string) *plugins.DownloadPluginPackagePayload {
@@ -6147,7 +7093,8 @@ func NewGetMarketplaceSettingsPayload(sessionToken *string, projectSlugInput *st
 // updateMarketplaceSettings endpoint payload.
 func NewUpdateMarketplaceSettingsPayload(body *UpdateMarketplaceSettingsRequestBody, sessionToken *string, projectSlugInput *string) *plugins.UpdateMarketplaceSettingsPayload {
 	v := &plugins.UpdateMarketplaceSettingsPayload{
-		MarketplaceName: body.MarketplaceName,
+		MarketplaceName:      body.MarketplaceName,
+		ObservabilityEnabled: body.ObservabilityEnabled,
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

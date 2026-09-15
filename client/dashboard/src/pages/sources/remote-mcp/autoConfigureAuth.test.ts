@@ -1,14 +1,16 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
 import type { Gram } from "@gram/client";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { RemoteMcpServer } from "@gram/client/models/components/remotemcpserver.js";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-
+import { autoConfigureRemoteMcpAuth } from "./autoConfigureAuth";
 import { proxyRegisterUpstreamClient } from "@/lib/proxyRegisterUpstreamClient";
 
-import { autoConfigureRemoteMcpAuth } from "./autoConfigureAuth";
-
-vi.mock("@/lib/proxyRegisterUpstreamClient", () => ({
+vi.mock("@/lib/proxyRegisterUpstreamClient", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("@/lib/proxyRegisterUpstreamClient")
+  >()),
   proxyRegisterUpstreamClient: vi.fn(),
 }));
 
@@ -28,6 +30,8 @@ describe("autoConfigureRemoteMcpAuth", () => {
       clientId: "client-from-dcr",
       clientSecret: "secret-from-dcr",
       tokenEndpointAuthMethod: "client_secret_post",
+      clientIdIssuedAt: null,
+      clientSecretExpiresAt: null,
     });
   });
 
@@ -75,6 +79,10 @@ describe("autoConfigureRemoteMcpAuth", () => {
           clientId: "client-from-dcr",
           clientSecret: "secret-from-dcr",
           tokenEndpointAuthMethod: "client_secret_post",
+          // Lifecycle stamps from the registration, so the server can
+          // re-register the client in place once the issuer expires it.
+          clientIdIssuedAt: undefined,
+          clientSecretExpiresAt: undefined,
         }),
       },
       undefined,
@@ -507,6 +515,7 @@ function mcpServer(overrides: Partial<McpServer> = {}): McpServer {
     name: "Remote server",
     slug: "remote-server",
     remoteMcpServerId: "remote-mcp-server-1",
+    networkAccessMode: "public_only",
     visibility: "disabled",
     userSessionIssuerId: "server-usi",
     createdAt: new Date(0),

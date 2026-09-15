@@ -608,17 +608,36 @@ func (q *Queries) GetExternalMCPToolsRequiringOAuth(ctx context.Context, deploym
 }
 
 const getMCPRegistryByID = `-- name: GetMCPRegistryByID :one
-SELECT id, name, url, created_at, updated_at
+SELECT
+  id,
+  name,
+  url,
+  source_type,
+  auth_profile,
+  enabled,
+  certification_state,
+  certification_version,
+  priority,
+  source_key,
+  created_at,
+  updated_at
 FROM mcp_registries
 WHERE id = $1 AND deleted IS FALSE
 `
 
 type GetMCPRegistryByIDRow struct {
-	ID        uuid.UUID
-	Name      string
-	Url       string
-	CreatedAt pgtype.Timestamptz
-	UpdatedAt pgtype.Timestamptz
+	ID                   uuid.UUID
+	Name                 string
+	Url                  string
+	SourceType           pgtype.Text
+	AuthProfile          pgtype.Text
+	Enabled              pgtype.Bool
+	CertificationState   pgtype.Text
+	CertificationVersion pgtype.Text
+	Priority             pgtype.Int4
+	SourceKey            pgtype.Text
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
 }
 
 func (q *Queries) GetMCPRegistryByID(ctx context.Context, id uuid.UUID) (GetMCPRegistryByIDRow, error) {
@@ -628,6 +647,13 @@ func (q *Queries) GetMCPRegistryByID(ctx context.Context, id uuid.UUID) (GetMCPR
 		&i.ID,
 		&i.Name,
 		&i.Url,
+		&i.SourceType,
+		&i.AuthProfile,
+		&i.Enabled,
+		&i.CertificationState,
+		&i.CertificationVersion,
+		&i.Priority,
+		&i.SourceKey,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -943,18 +969,37 @@ func (q *Queries) ListExternalMCPToolDefinitions(ctx context.Context, deployment
 }
 
 const listMCPRegistries = `-- name: ListMCPRegistries :many
-SELECT id, name, url, created_at, updated_at
+SELECT
+  id,
+  name,
+  url,
+  source_type,
+  auth_profile,
+  enabled,
+  certification_state,
+  certification_version,
+  priority,
+  source_key,
+  created_at,
+  updated_at
 FROM mcp_registries
 WHERE deleted IS FALSE
 ORDER BY name ASC
 `
 
 type ListMCPRegistriesRow struct {
-	ID        uuid.UUID
-	Name      string
-	Url       string
-	CreatedAt pgtype.Timestamptz
-	UpdatedAt pgtype.Timestamptz
+	ID                   uuid.UUID
+	Name                 string
+	Url                  string
+	SourceType           pgtype.Text
+	AuthProfile          pgtype.Text
+	Enabled              pgtype.Bool
+	CertificationState   pgtype.Text
+	CertificationVersion pgtype.Text
+	Priority             pgtype.Int4
+	SourceKey            pgtype.Text
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
 }
 
 func (q *Queries) ListMCPRegistries(ctx context.Context) ([]ListMCPRegistriesRow, error) {
@@ -970,6 +1015,13 @@ func (q *Queries) ListMCPRegistries(ctx context.Context) ([]ListMCPRegistriesRow
 			&i.ID,
 			&i.Name,
 			&i.Url,
+			&i.SourceType,
+			&i.AuthProfile,
+			&i.Enabled,
+			&i.CertificationState,
+			&i.CertificationVersion,
+			&i.Priority,
+			&i.SourceKey,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {

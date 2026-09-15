@@ -1689,6 +1689,248 @@ func DecodeListToolFiltersResponse(decoder func(*http.Response) goahttp.Decoder,
 	}
 }
 
+// BuildListToolSchemaStaticValuesRequest instantiates a HTTP request object
+// with method and path set to call the "toolsets" service
+// "listToolSchemaStaticValues" endpoint
+func (c *Client) BuildListToolSchemaStaticValuesRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListToolSchemaStaticValuesToolsetsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("toolsets", "listToolSchemaStaticValues", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListToolSchemaStaticValuesRequest returns an encoder for requests sent
+// to the toolsets listToolSchemaStaticValues server.
+func EncodeListToolSchemaStaticValuesRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*toolsets.ListToolSchemaStaticValuesPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("toolsets", "listToolSchemaStaticValues", "*toolsets.ListToolSchemaStaticValuesPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("slug", string(p.Slug))
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListToolSchemaStaticValuesResponse returns a decoder for responses
+// returned by the toolsets listToolSchemaStaticValues endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeListToolSchemaStaticValuesResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListToolSchemaStaticValuesResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListToolSchemaStaticValuesResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "listToolSchemaStaticValues", err)
+			}
+			err = ValidateListToolSchemaStaticValuesResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "listToolSchemaStaticValues", err)
+			}
+			res := NewListToolSchemaStaticValuesResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListToolSchemaStaticValuesUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "listToolSchemaStaticValues", err)
+			}
+			err = ValidateListToolSchemaStaticValuesUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "listToolSchemaStaticValues", err)
+			}
+			return nil, NewListToolSchemaStaticValuesUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListToolSchemaStaticValuesForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "listToolSchemaStaticValues", err)
+			}
+			err = ValidateListToolSchemaStaticValuesForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "listToolSchemaStaticValues", err)
+			}
+			return nil, NewListToolSchemaStaticValuesForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListToolSchemaStaticValuesBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "listToolSchemaStaticValues", err)
+			}
+			err = ValidateListToolSchemaStaticValuesBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "listToolSchemaStaticValues", err)
+			}
+			return nil, NewListToolSchemaStaticValuesBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListToolSchemaStaticValuesNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "listToolSchemaStaticValues", err)
+			}
+			err = ValidateListToolSchemaStaticValuesNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "listToolSchemaStaticValues", err)
+			}
+			return nil, NewListToolSchemaStaticValuesNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListToolSchemaStaticValuesConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "listToolSchemaStaticValues", err)
+			}
+			err = ValidateListToolSchemaStaticValuesConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "listToolSchemaStaticValues", err)
+			}
+			return nil, NewListToolSchemaStaticValuesConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListToolSchemaStaticValuesUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "listToolSchemaStaticValues", err)
+			}
+			err = ValidateListToolSchemaStaticValuesUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "listToolSchemaStaticValues", err)
+			}
+			return nil, NewListToolSchemaStaticValuesUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListToolSchemaStaticValuesInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "listToolSchemaStaticValues", err)
+			}
+			err = ValidateListToolSchemaStaticValuesInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "listToolSchemaStaticValues", err)
+			}
+			return nil, NewListToolSchemaStaticValuesInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListToolSchemaStaticValuesInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "listToolSchemaStaticValues", err)
+				}
+				err = ValidateListToolSchemaStaticValuesInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "listToolSchemaStaticValues", err)
+				}
+				return nil, NewListToolSchemaStaticValuesInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListToolSchemaStaticValuesUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "listToolSchemaStaticValues", err)
+				}
+				err = ValidateListToolSchemaStaticValuesUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "listToolSchemaStaticValues", err)
+				}
+				return nil, NewListToolSchemaStaticValuesUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("toolsets", "listToolSchemaStaticValues", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListToolSchemaStaticValuesGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "listToolSchemaStaticValues", err)
+			}
+			err = ValidateListToolSchemaStaticValuesGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "listToolSchemaStaticValues", err)
+			}
+			return nil, NewListToolSchemaStaticValuesGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("toolsets", "listToolSchemaStaticValues", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildCheckMCPSlugAvailabilityRequest instantiates a HTTP request object with
 // method and path set to call the "toolsets" service
 // "checkMCPSlugAvailability" endpoint
@@ -2409,6 +2651,252 @@ func DecodeAddExternalOAuthServerResponse(decoder func(*http.Response) goahttp.D
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("toolsets", "addExternalOAuthServer", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildUpdateExternalOAuthServerRequest instantiates a HTTP request object
+// with method and path set to call the "toolsets" service
+// "updateExternalOAuthServer" endpoint
+func (c *Client) BuildUpdateExternalOAuthServerRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpdateExternalOAuthServerToolsetsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("toolsets", "updateExternalOAuthServer", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeUpdateExternalOAuthServerRequest returns an encoder for requests sent
+// to the toolsets updateExternalOAuthServer server.
+func EncodeUpdateExternalOAuthServerRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*toolsets.UpdateExternalOAuthServerPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("toolsets", "updateExternalOAuthServer", "*toolsets.UpdateExternalOAuthServerPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("slug", string(p.Slug))
+		req.URL.RawQuery = values.Encode()
+		body := NewUpdateExternalOAuthServerRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("toolsets", "updateExternalOAuthServer", err)
+		}
+		return nil
+	}
+}
+
+// DecodeUpdateExternalOAuthServerResponse returns a decoder for responses
+// returned by the toolsets updateExternalOAuthServer endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeUpdateExternalOAuthServerResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeUpdateExternalOAuthServerResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body UpdateExternalOAuthServerResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "updateExternalOAuthServer", err)
+			}
+			err = ValidateUpdateExternalOAuthServerResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "updateExternalOAuthServer", err)
+			}
+			res := NewUpdateExternalOAuthServerToolsetOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body UpdateExternalOAuthServerUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "updateExternalOAuthServer", err)
+			}
+			err = ValidateUpdateExternalOAuthServerUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "updateExternalOAuthServer", err)
+			}
+			return nil, NewUpdateExternalOAuthServerUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body UpdateExternalOAuthServerForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "updateExternalOAuthServer", err)
+			}
+			err = ValidateUpdateExternalOAuthServerForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "updateExternalOAuthServer", err)
+			}
+			return nil, NewUpdateExternalOAuthServerForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body UpdateExternalOAuthServerBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "updateExternalOAuthServer", err)
+			}
+			err = ValidateUpdateExternalOAuthServerBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "updateExternalOAuthServer", err)
+			}
+			return nil, NewUpdateExternalOAuthServerBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body UpdateExternalOAuthServerNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "updateExternalOAuthServer", err)
+			}
+			err = ValidateUpdateExternalOAuthServerNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "updateExternalOAuthServer", err)
+			}
+			return nil, NewUpdateExternalOAuthServerNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body UpdateExternalOAuthServerConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "updateExternalOAuthServer", err)
+			}
+			err = ValidateUpdateExternalOAuthServerConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "updateExternalOAuthServer", err)
+			}
+			return nil, NewUpdateExternalOAuthServerConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body UpdateExternalOAuthServerUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "updateExternalOAuthServer", err)
+			}
+			err = ValidateUpdateExternalOAuthServerUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "updateExternalOAuthServer", err)
+			}
+			return nil, NewUpdateExternalOAuthServerUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body UpdateExternalOAuthServerInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "updateExternalOAuthServer", err)
+			}
+			err = ValidateUpdateExternalOAuthServerInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "updateExternalOAuthServer", err)
+			}
+			return nil, NewUpdateExternalOAuthServerInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body UpdateExternalOAuthServerInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "updateExternalOAuthServer", err)
+				}
+				err = ValidateUpdateExternalOAuthServerInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "updateExternalOAuthServer", err)
+				}
+				return nil, NewUpdateExternalOAuthServerInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body UpdateExternalOAuthServerUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "updateExternalOAuthServer", err)
+				}
+				err = ValidateUpdateExternalOAuthServerUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "updateExternalOAuthServer", err)
+				}
+				return nil, NewUpdateExternalOAuthServerUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("toolsets", "updateExternalOAuthServer", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body UpdateExternalOAuthServerGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "updateExternalOAuthServer", err)
+			}
+			err = ValidateUpdateExternalOAuthServerGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "updateExternalOAuthServer", err)
+			}
+			return nil, NewUpdateExternalOAuthServerGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("toolsets", "updateExternalOAuthServer", resp.StatusCode, string(body))
 		}
 	}
 }
@@ -3694,12 +4182,13 @@ func unmarshalExternalOAuthServerResponseBodyToTypesExternalOAuthServer(v *Exter
 		return nil
 	}
 	res := &types.ExternalOAuthServer{
-		ID:        *v.ID,
-		ProjectID: *v.ProjectID,
-		Slug:      types.Slug(*v.Slug),
-		Metadata:  v.Metadata,
-		CreatedAt: *v.CreatedAt,
-		UpdatedAt: *v.UpdatedAt,
+		ID:                        *v.ID,
+		ProjectID:                 *v.ProjectID,
+		Slug:                      types.Slug(*v.Slug),
+		Metadata:                  v.Metadata,
+		AuthorizationServerIssuer: v.AuthorizationServerIssuer,
+		CreatedAt:                 *v.CreatedAt,
+		UpdatedAt:                 *v.UpdatedAt,
 	}
 
 	return res
@@ -3919,13 +4408,50 @@ func unmarshalToolFilterToolResponseBodyToTypesToolFilterTool(v *ToolFilterToolR
 	return res
 }
 
+// unmarshalToolSchemaStaticValuesResponseBodyToToolsetsToolSchemaStaticValues
+// builds a value of type *toolsets.ToolSchemaStaticValues from a value of type
+// *ToolSchemaStaticValuesResponseBody.
+func unmarshalToolSchemaStaticValuesResponseBodyToToolsetsToolSchemaStaticValues(v *ToolSchemaStaticValuesResponseBody) *toolsets.ToolSchemaStaticValues {
+	res := &toolsets.ToolSchemaStaticValues{
+		ToolUrn:  *v.ToolUrn,
+		ToolName: *v.ToolName,
+	}
+	res.Values = make([]*toolsets.ToolSchemaStaticValue, len(v.Values))
+	for i, val := range v.Values {
+		if val == nil {
+			res.Values[i] = nil
+			continue
+		}
+		res.Values[i] = unmarshalToolSchemaStaticValueResponseBodyToToolsetsToolSchemaStaticValue(val)
+	}
+
+	return res
+}
+
+// unmarshalToolSchemaStaticValueResponseBodyToToolsetsToolSchemaStaticValue
+// builds a value of type *toolsets.ToolSchemaStaticValue from a value of type
+// *ToolSchemaStaticValueResponseBody.
+func unmarshalToolSchemaStaticValueResponseBodyToToolsetsToolSchemaStaticValue(v *ToolSchemaStaticValueResponseBody) *toolsets.ToolSchemaStaticValue {
+	res := &toolsets.ToolSchemaStaticValue{
+		SchemaPath: *v.SchemaPath,
+		Keyword:    *v.Keyword,
+		ValueJSON:  *v.ValueJSON,
+	}
+
+	return res
+}
+
 // marshalTypesExternalOAuthServerFormToExternalOAuthServerFormRequestBody
 // builds a value of type *ExternalOAuthServerFormRequestBody from a value of
 // type *types.ExternalOAuthServerForm.
 func marshalTypesExternalOAuthServerFormToExternalOAuthServerFormRequestBody(v *types.ExternalOAuthServerForm) *ExternalOAuthServerFormRequestBody {
 	res := &ExternalOAuthServerFormRequestBody{
-		Slug:     string(v.Slug),
-		Metadata: v.Metadata,
+		Metadata:                  v.Metadata,
+		AuthorizationServerIssuer: v.AuthorizationServerIssuer,
+	}
+	if v.Slug != nil {
+		slug := string(*v.Slug)
+		res.Slug = &slug
 	}
 
 	return res
@@ -3936,8 +4462,12 @@ func marshalTypesExternalOAuthServerFormToExternalOAuthServerFormRequestBody(v *
 // *ExternalOAuthServerFormRequestBody.
 func marshalExternalOAuthServerFormRequestBodyToTypesExternalOAuthServerForm(v *ExternalOAuthServerFormRequestBody) *types.ExternalOAuthServerForm {
 	res := &types.ExternalOAuthServerForm{
-		Slug:     types.Slug(v.Slug),
-		Metadata: v.Metadata,
+		Metadata:                  v.Metadata,
+		AuthorizationServerIssuer: v.AuthorizationServerIssuer,
+	}
+	if v.Slug != nil {
+		slug := types.Slug(*v.Slug)
+		res.Slug = &slug
 	}
 
 	return res

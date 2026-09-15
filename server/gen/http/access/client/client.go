@@ -69,25 +69,33 @@ type Client struct {
 	// the listShadowMCPInventoryUsers endpoint.
 	ListShadowMCPInventoryUsersDoer goahttp.Doer
 
-	// UpsertShadowMCPInventoryPolicyBypass Doer is the HTTP client used to make
-	// requests to the upsertShadowMCPInventoryPolicyBypass endpoint.
-	UpsertShadowMCPInventoryPolicyBypassDoer goahttp.Doer
-
-	// DeleteShadowMCPInventoryPolicyBypass Doer is the HTTP client used to make
-	// requests to the deleteShadowMCPInventoryPolicyBypass endpoint.
-	DeleteShadowMCPInventoryPolicyBypassDoer goahttp.Doer
-
-	// BlockShadowMCPInventoryServer Doer is the HTTP client used to make requests
-	// to the blockShadowMCPInventoryServer endpoint.
-	BlockShadowMCPInventoryServerDoer goahttp.Doer
-
-	// UnblockShadowMCPInventoryServer Doer is the HTTP client used to make
-	// requests to the unblockShadowMCPInventoryServer endpoint.
-	UnblockShadowMCPInventoryServerDoer goahttp.Doer
+	// ListShadowMCPInventoryServersForUser Doer is the HTTP client used to make
+	// requests to the listShadowMCPInventoryServersForUser endpoint.
+	ListShadowMCPInventoryServersForUserDoer goahttp.Doer
 
 	// ResolveShadowMCPInventoryRequest Doer is the HTTP client used to make
 	// requests to the resolveShadowMCPInventoryRequest endpoint.
 	ResolveShadowMCPInventoryRequestDoer goahttp.Doer
+
+	// ListAIDetections Doer is the HTTP client used to make requests to the
+	// listAIDetections endpoint.
+	ListAIDetectionsDoer goahttp.Doer
+
+	// ListEmployeeAIDetections Doer is the HTTP client used to make requests to
+	// the listEmployeeAIDetections endpoint.
+	ListEmployeeAIDetectionsDoer goahttp.Doer
+
+	// ListResourceAudience Doer is the HTTP client used to make requests to the
+	// listResourceAudience endpoint.
+	ListResourceAudienceDoer goahttp.Doer
+
+	// SetResourceAudience Doer is the HTTP client used to make requests to the
+	// setResourceAudience endpoint.
+	SetResourceAudienceDoer goahttp.Doer
+
+	// ListAudienceOptions Doer is the HTTP client used to make requests to the
+	// listAudienceOptions endpoint.
+	ListAudienceOptionsDoer goahttp.Doer
 
 	// RequestAccess Doer is the HTTP client used to make requests to the
 	// requestAccess endpoint.
@@ -104,6 +112,10 @@ type Client struct {
 	// ResolveChallenge Doer is the HTTP client used to make requests to the
 	// resolveChallenge endpoint.
 	ResolveChallengeDoer goahttp.Doer
+
+	// ListIdentityAccess Doer is the HTTP client used to make requests to the
+	// listIdentityAccess endpoint.
+	ListIdentityAccessDoer goahttp.Doer
 
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
@@ -138,15 +150,18 @@ func NewClient(
 		GetShadowMCPInventoryServerDoer:          doer,
 		UpdateShadowMCPInventoryServerNameDoer:   doer,
 		ListShadowMCPInventoryUsersDoer:          doer,
-		UpsertShadowMCPInventoryPolicyBypassDoer: doer,
-		DeleteShadowMCPInventoryPolicyBypassDoer: doer,
-		BlockShadowMCPInventoryServerDoer:        doer,
-		UnblockShadowMCPInventoryServerDoer:      doer,
+		ListShadowMCPInventoryServersForUserDoer: doer,
 		ResolveShadowMCPInventoryRequestDoer:     doer,
+		ListAIDetectionsDoer:                     doer,
+		ListEmployeeAIDetectionsDoer:             doer,
+		ListResourceAudienceDoer:                 doer,
+		SetResourceAudienceDoer:                  doer,
+		ListAudienceOptionsDoer:                  doer,
 		RequestAccessDoer:                        doer,
 		ListChallengesDoer:                       doer,
 		ListChallengeBucketsDoer:                 doer,
 		ResolveChallengeDoer:                     doer,
+		ListIdentityAccessDoer:                   doer,
 		RestoreResponseBody:                      restoreBody,
 		scheme:                                   scheme,
 		host:                                     host,
@@ -467,15 +482,15 @@ func (c *Client) ListShadowMCPInventoryUsers() goa.Endpoint {
 	}
 }
 
-// UpsertShadowMCPInventoryPolicyBypass returns an endpoint that makes HTTP
-// requests to the access service upsertShadowMCPInventoryPolicyBypass server.
-func (c *Client) UpsertShadowMCPInventoryPolicyBypass() goa.Endpoint {
+// ListShadowMCPInventoryServersForUser returns an endpoint that makes HTTP
+// requests to the access service listShadowMCPInventoryServersForUser server.
+func (c *Client) ListShadowMCPInventoryServersForUser() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeUpsertShadowMCPInventoryPolicyBypassRequest(c.encoder)
-		decodeResponse = DecodeUpsertShadowMCPInventoryPolicyBypassResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeListShadowMCPInventoryServersForUserRequest(c.encoder)
+		decodeResponse = DecodeListShadowMCPInventoryServersForUserResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildUpsertShadowMCPInventoryPolicyBypassRequest(ctx, v)
+		req, err := c.BuildListShadowMCPInventoryServersForUserRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -483,81 +498,9 @@ func (c *Client) UpsertShadowMCPInventoryPolicyBypass() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.UpsertShadowMCPInventoryPolicyBypassDoer.Do(req)
+		resp, err := c.ListShadowMCPInventoryServersForUserDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("access", "upsertShadowMCPInventoryPolicyBypass", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// DeleteShadowMCPInventoryPolicyBypass returns an endpoint that makes HTTP
-// requests to the access service deleteShadowMCPInventoryPolicyBypass server.
-func (c *Client) DeleteShadowMCPInventoryPolicyBypass() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeDeleteShadowMCPInventoryPolicyBypassRequest(c.encoder)
-		decodeResponse = DecodeDeleteShadowMCPInventoryPolicyBypassResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildDeleteShadowMCPInventoryPolicyBypassRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.DeleteShadowMCPInventoryPolicyBypassDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("access", "deleteShadowMCPInventoryPolicyBypass", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// BlockShadowMCPInventoryServer returns an endpoint that makes HTTP requests
-// to the access service blockShadowMCPInventoryServer server.
-func (c *Client) BlockShadowMCPInventoryServer() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeBlockShadowMCPInventoryServerRequest(c.encoder)
-		decodeResponse = DecodeBlockShadowMCPInventoryServerResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildBlockShadowMCPInventoryServerRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.BlockShadowMCPInventoryServerDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("access", "blockShadowMCPInventoryServer", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// UnblockShadowMCPInventoryServer returns an endpoint that makes HTTP requests
-// to the access service unblockShadowMCPInventoryServer server.
-func (c *Client) UnblockShadowMCPInventoryServer() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeUnblockShadowMCPInventoryServerRequest(c.encoder)
-		decodeResponse = DecodeUnblockShadowMCPInventoryServerResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildUnblockShadowMCPInventoryServerRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.UnblockShadowMCPInventoryServerDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("access", "unblockShadowMCPInventoryServer", err)
+			return nil, goahttp.ErrRequestError("access", "listShadowMCPInventoryServersForUser", err)
 		}
 		return decodeResponse(resp)
 	}
@@ -582,6 +525,126 @@ func (c *Client) ResolveShadowMCPInventoryRequest() goa.Endpoint {
 		resp, err := c.ResolveShadowMCPInventoryRequestDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("access", "resolveShadowMCPInventoryRequest", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListAIDetections returns an endpoint that makes HTTP requests to the access
+// service listAIDetections server.
+func (c *Client) ListAIDetections() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListAIDetectionsRequest(c.encoder)
+		decodeResponse = DecodeListAIDetectionsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListAIDetectionsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListAIDetectionsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "listAIDetections", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListEmployeeAIDetections returns an endpoint that makes HTTP requests to the
+// access service listEmployeeAIDetections server.
+func (c *Client) ListEmployeeAIDetections() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListEmployeeAIDetectionsRequest(c.encoder)
+		decodeResponse = DecodeListEmployeeAIDetectionsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListEmployeeAIDetectionsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListEmployeeAIDetectionsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "listEmployeeAIDetections", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListResourceAudience returns an endpoint that makes HTTP requests to the
+// access service listResourceAudience server.
+func (c *Client) ListResourceAudience() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListResourceAudienceRequest(c.encoder)
+		decodeResponse = DecodeListResourceAudienceResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListResourceAudienceRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListResourceAudienceDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "listResourceAudience", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetResourceAudience returns an endpoint that makes HTTP requests to the
+// access service setResourceAudience server.
+func (c *Client) SetResourceAudience() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetResourceAudienceRequest(c.encoder)
+		decodeResponse = DecodeSetResourceAudienceResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetResourceAudienceRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetResourceAudienceDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "setResourceAudience", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListAudienceOptions returns an endpoint that makes HTTP requests to the
+// access service listAudienceOptions server.
+func (c *Client) ListAudienceOptions() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListAudienceOptionsRequest(c.encoder)
+		decodeResponse = DecodeListAudienceOptionsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListAudienceOptionsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListAudienceOptionsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "listAudienceOptions", err)
 		}
 		return decodeResponse(resp)
 	}
@@ -678,6 +741,30 @@ func (c *Client) ResolveChallenge() goa.Endpoint {
 		resp, err := c.ResolveChallengeDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("access", "resolveChallenge", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListIdentityAccess returns an endpoint that makes HTTP requests to the
+// access service listIdentityAccess server.
+func (c *Client) ListIdentityAccess() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListIdentityAccessRequest(c.encoder)
+		decodeResponse = DecodeListIdentityAccessResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListIdentityAccessRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListIdentityAccessDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "listIdentityAccess", err)
 		}
 		return decodeResponse(resp)
 	}

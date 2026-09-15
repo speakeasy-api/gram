@@ -174,7 +174,7 @@ func (p *ToolExtractor) Do(
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "%s: error fetching functions zip file", slug).LogError(ctx, logger)
 	}
-	defer o11y.LogDefer(ctx, logger, func() error {
+	defer o11y.LogDefer(ctx, logger, "failed to close functions zip file", func() error {
 		return rc.Close()
 	})
 
@@ -207,7 +207,7 @@ func (p *ToolExtractor) Do(
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "%s: error opening manifest file", slug).LogError(ctx, logger, attrError)
 	}
-	defer o11y.LogDefer(ctx, logger, func() error {
+	defer o11y.LogDefer(ctx, logger, "failed to close functions manifest reader", func() error {
 		return manifestRdr.Close()
 	})
 

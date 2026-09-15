@@ -14,7 +14,8 @@ import { useQuery } from "@tanstack/react-query";
  */
 export type UserSessionTokenTarget =
   | { kind: "toolset"; id: string | undefined }
-  | { kind: "mcpServer"; id: string | undefined };
+  | { kind: "mcpServer"; id: string | undefined }
+  | { kind: "metaMcpServer"; id: string | undefined };
 
 export interface UseUserSessionTokenResult {
   /** The minted user-session JWT, or undefined while loading / not gated. */
@@ -30,6 +31,8 @@ function mintRequestBody(
       return { toolsetId: target.id };
     case "mcpServer":
       return { mcpServerId: target.id };
+    case "metaMcpServer":
+      return { metaMcpServerId: target.id };
   }
 }
 

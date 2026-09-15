@@ -31,34 +31,80 @@ type ToolsCallRequest struct {
 	UserRequest *UserRequest
 }
 
-// toolsCallRequestFromUserRequest returns a ToolsCallRequest if req carries
-// exactly one JSON-RPC "tools/call" request whose params decode cleanly.
-// Anything else — notifications, responses, multiple messages, unrelated
-// methods, malformed params — returns ok=false so the typed interceptor loop
-// is skipped. Decoding failures do not abort the proxy; the request is
-// forwarded to upstream unchanged so upstream's own validation surfaces.
-func toolsCallRequestFromUserRequest(req *UserRequest) (*ToolsCallRequest, bool) {
+// userRequestMethod returns the JSON-RPC method of a single-message user
+// request, or "" for anything else (responses, batch shapes). Used by the
+// strict-tool-selection path to distinguish "not a tools/call" from "a
+// tools/call whose params failed to decode".
+func userRequestMethod(req *UserRequest) string {
 	if req == nil || len(req.JSONRPCMessages) != 1 {
-		return nil, false
+		return ""
+	}
+	if rpcReq, ok := req.JSONRPCMessages[0].(*jsonrpc.Request); ok {
+		return rpcReq.Method
+	}
+	return ""
+}
+
+// IsToolsCallRequest reports whether req is a single JSON-RPC tools/call
+// request without decoding its method-specific parameters.
+func IsToolsCallRequest(req *UserRequest) bool {
+	return userRequestMethod(req) == methodToolsCall
+}
+
+// ToolsCallName returns the best-effort tool name from a single JSON-RPC
+// tools/call request. The boolean reports method recognition independently of
+// method-parameter validity so method-level observers can include malformed
+// attempts without taking ownership of validation.
+func ToolsCallName(req *UserRequest) (string, bool) {
+	if !IsToolsCallRequest(req) {
+		return "", false
+	}
+
+	var params struct {
+		Name string `json:"name"`
+	}
+	rpcReq, ok := req.JSONRPCMessages[0].(*jsonrpc.Request)
+	if ok {
+		_ = json.Unmarshal(rpcReq.Params, &params)
+	}
+	return params.Name, true
+}
+
+// toolsCallRequestFromUserRequest returns a ToolsCallRequest if req carries
+// exactly one JSON-RPC "tools/call" request. A recognized call retains its
+// underlying request even when params fail to decode so method-level preflight
+// enforcement can run before the proxy rejects the malformed call. Unrelated
+// methods and non-request messages return nil, nil.
+func toolsCallRequestFromUserRequest(req *UserRequest) (*ToolsCallRequest, error) {
+	if req == nil || len(req.JSONRPCMessages) != 1 {
+		return nil, nil
 	}
 	rpcReq, ok := req.JSONRPCMessages[0].(*jsonrpc.Request)
 	if !ok {
-		return nil, false
+		return nil, nil
 	}
 	if rpcReq.Method != methodToolsCall {
-		return nil, false
+		return nil, nil
+	}
+
+	call := &ToolsCallRequest{Params: nil, UserRequest: req}
+	if firstNonWhitespaceByte(rpcReq.Params) != '{' {
+		return call, fmt.Errorf("tools/call params must be a JSON object")
 	}
 
 	params := &mcp.CallToolParamsRaw{
-		Arguments: nil,
-		Meta:      nil,
-		Name:      "",
+		Arguments:      nil,
+		Meta:           nil,
+		Name:           "",
+		InputResponses: nil,
+		RequestState:   "",
 	}
 	if err := json.Unmarshal(rpcReq.Params, params); err != nil {
-		return nil, false
+		return call, fmt.Errorf("decode tools/call params: %w", err)
 	}
 
-	return &ToolsCallRequest{UserRequest: req, Params: params}, true
+	call.Params = params
+	return call, nil
 }
 
 // SetArguments replaces the arguments payload on a tools/call request,
@@ -68,37 +114,41 @@ func toolsCallRequestFromUserRequest(req *UserRequest) (*ToolsCallRequest, bool)
 // argument shapes, or rewriting wholesale.
 //
 // arguments must be a JSON object payload that the upstream tool can
-// unmarshal against its declared input schema. The replacement is
-// observed by every subsequent interceptor in the same chain through the
-// shared *Params pointer — no re-read of wire bytes is required. The
-// outer jsonrpc.Message is re-encoded once after the chain completes (see
+// unmarshal against its declared input schema; a nil or empty arguments
+// removes the member from the forwarded params, mirroring the omitempty
+// encoding of the field. The replacement is observed by every subsequent
+// interceptor in the same chain through the shared *Params pointer — no
+// re-read of wire bytes is required. The outer jsonrpc.Message is
+// re-encoded once after the chain completes (see
 // [UserRequest.refreshBody]); this method does the inner payload swap up
 // front so the dirty signal alone is sufficient to trigger that
-// re-encode. Marshal happens before any typed-view or underlying-message
-// state is touched so a marshal failure leaves everything at its
-// pre-call values — the typed view and the wire remain in sync
-// regardless of the failure mode.
+// re-encode. Only the params' arguments member is rewritten: the
+// replacement is spliced into the original wire payload, so _meta, name,
+// and members not modeled by [mcp.CallToolParamsRaw] retain their
+// original values instead of being dropped by a typed re-marshal. The
+// splice happens before any typed-view or underlying-message state is
+// touched so a failure leaves everything at its pre-call values — the
+// typed view and the wire remain in sync regardless of the failure mode.
 //
 // Returns a [*MutationError] when the underlying jsonrpc.Message is not
-// a *jsonrpc.Request or when marshaling the mutated CallToolParamsRaw
-// fails. The proxy detects [*MutationError] at the interceptor return
-// path and surfaces it as an HTTP 5xx via [oops.E] with
-// [oops.CodeUnexpected] rather than as a user-facing JSON-RPC rejection.
+// a *jsonrpc.Request or when splicing the replacement arguments — which
+// also validates that arguments is well-formed JSON — fails. The proxy
+// detects [*MutationError] at the interceptor return path and surfaces
+// it as an HTTP 5xx via [oops.E] with [oops.CodeUnexpected] rather than
+// as a user-facing JSON-RPC rejection.
 func (r *ToolsCallRequest) SetArguments(arguments json.RawMessage) error {
 	rpcReq, ok := r.UserRequest.JSONRPCMessages[0].(*jsonrpc.Request)
 	if !ok {
 		return &MutationError{Op: "set arguments", Cause: fmt.Errorf("underlying message is %T, want *jsonrpc.Request", r.UserRequest.JSONRPCMessages[0])}
 	}
 
-	// Stage the mutation against a temporary copy of Params so a marshal
-	// failure can't leave the typed view's Arguments desynced from the
-	// underlying wire bytes. Only commit (assign to Params.Arguments,
-	// rpcReq.Params, dirty) once marshaling has succeeded.
-	staged := *r.Params
-	staged.Arguments = arguments
-	payload, err := json.Marshal(&staged)
+	// Splice the replacement into the original wire payload so a failure
+	// can't leave the typed view's Arguments desynced from the underlying
+	// wire bytes. Only commit (assign to Params.Arguments, rpcReq.Params,
+	// dirty) once splicing has succeeded.
+	payload, err := spliceTopLevelKey(rpcReq.Params, "arguments", arguments)
 	if err != nil {
-		return &MutationError{Op: "set arguments", Cause: fmt.Errorf("marshal mutated CallToolParamsRaw: %w", err)}
+		return &MutationError{Op: "set arguments", Cause: fmt.Errorf("splice replacement arguments: %w", err)}
 	}
 
 	r.Params.Arguments = arguments

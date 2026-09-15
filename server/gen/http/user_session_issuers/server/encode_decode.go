@@ -1203,10 +1203,12 @@ func marshalTypesUserSessionIssuerToUserSessionIssuerResponseBody(v *types.UserS
 	res := &UserSessionIssuerResponseBody{
 		ID:                            v.ID,
 		ProjectID:                     v.ProjectID,
+		OrganizationID:                v.OrganizationID,
 		Slug:                          v.Slug,
 		AuthnChallengeMode:            v.AuthnChallengeMode,
 		SessionDurationHours:          v.SessionDurationHours,
 		ClientIDMetadataAdmissionMode: v.ClientIDMetadataAdmissionMode,
+		TrustedRemoteSessionIssuerID:  v.TrustedRemoteSessionIssuerID,
 		CreatedAt:                     v.CreatedAt,
 		UpdatedAt:                     v.UpdatedAt,
 	}

@@ -17,12 +17,17 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	externalmcp_types "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testmcp"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -31,7 +36,8 @@ import (
 func TestServePublic_AssistantTokenResolvesOwnerRemoteSessionToUpstream(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestMCPService(t)
+	reader := sdkmetric.NewManualReader()
+	ctx, ti := newTestMCPServiceWithMeterProvider(t, sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -66,6 +72,10 @@ func TestServePublic_AssistantTokenResolvesOwnerRemoteSessionToUpstream(t *testi
 	insertRemoteSessionAccessToken(t, ctx, ti, fixture.UserSessionIssuer.ID, fixture.RemoteSessionClient.ID, ownerSubject, "valid-upstream-token", time.Now().Add(time.Hour))
 
 	assistantToken := mintAssistantBearerForOwner(t, ti, authCtx)
+	serveCtx := contextvalues.SetRequestContext(context.Background(), &contextvalues.RequestContext{
+		Host:   "mcp.example.test",
+		ReqURL: "/mcp/" + fixture.Toolset.McpSlug.String,
+	})
 
 	initBody, err := json.Marshal(map[string]any{
 		"jsonrpc": "2.0",
@@ -78,7 +88,7 @@ func TestServePublic_AssistantTokenResolvesOwnerRemoteSessionToUpstream(t *testi
 		},
 	})
 	require.NoError(t, err)
-	initResp, err := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, initBody, assistantToken, nil)
+	initResp, err := servePublicHTTP(t, serveCtx, ti, fixture.Toolset.McpSlug.String, initBody, assistantToken, nil)
 	require.NoError(t, err, "initialize must succeed via the assistant-token fallback")
 	require.Equal(t, http.StatusOK, initResp.Code, "initialize response: %s", initResp.Body.String())
 
@@ -92,13 +102,34 @@ func TestServePublic_AssistantTokenResolvesOwnerRemoteSessionToUpstream(t *testi
 		},
 	})
 	require.NoError(t, err)
-	callResp, err := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, callBody, assistantToken, nil)
+	callResp, err := servePublicHTTP(t, serveCtx, ti, fixture.Toolset.McpSlug.String, callBody, assistantToken, nil)
 	require.NoError(t, err, "tools/call must succeed via the assistant-token fallback")
 	require.Equal(t, http.StatusOK, callResp.Code, "tools/call response: %s", callResp.Body.String())
 
 	got, _ := capturedAuth.Load().(string)
 	require.Equal(t, "Bearer valid-upstream-token", got,
 		"resolver must forward the owner's exchanged remote_session token even when the caller authenticated with an assistant JWT")
+
+	var rm metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(t.Context(), &rm))
+	coveragePoints := map[attribute.Set]int64{}
+	for _, scope := range rm.ScopeMetrics {
+		for _, metric := range scope.Metrics {
+			if metric.Name != mcpmetrics.InstrumentMCPToolCallKillswitchIdentity {
+				continue
+			}
+			sum, ok := metric.Data.(metricdata.Sum[int64])
+			require.True(t, ok)
+			for _, point := range sum.DataPoints {
+				coveragePoints[point.Attributes] = point.Value
+			}
+		}
+	}
+	require.Equal(t, int64(1), coveragePoints[attribute.NewSet(
+		attr.McpKillswitchSurface(mcpmetrics.KillswitchSurfaceHosted),
+		attr.McpKillswitchIdentityClass(mcpmetrics.KillswitchIdentityAssistant),
+		attr.McpKillswitchResourceClass(mcpmetrics.KillswitchResourceLegacyNoServer),
+	)], "production legacy tools/call dispatch must report low coverage and assistant provenance without inferring an acting user")
 }
 
 func TestServePublic_AssistantTokenWithoutRemoteSessionChallenges(t *testing.T) {

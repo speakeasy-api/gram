@@ -298,10 +298,35 @@ func (s *Service) SendMessage(ctx context.Context, payload *gen.SendMessagePaylo
 		skillIDs = append(skillIDs, skillID)
 	}
 
-	result, err := s.core.SendDashboardMessage(ctx, *authCtx.ProjectID, assistantID, authCtx.UserID, chatID, payload.Message, idempotencyKey, skillIDs)
+	attachments := make([]DashboardAttachmentInput, 0, len(payload.Attachments))
+	for _, attachment := range payload.Attachments {
+		// A JSON `null` inside the array survives decoding as a nil element.
+		if attachment == nil {
+			return nil, oops.E(oops.CodeBadRequest, nil, "attachment entries cannot be null")
+		}
+		assetID, err := uuid.Parse(attachment.AssetID)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid attachment asset id").LogError(ctx, s.logger)
+		}
+		name := ""
+		if attachment.Name != nil {
+			name = *attachment.Name
+		}
+		attachments = append(attachments, DashboardAttachmentInput{AssetID: assetID, Name: name})
+	}
+
+	// A turn must say something: empty text is only allowed when files carry it.
+	if payload.Message == "" && len(attachments) == 0 {
+		return nil, oops.E(oops.CodeBadRequest, nil, "message text is required when no attachments are sent")
+	}
+
+	result, err := s.core.SendDashboardMessage(ctx, *authCtx.ProjectID, assistantID, authCtx.UserID, chatID, payload.Message, idempotencyKey, skillIDs, attachments)
 	if err != nil {
 		if errors.Is(err, ErrAssistantTurnSkillContextTooLarge) {
 			return nil, oops.E(oops.CodeBadRequest, err, "selected skill context is too large").LogError(ctx, s.logger)
+		}
+		if errors.Is(err, ErrAssistantTurnAttachmentUnavailable) {
+			return nil, oops.E(oops.CodeBadRequest, err, "one or more attachments are unavailable").LogError(ctx, s.logger)
 		}
 		if errors.Is(err, ErrAssistantTurnSkillUnavailable) {
 			return nil, oops.E(oops.CodeBadRequest, err, "one or more selected skills are unavailable").LogError(ctx, s.logger)
@@ -320,6 +345,50 @@ func (s *Service) SendMessage(ctx context.Context, payload *gen.SendMessagePaylo
 		ChatID:   result.ChatID.String(),
 		ThreadID: threadID,
 		Accepted: result.Accepted,
+	}, nil
+}
+
+func (s *Service) InterruptTurn(ctx context.Context, payload *gen.InterruptTurnPayload) (*gen.InterruptTurnResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	// Gated exactly like sendMessage: stopping a reply you started is part of
+	// talking to an assistant, not a configuration change, so a viewer who can
+	// send must be able to stop.
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+	// Chat ownership is per user, so a stop needs the same user identity the
+	// send carried.
+	if authCtx.UserID == "" {
+		return nil, oops.E(oops.CodeUnauthorized, nil, "stopping a turn requires a user identity").LogError(ctx, s.logger)
+	}
+
+	assistantID, err := uuid.Parse(payload.AssistantID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid assistant id").LogError(ctx, s.logger)
+	}
+	chatID, err := uuid.Parse(payload.ChatID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid chat id").LogError(ctx, s.logger)
+	}
+
+	result, err := s.core.InterruptDashboardTurn(ctx, *authCtx.ProjectID, assistantID, authCtx.UserID, chatID)
+	if err != nil {
+		// Chat ids are not user-namespaced, so a chat the caller does not own
+		// reads as not-found rather than forbidden — same disclosure rule
+		// sendMessage follows.
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "chat not found").LogError(ctx, s.logger)
+		}
+		return nil, mapAssistantStoreError(ctx, s.logger, err, "interrupt assistant turn")
+	}
+
+	return &gen.InterruptTurnResult{
+		Stopped:         result.StoppedSomething(),
+		Interrupted:     result.Interrupted,
+		CancelledQueued: conv.SafeInt(result.CancelledQueued),
 	}, nil
 }
 

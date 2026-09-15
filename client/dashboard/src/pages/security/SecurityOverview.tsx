@@ -1,4 +1,8 @@
-import { MetricCard, MetricCardGroup } from "@/components/chart/MetricCard";
+import {
+  StatTile,
+  StatTileGroup,
+  StatTileSkeleton,
+} from "@/components/chart/stat-tile";
 import { ChartCard } from "@/components/chart/ChartCard";
 import { AXIS, TOOLTIP } from "@/components/chart/palette";
 import { useSeriesColors } from "@/components/chart/useSeriesColors";
@@ -11,12 +15,13 @@ import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { DashboardCard } from "@/components/ui/DashboardCard";
+import { Card } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { type DateRangePreset } from "@/elements";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
+import { encodeIdentityUrn } from "@/lib/identity-urn";
 import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
 import { keepPreviousData } from "@tanstack/react-query";
 import { Shield } from "lucide-react";
@@ -258,18 +263,21 @@ function SecurityOverviewContent() {
   }, [overview?.topRules, routes.riskEvents, location.search]);
 
   const topUsers = useMemo<BarDatum[]>(() => {
-    const userDetailRoute = (
-      routes.riskOverview as unknown as {
-        userDetail?: { href: (...params: string[]) => string };
-      }
-    ).userDetail;
     return (overview?.topUsers ?? []).map((user) => {
-      const href =
-        user.externalUserId && userDetailRoute
-          ? `${userDetailRoute.href(
-              encodeURIComponent(user.externalUserId),
-            )}${location.search}`
-          : undefined;
+      // Bars lead to the person's identity page, where these findings sit
+      // beside their access, spend and devices.
+      // Findings resolved through the directory carry an address and no
+      // external id; the resolver keys on either, so both reach the person.
+      const identityUrn = user.externalUserId
+        ? `external:${user.externalUserId}`
+        : user.email
+          ? `email:${user.email}`
+          : null;
+      const href = identityUrn
+        ? `${routes.identities.detail.overview.href(
+            encodeIdentityUrn(identityUrn),
+          )}${location.search}`
+        : undefined;
       return {
         key: user.externalUserId || user.email,
         label: user.email,
@@ -277,7 +285,7 @@ function SecurityOverviewContent() {
         href,
       };
     });
-  }, [overview?.topUsers, routes.riskOverview, location.search]);
+  }, [overview?.topUsers, routes.identities, location.search]);
 
   if (overviewQuery.error) {
     return (
@@ -371,11 +379,11 @@ function SecurityOverviewContent() {
             </Button>
           </div>
         )}
-        <MetricCardGroup>
+        <StatTileGroup>
           {isOverviewLoading ? (
-            <Skeleton className="h-[100px] flex-1" />
+            <StatTileSkeleton />
           ) : (
-            <MetricCard
+            <StatTile
               title="Events Scanned"
               value={overview?.messagesScanned ?? 0}
               tone="information"
@@ -384,9 +392,9 @@ function SecurityOverviewContent() {
             />
           )}
           {isOverviewLoading ? (
-            <Skeleton className="h-[100px] flex-1" />
+            <StatTileSkeleton />
           ) : (
-            <MetricCard
+            <StatTile
               title="Findings"
               value={overview?.findings ?? 0}
               tone={(overview?.findings ?? 0) > 0 ? "destructive" : "neutral"}
@@ -395,9 +403,9 @@ function SecurityOverviewContent() {
             />
           )}
           {isOverviewLoading ? (
-            <Skeleton className="h-[100px] flex-1" />
+            <StatTileSkeleton />
           ) : (
-            <MetricCard
+            <StatTile
               title="Flagged Sessions"
               value={overview?.flaggedSessions ?? 0}
               tone={
@@ -408,9 +416,9 @@ function SecurityOverviewContent() {
             />
           )}
           {isOverviewLoading ? (
-            <Skeleton className="h-[100px] flex-1" />
+            <StatTileSkeleton />
           ) : (
-            <MetricCard
+            <StatTile
               title="Active Policies"
               value={overview?.activePolicies ?? 0}
               tone="success"
@@ -418,7 +426,7 @@ function SecurityOverviewContent() {
               icon="shield-check"
             />
           )}
-        </MetricCardGroup>
+        </StatTileGroup>
       </RiskOverviewShell>
 
       <RiskActivitySection>
@@ -546,9 +554,9 @@ function DashboardChartCard({
   action?: ReactNode;
 }) {
   return (
-    <DashboardCard title={title} action={action}>
+    <Card.Dashboard title={title} action={action}>
       {loading ? <SkeletonList /> : empty ? <ChartEmptyState /> : children}
-    </DashboardCard>
+    </Card.Dashboard>
   );
 }
 

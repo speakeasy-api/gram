@@ -11,14 +11,14 @@ func TestServiceHasServiceAssertionGood(t *testing.T) {
 	t.Parallel()
 
 	testdata := analysistest.TestData()
-	analysistest.Run(t, testdata, newServiceHasServiceAssertionAnalyzer(serviceHasServiceAssertionSettings{}), "serviceannotation")
+	analysistest.Run(t, testdata, newServiceHasServiceAssertionAnalyzer(serviceHasServiceAssertionSettings{}), "github.com/speakeasy-api/gram/server/internal/serviceannotation")
 }
 
 func TestServiceHasServiceAssertionMissing(t *testing.T) {
 	t.Parallel()
 
 	testdata := analysistest.TestData()
-	analysistest.Run(t, testdata, newServiceHasServiceAssertionAnalyzer(serviceHasServiceAssertionSettings{}), "serviceannotationmissingimpl")
+	analysistest.Run(t, testdata, newServiceHasServiceAssertionAnalyzer(serviceHasServiceAssertionSettings{}), "github.com/speakeasy-api/gram/server/internal/serviceannotationmissingimpl")
 }
 
 func TestBuildAnalyzersSkipsDisabledServiceHasServiceAssertion(t *testing.T) {

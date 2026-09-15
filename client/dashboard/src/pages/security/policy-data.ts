@@ -1,6 +1,6 @@
 import { PERSONAL_ACCOUNT_GOVERNANCE_NOTE } from "@/lib/personal-account-governance";
 
-export type PolicyAction = "flag" | "block" | "warn";
+export type PolicyAction = "flag" | "block" | "warn" | "quarantine";
 
 export type PolicyMessageType =
   | "user_message"
@@ -121,6 +121,14 @@ export const RULE_CATEGORY_META: Record<
     icon: "regex",
   },
 };
+
+// Display order for the message kinds a policy can scope to.
+export const ALL_POLICY_MESSAGE_TYPES: PolicyMessageType[] = [
+  "user_message",
+  "tool_request",
+  "tool_response",
+  "assistant_message",
+];
 
 export const POLICY_MESSAGE_TYPE_META: Record<
   PolicyMessageType,

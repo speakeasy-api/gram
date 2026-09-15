@@ -1,17 +1,18 @@
-// Package httpcache provides a shared write path for public, cacheable JSON
-// responses. It centralises the Cache-Control + ETag + conditional-request
-// (304) contract so Gram's public well-known / OAuth-metadata responses cache
-// consistently.
+// Package httpcache holds shared HTTP caching semantics, in both directions.
+// The write path (WriteCacheableJSON) centralises the Cache-Control + ETag +
+// conditional-request (304) contract so public well-known / OAuth-metadata
+// responses cache consistently. The read path (FreshnessPolicy, SanitizeETag)
+// parses the same headers off responses fetched from other hosts, so every
+// remote-document cache derives freshness and revalidation state identically.
+// Header-specific parsing lives in the http_header_*.go files, one per header
+// family.
 package httpcache
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"net/http"
-	"strings"
 
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -46,35 +47,4 @@ func WriteCacheableJSON(ctx context.Context, w http.ResponseWriter, r *http.Requ
 	}
 
 	return nil
-}
-
-// strongETag returns a strong ETag (RFC 9110 §8.8.3): a quoted hex SHA-256
-// digest of body. Strong because it is computed from the exact bytes Gram
-// writes, before any downstream compression. Host-derived URLs are part of body,
-// so two hosts of the same resource naturally get distinct ETags without Vary.
-func strongETag(body []byte) string {
-	sum := sha256.Sum256(body)
-	return `"` + hex.EncodeToString(sum[:]) + `"`
-}
-
-// ifNoneMatchSatisfied reports whether an If-None-Match header value matches
-// etag, using the weak comparison RFC 9110 §13.1.2 mandates for If-None-Match
-// (the W/ prefix is ignored on both sides). "*" matches any current
-// representation.
-func ifNoneMatchSatisfied(header, etag string) bool {
-	header = strings.TrimSpace(header)
-	switch header {
-	case "":
-		return false
-	case "*":
-		return true
-	}
-
-	want := strings.TrimPrefix(etag, "W/")
-	for candidate := range strings.SplitSeq(header, ",") {
-		if strings.TrimPrefix(strings.TrimSpace(candidate), "W/") == want {
-			return true
-		}
-	}
-	return false
 }

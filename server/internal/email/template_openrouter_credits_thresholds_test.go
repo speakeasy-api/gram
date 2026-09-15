@@ -6,16 +6,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestOpenRouterChatCreditsThreshold_TransactionalID(t *testing.T) {
+func TestOpenRouterChatCreditsThreshold_Key(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, transactionalIDOpenRouterChatCreditsThreshold, OpenRouterChatCreditsThreshold{}.TransactionalID())
+	require.Equal(t, TemplateKeyOpenRouterChatCredits, OpenRouterChatCreditsThreshold{}.Key())
 }
 
-func TestOpenRouterInternalCreditsThreshold_TransactionalID(t *testing.T) {
+func TestOpenRouterInternalCreditsThreshold_Key(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, transactionalIDOpenRouterInternalCreditsThreshold, OpenRouterInternalCreditsThreshold{}.TransactionalID())
+	require.Equal(t, TemplateKeyOpenRouterInternalCredits, OpenRouterInternalCreditsThreshold{}.Key())
 }
 
 func TestOpenRouterChatCreditsThreshold_Variables_RendersExpectedKeys(t *testing.T) {

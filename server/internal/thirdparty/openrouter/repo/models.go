@@ -11,10 +11,12 @@ import (
 type OpenrouterApiKey struct {
 	OrganizationID string
 	KeyType        string
-	Key            string
+	Key            pgtype.Text
+	KeyEncrypted   pgtype.Text
 	KeyHash        string
 	MonthlyCredits int64
 	Disabled       bool
+	DisableCauses  []string
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
 	DeletedAt      pgtype.Timestamptz

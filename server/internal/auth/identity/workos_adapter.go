@@ -35,6 +35,11 @@ func (a *WorkOSAdapter) AuthenticateWithCode(ctx context.Context, clientID, code
 		return nil, fmt.Errorf("workos authenticate: %w", err)
 	}
 
+	impersonatorEmail := ""
+	if resp.Impersonator != nil {
+		impersonatorEmail = resp.Impersonator.Email
+	}
+
 	return &AuthenticateResult{
 		AccessToken:    resp.AccessToken,
 		OrganizationID: resp.OrganizationID,
@@ -47,6 +52,7 @@ func (a *WorkOSAdapter) AuthenticateWithCode(ctx context.Context, clientID, code
 			ProfilePictureURL: resp.User.ProfilePictureURL,
 			ExternalID:        resp.User.ExternalID,
 		},
+		impersonatorEmail: impersonatorEmail,
 	}, nil
 }
 
@@ -90,6 +96,7 @@ func (a *WorkOSAdapter) AuthenticateWithMagicAuth(ctx context.Context, clientID,
 			ProfilePictureURL: resp.User.ProfilePictureURL,
 			ExternalID:        resp.User.ExternalID,
 		},
+		impersonatorEmail: "",
 	}, nil
 }
 

@@ -1,18 +1,13 @@
-// Non-consuming per-card actions for the consent page: connect (start the
-// upstream OAuth leg carrying the auto-refresh choice), refresh (renew the
-// external service now), disconnect (soft-delete the subject's
-// remote_session), and set_auto_refresh (persist the preference). Unlike the
-// approve/deny POST, these read the challenge state with a plain Get — the
-// page stays usable and the single consuming GetAndDelete transition remains
-// the approve/deny handler's alone, so at most one client grant is ever minted
-// per authorization request.
+// Non-consuming per-card consent actions; only approve/deny consumes the challenge, so at most one client grant is minted.
 
 package mcp
 
 import (
+	"context"
 	"crypto/subtle"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 
@@ -20,8 +15,11 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 )
 
 // HandleConsentAction serves `POST /mcp/{mcpSlug}/connect/remote-session`.
@@ -64,8 +62,11 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").LogError(ctx, logger)
 	}
 	logger = logger.With(attr.SlogOAuthFlowID(challengeState.FlowID))
-	if err := endpoint.ValidateRef(challengeState.Endpoint); err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "authn challenge state does not match this MCP server").LogError(ctx, logger)
+	if err := endpoint.ValidateChallenge(ctx, challengeState.Endpoint, challengeState.UserSessionIssuerID); err != nil {
+		if errors.Is(err, networkingress.ErrAuthorityUnavailable) {
+			s.metrics.RecordOAuthAuthorityUnavailable(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageConsent)
+		}
+		return oauthAuthorityError(err).LogError(ctx, logger)
 	}
 	if challengeState.CSRFToken == "" || subtle.ConstantTimeCompare([]byte(r.PostForm.Get("csrf_token")), []byte(challengeState.CSRFToken)) != 1 {
 		return oops.E(oops.CodeUnauthorized, nil, "invalid consent csrf token").LogError(ctx, logger)
@@ -89,15 +90,19 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		if perr != nil {
 			return nil, oops.E(oops.CodeBadRequest, perr, "invalid client_id").LogError(ctx, logger)
 		}
-		for i := range clients {
-			if clients[i].ID == clientID {
-				return &clients[i], nil
-			}
+		if client := findConsentClient(clients, clientID); client != nil {
+			return client, nil
 		}
 		return nil, oops.E(oops.CodeBadRequest, nil, "unknown remote session client for this MCP server").LogError(ctx, logger)
 	}
 
 	backURL := fmt.Sprintf("/%s/%s/connect?state=%s", endpoint.RouteBase, endpoint.Slug, url.QueryEscape(stateID))
+
+	// Auto refresh is only the subject's choice while the organization lets
+	// them choose. Under either managed policy the posted value is ignored, so
+	// a crafted form can neither disable a required connection nor opt into
+	// refresh the organization disabled.
+	autoRefreshPolicy := s.resolveAutoRefreshPolicy(ctx, endpoint.OrganizationID)
 
 	switch r.PostForm.Get("action") {
 	case "connect":
@@ -105,25 +110,21 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		if cerr != nil {
 			return cerr
 		}
+		// Only a user-controlled policy authors a stored preference. Managed
+		// policies leave it unset so remote_sessions.auto_refresh stays purely
+		// user-originated: the keepalive applies the policy at query time, so
+		// persisting a forced value would buy nothing and would overwrite the
+		// choice a subject made before the organization took over.
 		var autoRefresh *bool
-		if _, posted := r.PostForm["auto_refresh"]; posted {
-			v := r.PostForm.Get("auto_refresh") == "on"
-			autoRefresh = &v
+		if autoRefreshPolicy == autoRefreshUserControlled {
+			if _, posted := r.PostForm["auto_refresh"]; posted {
+				v := r.PostForm.Get("auto_refresh") == "on"
+				autoRefresh = &v
+			}
 		}
-		challengeURL, berr := s.remoteChallengeMgr.BuildAuthorizationUrl(ctx, remotesessions.ParentChallenge{
-			ID:                  challengeState.ID,
-			ProjectID:           endpoint.ProjectID,
-			OrganizationID:      endpoint.OrganizationID,
-			UserSessionIssuerID: endpoint.UserSessionIssuerID,
-			Subject:             challengeState.Subject,
-			McpSlug:             endpoint.Slug,
-			RouteBase:           endpoint.RouteBase,
-			FinalRedirectURI:    "",
-			Resource:            endpoint.UpstreamResource,
-			AutoRefresh:         autoRefresh,
-		}, *client)
+		challengeURL, berr := s.buildRemoteConnectURL(ctx, logger, endpoint, challengeState, *client, autoRefresh)
 		if berr != nil {
-			return oops.E(oops.CodeUnexpected, berr, "build authorization url").LogError(ctx, logger)
+			return berr
 		}
 		http.Redirect(w, r, challengeURL, http.StatusSeeOther)
 		return nil
@@ -133,8 +134,26 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		if cerr != nil {
 			return cerr
 		}
-		if _, err := s.remoteChallengeMgr.DisconnectRemoteSession(ctx, subject, endpoint.ProjectID, endpoint.UserSessionIssuerID, client.ID); err != nil {
+		if _, err := s.remoteChallengeMgr.DisconnectRemoteSession(ctx, subject, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, client.ID); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "disconnect remote session").LogError(ctx, logger)
+		}
+		// Latch auto-connect off. Without this the redirect back to the consent
+		// page would see a single disconnected card and immediately bounce the
+		// user into the provider again, making disconnect impossible to
+		// complete.
+		//
+		// CompareAndSwap, not Store: this handler read the challenge with a
+		// plain Get, so the approve POST may have consumed it since. A Store
+		// would put the consumed challenge back and let a replayed approval
+		// mint a second grant against it. A lost swap means the challenge
+		// moved on, which is not a reason to fail the disconnect that already
+		// succeeded.
+		if !challengeState.AutoConnectDone {
+			latched := challengeState
+			latched.AutoConnectDone = true
+			if _, err := s.authnChallengeCache.CompareAndSwap(ctx, challengeState, latched); err != nil {
+				logger.WarnContext(ctx, "latch auto-connect off after disconnect", attr.SlogError(err))
+			}
 		}
 		http.Redirect(w, r, backURL, http.StatusSeeOther)
 		return nil
@@ -147,24 +166,40 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		result, refreshErr := s.remoteChallengeMgr.RefreshRemoteSession(
 			ctx,
 			subject,
+			endpoint.ProjectID,
+			endpoint.OrganizationID,
 			endpoint.UserSessionIssuerID,
 			client.ID,
-			endpoint.UpstreamResource,
 		)
 		if refreshErr != nil {
 			switch {
 			case errors.Is(refreshErr, remotesessions.ErrRemoteSessionNotRefreshable):
 				return oops.E(oops.CodeBadRequest, refreshErr, "Reconnect this service before refreshing it.").LogWarn(ctx, logger)
 			default:
-				var tokenRefreshErr *remotesessions.TokenRefreshError
-				if errors.As(refreshErr, &tokenRefreshErr) {
+				if tokenRefreshErr, ok := errors.AsType[*remotesessions.TokenRefreshError](refreshErr); ok {
 					return oops.E(oops.CodeBadRequest, refreshErr, "Unable to refresh: %s", tokenRefreshErr.Reason).LogWarn(ctx, logger)
 				}
 				return oops.E(oops.CodeUnexpected, refreshErr, "refresh remote session").LogError(ctx, logger)
 			}
 		}
-		if result.Outcome == remotesessions.RefreshOutcomeSessionInactive {
+		if result.Outcome == remotesessionmetrics.RefreshOutcomeSessionInactive {
 			return oops.E(oops.CodeBadRequest, nil, "Reconnect this service before refreshing it.").LogWarn(ctx, logger)
+		}
+		http.Redirect(w, r, backURL, http.StatusSeeOther)
+		return nil
+
+	case "validate":
+		client, cerr := resolveClient()
+		if cerr != nil {
+			return cerr
+		}
+		err := s.validateRemoteSession(ctx, logger, endpoint, challengeState, *client)
+		switch {
+		case errors.Is(err, errValidationRateLimited):
+			http.Redirect(w, r, backURL+"&validate_limited="+url.QueryEscape(client.ID.String()), http.StatusSeeOther)
+			return nil
+		case err != nil:
+			return err
 		}
 		http.Redirect(w, r, backURL, http.StatusSeeOther)
 		return nil
@@ -172,10 +207,17 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 	case "set_auto_refresh":
 		// Page-level "Auto refresh": persist the choice for every bound client.
 		// Clients without a stored session update zero rows; their preference
-		// rides the next connect instead.
+		// rides the next connect instead. Managed policies ignore this action:
+		// their effective value comes from organization policy, while the stored
+		// user preference remains intact if the organization later restores
+		// user-controlled refresh.
+		if autoRefreshPolicy != autoRefreshUserControlled {
+			http.Redirect(w, r, backURL, http.StatusSeeOther)
+			return nil
+		}
 		enabled := r.PostForm.Get("auto_refresh") == "on"
 		for i := range clients {
-			if _, err := s.remoteChallengeMgr.SetRemoteSessionAutoRefresh(ctx, subject, endpoint.ProjectID, endpoint.UserSessionIssuerID, clients[i].ID, enabled); err != nil {
+			if _, err := s.remoteChallengeMgr.SetRemoteSessionAutoRefresh(ctx, subject, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, clients[i].ID, enabled); err != nil {
 				return oops.E(oops.CodeUnexpected, err, "set remote session auto refresh").LogError(ctx, logger)
 			}
 		}
@@ -183,6 +225,73 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		return nil
 
 	default:
-		return oops.E(oops.CodeBadRequest, nil, `action must be "connect", "refresh", "disconnect", or "set_auto_refresh"`).LogError(ctx, logger)
+		return oops.E(oops.CodeBadRequest, nil, `action must be "connect", "refresh", "validate", "disconnect", or "set_auto_refresh"`).LogError(ctx, logger)
 	}
+}
+
+// buildRemoteConnectURL builds the upstream authorization URL for one remote
+// session client. Shared by the page's explicit Connect action and by the
+// consent page's auto-connect, so both legs resolve the upstream resource
+// identically — an auto-connect that qualified the credential differently from
+// a manual one would mint a session the runtime then rejects.
+func (s *Service) buildRemoteConnectURL(
+	ctx context.Context,
+	logger *slog.Logger,
+	endpoint *ResolvedMcpEndpoint,
+	challengeState AuthnChallengeState,
+	client remotesessions.Client,
+	autoRefresh *bool,
+) (string, error) {
+	// Not endpoint.UpstreamResource: under multi-binding that may belong
+	// to a different client's upstream.
+	var clientResource string
+	var rerr error
+	claimedByMember := false
+	if endpoint.MetaMcpServerID.Valid {
+		// Member visibility is judged against the consent subject, as the runtime
+		// request the minted session will make will be.
+		memberCtx, cerr := s.contextForSessionSubject(ctx, endpoint, *challengeState.Subject, "consent:"+challengeState.ID, challengeState.ClientID)
+		if cerr != nil {
+			return "", oops.E(oops.CodeUnexpected, cerr, "stamp consent subject context").LogError(ctx, logger)
+		}
+		clientResource, claimedByMember, rerr = s.resolveMetaMemberResource(memberCtx, logger, endpoint, client.RemoteSessionIssuerID)
+	}
+	// Gate on the claim, not an empty resource: an ambiguous meta MCP has
+	// decided, and falling back would qualify the credential anyway.
+	if rerr == nil && !claimedByMember {
+		clientResource, rerr = s.remoteChallengeMgr.FallbackResourceForClient(ctx, client.ID)
+	}
+	if rerr != nil {
+		return "", oops.E(oops.CodeUnexpected, rerr, "derive client upstream resource").LogError(ctx, logger)
+	}
+
+	challengeURL, berr := s.remoteChallengeMgr.BuildAuthorizationUrl(ctx, remotesessions.ParentChallenge{
+		ID:                  challengeState.ID,
+		ProjectID:           endpoint.ProjectID,
+		OrganizationID:      endpoint.OrganizationID,
+		UserSessionIssuerID: endpoint.UserSessionIssuerID,
+		Subject:             challengeState.Subject,
+		McpSlug:             endpoint.Slug,
+		RouteBase:           endpoint.RouteBase,
+		McpServerID:         endpoint.McpServerID,
+		MetaMcpServerID:     endpoint.MetaMcpServerID,
+		FinalRedirectURI:    "",
+		Resource:            clientResource,
+		AutoRefresh:         autoRefresh,
+		Authority:           challengeState.Endpoint.Authority,
+	}, client)
+	if berr != nil {
+		return "", oops.E(oops.CodeUnexpected, berr, "build authorization url").LogError(ctx, logger)
+	}
+	return challengeURL, nil
+}
+
+// findConsentClient picks the endpoint's client with the given id, or nil.
+func findConsentClient(clients []remotesessions.Client, id uuid.UUID) *remotesessions.Client {
+	for i := range clients {
+		if clients[i].ID == id {
+			return &clients[i]
+		}
+	}
+	return nil
 }

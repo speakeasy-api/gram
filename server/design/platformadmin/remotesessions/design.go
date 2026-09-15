@@ -42,6 +42,32 @@ var _ = Service("adminRemoteSessions", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateGlobalRemoteSessionIssuer"}`)
 	})
 
+	Method("getGlobalIssuerDuplicatePreflight", func() {
+		Description("Report the global remote_session_issuers that already describe an upstream issuer URL, so the catalog create and edit forms can warn before curating a second entry for the same authorization server. Requires platform admin.\n\nScoped to the global partition only. Tenant issuers naming the same URL are deliberately not reported here — listGlobalIssuerConvergenceCandidates is the surface for those, and it is keyed on a global issuer that already exists.\n\nThe global tier is unique on slug but not on issuer, so nothing prevents a duplicate catalog entry and this warning is the only thing that will catch one. Advisory all the same: it never blocks the write. Matching uses the same canonicalization as the tenant-facing preflights, and an unparseable URL returns no matches rather than an error.")
+
+		Payload(func() {
+			// Not Required: Goa cannot tell an absent query parameter from an
+			// empty one, so requiring it would turn a blank form field into a
+			// 400 at the transport decoder, contradicting the empty-match
+			// contract below before the handler ever runs.
+			Attribute("issuer", String, "The upstream issuer URL being entered (e.g. https://login.linear.app). Empty or unparseable returns no matches.")
+			security.SessionPayload()
+		})
+
+		Result(rsissuers.RemoteSessionIssuerDuplicatePreflight)
+
+		HTTP(func() {
+			GET("/rpc/adminRemoteSessions.getGlobalIssuerDuplicatePreflight")
+			Param("issuer")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getGlobalRemoteSessionIssuerDuplicatePreflight")
+		Meta("openapi:extension:x-speakeasy-name-override", "getGlobalIssuerDuplicatePreflight")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GlobalRemoteSessionIssuerDuplicatePreflight"}`)
+	})
+
 	Method("listGlobalIssuers", func() {
 		Description("List global remote_session_issuers. Requires platform admin.")
 
@@ -419,8 +445,8 @@ var IssuerConvergenceCandidate = Type("IssuerConvergenceCandidate", func() {
 	Attribute("organization_id", String, "The organization that owns the candidate. Empty for a legacy project-scoped issuer written before this column existed.")
 	Attribute("organization_name", String, "Display name of the owning organization. Empty when the organization has no synced metadata.")
 	Attribute("client_count", Int, "Number of non-deleted remote_session_clients that would move onto the target issuer.")
-	Attribute("endpoint_mismatches", ArrayOf(String), "Names of the authorization-server metadata fields (issuer, token_endpoint, authorization_endpoint) that differ from the target. Non-empty blocks the migration.")
-	Attribute("warnings", ArrayOf(String), "Non-blocking divergences (oidc, passthrough, scopes_supported). The target issuer's values become authoritative for the migrated clients.")
+	Attribute("endpoint_mismatches", ArrayOf(rsissuers.IssuerFieldMismatch), "The authorization-server metadata fields (issuer, token_endpoint, authorization_endpoint) that differ from the target, with both sides' values. Non-empty blocks the migration.")
+	Attribute("warnings", ArrayOf(rsissuers.IssuerFieldMismatch), "Non-blocking divergences (oidc, passthrough, scopes_supported), with both sides' values. The target issuer's values become authoritative for the migrated clients.")
 
 	Required("issuer", "organization_id", "organization_name", "client_count", "endpoint_mismatches", "warnings")
 })
@@ -435,21 +461,23 @@ var ListIssuerConvergenceCandidatesResult = Type("ListIssuerConvergenceCandidate
 })
 
 // IssuerMigratePreflight describes the impact of consolidating one
-// organization's issuer onto a global issuer. can_migrate is FALSE exactly when
-// endpoint_mismatches or conflicting_mcp_server_names is non-empty — the same
-// two conditions the migrate mutation rejects with 409.
+// organization's issuer onto a global issuer. can_migrate is FALSE when
+// endpoint metadata differs, an MCP-server binding conflicts, or a
+// user-session issuer still trusts the source — the same conditions the
+// mutation rejects with 409.
 var IssuerMigratePreflight = Type("IssuerMigratePreflight", func() {
 	Description("Authoritative impact summary for consolidating a tenant remote_session_issuer onto a global one: how many clients move, which MCP servers are affected, every blocker that would make the migration fail, and how many tenant-owned clients the target already carries.")
 
 	Attribute("client_count", Int, "Number of non-deleted remote_session_clients that would be re-pointed from the source issuer to the target issuer.")
 	Attribute("mcp_server_names", ArrayOf(String), "Display names of MCP servers attached to the source issuer's clients.")
-	Attribute("endpoint_mismatches", ArrayOf(String), "Names of the authorization-server metadata fields (issuer, token_endpoint, authorization_endpoint) that differ between source and target. Non-empty blocks the migration.")
+	Attribute("endpoint_mismatches", ArrayOf(rsissuers.IssuerFieldMismatch), "The authorization-server metadata fields (issuer, token_endpoint, authorization_endpoint) that differ between source and target, with both sides' values. Non-empty blocks the migration.")
 	Attribute("conflicting_mcp_server_names", ArrayOf(String), "Display names of MCP servers where both the source and the target issuer already have a client bound. Non-empty blocks the migration; detach one client per listed server and retry.")
-	Attribute("warnings", ArrayOf(String), "Non-blocking divergences (oidc, passthrough, scopes_supported). The target issuer's values become authoritative for the migrated clients.")
-	Attribute("can_migrate", Boolean, "TRUE when the migration would succeed: no endpoint mismatches and no conflicting MCP-server bindings.")
+	Attribute("warnings", ArrayOf(rsissuers.IssuerFieldMismatch), "Non-blocking divergences (oidc, passthrough, scopes_supported), with both sides' values. The target issuer's values become authoritative for the migrated clients.")
+	Attribute("trusted_user_session_issuer_count", Int, "Number of user_session_issuers that trust the source. Any non-zero value blocks migration.")
+	Attribute("can_migrate", Boolean, "TRUE when the migration would succeed: no endpoint mismatches, conflicting MCP-server bindings, or user-session issuers that trust the source.")
 	Attribute("target_tenant_client_count", Int, "Number of tenant-owned remote_session_clients already registered with the target issuer, BEFORE this migration. Any non-zero value blocks deleting the target issuer, and only the owning organizations can clear it, so a successful migration is effectively one-way.")
 
-	Required("client_count", "mcp_server_names", "endpoint_mismatches", "conflicting_mcp_server_names", "warnings", "can_migrate", "target_tenant_client_count")
+	Required("client_count", "mcp_server_names", "endpoint_mismatches", "conflicting_mcp_server_names", "warnings", "trusted_user_session_issuer_count", "can_migrate", "target_tenant_client_count")
 })
 
 // MigrateRemoteSessionIssuerResult reports the outcome of consolidating
@@ -465,18 +493,19 @@ var MigrateRemoteSessionIssuerResult = Type("MigrateRemoteSessionIssuerResult", 
 })
 
 // GlobalRemoteSessionIssuer is the platform-admin view of a global
-// remote_session_issuer: the record plus the two client counts that decide
-// whether it can be deleted. They are reported separately because only one of
-// them is actionable by the platform admin — global clients they can delete
-// here, tenant-owned clients they can neither see nor remove.
+// remote_session_issuer: the record plus the three reference counts that decide
+// whether it can be deleted. They are reported separately because only global
+// clients are actionable by the platform admin; tenant-owned clients and
+// user-session issuer trust links must be removed by their owning organizations.
 var GlobalRemoteSessionIssuer = Type("GlobalRemoteSessionIssuer", func() {
-	Description("A platform-administrator view of a global remote_session_issuer: the issuer plus its global and tenant-owned client counts.")
+	Description("A platform-administrator view of a global remote_session_issuer: the issuer plus the reference counts that can block deletion.")
 
 	Attribute("issuer", rsissuers.RemoteSessionIssuer, "The remote_session_issuer record.")
 	Attribute("global_client_count", Int, "Number of non-deleted global remote_session_clients (project_id NULL, organization_id NULL) registered with this issuer. These block a delete and the platform admin can remove them here.")
 	Attribute("tenant_client_count", Int, "Number of non-deleted remote_session_clients owned by an organization or project that are registered with this issuer. These block a delete but only their owning organization can remove them.")
+	Attribute("trusted_user_session_issuer_count", Int, "Number of active tenant-owned user_session_issuers that trust this issuer. These block deletion and must be unlinked by their owning organizations.")
 
-	Required("issuer", "global_client_count", "tenant_client_count")
+	Required("issuer", "global_client_count", "tenant_client_count", "trusted_user_session_issuer_count")
 })
 
 var ListGlobalRemoteSessionIssuersResult = Type("ListGlobalRemoteSessionIssuersResult", func() {

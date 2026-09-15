@@ -17,7 +17,11 @@ import (
 
 // BuildGetSettingsPayload builds the payload for the adminChatAnalysis
 // getSettings endpoint from CLI flags.
-func BuildGetSettingsPayload(adminChatAnalysisGetSettingsSessionToken string) (*adminchatanalysis.GetSettingsPayload, error) {
+func BuildGetSettingsPayload(adminChatAnalysisGetSettingsOrganizationID string, adminChatAnalysisGetSettingsSessionToken string) (*adminchatanalysis.GetSettingsPayload, error) {
+	var organizationID string
+	{
+		organizationID = adminChatAnalysisGetSettingsOrganizationID
+	}
 	var sessionToken *string
 	{
 		if adminChatAnalysisGetSettingsSessionToken != "" {
@@ -25,6 +29,7 @@ func BuildGetSettingsPayload(adminChatAnalysisGetSettingsSessionToken string) (*
 		}
 	}
 	v := &adminchatanalysis.GetSettingsPayload{}
+	v.OrganizationID = organizationID
 	v.SessionToken = sessionToken
 
 	return v, nil
@@ -38,7 +43,7 @@ func BuildUpsertWorkUnitsSettingsPayload(adminChatAnalysisUpsertWorkUnitsSetting
 	{
 		err = json.Unmarshal([]byte(adminChatAnalysisUpsertWorkUnitsSettingsBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"work_units_daily_cap\": 1,\n      \"work_units_enabled\": false\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"organization_id\": \"abc123\",\n      \"work_units_daily_cap\": 1,\n      \"work_units_enabled\": false\n   }'")
 		}
 		if body.WorkUnitsDailyCap < 0 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.work_units_daily_cap", body.WorkUnitsDailyCap, 0, true))
@@ -57,6 +62,7 @@ func BuildUpsertWorkUnitsSettingsPayload(adminChatAnalysisUpsertWorkUnitsSetting
 		}
 	}
 	v := &adminchatanalysis.UpsertWorkUnitsSettingsPayload{
+		OrganizationID:    body.OrganizationID,
 		WorkUnitsEnabled:  body.WorkUnitsEnabled,
 		WorkUnitsDailyCap: body.WorkUnitsDailyCap,
 	}
@@ -73,7 +79,7 @@ func BuildUpsertBusinessMemorySettingsPayload(adminChatAnalysisUpsertBusinessMem
 	{
 		err = json.Unmarshal([]byte(adminChatAnalysisUpsertBusinessMemorySettingsBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"business_memory_daily_cap\": 1,\n      \"business_memory_enabled\": false\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"business_memory_daily_cap\": 1,\n      \"business_memory_enabled\": false,\n      \"organization_id\": \"abc123\"\n   }'")
 		}
 		if body.BusinessMemoryDailyCap < 0 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.business_memory_daily_cap", body.BusinessMemoryDailyCap, 0, true))
@@ -92,6 +98,7 @@ func BuildUpsertBusinessMemorySettingsPayload(adminChatAnalysisUpsertBusinessMem
 		}
 	}
 	v := &adminchatanalysis.UpsertBusinessMemorySettingsPayload{
+		OrganizationID:         body.OrganizationID,
 		BusinessMemoryEnabled:  body.BusinessMemoryEnabled,
 		BusinessMemoryDailyCap: body.BusinessMemoryDailyCap,
 	}
@@ -102,14 +109,24 @@ func BuildUpsertBusinessMemorySettingsPayload(adminChatAnalysisUpsertBusinessMem
 
 // BuildTriggerAnalysisPayload builds the payload for the adminChatAnalysis
 // triggerAnalysis endpoint from CLI flags.
-func BuildTriggerAnalysisPayload(adminChatAnalysisTriggerAnalysisSessionToken string) (*adminchatanalysis.TriggerAnalysisPayload, error) {
+func BuildTriggerAnalysisPayload(adminChatAnalysisTriggerAnalysisBody string, adminChatAnalysisTriggerAnalysisSessionToken string) (*adminchatanalysis.TriggerAnalysisPayload, error) {
+	var err error
+	var body TriggerAnalysisRequestBody
+	{
+		err = json.Unmarshal([]byte(adminChatAnalysisTriggerAnalysisBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"organization_id\": \"abc123\"\n   }'")
+		}
+	}
 	var sessionToken *string
 	{
 		if adminChatAnalysisTriggerAnalysisSessionToken != "" {
 			sessionToken = &adminChatAnalysisTriggerAnalysisSessionToken
 		}
 	}
-	v := &adminchatanalysis.TriggerAnalysisPayload{}
+	v := &adminchatanalysis.TriggerAnalysisPayload{
+		OrganizationID: body.OrganizationID,
+	}
 	v.SessionToken = sessionToken
 
 	return v, nil

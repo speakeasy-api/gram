@@ -3,11 +3,48 @@ package platformmcp
 import (
 	"crypto/sha256"
 	"encoding/base64"
+	"errors"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
+
+	platformoauth "github.com/speakeasy-api/gram/server/internal/platformmcp/oauth"
+	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 )
+
+func TestConnectionFromRowDerivesLegacyAuthorizationDeadline(t *testing.T) {
+	t.Parallel()
+
+	authorizedAt := time.Date(2026, time.January, 1, 12, 0, 0, 0, time.UTC)
+	reauthorizedAt := authorizedAt.Add(24 * time.Hour)
+	row := platformrepo.PlatformMcpConnection{
+		ID:                     uuid.New(),
+		OrganizationID:         "organization-1",
+		SubjectUrn:             "user:user-1",
+		ActiveGeneration:       uuid.New(),
+		AuthorizedAt:           pgtype.Timestamptz{Time: authorizedAt, Valid: true},
+		ReauthorizedAt:         pgtype.Timestamptz{Time: reauthorizedAt, Valid: true},
+		AuthorizationExpiresAt: pgtype.Timestamptz{},
+	}
+
+	connection := connectionFromRow(row, "client-1")
+	require.Equal(t, reauthorizedAt.Add(platformoauth.AuthorizationLifetime), connection.AuthorizationExpiresAt)
+}
+
+func TestJWTAuthenticationStoreErrorClassifiesAvailability(t *testing.T) {
+	t.Parallel()
+
+	storeErr := errors.New("database unavailable")
+
+	require.ErrorIs(t, jwtAuthenticationStoreError(pgx.ErrNoRows), ErrUnauthorized)
+	require.ErrorIs(t, jwtAuthenticationStoreError(storeErr), ErrUnavailable)
+	require.ErrorIs(t, jwtAuthenticationStoreError(storeErr), storeErr)
+}
 
 func TestVerifyPKCE(t *testing.T) {
 	t.Parallel()

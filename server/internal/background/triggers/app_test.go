@@ -2,6 +2,10 @@ package triggers
 
 import (
 	"context"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -11,6 +15,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	slackclient "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
 )
 
@@ -148,4 +153,65 @@ func TestLogTriggerDeliveryOmitsTraceContextWhenAbsent(t *testing.T) {
 
 	require.NotContains(t, captured.Attributes, attr.TraceIDKey)
 	require.NotContains(t, captured.Attributes, attr.SpanIDKey)
+}
+
+func TestClearSlackThreadStatusForDM(t *testing.T) {
+	t.Parallel()
+
+	var form url.Values
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			t.Errorf("parse form: %v", err)
+		}
+		form = r.PostForm
+		w.Header().Set("Content-Type", "application/json")
+		if _, err := w.Write([]byte(`{"ok":true}`)); err != nil {
+			t.Errorf("write response: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	app := &App{
+		logger:      slog.New(slog.DiscardHandler), //nolint:forbidigo // GG006: testenv imports this package
+		slackClient: slackclient.NewSlackClientWithBaseURL(server.URL, server.Client()),
+	}
+	app.clearSlackThreadStatus(
+		t.Context(),
+		triggerrepo.TriggerInstance{DefinitionSlug: DefinitionSlugSlack},
+		map[string]string{"SLACK_BOT_TOKEN": "xoxb-test-token"},
+		EventEnvelope{Event: slackTriggerEvent{ChannelID: "D123", Timestamp: "123.456"}},
+	)
+
+	require.Equal(t, "D123", form.Get("channel_id"))
+	require.Equal(t, "123.456", form.Get("thread_ts"))
+	require.Contains(t, form, "status")
+	require.Empty(t, form.Get("status"))
+	require.NotContains(t, form, "loading_messages")
+}
+
+func TestClearSlackThreadStatusSkipsAmbientChannelMessage(t *testing.T) {
+	t.Parallel()
+
+	called := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		called = true
+		w.Header().Set("Content-Type", "application/json")
+		if _, err := w.Write([]byte(`{"ok":true}`)); err != nil {
+			t.Errorf("write response: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	app := &App{
+		logger:      slog.New(slog.DiscardHandler), //nolint:forbidigo // GG006: testenv imports this package
+		slackClient: slackclient.NewSlackClientWithBaseURL(server.URL, server.Client()),
+	}
+	app.clearSlackThreadStatus(
+		t.Context(),
+		triggerrepo.TriggerInstance{DefinitionSlug: DefinitionSlugSlack},
+		map[string]string{"SLACK_BOT_TOKEN": "xoxb-test-token"},
+		EventEnvelope{Event: slackTriggerEvent{EventType: "message", ChannelID: "C123", Timestamp: "123.456"}},
+	)
+
+	require.False(t, called)
 }

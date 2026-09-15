@@ -93,14 +93,21 @@ type InfoPayload struct {
 
 // InfoResult is the result type of the auth service info method.
 type InfoResult struct {
-	UserID               string
-	UserEmail            string
-	UserSignature        *string
-	UserDisplayName      *string
-	UserPhotoURL         *string
-	IsAdmin              bool
-	ActiveOrganizationID string
-	GramAccountType      string
+	UserID          string
+	UserEmail       string
+	UserSignature   *string
+	UserDisplayName *string
+	UserPhotoURL    *string
+	IsAdmin         bool
+	// The WorkOS Dashboard operator who initiated this impersonation session.
+	// Empty for ordinary authentication.
+	ImpersonatorEmail *string
+	// Whether this is a validated, time-bounded organization support session.
+	OrganizationOverride bool
+	// Fixed expiration of the organization support session.
+	OrganizationOverrideExpiresAt *string
+	ActiveOrganizationID          string
+	GramAccountType               string
 	// Whether the organization has an active billing subscription
 	HasActiveSubscription bool
 	// Whether the organization is whitelisted to access the platform
@@ -123,6 +130,8 @@ type LoginPayload struct {
 	// Optional email address. Pre-fills the email field on the identity provider's
 	// sign-up screen. Never stored.
 	Email *string
+	// Opaque, one-time organization support handoff. Never included in OAuth state.
+	SupportHandoff *string
 }
 
 // LoginResult is the result type of the auth service login method.

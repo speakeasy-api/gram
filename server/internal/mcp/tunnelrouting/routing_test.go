@@ -77,6 +77,31 @@ func TestRetryerSubstreamFailedRetriesSameRouteWithoutUnpublish(t *testing.T) {
 	require.Equal(t, []string{"127.0.0.1:1001"}, candidates)
 }
 
+func TestBusyResponseRejectionMapsPostToGenericAvailabilityError(t *testing.T) {
+	t.Parallel()
+
+	resp := tunnelErrorResponseForMethod(wire.TunnelErrorTunnelBusy, http.MethodPost)
+	defer func() { require.NoError(t, resp.Body.Close()) }()
+
+	rejection := BusyResponseRejection(resp)
+	require.NotNil(t, rejection)
+	require.Equal(t, proxy.RejectCodeServerError, rejection.Code)
+	require.Equal(t, "The MCP server is temporarily unavailable. Please retry.", rejection.Message)
+	require.Equal(t, map[string]any{
+		"code":      "service_unavailable",
+		"retryable": true,
+	}, rejection.Data)
+}
+
+func TestBusyResponseRejectionLeavesGetAsHTTPResponse(t *testing.T) {
+	t.Parallel()
+
+	resp := tunnelErrorResponseForMethod(wire.TunnelErrorTunnelBusy, http.MethodGet)
+	defer func() { require.NoError(t, resp.Body.Close()) }()
+
+	require.Nil(t, BusyResponseRejection(resp))
+}
+
 // TestRetryerTunnelBusyFailsOverWithoutUnpublish: tunnel-busy means the
 // selected gateway is healthy but at capacity — its route must stay published
 // while the request fails over to another candidate, and replay is safe for

@@ -59,10 +59,10 @@ export type ChatAnalysisSettingsQueryError =
  * getSettings adminChatAnalysis
  *
  * @remarks
- * Get the active organization's chat analysis settings. Requires platform admin.
+ * Get the named organization's chat analysis settings. Requires platform admin.
  */
 export function useChatAnalysisSettings(
-  request?: GetChatAnalysisSettingsRequest | undefined,
+  request: GetChatAnalysisSettingsRequest,
   security?: GetChatAnalysisSettingsSecurity | undefined,
   options?: QueryHookOptions<
     ChatAnalysisSettingsQueryData,
@@ -88,10 +88,10 @@ export function useChatAnalysisSettings(
  * getSettings adminChatAnalysis
  *
  * @remarks
- * Get the active organization's chat analysis settings. Requires platform admin.
+ * Get the named organization's chat analysis settings. Requires platform admin.
  */
 export function useChatAnalysisSettingsSuspense(
-  request?: GetChatAnalysisSettingsRequest | undefined,
+  request: GetChatAnalysisSettingsRequest,
   security?: GetChatAnalysisSettingsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ChatAnalysisSettingsQueryData,
@@ -115,7 +115,9 @@ export function useChatAnalysisSettingsSuspense(
 
 export function setChatAnalysisSettingsData(
   client: QueryClient,
-  queryKeyBase: [parameters: { gramSession?: string | undefined }],
+  queryKeyBase: [
+    parameters: { organizationId: string; gramSession?: string | undefined },
+  ],
   data: ChatAnalysisSettingsQueryData,
 ): ChatAnalysisSettingsQueryData | undefined {
   const key = queryKeyChatAnalysisSettings(...queryKeyBase);
@@ -126,7 +128,7 @@ export function setChatAnalysisSettingsData(
 export function invalidateChatAnalysisSettings(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
-    [parameters: { gramSession?: string | undefined }]
+    [parameters: { organizationId: string; gramSession?: string | undefined }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {

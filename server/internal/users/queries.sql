@@ -1,4 +1,7 @@
 -- name: UpsertUser :one
+-- Login and other IDP upserts mean the user is authenticating now, so clear
+-- WorkOS soft-delete markers left by a prior user.deleted event. Without this,
+-- email reuse after WorkOS deletion leaves the Gram user RBAC-inactive.
 INSERT INTO users (id, email, display_name, photo_url, admin)
 VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT (id) DO UPDATE SET
@@ -7,7 +10,9 @@ ON CONFLICT (id) DO UPDATE SET
   photo_url = EXCLUDED.photo_url,
   admin = EXCLUDED.admin,
   last_login = clock_timestamp(),
-  updated_at = clock_timestamp()
+  updated_at = clock_timestamp(),
+  workos_deleted_at = NULL,
+  deleted_at = NULL
 RETURNING *, (xmax = 0) AS was_created;
 
 -- name: UpsertSyncedUser :execrows
@@ -25,18 +30,24 @@ ON CONFLICT (workos_id) DO UPDATE SET
   updated_at = clock_timestamp()
 WHERE users.workos_updated_at IS NULL OR EXCLUDED.workos_updated_at >= users.workos_updated_at;
 
--- name: DisableUser :exec
+-- name: DisableUser :many
 UPDATE users
 SET workos_updated_at = @workos_updated_at,
   workos_deleted_at = @workos_deleted_at,
   deleted_at = COALESCE(deleted_at, clock_timestamp()),
   updated_at = clock_timestamp()
 WHERE workos_id = @workos_id
-  AND (workos_updated_at IS NULL OR @workos_updated_at >= workos_updated_at);
+  AND (workos_updated_at IS NULL OR @workos_updated_at >= workos_updated_at)
+RETURNING id;
 
 -- name: GetUser :one
 SELECT * FROM users
 WHERE id = $1;
+
+-- name: LockUserForPlatformAdminCheck :one
+SELECT * FROM users
+WHERE id = $1
+FOR SHARE;
 
 -- name: GetUserByEmail :one
 SELECT * FROM users
@@ -79,13 +90,36 @@ LIMIT 1;
 SELECT DISTINCT ON (lower(u.email)) u.* FROM users u
 JOIN organization_user_relationships our ON our.user_id = u.id
 WHERE lower(u.email) = ANY(ARRAY(SELECT lower(e) FROM unnest(@emails::text[]) AS e))
+  AND u.deleted_at IS NULL
   AND our.organization_id = @organization_id
   AND our.deleted_at IS NULL
 ORDER BY lower(u.email), (u.email = lower(u.email)) DESC, u.created_at, u.id;
 
+-- name: GetConnectedUsersMatchingEmails :many
+-- Returns every connected row matching the emails case-insensitively. Callers
+-- that assign ownership use this to reject ambiguous case-variant identities.
+SELECT u.* FROM users u
+JOIN organization_user_relationships our ON our.user_id = u.id
+WHERE lower(u.email) = ANY(ARRAY(SELECT lower(e) FROM unnest(@emails::text[]) AS e))
+  AND u.deleted_at IS NULL
+  AND our.organization_id = @organization_id
+  AND our.deleted_at IS NULL
+ORDER BY lower(u.email), u.created_at, u.id;
+
 -- name: GetUsersByIDs :many
 SELECT * FROM users
 WHERE id = ANY(@ids::text[]);
+
+-- name: GetConnectedUsersByIDs :many
+-- The org-scoped counterpart to GetConnectedUsersByEmails: resolves gram user
+-- ids to the directory rows they own. Callers hold a user id from a client
+-- payload, so the org join is what keeps one org's ids from resolving against
+-- another org's directory.
+SELECT u.* FROM users u
+JOIN organization_user_relationships our ON our.user_id = u.id
+WHERE u.id = ANY(@ids::text[])
+  AND our.organization_id = @organization_id
+  AND our.deleted_at IS NULL;
 
 -- name: SetUserWorkosID :exec
 UPDATE users

@@ -30,6 +30,8 @@ type ListFacetsResponseBody struct {
 	Actors []*AuditLogFacetOptionResponseBody `form:"actors,omitempty" json:"actors,omitempty" xml:"actors,omitempty"`
 	// Available action facets
 	Actions []*AuditLogFacetOptionResponseBody `form:"actions,omitempty" json:"actions,omitempty" xml:"actions,omitempty"`
+	// Available acting surface facets
+	Surfaces []*AuditLogFacetOptionResponseBody `form:"surfaces,omitempty" json:"surfaces,omitempty" xml:"surfaces,omitempty"`
 }
 
 // ListUnauthorizedResponseBody is the type of the "auditlogs" service "list"
@@ -396,14 +398,21 @@ type ListFacetsGatewayErrorResponseBody struct {
 
 // AuditLogResponseBody is used to define fields on response body types.
 type AuditLogResponseBody struct {
-	ID                 *string         `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	ProjectID          *string         `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	ProjectSlug        *string         `form:"project_slug,omitempty" json:"project_slug,omitempty" xml:"project_slug,omitempty"`
-	ActorID            *string         `form:"actor_id,omitempty" json:"actor_id,omitempty" xml:"actor_id,omitempty"`
-	ActorType          *string         `form:"actor_type,omitempty" json:"actor_type,omitempty" xml:"actor_type,omitempty"`
-	ActorDisplayName   *string         `form:"actor_display_name,omitempty" json:"actor_display_name,omitempty" xml:"actor_display_name,omitempty"`
-	ActorSlug          *string         `form:"actor_slug,omitempty" json:"actor_slug,omitempty" xml:"actor_slug,omitempty"`
-	Action             *string         `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
+	ID               *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	ProjectID        *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	ProjectSlug      *string `form:"project_slug,omitempty" json:"project_slug,omitempty" xml:"project_slug,omitempty"`
+	ActorID          *string `form:"actor_id,omitempty" json:"actor_id,omitempty" xml:"actor_id,omitempty"`
+	ActorType        *string `form:"actor_type,omitempty" json:"actor_type,omitempty" xml:"actor_type,omitempty"`
+	ActorDisplayName *string `form:"actor_display_name,omitempty" json:"actor_display_name,omitempty" xml:"actor_display_name,omitempty"`
+	ActorSlug        *string `form:"actor_slug,omitempty" json:"actor_slug,omitempty" xml:"actor_slug,omitempty"`
+	Action           *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
+	// How the change was made: 'dashboard', 'api_key', 'platform_mcp',
+	// 'project_assistant', or 'unknown' when no surface was identifiable. Always
+	// present.
+	ActingSurface *string `form:"acting_surface,omitempty" json:"acting_surface,omitempty" xml:"acting_surface,omitempty"`
+	// The registered OAuth client the call authenticated as, when it had one.
+	// Absent for calls that carried no OAuth client.
+	ActingClientID     *string         `form:"acting_client_id,omitempty" json:"acting_client_id,omitempty" xml:"acting_client_id,omitempty"`
 	SubjectID          *string         `form:"subject_id,omitempty" json:"subject_id,omitempty" xml:"subject_id,omitempty"`
 	SubjectType        *string         `form:"subject_type,omitempty" json:"subject_type,omitempty" xml:"subject_type,omitempty"`
 	SubjectDisplayName *string         `form:"subject_display_name,omitempty" json:"subject_display_name,omitempty" xml:"subject_display_name,omitempty"`
@@ -608,6 +617,14 @@ func NewListFacetsListAuditLogFacetsResultOK(body *ListFacetsResponseBody) *audi
 		}
 		v.Actions[i] = unmarshalAuditLogFacetOptionResponseBodyToAuditlogsAuditLogFacetOption(val)
 	}
+	v.Surfaces = make([]*auditlogs.AuditLogFacetOption, len(body.Surfaces))
+	for i, val := range body.Surfaces {
+		if val == nil {
+			v.Surfaces[i] = nil
+			continue
+		}
+		v.Surfaces[i] = unmarshalAuditLogFacetOptionResponseBodyToAuditlogsAuditLogFacetOption(val)
+	}
 
 	return v
 }
@@ -786,6 +803,9 @@ func ValidateListFacetsResponseBody(body *ListFacetsResponseBody) (err error) {
 	if body.Actions == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("actions", "body"))
 	}
+	if body.Surfaces == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("surfaces", "body"))
+	}
 	for _, e := range body.Actors {
 		if e != nil {
 			if err2 := ValidateAuditLogFacetOptionResponseBody(e); err2 != nil {
@@ -794,6 +814,13 @@ func ValidateListFacetsResponseBody(body *ListFacetsResponseBody) (err error) {
 		}
 	}
 	for _, e := range body.Actions {
+		if e != nil {
+			if err2 := ValidateAuditLogFacetOptionResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Surfaces {
 		if e != nil {
 			if err2 := ValidateAuditLogFacetOptionResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
@@ -1303,6 +1330,9 @@ func ValidateAuditLogResponseBody(body *AuditLogResponseBody) (err error) {
 	}
 	if body.SubjectType == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("subject_type", "body"))
+	}
+	if body.ActingSurface == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("acting_surface", "body"))
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))

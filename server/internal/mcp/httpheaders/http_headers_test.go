@@ -170,3 +170,31 @@ func TestAuthorizationOrChatSessionToken_BasicSchemeAlone(t *testing.T) {
 
 	require.Equal(t, "Basic abc123", httpheaders.AuthorizationOrChatSessionToken(newIdentityRequest(t, "Basic abc123", "")))
 }
+
+func TestIsStandardMCPRequestHeader_StandardHeaders(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, httpheaders.IsStandardMCPRequestHeader("MCP-Protocol-Version"))
+	require.True(t, httpheaders.IsStandardMCPRequestHeader("Mcp-Method"))
+	require.True(t, httpheaders.IsStandardMCPRequestHeader("Mcp-Name"))
+	require.True(t, httpheaders.IsStandardMCPRequestHeader("Mcp-Param-Region"))
+	require.True(t, httpheaders.IsStandardMCPRequestHeader("mcp-method"), "field names compare case-insensitively")
+	require.True(t, httpheaders.IsStandardMCPRequestHeader("MCP-PARAM-X"), "field names compare case-insensitively")
+}
+
+func TestIsStandardMCPRequestHeader_NonStandardHeaders(t *testing.T) {
+	t.Parallel()
+
+	require.False(t, httpheaders.IsStandardMCPRequestHeader("Mcp-Session-Id"), "session id is legacy transport state, not 2026-07-28 request metadata")
+	require.False(t, httpheaders.IsStandardMCPRequestHeader("Mcp-Api-Key"), "user-supplied variable headers are not standard headers")
+	require.False(t, httpheaders.IsStandardMCPRequestHeader("Mcp-Param"), "the param family requires the trailing dash")
+	require.False(t, httpheaders.IsStandardMCPRequestHeader("Authorization"))
+	require.False(t, httpheaders.IsStandardMCPRequestHeader(""))
+}
+
+func TestIsStandardMCPRequestHeader_BareParamPrefixIsNotStandard(t *testing.T) {
+	t.Parallel()
+
+	// The Mcp-Param-{Name} family requires a non-empty name.
+	require.False(t, httpheaders.IsStandardMCPRequestHeader("Mcp-Param-"))
+}

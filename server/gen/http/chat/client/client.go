@@ -21,6 +21,10 @@ type Client struct {
 	// endpoint.
 	ListChatsDoer goahttp.Doer
 
+	// GetAssistantSessionSummary Doer is the HTTP client used to make requests to
+	// the getAssistantSessionSummary endpoint.
+	GetAssistantSessionSummaryDoer goahttp.Doer
+
 	// GetWorkUnitsTrend Doer is the HTTP client used to make requests to the
 	// getWorkUnitsTrend endpoint.
 	GetWorkUnitsTrendDoer goahttp.Doer
@@ -49,6 +53,10 @@ type Client struct {
 	// endpoint.
 	SummarizeDoer goahttp.Doer
 
+	// SummarizeToolCall Doer is the HTTP client used to make requests to the
+	// summarizeToolCall endpoint.
+	SummarizeToolCallDoer goahttp.Doer
+
 	// SubmitFeedback Doer is the HTTP client used to make requests to the
 	// submitFeedback endpoint.
 	SubmitFeedbackDoer goahttp.Doer
@@ -56,6 +64,10 @@ type Client struct {
 	// ListSources Doer is the HTTP client used to make requests to the listSources
 	// endpoint.
 	ListSourcesDoer goahttp.Doer
+
+	// ListSessionLinks Doer is the HTTP client used to make requests to the
+	// listSessionLinks endpoint.
+	ListSessionLinksDoer goahttp.Doer
 
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
@@ -77,21 +89,24 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		ListChatsDoer:         doer,
-		GetWorkUnitsTrendDoer: doer,
-		LoadChatDoer:          doer,
-		GenerateTitleDoer:     doer,
-		CreditUsageDoer:       doer,
-		DeleteChatDoer:        doer,
-		SetPinnedDoer:         doer,
-		SummarizeDoer:         doer,
-		SubmitFeedbackDoer:    doer,
-		ListSourcesDoer:       doer,
-		RestoreResponseBody:   restoreBody,
-		scheme:                scheme,
-		host:                  host,
-		decoder:               dec,
-		encoder:               enc,
+		ListChatsDoer:                  doer,
+		GetAssistantSessionSummaryDoer: doer,
+		GetWorkUnitsTrendDoer:          doer,
+		LoadChatDoer:                   doer,
+		GenerateTitleDoer:              doer,
+		CreditUsageDoer:                doer,
+		DeleteChatDoer:                 doer,
+		SetPinnedDoer:                  doer,
+		SummarizeDoer:                  doer,
+		SummarizeToolCallDoer:          doer,
+		SubmitFeedbackDoer:             doer,
+		ListSourcesDoer:                doer,
+		ListSessionLinksDoer:           doer,
+		RestoreResponseBody:            restoreBody,
+		scheme:                         scheme,
+		host:                           host,
+		decoder:                        dec,
+		encoder:                        enc,
 	}
 }
 
@@ -114,6 +129,30 @@ func (c *Client) ListChats() goa.Endpoint {
 		resp, err := c.ListChatsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("chat", "listChats", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetAssistantSessionSummary returns an endpoint that makes HTTP requests to
+// the chat service getAssistantSessionSummary server.
+func (c *Client) GetAssistantSessionSummary() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetAssistantSessionSummaryRequest(c.encoder)
+		decodeResponse = DecodeGetAssistantSessionSummaryResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetAssistantSessionSummaryRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetAssistantSessionSummaryDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("chat", "getAssistantSessionSummary", err)
 		}
 		return decodeResponse(resp)
 	}
@@ -287,6 +326,30 @@ func (c *Client) Summarize() goa.Endpoint {
 	}
 }
 
+// SummarizeToolCall returns an endpoint that makes HTTP requests to the chat
+// service summarizeToolCall server.
+func (c *Client) SummarizeToolCall() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSummarizeToolCallRequest(c.encoder)
+		decodeResponse = DecodeSummarizeToolCallResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSummarizeToolCallRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SummarizeToolCallDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("chat", "summarizeToolCall", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
 // SubmitFeedback returns an endpoint that makes HTTP requests to the chat
 // service submitFeedback server.
 func (c *Client) SubmitFeedback() goa.Endpoint {
@@ -330,6 +393,30 @@ func (c *Client) ListSources() goa.Endpoint {
 		resp, err := c.ListSourcesDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("chat", "listSources", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListSessionLinks returns an endpoint that makes HTTP requests to the chat
+// service listSessionLinks server.
+func (c *Client) ListSessionLinks() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListSessionLinksRequest(c.encoder)
+		decodeResponse = DecodeListSessionLinksResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListSessionLinksRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListSessionLinksDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("chat", "listSessionLinks", err)
 		}
 		return decodeResponse(resp)
 	}

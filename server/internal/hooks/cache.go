@@ -11,6 +11,13 @@ func sessionCacheKey(sessionID string) string {
 	return fmt.Sprintf("session:metadata:%s", sessionID)
 }
 
+// sessionNativeHooksCacheKey records that a session has a durably captured
+// native prompt, so model-proxy prompts can remain telemetry-only when no shared
+// turn identifier is available.
+func sessionNativeHooksCacheKey(projectID, sessionID string) string {
+	return fmt.Sprintf("session:native-prompt:v1:%s:%s", projectID, sessionID)
+}
+
 // hookPendingCacheKey returns the Redis key for buffered hooks for a session
 func hookPendingCacheKey(sessionID string) string {
 	return fmt.Sprintf("hook:pending:%s", sessionID)

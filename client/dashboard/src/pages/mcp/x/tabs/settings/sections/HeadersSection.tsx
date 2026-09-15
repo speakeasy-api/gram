@@ -280,11 +280,9 @@ export function HeadersSection({
     undefined,
     { enabled: suggestionsEnabled && remoteMcpServerId !== "" },
   );
-  const { data: catalogData } = useListMCPCatalog(
-    undefined,
-    undefined,
-    suggestionsEnabled,
-  );
+  const { data: catalogData } = useListMCPCatalog(undefined, undefined, {
+    enabled: suggestionsEnabled,
+  });
   const suggestedHeaders = useMemo(() => {
     if (!remoteMcpServer?.url || !catalogData?.servers) return [];
     return catalogHeadersForRemoteUrl(
@@ -412,8 +410,7 @@ export function HeadersSection({
   const mutationError =
     createHeader.error ?? updateHeader.error ?? deleteHeader.error;
 
-  const remoteSettingsHref = `${routes.sources.source.href(
-    "remotemcp",
+  const remoteSettingsHref = `${routes.mcp.x.settings.href(
     remoteMcpServerId,
   )}#settings`;
 

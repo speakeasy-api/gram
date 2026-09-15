@@ -73,11 +73,13 @@ Run `./zero` until it succeeds. This script is what you use to run the dashboard
 
 The main dependencies are [Mise](https://mise.jdx.dev/) and [Docker](https://www.docker.com/). The `./zero` script will guide you to install these if they are not found.
 
-Once everything is running, seed the local database with sample data:
+Seed your local organization with a realistic working environment — a deployed API, agent sessions, telemetry, risk findings, teammates, and an API key:
 
 ```bash
 mise seed
 ```
+
+It talks to the databases directly, so it can run before the services are up, and re-running it resets the seeded data.
 
 To work on several branches at once, each git worktree can run its own full stack on its own ports:
 

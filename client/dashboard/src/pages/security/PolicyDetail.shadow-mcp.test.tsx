@@ -2,12 +2,13 @@ import { useSdkClient } from "@/contexts/Sdk";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Children, isValidElement, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { shadowMCPPolicyInventoryQueryKey } from "@/components/shadow-mcp/useShadowMCPPolicyInventory";
 import { TooltipProvider } from "@/components/ui/Tooltip";
-import { StandardPolicyEditor } from "./PolicyDetail";
+import { PolicyNew, StandardPolicyEditor } from "./PolicyDetail";
+import { testAccessSummary } from "@/components/shadow-mcp/shadowMCPInventoryTestFixtures";
 
 const mocks = vi.hoisted(() => ({
   saveDisabledRenders: [] as boolean[],
@@ -16,6 +17,13 @@ const mocks = vi.hoisted(() => ({
   step: "action" as string | null,
   mutateCreate: vi.fn(),
   mutateUpdate: vi.fn(),
+  kind: null as string | null,
+  category: null as string | null,
+  detectorSelections: [] as Array<{ category: string; selected: boolean }>,
+}));
+
+vi.mock("sonner", () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
 }));
 
 vi.mock("@/contexts/Auth", () => ({
@@ -23,7 +31,17 @@ vi.mock("@/contexts/Auth", () => ({
 }));
 
 vi.mock("@/components/page-layout", () => ({
-  Page: () => null,
+  Page: Object.assign(({ children }: { children?: ReactNode }) => children, {
+    Header: Object.assign(
+      ({ children }: { children?: ReactNode }) => children,
+      { Breadcrumbs: () => null },
+    ),
+    Body: ({ children }: { children?: ReactNode }) => children,
+  }),
+}));
+
+vi.mock("@/components/require-scope", () => ({
+  RequireScope: ({ children }: { children: ReactNode }) => children,
 }));
 
 vi.mock("@/contexts/Sdk", () => ({
@@ -35,7 +53,11 @@ vi.mock("@/routes", () => ({
 }));
 
 vi.mock("nuqs", () => ({
-  useQueryState: () => [mocks.step, vi.fn()],
+  useQueryState: (name: string) => {
+    if (name === "kind") return [mocks.kind, vi.fn()];
+    if (name === "category") return [mocks.category, vi.fn()];
+    return [mocks.step, vi.fn()];
+  },
 }));
 
 vi.mock("@/components/shadow-mcp/ShadowMCPPolicyServerSelector", () => ({
@@ -77,10 +99,22 @@ vi.mock("./use-cel-status", () => ({
 vi.mock("./PolicyCenter", () => ({
   ActionPicker: () => null,
   CustomizeRulesSheet: () => null,
-  DetectorCard: () => null,
   PolicyAudiencePicker: () => null,
   RuleSelectList: () => null,
   ScopeCard: () => null,
+}));
+
+vi.mock("./DetectorCard", () => ({
+  DetectorCard: ({
+    category,
+    selected,
+  }: {
+    category: string;
+    selected: boolean;
+  }) => {
+    mocks.detectorSelections.push({ category, selected });
+    return null;
+  },
 }));
 
 vi.mock("@/pages/chatLogs/ChatTranscript", () => ({
@@ -151,6 +185,9 @@ function inventoryServer(
     urlHost: "github.example.com",
     userCount: 1,
     ...overrides,
+    accessSummary:
+      overrides.accessSummary ??
+      testAccessSummary(overrides.access ?? "allowed"),
   };
 }
 
@@ -170,7 +207,6 @@ function blockingPolicyWithDirtyDraftName(): RiskPolicy {
     createdAt: new Date("2026-01-01T10:00:00Z"),
     enabled: true,
     id: "policy-1",
-    messageTypes: [],
     pendingMessages: 0,
     policyType: "standard",
     projectId: "project-1",
@@ -188,10 +224,36 @@ describe("StandardPolicyEditor cached Shadow MCP inventory", () => {
     mocks.selectionRenders.length = 0;
     mocks.modeRenders.length = 0;
     mocks.step = "action";
+    mocks.kind = null;
+    mocks.category = null;
+    mocks.detectorSelections.length = 0;
     vi.clearAllMocks();
     vi.mocked(useSdkClient).mockReturnValue({
       access: { listShadowMCPInventory: vi.fn() },
     } as unknown as ReturnType<typeof useSdkClient>);
+  });
+
+  it("preselects the prompt injection detector from the setup link", () => {
+    mocks.kind = "standard";
+    mocks.category = "prompt_injection";
+    mocks.step = null;
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <PolicyNew />
+        </TooltipProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(
+      mocks.detectorSelections.find(
+        (selection) => selection.category === "prompt_injection",
+      )?.selected,
+    ).toBe(true);
   });
 
   it("keeps save blocked until cached inventory preselection initializes", async () => {
@@ -258,6 +320,51 @@ describe("StandardPolicyEditor cached Shadow MCP inventory", () => {
         "https://sketchy.example.com/mcp",
       ]);
       expect(mocks.modeRenders.at(-1)).toBe("block");
+    });
+  });
+});
+
+describe("StandardPolicyEditor policy pause", () => {
+  beforeEach(() => {
+    mocks.saveDisabledRenders.length = 0;
+    mocks.selectionRenders.length = 0;
+    mocks.modeRenders.length = 0;
+    mocks.step = "action";
+    mocks.kind = null;
+    mocks.category = null;
+    mocks.detectorSelections.length = 0;
+    vi.clearAllMocks();
+    vi.mocked(useSdkClient).mockReturnValue({
+      access: { listShadowMCPInventory: vi.fn() },
+    } as unknown as ReturnType<typeof useSdkClient>);
+  });
+
+  it("shows Inactive and an enable switch when the policy is disabled", () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <StandardPolicyEditor
+            policy={{ ...blockingPolicyWithDirtyDraftName(), enabled: false }}
+          />
+        </TooltipProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByText("Inactive")).toBeTruthy();
+    const toggle = screen.getByRole("switch", { name: "Enable policy" });
+    fireEvent.click(toggle);
+    expect(mocks.mutateUpdate).toHaveBeenCalledWith({
+      request: {
+        updateRiskPolicyRequestBody: {
+          id: "policy-1",
+          name: "Original name",
+          enabled: true,
+        },
+      },
     });
   });
 });

@@ -43,14 +43,13 @@ const (
 	ToolNameGetUserSession         = "platform_get_user_session"
 	ToolNameGetPlatformContext     = "platform_get_platform_context"
 	ToolNameListProjects           = "platform_list_projects"
-	ToolNameListProjectMCPs        = "platform_list_project_mcps"
+	ToolNameFindMCP                = "platform_find_mcp"
 	ToolNameGetMCP                 = "platform_get_mcp"
 )
 
 // Skill tool names are externally specified by the skills RFC.
 const (
-	ToolNameSkillsLoad            = "skills_load"
-	ToolNamePlatformSkillFeedback = "platform_skill_feedback"
+	ToolNameSkillsLoad = "skills_load"
 )
 
 type Dependencies struct {

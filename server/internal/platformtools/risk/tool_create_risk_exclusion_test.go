@@ -68,7 +68,7 @@ func callCreate(t *testing.T, svc RiskService, payload string) exclusionView {
 	t.Helper()
 
 	var out bytes.Buffer
-	err := NewCreateRiskExclusionTool(svc).Call(t.Context(), toolconfig.ToolCallEnv{}, strings.NewReader(payload), &out)
+	err := NewCreateRiskExclusionTool(svc, "test-redaction-key").Call(t.Context(), toolconfig.ToolCallEnv{}, strings.NewReader(payload), &out)
 	require.NoError(t, err)
 
 	var view exclusionView

@@ -1,39 +1,11 @@
 import { useTelemetry } from "@/contexts/Telemetry";
+import { authPageHref } from "@/lib/safe-external-url";
 import { buildLoginRedirectURL, cn } from "@/lib/utils";
 import { useForm } from "@tanstack/react-form";
 import { Link } from "react-router";
 import { AUTH_BUTTON_CLASSES, AUTH_PILLARS } from "./auth-constants";
 import { SigninErrorNotice } from "./auth-errors";
-
-// Mirrors the server's validOrgNameRegex, literal space included: the server
-// rejects every other whitespace character, and normalizeCompanyName has
-// already collapsed runs of whitespace by the time this runs.
-const VALID_ORG_NAME_REGEX = /^[a-zA-Z0-9 _-]+$/;
-const INVALID_ORG_NAME_MESSAGE =
-  "Company name contains invalid characters. Only letters, numbers, spaces, hyphens, and underscores are allowed.";
-
-// Matches the server's cap in validateOrgName. The server is authoritative and
-// rejects anything longer before the identity-provider hop; this only saves the
-// round trip.
-const MAX_ORG_NAME_LENGTH = 100;
-
-// The name becomes the org's URL slug, and Slugify
-// (server/internal/auth/orgslug) keeps only [a-z0-9] — so this is a floor on
-// the slug, not on what the user typed. Counting anything else would let "A-"
-// through as two characters and produce the one-character slug "a", and
-// "-----" through as five and produce none at all.
-const MIN_ORG_NAME_SLUG_CHARS = 2;
-const SHORT_ORG_NAME_MESSAGE = `Company name must contain at least ${MIN_ORG_NAME_SLUG_CHARS} letters or numbers`;
-
-function countSlugChars(value: string): number {
-  return value.replace(/[^a-zA-Z0-9]/g, "").length;
-}
-
-// Pasted names often carry a non-breaking space, which JavaScript's `\s`
-// accepts and the server's Go regex does not.
-function normalizeCompanyName(value: string): string {
-  return value.replace(/\s+/g, " ").trim();
-}
+import { normalizeOrgName, validateOrgName } from "./org-name";
 
 // Mirrors the server's validateSignupEmail. WorkOS verifies the address and
 // the user can edit it on the next screen, so this only catches typos before
@@ -53,26 +25,17 @@ function validateEmail(value: string): string | undefined {
   return undefined;
 }
 
-function validateCompanyName(value: string): string | undefined {
-  const normalized = normalizeCompanyName(value);
-  if (!normalized) return "Company name is required";
-  if (normalized.length > MAX_ORG_NAME_LENGTH) {
-    return `Company name must be ${MAX_ORG_NAME_LENGTH} characters or fewer`;
-  }
-  if (!VALID_ORG_NAME_REGEX.test(normalized)) return INVALID_ORG_NAME_MESSAGE;
-  if (countSlugChars(normalized) < MIN_ORG_NAME_SLUG_CHARS) {
-    return SHORT_ORG_NAME_MESSAGE;
-  }
-  return undefined;
-}
-
 /** First error string for a field, or undefined. */
 function firstError(errors: unknown[]): string | undefined {
   const error = errors.find(Boolean);
   return typeof error === "string" ? error : undefined;
 }
 
-export function SignUpPanel(): JSX.Element {
+export function SignUpPanel({
+  redirectTo,
+}: {
+  redirectTo?: string | null;
+}): JSX.Element {
   const telemetry = useTelemetry();
   const form = useForm({
     defaultValues: { email: "", companyName: "" },
@@ -93,8 +56,8 @@ export function SignUpPanel(): JSX.Element {
       // arrives pre-filled, and is never stored at all.
       window.location.assign(
         buildLoginRedirectURL(
-          null,
-          normalizeCompanyName(value.companyName),
+          redirectTo ?? null,
+          normalizeOrgName(value.companyName),
           value.email.trim(),
         ),
       );
@@ -204,8 +167,8 @@ export function SignUpPanel(): JSX.Element {
               <form.Field
                 name="companyName"
                 validators={{
-                  onChange: ({ value }) => validateCompanyName(value),
-                  onSubmit: ({ value }) => validateCompanyName(value),
+                  onChange: ({ value }) => validateOrgName(value),
+                  onSubmit: ({ value }) => validateOrgName(value),
                 }}
               >
                 {(field) => {
@@ -269,7 +232,7 @@ export function SignUpPanel(): JSX.Element {
                   "mx-auto px-[22px] disabled:cursor-not-allowed disabled:opacity-50",
                 )}
               >
-                Start Trial
+                Create Account
               </button>
             </>
           )}
@@ -283,7 +246,7 @@ export function SignUpPanel(): JSX.Element {
       <p className="mt-2 text-[14px] text-(--muted-strong)">
         Already have an account?{" "}
         <Link
-          to="/login"
+          to={authPageHref("/login", redirectTo)}
           className="text-(--link) underline hover:text-(--focus)"
         >
           Log in

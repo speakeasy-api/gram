@@ -30,7 +30,7 @@ INSERT INTO api_keys (
   , $6
   , $7::text[]
 )
-RETURNING id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, created_at, updated_at, deleted_at, deleted, last_accessed_at
+RETURNING id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, subject_urn, delegated_grants, delegated_grants_version, expires_at, created_at, updated_at, deleted_at, deleted, last_accessed_at
 `
 
 type CreateAPIKeyParams struct {
@@ -63,6 +63,86 @@ func (q *Queries) CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (Api
 		&i.KeyPrefix,
 		&i.KeyHash,
 		&i.Scopes,
+		&i.SubjectUrn,
+		&i.DelegatedGrants,
+		&i.DelegatedGrantsVersion,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+		&i.LastAccessedAt,
+	)
+	return i, err
+}
+
+const createAgentAPIKey = `-- name: CreateAgentAPIKey :one
+INSERT INTO api_keys (
+    organization_id
+  , project_id
+  , created_by_user_id
+  , name
+  , key_prefix
+  , key_hash
+  , scopes
+  , subject_urn
+  , delegated_grants
+  , delegated_grants_version
+  , expires_at
+) VALUES (
+    $1
+  , NULL
+  , $2
+  , $3
+  , $4
+  , $5
+  , ARRAY[]::text[]
+  , $6
+  , $7::jsonb
+  , $8
+  , $9
+)
+RETURNING id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, subject_urn, delegated_grants, delegated_grants_version, expires_at, created_at, updated_at, deleted_at, deleted, last_accessed_at
+`
+
+type CreateAgentAPIKeyParams struct {
+	OrganizationID         string
+	CreatedByUserID        string
+	Name                   string
+	KeyPrefix              string
+	KeyHash                string
+	SubjectUrn             pgtype.Text
+	DelegatedGrants        []byte
+	DelegatedGrantsVersion pgtype.Int4
+	ExpiresAt              pgtype.Timestamptz
+}
+
+func (q *Queries) CreateAgentAPIKey(ctx context.Context, arg CreateAgentAPIKeyParams) (ApiKey, error) {
+	row := q.db.QueryRow(ctx, createAgentAPIKey,
+		arg.OrganizationID,
+		arg.CreatedByUserID,
+		arg.Name,
+		arg.KeyPrefix,
+		arg.KeyHash,
+		arg.SubjectUrn,
+		arg.DelegatedGrants,
+		arg.DelegatedGrantsVersion,
+		arg.ExpiresAt,
+	)
+	var i ApiKey
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.CreatedByUserID,
+		&i.Name,
+		&i.KeyPrefix,
+		&i.KeyHash,
+		&i.Scopes,
+		&i.SubjectUrn,
+		&i.DelegatedGrants,
+		&i.DelegatedGrantsVersion,
+		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -77,6 +157,7 @@ UPDATE api_keys
 SET deleted_at = NOW()
 WHERE id = $1
   AND organization_id = $2
+  AND subject_urn IS NULL
   AND deleted IS FALSE
 RETURNING id, organization_id, project_id, name, scopes
 `
@@ -146,8 +227,125 @@ func (q *Queries) DeleteAPIKeyByProject(ctx context.Context, arg DeleteAPIKeyByP
 	return i, err
 }
 
+const deleteAgentAPIKey = `-- name: DeleteAgentAPIKey :one
+UPDATE api_keys
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE id = $1
+  AND organization_id = $2
+  AND subject_urn = $3
+  AND deleted IS FALSE
+RETURNING id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, subject_urn, delegated_grants, delegated_grants_version, expires_at, created_at, updated_at, deleted_at, deleted, last_accessed_at
+`
+
+type DeleteAgentAPIKeyParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+	SubjectUrn     pgtype.Text
+}
+
+func (q *Queries) DeleteAgentAPIKey(ctx context.Context, arg DeleteAgentAPIKeyParams) (ApiKey, error) {
+	row := q.db.QueryRow(ctx, deleteAgentAPIKey, arg.ID, arg.OrganizationID, arg.SubjectUrn)
+	var i ApiKey
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.CreatedByUserID,
+		&i.Name,
+		&i.KeyPrefix,
+		&i.KeyHash,
+		&i.Scopes,
+		&i.SubjectUrn,
+		&i.DelegatedGrants,
+		&i.DelegatedGrantsVersion,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+		&i.LastAccessedAt,
+	)
+	return i, err
+}
+
+const getAPIKeyByID = `-- name: GetAPIKeyByID :one
+SELECT id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, subject_urn, delegated_grants, delegated_grants_version, expires_at, created_at, updated_at, deleted_at, deleted, last_accessed_at
+FROM api_keys
+WHERE id = $1
+  AND organization_id = $2
+`
+
+type GetAPIKeyByIDParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) GetAPIKeyByID(ctx context.Context, arg GetAPIKeyByIDParams) (ApiKey, error) {
+	row := q.db.QueryRow(ctx, getAPIKeyByID, arg.ID, arg.OrganizationID)
+	var i ApiKey
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.CreatedByUserID,
+		&i.Name,
+		&i.KeyPrefix,
+		&i.KeyHash,
+		&i.Scopes,
+		&i.SubjectUrn,
+		&i.DelegatedGrants,
+		&i.DelegatedGrantsVersion,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+		&i.LastAccessedAt,
+	)
+	return i, err
+}
+
+const getAPIKeyByIDForUpdate = `-- name: GetAPIKeyByIDForUpdate :one
+SELECT id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, subject_urn, delegated_grants, delegated_grants_version, expires_at, created_at, updated_at, deleted_at, deleted, last_accessed_at
+FROM api_keys
+WHERE id = $1
+  AND organization_id = $2
+FOR UPDATE
+`
+
+type GetAPIKeyByIDForUpdateParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) GetAPIKeyByIDForUpdate(ctx context.Context, arg GetAPIKeyByIDForUpdateParams) (ApiKey, error) {
+	row := q.db.QueryRow(ctx, getAPIKeyByIDForUpdate, arg.ID, arg.OrganizationID)
+	var i ApiKey
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.CreatedByUserID,
+		&i.Name,
+		&i.KeyPrefix,
+		&i.KeyHash,
+		&i.Scopes,
+		&i.SubjectUrn,
+		&i.DelegatedGrants,
+		&i.DelegatedGrantsVersion,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+		&i.LastAccessedAt,
+	)
+	return i, err
+}
+
 const getAPIKeyByKeyHash = `-- name: GetAPIKeyByKeyHash :one
-SELECT api_keys.id, api_keys.organization_id, api_keys.project_id, api_keys.created_by_user_id, api_keys.name, api_keys.key_prefix, api_keys.key_hash, api_keys.scopes, api_keys.created_at, api_keys.updated_at, api_keys.deleted_at, api_keys.deleted, api_keys.last_accessed_at, users.email
+SELECT api_keys.id, api_keys.organization_id, api_keys.project_id, api_keys.created_by_user_id, api_keys.name, api_keys.key_prefix, api_keys.key_hash, api_keys.scopes, api_keys.subject_urn, api_keys.delegated_grants, api_keys.delegated_grants_version, api_keys.expires_at, api_keys.created_at, api_keys.updated_at, api_keys.deleted_at, api_keys.deleted, api_keys.last_accessed_at, users.email
 FROM api_keys
 JOIN users ON users.id = api_keys.created_by_user_id
 WHERE key_hash = $1
@@ -155,20 +353,24 @@ WHERE key_hash = $1
 `
 
 type GetAPIKeyByKeyHashRow struct {
-	ID              uuid.UUID
-	OrganizationID  string
-	ProjectID       uuid.NullUUID
-	CreatedByUserID string
-	Name            string
-	KeyPrefix       string
-	KeyHash         string
-	Scopes          []string
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	Deleted         bool
-	LastAccessedAt  pgtype.Timestamptz
-	Email           string
+	ID                     uuid.UUID
+	OrganizationID         string
+	ProjectID              uuid.NullUUID
+	CreatedByUserID        string
+	Name                   string
+	KeyPrefix              string
+	KeyHash                string
+	Scopes                 []string
+	SubjectUrn             pgtype.Text
+	DelegatedGrants        []byte
+	DelegatedGrantsVersion pgtype.Int4
+	ExpiresAt              pgtype.Timestamptz
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	DeletedAt              pgtype.Timestamptz
+	Deleted                bool
+	LastAccessedAt         pgtype.Timestamptz
+	Email                  string
 }
 
 func (q *Queries) GetAPIKeyByKeyHash(ctx context.Context, keyHash string) (GetAPIKeyByKeyHashRow, error) {
@@ -183,6 +385,10 @@ func (q *Queries) GetAPIKeyByKeyHash(ctx context.Context, keyHash string) (GetAP
 		&i.KeyPrefix,
 		&i.KeyHash,
 		&i.Scopes,
+		&i.SubjectUrn,
+		&i.DelegatedGrants,
+		&i.DelegatedGrantsVersion,
+		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -191,6 +397,45 @@ func (q *Queries) GetAPIKeyByKeyHash(ctx context.Context, keyHash string) (GetAP
 		&i.Email,
 	)
 	return i, err
+}
+
+const getActivePrincipalAPIKeyForAdmission = `-- name: GetActivePrincipalAPIKeyForAdmission :one
+SELECT id
+FROM api_keys
+WHERE id = $1
+  AND organization_id = $2
+  AND deleted IS FALSE
+  AND cardinality(scopes) = 0
+  AND subject_urn = $3
+  AND created_by_user_id = $4
+  AND delegated_grants = $5::jsonb
+  AND delegated_grants_version = $6
+  AND expires_at > statement_timestamp()
+  AND expires_at > created_at
+  AND expires_at <= created_at + INTERVAL '365 days'
+`
+
+type GetActivePrincipalAPIKeyForAdmissionParams struct {
+	ID                     uuid.UUID
+	OrganizationID         string
+	SubjectUrn             pgtype.Text
+	AuthorizerUserID       string
+	DelegatedGrants        []byte
+	DelegatedGrantsVersion pgtype.Int4
+}
+
+func (q *Queries) GetActivePrincipalAPIKeyForAdmission(ctx context.Context, arg GetActivePrincipalAPIKeyForAdmissionParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getActivePrincipalAPIKeyForAdmission,
+		arg.ID,
+		arg.OrganizationID,
+		arg.SubjectUrn,
+		arg.AuthorizerUserID,
+		arg.DelegatedGrants,
+		arg.DelegatedGrantsVersion,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const isAPIKeyManagedByActiveLiteLLMInstance = `-- name: IsAPIKeyManagedByActiveLiteLLMInstance :one
@@ -221,10 +466,11 @@ func (q *Queries) IsAPIKeyManagedByActiveLiteLLMInstance(ctx context.Context, ar
 }
 
 const listAPIKeysByOrganization = `-- name: ListAPIKeysByOrganization :many
-SELECT id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, created_at, updated_at, deleted_at, deleted, last_accessed_at
+SELECT api_keys.id, api_keys.organization_id, api_keys.project_id, api_keys.created_by_user_id, api_keys.name, api_keys.key_prefix, api_keys.key_hash, api_keys.scopes, api_keys.subject_urn, api_keys.delegated_grants, api_keys.delegated_grants_version, api_keys.expires_at, api_keys.created_at, api_keys.updated_at, api_keys.deleted_at, api_keys.deleted, api_keys.last_accessed_at
 FROM api_keys
 WHERE api_keys.organization_id = $1
   AND api_keys.deleted IS FALSE
+  AND api_keys.subject_urn IS NULL
   AND NOT EXISTS (
     SELECT 1
     FROM litellm_instances li
@@ -233,9 +479,14 @@ WHERE api_keys.organization_id = $1
       AND li.api_key_id = api_keys.id
       AND li.deleted IS FALSE
   )
-ORDER BY created_at DESC
+ORDER BY api_keys.created_at DESC
 `
 
+// Deliberately does NOT join users the way GetAPIKeyByKeyHash does. A key
+// whose created_by_user_id is not a users.id is unusable (auth's join drops
+// it), but hiding it here would leave the owner with an invisible row they
+// cannot inspect or delete. RepairOrphanedAPIKeyCreators repoints those rows
+// instead; the durable guarantee belongs on a foreign key, not on this SELECT.
 func (q *Queries) ListAPIKeysByOrganization(ctx context.Context, organizationID string) ([]ApiKey, error) {
 	rows, err := q.db.Query(ctx, listAPIKeysByOrganization, organizationID)
 	if err != nil {
@@ -254,6 +505,10 @@ func (q *Queries) ListAPIKeysByOrganization(ctx context.Context, organizationID 
 			&i.KeyPrefix,
 			&i.KeyHash,
 			&i.Scopes,
+			&i.SubjectUrn,
+			&i.DelegatedGrants,
+			&i.DelegatedGrantsVersion,
+			&i.ExpiresAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -268,6 +523,93 @@ func (q *Queries) ListAPIKeysByOrganization(ctx context.Context, organizationID 
 		return nil, err
 	}
 	return items, nil
+}
+
+const listAgentAPIKeys = `-- name: ListAgentAPIKeys :many
+SELECT id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, subject_urn, delegated_grants, delegated_grants_version, expires_at, created_at, updated_at, deleted_at, deleted, last_accessed_at
+FROM api_keys
+WHERE organization_id = $1
+  AND subject_urn = $2
+  AND deleted IS FALSE
+ORDER BY created_at DESC
+`
+
+type ListAgentAPIKeysParams struct {
+	OrganizationID string
+	SubjectUrn     pgtype.Text
+}
+
+func (q *Queries) ListAgentAPIKeys(ctx context.Context, arg ListAgentAPIKeysParams) ([]ApiKey, error) {
+	rows, err := q.db.Query(ctx, listAgentAPIKeys, arg.OrganizationID, arg.SubjectUrn)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ApiKey
+	for rows.Next() {
+		var i ApiKey
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.CreatedByUserID,
+			&i.Name,
+			&i.KeyPrefix,
+			&i.KeyHash,
+			&i.Scopes,
+			&i.SubjectUrn,
+			&i.DelegatedGrants,
+			&i.DelegatedGrantsVersion,
+			&i.ExpiresAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+			&i.LastAccessedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const repairOrphanedAPIKeyCreators = `-- name: RepairOrphanedAPIKeyCreators :execrows
+UPDATE api_keys k
+SET
+  created_by_user_id = member.user_id,
+  updated_at = clock_timestamp()
+FROM (
+  SELECT DISTINCT ON (our.organization_id)
+    our.organization_id,
+    our.user_id
+  FROM organization_user_relationships our
+  JOIN users u ON u.id = our.user_id
+  WHERE our.deleted IS FALSE
+    AND our.user_id IS NOT NULL
+    AND u.deleted_at IS NULL
+  ORDER BY our.organization_id, our.created_at ASC, our.user_id ASC
+) member
+WHERE k.organization_id = member.organization_id
+  AND k.deleted IS FALSE
+  AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = k.created_by_user_id)
+`
+
+// Points API keys whose created_by_user_id is not a users.id (including the
+// 'system' placeholder minted by the plugin rollout sweep) at the oldest
+// connected member of their organization. GetAPIKeyByKeyHash JOINs users on
+// that column, so these keys authenticate as 401 until this rewrite. This is
+// a deliberate cross-tenant repair — unlike tenant-scoped queries it is not
+// constrained to a project_id.
+func (q *Queries) RepairOrphanedAPIKeyCreators(ctx context.Context) (int64, error) {
+	result, err := q.db.Exec(ctx, repairOrphanedAPIKeyCreators)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const updateAPIKeyLastAccessedAt = `-- name: UpdateAPIKeyLastAccessedAt :exec

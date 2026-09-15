@@ -15,6 +15,7 @@ import {
   SheetTitle,
 } from "@/components/ui/Sheet";
 import { useOrgRoutes } from "@/routes";
+import type { GcpIamCredential } from "@gram/client/models/components/gcpiamcredential.js";
 import { useCreateGcpIamCredentialMutation } from "@gram/client/react-query/createGcpIamCredential";
 import { invalidateAllListExternalCredentials } from "@gram/client/react-query/listExternalCredentials";
 import { Alert } from "@/components/ui/Alert";
@@ -32,12 +33,19 @@ import {
 
 // CreateExternalCredentialSheet creates an organization external credential. The
 // External Service selector chooses the provider and swaps which fields render.
+//
+// onCreated lets a caller keep the user where they are instead of sending them
+// to the new credential's detail page. The encryption key form opens this sheet
+// to fill its own credential picker, and navigating away there would discard the
+// half-written key the user opened it from.
 export function CreateExternalCredentialSheet({
   open,
   onOpenChange,
+  onCreated,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onCreated?: (credential: GcpIamCredential) => void;
 }): JSX.Element {
   const orgRoutes = useOrgRoutes();
   const queryClient = useQueryClient();
@@ -52,6 +60,12 @@ export function CreateExternalCredentialSheet({
       await invalidateAllListExternalCredentials(queryClient);
       toast.success("External credential created");
       onOpenChange(false);
+
+      if (onCreated) {
+        onCreated(created);
+        return;
+      }
+
       orgRoutes.externalServices.credentialDetail.goTo(
         providerSlug(created.provider),
         created.id,

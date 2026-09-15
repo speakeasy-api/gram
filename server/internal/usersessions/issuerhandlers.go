@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/google/uuid"
@@ -25,6 +26,19 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
+const maxSessionDurationHours = int64(math.MaxInt64) / int64(time.Hour)
+
+func sessionDurationFromHours(hours int) (time.Duration, error) {
+	if hours <= 0 {
+		return 0, fmt.Errorf("session_duration_hours must be positive")
+	}
+	if int64(hours) > maxSessionDurationHours {
+		return 0, fmt.Errorf("session_duration_hours must not exceed %d", maxSessionDurationHours)
+	}
+
+	return time.Duration(int64(hours) * int64(time.Hour)), nil
+}
+
 // Creates an issuer. authn_challenge_mode is "chain" (the issuer
 // re-uses an upstream IdP without prompting) or "interactive" (the
 // issuer collects user consent before issuing a session).
@@ -43,10 +57,10 @@ func (s *Service) CreateUserSessionIssuer(ctx context.Context, payload *gen.Crea
 	if payload.Slug == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "slug is required").LogError(ctx, logger)
 	}
-	if payload.SessionDurationHours <= 0 {
-		return nil, oops.E(oops.CodeBadRequest, nil, "session_duration_hours must be positive").LogError(ctx, logger)
+	dur, err := sessionDurationFromHours(payload.SessionDurationHours)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid session_duration_hours: %v", err).LogError(ctx, logger)
 	}
-	dur := time.Duration(payload.SessionDurationHours) * time.Hour
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -56,6 +70,7 @@ func (s *Service) CreateUserSessionIssuer(ctx context.Context, payload *gen.Crea
 
 	row, err := repo.New(dbtx).CreateUserSessionIssuer(ctx, repo.CreateUserSessionIssuerParams{
 		ProjectID:          *authCtx.ProjectID,
+		OrganizationID:     conv.ToPGText(authCtx.ActiveOrganizationID),
 		Slug:               payload.Slug,
 		AuthnChallengeMode: payload.AuthnChallengeMode,
 		SessionDuration:    pgtype.Interval{Microseconds: dur.Microseconds(), Days: 0, Months: 0, Valid: true},
@@ -80,7 +95,7 @@ func (s *Service) CreateUserSessionIssuer(ctx context.Context, payload *gen.Crea
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
-	return userSessionIssuerView(row), nil
+	return UserSessionIssuerView(row), nil
 }
 
 // Patches an issuer; nil fields are no-ops.
@@ -103,10 +118,10 @@ func (s *Service) UpdateUserSessionIssuer(ctx context.Context, payload *gen.Upda
 
 	var durPtr *time.Duration
 	if payload.SessionDurationHours != nil {
-		if *payload.SessionDurationHours <= 0 {
-			return nil, oops.E(oops.CodeBadRequest, nil, "session_duration_hours must be positive").LogError(ctx, logger)
+		parsed, parseErr := sessionDurationFromHours(*payload.SessionDurationHours)
+		if parseErr != nil {
+			return nil, oops.E(oops.CodeBadRequest, parseErr, "invalid session_duration_hours: %v", parseErr).LogError(ctx, logger)
 		}
-		parsed := time.Duration(*payload.SessionDurationHours) * time.Hour
 		durPtr = &parsed
 	}
 	// Validated in app code: the column carries no CHECK constraint by
@@ -124,7 +139,7 @@ func (s *Service) UpdateUserSessionIssuer(ctx context.Context, payload *gen.Upda
 
 	txRepo := repo.New(dbtx)
 
-	existing, err := txRepo.GetUserSessionIssuerByID(ctx, repo.GetUserSessionIssuerByIDParams{
+	existing, err := txRepo.GetProjectUserSessionIssuerByID(ctx, repo.GetProjectUserSessionIssuerByIDParams{
 		ID:        id,
 		ProjectID: *authCtx.ProjectID,
 	})
@@ -135,7 +150,7 @@ func (s *Service) UpdateUserSessionIssuer(ctx context.Context, payload *gen.Upda
 		return nil, oops.E(oops.CodeUnexpected, err, "get user session issuer").LogError(ctx, logger)
 	}
 
-	beforeView := userSessionIssuerView(existing)
+	beforeView := UserSessionIssuerView(existing)
 
 	updated, err := txRepo.UpdateUserSessionIssuer(ctx, repo.UpdateUserSessionIssuerParams{
 		Slug:               conv.PtrToPGText(payload.Slug),
@@ -154,7 +169,7 @@ func (s *Service) UpdateUserSessionIssuer(ctx context.Context, payload *gen.Upda
 		return nil, oops.E(oops.CodeUnexpected, err, "update user session issuer").LogError(ctx, logger)
 	}
 
-	afterView := userSessionIssuerView(updated)
+	afterView := UserSessionIssuerView(updated)
 
 	if err := s.audit.LogUserSessionIssuerUpdate(ctx, dbtx, audit.LogUserSessionIssuerUpdateEvent{
 		OrganizationID:                  authCtx.ActiveOrganizationID,
@@ -195,9 +210,10 @@ func (s *Service) ListUserSessionIssuers(ctx context.Context, payload *gen.ListU
 	}
 
 	rows, err := repo.New(s.db).ListUserSessionIssuersByProjectID(ctx, repo.ListUserSessionIssuersByProjectIDParams{
-		ProjectID:  *authCtx.ProjectID,
-		Cursor:     cursor,
-		LimitValue: limit,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Cursor:         cursor,
+		LimitValue:     limit,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list user session issuers").LogError(ctx, s.logger)
@@ -205,7 +221,7 @@ func (s *Service) ListUserSessionIssuers(ctx context.Context, payload *gen.ListU
 
 	items := make([]*types.UserSessionIssuer, len(rows))
 	for i, row := range rows {
-		items[i] = userSessionIssuerView(row)
+		items[i] = UserSessionIssuerView(row)
 	}
 
 	var nextCursor *string
@@ -245,8 +261,9 @@ func (s *Service) GetUserSessionIssuer(ctx context.Context, payload *gen.GetUser
 		}
 
 		row, err = repo.New(s.db).GetUserSessionIssuerByID(ctx, repo.GetUserSessionIssuerByIDParams{
-			ID:        id,
-			ProjectID: *authCtx.ProjectID,
+			ID:             id,
+			ProjectID:      *authCtx.ProjectID,
+			OrganizationID: authCtx.ActiveOrganizationID,
 		})
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
@@ -268,7 +285,7 @@ func (s *Service) GetUserSessionIssuer(ctx context.Context, payload *gen.GetUser
 		}
 	}
 
-	return userSessionIssuerView(row), nil
+	return UserSessionIssuerView(row), nil
 }
 
 // Soft-deletes an issuer and cascades to its user_sessions and
@@ -297,6 +314,23 @@ func (s *Service) DeleteUserSessionIssuer(ctx context.Context, payload *gen.Dele
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := repo.New(dbtx)
+	if err := txRepo.LockUserSessionIssuerForOwnerBinding(ctx, id); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock user session issuer for owner binding").LogError(ctx, logger)
+	}
+
+	// Lock the issuer row before the ownership check. A concurrent meta MCP
+	// attach holds this same row lock while writing its reference, so once the
+	// lock is acquired the statements below run on a snapshot that includes
+	// any newly committed owner.
+	if _, err := txRepo.LockUserSessionIssuer(ctx, repo.LockUserSessionIssuerParams{
+		ID:        id,
+		ProjectID: *authCtx.ProjectID,
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, logger)
+		}
+		return oops.E(oops.CodeUnexpected, err, "lock user session issuer").LogError(ctx, logger)
+	}
 
 	hasActiveOwner, err := txRepo.UserSessionIssuerHasActiveOwner(ctx, repo.UserSessionIssuerHasActiveOwnerParams{
 		ProjectID:           *authCtx.ProjectID,
@@ -306,7 +340,7 @@ func (s *Service) DeleteUserSessionIssuer(ctx context.Context, payload *gen.Dele
 		return oops.E(oops.CodeUnexpected, err, "check user session issuer ownership").LogError(ctx, logger)
 	}
 	if hasActiveOwner {
-		return oops.E(oops.CodeConflict, nil, "user session issuer is still in use by an active MCP server or toolset")
+		return oops.E(oops.CodeConflict, nil, "user session issuer is still in use by an active MCP server, toolset, or meta MCP server")
 	}
 
 	deleted, err := txRepo.DeleteUserSessionIssuer(ctx, repo.DeleteUserSessionIssuerParams{
@@ -323,24 +357,19 @@ func (s *Service) DeleteUserSessionIssuer(ctx context.Context, payload *gen.Dele
 				return oops.E(oops.CodeUnexpected, ownerErr, "recheck user session issuer ownership").LogError(ctx, logger)
 			}
 			if hasActiveOwner {
-				return oops.E(oops.CodeConflict, nil, "user session issuer is still in use by an active MCP server or toolset")
+				return oops.E(oops.CodeConflict, nil, "user session issuer is still in use by an active MCP server, toolset, or meta MCP server")
 			}
 			return oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, logger)
 		}
 		return oops.E(oops.CodeUnexpected, err, "delete user session issuer").LogError(ctx, logger)
 	}
 
-	if err = txRepo.DeleteRemoteSessionClientAttachmentsForUserSessionIssuer(
-		ctx,
-		repo.DeleteRemoteSessionClientAttachmentsForUserSessionIssuerParams{
-			UserSessionIssuerID: deleted.ID,
-			ProjectID:           *authCtx.ProjectID,
-		},
-	); err != nil {
+	orphanCreds, err := s.revoker.DetachUserSessionIssuerFromClients(ctx, dbtx, deleted.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
+	if err != nil {
 		return oops.E(
 			oops.CodeUnexpected,
 			err,
-			"failed to delete remote session client attachments for user session issuer %s",
+			"failed to detach remote session clients from user session issuer %s",
 			deleted.ID,
 		).LogError(ctx, logger)
 	}
@@ -369,23 +398,36 @@ func (s *Service) DeleteUserSessionIssuer(ctx context.Context, payload *gen.Dele
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
+	// Post-commit, best-effort: RFC 7009 for the orphaned grants.
+	s.revoker.RevokeAllDetached(ctx, orphanCreds)
+
 	return nil
 }
 
-func userSessionIssuerView(row repo.UserSessionIssuer) *types.UserSessionIssuer {
+// UserSessionIssuerView projects an issuer row onto the API view. Exported so
+// the Platform MCP admission tools build the same audit snapshots this service
+// writes, rather than a second, drifting projection of the same row.
+func UserSessionIssuerView(row repo.UserSessionIssuer) *types.UserSessionIssuer {
 	dur := time.Duration(row.SessionDuration.Microseconds) * time.Microsecond
 	// The EFFECTIVE mode, never the raw column: an issuer that has never had
 	// one set stores NULL and reports the resolved default. Clients of this
 	// API — including the audit snapshots built from this view — should never
 	// have to know the unset state exists.
 	mode, _ := admission.ResolveMode(row.ClientIDMetadataAdmissionMode.String, row.ClientIDMetadataAdmissionMode.Valid)
+	projectID := ""
+	if row.ProjectID.Valid {
+		projectID = row.ProjectID.UUID.String()
+	}
+
 	return &types.UserSessionIssuer{
 		ID:                            row.ID.String(),
-		ProjectID:                     row.ProjectID.String(),
+		ProjectID:                     projectID,
+		OrganizationID:                conv.FromPGTextOrEmpty[string](row.OrganizationID),
 		Slug:                          row.Slug,
 		AuthnChallengeMode:            row.AuthnChallengeMode,
 		SessionDurationHours:          int(dur / time.Hour),
 		ClientIDMetadataAdmissionMode: string(mode),
+		TrustedRemoteSessionIssuerID:  conv.FromNullableUUID(row.TrustedRemoteSessionIssuerID),
 		CreatedAt:                     row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:                     row.UpdatedAt.Time.Format(time.RFC3339),
 	}

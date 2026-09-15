@@ -156,6 +156,11 @@ func TestChatClient_GetCompletion_ClassifiesHTTPErrorsBySanitizedBody(t *testing
 			require.Equal(t, tc.wantCorruption, IsHistoryCorruptionCandidate(err))
 			require.Equal(t, tc.wantBadRequest, IsBadRequest(err))
 			require.Equal(t, tc.wantContentPolicy, IsContentPolicy(err))
+			var httpErr *HTTPError
+			require.ErrorAs(t, err, &httpErr)
+			require.Equal(t, tc.status, httpErr.StatusCode)
+			wantPermanent := tc.status >= http.StatusBadRequest && tc.status < http.StatusInternalServerError && tc.status != http.StatusRequestTimeout && tc.status != http.StatusTooManyRequests
+			require.Equal(t, wantPermanent, IsPermanentError(err))
 
 			require.NotContains(t, err.Error(), echoedRequestCanary, "response body must not reach the error message for any status")
 			require.Contains(t, err.Error(), strconv.Itoa(tc.status), "status must survive sanitization")

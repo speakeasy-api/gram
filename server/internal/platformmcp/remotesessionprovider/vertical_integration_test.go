@@ -160,7 +160,7 @@ func TestReviewedRemoteSessionProviderVerticalSlice(t *testing.T) {
 	overflow, err := adapter.ProbeReadiness(ctx, providerProbeRequest(principal, project.ID, registration))
 	require.NoError(t, err)
 	require.Equal(t, platformmcp.ReadinessUnsupported, overflow.State)
-	require.Equal(t, "response_too_large", overflow.EvidenceCode)
+	require.Equal(t, "initialize_response_too_large", overflow.EvidenceCode)
 	upstream.mode.Store(upstreamModeNormal)
 
 	_, err = remotesessionsrepo.New(conn).RevokeRemoteSession(ctx, remotesessionsrepo.RevokeRemoteSessionParams{ID: remoteSession.ID, ProjectID: project.ID})
@@ -280,7 +280,7 @@ func newChallengeManager(t *testing.T, conn *pgxpool.Pool, policy *guardian.Poli
 	require.NoError(t, err)
 	baseURL, err := url.Parse("https://gram.test")
 	require.NoError(t, err)
-	return remotesessions.NewChallengeManager(testenv.NewLogger(t), conn, testenv.NewEncryptionClient(t), policy, cache.NewRedisCacheAdapter(redisClient), baseURL)
+	return remotesessions.NewChallengeManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, testenv.NewEncryptionClient(t), policy, cache.NewRedisCacheAdapter(redisClient), baseURL)
 }
 
 func seedPlatformRegistration(t *testing.T, ctx context.Context, conn *pgxpool.Pool) (platformmcp.Principal, platformmcp.ResolvedProject) {
@@ -299,7 +299,7 @@ func seedPlatformRegistration(t *testing.T, ctx context.Context, conn *pgxpool.P
 	require.NoError(t, err)
 	connectionID, generation := uuid.New(), uuid.New()
 	userID := "user_" + uuid.NewString()
-	_, err = platformrepo.New(conn).CreatePlatformMCPConnection(ctx, platformrepo.CreatePlatformMCPConnectionParams{ID: connectionID, OrganizationID: organizationID, SubjectUrn: urn.NewUserSubject(userID).String(), OauthClientID: client.ID, ActiveGeneration: generation})
+	_, err = platformrepo.New(conn).CreatePlatformMCPConnection(ctx, platformrepo.CreatePlatformMCPConnectionParams{ID: connectionID, OrganizationID: organizationID, SubjectUrn: urn.NewUserSubject(userID).String(), OauthClientID: client.ID, ActiveGeneration: generation, AuthorizationExpiresAt: pgtype.Timestamptz{Time: time.Now().UTC().Add(90 * 24 * time.Hour), Valid: true}})
 	require.NoError(t, err)
 	return platformmcp.Principal{UserID: userID, OrganizationID: organizationID, ConnectionID: connectionID.String(), Generation: generation.String()}, platformmcp.ResolvedProject{ID: project.ID, Name: project.Name, Slug: project.Slug}
 }
@@ -333,7 +333,7 @@ func seedRegistrationEligibleCohort(t *testing.T, ctx context.Context, conn *pgx
 	require.NoError(t, err)
 	_, err = mcpendpointsrepo.New(conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID:   projectID,
-		McpServerID: server.ID,
+		McpServerID: uuid.NullUUID{UUID: server.ID, Valid: true},
 		Slug:        "cohort-endpoint-" + uuid.NewString()[:8],
 	})
 	require.NoError(t, err)
@@ -346,7 +346,7 @@ func registerReviewedMCP(t *testing.T, ctx context.Context, conn *pgxpool.Pool, 
 	require.NoError(t, err)
 	receipt, err = store.ConvergeRegistration(ctx, principal, project, request, receipt)
 	require.NoError(t, err)
-	receipt, err = store.CompleteRegistration(ctx, principal, project, request, receipt, remoteURL)
+	receipt, err = store.CompleteRegistrationWithRemoteURL(ctx, principal, project, request, receipt, remoteURL)
 	require.NoError(t, err)
 	registration, err := platformrepo.New(conn).GetActivePlatformMCPCatalogRegistration(ctx, platformrepo.GetActivePlatformMCPCatalogRegistrationParams{OrganizationID: principal.OrganizationID, ProjectID: project.ID, SourceKind: request.SourceKind, CatalogProvider: request.CatalogProvider, CatalogReference: request.CatalogReference})
 	require.NoError(t, err)

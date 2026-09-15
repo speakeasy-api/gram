@@ -15,7 +15,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
-	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func TestService_DeleteRole(t *testing.T) {
@@ -28,14 +27,15 @@ func TestService_DeleteRole(t *testing.T) {
 
 	roleID := seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockRole("role_custom", "Custom Builder", "custom-builder", "Old description"))
 	ti.roles.On("DeleteRole", mock.Anything, mockidp.MockOrgID, "custom-builder").Return(nil).Once()
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeProjectRead, "project-1")
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeMCPConnect, authz.WildcardResource)
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeRiskPolicyEvaluate, "policy-1")
+	rolePrincipal := seededRolePrincipal(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "custom-builder")
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, rolePrincipal, authz.ScopeProjectRead, "project-1")
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, rolePrincipal, authz.ScopeMCPConnect, authz.WildcardResource)
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, rolePrincipal, authz.ScopeRiskPolicyEvaluate, "policy-1")
 
 	err := ti.service.DeleteRole(ctx, &gen.DeleteRolePayload{ID: roleID})
 	require.NoError(t, err)
 
-	grants := listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"))
+	grants := listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, rolePrincipal)
 	require.Empty(t, grants)
 
 	role, err := accessrepo.New(ti.conn).GetOrganizationRoleBySlug(ctx, accessrepo.GetOrganizationRoleBySlugParams{
@@ -123,12 +123,13 @@ func TestService_DeleteRole_ReassignFailureDoesNotHaltDelete(t *testing.T) {
 	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "", mockMember(mockidp.MockOrgID, "membership_1", "user_1", "custom-builder"))
 	ti.roles.On("UpdateMemberRoles", mock.Anything, "membership_1", []string{authz.SystemRoleMember}).Return((*thirdpartyworkos.Member)(nil), errors.New("workos unavailable")).Times(3)
 	ti.roles.On("DeleteRole", mock.Anything, mockidp.MockOrgID, "custom-builder").Return(nil).Once()
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeProjectRead, "project-1")
+	rolePrincipal := seededRolePrincipal(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "custom-builder")
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, rolePrincipal, authz.ScopeProjectRead, "project-1")
 
 	err := ti.service.DeleteRole(ctx, &gen.DeleteRolePayload{ID: roleID})
 	require.NoError(t, err)
 
-	grants := listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"))
+	grants := listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, rolePrincipal)
 	require.Empty(t, grants)
 }
 
@@ -153,12 +154,13 @@ func TestService_DeleteRole_PartialReassignFailureContinuesDelete(t *testing.T) 
 	}, nil).Once()
 	ti.roles.On("UpdateMemberRoles", mock.Anything, "membership_2", []string{authz.SystemRoleMember}).Return((*thirdpartyworkos.Member)(nil), errors.New("workos unavailable")).Times(3)
 	ti.roles.On("DeleteRole", mock.Anything, mockidp.MockOrgID, "custom-builder").Return(nil).Once()
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeProjectRead, "project-1")
+	rolePrincipal := seededRolePrincipal(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "custom-builder")
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, rolePrincipal, authz.ScopeProjectRead, "project-1")
 
 	err := ti.service.DeleteRole(ctx, &gen.DeleteRolePayload{ID: roleID})
 	require.NoError(t, err)
 
-	grants := listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"))
+	grants := listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, rolePrincipal)
 	require.Empty(t, grants)
 }
 
@@ -194,12 +196,13 @@ func TestService_DeleteRole_WorkOSDeleteFailure(t *testing.T) {
 	require.NotNil(t, authCtx)
 	roleID := seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockRole("role_custom", "Custom Builder", "custom-builder", "Old description"))
 	ti.roles.On("DeleteRole", mock.Anything, mockidp.MockOrgID, "custom-builder").Return(errors.New("workos unavailable")).Times(3)
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeProjectRead, "project-1")
+	rolePrincipal := seededRolePrincipal(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "custom-builder")
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, rolePrincipal, authz.ScopeProjectRead, "project-1")
 
 	err := ti.service.DeleteRole(ctx, &gen.DeleteRolePayload{ID: roleID})
 	require.NoError(t, err)
 
-	grants := listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"))
+	grants := listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, rolePrincipal)
 	require.Empty(t, grants)
 }
 
@@ -215,7 +218,7 @@ func TestService_DeleteRole_AuditLog(t *testing.T) {
 
 	roleID := seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockRole("role_custom", "Audit Builder", "custom-builder", "Old description"))
 	ti.roles.On("DeleteRole", mock.Anything, mockidp.MockOrgID, "custom-builder").Return(nil).Once()
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeProjectRead, "project-1")
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, seededRolePrincipal(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "custom-builder"), authz.ScopeProjectRead, "project-1")
 
 	err = ti.service.DeleteRole(ctx, &gen.DeleteRolePayload{ID: roleID})
 	require.NoError(t, err)

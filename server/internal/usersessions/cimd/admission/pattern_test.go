@@ -7,7 +7,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const chatGPTPattern = "https://chatgpt.com/oauth/*/client.json"
+const (
+	chatGPTPattern = "https://chatgpt.com/oauth/*/client.json"
+	codexPattern   = "https://chatgpt.com/oauth/codex/*/client.json"
+)
 
 func TestPresetIsPattern(t *testing.T) {
 	t.Parallel()
@@ -220,6 +223,55 @@ func TestCatalogAdmits_ChatGPTConnectorNamespace(t *testing.T) {
 
 	require.False(t, catalogAdmits("https://chatgpt.com.evil.example.com/oauth/x/client.json"))
 	require.False(t, catalogAdmits("https://chatgpt.com/oauth/x/y/client.json"))
+}
+
+// TestCatalogAdmits_CodexPerServerNamespace exercises the Codex CLI pattern
+// against the client_id shape Codex ≥0.148.0 presents: {id} is a 12-char
+// base64url-no-pad digest of the MCP server URL, so real ids draw only on
+// A-Z, a-z, 0-9, "-", and "_" — an alphabet containing no "/", which is
+// what makes single-segment matching sound for this namespace.
+func TestCatalogAdmits_CodexPerServerNamespace(t *testing.T) {
+	t.Parallel()
+
+	// The first two are real ids observed in production denials (AIS-582);
+	// between them they cover the "-" alphabet character, and the third
+	// covers "_".
+	admitted := []string{
+		"https://chatgpt.com/oauth/codex/WoV6218LroET/client.json",
+		"https://chatgpt.com/oauth/codex/Lv2-Pvw8pHkH/client.json",
+		"https://chatgpt.com/oauth/codex/p9jr1GJD7_bK/client.json",
+	}
+	for _, clientID := range admitted {
+		require.Truef(t, matchesPattern(codexPattern, clientID), "%q should match", clientID)
+		require.Truef(t, catalogAdmits(clientID), "%q should be admitted by the catalog", clientID)
+	}
+
+	rejected := []string{
+		"https://chatgpt.com/oauth/codex/client.json",                    // zero segments for the *
+		"https://chatgpt.com/oauth/codex/a/b/client.json",                // two segments for one *
+		"https://chatgpt.com/oauth/codex//client.json",                   // empty segment
+		"https://chatgpt.com/oauth/other/abc123/client.json",             // literal segment differs
+		"https://chatgpt.com/oauth/codex/x/client.json?probe=1",          // query is part of the compare
+		"https://chatgpt.com.evil.example.com/oauth/codex/x/client.json", // suffix-extended host
+	}
+	for _, clientID := range rejected {
+		require.Falsef(t, matchesPattern(codexPattern, clientID), "%q must NOT match", clientID)
+	}
+	// The deeper shape must miss the whole catalog, not just this pattern.
+	require.False(t, catalogAdmits("https://chatgpt.com/oauth/codex/a/b/client.json"))
+}
+
+// TestCatalog_CodexStableDocumentAttribution pins which rule covers the
+// DisplayOnly stable Codex document: the one-segment connector wildcard,
+// not the Codex per-server pattern, which requires a segment between
+// "codex" and "client.json". A catalog edit that shifts this coverage
+// should fail here rather than move the invariant silently.
+func TestCatalog_CodexStableDocumentAttribution(t *testing.T) {
+	t.Parallel()
+
+	const stableDocument = "https://chatgpt.com/oauth/codex/client.json"
+	require.True(t, matchesPattern(chatGPTPattern, stableDocument))
+	require.False(t, matchesPattern(codexPattern, stableDocument))
 }
 
 // TestCatalogAdmits_ExactEntriesUnaffectedByPatterns: adding wildcards must

@@ -3,6 +3,7 @@ package remotemcp
 import (
 	. "goa.design/goa/v3/dsl"
 
+	mcpservers "github.com/speakeasy-api/gram/server/design/mcpservers"
 	"github.com/speakeasy-api/gram/server/design/security"
 	"github.com/speakeasy-api/gram/server/design/shared"
 )
@@ -38,6 +39,30 @@ var _ = Service("remoteMcp", func() {
 		Meta("openapi:operationId", "createRemoteMcpServer")
 		Meta("openapi:extension:x-speakeasy-name-override", "createServer")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateRemoteMcpServer"}`)
+	})
+
+	Method("createServerAndMcpServer", func() {
+		Description("Create a remote MCP server and its linked, disabled MCP server atomically. The dashboard uses this workflow so a failed linked-server creation never leaves an orphan remote source.")
+
+		Payload(func() {
+			Extend(CreateServerForm)
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(CreateServerAndMcpServerResult)
+
+		HTTP(func() {
+			POST("/rpc/remoteMcp.createServerAndMcpServer")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "createRemoteMcpServerAndMcpServer")
+		Meta("openapi:extension:x-speakeasy-name-override", "createServerAndMcpServer")
 	})
 
 	Method("listServers", func() {
@@ -398,6 +423,9 @@ var ProtectedResourceMetadata = Type("ProtectedResourceMetadata", func() {
 	Attribute("scopes_supported", ArrayOf(String), "Scopes advertised by the resource server.")
 	Attribute("bearer_methods_supported", ArrayOf(String), "Bearer token presentation methods accepted by the resource server.")
 	Attribute("resource_documentation", String, "URL of human-readable documentation for the resource server.")
+	Attribute("resource_name", String, "Human-readable display name of the resource server.")
+	Attribute("resource_policy_uri", String, "URL of the resource server's data-usage policy.")
+	Attribute("resource_tos_uri", String, "URL of the resource server's terms of service.")
 })
 
 var ProtectedResourceMetadataUnavailable = Type("ProtectedResourceMetadataUnavailable", func() {
@@ -494,6 +522,15 @@ var RemoteMcpServerHeader = Type("RemoteMcpServerHeader", func() {
 	})
 
 	Required("id", "name", "is_required", "is_secret", "created_at", "updated_at")
+})
+
+var CreateServerAndMcpServerResult = Type("CreateServerAndMcpServerResult", func() {
+	Description("The atomically created remote MCP source and its linked disabled MCP server.")
+
+	Attribute("remote_mcp_server", RemoteMcpServer)
+	Attribute("mcp_server", mcpservers.McpServer)
+
+	Required("remote_mcp_server", "mcp_server")
 })
 
 var ListServersResult = Type("ListServersResult", func() {

@@ -1,3 +1,4 @@
+import { catalogLogoClassName } from "./logo";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Label } from "@/components/ui/Label";
 import { Text } from "@/components/ui/Text";
@@ -549,7 +550,10 @@ function SelectRemotesPhaseContent({
               <img
                 src={currentConfig.server.iconUrl}
                 alt=""
-                className="h-6 w-6"
+                className={cn(
+                  "h-6 w-6",
+                  catalogLogoClassName(currentConfig.server.registrySpecifier),
+                )}
               />
             ) : (
               <ServerIcon className="text-muted-foreground h-5 w-5" />
@@ -851,7 +855,14 @@ function BatchServerConfig({
             <div className="flex items-center gap-3">
               <div className="bg-primary/10 flex h-6 w-6 shrink-0 items-center justify-center">
                 {config.server.iconUrl ? (
-                  <img src={config.server.iconUrl} alt="" className="h-4 w-4" />
+                  <img
+                    src={config.server.iconUrl}
+                    alt=""
+                    className={cn(
+                      "h-4 w-4",
+                      catalogLogoClassName(config.server.registrySpecifier),
+                    )}
+                  />
                 ) : (
                   <ServerIcon className="text-muted-foreground h-3 w-3" />
                 )}
@@ -1255,7 +1266,7 @@ function NextSteps({
     <div>
       <Text className="mb-2 font-medium">Next steps</Text>
       <div className="grid grid-cols-2 gap-2">
-        <routes.sources.Link className="no-underline hover:no-underline">
+        <routes.mcp.Link className="no-underline hover:no-underline">
           <div className="group hover:border-foreground/20 hover:bg-muted/30 flex h-full items-center gap-3 border p-3 transition-all [&_*]:no-underline">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center bg-blue-500/10 dark:bg-blue-500/20">
               <Plus className="h-4 w-4 text-blue-600 dark:text-blue-400" />
@@ -1267,7 +1278,7 @@ function NextSteps({
             </div>
             <ArrowRight className="text-muted-foreground h-4 w-4 opacity-0 transition-opacity group-hover:opacity-100" />
           </div>
-        </routes.sources.Link>
+        </routes.mcp.Link>
         {status.mcpEndpointUrl && (
           <a
             href={`${status.mcpEndpointUrl}/install`}

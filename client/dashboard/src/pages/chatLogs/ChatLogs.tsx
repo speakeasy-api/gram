@@ -1,20 +1,10 @@
-import { RequireScope } from "@/components/require-scope";
+import { WorkbenchPage } from "@/components/page-templates";
 import { LogsAgentsContent } from "@/components/observe/LogsAgents";
-import { Page } from "@/components/page-layout";
 
 export default function ChatLogs(): JSX.Element {
   return (
-    <div className="flex h-full flex-col">
-      <Page>
-        <Page.Header>
-          <Page.Header.Breadcrumbs fullWidth />
-        </Page.Header>
-        <Page.Body fullWidth fullHeight overflowHidden noPadding>
-          <RequireScope scope="org:admin" level="page">
-            <LogsAgentsContent />
-          </RequireScope>
-        </Page.Body>
-      </Page>
-    </div>
+    <WorkbenchPage scope="org:admin">
+      <LogsAgentsContent />
+    </WorkbenchPage>
   );
 }

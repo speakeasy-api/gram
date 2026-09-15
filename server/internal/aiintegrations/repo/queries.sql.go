@@ -50,20 +50,47 @@ func (q *Queries) AdvanceWatermark(ctx context.Context, arg AdvanceWatermarkPara
 	return err
 }
 
-const clearSyncSchedulePauses = `-- name: ClearSyncSchedulePauses :exec
-UPDATE ai_integration_syncs
-SET auto_paused_at = NULL,
-    consecutive_failures = 0,
-    updated_at = clock_timestamp()
-WHERE ai_integration_config_id = $1
+const clearSyncSchedulePauses = `-- name: ClearSyncSchedulePauses :one
+WITH cleared AS (
+  UPDATE ai_integration_syncs
+  SET next_poll_after = CASE
+        WHEN consecutive_failures > 0 OR auto_paused_at IS NOT NULL
+        THEN clock_timestamp()
+        ELSE next_poll_after
+      END,
+      auto_paused_at = NULL,
+      consecutive_failures = 0,
+      updated_at = clock_timestamp()
+  WHERE ai_integration_config_id = $2
+  RETURNING schedule, next_poll_after, consecutive_failures
+)
+SELECT next_poll_after, consecutive_failures
+FROM cleared
+WHERE schedule = $1
 `
+
+type ClearSyncSchedulePausesParams struct {
+	Schedule              string
+	AiIntegrationConfigID uuid.UUID
+}
+
+type ClearSyncSchedulePausesRow struct {
+	NextPollAfter       pgtype.Timestamptz
+	ConsecutiveFailures int32
+}
 
 // ClearSyncSchedulePauses lifts any automatic pause on all of a config's
 // schedules and resets their failure streaks. Runs whenever the user saves
-// the integration so a fixed configuration starts polling again.
-func (q *Queries) ClearSyncSchedulePauses(ctx context.Context, aiIntegrationConfigID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, clearSyncSchedulePauses, aiIntegrationConfigID)
-	return err
+// the integration so a fixed configuration starts polling again. Schedules
+// that were failing also become due immediately: failure backoff can leave
+// next_poll_after hours out, and keeping it would leave a just-fixed
+// integration dark until the backed-off time arrives. Healthy schedules
+// keep their cadence.
+func (q *Queries) ClearSyncSchedulePauses(ctx context.Context, arg ClearSyncSchedulePausesParams) (ClearSyncSchedulePausesRow, error) {
+	row := q.db.QueryRow(ctx, clearSyncSchedulePauses, arg.Schedule, arg.AiIntegrationConfigID)
+	var i ClearSyncSchedulePausesRow
+	err := row.Scan(&i.NextPollAfter, &i.ConsecutiveFailures)
+	return i, err
 }
 
 const countConfigsByOrganization = `-- name: CountConfigsByOrganization :one
@@ -96,6 +123,39 @@ func (q *Queries) CountSyncRowsForTest(ctx context.Context, aiIntegrationConfigI
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const deleteAnthropicInferenceConfig = `-- name: DeleteAnthropicInferenceConfig :one
+UPDATE ai_integration_configs
+SET deleted_at = clock_timestamp(), enabled = false
+WHERE organization_id = $1 AND project_id = $2
+  AND provider = 'anthropic_inference' AND deleted IS FALSE
+RETURNING created_at, deleted_at, updated_at, organization_id, provider, project_id, external_organization_id, api_key_encrypted, enabled, billing_mode, id, deleted
+`
+
+type DeleteAnthropicInferenceConfigParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) DeleteAnthropicInferenceConfig(ctx context.Context, arg DeleteAnthropicInferenceConfigParams) (AiIntegrationConfig, error) {
+	row := q.db.QueryRow(ctx, deleteAnthropicInferenceConfig, arg.OrganizationID, arg.ProjectID)
+	var i AiIntegrationConfig
+	err := row.Scan(
+		&i.CreatedAt,
+		&i.DeletedAt,
+		&i.UpdatedAt,
+		&i.OrganizationID,
+		&i.Provider,
+		&i.ProjectID,
+		&i.ExternalOrganizationID,
+		&i.ApiKeyEncrypted,
+		&i.Enabled,
+		&i.BillingMode,
+		&i.ID,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const ensureProviderSyncSchedules = `-- name: EnsureProviderSyncSchedules :exec
@@ -219,6 +279,63 @@ func (q *Queries) EnsureSync(ctx context.Context, arg EnsureSyncParams) (EnsureS
 		&i.AutoPausedAt,
 		&i.DisabledAt,
 		&i.ID,
+	)
+	return i, err
+}
+
+const getAnthropicInferenceConfig = `-- name: GetAnthropicInferenceConfig :one
+SELECT created_at, deleted_at, updated_at, organization_id, provider, project_id, external_organization_id, api_key_encrypted, enabled, billing_mode, id, deleted FROM ai_integration_configs
+WHERE organization_id = $1
+  AND provider = 'anthropic_inference'
+  AND deleted IS FALSE
+`
+
+// Inference hooks are push integrations and deliberately have no poll schedules.
+func (q *Queries) GetAnthropicInferenceConfig(ctx context.Context, organizationID string) (AiIntegrationConfig, error) {
+	row := q.db.QueryRow(ctx, getAnthropicInferenceConfig, organizationID)
+	var i AiIntegrationConfig
+	err := row.Scan(
+		&i.CreatedAt,
+		&i.DeletedAt,
+		&i.UpdatedAt,
+		&i.OrganizationID,
+		&i.Provider,
+		&i.ProjectID,
+		&i.ExternalOrganizationID,
+		&i.ApiKeyEncrypted,
+		&i.Enabled,
+		&i.BillingMode,
+		&i.ID,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getAnthropicInferenceConfigByID = `-- name: GetAnthropicInferenceConfigByID :one
+SELECT c.created_at, c.deleted_at, c.updated_at, c.organization_id, c.provider, c.project_id, c.external_organization_id, c.api_key_encrypted, c.enabled, c.billing_mode, c.id, c.deleted FROM ai_integration_configs c
+JOIN projects p ON p.id = c.project_id AND p.organization_id = c.organization_id
+WHERE c.id = $1 AND c.provider = 'anthropic_inference'
+  AND c.deleted IS FALSE AND p.deleted IS FALSE
+`
+
+// The random endpoint identifier is the credential lookup key before signature
+// verification; it does not itself authorize ingestion.
+func (q *Queries) GetAnthropicInferenceConfigByID(ctx context.Context, id uuid.UUID) (AiIntegrationConfig, error) {
+	row := q.db.QueryRow(ctx, getAnthropicInferenceConfigByID, id)
+	var i AiIntegrationConfig
+	err := row.Scan(
+		&i.CreatedAt,
+		&i.DeletedAt,
+		&i.UpdatedAt,
+		&i.OrganizationID,
+		&i.Provider,
+		&i.ProjectID,
+		&i.ExternalOrganizationID,
+		&i.ApiKeyEncrypted,
+		&i.Enabled,
+		&i.BillingMode,
+		&i.ID,
+		&i.Deleted,
 	)
 	return i, err
 }
@@ -864,6 +981,16 @@ func (q *Queries) ListUsagePollCandidates(ctx context.Context, arg ListUsagePoll
 	return items, nil
 }
 
+const lockAnthropicInferenceConfig = `-- name: LockAnthropicInferenceConfig :exec
+SELECT pg_advisory_xact_lock(hashtextextended('anthropic_inference:' || $1::text, 0))
+`
+
+// Serialize organization-level setup, including concurrent first-time requests.
+func (q *Queries) LockAnthropicInferenceConfig(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, lockAnthropicInferenceConfig, organizationID)
+	return err
+}
+
 const recordPollSuccessKeepWatermark = `-- name: RecordPollSuccessKeepWatermark :exec
 UPDATE ai_integration_syncs
 SET next_poll_after = $1,
@@ -1046,6 +1173,23 @@ func (q *Queries) RetrySyncSchedule(ctx context.Context, arg RetrySyncSchedulePa
 const setSyncScheduleDisabled = `-- name: SetSyncScheduleDisabled :one
 UPDATE ai_integration_syncs
 SET disabled_at = CASE WHEN $1::bool THEN clock_timestamp() ELSE NULL END,
+    next_poll_after = CASE
+      WHEN NOT $1::bool
+        AND disabled_at IS NOT NULL
+        AND (consecutive_failures > 0 OR auto_paused_at IS NOT NULL)
+      THEN clock_timestamp()
+      ELSE next_poll_after
+    END,
+    consecutive_failures = CASE
+      WHEN NOT $1::bool AND disabled_at IS NOT NULL
+      THEN 0
+      ELSE consecutive_failures
+    END,
+    auto_paused_at = CASE
+      WHEN NOT $1::bool AND disabled_at IS NOT NULL
+      THEN NULL
+      ELSE auto_paused_at
+    END,
     updated_at = clock_timestamp()
 WHERE ai_integration_config_id = $2
   AND schedule = $3
@@ -1060,8 +1204,14 @@ type SetSyncScheduleDisabledParams struct {
 
 // SetSyncScheduleDisabled records a user's explicit pause (or unpause) of one
 // sync schedule. Distinct from auto_paused_at: only the user flips this flag.
-// Re-enabling leaves next_poll_after untouched — a stale value is already due,
-// so candidate selection picks the schedule up on the next scheduler tick.
+// Transitioning a schedule from disabled to enabled starts a fresh run: it
+// becomes due immediately when it was failing or auto-paused — failure
+// backoff can leave next_poll_after hours out — its failure streak resets so
+// polling resumes at full cadence instead of continuing the old backoff
+// toward the auto-pause threshold, and any automatic pause lifts, since
+// candidate selection would otherwise never re-enqueue the schedule the user
+// just asked to run. An already-enabled or healthy schedule keeps its
+// next_poll_after, streak, and pause state.
 func (q *Queries) SetSyncScheduleDisabled(ctx context.Context, arg SetSyncScheduleDisabledParams) (AiIntegrationSync, error) {
 	row := q.db.QueryRow(ctx, setSyncScheduleDisabled, arg.Disabled, arg.AiIntegrationConfigID, arg.Schedule)
 	var i AiIntegrationSync
@@ -1102,6 +1252,51 @@ type SoftDeleteConfigParams struct {
 func (q *Queries) SoftDeleteConfig(ctx context.Context, arg SoftDeleteConfigParams) error {
 	_, err := q.db.Exec(ctx, softDeleteConfig, arg.OrganizationID, arg.Provider)
 	return err
+}
+
+const updateAnthropicInferenceConfig = `-- name: UpdateAnthropicInferenceConfig :one
+UPDATE ai_integration_configs
+SET api_key_encrypted = $1,
+    enabled = $2,
+    updated_at = clock_timestamp()
+WHERE id = $3 AND organization_id = $4
+  AND project_id = $5 AND provider = 'anthropic_inference'
+  AND deleted IS FALSE
+RETURNING created_at, deleted_at, updated_at, organization_id, provider, project_id, external_organization_id, api_key_encrypted, enabled, billing_mode, id, deleted
+`
+
+type UpdateAnthropicInferenceConfigParams struct {
+	ApiKeyEncrypted string
+	Enabled         bool
+	ID              uuid.UUID
+	OrganizationID  string
+	ProjectID       uuid.UUID
+}
+
+func (q *Queries) UpdateAnthropicInferenceConfig(ctx context.Context, arg UpdateAnthropicInferenceConfigParams) (AiIntegrationConfig, error) {
+	row := q.db.QueryRow(ctx, updateAnthropicInferenceConfig,
+		arg.ApiKeyEncrypted,
+		arg.Enabled,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ProjectID,
+	)
+	var i AiIntegrationConfig
+	err := row.Scan(
+		&i.CreatedAt,
+		&i.DeletedAt,
+		&i.UpdatedAt,
+		&i.OrganizationID,
+		&i.Provider,
+		&i.ProjectID,
+		&i.ExternalOrganizationID,
+		&i.ApiKeyEncrypted,
+		&i.Enabled,
+		&i.BillingMode,
+		&i.ID,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const updateConfigSettings = `-- name: UpdateConfigSettings :one

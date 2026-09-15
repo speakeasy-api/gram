@@ -122,11 +122,47 @@ func (s *Signer) Validate(token, expectedAudience string) (*SessionClaims, error
 	return &claims, nil
 }
 
-// ValidatedSession is a verified token's caller identity.
+// ValidateExactAudience parses and verifies a signed token whose audience must
+// be exactly the expected singleton. Use this for resource servers that must not
+// accept a token broadened to additional audiences.
+func (s *Signer) ValidateExactAudience(token, expectedAudience string) (*SessionClaims, error) {
+	claims, err := s.Validate(token, expectedAudience)
+	if err != nil {
+		return nil, err
+	}
+	if len(claims.Audience) != 1 || claims.Audience[0] != expectedAudience {
+		return nil, errors.New("validate token: audience must exactly match the resource")
+	}
+	return claims, nil
+}
+
+// ValidatedSession is opaque proof that a token's caller identity passed
+// ValidateBearer. Its fields are deliberately private so callers cannot forge
+// an authoritative session from a subject or user ID.
 type ValidatedSession struct {
-	Subject  urn.SessionSubject
-	JTI      string
-	ClientID string
+	subject   urn.SessionSubject
+	jti       string
+	clientID  string
+	validated bool
+}
+
+// Subject returns the verified session subject.
+func (s ValidatedSession) Subject() urn.SessionSubject { return s.subject }
+
+// JTI returns the verified token identifier.
+func (s ValidatedSession) JTI() string { return s.jti }
+
+// ClientID returns the verified OAuth client ID, if present.
+func (s ValidatedSession) ClientID() string { return s.clientID }
+
+// Valid reports whether this value was produced by ValidateBearer and still
+// contains a well-formed subject and token identifier.
+func (s ValidatedSession) Valid() bool {
+	if !s.validated || s.jti == "" {
+		return false
+	}
+	_, err := s.subject.MarshalText()
+	return err == nil
 }
 
 // ValidateBearer verifies signature, expiry, audience, revocation, and subject.
@@ -154,7 +190,7 @@ func (s *Signer) ValidateBearer(ctx context.Context, token, expectedAudience str
 	if err != nil {
 		return ValidatedSession{}, fmt.Errorf("parse session subject: %w", err)
 	}
-	return ValidatedSession{Subject: subject, JTI: claims.ID, ClientID: claims.ClientID}, nil
+	return ValidatedSession{subject: subject, jti: claims.ID, clientID: claims.ClientID, validated: true}, nil
 }
 
 func validSuppliedJTI(jti string) bool {

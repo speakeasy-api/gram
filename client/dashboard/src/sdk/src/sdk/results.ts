@@ -49,7 +49,7 @@ export class Results extends ClientSDK {
    * listDismissedRiskResults risk
    *
    * @remarks
-   * List risk results manually marked as false positive for the current project (the Dismissed tab). Kept separate from listRiskResults, which never returns dismissed results.
+   * List suppressed risk results for the current project — findings hidden by an exclusion rule, a manual dismissal, or the automated false-positive sweep. Kept separate from listRiskResults, which never returns suppressed results.
    */
   async listDismissed(
     request?: ListDismissedRiskResultsRequest | undefined,

@@ -1,7 +1,9 @@
-import { MetricCard, MetricCardGroup } from "@/components/chart/MetricCard";
+import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
+import { useOrganization } from "@/contexts/Auth";
 import { InputField } from "@/components/moon/input-field";
 import { Page } from "@/components/page-layout";
 import { MCPStatusIndicator } from "@/components/mcp/MCPStatusIndicator";
+import { useRecentLabelOverride } from "@/components/command-palette/recentlyVisited";
 import { RequireScope } from "@/components/require-scope";
 import { ToolCollectionBadge } from "@/components/tool-collection-badge";
 import { Button as UiButton } from "@/components/ui/Button";
@@ -16,7 +18,7 @@ import { mcpServerRouteParam } from "@/lib/sources";
 import {
   DangerSettingsSection,
   SettingsSection,
-} from "@/pages/mcp/x/tabs/settings/SettingsSection";
+} from "@/components/detail/settings-section";
 import { useRoutes } from "@/routes";
 import {
   invalidateAllPlugin,
@@ -35,6 +37,7 @@ import { useRemovePluginServerMutation } from "@gram/client/react-query/removePl
 import { useListToolsets } from "@gram/client/react-query/listToolsets";
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers";
+import { useAudiences } from "@gram/client/react-query/audiences";
 import { useMembers } from "@gram/client/react-query/members";
 import { useRoles } from "@gram/client/react-query/roles";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
@@ -82,6 +85,7 @@ import { PluginSkillsSection } from "./PluginSkillsSection";
 import { PluginAssignmentsList } from "./PluginAssignmentsList";
 import {
   activePluginSection,
+  pluginSectionHref,
   PLUGIN_ASSIGNMENTS_SECTION_ID,
   PLUGIN_OVERVIEW_SECTION_ID,
   PLUGIN_SERVERS_SECTION_ID,
@@ -89,15 +93,19 @@ import {
   PLUGIN_SKILLS_SECTION_ID,
 } from "./plugin-detail-sections";
 import { countPluginInstalls } from "./plugin-reach";
-import { describePrincipal, memberMapByUrn, roleMapByUrn } from "./principals";
+import {
+  audienceMapByUrn,
+  describePrincipal,
+  memberMapByUrn,
+  roleMapByUrn,
+} from "./principals";
 import { PublishDialog } from "./PublishDialog";
 import { SectionEmptyState } from "./SectionEmptyState";
 import { usePluginAssignmentsVisible } from "./use-plugin-assignments-visible";
 
 // A selectable server for a plugin, sourced from either a toolset (Hosted) or
 // a Remote- or unproxied-MCP-backed mcp_server. The kind determines
-// whether it is submitted as a toolset_id or an mcp_server_id, mirroring the
-// collections picker.
+// whether it is submitted as a toolset_id or an mcp_server_id.
 type ServerOptionKind = "toolset" | "mcpServer";
 type ServerOption = {
   kind: ServerOptionKind;
@@ -144,6 +152,7 @@ export default function PluginDetail(): JSX.Element | null {
   }, [pluginId]);
 
   const { data: plugin } = usePluginSuspense({ id: pluginId! });
+  useRecentLabelOverride(location.pathname, plugin.name);
   // Polled so the publish-freshness badges/banner pick up the Temporal
   // generator-rollout schedule's auto-sync without a manual refresh.
   const { data: publishStatus } = usePublishStatus(undefined, undefined, {
@@ -203,6 +212,7 @@ export default function PluginDetail(): JSX.Element | null {
   // Query dedupes these with the sheet's own calls.
   const { data: rolesData } = useRoles();
   const { data: membersData } = useMembers();
+  const { data: audiencesData } = useAudiences();
   const roleByUrn = useMemo(
     () => roleMapByUrn(rolesData?.roles ?? []),
     [rolesData?.roles],
@@ -211,9 +221,16 @@ export default function PluginDetail(): JSX.Element | null {
     () => memberMapByUrn(membersData?.members ?? []),
     [membersData?.members],
   );
+  const audienceByUrn = useMemo(
+    () => audienceMapByUrn(audiencesData?.audiences ?? []),
+    [audiencesData?.audiences],
+  );
 
   const showAssignments = usePluginAssignmentsVisible();
-  const { data: productFeatures } = useProductFeatures();
+  const organization = useOrganization();
+  const { data: productFeatures } = useProductFeatures({
+    organizationId: organization.id,
+  });
 
   // Device-agent reach powers the Installs stat. It's an admin-only, org-scoped
   // list, so it's fetched only for device-agent orgs and degrades quietly
@@ -500,6 +517,7 @@ export default function PluginDetail(): JSX.Element | null {
           a.principalUrn,
           roleByUrn,
           memberByUrn,
+          audienceByUrn,
         );
         const email = memberByUrn.get(a.principalUrn)?.email ?? "";
         return (
@@ -527,6 +545,7 @@ export default function PluginDetail(): JSX.Element | null {
         assignments={filteredAssignments}
         roleByUrn={roleByUrn}
         memberByUrn={memberByUrn}
+        audienceByUrn={audienceByUrn}
       />
     );
   }
@@ -578,32 +597,47 @@ export default function PluginDetail(): JSX.Element | null {
                 </Stack>
               </div>
 
-              <MetricCardGroup>
-                <MetricCard
+              <StatTileGroup>
+                <StatTile
                   title="MCP servers"
                   value={plugin.serverCount ?? servers.length}
                   tone="information"
                   format="number"
                   icon="network"
+                  link={pluginSectionHref(
+                    routes,
+                    pluginId!,
+                    PLUGIN_SERVERS_SECTION_ID,
+                  )}
                 />
-                <MetricCard
+                <StatTile
                   title="Skills"
                   value={plugin.skillCount ?? 0}
                   tone="information"
                   format="number"
                   icon="sparkles"
+                  link={pluginSectionHref(
+                    routes,
+                    pluginId!,
+                    PLUGIN_SKILLS_SECTION_ID,
+                  )}
                 />
                 {showAssignments && (
                   <>
-                    <MetricCard
+                    <StatTile
                       title="Assignments"
                       value={plugin.assignmentCount ?? assignments.length}
                       tone="information"
                       format="number"
                       icon="users"
                       subtext="Roles, users, and emails"
+                      link={pluginSectionHref(
+                        routes,
+                        pluginId!,
+                        PLUGIN_ASSIGNMENTS_SECTION_ID,
+                      )}
                     />
-                    <MetricCard
+                    <StatTile
                       title="Installs"
                       value={installs}
                       tone="information"
@@ -624,7 +658,7 @@ export default function PluginDetail(): JSX.Element | null {
                     />
                   </>
                 )}
-              </MetricCardGroup>
+              </StatTileGroup>
 
               <PublishFreshnessIndicator publishStatus={publishStatus} />
             </section>
@@ -681,7 +715,6 @@ export default function PluginDetail(): JSX.Element | null {
               <PluginSkillsSection
                 key={pluginId!}
                 pluginId={pluginId!}
-                viewMode="grid"
                 onMutated={(message) => offerPublish(message)}
               />
             </RequireScope>

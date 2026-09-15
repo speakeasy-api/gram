@@ -24,7 +24,6 @@ import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { resolveScopeBillingMode } from "@/components/estimated-cost-utils";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { InsightsConfig } from "@/components/insights-dock";
-import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { useDateRangeFilter } from "@/components/observe/useDateRangeFilter";
 import { useProject } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
@@ -65,6 +64,7 @@ import {
   isSessionLeaf,
   isSessionsAxis,
   LABELS,
+  llmTokens,
   type Measures,
   nextAvailableDimension,
   parseDrillPath,
@@ -102,7 +102,7 @@ function sumRowMeasures(rows: QueryRow[]): Measures {
       cost: acc.cost + (r.measures.totalCost ?? 0),
       sessions: acc.sessions + (r.measures.totalChats ?? 0),
       tools: acc.tools + (r.measures.totalToolCalls ?? 0),
-      tokens: acc.tokens + (r.measures.totalTokens ?? 0),
+      tokens: acc.tokens + llmTokens(r.measures),
       cacheCreation:
         acc.cacheCreation + (r.measures.cacheCreationInputTokens ?? 0),
       workUnits: acc.workUnits + (r.measures.totalWorkUnits ?? 0),
@@ -768,7 +768,7 @@ export function CostsExplorer(): JSX.Element {
         cost[i] = (cost[i] ?? 0) + (p.measures.totalCost ?? 0);
         chats[i] = (chats[i] ?? 0) + (p.measures.totalChats ?? 0);
         tools[i] = (tools[i] ?? 0) + (p.measures.totalToolCalls ?? 0);
-        tokens[i] = (tokens[i] ?? 0) + (p.measures.totalTokens ?? 0);
+        tokens[i] = (tokens[i] ?? 0) + llmTokens(p.measures);
         cacheCreation[i] =
           (cacheCreation[i] ?? 0) + (p.measures.cacheCreationInputTokens ?? 0);
         workUnits[i] = (workUnits[i] ?? 0) + (p.measures.totalWorkUnits ?? 0);
@@ -1318,14 +1318,12 @@ export function CostsExplorer(): JSX.Element {
               agent, and model.
             </p>
           </div>
-          <div className="relative flex-1">
-            <div
-              className="pointer-events-none h-full select-none"
-              aria-hidden="true"
-            >
-              <ObservabilitySkeleton />
-            </div>
-            <EnableLoggingOverlay onEnabled={() => void refetch()} />
+          <div className="flex-1">
+            <EnableLoggingOverlay
+              onEnabled={() => void refetch()}
+              screenshotSrc="/empty-states/cost_empty.png"
+              screenshotAlt="Costs dashboard with attributed AI spend"
+            />
           </div>
         </div>
       </>

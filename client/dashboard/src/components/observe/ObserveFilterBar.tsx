@@ -12,7 +12,7 @@ import { ACCOUNT_TYPE_OPTIONS } from "@/components/observe/observeFilterConstant
 import { Page } from "@/components/page-layout";
 import type { useServerNameMappings } from "@/hooks/useServerNameMappings";
 import { formatPlatform } from "@/lib/formatPlatform";
-import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
+import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import type {
   MultiSelectGroup,
   MultiSelectOption,
@@ -35,6 +35,7 @@ export type ObserveTypeFilterValue =
   | "skill"
   | "hosted_mcp_server"
   | "tunneled_mcp_server"
+  | "meta_mcp_server"
   | "shadow_mcp_server"
   | "local_tool";
 
@@ -108,6 +109,7 @@ const ACCOUNT_TYPE_DIMENSION: FilterDimension = {
   label: "Account type",
   kind: "select",
   allLabel: "All",
+  description: "Usage on personal accounts versus team-managed ones.",
 };
 const STATUS_DIMENSION: FilterDimension = {
   id: "status",
@@ -223,7 +225,7 @@ export function ObserveFilterBar({
         label: formatPlatform(source),
         value: source,
         icon: ({ className: iconClassName }: { className?: string }) => (
-          <HookSourceIcon source={source} className={iconClassName} />
+          <AgentProviderIcon source={source} className={iconClassName} />
         ),
       })),
     [sourceOptions],

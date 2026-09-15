@@ -19,12 +19,18 @@ type ClickhouseClientFunc func(t *testing.T) (clickhouse.Conn, error)
 // from migration files. Returns a container reference and a function to create
 // test connections. The per-test connection is automatically closed via t.Cleanup.
 func NewTestClickhouse(ctx context.Context) (*clickhousecontainer.ClickHouseContainer, ClickhouseClientFunc, error) {
-	container, err := clickhousecontainer.Run(ctx, "clickhouse/clickhouse-server:25.8.3",
+	if err := ensureDockerReady(ctx); err != nil {
+		return nil, nil, fmt.Errorf("wait for docker: %w", err)
+	}
+
+	container, err := clickhousecontainer.Run(ctx, "clickhouse/clickhouse-server:26.2.19.43@sha256:c2f2605585899d5103a0447daadbc0005f362200d5f0fcca7f40db3ca0dd36dd",
 		clickhousecontainer.WithUsername("gram"),
 		clickhousecontainer.WithPassword("gram"),
 		clickhousecontainer.WithInitScripts(rootPath("clickhouse", "schema.sql")),
 		testcontainers.WithWaitStrategy(
-			wait.ForExec([]string{"clickhouse-client", "--user", "gram", "--password", "gram", "--query", "SELECT 1"}),
+			// The image initializes through a localhost-only bootstrap server.
+			// Dial its hostname so readiness requires the final network listener.
+			wait.ForExec([]string{"sh", "-c", `clickhouse-client --host "$HOSTNAME" --user gram --password gram --query "SELECT 1"`}),
 		),
 		WithPublishedPortWait("9000/tcp"),
 		WithoutPublishedPorts(),

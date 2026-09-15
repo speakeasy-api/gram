@@ -24,9 +24,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func TestServePlatformToolset_ManagedAssistantReachesManagedToolset(t *testing.T) {
@@ -52,6 +56,32 @@ func TestServePlatformToolset_ManagedAssistantReachesManagedToolset(t *testing.T
 	require.Contains(t, w.Body.String(), platformtools.ToolNameSearchLogs)
 }
 
+// The swap cuts both ways: an org on the platformmcp variant must lose the
+// legacy toolset, not merely gain the platform one.
+func TestServePlatformToolset_ManagedToolsetRejectedOnPlatformMCPVariant(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	managedID := createAssistant(t, ti, authCtx, "Managed")
+	err := assistantsrepo.New(ti.conn).CreateProjectManagedAssistant(t.Context(), assistantsrepo.CreateProjectManagedAssistantParams{
+		ProjectID:   *authCtx.ProjectID,
+		AssistantID: managedID,
+	})
+	require.NoError(t, err)
+
+	ti.features.SetFlagVariant(feature.FlagAssistantPlatformMCP, authCtx.ActiveOrganizationID, feature.VariantAssistantToolsPlatformMCP)
+
+	token := mintAssistantToken(t, ti, authCtx, managedID)
+	_, err = servePlatformHTTP(t, ti, platformtools.ManagedAssistantPlatformToolsetSlug, toolsListBody(), token)
+	require.Error(t, err, "the legacy toolset must stay hidden on the platformmcp variant")
+	require.Contains(t, err.Error(), "not found")
+}
+
 func TestServePlatformToolset_NonManagedAssistantRejected(t *testing.T) {
 	t.Parallel()
 
@@ -75,6 +105,66 @@ func TestServePlatformToolset_NonManagedAssistantRejected(t *testing.T) {
 
 	_, err = servePlatformHTTP(t, ti, platformtools.ManagedAssistantPlatformToolsetSlug, toolsListBody(), token)
 	require.Error(t, err, "a non-managed assistant must be rejected at the entrypoint")
+	require.Contains(t, err.Error(), "not found")
+}
+
+func TestServePlatformToolset_UnsupportedVersionPrecedesTokenAuthentication(t *testing.T) {
+	t.Parallel()
+
+	_, ti := newTestMCPService(t)
+	slug := platformtools.ManagedAssistantPlatformToolsetSlug
+	req := httptest.NewRequest(http.MethodPost, "/platform/mcp/"+slug, bytes.NewReader(toolsListBody()))
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(mcpversions.HTTPHeader, mcpversions.Version20260728)
+
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("toolsetSlug", slug)
+	req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
+
+	w := httptest.NewRecorder()
+	err := ti.service.ServePlatformToolset(w, req)
+	require.NoError(t, err)
+	requireUnsupportedProtocolVersionResponse(t, w, mcpversions.Version20260728, mcpversions.SupportedPlatformToolset())
+	require.Empty(t, w.Header().Get("WWW-Authenticate"))
+}
+
+func TestServePlatformToolset_EmptyBodyRequiresTokenAuthentication(t *testing.T) {
+	t.Parallel()
+
+	_, ti := newTestMCPService(t)
+	_, err := servePlatformHTTP(t, ti, platformtools.ManagedAssistantPlatformToolsetSlug, nil, "")
+	require.Error(t, err)
+
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeUnauthorized, shareable.Code)
+}
+
+// The research tools are the MCP research runner's, and it holds them
+// in-process. Served over HTTP they would give any assistant in any
+// mcp_approval organization billable web search and arbitrary page fetch, so
+// the entrypoint refuses the slug outright — including for the project's own
+// managed assistant, which is the most privileged token that reaches here.
+func TestServePlatformToolset_ResearchToolsetIsNotServed(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	managedID := createAssistant(t, ti, authCtx, "Managed")
+	err := assistantsrepo.New(ti.conn).CreateProjectManagedAssistant(t.Context(), assistantsrepo.CreateProjectManagedAssistantParams{
+		ProjectID:   *authCtx.ProjectID,
+		AssistantID: managedID,
+	})
+	require.NoError(t, err)
+
+	token := mintAssistantToken(t, ti, authCtx, managedID)
+	_, err = servePlatformHTTP(t, ti, platformtools.ResearchToolsetSlug, toolsListBody(), token)
+	require.Error(t, err)
 	require.Contains(t, err.Error(), "not found")
 }
 
@@ -138,37 +228,6 @@ func TestServePlatformToolset_AssistantToolCallAudited(t *testing.T) {
 	require.True(t, ok, "metadata must carry the tool call params: %s", string(record.Metadata))
 	require.Equal(t, "errors", params["query"])
 	require.Equal(t, "[REDACTED]", params["api_token"], "secret-shaped params must be scrubbed")
-}
-
-func TestServePlatformToolset_PreservesShareableToolError(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestMCPService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
-
-	assistantID := createAssistant(t, ti, authCtx, "Feedback")
-	token, _ := mintThreadAssistantToken(t, ti, authCtx, assistantID, "feedback-error")
-	body, err := json.Marshal(map[string]any{
-		"jsonrpc": "2.0",
-		"id":      1,
-		"method":  "tools/call",
-		"params": map[string]any{
-			"name": platformtools.ToolNamePlatformSkillFeedback,
-			"arguments": map[string]any{
-				"skill":   "missing-skill",
-				"outcome": "did_not_help",
-			},
-		},
-	})
-	require.NoError(t, err)
-
-	w, err := servePlatformHTTP(t, ti, platformtools.AssistantsPlatformToolsetSlug, body, token)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, w.Code)
-	require.Contains(t, w.Body.String(), "call skills_load for this skill before submitting feedback")
-	require.NotContains(t, w.Body.String(), "Internal error")
 }
 
 func createAssistant(t *testing.T, ti *testInstance, authCtx *contextvalues.AuthContext, name string) uuid.UUID {
@@ -260,8 +319,9 @@ func servePlatformHTTP(t *testing.T, ti *testInstance, slug string, body []byte,
 }
 
 // The Platform MCP read toolset is rollout-gated: the managed assistant
-// reaches it only when the assistant-platform-mcp flag is on for the org.
-func TestServePlatformToolset_PlatformMCPReadFlagOnListsTools(t *testing.T) {
+// reaches it only when the assistant-platform-mcp flag resolves to the
+// platformmcp variant for the org.
+func TestServePlatformToolset_PlatformMCPReadVariantListsTools(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -277,20 +337,35 @@ func TestServePlatformToolset_PlatformMCPReadFlagOnListsTools(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	ti.features.SetFlag(feature.FlagAssistantPlatformMCP, authCtx.ActiveOrganizationID, true)
+	ti.features.SetFlagVariant(feature.FlagAssistantPlatformMCP, authCtx.ActiveOrganizationID, feature.VariantAssistantToolsPlatformMCP)
 
 	token := mintAssistantToken(t, ti, authCtx, managedID)
 	w, err := servePlatformHTTP(t, ti, platformtools.PlatformMCPReadToolsetSlug, toolsListBody(), token)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code, "managed assistant must reach the platform toolset when the flag is on: %s", w.Body.String())
+	// Names come through as the catalogue declares them: the assistant is
+	// served that catalogue rather than a parallel platformtools set, so there
+	// is nothing to disambiguate and no platform_ prefix.
 	body := w.Body.String()
-	require.Contains(t, body, platformtools.ToolNameGetPlatformContext)
-	require.Contains(t, body, platformtools.ToolNameListProjects)
-	require.Contains(t, body, platformtools.ToolNameListProjectMCPs)
-	require.Contains(t, body, platformtools.ToolNameGetMCP)
+	require.Contains(t, body, `"get_platform_context"`)
+	require.Contains(t, body, `"list_projects"`)
+	require.Contains(t, body, `"find_mcp"`)
+	require.Contains(t, body, `"get_mcp"`)
+	require.NotContains(t, body, platformtools.ToolNameListProjects, "the legacy prefixed set must not be served on this variant")
+
+	// The assistant only ever acts in its own project, so the project the
+	// policy supplies is not advertised as an argument for a model to choose.
+	require.NotContains(t, body, `"project_id"`, "project arguments are injected, not requested")
+
+	// The catalogue is narrowed by the active organization's product features
+	// and embeds that organization's project in each tool, so it is never
+	// shareable with another caller.
+	var envelope map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &envelope))
+	requireCacheHints(t, envelope["result"], "private")
 }
 
-func TestServePlatformToolset_PlatformMCPReadFlagOffRejected(t *testing.T) {
+func TestServePlatformToolset_PlatformMCPReadLegacyVariantRejected(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -308,7 +383,7 @@ func TestServePlatformToolset_PlatformMCPReadFlagOffRejected(t *testing.T) {
 
 	token := mintAssistantToken(t, ti, authCtx, managedID)
 	_, err = servePlatformHTTP(t, ti, platformtools.PlatformMCPReadToolsetSlug, toolsListBody(), token)
-	require.Error(t, err, "the platform toolset must stay hidden while the flag is off")
+	require.Error(t, err, "the platform toolset must stay hidden on the legacy variant")
 	require.Contains(t, err.Error(), "not found")
 }
 
@@ -328,13 +403,13 @@ func TestServePlatformToolset_PlatformMCPReadNonManagedAssistantRejected(t *test
 	})
 	require.NoError(t, err)
 
-	ti.features.SetFlag(feature.FlagAssistantPlatformMCP, authCtx.ActiveOrganizationID, true)
+	ti.features.SetFlagVariant(feature.FlagAssistantPlatformMCP, authCtx.ActiveOrganizationID, feature.VariantAssistantToolsPlatformMCP)
 
 	otherID := createAssistant(t, ti, authCtx, "Other")
 	token := mintAssistantToken(t, ti, authCtx, otherID)
 
 	_, err = servePlatformHTTP(t, ti, platformtools.PlatformMCPReadToolsetSlug, toolsListBody(), token)
-	require.Error(t, err, "a non-managed assistant must not reach the platform toolset even with the flag on")
+	require.Error(t, err, "a non-managed assistant must not reach the platform toolset even on the platformmcp variant")
 	require.Contains(t, err.Error(), "not found")
 }
 
@@ -356,7 +431,11 @@ func TestServePlatformToolset_PlatformMCPReadListProjectsCall(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	ti.features.SetFlag(feature.FlagAssistantPlatformMCP, authCtx.ActiveOrganizationID, true)
+	ti.features.SetFlagVariant(feature.FlagAssistantPlatformMCP, authCtx.ActiveOrganizationID, feature.VariantAssistantToolsPlatformMCP)
+
+	// Assistant calls are authorized live on every request, not carried from
+	// an earlier decision, so the grant has to exist for real.
+	grantLiveOrgAdmin(t, ti, authCtx)
 
 	token := mintAssistantToken(t, ti, authCtx, managedID)
 
@@ -365,7 +444,7 @@ func TestServePlatformToolset_PlatformMCPReadListProjectsCall(t *testing.T) {
 		"id":      1,
 		"method":  "tools/call",
 		"params": map[string]any{
-			"name":      platformtools.ToolNameListProjects,
+			"name":      "list_projects",
 			"arguments": map[string]any{},
 		},
 	})
@@ -375,4 +454,21 @@ func TestServePlatformToolset_PlatformMCPReadListProjectsCall(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code, "list_projects call must succeed: %s", w.Body.String())
 	require.Contains(t, w.Body.String(), authCtx.ProjectID.String(), "the caller's project must appear in the listing")
+}
+
+// grantLiveOrgAdmin persists an org:admin grant for the auth context's user.
+// The adapter rechecks authorization against the database on every call, which
+// the test fixture's context-only grants do not satisfy.
+func grantLiveOrgAdmin(t *testing.T, ti *testInstance, authCtx *contextvalues.AuthContext) {
+	t.Helper()
+
+	err := authz.PatchPrincipalGrants(
+		t.Context(),
+		ti.conn,
+		authCtx.ActiveOrganizationID,
+		urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		[]*authz.RoleGrant{{Scope: string(authz.ScopeOrgAdmin), Selectors: nil}},
+		nil,
+	)
+	require.NoError(t, err)
 }

@@ -28,7 +28,7 @@ const preview: Preview = {
         method: "alphabetical",
         // `*` is the slot the unnamed entries sort into, so the gallery stays
         // pinned above the individual components.
-        order: ["Design System", ["All Components", "*"]],
+        order: ["Design System", ["All Components", "Page Templates", "*"]],
       },
     },
   },

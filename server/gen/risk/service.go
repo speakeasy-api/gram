@@ -30,6 +30,10 @@ type Service interface {
 	UpdateRiskPolicy(context.Context, *UpdateRiskPolicyPayload) (res *types.RiskPolicy, err error)
 	// Delete a risk analysis policy.
 	DeleteRiskPolicy(context.Context, *DeleteRiskPolicyPayload) (err error)
+	// List active session quarantines for the current project.
+	ListSessionQuarantines(context.Context, *ListSessionQuarantinesPayload) (res *ListSessionQuarantinesResult, err error)
+	// Release an active session quarantine.
+	ReleaseSessionQuarantine(context.Context, *ReleaseSessionQuarantinePayload) (res *SessionQuarantine, err error)
 	// List risk analysis results for the current project.
 	ListRiskResults(context.Context, *ListRiskResultsPayload) (res *ListRiskResultsResult, err error)
 	// List risk analysis results with the `match` field redacted to an opaque
@@ -52,9 +56,9 @@ type Service interface {
 	MarkRiskResultsFalsePositive(context.Context, *MarkRiskResultsFalsePositivePayload) (err error)
 	// Undo a false-positive dismissal for one or more risk results.
 	UnmarkRiskResultsFalsePositive(context.Context, *UnmarkRiskResultsFalsePositivePayload) (err error)
-	// List risk results manually marked as false positive for the current project
-	// (the Dismissed tab). Kept separate from listRiskResults, which never returns
-	// dismissed results.
+	// List suppressed risk results for the current project — findings hidden by an
+	// exclusion rule, a manual dismissal, or the automated false-positive sweep.
+	// Kept separate from listRiskResults, which never returns suppressed results.
 	ListDismissedRiskResults(context.Context, *ListDismissedRiskResultsPayload) (res *ListRiskResultsResult, err error)
 	// Get risk overview metrics and trend data for the current project.
 	GetRiskOverview(context.Context, *GetRiskOverviewPayload) (res *RiskOverviewResult, err error)
@@ -83,7 +87,7 @@ type Service interface {
 	GetRiskPolicyStatus(context.Context, *GetRiskPolicyStatusPayload) (res *types.RiskPolicyStatus, err error)
 	// Create or refresh a risk policy bypass request from a signed request URL
 	// token.
-	CreateRiskPolicyBypassRequest(context.Context, *CreateRiskPolicyBypassRequestPayload) (res *RiskPolicyBypassRequest, err error)
+	CreateRiskPolicyBypassRequest(context.Context, *CreateRiskPolicyBypassRequestPayload) (res *PolicyBypassRedemption, err error)
 	// Acknowledge a risk policy warn/challenge from a warning-link token. Records
 	// the acknowledgement so the user's retried action proceeds; self-service (no
 	// admin approval).
@@ -190,7 +194,7 @@ const ServiceName = "risk"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [47]string{"createRiskPolicy", "listRiskPolicies", "listBuiltinExclusions", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsForAgent", "unmaskRiskResult", "listRiskResultsByChat", "markRiskResultsFalsePositive", "unmarkRiskResultsFalsePositive", "listDismissedRiskResults", "getRiskOverview", "listRiskCategories", "compileExpr", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskSignals", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "acknowledgeRiskPolicyChallenge", "getRiskPolicyChallenge", "declineRiskPolicyChallenge", "getRiskBlock", "submitRiskBlockFeedback", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "suggestExclusion", "testDetectionRule", "evaluatePromptGuardrail", "saveRiskEvalReview", "listRiskEvalReviews", "deleteRiskEvalReview"}
+var MethodNames = [49]string{"createRiskPolicy", "listRiskPolicies", "listBuiltinExclusions", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listSessionQuarantines", "releaseSessionQuarantine", "listRiskResults", "listRiskResultsForAgent", "unmaskRiskResult", "listRiskResultsByChat", "markRiskResultsFalsePositive", "unmarkRiskResultsFalsePositive", "listDismissedRiskResults", "getRiskOverview", "listRiskCategories", "compileExpr", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskSignals", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "acknowledgeRiskPolicyChallenge", "getRiskPolicyChallenge", "declineRiskPolicyChallenge", "getRiskBlock", "submitRiskBlockFeedback", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "suggestExclusion", "testDetectionRule", "evaluatePromptGuardrail", "saveRiskEvalReview", "listRiskEvalReviews", "deleteRiskEvalReview"}
 
 // AcknowledgeRiskPolicyChallengePayload is the payload type of the risk
 // service acknowledgeRiskPolicyChallenge method.
@@ -303,8 +307,13 @@ type CreateRiskExclusionPayload struct {
 // createRiskPolicyBypassRequest method.
 type CreateRiskPolicyBypassRequestPayload struct {
 	SessionToken *string
+	ApikeyToken  *string
 	// Signed request token generated when a risk policy blocks an action.
 	RequestToken string
+	// The requester's own justification for needing this, shown to whoever
+	// decides. Optional: an older client that sends none falls back to the
+	// policy's block reason.
+	Note *string
 }
 
 // CreateRiskPolicyPayload is the payload type of the risk service
@@ -341,19 +350,10 @@ type CreateRiskPolicyPayload struct {
 	DisabledRules []string
 	// Custom detection rule ids to attach as detectors: a match produces a finding.
 	CustomRuleIds []string
-	// Message types this policy applies to. When empty or omitted, the policy
-	// scans all supported types.
-	MessageTypes []string
-	// CEL scope predicate: the policy evaluates a message only when this boolean
-	// expression is true (in addition to message_types). Omit/empty means all
-	// messages are in scope.
-	ScopeInclude *string
-	// CEL exemption predicate: the policy is skipped for a message when this
-	// boolean expression is true. Omit/empty means no inline exemption.
-	ScopeExempt *string
 	// Whether the policy is active.
 	Enabled *bool
-	// Policy action: flag, warn (challenge), or block.
+	// Policy action: flag, warn (challenge), block, or quarantine (deny and freeze
+	// the hook session).
 	Action string
 	// Policy audience type: everyone or targeted.
 	AudienceType string
@@ -647,6 +647,9 @@ type ListDismissedRiskResultsPayload struct {
 	Cursor *string
 	// Maximum number of results to return per page.
 	Limit *int
+	// Only return results suppressed for these reasons. Omitted or empty means all
+	// reasons.
+	Reasons []string
 }
 
 // ListRiskCategoriesPayload is the payload type of the risk service
@@ -814,6 +817,10 @@ type ListRiskResultsPayload struct {
 	// Optional user identifier substring to filter by (case-insensitive, matched
 	// against the chat's external user id).
 	UserID *string
+	// Optional external user identifiers to filter by, matched whole rather than
+	// as a substring. Pass every identifier a subject is known by; unlike user_id
+	// this cannot pull in another person whose identifier merely contains theirs.
+	ExternalUserIds []string
 	// If true, collapse results to one row per (policy_id, rule_id, match),
 	// keeping the most recent occurrence. Useful when the same secret is detected
 	// many times within a single message body.
@@ -845,6 +852,21 @@ type ListRiskResultsResult struct {
 	NextCursor *string
 }
 
+// ListSessionQuarantinesPayload is the payload type of the risk service
+// listSessionQuarantines method.
+type ListSessionQuarantinesPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// ListSessionQuarantinesResult is the result type of the risk service
+// listSessionQuarantines method.
+type ListSessionQuarantinesResult struct {
+	// Active session quarantines.
+	Quarantines []*SessionQuarantine
+}
+
 // MarkRiskResultsFalsePositivePayload is the payload type of the risk service
 // markRiskResultsFalsePositive method.
 type MarkRiskResultsFalsePositivePayload struct {
@@ -855,6 +877,17 @@ type MarkRiskResultsFalsePositivePayload struct {
 	ResultIds []string
 	// Optional free-text reason for the dismissal.
 	Reason *string
+}
+
+// PolicyBypassRedemption is the result type of the risk service
+// createRiskPolicyBypassRequest method.
+type PolicyBypassRedemption struct {
+	// The kind of request the token redeemed into.
+	Kind string
+	// The id of the created or refreshed request.
+	ID string
+	// The request's current status.
+	Status string
 }
 
 // PromptGuardrailEvalResult is the result type of the risk service
@@ -905,6 +938,16 @@ type PromptGuardrailMessageVerdict struct {
 	TotalTokens int
 }
 
+// ReleaseSessionQuarantinePayload is the payload type of the risk service
+// releaseSessionQuarantine method.
+type ReleaseSessionQuarantinePayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The session quarantine ID.
+	ID string
+}
+
 // RevokeRiskPolicyBypassRequestPayload is the payload type of the risk service
 // revokeRiskPolicyBypassRequest method.
 type RevokeRiskPolicyBypassRequestPayload struct {
@@ -927,6 +970,9 @@ type RiskBlock struct {
 	PolicyName string
 	// Name of the tool that was blocked, when known.
 	ToolName *string
+	// Agent surface that reported the blocked call (adapter slug, e.g.
+	// "openclaw"), when known.
+	Provider *string
 	// When the block occurred.
 	CreatedAt string
 	// Existing feedback sentiment recorded for this block, when any.
@@ -1037,7 +1083,7 @@ type RiskOverviewUser struct {
 }
 
 // RiskPolicyBypassRequest is the result type of the risk service
-// createRiskPolicyBypassRequest method.
+// approveRiskPolicyBypassRequest method.
 type RiskPolicyBypassRequest struct {
 	// The bypass request ID.
 	ID string
@@ -1165,10 +1211,11 @@ type RiskSignalsResult struct {
 	// Organization risk score computed the same way over the equal-length window
 	// immediately before from.
 	PreviousOrgRiskScore float64
-	// Deduplicated findings in the 24 hours ending at to.
-	Findings24h int64
-	// Deduplicated findings in the 24 hours before that.
-	PreviousFindings24h int64
+	// Deduplicated live findings in the window.
+	Findings int64
+	// Deduplicated live findings in the equal-length window immediately before
+	// from.
+	PreviousFindings int64
 	// Signals with at least one live finding in the window.
 	OpenSignals int64
 	// Signals rated critical in the window.
@@ -1223,6 +1270,33 @@ type SaveRiskEvalReviewPayload struct {
 	ChatID string
 	// The reviewer's ground-truth verdict for this session.
 	Verdict string
+}
+
+// SessionQuarantine is the result type of the risk service
+// releaseSessionQuarantine method.
+type SessionQuarantine struct {
+	// The session quarantine ID.
+	ID string
+	// The organization ID.
+	OrganizationID string
+	// The project ID.
+	ProjectID string
+	// The hook conversation ID that is quarantined.
+	SessionID string
+	// The risk policy that opened the quarantine, when still available.
+	RiskPolicyID *string
+	// The risk policy name captured when the quarantine opened.
+	RiskPolicyName string
+	// The user whose hook event opened the quarantine.
+	UserID string
+	// The deny reason captured when the quarantine opened.
+	Reason string
+	// When the quarantine opened.
+	CreatedAt string
+	// When the quarantine was released.
+	ReleasedAt *string
+	// The user who released the quarantine.
+	ReleasedBy *string
 }
 
 // SubmitRiskBlockFeedbackPayload is the payload type of the risk service
@@ -1459,18 +1533,10 @@ type UpdateRiskPolicyPayload struct {
 	// Custom detection rule ids to attach as detectors: a match produces a
 	// finding. Omit to preserve the current selection.
 	CustomRuleIds []string
-	// Message types this policy applies to. Omit to preserve the current
-	// selection; send an empty array to apply to all types.
-	MessageTypes []string
-	// CEL scope predicate (in addition to message_types). Omit to preserve the
-	// current value; send empty to clear.
-	ScopeInclude *string
-	// CEL exemption predicate. Omit to preserve the current value; send empty to
-	// clear.
-	ScopeExempt *string
 	// Whether the policy is active.
 	Enabled *bool
-	// Policy action: flag, warn (challenge), or block.
+	// Policy action: flag, warn (challenge), block, or quarantine (deny and freeze
+	// the hook session).
 	Action *string
 	// Policy audience type: everyone or targeted. Omit to preserve the current
 	// audience type.
@@ -1488,6 +1554,11 @@ type UpdateRiskPolicyPayload struct {
 	// For allow_all policies: complete desired canonical URL block set. Omit to
 	// preserve; send empty to clear.
 	ShadowMcpBlockedUrls []string `json:"shadow_mcp_blocked_urls"`
+	// Confirms that this edit may displace standing MCP approval decisions its URL
+	// lists contradict, transitioning them to superseded (audit-logged, decision
+	// history preserved). Without it, a contradicting edit is rejected with a
+	// conflict naming the affected servers.
+	SupersedeDecisions *bool `json:"supersede_decisions"`
 	// Whether the policy name should be auto-generated.
 	AutoName *bool
 	// Optional message shown to end users when this policy blocks an action or

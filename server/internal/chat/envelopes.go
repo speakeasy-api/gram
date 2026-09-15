@@ -21,7 +21,27 @@ import (
 // `<message-context>…</notification>` is left alone. Anchored to the start, so
 // a tag a user types mid-message is preserved; the non-greedy body stops at the
 // first close tag.
-var leadingEnvelopeRE = regexp.MustCompile(`(?s)^(?:\s*<message-context>.*?</message-context>\s*|\s*<notification>.*?</notification>\s*)+`)
+// OpenClaw prepends its own envelope to channel-originated turns (Discord /
+// Slack / Telegram): a "Delivery: …" hint line, "<Label> (untrusted…):"
+// headers over a ```json fence (Conversation info, Sender, Reply target, …),
+// and chat-history / chat-window paragraphs whose rows are
+// "#id 2026-08-27 13:51:33 EDT [reply target] ->#id sender: text"; a row
+// must carry the timestamp (after an optional #id) and a "sender: " later,
+// which bounds the paragraph so a human line right after it — even
+// "#note can: continue" — survives. OpenClaw also stamps every turn with a
+// leading "[Thu 2026-08-27 13:51 EDT] " that always carries a short zone name;
+// a human line that opens with a date-time bracket but no zone is not the
+// stamp and is left alone. The hooks relay strips all of this
+// before ingest on current installs; this covers turns stored before it did
+// and any install still bootstrapping an older hooks binary.
+var leadingEnvelopeRE = regexp.MustCompile(`(?s)^(?:` +
+	`\s*\[(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun) \d{4}-\d{2}-\d{2} \d{2}:\d{2}(?::\d{2})? [A-Z]{1,5}(?:[+-]\d{1,2}(?::\d{2})?)?\] *` +
+	`|\s*<message-context>.*?</message-context>\s*` +
+	`|\s*<notification>.*?</notification>\s*` +
+	"|\\s*Delivery: (?:to send a message, use the `message` tool\\.|Final assistant text is not automatically delivered in this run\\.[^\\n]*|No visible reply is delivered automatically in this run[^\\n]*)\\s*" +
+	"|\\s*[^\\n]* \\(untrusted[^)\\n]*\\):\\n```json\\n.*?\\n```\\s*" +
+	`|\s*[^\n]* \(untrusted(?:, chronological[^)\n]*|, for context)\):\n(?:(?:#\S+ )?\d{4}-\d{2}-\d{2} \d{2}:\d{2}(?::\d{2})?(?: [A-Z]{1,5})? (?:\[reply target\] )?(?:->#\S+ )?[^\n]*: [^\n]*(?:\n|$))*\s*` +
+	`)+`)
 
 // StripLeadingEnvelopes removes any leading harness framing so downstream LLM
 // prompts (titles, session summaries) see only the human-authored turn text.

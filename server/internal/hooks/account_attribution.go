@@ -133,6 +133,12 @@ func (s *Service) attributeSession(ctx context.Context, meta *SessionMetadata) e
 	}
 	meta.UserAccountID = account.ID.String()
 
+	// An attributed link (a user id on the account) is what changes the
+	// identity map; unattributed upserts cannot alter any fold.
+	if meta.UserID != "" {
+		s.signalIdentityMapRefresh(ctx)
+	}
+
 	billingMode, err := s.resolveBillingMode(ctx, meta, conv.FromPGTextOrEmpty[string](account.BillingMode))
 	if err != nil {
 		return fmt.Errorf("resolve billing mode: %w", err)

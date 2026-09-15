@@ -454,9 +454,15 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 	// Saving the integration is the user's "try again" signal: lift any
 	// automatic pauses so schedules stopped over a rejected configuration
 	// start polling again with a fresh failure budget.
-	if err := q.ClearSyncSchedulePauses(ctx, row.ID); err != nil {
+	clearedRow, err := q.ClearSyncSchedulePauses(ctx, repo.ClearSyncSchedulePausesParams{
+		AiIntegrationConfigID: row.ID,
+		Schedule:              providerSched.schedule,
+	})
+	if err != nil {
 		return UpsertResult{}, oops.E(oops.CodeUnexpected, err, "failed to clear ai integration sync pauses")
 	}
+	syncRow.NextPollAfter = clearedRow.NextPollAfter
+	syncRow.ConsecutiveFailures = clearedRow.ConsecutiveFailures
 	if resetPollWatermarkAt != nil {
 		syncRow.PollWatermarkAt = conv.ToPGTimestamptz(*resetPollWatermarkAt)
 		syncRow.NextPollAfter = conv.ToPGTimestamptz(resetPollWatermarkAt.UTC().Add(pollIntervalForSchedule(providerSched.schedule)))
@@ -755,7 +761,7 @@ func (s *Store) RecordUsagePollSuccess(ctx context.Context, syncID uuid.UUID, sc
 		NextPollAfter:   conv.ToPGTimestamptz(t.UTC().Add(pollIntervalForSchedule(schedule))),
 		LastCursorID:    conv.ToPGTextEmpty(lastCursor),
 	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to record ai integration usage poll success")
+		return fmt.Errorf("record ai integration usage poll success: %w", err)
 	}
 	return nil
 }
@@ -818,7 +824,7 @@ func (s *Store) EnsureTimeSyncSchedule(ctx context.Context, configID uuid.UUID, 
 func (s *Store) AdvanceWatermark(ctx context.Context, syncID uuid.UUID, checkpoint timewindowpoller.PollCheckpoint) error {
 	encoded, err := checkpoint.MarshalText()
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to encode ai integration sync checkpoint")
+		return fmt.Errorf("encode ai integration sync checkpoint: %w", err)
 	}
 	shadowWatermark := checkpoint.Watermark
 	if shadowWatermark.IsZero() {
@@ -829,7 +835,7 @@ func (s *Store) AdvanceWatermark(ctx context.Context, syncID uuid.UUID, checkpoi
 		PollCheckpoint:  conv.ToPGText(string(encoded)),
 		SyncID:          syncID,
 	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to advance ai integration sync schedule watermark")
+		return fmt.Errorf("advance ai integration sync schedule watermark: %w", err)
 	}
 	return nil
 }
@@ -842,7 +848,7 @@ func (s *Store) RecordSchedulePollSuccess(ctx context.Context, configID uuid.UUI
 		Schedule:              schedule,
 		NextPollAfter:         conv.ToPGTimestamptz(t.UTC().Add(pollIntervalForSchedule(schedule))),
 	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to record ai integration sync schedule poll success")
+		return fmt.Errorf("record ai integration sync schedule poll success: %w", err)
 	}
 	return nil
 }
@@ -854,34 +860,76 @@ func (s *Store) RecordSchedulePollSuccess(ctx context.Context, configID uuid.UUI
 // integration clears the pause and the failure streak.
 const AutoPauseAfterRejectedPolls = 3
 
+// pollFailureMaxBackoffDoublings caps the exponential backoff applied to a
+// schedule's next poll after consecutive final failures. A schedule that
+// fails deterministically every run (e.g. a poisoned compliance log file)
+// settles at 2^6 = 64x its base interval — about 5.3h for a 5m schedule —
+// instead of retrying at full cadence forever and tripping failure-burst
+// monitors. A poll success resets the streak, restoring the normal cadence.
+const pollFailureMaxBackoffDoublings = 6
+
+// pollFailureBackoffCeiling bounds the backed-off delay regardless of the
+// schedule's base interval. Doubling alone would park long-interval
+// schedules for days after a streak a bounded provider outage can produce —
+// 2^6 x the 4h analytics interval is over ten days — while a few hours is
+// already enough to quiet failure-burst monitors and keeps recovery
+// same-day.
+const pollFailureBackoffCeiling = 6 * time.Hour
+
 // RecordSchedulePollFailure records a final poll failure on a schedule. A
 // positive pauseAfter automatically pauses the schedule once its consecutive
 // failure count reaches that threshold; zero never pauses, for failures that
-// retrying at the normal cadence can plausibly fix.
-func (s *Store) RecordSchedulePollFailure(ctx context.Context, configID uuid.UUID, schedule string, t time.Time, cause error, pauseAfter int32) error {
+// retrying can plausibly fix. Every recorded failure doubles the delay until
+// the next poll, capped at 2^pollFailureMaxBackoffDoublings times the
+// schedule's base interval, so chronic failures decay to a slow cadence
+// instead of retrying at full speed indefinitely. shareableErr must already be
+// safe to show to organization members; this method persists Error() verbatim.
+func (s *Store) RecordSchedulePollFailure(ctx context.Context, configID uuid.UUID, schedule string, t time.Time, shareableErr error, pauseAfter int32) error {
 	var errStr string
-	if cause != nil {
-		errStr = cause.Error()
-		var shareable *oops.ShareableError
-		if errors.As(cause, &shareable) {
-			errStr = shareable.String()
+	if shareableErr != nil {
+		errStr = shareableErr.Error()
+	}
+
+	// The streak before this failure decides the backoff; a lookup failure
+	// falls back to the base interval so the failure is still recorded.
+	backoffDoublings := 0
+	schedules, err := s.ListSyncSchedules(ctx, configID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to read failure streak for poll backoff", attr.SlogError(err))
+	}
+	for _, state := range schedules {
+		if state.Schedule == schedule {
+			backoffDoublings = min(int(state.ConsecutiveFailures), pollFailureMaxBackoffDoublings)
+			break
 		}
+	}
+	// The ceiling never cuts below the base cadence: a failure must not make
+	// a schedule poll sooner than a success would.
+	baseInterval := pollIntervalForSchedule(schedule)
+	retryDelay := max(min(baseInterval*time.Duration(1<<backoffDoublings), pollFailureBackoffCeiling), baseInterval)
+
+	// Anchor on the later of the poll's end time and now: a failing run can
+	// finish long after its endTime, and an endTime-anchored delay would put
+	// the next poll in the past, erasing the early backoff rounds.
+	anchor := t.UTC()
+	if now := time.Now().UTC(); now.After(anchor) {
+		anchor = now
 	}
 
 	if err := s.repo.RecordUsagePollFailure(ctx, repo.RecordUsagePollFailureParams{
 		AiIntegrationConfigID: configID,
 		Schedule:              schedule,
-		NextPollAfter:         conv.ToPGTimestamptz(t.UTC().Add(pollIntervalForSchedule(schedule))),
+		NextPollAfter:         conv.ToPGTimestamptz(anchor.Add(retryDelay)),
 		LastPollError:         conv.ToPGTextEmpty(conv.TruncateString(errStr, maxUsagePollErrorMessage)),
 		PauseAfter:            pauseAfter,
 	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to record ai integration sync schedule poll failure")
+		return fmt.Errorf("record ai integration sync schedule poll failure: %w", err)
 	}
 	return nil
 }
 
-func (s *Store) RecordUsagePollFailure(ctx context.Context, configID uuid.UUID, provider string, t time.Time, cause error) error {
-	return s.RecordSchedulePollFailure(ctx, configID, provider, t, cause, 0)
+func (s *Store) RecordUsagePollFailure(ctx context.Context, configID uuid.UUID, provider string, t time.Time, shareableErr error) error {
+	return s.RecordSchedulePollFailure(ctx, configID, provider, t, shareableErr, 0)
 }
 
 // epochTime is the never-synced watermark sentinel for time-kind schedules

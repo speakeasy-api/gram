@@ -1,10 +1,15 @@
+import { IdentityLink } from "@/components/identity-link";
 import { Link, useNavigate } from "react-router";
-import { MetricCard, MetricCardGroup } from "@/components/chart/MetricCard";
+import { useOrganization } from "@/contexts/Auth";
+import {
+  StatTile,
+  StatTileGroup,
+  StatTileSkeleton,
+} from "@/components/chart/stat-tile";
 import { RankedBarList } from "@/components/chart/RankedBarList";
 import { Page } from "@/components/page-layout";
 import { Avatar, AvatarFallback } from "@/components/ui/Avatar";
-import { getIdentityTint } from "@/components/gradient-colors";
-import { DashboardCard } from "@/components/ui/DashboardCard";
+import { getIdentityTint, useIsDarkTheme } from "@/components/gradient-colors";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useProject } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
@@ -41,10 +46,12 @@ import {
   useDateRangeFilter,
 } from "@/components/observe/useDateRangeFilter";
 import { safeBase64Encode } from "@/components/observe/observeFilterUtils";
+import { llmTokens } from "@/pages/costs/taxonomy";
 import { ActivityTimelineCard } from "./ActivityTimelineCard";
 import { buildProjectOverviewQuery } from "./projectOverviewQuery";
 
 export function ProjectDashboard(): JSX.Element {
+  const isDark = useIsDarkTheme();
   const { orgSlug, projectSlug } = useSlugs();
   const project = useProject();
   const projectId = project.id;
@@ -89,11 +96,12 @@ export function ProjectDashboard(): JSX.Element {
     [customRange, customRangeLabel, dateRange],
   );
 
+  const organization = useOrganization();
   const {
     data: featuresData,
     isPending: isFeaturesPending,
     isError: isFeaturesError,
-  } = useProductFeatures();
+  } = useProductFeatures({ organizationId: organization.id });
   const logsEnabled = featuresData?.logsEnabled === true;
 
   // The SDK's useGetProjectOverview omits the request body from its query
@@ -162,7 +170,7 @@ export function ProjectDashboard(): JSX.Element {
             from,
             to,
             groupBy: GroupBy.Email,
-            sortBy: "total_tokens",
+            sortBy: "llm_tokens",
             topN: 100,
             filters: projectFilter,
           },
@@ -193,13 +201,16 @@ export function ProjectDashboard(): JSX.Element {
 
   const topUsersByTokens = useMemo(() => {
     return [...rankableUserRows]
-      .sort((a, b) => b.measures.totalTokens - a.measures.totalTokens)
+      .sort((a, b) => llmTokens(b.measures) - llmTokens(a.measures))
       .slice(0, 5)
-      .filter((r) => r.measures.totalTokens > 0)
+      .filter((r) => llmTokens(r.measures) > 0)
       .map((r) => ({
         key: r.groupValue,
         label: memberByEmail.get(r.groupValue)?.name ?? r.groupValue,
-        value: r.measures.totalTokens,
+        value: llmTokens(r.measures),
+        // Group keys are emails, which is exactly what the email: URN form
+        // exists for.
+        identifier: r.groupValue ? { email: r.groupValue } : null,
       }));
   }, [rankableUserRows, memberByEmail]);
 
@@ -258,7 +269,7 @@ export function ProjectDashboard(): JSX.Element {
               from,
               to,
               groupBy: GroupBy.HookSource,
-              sortBy: "total_tokens",
+              sortBy: "llm_tokens",
               topN: 10,
               filters: projectFilter,
             },
@@ -271,19 +282,23 @@ export function ProjectDashboard(): JSX.Element {
   );
 
   const mostUsedAgents = useMemo(() => {
-    return (usageByAgentData?.table ?? [])
-      .filter(
-        (r) =>
-          r.groupValue !== "" &&
-          r.groupValue !== "Other" &&
-          r.measures.totalTokens > 0,
-      )
-      .slice(0, 5)
-      .map((r) => ({
-        key: r.groupValue,
-        label: formatPlatform(r.groupValue),
-        value: r.measures.totalTokens,
-      }));
+    return (
+      (usageByAgentData?.table ?? [])
+        .filter(
+          (r) =>
+            r.groupValue !== "" &&
+            r.groupValue !== "Other" &&
+            llmTokens(r.measures) > 0,
+        )
+        // Server already ranks by llm_tokens; kept as a formality.
+        .sort((a, b) => llmTokens(b.measures) - llmTokens(a.measures))
+        .slice(0, 5)
+        .map((r) => ({
+          key: r.groupValue,
+          label: formatPlatform(r.groupValue),
+          value: llmTokens(r.measures),
+        }))
+    );
   }, [usageByAgentData]);
 
   // MCP-hosting fallback: external end-users (customer-supplied IDs) and their
@@ -487,11 +502,11 @@ export function ProjectDashboard(): JSX.Element {
           {logsEnabled && (
             <>
               {/* Row 0: KPI Cards */}
-              <MetricCardGroup>
+              <StatTileGroup>
                 {isOverviewPending ? (
-                  <Skeleton className="h-[100px] flex-1" />
+                  <StatTileSkeleton />
                 ) : (
-                  <MetricCard
+                  <StatTile
                     title="Active Servers"
                     value={overview?.summary.activeServersCount ?? 0}
                     tone="information"
@@ -501,9 +516,9 @@ export function ProjectDashboard(): JSX.Element {
                   />
                 )}
                 {isOverviewPending ? (
-                  <Skeleton className="h-[100px] flex-1" />
+                  <StatTileSkeleton />
                 ) : (
-                  <MetricCard
+                  <StatTile
                     title="Tool Calls"
                     value={overview?.summary.totalToolCalls ?? 0}
                     tone="information"
@@ -513,9 +528,9 @@ export function ProjectDashboard(): JSX.Element {
                   />
                 )}
                 {modePending || (!hasHookData && mcpUsersPending) ? (
-                  <Skeleton className="h-[100px] flex-1" />
+                  <StatTileSkeleton />
                 ) : hasHookData ? (
-                  <MetricCard
+                  <StatTile
                     title="Total Spend"
                     value={totalSpend}
                     tone="information"
@@ -524,7 +539,7 @@ export function ProjectDashboard(): JSX.Element {
                     tooltip="Total LLM spend recorded for this project in the selected period. Matches the figure on the Costs page."
                   />
                 ) : (
-                  <MetricCard
+                  <StatTile
                     title="End Users"
                     value={endUsersCount}
                     tone="information"
@@ -533,9 +548,9 @@ export function ProjectDashboard(): JSX.Element {
                   />
                 )}
                 {modePending || isOverviewPending ? (
-                  <Skeleton className="h-[100px] flex-1" />
+                  <StatTileSkeleton />
                 ) : hasHookData ? (
-                  <MetricCard
+                  <StatTile
                     title="Sessions"
                     value={totalSessions}
                     tone="information"
@@ -543,7 +558,7 @@ export function ProjectDashboard(): JSX.Element {
                     tooltip="Distinct agent sessions across project members in the selected period."
                   />
                 ) : (
-                  <MetricCard
+                  <StatTile
                     title="Failed Tool Calls"
                     value={overview?.summary.failedToolCalls ?? 0}
                     tone={
@@ -556,11 +571,11 @@ export function ProjectDashboard(): JSX.Element {
                     tooltip="MCP tool calls that returned an error (HTTP 4xx/5xx) in the selected period."
                   />
                 )}
-              </MetricCardGroup>
+              </StatTileGroup>
 
               {/* Row 1: Top Activity */}
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                <DashboardCard
+                <Card.Dashboard
                   title={hasHookData ? "Top Users" : "Top End Users"}
                   tooltip={
                     hasHookData
@@ -584,8 +599,11 @@ export function ProjectDashboard(): JSX.Element {
                         }
                       />
                       <ViewAllLink
-                        to={withRange(routes.employees.href(), {
-                          sort: "tokenCount:desc",
+                        to={withRange(routes.identities.href(), {
+                          // Column key on the identities table, which reads
+                          // this param; "tokenCount" was the old employees
+                          // list's key and matched nothing here.
+                          sort: "tokens:desc",
                         })}
                       />
                     </CardActions>
@@ -601,9 +619,9 @@ export function ProjectDashboard(): JSX.Element {
                       items={hasHookData ? topUsersByTokens : topEndUsers}
                     />
                   )}
-                </DashboardCard>
+                </Card.Dashboard>
 
-                <DashboardCard
+                <Card.Dashboard
                   title="Top Servers"
                   tooltip="Servers ranked by the number of tool calls they served in the selected period, based on logs captured from user sessions in addition to MCP servers hosted in your project."
                   action={
@@ -641,14 +659,14 @@ export function ProjectDashboard(): JSX.Element {
                         }))}
                     />
                   )}
-                </DashboardCard>
+                </Card.Dashboard>
               </div>
 
               {/* Row 2: Sessions (hook view) / Tools (MCP view) */}
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                 {hasHookData ? (
                   <>
-                    <DashboardCard
+                    <Card.Dashboard
                       title="Most Agent Sessions by User"
                       tooltip="Employees ranked by the number of distinct agent sessions in the selected period."
                       action={
@@ -697,14 +715,25 @@ export function ProjectDashboard(): JSX.Element {
                               <Avatar className="size-8 shrink-0">
                                 <AvatarFallback
                                   className="text-xs font-medium"
-                                  style={getIdentityTint(user.initialsSource)}
+                                  style={getIdentityTint(
+                                    user.initialsSource,
+                                    isDark,
+                                  )}
                                 >
                                   {emailInitials(user.initialsSource)}
                                 </AvatarFallback>
                               </Avatar>
                               <div className="min-w-0 flex-1">
                                 <p className="truncate text-sm font-medium">
-                                  {user.name}
+                                  <IdentityLink
+                                    identifier={
+                                      user.userId
+                                        ? { email: user.userId }
+                                        : null
+                                    }
+                                  >
+                                    {user.name}
+                                  </IdentityLink>
                                 </p>
                                 <p className="text-muted-foreground text-xs">
                                   {user.sessions.toLocaleString()}{" "}
@@ -715,9 +744,9 @@ export function ProjectDashboard(): JSX.Element {
                           ))}
                         </ul>
                       )}
-                    </DashboardCard>
+                    </Card.Dashboard>
 
-                    <DashboardCard
+                    <Card.Dashboard
                       title="Most Used Agents"
                       tooltip="Coding agents ranked by token volume in the selected period, identified from client metadata sent with each call."
                       action={
@@ -747,11 +776,11 @@ export function ProjectDashboard(): JSX.Element {
                       ) : (
                         <RankedBarList items={mostUsedAgents} />
                       )}
-                    </DashboardCard>
+                    </Card.Dashboard>
                   </>
                 ) : (
                   <>
-                    <DashboardCard
+                    <Card.Dashboard
                       title="Most Used Tools"
                       tooltip="Tools ranked by the number of MCP calls they served in the selected period."
                       action={
@@ -767,9 +796,9 @@ export function ProjectDashboard(): JSX.Element {
                       ) : (
                         <RankedBarList items={mostUsedTools} />
                       )}
-                    </DashboardCard>
+                    </Card.Dashboard>
 
-                    <DashboardCard
+                    <Card.Dashboard
                       title="Top Tools by Failure Rate"
                       tooltip="Tools with the highest share of failed MCP calls (HTTP 4xx/5xx) in the selected period. Only tools with at least one failure are shown."
                       action={
@@ -785,7 +814,7 @@ export function ProjectDashboard(): JSX.Element {
                       ) : (
                         <RankedBarList items={topToolsByFailureRate} />
                       )}
-                    </DashboardCard>
+                    </Card.Dashboard>
                   </>
                 )}
               </div>

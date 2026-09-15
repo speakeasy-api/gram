@@ -29,8 +29,9 @@ func TestResponseWriterWrappersForwardFlush(t *testing.T) {
 
 	inner := &flushRecorder{ResponseRecorder: httptest.NewRecorder(), flushed: false}
 	wrappers := map[string]http.ResponseWriter{
-		"logging.responseWriter":             newResponseWriter(inner),
-		"admin_security.adminCookieRewriter": &adminCookieRewriter{ResponseWriter: inner, domain: "example.com", wroteHeader: false},
+		"logging.responseWriter":              newResponseWriter(inner),
+		"admin_security.adminCookieRewriter":  &adminCookieRewriter{ResponseWriter: inner, domain: "example.com", wroteHeader: false},
+		"clear_site_data.clearSiteDataWriter": &clearSiteDataWriter{ResponseWriter: inner, wroteHeader: false},
 	}
 
 	for name, w := range wrappers {

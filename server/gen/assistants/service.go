@@ -33,6 +33,12 @@ type Service interface {
 	// fresh chat id. The reply is delivered asynchronously; poll the chat service
 	// (loadChat) to read it.
 	SendMessage(context.Context, *SendMessagePayload) (res *SendMessageResult, err error)
+	// Stop whatever a conversation is currently generating. Cancels turns still
+	// queued on the conversation's thread and interrupts the turn in flight on the
+	// assistant runtime, so the reply stops where it is rather than finishing in
+	// the background. Idempotent and safe to call when nothing is running:
+	// `stopped` is false when the reply had already finished.
+	InterruptTurn(context.Context, *InterruptTurnPayload) (res *InterruptTurnResult, err error)
 	// Get the project's built-in Project Assistant if it exists. Returns 404 when
 	// no managed assistant has been provisioned yet — call ensureManagedAssistant
 	// to create one.
@@ -62,7 +68,7 @@ const ServiceName = "assistants"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [8]string{"listAssistants", "getAssistant", "createAssistant", "updateAssistant", "deleteAssistant", "sendMessage", "getManagedAssistant", "ensureManagedAssistant"}
+var MethodNames = [9]string{"listAssistants", "getAssistant", "createAssistant", "updateAssistant", "deleteAssistant", "sendMessage", "interruptTurn", "getManagedAssistant", "ensureManagedAssistant"}
 
 // CreateAssistantPayload is the payload type of the assistants service
 // createAssistant method.
@@ -119,6 +125,30 @@ type GetManagedAssistantPayload struct {
 	ProjectSlugInput *string
 }
 
+// InterruptTurnPayload is the payload type of the assistants service
+// interruptTurn method.
+type InterruptTurnPayload struct {
+	// The assistant whose conversation should stop generating.
+	AssistantID string
+	// The conversation to stop, as returned by sendMessage.
+	ChatID           string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// InterruptTurnResult is the result type of the assistants service
+// interruptTurn method.
+type InterruptTurnResult struct {
+	// Whether the call stopped anything. False means nothing was generating — the
+	// reply had already finished, or the conversation never started a turn.
+	Stopped bool
+	// Whether a turn in flight on the assistant runtime was cancelled.
+	Interrupted bool
+	// How many turns were dropped from the conversation's queue before any runtime
+	// claimed them.
+	CancelledQueued int
+}
+
 // ListAssistantsPayload is the payload type of the assistants service
 // listAssistants method.
 type ListAssistantsPayload struct {
@@ -133,12 +163,19 @@ type ListAssistantsResult struct {
 	Assistants []*types.Assistant
 }
 
+type SendMessageAttachment struct {
+	// The chat attachment asset returned by assets.uploadChatAttachment.
+	AssetID string
+	// The file name to show the assistant. Falls back to the stored asset name.
+	Name *string
+}
+
 // SendMessagePayload is the payload type of the assistants service sendMessage
 // method.
 type SendMessagePayload struct {
 	// The assistant to send the message to.
 	AssistantID string
-	// The user's message text.
+	// The user's message text. May be empty when the turn carries attachments.
 	Message string
 	// The conversation to continue (from listChats or a prior sendMessage). Omit
 	// to start a new conversation; the server mints and returns a fresh chat id.
@@ -147,7 +184,9 @@ type SendMessagePayload struct {
 	// enqueuing twice. A new key is generated server-side when omitted.
 	IdempotencyKey *string
 	// Project skills to make available for this turn.
-	SkillIds         []string
+	SkillIds []string
+	// Files uploaded through assets.uploadChatAttachment that this turn carries.
+	Attachments      []*SendMessageAttachment
 	SessionToken     *string
 	ProjectSlugInput *string
 }

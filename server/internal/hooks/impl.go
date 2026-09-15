@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/url"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -18,7 +19,10 @@ import (
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
+	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -26,9 +30,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
 	"github.com/speakeasy-api/gram/server/internal/skills/suggest"
@@ -42,26 +48,43 @@ import (
 )
 
 type Service struct {
-	tracer             trace.Tracer
-	metrics            *metrics
-	logger             *slog.Logger
-	db                 *pgxpool.Pool
-	telemetryLogger    *telemetry.Logger
+	tracer          trace.Tracer
+	metrics         *metrics
+	logger          *slog.Logger
+	db              *pgxpool.Pool
+	telemetryLogger *telemetry.Logger
+	// otelLogPublisher tees OTLP logs received on the hooks endpoint into the
+	// OTel event feed pipeline (the gram.otel.v1.InboundLogRecord topic).
+	// Optional: when nil, hooks OTLP ingestion behaves exactly as before and
+	// nothing is republished.
+	otelLogPublisher gcp.Publisher[*otelv1.InboundLogRecord]
+	// otelTeeDrains tracks in-flight tee ack-drain goroutines so tests can
+	// await them deterministically.
+	otelTeeDrains      sync.WaitGroup
 	auth               authorizer
 	authz              *authz.Engine
+	audit              *audit.Logger
 	cache              cache.Cache
 	temporalEnv        *tenv.Environment
 	repo               *repo.Queries
 	productFeatures    ProductFeaturesClient
 	chatTitleGenerator ChatTitleGenerator
 	riskScanner        risk.RiskScanner
-	policyBypass       *risk.PolicyBypassEvaluator
-	spendGate          *spendrules.Gate
-	shadowMCPClient    *shadowmcp.Client
-	writer             *chat.ChatMessageWriter
+	// piScanner flags captured skill manifests that read as prompt injections.
+	// Optional: when nil, skill capture stores content and scans nothing.
+	piScanner       *promptinjection.Scanner
+	riskRecorder    *metering.RiskRecorder
+	policyBypass    *risk.PolicyBypassEvaluator
+	spendGate       *spendrules.Gate
+	shadowMCPClient *shadowmcp.Client
+	writer          *chat.ChatMessageWriter
 	// efficacySignaler is optional: when nil, hook paths record exactly as
 	// before and emit no wakes.
 	efficacySignaler efficacy.Signaler
+	// identityMapRefresh is optional: when nil, newly attributed account
+	// links converge into the ClickHouse identity map at the sync schedule's
+	// next tick instead of immediately.
+	identityMapRefresh IdentityMapRefreshSignaler
 	// suggestionSignaler is optional: when nil, recorded feedback skips the
 	// suggestion-analysis wake.
 	suggestionSignaler suggest.Signaler
@@ -121,6 +144,11 @@ type SessionMetadata struct {
 	// letting the user breakdown fall back to the device when the session has
 	// no email (company-credential sessions emit no user identity).
 	Hostname string
+	// Cwd is the session's working directory as reported by the hook adapter
+	// (hook.ingest.v1 session.cwd, or the legacy Claude payload's cwd).
+	// Persisted onto chats so session portability can materialize a moved
+	// session into the right project directory.
+	Cwd string
 	// AccountType is "team" or "personal" once classified, else empty.
 	AccountType string
 	// BillingMode is the admin-declared billing mode for the provider org this
@@ -165,6 +193,34 @@ type ChatTitleGenerator interface {
 // slow coordinator.
 const skillEfficacySignalTimeout = time.Second
 
+// IdentityMapRefreshSignaler requests an immediate ClickHouse identity map
+// sync after an account link gains attribution. Implemented by the background
+// package's throttled schedule trigger.
+type IdentityMapRefreshSignaler interface {
+	SignalIdentityMapRefresh(ctx context.Context) error
+}
+
+// identityMapRefreshSignalTimeout bounds one refresh request. A request is
+// best-effort and always follows a durable link write, so it must never hold
+// a hook response open on a slow Temporal call.
+const identityMapRefreshSignalTimeout = time.Second
+
+// signalIdentityMapRefresh delivers one best-effort refresh request after an
+// attributed account link write. Detached from the request context — the link
+// is already durable — and bounded so a slow Temporal call can never hold a
+// hook response open. Failures are logged and swallowed: the sync schedule
+// delivers the same refresh at its next tick.
+func (s *Service) signalIdentityMapRefresh(ctx context.Context) {
+	if s.identityMapRefresh == nil {
+		return
+	}
+	signalCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), identityMapRefreshSignalTimeout)
+	defer cancel()
+	if err := s.identityMapRefresh.SignalIdentityMapRefresh(signalCtx); err != nil {
+		s.logger.ErrorContext(ctx, "signal identity map refresh from hook", attr.SlogError(err))
+	}
+}
+
 // signalSkillEfficacy delivers one best-effort wake for a project. Detached
 // from the request context: the write the wake reports is already durable, so a
 // client disconnect must not drop it. Failures are logged and swallowed —
@@ -192,23 +248,28 @@ func NewService(
 	tracerProvider trace.TracerProvider,
 	meterProvider metric.MeterProvider,
 	telemetryLogger *telemetry.Logger,
+	otelLogPublisher gcp.Publisher[*otelv1.InboundLogRecord],
 	sessionsMgr *sessions.Manager,
 	cacheAdapter cache.Cache,
 	completionsClient openrouter.CompletionClient,
 	temporalEnv *tenv.Environment,
 	authz *authz.Engine,
+	auditLogger *audit.Logger,
 	pfClient ProductFeaturesClient,
 	chatTitleGenerator ChatTitleGenerator,
 	riskScanner risk.RiskScanner,
+	piScanner *promptinjection.Scanner,
 	policyBypass *risk.PolicyBypassEvaluator,
 	spendGate *spendrules.Gate,
 	shadowMCPClient *shadowmcp.Client,
 	writer *chat.ChatMessageWriter,
 	efficacySignaler efficacy.Signaler,
 	suggestionSignaler suggest.Signaler,
+	identityMapRefresh IdentityMapRefreshSignaler,
 	serverURL *url.URL,
 	siteURL *url.URL,
 	jwtSecret string,
+	riskRecorder *metering.RiskRecorder,
 ) *Service {
 	return &Service{
 		tracer:             tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/hooks"),
@@ -216,20 +277,26 @@ func NewService(
 		logger:             logger.With(attr.SlogComponent("hooks")),
 		db:                 db,
 		telemetryLogger:    telemetryLogger,
+		otelLogPublisher:   otelLogPublisher,
+		otelTeeDrains:      sync.WaitGroup{},
 		auth:               auth.New(logger, db, sessionsMgr, authz),
 		authz:              authz,
+		audit:              auditLogger,
 		cache:              cacheAdapter,
 		temporalEnv:        temporalEnv,
 		repo:               repo.New(db),
 		productFeatures:    pfClient,
 		chatTitleGenerator: chatTitleGenerator,
 		riskScanner:        riskScanner,
+		piScanner:          piScanner,
+		riskRecorder:       riskRecorder,
 		policyBypass:       policyBypass,
 		spendGate:          spendGate,
 		shadowMCPClient:    shadowMCPClient,
 		writer:             writer,
 		efficacySignaler:   efficacySignaler,
 		suggestionSignaler: suggestionSignaler,
+		identityMapRefresh: identityMapRefresh,
 		serverURL:          serverURL,
 		siteURL:            siteURL,
 		jwtSecret:          jwtSecret,

@@ -16,26 +16,28 @@ import (
 
 // Client is the "remoteSessionIssuers" service client.
 type Client struct {
-	FetchRemoteSessionIssuerMetadataEndpoint   goa.Endpoint
-	RefreshRemoteSessionIssuerMetadataEndpoint goa.Endpoint
-	CreateRemoteSessionIssuerEndpoint          goa.Endpoint
-	UpdateRemoteSessionIssuerEndpoint          goa.Endpoint
-	ListRemoteSessionIssuersEndpoint           goa.Endpoint
-	GetRemoteSessionIssuerEndpoint             goa.Endpoint
-	DeleteRemoteSessionIssuerEndpoint          goa.Endpoint
+	FetchRemoteSessionIssuerMetadataEndpoint         goa.Endpoint
+	RefreshRemoteSessionIssuerMetadataEndpoint       goa.Endpoint
+	CreateRemoteSessionIssuerEndpoint                goa.Endpoint
+	UpdateRemoteSessionIssuerEndpoint                goa.Endpoint
+	ListRemoteSessionIssuersEndpoint                 goa.Endpoint
+	GetRemoteSessionIssuerEndpoint                   goa.Endpoint
+	GetRemoteSessionIssuerDuplicatePreflightEndpoint goa.Endpoint
+	DeleteRemoteSessionIssuerEndpoint                goa.Endpoint
 }
 
 // NewClient initializes a "remoteSessionIssuers" service client given the
 // endpoints.
-func NewClient(fetchRemoteSessionIssuerMetadata, refreshRemoteSessionIssuerMetadata, createRemoteSessionIssuer, updateRemoteSessionIssuer, listRemoteSessionIssuers, getRemoteSessionIssuer, deleteRemoteSessionIssuer goa.Endpoint) *Client {
+func NewClient(fetchRemoteSessionIssuerMetadata, refreshRemoteSessionIssuerMetadata, createRemoteSessionIssuer, updateRemoteSessionIssuer, listRemoteSessionIssuers, getRemoteSessionIssuer, getRemoteSessionIssuerDuplicatePreflight, deleteRemoteSessionIssuer goa.Endpoint) *Client {
 	return &Client{
-		FetchRemoteSessionIssuerMetadataEndpoint:   fetchRemoteSessionIssuerMetadata,
-		RefreshRemoteSessionIssuerMetadataEndpoint: refreshRemoteSessionIssuerMetadata,
-		CreateRemoteSessionIssuerEndpoint:          createRemoteSessionIssuer,
-		UpdateRemoteSessionIssuerEndpoint:          updateRemoteSessionIssuer,
-		ListRemoteSessionIssuersEndpoint:           listRemoteSessionIssuers,
-		GetRemoteSessionIssuerEndpoint:             getRemoteSessionIssuer,
-		DeleteRemoteSessionIssuerEndpoint:          deleteRemoteSessionIssuer,
+		FetchRemoteSessionIssuerMetadataEndpoint:         fetchRemoteSessionIssuerMetadata,
+		RefreshRemoteSessionIssuerMetadataEndpoint:       refreshRemoteSessionIssuerMetadata,
+		CreateRemoteSessionIssuerEndpoint:                createRemoteSessionIssuer,
+		UpdateRemoteSessionIssuerEndpoint:                updateRemoteSessionIssuer,
+		ListRemoteSessionIssuersEndpoint:                 listRemoteSessionIssuers,
+		GetRemoteSessionIssuerEndpoint:                   getRemoteSessionIssuer,
+		GetRemoteSessionIssuerDuplicatePreflightEndpoint: getRemoteSessionIssuerDuplicatePreflight,
+		DeleteRemoteSessionIssuerEndpoint:                deleteRemoteSessionIssuer,
 	}
 }
 
@@ -177,6 +179,30 @@ func (c *Client) GetRemoteSessionIssuer(ctx context.Context, p *GetRemoteSession
 		return
 	}
 	return ires.(*types.RemoteSessionIssuer), nil
+}
+
+// GetRemoteSessionIssuerDuplicatePreflight calls the
+// "getRemoteSessionIssuerDuplicatePreflight" endpoint of the
+// "remoteSessionIssuers" service.
+// GetRemoteSessionIssuerDuplicatePreflight may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetRemoteSessionIssuerDuplicatePreflight(ctx context.Context, p *GetRemoteSessionIssuerDuplicatePreflightPayload) (res *types.RemoteSessionIssuerDuplicatePreflight, err error) {
+	var ires any
+	ires, err = c.GetRemoteSessionIssuerDuplicatePreflightEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.RemoteSessionIssuerDuplicatePreflight), nil
 }
 
 // DeleteRemoteSessionIssuer calls the "deleteRemoteSessionIssuer" endpoint of

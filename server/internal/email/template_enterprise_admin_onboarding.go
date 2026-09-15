@@ -9,8 +9,8 @@ type EnterpriseAdminOnboarding struct {
 	SetupLink string
 }
 
-func (EnterpriseAdminOnboarding) TransactionalID() TransactionalID {
-	return transactionalIDEnterpriseAdminOnboarding
+func (EnterpriseAdminOnboarding) Key() TemplateKey {
+	return TemplateKeyEnterpriseAdminOnboarding
 }
 
 func (t EnterpriseAdminOnboarding) Variables() map[string]string {

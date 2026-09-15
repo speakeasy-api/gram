@@ -57,6 +57,10 @@ var ErrAssistantTurnSkillContextTooLarge = errors.New("selected skill context is
 
 const maxAssistantTurnSkillContextBytes = 256 * 1024
 
+// ErrAssistantTurnAttachmentUnavailable means at least one attachment id sent
+// with a dashboard turn is not a chat attachment asset in the project.
+var ErrAssistantTurnAttachmentUnavailable = errors.New("one or more attachments are unavailable")
+
 // managedAssistantName composes a project's managed-assistant display name. The
 // project name is embedded so the per-project assistants stay distinguishable
 // across an organization. project.name is capped at 40 chars and assistants.name
@@ -324,6 +328,29 @@ type dashboardIngestPayload struct {
 	CorrelationID  string                      `json:"correlation_id"`
 	IdempotencyKey string                      `json:"idempotency_key"`
 	SkillContext   []dashboardTurnSkillContext `json:"skill_context,omitempty"`
+	Attachments    []dashboardTurnAttachment   `json:"attachments,omitempty"`
+}
+
+// DashboardAttachmentInput names one uploaded file the caller wants attached
+// to a dashboard turn. Name is the client's display name; it falls back to the
+// stored asset name when empty.
+type DashboardAttachmentInput struct {
+	AssetID uuid.UUID
+	Name    string
+}
+
+// dashboardTurnAttachment is the metadata a dashboard turn carries for one
+// uploaded file. Only the asset id is authoritative — the bytes and the
+// storage URL are re-resolved from the project's assets when the turn runs, so
+// a stale or tampered payload cannot point the runtime at another blob.
+type dashboardTurnAttachment struct {
+	AssetID uuid.UUID `json:"asset_id"`
+	// ProjectID scopes the asset: serving the bytes back to a reopened thread
+	// needs both ids, and DecodeTurn has no project context of its own.
+	ProjectID     uuid.UUID `json:"project_id"`
+	Name          string    `json:"name"`
+	ContentType   string    `json:"content_type"`
+	ContentLength int64     `json:"content_length"`
 }
 
 type dashboardTurnSkillContext struct {
@@ -351,7 +378,7 @@ type DashboardSendResult struct {
 // returned), or an existing chat id to continue it. idempotencyKey may be empty
 // — a fresh one is minted so the ingest still succeeds, but callers that want
 // retry-safe dedupe should pass a stable key.
-func (s *ServiceCore) SendDashboardMessage(ctx context.Context, projectID, assistantID uuid.UUID, userID string, chatID uuid.UUID, text, idempotencyKey string, skillIDs []uuid.UUID) (DashboardSendResult, error) {
+func (s *ServiceCore) SendDashboardMessage(ctx context.Context, projectID, assistantID uuid.UUID, userID string, chatID uuid.UUID, text, idempotencyKey string, skillIDs []uuid.UUID, attachments []DashboardAttachmentInput) (DashboardSendResult, error) {
 	assistant, err := s.GetAssistant(ctx, projectID, assistantID)
 	if err != nil {
 		return DashboardSendResult{}, err
@@ -385,6 +412,11 @@ func (s *ServiceCore) SendDashboardMessage(ctx context.Context, projectID, assis
 		}
 	}
 
+	turnAttachments, err := s.resolveDashboardTurnAttachments(ctx, projectID, attachments)
+	if err != nil {
+		return DashboardSendResult{}, err
+	}
+
 	if chatID == uuid.Nil {
 		chatID = uuid.New()
 	}
@@ -408,6 +440,7 @@ func (s *ServiceCore) SendDashboardMessage(ctx context.Context, projectID, assis
 		CorrelationID:  correlationID,
 		IdempotencyKey: idempotencyKey,
 		SkillContext:   skillContext,
+		Attachments:    turnAttachments,
 	})
 	if err != nil {
 		return DashboardSendResult{}, fmt.Errorf("marshal dashboard message: %w", err)

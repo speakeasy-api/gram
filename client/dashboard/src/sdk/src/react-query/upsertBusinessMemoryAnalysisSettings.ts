@@ -55,7 +55,7 @@ export type UpsertBusinessMemoryAnalysisSettingsMutationError =
  * upsertBusinessMemorySettings adminChatAnalysis
  *
  * @remarks
- * Create or replace the active organization's business-memory extraction settings. Requires platform admin.
+ * Create or replace the named organization's business-memory extraction settings. Requires platform admin.
  */
 export function useUpsertBusinessMemoryAnalysisSettingsMutation(
   options?: MutationHookOptions<

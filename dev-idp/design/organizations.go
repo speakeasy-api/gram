@@ -11,7 +11,7 @@ var ListOrganizationsResult = Type("ListOrganizationsResult", func() {
 })
 
 var _ = Service("organizations", func() {
-	Description("Dev-idp organizations CRUD. Backs both mock-workos and oauth2 modes' org metadata. Permanently unauthenticated (idp-design.md §6).")
+	Description("Dev-idp organizations CRUD. Backs the local backend's org metadata. Permanently unauthenticated.")
 
 	Method("create", func() {
 		Description("Create an organization.")

@@ -7,17 +7,24 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/metering"
+	domainskills "github.com/speakeasy-api/gram/server/internal/skills"
 	"github.com/speakeasy-api/gram/server/internal/skills/repo"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -237,10 +244,21 @@ func (f *flakyChats) ListChatTranscriptMessagesPage(ctx context.Context, arg cha
 	return rows, nil
 }
 
+type stubSuggestionSignaler struct {
+	calls [][2]uuid.UUID
+	err   error
+}
+
+func (s *stubSuggestionSignaler) Signal(_ context.Context, projectID, skillID uuid.UUID) error {
+	s.calls = append(s.calls, [2]uuid.UUID{projectID, skillID})
+	return s.err
+}
+
 type publishHarness struct {
 	fixture    efficacyFixture
 	scores     *telemetryrepo.Queries
 	judge      *stubJudge
+	signaler   *stubSuggestionSignaler
 	claimToken uuid.UUID
 }
 
@@ -251,13 +269,13 @@ func newPublishHarness(t *testing.T, name string) publishHarness {
 	conn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	return publishHarness{fixture: fixture, scores: telemetryrepo.New(conn), judge: newStubJudge(), claimToken: uuid.New()}
+	return publishHarness{fixture: fixture, scores: telemetryrepo.New(conn), judge: newStubJudge(), signaler: &stubSuggestionSignaler{}, claimToken: uuid.New()}
 }
 
 func (h publishHarness) publisher(t *testing.T, scores ScoreSink) *Publisher {
 	t.Helper()
 
-	return NewPublisher(testenv.NewLogger(t), testenv.NewTracerProvider(t), h.fixture.db, scores, h.judge)
+	return NewPublisher(testenv.NewLogger(t), testenv.NewTracerProvider(t), h.fixture.db, scores, h.judge, h.signaler, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
 }
 
 // today is the reservation day every fixture row spends on unless a test
@@ -464,6 +482,168 @@ func TestPublishScoresReservedEvaluationOnce(t *testing.T) {
 	require.Equal(t, PublishResult{Loaded: 0, AlreadyPublished: 0, Scored: 0, ModelFailures: 0, Failed: 0, Retryable: 0}, replay)
 	require.Equal(t, 1, h.judge.calls[SurfaceDev], "a replay must not pay for inference again")
 	require.Equal(t, []string{evaluation.ID.String()}, h.publishedIDs(t, evaluation))
+}
+
+func TestPublishPersistsHighConfidenceRecommendationsIdempotently(t *testing.T) {
+	t.Parallel()
+	h := newPublishHarness(t, "skill_efficacy_publish_recommendations")
+	evaluation := h.reserve(t, "claude-session-recommendations", "claude-code")
+	judged := okVerdict()
+	durable := []RawRecommendation{
+		{IssueType: "obsolete_guidance", ChangeType: "replace_obsolete_guidance", EvidenceMessageIndices: []int{2, 4}, Outcome: "misleading", Note: "first durable recommendation\x00 with export GITHUB_TOKEN=ghp_R2D2C3POLuk3Skywalker1234567890ab", Confidence: "high"},
+		{IssueType: "harmful_overconstraint", ChangeType: "relax_constraint", EvidenceMessageIndices: []int{7}, Outcome: "harmful", Note: "second durable recommendation", Confidence: "high"},
+	}
+	legacyIdentity := RawRecommendation{Outcome: durable[0].Outcome, Note: durable[0].Note, Confidence: durable[0].Confidence}
+	require.Equal(t, recommendationFeedbackID(evaluation.ID, legacyIdentity), recommendationFeedbackID(evaluation.ID, durable[0]), "v11 taxonomy and evidence do not change stable feedback ids")
+	judged.Verdict.Recommendations = append([]RawRecommendation{{IssueType: "guidance_gap", ChangeType: "add_missing_requirement", EvidenceMessageIndices: []int{2}, Outcome: "did_not_help", Note: "low confidence evidence", Confidence: "low"}}, durable...)
+	h.judge.results[SurfaceDev] = judged
+
+	failed, err := h.publisher(t, failingSink{ScoreSink: h.scores, err: errors.New("clickhouse unavailable")}).Publish(
+		t.Context(), h.fixture.projectID, evaluation.ClaimToken, []uuid.UUID{evaluation.ID}, nil,
+	)
+	require.ErrorIs(t, err, ErrRetryable)
+	require.Equal(t, 1, failed.Retryable)
+	require.Empty(t, h.publishedIDs(t, evaluation))
+	require.Equal(t, [][2]uuid.UUID{{h.fixture.projectID, evaluation.SkillID}}, h.signaler.calls)
+
+	judged.Verdict.Recommendations = []RawRecommendation{durable[1], durable[0]}
+	h.judge.results[SurfaceDev] = judged
+	retry, err := h.publisher(t, h.scores).Publish(t.Context(), h.fixture.projectID, evaluation.ClaimToken, []uuid.UUID{evaluation.ID}, nil)
+	require.NoError(t, err)
+	require.Equal(t, 1, retry.Scored)
+	require.Len(t, h.signaler.calls, 2, "one workflow signal is sent after each complete durable write attempt")
+
+	feedback, err := repo.New(h.fixture.db).ListSkillFeedbackByID(t.Context(), repo.ListSkillFeedbackByIDParams{
+		ProjectID:       h.fixture.projectID,
+		SkillID:         uuid.NullUUID{UUID: evaluation.SkillID, Valid: true},
+		CursorCreatedAt: pgtype.Timestamptz{},
+		CursorID:        uuid.NullUUID{},
+		PageLimit:       10,
+	})
+	require.NoError(t, err)
+	require.Len(t, feedback, 2, "deterministic ids make the retry a project-scoped no-op")
+	feedbackByID := make(map[uuid.UUID]repo.SkillFeedback, len(feedback))
+	for _, stored := range feedback {
+		feedbackByID[stored.ID] = stored
+	}
+
+	for _, expected := range durable {
+		if expected.Outcome == "misleading" {
+			expected.Note = `first durable recommendation\u0000 with export GITHUB_TOKEN=<redacted>`
+		}
+		stored, ok := feedbackByID[recommendationFeedbackID(evaluation.ID, expected)]
+		require.True(t, ok)
+		require.Equal(t, evaluation.SkillVersionID, stored.SkillVersionID.UUID)
+		require.Equal(t, string(domainskills.FeedbackSourceDev), stored.Source)
+		require.Equal(t, expected.Outcome, stored.Outcome)
+		require.Equal(t, expected.Note, stored.Note.String)
+		require.Equal(t, evaluation.SessionID, stored.SessionID.String)
+		require.False(t, stored.UserID.Valid)
+		require.False(t, stored.UserEmail.Valid)
+		if expected.Outcome == "misleading" {
+			require.Contains(t, stored.Note.String, "first durable recommendation", "redaction preserves actionable evidence")
+			require.Contains(t, stored.Note.String, `\u0000`)
+			require.Contains(t, stored.Note.String, recommendationRedaction)
+			require.NotContains(t, stored.Note.String, "ghp_R2D2C3POLuk3Skywalker1234567890ab")
+		}
+	}
+}
+
+func TestPublishSignalFailureLeavesFeedbackDurableAndStillScores(t *testing.T) {
+	t.Parallel()
+	h := newPublishHarness(t, "skill_efficacy_publish_signal_failure")
+	evaluation := h.reserve(t, "claude-session-signal-failure", "claude-code")
+	judged := okVerdict()
+	judged.Verdict.Recommendations = []RawRecommendation{{IssueType: "guidance_gap", ChangeType: "add_missing_requirement", EvidenceMessageIndices: []int{1}, Outcome: "did_not_help", Note: "durable evidence", Confidence: "high"}}
+	h.judge.results[SurfaceDev] = judged
+	h.signaler.err = errors.New("temporal unavailable")
+
+	result, err := h.publisher(t, h.scores).Publish(t.Context(), h.fixture.projectID, evaluation.ClaimToken, []uuid.UUID{evaluation.ID}, nil)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Scored)
+	require.Equal(t, []string{evaluation.ID.String()}, h.publishedIDs(t, evaluation), "the daily sweep covers a failed best-effort workflow signal")
+
+	feedback, err := repo.New(h.fixture.db).ListSkillFeedbackByID(t.Context(), repo.ListSkillFeedbackByIDParams{
+		ProjectID:       h.fixture.projectID,
+		SkillID:         uuid.NullUUID{UUID: evaluation.SkillID, Valid: true},
+		CursorCreatedAt: pgtype.Timestamptz{},
+		CursorID:        uuid.NullUUID{},
+		PageLimit:       10,
+	})
+	require.NoError(t, err)
+	require.Len(t, feedback, 1)
+	require.Len(t, h.signaler.calls, 1)
+}
+
+func TestPublishMeterFailureLeavesRecommendationAndScoreDurableWithoutChargingAttempt(t *testing.T) {
+	t.Parallel()
+	h := newPublishHarness(t, "skill_efficacy_publish_meter_failure")
+	evaluation := h.reserve(t, "claude-session-meter-failure", "claude-code")
+	judged := okVerdict()
+	judged.Verdict.Recommendations = []RawRecommendation{{IssueType: "guidance_gap", ChangeType: "add_missing_requirement", EvidenceMessageIndices: []int{1}, Outcome: "did_not_help", Note: "durable evidence with export GITHUB_TOKEN=ghp_R2D2C3POLuk3Skywalker1234567890ab", Confidence: "high"}}
+	h.judge.results[SurfaceDev] = judged
+
+	meterPublisher := gcp.NewMockPublisher[*meteringv1.MeterReading]()
+	releaseMeter := make(chan struct{})
+	release := sync.OnceFunc(func() { close(releaseMeter) })
+	t.Cleanup(release)
+	meterContexts := make(chan context.Context, 1)
+	meterPublisher.On("Publish", mock.Anything, mock.Anything).Return(errors.New("meter unavailable")).Once().Run(func(args mock.Arguments) {
+		recordCtx, ok := args.Get(0).(context.Context)
+		require.True(t, ok)
+		meterContexts <- recordCtx
+		select {
+		case <-releaseMeter:
+		case <-recordCtx.Done():
+		}
+	})
+	logFile, err := os.CreateTemp(t.TempDir(), "meter.log")
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, logFile.Close()) })
+	publisher := h.publisher(t, h.scores)
+	publisher.logger = slog.New(slog.NewJSONHandler(logFile, nil))
+	// Recording stays blocked until durable publication finishes and cancels
+	// its evaluation context, so the recording context must be independent.
+	publisher.riskRecorder = metering.NewRiskRecorder(meterPublisher)
+
+	result, err := publisher.Publish(t.Context(), h.fixture.projectID, evaluation.ClaimToken, []uuid.UUID{evaluation.ID}, nil)
+	require.NoError(t, err)
+	require.Equal(t, PublishResult{Loaded: 1, AlreadyPublished: 0, Scored: 1, ModelFailures: 0, Failed: 0, Retryable: 0}, result)
+	require.Equal(t, []string{evaluation.ID.String()}, h.publishedIDs(t, evaluation))
+
+	feedback, err := repo.New(h.fixture.db).ListSkillFeedbackByID(t.Context(), repo.ListSkillFeedbackByIDParams{
+		ProjectID:       h.fixture.projectID,
+		SkillID:         uuid.NullUUID{UUID: evaluation.SkillID, Valid: true},
+		CursorCreatedAt: pgtype.Timestamptz{},
+		CursorID:        uuid.NullUUID{},
+		PageLimit:       10,
+	})
+	require.NoError(t, err)
+	require.Len(t, feedback, 1)
+	require.Equal(t, "durable evidence with export GITHUB_TOKEN=<redacted>", feedback[0].Note.String)
+
+	state, err := repo.New(h.fixture.db).GetSkillEfficacyEvaluationState(t.Context(), repo.GetSkillEfficacyEvaluationStateParams{
+		ProjectID: h.fixture.projectID,
+		ID:        evaluation.ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "scored", state.State)
+	require.Zero(t, state.Attempts, "meter publication failure must not charge an efficacy retry attempt")
+	var recordCtx context.Context
+	select {
+	case recordCtx = <-meterContexts:
+	case <-time.After(time.Second):
+		t.Fatal("usage recording did not start")
+	}
+	require.NoError(t, recordCtx.Err(), "evaluation completion must not cancel usage recording")
+	_, bounded := recordCtx.Deadline()
+	require.True(t, bounded, "detached usage recording must still have a deadline")
+	release()
+	require.Eventually(t, func() bool {
+		logs, err := os.ReadFile(logFile.Name())
+		return err == nil && bytes.Contains(logs, []byte("meter unavailable"))
+	}, time.Second, time.Millisecond)
+	meterPublisher.AssertExpectations(t)
 }
 
 // The subject of a reservation can be deleted while the batch is in flight, so
@@ -982,7 +1162,7 @@ func TestPublishModelFailureRecordsClassNotProviderDetail(t *testing.T) {
 	h.judge.errs[SurfaceDev] = fmt.Errorf("openrouter rejected efficacy judge request: %w: 400 %s", ErrModelFailure, echoed)
 
 	var logs bytes.Buffer
-	publisher := NewPublisher(slog.New(slog.NewJSONHandler(&logs, nil)), testenv.NewTracerProvider(t), h.fixture.db, h.scores, h.judge)
+	publisher := NewPublisher(slog.New(slog.NewJSONHandler(&logs, nil)), testenv.NewTracerProvider(t), h.fixture.db, h.scores, h.judge, h.signaler, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
 
 	result, err := publisher.Publish(t.Context(), h.fixture.projectID, evaluation.ClaimToken, []uuid.UUID{evaluation.ID}, nil)
 	require.NoError(t, err)

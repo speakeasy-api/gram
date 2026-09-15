@@ -5,9 +5,11 @@ import (
 	"errors"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	orgissuersgen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_issuers"
 	"github.com/speakeasy-api/gram/server/gen/types"
@@ -16,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/issuerurl"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -68,6 +71,21 @@ func (s *Service) CreateIssuer(ctx context.Context, payload *orgissuersgen.Creat
 	logoAssetID, err := conv.PtrToNullUUID(payload.LogoAssetID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid logo asset id").LogError(ctx, logger)
+	}
+
+	// Revocation endpoint must be HTTPS, or HTTP on loopback where a token
+	// never crosses a network: tokens are sensitive credentials that must not
+	// be transmitted in plaintext. An empty value stays legal.
+	if v := conv.PtrValOr(payload.RevocationEndpoint, ""); v != "" && !urls.IsAbsoluteHTTPSOrLoopback(v) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "revocation_endpoint must be an absolute https URL, or http on loopback").LogError(ctx, logger)
+	}
+	// The userinfo and introspection endpoints receive access tokens, so they
+	// are held to the same transport rule as the revocation endpoint.
+	if v := conv.PtrValOr(payload.UserinfoEndpoint, ""); v != "" && !urls.IsAbsoluteHTTPSOrLoopback(v) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "userinfo_endpoint must be an absolute https URL, or http on loopback").LogError(ctx, logger)
+	}
+	if v := conv.PtrValOr(payload.IntrospectionEndpoint, ""); v != "" && !urls.IsAbsoluteHTTPSOrLoopback(v) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "introspection_endpoint must be an absolute https URL, or http on loopback").LogError(ctx, logger)
 	}
 
 	// Discovery drops malformed documentation URLs, but a caller holding the write
@@ -124,6 +142,7 @@ func (s *Service) CreateIssuer(ctx context.Context, payload *orgissuersgen.Creat
 		ClientSetupDocumentationUrl:       conv.PtrToPGTextEmpty(payload.ClientSetupDocumentationURL),
 		AuthorizationEndpoint:             conv.PtrToPGText(payload.AuthorizationEndpoint),
 		TokenEndpoint:                     conv.PtrToPGText(payload.TokenEndpoint),
+		RevocationEndpoint:                conv.PtrToPGText(payload.RevocationEndpoint),
 		RegistrationEndpoint:              conv.PtrToPGText(payload.RegistrationEndpoint),
 		JwksUri:                           conv.PtrToPGText(payload.JwksURI),
 		ServiceDocumentation:              conv.PtrToPGTextEmpty(payload.ServiceDocumentation),
@@ -133,9 +152,25 @@ func (s *Service) CreateIssuer(ctx context.Context, payload *orgissuersgen.Creat
 		GrantTypesSupported:               payload.GrantTypesSupported,
 		ResponseTypesSupported:            payload.ResponseTypesSupported,
 		TokenEndpointAuthMethodsSupported: payload.TokenEndpointAuthMethodsSupported,
+		CodeChallengeMethodsSupported:     payload.CodeChallengeMethodsSupported,
 		ClientIDMetadataDocumentSupported: conv.PtrValOr(payload.ClientIDMetadataDocumentSupported, false),
 		Oidc:                              conv.PtrValOr(payload.Oidc, false),
 		Passthrough:                       conv.PtrValOr(payload.Passthrough, false),
+		// Discovered fields forwarded from the draft. Omitted fields store NULL
+		// ("not captured"), like code_challenge_methods_supported above.
+		UserinfoEndpoint:                           conv.PtrToPGTextEmpty(payload.UserinfoEndpoint),
+		IntrospectionEndpoint:                      conv.PtrToPGTextEmpty(payload.IntrospectionEndpoint),
+		IntrospectionEndpointAuthMethodsSupported:  payload.IntrospectionEndpointAuthMethodsSupported,
+		IDTokenSigningAlgValuesSupported:           payload.IDTokenSigningAlgValuesSupported,
+		ClaimsSupported:                            payload.ClaimsSupported,
+		BackchannelLogoutSupported:                 conv.PtrToPGBool(payload.BackchannelLogoutSupported),
+		AuthorizationResponseIssParameterSupported: conv.PtrToPGBool(payload.AuthorizationResponseIssParameterSupported),
+		ScopeOverride:                              scopeOverride(payload.ScopeOverride),
+		ResourceIndicatorSupported:                 conv.PtrToPGBool(payload.ResourceIndicatorSupported),
+		Metadata:                                   nil,
+		MetadataFetchedAt:                          pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+		MetadataLastError:                          "",
+		MetadataLastErrorUrl:                       "",
 	})
 	if err != nil {
 		if isRemoteSessionIssuerSlugConflict(err) || isGlobalRemoteSessionIssuerSlugConflict(err) {
@@ -252,7 +287,7 @@ func (s *Service) GetIssuer(ctx context.Context, payload *orgissuersgen.GetIssue
 }
 
 // GetIssuerDeletePreflight returns the authoritative impact of deleting an
-// issuer: client count and the names of MCP servers its clients are attached to.
+// issuer: client attachments and user-session issuers that trust it.
 func (s *Service) GetIssuerDeletePreflight(ctx context.Context, payload *orgissuersgen.GetIssuerDeletePreflightPayload) (*orgissuersgen.OrganizationIssuerDeletePreflight, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
@@ -302,11 +337,81 @@ func (s *Service) GetIssuerDeletePreflight(ctx context.Context, payload *orgissu
 	for _, row := range nameRows {
 		names = append(names, orgDisplayName(conv.FromPGText[string](row.Name), row.Url))
 	}
+	trustedRows, err := r.ListOrganizationTrustedUserSessionIssuersByRemoteSessionIssuerID(ctx, repo.ListOrganizationTrustedUserSessionIssuersByRemoteSessionIssuerIDParams{
+		RemoteSessionIssuerID: issuerID,
+		OrganizationID:        authCtx.ActiveOrganizationID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list user session issuers that trust issuer").LogError(ctx, logger)
+	}
+	trusted := make([]*orgissuersgen.TrustedUserSessionIssuerReference, 0, len(trustedRows))
+	for _, row := range trustedRows {
+		trusted = append(trusted, &orgissuersgen.TrustedUserSessionIssuerReference{ID: row.ID.String(), Slug: row.Slug})
+	}
 
 	return &orgissuersgen.OrganizationIssuerDeletePreflight{
-		ClientCount:    int(clientCount),
-		McpServerNames: names,
+		ClientCount:               int(clientCount),
+		McpServerNames:            names,
+		TrustedUserSessionIssuers: trusted,
 	}, nil
+}
+
+// GetIssuerDuplicatePreflight reports the issuers an organization administrator
+// can already see that describe a given upstream authorization server, so a
+// create or edit form can warn before adding a second record for one issuer.
+//
+// The organization arm is the wide one — every record in the organization,
+// project-specific ones included — rather than the organization-level-only arm
+// the project tier uses. An org administrator holds org:read across the whole
+// organization, and the project-specific rows are the most useful thing this can
+// report: an administrator adding an organization-level issuer most needs to
+// know that several projects already configured the same URL separately, since
+// those are exactly what MigrateIssuer consolidates.
+//
+// The answer does not depend on whether the issuer being created will be
+// organization-level or project-scoped. Both are written by CreateIssuer under
+// the same org:admin grant, and narrowing the project-scoped case would hide
+// duplicates the same caller can see a moment later in the issuer listing.
+func (s *Service) GetIssuerDuplicatePreflight(ctx context.Context, payload *orgissuersgen.GetIssuerDuplicatePreflightPayload) (*types.RemoteSessionIssuerDuplicatePreflight, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+
+	canonical, err := issuerurl.Parse(conv.PtrValOrEmpty(payload.Issuer, ""))
+	if err != nil {
+		return emptyIssuerDuplicatePreflight(), nil
+	}
+
+	candidates, err := repo.New(s.db).ListOrganizationRemoteSessionIssuersByIssuerURL(ctx, repo.ListOrganizationRemoteSessionIssuersByIssuerURLParams{
+		Issuers:        canonical.MatchCandidates(),
+		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
+		IncludeGlobal:  true,
+		PerTierLimit:   maxIssuerDuplicateMatchesPerTier,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list organization remote session issuers by issuer url").LogError(ctx, logger)
+	}
+
+	rows := make([]issuerDuplicateCandidate, 0, len(candidates))
+	for _, candidate := range candidates {
+		rows = append(rows, issuerDuplicateCandidate{
+			id:          candidate.ID,
+			slug:        candidate.Slug,
+			name:        conv.FromPGTextOrEmpty[string](candidate.Name),
+			issuerURL:   candidate.Issuer,
+			tier:        scopeOfTenancy(candidate.ProjectID, candidate.OrganizationID),
+			projectName: candidate.ProjectName,
+		})
+	}
+
+	return buildIssuerDuplicatePreflight(rows), nil
 }
 
 // UpdateIssuer patches any issuer in the caller's organization.
@@ -330,9 +435,27 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *orgissuersgen.Updat
 		return nil, oops.E(oops.CodeBadRequest, nil, "issuer cannot be set to empty").LogError(ctx, logger)
 	}
 
-	logoAssetID, err := conv.PtrToNullUUID(payload.LogoAssetID)
-	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid logo asset id").LogError(ctx, logger)
+	// An empty logo asset id stays legal: the update query reads it as the
+	// explicit "clear to NULL" sentinel. Any other value must be a uuid —
+	// the query casts the text parameter, so a malformed value has to be
+	// rejected here rather than surfacing as a Postgres cast error.
+	if v := conv.PtrValOr(payload.LogoAssetID, ""); v != "" {
+		if _, err := uuid.Parse(v); err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid logo asset id").LogError(ctx, logger)
+		}
+	}
+
+	// Revocation endpoint must be HTTPS, or HTTP on loopback where a token
+	// never crosses a network: tokens are sensitive credentials that must not
+	// be transmitted in plaintext. An empty value stays legal.
+	if v := conv.PtrValOr(payload.RevocationEndpoint, ""); v != "" && !urls.IsAbsoluteHTTPSOrLoopback(v) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "revocation_endpoint must be an absolute https URL, or http on loopback").LogError(ctx, logger)
+	}
+	if v := conv.PtrValOr(payload.UserinfoEndpoint, ""); v != "" && !urls.IsAbsoluteHTTPSOrLoopback(v) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "userinfo_endpoint must be an absolute https URL, or http on loopback").LogError(ctx, logger)
+	}
+	if v := conv.PtrValOr(payload.IntrospectionEndpoint, ""); v != "" && !urls.IsAbsoluteHTTPSOrLoopback(v) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "introspection_endpoint must be an absolute https URL, or http on loopback").LogError(ctx, logger)
 	}
 
 	// Discovery drops malformed documentation URLs, but a caller holding the write
@@ -390,10 +513,11 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *orgissuersgen.Updat
 		Slug:                              conv.PtrToPGText(payload.Slug),
 		Issuer:                            conv.PtrToPGText(payload.Issuer),
 		Name:                              conv.PtrToPGText(payload.Name),
-		LogoAssetID:                       logoAssetID,
+		LogoAssetID:                       conv.PtrToPGText(payload.LogoAssetID),
 		ClientSetupDocumentationUrl:       conv.PtrToPGText(payload.ClientSetupDocumentationURL),
 		AuthorizationEndpoint:             conv.PtrToPGText(payload.AuthorizationEndpoint),
 		TokenEndpoint:                     conv.PtrToPGText(payload.TokenEndpoint),
+		RevocationEndpoint:                conv.PtrToPGText(payload.RevocationEndpoint),
 		RegistrationEndpoint:              conv.PtrToPGText(payload.RegistrationEndpoint),
 		JwksUri:                           conv.PtrToPGText(payload.JwksURI),
 		ServiceDocumentation:              conv.PtrToPGText(payload.ServiceDocumentation),
@@ -403,11 +527,21 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *orgissuersgen.Updat
 		GrantTypesSupported:               payload.GrantTypesSupported,
 		ResponseTypesSupported:            payload.ResponseTypesSupported,
 		TokenEndpointAuthMethodsSupported: payload.TokenEndpointAuthMethodsSupported,
+		CodeChallengeMethodsSupported:     payload.CodeChallengeMethodsSupported,
 		ClientIDMetadataDocumentSupported: conv.PtrToPGBool(payload.ClientIDMetadataDocumentSupported),
-		Oidc:                              conv.PtrToPGBool(payload.Oidc),
-		Passthrough:                       conv.PtrToPGBool(payload.Passthrough),
-		ID:                                issuerID,
-		OrganizationID:                    conv.ToPGText(authCtx.ActiveOrganizationID),
+		UserinfoEndpoint:                  conv.PtrToPGText(payload.UserinfoEndpoint),
+		IntrospectionEndpoint:             conv.PtrToPGText(payload.IntrospectionEndpoint),
+		IntrospectionEndpointAuthMethodsSupported:  payload.IntrospectionEndpointAuthMethodsSupported,
+		IDTokenSigningAlgValuesSupported:           payload.IDTokenSigningAlgValuesSupported,
+		ClaimsSupported:                            payload.ClaimsSupported,
+		BackchannelLogoutSupported:                 conv.PtrToPGBool(payload.BackchannelLogoutSupported),
+		AuthorizationResponseIssParameterSupported: conv.PtrToPGBool(payload.AuthorizationResponseIssParameterSupported),
+		ScopeOverride:                              payload.ScopeOverride,
+		ResourceIndicatorSupported:                 conv.PtrToPGBool(payload.ResourceIndicatorSupported),
+		Oidc:                                       conv.PtrToPGBool(payload.Oidc),
+		Passthrough:                                conv.PtrToPGBool(payload.Passthrough),
+		ID:                                         issuerID,
+		OrganizationID:                             conv.ToPGText(authCtx.ActiveOrganizationID),
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -476,12 +610,12 @@ func (s *Service) FetchIssuerMetadata(ctx context.Context, payload *orgissuersge
 		return nil, oops.E(oops.CodeBadRequest, nil, "invalid issuer url").LogError(ctx, logger)
 	}
 
-	doc, warnings, err := discoverIssuerMetadata(ctx, s.policy, issuerURL)
+	discovered, err := discoverIssuerMetadata(ctx, s.policy, issuerURL)
 	if err != nil {
 		return nil, mapDiscoveryError(ctx, logger, err, oops.CodeBadRequest)
 	}
 
-	return buildIssuerDraft(doc, issuerURL, warnings), nil
+	return buildIssuerDraft(discovered.doc, issuerURL, discovered.warnings), nil
 }
 
 // RefreshIssuerMetadata re-reads an existing issuer's RFC 8414 metadata
@@ -529,7 +663,7 @@ func (s *Service) RefreshIssuerMetadata(ctx context.Context, payload *orgissuers
 		return nil, oops.E(oops.CodeUnexpected, err, "get organization admin remote session issuer").LogError(ctx, logger)
 	}
 
-	params, warnings, err := refreshIssuerMetadata(ctx, s.policy, existing)
+	params, warnings, err := refreshIssuerMetadata(ctx, s.policy, s.jwksResolver, existing)
 	if err != nil {
 		return nil, mapDiscoveryError(ctx, logger, err, oops.CodeGatewayError)
 	}
@@ -556,6 +690,9 @@ func (s *Service) RefreshIssuerMetadata(ctx context.Context, payload *orgissuers
 			return nil, oops.E(oops.CodeConflict, err, "%s", refreshConflictMessage).LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "lock organization admin remote session issuer").LogError(ctx, logger)
+	}
+	if !sameMetadataRefreshSnapshot(locked, existing) {
+		return nil, oops.E(oops.CodeConflict, nil, "%s", refreshConflictMessage).LogError(ctx, logger)
 	}
 
 	beforeView := mv.BuildRemoteSessionIssuerView(locked)
@@ -655,6 +792,13 @@ func (s *Service) DeleteIssuer(ctx context.Context, payload *orgissuersgen.Delet
 	if clientCount > 0 {
 		return oops.E(oops.CodeConflict, nil, "remote session issuer has active clients; delete the clients first").LogError(ctx, logger)
 	}
+	trustedCount, err := txRepo.CountTrustedUserSessionIssuersByRemoteSessionIssuerID(ctx, issuerID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "count user session issuers that trust issuer").LogError(ctx, logger)
+	}
+	if trustedCount > 0 {
+		return oops.E(oops.CodeConflict, nil, "remote session issuer is trusted by active user session issuers; unlink them first").LogError(ctx, logger)
+	}
 
 	deleted, err := txRepo.DeleteOrganizationRemoteSessionIssuer(ctx, repo.DeleteOrganizationRemoteSessionIssuerParams{
 		ID:             issuerID,
@@ -738,8 +882,10 @@ func (s *Service) MoveIssuer(ctx context.Context, payload *orgissuersgen.MoveIss
 
 	// A platform issuer has no owning organization to re-scope within, and a
 	// tenant must never move one. SetOrganizationRemoteSessionIssuerProject is
-	// org-scoped and would refuse anyway; opting out keeps it a clean 404.
-	existing, err := txRepo.GetOrganizationRemoteSessionIssuerByID(ctx, repo.GetOrganizationRemoteSessionIssuerByIDParams{
+	// org-scoped and would refuse anyway; checking before the cross-reference
+	// advisory lock keeps foreign issuer IDs from creating cross-tenant lock
+	// contention.
+	_, err = txRepo.GetOrganizationRemoteSessionIssuerByID(ctx, repo.GetOrganizationRemoteSessionIssuerByIDParams{
 		ID:             issuerID,
 		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
 		IncludeGlobal:  false,
@@ -750,8 +896,35 @@ func (s *Service) MoveIssuer(ctx context.Context, payload *orgissuersgen.MoveIss
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "get organization admin remote session issuer").LogError(ctx, logger)
 	}
+	if err := txRepo.LockRemoteSessionIssuerForClientBinding(ctx, issuerID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock remote session issuer references").LogError(ctx, logger)
+	}
+
+	// Re-check ownership after taking the advisory lock. A concurrent platform
+	// migration or delete that won the lock must win rather than letting this
+	// move act on a row whose scope changed after the preflight read.
+	existing, err := txRepo.GetOrganizationRemoteSessionIssuerByID(ctx, repo.GetOrganizationRemoteSessionIssuerByIDParams{
+		ID:             issuerID,
+		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
+		IncludeGlobal:  false,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeConflict, err, "remote session issuer changed while it was being locked; retry the move").LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "recheck organization admin remote session issuer").LogError(ctx, logger)
+	}
 
 	beforeView := mv.BuildRemoteSessionIssuerView(existing)
+	if projectID.Valid {
+		trustedCount, err := txRepo.CountTrustedUserSessionIssuersByRemoteSessionIssuerID(ctx, issuerID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "count user session issuers that trust issuer").LogError(ctx, logger)
+		}
+		if trustedCount > 0 {
+			return nil, oops.E(oops.CodeConflict, nil, "remote session issuer is trusted by active user session issuers; unlink them before moving it to a project").LogError(ctx, logger)
+		}
+	}
 
 	updated, err := txRepo.SetOrganizationRemoteSessionIssuerProject(ctx, repo.SetOrganizationRemoteSessionIssuerProjectParams{
 		ProjectID:      projectID,
@@ -894,11 +1067,20 @@ func (s *Service) GetIssuerMigratePreflight(ctx context.Context, payload *orgiss
 	return &orgissuersgen.OrganizationIssuerMigratePreflight{
 		ClientCount:               int(preflight.clientCount),
 		McpServerNames:            preflight.mcpServerNames,
-		EndpointMismatches:        preflight.endpointMismatches,
+		EndpointMismatches:        issuerFieldMismatchViews(preflight.endpointMismatches),
 		ConflictingMcpServerNames: preflight.conflictingMcpServerNames,
-		Warnings:                  preflight.warnings,
+		Warnings:                  issuerFieldMismatchViews(preflight.warnings),
+		TrustedUserSessionIssuers: trustedUserSessionIssuerReferenceViews(preflight.trustedUserSessionIssuers),
 		CanMigrate:                preflight.canMigrate(),
 	}, nil
+}
+
+func trustedUserSessionIssuerReferenceViews(refs []trustedUserSessionIssuerReference) []*orgissuersgen.TrustedUserSessionIssuerReference {
+	views := make([]*orgissuersgen.TrustedUserSessionIssuerReference, 0, len(refs))
+	for _, ref := range refs {
+		views = append(views, &orgissuersgen.TrustedUserSessionIssuerReference{ID: ref.id.String(), Slug: ref.slug})
+	}
+	return views
 }
 
 // MigrateIssuer consolidates the source issuer onto the target: every active

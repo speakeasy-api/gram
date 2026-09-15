@@ -1,9 +1,9 @@
 // Client resolution seam for the issuer-gated OAuth surface. Every handler
 // that resolves a user_session_clients row from a presented client_id —
 // authorize, token, consent GET/POST — funnels through
-// resolveUserSessionClient, so inbound CIMD resolution (and its future
-// layers: document caching, per-origin rate limits, admission control) has
-// exactly one home instead of per-handler branches.
+// resolveUserSessionClient, so inbound CIMD resolution and the layers around
+// it (admission control and document caching) have exactly one home instead
+// of per-handler branches.
 
 package mcp
 
@@ -19,7 +19,8 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
@@ -34,16 +35,15 @@ const (
 	// lookupClientOnly resolves strictly from the database. Used by the
 	// token and consent handlers: by the time they run, the authorize leg
 	// has already persisted any CIMD row, and mid-flow requests (a code
-	// exchange or refresh) must keep working even if the CIMD flag flips
-	// off between legs.
+	// exchange or refresh) must keep working even if the issuer's admission
+	// policy changes between legs.
 	lookupClientOnly clientIDResolveMode = "lookup_only"
 
 	// resolveClientCIMD additionally treats a URL-shaped client_id as a
-	// Client ID Metadata Document reference when the issuer organization's
-	// gram-user-session-cimd flag is on: the document is fetched and
-	// validated on every call (no caching) and the row lazily
-	// upserted. Authorize-time only — the consent GET/POST re-resolve the
-	// client by client_id, so the row must exist before the flow leaves
+	// Client ID Metadata Document reference: the row is read, the document
+	// fetched and validated when that row's cache has lapsed, and the row
+	// lazily upserted. Authorize-time only — the consent GET/POST re-resolve
+	// the client by client_id, so the row must exist before the flow leaves
 	// /authorize.
 	resolveClientCIMD clientIDResolveMode = "resolve_cimd"
 )
@@ -54,18 +54,8 @@ const (
 // rather than echoing it to the client.
 var errCIMDFetchFailed = errors.New("cimd document fetch failed")
 
-// errCIMDDisabled marks a URL-shaped client_id rejected because the issuer
-// organization's gram-user-session-cimd flag is off. Handlers must render it
-// exactly like an unknown client (invalid_client, "unknown client_id") so
-// the wire response does not leak per-organization flag state; the dedicated
-// sentinel exists so the flag-off path is loggable and is not conflated
-// with pgx.ErrNoRows from a lookup that actually ran.
-var errCIMDDisabled = errors.New("cimd disabled for organization")
-
 // An admission denial surfaces as *admission.DenialError, which carries its
-// own client-facing Description. Unlike errCIMDDisabled — whose wire
-// response is deliberately generic so it cannot be used to probe
-// per-organization flag state — an admission denial is customer-configured
+// own client-facing Description. An admission denial is customer-configured
 // policy rather than a rollout secret, so being explicit is safe and
 // useful.
 
@@ -79,53 +69,134 @@ var errCIMDDisabled = errors.New("cimd disabled for organization")
 //     client-safe code + description (resolveClientCIMD only)
 //   - errCIMDFetchFailed: document fetch failure; log, render generic
 //     (resolveClientCIMD only)
-//   - errCIMDDisabled: URL-shaped client_id while the flag is off; render
-//     as unknown client (resolveClientCIMD only). Deliberately fails closed
-//     even when a previously-resolved row exists, so disabling the flag is
-//     a real off switch for new authorize flows
 //   - pgx.ErrNoRows: unknown client
 //   - anything else: infrastructure failure
 func (s *Service) resolveUserSessionClient(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, clientID string, mode clientIDResolveMode) (*usersessions_repo.UserSessionClient, error) {
 	queries := usersessions_repo.New(s.db)
 
 	if mode == resolveClientCIMD && cimd.IsClientIDURL(clientID) {
-		if !s.userSessionCIMDEnabled(ctx, logger, endpoint) {
-			return nil, errCIMDDisabled
-		}
-
 		// Admission runs before the resolver, so a denied client_id costs a
-		// map lookup — no outbound request, no fetch timeout, and (once
-		// AIS-215 lands) no rate-limiter token. It also runs before the
-		// length cap inside the resolver, which is why admission applies its
-		// own bound before a catalog miss can reach the database.
+		// map lookup — no outbound request, no fetch timeout. It also runs
+		// before the length cap inside the resolver, which is why admission
+		// applies its own bound before a catalog miss can reach the database.
 		if err := s.admitCIMDClient(ctx, logger, endpoint, clientID); err != nil {
 			return nil, err
 		}
 
-		doc, err := s.cimdResolver.Resolve(ctx, clientID)
+		// The persisted row doubles as the document cache, so it is read
+		// before the fetch rather than only written after one. A miss is
+		// the ordinary first-contact case, not an error.
+		var cachedRow *usersessions_repo.UserSessionClient
+		existing, err := queries.GetUserSessionClientByClientID(ctx, usersessions_repo.GetUserSessionClientByClientIDParams{
+			UserSessionIssuerID: endpoint.UserSessionIssuerID,
+			ClientID:            clientID,
+		})
+		switch {
+		case err == nil:
+			cachedRow = &existing
+		case errors.Is(err, pgx.ErrNoRows):
+		default:
+			return nil, fmt.Errorf("lookup cimd user session client: %w", err)
+		}
+
+		// Only a CIMD-resolved row is a cache. A secret-bearing DCR row
+		// that happens to share this client_id must still force a fetch:
+		// its metadata never came from a document, and the upsert's guard
+		// will refuse to rewrite it anyway.
+		//
+		// A row with no expiry still contributes its validator. The two
+		// columns are independent: a host may serve an ETag with no
+		// freshness directives at all, and clearing only the expiry is a
+		// request to revalidate now, not to discard what revalidation
+		// needs. Discarding both is what a purge is for.
+		var cache cimd.CacheState
+		if cachedRow != nil && cachedRow.ClientIDMetadataUri.Valid {
+			cache = cimd.CacheState{
+				ExpiresAt: cachedRow.ClientIDMetadataCacheExpiresAt.Time,
+				ETag:      cachedRow.ClientIDMetadataEtag.String,
+			}
+		}
+
+		result, err := s.cimdResolver.Resolve(ctx, clientID, cache)
 		if err != nil {
+			// Fail closed on every refresh failure, leaving the cached row
+			// as it was: -02 §5.1 says a fetch failure SHOULD abort the
+			// authorization request, so an expired document is never served
+			// stale to keep a flow alive.
 			if _, ok := errors.AsType[*oauthwire.Error](err); ok {
 				return nil, fmt.Errorf("resolve cimd client: %w", err)
 			}
 			return nil, fmt.Errorf("%w: %w", errCIMDFetchFailed, err)
 		}
 
-		row, err := queries.UpsertUserSessionClientFromCIMD(ctx, usersessions_repo.UpsertUserSessionClientFromCIMDParams{
-			UserSessionIssuerID: endpoint.UserSessionIssuerID,
-			ClientID:            clientID,
-			ClientName:          doc.ClientName,
-			RedirectUris:        doc.RedirectURIs,
-		})
-		if err != nil {
-			// No-rows here means the DO UPDATE guard refused to rewrite a
-			// secret-bearing row sharing this client_id; surface it as an
-			// unknown client rather than a 500.
-			if errors.Is(err, pgx.ErrNoRows) {
-				return nil, pgx.ErrNoRows
-			}
-			return nil, fmt.Errorf("upsert cimd user session client: %w", err)
+		if result.Outcome != cimd.CacheOutcomeRefreshed && cachedRow == nil {
+			// Unreachable: the resolver reports a cache outcome only for
+			// cache state this function passed in, and it passes none
+			// without a row. Checked rather than dereferenced because the
+			// alternative is a panic on an unauthenticated endpoint.
+			return nil, fmt.Errorf("cimd resolver reported %q outcome with no cached client", result.Outcome)
 		}
-		return &row, nil
+
+		switch result.Outcome {
+		case cimd.CacheOutcomeCached:
+			return cachedRow, nil
+		case cimd.CacheOutcomeNotModified:
+			row, err := queries.UpdateUserSessionClientCIMDCache(ctx, usersessions_repo.UpdateUserSessionClientCIMDCacheParams{
+				ID:                   cachedRow.ID,
+				CacheTtlSeconds:      result.TTL.Seconds(),
+				ClientIDMetadataEtag: conv.ToPGTextEmpty(result.ETag),
+			})
+			if err != nil {
+				// No-rows means the row stopped being an updatable CIMD row
+				// between the read and the write (revoked, or replaced by a
+				// secret-bearing registration); treat it as unknown rather
+				// than serving the row the 304 was about.
+				if errors.Is(err, pgx.ErrNoRows) {
+					return nil, pgx.ErrNoRows
+				}
+				return nil, fmt.Errorf("update cimd user session client cache: %w", err)
+			}
+			return &row, nil
+		case cimd.CacheOutcomeRefreshed:
+			if cachedRow != nil && usersessions.CIMDDocumentDowngradesAuthMethod(cachedRow, result.Document) {
+				// A document that drops private_key_jwt after committing to
+				// it is indistinguishable from a domain takeover, and no
+				// legitimate client has been observed doing it. The stored
+				// method stands; the operator's reset is to revoke the
+				// client, after which the next authorize registers afresh.
+				logger.WarnContext(ctx, "cimd document downgrades token_endpoint_auth_method, refusing refresh",
+					attr.SlogOAuthClientID(clientID),
+					attr.SlogOAuthRegisteredAuthMethod(cachedRow.TokenEndpointAuthMethod.String),
+					attr.SlogOAuthDeclaredAuthMethod(result.Document.DeclaredAuthMethod()),
+				)
+				return nil, fmt.Errorf("resolve cimd client: %w", &oauthwire.Error{Code: "invalid_client_metadata", Description: "document may not downgrade token_endpoint_auth_method from private_key_jwt"})
+			}
+			row, err := queries.UpsertUserSessionClientFromCIMD(ctx, usersessions_repo.UpsertUserSessionClientFromCIMDParams{
+				UserSessionIssuerID:     endpoint.UserSessionIssuerID,
+				ClientID:                clientID,
+				ClientName:              result.Document.ClientName,
+				RedirectUris:            result.Document.RedirectURIs,
+				CacheTtlSeconds:         result.TTL.Seconds(),
+				ClientIDMetadataEtag:    conv.ToPGTextEmpty(result.ETag),
+				TokenEndpointAuthMethod: result.Document.DeclaredAuthMethod(),
+				ClientJwks:              result.Document.JWKS,
+				ClientJwksUri:           conv.ToPGTextEmpty(result.Document.JWKSURI),
+			})
+			if err != nil {
+				// No-rows here means a DO UPDATE guard refused the write:
+				// the row is a secret-bearing registration sharing this
+				// client_id, or a concurrent refresh raced the downgrade
+				// check above. Either surfaces as an unknown client rather
+				// than a 500.
+				if errors.Is(err, pgx.ErrNoRows) {
+					return nil, pgx.ErrNoRows
+				}
+				return nil, fmt.Errorf("upsert cimd user session client: %w", err)
+			}
+			return &row, nil
+		default:
+			return nil, fmt.Errorf("unknown cimd resolve outcome %q", result.Outcome)
+		}
 	}
 
 	row, err := queries.GetUserSessionClientByClientID(ctx, usersessions_repo.GetUserSessionClientByClientIDParams{
@@ -138,36 +209,12 @@ func (s *Service) resolveUserSessionClient(ctx context.Context, logger *slog.Log
 	return &row, nil
 }
 
-// userSessionCIMDEnabled evaluates the inbound-CIMD rollout flag for the
-// endpoint's organization. distinctID is the organization ID with no groups
-// (matching the flag's PostHog targeting). Successful evaluations are
-// remembered per organization so a flag-provider outage degrades to the
-// last known state instead of failing closed — this runs on unauthenticated
-// endpoints (/authorize and the well-known metadata), where fail-closed
-// would turn a PostHog outage into an OAuth login outage for every
-// CIMD-enabled organization. Fresh evaluations always win, so flag flips
-// propagate immediately; the map holds one bool per organization that
-// touches the OAuth surface, so growth is bounded by tenant count.
-func (s *Service) userSessionCIMDEnabled(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint) bool {
-	enabled, err := s.features.IsFlagEnabled(ctx, feature.FlagUserSessionCIMD, endpoint.OrganizationID, nil)
-	if err != nil {
-		s.cimdOrgFlagMu.RLock()
-		lastKnown, ok := s.cimdOrgFlagLastKnown[endpoint.OrganizationID]
-		s.cimdOrgFlagMu.RUnlock()
-		logger.WarnContext(ctx, "evaluate user session cimd flag", attr.SlogError(err))
-		return ok && lastKnown
-	}
-
-	s.cimdOrgFlagMu.Lock()
-	s.cimdOrgFlagLastKnown[endpoint.OrganizationID] = enabled
-	s.cimdOrgFlagMu.Unlock()
-	return enabled
-}
-
 // admitCIMDClient enforces the issuer's CIMD admission policy against a
 // presented URL-shaped client_id, before any document is fetched. Returns
 // nil when the client is admitted, a *admission.DenialError when policy
-// denies it, and a wrapped error when the custom-URL lookup itself fails.
+// denies it, and a wrapped error when a custom-URL lookup the decision
+// depends on fails. An open-mode issuer refuses nobody, so its lookup feeds
+// telemetry only and a failure there is swallowed rather than returned.
 //
 // The catalog is consulted first and in memory, so the common case — a
 // preset client on a presets-mode issuer — never touches the database. Only
@@ -182,6 +229,15 @@ func (s *Service) admitCIMDClient(ctx context.Context, logger *slog.Logger, endp
 		logger.ErrorContext(ctx, "unrecognized cimd admission mode stored on issuer, failing closed",
 			attr.SlogCIMDAdmissionMode(endpoint.CIMDAdmissionModeRaw.String),
 		)
+	}
+
+	if mode == admission.ModeOpen {
+		// Open admits every spec-valid client, so Evaluate has nothing left
+		// to decide here. The shadow takes its place: the client is let
+		// through regardless, and what presets would have said about it is
+		// what lands on the counter.
+		s.cimdAdmissionMetrics.RecordAdmitted(ctx, mode, s.shadowCIMDAdmitReason(ctx, logger, endpoint, clientID))
+		return nil
 	}
 
 	decision := admission.Evaluate(mode, clientID)
@@ -231,6 +287,76 @@ func (s *Service) admitCIMDClient(ctx context.Context, logger *slog.Logger, endp
 
 	logger.InfoContext(ctx, "cimd admission denied", logAttrs...)
 	return &admission.DenialError{Mode: mode, Reason: decision.Denial}
+}
+
+// shadowCIMDAdmitReason computes what ModePresets WOULD have decided about
+// a client_id an open-mode issuer is admitting anyway, and returns it as the
+// outcome to record. It never refuses anything: every return value is an
+// AdmitReason, and a failure to reach a verdict is recorded as one too.
+//
+// The custom-URL lookup is the same one enforcement performs, so
+// AdmitOpenNotListed keeps meaning "no rule anywhere covers this client"
+// rather than the weaker "not in the catalog". It is not a new cost: every
+// catalog miss on an unconfigured issuer already paid for that query before
+// open became the resting state.
+func (s *Service) shadowCIMDAdmitReason(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, clientID string) admission.AdmitReason {
+	shadow := admission.EvaluateShadow(clientID)
+
+	switch shadow.Outcome {
+	case admission.OutcomeAdmit:
+		return shadow.Admit
+	case admission.OutcomeDeny:
+		// Reachable only for a client_id too long to hand to the database.
+		// Nothing was refused, since the request was admitted before the
+		// shadow ran, but it is still named on both surfaces rather than
+		// dropped: on an unauthenticated endpoint a run of these is a
+		// probing campaign, and that is worth being able to see.
+		logger.InfoContext(ctx, "cimd admission would deny",
+			attr.SlogOAuthClientID(truncateClientIDForLog(clientID)),
+			attr.SlogCIMDAdmissionMode(admission.ModeOpen),
+			attr.SlogCIMDAdmissionOutcome(shadow.Denial),
+		)
+		return admission.AdmitOpenOversized
+	case admission.OutcomeCheckCustom:
+		admitted, err := usersessions_repo.New(s.db).IssuerAdmitsCimdClientURI(ctx, usersessions_repo.IssuerAdmitsCimdClientURIParams{
+			UserSessionIssuerID: endpoint.UserSessionIssuerID,
+			ClientIDMetadataUri: clientID,
+		})
+		if err != nil {
+			// Telemetry, never the flow. The client is already admitted, so a
+			// failed lookup costs the measurement and nothing else.
+			//
+			// A cancelled context is the client hanging up mid-authorize,
+			// which is ordinary on this surface and says nothing about the
+			// database. Logging those at error level would bury the failures
+			// that do mean something.
+			if !errors.Is(err, context.Canceled) {
+				logger.ErrorContext(ctx, "cimd admission shadow lookup failed",
+					attr.SlogOAuthClientID(truncateClientIDForLog(clientID)),
+					attr.SlogError(err),
+				)
+			}
+			return admission.AdmitOpen
+		}
+		if admitted {
+			return admission.AdmitCustom
+		}
+		// The presented client_id goes in the log and never in a metric
+		// dimension. This is the line an operator triaging a catalog gap
+		// aggregates by client_id: the message keeps "denied" honest when
+		// nothing was, and the outcome attribute carries the shadow's own
+		// verdict so the line reads as the refusal that did not happen.
+		logger.InfoContext(ctx, "cimd admission would deny",
+			attr.SlogOAuthClientID(truncateClientIDForLog(clientID)),
+			attr.SlogCIMDAdmissionMode(admission.ModeOpen),
+			attr.SlogCIMDAdmissionOutcome(admission.DenialNotListed),
+		)
+		return admission.AdmitOpenNotListed
+	default:
+		// Unreachable: Decision carries exactly the three outcomes above.
+		// Recorded as a missing verdict rather than invented as one.
+		return admission.AdmitOpen
+	}
 }
 
 // truncateClientIDForLog bounds a presented client_id for logging. The value

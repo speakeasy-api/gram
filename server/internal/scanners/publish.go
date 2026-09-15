@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 )
 
 type FindingMetadata struct {
@@ -102,6 +103,10 @@ func StartPublishFindings(ctx context.Context, pub gcp.Publisher[*riskv1.Finding
 			Field:             &finding.Field,
 			Path:              &finding.Path,
 			ToolCallId:        &finding.McpLookupToolCallID,
+			// Scanner output is always a finding copy. State-change republishes
+			// (suppression/unsuppression) are built elsewhere and never pass
+			// through here.
+			EventKind: new(chrepo.EventKindFinding),
 		}.Build()
 
 		results = append(results, pub.Publish(ctx, msg))

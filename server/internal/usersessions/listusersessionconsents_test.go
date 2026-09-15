@@ -29,10 +29,12 @@ func TestListUserSessionConsents(t *testing.T) {
 
 	client, err := seedUserSessionClient(t, ctx, ti.conn, uuid.MustParse(issuer.ID), "list-consents-client")
 	require.NoError(t, err)
+	requireOrganizationID(t, ctx, client.OrganizationID)
 
 	for _, principal := range []urn.SessionSubject{urn.NewUserSubject("p1"), urn.NewUserSubject("p2")} {
-		_, err := seedUserSessionConsent(t, ctx, ti.conn, client.ID, principal)
+		consent, err := seedUserSessionConsent(t, ctx, ti.conn, client.ID, principal)
 		require.NoError(t, err)
+		requireOrganizationID(t, ctx, consent.OrganizationID)
 	}
 
 	got, err := ti.service.ListUserSessionConsents(ctx, &gen.ListUserSessionConsentsPayload{
@@ -249,4 +251,40 @@ func TestListUserSessionConsents_RBACForbidden(t *testing.T) {
 		Limit:               nil,
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestListUserSessionConsents_ExcludesSiblingProject(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	sp := seedSiblingProject(t, ctx, ti, "list-consent-sibling")
+
+	listed, err := ti.service.ListUserSessionConsents(ctx, &gen.ListUserSessionConsentsPayload{
+		SubjectUrn:          nil,
+		UserSessionClientID: nil,
+		UserSessionIssuerID: nil,
+		Cursor:              nil,
+		Limit:               nil,
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+	})
+	require.NoError(t, err)
+	for _, item := range listed.Items {
+		require.NotEqual(t, sp.consentID.String(), item.ID)
+	}
+
+	issuerID := sp.issuerID.String()
+	filtered, err := ti.service.ListUserSessionConsents(ctx, &gen.ListUserSessionConsentsPayload{
+		SubjectUrn:          nil,
+		UserSessionClientID: nil,
+		UserSessionIssuerID: &issuerID,
+		Cursor:              nil,
+		Limit:               nil,
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+	})
+	require.NoError(t, err)
+	require.Empty(t, filtered.Items)
 }

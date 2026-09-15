@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -50,6 +51,16 @@ func isSkippedRequestHeader(name string) bool {
 		"proxy-authenticate",
 		"proxy-authorization",
 		"referer",
+		// Sec-Fetch-* describe the dashboard's own fetch, not the caller's
+		// intent toward the upstream, and are dropped for the same reason as
+		// Origin above. Forwarding them is doubly wrong now that Gram enforces
+		// the same protection inbound: "cross-site" 403s any upstream running
+		// net/http.CrossOriginProtection, while "same-origin" would falsely
+		// satisfy that upstream's check on Gram's behalf.
+		"sec-fetch-dest",
+		"sec-fetch-mode",
+		"sec-fetch-site",
+		"sec-fetch-user",
 		"te",
 		"trailer",
 		"transfer-encoding",
@@ -103,6 +114,9 @@ func isSkippedResponseHeader(name string) bool {
 // [http.ResponseWriter.WriteHeader]; once the status line is written, header
 // mutations are silently dropped.
 func applyResponseHeaders(w http.ResponseWriter, remoteResp *http.Response, wwwAuthenticate string) {
+	// Marks the access log's gram.http.response.external attribute so relayed
+	// upstream statuses (including 5xx) are distinguishable from Gram faults.
+	w.Header().Set(constants.HeaderProxiedResponse, "1")
 	replaceChallenge := wwwAuthenticate != "" &&
 		(remoteResp.StatusCode == http.StatusUnauthorized || remoteResp.StatusCode == http.StatusForbidden)
 	for name, values := range remoteResp.Header {

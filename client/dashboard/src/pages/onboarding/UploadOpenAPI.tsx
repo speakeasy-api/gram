@@ -1,5 +1,5 @@
-import { Page } from "@/components/page-layout";
-import { RequireScope } from "@/components/require-scope";
+import { FormPage } from "@/components/page-templates";
+import { Stack } from "@/components/ui/Stack";
 
 import { Text } from "@/components/ui/Text";
 import DeployStep from "@/components/upload-asset/deploy-step";
@@ -9,95 +9,77 @@ import UploadAssetStepper from "@/components/upload-asset/stepper";
 import { useStepper } from "@/components/upload-asset/stepper/use-stepper";
 import UploadFileStep from "@/components/upload-asset/upload-file-step";
 import { useRoutes } from "@/routes";
-import { Heading } from "@/components/ui/Heading";
 import { Button } from "@/components/ui/Button";
-import { Stack } from "@/components/ui/Stack";
-import { ArrowRightIcon, FileTextIcon, RefreshCcwIcon } from "lucide-react";
+import { useProject } from "@/contexts/Auth";
+import { ArrowRightIcon, RefreshCcwIcon } from "lucide-react";
 
 export default function UploadOpenAPI(): JSX.Element {
+  const project = useProject();
   return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <RequireScope scope="project:write" level="page">
-          <div className="max-w-2xl">
-            {/* Header */}
-            <Stack gap={3} className="mb-8">
-              <Stack direction="horizontal" gap={3} align="center">
-                <div className="border-border bg-card flex h-10 w-10 shrink-0 items-center justify-center border">
-                  <FileTextIcon className="text-muted-foreground h-5 w-5" />
-                </div>
-                <Heading variant="h3" className="text-display-sm font-thin">
-                  Import OpenAPI Specification
-                </Heading>
-              </Stack>
-              <Text muted>
-                Upload your OpenAPI spec to automatically generate tools for
-                every endpoint. Supports JSON and YAML formats.
-              </Text>
+    <FormPage
+      scope="project:write"
+      resourceId={project.id}
+      title="Import OpenAPI specification"
+      description="Upload your OpenAPI spec to automatically generate tools for every endpoint. Supports JSON and YAML formats."
+    >
+      <div>
+        {/* Stepper */}
+        <UploadAssetStepper.Provider step={1}>
+          <UploadAssetStepper.Frame>
+            <UploadAssetStep step={1}>
+              <UploadAssetStep.Indicator />
+              <UploadAssetStep.Header
+                title="Upload OpenAPI Specification"
+                description="Upload your OpenAPI specification to get started."
+              />
+              <UploadAssetStep.Content>
+                <UploadFileStep />
+              </UploadAssetStep.Content>
+            </UploadAssetStep>
+
+            <UploadAssetStep step={2}>
+              <UploadAssetStep.Indicator />
+              <UploadAssetStep.Header
+                title="Name Your API"
+                description="The tools generated will be scoped under this name."
+              />
+              <UploadAssetStep.Content>
+                <NameDeploymentStep />
+              </UploadAssetStep.Content>
+            </UploadAssetStep>
+
+            <UploadAssetStep step={3}>
+              <UploadAssetStep.Indicator />
+              <UploadAssetStep.Header
+                title="Generate Tools"
+                description="The platform will generate tools for your API."
+              />
+              <UploadAssetStep.Content>
+                <DeployStep />
+              </UploadAssetStep.Content>
+            </UploadAssetStep>
+
+            <Stack direction="horizontal" justify="start">
+              <FooterActions />
             </Stack>
+          </UploadAssetStepper.Frame>
+        </UploadAssetStepper.Provider>
 
-            {/* Stepper */}
-            <UploadAssetStepper.Provider step={1}>
-              <UploadAssetStepper.Frame>
-                <UploadAssetStep step={1}>
-                  <UploadAssetStep.Indicator />
-                  <UploadAssetStep.Header
-                    title="Upload OpenAPI Specification"
-                    description="Upload your OpenAPI specification to get started."
-                  />
-                  <UploadAssetStep.Content>
-                    <UploadFileStep />
-                  </UploadAssetStep.Content>
-                </UploadAssetStep>
-
-                <UploadAssetStep step={2}>
-                  <UploadAssetStep.Indicator />
-                  <UploadAssetStep.Header
-                    title="Name Your API"
-                    description="The tools generated will be scoped under this name."
-                  />
-                  <UploadAssetStep.Content>
-                    <NameDeploymentStep />
-                  </UploadAssetStep.Content>
-                </UploadAssetStep>
-
-                <UploadAssetStep step={3}>
-                  <UploadAssetStep.Indicator />
-                  <UploadAssetStep.Header
-                    title="Generate Tools"
-                    description="The platform will generate tools for your API."
-                  />
-                  <UploadAssetStep.Content>
-                    <DeployStep />
-                  </UploadAssetStep.Content>
-                </UploadAssetStep>
-
-                <Stack direction="horizontal" justify="start">
-                  <FooterActions />
-                </Stack>
-              </UploadAssetStepper.Frame>
-            </UploadAssetStepper.Provider>
-
-            {/* Help text */}
-            <Text small muted className="mt-6">
-              Don't have an OpenAPI spec?{" "}
-              <a
-                href="https://www.speakeasy.com/docs/gram"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary hover:underline"
-              >
-                Learn how to create one
-              </a>{" "}
-              or try our sample specs.
-            </Text>
-          </div>
-        </RequireScope>
-      </Page.Body>
-    </Page>
+        {/* Help text */}
+        <Text small muted className="mt-6">
+          Don't have an OpenAPI spec?{" "}
+          <a
+            href="https://www.speakeasy.com/docs/gram"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary hover:underline"
+          >
+            Learn how to create one
+          </a>{" "}
+          or try our sample specs.
+        </Text>
+      </div>
+    </FormPage>
   );
 }
 

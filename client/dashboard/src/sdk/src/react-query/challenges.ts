@@ -112,6 +112,8 @@ export function setChallengesData(
       projectId?: string | undefined;
       resolved?: boolean | undefined;
       ids?: Array<string> | undefined;
+      from?: Date | undefined;
+      to?: Date | undefined;
       limit?: number | undefined;
       offset?: number | undefined;
       gramKey?: string | undefined;
@@ -135,6 +137,8 @@ export function invalidateChallenges(
       projectId?: string | undefined;
       resolved?: boolean | undefined;
       ids?: Array<string> | undefined;
+      from?: Date | undefined;
+      to?: Date | undefined;
       limit?: number | undefined;
       offset?: number | undefined;
       gramKey?: string | undefined;

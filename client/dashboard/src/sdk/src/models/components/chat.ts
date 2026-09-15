@@ -67,6 +67,10 @@ export type Chat = {
    */
   lastMessageTimestamp: Date;
   /**
+   * True when the session's traffic was observed by the LiteLLM proxy, including sessions whose transcript is owned by the agent's own hook stream
+   */
+  litellmProxied?: boolean | undefined;
+  /**
    * Present only when `query` was requested: contiguous runs of returned messages, each spanning one or more query matches and their surrounding context. Use each segment's cursors to expand it.
    */
   matchSegments?: Array<RiskSegment> | undefined;
@@ -82,6 +86,10 @@ export type Chat = {
    * The number of messages in the chat
    */
   numMessages: number;
+  /**
+   * The supported client that originated a chat routed through the source, when known
+   */
+  originatingClient?: string | undefined;
   /**
    * True when the chat is pinned
    */
@@ -170,10 +178,12 @@ export const Chat$inboundSchema: z.ZodMiniType<Chat, unknown> = z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
+    litellm_proxied: z.optional(z.boolean()),
     match_segments: z.optional(z.array(RiskSegment$inboundSchema)),
     max_generation: z.int(),
     messages: z.array(ChatMessage$inboundSchema),
     num_messages: z.int(),
+    originating_client: z.optional(z.string()),
     pinned: z.optional(z.boolean()),
     risk_findings_count: z.optional(z.int()),
     risk_segments: z.optional(z.array(RiskSegment$inboundSchema)),
@@ -209,9 +219,11 @@ export const Chat$inboundSchema: z.ZodMiniType<Chat, unknown> = z.pipe(
       "has_more_after": "hasMoreAfter",
       "has_more_before": "hasMoreBefore",
       "last_message_timestamp": "lastMessageTimestamp",
+      "litellm_proxied": "litellmProxied",
       "match_segments": "matchSegments",
       "max_generation": "maxGeneration",
       "num_messages": "numMessages",
+      "originating_client": "originatingClient",
       "risk_findings_count": "riskFindingsCount",
       "risk_segments": "riskSegments",
       "summary_generated_at": "summaryGeneratedAt",

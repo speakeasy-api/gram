@@ -8,10 +8,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel/attribute"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
-	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -208,25 +206,6 @@ func TestLogs_CachesMultiSessionBatchPerSessionWithoutLeakingIdentity(t *testing
 	require.Empty(t, sessionB.UserEmail)
 	require.Empty(t, sessionB.ExternalOrgID)
 	require.Empty(t, sessionB.UserID)
-}
-
-func TestShouldTriggerClaudePromptCorrelation(t *testing.T) {
-	t.Parallel()
-
-	require.True(t, shouldTriggerClaudePromptCorrelation(map[attr.Key]any{
-		attribute.Key("event.name"): "user_prompt",
-		attribute.Key("prompt.id"):  "prompt-1",
-		attribute.Key("session.id"): "session-1",
-	}))
-
-	require.False(t, shouldTriggerClaudePromptCorrelation(map[attr.Key]any{
-		attribute.Key("event.name"): "tool_call",
-		attribute.Key("prompt.id"):  "prompt-1",
-	}))
-
-	require.True(t, shouldTriggerClaudePromptCorrelation(map[attr.Key]any{
-		attribute.Key("event.name"): "user_prompt",
-	}))
 }
 
 func TestExtractSessionMetadataSkipsNilOTELAttributeElements(t *testing.T) {

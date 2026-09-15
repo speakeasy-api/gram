@@ -130,3 +130,36 @@ func TestGetUserSessionIssuer_RBACForbidden(t *testing.T) {
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
+
+func TestGetUserSessionIssuer_SiblingProjectNotFound(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	sp := seedSiblingProject(t, ctx, ti, "get-iss-sibling")
+	id := sp.issuerID.String()
+
+	_, err := ti.service.GetUserSessionIssuer(ctx, &gen.GetUserSessionIssuerPayload{
+		ID:               &id,
+		Slug:             nil,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+func TestGetUserSessionIssuerBySlug_SiblingProjectNotFound(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	sp := seedSiblingProject(t, ctx, ti, "get-slug-sibling")
+
+	_, err := ti.service.GetUserSessionIssuer(ctx, &gen.GetUserSessionIssuerPayload{
+		ID:               nil,
+		Slug:             &sp.issuerSlug,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	requireOopsCode(t, err, oops.CodeNotFound)
+}

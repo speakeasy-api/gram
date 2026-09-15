@@ -13,6 +13,7 @@ import { buildUserSessionResourceSlug } from "@/lib/externalMcpUserSessions";
 import {
   type AuthedFetch,
   proxyRegisterUpstreamClient,
+  registrationProvenance,
 } from "@/lib/proxyRegisterUpstreamClient";
 import { isNotFoundError } from "@/lib/errors";
 import { deriveRemoteSessionIssuerNameFromUrl } from "@/lib/sources";
@@ -196,6 +197,16 @@ export async function autoConfigureRemoteMcpAuth({
               draft.tokenEndpointAuthMethodsSupported ?? [],
             clientIdMetadataDocumentSupported:
               draft.clientIdMetadataDocumentSupported,
+            userinfoEndpoint: draft.userinfoEndpoint,
+            introspectionEndpoint: draft.introspectionEndpoint,
+            introspectionEndpointAuthMethodsSupported:
+              draft.introspectionEndpointAuthMethodsSupported ?? undefined,
+            idTokenSigningAlgValuesSupported:
+              draft.idTokenSigningAlgValuesSupported ?? undefined,
+            claimsSupported: draft.claimsSupported ?? undefined,
+            backchannelLogoutSupported: draft.backchannelLogoutSupported,
+            authorizationResponseIssParameterSupported:
+              draft.authorizationResponseIssParameterSupported,
             oidc: draft.oidc,
             passthrough: draft.passthrough,
           },
@@ -262,6 +273,7 @@ export async function autoConfigureRemoteMcpAuth({
             narrowTokenEndpointAuthMethod(registered.tokenEndpointAuthMethod) ??
             preferredAuthMethod,
           scope: scopes.length > 0 ? scopes : undefined,
+          ...registrationProvenance(registered),
         },
       },
       undefined,

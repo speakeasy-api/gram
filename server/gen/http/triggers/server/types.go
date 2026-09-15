@@ -69,6 +69,13 @@ type ListTriggerInstancesResponseBody struct {
 	Triggers []*TriggerInstanceResponseBody `form:"triggers" json:"triggers" xml:"triggers"`
 }
 
+// ListTriggerEventsResponseBody is the type of the "triggers" service
+// "listTriggerEvents" endpoint HTTP response body.
+type ListTriggerEventsResponseBody struct {
+	// The dispatch events for the trigger instance, most recent first.
+	Events []*TriggerEventResponseBody `form:"events" json:"events" xml:"events"`
+}
+
 // GetTriggerInstanceResponseBody is the type of the "triggers" service
 // "getTriggerInstance" endpoint HTTP response body.
 type GetTriggerInstanceResponseBody struct {
@@ -589,6 +596,192 @@ type ListTriggerInstancesUnexpectedResponseBody struct {
 // service "listTriggerInstances" endpoint HTTP response body for the
 // "gateway_error" error.
 type ListTriggerInstancesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTriggerEventsUnauthorizedResponseBody is the type of the "triggers"
+// service "listTriggerEvents" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListTriggerEventsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTriggerEventsForbiddenResponseBody is the type of the "triggers" service
+// "listTriggerEvents" endpoint HTTP response body for the "forbidden" error.
+type ListTriggerEventsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTriggerEventsBadRequestResponseBody is the type of the "triggers"
+// service "listTriggerEvents" endpoint HTTP response body for the
+// "bad_request" error.
+type ListTriggerEventsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTriggerEventsNotFoundResponseBody is the type of the "triggers" service
+// "listTriggerEvents" endpoint HTTP response body for the "not_found" error.
+type ListTriggerEventsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTriggerEventsConflictResponseBody is the type of the "triggers" service
+// "listTriggerEvents" endpoint HTTP response body for the "conflict" error.
+type ListTriggerEventsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTriggerEventsUnsupportedMediaResponseBody is the type of the "triggers"
+// service "listTriggerEvents" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListTriggerEventsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTriggerEventsInvalidResponseBody is the type of the "triggers" service
+// "listTriggerEvents" endpoint HTTP response body for the "invalid" error.
+type ListTriggerEventsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTriggerEventsInvariantViolationResponseBody is the type of the
+// "triggers" service "listTriggerEvents" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListTriggerEventsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTriggerEventsUnexpectedResponseBody is the type of the "triggers"
+// service "listTriggerEvents" endpoint HTTP response body for the "unexpected"
+// error.
+type ListTriggerEventsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTriggerEventsGatewayErrorResponseBody is the type of the "triggers"
+// service "listTriggerEvents" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListTriggerEventsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1799,6 +1992,26 @@ type TriggerInstanceResponseBody struct {
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
+// TriggerEventResponseBody is used to define fields on response body types.
+type TriggerEventResponseBody struct {
+	// The trigger event ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The trigger instance that dispatched the event.
+	TriggerInstanceID string `form:"trigger_instance_id" json:"trigger_instance_id" xml:"trigger_instance_id"`
+	// The processing status of the event.
+	Status string `form:"status" json:"status" xml:"status"`
+	// Number of processing attempts.
+	Attempts int `form:"attempts" json:"attempts" xml:"attempts"`
+	// The last processing error, if any.
+	LastError *string `form:"last_error,omitempty" json:"last_error,omitempty" xml:"last_error,omitempty"`
+	// The conversation the event was routed to.
+	ChatID *string `form:"chat_id,omitempty" json:"chat_id,omitempty" xml:"chat_id,omitempty"`
+	// Creation timestamp.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// Processing completion timestamp.
+	ProcessedAt *string `form:"processed_at,omitempty" json:"processed_at,omitempty" xml:"processed_at,omitempty"`
+}
+
 // NewListTriggerDefinitionsResponseBody builds the HTTP response body from the
 // result of the "listTriggerDefinitions" endpoint of the "triggers" service.
 func NewListTriggerDefinitionsResponseBody(res *triggers.ListTriggerDefinitionsResult) *ListTriggerDefinitionsResponseBody {
@@ -1833,6 +2046,25 @@ func NewListTriggerInstancesResponseBody(res *triggers.ListTriggerInstancesResul
 		}
 	} else {
 		body.Triggers = []*TriggerInstanceResponseBody{}
+	}
+	return body
+}
+
+// NewListTriggerEventsResponseBody builds the HTTP response body from the
+// result of the "listTriggerEvents" endpoint of the "triggers" service.
+func NewListTriggerEventsResponseBody(res *triggers.ListTriggerEventsResult) *ListTriggerEventsResponseBody {
+	body := &ListTriggerEventsResponseBody{}
+	if res.Events != nil {
+		body.Events = make([]*TriggerEventResponseBody, len(res.Events))
+		for i, val := range res.Events {
+			if val == nil {
+				body.Events[i] = nil
+				continue
+			}
+			body.Events[i] = marshalTypesTriggerEventToTriggerEventResponseBody(val)
+		}
+	} else {
+		body.Events = []*TriggerEventResponseBody{}
 	}
 	return body
 }
@@ -2267,6 +2499,152 @@ func NewListTriggerInstancesUnexpectedResponseBody(res *goa.ServiceError) *ListT
 // "triggers" service.
 func NewListTriggerInstancesGatewayErrorResponseBody(res *goa.ServiceError) *ListTriggerInstancesGatewayErrorResponseBody {
 	body := &ListTriggerInstancesGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTriggerEventsUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "listTriggerEvents" endpoint of the "triggers"
+// service.
+func NewListTriggerEventsUnauthorizedResponseBody(res *goa.ServiceError) *ListTriggerEventsUnauthorizedResponseBody {
+	body := &ListTriggerEventsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTriggerEventsForbiddenResponseBody builds the HTTP response body from
+// the result of the "listTriggerEvents" endpoint of the "triggers" service.
+func NewListTriggerEventsForbiddenResponseBody(res *goa.ServiceError) *ListTriggerEventsForbiddenResponseBody {
+	body := &ListTriggerEventsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTriggerEventsBadRequestResponseBody builds the HTTP response body
+// from the result of the "listTriggerEvents" endpoint of the "triggers"
+// service.
+func NewListTriggerEventsBadRequestResponseBody(res *goa.ServiceError) *ListTriggerEventsBadRequestResponseBody {
+	body := &ListTriggerEventsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTriggerEventsNotFoundResponseBody builds the HTTP response body from
+// the result of the "listTriggerEvents" endpoint of the "triggers" service.
+func NewListTriggerEventsNotFoundResponseBody(res *goa.ServiceError) *ListTriggerEventsNotFoundResponseBody {
+	body := &ListTriggerEventsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTriggerEventsConflictResponseBody builds the HTTP response body from
+// the result of the "listTriggerEvents" endpoint of the "triggers" service.
+func NewListTriggerEventsConflictResponseBody(res *goa.ServiceError) *ListTriggerEventsConflictResponseBody {
+	body := &ListTriggerEventsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTriggerEventsUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "listTriggerEvents" endpoint of the "triggers"
+// service.
+func NewListTriggerEventsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListTriggerEventsUnsupportedMediaResponseBody {
+	body := &ListTriggerEventsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTriggerEventsInvalidResponseBody builds the HTTP response body from
+// the result of the "listTriggerEvents" endpoint of the "triggers" service.
+func NewListTriggerEventsInvalidResponseBody(res *goa.ServiceError) *ListTriggerEventsInvalidResponseBody {
+	body := &ListTriggerEventsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTriggerEventsInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "listTriggerEvents" endpoint of the "triggers"
+// service.
+func NewListTriggerEventsInvariantViolationResponseBody(res *goa.ServiceError) *ListTriggerEventsInvariantViolationResponseBody {
+	body := &ListTriggerEventsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTriggerEventsUnexpectedResponseBody builds the HTTP response body
+// from the result of the "listTriggerEvents" endpoint of the "triggers"
+// service.
+func NewListTriggerEventsUnexpectedResponseBody(res *goa.ServiceError) *ListTriggerEventsUnexpectedResponseBody {
+	body := &ListTriggerEventsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTriggerEventsGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "listTriggerEvents" endpoint of the "triggers"
+// service.
+func NewListTriggerEventsGatewayErrorResponseBody(res *goa.ServiceError) *ListTriggerEventsGatewayErrorResponseBody {
+	body := &ListTriggerEventsGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -3188,6 +3566,18 @@ func NewListTriggerDefinitionsPayload(sessionToken *string, projectSlugInput *st
 // listTriggerInstances endpoint payload.
 func NewListTriggerInstancesPayload(sessionToken *string, projectSlugInput *string) *triggers.ListTriggerInstancesPayload {
 	v := &triggers.ListTriggerInstancesPayload{}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewListTriggerEventsPayload builds a triggers service listTriggerEvents
+// endpoint payload.
+func NewListTriggerEventsPayload(id string, limit int, sessionToken *string, projectSlugInput *string) *triggers.ListTriggerEventsPayload {
+	v := &triggers.ListTriggerEventsPayload{}
+	v.ID = id
+	v.Limit = limit
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 

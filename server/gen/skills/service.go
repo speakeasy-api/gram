@@ -126,9 +126,12 @@ type AddVersionPayload struct {
 	Content string
 	// The optional source version this new version was derived from.
 	DerivedFromVersionID *string
-	SessionToken         *string
-	ApikeyToken          *string
-	ProjectSlugInput     *string
+	// The version the caller believes is current. When set, the write is rejected
+	// as a conflict if the skill has moved on.
+	ExpectedLatestVersionID *string
+	SessionToken            *string
+	ApikeyToken             *string
+	ProjectSlugInput        *string
 }
 
 // ApproveAllSkillSuggestionsResult is the result type of the skills service
@@ -253,6 +256,8 @@ type GetSkillResult struct {
 	Drift *SkillDrift
 	// The number of active, non-deleted assistants using the skill.
 	AssistantCount int64
+	// Open prompt-injection findings for the current skill version.
+	PromptInjectionFindings []*SkillPromptInjectionFinding
 }
 
 // ListDistributionsPayload is the payload type of the skills service
@@ -299,6 +304,11 @@ type ListPayload struct {
 	Classifications []string
 	// Only return skills that have any of these tags.
 	Tags []string
+	// Only return skills at least one of these Gram users is authorized to reach,
+	// through a grant on them or on a role they hold, less any blocking grant
+	// withdrawing the same scope. Plugin membership is distribution and does not
+	// widen it.
+	AccessibleBy []string
 	// How to order skills.
 	Sort             string
 	SessionToken     *string
@@ -584,6 +594,17 @@ type SkillFeedbackTimelinePoint struct {
 	FeedbackCount int64
 }
 
+// A prompt-injection finding for the current skill version. Raw matched
+// content is intentionally omitted.
+type SkillPromptInjectionFinding struct {
+	// The rule that produced the finding.
+	RuleID string
+	// Why the current skill version was flagged.
+	Description string
+	// The classifier confidence from 0 to 1.
+	Confidence float64
+}
+
 // A UTC-day activation bucket for one attributed skill version.
 type SkillSightingTimelinePoint struct {
 	// Start of the UTC day.
@@ -675,10 +696,13 @@ type UpdatePayload struct {
 	// The optional skill summary.
 	Summary *string
 	// Registry tags for categorizing the skill. At most 40 tags.
-	Tags             []string
-	SessionToken     *string
-	ApikeyToken      *string
-	ProjectSlugInput *string
+	Tags []string
+	// The version the caller believes is current. When set, the write is rejected
+	// as a conflict if the skill has moved on.
+	ExpectedLatestVersionID *string
+	SessionToken            *string
+	ApikeyToken             *string
+	ProjectSlugInput        *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

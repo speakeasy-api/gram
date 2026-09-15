@@ -14,6 +14,16 @@ var _ = Service("plugins", func() {
 	Description("Manage distributable plugin bundles of MCP servers and hooks.")
 	Security(security.Session, security.ProjectSlug)
 	shared.DeclareErrorResponses()
+	Error(string(oops.CodeUnavailable), func() {
+		Description(oops.CodeUnavailable.UserMessage())
+		Fault()
+	})
+	HTTP(func() {
+		shared.DeclareHTTPErrorResponses()
+		Response(string(oops.CodeUnavailable), StatusServiceUnavailable, func() {
+			ContentType("application/json")
+		})
+	})
 
 	Method("listPlugins", func() {
 		Description("List all plugins for the current project.")
@@ -237,6 +247,28 @@ var _ = Service("plugins", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetPluginAssignments"}`)
 	})
 
+	Method("listAudiences", func() {
+		Description("List the audiences that can be assigned to plugins.")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ListAudiencesResult)
+
+		HTTP(func() {
+			GET("/rpc/plugins.listAudiences")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listAudiences")
+		Meta("openapi:extension:x-speakeasy-name-override", "listAudiences")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "Audiences"}`)
+	})
+
 	Method("downloadPluginPackage", func() {
 		Description("Download a ZIP of a single plugin package for direct installation.")
 		Error(string(oops.CodeFailedPrecondition), func() { Description(oops.CodeFailedPrecondition.UserMessage()) })
@@ -288,7 +320,7 @@ var _ = Service("plugins", func() {
 		Payload(func() {
 			Attribute("platform", String, func() {
 				Description("Target platform.")
-				Enum("claude", "cursor", "codex", "opencode", "pi")
+				Enum("claude", "cursor", "codex", "opencode", "copilot", "openclaw", "pi")
 			})
 			Required("platform")
 			security.SessionPayload()
@@ -419,7 +451,8 @@ var _ = Service("plugins", func() {
 		Description("Update the marketplace settings for the current project. If a marketplace is already published, the updated settings are pushed to GitHub before the call returns.")
 
 		Payload(func() {
-			Attribute("marketplace_name", String, "Override for the marketplace name (the identifier users type as `<plugin>@<marketplace>`). Pass an empty string or omit to clear the override and fall back to the default.")
+			Attribute("marketplace_name", String, "Override for the marketplace name (the identifier users type as `<plugin>@<marketplace>`). Pass an empty string to clear the override and fall back to the default. Omit to leave the current override unchanged.")
+			Attribute("observability_enabled", Boolean, "Whether this project's observability plugin is included in the published marketplace and installed by the device agent. Omit to leave the current value unchanged.")
 			security.SessionPayload()
 			security.ProjectPayload()
 		})
@@ -478,10 +511,22 @@ var PluginAssignmentModel = Type("PluginAssignment", func() {
 		Description("Unique assignment identifier.")
 		Format(FormatUUID)
 	})
-	Attribute("principal_urn", String, "Principal URN (e.g. role:engineering, user:id, or *).")
+	Attribute("principal_urn", String, "Principal URN (e.g. role:organization:<uuid>, user:id, or *).")
 	Attribute("created_at", String, func() {
 		Format(FormatDateTime)
 	})
+})
+
+var PluginAudienceModel = Type("PluginAudience", func() {
+	Required("kind", "display_name", "principal_urn")
+
+	Attribute("kind", String, func() {
+		Description("Audience kind.")
+		Enum("everyone", "role", "directory_group", "directory_attribute")
+	})
+	Attribute("display_name", String, "Display name for the audience.")
+	Attribute("member_count", Int64, "Number of current members, when the audience has an enumerable membership.")
+	Attribute("principal_urn", String, "Principal URN used to assign the audience to a plugin.")
 })
 
 // PluginModel is the full plugin representation.
@@ -590,6 +635,12 @@ var ListPluginsResult = Type("ListPluginsResult", func() {
 	Attribute("plugins", ArrayOf(PluginModel), "The plugins in the organization.")
 })
 
+var ListAudiencesResult = Type("ListAudiencesResult", func() {
+	Required("audiences")
+
+	Attribute("audiences", ArrayOf(PluginAudienceModel), "Audiences that can be assigned to plugins.")
+})
+
 var PublishStatusResult = Type("PublishStatusResult", func() {
 	Required("configured", "connected")
 
@@ -601,6 +652,7 @@ var PublishStatusResult = Type("PublishStatusResult", func() {
 	Attribute("marketplace_url", String, "Git-based Claude Code marketplace URL — the value to pass to `/plugin marketplace add` or set as the source URL in `extraKnownMarketplaces`. Present once a marketplace token has been minted, which happens automatically on the first publish.")
 	Attribute("claude_observability_plugin", String, "Slug of the generated Claude Code observability plugin in the published marketplace — install as `<slug>@<marketplace name>`. Present when connected.")
 	Attribute("codex_observability_plugin", String, "Slug of the generated Codex observability plugin in the published marketplace — install as `<slug>@<marketplace name>`. Present when connected.")
+	Attribute("cursor_observability_plugin", String, "Slug of the generated Cursor observability plugin in the published marketplace — the value to mark required in Cursor's team marketplace. Present when connected.")
 	Attribute("has_collaborators", Boolean, "Whether the repo has at least one directly-added GitHub collaborator (excludes access granted via org membership/teams). Absent when the project is not connected.")
 	Attribute("up_to_date", Boolean, "Whether the project's current plugin state matches what was last published to GitHub. Absent when the project is not connected, or when the connection predates content fingerprinting (freshness can't be determined).")
 	Attribute("last_published_at", String, func() {
@@ -616,11 +668,12 @@ var PublishPluginsResult = Type("PublishPluginsResult", func() {
 })
 
 var MarketplaceSettingsResult = Type("MarketplaceSettingsResult", func() {
-	Required("default_name", "effective_name")
+	Required("default_name", "effective_name", "observability_enabled")
 
 	Attribute("marketplace_name", String, "User-provided override for the marketplace name. Absent when no override is configured.")
 	Attribute("default_name", String, "The default marketplace name used when no override is configured.")
 	Attribute("effective_name", String, "The marketplace name that will be used at publish time (override if set, otherwise default).")
+	Attribute("observability_enabled", Boolean, "Whether this project's observability plugin is included in the published marketplace and installed by the device agent. Defaults to true when unset.")
 })
 
 var UpdateMarketplaceSettingsResult = Type("UpdateMarketplaceSettingsResult", func() {

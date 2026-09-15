@@ -26,7 +26,7 @@ import { Loader2, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
-import { DangerSettingsSection } from "../SettingsSection";
+import { DangerSettingsSection } from "@/components/detail/settings-section";
 
 function mcpServerVisibilityUpdateForm(
   mcpServer: McpServer,

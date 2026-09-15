@@ -32,9 +32,17 @@ type RemoteSessionClient struct {
 	ClientIDIssuedAt    string
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string
+	// When the issuer's token endpoint last answered invalid_client for this
+	// client_id, meaning the issuer no longer recognizes the registration. Null
+	// while the registration is in good standing; cleared by a successful
+	// rotation, a successful refresh, or a replaced secret.
+	UpstreamRejectedAt *string
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string
+	// The organization JSON Web Key Set attached to this client, managed through
+	// attachKeySet and detachKeySet. Null when no key set is attached.
+	JSONWebKeySetID *string
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
 	Scope []string

@@ -13,6 +13,8 @@ export type { MarkdownLinkValue } from "./contexts/MarkdownLinkContext";
 
 // Core Components
 export { Chat } from "@/elements/components/Chat";
+export { ChatComposer } from "@/elements/components/ChatComposer";
+export { focusChatComposer } from "@/elements/lib/composerFocus";
 export { ChatHistory } from "@/elements/components/ChatHistory";
 export { ActiveChatTitle } from "@/elements/components/ActiveChatTitle";
 export { ShareButton } from "@/elements/components/ShareButton";

@@ -1,3 +1,4 @@
+import { IdentityLink } from "@/components/identity-link";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { type Column, Table } from "@/components/ui/Table";
 import { SkeletonTable } from "@/components/ui/Skeleton";
@@ -39,7 +40,13 @@ const userColumns: Column<UnproxiedMcpServerUserUsageRow>[] = [
     key: "userEmail",
     header: "User",
     render: (row) => (
-      <Text className="truncate">{row.userEmail || "Unknown"}</Text>
+      <Text className="truncate">
+        <IdentityLink
+          identifier={row.userEmail ? { email: row.userEmail } : null}
+        >
+          {row.userEmail || "Unknown"}
+        </IdentityLink>
+      </Text>
     ),
   },
   {

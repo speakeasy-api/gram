@@ -1,9 +1,9 @@
 import { MemberFacepile } from "@/components/member-facepile";
 import {
-  McpSidebarInfoLabel,
-  McpSidebarNavShell,
-  type McpSidebarNavItem,
-} from "@/components/mcp-sidebar-nav-shell";
+  DetailSidebarInfoLabel,
+  DetailSidebarNav,
+  type DetailSidebarNavItem,
+} from "@/components/detail/detail-sidebar-nav";
 import { Badge } from "@/components/ui/Badge";
 import { Text } from "@/components/ui/Text";
 import {
@@ -22,6 +22,7 @@ import {
   type PluginSection,
 } from "@/pages/plugins/plugin-detail-sections";
 import {
+  audienceMapByUrn,
   describePrincipal,
   individualMemberFacepile,
   isIndividualMemberPrincipal,
@@ -32,6 +33,7 @@ import {
 import { usePluginAssignmentsVisible } from "@/pages/plugins/use-plugin-assignments-visible";
 import { useRoutes } from "@/routes";
 import { useMembers } from "@gram/client/react-query/members";
+import { useAudiences } from "@gram/client/react-query/audiences";
 import { usePlugin } from "@gram/client/react-query/plugin";
 import { usePublishStatus } from "@gram/client/react-query/publishStatus";
 import { useRoles } from "@gram/client/react-query/roles";
@@ -57,6 +59,7 @@ export function PluginDetailSidebarNav(): React.JSX.Element | null {
   const { data: publishStatus } = usePublishStatus();
   const { data: membersData } = useMembers();
   const { data: rolesData } = useRoles();
+  const { data: audiencesData } = useAudiences();
   const showAssignments = usePluginAssignmentsVisible();
 
   const memberByUrn = React.useMemo(
@@ -67,6 +70,10 @@ export function PluginDetailSidebarNav(): React.JSX.Element | null {
     () => roleMapByUrn(rolesData?.roles ?? []),
     [rolesData?.roles],
   );
+  const audienceByUrn = React.useMemo(
+    () => audienceMapByUrn(audiencesData?.audiences ?? []),
+    [audiencesData?.audiences],
+  );
 
   if (!pluginId) return null;
 
@@ -75,7 +82,7 @@ export function PluginDetailSidebarNav(): React.JSX.Element | null {
     sectionId: PluginSection,
     title: string,
     Icon: React.ComponentType<{ className?: string }>,
-  ): McpSidebarNavItem => ({
+  ): DetailSidebarNavItem => ({
     key: sectionId,
     title,
     Icon,
@@ -83,7 +90,7 @@ export function PluginDetailSidebarNav(): React.JSX.Element | null {
     active: activeSectionId === sectionId,
   });
 
-  const items: McpSidebarNavItem[] = [
+  const items: DetailSidebarNavItem[] = [
     sectionItem(PLUGIN_OVERVIEW_SECTION_ID, "Overview", LayoutDashboard),
     sectionItem(PLUGIN_SERVERS_SECTION_ID, "MCP Servers", Network),
     sectionItem(PLUGIN_SKILLS_SECTION_ID, "Skills", Sparkles),
@@ -130,7 +137,7 @@ export function PluginDetailSidebarNav(): React.JSX.Element | null {
 
       {showMarketplaceInfo && (
         <div className="flex flex-col gap-1">
-          <McpSidebarInfoLabel>Marketplace</McpSidebarInfoLabel>
+          <DetailSidebarInfoLabel>Marketplace</DetailSidebarInfoLabel>
           <div className="flex flex-wrap items-center gap-1.5">
             {hasUnpublishedChanges && (
               <Badge variant="warning">
@@ -153,18 +160,18 @@ export function PluginDetailSidebarNav(): React.JSX.Element | null {
 
       <div className="flex gap-6">
         <div className="flex flex-col gap-1">
-          <McpSidebarInfoLabel>Servers</McpSidebarInfoLabel>
+          <DetailSidebarInfoLabel>Servers</DetailSidebarInfoLabel>
           <Text variant="small">{serverCount}</Text>
         </div>
         <div className="flex flex-col gap-1">
-          <McpSidebarInfoLabel>Skills</McpSidebarInfoLabel>
+          <DetailSidebarInfoLabel>Skills</DetailSidebarInfoLabel>
           <Text variant="small">{plugin.skillCount ?? 0}</Text>
         </div>
       </div>
 
       {showAssignments && (
         <div className="flex flex-col gap-1.5">
-          <McpSidebarInfoLabel>Distributed to</McpSidebarInfoLabel>
+          <DetailSidebarInfoLabel>Distributed to</DetailSidebarInfoLabel>
           {assignments.length === 0 ? (
             <Text variant="small" muted className="text-xs">
               No one yet
@@ -179,6 +186,7 @@ export function PluginDetailSidebarNav(): React.JSX.Element | null {
                   assignment.principalUrn,
                   roleByUrn,
                   memberByUrn,
+                  audienceByUrn,
                 );
                 const PrincipalIcon = principalIcon(kind);
                 return (
@@ -205,7 +213,7 @@ export function PluginDetailSidebarNav(): React.JSX.Element | null {
   );
 
   return (
-    <McpSidebarNavShell
+    <DetailSidebarNav
       backHref={routes.plugins.href()}
       backLabel="Back to all plugins"
       cardContent={cardContent}

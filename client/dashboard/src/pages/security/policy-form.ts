@@ -1,9 +1,7 @@
 import celExamples from "./cel-examples.json";
 import {
   DETECTION_RULES,
-  POLICY_MESSAGE_TYPE_META,
   type PolicyAction,
-  type PolicyMessageType,
   type RuleCategory,
 } from "./policy-data";
 import { ruleIdToPresidioEntity } from "./rule-ids";
@@ -14,7 +12,6 @@ export const PRESIDIO_CATEGORIES: RuleCategory[] = [
   "pii",
   "government_ids",
   "healthcare",
-  "off_policy",
 ];
 
 /** Categories that are currently available */
@@ -29,11 +26,11 @@ export const AVAILABLE_CATEGORIES: Set<RuleCategory> = new Set([
   "custom",
 ]);
 
-/** All rule categories in display order. off_policy renders via the
- * PRESIDIO_CATEGORIES spread — don't also list it explicitly. */
+/** All rule categories in display order. */
 export const ALL_CATEGORIES: RuleCategory[] = [
   "secrets",
   ...PRESIDIO_CATEGORIES,
+  "off_policy",
   "shadow_mcp",
   "destructive_tool",
   "cli_destructive",
@@ -59,10 +56,6 @@ export const CATEGORY_LEVEL_DETECTORS: Set<RuleCategory> = new Set([
   "destructive_tool",
   "cli_destructive",
 ]);
-
-export const ALL_POLICY_MESSAGE_TYPES = Object.keys(
-  POLICY_MESSAGE_TYPE_META,
-) as Array<PolicyMessageType>;
 
 export type CategoriesPayload = {
   sources: string[];
@@ -172,6 +165,28 @@ export function parseApprovedEmailDomains(raw: string): string[] {
     .filter((domain) => domain.length > 0);
 }
 
+/** Categories a policy detects on, for scope resolution. Broader than
+ *  `policyToCategories`: a presidio policy with no entity list detects every
+ *  presidio-backed category, and custom rules carry the `custom` category. */
+export function policyDetectionCategories(policy: {
+  policyType?: string;
+  sources?: string[];
+  presidioEntities?: string[];
+  customRuleIds?: string[];
+}): Set<RuleCategory> {
+  if (policy.policyType === "prompt_based") return new Set(["prompt_policy"]);
+
+  const sources = policy.sources ?? [];
+  const categories = policyToCategories(sources, policy.presidioEntities);
+  if (sources.includes("presidio") && !policy.presidioEntities?.length) {
+    for (const category of [...PRESIDIO_CATEGORIES, "off_policy" as const]) {
+      categories.add(category);
+    }
+  }
+  if (policy.customRuleIds?.length) categories.add("custom");
+  return categories;
+}
+
 /** Canonical ids of hidden rules an existing policy already pins via its
  *  presidioEntities. Lets an edit preserve a deprecated entity the policy
  *  carried before it was hidden, without ever newly adding one. */
@@ -190,20 +205,6 @@ export function pinnedHiddenRuleIds(presidioEntities?: string[]): Set<string> {
     }
   }
   return pinned;
-}
-
-export function policyMessageTypesForForm(
-  messageTypes?: string[],
-): Set<PolicyMessageType> {
-  if (!messageTypes?.length) {
-    return new Set(ALL_POLICY_MESSAGE_TYPES);
-  }
-
-  return new Set(
-    messageTypes.filter((type): type is PolicyMessageType =>
-      ALL_POLICY_MESSAGE_TYPES.includes(type as PolicyMessageType),
-    ),
-  );
 }
 
 /** Example scope CEL snippets offered beneath the include field — narrow a
@@ -237,5 +238,11 @@ export const ACTION_OPTIONS: {
     value: "block",
     title: "Deny the request",
     description: "Deny prompts and tool calls that match detection rules",
+  },
+  {
+    value: "quarantine",
+    title: "Quarantine session",
+    description:
+      "Deny the matching event and freeze prompts and tool calls in that session until an admin releases it.",
   },
 ];

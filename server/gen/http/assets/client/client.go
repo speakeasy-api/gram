@@ -34,6 +34,10 @@ type Client struct {
 	// uploadOpenAPIv3 endpoint.
 	UploadOpenAPIv3Doer goahttp.Doer
 
+	// FetchImageFromURL Doer is the HTTP client used to make requests to the
+	// fetchImageFromURL endpoint.
+	FetchImageFromURLDoer goahttp.Doer
+
 	// FetchOpenAPIv3FromURL Doer is the HTTP client used to make requests to the
 	// fetchOpenAPIv3FromURL endpoint.
 	FetchOpenAPIv3FromURLDoer goahttp.Doer
@@ -90,6 +94,7 @@ func NewClient(
 		UploadImageDoer:                   doer,
 		UploadFunctionsDoer:               doer,
 		UploadOpenAPIv3Doer:               doer,
+		FetchImageFromURLDoer:             doer,
 		FetchOpenAPIv3FromURLDoer:         doer,
 		ServeOpenAPIv3Doer:                doer,
 		ServeFunctionDoer:                 doer,
@@ -202,6 +207,30 @@ func (c *Client) UploadOpenAPIv3() goa.Endpoint {
 		resp, err := c.UploadOpenAPIv3Doer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("assets", "uploadOpenAPIv3", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// FetchImageFromURL returns an endpoint that makes HTTP requests to the assets
+// service fetchImageFromURL server.
+func (c *Client) FetchImageFromURL() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeFetchImageFromURLRequest(c.encoder)
+		decodeResponse = DecodeFetchImageFromURLResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildFetchImageFromURLRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.FetchImageFromURLDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("assets", "fetchImageFromURL", err)
 		}
 		return decodeResponse(resp)
 	}

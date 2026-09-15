@@ -10,6 +10,7 @@ import {
   shadowMCPPolicyInventoryQueryKey,
   useShadowMCPPolicyInventory,
 } from "./useShadowMCPPolicyInventory";
+import { testAccessSummary } from "./shadowMCPInventoryTestFixtures";
 
 const listInventory = vi.fn();
 
@@ -37,6 +38,8 @@ function inventoryServer(
     urlHost: new URL(canonicalServerUrl).host,
     userCount: 0,
     ...overrides,
+    accessSummary:
+      overrides.accessSummary ?? testAccessSummary(overrides.access ?? "none"),
   };
 }
 

@@ -63,8 +63,9 @@ type PluginServer struct {
 }
 
 type ProjectMarketplaceSetting struct {
-	ProjectID       uuid.UUID
-	MarketplaceName pgtype.Text
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
+	ProjectID            uuid.UUID
+	MarketplaceName      pgtype.Text
+	ObservabilityEnabled pgtype.Bool
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
 }

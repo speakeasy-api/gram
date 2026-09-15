@@ -22,10 +22,10 @@ type RiskSignalWindowParams struct {
 }
 
 // signalFindings is the doubled-window analog of overviewFindings: the same
-// per-id dedup (latest inserted_at wins) and live-finding filters, but scanning
+// per-id dedup (latestCopyOrderSQL) and live-finding filters, but scanning
 // [WideFrom, To) so callers can split current vs previous with *If aggregates.
 func signalFindings(p RiskSignalWindowParams, columns ...squirrel.Sqlizer) squirrel.SelectBuilder {
-	latest := sq.Select("*", "ROW_NUMBER() OVER (PARTITION BY id ORDER BY inserted_at DESC) AS rn").
+	latest := sq.Select("*", "ROW_NUMBER() OVER (PARTITION BY id ORDER BY "+latestCopyOrderSQL+") AS rn").
 		From("risk_findings").
 		Where("organization_id = ?", p.OrganizationID).
 		Where("project_id = ?", p.ProjectID).
@@ -41,6 +41,9 @@ func signalFindings(p RiskSignalWindowParams, columns ...squirrel.Sqlizer) squir
 		Where("rn = 1").
 		Where("dead_letter_reason = ''").
 		Where("excluded_at IS NULL").
+		// Legacy suppression column, still filtered until the
+		// false_positive_at-only rows written before the suppression
+		// convergence age out under the table's 90-day TTL.
 		Where("false_positive_at IS NULL")
 }
 
@@ -61,9 +64,17 @@ const (
 // stay empty/zero for rows written before the chat_source and team
 // attribution columns existed.
 type RiskSignalAggregate struct {
-	RuleID            string
-	Category          string
-	Sources           []string
+	RuleID   string
+	Category string
+	Sources  []string
+	// PolicyIDsCur and PolicyIDsPrev are the distinct non-empty
+	// risk_policy_id values stamped on the rule's findings, split per
+	// window. The split matters: each window's score must resolve only from
+	// policies that matched that window's findings, or a policy added today
+	// would retroactively rescore the previous-window baseline (and vice
+	// versa). Empty for pre-policy rows.
+	PolicyIDsCur      []string
+	PolicyIDsPrev     []string
 	Description       string
 	Apps              []string
 	FindingsCur       uint64
@@ -91,6 +102,8 @@ func (q *Queries) ListRiskSignalAggregates(ctx context.Context, p RiskSignalWind
 		squirrel.Expr("rule_id"),
 		squirrel.Alias(squirrel.Expr("any(category)"), "g_category"),
 		squirrel.Alias(squirrel.Expr("groupUniqArray(source)"), "g_sources"),
+		squirrel.Alias(squirrel.Expr("groupUniqArrayIf(risk_policy_id, risk_policy_id != '' AND created_at >= ?)", p.From), "g_policy_ids_cur"),
+		squirrel.Alias(squirrel.Expr("groupUniqArrayIf(risk_policy_id, risk_policy_id != '' AND created_at < ?)", p.From), "g_policy_ids_prev"),
 		squirrel.Alias(squirrel.Expr("any(description)"), "g_description"),
 		squirrel.Alias(squirrel.Expr("groupUniqArrayIf(chat_source, chat_source != '' AND created_at >= ?)", p.From), "g_apps"),
 		squirrel.Alias(squirrel.Expr("uniqExactIf(id, created_at >= ?)", p.From), "findings_cur"),
@@ -126,6 +139,8 @@ func (q *Queries) ListRiskSignalAggregates(ctx context.Context, p RiskSignalWind
 			&row.RuleID,
 			&row.Category,
 			&row.Sources,
+			&row.PolicyIDsCur,
+			&row.PolicyIDsPrev,
 			&row.Description,
 			&row.Apps,
 			&row.FindingsCur,

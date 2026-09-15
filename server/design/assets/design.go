@@ -34,6 +34,7 @@ var _ = Service("assets", func() {
 				Header("content_length:Content-Length")
 				Header("last_modified:Last-Modified")
 				Header("access_control_allow_origin:Access-Control-Allow-Origin")
+				Header("cross_origin_resource_policy:Cross-Origin-Resource-Policy")
 			})
 
 			SkipResponseBodyEncodeDecode()
@@ -109,6 +110,25 @@ var _ = Service("assets", func() {
 		Meta("openapi:operationId", "uploadOpenAPIv3Asset")
 		Meta("openapi:extension:x-speakeasy-name-override", "uploadOpenAPIv3")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UploadOpenAPIv3"}`)
+	})
+
+	Method("fetchImageFromURL", func() {
+		Description("Fetch an image from a URL and upload it to Gram as an image asset.")
+
+		Payload(FetchImageFromURLForm)
+
+		Result(UploadImageResult)
+
+		HTTP(func() {
+			POST("/rpc/assets.fetchImageFromURL")
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			security.SessionHeader()
+		})
+
+		Meta("openapi:operationId", "fetchImageFromURL")
+		Meta("openapi:extension:x-speakeasy-name-override", "fetchImageFromURL")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "FetchImageFromURL"}`)
 	})
 
 	Method("fetchOpenAPIv3FromURL", func() {
@@ -341,12 +361,18 @@ var ServeImageForm = Type("ServeImageForm", func() {
 })
 
 var ServeImageResult = Type("ServeImageResult", func() {
-	Required("content_type", "content_length", "last_modified")
+	Required(
+		"content_type",
+		"content_length",
+		"last_modified",
+		"cross_origin_resource_policy",
+	)
 
 	Attribute("content_type", String)
 	Attribute("content_length", Int64)
 	Attribute("last_modified", String)
 	Attribute("access_control_allow_origin", String)
+	Attribute("cross_origin_resource_policy", String)
 })
 
 var UploadOpenAPIv3Form = Type("UploadOpenAPIv3Form", func() {
@@ -372,6 +398,15 @@ var UploadOpenAPIv3Result = Type("UploadOpenAPIv3Result", func() {
 	Required("asset")
 
 	Attribute("asset", Asset, "The asset entry that was created in Gram")
+})
+
+var FetchImageFromURLForm = Type("FetchImageFromURLForm", func() {
+	Required("url")
+	security.ByKeyPayload()
+	security.SessionPayload()
+	security.ProjectPayload()
+
+	Attribute("url", String, "The URL to fetch the image from")
 })
 
 var UploadImageForm = Type("UploadImageForm", func() {

@@ -1,12 +1,9 @@
 import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
-import { PageEyebrow } from "@/components/page-eyebrow";
-import { Page } from "@/components/page-layout";
+import { ResourceListPage } from "@/components/page-templates";
 import { Dialog } from "@/components/ui/Dialog";
-import { Heading } from "@/components/ui/Heading";
 import { Label } from "@/components/ui/Label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
-import { SearchBar } from "@/components/ui/SearchBar";
 import { Text } from "@/components/ui/Text";
 import { HumanizeDateTime } from "@/lib/dates";
 import { assert } from "@/lib/utils";
@@ -19,31 +16,45 @@ import {
 import { useRevokeAPIKeyMutation } from "@gram/client/react-query/revokeAPIKey";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
-import { Stack } from "@/components/ui/Stack";
 import { Column, Table } from "@/components/ui/Table";
 import { useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Copy } from "lucide-react";
 import { useMemo, useState } from "react";
+import { useOrganization } from "@/contexts/Auth";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/Select";
 import { RequireScope } from "@/components/require-scope";
 
 export default function OrgApiKeys(): JSX.Element {
-  // We need an outer component wrapping the inner as the key fetching request
-  // will return a forbidden error if the user does not have the org:admin scope
+  const organization = useOrganization();
+  // The key fetching request returns a forbidden error without the org:admin
+  // scope; the outer RequireScope gates rendering (and the data hook) on that
+  // scope.
   return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <RequireScope scope="org:admin" level="page">
-          <OrgApiKeysInner />
-        </RequireScope>
-      </Page.Body>
-    </Page>
+    <RequireScope scope="org:admin" level="page">
+      <OrgApiKeysInner key={organization.id} />
+    </RequireScope>
   );
 }
 
 function OrgApiKeysInner() {
+  const organization = useOrganization();
+  const [projectId, setProjectId] = useState("organization-wide");
+  const projectSelectionValid =
+    projectId === "organization-wide" ||
+    organization.projects.some((project) => project.id === projectId);
+  const projectLabel = (id?: string) => {
+    if (!id) return "Organization-wide";
+    return (
+      organization.projects.find((project) => project.id === id)?.name ??
+      "Unavailable project"
+    );
+  };
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [keyToRevoke, setKeyToRevoke] = useState<Key | null>(null);
   const [newlyCreatedKey, setNewlyCreatedKey] = useState<Key | null>(null);
@@ -82,6 +93,7 @@ function OrgApiKeysInner() {
 
   const handleCreateKey: React.FormEventHandler<HTMLFormElement> = (e) => {
     e.preventDefault();
+    if (!projectSelectionValid || createKeyMutation.isPending) return;
     const formEl = e.currentTarget;
     const formData = new FormData(formEl);
     const newKeyName = formData.get("name");
@@ -95,6 +107,8 @@ function OrgApiKeysInner() {
         request: {
           createKeyForm: {
             name: newKeyName,
+            projectId:
+              projectId === "organization-wide" ? undefined : projectId,
             scopes: [scope],
           },
         },
@@ -130,6 +144,7 @@ function OrgApiKeysInner() {
     setIsCreateDialogOpen(false);
     setNewlyCreatedKey(null);
     setIsCopied(false);
+    setProjectId("organization-wide");
   };
 
   const apiKeyColumns: Column<Key>[] = [
@@ -150,6 +165,14 @@ function OrgApiKeysInner() {
       header: "Scopes",
       width: "1fr",
       render: (key: Key) => <Text variant="body">{key.scopes.join(", ")}</Text>,
+    },
+    {
+      key: "projectId",
+      header: "Project binding",
+      width: "1fr",
+      render: (key: Key) => (
+        <Text variant="body">{projectLabel(key.projectId)}</Text>
+      ),
     },
     {
       key: "createdAt",
@@ -188,71 +211,66 @@ function OrgApiKeysInner() {
     },
   ];
 
+  const newApiKeyButton = (
+    <RequireScope scope="org:admin" level="component">
+      <Button onClick={() => setIsCreateDialogOpen(true)}>New API Key</Button>
+    </RequireScope>
+  );
+
+  const createKeyButton = (
+    <RequireScope scope="org:admin" level="component">
+      <Button
+        size="sm"
+        variant="secondary"
+        onClick={() => setIsCreateDialogOpen(true)}
+      >
+        <Button.LeftIcon>
+          <Icon name="key-round" className="h-4 w-4" />
+        </Button.LeftIcon>
+        <Button.Text>Create Key</Button.Text>
+      </Button>
+    </RequireScope>
+  );
+
+  const hasNoKeys = (keysData?.keys ?? []).length === 0;
+
   return (
     <>
-      <div className="mb-6">
-        <PageEyebrow className="mb-2" />
-        <Heading variant="h4" className="mb-2 text-display-sm font-thin">
-          API Keys
-        </Heading>
-        <Text muted small className="mt-1">
-          Create and manage API keys to authenticate programmatic access to
-          platform services, including MCP service deployments, tool management,
-          and other connections.
-        </Text>
-      </div>
-      <Stack
-        direction="horizontal"
-        justify="space-between"
-        align="center"
-        className="mb-4"
+      <ResourceListPage
+        title="API Keys"
+        description="Create and manage API keys to authenticate programmatic access to platform services, including MCP service deployments, tool management, and other connections."
+        primaryAction={newApiKeyButton}
+        search={{
+          value: apiKeySearch,
+          onChange: setApiKeySearch,
+          placeholder: "Search by key name",
+        }}
+        isEmpty={hasNoKeys}
+        empty={{
+          icon: "key-round",
+          heading: "No API keys yet",
+          action: createKeyButton,
+        }}
       >
-        <SearchBar
-          value={apiKeySearch}
-          onChange={setApiKeySearch}
-          placeholder="Search by key name"
-          className="w-64"
-        />
-        <RequireScope scope="org:admin" level="component">
-          <Button onClick={() => setIsCreateDialogOpen(true)}>
-            New API Key
-          </Button>
-        </RequireScope>
-      </Stack>
-      {filteredKeys.length > 0 ? (
-        <Table
-          columns={apiKeyColumns}
-          data={filteredKeys}
-          rowKey={(row) => row.id}
-          className="max-h-[500px] overflow-y-auto"
-        />
-      ) : (
-        <div
-          role="status"
-          className="border-border bg-background flex min-h-32 flex-col items-center justify-center gap-4 border p-6"
-        >
-          <Text variant="body">
-            {apiKeySearch ? "No matching API keys" : "No API keys yet"}
-          </Text>
-          {!apiKeySearch && (
-            <RequireScope scope="org:admin" level="component">
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => setIsCreateDialogOpen(true)}
-              >
-                <Button.LeftIcon>
-                  <Icon name="key-round" className="h-4 w-4" />
-                </Button.LeftIcon>
-                <Button.Text>Create Key</Button.Text>
-              </Button>
-            </RequireScope>
-          )}
-        </div>
-      )}
+        {filteredKeys.length > 0 ? (
+          <Table
+            columns={apiKeyColumns}
+            data={filteredKeys}
+            rowKey={(row) => row.id}
+            className="max-h-[500px] overflow-y-auto"
+          />
+        ) : (
+          <div
+            role="status"
+            className="border-border bg-background flex min-h-32 flex-col items-center justify-center gap-4 border p-6"
+          >
+            <Text variant="body">No matching API keys</Text>
+          </div>
+        )}
+      </ResourceListPage>
 
       <Dialog open={isCreateDialogOpen} onOpenChange={handleCloseCreateDialog}>
-        <Dialog.Content>
+        <Dialog.Content className="max-h-[90vh] overflow-y-auto">
           <Dialog.Header>
             <Dialog.Title>
               {newlyCreatedKey ? "API Key Created" : "Create New API Key"}
@@ -264,6 +282,9 @@ function OrgApiKeysInner() {
                 You will not be able to see this token value again once you
                 close this dialog. Copy it now and store it securely.
               </div>
+              <Text variant="body">
+                Project binding: {projectLabel(newlyCreatedKey.projectId)}
+              </Text>
               <div className="bg-muted flex items-center space-x-2 p-3">
                 <code className="flex-1 break-all">{newlyCreatedKey.key}</code>
                 <Button
@@ -296,6 +317,41 @@ function OrgApiKeysInner() {
                 autoCapitalize="off"
                 autoComplete="off"
                 autoCorrect="off"
+              />
+
+              <AnyField
+                label="Project"
+                hint="Restrict this key to a project without changing its scope."
+                error={
+                  !projectSelectionValid &&
+                  "This project is no longer available. Select a project or Organization-wide."
+                }
+                render={(props) => (
+                  <Select value={projectId} onValueChange={setProjectId}>
+                    <SelectTrigger
+                      {...props}
+                      aria-invalid={!projectSelectionValid}
+                      className="w-full"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="organization-wide">
+                        Organization-wide
+                      </SelectItem>
+                      {organization.projects.map((project) => (
+                        <SelectItem key={project.id} value={project.id}>
+                          {project.name}
+                        </SelectItem>
+                      ))}
+                      {!projectSelectionValid && (
+                        <SelectItem value={projectId} disabled>
+                          Unavailable project
+                        </SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                )}
               />
 
               <AnyField
@@ -354,7 +410,12 @@ function OrgApiKeysInner() {
                 >
                   Cancel
                 </Button>
-                <Button type="submit" disabled={createKeyMutation.isPending}>
+                <Button
+                  type="submit"
+                  disabled={
+                    createKeyMutation.isPending || !projectSelectionValid
+                  }
+                >
                   Create
                 </Button>
               </div>

@@ -90,7 +90,7 @@ func (e *EmulatedPubSubBroker) reconcileTopic(ctx context.Context, topicName str
 	_, err := e.client.TopicAdminClient.CreateTopic(ctx, topic)
 	switch {
 	case status.Code(err) == codes.AlreadyExists:
-		e.logger.InfoContext(ctx, "topic already exists", attr.SlogGCPTopicQualifiedName(qname))
+		e.logger.DebugContext(ctx, "topic already exists", attr.SlogGCPTopicQualifiedName(qname))
 	case err != nil:
 		return fmt.Errorf("create topic %q: %w", qname, err)
 	default:
@@ -206,7 +206,7 @@ func (e *EmulatedPubSubBroker) reconcileSubscriptions(ctx context.Context, subNa
 	_, err := e.client.SubscriptionAdminClient.CreateSubscription(ctx, sub)
 	switch {
 	case status.Code(err) == codes.AlreadyExists:
-		e.logger.InfoContext(ctx, "subscription already exists", attr.SlogGCPSubscriptionQualifiedName(qname))
+		e.logger.DebugContext(ctx, "subscription already exists", attr.SlogGCPSubscriptionQualifiedName(qname))
 	case err != nil:
 		return fmt.Errorf("create subscription %q: %w", qname, err)
 	default:

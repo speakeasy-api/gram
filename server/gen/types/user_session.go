@@ -37,6 +37,18 @@ type UserSession struct {
 	// ID Metadata Document (CIMD) hosted at this URL, rather than registered via
 	// RFC 7591 DCR. Null for DCR clients and for sessions with no bound client.
 	ClientIDMetadataURI *string
+	// What the client that established this session must present to authenticate:
+	// 'public' (nothing), 'secret' (a client secret), 'key' (an assertion signed
+	// by its published key), or 'misconfigured'. Derived by the same rule the
+	// token endpoint enforces. Null only when the session has no bound client,
+	// which is the case for API key and anonymous subjects; a bound client always
+	// resolves to one of the four.
+	ClientCredentialKind *string
+	// The raw RFC 7591 token_endpoint_auth_method the client declared, for
+	// debugging against the spec. Null both for a session with no bound client and
+	// for a client registered before the value was recorded;
+	// client_credential_kind separates those cases and is what should be displayed.
+	ClientTokenEndpointAuthMethod *string
 	// Subject kind: 'user', 'apikey', or 'anonymous'.
 	SubjectType string
 	// Resolved human-readable name of the subject, if known.
@@ -46,4 +58,14 @@ type UserSession struct {
 	SubjectPhotoURL *string
 	// When the session was revoked, if it has been.
 	RevokedAt *string
+	// When this session last carried an MCP request. Recorded on the request path
+	// and coalesced to a five-minute resolution, so treat it as accurate to within
+	// that. Null means the session has not been used since the column was
+	// introduced — unknown, not never.
+	LastUsedAt *string
+	// The upstream providers Gram holds tokens for on this session's subject,
+	// through the same issuer. Empty when the session reaches only Gram-native
+	// tools. A session can have several: an issuer may have more than one
+	// remote_session_client attached.
+	Upstreams []*UserSessionUpstream
 }

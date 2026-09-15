@@ -23,8 +23,25 @@ func testPropagator() propagation.TextMapPropagator {
 func TestMessageAttributes_AlwaysCarriesContentTypeAndSchema(t *testing.T) {
 	t.Parallel()
 
-	attrs := messageAttributes(t.Context(), testPropagator(), &emptypb.Empty{})
+	attrs := messageAttributes(t.Context(), testPropagator(), &emptypb.Empty{}, nil)
 
+	require.Equal(t, "application/x-protobuf", attrs["content-type"])
+	require.Equal(t, "google.protobuf.Empty", attrs["schema"])
+}
+
+func TestMessageAttributes_MergesCustomAttributesUnderWireMarkers(t *testing.T) {
+	t.Parallel()
+
+	opts := resolvePublishOptions([]PublishOption{
+		WithMessageAttributes(map[string]string{
+			"gram-reply-urn": "urn:gram:reply:test",
+			"content-type":   "text/plain",
+			"schema":         "wrong.schema",
+		}),
+	})
+	attrs := messageAttributes(t.Context(), testPropagator(), &emptypb.Empty{}, opts.Attributes)
+
+	require.Equal(t, "urn:gram:reply:test", attrs["gram-reply-urn"])
 	require.Equal(t, "application/x-protobuf", attrs["content-type"])
 	require.Equal(t, "google.protobuf.Empty", attrs["schema"])
 }
@@ -32,7 +49,7 @@ func TestMessageAttributes_AlwaysCarriesContentTypeAndSchema(t *testing.T) {
 func TestMessageAttributes_NoTraceContextWithoutActiveSpan(t *testing.T) {
 	t.Parallel()
 
-	attrs := messageAttributes(t.Context(), testPropagator(), &emptypb.Empty{})
+	attrs := messageAttributes(t.Context(), testPropagator(), &emptypb.Empty{}, nil)
 
 	// With no span in ctx the propagator injects nothing, so unpropagated
 	// messages still let the subscriber start a fresh trace.
@@ -58,7 +75,7 @@ func TestMessageAttributes_RoundTripsTraceContextToSubscriber(t *testing.T) {
 	publishCtx := trace.ContextWithSpanContext(context.Background(), parentSC)
 
 	// Publisher side: messageAttributes injects the active trace context.
-	attrs := messageAttributes(publishCtx, prop, &emptypb.Empty{})
+	attrs := messageAttributes(publishCtx, prop, &emptypb.Empty{}, nil)
 	require.Contains(t, attrs, "traceparent", "an active span should be propagated")
 
 	// Subscriber side (mirrors streams.go): extract from the message attributes.

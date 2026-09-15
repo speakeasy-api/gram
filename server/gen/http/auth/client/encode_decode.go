@@ -307,6 +307,9 @@ func EncodeLoginRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.
 		if p.Email != nil {
 			values.Add("email", *p.Email)
 		}
+		if p.SupportHandoff != nil {
+			values.Add("support_handoff", *p.SupportHandoff)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}

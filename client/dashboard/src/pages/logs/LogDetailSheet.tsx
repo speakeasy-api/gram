@@ -1,3 +1,7 @@
+import { MCPCard, MCPCardSkeleton } from "@/components/mcp/MCPCard";
+import { Card } from "@/components/ui/Card";
+import { useToolsets } from "@/pages/toolsets/useToolsets";
+import { useRoutes } from "@/routes";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/Sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { cn } from "@/lib/utils";
@@ -13,10 +17,12 @@ import {
 import { Icon } from "@/components/ui/Icon";
 import { ChevronDown, Copy } from "lucide-react";
 import { useId, useState } from "react";
+import { ErrorBoundary } from "react-error-boundary";
 import { formatNanoTimestamp, getSeverityColorClass } from "./utils";
 
 interface LogDetailSheetProps {
   log: TelemetryLogRecord | null;
+  hostedToolsetSlug?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onAddFilter?: (path: string, op: Operator, value: string) => void;
@@ -24,6 +30,7 @@ interface LogDetailSheetProps {
 
 export function LogDetailSheet({
   log,
+  hostedToolsetSlug,
   open,
   onOpenChange,
   onAddFilter,
@@ -34,7 +41,13 @@ export function LogDetailSheet({
         className="h-full max-h-screen overflow-y-auto"
         style={{ width: "33vw", minWidth: 500, maxWidth: "none" }}
       >
-        {log && <LogDetailContent log={log} onAddFilter={onAddFilter} />}
+        {log && (
+          <LogDetailContent
+            log={log}
+            hostedToolsetSlug={hostedToolsetSlug}
+            onAddFilter={onAddFilter}
+          />
+        )}
       </SheetContent>
     </Sheet>
   );
@@ -102,11 +115,47 @@ function removeNestedKey(
   return clone;
 }
 
+function HostedServerCard({
+  toolsetSlug,
+}: {
+  toolsetSlug: string;
+}): JSX.Element {
+  const toolsets = useToolsets();
+  const routes = useRoutes();
+  const toolset = toolsets.find((item) => item.slug === toolsetSlug);
+  const unavailableCard = (
+    <Card href={routes.mcp.details.overview.href(toolsetSlug)}>
+      <Card.Header>
+        <Card.Title>{toolsetSlug}</Card.Title>
+        <Card.Description>Server details are unavailable</Card.Description>
+      </Card.Header>
+    </Card>
+  );
+  let card = unavailableCard;
+  if (toolset) {
+    card = (
+      <ErrorBoundary fallback={unavailableCard} resetKeys={[toolsetSlug]}>
+        <MCPCard toolset={toolset} />
+      </ErrorBoundary>
+    );
+  } else if (toolsets.isLoading) {
+    card = <MCPCardSkeleton />;
+  }
+  return (
+    <section aria-label="Hosted MCP server" className="flex flex-col gap-2">
+      <h3 className="text-eyebrow">Hosted MCP server</h3>
+      {card}
+    </section>
+  );
+}
+
 function LogDetailContent({
   log,
+  hostedToolsetSlug,
   onAddFilter,
 }: {
   log: TelemetryLogRecord;
+  hostedToolsetSlug?: string;
   onAddFilter?: (path: string, op: Operator, value: string) => void;
 }) {
   const severityClass = getSeverityColorClass(log.severityText);
@@ -117,6 +166,11 @@ function LogDetailContent({
 
   // Extract tool I/O content from attributes
   const attrs = log.attributes as Record<string, unknown> | undefined;
+  const flatToolsetSlug = attrs?.["gram.toolset.slug"];
+  const toolsetSlug =
+    (attrs && getNestedValue(attrs, "gram.toolset.slug")) ||
+    (typeof flatToolsetSlug === "string" && flatToolsetSlug) ||
+    hostedToolsetSlug;
   const toolInput = attrs
     ? getNestedValue(attrs, TOOL_IO_ATTR_KEYS.input)
     : undefined;
@@ -225,6 +279,8 @@ function LogDetailContent({
           />
         </div>
       </div>
+
+      {toolsetSlug && <HostedServerCard toolsetSlug={toolsetSlug} />}
 
       {/* Tabs: Details / Raw Data */}
       <Tabs defaultValue="details" className="w-full flex-1">

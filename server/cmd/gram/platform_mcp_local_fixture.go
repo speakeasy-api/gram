@@ -8,33 +8,34 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/localfixture"
 )
 
-const platformMCPLocalFixtureFlag = "platform-mcp-local-fixture"
-
 type platformMCPLocalFixtureConfig struct {
 	Origin  *url.URL
 	Fixture *localfixture.Config
 }
 
-func platformMCPLocalFixtureConfigFromCLI(environment string, enabled bool, rawServerURL string) (*platformMCPLocalFixtureConfig, error) {
-	if !enabled {
-		return nil, nil
-	}
+func platformMCPLocalFixtureConfigFromCLI(environment, rawServerURL string) (*platformMCPLocalFixtureConfig, error) {
 	if environment != "local" {
-		return nil, fmt.Errorf("%s is only supported when environment is local", platformMCPLocalFixtureFlag)
+		return nil, nil
 	}
 
 	origin, err := url.Parse(rawServerURL)
 	if err != nil {
-		return nil, fmt.Errorf("parse server URL for %s: %w", platformMCPLocalFixtureFlag, err)
+		return nil, fmt.Errorf("parse server URL for local Platform MCP source: %w", err)
+	}
+	// The synthetic source includes OAuth and therefore requires HTTPS. Local
+	// HTTP mode remains supported by using the normal browser-catalogue runtime
+	// without the synthetic reviewed source instead of failing server startup.
+	if origin.Scheme == "http" {
+		return nil, nil
 	}
 	if err := localfixture.ValidateOrigin(origin); err != nil {
-		return nil, fmt.Errorf("%s requires an HTTPS server origin without credentials, path, query, or fragment: %w", platformMCPLocalFixtureFlag, err)
+		return nil, fmt.Errorf("local Platform MCP source requires an HTTPS server origin without credentials, path, query, or fragment: %w", err)
 	}
 
 	origin.Path = strings.TrimSuffix(origin.Path, "/")
 	fixture, err := localfixture.NewConfig(origin)
 	if err != nil {
-		return nil, fmt.Errorf("create %s descriptor: %w", platformMCPLocalFixtureFlag, err)
+		return nil, fmt.Errorf("create local Platform MCP source descriptor: %w", err)
 	}
 	return &platformMCPLocalFixtureConfig{Origin: origin, Fixture: fixture}, nil
 }

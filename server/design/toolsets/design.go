@@ -195,6 +195,33 @@ var _ = Service("toolsets", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListToolsetToolFilters"}`)
 	})
 
+	Method("listToolSchemaStaticValues", func() {
+		Description("List every const, default, enum, example, and examples value in each tool input schema. The result is deliberately mechanical: clients decide how to present or interpret the values. This supports reviewing the exact schema contents before changing how a toolset is shared.")
+
+		Payload(func() {
+			Required("slug")
+			Attribute("slug", shared.Slug, "The slug of the toolset")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ListToolSchemaStaticValuesResult)
+
+		HTTP(func() {
+			GET("/rpc/toolsets.listToolSchemaStaticValues")
+			Param("slug")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listToolsetToolSchemaStaticValues")
+		Meta("openapi:extension:x-speakeasy-name-override", "listToolSchemaStaticValues")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListToolSchemaStaticValues"}`)
+	})
+
 	Method("checkMCPSlugAvailability", func() {
 		Description("Check if a MCP slug is available")
 
@@ -271,6 +298,31 @@ var _ = Service("toolsets", func() {
 		Meta("openapi:operationId", "addExternalOAuthServer")
 		Meta("openapi:extension:x-speakeasy-name-override", "addExternalOAuthServer")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AddExternalOAuthServer"}`)
+	})
+
+	Method("updateExternalOAuthServer", func() {
+		Description("Change an attached external OAuth server between provider-hosted and Gram-hosted authorization-server metadata without replacing the server, registrations, tokens, or toolset association")
+
+		Payload(func() {
+			Extend(UpdateExternalOAuthServerForm)
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(shared.Toolset)
+
+		HTTP(func() {
+			Param("slug")
+			POST("/rpc/toolsets.updateExternalOAuthServer")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "updateExternalOAuthServer")
+		Meta("openapi:extension:x-speakeasy-name-override", "updateExternalOAuthServer")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateExternalOAuthServer"}`)
 	})
 
 	Method("removeOAuthServer", func() {
@@ -373,6 +425,27 @@ var ListToolsetSummariesResult = Type("ListToolsetSummariesResult", func() {
 	Required("toolsets")
 })
 
+var ToolSchemaStaticValue = Type("ToolSchemaStaticValue", func() {
+	Description("A literal value carried by a JSON Schema keyword.")
+	Attribute("schema_path", String, "JSON Pointer to the schema object containing the keyword")
+	Attribute("keyword", String, "The JSON Schema keyword containing the value")
+	Attribute("value_json", String, "JSON-encoded literal value, preserving null and number precision")
+	Required("schema_path", "keyword", "value_json")
+})
+
+var ToolSchemaStaticValues = Type("ToolSchemaStaticValues", func() {
+	Description("Static values found in one tool input schema.")
+	Attribute("tool_urn", String, "The tool URN")
+	Attribute("tool_name", String, "The tool name")
+	Attribute("values", ArrayOf(ToolSchemaStaticValue), "Static values in the tool input schema")
+	Required("tool_urn", "tool_name", "values")
+})
+
+var ListToolSchemaStaticValuesResult = Type("ListToolSchemaStaticValuesResult", func() {
+	Attribute("tools", ArrayOf(ToolSchemaStaticValues), "Per-tool static values for tools whose input schemas contain at least one matching keyword")
+	Required("tools")
+})
+
 var UpdateToolsetForm = Type("UpdateToolsetForm", func() {
 	Attribute("slug", shared.Slug, "The slug of the toolset to update")
 	Attribute("name", String, "The new name of the toolset")
@@ -395,6 +468,18 @@ var AddExternalOAuthServerForm = Type("AddExternalOAuthServerForm", func() {
 	Attribute("external_oauth_server", shared.ExternalOAuthServerForm, "The external OAuth server data to create and associate with the toolset")
 	security.ProjectPayload()
 	Required("slug", "external_oauth_server")
+})
+
+var UpdateExternalOAuthServerForm = Type("UpdateExternalOAuthServerForm", func() {
+	Attribute("slug", shared.Slug, "The slug of the toolset whose attached external OAuth server is updated")
+	Attribute("metadata", Any, "JSON object metadata to restore Gram-hosted compatibility mode. Supply exactly one of metadata and authorization_server_issuer.")
+	Attribute("authorization_server_issuer", String, "Exact HTTPS issuer to set for provider-hosted discovery. Gram strictly discovers and verifies it before the atomic update. Supply exactly one of authorization_server_issuer and metadata; clients may need to register or authenticate again after a mode change.", func() {
+		Format(FormatURI)
+		Pattern(`^https://`)
+		MaxLength(500)
+	})
+	security.ProjectPayload()
+	Required("slug")
 })
 
 var SetUserSessionIssuerForm = Type("SetUserSessionIssuerForm", func() {

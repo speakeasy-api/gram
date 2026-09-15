@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -28,6 +29,7 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/skills/server"
 	gen "github.com/speakeasy-api/gram/server/gen/skills"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -39,6 +41,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/skills/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -61,7 +64,11 @@ type Service struct {
 	features *productfeatures.Client
 	audit    *audit.Logger
 	signaler ManualSuggestionSignaler
-	siteURL  *url.URL
+	// publisher republishes a project's marketplace packages after a skill is
+	// distributed to or revoked from a plugin. Nil in tests; signalPluginPublish
+	// is a no-op then.
+	publisher PluginPublishSignaler
+	siteURL   *url.URL
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -76,20 +83,22 @@ func NewService(
 	features *productfeatures.Client,
 	auditLogger *audit.Logger,
 	signaler ManualSuggestionSignaler,
+	publisher PluginPublishSignaler,
 	siteURL *url.URL,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("skills"))
 
 	return &Service{
-		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/skills"),
-		logger:   logger,
-		db:       db,
-		auth:     auth.New(logger, db, sessions, authzEngine),
-		authz:    authzEngine,
-		features: features,
-		audit:    auditLogger,
-		signaler: signaler,
-		siteURL:  siteURL,
+		tracer:    tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/skills"),
+		logger:    logger,
+		db:        db,
+		auth:      auth.New(logger, db, sessions, authzEngine),
+		authz:     authzEngine,
+		features:  features,
+		audit:     auditLogger,
+		signaler:  signaler,
+		publisher: publisher,
+		siteURL:   siteURL,
 	}
 }
 
@@ -285,6 +294,39 @@ func resolveDerivedFromVersion(ctx context.Context, queries *repo.Queries, proje
 	return uuid.NullUUID{UUID: versionID, Valid: true}, uuid.NullUUID{UUID: version.SkillID, Valid: true}, nil
 }
 
+// parseExpectedLatestVersion validates a caller's optimistic concurrency token.
+//
+// Parsing is deliberately separate from comparing. Both write paths recover
+// from a stale token when the write turns out to be a replay, and a combined
+// check would let those recovery paths swallow a malformed token as though it
+// were merely stale — accepting a write whose concurrency claim was never
+// valid in the first place.
+//
+// The token names the version the caller believed was current, not a counter:
+// version IDs are what every skill read already returns, so a caller has one
+// without a second lookup.
+func parseExpectedLatestVersion(expected *string) (uuid.NullUUID, error) {
+	if expected == nil {
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, nil
+	}
+	expectedID, err := uuid.Parse(*expected)
+	if err != nil {
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, oops.E(oops.CodeBadRequest, err, "invalid expected latest version id")
+	}
+	return uuid.NullUUID{UUID: expectedID, Valid: true}, nil
+}
+
+// expectedLatestVersionStale reports whether the skill has moved on since the
+// caller read it. It runs inside the transaction that performs the write, so a
+// concurrent version is a conflict rather than a silent overwrite.
+func expectedLatestVersionStale(expected uuid.NullUUID, latestVersionID uuid.UUID) bool {
+	return expected.Valid && expected.UUID != latestVersionID
+}
+
+func errSkillVersionConflict() error {
+	return oops.E(oops.CodeConflict, nil, "the skill has a newer version than the expected one; re-read the skill and retry")
+}
+
 type distributionTarget struct {
 	channel     string
 	pluginID    uuid.NullUUID
@@ -314,6 +356,25 @@ func parseDistributionTarget(pluginID, assistantID *string) (distributionTarget,
 		return distributionTarget{}, oops.E(oops.CodeBadRequest, nil, "invalid assistant id")
 	}
 	return distributionTarget{channel: "assistant", pluginID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, assistantID: uuid.NullUUID{UUID: id, Valid: true}}, nil
+}
+
+// signalPluginPublish republishes the project's marketplace packages after a
+// plugin-channel distribution changed. The publisher is nil when GitHub
+// publishing is not configured, so a deployment without it enqueues nothing
+// rather than filling Temporal with runs that can only fail. Best-effort: a failed enqueue is logged
+// and never fails the request, since the rollout sweep still picks the project
+// up on its next tick. Must only be called after the triggering transaction
+// has committed — the publish reads live state a rollback would take back.
+func (s *Service) signalPluginPublish(ctx context.Context, target distributionTarget, authCtx *contextvalues.AuthContext) {
+	if s.publisher == nil || target.channel != "plugin" {
+		return
+	}
+
+	// The request returning shouldn't drop the enqueue.
+	if err := s.publisher.SignalPluginPublish(context.WithoutCancel(ctx), *authCtx.ProjectID, authCtx.UserID); err != nil {
+		s.logger.WarnContext(ctx, "failed to signal plugin publish",
+			attr.SlogProjectID(authCtx.ProjectID.String()), attr.SlogError(err))
+	}
 }
 
 func (s *Service) recordVersion(
@@ -613,6 +674,37 @@ func (s *Service) AddVersion(ctx context.Context, payload *gen.AddVersionPayload
 	if skill.Name != parsed.Name && !parentSkillID.Valid {
 		return nil, oops.E(oops.CodeInvalid, nil, "manifest name does not match the skill")
 	}
+	expectedLatest, err := parseExpectedLatestVersion(payload.ExpectedLatestVersionID)
+	if err != nil {
+		return nil, err
+	}
+	if expectedLatest.Valid {
+		state, err := loadDerivedSkillState(ctx, queries, *authCtx.ProjectID, skill.ID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "load skill state before adding version").LogError(ctx, logger)
+		}
+		if expectedLatestVersionStale(expectedLatest, state.LatestVersionID) {
+			// A retried write that already landed is stale by its own token,
+			// but it is not a lost update: the version it created is current
+			// and carries exactly this content, so it stays the same no-op an
+			// unconditional retry would get.
+			matched, hashErr := queries.GetSkillVersionByHash(ctx, repo.GetSkillVersionByHashParams{
+				ProjectID:       *authCtx.ProjectID,
+				SkillID:         skill.ID,
+				CanonicalSha256: parsed.CanonicalSHA256,
+			})
+			switch {
+			case errors.Is(hashErr, pgx.ErrNoRows):
+				// The content is genuinely new, so the stale token is a real
+				// conflict rather than a replay.
+				return nil, errSkillVersionConflict()
+			case hashErr != nil:
+				return nil, oops.E(oops.CodeUnexpected, hashErr, "resolve skill version by hash for stale token recovery").LogError(ctx, logger)
+			case matched.ID != state.LatestVersionID:
+				return nil, errSkillVersionConflict()
+			}
+		}
+	}
 
 	result, err := s.recordVersion(ctx, dbtx, queries, authCtx, logger, skill, parsed, false, false, derivedFromVersionID)
 	if err != nil {
@@ -753,6 +845,10 @@ func (s *Service) Update(ctx context.Context, payload *gen.UpdatePayload) (*type
 	if err != nil {
 		return nil, err
 	}
+	expectedLatest, err := parseExpectedLatestVersion(payload.ExpectedLatestVersionID)
+	if err != nil {
+		return nil, err
+	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -770,6 +866,19 @@ func (s *Service) Update(ctx context.Context, payload *gen.UpdatePayload) (*type
 	state, err := loadDerivedSkillState(ctx, queries, *authCtx.ProjectID, skill.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load skill state before update").LogError(ctx, logger)
+	}
+	if expectedLatestVersionStale(expectedLatest, state.LatestVersionID) {
+		// Metadata edits never create a version, so this token only goes stale
+		// when someone else records one. A retry of an edit that already landed
+		// is then indistinguishable from a lost update by token alone — except
+		// that the values it asks for are already the values in place, which
+		// makes it the same no-op the equivalent version write gets.
+		if !skillMetadataMatches(skill, name, displayName, summary, tags) {
+			return nil, errSkillVersionConflict()
+		}
+		// Returned before the write so a replay neither advances updated_at nor
+		// records a second update event for an edit that already happened.
+		return mv.BuildSkillView(skill, state.LatestVersionID, state.VersionCount, state.HasValidVersion, pgtype.Text{String: "", Valid: false}), nil
 	}
 
 	updated, err := queries.UpdateSkillDetails(ctx, repo.UpdateSkillDetailsParams{
@@ -809,6 +918,89 @@ func (s *Service) Update(ctx context.Context, payload *gen.UpdatePayload) (*type
 	return mv.BuildSkillView(updated, state.LatestVersionID, state.VersionCount, state.HasValidVersion, pgtype.Text{String: "", Valid: false}), nil
 }
 
+// skillMetadataMatches reports whether a skill already carries exactly the
+// metadata a write is asking for, which is what separates a replayed edit from
+// one that would overwrite someone else's.
+func skillMetadataMatches(skill repo.Skill, name, displayName string, summary *string, tags []string) bool {
+	if skill.Name != name || skill.DisplayName != displayName {
+		return false
+	}
+	currentSummary := ""
+	if skill.Summary.Valid {
+		currentSummary = skill.Summary.String
+	}
+	requestedSummary := ""
+	if summary != nil {
+		requestedSummary = *summary
+	}
+	if currentSummary != requestedSummary {
+		return false
+	}
+	return slices.Equal(skillTagsOrEmpty(skill.Tags), skillTagsOrEmpty(tags))
+}
+
+// accessibleSkillIDs returns the skills at least one of these users is
+// authorized to reach across the organization.
+//
+// The rule — a grant on the user or on a role they hold, less any blocking
+// grant withdrawing the same scope — lives in the access service's query, and
+// is read from here rather than restated so the two surfaces cannot drift.
+// Several users union, matching how the listing filters read: a skill shows if
+// anyone named can reach it.
+//
+// The returned slice is never nil, so an empty result reads as "none" and not
+// as "unrestricted".
+func (s *Service) accessibleSkillIDs(ctx context.Context, orgID string, userIDs []string) ([]uuid.UUID, error) {
+	queries := accessrepo.New(s.db)
+	seen := make(map[uuid.UUID]struct{})
+	ids := make([]uuid.UUID, 0)
+
+	for _, userID := range userIDs {
+		// Checked before resolving: ResolveUserPrincipals answers for a
+		// non-member with the everyone principal alone rather than an error,
+		// so an unknown or cross-organization id would otherwise widen the
+		// listing to whatever user:all reaches instead of narrowing it.
+		isMember, err := orgrepo.New(s.db).HasActiveOrganizationUser(ctx, orgrepo.HasActiveOrganizationUserParams{
+			UserID:         userID,
+			OrganizationID: orgID,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("check organization membership: %w", err)
+		}
+		if !isMember {
+			return nil, fmt.Errorf("%w: user %q", authz.ErrPrincipalNotFound, userID)
+		}
+
+		principals, err := authz.ResolveUserPrincipals(ctx, s.db, orgID, userID)
+		if err != nil {
+			return nil, fmt.Errorf("resolve user principals: %w", err)
+		}
+
+		urns := make([]string, 0, len(principals))
+		for _, p := range principals {
+			urns = append(urns, p.String())
+		}
+
+		rows, err := queries.ListAccessibleSkillsForUser(ctx, accessrepo.ListAccessibleSkillsForUserParams{
+			OrganizationID: orgID,
+			PrincipalUrns:  urns,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("list accessible skills: %w", err)
+		}
+
+		for _, row := range rows {
+			if _, ok := seen[row.ID]; ok {
+				continue
+			}
+			seen[row.ID] = struct{}{}
+			ids = append(ids, row.ID)
+		}
+	}
+
+	return ids, nil
+}
+
 func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.ListSkillsResult, error) {
 	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillRead)
 	if err != nil {
@@ -839,6 +1031,23 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 		}
 	}
 
+	// "Which skills may this person reach" is an authorization question, so it
+	// is answered by the access service's own query rather than restated here.
+	// A nil id slice leaves the listing unrestricted; an empty one is the real
+	// answer "none", and the queries distinguish the two.
+	var skillIDs []uuid.UUID
+	if payload.AccessibleBy != nil {
+		skillIDs, err = s.accessibleSkillIDs(ctx, authCtx.ActiveOrganizationID, payload.AccessibleBy)
+		switch {
+		case errors.Is(err, authz.ErrPrincipalInvalid):
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid accessible_by user id")
+		case errors.Is(err, authz.ErrPrincipalNotFound):
+			return nil, oops.E(oops.CodeNotFound, nil, "user not found in this organization")
+		case err != nil:
+			return nil, oops.E(oops.CodeUnexpected, err, "resolve accessible skills").LogError(ctx, logger)
+		}
+	}
+
 	queries := repo.New(s.db)
 	rows, err := queries.ListSkills(ctx, repo.ListSkillsParams{
 		ProjectID:       *authCtx.ProjectID,
@@ -846,6 +1055,7 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 		SourceKinds:     payload.SourceKinds,
 		Classifications: payload.Classifications,
 		Tags:            payload.Tags,
+		SkillIds:        skillIDs,
 		SortOrder:       sortOrder,
 		CursorName:      cursorName,
 		CursorUpdatedAt: cursorUpdatedAt,
@@ -879,6 +1089,7 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 			SourceKinds:     payload.SourceKinds,
 			Classifications: payload.Classifications,
 			Tags:            payload.Tags,
+			SkillIds:        skillIDs,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "count skills").LogError(ctx, logger)
@@ -942,7 +1153,8 @@ func (s *Service) ListFeedback(ctx context.Context, payload *gen.ListFeedbackPay
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "count skill feedback").LogError(ctx, logger)
 	}
-	windowEnd := time.Now().UTC()
+	// Use the same clock as feedback.created_at, not the application host clock.
+	windowEnd := counts.WindowEnd.Time.UTC()
 	windowStart := windowEnd.Truncate(24 * time.Hour).Add(-29 * 24 * time.Hour)
 	metrics, err := queries.GetSkillFeedbackMetrics(ctx, repo.GetSkillFeedbackMetricsParams{
 		ProjectID: *authCtx.ProjectID, SkillID: uuid.NullUUID{UUID: skillID, Valid: true},
@@ -988,7 +1200,7 @@ func (s *Service) ListFeedback(ctx context.Context, payload *gen.ListFeedbackPay
 			DidNotHelp: counts.DidNotHelp, Misleading: counts.Misleading, Harmful: counts.Harmful,
 		},
 		Metrics: &gen.SkillFeedbackMetrics{
-			WindowStart: windowStart.Format(time.RFC3339), WindowEnd: windowEnd.Format(time.RFC3339),
+			WindowStart: windowStart.Format(time.RFC3339Nano), WindowEnd: windowEnd.Format(time.RFC3339Nano),
 			FeedbackInWindow: metrics.FeedbackInWindow, ActivationsInWindow: metrics.ActivationsInWindow,
 			FeedbackActivationsInWindow: metrics.FeedbackActivationsInWindow,
 			Unreviewed:                  metrics.Unreviewed,
@@ -1042,6 +1254,7 @@ func (s *Service) Get(ctx context.Context, payload *gen.GetPayload) (*gen.GetSki
 	}
 
 	var latestView *types.SkillVersion
+	promptInjectionFindings := make([]*gen.SkillPromptInjectionFinding, 0)
 	if details.LatestVersionID != uuid.Nil {
 		latest, latestErr := queries.GetSkillVersionDetails(ctx, repo.GetSkillVersionDetailsParams{
 			ProjectID: *authCtx.ProjectID, SkillID: skillID, SkillVersionID: details.LatestVersionID,
@@ -1054,6 +1267,18 @@ func (s *Service) Get(ctx context.Context, payload *gen.GetPayload) (*gen.GetSki
 		})
 		if latestErr != nil {
 			return nil, oops.E(oops.CodeUnexpected, latestErr, "build latest skill version").LogError(ctx, logger)
+		}
+		findingRows, findingErr := queries.ListSkillVersionPromptInjectionFindings(ctx, repo.ListSkillVersionPromptInjectionFindingsParams{
+			ProjectID: *authCtx.ProjectID, SkillID: skillID, SkillVersionID: details.LatestVersionID,
+		})
+		if findingErr != nil {
+			return nil, oops.E(oops.CodeUnexpected, findingErr, "list skill prompt injection findings").LogError(ctx, logger)
+		}
+		promptInjectionFindings = make([]*gen.SkillPromptInjectionFinding, len(findingRows))
+		for i, row := range findingRows {
+			promptInjectionFindings[i] = &gen.SkillPromptInjectionFinding{
+				RuleID: row.RuleID, Description: row.Description, Confidence: row.Confidence,
+			}
 		}
 	}
 
@@ -1118,9 +1343,10 @@ func (s *Service) Get(ctx context.Context, payload *gen.GetPayload) (*gen.GetSki
 	}
 
 	return &gen.GetSkillResult{
-		Skill:          mv.BuildSkillView(details.Skill, details.LatestVersionID, details.VersionCount, details.HasValidVersion, details.ShareToken),
-		LatestVersion:  latestView,
-		AssistantCount: details.AssistantCount,
+		Skill:                   mv.BuildSkillView(details.Skill, details.LatestVersionID, details.VersionCount, details.HasValidVersion, details.ShareToken),
+		LatestVersion:           latestView,
+		AssistantCount:          details.AssistantCount,
+		PromptInjectionFindings: promptInjectionFindings,
 		Adoption: &gen.SkillAdoption{
 			WindowStart: windowStart.Format(time.RFC3339), WindowEnd: windowEnd.Format(time.RFC3339),
 			DistinctHostnames: adoption.DistinctHostnames, ActivationsInWindow: adoption.ActivationsInWindow,
@@ -1375,6 +1601,9 @@ func (s *Service) Distribute(ctx context.Context, payload *gen.DistributePayload
 		if err := dbtx.Commit(ctx); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "commit skill distribution update transaction").LogError(ctx, logger)
 		}
+
+		s.signalPluginPublish(ctx, target, authCtx)
+
 		return mv.BuildSkillDistributionView(distribution, skill.Name, skill.DisplayName, pluginName, assistantName, resolvedVersionID), nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
@@ -1409,6 +1638,8 @@ func (s *Service) Distribute(ctx context.Context, payload *gen.DistributePayload
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit distribute skill transaction").LogError(ctx, logger)
 	}
+
+	s.signalPluginPublish(ctx, target, authCtx)
 
 	return mv.BuildSkillDistributionView(distribution, skill.Name, skill.DisplayName, pluginName, assistantName, resolvedVersionID), nil
 }
@@ -1486,6 +1717,8 @@ func (s *Service) Undistribute(ctx context.Context, payload *gen.UndistributePay
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit undistribute skill transaction").LogError(ctx, logger)
 	}
+
+	s.signalPluginPublish(ctx, target, authCtx)
 
 	return nil
 }

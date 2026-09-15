@@ -15,7 +15,7 @@ import (
 // hooksRolloutEligible touches neither, so nil deps are safe here.
 func eligibilityService(t *testing.T, features feature.Provider) *Service {
 	t.Helper()
-	return NewPublisher(testenv.NewLogger(t), nil, nil, nil, "local", "", features, nil)
+	return NewPublisher(testenv.NewLogger(t), nil, nil, nil, "local", "", features)
 }
 
 func TestHooksRolloutEligible_CanaryBypassesProvider(t *testing.T) {

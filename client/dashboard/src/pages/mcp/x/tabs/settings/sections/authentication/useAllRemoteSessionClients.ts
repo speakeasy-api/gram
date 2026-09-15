@@ -37,11 +37,10 @@ export function useAllRemoteSessionClients(
     [query.data],
   );
 
-  // Keep isLoading true while more pages are still being fetched so the
-  // consumer's spinner stays up until the list is complete — otherwise it
-  // would flicker off after the first page even though more rows are
-  // coming.
-  const isLoading = query.isLoading || hasNextPage;
+  // Keep isLoading true while any fetch is in flight or more pages remain. A
+  // background refetch can otherwise expose cached pages as complete and let a
+  // consumer make decisions from a stale partial list.
+  const isLoading = query.isFetching || hasNextPage;
 
   return { items, isLoading };
 }

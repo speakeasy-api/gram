@@ -16,6 +16,11 @@ run = "mise run start:admin"
 ready_cmd = "mise run check:daemon --name {{name}}"
 depends = ["mock-oidc"]
 
+[daemons.admin-dashboard]
+run = "mise run start:admin-dashboard"
+ready_cmd = "mise run check:daemon --name {{name}}"
+depends = ["admin"]
+
 [daemons.mock-oidc]
 run = "mise run start:mock-oidc"
 ready_cmd = "mise run check:daemon --name {{name}}"
@@ -36,10 +41,16 @@ ready_cmd = "mise run check:daemon --name {{name}}"
 run = "mise run start:pystreams-multi"
 ready_cmd = "mise run check:daemon --name {{name}}"
 
+# Deliberately does NOT depend on `server`. Vite's dev proxy dials the server
+# per request, not at startup, so gating the dashboard on server readiness
+# bought nothing and cost the whole cold Go compile: on a fresh worktree vite
+# only launched ~80s into a ~137s boot, which is most of the wait before the
+# dashboard is reachable. Starting it immediately means the page is up while
+# the server is still building; requests made in that window fail until the
+# server is ready, which is the normal dev experience after any server restart.
 [daemons.dashboard]
 run = "mise run start:dashboard"
 ready_cmd = "mise run check:daemon --name {{name}}"
-depends = ["server"]
 
 [daemons.assistant-runtime]
 run = "mise run start:assistant-runtime"
@@ -49,7 +60,14 @@ ready_cmd = "mise run check:daemon --name {{name}}"
 run = "mise run start:tunnel-gateway"
 ready_cmd = "mise run check:daemon --name {{name}}"
 
-[daemons.tunnel-postgres-mcp]
-run = "mise run start:tunnel-postgres-mcp"
-ready_cmd = "mise run check:daemon --name {{name}}"
-depends = ["tunnel-gateway"]
+# Not a service: a cron that checks, every five minutes, whether this
+# worktree's stack has gone unused, and pauses it if so (see
+# `mise run idle-pause`). A developer with several worktrees otherwise pays for
+# every stack they are no longer looking at, and the alternative -- a launchd
+# agent or a systemd timer -- installs a job on the developer's machine that
+# outlives the repo. pitchfork is already running the stack it is watching, so
+# the scheduler comes and goes with it: a paused worktree needs no scheduler,
+# and `mise run wake` brings this back with everything else.
+[daemons.idle-pause]
+run = "mise run idle-pause"
+cron = "0 */5 * * * *"

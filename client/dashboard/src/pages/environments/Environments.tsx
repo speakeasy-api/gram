@@ -1,5 +1,5 @@
 import { InputDialog } from "@/components/input-dialog";
-import { Page } from "@/components/page-layout";
+import { ResourceListPage } from "@/components/page-templates";
 import { RequireScope } from "@/components/require-scope";
 import { CardContextMenu } from "@/components/card-context-menu";
 import { Card } from "@/components/ui/Card";
@@ -11,7 +11,7 @@ import { useRoutes } from "@/routes";
 import { Environment } from "@gram/client/models/components/environment.js";
 import { useCreateEnvironmentMutation } from "@gram/client/react-query/createEnvironment.js";
 import { ArrowRight, Blocks, Plus } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Outlet } from "react-router";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -25,16 +25,9 @@ export function EnvironmentsRoot(): JSX.Element {
 
 export default function Environments(): JSX.Element {
   return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <RequireScope scope={["project:read", "project:write"]} level="page">
-          <EnvironmentsInner />
-        </RequireScope>
-      </Page.Body>
-    </Page>
+    <RequireScope scope={["project:read", "project:write"]} level="page">
+      <EnvironmentsInner />
+    </RequireScope>
   );
 }
 
@@ -48,6 +41,18 @@ function EnvironmentsInner() {
     useState(false);
   const [environmentName, setEnvironmentName] = useState("");
   const [cloneSource, setCloneSource] = useState<Environment | null>(null);
+  const [search, setSearch] = useState("");
+
+  const filteredEnvironments = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return environments;
+    return environments.filter(
+      (environment) =>
+        environment.name.toLowerCase().includes(query) ||
+        environment.slug.toLowerCase().includes(query) ||
+        (environment.description?.toLowerCase().includes(query) ?? false),
+    );
+  }, [environments, search]);
 
   const createEnvironmentMutation = useCreateEnvironmentMutation({
     onSuccess: async (data) => {
@@ -79,62 +84,56 @@ function EnvironmentsInner() {
     });
   };
 
+  const newEnvironmentButton = (
+    <RequireScope scope="environment:write" level="component">
+      <Button onClick={() => setCreateEnvironmentDialogOpen(true)}>
+        <Button.LeftIcon>
+          <Plus className="h-4 w-4" />
+        </Button.LeftIcon>
+        <Button.Text>New Environment</Button.Text>
+      </Button>
+    </RequireScope>
+  );
+
   return (
     <>
-      <Page.Section>
-        <Page.Section.Title>Environments</Page.Section.Title>
-        <Page.Section.Description>
-          Create re-usable environment configurations and share amongst multiple
-          MCP servers and Assistants. Commonly used to securely store sensitive
-          secrets used to access various sources.
-        </Page.Section.Description>
-        <Page.Section.CTA>
-          {environments.length > 0 && (
-            <RequireScope scope="environment:write" level="component">
-              <Button onClick={() => setCreateEnvironmentDialogOpen(true)}>
-                <Button.LeftIcon>
-                  <Plus className="h-4 w-4" />
-                </Button.LeftIcon>
-                <Button.Text>New Environment</Button.Text>
-              </Button>
-            </RequireScope>
-          )}
-        </Page.Section.CTA>
-        <Page.Section.Body>
-          {environments.length === 0 ? (
-            <div className="bg-muted/20 flex flex-col items-center justify-center border border-dashed px-8 py-16">
-              <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
-                <Blocks className="text-muted-foreground h-6 w-6" />
-              </div>
-              <Text variant="subheading" className="mb-1">
-                No environments yet
-              </Text>
-              <Text small muted className="mb-4 max-w-md text-center">
-                Environments let you store configuration and secrets that can be
-                shared across multiple MCP servers.
-              </Text>
-              <RequireScope scope="environment:write" level="component">
-                <Button onClick={() => setCreateEnvironmentDialogOpen(true)}>
-                  <Button.LeftIcon>
-                    <Plus className="h-4 w-4" />
-                  </Button.LeftIcon>
-                  <Button.Text>New Environment</Button.Text>
-                </Button>
-              </RequireScope>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-              {environments.map((environment) => (
-                <EnvironmentCard
-                  key={environment.id}
-                  environment={environment}
-                  onClone={setCloneSource}
-                />
-              ))}
-            </div>
-          )}
-        </Page.Section.Body>
-      </Page.Section>
+      <ResourceListPage
+        title="Environments"
+        description="Create re-usable environment configurations and share amongst multiple MCP servers and Assistants. Commonly used to securely store sensitive secrets used to access various sources."
+        primaryAction={
+          environments.length > 0 ? newEnvironmentButton : undefined
+        }
+        search={{
+          value: search,
+          onChange: setSearch,
+          placeholder: "Search environments...",
+        }}
+        isEmpty={environments.length === 0}
+        empty={{
+          icon: "blocks",
+          heading: "No environments yet",
+          description:
+            "Environments let you store configuration and secrets that can be shared across multiple MCP servers.",
+          action: newEnvironmentButton,
+        }}
+      >
+        {filteredEnvironments.length === 0 ? (
+          // The project has environments; this search just matches none of
+          // them, so the toolbar stays put rather than the empty state above.
+          <Text muted className="py-8 text-center">
+            {`No environments matching “${search}”`}
+          </Text>
+        ) : null}
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+          {filteredEnvironments.map((environment) => (
+            <EnvironmentCard
+              key={environment.id}
+              environment={environment}
+              onClone={setCloneSource}
+            />
+          ))}
+        </div>
+      </ResourceListPage>
       <InputDialog
         open={createEnvironmentDialogOpen}
         onOpenChange={setCreateEnvironmentDialogOpen}

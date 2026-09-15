@@ -463,6 +463,231 @@ func EncodeCreateProjectError(encoder func(context.Context, http.ResponseWriter)
 	}
 }
 
+// EncodeUpdateProjectResponse returns an encoder for responses returned by the
+// projects updateProject endpoint.
+func EncodeUpdateProjectResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*projects.UpdateProjectResult)
+		enc := encoder(ctx, w)
+		body := NewUpdateProjectResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeUpdateProjectRequest returns a decoder for requests sent to the
+// projects updateProject endpoint.
+func DecodeUpdateProjectRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*projects.UpdateProjectPayload, error) {
+	return func(r *http.Request) (*projects.UpdateProjectPayload, error) {
+		var payload *projects.UpdateProjectPayload
+		var (
+			body UpdateProjectRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateUpdateProjectRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			sessionToken     *string
+			projectSlugInput *string
+		)
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		payload = NewUpdateProjectPayload(&body, sessionToken, projectSlugInput)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeUpdateProjectError returns an encoder for errors returned by the
+// updateProject projects endpoint.
+func EncodeUpdateProjectError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateProjectUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateProjectForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateProjectBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateProjectNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateProjectConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateProjectUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateProjectInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateProjectInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateProjectUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateProjectGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeListProjectsResponse returns an encoder for responses returned by the
 // projects listProjects endpoint.
 func EncodeListProjectsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {

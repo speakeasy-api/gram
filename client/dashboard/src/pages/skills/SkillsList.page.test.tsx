@@ -24,8 +24,13 @@ const testState = vi.hoisted(() => ({
   metricPageSize: 200,
   loadedMetricPageCount: 1,
   skillRequests: [] as unknown[],
+  insightRequests: [] as unknown[],
   metricSkillRequests: [] as unknown[],
   searchValue: "example",
+  /** The "Accessible by" selection the filter control reports. */
+  accessibleBy: [] as string[],
+  /** Which skill ids each user is authorized to reach, keyed by user id. */
+  reachableSkillIds: {} as Record<string, string[]>,
   skills: [] as Array<Record<string, unknown>>,
   unknownActivations: [] as Array<Record<string, unknown>>,
   suggestionFetchNextPage: vi.fn().mockResolvedValue(undefined),
@@ -43,18 +48,36 @@ const testState = vi.hoisted(() => ({
   invalidateFeedback: vi.fn().mockResolvedValue(undefined),
   invalidateEfficacy: vi.fn().mockResolvedValue(undefined),
   toastInfo: vi.fn(),
+  adminAllowed: true,
+  policyHookCalls: 0,
+  policyError: null as Error | null,
+  policyRefetch: vi.fn().mockResolvedValue(undefined),
+  invalidatePolicies: vi.fn().mockResolvedValue(undefined),
+  policies: [] as Array<Record<string, unknown>>,
 }));
 
 vi.mock("@/components/filters", () => ({
   defineFilters: <T,>(value: T) => value,
+  accessibleByFilterOptions: () => [],
   useFilterState: () => ({
-    values: { sourceKind: [], classification: [], tags: [] },
+    values: {
+      sourceKind: [],
+      classification: [],
+      tags: [],
+      accessibleBy: testState.accessibleBy,
+    },
     setValue: vi.fn(),
     clearValue: vi.fn(),
     clearAll: vi.fn(),
   }),
 }));
-vi.mock("@/contexts/Auth", () => ({ useProject: () => ({ id: "project_a" }) }));
+vi.mock("@/contexts/Auth", () => ({
+  useProject: () => ({ id: "project_a" }),
+  useSession: () => ({ user: { id: "user_a" } }),
+}));
+vi.mock("@gram/client/react-query/members.js", () => ({
+  useMembers: () => ({ data: { members: [] }, refetch: vi.fn() }),
+}));
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => testState.queryClient,
 }));
@@ -73,20 +96,71 @@ vi.mock("@/routes", () => ({
       href: () => "/skills",
       detail: { href: (id: string) => `/skills/${id}` },
     },
+    policyCenter: {
+      new: {
+        Link: ({
+          children,
+          queryParams,
+        }: {
+          children: ReactNode;
+          queryParams: Record<string, string>;
+        }) => (
+          <a href={`/risk-policies/new?${new URLSearchParams(queryParams)}`}>
+            {children}
+          </a>
+        ),
+      },
+      detail: {
+        Link: ({
+          children,
+          params,
+        }: {
+          children: ReactNode;
+          params: string[];
+        }) => <a href={`/risk-policies/${params[0]}`}>{children}</a>,
+      },
+    },
   }),
+}));
+vi.mock("@gram/client/react-query/riskListPolicies.js", () => ({
+  invalidateAllRiskListPolicies: testState.invalidatePolicies,
+  useRiskListPolicies: () => {
+    testState.policyHookCalls += 1;
+    return {
+      data: testState.policyError
+        ? undefined
+        : { policies: testState.policies },
+      error: testState.policyError,
+      refetch: testState.policyRefetch,
+    };
+  },
 }));
 vi.mock("@gram/client/react-query/skills.js", () => ({
   useSkills: (request: {
     cursor?: string;
     limit?: number;
     search?: string;
+    accessibleBy?: string[];
   }) => {
     testState.skillRequests.push(request);
-    const matchingSkills = request.search
+    const searched = request.search
       ? testState.skills.filter((skill) =>
           String(skill.displayName).toLowerCase().includes(request.search!),
         )
       : testState.skills;
+    // Honoured rather than ignored: a mock that dropped accessibleBy would
+    // let the filter stop being sent without any test noticing.
+    const reachable =
+      request.accessibleBy && request.accessibleBy.length > 0
+        ? new Set(
+            request.accessibleBy.flatMap(
+              (userId) => testState.reachableSkillIds[userId] ?? [],
+            ),
+          )
+        : undefined;
+    const matchingSkills = reachable
+      ? searched.filter((skill) => reachable.has(String(skill.id)))
+      : searched;
     const start = Number(request.cursor ?? 0);
     const limit = request.limit ?? 50;
     const next = start + limit;
@@ -185,12 +259,15 @@ vi.mock("@gram/client/react-query/skillFeedback.js", () => ({
   invalidateAllSkillFeedback: testState.invalidateFeedback,
 }));
 vi.mock("@gram/client/react-query/skillEfficacyInsights.js", () => ({
-  useSkillEfficacyInsights: () => ({
-    data: testState.insightsData,
-    error: testState.insightsError,
-    isFetching: false,
-    refetch: testState.insightsRefetch,
-  }),
+  useSkillEfficacyInsights: (request: unknown) => {
+    testState.insightRequests.push(request);
+    return {
+      data: testState.insightsData,
+      error: testState.insightsError,
+      isFetching: false,
+      refetch: testState.insightsRefetch,
+    };
+  },
   invalidateAllSkillEfficacyInsights: testState.invalidateEfficacy,
 }));
 vi.mock("@gram/client/react-query/skillTags.js", () => ({
@@ -223,7 +300,14 @@ vi.mock("@gram/client/react-query/unknownSkillActivations.js", () => ({
   }),
 }));
 vi.mock("@/components/require-scope", () => ({
-  RequireScope: ({ children }: { children: ReactNode }) => <>{children}</>,
+  RequireScope: ({
+    children,
+    scope,
+  }: {
+    children: ReactNode;
+    scope: string;
+  }) =>
+    scope === "org:admin" && !testState.adminAllowed ? null : <>{children}</>,
 }));
 vi.mock("@/components/ui/Tooltip", () => ({
   Tooltip: ({ children }: { children: ReactNode }) => <>{children}</>,
@@ -257,7 +341,9 @@ vi.mock("@/components/page-layout", () => {
     Filters,
     Count: Wrapper,
     Actions: Wrapper,
-    Refresh: () => null,
+    Refresh: ({ onRefresh }: { onRefresh: () => void }) => (
+      <button onClick={onRefresh}>Refresh</button>
+    ),
   });
   return {
     Page: Object.assign(Wrapper, {
@@ -410,7 +496,10 @@ beforeEach(() => {
   testState.loadedMetricPageCount = 1;
   testState.skillRequests = [];
   testState.metricSkillRequests = [];
+  testState.insightRequests = [];
   testState.searchValue = "example";
+  testState.accessibleBy = [];
+  testState.reachableSkillIds = {};
   testState.skills = makeSkills(250);
   testState.unknownActivations = [];
   testState.suggestionFetchNextPage.mockReset().mockResolvedValue(undefined);
@@ -421,6 +510,12 @@ beforeEach(() => {
   testState.suggestionTotal = 0;
   testState.suggestionRequests = [];
   testState.toastInfo.mockReset();
+  testState.adminAllowed = true;
+  testState.policyHookCalls = 0;
+  testState.policyError = null;
+  testState.policyRefetch.mockReset().mockResolvedValue(undefined);
+  testState.invalidatePolicies.mockReset().mockResolvedValue(undefined);
+  testState.policies = [];
   testState.invalidateSkills.mockReset().mockResolvedValue(undefined);
   testState.invalidateSkill.mockReset().mockResolvedValue(undefined);
   testState.invalidateDistributions.mockReset().mockResolvedValue(undefined);
@@ -433,6 +528,101 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("SkillsList pagination surfaces", () => {
+  // The filter is applied by the server, not by the rendered page, so what
+  // has to hold is that the selection reaches the request. A page that
+  // quietly stopped sending it would still look right on screen while
+  // listing skills the chosen person cannot reach.
+  it("sends the accessible-by selection to the skills request", () => {
+    testState.accessibleBy = ["user_a", "user_b"];
+
+    render(<SkillsList />);
+
+    expect(testState.skillRequests).toContainEqual(
+      expect.objectContaining({ accessibleBy: ["user_a", "user_b"] }),
+    );
+  });
+
+  it("lists only the skills the selected people can reach", () => {
+    testState.skills = makeSkills(4);
+    testState.accessibleBy = ["user_a"];
+    testState.reachableSkillIds = { user_a: ["skill_1", "skill_3"] };
+
+    render(<SkillsList />);
+
+    expect(screen.getByText("Example 1")).toBeTruthy();
+    expect(screen.getByText("Example 3")).toBeTruthy();
+    expect(screen.queryByText("Example 0")).toBeNull();
+    expect(screen.queryByText("Example 2")).toBeNull();
+  });
+
+  it("requests only list-visible insight metrics", () => {
+    render(<SkillsList />);
+
+    expect(testState.insightRequests).toContainEqual(
+      expect.objectContaining({
+        includeSessionCost: false,
+        includeRegressionSignal: false,
+      }),
+    );
+  });
+
+  it("links admins to prompt injection policy setup", () => {
+    render(<SkillsList />);
+
+    const link = screen.getByRole("link", { name: "Set up scanning" });
+    expect(link.getAttribute("href")).toBe(
+      "/risk-policies/new?kind=standard&category=prompt_injection",
+    );
+  });
+
+  it("links admins to the enabled prompt injection policy", () => {
+    testState.policies = [
+      {
+        id: "policy_pi",
+        enabled: true,
+        sources: ["gitleaks", "prompt_injection"],
+      },
+    ];
+
+    render(<SkillsList />);
+
+    const link = screen.getByRole("link", { name: "View policy" });
+    expect(link.getAttribute("href")).toBe("/risk-policies/policy_pi");
+  });
+
+  it("does not load policy configuration for non-admin skill readers", () => {
+    testState.adminAllowed = false;
+
+    render(<SkillsList />);
+
+    expect(screen.queryByText("Set up prompt injection scanning")).toBeNull();
+    expect(testState.policyHookCalls).toBe(0);
+  });
+
+  it("shows a retry when prompt injection policy status fails to load", () => {
+    testState.policyError = new Error("policy request failed");
+
+    render(<SkillsList />);
+
+    expect(
+      screen.getByText("Unable to load prompt injection policy"),
+    ).toBeDefined();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Retry policy status" }),
+    );
+    expect(testState.policyRefetch).toHaveBeenCalledOnce();
+  });
+
+  it("refreshes prompt injection policy status with the skills page", () => {
+    render(<SkillsList />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+
+    expect(testState.invalidatePolicies).toHaveBeenCalledWith(
+      testState.queryClient,
+    );
+  });
+
   it("shows only the compact skills table columns", () => {
     render(<SkillsList />);
 

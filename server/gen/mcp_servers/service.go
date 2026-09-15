@@ -130,6 +130,8 @@ type CreateMcpServerPayload struct {
 	ToolVariationsGroupID *string
 	// The visibility of the server
 	Visibility types.McpServerVisibility
+	// The allowed network surfaces. Omit to default to public_only.
+	NetworkAccessMode *types.NetworkAccessMode
 }
 
 // DeleteMcpServerPayload is the payload type of the mcpServers service
@@ -316,6 +318,8 @@ type UpdateMcpServerPayload struct {
 	ToolVariationsGroupID *string
 	// The visibility of the server
 	Visibility types.McpServerVisibility
+	// The allowed network surfaces. Omit to preserve the stored mode.
+	NetworkAccessMode *types.NetworkAccessMode
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.
@@ -366,4 +370,9 @@ func MakeUnexpected(err error) *goa.ServiceError {
 // MakeGatewayError builds a goa.ServiceError from an error.
 func MakeGatewayError(err error) *goa.ServiceError {
 	return goa.NewServiceError(err, "gateway_error", false, false, true)
+}
+
+// MakeUnavailable builds a goa.ServiceError from an error.
+func MakeUnavailable(err error) *goa.ServiceError {
+	return goa.NewServiceError(err, "unavailable", false, false, true)
 }

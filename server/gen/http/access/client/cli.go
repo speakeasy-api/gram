@@ -74,7 +74,7 @@ func BuildCreateRolePayload(accessCreateRoleBody string, accessCreateRoleApikeyT
 	{
 		err = json.Unmarshal([]byte(accessCreateRoleBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"grants\": [\n         {\n            \"scope\": \"org:blocked_read\",\n            \"selectors\": [\n               {\n                  \"disposition\": \"destructive\",\n                  \"project_id\": \"abc123\",\n                  \"resource_id\": \"abc123\",\n                  \"resource_kind\": \"mcp\",\n                  \"server_url\": \"https://example.com/foo\",\n                  \"tool\": \"abc123\"\n               }\n            ]\n         }\n      ],\n      \"member_ids\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"description\": \"abc123\",\n      \"grants\": [\n         {\n            \"scope\": \"org:blocked_read\",\n            \"selectors\": [\n               {\n                  \"disposition\": \"destructive\",\n                  \"project_id\": \"abc123\",\n                  \"resource_id\": \"abc123\",\n                  \"resource_kind\": \"mcp\",\n                  \"server_url\": \"https://example.com/foo\",\n                  \"tool\": \"abc123\"\n               }\n            ]\n         }\n      ],\n      \"member_ids\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\"\n   }'")
 		}
 		if body.Grants == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("grants", "body"))
@@ -85,6 +85,9 @@ func BuildCreateRolePayload(accessCreateRoleBody string, accessCreateRoleApikeyT
 					err = goa.MergeErrors(err, err2)
 				}
 			}
+		}
+		for _, e := range body.AgentIds {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_ids[*]", e, goa.FormatUUID))
 		}
 		if err != nil {
 			return nil, err
@@ -124,6 +127,12 @@ func BuildCreateRolePayload(accessCreateRoleBody string, accessCreateRoleApikeyT
 			v.MemberIds[i] = val
 		}
 	}
+	if body.AgentIds != nil {
+		v.AgentIds = make([]string, len(body.AgentIds))
+		for i, val := range body.AgentIds {
+			v.AgentIds[i] = val
+		}
+	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
@@ -138,7 +147,7 @@ func BuildUpdateRolePayload(accessUpdateRoleBody string, accessUpdateRoleApikeyT
 	{
 		err = json.Unmarshal([]byte(accessUpdateRoleBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"add_grants\": [\n         {\n            \"scope\": \"org:blocked_read\",\n            \"selectors\": [\n               {\n                  \"disposition\": \"destructive\",\n                  \"project_id\": \"abc123\",\n                  \"resource_id\": \"abc123\",\n                  \"resource_kind\": \"mcp\",\n                  \"server_url\": \"https://example.com/foo\",\n                  \"tool\": \"abc123\"\n               }\n            ]\n         }\n      ],\n      \"description\": \"abc123\",\n      \"id\": \"abc123\",\n      \"member_ids\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\",\n      \"remove_grants\": [\n         {\n            \"scope\": \"org:blocked_read\",\n            \"selectors\": [\n               {\n                  \"disposition\": \"destructive\",\n                  \"project_id\": \"abc123\",\n                  \"resource_id\": \"abc123\",\n                  \"resource_kind\": \"mcp\",\n                  \"server_url\": \"https://example.com/foo\",\n                  \"tool\": \"abc123\"\n               }\n            ]\n         }\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"add_grants\": [\n         {\n            \"scope\": \"org:blocked_read\",\n            \"selectors\": [\n               {\n                  \"disposition\": \"destructive\",\n                  \"project_id\": \"abc123\",\n                  \"resource_id\": \"abc123\",\n                  \"resource_kind\": \"mcp\",\n                  \"server_url\": \"https://example.com/foo\",\n                  \"tool\": \"abc123\"\n               }\n            ]\n         }\n      ],\n      \"agent_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"description\": \"abc123\",\n      \"id\": \"abc123\",\n      \"member_ids\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\",\n      \"remove_grants\": [\n         {\n            \"scope\": \"org:blocked_read\",\n            \"selectors\": [\n               {\n                  \"disposition\": \"destructive\",\n                  \"project_id\": \"abc123\",\n                  \"resource_id\": \"abc123\",\n                  \"resource_kind\": \"mcp\",\n                  \"server_url\": \"https://example.com/foo\",\n                  \"tool\": \"abc123\"\n               }\n            ]\n         }\n      ]\n   }'")
 		}
 		for _, e := range body.AddGrants {
 			if e != nil {
@@ -153,6 +162,9 @@ func BuildUpdateRolePayload(accessUpdateRoleBody string, accessUpdateRoleApikeyT
 					err = goa.MergeErrors(err, err2)
 				}
 			}
+		}
+		for _, e := range body.AgentIds {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_ids[*]", e, goa.FormatUUID))
 		}
 		if err != nil {
 			return nil, err
@@ -199,6 +211,12 @@ func BuildUpdateRolePayload(accessUpdateRoleBody string, accessUpdateRoleApikeyT
 		v.MemberIds = make([]string, len(body.MemberIds))
 		for i, val := range body.MemberIds {
 			v.MemberIds[i] = val
+		}
+	}
+	if body.AgentIds != nil {
+		v.AgentIds = make([]string, len(body.AgentIds))
+		for i, val := range body.AgentIds {
+			v.AgentIds[i] = val
 		}
 	}
 	v.ApikeyToken = apikeyToken
@@ -526,156 +544,86 @@ func BuildListShadowMCPInventoryUsersPayload(accessListShadowMCPInventoryUsersPr
 	return v, nil
 }
 
-// BuildUpsertShadowMCPInventoryPolicyBypassPayload builds the payload for the
-// access upsertShadowMCPInventoryPolicyBypass endpoint from CLI flags.
-func BuildUpsertShadowMCPInventoryPolicyBypassPayload(accessUpsertShadowMCPInventoryPolicyBypassBody string, accessUpsertShadowMCPInventoryPolicyBypassSessionToken string) (*access.UpsertShadowMCPInventoryPolicyBypassPayload, error) {
-	var err error
-	var body UpsertShadowMCPInventoryPolicyBypassRequestBody
-	{
-		err = json.Unmarshal([]byte(accessUpsertShadowMCPInventoryPolicyBypassBody), &body)
-		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"policy_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"server_url\": \"https://example.com/foo\"\n   }'")
-		}
-		if body.PolicyIds == nil {
-			err = goa.MergeErrors(err, goa.MissingFieldError("policy_ids", "body"))
-		}
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", body.ProjectID, goa.FormatUUID))
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.server_url", body.ServerURL, goa.FormatURI))
-		for _, e := range body.PolicyIds {
-			err = goa.MergeErrors(err, goa.ValidateFormat("body.policy_ids[*]", e, goa.FormatUUID))
-		}
-		if err != nil {
-			return nil, err
-		}
-	}
-	var sessionToken *string
-	{
-		if accessUpsertShadowMCPInventoryPolicyBypassSessionToken != "" {
-			sessionToken = &accessUpsertShadowMCPInventoryPolicyBypassSessionToken
-		}
-	}
-	v := &access.UpsertShadowMCPInventoryPolicyBypassPayload{
-		ProjectID: body.ProjectID,
-		ServerURL: body.ServerURL,
-	}
-	if body.PolicyIds != nil {
-		v.PolicyIds = make([]string, len(body.PolicyIds))
-		for i, val := range body.PolicyIds {
-			v.PolicyIds[i] = val
-		}
-	} else {
-		v.PolicyIds = []string{}
-	}
-	v.SessionToken = sessionToken
-
-	return v, nil
-}
-
-// BuildDeleteShadowMCPInventoryPolicyBypassPayload builds the payload for the
-// access deleteShadowMCPInventoryPolicyBypass endpoint from CLI flags.
-func BuildDeleteShadowMCPInventoryPolicyBypassPayload(accessDeleteShadowMCPInventoryPolicyBypassProjectID string, accessDeleteShadowMCPInventoryPolicyBypassServerURL string, accessDeleteShadowMCPInventoryPolicyBypassSessionToken string) (*access.DeleteShadowMCPInventoryPolicyBypassPayload, error) {
+// BuildListShadowMCPInventoryServersForUserPayload builds the payload for the
+// access listShadowMCPInventoryServersForUser endpoint from CLI flags.
+func BuildListShadowMCPInventoryServersForUserPayload(accessListShadowMCPInventoryServersForUserProjectID string, accessListShadowMCPInventoryServersForUserUserKeys string, accessListShadowMCPInventoryServersForUserFrom string, accessListShadowMCPInventoryServersForUserTo string, accessListShadowMCPInventoryServersForUserLimit string, accessListShadowMCPInventoryServersForUserSessionToken string) (*access.ListShadowMCPInventoryServersForUserPayload, error) {
 	var err error
 	var projectID string
 	{
-		projectID = accessDeleteShadowMCPInventoryPolicyBypassProjectID
+		projectID = accessListShadowMCPInventoryServersForUserProjectID
 		err = goa.MergeErrors(err, goa.ValidateFormat("project_id", projectID, goa.FormatUUID))
 		if err != nil {
 			return nil, err
 		}
 	}
-	var serverURL string
+	var userKeys []string
 	{
-		serverURL = accessDeleteShadowMCPInventoryPolicyBypassServerURL
-		err = goa.MergeErrors(err, goa.ValidateFormat("server_url", serverURL, goa.FormatURI))
+		err = json.Unmarshal([]byte(accessListShadowMCPInventoryServersForUserUserKeys), &userKeys)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for userKeys, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"abc123\",\n      \"abc123\"\n   ]'")
+		}
+		if len(userKeys) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("user_keys", userKeys, len(userKeys), 1, true))
+		}
+		if len(userKeys) > 200 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("user_keys", userKeys, len(userKeys), 200, false))
+		}
 		if err != nil {
 			return nil, err
 		}
 	}
-	var sessionToken *string
+	var from *string
 	{
-		if accessDeleteShadowMCPInventoryPolicyBypassSessionToken != "" {
-			sessionToken = &accessDeleteShadowMCPInventoryPolicyBypassSessionToken
+		if accessListShadowMCPInventoryServersForUserFrom != "" {
+			from = &accessListShadowMCPInventoryServersForUserFrom
+			err = goa.MergeErrors(err, goa.ValidateFormat("from", *from, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
-	v := &access.DeleteShadowMCPInventoryPolicyBypassPayload{}
+	var to *string
+	{
+		if accessListShadowMCPInventoryServersForUserTo != "" {
+			to = &accessListShadowMCPInventoryServersForUserTo
+			err = goa.MergeErrors(err, goa.ValidateFormat("to", *to, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var limit int
+	{
+		if accessListShadowMCPInventoryServersForUserLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(accessListShadowMCPInventoryServersForUserLimit, 10, strconv.IntSize)
+			limit = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+			if limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
+			}
+			if limit > 200 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 200, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var sessionToken *string
+	{
+		if accessListShadowMCPInventoryServersForUserSessionToken != "" {
+			sessionToken = &accessListShadowMCPInventoryServersForUserSessionToken
+		}
+	}
+	v := &access.ListShadowMCPInventoryServersForUserPayload{}
 	v.ProjectID = projectID
-	v.ServerURL = serverURL
-	v.SessionToken = sessionToken
-
-	return v, nil
-}
-
-// BuildBlockShadowMCPInventoryServerPayload builds the payload for the access
-// blockShadowMCPInventoryServer endpoint from CLI flags.
-func BuildBlockShadowMCPInventoryServerPayload(accessBlockShadowMCPInventoryServerBody string, accessBlockShadowMCPInventoryServerSessionToken string) (*access.BlockShadowMCPInventoryServerPayload, error) {
-	var err error
-	var body BlockShadowMCPInventoryServerRequestBody
-	{
-		err = json.Unmarshal([]byte(accessBlockShadowMCPInventoryServerBody), &body)
-		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"policy_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"server_url\": \"https://example.com/foo\"\n   }'")
-		}
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", body.ProjectID, goa.FormatUUID))
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.server_url", body.ServerURL, goa.FormatURI))
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.policy_id", body.PolicyID, goa.FormatUUID))
-		if err != nil {
-			return nil, err
-		}
-	}
-	var sessionToken *string
-	{
-		if accessBlockShadowMCPInventoryServerSessionToken != "" {
-			sessionToken = &accessBlockShadowMCPInventoryServerSessionToken
-		}
-	}
-	v := &access.BlockShadowMCPInventoryServerPayload{
-		ProjectID: body.ProjectID,
-		ServerURL: body.ServerURL,
-		PolicyID:  body.PolicyID,
-	}
-	v.SessionToken = sessionToken
-
-	return v, nil
-}
-
-// BuildUnblockShadowMCPInventoryServerPayload builds the payload for the
-// access unblockShadowMCPInventoryServer endpoint from CLI flags.
-func BuildUnblockShadowMCPInventoryServerPayload(accessUnblockShadowMCPInventoryServerProjectID string, accessUnblockShadowMCPInventoryServerServerURL string, accessUnblockShadowMCPInventoryServerPolicyID string, accessUnblockShadowMCPInventoryServerSessionToken string) (*access.UnblockShadowMCPInventoryServerPayload, error) {
-	var err error
-	var projectID string
-	{
-		projectID = accessUnblockShadowMCPInventoryServerProjectID
-		err = goa.MergeErrors(err, goa.ValidateFormat("project_id", projectID, goa.FormatUUID))
-		if err != nil {
-			return nil, err
-		}
-	}
-	var serverURL string
-	{
-		serverURL = accessUnblockShadowMCPInventoryServerServerURL
-		err = goa.MergeErrors(err, goa.ValidateFormat("server_url", serverURL, goa.FormatURI))
-		if err != nil {
-			return nil, err
-		}
-	}
-	var policyID string
-	{
-		policyID = accessUnblockShadowMCPInventoryServerPolicyID
-		err = goa.MergeErrors(err, goa.ValidateFormat("policy_id", policyID, goa.FormatUUID))
-		if err != nil {
-			return nil, err
-		}
-	}
-	var sessionToken *string
-	{
-		if accessUnblockShadowMCPInventoryServerSessionToken != "" {
-			sessionToken = &accessUnblockShadowMCPInventoryServerSessionToken
-		}
-	}
-	v := &access.UnblockShadowMCPInventoryServerPayload{}
-	v.ProjectID = projectID
-	v.ServerURL = serverURL
-	v.PolicyID = policyID
+	v.UserKeys = userKeys
+	v.From = from
+	v.To = to
+	v.Limit = limit
 	v.SessionToken = sessionToken
 
 	return v, nil
@@ -725,6 +673,204 @@ func BuildResolveShadowMCPInventoryRequestPayload(accessResolveShadowMCPInventor
 	return v, nil
 }
 
+// BuildListAIDetectionsPayload builds the payload for the access
+// listAIDetections endpoint from CLI flags.
+func BuildListAIDetectionsPayload(accessListAIDetectionsCategory string, accessListAIDetectionsDirectoryGroupID string, accessListAIDetectionsSessionToken string) (*access.ListAIDetectionsPayload, error) {
+	var err error
+	var category *string
+	{
+		if accessListAIDetectionsCategory != "" {
+			category = &accessListAIDetectionsCategory
+			if !(*category == "harness" || *category == "local_model") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("category", *category, []any{"harness", "local_model"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var directoryGroupID *string
+	{
+		if accessListAIDetectionsDirectoryGroupID != "" {
+			directoryGroupID = &accessListAIDetectionsDirectoryGroupID
+			err = goa.MergeErrors(err, goa.ValidateFormat("directory_group_id", *directoryGroupID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var sessionToken *string
+	{
+		if accessListAIDetectionsSessionToken != "" {
+			sessionToken = &accessListAIDetectionsSessionToken
+		}
+	}
+	v := &access.ListAIDetectionsPayload{}
+	v.Category = category
+	v.DirectoryGroupID = directoryGroupID
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildListEmployeeAIDetectionsPayload builds the payload for the access
+// listEmployeeAIDetections endpoint from CLI flags.
+func BuildListEmployeeAIDetectionsPayload(accessListEmployeeAIDetectionsUserEmail string, accessListEmployeeAIDetectionsSessionToken string, accessListEmployeeAIDetectionsProjectSlugInput string) (*access.ListEmployeeAIDetectionsPayload, error) {
+	var err error
+	var userEmail string
+	{
+		userEmail = accessListEmployeeAIDetectionsUserEmail
+		err = goa.MergeErrors(err, goa.ValidateFormat("user_email", userEmail, goa.FormatEmail))
+		if utf8.RuneCountInString(userEmail) > 320 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("user_email", userEmail, utf8.RuneCountInString(userEmail), 320, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if accessListEmployeeAIDetectionsSessionToken != "" {
+			sessionToken = &accessListEmployeeAIDetectionsSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if accessListEmployeeAIDetectionsProjectSlugInput != "" {
+			projectSlugInput = &accessListEmployeeAIDetectionsProjectSlugInput
+		}
+	}
+	v := &access.ListEmployeeAIDetectionsPayload{}
+	v.UserEmail = userEmail
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildListResourceAudiencePayload builds the payload for the access
+// listResourceAudience endpoint from CLI flags.
+func BuildListResourceAudiencePayload(accessListResourceAudienceResourceKind string, accessListResourceAudienceResourceID string, accessListResourceAudienceApikeyToken string, accessListResourceAudienceSessionToken string) (*access.ListResourceAudiencePayload, error) {
+	var err error
+	var resourceKind string
+	{
+		resourceKind = accessListResourceAudienceResourceKind
+		if !(resourceKind == "mcp") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("resource_kind", resourceKind, []any{"mcp"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var resourceID string
+	{
+		resourceID = accessListResourceAudienceResourceID
+	}
+	var apikeyToken *string
+	{
+		if accessListResourceAudienceApikeyToken != "" {
+			apikeyToken = &accessListResourceAudienceApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if accessListResourceAudienceSessionToken != "" {
+			sessionToken = &accessListResourceAudienceSessionToken
+		}
+	}
+	v := &access.ListResourceAudiencePayload{}
+	v.ResourceKind = resourceKind
+	v.ResourceID = resourceID
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildSetResourceAudiencePayload builds the payload for the access
+// setResourceAudience endpoint from CLI flags.
+func BuildSetResourceAudiencePayload(accessSetResourceAudienceBody string, accessSetResourceAudienceApikeyToken string, accessSetResourceAudienceSessionToken string) (*access.SetResourceAudiencePayload, error) {
+	var err error
+	var body SetResourceAudienceRequestBody
+	{
+		err = json.Unmarshal([]byte(accessSetResourceAudienceBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"entries\": [\n         {\n            \"dispositions\": [\n               \"destructive\"\n            ],\n            \"level\": \"view\",\n            \"principal_urn\": \"abc123\",\n            \"tools\": [\n               \"abc123\"\n            ]\n         }\n      ],\n      \"expected_version\": \"abc123\",\n      \"resource_id\": \"abc123\",\n      \"resource_kind\": \"mcp\"\n   }'")
+		}
+		if body.Entries == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("entries", "body"))
+		}
+		if !(body.ResourceKind == "mcp") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_kind", body.ResourceKind, []any{"mcp"}))
+		}
+		for _, e := range body.Entries {
+			if e != nil {
+				if err2 := ValidateSetResourceAudienceEntryRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if accessSetResourceAudienceApikeyToken != "" {
+			apikeyToken = &accessSetResourceAudienceApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if accessSetResourceAudienceSessionToken != "" {
+			sessionToken = &accessSetResourceAudienceSessionToken
+		}
+	}
+	v := &access.SetResourceAudiencePayload{
+		ResourceKind:    body.ResourceKind,
+		ResourceID:      body.ResourceID,
+		ExpectedVersion: body.ExpectedVersion,
+	}
+	if body.Entries != nil {
+		v.Entries = make([]*access.SetResourceAudienceEntry, len(body.Entries))
+		for i, val := range body.Entries {
+			if val == nil {
+				v.Entries[i] = nil
+				continue
+			}
+			v.Entries[i] = marshalSetResourceAudienceEntryRequestBodyToAccessSetResourceAudienceEntry(val)
+		}
+	} else {
+		v.Entries = []*access.SetResourceAudienceEntry{}
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildListAudienceOptionsPayload builds the payload for the access
+// listAudienceOptions endpoint from CLI flags.
+func BuildListAudienceOptionsPayload(accessListAudienceOptionsApikeyToken string, accessListAudienceOptionsSessionToken string) (*access.ListAudienceOptionsPayload, error) {
+	var apikeyToken *string
+	{
+		if accessListAudienceOptionsApikeyToken != "" {
+			apikeyToken = &accessListAudienceOptionsApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if accessListAudienceOptionsSessionToken != "" {
+			sessionToken = &accessListAudienceOptionsSessionToken
+		}
+	}
+	v := &access.ListAudienceOptionsPayload{}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildRequestAccessPayload builds the payload for the access requestAccess
 // endpoint from CLI flags.
 func BuildRequestAccessPayload(accessRequestAccessBody string, accessRequestAccessApikeyToken string, accessRequestAccessSessionToken string) (*access.RequestAccessPayload, error) {
@@ -735,8 +881,8 @@ func BuildRequestAccessPayload(accessRequestAccessBody string, accessRequestAcce
 		if err != nil {
 			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"message\": \"aaa\",\n      \"resource_id\": \"abc123\",\n      \"resource_name\": \"abc123\",\n      \"scope\": \"org:admin\"\n   }'")
 		}
-		if !(body.Scope == "org:read" || body.Scope == "org:admin" || body.Scope == "project:read" || body.Scope == "project:write" || body.Scope == "mcp:read" || body.Scope == "mcp:write" || body.Scope == "mcp:connect" || body.Scope == "environment:read" || body.Scope == "environment:write" || body.Scope == "skill:read" || body.Scope == "skill:write" || body.Scope == "risk_policy:evaluate" || body.Scope == "risk_policy:bypass" || body.Scope == "chat:read" || body.Scope == "chat:write") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", body.Scope, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "skill:read", "skill:write", "risk_policy:evaluate", "risk_policy:bypass", "chat:read", "chat:write"}))
+		if !(body.Scope == "org:read" || body.Scope == "org:admin" || body.Scope == "project:read" || body.Scope == "project:write" || body.Scope == "mcp:read" || body.Scope == "mcp:write" || body.Scope == "mcp:connect" || body.Scope == "environment:read" || body.Scope == "environment:write" || body.Scope == "skill:read" || body.Scope == "skill:write" || body.Scope == "risk_policy:evaluate" || body.Scope == "risk_policy:bypass" || body.Scope == "chat:read" || body.Scope == "chat:write" || body.Scope == "agent:read" || body.Scope == "agent:write" || body.Scope == "agent:authorize" || body.Scope == "agent:transfer") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", body.Scope, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "skill:read", "skill:write", "risk_policy:evaluate", "risk_policy:bypass", "chat:read", "chat:write", "agent:read", "agent:write", "agent:authorize", "agent:transfer"}))
 		}
 		if body.Message != nil {
 			if utf8.RuneCountInString(*body.Message) > 1000 {
@@ -773,7 +919,7 @@ func BuildRequestAccessPayload(accessRequestAccessBody string, accessRequestAcce
 
 // BuildListChallengesPayload builds the payload for the access listChallenges
 // endpoint from CLI flags.
-func BuildListChallengesPayload(accessListChallengesOutcome string, accessListChallengesPrincipalUrn string, accessListChallengesScope string, accessListChallengesProjectID string, accessListChallengesResolved string, accessListChallengesIds string, accessListChallengesLimit string, accessListChallengesOffset string, accessListChallengesApikeyToken string, accessListChallengesSessionToken string) (*access.ListChallengesPayload, error) {
+func BuildListChallengesPayload(accessListChallengesOutcome string, accessListChallengesPrincipalUrn string, accessListChallengesScope string, accessListChallengesProjectID string, accessListChallengesResolved string, accessListChallengesIds string, accessListChallengesFrom string, accessListChallengesTo string, accessListChallengesLimit string, accessListChallengesOffset string, accessListChallengesApikeyToken string, accessListChallengesSessionToken string) (*access.ListChallengesPayload, error) {
 	var err error
 	var outcome *string
 	{
@@ -822,6 +968,26 @@ func BuildListChallengesPayload(accessListChallengesOutcome string, accessListCh
 			err = json.Unmarshal([]byte(accessListChallengesIds), &ids)
 			if err != nil {
 				return nil, fmt.Errorf("invalid JSON for ids, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"abc123\"\n   ]'")
+			}
+		}
+	}
+	var from *string
+	{
+		if accessListChallengesFrom != "" {
+			from = &accessListChallengesFrom
+			err = goa.MergeErrors(err, goa.ValidateFormat("from", *from, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var to *string
+	{
+		if accessListChallengesTo != "" {
+			to = &accessListChallengesTo
+			err = goa.MergeErrors(err, goa.ValidateFormat("to", *to, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
 			}
 		}
 	}
@@ -881,6 +1047,8 @@ func BuildListChallengesPayload(accessListChallengesOutcome string, accessListCh
 	v.ProjectID = projectID
 	v.Resolved = resolved
 	v.Ids = ids
+	v.From = from
+	v.To = to
 	v.Limit = limit
 	v.Offset = offset
 	v.ApikeyToken = apikeyToken
@@ -1046,6 +1214,26 @@ func BuildResolveChallengePayload(accessResolveChallengeBody string, accessResol
 		v.ChallengeIds = []string{}
 	}
 	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildListIdentityAccessPayload builds the payload for the access
+// listIdentityAccess endpoint from CLI flags.
+func BuildListIdentityAccessPayload(accessListIdentityAccessUserID string, accessListIdentityAccessSessionToken string) (*access.ListIdentityAccessPayload, error) {
+	var userID string
+	{
+		userID = accessListIdentityAccessUserID
+	}
+	var sessionToken *string
+	{
+		if accessListIdentityAccessSessionToken != "" {
+			sessionToken = &accessListIdentityAccessSessionToken
+		}
+	}
+	v := &access.ListIdentityAccessPayload{}
+	v.UserID = userID
 	v.SessionToken = sessionToken
 
 	return v, nil

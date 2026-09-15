@@ -20,6 +20,10 @@ export type ListAuditLogFacetsResult = {
    * Available actor facets
    */
   actors: Array<AuditLogFacetOption>;
+  /**
+   * Available acting surface facets
+   */
+  surfaces: Array<AuditLogFacetOption>;
 };
 
 /** @internal */
@@ -29,6 +33,7 @@ export const ListAuditLogFacetsResult$inboundSchema: z.ZodMiniType<
 > = z.object({
   actions: z.array(AuditLogFacetOption$inboundSchema),
   actors: z.array(AuditLogFacetOption$inboundSchema),
+  surfaces: z.array(AuditLogFacetOption$inboundSchema),
 });
 
 export function listAuditLogFacetsResultFromJSON(

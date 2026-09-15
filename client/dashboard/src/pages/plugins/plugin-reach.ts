@@ -17,10 +17,7 @@ const ALL_USERS_PRINCIPAL = "user:all";
 //   user:all           → every synced identity that resolves to an org member
 //   email:<addr>       → the synced user with that email
 //   user:<id>          → the member with that id
-//   role:<...>         → every synced member holding that role, matched against
-//                        both the canonical role URN and the legacy role:<slug>
-//                        principal (the backend still honors both — see
-//                        newRolePrincipals / AGE-1954)
+//   role:<kind>:<uuid> → every synced member holding that role
 //
 // Marketplace installs (Claude/Cursor/Codex) ship every published plugin and
 // aren't attributed per plugin, so this count reflects device-agent reach only.
@@ -44,13 +41,9 @@ export function countPluginInstalls(
     (a) => a.principalUrn === ALL_USERS_PRINCIPAL,
   );
 
-  // A role assignment can be stored as either the canonical role principal URN
-  // or the legacy role:<slug> form, so index roles under both to match the
-  // agent's dual-principal role matching.
   const roleIdByUrn = new Map<string, string>();
   for (const role of roles) {
     if (role.principalUrn) roleIdByUrn.set(role.principalUrn, role.id);
-    if (role.slug) roleIdByUrn.set(`${ROLE_PREFIX}${role.slug}`, role.id);
   }
 
   const assignedEmails = new Set<string>();

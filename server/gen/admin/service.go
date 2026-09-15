@@ -9,7 +9,11 @@ package admin
 
 import (
 	"context"
+	"encoding/json"
+	"io"
 
+	adminviews "github.com/speakeasy-api/gram/server/gen/admin/views"
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
 )
@@ -22,20 +26,171 @@ type Service interface {
 	Callback(context.Context, *CallbackPayload) (res *CallbackResult, err error)
 	// Logout implements logout.
 	Logout(context.Context, *LogoutPayload) (err error)
+	// GetSession implements getSession.
+	GetSession(context.Context, *GetSessionPayload) (res *AdminSession, err error)
+	// GetOrganizationFeatures implements getOrganizationFeatures.
+	GetOrganizationFeatures(context.Context, *GetOrganizationFeaturesPayload) (res *ProductFeatures, err error)
+	// SetOrganizationFeature implements setOrganizationFeature.
+	SetOrganizationFeature(context.Context, *SetOrganizationFeaturePayload) (res *ProductFeatures, err error)
+	// GetOrganizationChatAnalysisSettings implements
+	// getOrganizationChatAnalysisSettings.
+	GetOrganizationChatAnalysisSettings(context.Context, *GetOrganizationChatAnalysisSettingsPayload) (res *AdminChatAnalysisSettings, err error)
+	// SetOrganizationChatAnalysisSettings implements
+	// setOrganizationChatAnalysisSettings.
+	SetOrganizationChatAnalysisSettings(context.Context, *SetOrganizationChatAnalysisSettingsPayload) (res *AdminChatAnalysisSettings, err error)
+	// TriggerOrganizationChatAnalysis implements triggerOrganizationChatAnalysis.
+	TriggerOrganizationChatAnalysis(context.Context, *TriggerOrganizationChatAnalysisPayload) (res *AdminChatAnalysisTriggerResult, err error)
+	// OpenOrganizationInDashboard implements openOrganizationInDashboard.
+	OpenOrganizationInDashboard(context.Context, *OpenOrganizationInDashboardPayload) (res *AdminDashboardRedirect, err error)
 	// Returns full admin details for a project by id or slug, including aggregated
 	// counts of child resources.
 	GetProject(context.Context, *GetProjectPayload) (res *AdminProjectDetail, err error)
 	// Updates admin-managed fields on an organization. At least one of
 	// account_type or whitelisted must be supplied.
 	UpdateOrganization(context.Context, *UpdateOrganizationPayload) (res *AdminOrganization, err error)
+	// Sets one account type on many organizations in a single statement. An ID
+	// that matches no organization is reported back rather than failing the batch,
+	// so a stale ID costs the operator that row and not the whole call.
+	BulkUpdateAccountType(context.Context, *BulkUpdateAccountTypePayload) (res *AdminBulkUpdateAccountTypeResult, err error)
+	// Disables an organization, recording the moment of the action in disabled_at.
+	// Idempotent: disabling an already-disabled organization keeps the original
+	// timestamp.
+	DisableOrganization(context.Context, *DisableOrganizationPayload) (res *AdminOrganization, err error)
+	// Re-enables a disabled organization by clearing disabled_at. Idempotent: an
+	// organization that is already active is unaffected.
+	EnableOrganization(context.Context, *EnableOrganizationPayload) (res *AdminOrganization, err error)
 	// Returns full admin details for a single organization by id or slug.
 	GetOrganization(context.Context, *GetOrganizationPayload) (res *AdminOrganization, err error)
 	// Lists members of an organization (admin view, no auth scoping).
 	ListOrganizationMembers(context.Context, *ListOrganizationMembersPayload) (res *AdminListOrganizationMembersResult, err error)
 	// Lists projects belonging to an organization (admin view, no auth scoping).
 	ListOrganizationProjects(context.Context, *ListOrganizationProjectsPayload) (res *AdminListOrganizationProjectsResult, err error)
-	// Lists organizations for admin operations with optional search and filters.
+	// Lists activity belonging to an organization for admin operators.
+	ListOrganizationActivity(context.Context, *ListOrganizationActivityPayload) (res *AdminListOrganizationActivityResult, err error)
+	// Lists organizations for platform admin operations with optional search and
+	// filters. Defaults to created_at descending, with id ascending to break ties.
 	ListOrganizations(context.Context, *ListOrganizationsPayload) (res *AdminListOrganizationsResult, err error)
+	// Extends a running enterprise trial by adding days to its current end date.
+	// Only a running trial can be extended: one that has converted, has been
+	// demoted, or has already expired is rejected rather than re-armed.
+	ExtendTrial(context.Context, *ExtendTrialPayload) (res *AdminOrganization, err error)
+	// Creates an organization in WorkOS and in Gram, so an operator does not have
+	// to leave the admin app for the WorkOS dashboard. The organization starts
+	// with no members, is not whitelisted, and gets no trial. Idempotent against
+	// the WorkOS organization webhook: the Gram ID is derived from the WorkOS ID,
+	// so both writers converge on one row.
+	CreateOrganization(context.Context, *CreateOrganizationPayload) (res *AdminOrganization, err error)
+	// Puts a demoted enterprise trial back on: restores the organization's account
+	// type and whitelist flag, revives its model provider keys, and gives the
+	// trial a fresh run of the given length counted from now. Only a demoted trial
+	// can be re-armed; one that has converted or is already running is rejected.
+	RearmTrial(context.Context, *RearmTrialPayload) (res *AdminOrganization, err error)
+	// Returns platform-wide organization counts for the strip above the
+	// organizations list. Every figure counts the whole platform: none of them
+	// narrows to the caller's list filters, so the strip does not move when an
+	// operator filters.
+	GetOrganizationStats(context.Context, *GetOrganizationStatsPayload) (res *AdminOrganizationStats, err error)
+	// Returns the configured state of every materialized platform-managed
+	// OpenRouter key for an organization.
+	GetInferenceKeys(context.Context, *GetInferenceKeysPayload) (res []*AdminInferenceKey, err error)
+	// Sets the monthly limit for one materialized platform-managed OpenRouter key.
+	SetInferenceKeyMonthlyLimit(context.Context, *SetInferenceKeyMonthlyLimitPayload) (res *AdminInferenceKeyLimit, err error)
+	// Returns up to twelve complete UTC calendar months of recorded inference
+	// spend for an organization.
+	GetInferenceSpendHistory(context.Context, *GetInferenceSpendHistoryPayload) (res []*AdminInferenceSpendMonth, err error)
+	// Returns current PAYG usage and estimated cost for an organization.
+	GetPaygBillingSummary(context.Context, *GetPaygBillingSummaryPayload) (res *AdminPaygBillingSummary, err error)
+	// Returns Stripe customer details for confirmation before assigning the
+	// customer to an organization.
+	GetStripeCustomer(context.Context, *GetStripeCustomerPayload) (res *AdminStripeCustomer, err error)
+	// Sets an organization's Stripe customer ID when it has no existing Stripe
+	// customer or subscription.
+	SetStripeCustomer(context.Context, *SetStripeCustomerPayload) (res *AdminOrganization, err error)
+	// Returns the live Stripe subscription and payment state for an organization.
+	GetStripeSubscription(context.Context, *GetStripeSubscriptionPayload) (res *AdminStripeSubscription, err error)
+	// Schedules an organization's PAYG subscription to cancel at period end.
+	CancelStripeSubscription(context.Context, *CancelStripeSubscriptionPayload) (res *AdminStripeSubscription, err error)
+	// Removes a scheduled period-end cancellation from an organization's PAYG
+	// subscription.
+	ResumeStripeSubscription(context.Context, *ResumeStripeSubscriptionPayload) (res *AdminStripeSubscription, err error)
+	// Records that an organization's enterprise trial converted to a signed
+	// contract.
+	MarkEnterpriseTrialConverted(context.Context, *MarkEnterpriseTrialConvertedPayload) (res *MarkEnterpriseTrialConvertedResult, err error)
+	// Create a global remote_session_issuer (project_id NULL, organization_id
+	// NULL). Requires platform admin.
+	CreateGlobalIssuer(context.Context, *CreateGlobalIssuerPayload) (res *types.RemoteSessionIssuer, err error)
+	// Report the global remote_session_issuers that already describe an upstream
+	// issuer URL, so the catalog create and edit forms can warn before curating a
+	// second entry for the same authorization server. Requires platform admin.
+
+	// Scoped to the global partition only. Tenant issuers naming the same URL are
+	// deliberately not reported here — listGlobalIssuerConvergenceCandidates is
+	// the surface for those, and it is keyed on a global issuer that already
+	// exists.
+
+	// The global tier is unique on slug but not on issuer, so nothing prevents a
+	// duplicate catalog entry and this warning is the only thing that will catch
+	// one. Advisory all the same: it never blocks the write. Matching uses the
+	// same canonicalization as the tenant-facing preflights, and an unparseable
+	// URL returns no matches rather than an error.
+	GetGlobalIssuerDuplicatePreflight(context.Context, *GetGlobalIssuerDuplicatePreflightPayload) (res *types.RemoteSessionIssuerDuplicatePreflight, err error)
+	// List global remote_session_issuers. Requires platform admin.
+	ListGlobalIssuers(context.Context, *ListGlobalIssuersPayload) (res *ListGlobalRemoteSessionIssuersResult, err error)
+	// Get a global remote_session_issuer by id. Requires platform admin.
+	GetGlobalIssuer(context.Context, *GetGlobalIssuerPayload) (res *GlobalRemoteSessionIssuer, err error)
+	// Update a global remote_session_issuer. Requires platform admin.
+	UpdateGlobalIssuer(context.Context, *UpdateGlobalIssuerPayload) (res *types.RemoteSessionIssuer, err error)
+	// Soft-delete a global remote_session_issuer. Blocked when any global
+	// remote_session_clients still reference it. Requires platform admin.
+	DeleteGlobalIssuer(context.Context, *DeleteGlobalIssuerPayload) (err error)
+	// Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server
+	// document and return a draft suitable for createGlobalIssuer. Keyed by issuer
+	// URL; no record need exist and nothing is persisted. Requires platform admin.
+	FetchGlobalIssuerMetadata(context.Context, *FetchGlobalIssuerMetadataPayload) (res *types.RemoteSessionIssuerDraft, err error)
+	// Re-fetch an existing global remote_session_issuer's RFC 8414 metadata
+	// document and persist the discovered values. Keyed by issuer id. Only RFC
+	// 8414-derived columns are written — endpoints, the *_supported arrays,
+	// client_id_metadata_document_supported, and the documentation URLs. Gram
+	// behavior and display fields (oidc, passthrough, name, slug, logo, client
+	// setup documentation) are left alone. Requires platform admin.
+	RefreshGlobalIssuerMetadata(context.Context, *RefreshGlobalIssuerMetadataPayload) (res *types.RemoteSessionIssuerRefresh, err error)
+	// List the organization- and project-level remote_session_issuers that
+	// describe the same upstream authorization server as a given global issuer,
+	// and so could be consolidated onto it. Matching is by canonical issuer URL,
+	// collapsing trailing-slash and default-port spellings. Each candidate carries
+	// its owning organization, the number of clients that would move, and the
+	// metadata differences that would block or accompany the migration. Requires
+	// platform admin.
+	ListGlobalIssuerConvergenceCandidates(context.Context, *ListGlobalIssuerConvergenceCandidatesPayload) (res *ListIssuerConvergenceCandidatesResult, err error)
+	// Authoritative impact summary for consolidating a tenant
+	// remote_session_issuer onto a global one: the clients that would move, the
+	// affected MCP servers, and every blocker (endpoint mismatches, conflicting
+	// MCP-server bindings). Also reports how many tenant-owned clients the target
+	// already carries, since those permanently block deleting it. Requires
+	// platform admin.
+	GetGlobalIssuerMigratePreflight(context.Context, *GetGlobalIssuerMigratePreflightPayload) (res *IssuerMigratePreflight, err error)
+	// Consolidate an organization- or project-level remote_session_issuer onto a
+	// global one: re-point every client from the source issuer onto the target,
+	// then soft-delete the source. Existing remote sessions are preserved, so no
+	// user re-authenticates. The source may belong to any organization; the target
+	// must be a global issuer. Both must agree on issuer (compared canonically),
+	// token_endpoint, and authorization_endpoint. One source per call. Requires
+	// platform admin.
+	MigrateToGlobalIssuer(context.Context, *MigrateToGlobalIssuerPayload) (res *MigrateRemoteSessionIssuerResult, err error)
+	// Upload a global issuer logo, limited to 4 MiB and PNG, JPEG, GIF or WebP.
+	UploadPlatformImage(context.Context, *UploadPlatformImagePayload, io.ReadCloser) (res *UploadImageResult, err error)
+	// Serve a public image, preserving the existing image serving contract.
+
+	// If body implements [io.WriterTo], that implementation will be used instead.
+	// Consider [goa.design/goa/v3/pkg.SkipResponseWriter] to adapt existing
+	// implementations.
+	ServeImage(context.Context, *ServeImageForm) (res *ServeImageResult, body io.ReadCloser, err error)
+	// Starts a new enterprise trial for an organization that has never trialled,
+	// or restarts one that has expired without converting or being demoted. Sets
+	// the account type, whitelist flag, trial entitlements and a fresh runway
+	// counted from now. A running, demoted or converted trial is rejected: those
+	// are extend, re-arm and a contract.
+	StartTrial(context.Context, *StartTrialPayload) (res *AdminOrganization, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -58,7 +213,80 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [9]string{"login", "callback", "logout", "getProject", "updateOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizations"}
+var MethodNames = [48]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizationActivity", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial"}
+
+// AdminBulkUpdateAccountTypeResult is the result type of the admin service
+// bulkUpdateAccountType method.
+type AdminBulkUpdateAccountTypeResult struct {
+	// IDs of the organizations whose account type was set. Order is unspecified:
+	// do not rely on it.
+	UpdatedIds []string
+	// IDs from the request that matched no organization, deduplicated and in
+	// request order. Nothing was written for these.
+	MissingIds []string
+}
+
+// AdminChatAnalysisSettings is the result type of the admin service
+// getOrganizationChatAnalysisSettings method.
+type AdminChatAnalysisSettings struct {
+	OrganizationID         string
+	WorkUnitsEnabled       bool
+	WorkUnitsDailyCap      int
+	BusinessMemoryEnabled  bool
+	BusinessMemoryDailyCap int
+	IsDefault              bool
+}
+
+// AdminChatAnalysisTriggerResult is the result type of the admin service
+// triggerOrganizationChatAnalysis method.
+type AdminChatAnalysisTriggerResult struct {
+	ProjectsSignaled int
+}
+
+// AdminDashboardRedirect is the result type of the admin service
+// openOrganizationInDashboard method.
+type AdminDashboardRedirect struct {
+	Location     string
+	CacheControl string
+}
+
+// Current usage and configured state for one materialized platform-managed
+// OpenRouter key, without key material or provider identifiers.
+type AdminInferenceKey struct {
+	KeyType string
+	// Credits spent this month in USD.
+	CreditsUsed    float64
+	MonthlyCredits int64
+	Disabled       bool
+	// Active internal disable causes. Omitted for legacy unclassified rows.
+	DisableCauses []string
+	// Whether disable_causes is classified, including an explicitly empty cause
+	// set.
+	DisableCausesClassified bool
+}
+
+// AdminInferenceKeyLimit is the result type of the admin service
+// setInferenceKeyMonthlyLimit method.
+type AdminInferenceKeyLimit struct {
+	KeyType        string
+	MonthlyCredits int64
+}
+
+type AdminInferenceSpendMonth struct {
+	PeriodStart string
+	// Exclusive end of the UTC calendar month.
+	PeriodEnd string
+	SpendUsd  string
+}
+
+// AdminListOrganizationActivityResult is the result type of the admin service
+// listOrganizationActivity method.
+type AdminListOrganizationActivityResult struct {
+	// List of organization activity.
+	Logs []*AuditLog
+	// Cursor for the next page of results.
+	NextCursor *string
+}
 
 // AdminListOrganizationMembersResult is the result type of the admin service
 // listOrganizationMembers method.
@@ -79,8 +307,10 @@ type AdminListOrganizationProjectsResult struct {
 type AdminListOrganizationsResult struct {
 	// The page of organizations.
 	Organizations []*AdminOrganization
-	// Cursor for the next page; empty when exhausted.
+	// Cursor for the next page; empty when exhausted. Omitted in offset mode.
 	NextCursor *string
+	// Number of organizations matching the filters, before paging.
+	Total int64
 }
 
 // AdminOrganization is the result type of the admin service updateOrganization
@@ -92,18 +322,29 @@ type AdminOrganization struct {
 	Name string
 	// The slug of the organization
 	Slug string
-	// Gram account type (e.g. free, pro, enterprise).
+	// Gram account type (e.g. free, pro, payg, enterprise).
 	AccountType string
 	// WorkOS organization ID, if linked.
 	WorkosID *string
+	// Stripe customer ID, if billing metadata has a customer.
+	StripeCustomerID *string
+	// Current Stripe subscription ID, if subscribed.
+	StripeSubscriptionID *string
 	// Whether the organization is whitelisted for full access.
 	Whitelisted bool
 	// The time at which the organization was disabled, if any.
 	DisabledAt *string
-	// The time at which the free trial started.
-	FreeTrialStartedAt *string
-	// The time at which the free trial ends.
-	FreeTrialEndsAt *string
+	// Lifecycle state of the organization's enterprise trial.
+	TrialState *string
+	// The trial tier. Absent when the organization never trialled.
+	TrialTier *string
+	// The time at which the enterprise trial ends. Absent when the organization
+	// never trialled.
+	TrialEndsAt *string
+	// The time at which the trial converted to a paid plan, if any.
+	TrialConvertedAt *string
+	// The time at which the organization was demoted after its trial, if any.
+	TrialDemotedAt *string
 	// Number of active members in the organization.
 	MemberCount int
 	// The creation date of the organization.
@@ -126,6 +367,39 @@ type AdminOrganizationMember struct {
 	UpdatedAt string
 }
 
+// AdminOrganizationStats is the result type of the admin service
+// getOrganizationStats method.
+type AdminOrganizationStats struct {
+	// Every organization on the platform, disabled ones included.
+	Total int64
+	// Organizations created in the last 7 days, whatever their current status.
+	CreatedLast7Days int64
+	// Organizations on a paid account type (payg or enterprise), disabled ones
+	// included.
+	Customers int64
+	// Customers created in the last 7 days, whatever their current status.
+	CustomersCreatedLast7Days int64
+	// Organizations whose trial_state is ending_soon.
+	TrialsEndingSoon int64
+	// Organizations with disabled_at set.
+	Disabled int64
+	// Organizations disabled in the last 7 days.
+	DisabledLast7Days int64
+}
+
+// AdminPaygBillingSummary is the result type of the admin service
+// getPaygBillingSummary method.
+type AdminPaygBillingSummary struct {
+	PeriodStart            string
+	PeriodEnd              string
+	TumTokens              int64
+	TumUnitPriceUsd        string
+	TumCostUsd             string
+	OtherInferenceSpendUsd string
+	RecordedThrough        *string
+	EstimatedTotalUsd      string
+}
+
 // Project summary surfaced to admin operators.
 type AdminProject struct {
 	// The ID of the project
@@ -134,6 +408,9 @@ type AdminProject struct {
 	Name string
 	// The slug of the project
 	Slug string
+	// Number of MCP servers in the project, counting both toolset-backed servers
+	// and mcp_servers rows.
+	McpServerCount int
 	// The creation date of the project.
 	CreatedAt string
 	// The last update date of the project.
@@ -170,6 +447,89 @@ type AdminProjectDetail struct {
 	UpdatedAt      string
 }
 
+// AdminSession is the result type of the admin service getSession method.
+type AdminSession struct {
+	Email string
+	Name  *string
+}
+
+// AdminStripeCustomer is the result type of the admin service
+// getStripeCustomer method.
+type AdminStripeCustomer struct {
+	ID          string
+	Name        *string
+	Email       *string
+	Description *string
+	Livemode    bool
+}
+
+// AdminStripeSubscription is the result type of the admin service
+// getStripeSubscription method.
+type AdminStripeSubscription struct {
+	Status             string
+	CurrentPeriodStart string
+	CurrentPeriodEnd   string
+	TrialStart         *string
+	TrialEnd           *string
+	CancelAtPeriodEnd  bool
+	CancelAt           *string
+	CanceledAt         *string
+	PaymentFailed      bool
+}
+
+type Asset struct {
+	// The ID of the asset
+	ID   string
+	Kind string
+	// The SHA256 hash of the asset
+	Sha256 string
+	// The content type of the asset
+	ContentType string
+	// The content length of the asset
+	ContentLength int64
+	// The creation date of the asset.
+	CreatedAt string
+	// The last update date of the asset.
+	UpdatedAt string
+}
+
+type AuditLog struct {
+	ID               string
+	ProjectID        *string
+	ProjectSlug      *string
+	ActorID          string
+	ActorType        string
+	ActorDisplayName *string
+	ActorSlug        *string
+	Action           string
+	// How the change was made: 'dashboard', 'api_key', 'platform_mcp',
+	// 'project_assistant', or 'unknown' when no surface was identifiable. Always
+	// present.
+	ActingSurface string
+	// The registered OAuth client the call authenticated as, when it had one.
+	// Absent for calls that carried no OAuth client.
+	ActingClientID     *string
+	SubjectID          string
+	SubjectType        string
+	SubjectDisplayName *string
+	SubjectSlug        *string
+	BeforeSnapshot     json.RawMessage
+	AfterSnapshot      json.RawMessage
+	Metadata           map[string]any
+	// The creation date of the audit log.
+	CreatedAt string
+}
+
+// BulkUpdateAccountTypePayload is the payload type of the admin service
+// bulkUpdateAccountType method.
+type BulkUpdateAccountTypePayload struct {
+	AdminSessionToken *string
+	// Organization IDs to update.
+	Ids []string
+	// New gram_account_type for every listed organization.
+	AccountType string
+}
+
 // CallbackPayload is the payload type of the admin service callback method.
 type CallbackPayload struct {
 	// The authorization code returned by the provider on success
@@ -194,6 +554,212 @@ type CallbackResult struct {
 	SessionID string
 }
 
+// CancelStripeSubscriptionPayload is the payload type of the admin service
+// cancelStripeSubscription method.
+type CancelStripeSubscriptionPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+}
+
+// CreateGlobalIssuerPayload is the payload type of the admin service
+// createGlobalIssuer method.
+type CreateGlobalIssuerPayload struct {
+	AdminSessionToken *string
+	// Project-unique slug.
+	Slug string
+	// Issuer URL; matches the iss claim.
+	Issuer string
+	// Optional display name. Stored NULL when empty; clients fall back to the
+	// issuer URL/slug.
+	Name *string
+	// Optional logo asset id.
+	LogoAssetID *string
+	// URL of OAuth client setup documentation shown when creating clients.
+	// Manually set, not RFC 8414; rejected unless an absolute http(s) URL.
+	ClientSetupDocumentationURL *string
+	// Upstream authorization endpoint.
+	AuthorizationEndpoint *string
+	// Upstream token endpoint.
+	TokenEndpoint *string
+	// Upstream RFC 7009 revocation endpoint; absent for issuers that advertise
+	// none.
+	RevocationEndpoint *string
+	// Upstream RFC 7591 registration endpoint; absent for issuers without DCR.
+	RegistrationEndpoint *string
+	// Upstream JWKS URI.
+	JwksURI *string
+	// RFC 8414 service_documentation; developer documentation for the issuer.
+	// Discovered from the issuer metadata document; rejected unless an absolute
+	// http(s) URL.
+	ServiceDocumentation *string
+	// RFC 8414 op_policy_uri; the issuer's client data-usage policy. Discovered
+	// from the issuer metadata document; rejected unless an absolute http(s) URL.
+	OpPolicyURI *string
+	// RFC 8414 op_tos_uri; the issuer's terms of service. Discovered from the
+	// issuer metadata document; rejected unless an absolute http(s) URL.
+	OpTosURI *string
+	// Scopes advertised by the issuer.
+	ScopesSupported []string
+	// Grant types advertised by the issuer.
+	GrantTypesSupported []string
+	// Response types advertised by the issuer.
+	ResponseTypesSupported []string
+	// Token endpoint auth methods advertised by the issuer.
+	TokenEndpointAuthMethodsSupported []string
+	// PKCE code challenge methods advertised by the issuer (RFC 8414
+	// code_challenge_methods_supported). Omitting the field stores null ("not
+	// captured"), distinct from an empty array ("the issuer advertises no
+	// methods").
+	CodeChallengeMethodsSupported []string
+	// When true, may unlock OIDC-aware behaviour. Default false.
+	Oidc *bool
+	// When true, the MCP client registers and transacts directly with this issuer.
+	// Default false.
+	Passthrough *bool
+	// When true, the issuer accepts a Client ID Metadata Document URL as client_id
+	// (OAuth CIMD draft). Discovered from the issuer metadata document and used to
+	// pre-flight outbound CIMD. Default false.
+	ClientIDMetadataDocumentSupported *bool
+	// OpenID Connect userinfo endpoint. Discovered from the issuer metadata
+	// document; rejected unless an absolute https URL, or http on loopback.
+	UserinfoEndpoint *string
+	// RFC 7662 token introspection endpoint. Discovered from the issuer metadata
+	// document; rejected unless an absolute https URL, or http on loopback.
+	IntrospectionEndpoint *string
+	// Client authentication methods the introspection endpoint accepts. Omitting
+	// the field stores null ("not captured"), distinct from an empty array ("the
+	// issuer advertises none").
+	IntrospectionEndpointAuthMethodsSupported []string
+	// JWS algorithms the issuer signs ID tokens with. Omitting the field stores
+	// null ("not captured"), distinct from an empty array ("the issuer advertises
+	// none").
+	IDTokenSigningAlgValuesSupported []string
+	// Claims the issuer can return in ID tokens and from userinfo. Omitting the
+	// field stores null ("not captured"), distinct from an empty array ("the
+	// issuer advertises none").
+	ClaimsSupported []string
+	// Whether the issuer supports OpenID Connect Back-Channel Logout. Omitting the
+	// field stores null ("not captured").
+	BackchannelLogoutSupported *bool
+	// Whether the issuer includes the RFC 9207 iss parameter in authorization
+	// responses. Omitting the field stores null ("not captured").
+	AuthorizationResponseIssParameterSupported *bool
+	// Operator-pinned scope request. When set, it is sent verbatim on the upstream
+	// authorize redirect in place of the resolved scope set. Omit or send an empty
+	// array to leave it unset.
+	ScopeOverride []string
+	// Whether the issuer accepts the RFC 8707 resource parameter. Omit to leave it
+	// unset: the parameter is then sent, and a login or refresh the issuer answers
+	// with invalid_target is retried once without it. Set false to never send it.
+	ResourceIndicatorSupported *bool
+}
+
+// CreateOrganizationPayload is the payload type of the admin service
+// createOrganization method.
+type CreateOrganizationPayload struct {
+	AdminSessionToken *string
+	// Display name for the new organization.
+	Name string
+}
+
+// DeleteGlobalIssuerPayload is the payload type of the admin service
+// deleteGlobalIssuer method.
+type DeleteGlobalIssuerPayload struct {
+	// The remote_session_issuer id.
+	ID                string
+	AdminSessionToken *string
+}
+
+// DisableOrganizationPayload is the payload type of the admin service
+// disableOrganization method.
+type DisableOrganizationPayload struct {
+	AdminSessionToken *string
+	// Organization ID.
+	ID string
+}
+
+// EnableOrganizationPayload is the payload type of the admin service
+// enableOrganization method.
+type EnableOrganizationPayload struct {
+	AdminSessionToken *string
+	// Organization ID.
+	ID string
+}
+
+// ExtendTrialPayload is the payload type of the admin service extendTrial
+// method.
+type ExtendTrialPayload struct {
+	AdminSessionToken *string
+	// Organization ID.
+	ID string
+	// Number of days to add to the trial's current end date.
+	Days int
+}
+
+// FetchGlobalIssuerMetadataPayload is the payload type of the admin service
+// fetchGlobalIssuerMetadata method.
+type FetchGlobalIssuerMetadataPayload struct {
+	// Issuer URL to fetch metadata for (e.g. https://login.linear.com).
+	Issuer            string
+	AdminSessionToken *string
+}
+
+// GetGlobalIssuerDuplicatePreflightPayload is the payload type of the admin
+// service getGlobalIssuerDuplicatePreflight method.
+type GetGlobalIssuerDuplicatePreflightPayload struct {
+	// The upstream issuer URL being entered (e.g. https://login.linear.app). Empty
+	// or unparseable returns no matches.
+	Issuer            *string
+	AdminSessionToken *string
+}
+
+// GetGlobalIssuerMigratePreflightPayload is the payload type of the admin
+// service getGlobalIssuerMigratePreflight method.
+type GetGlobalIssuerMigratePreflightPayload struct {
+	// The organization- or project-level remote_session_issuer to migrate away
+	// from.
+	SourceID string
+	// The global remote_session_issuer to migrate onto.
+	TargetID          string
+	AdminSessionToken *string
+}
+
+// GetGlobalIssuerPayload is the payload type of the admin service
+// getGlobalIssuer method.
+type GetGlobalIssuerPayload struct {
+	// The remote_session_issuer id.
+	ID                string
+	AdminSessionToken *string
+}
+
+// GetInferenceKeysPayload is the payload type of the admin service
+// getInferenceKeys method.
+type GetInferenceKeysPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+}
+
+// GetInferenceSpendHistoryPayload is the payload type of the admin service
+// getInferenceSpendHistory method.
+type GetInferenceSpendHistoryPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+}
+
+// GetOrganizationChatAnalysisSettingsPayload is the payload type of the admin
+// service getOrganizationChatAnalysisSettings method.
+type GetOrganizationChatAnalysisSettingsPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+}
+
+// GetOrganizationFeaturesPayload is the payload type of the admin service
+// getOrganizationFeatures method.
+type GetOrganizationFeaturesPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+}
+
 // GetOrganizationPayload is the payload type of the admin service
 // getOrganization method.
 type GetOrganizationPayload struct {
@@ -202,11 +768,172 @@ type GetOrganizationPayload struct {
 	IDOrSlug string
 }
 
+// GetOrganizationStatsPayload is the payload type of the admin service
+// getOrganizationStats method.
+type GetOrganizationStatsPayload struct {
+	AdminSessionToken *string
+}
+
+// GetPaygBillingSummaryPayload is the payload type of the admin service
+// getPaygBillingSummary method.
+type GetPaygBillingSummaryPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+}
+
 // GetProjectPayload is the payload type of the admin service getProject method.
 type GetProjectPayload struct {
 	AdminSessionToken *string
 	// Project ID or slug.
 	IDOrSlug string
+	// Organization the project must belong to, by id or slug. A project outside it
+	// is reported as not found. Optional, because the global project lookup has no
+	// organization to scope by.
+	OrganizationIDOrSlug *string
+}
+
+// GetSessionPayload is the payload type of the admin service getSession method.
+type GetSessionPayload struct {
+	AdminSessionToken *string
+}
+
+// GetStripeCustomerPayload is the payload type of the admin service
+// getStripeCustomer method.
+type GetStripeCustomerPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+	StripeCustomerID  string
+}
+
+// GetStripeSubscriptionPayload is the payload type of the admin service
+// getStripeSubscription method.
+type GetStripeSubscriptionPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+}
+
+// GlobalRemoteSessionIssuer is the result type of the admin service
+// getGlobalIssuer method.
+type GlobalRemoteSessionIssuer struct {
+	// The remote_session_issuer record.
+	Issuer *types.RemoteSessionIssuer
+	// Number of non-deleted global remote_session_clients (project_id NULL,
+	// organization_id NULL) registered with this issuer. These block a delete and
+	// the platform admin can remove them here.
+	GlobalClientCount int
+	// Number of non-deleted remote_session_clients owned by an organization or
+	// project that are registered with this issuer. These block a delete but only
+	// their owning organization can remove them.
+	TenantClientCount int
+	// Number of active tenant-owned user_session_issuers that trust this issuer.
+	// These block deletion and must be unlinked by their owning organizations.
+	TrustedUserSessionIssuerCount int
+}
+
+// An organization- or project-level remote_session_issuer that names the same
+// upstream authorization server as a global issuer, and so could be
+// consolidated onto it.
+type IssuerConvergenceCandidate struct {
+	// The candidate tenant remote_session_issuer.
+	Issuer *types.RemoteSessionIssuer
+	// The organization that owns the candidate. Empty for a legacy project-scoped
+	// issuer written before this column existed.
+	OrganizationID string
+	// Display name of the owning organization. Empty when the organization has no
+	// synced metadata.
+	OrganizationName string
+	// Number of non-deleted remote_session_clients that would move onto the target
+	// issuer.
+	ClientCount int
+	// The authorization-server metadata fields (issuer, token_endpoint,
+	// authorization_endpoint) that differ from the target, with both sides'
+	// values. Non-empty blocks the migration.
+	EndpointMismatches []*types.IssuerFieldMismatch
+	// Non-blocking divergences (oidc, passthrough, scopes_supported), with both
+	// sides' values. The target issuer's values become authoritative for the
+	// migrated clients.
+	Warnings []*types.IssuerFieldMismatch
+}
+
+// IssuerMigratePreflight is the result type of the admin service
+// getGlobalIssuerMigratePreflight method.
+type IssuerMigratePreflight struct {
+	// Number of non-deleted remote_session_clients that would be re-pointed from
+	// the source issuer to the target issuer.
+	ClientCount int
+	// Display names of MCP servers attached to the source issuer's clients.
+	McpServerNames []string
+	// The authorization-server metadata fields (issuer, token_endpoint,
+	// authorization_endpoint) that differ between source and target, with both
+	// sides' values. Non-empty blocks the migration.
+	EndpointMismatches []*types.IssuerFieldMismatch
+	// Display names of MCP servers where both the source and the target issuer
+	// already have a client bound. Non-empty blocks the migration; detach one
+	// client per listed server and retry.
+	ConflictingMcpServerNames []string
+	// Non-blocking divergences (oidc, passthrough, scopes_supported), with both
+	// sides' values. The target issuer's values become authoritative for the
+	// migrated clients.
+	Warnings []*types.IssuerFieldMismatch
+	// Number of user_session_issuers that trust the source. Any non-zero value
+	// blocks migration.
+	TrustedUserSessionIssuerCount int
+	// TRUE when the migration would succeed: no endpoint mismatches, conflicting
+	// MCP-server bindings, or user-session issuers that trust the source.
+	CanMigrate bool
+	// Number of tenant-owned remote_session_clients already registered with the
+	// target issuer, BEFORE this migration. Any non-zero value blocks deleting the
+	// target issuer, and only the owning organizations can clear it, so a
+	// successful migration is effectively one-way.
+	TargetTenantClientCount int
+}
+
+// ListGlobalIssuerConvergenceCandidatesPayload is the payload type of the
+// admin service listGlobalIssuerConvergenceCandidates method.
+type ListGlobalIssuerConvergenceCandidatesPayload struct {
+	// The global remote_session_issuer that candidates would be consolidated onto.
+	TargetID string
+	// Pagination cursor.
+	Cursor *string
+	// Page size (default 50, max 100).
+	Limit             *int
+	AdminSessionToken *string
+}
+
+// ListGlobalIssuersPayload is the payload type of the admin service
+// listGlobalIssuers method.
+type ListGlobalIssuersPayload struct {
+	// Pagination cursor.
+	Cursor *string
+	// Page size (default 50, max 100).
+	Limit             *int
+	AdminSessionToken *string
+}
+
+// ListGlobalRemoteSessionIssuersResult is the result type of the admin service
+// listGlobalIssuers method.
+type ListGlobalRemoteSessionIssuersResult struct {
+	Items []*GlobalRemoteSessionIssuer
+	// Cursor for the next page; empty when exhausted.
+	NextCursor *string
+}
+
+// ListIssuerConvergenceCandidatesResult is the result type of the admin
+// service listGlobalIssuerConvergenceCandidates method.
+type ListIssuerConvergenceCandidatesResult struct {
+	Items []*IssuerConvergenceCandidate
+	// Cursor for the next page; empty when exhausted.
+	NextCursor *string
+}
+
+// ListOrganizationActivityPayload is the payload type of the admin service
+// listOrganizationActivity method.
+type ListOrganizationActivityPayload struct {
+	AdminSessionToken *string
+	// Organization ID.
+	OrganizationID string
+	// Cursor for paginating through organization activity.
+	Cursor *string
 }
 
 // ListOrganizationMembersPayload is the payload type of the admin service
@@ -229,16 +956,50 @@ type ListOrganizationProjectsPayload struct {
 // listOrganizations method.
 type ListOrganizationsPayload struct {
 	AdminSessionToken *string
-	// Search term applied to name and slug (case-insensitive substring).
+	// Search term, trimmed of surrounding whitespace. Matches name and slug as a
+	// case-insensitive substring, with % and _ taken literally, and matches
+	// organization id and WorkOS id exactly, ignoring case. An id match also
+	// returns an organization that disabled_states or include_disabled would
+	// otherwise hide; it still respects account_type, account_types, trial_states
+	// and cursor.
 	Q *string
-	// Filter by gram_account_type (e.g. free, pro, enterprise).
+	// Filter by a single gram_account_type (e.g. free, pro, payg, enterprise).
+	// Superseded by account_types, which it joins as one more member of the same
+	// set.
 	AccountType *string
-	// Include organizations with disabled_at set. Defaults to false.
+	// Match any of these gram_account_type values. Empty matches every account
+	// type. A value no organization carries matches nothing rather than failing
+	// the request.
+	AccountTypes []string
+	// Match any of running, ending_soon, expired, demoted, converted or none.
+	// Empty matches every trial state. An unrecognised value matches nothing
+	// rather than failing the request.
+	TrialStates []string
+	// Match any of active or disabled. Empty falls back to include_disabled. An
+	// unrecognised value matches nothing rather than failing the request.
+	DisabledStates []string
+	// Include organizations with disabled_at set. Defaults to false. Superseded by
+	// disabled_states, which overrides it outright when supplied.
 	IncludeDisabled *bool
-	// Pagination cursor: id of the last item from the previous page.
+	// Pagination cursor: id of the last item from the previous page in created_at
+	// descending, id ascending order. The anchor is resolved regardless of
+	// filters; a deleted or unknown id returns an empty page. Ignored when sort or
+	// page is supplied.
 	Cursor *string
 	// Page size (default 50, max 100).
 	Limit *int
+	// Column to sort by: name, slug, account_type, member_count, created_at,
+	// disabled_at or trial_ends_at. Omitted or unknown values use created_at
+	// descending. Ties always sort by id ascending. Supplying it selects offset
+	// paging.
+	Sort *string
+	// Sort direction, asc or desc, applied to the column named by sort. Any other
+	// value sorts ascending. Ignored when sort is omitted or unknown, preserving
+	// the newest-first default. On its own it does not select offset paging.
+	Direction *string
+	// 1-based page number for offset paging (default 1). Supplying it selects
+	// offset paging.
+	Page *int
 }
 
 // LoginPayload is the payload type of the admin service login method.
@@ -265,16 +1026,314 @@ type LogoutPayload struct {
 	SessionID *string
 }
 
+// MarkEnterpriseTrialConvertedPayload is the payload type of the admin service
+// markEnterpriseTrialConverted method.
+type MarkEnterpriseTrialConvertedPayload struct {
+	AdminSessionToken *string
+	// Organization ID.
+	ID string
+}
+
+// MarkEnterpriseTrialConvertedResult is the result type of the admin service
+// markEnterpriseTrialConverted method.
+type MarkEnterpriseTrialConvertedResult struct {
+	// The converted organization ID.
+	OrganizationID string
+	// The time at which the enterprise trial was recorded as converted.
+	ConvertedAt string
+}
+
+// MigrateRemoteSessionIssuerResult is the result type of the admin service
+// migrateToGlobalIssuer method.
+type MigrateRemoteSessionIssuerResult struct {
+	// The surviving target global remote_session_issuer.
+	Issuer *types.RemoteSessionIssuer
+	// Number of remote_session_clients re-pointed from the source issuer to the
+	// target issuer. Zero when the source had no active clients.
+	ClientsMigrated int
+	// TRUE when the source issuer was soft-deleted.
+	SourceDeleted bool
+}
+
+// MigrateToGlobalIssuerPayload is the payload type of the admin service
+// migrateToGlobalIssuer method.
+type MigrateToGlobalIssuerPayload struct {
+	// The organization- or project-level remote_session_issuer to migrate away
+	// from; soft-deleted on success.
+	SourceID string
+	// The global remote_session_issuer to migrate onto; survives and adopts the
+	// source's clients.
+	TargetID          string
+	AdminSessionToken *string
+}
+
+// OpenOrganizationInDashboardPayload is the payload type of the admin service
+// openOrganizationInDashboard method.
+type OpenOrganizationInDashboardPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+}
+
+type ProductFeatureName string
+
+// ProductFeatures is the result type of the admin service
+// getOrganizationFeatures method.
+type ProductFeatures struct {
+	// Whether logging is enabled
+	LogsEnabled bool
+	// Whether tool I/O logging is enabled
+	ToolIoLogsEnabled bool
+	// Whether Claude Code session capture is enabled
+	SessionCaptureEnabled bool
+	// Whether authz challenge logging to ClickHouse is enabled
+	AuthzChallengeLoggingEnabled bool
+	// Whether SSO setup is enabled for the organization
+	SsoEnabled bool
+	// Whether SCIM/directory sync setup is enabled for the organization
+	ScimEnabled bool
+	// Whether generated hook plugins may mint per-user keys via the interactive
+	// browser login
+	HooksBrowserLoginEnabled bool
+	// Whether hooks fail open when the Speakeasy control plane is unreachable or
+	// erroring — blocking policies are not enforced for the duration of the outage
+	HooksFailOpenEnabled bool
+	// Whether the organization can supply its own model provider API keys (BYOK)
+	CustomModelKeysEnabled bool
+	// Whether the Skills page is enabled for the organization
+	SkillsEnabled bool
+	// Whether skill capture stores activation metadata without requesting manifest
+	// content
+	SkillCaptureMetadataOnly bool
+	// Whether the organization can provision push integrations for AI platforms
+	AiPlatformPushIntegrationsEnabled bool
+	// Whether the organization can use the Gram Platform MCP capability
+	PlatformMcpEnabled bool
+	// Whether the organization can manage the external credentials and cloud KMS
+	// keys backing customer-managed encryption
+	CustomerManagedEncryptionKeysEnabled bool
+	// Whether consent screens expose automatic remote-session refresh for the
+	// organization
+	RemoteSessionAutoRefreshEnabled bool
+	// Whether automatic remote-session refresh is enforced as the organization
+	// default: forced on for every user, shown locked on consent screens, and
+	// applied by the keepalive regardless of per-session preference
+	RemoteSessionAutoRefreshEnforcedEnabled bool
+	// Whether MCP consent screens offer the tool filtering picker for the
+	// organization
+	ConsentToolFilteringEnabled bool
+	// Whether agent session portability is enabled for the organization: session
+	// sharing links, move reporting with lineage, and picker title enrichment via
+	// the device agent
+	SessionPortabilityEnabled bool
+	// Whether the organization has the staff-managed private network ingress
+	// entitlement
+	NetworkIngressEnabled bool
+	// Whether the organization uses the device agent (any device has polled
+	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
+	// feature.
+	DeviceAgent bool
+}
+
+// RearmTrialPayload is the payload type of the admin service rearmTrial method.
+type RearmTrialPayload struct {
+	AdminSessionToken *string
+	// Organization ID.
+	ID string
+	// Number of days the re-armed trial runs for, counted from now.
+	Days int
+}
+
+// RefreshGlobalIssuerMetadataPayload is the payload type of the admin service
+// refreshGlobalIssuerMetadata method.
+type RefreshGlobalIssuerMetadataPayload struct {
+	// The remote_session_issuer id.
+	ID                string
+	AdminSessionToken *string
+}
+
+// ResumeStripeSubscriptionPayload is the payload type of the admin service
+// resumeStripeSubscription method.
+type ResumeStripeSubscriptionPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+}
+
+// ServeImageForm is the payload type of the admin service serveImage method.
+type ServeImageForm struct {
+	// The ID of the asset to serve
+	ID string
+}
+
+// ServeImageResult is the result type of the admin service serveImage method.
+type ServeImageResult struct {
+	ContentType               string
+	ContentLength             int64
+	LastModified              string
+	AccessControlAllowOrigin  *string
+	CrossOriginResourcePolicy string
+}
+
+// SetInferenceKeyMonthlyLimitPayload is the payload type of the admin service
+// setInferenceKeyMonthlyLimit method.
+type SetInferenceKeyMonthlyLimitPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+	KeyType           string
+	MonthlyCredits    int
+}
+
+// SetOrganizationChatAnalysisSettingsPayload is the payload type of the admin
+// service setOrganizationChatAnalysisSettings method.
+type SetOrganizationChatAnalysisSettingsPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+	Judge             string
+	Enabled           bool
+	DailyCap          int
+}
+
+// SetOrganizationFeaturePayload is the payload type of the admin service
+// setOrganizationFeature method.
+type SetOrganizationFeaturePayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+	FeatureName       ProductFeatureName
+	Enabled           bool
+}
+
+// SetStripeCustomerPayload is the payload type of the admin service
+// setStripeCustomer method.
+type SetStripeCustomerPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+	StripeCustomerID  string
+}
+
+// StartTrialPayload is the payload type of the admin service startTrial method.
+type StartTrialPayload struct {
+	AdminSessionToken *string
+	// Organization ID.
+	ID string
+	// Number of days the trial runs for, counted from now.
+	Days int
+}
+
+// TriggerOrganizationChatAnalysisPayload is the payload type of the admin
+// service triggerOrganizationChatAnalysis method.
+type TriggerOrganizationChatAnalysisPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+}
+
+// UpdateGlobalIssuerPayload is the payload type of the admin service
+// updateGlobalIssuer method.
+type UpdateGlobalIssuerPayload struct {
+	AdminSessionToken *string
+	// The remote_session_issuer id.
+	ID string
+	// Rename the slug.
+	Slug *string
+	// Issuer URL; matches the iss claim.
+	Issuer *string
+	// Set or clear the display name. An empty string clears it to NULL.
+	Name *string
+	// Set or clear the logo asset id. An empty string clears it to NULL; any other
+	// value must be a uuid.
+	LogoAssetID *string
+	// Set or clear the URL of OAuth client setup documentation shown when creating
+	// clients. An empty string clears it to NULL; any other value must be an
+	// absolute http(s) URL.
+	ClientSetupDocumentationURL *string
+	// Upstream authorization endpoint.
+	AuthorizationEndpoint *string
+	// Upstream token endpoint.
+	TokenEndpoint *string
+	// Upstream RFC 7009 revocation endpoint.
+	RevocationEndpoint *string
+	// Upstream RFC 7591 registration endpoint.
+	RegistrationEndpoint *string
+	// Upstream JWKS URI.
+	JwksURI *string
+	// Set or clear RFC 8414 service_documentation. An empty string clears it to
+	// NULL; any other value must be an absolute http(s) URL.
+	ServiceDocumentation *string
+	// Set or clear RFC 8414 op_policy_uri. An empty string clears it to NULL; any
+	// other value must be an absolute http(s) URL.
+	OpPolicyURI *string
+	// Set or clear RFC 8414 op_tos_uri. An empty string clears it to NULL; any
+	// other value must be an absolute http(s) URL.
+	OpTosURI                          *string
+	ScopesSupported                   []string
+	GrantTypesSupported               []string
+	ResponseTypesSupported            []string
+	TokenEndpointAuthMethodsSupported []string
+	// PKCE code challenge methods advertised by the issuer (RFC 8414
+	// code_challenge_methods_supported). Omitting the field leaves the stored
+	// value unchanged; an empty array records that the issuer advertises no
+	// methods.
+	CodeChallengeMethodsSupported []string
+	Oidc                          *bool
+	Passthrough                   *bool
+	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
+	// (OAuth CIMD draft).
+	ClientIDMetadataDocumentSupported *bool
+	// Set or clear the OpenID Connect userinfo endpoint. An empty string clears it
+	// to NULL; any other value must be an absolute https URL, or http on loopback.
+	UserinfoEndpoint *string
+	// Set or clear the RFC 7662 token introspection endpoint. An empty string
+	// clears it to NULL; any other value must be an absolute https URL, or http on
+	// loopback.
+	IntrospectionEndpoint *string
+	// Client authentication methods the introspection endpoint accepts. Omitting
+	// the field leaves the stored value unchanged; an empty array records that the
+	// issuer advertises none.
+	IntrospectionEndpointAuthMethodsSupported []string
+	// JWS algorithms the issuer signs ID tokens with. Omitting the field leaves
+	// the stored value unchanged; an empty array records that the issuer
+	// advertises none.
+	IDTokenSigningAlgValuesSupported []string
+	// Claims the issuer can return in ID tokens and from userinfo. Omitting the
+	// field leaves the stored value unchanged; an empty array records that the
+	// issuer advertises none.
+	ClaimsSupported []string
+	// Whether the issuer supports OpenID Connect Back-Channel Logout. Omitting the
+	// field leaves the stored value unchanged.
+	BackchannelLogoutSupported *bool
+	// Whether the issuer includes the RFC 9207 iss parameter in authorization
+	// responses. Omitting the field leaves the stored value unchanged.
+	AuthorizationResponseIssParameterSupported *bool
+	// Set or clear the operator-pinned scope request. Omitting the field (or
+	// sending null) leaves the stored value unchanged; an empty array clears it.
+	ScopeOverride []string `json:"scope_override"`
+	// Whether the issuer accepts the RFC 8707 resource parameter. Omitting the
+	// field leaves the stored value unchanged.
+	ResourceIndicatorSupported *bool
+}
+
 // UpdateOrganizationPayload is the payload type of the admin service
 // updateOrganization method.
 type UpdateOrganizationPayload struct {
 	AdminSessionToken *string
 	// Organization ID.
 	ID string
-	// New gram_account_type (e.g. free, pro, enterprise).
+	// New gram_account_type (free, pro, payg, or enterprise).
 	AccountType *string
 	// New whitelisted flag.
 	Whitelisted *bool
+}
+
+// UploadImageResult is the result type of the admin service
+// uploadPlatformImage method.
+type UploadImageResult struct {
+	// The asset entry that was created in Gram
+	Asset *Asset
+}
+
+// UploadPlatformImagePayload is the payload type of the admin service
+// uploadPlatformImage method.
+type UploadPlatformImagePayload struct {
+	AdminSessionToken *string
+	ContentType       string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.
@@ -325,4 +1384,117 @@ func MakeUnexpected(err error) *goa.ServiceError {
 // MakeGatewayError builds a goa.ServiceError from an error.
 func MakeGatewayError(err error) *goa.ServiceError {
 	return goa.NewServiceError(err, "gateway_error", false, false, true)
+}
+
+// MakeUnavailable builds a goa.ServiceError from an error.
+func MakeUnavailable(err error) *goa.ServiceError {
+	return goa.NewServiceError(err, "unavailable", false, false, true)
+}
+
+// NewProductFeatures initializes result type ProductFeatures from viewed
+// result type ProductFeatures.
+func NewProductFeatures(vres *adminviews.ProductFeatures) *ProductFeatures {
+	return newProductFeatures(vres.Projected)
+}
+
+// NewViewedProductFeatures initializes viewed result type ProductFeatures from
+// result type ProductFeatures using the given view.
+func NewViewedProductFeatures(res *ProductFeatures, view string) *adminviews.ProductFeatures {
+	p := newProductFeaturesView(res)
+	return &adminviews.ProductFeatures{Projected: p, View: "default"}
+}
+
+// newProductFeatures converts projected type ProductFeatures to service type
+// ProductFeatures.
+func newProductFeatures(vres *adminviews.ProductFeaturesView) *ProductFeatures {
+	res := &ProductFeatures{}
+	if vres.LogsEnabled != nil {
+		res.LogsEnabled = *vres.LogsEnabled
+	}
+	if vres.ToolIoLogsEnabled != nil {
+		res.ToolIoLogsEnabled = *vres.ToolIoLogsEnabled
+	}
+	if vres.SessionCaptureEnabled != nil {
+		res.SessionCaptureEnabled = *vres.SessionCaptureEnabled
+	}
+	if vres.AuthzChallengeLoggingEnabled != nil {
+		res.AuthzChallengeLoggingEnabled = *vres.AuthzChallengeLoggingEnabled
+	}
+	if vres.SsoEnabled != nil {
+		res.SsoEnabled = *vres.SsoEnabled
+	}
+	if vres.ScimEnabled != nil {
+		res.ScimEnabled = *vres.ScimEnabled
+	}
+	if vres.HooksBrowserLoginEnabled != nil {
+		res.HooksBrowserLoginEnabled = *vres.HooksBrowserLoginEnabled
+	}
+	if vres.HooksFailOpenEnabled != nil {
+		res.HooksFailOpenEnabled = *vres.HooksFailOpenEnabled
+	}
+	if vres.CustomModelKeysEnabled != nil {
+		res.CustomModelKeysEnabled = *vres.CustomModelKeysEnabled
+	}
+	if vres.SkillsEnabled != nil {
+		res.SkillsEnabled = *vres.SkillsEnabled
+	}
+	if vres.SkillCaptureMetadataOnly != nil {
+		res.SkillCaptureMetadataOnly = *vres.SkillCaptureMetadataOnly
+	}
+	if vres.AiPlatformPushIntegrationsEnabled != nil {
+		res.AiPlatformPushIntegrationsEnabled = *vres.AiPlatformPushIntegrationsEnabled
+	}
+	if vres.PlatformMcpEnabled != nil {
+		res.PlatformMcpEnabled = *vres.PlatformMcpEnabled
+	}
+	if vres.CustomerManagedEncryptionKeysEnabled != nil {
+		res.CustomerManagedEncryptionKeysEnabled = *vres.CustomerManagedEncryptionKeysEnabled
+	}
+	if vres.RemoteSessionAutoRefreshEnabled != nil {
+		res.RemoteSessionAutoRefreshEnabled = *vres.RemoteSessionAutoRefreshEnabled
+	}
+	if vres.RemoteSessionAutoRefreshEnforcedEnabled != nil {
+		res.RemoteSessionAutoRefreshEnforcedEnabled = *vres.RemoteSessionAutoRefreshEnforcedEnabled
+	}
+	if vres.ConsentToolFilteringEnabled != nil {
+		res.ConsentToolFilteringEnabled = *vres.ConsentToolFilteringEnabled
+	}
+	if vres.SessionPortabilityEnabled != nil {
+		res.SessionPortabilityEnabled = *vres.SessionPortabilityEnabled
+	}
+	if vres.NetworkIngressEnabled != nil {
+		res.NetworkIngressEnabled = *vres.NetworkIngressEnabled
+	}
+	if vres.DeviceAgent != nil {
+		res.DeviceAgent = *vres.DeviceAgent
+	}
+	return res
+}
+
+// newProductFeaturesView projects result type ProductFeatures to projected
+// type ProductFeaturesView using the "default" view.
+func newProductFeaturesView(res *ProductFeatures) *adminviews.ProductFeaturesView {
+	vres := &adminviews.ProductFeaturesView{
+		LogsEnabled:                             &res.LogsEnabled,
+		ToolIoLogsEnabled:                       &res.ToolIoLogsEnabled,
+		SessionCaptureEnabled:                   &res.SessionCaptureEnabled,
+		AuthzChallengeLoggingEnabled:            &res.AuthzChallengeLoggingEnabled,
+		SsoEnabled:                              &res.SsoEnabled,
+		ScimEnabled:                             &res.ScimEnabled,
+		HooksBrowserLoginEnabled:                &res.HooksBrowserLoginEnabled,
+		HooksFailOpenEnabled:                    &res.HooksFailOpenEnabled,
+		CustomModelKeysEnabled:                  &res.CustomModelKeysEnabled,
+		SkillsEnabled:                           &res.SkillsEnabled,
+		SkillCaptureMetadataOnly:                &res.SkillCaptureMetadataOnly,
+		AiPlatformPushIntegrationsEnabled:       &res.AiPlatformPushIntegrationsEnabled,
+		PlatformMcpEnabled:                      &res.PlatformMcpEnabled,
+		CustomerManagedEncryptionKeysEnabled:    &res.CustomerManagedEncryptionKeysEnabled,
+		RemoteSessionAutoRefreshEnabled:         &res.RemoteSessionAutoRefreshEnabled,
+		RemoteSessionAutoRefreshEnforcedEnabled: &res.RemoteSessionAutoRefreshEnforcedEnabled,
+		ConsentToolFilteringEnabled:             &res.ConsentToolFilteringEnabled,
+		SessionPortabilityEnabled:               &res.SessionPortabilityEnabled,
+		NetworkIngressEnabled:                   &res.NetworkIngressEnabled,
+		DeviceAgent:                             &res.DeviceAgent,
+	}
+	return vres
 }

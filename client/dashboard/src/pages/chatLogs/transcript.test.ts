@@ -4,10 +4,63 @@ import {
   buildDisplayItems,
   displayItemContainsMessage,
   displayItemRows,
+  messageEnvelope,
+  messageText,
+  buildTranscript,
   type DisplayItem,
   type ToolRow,
   type TranscriptRow,
 } from "./transcript";
+
+describe("messageText", () => {
+  it("renders only the human text of an OpenClaw channel turn", () => {
+    const stored =
+      'Conversation info (untrusted metadata):\n```json\n{"chat_id": "channel:42"}\n```\n\n@Bot what does this command do';
+    expect(messageText(stored)).toBe("@Bot what does this command do");
+  });
+
+  it("exposes the envelope for the folded disclosure", () => {
+    const stored =
+      'Conversation info (untrusted metadata):\n```json\n{"chat_id": "channel:42"}\n```\n\n@Bot what does this command do';
+    expect(messageEnvelope(stored)).toBe(
+      'Conversation info (untrusted metadata):\n```json\n{"chat_id": "channel:42"}\n```',
+    );
+    expect(messageEnvelope("plain")).toBe("");
+    expect(messageEnvelope([{ type: "text", text: stored }])).toContain(
+      "Conversation info",
+    );
+  });
+
+  it("hides a text-part turn that is only envelope, but keeps media", () => {
+    const envelopeOnly = "<message-context>\nEventID: e1\n</message-context>";
+    const rows = buildTranscript([
+      {
+        id: "a",
+        seq: 1,
+        role: "user",
+        content: [{ type: "text", text: envelopeOnly }],
+      },
+      {
+        id: "b",
+        seq: 2,
+        role: "user",
+        content: [
+          { type: "text", text: envelopeOnly },
+          { type: "image", image: "x" },
+        ],
+      },
+    ] as never);
+    expect(rows.map((r) => r.id)).toEqual(["b"]);
+  });
+
+  it("still strips the assistant runtime's message-context envelope", () => {
+    expect(
+      messageText(
+        "<message-context>\nEventID: e1\n</message-context>\nWhat changed?",
+      ),
+    ).toBe("What changed?");
+  });
+});
 
 describe("argsToString", () => {
   it("omits blank argument payloads instead of rendering an empty section", () => {

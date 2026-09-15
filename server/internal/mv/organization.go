@@ -2,8 +2,10 @@ package mv
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -28,8 +30,9 @@ func DescribeOrganization(ctx context.Context, logger *slog.Logger, orgRepo *org
 		HasActiveSubscription: false,
 	}
 
-	// An org is enterprise if it's explicitly set to enterprise in the database
-	if org.GramAccountType == "enterprise" {
+	// Operator-managed tiers are authoritative and must never be overwritten by
+	// stale billing provider state.
+	if isOperatorManagedTier(billing.Tier(org.GramAccountType)) {
 		org.HasActiveSubscription = true
 		return &org, nil
 	}
@@ -51,15 +54,34 @@ func DescribeOrganization(ctx context.Context, logger *slog.Logger, orgRepo *org
 	// Otherwise, the source of truth for account type is the Polar customer state
 	if customerTier != nil {
 		if previousAccountType != string(*customerTier) {
-			if err := orgRepo.SetAccountType(ctx, org_repo.SetAccountTypeParams{
-				GramAccountType: string(*customerTier),
-				ID:              orgID,
-			}); err != nil {
+			updated, err := orgRepo.SetAccountTypeIfUnchanged(ctx, org_repo.SetAccountTypeIfUnchangedParams{
+				GramAccountType:     string(*customerTier),
+				PreviousAccountType: previousAccountType,
+				ID:                  orgID,
+			})
+			switch {
+			case err == nil:
+				org.OrganizationMetadatum = updated
+			case errors.Is(err, pgx.ErrNoRows):
+				current, reloadErr := orgRepo.GetOrganizationMetadata(ctx, orgID)
+				if reloadErr != nil {
+					logger.ErrorContext(ctx, "error reloading account type after concurrent update", attr.SlogError(reloadErr))
+				} else {
+					org.OrganizationMetadatum = current
+					org.HasActiveSubscription = hasActiveSubscription || isOperatorManagedTier(billing.Tier(current.GramAccountType))
+				}
+			default:
 				logger.ErrorContext(ctx, "error setting account type", attr.SlogError(err))
+				org.GramAccountType = string(*customerTier)
 			}
+		} else {
+			org.GramAccountType = string(*customerTier)
 		}
-		org.GramAccountType = string(*customerTier)
 	}
 
 	return &org, nil
+}
+
+func isOperatorManagedTier(tier billing.Tier) bool {
+	return tier == billing.TierEnterprise || tier == billing.TierPayg
 }

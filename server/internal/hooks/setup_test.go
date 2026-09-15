@@ -18,8 +18,12 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
+	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -27,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
@@ -69,6 +74,28 @@ type testInstance struct {
 	sessionManager  *sessions.Manager
 	assetStorage    assets.BlobStore
 	efficacySignals *recordingEfficacySignaler
+	identitySignals *recordingIdentityMapSignaler
+}
+
+// recordingIdentityMapSignaler captures identity map refresh requests emitted
+// after attributed account-link writes. Called synchronously by the producer,
+// so a test reads the count straight after the call under test.
+type recordingIdentityMapSignaler struct {
+	mu    sync.Mutex
+	count int
+}
+
+func (r *recordingIdentityMapSignaler) SignalIdentityMapRefresh(context.Context) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.count++
+	return nil
+}
+
+func (r *recordingIdentityMapSignaler) refreshCount() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.count
 }
 
 // recordingEfficacySignaler captures the skill efficacy wakes a hook path
@@ -172,7 +199,7 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	assetStorage := assetstest.NewTestBlobStore(t)
 	chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, conn, assetStorage)
 	t.Cleanup(func() { _ = chatWriterShutdown(t.Context()) })
@@ -181,6 +208,7 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 	serverURL, err := url.Parse("https://localhost:8080")
 	require.NoError(t, err)
 	efficacySignals := &recordingEfficacySignaler{mu: sync.Mutex{}, err: nil, signals: nil}
+	identitySignals := &recordingIdentityMapSignaler{mu: sync.Mutex{}, count: 0}
 	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, serverURL)
 	policyBypass := risk.NewPolicyBypassEvaluator(logger, conn)
 	spendCelEngine, err := spendcelenv.New()
@@ -193,11 +221,14 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 		tracerProvider,
 		meterProvider,
 		nil,
+		gcp.NewNoopPublisher[*otelv1.InboundLogRecord](),
 		sessionManager,
 		cacheAdapter,
 		nil,
 		nil,
 		authzEngine,
+		audit.NewLogger(),
+		nil,
 		nil,
 		nil,
 		nil,
@@ -207,9 +238,11 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 		chatWriter,
 		efficacySignals,
 		nil,
+		identitySignals,
 		serverURL,
 		siteURL,
 		"test-jwt-secret",
+		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
 	)
 
 	return ctx, &testInstance{
@@ -221,6 +254,7 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 		sessionManager:  sessionManager,
 		assetStorage:    assetStorage,
 		efficacySignals: efficacySignals,
+		identitySignals: identitySignals,
 	}
 }
 

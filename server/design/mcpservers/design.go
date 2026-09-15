@@ -5,6 +5,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/design/security"
 	"github.com/speakeasy-api/gram/server/design/shared"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 var _ = Service("mcpServers", func() {
@@ -14,6 +15,16 @@ var _ = Service("mcpServers", func() {
 		Scope("producer")
 	})
 	shared.DeclareErrorResponses()
+	Error(string(oops.CodeUnavailable), func() {
+		Description(oops.CodeUnavailable.UserMessage())
+		Fault()
+	})
+	HTTP(func() {
+		shared.DeclareHTTPErrorResponses()
+		Response(string(oops.CodeUnavailable), StatusServiceUnavailable, func() {
+			ContentType("application/json")
+		})
+	})
 
 	Method("createMcpServer", func() {
 		Description("Create a new MCP server")
@@ -396,6 +407,7 @@ var CreateMcpServerForm = Type("CreateMcpServerForm", func() {
 		Format(FormatUUID)
 	})
 	Attribute("visibility", McpServerVisibility, "The visibility of the server")
+	Attribute("network_access_mode", shared.NetworkAccessMode, "The allowed network surfaces. Omit to default to public_only.")
 
 	Required("name", "visibility")
 })
@@ -426,6 +438,7 @@ var UpdateMcpServerForm = Type("UpdateMcpServerForm", func() {
 		Format(FormatUUID)
 	})
 	Attribute("visibility", McpServerVisibility, "The visibility of the server")
+	Attribute("network_access_mode", shared.NetworkAccessMode, "The allowed network surfaces. Omit to preserve the stored mode.")
 
 	Required("id", "visibility")
 })
@@ -465,6 +478,7 @@ var McpServer = Type("McpServer", func() {
 		Format(FormatUUID)
 	})
 	Attribute("visibility", McpServerVisibility, "The visibility of the server")
+	Attribute("network_access_mode", shared.NetworkAccessMode, "The effective allowed network surfaces. Existing NULL rows are public_only.")
 	Attribute("created_at", String, func() {
 		Description("When the MCP server was created")
 		Format(FormatDateTime)
@@ -474,7 +488,7 @@ var McpServer = Type("McpServer", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "project_id", "visibility", "created_at", "updated_at")
+	Required("id", "project_id", "visibility", "network_access_mode", "created_at", "updated_at")
 })
 
 var ListMcpServersResult = Type("ListMcpServersResult", func() {

@@ -12,13 +12,6 @@ import { Card } from "@/components/ui/Card";
 import { Heading } from "@/components/ui/Heading";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/Select";
 import { Slider } from "@/components/ui/Slider";
 import {
   Sheet,
@@ -32,6 +25,7 @@ import { Switch } from "@/components/ui/Switch";
 import { TextArea } from "@/components/ui/Textarea";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Text } from "@/components/ui/Text";
+import { useRecentLabelOverride } from "@/components/command-palette/recentlyVisited";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { useProject } from "@/contexts/Auth";
@@ -79,19 +73,23 @@ import {
   useRef,
   useState,
 } from "react";
-import { useParams } from "react-router";
+import { useLocation, useParams } from "react-router";
+import { toast } from "sonner";
 import { useQueryState } from "nuqs";
 import {
   isBlockingShadowMCPPolicy,
   isShadowMCPBlockConfiguration,
   shadowMCPAllowedURLsForMutation,
   shadowMCPBlockedURLsForMutation,
+  shadowMCPDecisionConflicts,
   shadowMCPSelectionBaselineForUpdate,
   shadowMCPSelectionIsDirty,
   shadowMCPSelectionIsInitialized,
+  type ShadowMCPDecisionConflict,
   type ShadowMCPDisposition,
 } from "./policy-shadow-mcp-setup";
-import { type Step } from "@/pages/setup/components/onboarding-stepper";
+import { SupersedeDecisionsDialog } from "./SupersedeDecisionsDialog";
+
 import {
   DETECTION_RULES,
   RULE_CATEGORY_META,
@@ -106,8 +104,14 @@ import {
 } from "./PolicyCenter";
 import { DetectorCard } from "./DetectorCard";
 import { builtInRuleDisabledReason } from "./policy-built-in-rule-exclusivity";
+import { policyStatusLabel } from "./policy-enabled";
+import {
+  togglePolicyEnabledVariables,
+  useTogglePolicyEnabled,
+} from "./use-toggle-policy-enabled";
 import {
   ALL_CATEGORIES,
+  AVAILABLE_CATEGORIES,
   CATEGORY_LEVEL_DETECTORS,
   FLAG_ONLY_CATEGORIES,
   PRESIDIO_CATEGORIES,
@@ -118,6 +122,7 @@ import {
   pinnedHiddenRuleIds,
   policyToCategories,
 } from "./policy-form";
+import { decodeKindScope, encodeKindScope } from "./policy-scope";
 import { SeverityBadge } from "./risk-ui";
 import { CelExpressionField } from "./cel-field";
 import { CelReferenceSheet } from "./cel-reference";
@@ -152,26 +157,11 @@ import {
 import { useChatTranscript } from "@/pages/chatLogs/useChatTranscript";
 import { formatUsageCost } from "@/pages/chatLogs/claudeUsage";
 
-// Judge models offered in the workbench (mirrors PolicyCenter's list; the
-// picker is intentionally small until the model catalog is centralized).
-// Sentinel for the "use server default" model option — Radix Select forbids an
-// empty-string item value, so "" is mapped through this and back on change.
-const DEFAULT_MODEL_VALUE = "__default__";
-
-// Gemini 3.5 Flash is deliberately absent: the judge disables reasoning
-// (`reasoning.effort: "none"`), which the Gemini 3.5 generation rejects with a
-// 400 — every evaluation on it would fail into the policy's error mode.
-const JUDGE_MODELS: { value: string; label: string }[] = [
-  { value: "", label: "Default (Gemini 3.1 Flash Lite)" },
-  { value: "anthropic/claude-sonnet-4.6", label: "Claude Sonnet 4.6" },
-  { value: "anthropic/claude-haiku-4.5", label: "Claude Haiku 4.5" },
-];
-
-const PROMPT_STEPS: Step[] = [
+const PROMPT_STEPS: PolicyStep[] = [
   {
     id: "guardrail",
     title: "Guardrail",
-    description: "Describe the behavior to catch and pick the judge.",
+    description: "Describe the behavior to catch and tune the judge.",
   },
   {
     id: "scope",
@@ -195,7 +185,7 @@ const PROMPT_STEPS: Step[] = [
   },
 ];
 
-const STANDARD_STEPS: Step[] = [
+const STANDARD_STEPS: PolicyStep[] = [
   {
     id: "detect",
     title: "Detect",
@@ -218,10 +208,50 @@ const STANDARD_STEPS: Step[] = [
   },
 ];
 
+const POLICY_ACTION_LABEL: Record<PolicyAction, string> = {
+  flag: "Flag",
+  warn: "Warn",
+  block: "Block",
+  quarantine: "Quarantine",
+};
+
+const POLICY_ACTION_MESSAGE: Record<
+  Exclude<PolicyAction, "flag">,
+  { label: string; description: string; placeholder: string }
+> = {
+  warn: {
+    label: "Warning message",
+    description:
+      "Shown to the user when this policy warns on a tool call or prompt. Supports %{match}, %{entity}, %{policy}, and %{rule} placeholders, substituted at warn time. Leave blank to use the default message.",
+    placeholder: "e.g. %{match} looks sensitive. Acknowledge to proceed.",
+  },
+  block: {
+    label: "Block message",
+    description:
+      "Shown to the user when this policy blocks a tool call or prompt. Leave blank to use the default message.",
+    placeholder:
+      "e.g. This action was blocked by your organization's security policy. Contact your admin for help.",
+  },
+  quarantine: {
+    label: "Quarantine message",
+    description:
+      "Shown to the user when this policy quarantines their session. Leave blank to use the default message.",
+    placeholder:
+      "e.g. This session was quarantined by your organization's security policy. Contact your admin for help.",
+  },
+};
+
+interface PolicyStep {
+  id: string;
+  title: string;
+  description: string;
+  badge?: string;
+}
+
 // Back the active step with a `?step=<id>` URL param so browser back/forward
 // (and refresh, and shareable links) traverse the steps. history: "push" makes
 // each step change its own history entry.
-function useStepParam(steps: Step[]): [number, (index: number) => void] {
+function useStepParam(steps: PolicyStep[]): [number, (index: number) => void] {
   const [raw, setRaw] = useQueryState("step", { history: "push" });
   const found = steps.findIndex((s) => s.id === raw);
   const index = found >= 0 ? found : 0;
@@ -252,7 +282,12 @@ export default function PolicyDetail(): JSX.Element {
 }
 
 function PolicyDetailContent({ policyId }: { policyId: string }): JSX.Element {
+  const location = useLocation();
   const { data: policy, isLoading } = useRiskPoliciesGet({ id: policyId });
+  useRecentLabelOverride(
+    location.pathname,
+    policy ? `Guardrail · ${policy.name}` : undefined,
+  );
 
   return (
     <Page>
@@ -281,7 +316,20 @@ function PolicyDetailContent({ policyId }: { policyId: string }): JSX.Element {
 // ── Create page (serves both standard and prompt policies) ───────────────────
 
 export function PolicyNew(): JSX.Element {
+  return (
+    <RequireScope scope="org:admin" level="page">
+      <PolicyNewContent />
+    </RequireScope>
+  );
+}
+
+function PolicyNewContent(): JSX.Element {
   const [kind] = useQueryState("kind");
+  const [category] = useQueryState("category");
+  const initialCategories =
+    category && AVAILABLE_CATEGORIES.has(category as RuleCategory)
+      ? new Set<RuleCategory>([category as RuleCategory])
+      : undefined;
   if (kind === "standard") {
     return (
       <Page>
@@ -289,7 +337,10 @@ export function PolicyNew(): JSX.Element {
           <Page.Header.Breadcrumbs />
         </Page.Header>
         <Page.Body>
-          <StandardPolicyEditor policy={null} />
+          <StandardPolicyEditor
+            policy={null}
+            initialCategories={initialCategories}
+          />
         </Page.Body>
       </Page>
     );
@@ -371,7 +422,7 @@ function HorizontalStepper({
   current,
   onStep,
 }: {
-  steps: Step[];
+  steps: PolicyStep[];
   current: number;
   onStep: (index: number) => void;
 }): JSX.Element {
@@ -430,7 +481,7 @@ function StepperShell({
   children,
 }: {
   header: React.ReactNode;
-  steps: Step[];
+  steps: PolicyStep[];
   current: number;
   onStep: (index: number) => void;
   children: React.ReactNode;
@@ -513,6 +564,7 @@ function PolicyHeader({
   const isCreate = policy === null;
   const routes = useRoutes();
   const [editingName, setEditingName] = useState(false);
+  const toggleEnabledMutation = useTogglePolicyEnabled();
 
   return (
     <Stack
@@ -558,11 +610,32 @@ function PolicyHeader({
               <Pencil className="text-muted-foreground h-4 w-4 shrink-0 opacity-0 transition-opacity group-hover:opacity-100" />
             </button>
           )}
-          {policy ? <StatusBadge /> : null}
+          {policy ? (
+            <>
+              <StatusBadge enabled={policy.enabled} />
+              <Switch
+                checked={policy.enabled}
+                disabled={saving || toggleEnabledMutation.isPending}
+                onCheckedChange={(checked) =>
+                  toggleEnabledMutation.mutate(
+                    togglePolicyEnabledVariables(
+                      policy.id,
+                      policy.name,
+                      checked,
+                    ),
+                  )
+                }
+                aria-label={policy.enabled ? "Disable policy" : "Enable policy"}
+              />
+            </>
+          ) : null}
         </Stack>
         {policy ? (
           <Text small muted>
             Version {policy.version} · {kindLabel}
+            {policy.enabled
+              ? null
+              : " · Inactive — new messages are not scanned"}
           </Text>
         ) : (
           <Text small muted>
@@ -614,8 +687,12 @@ function CreateButton({
   );
 }
 
-function StatusBadge(): JSX.Element {
-  return <Badge variant="success">Enforcing</Badge>;
+function StatusBadge({ enabled }: { enabled: boolean }): JSX.Element {
+  return (
+    <Badge variant={enabled ? "success" : "neutral"}>
+      {policyStatusLabel(enabled)}
+    </Badge>
+  );
 }
 
 // Vertical section header — title stacked over subtext with breathing room.
@@ -666,7 +743,6 @@ function PromptPolicyEditor({
   // defaults (create). Kept local so the author can iterate freely.
   const [name, setName] = useState(policy?.name ?? "");
   const [prompt, setPrompt] = useState(policy?.prompt ?? "");
-  const [model, setModel] = useState(policy?.modelConfig?.model ?? "");
   const [temperature, setTemperature] = useState(
     policy?.modelConfig?.temperature ?? 0,
   );
@@ -696,7 +772,6 @@ function PromptPolicyEditor({
     !!policy &&
     (name !== policy.name ||
       prompt !== (policy.prompt ?? "") ||
-      model !== (policy.modelConfig?.model ?? "") ||
       temperature !== (policy.modelConfig?.temperature ?? 0) ||
       failOpen !== (policy.modelConfig?.failOpen ?? true) ||
       !sameScopeOverrides(
@@ -721,6 +796,7 @@ function PromptPolicyEditor({
     onSuccess: () => {
       void invalidateAllRiskPoliciesGet(queryClient);
       void invalidateAllRiskListPolicies(queryClient);
+      toast.success("Policy updated");
     },
   });
   const createMutation = useRiskCreatePolicyMutation({
@@ -772,10 +848,8 @@ function PromptPolicyEditor({
         updateRiskPolicyRequestBody: {
           id: policy.id,
           name: name.trim() || policy.name,
-          enabled: true,
           prompt,
           modelConfig: {
-            model: model || undefined,
             temperature,
             failOpen,
           },
@@ -798,7 +872,7 @@ function PromptPolicyEditor({
           ...(autoName ? {} : { name: name.trim() }),
           enabled: true,
           prompt,
-          modelConfig: { model: model || undefined, temperature, failOpen },
+          modelConfig: { temperature, failOpen },
           ...(detectionScopes.length > 0 ? { detectionScopes } : {}),
           ...actionPayload(),
           ...(userMessage.trim() ? { userMessage } : {}),
@@ -822,30 +896,19 @@ function PromptPolicyEditor({
     scopeInclude: promptPolicyDef?.recommendedScopeInclude ?? "",
     scopeExempt: promptPolicyDef?.recommendedScopeExempt ?? "",
   };
-  // A preserved legacy policy-level scope still intersects the category scope
-  // in production (scanner: includes AND, exempts OR), so compose it here too.
   const guardrail = useMemo<Guardrail>(
     () => ({
       prompt,
-      model,
       temperature,
       failOpen,
-      messageTypes: policy?.messageTypes ?? [],
-      scopeInclude: intersectScopeExprs(
-        policy?.scopeInclude ?? "",
-        effectiveScope.scopeInclude,
-      ),
-      scopeExempt: unionScopeExprs(
-        policy?.scopeExempt ?? "",
-        effectiveScope.scopeExempt,
-      ),
+      messageTypes: [],
+      scopeInclude: effectiveScope.scopeInclude,
+      scopeExempt: effectiveScope.scopeExempt,
     }),
     [
       prompt,
-      model,
       temperature,
       failOpen,
-      policy,
       effectiveScope.scopeInclude,
       effectiveScope.scopeExempt,
     ],
@@ -877,8 +940,6 @@ function PromptPolicyEditor({
         <>
           <GuardrailCard prompt={prompt} onPromptChange={setPrompt} />
           <JudgeSection
-            model={model}
-            onModelChange={setModel}
             temperature={temperature}
             onTemperatureChange={setTemperature}
             failOpen={failOpen}
@@ -893,7 +954,6 @@ function PromptPolicyEditor({
           selectedCategories={promptPolicyCategories}
           scopeOverrides={scopeOverrides}
           setScopeOverrides={setScopeOverrides}
-          legacyPolicy={policy}
         />
       )}
 
@@ -926,7 +986,6 @@ function PromptPolicyEditor({
       {step === 4 && (
         <PromptReview
           prompt={prompt}
-          model={model}
           temperature={temperature}
           failOpen={failOpen}
           customizedScopeCount={scopeOverrides.size}
@@ -986,18 +1045,14 @@ function GuardrailCard({
   );
 }
 
-// ── Judge section (model · temperature · fail behavior) ──────────────────────
+// ── Judge section (temperature · fail behavior) ──────────────────────────────
 
 function JudgeSection({
-  model,
-  onModelChange,
   temperature,
   onTemperatureChange,
   failOpen,
   onFailOpenChange,
 }: {
-  model: string;
-  onModelChange: (v: string) => void;
   temperature: number;
   onTemperatureChange: (v: number) => void;
   failOpen: boolean;
@@ -1007,37 +1062,9 @@ function JudgeSection({
     <Card>
       <SectionHeader
         title="Judge"
-        description="The model that evaluates each in-scope message and how it behaves under error."
+        description="How the judge evaluates each in-scope message and how it behaves under error."
       />
       <Stack gap={8}>
-        {/* Model */}
-        <div className="space-y-2">
-          <Text small>Model</Text>
-          <Text small muted>
-            The LLM that judges each in-scope message.
-          </Text>
-          <Select
-            value={model || DEFAULT_MODEL_VALUE}
-            onValueChange={(v) =>
-              onModelChange(v === DEFAULT_MODEL_VALUE ? "" : v)
-            }
-          >
-            <SelectTrigger className="w-[16rem]">
-              <SelectValue placeholder="Default" />
-            </SelectTrigger>
-            <SelectContent>
-              {JUDGE_MODELS.map((m) => (
-                <SelectItem
-                  key={m.value || DEFAULT_MODEL_VALUE}
-                  value={m.value || DEFAULT_MODEL_VALUE}
-                >
-                  {m.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
         {/* Temperature */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
@@ -1095,13 +1122,11 @@ function ScopeStep({
   selectedCategories,
   scopeOverrides,
   setScopeOverrides,
-  legacyPolicy,
 }: {
   description: string;
   selectedCategories: Set<RuleCategory>;
   scopeOverrides: Map<string, ScopeOverride>;
   setScopeOverrides: (next: Map<string, ScopeOverride>) => void;
-  legacyPolicy?: RiskPolicy | null;
 }): JSX.Element {
   return (
     <Card>
@@ -1112,41 +1137,8 @@ function ScopeStep({
           scopeOverrides={scopeOverrides}
           setScopeOverrides={setScopeOverrides}
         />
-        <LegacyScopeNotice policy={legacyPolicy} />
       </Stack>
     </Card>
-  );
-}
-
-// Read-only reminder for policies that still carry a policy-level scope from
-// before category detection scopes became the only scoping surface. The
-// dashboard no longer edits these fields; a migration will fold them into
-// category scopes.
-function LegacyScopeNotice({
-  policy,
-}: {
-  policy?: RiskPolicy | null;
-}): JSX.Element | null {
-  if (!policy) return null;
-  const parts: string[] = [];
-  if ((policy.messageTypes ?? []).length > 0) {
-    parts.push(`message types: ${(policy.messageTypes ?? []).join(", ")}`);
-  }
-  if ((policy.scopeInclude ?? "").trim() !== "") {
-    parts.push(`include: ${(policy.scopeInclude ?? "").trim()}`);
-  }
-  if ((policy.scopeExempt ?? "").trim() !== "") {
-    parts.push(`exempt: ${(policy.scopeExempt ?? "").trim()}`);
-  }
-  if (parts.length === 0) return null;
-  return (
-    <div className="border-border bg-muted/20 border px-3 py-2">
-      <Text small muted>
-        A legacy policy-level scope still narrows this policy in addition to the
-        category scopes above ({parts.join("; ")}). It is preserved as-is and
-        will be migrated into category scopes.
-      </Text>
-    </div>
   );
 }
 
@@ -1170,8 +1162,10 @@ function RecommendedScopesPanel({
       .filter((category) =>
         selectedCategories.has(category.key as RuleCategory),
       )
-      .filter((category) => hasDisplayableRecommendedScope(category));
-  }, [categoriesQuery.data?.categories, selectedCategories]);
+      .filter((category) =>
+        hasDisplayableScope(category, scopeOverrides.get(category.key)),
+      );
+  }, [categoriesQuery.data?.categories, selectedCategories, scopeOverrides]);
 
   if (categoriesQuery.isLoading) {
     return (
@@ -1249,6 +1243,10 @@ function kindsFromExpr(expr: string): Set<ScopeSurfaceKind> | null {
   const trimmed = expr.trim();
   const out = new Set<ScopeSurfaceKind>();
   if (trimmed === "") return out;
+
+  const decoded = decodeKindScope(trimmed);
+  if (decoded) return new Set(decoded);
+
   for (const part of trimmed.split("||")) {
     const match = /^\(?\s*kind\s*==\s*"(\w+)"\s*\)?$/.exec(part.trim());
     const kind = match?.[1] as ScopeSurfaceKind | undefined;
@@ -1372,9 +1370,9 @@ function scopeFromSurfaces(surfaces: Set<ScopeSurfaceKind>): ScopeOverride {
     return { scopeInclude: "", scopeExempt: `kind == "${missing[0]}"` };
   }
   return {
-    scopeInclude: ALL_SURFACE_KINDS.filter((kind) => surfaces.has(kind))
-      .map((kind) => `kind == "${kind}"`)
-      .join(" || "),
+    scopeInclude: encodeKindScope(
+      ALL_SURFACE_KINDS.filter((kind) => surfaces.has(kind)),
+    ),
     scopeExempt: "",
   };
 }
@@ -1703,9 +1701,13 @@ function RecommendedScopeCodeLine({
   );
 }
 
-function hasDisplayableRecommendedScope(
+// A category with an empty recommendation (e.g. custom rules) still gets a
+// row when the policy carries its own scope for it.
+function hasDisplayableScope(
   category: RiskCategoryDefinition,
+  override: ScopeOverride | undefined,
 ): boolean {
+  if (override !== undefined) return true;
   if (!category.recommendedScopeApplicable) return true;
   return (
     category.recommendedScopeInclude.trim() !== "" ||
@@ -1750,24 +1752,6 @@ function scopeSummaryText(customizedScopeCount: number): string {
   return customizedScopeCount > 0
     ? `Recommended scopes (${customizedScopeCount} customized)`
     : "Recommended scopes";
-}
-
-// Combine two include expressions: a message must satisfy both.
-function intersectScopeExprs(a: string, b: string): string {
-  const left = a.trim();
-  const right = b.trim();
-  if (left === "") return right;
-  if (right === "") return left;
-  return `(${left}) && (${right})`;
-}
-
-// Combine two exempt expressions: either one takes the message out.
-function unionScopeExprs(a: string, b: string): string {
-  const left = a.trim();
-  const right = b.trim();
-  if (left === "") return right;
-  if (right === "") return left;
-  return `(${left}) || (${right})`;
 }
 
 function detectionScopesPayload(
@@ -1946,21 +1930,15 @@ function ActionStep({
           {action !== "flag" && (
             <div className="space-y-2">
               <Label className="text-sm font-medium">
-                {action === "warn" ? "Warning message" : "Custom Message"}
+                {POLICY_ACTION_MESSAGE[action].label}
               </Label>
               <p className="text-muted-foreground text-xs">
-                {action === "warn"
-                  ? "Shown to the user when this policy warns on a tool call or prompt. Supports %{match}, %{entity}, %{policy}, and %{rule} placeholders, substituted at warn time. Leave blank to use the default message."
-                  : "Shown to the user when this policy blocks a tool call or prompt. Leave blank to use the default message."}
+                {POLICY_ACTION_MESSAGE[action].description}
               </p>
               <TextArea
                 value={userMessage}
                 onChange={setUserMessage}
-                placeholder={
-                  action === "warn"
-                    ? "e.g. %{match} looks sensitive. Acknowledge to proceed."
-                    : "e.g. This action was blocked by your organization's security policy. Contact your admin for help."
-                }
+                placeholder={POLICY_ACTION_MESSAGE[action].placeholder}
                 rows={3}
               />
             </div>
@@ -1979,7 +1957,6 @@ type EvalMatchFilter = "all" | "flagged" | "clean";
 
 type Guardrail = {
   prompt: string;
-  model: string;
   temperature: number;
   failOpen: boolean;
   messageTypes: string[];
@@ -1995,7 +1972,6 @@ function evalRequestBody(guardrail: Guardrail, chatId: string) {
       chatId,
       prompt: guardrail.prompt,
       modelConfig: {
-        model: guardrail.model || undefined,
         temperature: guardrail.temperature,
         failOpen: guardrail.failOpen,
       },
@@ -2049,7 +2025,6 @@ function usePromptGuardrailEval(
 function guardrailEvalKey(guardrail: Guardrail): string {
   return JSON.stringify({
     prompt: guardrail.prompt,
-    model: guardrail.model || "",
     temperature: guardrail.temperature,
     failOpen: guardrail.failOpen,
     messageTypes: guardrail.messageTypes,
@@ -2306,7 +2281,6 @@ function EvalTuner({
 
 function PromptReview({
   prompt,
-  model,
   temperature,
   failOpen,
   customizedScopeCount,
@@ -2319,7 +2293,6 @@ function PromptReview({
   onVerdictSelect,
 }: {
   prompt: string;
-  model: string;
   temperature: number;
   failOpen: boolean;
   customizedScopeCount: number;
@@ -2332,8 +2305,6 @@ function PromptReview({
   onVerdictSelect: (verdict: EvalVerdict) => void;
 }): JSX.Element {
   const scopeText = scopeSummaryText(customizedScopeCount);
-  const modelLabel =
-    JUDGE_MODELS.find((m) => m.value === model)?.label ?? model;
 
   return (
     <Stack gap={4}>
@@ -2347,7 +2318,7 @@ function PromptReview({
           </SummaryRow>
           <SummaryRow label="Judge">
             <Text small className="text-right">
-              {modelLabel} · temperature {temperature.toFixed(1)} ·{" "}
+              temperature {temperature.toFixed(1)} ·{" "}
               {failOpen ? "fail open" : "fail closed"}
             </Text>
           </SummaryRow>
@@ -2358,11 +2329,7 @@ function PromptReview({
           </SummaryRow>
           <SummaryRow label="Action">
             <Badge variant={action === "flag" ? "neutral" : "warning"}>
-              {action === "block"
-                ? "Block"
-                : action === "warn"
-                  ? "Warn"
-                  : "Flag"}
+              {POLICY_ACTION_LABEL[action]}
             </Badge>
           </SummaryRow>
           <SummaryRow label="Severity">
@@ -3447,8 +3414,10 @@ function ReviewAgreementControl({
 
 export function StandardPolicyEditor({
   policy,
+  initialCategories,
 }: {
   policy: RiskPolicy | null;
+  initialCategories?: ReadonlySet<RuleCategory>;
 }): JSX.Element {
   const routes = useRoutes();
   const project = useProject();
@@ -3491,7 +3460,7 @@ export function StandardPolicyEditor({
   const [name, setName] = useState(policy?.name ?? "");
   const [selectedCategories, setSelectedCategories] = useState<
     Set<RuleCategory>
-  >(() => orig?.categories ?? new Set<RuleCategory>());
+  >(() => new Set(orig?.categories ?? initialCategories));
   const [disabledRules, setDisabledRules] = useState<Set<string>>(
     () => new Set(policy?.disabledRules ?? []),
   );
@@ -3512,6 +3481,11 @@ export function StandardPolicyEditor({
   >(() => new Set());
   const [originalShadowMCPURLs, setOriginalShadowMCPURLs] =
     useState<Set<string> | null>(null);
+  // Standing decisions the pending save would contradict; non-null opens the
+  // supersede confirmation.
+  const [supersedeConflicts, setSupersedeConflicts] = useState<
+    ShadowMCPDecisionConflict[] | null
+  >(null);
   const [shadowMCPDisposition, setShadowMCPDisposition] =
     useState<ShadowMCPDisposition>(
       () =>
@@ -3644,6 +3618,7 @@ export function StandardPolicyEditor({
 
   const updateMutation = useRiskPoliciesUpdateMutation({
     onSuccess: (_policy, variables) => {
+      setSupersedeConflicts(null);
       const submittedURLs = shadowMCPSelectionBaselineForUpdate(
         variables.request.updateRiskPolicyRequestBody,
       );
@@ -3655,6 +3630,7 @@ export function StandardPolicyEditor({
       void invalidateAllRiskListPolicies(queryClient);
       void invalidateAllShadowMCPInventory(queryClient);
       void invalidateShadowMCPPolicyInventory(queryClient, project.id);
+      toast.success("Policy updated");
     },
   });
   const createMutation = useRiskCreatePolicyMutation({
@@ -3697,7 +3673,7 @@ export function StandardPolicyEditor({
   };
 
   // Build the full update/create body, mirroring PolicyCenter's standard branch.
-  const save = () => {
+  const save = (options?: { supersedeDecisions?: boolean }) => {
     const {
       sources,
       presidioEntities,
@@ -3747,12 +3723,29 @@ export function StandardPolicyEditor({
     };
 
     if (policy) {
+      // A URL toggle that contradicts a recorded decision needs explicit
+      // confirmation before it supersedes that decision.
+      if (
+        !options?.supersedeDecisions &&
+        targetIsShadowMCPBlock &&
+        originalHasShadowMCPBlockConfiguration
+      ) {
+        const conflicts = shadowMCPDecisionConflicts({
+          servers: inventoryQuery.data ?? [],
+          originalURLs: originalShadowMCPURLs,
+          selectedURLs: selectedShadowMCPURLs,
+          disposition: shadowMCPDisposition,
+        });
+        if (conflicts.length > 0) {
+          setSupersedeConflicts(conflicts);
+          return;
+        }
+      }
       updateMutation.mutate({
         request: {
           updateRiskPolicyRequestBody: {
             id: policy.id,
             name: name.trim() || policy.name,
-            enabled: true,
             sources,
             presidioEntities,
             promptInjectionRules,
@@ -3773,6 +3766,9 @@ export function StandardPolicyEditor({
               ? presidioThreshold
               : DEFAULT_PRESIDIO_THRESHOLD,
             ...setupFields,
+            ...(options?.supersedeDecisions
+              ? { supersedeDecisions: true }
+              : {}),
             ...(identityActive ? { approvedEmailDomains } : {}),
           },
         },
@@ -3821,12 +3817,18 @@ export function StandardPolicyEditor({
       saving={saving}
       actionDisabled={saveBlocked}
       onSubmit={() => save()}
-      onCreate={save}
+      onCreate={() => save()}
     />
   );
 
   return (
     <>
+      <SupersedeDecisionsDialog
+        conflicts={supersedeConflicts}
+        saving={saving}
+        onCancel={() => setSupersedeConflicts(null)}
+        onConfirm={() => save({ supersedeDecisions: true })}
+      />
       <StepperShell
         header={header}
         steps={STANDARD_STEPS}
@@ -3876,8 +3878,8 @@ export function StandardPolicyEditor({
                         Attach your organization's custom rules as{" "}
                         <span className="text-foreground font-medium">
                           detectors
-                        </span>{" "}
-                        — a match records a finding.
+                        </span>
+                        . A match records a finding.
                       </>
                     }
                     idPrefix="detector"
@@ -3910,7 +3912,6 @@ export function StandardPolicyEditor({
             selectedCategories={selectedCategories}
             scopeOverrides={scopeOverrides}
             setScopeOverrides={setScopeOverrides}
-            legacyPolicy={policy}
           />
         )}
 
@@ -4072,7 +4073,7 @@ function StandardReview({
         </SummaryRow>
         <SummaryRow label="Action">
           <Badge variant={action === "flag" ? "neutral" : "warning"}>
-            {action === "block" ? "Block" : action === "warn" ? "Warn" : "Flag"}
+            {POLICY_ACTION_LABEL[action]}
           </Badge>
         </SummaryRow>
         <SummaryRow label="Severity">

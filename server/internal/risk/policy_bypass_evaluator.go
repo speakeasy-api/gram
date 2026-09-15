@@ -5,7 +5,7 @@ import (
 	"context"
 	"log/slog"
 	"maps"
-	"net/url"
+	"slices"
 	"strings"
 
 	"github.com/speakeasy-api/gram/server/internal/access/repo"
@@ -81,6 +81,30 @@ func (e *PolicyBypassEvaluator) CanBypass(ctx context.Context, input PolicyBypas
 	return e.CanBypassBatch(ctx, []PolicyBypassEvaluation{input})[input]
 }
 
+// CanBypassWithGrants evaluates a bypass against an already-loaded caller grant
+// snapshot. Callers that also need policy-audience checks use this to keep both
+// decisions consistent under the same transaction snapshot.
+func CanBypassWithGrants(grants []authz.Grant, input PolicyBypassEvaluation) bool {
+	return CanBypassBatchWithGrants(grants, []PolicyBypassEvaluation{input})[input]
+}
+
+// CanBypassBatchWithGrants evaluates several bypasses against one already-loaded
+// caller grant snapshot, canonicalizing legacy selectors only once.
+func CanBypassBatchWithGrants(grants []authz.Grant, inputs []PolicyBypassEvaluation) map[PolicyBypassEvaluation]bool {
+	decisions := make(map[PolicyBypassEvaluation]bool, len(inputs))
+	grants = canonicalizeRiskPolicyBypassGrants(grants)
+	for _, input := range inputs {
+		userID := strings.TrimSpace(input.UserID)
+		if userID == urn.AllUsersPrincipalID || strings.TrimSpace(input.PolicyID) == "" {
+			decisions[input] = false
+			continue
+		}
+		check := authz.RiskPolicyBypassCheck(input.PolicyID, policyBypassCheckDimensions(input.Target))
+		decisions[input] = authz.GrantsSatisfy(grants, check)
+	}
+	return decisions
+}
+
 // CanBypassBatch evaluates inputs after loading principals and grants once per
 // organization/user pair. Results are keyed by their complete input so callers
 // do not have to correlate parallel slices. Missing entries deny by default.
@@ -105,10 +129,7 @@ func (e *PolicyBypassEvaluator) CanBypassBatch(ctx context.Context, inputs []Pol
 		if !ok {
 			continue
 		}
-		for _, input := range evaluations {
-			check := authz.RiskPolicyBypassCheck(input.PolicyID, policyBypassCheckDimensions(input.Target))
-			results[input] = authz.GrantsSatisfy(grants, check)
-		}
+		maps.Copy(results, CanBypassBatchWithGrants(grants, evaluations))
 	}
 
 	return results
@@ -141,7 +162,7 @@ func (e *PolicyBypassEvaluator) loadGrants(ctx context.Context, organizationID s
 		)
 		return nil, false
 	}
-	return canonicalizeRiskPolicyBypassGrants(grants), true
+	return grants, true
 }
 
 // canonicalizeRiskPolicyBypassGrants keeps existing approvals compatible with
@@ -152,17 +173,22 @@ func (e *PolicyBypassEvaluator) loadGrants(ctx context.Context, organizationID s
 // without changing their persisted selector (which is still needed to revoke
 // or edit the original grant).
 func canonicalizeRiskPolicyBypassGrants(grants []authz.Grant) []authz.Grant {
-	for i := range grants {
-		selector := grants[i].Selector
-		if grants[i].Scope != authz.ScopeRiskPolicyBypass ||
-			selector[authz.SelectorKeyServerURL] == "" ||
-			selector[authz.SelectorKeyServerIdentity] == "" {
+	normalized := slices.Clone(grants)
+	for i := range normalized {
+		selector := normalized[i].Selector
+		if normalized[i].Scope != authz.ScopeRiskPolicyBypass || selector[authz.SelectorKeyServerURL] == "" {
 			continue
 		}
-		grants[i].Selector = maps.Clone(selector)
-		delete(grants[i].Selector, authz.SelectorKeyServerIdentity)
+		normalized[i].Selector = maps.Clone(selector)
+		if inventoryURL, ok := shadowmcp.CanonicalizeInventoryURL(selector[authz.SelectorKeyServerURL]); ok {
+			normalized[i].Selector[authz.SelectorKeyServerURL] = inventoryURL.CanonicalURL
+		}
+		// Legacy access-request approvals paired an identity label with the URL.
+		// A resolved canonical URL is the authorization target, not a second
+		// constraint. Malformed legacy URLs remain URL-only and non-matching.
+		delete(normalized[i].Selector, authz.SelectorKeyServerIdentity)
 	}
-	return grants
+	return normalized
 }
 
 func policyBypassCheckDimensions(target *PolicyBypassTarget) authz.RiskPolicyDimensions {
@@ -204,13 +230,9 @@ func ShadowMCPPolicyBypassTarget(evidence shadowmcp.AccessEvidence, toolName str
 }
 
 func normalizedShadowMCPServerURL(raw string) string {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
+	inventoryURL, ok := shadowmcp.CanonicalizeInventoryURL(raw)
+	if !ok {
 		return ""
 	}
-	parsed, err := url.Parse(raw)
-	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
-		return ""
-	}
-	return parsed.String()
+	return inventoryURL.CanonicalURL
 }

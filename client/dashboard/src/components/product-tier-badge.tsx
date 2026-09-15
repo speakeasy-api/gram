@@ -14,6 +14,7 @@ export const ProductTierBadge = ({
     base: "Base",
     base_PAID: "Base",
     __deprecated__pro: "Pro",
+    payg: "Pay As You Go",
     enterprise: "Enterprise",
   }[finalTier];
 

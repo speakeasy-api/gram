@@ -455,6 +455,16 @@ WHERE d.organization_id = @organization_id
   AND (sqlc.narg('provider')::text IS NULL OR c.provider = sqlc.narg('provider')::text)
   AND (sqlc.narg('cursor_id')::uuid IS NULL OR d.id < sqlc.narg('cursor_id')::uuid)
   AND (sqlc.narg('bucket')::text IS NULL OR sqlc.narg('bucket')::text = cov.coverage_bucket)
+  -- One person's devices. Both legs are needed and neither subsumes the other:
+  -- user_id is only set when the MDM's reported email resolved to a member, so
+  -- matching on it alone would drop the devices of someone whose MDM email is
+  -- a work alias, while matching on email alone would drop a device whose
+  -- assigned email the MDM has since changed.
+  AND (
+    (COALESCE(cardinality(@user_ids::text[]), 0) = 0 AND COALESCE(cardinality(@user_emails::text[]), 0) = 0)
+    OR d.user_id = ANY(@user_ids::text[])
+    OR LOWER(d.user_email) = ANY(ARRAY(SELECT LOWER(e) FROM unnest(@user_emails::text[]) AS e))
+  )
 ORDER BY d.id DESC
 LIMIT @page_limit;
 
@@ -510,6 +520,7 @@ SELECT
   , s.consecutive_failures
   , s.auto_paused_at
   , s.last_push_digest
+  , s.last_poll_success_at
 FROM device_integration_syncs s
 JOIN device_integration_schedules sch
   ON sch.id = s.device_integration_schedule_id
@@ -589,7 +600,7 @@ RETURNING (s.auto_paused_at IS NOT NULL)::boolean AS auto_paused;
 -- the insert a zero-row no-op, so stale-credential inventory never merges
 -- into the newly saved config.
 
--- name: UpsertMdmDevice :execrows
+-- name: UpsertMdmDevice :one
 INSERT INTO mdm_devices (
     device_integration_config_id
   , organization_id
@@ -632,7 +643,11 @@ ON CONFLICT (device_integration_config_id, external_id) DO UPDATE SET
     raw = EXCLUDED.raw,
     last_seen_at = clock_timestamp(),
     missing_since = NULL,
-    updated_at = clock_timestamp();
+    updated_at = clock_timestamp()
+-- xmax is zero on a freshly inserted row and non-zero on one this statement
+-- updated, which is the only way to tell a first sighting from a re-sighting:
+-- the row count is 1 for both. A guard failure returns no row at all.
+RETURNING (xmax = 0) AS inserted;
 
 -- MarkDevicesMissing stamps devices absent from the snapshot that started at
 -- @sync_started_at. INVARIANT: only ever called in the same transaction that

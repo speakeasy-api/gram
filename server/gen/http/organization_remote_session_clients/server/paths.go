@@ -42,6 +42,21 @@ func UpdateClientOrganizationRemoteSessionClientsPath() string {
 	return "/rpc/organizationRemoteSessionClients.update"
 }
 
+// AttachClientKeySetOrganizationRemoteSessionClientsPath returns the URL path to the organizationRemoteSessionClients service attachClientKeySet HTTP endpoint.
+func AttachClientKeySetOrganizationRemoteSessionClientsPath() string {
+	return "/rpc/organizationRemoteSessionClients.attachKeySet"
+}
+
+// DetachClientKeySetOrganizationRemoteSessionClientsPath returns the URL path to the organizationRemoteSessionClients service detachClientKeySet HTTP endpoint.
+func DetachClientKeySetOrganizationRemoteSessionClientsPath() string {
+	return "/rpc/organizationRemoteSessionClients.detachKeySet"
+}
+
+// RotateClientOrganizationRemoteSessionClientsPath returns the URL path to the organizationRemoteSessionClients service rotateClient HTTP endpoint.
+func RotateClientOrganizationRemoteSessionClientsPath() string {
+	return "/rpc/organizationRemoteSessionClients.rotate"
+}
+
 // DeleteClientOrganizationRemoteSessionClientsPath returns the URL path to the organizationRemoteSessionClients service deleteClient HTTP endpoint.
 func DeleteClientOrganizationRemoteSessionClientsPath() string {
 	return "/rpc/organizationRemoteSessionClients.delete"

@@ -12,6 +12,7 @@ type Tier string
 const (
 	TierBase       Tier = "free"
 	TierPro        Tier = "pro"
+	TierPayg       Tier = "payg"
 	TierEnterprise Tier = "enterprise"
 )
 

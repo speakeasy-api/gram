@@ -51,6 +51,7 @@ var _ = Service("skills", func() {
 			})
 			Attribute("content", String, "The complete uploaded SKILL.md content. Handlers enforce a maximum size of 65,536 UTF-8 bytes.")
 			Attribute("derived_from_version_id", String, "The optional source version this new version was derived from.", func() { Format(FormatUUID) })
+			Attribute("expected_latest_version_id", String, "The version the caller believes is current. When set, the write is rejected as a conflict if the skill has moved on.", func() { Format(FormatUUID) })
 			Required("id", "content")
 			security.SessionPayload()
 			security.ByKeyPayload()
@@ -112,6 +113,7 @@ var _ = Service("skills", func() {
 			Attribute("tags", ArrayOf(String, func() { MaxLength(64) }), "Registry tags for categorizing the skill. At most 40 tags.", func() {
 				MaxLength(40)
 			})
+			Attribute("expected_latest_version_id", String, "The version the caller believes is current. When set, the write is rejected as a conflict if the skill has moved on.", func() { Format(FormatUUID) })
 			Required("id", "name", "display_name", "tags")
 			security.SessionPayload()
 			security.ByKeyPayload()
@@ -148,6 +150,7 @@ var _ = Service("skills", func() {
 			Attribute("source_kinds", ArrayOf(String, func() { Enum("manual", "captured") }), "Only return skills from these sources.")
 			Attribute("classifications", ArrayOf(String, func() { Enum("custom", "built_in") }), "Only return skills with these classifications.")
 			Attribute("tags", ArrayOf(String, func() { MaxLength(64) }), "Only return skills that have any of these tags.")
+			Attribute("accessible_by", ArrayOf(String), "Only return skills at least one of these Gram users is authorized to reach, through a grant on them or on a role they hold, less any blocking grant withdrawing the same scope. Plugin membership is distribution and does not widen it.")
 			Attribute("sort", String, "How to order skills.", func() {
 				Enum("name", "updated")
 				Default("name")
@@ -167,6 +170,7 @@ var _ = Service("skills", func() {
 			Param("source_kinds")
 			Param("classifications")
 			Param("tags")
+			Param("accessible_by")
 			Param("sort")
 			security.SessionHeader()
 			security.ByKeyHeader()
@@ -739,6 +743,7 @@ var AddSkillVersionRequestBody = Type("AddSkillVersionRequestBody", func() {
 	})
 	Attribute("content", String, "The complete uploaded SKILL.md content. Handlers enforce a maximum size of 65,536 UTF-8 bytes.")
 	Attribute("derived_from_version_id", String, "The optional source version this new version was derived from.", func() { Format(FormatUUID) })
+	Attribute("expected_latest_version_id", String, "The version the caller believes is current. When set, the write is rejected as a conflict if the skill has moved on.", func() { Format(FormatUUID) })
 	Required("id", "content")
 })
 
@@ -789,6 +794,7 @@ var UpdateSkillRequestBody = Type("UpdateSkillRequestBody", func() {
 	Attribute("tags", ArrayOf(String, func() { MaxLength(64) }), "Registry tags for categorizing the skill. At most 40 tags.", func() {
 		MaxLength(40)
 	})
+	Attribute("expected_latest_version_id", String, "The version the caller believes is current. When set, the write is rejected as a conflict if the skill has moved on.", func() { Format(FormatUUID) })
 	Required("id", "name", "display_name", "tags")
 })
 
@@ -1201,6 +1207,18 @@ var RecordSkillResult = Type("RecordSkillResult", func() {
 	Required("skill", "version", "created_skill", "created_version")
 })
 
+var SkillPromptInjectionFinding = Type("SkillPromptInjectionFinding", func() {
+	Description("A prompt-injection finding for the current skill version. Raw matched content is intentionally omitted.")
+
+	Attribute("rule_id", String, "The rule that produced the finding.")
+	Attribute("description", String, "Why the current skill version was flagged.")
+	Attribute("confidence", Float64, "The classifier confidence from 0 to 1.", func() {
+		Minimum(0)
+		Maximum(1)
+	})
+	Required("rule_id", "description", "confidence")
+})
+
 var GetSkillResult = Type("GetSkillResult", func() {
 	Description("An active skill and its current version.")
 
@@ -1210,7 +1228,8 @@ var GetSkillResult = Type("GetSkillResult", func() {
 	Attribute("sighting_timeline", ArrayOf(SkillSightingTimelinePoint), "Daily activations by attributed version in the adoption window.")
 	Attribute("drift", SkillDrift, "Active-machine version convergence.")
 	Attribute("assistant_count", Int64, "The number of active, non-deleted assistants using the skill.")
-	Required("skill", "adoption", "sighting_timeline", "drift", "assistant_count")
+	Attribute("prompt_injection_findings", ArrayOf(SkillPromptInjectionFinding), "Open prompt-injection findings for the current skill version.")
+	Required("skill", "adoption", "sighting_timeline", "drift", "assistant_count", "prompt_injection_findings")
 })
 
 var ListSkillsResult = Type("ListSkillsResult", func() {

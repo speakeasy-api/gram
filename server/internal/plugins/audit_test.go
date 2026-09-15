@@ -228,7 +228,10 @@ func TestPluginsService_SetPluginAssignments_RecordsAuditEvent(t *testing.T) {
 	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionPluginAssignmentsSet)
 	require.NoError(t, err)
 
-	urns := []string{"role:engineering", "role:gtm"}
+	urns := []string{
+		createTestRolePrincipal(t, ctx, ti, "engineering"),
+		createTestRolePrincipal(t, ctx, ti, "gtm"),
+	}
 	_, err = ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{
 		PluginID:      plugin.ID,
 		PrincipalUrns: urns,
@@ -249,8 +252,8 @@ func TestPluginsService_SetPluginAssignments_RecordsAuditEvent(t *testing.T) {
 	got, ok := meta["principal_urns"].([]any)
 	require.True(t, ok)
 	require.Len(t, got, 2)
-	require.Equal(t, "role:engineering", got[0])
-	require.Equal(t, "role:gtm", got[1])
+	require.Equal(t, urns[0], got[0])
+	require.Equal(t, urns[1], got[1])
 }
 
 func TestPluginsService_PublishPlugins_RecordsAuditEvent(t *testing.T) {
@@ -293,4 +296,51 @@ func TestPluginsService_PublishPlugins_RecordsAuditEvent(t *testing.T) {
 	require.True(t, ok)
 	require.Len(t, slugs, 1)
 	require.Equal(t, plugin.Slug, slugs[0])
+}
+
+func TestPluginsService_UpdateMarketplaceSettings_RecordsAuditEvent(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionPluginMarketplaceSettingsUpdate)
+	require.NoError(t, err)
+
+	name := "audit-marketplace"
+	_, err = ti.service.UpdateMarketplaceSettings(ctx, &gen.UpdateMarketplaceSettingsPayload{
+		MarketplaceName: &name,
+	})
+	require.NoError(t, err)
+
+	disabled := false
+	_, err = ti.service.UpdateMarketplaceSettings(ctx, &gen.UpdateMarketplaceSettingsPayload{
+		ObservabilityEnabled: &disabled,
+	})
+	require.NoError(t, err)
+
+	// Re-saving the value already stored changes nothing, so it records nothing.
+	_, err = ti.service.UpdateMarketplaceSettings(ctx, &gen.UpdateMarketplaceSettingsPayload{
+		ObservabilityEnabled: &disabled,
+	})
+	require.NoError(t, err)
+
+	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionPluginMarketplaceSettingsUpdate)
+	require.NoError(t, err)
+	require.Equal(t, before+2, after, "each settings change records one entry, a no-op re-save none")
+
+	rec, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionPluginMarketplaceSettingsUpdate)
+	require.NoError(t, err)
+	require.Equal(t, "project", rec.SubjectType)
+
+	// The toggle's snapshots must show observability flipping without losing the
+	// name override the previous update set.
+	beforeSnap, err := audittest.DecodeAuditData(rec.BeforeSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, true, beforeSnap["observability_enabled"])
+	require.Equal(t, "audit-marketplace", beforeSnap["marketplace_name"])
+
+	afterSnap, err := audittest.DecodeAuditData(rec.AfterSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, false, afterSnap["observability_enabled"])
+	require.Equal(t, "audit-marketplace", afterSnap["marketplace_name"])
 }

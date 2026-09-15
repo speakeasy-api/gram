@@ -43,8 +43,7 @@ func memberSessionCtx(t *testing.T, ti *chatTestInstance) (context.Context, stri
 // rule can be asserted uniformly across all of them.
 type chatEndpoint struct {
 	name string
-	// write is true when the endpoint mutates the session, and so needs
-	// chat:write rather than chat:read for a non-owner.
+	// write is true when a non-owner needs chat:write rather than chat:read.
 	write bool
 	call  func(ctx context.Context, ti *chatTestInstance, chatID string) error
 }
@@ -72,7 +71,7 @@ func allChatEndpoints() []chatEndpoint {
 		{"generateTitle/rename", true, func(ctx context.Context, ti *chatTestInstance, id string) error {
 			return errOnly(ti.service.GenerateTitle(ctx, &gen.GenerateTitlePayload{ID: id, Title: &manualTitle}))
 		}},
-		{"setPinned", true, func(ctx context.Context, ti *chatTestInstance, id string) error {
+		{"setPinned", false, func(ctx context.Context, ti *chatTestInstance, id string) error {
 			return ti.service.SetPinned(ctx, &gen.SetPinnedPayload{ID: id, Pinned: true})
 		}},
 		{"summarize", false, func(ctx context.Context, ti *chatTestInstance, id string) error {
@@ -156,8 +155,9 @@ func TestChatEndpoints_CrossProjectIsNotFound(t *testing.T) {
 
 // The session-reviewer role: chat:read opens every transcript in the project,
 // which is what the Agent Sessions page relies on — but it must NOT convey the
-// power to delete, rename, pin, or annotate someone else's session. That is
-// chat:write's job, and it is the reason the two scopes are separate.
+// power to delete, rename, or annotate someone else's session. That is
+// chat:write's job, and it is the reason the two scopes are separate. Pinning
+// is a shared bookmark and follows the read grant.
 func TestChatEndpoints_ChatReadHolderCanReadButNotWrite(t *testing.T) {
 	t.Parallel()
 

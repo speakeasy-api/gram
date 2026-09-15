@@ -49,11 +49,12 @@ type Server struct {
 // a Tool to its MCP representation is returned to the caller.
 func (s *Server) mcpServer() (*mcp.Server, error) {
 	mcpServer := mcp.NewServer(&mcp.Implementation{
-		Icons:      nil,
-		Name:       "testmcp-server",
-		Title:      "",
-		Version:    "1.0.0",
-		WebsiteURL: "",
+		Icons:       nil,
+		Name:        "testmcp-server",
+		Title:       "",
+		Description: "",
+		Version:     "1.0.0",
+		WebsiteURL:  "",
 	}, nil)
 
 	for _, tool := range s.Tools {

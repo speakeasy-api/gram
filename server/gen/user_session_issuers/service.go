@@ -59,7 +59,8 @@ type CreateUserSessionIssuerPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
-	// Project-unique slug.
+	// Issuer slug. Unique for project-owned issuers; organization-owned issuer
+	// slugs may repeat.
 	Slug string
 	// How multi-remote authn challenges are presented: chain | interactive.
 	AuthnChallengeMode string
@@ -126,9 +127,7 @@ type UpdateUserSessionIssuerPayload struct {
 	// Which CIMD (OAuth Client ID Metadata Document) clients this issuer admits.
 	// 'presets' admits Gram's curated catalog plus this issuer's custom URLs;
 	// 'open' admits any spec-valid document; 'disabled' admits none and stops
-	// advertising CIMD support. Omit to leave unchanged. Once set, the issuer can
-	// never return to the unset state — it can only be moved between explicit
-	// modes.
+	// advertising CIMD support. Omit to leave unchanged.
 	ClientIDMetadataAdmissionMode *string
 }
 

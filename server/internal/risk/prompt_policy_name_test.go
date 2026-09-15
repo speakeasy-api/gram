@@ -9,7 +9,11 @@ import (
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/OpenRouterTeam/go-sdk/optionalnullable"
 
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/metering"
+	"github.com/speakeasy-api/gram/server/internal/stokens"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
@@ -97,6 +101,8 @@ func TestGeneratePromptPolicyName(t *testing.T) {
 			}
 			svc := &Service{
 				logger:           testenv.NewLogger(t),
+				riskRecorder:     metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+				stokenCodec:      stokens.NewCodec(),
 				completionClient: client,
 			}
 
@@ -115,7 +121,11 @@ func TestGeneratePromptPolicyName(t *testing.T) {
 func TestGeneratePromptPolicyNameWithoutCompletionClient(t *testing.T) {
 	t.Parallel()
 
-	svc := &Service{logger: testenv.NewLogger(t)}
+	svc := &Service{
+		logger:       testenv.NewLogger(t),
+		riskRecorder: metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		stokenCodec:  stokens.NewCodec(),
+	}
 	got := svc.generatePromptPolicyName(context.Background(), "org_123", "project_123", "Block destructive deletes", nil)
 	want := "Prompt Policy: Block destructive deletes"
 	if got != want {

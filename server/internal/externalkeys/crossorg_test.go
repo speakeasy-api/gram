@@ -48,9 +48,7 @@ func TestExternalKeys_CrossOrgIsolation(t *testing.T) {
 	_, err = ti.service.UpdateAwsKmsKey(otherCtx, &gen.UpdateAwsKmsKeyPayload{
 		ID:                     created.ID,
 		SessionToken:           nil,
-		KeyArn:                 "arn:aws:kms:us-east-1:999999999999:key/attacker",
 		ExternalCredentialID:   credID,
-		Algorithm:              "RS256",
 		Name:                   "hijacked",
 		CustomerGrantReference: nil,
 	})

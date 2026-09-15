@@ -21,7 +21,13 @@ describe("LiteLLM configuration", () => {
         - x-claude-code-session-id
         - session-id
         - thread-id
-        - x-session-id`);
+        - x-session-id
+        - x-gram-agent-provider
+        - x-gram-agent-session-id
+        - x-gram-agent-turn-id
+        - x-codex-turn-metadata
+        - x-opencode-session
+        - x-opencode-request`);
     expect(config).toContain("streaming_end_of_stream_only: true");
     expect(config).toContain("unreachable_fallback: fail_closed");
   });

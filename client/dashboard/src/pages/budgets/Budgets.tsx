@@ -1,4 +1,5 @@
-import { MetricCard, MetricCardGroup } from "@/components/chart/MetricCard";
+import { IdentityLink } from "@/components/identity-link";
+import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
 import { Page } from "@/components/page-layout";
 import { Button } from "@/components/ui/Button";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
@@ -227,8 +228,8 @@ function StatusSummaryCards({
       : 0;
 
   return (
-    <MetricCardGroup className="flex-wrap">
-      <MetricCard
+    <StatTileGroup className="flex-wrap">
+      <StatTile
         title="Spend vs budget"
         value={overview.totalSpendUsd}
         tone="information"
@@ -236,7 +237,7 @@ function StatusSummaryCards({
         format="number"
         subtext={`${spendPct}% of budgeted spend used across enabled rules`}
       />
-      <MetricCard
+      <StatTile
         title="Users over budget"
         value={overview.usersBreached}
         tone={overview.usersBreached > 0 ? "destructive" : "neutral"}
@@ -248,7 +249,7 @@ function StatusSummaryCards({
             : "people at or past a per-person limit"
         }
       />
-      <MetricCard
+      <StatTile
         title="Rules needing attention"
         value={overview.rulesUnhealthy}
         tone={overview.rulesUnhealthy > 0 ? "warning" : "neutral"}
@@ -260,7 +261,7 @@ function StatusSummaryCards({
             : "rules approaching or over budget"
         }
       />
-      <MetricCard
+      <StatTile
         title="Spend over budget"
         value={overview.spendOverBudgetUsd}
         tone={overview.spendOverBudgetUsd > 0 ? "destructive" : "neutral"}
@@ -273,7 +274,7 @@ function StatusSummaryCards({
             : "overages across individual limits"
         }
       />
-    </MetricCardGroup>
+    </StatTileGroup>
   );
 }
 
@@ -366,9 +367,6 @@ function RulesTab({
           placeholder="Search rules"
           debounceMs={150}
         />
-        <Page.Toolbar.Count>
-          {filtered.length} of {rules.length} rules
-        </Page.Toolbar.Count>
         <Page.Toolbar.Actions>
           <SegmentedControl<ActionFilter>
             value={actionFilter}
@@ -647,9 +645,6 @@ function EventsTab({ rules }: { rules: SpendRule[] }): JSX.Element {
   return (
     <div className="space-y-3">
       <Page.Toolbar>
-        <Page.Toolbar.Count>
-          {events.length} {events.length === 1 ? "event" : "events"}
-        </Page.Toolbar.Count>
         <Page.Toolbar.Actions>
           <SegmentedControl<EventFilter>
             value={filter}
@@ -763,7 +758,9 @@ function EventPersonCell({ event }: { event: SpendRuleEvent }): JSX.Element {
   return (
     <span className="block min-w-0">
       <span className="block truncate text-sm">
-        {event.displayName || event.email}
+        <IdentityLink identifier={event.email ? { email: event.email } : null}>
+          {event.displayName || event.email}
+        </IdentityLink>
       </span>
       {event.displayName && (
         <span className="text-muted-foreground block truncate text-xs">

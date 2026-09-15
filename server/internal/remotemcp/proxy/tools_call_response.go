@@ -75,6 +75,8 @@ func toolsCallResponseFromRemoteMessage(request *ToolsCallRequest, msg *RemoteMe
 		IsError:           false,
 		Meta:              nil,
 		StructuredContent: nil,
+		InputRequests:     nil,
+		RequestState:      "",
 	}
 	if err := json.Unmarshal(rpcResp.Result, result); err != nil {
 		return nil, false

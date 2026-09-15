@@ -34,6 +34,9 @@ type CreateGlobalIssuerRequestBody struct {
 	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
 	// Upstream token endpoint.
 	TokenEndpoint *string `form:"token_endpoint,omitempty" json:"token_endpoint,omitempty" xml:"token_endpoint,omitempty"`
+	// Upstream RFC 7009 revocation endpoint; absent for issuers that advertise
+	// none.
+	RevocationEndpoint *string `form:"revocation_endpoint,omitempty" json:"revocation_endpoint,omitempty" xml:"revocation_endpoint,omitempty"`
 	// Upstream RFC 7591 registration endpoint; absent for issuers without DCR.
 	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
 	// Upstream JWKS URI.
@@ -56,6 +59,11 @@ type CreateGlobalIssuerRequestBody struct {
 	ResponseTypesSupported []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
 	// Token endpoint auth methods advertised by the issuer.
 	TokenEndpointAuthMethodsSupported []string `form:"token_endpoint_auth_methods_supported,omitempty" json:"token_endpoint_auth_methods_supported,omitempty" xml:"token_endpoint_auth_methods_supported,omitempty"`
+	// PKCE code challenge methods advertised by the issuer (RFC 8414
+	// code_challenge_methods_supported). Omitting the field stores null ("not
+	// captured"), distinct from an empty array ("the issuer advertises no
+	// methods").
+	CodeChallengeMethodsSupported []string `form:"code_challenge_methods_supported,omitempty" json:"code_challenge_methods_supported,omitempty" xml:"code_challenge_methods_supported,omitempty"`
 	// When true, may unlock OIDC-aware behaviour. Default false.
 	Oidc *bool `form:"oidc,omitempty" json:"oidc,omitempty" xml:"oidc,omitempty"`
 	// When true, the MCP client registers and transacts directly with this issuer.
@@ -65,6 +73,38 @@ type CreateGlobalIssuerRequestBody struct {
 	// (OAuth CIMD draft). Discovered from the issuer metadata document and used to
 	// pre-flight outbound CIMD. Default false.
 	ClientIDMetadataDocumentSupported *bool `form:"client_id_metadata_document_supported,omitempty" json:"client_id_metadata_document_supported,omitempty" xml:"client_id_metadata_document_supported,omitempty"`
+	// OpenID Connect userinfo endpoint. Discovered from the issuer metadata
+	// document; rejected unless an absolute https URL, or http on loopback.
+	UserinfoEndpoint *string `form:"userinfo_endpoint,omitempty" json:"userinfo_endpoint,omitempty" xml:"userinfo_endpoint,omitempty"`
+	// RFC 7662 token introspection endpoint. Discovered from the issuer metadata
+	// document; rejected unless an absolute https URL, or http on loopback.
+	IntrospectionEndpoint *string `form:"introspection_endpoint,omitempty" json:"introspection_endpoint,omitempty" xml:"introspection_endpoint,omitempty"`
+	// Client authentication methods the introspection endpoint accepts. Omitting
+	// the field stores null ("not captured"), distinct from an empty array ("the
+	// issuer advertises none").
+	IntrospectionEndpointAuthMethodsSupported []string `form:"introspection_endpoint_auth_methods_supported,omitempty" json:"introspection_endpoint_auth_methods_supported,omitempty" xml:"introspection_endpoint_auth_methods_supported,omitempty"`
+	// JWS algorithms the issuer signs ID tokens with. Omitting the field stores
+	// null ("not captured"), distinct from an empty array ("the issuer advertises
+	// none").
+	IDTokenSigningAlgValuesSupported []string `form:"id_token_signing_alg_values_supported,omitempty" json:"id_token_signing_alg_values_supported,omitempty" xml:"id_token_signing_alg_values_supported,omitempty"`
+	// Claims the issuer can return in ID tokens and from userinfo. Omitting the
+	// field stores null ("not captured"), distinct from an empty array ("the
+	// issuer advertises none").
+	ClaimsSupported []string `form:"claims_supported,omitempty" json:"claims_supported,omitempty" xml:"claims_supported,omitempty"`
+	// Whether the issuer supports OpenID Connect Back-Channel Logout. Omitting the
+	// field stores null ("not captured").
+	BackchannelLogoutSupported *bool `form:"backchannel_logout_supported,omitempty" json:"backchannel_logout_supported,omitempty" xml:"backchannel_logout_supported,omitempty"`
+	// Whether the issuer includes the RFC 9207 iss parameter in authorization
+	// responses. Omitting the field stores null ("not captured").
+	AuthorizationResponseIssParameterSupported *bool `form:"authorization_response_iss_parameter_supported,omitempty" json:"authorization_response_iss_parameter_supported,omitempty" xml:"authorization_response_iss_parameter_supported,omitempty"`
+	// Operator-pinned scope request. When set, it is sent verbatim on the upstream
+	// authorize redirect in place of the resolved scope set. Omit or send an empty
+	// array to leave it unset.
+	ScopeOverride []string `form:"scope_override,omitempty" json:"scope_override,omitempty" xml:"scope_override,omitempty"`
+	// Whether the issuer accepts the RFC 8707 resource parameter. Omit to leave it
+	// unset: the parameter is then sent, and a login or refresh the issuer answers
+	// with invalid_target is retried once without it. Set false to never send it.
+	ResourceIndicatorSupported *bool `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
 }
 
 // UpdateGlobalIssuerRequestBody is the type of the "adminRemoteSessions"
@@ -78,7 +118,8 @@ type UpdateGlobalIssuerRequestBody struct {
 	Issuer *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
 	// Set or clear the display name. An empty string clears it to NULL.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// Set the logo asset id.
+	// Set or clear the logo asset id. An empty string clears it to NULL; any other
+	// value must be a uuid.
 	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
 	// Set or clear the URL of OAuth client setup documentation shown when creating
 	// clients. An empty string clears it to NULL; any other value must be an
@@ -88,6 +129,8 @@ type UpdateGlobalIssuerRequestBody struct {
 	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
 	// Upstream token endpoint.
 	TokenEndpoint *string `form:"token_endpoint,omitempty" json:"token_endpoint,omitempty" xml:"token_endpoint,omitempty"`
+	// Upstream RFC 7009 revocation endpoint.
+	RevocationEndpoint *string `form:"revocation_endpoint,omitempty" json:"revocation_endpoint,omitempty" xml:"revocation_endpoint,omitempty"`
 	// Upstream RFC 7591 registration endpoint.
 	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
 	// Upstream JWKS URI.
@@ -105,11 +148,47 @@ type UpdateGlobalIssuerRequestBody struct {
 	GrantTypesSupported               []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
 	ResponseTypesSupported            []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
 	TokenEndpointAuthMethodsSupported []string `form:"token_endpoint_auth_methods_supported,omitempty" json:"token_endpoint_auth_methods_supported,omitempty" xml:"token_endpoint_auth_methods_supported,omitempty"`
-	Oidc                              *bool    `form:"oidc,omitempty" json:"oidc,omitempty" xml:"oidc,omitempty"`
-	Passthrough                       *bool    `form:"passthrough,omitempty" json:"passthrough,omitempty" xml:"passthrough,omitempty"`
+	// PKCE code challenge methods advertised by the issuer (RFC 8414
+	// code_challenge_methods_supported). Omitting the field leaves the stored
+	// value unchanged; an empty array records that the issuer advertises no
+	// methods.
+	CodeChallengeMethodsSupported []string `form:"code_challenge_methods_supported,omitempty" json:"code_challenge_methods_supported,omitempty" xml:"code_challenge_methods_supported,omitempty"`
+	Oidc                          *bool    `form:"oidc,omitempty" json:"oidc,omitempty" xml:"oidc,omitempty"`
+	Passthrough                   *bool    `form:"passthrough,omitempty" json:"passthrough,omitempty" xml:"passthrough,omitempty"`
 	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
 	// (OAuth CIMD draft).
 	ClientIDMetadataDocumentSupported *bool `form:"client_id_metadata_document_supported,omitempty" json:"client_id_metadata_document_supported,omitempty" xml:"client_id_metadata_document_supported,omitempty"`
+	// Set or clear the OpenID Connect userinfo endpoint. An empty string clears it
+	// to NULL; any other value must be an absolute https URL, or http on loopback.
+	UserinfoEndpoint *string `form:"userinfo_endpoint,omitempty" json:"userinfo_endpoint,omitempty" xml:"userinfo_endpoint,omitempty"`
+	// Set or clear the RFC 7662 token introspection endpoint. An empty string
+	// clears it to NULL; any other value must be an absolute https URL, or http on
+	// loopback.
+	IntrospectionEndpoint *string `form:"introspection_endpoint,omitempty" json:"introspection_endpoint,omitempty" xml:"introspection_endpoint,omitempty"`
+	// Client authentication methods the introspection endpoint accepts. Omitting
+	// the field leaves the stored value unchanged; an empty array records that the
+	// issuer advertises none.
+	IntrospectionEndpointAuthMethodsSupported []string `form:"introspection_endpoint_auth_methods_supported,omitempty" json:"introspection_endpoint_auth_methods_supported,omitempty" xml:"introspection_endpoint_auth_methods_supported,omitempty"`
+	// JWS algorithms the issuer signs ID tokens with. Omitting the field leaves
+	// the stored value unchanged; an empty array records that the issuer
+	// advertises none.
+	IDTokenSigningAlgValuesSupported []string `form:"id_token_signing_alg_values_supported,omitempty" json:"id_token_signing_alg_values_supported,omitempty" xml:"id_token_signing_alg_values_supported,omitempty"`
+	// Claims the issuer can return in ID tokens and from userinfo. Omitting the
+	// field leaves the stored value unchanged; an empty array records that the
+	// issuer advertises none.
+	ClaimsSupported []string `form:"claims_supported,omitempty" json:"claims_supported,omitempty" xml:"claims_supported,omitempty"`
+	// Whether the issuer supports OpenID Connect Back-Channel Logout. Omitting the
+	// field leaves the stored value unchanged.
+	BackchannelLogoutSupported *bool `form:"backchannel_logout_supported,omitempty" json:"backchannel_logout_supported,omitempty" xml:"backchannel_logout_supported,omitempty"`
+	// Whether the issuer includes the RFC 9207 iss parameter in authorization
+	// responses. Omitting the field leaves the stored value unchanged.
+	AuthorizationResponseIssParameterSupported *bool `form:"authorization_response_iss_parameter_supported,omitempty" json:"authorization_response_iss_parameter_supported,omitempty" xml:"authorization_response_iss_parameter_supported,omitempty"`
+	// Set or clear the operator-pinned scope request. Omitting the field (or
+	// sending null) leaves the stored value unchanged; an empty array clears it.
+	ScopeOverride []string `json:"scope_override"`
+	// Whether the issuer accepts the RFC 8707 resource parameter. Omitting the
+	// field leaves the stored value unchanged.
+	ResourceIndicatorSupported *bool `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
 }
 
 // FetchGlobalIssuerMetadataRequestBody is the type of the
@@ -200,10 +279,18 @@ type CreateGlobalIssuerResponseBody struct {
 	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
 	// Upstream token endpoint.
 	TokenEndpoint *string `form:"token_endpoint,omitempty" json:"token_endpoint,omitempty" xml:"token_endpoint,omitempty"`
+	// Upstream RFC 7009 revocation endpoint; null when the issuer advertises none.
+	RevocationEndpoint *string `form:"revocation_endpoint,omitempty" json:"revocation_endpoint,omitempty" xml:"revocation_endpoint,omitempty"`
 	// Upstream RFC 7591 registration endpoint; null for issuers without DCR.
 	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
 	// Upstream JWKS URI; null when not advertised.
 	JwksURI *string `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	// When Gram last successfully fetched or revalidated the JWK Set. Null until
+	// the first successful refresh.
+	JwksFetchedAt *string `form:"jwks_fetched_at,omitempty" json:"jwks_fetched_at,omitempty" xml:"jwks_fetched_at,omitempty"`
+	// When the persisted JWK Set becomes stale under the upstream cache policy.
+	// Null until the first successful refresh.
+	JwksCacheExpiresAt *string `form:"jwks_cache_expires_at,omitempty" json:"jwks_cache_expires_at,omitempty" xml:"jwks_cache_expires_at,omitempty"`
 	// RFC 8414 service_documentation; developer documentation for the issuer. Null
 	// when not advertised.
 	ServiceDocumentation *string `form:"service_documentation,omitempty" json:"service_documentation,omitempty" xml:"service_documentation,omitempty"`
@@ -216,15 +303,63 @@ type CreateGlobalIssuerResponseBody struct {
 	GrantTypesSupported               []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
 	ResponseTypesSupported            []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
 	TokenEndpointAuthMethodsSupported []string `form:"token_endpoint_auth_methods_supported,omitempty" json:"token_endpoint_auth_methods_supported,omitempty" xml:"token_endpoint_auth_methods_supported,omitempty"`
+	// PKCE code challenge methods advertised by the issuer (RFC 8414
+	// code_challenge_methods_supported). Null when neither discovery nor an
+	// operator has captured the field for this issuer yet; an empty array means
+	// the field was captured and the issuer advertises no methods.
+	CodeChallengeMethodsSupported []string `json:"code_challenge_methods_supported"`
 	// When true, may unlock OIDC-aware behaviour.
 	Oidc bool `form:"oidc" json:"oidc" xml:"oidc"`
 	// When true, the MCP client registers and transacts directly with this issuer.
 	Passthrough bool `form:"passthrough" json:"passthrough" xml:"passthrough"`
 	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
 	// (OAuth CIMD draft).
-	ClientIDMetadataDocumentSupported bool   `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
-	CreatedAt                         string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                         string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	ClientIDMetadataDocumentSupported bool `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
+	// OpenID Connect userinfo endpoint. Null when not advertised or not yet
+	// captured by discovery.
+	UserinfoEndpoint *string `form:"userinfo_endpoint,omitempty" json:"userinfo_endpoint,omitempty" xml:"userinfo_endpoint,omitempty"`
+	// RFC 7662 token introspection endpoint. Null when not advertised or not yet
+	// captured by discovery.
+	IntrospectionEndpoint *string `form:"introspection_endpoint,omitempty" json:"introspection_endpoint,omitempty" xml:"introspection_endpoint,omitempty"`
+	// Client authentication methods the introspection endpoint accepts. Null until
+	// discovery captures the field; an empty array means the field was captured
+	// and the issuer advertises none.
+	IntrospectionEndpointAuthMethodsSupported []string `json:"introspection_endpoint_auth_methods_supported"`
+	// JWS algorithms the issuer signs ID tokens with. Null until discovery
+	// captures the field; an empty array means the field was captured and the
+	// issuer advertises none.
+	IDTokenSigningAlgValuesSupported []string `json:"id_token_signing_alg_values_supported"`
+	// Claims the issuer can return in ID tokens and from userinfo. Null until
+	// discovery captures the field; an empty array means the field was captured
+	// and the issuer advertises none.
+	ClaimsSupported []string `json:"claims_supported"`
+	// Whether the issuer supports OpenID Connect Back-Channel Logout. Null until
+	// discovery captures the field.
+	BackchannelLogoutSupported *bool `form:"backchannel_logout_supported,omitempty" json:"backchannel_logout_supported,omitempty" xml:"backchannel_logout_supported,omitempty"`
+	// Whether the issuer includes the RFC 9207 iss parameter in authorization
+	// responses. Null until discovery captures the field.
+	AuthorizationResponseIssParameterSupported *bool `form:"authorization_response_iss_parameter_supported,omitempty" json:"authorization_response_iss_parameter_supported,omitempty" xml:"authorization_response_iss_parameter_supported,omitempty"`
+	// Operator-pinned scope request, sent verbatim on the upstream authorize
+	// redirect in place of the resolved scope set. Null when unset.
+	ScopeOverride []string `json:"scope_override"`
+	// Whether the issuer accepts the RFC 8707 resource parameter, as an operator
+	// stated it. Null when unset; false omits the parameter on every grant.
+	ResourceIndicatorSupported *bool  `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
+	CreatedAt                  string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt                  string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// GetGlobalIssuerDuplicatePreflightResponseBody is the type of the
+// "adminRemoteSessions" service "getGlobalIssuerDuplicatePreflight" endpoint
+// HTTP response body.
+type GetGlobalIssuerDuplicatePreflightResponseBody struct {
+	// The matching issuers in resolution order: project-specific first, then
+	// organization-level, then platform-level, and oldest first within a tier. The
+	// first entry is therefore the issuer this caller would resolve the URL to
+	// today. Empty when nothing describes the URL yet, and empty when the supplied
+	// URL is not a usable issuer identifier. Truncated to a fixed cap, since a
+	// warning only has to establish that duplicates exist and name a few.
+	Matches []*RemoteSessionIssuerDuplicateMatchResponseBody `form:"matches" json:"matches" xml:"matches"`
 }
 
 // ListGlobalIssuersResponseBody is the type of the "adminRemoteSessions"
@@ -248,6 +383,9 @@ type GetGlobalIssuerResponseBody struct {
 	// project that are registered with this issuer. These block a delete but only
 	// their owning organization can remove them.
 	TenantClientCount int `form:"tenant_client_count" json:"tenant_client_count" xml:"tenant_client_count"`
+	// Number of active tenant-owned user_session_issuers that trust this issuer.
+	// These block deletion and must be unlinked by their owning organizations.
+	TrustedUserSessionIssuerCount int `form:"trusted_user_session_issuer_count" json:"trusted_user_session_issuer_count" xml:"trusted_user_session_issuer_count"`
 }
 
 // UpdateGlobalIssuerResponseBody is the type of the "adminRemoteSessions"
@@ -274,10 +412,18 @@ type UpdateGlobalIssuerResponseBody struct {
 	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
 	// Upstream token endpoint.
 	TokenEndpoint *string `form:"token_endpoint,omitempty" json:"token_endpoint,omitempty" xml:"token_endpoint,omitempty"`
+	// Upstream RFC 7009 revocation endpoint; null when the issuer advertises none.
+	RevocationEndpoint *string `form:"revocation_endpoint,omitempty" json:"revocation_endpoint,omitempty" xml:"revocation_endpoint,omitempty"`
 	// Upstream RFC 7591 registration endpoint; null for issuers without DCR.
 	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
 	// Upstream JWKS URI; null when not advertised.
 	JwksURI *string `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	// When Gram last successfully fetched or revalidated the JWK Set. Null until
+	// the first successful refresh.
+	JwksFetchedAt *string `form:"jwks_fetched_at,omitempty" json:"jwks_fetched_at,omitempty" xml:"jwks_fetched_at,omitempty"`
+	// When the persisted JWK Set becomes stale under the upstream cache policy.
+	// Null until the first successful refresh.
+	JwksCacheExpiresAt *string `form:"jwks_cache_expires_at,omitempty" json:"jwks_cache_expires_at,omitempty" xml:"jwks_cache_expires_at,omitempty"`
 	// RFC 8414 service_documentation; developer documentation for the issuer. Null
 	// when not advertised.
 	ServiceDocumentation *string `form:"service_documentation,omitempty" json:"service_documentation,omitempty" xml:"service_documentation,omitempty"`
@@ -290,15 +436,50 @@ type UpdateGlobalIssuerResponseBody struct {
 	GrantTypesSupported               []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
 	ResponseTypesSupported            []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
 	TokenEndpointAuthMethodsSupported []string `form:"token_endpoint_auth_methods_supported,omitempty" json:"token_endpoint_auth_methods_supported,omitempty" xml:"token_endpoint_auth_methods_supported,omitempty"`
+	// PKCE code challenge methods advertised by the issuer (RFC 8414
+	// code_challenge_methods_supported). Null when neither discovery nor an
+	// operator has captured the field for this issuer yet; an empty array means
+	// the field was captured and the issuer advertises no methods.
+	CodeChallengeMethodsSupported []string `json:"code_challenge_methods_supported"`
 	// When true, may unlock OIDC-aware behaviour.
 	Oidc bool `form:"oidc" json:"oidc" xml:"oidc"`
 	// When true, the MCP client registers and transacts directly with this issuer.
 	Passthrough bool `form:"passthrough" json:"passthrough" xml:"passthrough"`
 	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
 	// (OAuth CIMD draft).
-	ClientIDMetadataDocumentSupported bool   `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
-	CreatedAt                         string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                         string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	ClientIDMetadataDocumentSupported bool `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
+	// OpenID Connect userinfo endpoint. Null when not advertised or not yet
+	// captured by discovery.
+	UserinfoEndpoint *string `form:"userinfo_endpoint,omitempty" json:"userinfo_endpoint,omitempty" xml:"userinfo_endpoint,omitempty"`
+	// RFC 7662 token introspection endpoint. Null when not advertised or not yet
+	// captured by discovery.
+	IntrospectionEndpoint *string `form:"introspection_endpoint,omitempty" json:"introspection_endpoint,omitempty" xml:"introspection_endpoint,omitempty"`
+	// Client authentication methods the introspection endpoint accepts. Null until
+	// discovery captures the field; an empty array means the field was captured
+	// and the issuer advertises none.
+	IntrospectionEndpointAuthMethodsSupported []string `json:"introspection_endpoint_auth_methods_supported"`
+	// JWS algorithms the issuer signs ID tokens with. Null until discovery
+	// captures the field; an empty array means the field was captured and the
+	// issuer advertises none.
+	IDTokenSigningAlgValuesSupported []string `json:"id_token_signing_alg_values_supported"`
+	// Claims the issuer can return in ID tokens and from userinfo. Null until
+	// discovery captures the field; an empty array means the field was captured
+	// and the issuer advertises none.
+	ClaimsSupported []string `json:"claims_supported"`
+	// Whether the issuer supports OpenID Connect Back-Channel Logout. Null until
+	// discovery captures the field.
+	BackchannelLogoutSupported *bool `form:"backchannel_logout_supported,omitempty" json:"backchannel_logout_supported,omitempty" xml:"backchannel_logout_supported,omitempty"`
+	// Whether the issuer includes the RFC 9207 iss parameter in authorization
+	// responses. Null until discovery captures the field.
+	AuthorizationResponseIssParameterSupported *bool `form:"authorization_response_iss_parameter_supported,omitempty" json:"authorization_response_iss_parameter_supported,omitempty" xml:"authorization_response_iss_parameter_supported,omitempty"`
+	// Operator-pinned scope request, sent verbatim on the upstream authorize
+	// redirect in place of the resolved scope set. Null when unset.
+	ScopeOverride []string `json:"scope_override"`
+	// Whether the issuer accepts the RFC 8707 resource parameter, as an operator
+	// stated it. Null when unset; false omits the parameter on every grant.
+	ResourceIndicatorSupported *bool  `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
+	CreatedAt                  string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt                  string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // FetchGlobalIssuerMetadataResponseBody is the type of the
@@ -311,6 +492,8 @@ type FetchGlobalIssuerMetadataResponseBody struct {
 	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
 	// Upstream token endpoint.
 	TokenEndpoint *string `form:"token_endpoint,omitempty" json:"token_endpoint,omitempty" xml:"token_endpoint,omitempty"`
+	// Upstream RFC 7009 revocation endpoint; null when the issuer advertises none.
+	RevocationEndpoint *string `form:"revocation_endpoint,omitempty" json:"revocation_endpoint,omitempty" xml:"revocation_endpoint,omitempty"`
 	// Upstream RFC 7591 registration endpoint; null for issuers without DCR.
 	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
 	// Upstream JWKS URI; null when not advertised.
@@ -329,6 +512,9 @@ type FetchGlobalIssuerMetadataResponseBody struct {
 	GrantTypesSupported               []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
 	ResponseTypesSupported            []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
 	TokenEndpointAuthMethodsSupported []string `form:"token_endpoint_auth_methods_supported,omitempty" json:"token_endpoint_auth_methods_supported,omitempty" xml:"token_endpoint_auth_methods_supported,omitempty"`
+	// PKCE code challenge methods advertised in the discovery document (RFC 8414
+	// code_challenge_methods_supported). Null when the document omits the field.
+	CodeChallengeMethodsSupported []string `json:"code_challenge_methods_supported"`
 	// When true, may unlock OIDC-aware behaviour.
 	Oidc bool `form:"oidc" json:"oidc" xml:"oidc"`
 	// When true, the MCP client registers and transacts directly with this issuer.
@@ -336,6 +522,33 @@ type FetchGlobalIssuerMetadataResponseBody struct {
 	// Whether the issuer advertises support for a Client ID Metadata Document URL
 	// as client_id (OAuth CIMD draft), parsed from the discovery document.
 	ClientIDMetadataDocumentSupported bool `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
+	// OpenID Connect userinfo endpoint advertised in the discovery document. Null
+	// when not advertised.
+	UserinfoEndpoint *string `form:"userinfo_endpoint,omitempty" json:"userinfo_endpoint,omitempty" xml:"userinfo_endpoint,omitempty"`
+	// RFC 7662 token introspection endpoint advertised in the discovery document.
+	// Null when not advertised.
+	IntrospectionEndpoint *string `form:"introspection_endpoint,omitempty" json:"introspection_endpoint,omitempty" xml:"introspection_endpoint,omitempty"`
+	// Client authentication methods the introspection endpoint accepts. Null when
+	// the document omits the field.
+	IntrospectionEndpointAuthMethodsSupported []string `json:"introspection_endpoint_auth_methods_supported"`
+	// JWS algorithms the issuer signs ID tokens with. Null when the document omits
+	// the field.
+	IDTokenSigningAlgValuesSupported []string `json:"id_token_signing_alg_values_supported"`
+	// Claims the issuer can return in ID tokens and from userinfo. Null when the
+	// document omits the field.
+	ClaimsSupported []string `json:"claims_supported"`
+	// Whether the discovery document advertises OpenID Connect Back-Channel Logout
+	// support; false when the document omits the field.
+	BackchannelLogoutSupported bool `form:"backchannel_logout_supported" json:"backchannel_logout_supported" xml:"backchannel_logout_supported"`
+	// Whether the discovery document advertises the RFC 9207 iss parameter in
+	// authorization responses; false when the document omits the field.
+	AuthorizationResponseIssParameterSupported bool `form:"authorization_response_iss_parameter_supported" json:"authorization_response_iss_parameter_supported" xml:"authorization_response_iss_parameter_supported"`
+	// Operator-pinned scope request. Never proposed by discovery, so always null
+	// on a draft.
+	ScopeOverride []string `json:"scope_override"`
+	// Whether the issuer accepts the RFC 8707 resource parameter. Never proposed
+	// by discovery, so always null on a draft.
+	ResourceIndicatorSupported *bool `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
 	// Warnings describing any RFC 8414 deviations encountered during discovery.
 	DiscoveryWarnings []string `form:"discovery_warnings" json:"discovery_warnings" xml:"discovery_warnings"`
 }
@@ -378,9 +591,17 @@ type CreateGlobalClientResponseBody struct {
 	ClientIDIssuedAt    string  `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
+	// When the issuer's token endpoint last answered invalid_client for this
+	// client_id, meaning the issuer no longer recognizes the registration. Null
+	// while the registration is in good standing; cleared by a successful
+	// rotation, a successful refresh, or a replaced secret.
+	UpstreamRejectedAt *string `form:"upstream_rejected_at,omitempty" json:"upstream_rejected_at,omitempty" xml:"upstream_rejected_at,omitempty"`
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// The organization JSON Web Key Set attached to this client, managed through
+	// attachKeySet and detachKeySet. Null when no key set is attached.
+	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
@@ -424,9 +645,17 @@ type GetGlobalClientResponseBody struct {
 	ClientIDIssuedAt    string  `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
+	// When the issuer's token endpoint last answered invalid_client for this
+	// client_id, meaning the issuer no longer recognizes the registration. Null
+	// while the registration is in good standing; cleared by a successful
+	// rotation, a successful refresh, or a replaced secret.
+	UpstreamRejectedAt *string `form:"upstream_rejected_at,omitempty" json:"upstream_rejected_at,omitempty" xml:"upstream_rejected_at,omitempty"`
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// The organization JSON Web Key Set attached to this client, managed through
+	// attachKeySet and detachKeySet. Null when no key set is attached.
+	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
@@ -462,9 +691,17 @@ type UpdateGlobalClientResponseBody struct {
 	ClientIDIssuedAt    string  `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
+	// When the issuer's token endpoint last answered invalid_client for this
+	// client_id, meaning the issuer no longer recognizes the registration. Null
+	// while the registration is in good standing; cleared by a successful
+	// rotation, a successful refresh, or a replaced secret.
+	UpstreamRejectedAt *string `form:"upstream_rejected_at,omitempty" json:"upstream_rejected_at,omitempty" xml:"upstream_rejected_at,omitempty"`
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// The organization JSON Web Key Set attached to this client, managed through
+	// attachKeySet and detachKeySet. Null when no key set is attached.
+	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
@@ -493,19 +730,23 @@ type GetGlobalIssuerMigratePreflightResponseBody struct {
 	ClientCount int `form:"client_count" json:"client_count" xml:"client_count"`
 	// Display names of MCP servers attached to the source issuer's clients.
 	McpServerNames []string `form:"mcp_server_names" json:"mcp_server_names" xml:"mcp_server_names"`
-	// Names of the authorization-server metadata fields (issuer, token_endpoint,
-	// authorization_endpoint) that differ between source and target. Non-empty
-	// blocks the migration.
-	EndpointMismatches []string `form:"endpoint_mismatches" json:"endpoint_mismatches" xml:"endpoint_mismatches"`
+	// The authorization-server metadata fields (issuer, token_endpoint,
+	// authorization_endpoint) that differ between source and target, with both
+	// sides' values. Non-empty blocks the migration.
+	EndpointMismatches []*IssuerFieldMismatchResponseBody `form:"endpoint_mismatches" json:"endpoint_mismatches" xml:"endpoint_mismatches"`
 	// Display names of MCP servers where both the source and the target issuer
 	// already have a client bound. Non-empty blocks the migration; detach one
 	// client per listed server and retry.
 	ConflictingMcpServerNames []string `form:"conflicting_mcp_server_names" json:"conflicting_mcp_server_names" xml:"conflicting_mcp_server_names"`
-	// Non-blocking divergences (oidc, passthrough, scopes_supported). The target
-	// issuer's values become authoritative for the migrated clients.
-	Warnings []string `form:"warnings" json:"warnings" xml:"warnings"`
-	// TRUE when the migration would succeed: no endpoint mismatches and no
-	// conflicting MCP-server bindings.
+	// Non-blocking divergences (oidc, passthrough, scopes_supported), with both
+	// sides' values. The target issuer's values become authoritative for the
+	// migrated clients.
+	Warnings []*IssuerFieldMismatchResponseBody `form:"warnings" json:"warnings" xml:"warnings"`
+	// Number of user_session_issuers that trust the source. Any non-zero value
+	// blocks migration.
+	TrustedUserSessionIssuerCount int `form:"trusted_user_session_issuer_count" json:"trusted_user_session_issuer_count" xml:"trusted_user_session_issuer_count"`
+	// TRUE when the migration would succeed: no endpoint mismatches, conflicting
+	// MCP-server bindings, or user-session issuers that trust the source.
 	CanMigrate bool `form:"can_migrate" json:"can_migrate" xml:"can_migrate"`
 	// Number of tenant-owned remote_session_clients already registered with the
 	// target issuer, BEFORE this migration. Any non-zero value blocks deleting the
@@ -701,6 +942,196 @@ type CreateGlobalIssuerUnexpectedResponseBody struct {
 // "adminRemoteSessions" service "createGlobalIssuer" endpoint HTTP response
 // body for the "gateway_error" error.
 type CreateGlobalIssuerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetGlobalIssuerDuplicatePreflightUnauthorizedResponseBody is the type of the
+// "adminRemoteSessions" service "getGlobalIssuerDuplicatePreflight" endpoint
+// HTTP response body for the "unauthorized" error.
+type GetGlobalIssuerDuplicatePreflightUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetGlobalIssuerDuplicatePreflightForbiddenResponseBody is the type of the
+// "adminRemoteSessions" service "getGlobalIssuerDuplicatePreflight" endpoint
+// HTTP response body for the "forbidden" error.
+type GetGlobalIssuerDuplicatePreflightForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetGlobalIssuerDuplicatePreflightBadRequestResponseBody is the type of the
+// "adminRemoteSessions" service "getGlobalIssuerDuplicatePreflight" endpoint
+// HTTP response body for the "bad_request" error.
+type GetGlobalIssuerDuplicatePreflightBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetGlobalIssuerDuplicatePreflightNotFoundResponseBody is the type of the
+// "adminRemoteSessions" service "getGlobalIssuerDuplicatePreflight" endpoint
+// HTTP response body for the "not_found" error.
+type GetGlobalIssuerDuplicatePreflightNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetGlobalIssuerDuplicatePreflightConflictResponseBody is the type of the
+// "adminRemoteSessions" service "getGlobalIssuerDuplicatePreflight" endpoint
+// HTTP response body for the "conflict" error.
+type GetGlobalIssuerDuplicatePreflightConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetGlobalIssuerDuplicatePreflightUnsupportedMediaResponseBody is the type of
+// the "adminRemoteSessions" service "getGlobalIssuerDuplicatePreflight"
+// endpoint HTTP response body for the "unsupported_media" error.
+type GetGlobalIssuerDuplicatePreflightUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetGlobalIssuerDuplicatePreflightInvalidResponseBody is the type of the
+// "adminRemoteSessions" service "getGlobalIssuerDuplicatePreflight" endpoint
+// HTTP response body for the "invalid" error.
+type GetGlobalIssuerDuplicatePreflightInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetGlobalIssuerDuplicatePreflightInvariantViolationResponseBody is the type
+// of the "adminRemoteSessions" service "getGlobalIssuerDuplicatePreflight"
+// endpoint HTTP response body for the "invariant_violation" error.
+type GetGlobalIssuerDuplicatePreflightInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetGlobalIssuerDuplicatePreflightUnexpectedResponseBody is the type of the
+// "adminRemoteSessions" service "getGlobalIssuerDuplicatePreflight" endpoint
+// HTTP response body for the "unexpected" error.
+type GetGlobalIssuerDuplicatePreflightUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetGlobalIssuerDuplicatePreflightGatewayErrorResponseBody is the type of the
+// "adminRemoteSessions" service "getGlobalIssuerDuplicatePreflight" endpoint
+// HTTP response body for the "gateway_error" error.
+type GetGlobalIssuerDuplicatePreflightGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3378,6 +3809,30 @@ type MigrateToGlobalIssuerGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// RemoteSessionIssuerDuplicateMatchResponseBody is used to define fields on
+// response body types.
+type RemoteSessionIssuerDuplicateMatchResponseBody struct {
+	// The matching remote_session_issuer id.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The matching issuer's slug.
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// The matching issuer's display name. Empty when it has none, in which case a
+	// caller should fall back to the slug.
+	Name string `form:"name" json:"name" xml:"name"`
+	// The matching issuer's stored upstream URL. May differ in spelling from the
+	// URL that was looked up, since canonicalization is applied to the supplied
+	// URL only.
+	Issuer string `form:"issuer" json:"issuer" xml:"issuer"`
+	// Which tenancy tier owns the match: project-specific, organization-level, or
+	// platform-level.
+	Tier string `form:"tier" json:"tier" xml:"tier"`
+	// The owning project's name, for a project-specific match an organization
+	// administrator may not otherwise be able to place. Empty for
+	// organization-level and platform-level matches, and for project-specific
+	// matches returned to a caller already scoped to that project.
+	ProjectName string `form:"project_name" json:"project_name" xml:"project_name"`
+}
+
 // GlobalRemoteSessionIssuerResponseBody is used to define fields on response
 // body types.
 type GlobalRemoteSessionIssuerResponseBody struct {
@@ -3391,6 +3846,9 @@ type GlobalRemoteSessionIssuerResponseBody struct {
 	// project that are registered with this issuer. These block a delete but only
 	// their owning organization can remove them.
 	TenantClientCount int `form:"tenant_client_count" json:"tenant_client_count" xml:"tenant_client_count"`
+	// Number of active tenant-owned user_session_issuers that trust this issuer.
+	// These block deletion and must be unlinked by their owning organizations.
+	TrustedUserSessionIssuerCount int `form:"trusted_user_session_issuer_count" json:"trusted_user_session_issuer_count" xml:"trusted_user_session_issuer_count"`
 }
 
 // RemoteSessionIssuerResponseBody is used to define fields on response body
@@ -3417,10 +3875,18 @@ type RemoteSessionIssuerResponseBody struct {
 	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
 	// Upstream token endpoint.
 	TokenEndpoint *string `form:"token_endpoint,omitempty" json:"token_endpoint,omitempty" xml:"token_endpoint,omitempty"`
+	// Upstream RFC 7009 revocation endpoint; null when the issuer advertises none.
+	RevocationEndpoint *string `form:"revocation_endpoint,omitempty" json:"revocation_endpoint,omitempty" xml:"revocation_endpoint,omitempty"`
 	// Upstream RFC 7591 registration endpoint; null for issuers without DCR.
 	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
 	// Upstream JWKS URI; null when not advertised.
 	JwksURI *string `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	// When Gram last successfully fetched or revalidated the JWK Set. Null until
+	// the first successful refresh.
+	JwksFetchedAt *string `form:"jwks_fetched_at,omitempty" json:"jwks_fetched_at,omitempty" xml:"jwks_fetched_at,omitempty"`
+	// When the persisted JWK Set becomes stale under the upstream cache policy.
+	// Null until the first successful refresh.
+	JwksCacheExpiresAt *string `form:"jwks_cache_expires_at,omitempty" json:"jwks_cache_expires_at,omitempty" xml:"jwks_cache_expires_at,omitempty"`
 	// RFC 8414 service_documentation; developer documentation for the issuer. Null
 	// when not advertised.
 	ServiceDocumentation *string `form:"service_documentation,omitempty" json:"service_documentation,omitempty" xml:"service_documentation,omitempty"`
@@ -3433,15 +3899,50 @@ type RemoteSessionIssuerResponseBody struct {
 	GrantTypesSupported               []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
 	ResponseTypesSupported            []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
 	TokenEndpointAuthMethodsSupported []string `form:"token_endpoint_auth_methods_supported,omitempty" json:"token_endpoint_auth_methods_supported,omitempty" xml:"token_endpoint_auth_methods_supported,omitempty"`
+	// PKCE code challenge methods advertised by the issuer (RFC 8414
+	// code_challenge_methods_supported). Null when neither discovery nor an
+	// operator has captured the field for this issuer yet; an empty array means
+	// the field was captured and the issuer advertises no methods.
+	CodeChallengeMethodsSupported []string `json:"code_challenge_methods_supported"`
 	// When true, may unlock OIDC-aware behaviour.
 	Oidc bool `form:"oidc" json:"oidc" xml:"oidc"`
 	// When true, the MCP client registers and transacts directly with this issuer.
 	Passthrough bool `form:"passthrough" json:"passthrough" xml:"passthrough"`
 	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
 	// (OAuth CIMD draft).
-	ClientIDMetadataDocumentSupported bool   `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
-	CreatedAt                         string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                         string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	ClientIDMetadataDocumentSupported bool `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
+	// OpenID Connect userinfo endpoint. Null when not advertised or not yet
+	// captured by discovery.
+	UserinfoEndpoint *string `form:"userinfo_endpoint,omitempty" json:"userinfo_endpoint,omitempty" xml:"userinfo_endpoint,omitempty"`
+	// RFC 7662 token introspection endpoint. Null when not advertised or not yet
+	// captured by discovery.
+	IntrospectionEndpoint *string `form:"introspection_endpoint,omitempty" json:"introspection_endpoint,omitempty" xml:"introspection_endpoint,omitempty"`
+	// Client authentication methods the introspection endpoint accepts. Null until
+	// discovery captures the field; an empty array means the field was captured
+	// and the issuer advertises none.
+	IntrospectionEndpointAuthMethodsSupported []string `json:"introspection_endpoint_auth_methods_supported"`
+	// JWS algorithms the issuer signs ID tokens with. Null until discovery
+	// captures the field; an empty array means the field was captured and the
+	// issuer advertises none.
+	IDTokenSigningAlgValuesSupported []string `json:"id_token_signing_alg_values_supported"`
+	// Claims the issuer can return in ID tokens and from userinfo. Null until
+	// discovery captures the field; an empty array means the field was captured
+	// and the issuer advertises none.
+	ClaimsSupported []string `json:"claims_supported"`
+	// Whether the issuer supports OpenID Connect Back-Channel Logout. Null until
+	// discovery captures the field.
+	BackchannelLogoutSupported *bool `form:"backchannel_logout_supported,omitempty" json:"backchannel_logout_supported,omitempty" xml:"backchannel_logout_supported,omitempty"`
+	// Whether the issuer includes the RFC 9207 iss parameter in authorization
+	// responses. Null until discovery captures the field.
+	AuthorizationResponseIssParameterSupported *bool `form:"authorization_response_iss_parameter_supported,omitempty" json:"authorization_response_iss_parameter_supported,omitempty" xml:"authorization_response_iss_parameter_supported,omitempty"`
+	// Operator-pinned scope request, sent verbatim on the upstream authorize
+	// redirect in place of the resolved scope set. Null when unset.
+	ScopeOverride []string `json:"scope_override"`
+	// Whether the issuer accepts the RFC 8707 resource parameter, as an operator
+	// stated it. Null when unset; false omits the parameter on every grant.
+	ResourceIndicatorSupported *bool  `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
+	CreatedAt                  string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt                  string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // RemoteSessionClientResponseBody is used to define fields on response body
@@ -3469,9 +3970,17 @@ type RemoteSessionClientResponseBody struct {
 	ClientIDIssuedAt    string  `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
+	// When the issuer's token endpoint last answered invalid_client for this
+	// client_id, meaning the issuer no longer recognizes the registration. Null
+	// while the registration is in good standing; cleared by a successful
+	// rotation, a successful refresh, or a replaced secret.
+	UpstreamRejectedAt *string `form:"upstream_rejected_at,omitempty" json:"upstream_rejected_at,omitempty" xml:"upstream_rejected_at,omitempty"`
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// The organization JSON Web Key Set attached to this client, managed through
+	// attachKeySet and detachKeySet. Null when no key set is attached.
+	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
@@ -3496,13 +4005,34 @@ type IssuerConvergenceCandidateResponseBody struct {
 	// Number of non-deleted remote_session_clients that would move onto the target
 	// issuer.
 	ClientCount int `form:"client_count" json:"client_count" xml:"client_count"`
-	// Names of the authorization-server metadata fields (issuer, token_endpoint,
-	// authorization_endpoint) that differ from the target. Non-empty blocks the
-	// migration.
-	EndpointMismatches []string `form:"endpoint_mismatches" json:"endpoint_mismatches" xml:"endpoint_mismatches"`
-	// Non-blocking divergences (oidc, passthrough, scopes_supported). The target
-	// issuer's values become authoritative for the migrated clients.
-	Warnings []string `form:"warnings" json:"warnings" xml:"warnings"`
+	// The authorization-server metadata fields (issuer, token_endpoint,
+	// authorization_endpoint) that differ from the target, with both sides'
+	// values. Non-empty blocks the migration.
+	EndpointMismatches []*IssuerFieldMismatchResponseBody `form:"endpoint_mismatches" json:"endpoint_mismatches" xml:"endpoint_mismatches"`
+	// Non-blocking divergences (oidc, passthrough, scopes_supported), with both
+	// sides' values. The target issuer's values become authoritative for the
+	// migrated clients.
+	Warnings []*IssuerFieldMismatchResponseBody `form:"warnings" json:"warnings" xml:"warnings"`
+}
+
+// IssuerFieldMismatchResponseBody is used to define fields on response body
+// types.
+type IssuerFieldMismatchResponseBody struct {
+	// The differing field's name: issuer, token_endpoint, authorization_endpoint,
+	// oidc, passthrough, or scopes_supported.
+	Field string `form:"field" json:"field" xml:"field"`
+	// The source issuer's value for a scalar field, rendered as a string. Null
+	// when the source leaves the field unset, and null for a list-valued field.
+	SourceValue *string `form:"source_value,omitempty" json:"source_value,omitempty" xml:"source_value,omitempty"`
+	// The target issuer's value for a scalar field, rendered as a string. Null
+	// when the target leaves the field unset, and null for a list-valued field.
+	TargetValue *string `form:"target_value,omitempty" json:"target_value,omitempty" xml:"target_value,omitempty"`
+	// The source issuer's entries for a list-valued field. Absent for a scalar
+	// field, and absent when the source's list is empty.
+	SourceValues []string `form:"source_values,omitempty" json:"source_values,omitempty" xml:"source_values,omitempty"`
+	// The target issuer's entries for a list-valued field. Absent for a scalar
+	// field, and absent when the target's list is empty.
+	TargetValues []string `form:"target_values,omitempty" json:"target_values,omitempty" xml:"target_values,omitempty"`
 }
 
 // NewCreateGlobalIssuerResponseBody builds the HTTP response body from the
@@ -3520,16 +4050,24 @@ func NewCreateGlobalIssuerResponseBody(res *types.RemoteSessionIssuer) *CreateGl
 		ClientSetupDocumentationURL:       res.ClientSetupDocumentationURL,
 		AuthorizationEndpoint:             res.AuthorizationEndpoint,
 		TokenEndpoint:                     res.TokenEndpoint,
+		RevocationEndpoint:                res.RevocationEndpoint,
 		RegistrationEndpoint:              res.RegistrationEndpoint,
 		JwksURI:                           res.JwksURI,
+		JwksFetchedAt:                     res.JwksFetchedAt,
+		JwksCacheExpiresAt:                res.JwksCacheExpiresAt,
 		ServiceDocumentation:              res.ServiceDocumentation,
 		OpPolicyURI:                       res.OpPolicyURI,
 		OpTosURI:                          res.OpTosURI,
 		Oidc:                              res.Oidc,
 		Passthrough:                       res.Passthrough,
 		ClientIDMetadataDocumentSupported: res.ClientIDMetadataDocumentSupported,
-		CreatedAt:                         res.CreatedAt,
-		UpdatedAt:                         res.UpdatedAt,
+		UserinfoEndpoint:                  res.UserinfoEndpoint,
+		IntrospectionEndpoint:             res.IntrospectionEndpoint,
+		BackchannelLogoutSupported:        res.BackchannelLogoutSupported,
+		AuthorizationResponseIssParameterSupported: res.AuthorizationResponseIssParameterSupported,
+		ResourceIndicatorSupported:                 res.ResourceIndicatorSupported,
+		CreatedAt:                                  res.CreatedAt,
+		UpdatedAt:                                  res.UpdatedAt,
 	}
 	if res.ScopesSupported != nil {
 		body.ScopesSupported = make([]string, len(res.ScopesSupported))
@@ -3554,6 +4092,56 @@ func NewCreateGlobalIssuerResponseBody(res *types.RemoteSessionIssuer) *CreateGl
 		for i, val := range res.TokenEndpointAuthMethodsSupported {
 			body.TokenEndpointAuthMethodsSupported[i] = val
 		}
+	}
+	if res.CodeChallengeMethodsSupported != nil {
+		body.CodeChallengeMethodsSupported = make([]string, len(res.CodeChallengeMethodsSupported))
+		for i, val := range res.CodeChallengeMethodsSupported {
+			body.CodeChallengeMethodsSupported[i] = val
+		}
+	}
+	if res.IntrospectionEndpointAuthMethodsSupported != nil {
+		body.IntrospectionEndpointAuthMethodsSupported = make([]string, len(res.IntrospectionEndpointAuthMethodsSupported))
+		for i, val := range res.IntrospectionEndpointAuthMethodsSupported {
+			body.IntrospectionEndpointAuthMethodsSupported[i] = val
+		}
+	}
+	if res.IDTokenSigningAlgValuesSupported != nil {
+		body.IDTokenSigningAlgValuesSupported = make([]string, len(res.IDTokenSigningAlgValuesSupported))
+		for i, val := range res.IDTokenSigningAlgValuesSupported {
+			body.IDTokenSigningAlgValuesSupported[i] = val
+		}
+	}
+	if res.ClaimsSupported != nil {
+		body.ClaimsSupported = make([]string, len(res.ClaimsSupported))
+		for i, val := range res.ClaimsSupported {
+			body.ClaimsSupported[i] = val
+		}
+	}
+	if res.ScopeOverride != nil {
+		body.ScopeOverride = make([]string, len(res.ScopeOverride))
+		for i, val := range res.ScopeOverride {
+			body.ScopeOverride[i] = val
+		}
+	}
+	return body
+}
+
+// NewGetGlobalIssuerDuplicatePreflightResponseBody builds the HTTP response
+// body from the result of the "getGlobalIssuerDuplicatePreflight" endpoint of
+// the "adminRemoteSessions" service.
+func NewGetGlobalIssuerDuplicatePreflightResponseBody(res *types.RemoteSessionIssuerDuplicatePreflight) *GetGlobalIssuerDuplicatePreflightResponseBody {
+	body := &GetGlobalIssuerDuplicatePreflightResponseBody{}
+	if res.Matches != nil {
+		body.Matches = make([]*RemoteSessionIssuerDuplicateMatchResponseBody, len(res.Matches))
+		for i, val := range res.Matches {
+			if val == nil {
+				body.Matches[i] = nil
+				continue
+			}
+			body.Matches[i] = marshalTypesRemoteSessionIssuerDuplicateMatchToRemoteSessionIssuerDuplicateMatchResponseBody(val)
+		}
+	} else {
+		body.Matches = []*RemoteSessionIssuerDuplicateMatchResponseBody{}
 	}
 	return body
 }
@@ -3584,8 +4172,9 @@ func NewListGlobalIssuersResponseBody(res *adminremotesessions.ListGlobalRemoteS
 // of the "getGlobalIssuer" endpoint of the "adminRemoteSessions" service.
 func NewGetGlobalIssuerResponseBody(res *adminremotesessions.GlobalRemoteSessionIssuer) *GetGlobalIssuerResponseBody {
 	body := &GetGlobalIssuerResponseBody{
-		GlobalClientCount: res.GlobalClientCount,
-		TenantClientCount: res.TenantClientCount,
+		GlobalClientCount:             res.GlobalClientCount,
+		TenantClientCount:             res.TenantClientCount,
+		TrustedUserSessionIssuerCount: res.TrustedUserSessionIssuerCount,
 	}
 	if res.Issuer != nil {
 		body.Issuer = marshalTypesRemoteSessionIssuerToRemoteSessionIssuerResponseBody(res.Issuer)
@@ -3608,16 +4197,24 @@ func NewUpdateGlobalIssuerResponseBody(res *types.RemoteSessionIssuer) *UpdateGl
 		ClientSetupDocumentationURL:       res.ClientSetupDocumentationURL,
 		AuthorizationEndpoint:             res.AuthorizationEndpoint,
 		TokenEndpoint:                     res.TokenEndpoint,
+		RevocationEndpoint:                res.RevocationEndpoint,
 		RegistrationEndpoint:              res.RegistrationEndpoint,
 		JwksURI:                           res.JwksURI,
+		JwksFetchedAt:                     res.JwksFetchedAt,
+		JwksCacheExpiresAt:                res.JwksCacheExpiresAt,
 		ServiceDocumentation:              res.ServiceDocumentation,
 		OpPolicyURI:                       res.OpPolicyURI,
 		OpTosURI:                          res.OpTosURI,
 		Oidc:                              res.Oidc,
 		Passthrough:                       res.Passthrough,
 		ClientIDMetadataDocumentSupported: res.ClientIDMetadataDocumentSupported,
-		CreatedAt:                         res.CreatedAt,
-		UpdatedAt:                         res.UpdatedAt,
+		UserinfoEndpoint:                  res.UserinfoEndpoint,
+		IntrospectionEndpoint:             res.IntrospectionEndpoint,
+		BackchannelLogoutSupported:        res.BackchannelLogoutSupported,
+		AuthorizationResponseIssParameterSupported: res.AuthorizationResponseIssParameterSupported,
+		ResourceIndicatorSupported:                 res.ResourceIndicatorSupported,
+		CreatedAt:                                  res.CreatedAt,
+		UpdatedAt:                                  res.UpdatedAt,
 	}
 	if res.ScopesSupported != nil {
 		body.ScopesSupported = make([]string, len(res.ScopesSupported))
@@ -3641,6 +4238,36 @@ func NewUpdateGlobalIssuerResponseBody(res *types.RemoteSessionIssuer) *UpdateGl
 		body.TokenEndpointAuthMethodsSupported = make([]string, len(res.TokenEndpointAuthMethodsSupported))
 		for i, val := range res.TokenEndpointAuthMethodsSupported {
 			body.TokenEndpointAuthMethodsSupported[i] = val
+		}
+	}
+	if res.CodeChallengeMethodsSupported != nil {
+		body.CodeChallengeMethodsSupported = make([]string, len(res.CodeChallengeMethodsSupported))
+		for i, val := range res.CodeChallengeMethodsSupported {
+			body.CodeChallengeMethodsSupported[i] = val
+		}
+	}
+	if res.IntrospectionEndpointAuthMethodsSupported != nil {
+		body.IntrospectionEndpointAuthMethodsSupported = make([]string, len(res.IntrospectionEndpointAuthMethodsSupported))
+		for i, val := range res.IntrospectionEndpointAuthMethodsSupported {
+			body.IntrospectionEndpointAuthMethodsSupported[i] = val
+		}
+	}
+	if res.IDTokenSigningAlgValuesSupported != nil {
+		body.IDTokenSigningAlgValuesSupported = make([]string, len(res.IDTokenSigningAlgValuesSupported))
+		for i, val := range res.IDTokenSigningAlgValuesSupported {
+			body.IDTokenSigningAlgValuesSupported[i] = val
+		}
+	}
+	if res.ClaimsSupported != nil {
+		body.ClaimsSupported = make([]string, len(res.ClaimsSupported))
+		for i, val := range res.ClaimsSupported {
+			body.ClaimsSupported[i] = val
+		}
+	}
+	if res.ScopeOverride != nil {
+		body.ScopeOverride = make([]string, len(res.ScopeOverride))
+		for i, val := range res.ScopeOverride {
+			body.ScopeOverride[i] = val
 		}
 	}
 	return body
@@ -3654,6 +4281,7 @@ func NewFetchGlobalIssuerMetadataResponseBody(res *types.RemoteSessionIssuerDraf
 		Issuer:                            res.Issuer,
 		AuthorizationEndpoint:             res.AuthorizationEndpoint,
 		TokenEndpoint:                     res.TokenEndpoint,
+		RevocationEndpoint:                res.RevocationEndpoint,
 		RegistrationEndpoint:              res.RegistrationEndpoint,
 		JwksURI:                           res.JwksURI,
 		ServiceDocumentation:              res.ServiceDocumentation,
@@ -3662,6 +4290,11 @@ func NewFetchGlobalIssuerMetadataResponseBody(res *types.RemoteSessionIssuerDraf
 		Oidc:                              res.Oidc,
 		Passthrough:                       res.Passthrough,
 		ClientIDMetadataDocumentSupported: res.ClientIDMetadataDocumentSupported,
+		UserinfoEndpoint:                  res.UserinfoEndpoint,
+		IntrospectionEndpoint:             res.IntrospectionEndpoint,
+		BackchannelLogoutSupported:        res.BackchannelLogoutSupported,
+		AuthorizationResponseIssParameterSupported: res.AuthorizationResponseIssParameterSupported,
+		ResourceIndicatorSupported:                 res.ResourceIndicatorSupported,
 	}
 	if res.ScopesSupported != nil {
 		body.ScopesSupported = make([]string, len(res.ScopesSupported))
@@ -3685,6 +4318,36 @@ func NewFetchGlobalIssuerMetadataResponseBody(res *types.RemoteSessionIssuerDraf
 		body.TokenEndpointAuthMethodsSupported = make([]string, len(res.TokenEndpointAuthMethodsSupported))
 		for i, val := range res.TokenEndpointAuthMethodsSupported {
 			body.TokenEndpointAuthMethodsSupported[i] = val
+		}
+	}
+	if res.CodeChallengeMethodsSupported != nil {
+		body.CodeChallengeMethodsSupported = make([]string, len(res.CodeChallengeMethodsSupported))
+		for i, val := range res.CodeChallengeMethodsSupported {
+			body.CodeChallengeMethodsSupported[i] = val
+		}
+	}
+	if res.IntrospectionEndpointAuthMethodsSupported != nil {
+		body.IntrospectionEndpointAuthMethodsSupported = make([]string, len(res.IntrospectionEndpointAuthMethodsSupported))
+		for i, val := range res.IntrospectionEndpointAuthMethodsSupported {
+			body.IntrospectionEndpointAuthMethodsSupported[i] = val
+		}
+	}
+	if res.IDTokenSigningAlgValuesSupported != nil {
+		body.IDTokenSigningAlgValuesSupported = make([]string, len(res.IDTokenSigningAlgValuesSupported))
+		for i, val := range res.IDTokenSigningAlgValuesSupported {
+			body.IDTokenSigningAlgValuesSupported[i] = val
+		}
+	}
+	if res.ClaimsSupported != nil {
+		body.ClaimsSupported = make([]string, len(res.ClaimsSupported))
+		for i, val := range res.ClaimsSupported {
+			body.ClaimsSupported[i] = val
+		}
+	}
+	if res.ScopeOverride != nil {
+		body.ScopeOverride = make([]string, len(res.ScopeOverride))
+		for i, val := range res.ScopeOverride {
+			body.ScopeOverride[i] = val
 		}
 	}
 	if res.DiscoveryWarnings != nil {
@@ -3730,7 +4393,9 @@ func NewCreateGlobalClientResponseBody(res *types.RemoteSessionClient) *CreateGl
 		ClientIDMetadataURI:     res.ClientIDMetadataURI,
 		ClientIDIssuedAt:        res.ClientIDIssuedAt,
 		ClientSecretExpiresAt:   res.ClientSecretExpiresAt,
+		UpstreamRejectedAt:      res.UpstreamRejectedAt,
 		TokenEndpointAuthMethod: res.TokenEndpointAuthMethod,
+		JSONWebKeySetID:         res.JSONWebKeySetID,
 		Audience:                res.Audience,
 		CreatedAt:               res.CreatedAt,
 		UpdatedAt:               res.UpdatedAt,
@@ -3786,7 +4451,9 @@ func NewGetGlobalClientResponseBody(res *types.RemoteSessionClient) *GetGlobalCl
 		ClientIDMetadataURI:     res.ClientIDMetadataURI,
 		ClientIDIssuedAt:        res.ClientIDIssuedAt,
 		ClientSecretExpiresAt:   res.ClientSecretExpiresAt,
+		UpstreamRejectedAt:      res.UpstreamRejectedAt,
 		TokenEndpointAuthMethod: res.TokenEndpointAuthMethod,
+		JSONWebKeySetID:         res.JSONWebKeySetID,
 		Audience:                res.Audience,
 		CreatedAt:               res.CreatedAt,
 		UpdatedAt:               res.UpdatedAt,
@@ -3821,7 +4488,9 @@ func NewUpdateGlobalClientResponseBody(res *types.RemoteSessionClient) *UpdateGl
 		ClientIDMetadataURI:     res.ClientIDMetadataURI,
 		ClientIDIssuedAt:        res.ClientIDIssuedAt,
 		ClientSecretExpiresAt:   res.ClientSecretExpiresAt,
+		UpstreamRejectedAt:      res.UpstreamRejectedAt,
 		TokenEndpointAuthMethod: res.TokenEndpointAuthMethod,
+		JSONWebKeySetID:         res.JSONWebKeySetID,
 		Audience:                res.Audience,
 		CreatedAt:               res.CreatedAt,
 		UpdatedAt:               res.UpdatedAt,
@@ -3870,9 +4539,10 @@ func NewListGlobalIssuerConvergenceCandidatesResponseBody(res *adminremotesessio
 // "adminRemoteSessions" service.
 func NewGetGlobalIssuerMigratePreflightResponseBody(res *adminremotesessions.IssuerMigratePreflight) *GetGlobalIssuerMigratePreflightResponseBody {
 	body := &GetGlobalIssuerMigratePreflightResponseBody{
-		ClientCount:             res.ClientCount,
-		CanMigrate:              res.CanMigrate,
-		TargetTenantClientCount: res.TargetTenantClientCount,
+		ClientCount:                   res.ClientCount,
+		TrustedUserSessionIssuerCount: res.TrustedUserSessionIssuerCount,
+		CanMigrate:                    res.CanMigrate,
+		TargetTenantClientCount:       res.TargetTenantClientCount,
 	}
 	if res.McpServerNames != nil {
 		body.McpServerNames = make([]string, len(res.McpServerNames))
@@ -3883,12 +4553,16 @@ func NewGetGlobalIssuerMigratePreflightResponseBody(res *adminremotesessions.Iss
 		body.McpServerNames = []string{}
 	}
 	if res.EndpointMismatches != nil {
-		body.EndpointMismatches = make([]string, len(res.EndpointMismatches))
+		body.EndpointMismatches = make([]*IssuerFieldMismatchResponseBody, len(res.EndpointMismatches))
 		for i, val := range res.EndpointMismatches {
-			body.EndpointMismatches[i] = val
+			if val == nil {
+				body.EndpointMismatches[i] = nil
+				continue
+			}
+			body.EndpointMismatches[i] = marshalTypesIssuerFieldMismatchToIssuerFieldMismatchResponseBody(val)
 		}
 	} else {
-		body.EndpointMismatches = []string{}
+		body.EndpointMismatches = []*IssuerFieldMismatchResponseBody{}
 	}
 	if res.ConflictingMcpServerNames != nil {
 		body.ConflictingMcpServerNames = make([]string, len(res.ConflictingMcpServerNames))
@@ -3899,12 +4573,16 @@ func NewGetGlobalIssuerMigratePreflightResponseBody(res *adminremotesessions.Iss
 		body.ConflictingMcpServerNames = []string{}
 	}
 	if res.Warnings != nil {
-		body.Warnings = make([]string, len(res.Warnings))
+		body.Warnings = make([]*IssuerFieldMismatchResponseBody, len(res.Warnings))
 		for i, val := range res.Warnings {
-			body.Warnings[i] = val
+			if val == nil {
+				body.Warnings[i] = nil
+				continue
+			}
+			body.Warnings[i] = marshalTypesIssuerFieldMismatchToIssuerFieldMismatchResponseBody(val)
 		}
 	} else {
-		body.Warnings = []string{}
+		body.Warnings = []*IssuerFieldMismatchResponseBody{}
 	}
 	return body
 }
@@ -4063,6 +4741,158 @@ func NewCreateGlobalIssuerUnexpectedResponseBody(res *goa.ServiceError) *CreateG
 // "adminRemoteSessions" service.
 func NewCreateGlobalIssuerGatewayErrorResponseBody(res *goa.ServiceError) *CreateGlobalIssuerGatewayErrorResponseBody {
 	body := &CreateGlobalIssuerGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetGlobalIssuerDuplicatePreflightUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "getGlobalIssuerDuplicatePreflight"
+// endpoint of the "adminRemoteSessions" service.
+func NewGetGlobalIssuerDuplicatePreflightUnauthorizedResponseBody(res *goa.ServiceError) *GetGlobalIssuerDuplicatePreflightUnauthorizedResponseBody {
+	body := &GetGlobalIssuerDuplicatePreflightUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetGlobalIssuerDuplicatePreflightForbiddenResponseBody builds the HTTP
+// response body from the result of the "getGlobalIssuerDuplicatePreflight"
+// endpoint of the "adminRemoteSessions" service.
+func NewGetGlobalIssuerDuplicatePreflightForbiddenResponseBody(res *goa.ServiceError) *GetGlobalIssuerDuplicatePreflightForbiddenResponseBody {
+	body := &GetGlobalIssuerDuplicatePreflightForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetGlobalIssuerDuplicatePreflightBadRequestResponseBody builds the HTTP
+// response body from the result of the "getGlobalIssuerDuplicatePreflight"
+// endpoint of the "adminRemoteSessions" service.
+func NewGetGlobalIssuerDuplicatePreflightBadRequestResponseBody(res *goa.ServiceError) *GetGlobalIssuerDuplicatePreflightBadRequestResponseBody {
+	body := &GetGlobalIssuerDuplicatePreflightBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetGlobalIssuerDuplicatePreflightNotFoundResponseBody builds the HTTP
+// response body from the result of the "getGlobalIssuerDuplicatePreflight"
+// endpoint of the "adminRemoteSessions" service.
+func NewGetGlobalIssuerDuplicatePreflightNotFoundResponseBody(res *goa.ServiceError) *GetGlobalIssuerDuplicatePreflightNotFoundResponseBody {
+	body := &GetGlobalIssuerDuplicatePreflightNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetGlobalIssuerDuplicatePreflightConflictResponseBody builds the HTTP
+// response body from the result of the "getGlobalIssuerDuplicatePreflight"
+// endpoint of the "adminRemoteSessions" service.
+func NewGetGlobalIssuerDuplicatePreflightConflictResponseBody(res *goa.ServiceError) *GetGlobalIssuerDuplicatePreflightConflictResponseBody {
+	body := &GetGlobalIssuerDuplicatePreflightConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetGlobalIssuerDuplicatePreflightUnsupportedMediaResponseBody builds the
+// HTTP response body from the result of the
+// "getGlobalIssuerDuplicatePreflight" endpoint of the "adminRemoteSessions"
+// service.
+func NewGetGlobalIssuerDuplicatePreflightUnsupportedMediaResponseBody(res *goa.ServiceError) *GetGlobalIssuerDuplicatePreflightUnsupportedMediaResponseBody {
+	body := &GetGlobalIssuerDuplicatePreflightUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetGlobalIssuerDuplicatePreflightInvalidResponseBody builds the HTTP
+// response body from the result of the "getGlobalIssuerDuplicatePreflight"
+// endpoint of the "adminRemoteSessions" service.
+func NewGetGlobalIssuerDuplicatePreflightInvalidResponseBody(res *goa.ServiceError) *GetGlobalIssuerDuplicatePreflightInvalidResponseBody {
+	body := &GetGlobalIssuerDuplicatePreflightInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetGlobalIssuerDuplicatePreflightInvariantViolationResponseBody builds
+// the HTTP response body from the result of the
+// "getGlobalIssuerDuplicatePreflight" endpoint of the "adminRemoteSessions"
+// service.
+func NewGetGlobalIssuerDuplicatePreflightInvariantViolationResponseBody(res *goa.ServiceError) *GetGlobalIssuerDuplicatePreflightInvariantViolationResponseBody {
+	body := &GetGlobalIssuerDuplicatePreflightInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetGlobalIssuerDuplicatePreflightUnexpectedResponseBody builds the HTTP
+// response body from the result of the "getGlobalIssuerDuplicatePreflight"
+// endpoint of the "adminRemoteSessions" service.
+func NewGetGlobalIssuerDuplicatePreflightUnexpectedResponseBody(res *goa.ServiceError) *GetGlobalIssuerDuplicatePreflightUnexpectedResponseBody {
+	body := &GetGlobalIssuerDuplicatePreflightUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetGlobalIssuerDuplicatePreflightGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "getGlobalIssuerDuplicatePreflight"
+// endpoint of the "adminRemoteSessions" service.
+func NewGetGlobalIssuerDuplicatePreflightGatewayErrorResponseBody(res *goa.ServiceError) *GetGlobalIssuerDuplicatePreflightGatewayErrorResponseBody {
+	body := &GetGlobalIssuerDuplicatePreflightGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -6191,6 +7021,7 @@ func NewCreateGlobalIssuerPayload(body *CreateGlobalIssuerRequestBody, sessionTo
 		ClientSetupDocumentationURL:       body.ClientSetupDocumentationURL,
 		AuthorizationEndpoint:             body.AuthorizationEndpoint,
 		TokenEndpoint:                     body.TokenEndpoint,
+		RevocationEndpoint:                body.RevocationEndpoint,
 		RegistrationEndpoint:              body.RegistrationEndpoint,
 		JwksURI:                           body.JwksURI,
 		ServiceDocumentation:              body.ServiceDocumentation,
@@ -6199,6 +7030,11 @@ func NewCreateGlobalIssuerPayload(body *CreateGlobalIssuerRequestBody, sessionTo
 		Oidc:                              body.Oidc,
 		Passthrough:                       body.Passthrough,
 		ClientIDMetadataDocumentSupported: body.ClientIDMetadataDocumentSupported,
+		UserinfoEndpoint:                  body.UserinfoEndpoint,
+		IntrospectionEndpoint:             body.IntrospectionEndpoint,
+		BackchannelLogoutSupported:        body.BackchannelLogoutSupported,
+		AuthorizationResponseIssParameterSupported: body.AuthorizationResponseIssParameterSupported,
+		ResourceIndicatorSupported:                 body.ResourceIndicatorSupported,
 	}
 	if body.ScopesSupported != nil {
 		v.ScopesSupported = make([]string, len(body.ScopesSupported))
@@ -6224,6 +7060,46 @@ func NewCreateGlobalIssuerPayload(body *CreateGlobalIssuerRequestBody, sessionTo
 			v.TokenEndpointAuthMethodsSupported[i] = val
 		}
 	}
+	if body.CodeChallengeMethodsSupported != nil {
+		v.CodeChallengeMethodsSupported = make([]string, len(body.CodeChallengeMethodsSupported))
+		for i, val := range body.CodeChallengeMethodsSupported {
+			v.CodeChallengeMethodsSupported[i] = val
+		}
+	}
+	if body.IntrospectionEndpointAuthMethodsSupported != nil {
+		v.IntrospectionEndpointAuthMethodsSupported = make([]string, len(body.IntrospectionEndpointAuthMethodsSupported))
+		for i, val := range body.IntrospectionEndpointAuthMethodsSupported {
+			v.IntrospectionEndpointAuthMethodsSupported[i] = val
+		}
+	}
+	if body.IDTokenSigningAlgValuesSupported != nil {
+		v.IDTokenSigningAlgValuesSupported = make([]string, len(body.IDTokenSigningAlgValuesSupported))
+		for i, val := range body.IDTokenSigningAlgValuesSupported {
+			v.IDTokenSigningAlgValuesSupported[i] = val
+		}
+	}
+	if body.ClaimsSupported != nil {
+		v.ClaimsSupported = make([]string, len(body.ClaimsSupported))
+		for i, val := range body.ClaimsSupported {
+			v.ClaimsSupported[i] = val
+		}
+	}
+	if body.ScopeOverride != nil {
+		v.ScopeOverride = make([]string, len(body.ScopeOverride))
+		for i, val := range body.ScopeOverride {
+			v.ScopeOverride[i] = val
+		}
+	}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewGetGlobalIssuerDuplicatePreflightPayload builds a adminRemoteSessions
+// service getGlobalIssuerDuplicatePreflight endpoint payload.
+func NewGetGlobalIssuerDuplicatePreflightPayload(issuer *string, sessionToken *string) *adminremotesessions.GetGlobalIssuerDuplicatePreflightPayload {
+	v := &adminremotesessions.GetGlobalIssuerDuplicatePreflightPayload{}
+	v.Issuer = issuer
 	v.SessionToken = sessionToken
 
 	return v
@@ -6262,6 +7138,7 @@ func NewUpdateGlobalIssuerPayload(body *UpdateGlobalIssuerRequestBody, sessionTo
 		ClientSetupDocumentationURL:       body.ClientSetupDocumentationURL,
 		AuthorizationEndpoint:             body.AuthorizationEndpoint,
 		TokenEndpoint:                     body.TokenEndpoint,
+		RevocationEndpoint:                body.RevocationEndpoint,
 		RegistrationEndpoint:              body.RegistrationEndpoint,
 		JwksURI:                           body.JwksURI,
 		ServiceDocumentation:              body.ServiceDocumentation,
@@ -6270,6 +7147,11 @@ func NewUpdateGlobalIssuerPayload(body *UpdateGlobalIssuerRequestBody, sessionTo
 		Oidc:                              body.Oidc,
 		Passthrough:                       body.Passthrough,
 		ClientIDMetadataDocumentSupported: body.ClientIDMetadataDocumentSupported,
+		UserinfoEndpoint:                  body.UserinfoEndpoint,
+		IntrospectionEndpoint:             body.IntrospectionEndpoint,
+		BackchannelLogoutSupported:        body.BackchannelLogoutSupported,
+		AuthorizationResponseIssParameterSupported: body.AuthorizationResponseIssParameterSupported,
+		ResourceIndicatorSupported:                 body.ResourceIndicatorSupported,
 	}
 	if body.ScopesSupported != nil {
 		v.ScopesSupported = make([]string, len(body.ScopesSupported))
@@ -6293,6 +7175,36 @@ func NewUpdateGlobalIssuerPayload(body *UpdateGlobalIssuerRequestBody, sessionTo
 		v.TokenEndpointAuthMethodsSupported = make([]string, len(body.TokenEndpointAuthMethodsSupported))
 		for i, val := range body.TokenEndpointAuthMethodsSupported {
 			v.TokenEndpointAuthMethodsSupported[i] = val
+		}
+	}
+	if body.CodeChallengeMethodsSupported != nil {
+		v.CodeChallengeMethodsSupported = make([]string, len(body.CodeChallengeMethodsSupported))
+		for i, val := range body.CodeChallengeMethodsSupported {
+			v.CodeChallengeMethodsSupported[i] = val
+		}
+	}
+	if body.IntrospectionEndpointAuthMethodsSupported != nil {
+		v.IntrospectionEndpointAuthMethodsSupported = make([]string, len(body.IntrospectionEndpointAuthMethodsSupported))
+		for i, val := range body.IntrospectionEndpointAuthMethodsSupported {
+			v.IntrospectionEndpointAuthMethodsSupported[i] = val
+		}
+	}
+	if body.IDTokenSigningAlgValuesSupported != nil {
+		v.IDTokenSigningAlgValuesSupported = make([]string, len(body.IDTokenSigningAlgValuesSupported))
+		for i, val := range body.IDTokenSigningAlgValuesSupported {
+			v.IDTokenSigningAlgValuesSupported[i] = val
+		}
+	}
+	if body.ClaimsSupported != nil {
+		v.ClaimsSupported = make([]string, len(body.ClaimsSupported))
+		for i, val := range body.ClaimsSupported {
+			v.ClaimsSupported[i] = val
+		}
+	}
+	if body.ScopeOverride != nil {
+		v.ScopeOverride = make([]string, len(body.ScopeOverride))
+		for i, val := range body.ScopeOverride {
+			v.ScopeOverride[i] = val
 		}
 	}
 	v.SessionToken = sessionToken
@@ -6463,9 +7375,6 @@ func ValidateUpdateGlobalIssuerRequestBody(body *UpdateGlobalIssuerRequestBody) 
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
-	}
-	if body.LogoAssetID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.logo_asset_id", *body.LogoAssetID, goa.FormatUUID))
 	}
 	return
 }

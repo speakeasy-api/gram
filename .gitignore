@@ -6,12 +6,15 @@ PERSONAL_ACCOUNT_*
 .otel-capture/
 mise.local.toml
 mise.*.local.toml
+client/dashboard/vite.config.local.ts
+client/dashboard/src/dev/slot.local.tsx
 flags.local.csv
 *.tsbuildinfo
 .eslintcache
 node_modules
 bin
 junit-report.xml
+rerun-report.txt
 report.md
 .mise-tasks/local
 .assets
@@ -41,6 +44,7 @@ report.md
 /dev-idp/gen/http/openapi3.yaml
 scratch/
 /local/cache
+/local/lgtm
 /local/ssl
 /local/keys
 /local/functions
@@ -68,7 +72,6 @@ gram.code-workspace
 dist/
 **/.claude/settings.local.json
 **/.claude/.gram-install-prompted
-.vercel
 cover.*
 *gram.deploy.json
 .tmp-melange/
@@ -98,6 +101,9 @@ __pycache__/
 .playwright-mcp
 .playwright-cli
 
+# Traces, videos and screenshots from the e2e suite (mise run test:wake-stack)
+e2e/.playwright
+
 # Riptide artifacts (cloud-synced)
 .humanlayer/tasks/
 
@@ -116,3 +122,6 @@ storybook-static/
 # Removed orphaned Speakeasy build output (#4947); the SDK generates into
 # client/dashboard/src/sdk — nothing may reappear here.
 /client/sdk/
+
+# Compiled one-off backfill binary; build with `go build ./cmd/workos-backfill`.
+/server/workos-backfill

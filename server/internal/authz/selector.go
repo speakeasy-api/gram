@@ -80,6 +80,8 @@ func ResourceKindForScope(scope Scope) string {
 		return ResourceKindRiskPolicy
 	case "chat":
 		return ResourceKindChat
+	case "agent":
+		return ResourceKindAgent
 	default:
 		return ResourceKindWildcard
 	}

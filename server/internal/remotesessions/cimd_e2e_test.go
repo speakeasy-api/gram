@@ -73,7 +73,7 @@ func TestCIMD_OutboundRoundTripAgainstDevIDP(t *testing.T) {
 	// A real Redis-backed cache is required: BuildAuthorizationUrl writes the
 	// RemoteLoginState that HandleRemoteLoginCallback reads back, so the
 	// NoopCache-wired newCIMDChallengeManager helper would drop it mid-flow.
-	mgr = remotesessions.NewChallengeManager(testenv.NewLogger(t), ti.conn, enc, policy, ti.redisCache, mustURL(t, gramSrv.URL))
+	mgr = remotesessions.NewChallengeManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, enc, policy, ti.redisCache, mustURL(t, gramSrv.URL))
 
 	// Issuer pointing at the dev-idp's oauth2-1 mode, advertising CIMD support.
 	q := repo.New(ti.conn)

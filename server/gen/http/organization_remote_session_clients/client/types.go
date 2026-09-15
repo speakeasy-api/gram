@@ -39,6 +39,12 @@ type CreateClientRequestBody struct {
 	// Optional upstream OAuth audience to send on the authorize redirect and token
 	// exchange.
 	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// When the issuer reported issuing the client_id (RFC 7591
+	// client_id_issued_at). Omit to record the time of this call.
+	ClientIDIssuedAt *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
+	// When the issuer reported the client secret expires (RFC 7591
+	// client_secret_expires_at). Omit when the issuer reported no expiry.
+	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
 }
 
 // CreateCimdClientRequestBody is the type of the
@@ -77,6 +83,25 @@ type UpdateClientRequestBody struct {
 	// Replace the upstream OAuth audience sent for this client. Omit to leave
 	// unchanged.
 	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+}
+
+// AttachClientKeySetRequestBody is the type of the
+// "organizationRemoteSessionClients" service "attachClientKeySet" endpoint
+// HTTP request body.
+type AttachClientKeySetRequestBody struct {
+	// The remote_session_client id.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The organization JSON Web Key Set to sign this client's private_key_jwt
+	// assertions with. Must belong to the client's organization.
+	JSONWebKeySetID string `form:"json_web_key_set_id" json:"json_web_key_set_id" xml:"json_web_key_set_id"`
+}
+
+// RotateClientRequestBody is the type of the
+// "organizationRemoteSessionClients" service "rotateClient" endpoint HTTP
+// request body.
+type RotateClientRequestBody struct {
+	// The remote_session_client id.
+	ID string `form:"id" json:"id" xml:"id"`
 }
 
 // RemoveClientFromMcpServerRequestBody is the type of the
@@ -123,9 +148,17 @@ type GetClientResponseBody struct {
 	ClientIDIssuedAt    *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
+	// When the issuer's token endpoint last answered invalid_client for this
+	// client_id, meaning the issuer no longer recognizes the registration. Null
+	// while the registration is in good standing; cleared by a successful
+	// rotation, a successful refresh, or a replaced secret.
+	UpstreamRejectedAt *string `form:"upstream_rejected_at,omitempty" json:"upstream_rejected_at,omitempty" xml:"upstream_rejected_at,omitempty"`
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// The organization JSON Web Key Set attached to this client, managed through
+	// attachKeySet and detachKeySet. Null when no key set is attached.
+	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
@@ -179,9 +212,17 @@ type CreateClientResponseBody struct {
 	ClientIDIssuedAt    *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
+	// When the issuer's token endpoint last answered invalid_client for this
+	// client_id, meaning the issuer no longer recognizes the registration. Null
+	// while the registration is in good standing; cleared by a successful
+	// rotation, a successful refresh, or a replaced secret.
+	UpstreamRejectedAt *string `form:"upstream_rejected_at,omitempty" json:"upstream_rejected_at,omitempty" xml:"upstream_rejected_at,omitempty"`
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// The organization JSON Web Key Set attached to this client, managed through
+	// attachKeySet and detachKeySet. Null when no key set is attached.
+	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
@@ -218,9 +259,17 @@ type CreateCimdClientResponseBody struct {
 	ClientIDIssuedAt    *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
+	// When the issuer's token endpoint last answered invalid_client for this
+	// client_id, meaning the issuer no longer recognizes the registration. Null
+	// while the registration is in good standing; cleared by a successful
+	// rotation, a successful refresh, or a replaced secret.
+	UpstreamRejectedAt *string `form:"upstream_rejected_at,omitempty" json:"upstream_rejected_at,omitempty" xml:"upstream_rejected_at,omitempty"`
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// The organization JSON Web Key Set attached to this client, managed through
+	// attachKeySet and detachKeySet. Null when no key set is attached.
+	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
@@ -257,9 +306,158 @@ type UpdateClientResponseBody struct {
 	ClientIDIssuedAt    *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
+	// When the issuer's token endpoint last answered invalid_client for this
+	// client_id, meaning the issuer no longer recognizes the registration. Null
+	// while the registration is in good standing; cleared by a successful
+	// rotation, a successful refresh, or a replaced secret.
+	UpstreamRejectedAt *string `form:"upstream_rejected_at,omitempty" json:"upstream_rejected_at,omitempty" xml:"upstream_rejected_at,omitempty"`
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// The organization JSON Web Key Set attached to this client, managed through
+	// attachKeySet and detachKeySet. Null when no key set is attached.
+	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
+	// Explicit upstream OAuth scopes the dance requests for this client. Null
+	// falls back to the issuer's scopes_supported.
+	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	// Upstream OAuth audience sent on the authorize redirect and token exchange.
+	// Null omits the audience parameter.
+	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// AttachClientKeySetResponseBody is the type of the
+// "organizationRemoteSessionClients" service "attachClientKeySet" endpoint
+// HTTP response body.
+type AttachClientKeySetResponseBody struct {
+	// The remote_session_client id.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The owning project id. Empty for organization-level and global clients.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The owning organization id. Empty for legacy rows not yet backfilled and
+	// global clients.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// The owning remote_session_issuer id.
+	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
+	// The user_session_issuers this client is attached to via the join table.
+	// Empty for a standalone client with no attachments.
+	UserSessionIssuerIds []string `form:"user_session_issuer_ids,omitempty" json:"user_session_issuer_ids,omitempty" xml:"user_session_issuer_ids,omitempty"`
+	// The client_id used to identify this client at the issuer's token and
+	// authorization endpoints.
+	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	// When set, the client is in Client ID Metadata Document (CIMD) mode: Gram
+	// hosts its OAuth client metadata document at this URL and uses it as the
+	// client_id. Null for non-CIMD clients.
+	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
+	ClientIDIssuedAt    *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
+	// Null when the secret does not expire.
+	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
+	// When the issuer's token endpoint last answered invalid_client for this
+	// client_id, meaning the issuer no longer recognizes the registration. Null
+	// while the registration is in good standing; cleared by a successful
+	// rotation, a successful refresh, or a replaced secret.
+	UpstreamRejectedAt *string `form:"upstream_rejected_at,omitempty" json:"upstream_rejected_at,omitempty" xml:"upstream_rejected_at,omitempty"`
+	// How the client authenticates at the issuer's token endpoint. Null resolves
+	// to client_secret_basic at runtime.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// The organization JSON Web Key Set attached to this client, managed through
+	// attachKeySet and detachKeySet. Null when no key set is attached.
+	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
+	// Explicit upstream OAuth scopes the dance requests for this client. Null
+	// falls back to the issuer's scopes_supported.
+	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	// Upstream OAuth audience sent on the authorize redirect and token exchange.
+	// Null omits the audience parameter.
+	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// DetachClientKeySetResponseBody is the type of the
+// "organizationRemoteSessionClients" service "detachClientKeySet" endpoint
+// HTTP response body.
+type DetachClientKeySetResponseBody struct {
+	// The remote_session_client id.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The owning project id. Empty for organization-level and global clients.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The owning organization id. Empty for legacy rows not yet backfilled and
+	// global clients.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// The owning remote_session_issuer id.
+	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
+	// The user_session_issuers this client is attached to via the join table.
+	// Empty for a standalone client with no attachments.
+	UserSessionIssuerIds []string `form:"user_session_issuer_ids,omitempty" json:"user_session_issuer_ids,omitempty" xml:"user_session_issuer_ids,omitempty"`
+	// The client_id used to identify this client at the issuer's token and
+	// authorization endpoints.
+	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	// When set, the client is in Client ID Metadata Document (CIMD) mode: Gram
+	// hosts its OAuth client metadata document at this URL and uses it as the
+	// client_id. Null for non-CIMD clients.
+	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
+	ClientIDIssuedAt    *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
+	// Null when the secret does not expire.
+	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
+	// When the issuer's token endpoint last answered invalid_client for this
+	// client_id, meaning the issuer no longer recognizes the registration. Null
+	// while the registration is in good standing; cleared by a successful
+	// rotation, a successful refresh, or a replaced secret.
+	UpstreamRejectedAt *string `form:"upstream_rejected_at,omitempty" json:"upstream_rejected_at,omitempty" xml:"upstream_rejected_at,omitempty"`
+	// How the client authenticates at the issuer's token endpoint. Null resolves
+	// to client_secret_basic at runtime.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// The organization JSON Web Key Set attached to this client, managed through
+	// attachKeySet and detachKeySet. Null when no key set is attached.
+	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
+	// Explicit upstream OAuth scopes the dance requests for this client. Null
+	// falls back to the issuer's scopes_supported.
+	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	// Upstream OAuth audience sent on the authorize redirect and token exchange.
+	// Null omits the audience parameter.
+	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// RotateClientResponseBody is the type of the
+// "organizationRemoteSessionClients" service "rotateClient" endpoint HTTP
+// response body.
+type RotateClientResponseBody struct {
+	// The remote_session_client id.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The owning project id. Empty for organization-level and global clients.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The owning organization id. Empty for legacy rows not yet backfilled and
+	// global clients.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// The owning remote_session_issuer id.
+	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
+	// The user_session_issuers this client is attached to via the join table.
+	// Empty for a standalone client with no attachments.
+	UserSessionIssuerIds []string `form:"user_session_issuer_ids,omitempty" json:"user_session_issuer_ids,omitempty" xml:"user_session_issuer_ids,omitempty"`
+	// The client_id used to identify this client at the issuer's token and
+	// authorization endpoints.
+	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	// When set, the client is in Client ID Metadata Document (CIMD) mode: Gram
+	// hosts its OAuth client metadata document at this URL and uses it as the
+	// client_id. Null for non-CIMD clients.
+	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
+	ClientIDIssuedAt    *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
+	// Null when the secret does not expire.
+	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
+	// When the issuer's token endpoint last answered invalid_client for this
+	// client_id, meaning the issuer no longer recognizes the registration. Null
+	// while the registration is in good standing; cleared by a successful
+	// rotation, a successful refresh, or a replaced secret.
+	UpstreamRejectedAt *string `form:"upstream_rejected_at,omitempty" json:"upstream_rejected_at,omitempty" xml:"upstream_rejected_at,omitempty"`
+	// How the client authenticates at the issuer's token endpoint. Null resolves
+	// to client_secret_basic at runtime.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// The organization JSON Web Key Set attached to this client, managed through
+	// attachKeySet and detachKeySet. Null when no key set is attached.
+	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
@@ -1600,6 +1798,614 @@ type UpdateClientGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// AttachClientKeySetFailedPreconditionResponseBody is the type of the
+// "organizationRemoteSessionClients" service "attachClientKeySet" endpoint
+// HTTP response body for the "failed_precondition" error.
+type AttachClientKeySetFailedPreconditionResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AttachClientKeySetUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionClients" service "attachClientKeySet" endpoint
+// HTTP response body for the "unauthorized" error.
+type AttachClientKeySetUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AttachClientKeySetForbiddenResponseBody is the type of the
+// "organizationRemoteSessionClients" service "attachClientKeySet" endpoint
+// HTTP response body for the "forbidden" error.
+type AttachClientKeySetForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AttachClientKeySetBadRequestResponseBody is the type of the
+// "organizationRemoteSessionClients" service "attachClientKeySet" endpoint
+// HTTP response body for the "bad_request" error.
+type AttachClientKeySetBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AttachClientKeySetNotFoundResponseBody is the type of the
+// "organizationRemoteSessionClients" service "attachClientKeySet" endpoint
+// HTTP response body for the "not_found" error.
+type AttachClientKeySetNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AttachClientKeySetConflictResponseBody is the type of the
+// "organizationRemoteSessionClients" service "attachClientKeySet" endpoint
+// HTTP response body for the "conflict" error.
+type AttachClientKeySetConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AttachClientKeySetUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionClients" service "attachClientKeySet" endpoint
+// HTTP response body for the "unsupported_media" error.
+type AttachClientKeySetUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AttachClientKeySetInvalidResponseBody is the type of the
+// "organizationRemoteSessionClients" service "attachClientKeySet" endpoint
+// HTTP response body for the "invalid" error.
+type AttachClientKeySetInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AttachClientKeySetInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionClients" service "attachClientKeySet" endpoint
+// HTTP response body for the "invariant_violation" error.
+type AttachClientKeySetInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AttachClientKeySetUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionClients" service "attachClientKeySet" endpoint
+// HTTP response body for the "unexpected" error.
+type AttachClientKeySetUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AttachClientKeySetGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionClients" service "attachClientKeySet" endpoint
+// HTTP response body for the "gateway_error" error.
+type AttachClientKeySetGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DetachClientKeySetFailedPreconditionResponseBody is the type of the
+// "organizationRemoteSessionClients" service "detachClientKeySet" endpoint
+// HTTP response body for the "failed_precondition" error.
+type DetachClientKeySetFailedPreconditionResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DetachClientKeySetUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionClients" service "detachClientKeySet" endpoint
+// HTTP response body for the "unauthorized" error.
+type DetachClientKeySetUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DetachClientKeySetForbiddenResponseBody is the type of the
+// "organizationRemoteSessionClients" service "detachClientKeySet" endpoint
+// HTTP response body for the "forbidden" error.
+type DetachClientKeySetForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DetachClientKeySetBadRequestResponseBody is the type of the
+// "organizationRemoteSessionClients" service "detachClientKeySet" endpoint
+// HTTP response body for the "bad_request" error.
+type DetachClientKeySetBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DetachClientKeySetNotFoundResponseBody is the type of the
+// "organizationRemoteSessionClients" service "detachClientKeySet" endpoint
+// HTTP response body for the "not_found" error.
+type DetachClientKeySetNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DetachClientKeySetConflictResponseBody is the type of the
+// "organizationRemoteSessionClients" service "detachClientKeySet" endpoint
+// HTTP response body for the "conflict" error.
+type DetachClientKeySetConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DetachClientKeySetUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionClients" service "detachClientKeySet" endpoint
+// HTTP response body for the "unsupported_media" error.
+type DetachClientKeySetUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DetachClientKeySetInvalidResponseBody is the type of the
+// "organizationRemoteSessionClients" service "detachClientKeySet" endpoint
+// HTTP response body for the "invalid" error.
+type DetachClientKeySetInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DetachClientKeySetInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionClients" service "detachClientKeySet" endpoint
+// HTTP response body for the "invariant_violation" error.
+type DetachClientKeySetInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DetachClientKeySetUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionClients" service "detachClientKeySet" endpoint
+// HTTP response body for the "unexpected" error.
+type DetachClientKeySetUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DetachClientKeySetGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionClients" service "detachClientKeySet" endpoint
+// HTTP response body for the "gateway_error" error.
+type DetachClientKeySetGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RotateClientUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionClients" service "rotateClient" endpoint HTTP
+// response body for the "unauthorized" error.
+type RotateClientUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RotateClientForbiddenResponseBody is the type of the
+// "organizationRemoteSessionClients" service "rotateClient" endpoint HTTP
+// response body for the "forbidden" error.
+type RotateClientForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RotateClientBadRequestResponseBody is the type of the
+// "organizationRemoteSessionClients" service "rotateClient" endpoint HTTP
+// response body for the "bad_request" error.
+type RotateClientBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RotateClientNotFoundResponseBody is the type of the
+// "organizationRemoteSessionClients" service "rotateClient" endpoint HTTP
+// response body for the "not_found" error.
+type RotateClientNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RotateClientConflictResponseBody is the type of the
+// "organizationRemoteSessionClients" service "rotateClient" endpoint HTTP
+// response body for the "conflict" error.
+type RotateClientConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RotateClientUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionClients" service "rotateClient" endpoint HTTP
+// response body for the "unsupported_media" error.
+type RotateClientUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RotateClientInvalidResponseBody is the type of the
+// "organizationRemoteSessionClients" service "rotateClient" endpoint HTTP
+// response body for the "invalid" error.
+type RotateClientInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RotateClientInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionClients" service "rotateClient" endpoint HTTP
+// response body for the "invariant_violation" error.
+type RotateClientInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RotateClientUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionClients" service "rotateClient" endpoint HTTP
+// response body for the "unexpected" error.
+type RotateClientUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RotateClientGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionClients" service "rotateClient" endpoint HTTP
+// response body for the "gateway_error" error.
+type RotateClientGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // DeleteClientUnauthorizedResponseBody is the type of the
 // "organizationRemoteSessionClients" service "deleteClient" endpoint HTTP
 // response body for the "unauthorized" error.
@@ -2017,9 +2823,17 @@ type RemoteSessionClientResponseBody struct {
 	ClientIDIssuedAt    *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
+	// When the issuer's token endpoint last answered invalid_client for this
+	// client_id, meaning the issuer no longer recognizes the registration. Null
+	// while the registration is in good standing; cleared by a successful
+	// rotation, a successful refresh, or a replaced secret.
+	UpstreamRejectedAt *string `form:"upstream_rejected_at,omitempty" json:"upstream_rejected_at,omitempty" xml:"upstream_rejected_at,omitempty"`
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// The organization JSON Web Key Set attached to this client, managed through
+	// attachKeySet and detachKeySet. Null when no key set is attached.
+	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
@@ -2058,6 +2872,8 @@ func NewCreateClientRequestBody(p *organizationremotesessionclients.CreateClient
 		ClientSecret:            p.ClientSecret,
 		TokenEndpointAuthMethod: p.TokenEndpointAuthMethod,
 		Audience:                p.Audience,
+		ClientIDIssuedAt:        p.ClientIDIssuedAt,
+		ClientSecretExpiresAt:   p.ClientSecretExpiresAt,
 	}
 	if p.Scope != nil {
 		body.Scope = make([]string, len(p.Scope))
@@ -2101,6 +2917,27 @@ func NewUpdateClientRequestBody(p *organizationremotesessionclients.UpdateClient
 		for i, val := range p.Scope {
 			body.Scope[i] = val
 		}
+	}
+	return body
+}
+
+// NewAttachClientKeySetRequestBody builds the HTTP request body from the
+// payload of the "attachClientKeySet" endpoint of the
+// "organizationRemoteSessionClients" service.
+func NewAttachClientKeySetRequestBody(p *organizationremotesessionclients.AttachClientKeySetPayload) *AttachClientKeySetRequestBody {
+	body := &AttachClientKeySetRequestBody{
+		ID:              p.ID,
+		JSONWebKeySetID: p.JSONWebKeySetID,
+	}
+	return body
+}
+
+// NewRotateClientRequestBody builds the HTTP request body from the payload of
+// the "rotateClient" endpoint of the "organizationRemoteSessionClients"
+// service.
+func NewRotateClientRequestBody(p *organizationremotesessionclients.RotateClientPayload) *RotateClientRequestBody {
+	body := &RotateClientRequestBody{
+		ID: p.ID,
 	}
 	return body
 }
@@ -2298,7 +3135,9 @@ func NewGetClientRemoteSessionClientOK(body *GetClientResponseBody) *types.Remot
 		ClientIDMetadataURI:     body.ClientIDMetadataURI,
 		ClientIDIssuedAt:        *body.ClientIDIssuedAt,
 		ClientSecretExpiresAt:   body.ClientSecretExpiresAt,
+		UpstreamRejectedAt:      body.UpstreamRejectedAt,
 		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
+		JSONWebKeySetID:         body.JSONWebKeySetID,
 		Audience:                body.Audience,
 		CreatedAt:               *body.CreatedAt,
 		UpdatedAt:               *body.UpdatedAt,
@@ -2825,7 +3664,9 @@ func NewCreateClientRemoteSessionClientOK(body *CreateClientResponseBody) *types
 		ClientIDMetadataURI:     body.ClientIDMetadataURI,
 		ClientIDIssuedAt:        *body.ClientIDIssuedAt,
 		ClientSecretExpiresAt:   body.ClientSecretExpiresAt,
+		UpstreamRejectedAt:      body.UpstreamRejectedAt,
 		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
+		JSONWebKeySetID:         body.JSONWebKeySetID,
 		Audience:                body.Audience,
 		CreatedAt:               *body.CreatedAt,
 		UpdatedAt:               *body.UpdatedAt,
@@ -3007,7 +3848,9 @@ func NewCreateCimdClientRemoteSessionClientOK(body *CreateCimdClientResponseBody
 		ClientIDMetadataURI:     body.ClientIDMetadataURI,
 		ClientIDIssuedAt:        *body.ClientIDIssuedAt,
 		ClientSecretExpiresAt:   body.ClientSecretExpiresAt,
+		UpstreamRejectedAt:      body.UpstreamRejectedAt,
 		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
+		JSONWebKeySetID:         body.JSONWebKeySetID,
 		Audience:                body.Audience,
 		CreatedAt:               *body.CreatedAt,
 		UpdatedAt:               *body.UpdatedAt,
@@ -3191,7 +4034,9 @@ func NewUpdateClientRemoteSessionClientOK(body *UpdateClientResponseBody) *types
 		ClientIDMetadataURI:     body.ClientIDMetadataURI,
 		ClientIDIssuedAt:        *body.ClientIDIssuedAt,
 		ClientSecretExpiresAt:   body.ClientSecretExpiresAt,
+		UpstreamRejectedAt:      body.UpstreamRejectedAt,
 		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
+		JSONWebKeySetID:         body.JSONWebKeySetID,
 		Audience:                body.Audience,
 		CreatedAt:               *body.CreatedAt,
 		UpdatedAt:               *body.UpdatedAt,
@@ -3348,6 +4193,594 @@ func NewUpdateClientUnexpected(body *UpdateClientUnexpectedResponseBody) *goa.Se
 // NewUpdateClientGatewayError builds a organizationRemoteSessionClients
 // service updateClient endpoint gateway_error error.
 func NewUpdateClientGatewayError(body *UpdateClientGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAttachClientKeySetRemoteSessionClientOK builds a
+// "organizationRemoteSessionClients" service "attachClientKeySet" endpoint
+// result from a HTTP "OK" response.
+func NewAttachClientKeySetRemoteSessionClientOK(body *AttachClientKeySetResponseBody) *types.RemoteSessionClient {
+	v := &types.RemoteSessionClient{
+		ID:                      *body.ID,
+		ProjectID:               *body.ProjectID,
+		OrganizationID:          *body.OrganizationID,
+		RemoteSessionIssuerID:   *body.RemoteSessionIssuerID,
+		ClientID:                *body.ClientID,
+		ClientIDMetadataURI:     body.ClientIDMetadataURI,
+		ClientIDIssuedAt:        *body.ClientIDIssuedAt,
+		ClientSecretExpiresAt:   body.ClientSecretExpiresAt,
+		UpstreamRejectedAt:      body.UpstreamRejectedAt,
+		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
+		JSONWebKeySetID:         body.JSONWebKeySetID,
+		Audience:                body.Audience,
+		CreatedAt:               *body.CreatedAt,
+		UpdatedAt:               *body.UpdatedAt,
+	}
+	v.UserSessionIssuerIds = make([]string, len(body.UserSessionIssuerIds))
+	for i, val := range body.UserSessionIssuerIds {
+		v.UserSessionIssuerIds[i] = val
+	}
+	if body.Scope != nil {
+		v.Scope = make([]string, len(body.Scope))
+		for i, val := range body.Scope {
+			v.Scope[i] = val
+		}
+	}
+
+	return v
+}
+
+// NewAttachClientKeySetFailedPrecondition builds a
+// organizationRemoteSessionClients service attachClientKeySet endpoint
+// failed_precondition error.
+func NewAttachClientKeySetFailedPrecondition(body *AttachClientKeySetFailedPreconditionResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAttachClientKeySetUnauthorized builds a organizationRemoteSessionClients
+// service attachClientKeySet endpoint unauthorized error.
+func NewAttachClientKeySetUnauthorized(body *AttachClientKeySetUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAttachClientKeySetForbidden builds a organizationRemoteSessionClients
+// service attachClientKeySet endpoint forbidden error.
+func NewAttachClientKeySetForbidden(body *AttachClientKeySetForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAttachClientKeySetBadRequest builds a organizationRemoteSessionClients
+// service attachClientKeySet endpoint bad_request error.
+func NewAttachClientKeySetBadRequest(body *AttachClientKeySetBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAttachClientKeySetNotFound builds a organizationRemoteSessionClients
+// service attachClientKeySet endpoint not_found error.
+func NewAttachClientKeySetNotFound(body *AttachClientKeySetNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAttachClientKeySetConflict builds a organizationRemoteSessionClients
+// service attachClientKeySet endpoint conflict error.
+func NewAttachClientKeySetConflict(body *AttachClientKeySetConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAttachClientKeySetUnsupportedMedia builds a
+// organizationRemoteSessionClients service attachClientKeySet endpoint
+// unsupported_media error.
+func NewAttachClientKeySetUnsupportedMedia(body *AttachClientKeySetUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAttachClientKeySetInvalid builds a organizationRemoteSessionClients
+// service attachClientKeySet endpoint invalid error.
+func NewAttachClientKeySetInvalid(body *AttachClientKeySetInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAttachClientKeySetInvariantViolation builds a
+// organizationRemoteSessionClients service attachClientKeySet endpoint
+// invariant_violation error.
+func NewAttachClientKeySetInvariantViolation(body *AttachClientKeySetInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAttachClientKeySetUnexpected builds a organizationRemoteSessionClients
+// service attachClientKeySet endpoint unexpected error.
+func NewAttachClientKeySetUnexpected(body *AttachClientKeySetUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAttachClientKeySetGatewayError builds a organizationRemoteSessionClients
+// service attachClientKeySet endpoint gateway_error error.
+func NewAttachClientKeySetGatewayError(body *AttachClientKeySetGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDetachClientKeySetRemoteSessionClientOK builds a
+// "organizationRemoteSessionClients" service "detachClientKeySet" endpoint
+// result from a HTTP "OK" response.
+func NewDetachClientKeySetRemoteSessionClientOK(body *DetachClientKeySetResponseBody) *types.RemoteSessionClient {
+	v := &types.RemoteSessionClient{
+		ID:                      *body.ID,
+		ProjectID:               *body.ProjectID,
+		OrganizationID:          *body.OrganizationID,
+		RemoteSessionIssuerID:   *body.RemoteSessionIssuerID,
+		ClientID:                *body.ClientID,
+		ClientIDMetadataURI:     body.ClientIDMetadataURI,
+		ClientIDIssuedAt:        *body.ClientIDIssuedAt,
+		ClientSecretExpiresAt:   body.ClientSecretExpiresAt,
+		UpstreamRejectedAt:      body.UpstreamRejectedAt,
+		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
+		JSONWebKeySetID:         body.JSONWebKeySetID,
+		Audience:                body.Audience,
+		CreatedAt:               *body.CreatedAt,
+		UpdatedAt:               *body.UpdatedAt,
+	}
+	v.UserSessionIssuerIds = make([]string, len(body.UserSessionIssuerIds))
+	for i, val := range body.UserSessionIssuerIds {
+		v.UserSessionIssuerIds[i] = val
+	}
+	if body.Scope != nil {
+		v.Scope = make([]string, len(body.Scope))
+		for i, val := range body.Scope {
+			v.Scope[i] = val
+		}
+	}
+
+	return v
+}
+
+// NewDetachClientKeySetFailedPrecondition builds a
+// organizationRemoteSessionClients service detachClientKeySet endpoint
+// failed_precondition error.
+func NewDetachClientKeySetFailedPrecondition(body *DetachClientKeySetFailedPreconditionResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDetachClientKeySetUnauthorized builds a organizationRemoteSessionClients
+// service detachClientKeySet endpoint unauthorized error.
+func NewDetachClientKeySetUnauthorized(body *DetachClientKeySetUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDetachClientKeySetForbidden builds a organizationRemoteSessionClients
+// service detachClientKeySet endpoint forbidden error.
+func NewDetachClientKeySetForbidden(body *DetachClientKeySetForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDetachClientKeySetBadRequest builds a organizationRemoteSessionClients
+// service detachClientKeySet endpoint bad_request error.
+func NewDetachClientKeySetBadRequest(body *DetachClientKeySetBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDetachClientKeySetNotFound builds a organizationRemoteSessionClients
+// service detachClientKeySet endpoint not_found error.
+func NewDetachClientKeySetNotFound(body *DetachClientKeySetNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDetachClientKeySetConflict builds a organizationRemoteSessionClients
+// service detachClientKeySet endpoint conflict error.
+func NewDetachClientKeySetConflict(body *DetachClientKeySetConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDetachClientKeySetUnsupportedMedia builds a
+// organizationRemoteSessionClients service detachClientKeySet endpoint
+// unsupported_media error.
+func NewDetachClientKeySetUnsupportedMedia(body *DetachClientKeySetUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDetachClientKeySetInvalid builds a organizationRemoteSessionClients
+// service detachClientKeySet endpoint invalid error.
+func NewDetachClientKeySetInvalid(body *DetachClientKeySetInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDetachClientKeySetInvariantViolation builds a
+// organizationRemoteSessionClients service detachClientKeySet endpoint
+// invariant_violation error.
+func NewDetachClientKeySetInvariantViolation(body *DetachClientKeySetInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDetachClientKeySetUnexpected builds a organizationRemoteSessionClients
+// service detachClientKeySet endpoint unexpected error.
+func NewDetachClientKeySetUnexpected(body *DetachClientKeySetUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDetachClientKeySetGatewayError builds a organizationRemoteSessionClients
+// service detachClientKeySet endpoint gateway_error error.
+func NewDetachClientKeySetGatewayError(body *DetachClientKeySetGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRotateClientRemoteSessionClientOK builds a
+// "organizationRemoteSessionClients" service "rotateClient" endpoint result
+// from a HTTP "OK" response.
+func NewRotateClientRemoteSessionClientOK(body *RotateClientResponseBody) *types.RemoteSessionClient {
+	v := &types.RemoteSessionClient{
+		ID:                      *body.ID,
+		ProjectID:               *body.ProjectID,
+		OrganizationID:          *body.OrganizationID,
+		RemoteSessionIssuerID:   *body.RemoteSessionIssuerID,
+		ClientID:                *body.ClientID,
+		ClientIDMetadataURI:     body.ClientIDMetadataURI,
+		ClientIDIssuedAt:        *body.ClientIDIssuedAt,
+		ClientSecretExpiresAt:   body.ClientSecretExpiresAt,
+		UpstreamRejectedAt:      body.UpstreamRejectedAt,
+		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
+		JSONWebKeySetID:         body.JSONWebKeySetID,
+		Audience:                body.Audience,
+		CreatedAt:               *body.CreatedAt,
+		UpdatedAt:               *body.UpdatedAt,
+	}
+	v.UserSessionIssuerIds = make([]string, len(body.UserSessionIssuerIds))
+	for i, val := range body.UserSessionIssuerIds {
+		v.UserSessionIssuerIds[i] = val
+	}
+	if body.Scope != nil {
+		v.Scope = make([]string, len(body.Scope))
+		for i, val := range body.Scope {
+			v.Scope[i] = val
+		}
+	}
+
+	return v
+}
+
+// NewRotateClientUnauthorized builds a organizationRemoteSessionClients
+// service rotateClient endpoint unauthorized error.
+func NewRotateClientUnauthorized(body *RotateClientUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRotateClientForbidden builds a organizationRemoteSessionClients service
+// rotateClient endpoint forbidden error.
+func NewRotateClientForbidden(body *RotateClientForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRotateClientBadRequest builds a organizationRemoteSessionClients service
+// rotateClient endpoint bad_request error.
+func NewRotateClientBadRequest(body *RotateClientBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRotateClientNotFound builds a organizationRemoteSessionClients service
+// rotateClient endpoint not_found error.
+func NewRotateClientNotFound(body *RotateClientNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRotateClientConflict builds a organizationRemoteSessionClients service
+// rotateClient endpoint conflict error.
+func NewRotateClientConflict(body *RotateClientConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRotateClientUnsupportedMedia builds a organizationRemoteSessionClients
+// service rotateClient endpoint unsupported_media error.
+func NewRotateClientUnsupportedMedia(body *RotateClientUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRotateClientInvalid builds a organizationRemoteSessionClients service
+// rotateClient endpoint invalid error.
+func NewRotateClientInvalid(body *RotateClientInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRotateClientInvariantViolation builds a organizationRemoteSessionClients
+// service rotateClient endpoint invariant_violation error.
+func NewRotateClientInvariantViolation(body *RotateClientInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRotateClientUnexpected builds a organizationRemoteSessionClients service
+// rotateClient endpoint unexpected error.
+func NewRotateClientUnexpected(body *RotateClientUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRotateClientGatewayError builds a organizationRemoteSessionClients
+// service rotateClient endpoint gateway_error error.
+func NewRotateClientGatewayError(body *RotateClientGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -3731,10 +5164,16 @@ func ValidateGetClientResponseBody(body *GetClientResponseBody) (err error) {
 	if body.ClientSecretExpiresAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_secret_expires_at", *body.ClientSecretExpiresAt, goa.FormatDateTime))
 	}
+	if body.UpstreamRejectedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.upstream_rejected_at", *body.UpstreamRejectedAt, goa.FormatDateTime))
+	}
 	if body.TokenEndpointAuthMethod != nil {
 		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none"}))
 		}
+	}
+	if body.JSONWebKeySetID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.json_web_key_set_id", *body.JSONWebKeySetID, goa.FormatUUID))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -3818,10 +5257,16 @@ func ValidateCreateClientResponseBody(body *CreateClientResponseBody) (err error
 	if body.ClientSecretExpiresAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_secret_expires_at", *body.ClientSecretExpiresAt, goa.FormatDateTime))
 	}
+	if body.UpstreamRejectedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.upstream_rejected_at", *body.UpstreamRejectedAt, goa.FormatDateTime))
+	}
 	if body.TokenEndpointAuthMethod != nil {
 		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none"}))
 		}
+	}
+	if body.JSONWebKeySetID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.json_web_key_set_id", *body.JSONWebKeySetID, goa.FormatUUID))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -3877,10 +5322,16 @@ func ValidateCreateCimdClientResponseBody(body *CreateCimdClientResponseBody) (e
 	if body.ClientSecretExpiresAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_secret_expires_at", *body.ClientSecretExpiresAt, goa.FormatDateTime))
 	}
+	if body.UpstreamRejectedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.upstream_rejected_at", *body.UpstreamRejectedAt, goa.FormatDateTime))
+	}
 	if body.TokenEndpointAuthMethod != nil {
 		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none"}))
 		}
+	}
+	if body.JSONWebKeySetID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.json_web_key_set_id", *body.JSONWebKeySetID, goa.FormatUUID))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -3936,10 +5387,211 @@ func ValidateUpdateClientResponseBody(body *UpdateClientResponseBody) (err error
 	if body.ClientSecretExpiresAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_secret_expires_at", *body.ClientSecretExpiresAt, goa.FormatDateTime))
 	}
+	if body.UpstreamRejectedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.upstream_rejected_at", *body.UpstreamRejectedAt, goa.FormatDateTime))
+	}
 	if body.TokenEndpointAuthMethod != nil {
 		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none"}))
 		}
+	}
+	if body.JSONWebKeySetID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.json_web_key_set_id", *body.JSONWebKeySetID, goa.FormatUUID))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateAttachClientKeySetResponseBody runs the validations defined on
+// AttachClientKeySetResponseBody
+func ValidateAttachClientKeySetResponseBody(body *AttachClientKeySetResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.RemoteSessionIssuerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_issuer_id", "body"))
+	}
+	if body.UserSessionIssuerIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_session_issuer_ids", "body"))
+	}
+	if body.ClientID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
+	}
+	if body.ClientIDIssuedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_issued_at", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.RemoteSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", *body.RemoteSessionIssuerID, goa.FormatUUID))
+	}
+	for _, e := range body.UserSessionIssuerIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_ids[*]", e, goa.FormatUUID))
+	}
+	if body.ClientIDIssuedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_id_issued_at", *body.ClientIDIssuedAt, goa.FormatDateTime))
+	}
+	if body.ClientSecretExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_secret_expires_at", *body.ClientSecretExpiresAt, goa.FormatDateTime))
+	}
+	if body.UpstreamRejectedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.upstream_rejected_at", *body.UpstreamRejectedAt, goa.FormatDateTime))
+	}
+	if body.TokenEndpointAuthMethod != nil {
+		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none"}))
+		}
+	}
+	if body.JSONWebKeySetID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.json_web_key_set_id", *body.JSONWebKeySetID, goa.FormatUUID))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateDetachClientKeySetResponseBody runs the validations defined on
+// DetachClientKeySetResponseBody
+func ValidateDetachClientKeySetResponseBody(body *DetachClientKeySetResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.RemoteSessionIssuerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_issuer_id", "body"))
+	}
+	if body.UserSessionIssuerIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_session_issuer_ids", "body"))
+	}
+	if body.ClientID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
+	}
+	if body.ClientIDIssuedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_issued_at", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.RemoteSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", *body.RemoteSessionIssuerID, goa.FormatUUID))
+	}
+	for _, e := range body.UserSessionIssuerIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_ids[*]", e, goa.FormatUUID))
+	}
+	if body.ClientIDIssuedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_id_issued_at", *body.ClientIDIssuedAt, goa.FormatDateTime))
+	}
+	if body.ClientSecretExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_secret_expires_at", *body.ClientSecretExpiresAt, goa.FormatDateTime))
+	}
+	if body.UpstreamRejectedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.upstream_rejected_at", *body.UpstreamRejectedAt, goa.FormatDateTime))
+	}
+	if body.TokenEndpointAuthMethod != nil {
+		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none"}))
+		}
+	}
+	if body.JSONWebKeySetID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.json_web_key_set_id", *body.JSONWebKeySetID, goa.FormatUUID))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateRotateClientResponseBody runs the validations defined on
+// RotateClientResponseBody
+func ValidateRotateClientResponseBody(body *RotateClientResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.RemoteSessionIssuerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_issuer_id", "body"))
+	}
+	if body.UserSessionIssuerIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_session_issuer_ids", "body"))
+	}
+	if body.ClientID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
+	}
+	if body.ClientIDIssuedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_issued_at", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.RemoteSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", *body.RemoteSessionIssuerID, goa.FormatUUID))
+	}
+	for _, e := range body.UserSessionIssuerIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_ids[*]", e, goa.FormatUUID))
+	}
+	if body.ClientIDIssuedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_id_issued_at", *body.ClientIDIssuedAt, goa.FormatDateTime))
+	}
+	if body.ClientSecretExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_secret_expires_at", *body.ClientSecretExpiresAt, goa.FormatDateTime))
+	}
+	if body.UpstreamRejectedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.upstream_rejected_at", *body.UpstreamRejectedAt, goa.FormatDateTime))
+	}
+	if body.TokenEndpointAuthMethod != nil {
+		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none"}))
+		}
+	}
+	if body.JSONWebKeySetID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.json_web_key_set_id", *body.JSONWebKeySetID, goa.FormatUUID))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -5632,6 +7284,774 @@ func ValidateUpdateClientGatewayErrorResponseBody(body *UpdateClientGatewayError
 	return
 }
 
+// ValidateAttachClientKeySetFailedPreconditionResponseBody runs the
+// validations defined on attachClientKeySet_failed_precondition_response_body
+func ValidateAttachClientKeySetFailedPreconditionResponseBody(body *AttachClientKeySetFailedPreconditionResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAttachClientKeySetUnauthorizedResponseBody runs the validations
+// defined on attachClientKeySet_unauthorized_response_body
+func ValidateAttachClientKeySetUnauthorizedResponseBody(body *AttachClientKeySetUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAttachClientKeySetForbiddenResponseBody runs the validations defined
+// on attachClientKeySet_forbidden_response_body
+func ValidateAttachClientKeySetForbiddenResponseBody(body *AttachClientKeySetForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAttachClientKeySetBadRequestResponseBody runs the validations
+// defined on attachClientKeySet_bad_request_response_body
+func ValidateAttachClientKeySetBadRequestResponseBody(body *AttachClientKeySetBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAttachClientKeySetNotFoundResponseBody runs the validations defined
+// on attachClientKeySet_not_found_response_body
+func ValidateAttachClientKeySetNotFoundResponseBody(body *AttachClientKeySetNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAttachClientKeySetConflictResponseBody runs the validations defined
+// on attachClientKeySet_conflict_response_body
+func ValidateAttachClientKeySetConflictResponseBody(body *AttachClientKeySetConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAttachClientKeySetUnsupportedMediaResponseBody runs the validations
+// defined on attachClientKeySet_unsupported_media_response_body
+func ValidateAttachClientKeySetUnsupportedMediaResponseBody(body *AttachClientKeySetUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAttachClientKeySetInvalidResponseBody runs the validations defined
+// on attachClientKeySet_invalid_response_body
+func ValidateAttachClientKeySetInvalidResponseBody(body *AttachClientKeySetInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAttachClientKeySetInvariantViolationResponseBody runs the
+// validations defined on attachClientKeySet_invariant_violation_response_body
+func ValidateAttachClientKeySetInvariantViolationResponseBody(body *AttachClientKeySetInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAttachClientKeySetUnexpectedResponseBody runs the validations
+// defined on attachClientKeySet_unexpected_response_body
+func ValidateAttachClientKeySetUnexpectedResponseBody(body *AttachClientKeySetUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAttachClientKeySetGatewayErrorResponseBody runs the validations
+// defined on attachClientKeySet_gateway_error_response_body
+func ValidateAttachClientKeySetGatewayErrorResponseBody(body *AttachClientKeySetGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDetachClientKeySetFailedPreconditionResponseBody runs the
+// validations defined on detachClientKeySet_failed_precondition_response_body
+func ValidateDetachClientKeySetFailedPreconditionResponseBody(body *DetachClientKeySetFailedPreconditionResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDetachClientKeySetUnauthorizedResponseBody runs the validations
+// defined on detachClientKeySet_unauthorized_response_body
+func ValidateDetachClientKeySetUnauthorizedResponseBody(body *DetachClientKeySetUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDetachClientKeySetForbiddenResponseBody runs the validations defined
+// on detachClientKeySet_forbidden_response_body
+func ValidateDetachClientKeySetForbiddenResponseBody(body *DetachClientKeySetForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDetachClientKeySetBadRequestResponseBody runs the validations
+// defined on detachClientKeySet_bad_request_response_body
+func ValidateDetachClientKeySetBadRequestResponseBody(body *DetachClientKeySetBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDetachClientKeySetNotFoundResponseBody runs the validations defined
+// on detachClientKeySet_not_found_response_body
+func ValidateDetachClientKeySetNotFoundResponseBody(body *DetachClientKeySetNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDetachClientKeySetConflictResponseBody runs the validations defined
+// on detachClientKeySet_conflict_response_body
+func ValidateDetachClientKeySetConflictResponseBody(body *DetachClientKeySetConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDetachClientKeySetUnsupportedMediaResponseBody runs the validations
+// defined on detachClientKeySet_unsupported_media_response_body
+func ValidateDetachClientKeySetUnsupportedMediaResponseBody(body *DetachClientKeySetUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDetachClientKeySetInvalidResponseBody runs the validations defined
+// on detachClientKeySet_invalid_response_body
+func ValidateDetachClientKeySetInvalidResponseBody(body *DetachClientKeySetInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDetachClientKeySetInvariantViolationResponseBody runs the
+// validations defined on detachClientKeySet_invariant_violation_response_body
+func ValidateDetachClientKeySetInvariantViolationResponseBody(body *DetachClientKeySetInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDetachClientKeySetUnexpectedResponseBody runs the validations
+// defined on detachClientKeySet_unexpected_response_body
+func ValidateDetachClientKeySetUnexpectedResponseBody(body *DetachClientKeySetUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDetachClientKeySetGatewayErrorResponseBody runs the validations
+// defined on detachClientKeySet_gateway_error_response_body
+func ValidateDetachClientKeySetGatewayErrorResponseBody(body *DetachClientKeySetGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRotateClientUnauthorizedResponseBody runs the validations defined on
+// rotateClient_unauthorized_response_body
+func ValidateRotateClientUnauthorizedResponseBody(body *RotateClientUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRotateClientForbiddenResponseBody runs the validations defined on
+// rotateClient_forbidden_response_body
+func ValidateRotateClientForbiddenResponseBody(body *RotateClientForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRotateClientBadRequestResponseBody runs the validations defined on
+// rotateClient_bad_request_response_body
+func ValidateRotateClientBadRequestResponseBody(body *RotateClientBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRotateClientNotFoundResponseBody runs the validations defined on
+// rotateClient_not_found_response_body
+func ValidateRotateClientNotFoundResponseBody(body *RotateClientNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRotateClientConflictResponseBody runs the validations defined on
+// rotateClient_conflict_response_body
+func ValidateRotateClientConflictResponseBody(body *RotateClientConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRotateClientUnsupportedMediaResponseBody runs the validations
+// defined on rotateClient_unsupported_media_response_body
+func ValidateRotateClientUnsupportedMediaResponseBody(body *RotateClientUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRotateClientInvalidResponseBody runs the validations defined on
+// rotateClient_invalid_response_body
+func ValidateRotateClientInvalidResponseBody(body *RotateClientInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRotateClientInvariantViolationResponseBody runs the validations
+// defined on rotateClient_invariant_violation_response_body
+func ValidateRotateClientInvariantViolationResponseBody(body *RotateClientInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRotateClientUnexpectedResponseBody runs the validations defined on
+// rotateClient_unexpected_response_body
+func ValidateRotateClientUnexpectedResponseBody(body *RotateClientUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRotateClientGatewayErrorResponseBody runs the validations defined on
+// rotateClient_gateway_error_response_body
+func ValidateRotateClientGatewayErrorResponseBody(body *RotateClientGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateDeleteClientUnauthorizedResponseBody runs the validations defined on
 // deleteClient_unauthorized_response_body
 func ValidateDeleteClientUnauthorizedResponseBody(body *DeleteClientUnauthorizedResponseBody) (err error) {
@@ -6179,10 +8599,16 @@ func ValidateRemoteSessionClientResponseBody(body *RemoteSessionClientResponseBo
 	if body.ClientSecretExpiresAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_secret_expires_at", *body.ClientSecretExpiresAt, goa.FormatDateTime))
 	}
+	if body.UpstreamRejectedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.upstream_rejected_at", *body.UpstreamRejectedAt, goa.FormatDateTime))
+	}
 	if body.TokenEndpointAuthMethod != nil {
 		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none"}))
 		}
+	}
+	if body.JSONWebKeySetID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.json_web_key_set_id", *body.JSONWebKeySetID, goa.FormatUUID))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))

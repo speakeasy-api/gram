@@ -23,9 +23,9 @@ export type RiskSignalsResult = {
    */
   exposure: Array<RiskExposureSlice>;
   /**
-   * Deduplicated findings in the 24 hours ending at to.
+   * Deduplicated live findings in the window.
    */
-  findings24h: number;
+  findings: number;
   /**
    * Inclusive start of the signals window.
    */
@@ -39,9 +39,9 @@ export type RiskSignalsResult = {
    */
   orgRiskScore: number;
   /**
-   * Deduplicated findings in the 24 hours before that.
+   * Deduplicated live findings in the equal-length window immediately before from.
    */
-  previousFindings24h: number;
+  previousFindings: number;
   /**
    * Organization risk score computed the same way over the equal-length window immediately before from.
    */
@@ -72,14 +72,14 @@ export const RiskSignalsResult$inboundSchema: z.ZodMiniType<
   z.object({
     critical_signals: z.int(),
     exposure: z.array(RiskExposureSlice$inboundSchema),
-    findings_24h: z.int(),
+    findings: z.int(),
     from: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
     open_signals: z.int(),
     org_risk_score: z.number(),
-    previous_findings_24h: z.int(),
+    previous_findings: z.int(),
     previous_org_risk_score: z.number(),
     previous_users_exposed: z.int(),
     signals: z.array(RiskSignal$inboundSchema),
@@ -89,10 +89,9 @@ export const RiskSignalsResult$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "critical_signals": "criticalSignals",
-      "findings_24h": "findings24h",
       "open_signals": "openSignals",
       "org_risk_score": "orgRiskScore",
-      "previous_findings_24h": "previousFindings24h",
+      "previous_findings": "previousFindings",
       "previous_org_risk_score": "previousOrgRiskScore",
       "previous_users_exposed": "previousUsersExposed",
       "users_exposed": "usersExposed",

@@ -93,6 +93,40 @@ func parseCursorHookEvent(raw string) (HookEvent, bool) {
 	}
 }
 
+// parseCopilotHookEvent maps source.raw_event_name values to canonical
+// HookEvent names. These are Copilot's own camelCase hook event names, which
+// are close to Cursor's but not identical: the prompt event is
+// userPromptSubmitted rather than beforeSubmitPrompt, and stop is split into
+// agentStop/subagentStop. Copilot's preCompact, errorOccurred, subagentStart
+// and userPromptTransformed have no canonical equivalent and are deliberately
+// unmapped — they fall through to the canonical Event.Type instead.
+func parseCopilotHookEvent(raw string) (HookEvent, bool) {
+	switch raw {
+	case "sessionStart":
+		return HookEventSessionStart, true
+	case "sessionEnd":
+		return HookEventSessionEnd, true
+	case "userPromptSubmitted":
+		return HookEventUserPromptSubmit, true
+	case "preToolUse":
+		return HookEventPreToolUse, true
+	case "postToolUse":
+		return HookEventPostToolUse, true
+	case "postToolUseFailure":
+		return HookEventPostToolUseFailure, true
+	case "permissionRequest":
+		return HookEventPermissionRequest, true
+	case "agentStop":
+		return HookEventStop, true
+	case "subagentStop":
+		return HookEventSubagentStop, true
+	case "notification":
+		return HookEventNotification, true
+	default:
+		return HookEventUnknown, false
+	}
+}
+
 // parseOpencodeHookEvent maps source.raw_event_name values to canonical
 // HookEvent names. These are agenthooks' native
 // NativeNames (see codec_opencode.go's opencodeKind) — the OpenCode SDK's own

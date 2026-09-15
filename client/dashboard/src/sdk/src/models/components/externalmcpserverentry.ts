@@ -8,9 +8,17 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
+  ExternalMCPPackage,
+  ExternalMCPPackage$inboundSchema,
+} from "./externalmcppackage.js";
+import {
   ExternalMCPRemote,
   ExternalMCPRemote$inboundSchema,
 } from "./externalmcpremote.js";
+import {
+  ExternalMCPRepository,
+  ExternalMCPRepository$inboundSchema,
+} from "./externalmcprepository.js";
 
 /**
  * A summary of an MCP server from an external registry, returned by catalog listings
@@ -29,7 +37,7 @@ export type ExternalMCPServerEntry = {
    */
   isReadOnly: boolean;
   /**
-   * ID of the attached MCP server when this server is listed from a Collection (mcp_server-backed attachment)
+   * ID of the attached MCP server backing this server
    */
   mcpServerId?: string | undefined;
   /**
@@ -37,9 +45,9 @@ export type ExternalMCPServerEntry = {
    */
   meta?: any | undefined;
   /**
-   * ID of the internal collection registry this server came from
+   * Published packages that run this server, when the registry declares any
    */
-  organizationMcpCollectionRegistryId?: string | undefined;
+  packages?: Array<ExternalMCPPackage> | undefined;
   /**
    * ID of the external MCP registry this server came from
    */
@@ -53,6 +61,10 @@ export type ExternalMCPServerEntry = {
    */
   remotes?: Array<ExternalMCPRemote> | undefined;
   /**
+   * The source repository a registry entry links for its server. A registry declaration: nothing verifies the endpoint runs this code.
+   */
+  repository?: ExternalMCPRepository | undefined;
+  /**
    * Whether the server's OAuth authorization server advertises a dynamic client registration endpoint (RFC 7591). When false, connecting requires manual setup (static OAuth client credentials or API keys).
    */
   supportsDcr: boolean;
@@ -65,7 +77,7 @@ export type ExternalMCPServerEntry = {
    */
   toolCount: number;
   /**
-   * ID of the attached toolset when this server is listed from a Collection (toolset-backed attachment)
+   * ID of the attached toolset backing this server
    */
   toolsetId?: string | undefined;
   /**
@@ -85,10 +97,11 @@ export const ExternalMCPServerEntry$inboundSchema: z.ZodMiniType<
     is_read_only: z.boolean(),
     mcp_server_id: z.optional(z.string()),
     meta: z.optional(z.any()),
-    organization_mcp_collection_registry_id: z.optional(z.string()),
+    packages: z.optional(z.array(ExternalMCPPackage$inboundSchema)),
     registry_id: z.optional(z.string()),
     registry_specifier: z.string(),
     remotes: z.optional(z.array(ExternalMCPRemote$inboundSchema)),
+    repository: z.optional(ExternalMCPRepository$inboundSchema),
     supports_dcr: z.boolean(),
     title: z.optional(z.string()),
     tool_count: z.int(),
@@ -100,8 +113,6 @@ export const ExternalMCPServerEntry$inboundSchema: z.ZodMiniType<
       "icon_url": "iconUrl",
       "is_read_only": "isReadOnly",
       "mcp_server_id": "mcpServerId",
-      "organization_mcp_collection_registry_id":
-        "organizationMcpCollectionRegistryId",
       "registry_id": "registryId",
       "registry_specifier": "registrySpecifier",
       "supports_dcr": "supportsDcr",

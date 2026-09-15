@@ -25,6 +25,13 @@ func (f *fakeBillingRepo) GetStoredPeriodUsage(_ context.Context, _ string) (*ge
 	return f.storedUsage, f.storedErr
 }
 
+func periodUsageCredits(credits, included int) *gen.PeriodUsage {
+	return &gen.PeriodUsage{
+		Credits:         &credits,
+		IncludedCredits: &included,
+	}
+}
+
 func newServiceWithBilling(t *testing.T, repo billing.Repository) *Service {
 	t.Helper()
 	return &Service{
@@ -38,7 +45,7 @@ func TestCheckCreditBalance_AllowsWhenUnderIncluded(t *testing.T) {
 	t.Parallel()
 
 	svc := newServiceWithBilling(t, &fakeBillingRepo{
-		storedUsage: &gen.PeriodUsage{Credits: 10, IncludedCredits: 100},
+		storedUsage: periodUsageCredits(10, 100),
 	})
 
 	require.NoError(t, svc.checkCreditBalance(t.Context(), "org-1", "free"))
@@ -48,7 +55,7 @@ func TestCheckCreditBalance_RejectsWhenAtLimit(t *testing.T) {
 	t.Parallel()
 
 	svc := newServiceWithBilling(t, &fakeBillingRepo{
-		storedUsage: &gen.PeriodUsage{Credits: 100, IncludedCredits: 100},
+		storedUsage: periodUsageCredits(100, 100),
 	})
 
 	err := svc.checkCreditBalance(t.Context(), "org-1", "free")
@@ -62,7 +69,7 @@ func TestCheckCreditBalance_RejectsWhenOverLimit(t *testing.T) {
 	t.Parallel()
 
 	svc := newServiceWithBilling(t, &fakeBillingRepo{
-		storedUsage: &gen.PeriodUsage{Credits: 250, IncludedCredits: 100},
+		storedUsage: periodUsageCredits(250, 100),
 	})
 
 	err := svc.checkCreditBalance(t.Context(), "org-1", "free")
@@ -79,7 +86,7 @@ func TestCheckCreditBalance_AllowsWhenIncludedZero(t *testing.T) {
 	// product config). Don't block — let the request through and rely on
 	// upstream OpenRouter key limit as the backstop.
 	svc := newServiceWithBilling(t, &fakeBillingRepo{
-		storedUsage: &gen.PeriodUsage{Credits: 0, IncludedCredits: 0},
+		storedUsage: periodUsageCredits(0, 0),
 	})
 
 	require.NoError(t, svc.checkCreditBalance(t.Context(), "org-1", "free"))
@@ -98,13 +105,14 @@ func TestCheckCreditBalance_BypassesSpecialLimitOrgs(t *testing.T) {
 func TestCheckCreditBalance_BypassesPaidAccountTypes(t *testing.T) {
 	t.Parallel()
 
-	// Pro/enterprise are bounded by the OpenRouter key cap, not this gate
+	// Paid tiers are bounded by the OpenRouter key cap, not this gate
 	// (Phase 0). Repo would error if called.
 	repo := &fakeBillingRepo{storedErr: errors.New("must not be called")}
 	svc := newServiceWithBilling(t, repo)
 
-	require.NoError(t, svc.checkCreditBalance(t.Context(), "org-pro", "pro"))
-	require.NoError(t, svc.checkCreditBalance(t.Context(), "org-ent", "enterprise"))
+	for _, tier := range []billing.Tier{billing.TierPro, billing.TierPayg, billing.TierEnterprise} {
+		require.NoError(t, svc.checkCreditBalance(t.Context(), "org-paid", string(tier)))
+	}
 }
 
 func TestCheckCreditBalance_AllowsOnCacheMiss(t *testing.T) {

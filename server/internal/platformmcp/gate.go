@@ -4,127 +4,67 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-
-	"github.com/speakeasy-api/gram/server/internal/feature"
-	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 )
 
-// CapabilityChecker is the durable organization capability boundary.
+// CapabilityChecker is the durable organization capability boundary. Platform
+// MCP checks bypass the shared 15-minute product-feature cache so revocation is
+// visible on the next request, comfortably within the 60-second requirement.
 type CapabilityChecker interface {
 	IsFeatureEnabled(ctx context.Context, organizationID string, feature productfeatures.Feature) (bool, error)
+	IsFeatureEnabledUncached(ctx context.Context, organizationID string, feature productfeatures.Feature) (bool, error)
 }
 
-type OrganizationSlugResolver interface {
-	OrganizationSlug(ctx context.Context, organizationID string) (string, error)
-}
-
-type PostgresOrganizationSlugResolver struct {
-	db *pgxpool.Pool
-}
-
-func NewPostgresOrganizationSlugResolver(db *pgxpool.Pool) *PostgresOrganizationSlugResolver {
-	return &PostgresOrganizationSlugResolver{db: db}
-}
-
-func (r *PostgresOrganizationSlugResolver) OrganizationSlug(ctx context.Context, organizationID string) (string, error) {
-	if r == nil || r.db == nil || organizationID == "" {
-		return "", ErrUnavailable
-	}
-	organization, err := organizationsrepo.New(r.db).GetOrganizationMetadata(ctx, organizationID)
-	if err != nil {
-		return "", fmt.Errorf("get organization for Platform MCP rollout: %w", err)
-	}
-	return organization.Slug, nil
-}
-
-// OrganizationGate requires both the durable capability and transient rollout
-// clearance. It intentionally fails closed when either provider is unavailable.
+// OrganizationGate enforces the durable organization-admin entitlement. Any
+// unavailable dependency fails closed.
 type OrganizationGate struct {
-	capabilities  CapabilityChecker
-	rollout       feature.Provider
-	organizations OrganizationSlugResolver
+	capabilities CapabilityChecker
 }
 
-func NewOrganizationGate(capabilities CapabilityChecker, rollout feature.Provider, organizations OrganizationSlugResolver) *OrganizationGate {
-	return &OrganizationGate{capabilities: capabilities, rollout: rollout, organizations: organizations}
+func NewOrganizationGate(capabilities CapabilityChecker) *OrganizationGate {
+	return &OrganizationGate{capabilities: capabilities}
 }
 
 func (g *OrganizationGate) Enabled(ctx context.Context, organizationID string) (bool, error) {
-	if g == nil || g.capabilities == nil || g.rollout == nil || g.organizations == nil || organizationID == "" {
+	if g == nil || g.capabilities == nil || organizationID == "" {
 		return false, ErrUnavailable
 	}
 
-	capable, err := g.capabilities.IsFeatureEnabled(ctx, organizationID, productfeatures.FeaturePlatformMCP)
+	capable, err := g.capabilities.IsFeatureEnabledUncached(ctx, organizationID, productfeatures.FeaturePlatformMCP)
 	if err != nil {
 		return false, fmt.Errorf("check platform mcp capability: %w", err)
 	}
-	if !capable {
-		return false, nil
-	}
-
-	organizationSlug, err := resolveOrganizationSlug(ctx, g.organizations, organizationID)
-	if err != nil {
-		return false, err
-	}
-
-	rolledOut, err := g.rollout.IsFlagEnabled(ctx, feature.FlagPlatformMCPRollout, organizationID, feature.OrgProjectGroups(organizationSlug, ""))
-	if err != nil {
-		return false, fmt.Errorf("check platform mcp rollout: %w", err)
-	}
-	return rolledOut, nil
+	return capable, nil
 }
 
-// CatalogRegistrationGate adds the independent, default-off mutation rollout to
-// the already-required Platform MCP organization gate. Read tools must not use
-// this gate: catalog discovery and readiness remain available whenever the main
-// Platform MCP gate permits them.
+// CatalogRegistrationGate ensures mutations require the main Platform MCP
+// capability and an explicit project slug. Dashboard visibility is not checked:
+// an enabled organization may use the MCP through manual setup alone.
 type CatalogRegistrationGate struct {
-	platform      Gate
-	rollout       feature.Provider
-	organizations OrganizationSlugResolver
+	platform Gate
 }
 
-func NewCatalogRegistrationGate(platform Gate, rollout feature.Provider, organizations OrganizationSlugResolver) *CatalogRegistrationGate {
-	return &CatalogRegistrationGate{
-		platform:      platform,
-		rollout:       rollout,
-		organizations: organizations,
-	}
+func NewCatalogRegistrationGate(platform Gate) *CatalogRegistrationGate {
+	return &CatalogRegistrationGate{platform: platform}
 }
 
 func (g *CatalogRegistrationGate) Enabled(ctx context.Context, organizationID, projectSlug string) (bool, error) {
-	if g == nil || g.platform == nil || g.rollout == nil || g.organizations == nil || organizationID == "" || projectSlug == "" {
+	if projectSlug == "" {
 		return false, ErrUnavailable
 	}
+	return g.EnabledOrganization(ctx, organizationID)
+}
 
+// EnabledOrganization checks the same durable entitlement as a mutation
+// without accepting a project selector. Read-only direct inspection
+// needs this gate before it can perform user-directed egress.
+func (g *CatalogRegistrationGate) EnabledOrganization(ctx context.Context, organizationID string) (bool, error) {
+	if g == nil || g.platform == nil || organizationID == "" {
+		return false, ErrUnavailable
+	}
 	enabled, err := g.platform.Enabled(ctx, organizationID)
 	if err != nil {
 		return false, fmt.Errorf("check platform mcp gate: %w", err)
 	}
-	if !enabled {
-		return false, nil
-	}
-
-	organizationSlug, err := resolveOrganizationSlug(ctx, g.organizations, organizationID)
-	if err != nil {
-		return false, err
-	}
-	registrationEnabled, err := g.rollout.IsFlagEnabled(ctx, feature.FlagPlatformMCPCatalogRegistration, organizationID, feature.OrgProjectGroups(organizationSlug, projectSlug))
-	if err != nil {
-		return false, fmt.Errorf("check platform mcp catalog registration rollout: %w", err)
-	}
-	return registrationEnabled, nil
-}
-
-func resolveOrganizationSlug(ctx context.Context, organizations OrganizationSlugResolver, organizationID string) (string, error) {
-	organizationSlug, err := organizations.OrganizationSlug(ctx, organizationID)
-	if err != nil {
-		return "", fmt.Errorf("resolve platform mcp rollout organization: %w", err)
-	}
-	if organizationSlug == "" {
-		return "", ErrUnavailable
-	}
-	return organizationSlug, nil
+	return enabled, nil
 }

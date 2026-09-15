@@ -1,3 +1,4 @@
+import { AssetImageUploadField } from "@/components/asset-image-upload-field";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import {
@@ -22,6 +23,7 @@ import { useListProjects } from "@gram/client/react-query/listProjects.js";
 import { invalidateAllOrganizationRemoteSessionIssuers } from "@gram/client/react-query/organizationRemoteSessionIssuers.js";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
+import { Link } from "react-router";
 import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
@@ -35,6 +37,8 @@ import {
   deriveSlugFromUrl,
 } from "../mcp/x/tabs/settings/sections/authentication/issuerFormUtils";
 import { useIssuerDiscovery } from "../mcp/x/tabs/settings/sections/authentication/useIssuerDiscovery";
+import { IssuerDuplicateWarning } from "../mcp/x/tabs/settings/sections/authentication/IssuerDuplicateWarning";
+import { useIssuerDuplicatePreflight } from "../mcp/x/tabs/settings/sections/authentication/useIssuerDuplicatePreflight";
 import { buildCreateIssuerForm } from "./issuerSettingsForm";
 
 // Sentinel for the "no project" (organizational) selection. Radix Select treats
@@ -72,10 +76,28 @@ export function CreateRemoteIdentityProviderSheet({
   // operator edits them, after which the *Dirty flags lock in their value.
   const [name, setName] = useState("");
   const [nameDirty, setNameDirty] = useState(false);
+  const [logoAssetId, setLogoAssetId] = useState("");
+  // Create is held while a logo upload is in flight: submitting mid-upload
+  // would persist the pre-upload value and silently drop the picked logo.
+  const [logoUploading, setLogoUploading] = useState(false);
   const [slug, setSlug] = useState("");
   const [slugDirty, setSlugDirty] = useState(false);
   const [clientSetupDocumentationUrl, setClientSetupDocumentationUrl] =
     useState("");
+
+  // The Issuer URL as it stood when the operator last left the field. Held
+  // separately from the live input so the duplicate preflight runs on a settled
+  // value rather than once per keystroke.
+  const [settledIssuerUrl, setSettledIssuerUrl] = useState("");
+  // Org scope: matches span the whole organization, project-specific records
+  // included, plus the platform catalog. That is the point at this tier — an
+  // administrator adding an organization-level provider most needs to know
+  // which projects already configured the same URL on their own.
+  const { matches: duplicateMatches } = useIssuerDuplicatePreflight({
+    issuerUrl: settledIssuerUrl,
+    scope: "organization",
+    enabled: open,
+  });
 
   const {
     issuerUrl,
@@ -134,10 +156,12 @@ export function CreateRemoteIdentityProviderSheet({
     setProjectId(ORGANIZATIONAL);
     setName("");
     setNameDirty(false);
+    setLogoAssetId("");
     setSlug("");
     setSlugDirty(false);
     setClientSetupDocumentationUrl("");
     setIssuerUrl("");
+    setSettledIssuerUrl("");
     resetEndpointState();
     clearDiscoverError();
     resetCreateMutation();
@@ -155,13 +179,14 @@ export function CreateRemoteIdentityProviderSheet({
   );
 
   const handleSubmit = () => {
-    if (!submittable || submitting) return;
+    if (!submittable || submitting || logoUploading) return;
     createMutation.mutate({
       request: {
         createIssuerRequestBody: {
           projectId: projectId === ORGANIZATIONAL ? undefined : projectId,
           ...buildCreateIssuerForm({
             name,
+            logoAssetId,
             slug,
             clientSetupDocumentationUrl,
             issuerUrl,
@@ -215,8 +240,30 @@ export function CreateRemoteIdentityProviderSheet({
 
             <IssuerUrlField
               issuerUrl={issuerUrl}
+              onIssuerUrlSettled={setSettledIssuerUrl}
+              duplicateWarning={
+                <IssuerDuplicateWarning
+                  viewerScope="organization"
+                  matches={duplicateMatches}
+                  renderLink={(match) => (
+                    <Button asChild variant="secondary">
+                      <Link
+                        to={orgRoutes.remoteIdentityProviders.issuerDetail.href(
+                          match.id,
+                        )}
+                        onClick={() => onOpenChange(false)}
+                      >
+                        View existing provider
+                      </Link>
+                    </Button>
+                  )}
+                />
+              }
               onIssuerUrlChange={(value) => {
                 setIssuerUrl(value);
+                // Any edit invalidates the last blur, so a warning cannot
+                // outlive the URL it describes.
+                setSettledIssuerUrl("");
                 clearDiscoverError();
                 if (!slugDirty) {
                   const derived = deriveSlugFromUrl(value);
@@ -272,6 +319,14 @@ export function CreateRemoteIdentityProviderSheet({
               </Text>
             </Stack>
 
+            <AssetImageUploadField
+              tier="organization"
+              value={logoAssetId}
+              onChange={setLogoAssetId}
+              onUploadingChange={setLogoUploading}
+              description="Shown beside this provider in the dashboard and on the connect consent page."
+            />
+
             <Stack gap={2}>
               <Label className="text-muted-foreground text-xs">
                 Client setup documentation URL (optional)
@@ -326,7 +381,7 @@ export function CreateRemoteIdentityProviderSheet({
           </Button>
           <Button
             variant="primary"
-            disabled={!submittable || submitting}
+            disabled={!submittable || submitting || logoUploading}
             onClick={handleSubmit}
           >
             <Button.Text>{submitting ? "Creating…" : "Create"}</Button.Text>

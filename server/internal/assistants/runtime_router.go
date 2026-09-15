@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+
+	"github.com/google/uuid"
 )
 
 // runtimeRouter fans RuntimeBackend calls out to the backend named by each
@@ -51,11 +53,6 @@ func (r *runtimeRouter) SupportsBackend(backend string) bool {
 func (r *runtimeRouter) ServerURL() *url.URL { return r.backends[r.target].ServerURL() }
 func (r *runtimeRouter) ImageRef() string    { return r.backends[r.target].ImageRef() }
 
-// ReusesIdleRuntimes resolves against the target: it drives how a deploy rolls
-// new runtimes onto the configured image, which only concerns the backend that
-// admits them. The deploy sweep skips non-target rows for the same reason.
-func (r *runtimeRouter) ReusesIdleRuntimes() bool { return r.backends[r.target].ReusesIdleRuntimes() }
-
 func (r *runtimeRouter) Ensure(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendEnsureResult, error) {
 	b, err := r.route(runtime.Backend)
 	if err != nil {
@@ -91,6 +88,18 @@ func (r *runtimeRouter) RunTurn(ctx context.Context, runtime assistantRuntimeRec
 		return fmt.Errorf("run turn on %s runtime: %w", runtime.Backend, err)
 	}
 	return nil
+}
+
+func (r *runtimeRouter) InterruptTurn(ctx context.Context, runtime assistantRuntimeRecord, threadID uuid.UUID) (bool, error) {
+	b, err := r.route(runtime.Backend)
+	if err != nil {
+		return false, err
+	}
+	interrupted, err := b.InterruptTurn(ctx, runtime, threadID)
+	if err != nil {
+		return interrupted, fmt.Errorf("interrupt turn on %s runtime: %w", runtime.Backend, err)
+	}
+	return interrupted, nil
 }
 
 func (r *runtimeRouter) Status(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendStatus, error) {

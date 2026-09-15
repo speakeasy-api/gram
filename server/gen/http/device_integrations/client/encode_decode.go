@@ -1945,6 +1945,12 @@ func EncodeListManagedDevicesRequest(encoder func(*http.Request) goahttp.Encoder
 		if p.CoverageBucket != nil {
 			values.Add("coverage_bucket", *p.CoverageBucket)
 		}
+		for _, value := range p.UserIds {
+			values.Add("user_ids", value)
+		}
+		for _, value := range p.UserEmails {
+			values.Add("user_emails", value)
+		}
 		if p.Cursor != nil {
 			values.Add("cursor", *p.Cursor)
 		}

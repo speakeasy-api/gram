@@ -2,12 +2,21 @@ import type { KnipConfig } from "knip";
 
 const config: KnipConfig = {
   // Vite entry (index.html → src/main.tsx) is auto-detected.
-  // Emitted programmatically by themeInitPlugin, which Knip cannot infer.
-  entry: ["src/theme-init.ts"],
+  // theme-init.ts is emitted programmatically by themeInitPlugin, and the two
+  // consent entries live in vite.consent.config.ts and
+  // vite.consent-page.config.ts, non-default config filenames — Knip cannot
+  // infer any of them. The consent page's entry is the stylesheet itself: that
+  // build emits CSS for the server-rendered page and has no JS.
+  entry: [
+    "src/theme-init.ts",
+    "src/consent-tools/main.tsx",
+    "src/consent-page/consent-page.css",
+  ],
   // Vitest, ESLint, Tailwind, and TypeScript plugins are auto-enabled.
   ignoreBinaries: [
-    // Invoked from the lint:format script; not on the dep tree.
-    "oxfmt",
+    // The package manager itself, used to chain scripts and to reach the
+    // workspace-root oxfmt binary; not on the dep tree.
+    "aube",
     // Invoked from the prebuild script to build cel.wasm; not on the dep tree.
     "mise",
   ],
@@ -23,6 +32,15 @@ const config: KnipConfig = {
     // its full API (Badge.Text, DropdownMenuSub, …) whether or not the app
     // happens to use every part of it today.
     "src/components/ui/**/*",
+    // Dev-only brand-row corner. Most of it is imported normally; what is not
+    // is the seam it holds open for a developer's gitignored slot.local.tsx,
+    // absent in every stock checkout — so the exports meant for that file read
+    // as dead code here.
+    "src/dev/**/*",
+    // Page-template layer + its composite widgets: a shared page-shape library
+    // (all templates + widgets) whose full API is exposed whether or not every
+    // page has migrated onto it yet — same rationale as components/ui above.
+    "src/components/page-templates/**/*",
   ],
 };
 

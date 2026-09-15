@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -45,8 +46,26 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, fmt.Errorf("read config: %w", err)
 	}
 
+	// Local development gives every worktree its own ports, so a value such as
+	// the admin callback URL cannot be hardcoded. os.Expand turns an unset
+	// variable into an empty string, which produces a config that parses and
+	// then fails much later, so collect the unset names and reject the file.
+	var missing []string
+	expanded := os.Expand(string(data), func(key string) string {
+		val, ok := os.LookupEnv(key)
+		if !ok {
+			missing = append(missing, key)
+			return ""
+		}
+		return val
+	})
+	if len(missing) > 0 {
+		slices.Sort(missing)
+		return nil, fmt.Errorf("config references unset environment variables: %s", strings.Join(slices.Compact(missing), ", "))
+	}
+
 	var cfg Config
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
+	if err := yaml.Unmarshal([]byte(expanded), &cfg); err != nil {
 		return nil, fmt.Errorf("parse config: %w", err)
 	}
 

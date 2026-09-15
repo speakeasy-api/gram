@@ -1,21 +1,27 @@
 import { CommandGroup, CommandItem } from "@/components/ui/Command";
-import { useSlugs } from "@/contexts/Sdk";
+import { useProjectSlugForRequests, useSlugs } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
+import { mcpServerRouteParam } from "@/lib/sources";
 import { useEnvironments } from "@/pages/environments/useEnvironments";
+import { CATALOG_STALE_TIME_MS } from "@/pages/catalog/hooks";
 import { BUILTIN_RULES_BY_CATEGORY } from "@/pages/security/detection-rules-data";
+import { encodeIdentityUrn, withIdentityWindow } from "@/lib/identity-urn";
 import { useRoutes } from "@/routes";
 import { useAssistantsListSuspense } from "@gram/client/react-query/assistantsList.js";
 import { useLatestDeploymentSuspense } from "@gram/client/react-query/latestDeployment.js";
 import { useListDeploymentsSuspense } from "@gram/client/react-query/listDeployments.js";
+import { useListMCPCatalogSuspense } from "@gram/client/react-query/listMCPCatalog.js";
 import { useListToolsetsSuspense } from "@gram/client/react-query/listToolsets.js";
+import { useMcpServersSuspense } from "@gram/client/react-query/mcpServers.js";
+import { useMembersSuspense } from "@gram/client/react-query/members.js";
 import { useRiskListCustomDetectionRulesSuspense } from "@gram/client/react-query/riskListCustomDetectionRules.js";
-import { useRiskListPolicyBypassRequestsSuspense } from "@gram/client/react-query/riskListPolicyBypassRequests.js";
+import { useListMcpApprovalRequestsSuspense } from "@gram/client/react-query/listMcpApprovalRequests.js";
 import { useRiskListPoliciesSuspense } from "@gram/client/react-query/riskListPolicies.js";
 import { usePluginsSuspense } from "@gram/client/react-query/plugins";
 import { Icon } from "@/components/ui/Icon";
 import { type IconName } from "@/components/ui/Icon/names";
 import { Suspense, useMemo, type ReactNode } from "react";
-import { useNavigate } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 import { CommandErrorBoundary } from "./CommandErrorBoundary";
 
 /**
@@ -79,11 +85,41 @@ function ResultItem({
   );
 }
 
+// TODO(AGE-1902): collapse the two fetches once Hosted (toolset-backed) MCP
+// servers also source from mcp_servers.
+//
+// The palette mirrors the /mcp listing (see pages/mcp/MCP.tsx): "MCP Servers"
+// is one user-facing collection assembled from two backing stores, so both are
+// searched under a single heading. mcp_servers rows are filtered to the
+// non-toolset backends for the same reason the listing does it — a
+// toolset-backed mcp_servers row is the *same* server the toolsets fetch
+// already returned, so including it would double every hosted server in the
+// results. With that filter the two sets are disjoint and no dedupe is needed.
+//
+// Both fetches share this group's Suspense/error boundary, so either failing
+// hides the whole group. That's deliberate: half an "MCP Servers" list is worse
+// than none, because a user who searches and finds nothing concludes the server
+// doesn't exist.
 function McpServersGroup({ onNavigate }: GroupProps) {
   const routes = useRoutes();
-  const { data } = useListToolsetsSuspense();
-  const toolsets = data.toolsets ?? [];
-  if (!toolsets.length) return null;
+  const gramProject = useProjectSlugForRequests();
+  // Both lists are keyed by project: the SDK folds gramProject into the query
+  // key, so omitting it shares one cache entry across every project and a
+  // switch renders the previous project's rows until the refetch lands.
+  const { data: toolsetsData } = useListToolsetsSuspense({ gramProject });
+  const { data: mcpServersData } = useMcpServersSuspense({ gramProject });
+  const toolsets = toolsetsData.toolsets ?? [];
+  const mcpServers = useMemo(
+    () =>
+      (mcpServersData.mcpServers ?? []).filter(
+        (server) =>
+          !!server.remoteMcpServerId ||
+          !!server.tunneledMcpServerId ||
+          !!server.unproxiedMcpServerId,
+      ),
+    [mcpServersData],
+  );
+  if (!toolsets.length && !mcpServers.length) return null;
   return (
     <CommandGroup heading="MCP Servers">
       {toolsets.map((toolset) => (
@@ -95,6 +131,87 @@ function McpServersGroup({ onNavigate }: GroupProps) {
           icon="network"
           onSelect={() => {
             routes.mcp.details.goTo(toolset.slug);
+            onNavigate();
+          }}
+        />
+      ))}
+      {mcpServers.map((server) => (
+        <ResultItem
+          key={server.id}
+          value={`mcp ${server.name ?? ""} ${server.slug ?? ""} ${server.id}`}
+          label={server.name || "MCP Server"}
+          sublabel={server.slug}
+          icon="network"
+          onSelect={() => {
+            routes.mcp.x.overview.goTo(mcpServerRouteParam(server));
+            onNavigate();
+          }}
+        />
+      ))}
+    </CommandGroup>
+  );
+}
+
+/**
+ * Third-party servers offered by the registry catalog.
+ *
+ * Kept in a group of its own, under its own icon, rather than folded into "MCP
+ * Servers": a catalog hit is something this project could run, not something it
+ * runs, and the two legitimately share a name once an entry has been added. The
+ * registry specifier rides along as the sublabel, so a row is never mistaken
+ * for one of the project's own slugs.
+ *
+ * The typed query filters the fetched list here rather than being sent to
+ * listCatalog, which keeps what this group can reach identical to what the
+ * catalog page can show. Both read the same capped response: listCatalog
+ * concatenates its sources in priority order and truncates the merged list, so
+ * the day a second source is enabled, entries past the cap fall out of the
+ * page, out of this group, and out of the detail page — which resolves a
+ * selected row by finding it in that same list. Searching server-side here
+ * alone would filter per source before the merge and so surface rows the
+ * detail page then fails to resolve. The cap is the thing to lift, and the
+ * handler already marks it as standing until cursor pagination lands.
+ */
+function McpCatalogGroup({ onNavigate }: GroupProps) {
+  const routes = useRoutes();
+  const gramProject = useProjectSlugForRequests();
+  // Same request the catalog page makes, down to the freshness window: staleness
+  // is per-observer, so without it this reader would refetch the registry on
+  // every palette mount despite sharing a cache entry the page still considers
+  // fresh.
+  const { data } = useListMCPCatalogSuspense({ gramProject }, undefined, {
+    staleTime: CATALOG_STALE_TIME_MS,
+  });
+  // A specifier is unique within a registry but not across them, and the detail
+  // route is addressed by specifier alone — it resolves the first entry that
+  // matches. Two registries publishing one server would otherwise render as two
+  // identical rows that lead to the same page, so only the row that page
+  // actually opens is offered.
+  const servers = useMemo(() => {
+    const bySpecifier = new Map<string, (typeof data.servers)[number]>();
+    for (const server of data.servers ?? []) {
+      if (!bySpecifier.has(server.registrySpecifier)) {
+        bySpecifier.set(server.registrySpecifier, server);
+      }
+    }
+    return Array.from(bySpecifier.values());
+  }, [data]);
+  if (!servers.length) return null;
+  return (
+    <CommandGroup heading="MCP Catalog">
+      {servers.map((server) => (
+        <ResultItem
+          key={server.registrySpecifier}
+          value={`catalog ${server.title ?? ""} ${server.registrySpecifier}`}
+          label={server.title || server.registrySpecifier}
+          // Dropped when it is standing in as the label: an untitled entry
+          // would otherwise print its specifier twice on the same row.
+          sublabel={server.title ? server.registrySpecifier : undefined}
+          icon="store"
+          onSelect={() => {
+            routes.mcp.catalog.detail.goTo(
+              encodeURIComponent(server.registrySpecifier),
+            );
             onNavigate();
           }}
         />
@@ -140,7 +257,7 @@ function SourcesGroup({ onNavigate }: GroupProps) {
           sublabel={source.kind}
           icon="file-code"
           onSelect={() => {
-            routes.sources.source.goTo(source.kind, source.slug);
+            routes.mcp.goTo();
             onNavigate();
           }}
         />
@@ -253,7 +370,7 @@ function RiskPoliciesGroup({ onNavigate }: GroupProps) {
   const policies = data?.policies ?? [];
   if (!policies.length) return null;
   return (
-    <CommandGroup heading="Risk Policies">
+    <CommandGroup heading="Guardrails">
       {policies.map((policy) => (
         <ResultItem
           key={policy.id}
@@ -308,9 +425,10 @@ function DetectionRulesGroup({ onNavigate }: GroupProps) {
           sublabel={rule.severity}
           icon="scan-search"
           onSelect={() => {
-            // No per-rule route; deep-link opens the rule's sheet by id.
+            // No per-rule route; deep-link opens the rule's sheet by id on
+            // the Guardrails page's Detection Rules tab.
             void navigate(
-              `${routes.detectionRules.href()}?rule=${encodeURIComponent(rule.id)}`,
+              `${routes.policyCenter.href()}?tab=detection-rules&rule=${encodeURIComponent(rule.id)}`,
             );
             onNavigate();
           }}
@@ -324,39 +442,96 @@ function ApprovalRequestsGroup({ onNavigate }: GroupProps) {
   const routes = useRoutes();
   const navigate = useNavigate();
   const { projectSlug = "" } = useSlugs();
-  const { data } = useRiskListPolicyBypassRequestsSuspense({
+  const { data } = useListMcpApprovalRequestsSuspense({
     status: "requested",
     gramProject: projectSlug,
   });
   const requests = data?.requests ?? [];
   if (!requests.length) return null;
   return (
-    <CommandGroup heading="Approval Requests">
-      {requests.map((request) => {
-        const label =
-          request.targetLabel ??
-          request.targetKey ??
-          request.requesterEmail ??
-          request.requesterUserId ??
-          request.id;
-        return (
-          <ResultItem
-            key={request.id}
-            value={`approval request ${label} ${request.id}`}
-            label={label}
-            sublabel={request.status}
-            icon="inbox"
-            onSelect={() => {
-              // No per-request route; deep-link opens the review sheet by id.
-              void navigate(
-                `${routes.approvalRequests.href()}?review=${encodeURIComponent(request.id)}`,
-              );
-              onNavigate();
-            }}
-          />
-        );
-      })}
+    <CommandGroup heading="Access Requests">
+      {requests.map((request) => (
+        <ResultItem
+          key={request.id}
+          value={`access request ${request.targetRaw} ${request.id}`}
+          label={request.targetRaw}
+          sublabel={request.status}
+          icon="inbox"
+          onSelect={() => {
+            // stdio targets have no server page; their row on the servers
+            // table opens the review sheet.
+            void navigate(
+              request.serverSlug
+                ? routes.shadowMCP.detail.href(request.serverSlug)
+                : routes.shadowMCP.href(),
+            );
+            onNavigate();
+          }}
+        />
+      ))}
     </CommandGroup>
+  );
+}
+
+/**
+ * People, by name or address, jumping straight to their identity page.
+ *
+ * Directory members only: the identities index also lists unattributed
+ * addresses and agent ids, but reaching those needs an all-time telemetry crawl
+ * — far too heavy for a surface that has to answer on every keystroke.
+ */
+function PeopleGroup({ onNavigate }: GroupProps) {
+  // The identity page lives under a project, and the palette opens from the
+  // org shell too, where the path carries no slug. Fall back to the slug those
+  // pages already send on their requests, the same way IdentityLink does —
+  // without it the palette built `/org/projects//identities/...`, which
+  // matches no route.
+  const projectSlug = useProjectSlugForRequests();
+  const routes = useRoutes({ projectSlug });
+  const navigate = useNavigate();
+  // The palette opens over whatever page the reader had narrowed, so the
+  // person's page opens on that same window rather than the default one.
+  const { search } = useLocation();
+  const { data } = useMembersSuspense();
+  const members = data?.members ?? [];
+  if (!members.length) return null;
+  return (
+    <CommandGroup heading="People">
+      {members.map((member) => (
+        <ResultItem
+          key={member.id}
+          value={`person ${member.name} ${member.email} ${member.id}`}
+          label={member.name || member.email}
+          sublabel={member.email}
+          icon="user"
+          onSelect={() => {
+            void navigate(
+              withIdentityWindow(
+                routes.identities.detail.overview.href(
+                  encodeIdentityUrn(`user:${member.id}`),
+                ),
+                search,
+              ),
+            );
+            onNavigate();
+          }}
+        />
+      ))}
+    </CommandGroup>
+  );
+}
+
+/**
+ * The people group on its own, so the palette can offer it from the org shell
+ * too — where the project-scoped resource groups have no project to read.
+ */
+export function PeopleResults({ onNavigate }: GroupProps): JSX.Element | null {
+  const { hasAnyScope } = useRBAC();
+  if (!hasAnyScope(["org:read", "org:admin"])) return null;
+  return (
+    <LazyGroup>
+      <PeopleGroup onNavigate={onNavigate} />
+    </LazyGroup>
   );
 }
 
@@ -364,13 +539,21 @@ export function ResourceResults({
   onNavigate,
   query,
 }: GroupProps & { query: string }): JSX.Element {
-  const { hasAnyScope } = useRBAC();
+  const { hasAnyScope, hasScope } = useRBAC();
   // Risk resources are org:admin-gated on their own pages; mirror that here so
   // non-admins never fire the (forbidden) list calls.
   const isAdmin = hasAnyScope(["org:admin"]);
-  // Detection rules are high-cardinality (dozens of built-ins), so they'd flood
-  // the default view and fetch on open. Make them search-only: render (and
-  // fetch) the group only once the user types, letting cmdk filter the results.
+  // Approval requests are an org-admin surface, matching the queue page's
+  // own gate.
+  const canReadApprovals = hasScope("org:admin");
+  // What listCatalog itself requires, rather than the looser any-of gate the
+  // catalog page renders behind: an mcp:write-only reader would pass that one
+  // and then have the request refused.
+  const canBrowseCatalog = hasScope("project:read");
+  // Detection rules and the catalog are high-cardinality (dozens of built-ins;
+  // hundreds of registry entries), so they'd flood the default view and fetch
+  // on open. Make them search-only: render (and fetch) the group only once the
+  // user types, letting cmdk filter the results.
   const hasQuery = query.length > 0;
 
   return (
@@ -378,6 +561,13 @@ export function ResourceResults({
       <LazyGroup>
         <McpServersGroup onNavigate={onNavigate} />
       </LazyGroup>
+      {/* Directly below the project's own servers: when a name matches both,
+          what you already run should read first and the catalog offer second. */}
+      {canBrowseCatalog && hasQuery && (
+        <LazyGroup>
+          <McpCatalogGroup onNavigate={onNavigate} />
+        </LazyGroup>
+      )}
       <LazyGroup>
         <SourcesGroup onNavigate={onNavigate} />
       </LazyGroup>
@@ -403,10 +593,12 @@ export function ResourceResults({
               <DetectionRulesGroup onNavigate={onNavigate} />
             </LazyGroup>
           )}
-          <LazyGroup>
-            <ApprovalRequestsGroup onNavigate={onNavigate} />
-          </LazyGroup>
         </>
+      )}
+      {canReadApprovals && (
+        <LazyGroup>
+          <ApprovalRequestsGroup onNavigate={onNavigate} />
+        </LazyGroup>
       )}
     </>
   );

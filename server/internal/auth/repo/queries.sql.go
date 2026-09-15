@@ -70,3 +70,19 @@ func (q *Queries) PokeProjectByID(ctx context.Context, arg PokeProjectByIDParams
 	err := row.Scan(&id)
 	return id, err
 }
+
+const setUserAdminFixture = `-- name: SetUserAdminFixture :exec
+UPDATE users
+SET admin = $1
+WHERE id = $2
+`
+
+type SetUserAdminFixtureParams struct {
+	Admin  bool
+	UserID string
+}
+
+func (q *Queries) SetUserAdminFixture(ctx context.Context, arg SetUserAdminFixtureParams) error {
+	_, err := q.db.Exec(ctx, setUserAdminFixture, arg.Admin, arg.UserID)
+	return err
+}

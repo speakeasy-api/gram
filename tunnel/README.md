@@ -64,36 +64,26 @@ Redis is live data-plane state:
 
 ## Local Validation
 
-Start the local dev stack with `./zero --agent`.
-The local Postgres MCP server and agent are declared in `compose.yml` under the
-`tunnel` profile:
+Start the local dev stack with `./zero --agent`. The `tunnel-gateway`
+pitchfork daemon runs the local gateway with agent `/connect` on `:8090` and
+internal forwarding on `:8091`, using Redis for routes.
+
+To exercise the full path, create a tunneled MCP source in the dashboard and
+run the agent against any local MCP server with the one-time key it issues:
 
 ```bash
-docker compose --profile tunnel up --build tunnel-postgres-mcp tunnel-agent
+TUNNEL_GATEWAY_URL=ws://localhost:8090/connect \
+TUNNEL_KEY=<one-time tunnel key> \
+TUNNEL_LOCAL_MCP_URL=<local MCP server url> \
+TUNNEL_SERVICE_VERSION=dev \
+go run ./tunnel/cmd/tunnel-agent
 ```
-
-Two pitchfork daemon entries wrap the same local path:
-
-- `tunnel-gateway`: local gateway with agent `/connect` on `:8090` and internal forwarding on `:8091`, using Redis for routes.
-- `tunnel-postgres-mcp`: starts Postgres MCP and the companion tunnel agent.
-
-The tunnel seed task writes the local tunnel ID and key to `mise.local.toml`:
-
-```bash
-TUNNEL_LOCAL_ID=<tunneled_mcp_servers.id>
-TUNNEL_LOCAL_KEY=<one-time tunnel key>
-TUNNEL_LOCAL_MCP_ENDPOINT_SLUG=<mcp endpoint slug>
-TUNNEL_LOCAL_MCP_SERVER_ID=<mcp server id>
-```
-
-The Compose service runs the agent in the Postgres MCP network namespace and
-pins the upstream to `http://127.0.0.1:9000/mcp`; Gram reaches it through the
-normal tunneled MCP endpoint seeded in the dashboard.
 
 ## Tests
 
 ```bash
-go test ./tunnel/... ./server/internal/tunneledmcp/...
+mise exec -- go test ./tunnel/...
+mise run test:server ./internal/tunneledmcp/...
 ```
 
 `server/internal/mcp` covers the production MCP serve path that routes tunneled

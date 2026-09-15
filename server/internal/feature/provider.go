@@ -79,6 +79,60 @@ func (imp *InMemory) SetFlagPayload(flag Flag, distinctID string, payload []byte
 	(*sync.Map)(imp).Store(payloadKey(flag, distinctID), payload)
 }
 
+// variantKey namespaces variant entries so they never collide with the boolean
+// or payload entries stored for the same flag.
+func variantKey(flag Flag, distinctID string) string {
+	return "variant:" + distinctID + ":" + string(flag)
+}
+
+func (imp *InMemory) FlagVariant(ctx context.Context, flag Flag, distinctID string, groups map[string]string) (Variant, error) {
+	val, ok := (*sync.Map)(imp).Load(variantKey(flag, distinctID))
+	if !ok {
+		return "", nil
+	}
+
+	variant, ok := val.(Variant)
+	if !ok {
+		return "", nil
+	}
+
+	return variant, nil
+}
+
+func (imp *InMemory) SetFlagVariant(flag Flag, distinctID string, variant Variant) {
+	(*sync.Map)(imp).Store(variantKey(flag, distinctID), variant)
+}
+
+// Variant is the release key a multivariate flag resolves to. An empty Variant
+// means the flag is off, boolean-only, missing, or the provider could not
+// decide — callers must map it to their own fail-safe default rather than
+// treating it as a distinct behaviour.
+type Variant string
+
+// VariantProvider is implemented by providers that can resolve a multivariate
+// flag's variant key. Kept separate from Provider so bool-only implementations
+// (test fakes included) keep compiling.
+type VariantProvider interface {
+	FlagVariant(ctx context.Context, flag Flag, distinctID string, groups map[string]string) (Variant, error)
+}
+
+// FlagVariant resolves a multivariate flag's variant, returning "" for
+// providers that only expose the bool contract or when no variant matched.
+func FlagVariant(ctx context.Context, provider Provider, flag Flag, distinctID string, groups map[string]string) (Variant, error) {
+	if provider == nil {
+		return "", nil
+	}
+	resolver, ok := provider.(VariantProvider)
+	if !ok {
+		return "", nil
+	}
+	variant, err := resolver.FlagVariant(ctx, flag, distinctID, groups)
+	if err != nil {
+		return "", fmt.Errorf("resolve feature flag variant %q: %w", flag, err)
+	}
+	return variant, nil
+}
+
 // Evaluation reports whether a flag provider reached an authoritative decision.
 // It is intentionally separate from Provider so existing feature checks can keep
 // their bool-only contract while safety-sensitive callers can distinguish an

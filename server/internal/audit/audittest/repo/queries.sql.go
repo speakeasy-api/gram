@@ -12,6 +12,26 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const backdateAuditLog = `-- name: BackdateAuditLog :exec
+UPDATE audit_logs
+SET created_at = $1
+WHERE id = $2
+`
+
+type BackdateAuditLogParams struct {
+	CreatedAt pgtype.Timestamptz
+	ID        uuid.UUID
+}
+
+// Test-only: stamps one audit row at a chosen instant so a test can build a
+// window over rows it wrote. Production never sets created_at — it defaults to
+// clock_timestamp() — but a test asserting on a time range needs the rows to
+// sit at known, distinct points rather than microseconds apart.
+func (q *Queries) BackdateAuditLog(ctx context.Context, arg BackdateAuditLogParams) error {
+	_, err := q.db.Exec(ctx, backdateAuditLog, arg.CreatedAt, arg.ID)
+	return err
+}
+
 const countAuditLogs = `-- name: CountAuditLogs :one
 SELECT COUNT(*)
 FROM audit_logs
@@ -40,13 +60,21 @@ func (q *Queries) CountAuditLogsByAction(ctx context.Context, action string) (in
 const getLatestAuditLogByAction = `-- name: GetLatestAuditLogByAction :one
 SELECT
   action,
+  organization_id,
   project_id,
+  actor_id,
+  actor_type,
+  actor_display_name,
+  actor_slug,
+  subject_id,
   subject_type,
   subject_display_name,
   subject_slug,
   metadata,
   before_snapshot,
-  after_snapshot
+  after_snapshot,
+  acting_surface,
+  acting_client_id
 FROM audit_logs
 WHERE action = $1
 ORDER BY seq DESC
@@ -55,13 +83,21 @@ LIMIT 1
 
 type GetLatestAuditLogByActionRow struct {
 	Action             string
+	OrganizationID     string
 	ProjectID          uuid.NullUUID
+	ActorID            string
+	ActorType          string
+	ActorDisplayName   pgtype.Text
+	ActorSlug          pgtype.Text
+	SubjectID          string
 	SubjectType        string
 	SubjectDisplayName pgtype.Text
 	SubjectSlug        pgtype.Text
 	Metadata           []byte
 	BeforeSnapshot     []byte
 	AfterSnapshot      []byte
+	ActingSurface      pgtype.Text
+	ActingClientID     pgtype.Text
 }
 
 func (q *Queries) GetLatestAuditLogByAction(ctx context.Context, action string) (GetLatestAuditLogByActionRow, error) {
@@ -69,13 +105,21 @@ func (q *Queries) GetLatestAuditLogByAction(ctx context.Context, action string) 
 	var i GetLatestAuditLogByActionRow
 	err := row.Scan(
 		&i.Action,
+		&i.OrganizationID,
 		&i.ProjectID,
+		&i.ActorID,
+		&i.ActorType,
+		&i.ActorDisplayName,
+		&i.ActorSlug,
+		&i.SubjectID,
 		&i.SubjectType,
 		&i.SubjectDisplayName,
 		&i.SubjectSlug,
 		&i.Metadata,
 		&i.BeforeSnapshot,
 		&i.AfterSnapshot,
+		&i.ActingSurface,
+		&i.ActingClientID,
 	)
 	return i, err
 }

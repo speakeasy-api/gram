@@ -18,9 +18,10 @@ import (
 
 // Server lists the features service endpoint HTTP handlers.
 type Server struct {
-	Mounts             []*MountPoint
-	GetProductFeatures http.Handler
-	SetProductFeature  http.Handler
+	Mounts                            []*MountPoint
+	GetProductFeatures                http.Handler
+	SetProductFeature                 http.Handler
+	SetRemoteSessionAutoRefreshPolicy http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -52,9 +53,11 @@ func New(
 		Mounts: []*MountPoint{
 			{"GetProductFeatures", "GET", "/rpc/productFeatures.get"},
 			{"SetProductFeature", "POST", "/rpc/productFeatures.set"},
+			{"SetRemoteSessionAutoRefreshPolicy", "POST", "/rpc/productFeatures.setRemoteSessionAutoRefreshPolicy"},
 		},
-		GetProductFeatures: NewGetProductFeaturesHandler(e.GetProductFeatures, mux, decoder, encoder, errhandler, formatter),
-		SetProductFeature:  NewSetProductFeatureHandler(e.SetProductFeature, mux, decoder, encoder, errhandler, formatter),
+		GetProductFeatures:                NewGetProductFeaturesHandler(e.GetProductFeatures, mux, decoder, encoder, errhandler, formatter),
+		SetProductFeature:                 NewSetProductFeatureHandler(e.SetProductFeature, mux, decoder, encoder, errhandler, formatter),
+		SetRemoteSessionAutoRefreshPolicy: NewSetRemoteSessionAutoRefreshPolicyHandler(e.SetRemoteSessionAutoRefreshPolicy, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -65,6 +68,7 @@ func (s *Server) Service() string { return "features" }
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetProductFeatures = m(s.GetProductFeatures)
 	s.SetProductFeature = m(s.SetProductFeature)
+	s.SetRemoteSessionAutoRefreshPolicy = m(s.SetRemoteSessionAutoRefreshPolicy)
 }
 
 // MethodNames returns the methods served.
@@ -74,6 +78,7 @@ func (s *Server) MethodNames() []string { return features.MethodNames[:] }
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetProductFeaturesHandler(mux, h.GetProductFeatures)
 	MountSetProductFeatureHandler(mux, h.SetProductFeature)
+	MountSetRemoteSessionAutoRefreshPolicyHandler(mux, h.SetRemoteSessionAutoRefreshPolicy)
 }
 
 // Mount configures the mux to serve the features endpoints.
@@ -164,6 +169,60 @@ func NewSetProductFeatureHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "setProductFeature")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "features")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSetRemoteSessionAutoRefreshPolicyHandler configures the mux to serve
+// the "features" service "setRemoteSessionAutoRefreshPolicy" endpoint.
+func MountSetRemoteSessionAutoRefreshPolicyHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/productFeatures.setRemoteSessionAutoRefreshPolicy", f)
+}
+
+// NewSetRemoteSessionAutoRefreshPolicyHandler creates a HTTP handler which
+// loads the HTTP request and calls the "features" service
+// "setRemoteSessionAutoRefreshPolicy" endpoint.
+func NewSetRemoteSessionAutoRefreshPolicyHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetRemoteSessionAutoRefreshPolicyRequest(mux, decoder)
+		encodeResponse = EncodeSetRemoteSessionAutoRefreshPolicyResponse(encoder)
+		encodeError    = EncodeSetRemoteSessionAutoRefreshPolicyError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setRemoteSessionAutoRefreshPolicy")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "features")
 		payload, err := decodeRequest(r)
 		if err != nil {

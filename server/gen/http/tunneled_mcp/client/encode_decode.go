@@ -1699,19 +1699,24 @@ func DecodeDeleteServerResponse(decoder func(*http.Response) goahttp.Decoder, re
 // *TunneledMcpServerResponseBody.
 func unmarshalTunneledMcpServerResponseBodyToTypesTunneledMcpServer(v *TunneledMcpServerResponseBody) *types.TunneledMcpServer {
 	res := &types.TunneledMcpServer{
-		ID:                         *v.ID,
-		ProjectID:                  *v.ProjectID,
-		Name:                       *v.Name,
-		KeyPrefix:                  *v.KeyPrefix,
-		Status:                     types.TunneledMcpLifecycleStatus(*v.Status),
-		ConnectionStatus:           types.TunneledMcpConnectionStatus(*v.ConnectionStatus),
-		AllowPublic:                *v.AllowPublic,
-		AgentVersion:               v.AgentVersion,
-		LastSeenAt:                 v.LastSeenAt,
-		ActiveConnectionCount:      *v.ActiveConnectionCount,
-		ActiveConsumerSessionCount: *v.ActiveConsumerSessionCount,
-		CreatedAt:                  *v.CreatedAt,
-		UpdatedAt:                  *v.UpdatedAt,
+		ID:                                  *v.ID,
+		ProjectID:                           *v.ProjectID,
+		Name:                                *v.Name,
+		KeyPrefix:                           *v.KeyPrefix,
+		Status:                              types.TunneledMcpLifecycleStatus(*v.Status),
+		ConnectionStatus:                    types.TunneledMcpConnectionStatus(*v.ConnectionStatus),
+		AllowPublic:                         *v.AllowPublic,
+		AgentVersion:                        v.AgentVersion,
+		ResourceIdentifier:                  v.ResourceIdentifier,
+		PublicRequestRatePerSecond:          v.PublicRequestRatePerSecond,
+		PublicRequestBurst:                  v.PublicRequestBurst,
+		EffectivePublicRequestRatePerSecond: *v.EffectivePublicRequestRatePerSecond,
+		EffectivePublicRequestBurst:         *v.EffectivePublicRequestBurst,
+		LastSeenAt:                          v.LastSeenAt,
+		ActiveConnectionCount:               *v.ActiveConnectionCount,
+		ActiveConsumerSessionCount:          *v.ActiveConsumerSessionCount,
+		CreatedAt:                           *v.CreatedAt,
+		UpdatedAt:                           *v.UpdatedAt,
 	}
 
 	return res

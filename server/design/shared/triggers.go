@@ -29,6 +29,33 @@ var TriggerDefinition = Type("TriggerDefinition", func() {
 	Required("slug", "title", "description", "kind", "config_schema", "env_requirements")
 })
 
+var TriggerEvent = Type("TriggerEvent", func() {
+	Meta("struct:pkg:path", "types")
+
+	Attribute("id", String, "The trigger event ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("trigger_instance_id", String, "The trigger instance that dispatched the event.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("status", String, "The processing status of the event.", func() {
+		Enum("pending", "processing", "completed", "failed")
+	})
+	Attribute("attempts", Int, "Number of processing attempts.")
+	Attribute("last_error", String, "The last processing error, if any.")
+	Attribute("chat_id", String, "The conversation the event was routed to.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("created_at", String, "Creation timestamp.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("processed_at", String, "Processing completion timestamp.", func() {
+		Format(FormatDateTime)
+	})
+
+	Required("id", "trigger_instance_id", "status", "attempts", "created_at")
+})
+
 var TriggerInstance = Type("TriggerInstance", func() {
 	Meta("struct:pkg:path", "types")
 

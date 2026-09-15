@@ -3,8 +3,6 @@ package risk
 import (
 	"context"
 	"fmt"
-	"maps"
-	"slices"
 
 	"github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -63,35 +61,6 @@ func riskPolicyAudiencePrincipals(audienceType string, principalURNs []string) (
 	return principals, nil
 }
 
-func principalStrings(principals []urn.Principal) []string {
-	values := make([]string, 0, len(principals))
-	for _, principal := range principals {
-		values = append(values, principal.String())
-	}
-	return values
-}
-
-func syncRiskPolicyAudienceGrants(ctx context.Context, db repo.DBTX, organizationID string, policyID string, audienceType string, principalURNs []string) error {
-	principals, err := riskPolicyAudiencePrincipals(audienceType, principalURNs)
-	if err != nil {
-		return err
-	}
-
-	if err := authz.ReplaceGrantAudience(ctx, db, authz.ResourceGrant{
-		Resource: authz.Resource{
-			OrganizationID: organizationID,
-			Scope:          authz.ScopeRiskPolicyEvaluate,
-			ResourceID:     policyID,
-		},
-		Principals: principals,
-		Selector:   authz.NewSelector(authz.ScopeRiskPolicyEvaluate, policyID),
-	}); err != nil {
-		return fmt.Errorf("replace risk policy audience grants: %w", err)
-	}
-
-	return nil
-}
-
 func clearRiskPolicyAudienceGrants(ctx context.Context, db repo.DBTX, organizationID string, policyID string) error {
 	if err := authz.ReplaceGrantAudience(ctx, db, authz.ResourceGrant{
 		Resource: authz.Resource{
@@ -106,57 +75,4 @@ func clearRiskPolicyAudienceGrants(ctx context.Context, db repo.DBTX, organizati
 	}
 
 	return nil
-}
-
-func riskPolicyAudiencePrincipalURNs(ctx context.Context, db repo.DBTX, organizationID string, policyID string) ([]string, error) {
-	grants, err := authz.ListGrantsForResource(ctx, db, authz.Resource{
-		OrganizationID: organizationID,
-		Scope:          authz.ScopeRiskPolicyEvaluate,
-		ResourceID:     policyID,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("list risk policy audience grants: %w", err)
-	}
-
-	principalURNs := make([]string, 0, len(grants))
-	for _, grant := range grants {
-		if !maps.Equal(grant.Selector, authz.NewSelector(authz.ScopeRiskPolicyEvaluate, policyID)) {
-			continue
-		}
-		principalURNs = append(principalURNs, grant.PrincipalUrn)
-	}
-	slices.Sort(principalURNs)
-	principalURNs = slices.Compact(principalURNs)
-
-	return principalURNs, nil
-}
-
-// riskPolicyAudienceURNsByPolicy batch-loads audience principal URNs for the
-// given risk policies in a single query, keyed by policy id. Batched form of
-// riskPolicyAudiencePrincipalURNs used by ListRiskPolicies to avoid a per-policy
-// round trip. Scoped to policyIDs so it never loads the whole org. Policies with
-// no audience grants are simply absent from the map.
-func riskPolicyAudienceURNsByPolicy(ctx context.Context, db repo.DBTX, organizationID string, policyIDs []string) (map[string][]string, error) {
-	grants, err := authz.ListGrantsForResourceIDs(ctx, db, organizationID, authz.ScopeRiskPolicyEvaluate, policyIDs)
-	if err != nil {
-		return nil, fmt.Errorf("list risk policy audience grants: %w", err)
-	}
-
-	byPolicy := make(map[string][]string)
-	for _, grant := range grants {
-		// Attribute the grant to its policy via the selector's resource_id, then
-		// re-check against the canonical selector so grants carrying extra keys
-		// (or wildcards) are excluded exactly as the single-policy path does.
-		policyID := grant.Selector.ResourceID()
-		if !maps.Equal(grant.Selector, authz.NewSelector(authz.ScopeRiskPolicyEvaluate, policyID)) {
-			continue
-		}
-		byPolicy[policyID] = append(byPolicy[policyID], grant.PrincipalUrn)
-	}
-	for policyID, principalURNs := range byPolicy {
-		slices.Sort(principalURNs)
-		byPolicy[policyID] = slices.Compact(principalURNs)
-	}
-
-	return byPolicy, nil
 }

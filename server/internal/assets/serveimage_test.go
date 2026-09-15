@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	testidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	"github.com/speakeasy-api/gram/server/gen/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -36,13 +37,14 @@ func TestService_ServeImage_Success(t *testing.T) {
 
 	// Create asset in database using the URI from storage
 	asset, err := ti.repo.CreateAsset(ctx, repo.CreateAssetParams{
-		Name:          filename,
-		Url:           uri.String(),
-		ProjectID:     projectID,
-		Sha256:        "abc123",
-		Kind:          "image",
-		ContentType:   contentType,
-		ContentLength: contentLength,
+		Name:           filename,
+		Url:            uri.String(),
+		ProjectID:      projectID,
+		OrganizationID: testidp.MockOrgID,
+		Sha256:         "abc123",
+		Kind:           "image",
+		ContentType:    contentType,
+		ContentLength:  contentLength,
 	})
 	require.NoError(t, err)
 
@@ -58,6 +60,7 @@ func TestService_ServeImage_Success(t *testing.T) {
 	require.Equal(t, contentType, result.ContentType)
 	require.Equal(t, contentLength, result.ContentLength)
 	require.NotEmpty(t, result.LastModified)
+	require.Equal(t, "cross-origin", result.CrossOriginResourcePolicy)
 
 	bodyBytes, err := io.ReadAll(body)
 	require.NoError(t, err)
@@ -106,13 +109,14 @@ func TestService_ServeImage_FileNotInStorage(t *testing.T) {
 
 	// Create asset in database but don't put file in storage
 	asset, err := ti.repo.CreateAsset(ctx, repo.CreateAssetParams{
-		Name:          "missing-image.png",
-		Url:           "file://missing-asset.png",
-		ProjectID:     projectID,
-		Sha256:        "abc123",
-		Kind:          "image",
-		ContentType:   "image/png",
-		ContentLength: 1024,
+		Name:           "missing-image.png",
+		Url:            "file://missing-asset.png",
+		ProjectID:      projectID,
+		OrganizationID: testidp.MockOrgID,
+		Sha256:         "abc123",
+		Kind:           "image",
+		ContentType:    "image/png",
+		ContentLength:  1024,
 	})
 	require.NoError(t, err)
 
@@ -134,13 +138,14 @@ func TestService_ServeImage_InvalidAssetURL(t *testing.T) {
 
 	// Create asset with invalid URL
 	asset, err := ti.repo.CreateAsset(ctx, repo.CreateAssetParams{
-		Name:          "invalid-url.png",
-		Url:           "invalid-url",
-		ProjectID:     projectID,
-		Sha256:        "abc123",
-		Kind:          "image",
-		ContentType:   "image/png",
-		ContentLength: 1024,
+		Name:           "invalid-url.png",
+		Url:            "invalid-url",
+		ProjectID:      projectID,
+		OrganizationID: testidp.MockOrgID,
+		Sha256:         "abc123",
+		Kind:           "image",
+		ContentType:    "image/png",
+		ContentLength:  1024,
 	})
 	require.NoError(t, err)
 

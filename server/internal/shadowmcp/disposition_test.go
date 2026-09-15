@@ -3,8 +3,22 @@ package shadowmcp
 import (
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 )
+
+func TestEffectiveDisposition(t *testing.T) {
+	t.Parallel()
+
+	require.Empty(t, EffectiveDisposition(pgtype.Text{}, []string{SourceShadowMCP}, "flag"))
+	require.Empty(t, EffectiveDisposition(pgtype.Text{}, []string{"gitleaks"}, "block"))
+	require.Equal(t, DispositionBlockAll, EffectiveDisposition(pgtype.Text{}, []string{SourceShadowMCP}, "block"))
+	require.Equal(t, DispositionAllowAll, EffectiveDisposition(
+		pgtype.Text{String: DispositionAllowAll, Valid: true},
+		[]string{SourceShadowMCP},
+		"block",
+	))
+}
 
 func TestBlockedURLMatch_CanonicalizesBeforeMatching(t *testing.T) {
 	t.Parallel()

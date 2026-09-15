@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
 // deviceAgentReleasesBaseURL is the public, unauthenticated bucket the
@@ -33,6 +34,7 @@ import (
 const deviceAgentReleasesBaseURL = "https://storage.googleapis.com/speakeasy-device-agent-releases-prod"
 
 const installDeviceAgentMacOSPath = "/v1/install/device-agent-macos.pkg"
+const installDeviceAgentWindowsPath = "/v1/install/device-agent-windows.msi"
 
 // maxManifestSize bounds how much of the releases manifest response we will
 // read; releases.json is tiny, so this is generous headroom against a large
@@ -83,10 +85,11 @@ func Attach(mux goahttp.Muxer, service *Service) {
 		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
 	)
 
-	// Raw HTTP handler: a stable, version-agnostic link to the current signed
-	// macOS device-agent pkg, for docs/IT-admin instructions that can't run
-	// the dashboard's own version-resolution logic.
+	// Raw HTTP handlers: stable, version-agnostic links to the current signed
+	// macOS device-agent pkg and Windows msi, for docs/IT-admin instructions
+	// that can't run the dashboard's own version-resolution logic.
 	mux.Handle("GET", installDeviceAgentMacOSPath, service.handleInstallDeviceAgentMacOS)
+	mux.Handle("GET", installDeviceAgentWindowsPath, service.handleInstallDeviceAgentWindows)
 }
 
 // Openapi implements about.Service.
@@ -102,7 +105,23 @@ func (s *Service) Openapi(context.Context) (res *gen.OpenapiResult, body io.Read
 // pkg. Never hardcode the pkg URL elsewhere; link here instead so every
 // consumer stays current without a docs edit on every release.
 func (s *Service) handleInstallDeviceAgentMacOS(w http.ResponseWriter, r *http.Request) {
-	ctx, span := s.tracer.Start(r.Context(), "about.handleInstallDeviceAgentMacOS")
+	s.redirectToDeviceAgentArtifact(w, r, "about.handleInstallDeviceAgentMacOS", "speakeasy-agent_%s.pkg")
+}
+
+// handleInstallDeviceAgentWindows is the Windows analog of
+// handleInstallDeviceAgentMacOS: a stable link that 302-redirects to the
+// current version's signed msi.
+func (s *Service) handleInstallDeviceAgentWindows(w http.ResponseWriter, r *http.Request) {
+	s.redirectToDeviceAgentArtifact(w, r, "about.handleInstallDeviceAgentWindows", "speakeasy-agent_%s.msi")
+}
+
+// redirectToDeviceAgentArtifact resolves the current device-agent version from
+// the public releases manifest and 302-redirects to that version's copy of the
+// artifact named by artifactPattern (a fmt pattern with one %s for the
+// version). Installer artifacts follow the same on-ramp rule: published under
+// v<version>/ in the bucket but deliberately absent from releases.json.
+func (s *Service) redirectToDeviceAgentArtifact(w http.ResponseWriter, r *http.Request, spanName string, artifactPattern string) {
+	ctx, span := s.tracer.Start(r.Context(), spanName)
 	defer span.End()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.deviceAgentManifestURL, nil)
@@ -122,7 +141,7 @@ func (s *Service) handleInstallDeviceAgentMacOS(w http.ResponseWriter, r *http.R
 		http.Error(w, "device-agent installer temporarily unavailable", http.StatusBadGateway)
 		return
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
 
 	if resp.StatusCode != http.StatusOK {
 		span.SetStatus(codes.Error, "manifest non-200")
@@ -159,6 +178,6 @@ func (s *Service) handleInstallDeviceAgentMacOS(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	pkgURL := fmt.Sprintf("%s/v%s/speakeasy-agent_%s.pkg", s.deviceAgentReleasesURL, version, version)
-	http.Redirect(w, r, pkgURL, http.StatusFound)
+	artifactURL := fmt.Sprintf("%s/v%s/%s", s.deviceAgentReleasesURL, version, fmt.Sprintf(artifactPattern, version))
+	http.Redirect(w, r, artifactURL, http.StatusFound)
 }

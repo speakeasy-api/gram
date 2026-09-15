@@ -10,6 +10,7 @@ package features
 import (
 	"context"
 
+	featuresviews "github.com/speakeasy-api/gram/server/gen/features/views"
 	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
 )
@@ -17,9 +18,14 @@ import (
 // Manage product level feature controls.
 type Service interface {
 	// Get the current state of all product feature flags.
-	GetProductFeatures(context.Context, *GetProductFeaturesPayload) (res *GetProductFeaturesResult, err error)
-	// Enable or disable an organization feature flag.
+	GetProductFeatures(context.Context, *GetProductFeaturesPayload) (res *ProductFeatures, err error)
+	// Enable or disable an organization feature flag. Staff-managed entitlements
+	// (such as sso and scim) additionally require a Speakeasy platform
+	// administrator; organization admins can set only the org-settable operational
+	// toggles.
 	SetProductFeature(context.Context, *SetProductFeaturePayload) (err error)
+	// Set the organization policy for automatic remote-session refresh.
+	SetRemoteSessionAutoRefreshPolicy(context.Context, *SetRemoteSessionAutoRefreshPolicyPayload) (err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -42,17 +48,21 @@ const ServiceName = "features"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [2]string{"getProductFeatures", "setProductFeature"}
+var MethodNames = [3]string{"getProductFeatures", "setProductFeature", "setRemoteSessionAutoRefreshPolicy"}
 
 // GetProductFeaturesPayload is the payload type of the features service
 // getProductFeatures method.
 type GetProductFeaturesPayload struct {
-	SessionToken *string
+	// Organization whose product features to read.
+	OrganizationID string
+	SessionToken   *string
 }
 
-// GetProductFeaturesResult is the result type of the features service
+type ProductFeatureName string
+
+// ProductFeatures is the result type of the features service
 // getProductFeatures method.
-type GetProductFeaturesResult struct {
+type ProductFeatures struct {
 	// Whether logging is enabled
 	LogsEnabled bool
 	// Whether tool I/O logging is enabled
@@ -80,7 +90,7 @@ type GetProductFeaturesResult struct {
 	SkillCaptureMetadataOnly bool
 	// Whether the organization can provision push integrations for AI platforms
 	AiPlatformPushIntegrationsEnabled bool
-	// Whether the organization is eligible for the Gram Platform MCP capability
+	// Whether the organization can use the Gram Platform MCP capability
 	PlatformMcpEnabled bool
 	// Whether the organization can manage the external credentials and cloud KMS
 	// keys backing customer-managed encryption
@@ -88,6 +98,20 @@ type GetProductFeaturesResult struct {
 	// Whether consent screens expose automatic remote-session refresh for the
 	// organization
 	RemoteSessionAutoRefreshEnabled bool
+	// Whether automatic remote-session refresh is enforced as the organization
+	// default: forced on for every user, shown locked on consent screens, and
+	// applied by the keepalive regardless of per-session preference
+	RemoteSessionAutoRefreshEnforcedEnabled bool
+	// Whether MCP consent screens offer the tool filtering picker for the
+	// organization
+	ConsentToolFilteringEnabled bool
+	// Whether agent session portability is enabled for the organization: session
+	// sharing links, move reporting with lineage, and picker title enrichment via
+	// the device agent
+	SessionPortabilityEnabled bool
+	// Whether the organization has the staff-managed private network ingress
+	// entitlement
+	NetworkIngressEnabled bool
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
@@ -97,10 +121,22 @@ type GetProductFeaturesResult struct {
 // SetProductFeaturePayload is the payload type of the features service
 // setProductFeature method.
 type SetProductFeaturePayload struct {
+	// Organization whose product feature to update.
+	OrganizationID string
 	// Name of the feature to update
-	FeatureName string
+	FeatureName ProductFeatureName
 	// Whether the feature should be enabled
 	Enabled      bool
+	SessionToken *string
+}
+
+// SetRemoteSessionAutoRefreshPolicyPayload is the payload type of the features
+// service setRemoteSessionAutoRefreshPolicy method.
+type SetRemoteSessionAutoRefreshPolicyPayload struct {
+	// Organization whose automatic remote-session refresh policy to update.
+	OrganizationID string
+	// Organization policy for automatic remote-session refresh
+	Policy       string
 	SessionToken *string
 }
 
@@ -152,4 +188,112 @@ func MakeUnexpected(err error) *goa.ServiceError {
 // MakeGatewayError builds a goa.ServiceError from an error.
 func MakeGatewayError(err error) *goa.ServiceError {
 	return goa.NewServiceError(err, "gateway_error", false, false, true)
+}
+
+// NewProductFeatures initializes result type ProductFeatures from viewed
+// result type ProductFeatures.
+func NewProductFeatures(vres *featuresviews.ProductFeatures) *ProductFeatures {
+	return newProductFeatures(vres.Projected)
+}
+
+// NewViewedProductFeatures initializes viewed result type ProductFeatures from
+// result type ProductFeatures using the given view.
+func NewViewedProductFeatures(res *ProductFeatures, view string) *featuresviews.ProductFeatures {
+	p := newProductFeaturesView(res)
+	return &featuresviews.ProductFeatures{Projected: p, View: "default"}
+}
+
+// newProductFeatures converts projected type ProductFeatures to service type
+// ProductFeatures.
+func newProductFeatures(vres *featuresviews.ProductFeaturesView) *ProductFeatures {
+	res := &ProductFeatures{}
+	if vres.LogsEnabled != nil {
+		res.LogsEnabled = *vres.LogsEnabled
+	}
+	if vres.ToolIoLogsEnabled != nil {
+		res.ToolIoLogsEnabled = *vres.ToolIoLogsEnabled
+	}
+	if vres.SessionCaptureEnabled != nil {
+		res.SessionCaptureEnabled = *vres.SessionCaptureEnabled
+	}
+	if vres.AuthzChallengeLoggingEnabled != nil {
+		res.AuthzChallengeLoggingEnabled = *vres.AuthzChallengeLoggingEnabled
+	}
+	if vres.SsoEnabled != nil {
+		res.SsoEnabled = *vres.SsoEnabled
+	}
+	if vres.ScimEnabled != nil {
+		res.ScimEnabled = *vres.ScimEnabled
+	}
+	if vres.HooksBrowserLoginEnabled != nil {
+		res.HooksBrowserLoginEnabled = *vres.HooksBrowserLoginEnabled
+	}
+	if vres.HooksFailOpenEnabled != nil {
+		res.HooksFailOpenEnabled = *vres.HooksFailOpenEnabled
+	}
+	if vres.CustomModelKeysEnabled != nil {
+		res.CustomModelKeysEnabled = *vres.CustomModelKeysEnabled
+	}
+	if vres.SkillsEnabled != nil {
+		res.SkillsEnabled = *vres.SkillsEnabled
+	}
+	if vres.SkillCaptureMetadataOnly != nil {
+		res.SkillCaptureMetadataOnly = *vres.SkillCaptureMetadataOnly
+	}
+	if vres.AiPlatformPushIntegrationsEnabled != nil {
+		res.AiPlatformPushIntegrationsEnabled = *vres.AiPlatformPushIntegrationsEnabled
+	}
+	if vres.PlatformMcpEnabled != nil {
+		res.PlatformMcpEnabled = *vres.PlatformMcpEnabled
+	}
+	if vres.CustomerManagedEncryptionKeysEnabled != nil {
+		res.CustomerManagedEncryptionKeysEnabled = *vres.CustomerManagedEncryptionKeysEnabled
+	}
+	if vres.RemoteSessionAutoRefreshEnabled != nil {
+		res.RemoteSessionAutoRefreshEnabled = *vres.RemoteSessionAutoRefreshEnabled
+	}
+	if vres.RemoteSessionAutoRefreshEnforcedEnabled != nil {
+		res.RemoteSessionAutoRefreshEnforcedEnabled = *vres.RemoteSessionAutoRefreshEnforcedEnabled
+	}
+	if vres.ConsentToolFilteringEnabled != nil {
+		res.ConsentToolFilteringEnabled = *vres.ConsentToolFilteringEnabled
+	}
+	if vres.SessionPortabilityEnabled != nil {
+		res.SessionPortabilityEnabled = *vres.SessionPortabilityEnabled
+	}
+	if vres.NetworkIngressEnabled != nil {
+		res.NetworkIngressEnabled = *vres.NetworkIngressEnabled
+	}
+	if vres.DeviceAgent != nil {
+		res.DeviceAgent = *vres.DeviceAgent
+	}
+	return res
+}
+
+// newProductFeaturesView projects result type ProductFeatures to projected
+// type ProductFeaturesView using the "default" view.
+func newProductFeaturesView(res *ProductFeatures) *featuresviews.ProductFeaturesView {
+	vres := &featuresviews.ProductFeaturesView{
+		LogsEnabled:                             &res.LogsEnabled,
+		ToolIoLogsEnabled:                       &res.ToolIoLogsEnabled,
+		SessionCaptureEnabled:                   &res.SessionCaptureEnabled,
+		AuthzChallengeLoggingEnabled:            &res.AuthzChallengeLoggingEnabled,
+		SsoEnabled:                              &res.SsoEnabled,
+		ScimEnabled:                             &res.ScimEnabled,
+		HooksBrowserLoginEnabled:                &res.HooksBrowserLoginEnabled,
+		HooksFailOpenEnabled:                    &res.HooksFailOpenEnabled,
+		CustomModelKeysEnabled:                  &res.CustomModelKeysEnabled,
+		SkillsEnabled:                           &res.SkillsEnabled,
+		SkillCaptureMetadataOnly:                &res.SkillCaptureMetadataOnly,
+		AiPlatformPushIntegrationsEnabled:       &res.AiPlatformPushIntegrationsEnabled,
+		PlatformMcpEnabled:                      &res.PlatformMcpEnabled,
+		CustomerManagedEncryptionKeysEnabled:    &res.CustomerManagedEncryptionKeysEnabled,
+		RemoteSessionAutoRefreshEnabled:         &res.RemoteSessionAutoRefreshEnabled,
+		RemoteSessionAutoRefreshEnforcedEnabled: &res.RemoteSessionAutoRefreshEnforcedEnabled,
+		ConsentToolFilteringEnabled:             &res.ConsentToolFilteringEnabled,
+		SessionPortabilityEnabled:               &res.SessionPortabilityEnabled,
+		NetworkIngressEnabled:                   &res.NetworkIngressEnabled,
+		DeviceAgent:                             &res.DeviceAgent,
+	}
+	return vres
 }

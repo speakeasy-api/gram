@@ -12,6 +12,11 @@ func CreateKeyKeysPath() string {
 	return "/rpc/keys.create"
 }
 
+// RotateKeyKeysPath returns the URL path to the keys service rotateKey HTTP endpoint.
+func RotateKeyKeysPath() string {
+	return "/rpc/keys.rotate"
+}
+
 // ListKeysKeysPath returns the URL path to the keys service listKeys HTTP endpoint.
 func ListKeysKeysPath() string {
 	return "/rpc/keys.list"

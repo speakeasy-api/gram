@@ -994,6 +994,7 @@ func DecodeListRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.De
 			sourceKinds      []string
 			classifications  []string
 			tags             []string
+			accessibleBy     []string
 			sort             string
 			sessionToken     *string
 			apikeyToken      *string
@@ -1050,6 +1051,7 @@ func DecodeListRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.De
 				err = goa.MergeErrors(err, goa.InvalidLengthError("tags[*]", e, utf8.RuneCountInString(e), 64, false))
 			}
 		}
+		accessibleBy = qp["accessible_by"]
 		sortRaw := qp.Get("sort")
 		if sortRaw != "" {
 			sort = sortRaw
@@ -1074,7 +1076,7 @@ func DecodeListRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.De
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListPayload(cursor, limit, search, sourceKinds, classifications, tags, sort, sessionToken, apikeyToken, projectSlugInput)
+		payload = NewListPayload(cursor, limit, search, sourceKinds, classifications, tags, accessibleBy, sort, sessionToken, apikeyToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -5815,6 +5817,19 @@ func marshalSkillsSkillDriftToSkillDriftResponseBody(v *skills.SkillDrift) *Skil
 		}
 	} else {
 		res.TargetVersionIds = []string{}
+	}
+
+	return res
+}
+
+// marshalSkillsSkillPromptInjectionFindingToSkillPromptInjectionFindingResponseBody
+// builds a value of type *SkillPromptInjectionFindingResponseBody from a value
+// of type *skills.SkillPromptInjectionFinding.
+func marshalSkillsSkillPromptInjectionFindingToSkillPromptInjectionFindingResponseBody(v *skills.SkillPromptInjectionFinding) *SkillPromptInjectionFindingResponseBody {
+	res := &SkillPromptInjectionFindingResponseBody{
+		RuleID:      v.RuleID,
+		Description: v.Description,
+		Confidence:  v.Confidence,
 	}
 
 	return res

@@ -255,6 +255,245 @@ func DecodeCreateGlobalIssuerResponse(decoder func(*http.Response) goahttp.Decod
 	}
 }
 
+// BuildGetGlobalIssuerDuplicatePreflightRequest instantiates a HTTP request
+// object with method and path set to call the "adminRemoteSessions" service
+// "getGlobalIssuerDuplicatePreflight" endpoint
+func (c *Client) BuildGetGlobalIssuerDuplicatePreflightRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetGlobalIssuerDuplicatePreflightAdminRemoteSessionsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("adminRemoteSessions", "getGlobalIssuerDuplicatePreflight", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetGlobalIssuerDuplicatePreflightRequest returns an encoder for
+// requests sent to the adminRemoteSessions getGlobalIssuerDuplicatePreflight
+// server.
+func EncodeGetGlobalIssuerDuplicatePreflightRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*adminremotesessions.GetGlobalIssuerDuplicatePreflightPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("adminRemoteSessions", "getGlobalIssuerDuplicatePreflight", "*adminremotesessions.GetGlobalIssuerDuplicatePreflightPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		values := req.URL.Query()
+		if p.Issuer != nil {
+			values.Add("issuer", *p.Issuer)
+		}
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetGlobalIssuerDuplicatePreflightResponse returns a decoder for
+// responses returned by the adminRemoteSessions
+// getGlobalIssuerDuplicatePreflight endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeGetGlobalIssuerDuplicatePreflightResponse may return the following
+// errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetGlobalIssuerDuplicatePreflightResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetGlobalIssuerDuplicatePreflightResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "getGlobalIssuerDuplicatePreflight", err)
+			}
+			err = ValidateGetGlobalIssuerDuplicatePreflightResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "getGlobalIssuerDuplicatePreflight", err)
+			}
+			res := NewGetGlobalIssuerDuplicatePreflightRemoteSessionIssuerDuplicatePreflightOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetGlobalIssuerDuplicatePreflightUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "getGlobalIssuerDuplicatePreflight", err)
+			}
+			err = ValidateGetGlobalIssuerDuplicatePreflightUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "getGlobalIssuerDuplicatePreflight", err)
+			}
+			return nil, NewGetGlobalIssuerDuplicatePreflightUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetGlobalIssuerDuplicatePreflightForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "getGlobalIssuerDuplicatePreflight", err)
+			}
+			err = ValidateGetGlobalIssuerDuplicatePreflightForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "getGlobalIssuerDuplicatePreflight", err)
+			}
+			return nil, NewGetGlobalIssuerDuplicatePreflightForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetGlobalIssuerDuplicatePreflightBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "getGlobalIssuerDuplicatePreflight", err)
+			}
+			err = ValidateGetGlobalIssuerDuplicatePreflightBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "getGlobalIssuerDuplicatePreflight", err)
+			}
+			return nil, NewGetGlobalIssuerDuplicatePreflightBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetGlobalIssuerDuplicatePreflightNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "getGlobalIssuerDuplicatePreflight", err)
+			}
+			err = ValidateGetGlobalIssuerDuplicatePreflightNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "getGlobalIssuerDuplicatePreflight", err)
+			}
+			return nil, NewGetGlobalIssuerDuplicatePreflightNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetGlobalIssuerDuplicatePreflightConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "getGlobalIssuerDuplicatePreflight", err)
+			}
+			err = ValidateGetGlobalIssuerDuplicatePreflightConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "getGlobalIssuerDuplicatePreflight", err)
+			}
+			return nil, NewGetGlobalIssuerDuplicatePreflightConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetGlobalIssuerDuplicatePreflightUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "getGlobalIssuerDuplicatePreflight", err)
+			}
+			err = ValidateGetGlobalIssuerDuplicatePreflightUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "getGlobalIssuerDuplicatePreflight", err)
+			}
+			return nil, NewGetGlobalIssuerDuplicatePreflightUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetGlobalIssuerDuplicatePreflightInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "getGlobalIssuerDuplicatePreflight", err)
+			}
+			err = ValidateGetGlobalIssuerDuplicatePreflightInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "getGlobalIssuerDuplicatePreflight", err)
+			}
+			return nil, NewGetGlobalIssuerDuplicatePreflightInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetGlobalIssuerDuplicatePreflightInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("adminRemoteSessions", "getGlobalIssuerDuplicatePreflight", err)
+				}
+				err = ValidateGetGlobalIssuerDuplicatePreflightInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("adminRemoteSessions", "getGlobalIssuerDuplicatePreflight", err)
+				}
+				return nil, NewGetGlobalIssuerDuplicatePreflightInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetGlobalIssuerDuplicatePreflightUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("adminRemoteSessions", "getGlobalIssuerDuplicatePreflight", err)
+				}
+				err = ValidateGetGlobalIssuerDuplicatePreflightUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("adminRemoteSessions", "getGlobalIssuerDuplicatePreflight", err)
+				}
+				return nil, NewGetGlobalIssuerDuplicatePreflightUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("adminRemoteSessions", "getGlobalIssuerDuplicatePreflight", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetGlobalIssuerDuplicatePreflightGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "getGlobalIssuerDuplicatePreflight", err)
+			}
+			err = ValidateGetGlobalIssuerDuplicatePreflightGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "getGlobalIssuerDuplicatePreflight", err)
+			}
+			return nil, NewGetGlobalIssuerDuplicatePreflightGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("adminRemoteSessions", "getGlobalIssuerDuplicatePreflight", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListGlobalIssuersRequest instantiates a HTTP request object with method
 // and path set to call the "adminRemoteSessions" service "listGlobalIssuers"
 // endpoint
@@ -3536,13 +3775,30 @@ func DecodeMigrateToGlobalIssuerResponse(decoder func(*http.Response) goahttp.De
 	}
 }
 
+// unmarshalRemoteSessionIssuerDuplicateMatchResponseBodyToTypesRemoteSessionIssuerDuplicateMatch
+// builds a value of type *types.RemoteSessionIssuerDuplicateMatch from a value
+// of type *RemoteSessionIssuerDuplicateMatchResponseBody.
+func unmarshalRemoteSessionIssuerDuplicateMatchResponseBodyToTypesRemoteSessionIssuerDuplicateMatch(v *RemoteSessionIssuerDuplicateMatchResponseBody) *types.RemoteSessionIssuerDuplicateMatch {
+	res := &types.RemoteSessionIssuerDuplicateMatch{
+		ID:          *v.ID,
+		Slug:        *v.Slug,
+		Name:        *v.Name,
+		Issuer:      *v.Issuer,
+		Tier:        *v.Tier,
+		ProjectName: *v.ProjectName,
+	}
+
+	return res
+}
+
 // unmarshalGlobalRemoteSessionIssuerResponseBodyToAdminremotesessionsGlobalRemoteSessionIssuer
 // builds a value of type *adminremotesessions.GlobalRemoteSessionIssuer from a
 // value of type *GlobalRemoteSessionIssuerResponseBody.
 func unmarshalGlobalRemoteSessionIssuerResponseBodyToAdminremotesessionsGlobalRemoteSessionIssuer(v *GlobalRemoteSessionIssuerResponseBody) *adminremotesessions.GlobalRemoteSessionIssuer {
 	res := &adminremotesessions.GlobalRemoteSessionIssuer{
-		GlobalClientCount: *v.GlobalClientCount,
-		TenantClientCount: *v.TenantClientCount,
+		GlobalClientCount:             *v.GlobalClientCount,
+		TenantClientCount:             *v.TenantClientCount,
+		TrustedUserSessionIssuerCount: *v.TrustedUserSessionIssuerCount,
 	}
 	res.Issuer = unmarshalRemoteSessionIssuerResponseBodyToTypesRemoteSessionIssuer(v.Issuer)
 
@@ -3564,16 +3820,24 @@ func unmarshalRemoteSessionIssuerResponseBodyToTypesRemoteSessionIssuer(v *Remot
 		ClientSetupDocumentationURL:       v.ClientSetupDocumentationURL,
 		AuthorizationEndpoint:             v.AuthorizationEndpoint,
 		TokenEndpoint:                     v.TokenEndpoint,
+		RevocationEndpoint:                v.RevocationEndpoint,
 		RegistrationEndpoint:              v.RegistrationEndpoint,
 		JwksURI:                           v.JwksURI,
+		JwksFetchedAt:                     v.JwksFetchedAt,
+		JwksCacheExpiresAt:                v.JwksCacheExpiresAt,
 		ServiceDocumentation:              v.ServiceDocumentation,
 		OpPolicyURI:                       v.OpPolicyURI,
 		OpTosURI:                          v.OpTosURI,
 		Oidc:                              *v.Oidc,
 		Passthrough:                       *v.Passthrough,
 		ClientIDMetadataDocumentSupported: *v.ClientIDMetadataDocumentSupported,
-		CreatedAt:                         *v.CreatedAt,
-		UpdatedAt:                         *v.UpdatedAt,
+		UserinfoEndpoint:                  v.UserinfoEndpoint,
+		IntrospectionEndpoint:             v.IntrospectionEndpoint,
+		BackchannelLogoutSupported:        v.BackchannelLogoutSupported,
+		AuthorizationResponseIssParameterSupported: v.AuthorizationResponseIssParameterSupported,
+		ResourceIndicatorSupported:                 v.ResourceIndicatorSupported,
+		CreatedAt:                                  *v.CreatedAt,
+		UpdatedAt:                                  *v.UpdatedAt,
 	}
 	if v.ScopesSupported != nil {
 		res.ScopesSupported = make([]string, len(v.ScopesSupported))
@@ -3599,6 +3863,36 @@ func unmarshalRemoteSessionIssuerResponseBodyToTypesRemoteSessionIssuer(v *Remot
 			res.TokenEndpointAuthMethodsSupported[i] = val
 		}
 	}
+	if v.CodeChallengeMethodsSupported != nil {
+		res.CodeChallengeMethodsSupported = make([]string, len(v.CodeChallengeMethodsSupported))
+		for i, val := range v.CodeChallengeMethodsSupported {
+			res.CodeChallengeMethodsSupported[i] = val
+		}
+	}
+	if v.IntrospectionEndpointAuthMethodsSupported != nil {
+		res.IntrospectionEndpointAuthMethodsSupported = make([]string, len(v.IntrospectionEndpointAuthMethodsSupported))
+		for i, val := range v.IntrospectionEndpointAuthMethodsSupported {
+			res.IntrospectionEndpointAuthMethodsSupported[i] = val
+		}
+	}
+	if v.IDTokenSigningAlgValuesSupported != nil {
+		res.IDTokenSigningAlgValuesSupported = make([]string, len(v.IDTokenSigningAlgValuesSupported))
+		for i, val := range v.IDTokenSigningAlgValuesSupported {
+			res.IDTokenSigningAlgValuesSupported[i] = val
+		}
+	}
+	if v.ClaimsSupported != nil {
+		res.ClaimsSupported = make([]string, len(v.ClaimsSupported))
+		for i, val := range v.ClaimsSupported {
+			res.ClaimsSupported[i] = val
+		}
+	}
+	if v.ScopeOverride != nil {
+		res.ScopeOverride = make([]string, len(v.ScopeOverride))
+		for i, val := range v.ScopeOverride {
+			res.ScopeOverride[i] = val
+		}
+	}
 
 	return res
 }
@@ -3616,7 +3910,9 @@ func unmarshalRemoteSessionClientResponseBodyToTypesRemoteSessionClient(v *Remot
 		ClientIDMetadataURI:     v.ClientIDMetadataURI,
 		ClientIDIssuedAt:        *v.ClientIDIssuedAt,
 		ClientSecretExpiresAt:   v.ClientSecretExpiresAt,
+		UpstreamRejectedAt:      v.UpstreamRejectedAt,
 		TokenEndpointAuthMethod: v.TokenEndpointAuthMethod,
+		JSONWebKeySetID:         v.JSONWebKeySetID,
 		Audience:                v.Audience,
 		CreatedAt:               *v.CreatedAt,
 		UpdatedAt:               *v.UpdatedAt,
@@ -3645,13 +3941,46 @@ func unmarshalIssuerConvergenceCandidateResponseBodyToAdminremotesessionsIssuerC
 		ClientCount:      *v.ClientCount,
 	}
 	res.Issuer = unmarshalRemoteSessionIssuerResponseBodyToTypesRemoteSessionIssuer(v.Issuer)
-	res.EndpointMismatches = make([]string, len(v.EndpointMismatches))
+	res.EndpointMismatches = make([]*types.IssuerFieldMismatch, len(v.EndpointMismatches))
 	for i, val := range v.EndpointMismatches {
-		res.EndpointMismatches[i] = val
+		if val == nil {
+			res.EndpointMismatches[i] = nil
+			continue
+		}
+		res.EndpointMismatches[i] = unmarshalIssuerFieldMismatchResponseBodyToTypesIssuerFieldMismatch(val)
 	}
-	res.Warnings = make([]string, len(v.Warnings))
+	res.Warnings = make([]*types.IssuerFieldMismatch, len(v.Warnings))
 	for i, val := range v.Warnings {
-		res.Warnings[i] = val
+		if val == nil {
+			res.Warnings[i] = nil
+			continue
+		}
+		res.Warnings[i] = unmarshalIssuerFieldMismatchResponseBodyToTypesIssuerFieldMismatch(val)
+	}
+
+	return res
+}
+
+// unmarshalIssuerFieldMismatchResponseBodyToTypesIssuerFieldMismatch builds a
+// value of type *types.IssuerFieldMismatch from a value of type
+// *IssuerFieldMismatchResponseBody.
+func unmarshalIssuerFieldMismatchResponseBodyToTypesIssuerFieldMismatch(v *IssuerFieldMismatchResponseBody) *types.IssuerFieldMismatch {
+	res := &types.IssuerFieldMismatch{
+		Field:       *v.Field,
+		SourceValue: v.SourceValue,
+		TargetValue: v.TargetValue,
+	}
+	if v.SourceValues != nil {
+		res.SourceValues = make([]string, len(v.SourceValues))
+		for i, val := range v.SourceValues {
+			res.SourceValues[i] = val
+		}
+	}
+	if v.TargetValues != nil {
+		res.TargetValues = make([]string, len(v.TargetValues))
+		for i, val := range v.TargetValues {
+			res.TargetValues[i] = val
+		}
 	}
 
 	return res

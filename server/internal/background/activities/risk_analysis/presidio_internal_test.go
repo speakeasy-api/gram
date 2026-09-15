@@ -10,12 +10,15 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"sort"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/speakeasy-api/gram/server/internal/risk/presidiofp"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
+	"github.com/speakeasy-api/gram/server/internal/stokens"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
@@ -80,10 +83,67 @@ func TestIsFindingLevelDropped(t *testing.T) {
 	assert.False(t, isFindingLevelDropped(""))
 }
 
+// TestRetiredRecognizersMatchScannerDrops keeps the two halves of a retirement
+// in agreement. The live scanner refuses these entity types outright
+// (findingLevelDropEntities) while presidiofp classifies their stored findings
+// as false positives, which is what lets the offline sweep clear the rows
+// written before the live drop landed. A type in one list and not the other
+// means history and live behaviour have diverged.
+func TestRetiredRecognizersMatchScannerDrops(t *testing.T) {
+	t.Parallel()
+
+	retired := presidiofp.RetiredEntityTypes()
+	dropped := make([]string, 0, len(findingLevelDropEntities))
+	for entity := range findingLevelDropEntities {
+		dropped = append(dropped, entity)
+	}
+	sort.Strings(dropped)
+	assert.Equal(t, dropped, retired)
+}
+
+// TestConvertPresidioFindings_NHSNeedsContext is the regression test for
+// AIS-494. Presidio's NhsRecognizer validates a mod-11 check digit and, on
+// success, reports the match at maximum confidence without consulting its own
+// context words — so roughly one in eleven Confluence page ids, Unix timestamps
+// and order numbers surfaced as a UK National Health Service number. A
+// ten-digit run now only survives when the payload carries a health-care
+// signal.
+func TestConvertPresidioFindings_NHSNeedsContext(t *testing.T) {
+	t.Parallel()
+
+	nhsRuleID := scanners.GuardRuleID(prefixPII + "uk_nhs")
+
+	// A Confluence page id that happens to pass the check digit.
+	text := "see https://acme.atlassian.net/wiki/spaces/ENG/pages/4010232137/Runbook"
+	start := strings.Index(text, "4010232137")
+	findings := convertPresidioFindings(text, []presidioResult{
+		{EntityType: "UK_NHS", Start: start, End: start + 10, Score: 1},
+	})
+	assert.Empty(t, findings, "a ten-digit page id with no health-care context is not an NHS number")
+
+	// The same digits in a payload that talks about patients still report.
+	text = `{"patient": {"nhsNumber": "4010232137"}}`
+	start = strings.Index(text, "4010232137")
+	findings = convertPresidioFindings(text, []presidioResult{
+		{EntityType: "UK_NHS", Start: start, End: start + 10, Score: 1},
+	})
+	require.Len(t, findings, 1, "an NHS number in health-care context must still report")
+	assert.Equal(t, nhsRuleID, findings[0].RuleID)
+	assert.Equal(t, "4010232137", findings[0].Match)
+}
+
+// isValueFalsePositive is the value-only view of isPresidioFalsePositive, for
+// the catalogs below that judge a match on its own. Passing no context is
+// never grounds for suppression, so this only ever reports what the value
+// itself proves.
+func isValueFalsePositive(entityType, match string) bool {
+	return isPresidioFalsePositive(entityType, match, "")
+}
+
 // TestIsPresidioFalsePositive_CorpusAllFiltered is the canonical
 // positive-coverage gate: every IP in testdata/fp-ip.txt is an address
 // the catalog must drop. Each line is run through
-// isPresidioFalsePositive; any miss is a regression. The corpus is
+// isValueFalsePositive; any miss is a regression. The corpus is
 // hand-curated — extend it by adding IPs (one per line, sorted) that
 // surface as false positives during catalog tuning. Real residential
 // IPs (PII) are never added to the corpus or otherwise committed.
@@ -102,7 +162,7 @@ func TestIsPresidioFalsePositive_CorpusAllFiltered(t *testing.T) {
 		if ip == "" || strings.HasPrefix(ip, "#") {
 			continue
 		}
-		assert.True(t, isPresidioFalsePositive("IP_ADDRESS", ip),
+		assert.True(t, isValueFalsePositive("IP_ADDRESS", ip),
 			"corpus IP %q must be filtered", ip)
 		checked++
 	}
@@ -132,7 +192,7 @@ func TestIsPresidioFalsePositive_EmailCorpusAllFiltered(t *testing.T) {
 		if email == "" || strings.HasPrefix(email, "#") {
 			continue
 		}
-		assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", email),
+		assert.True(t, isValueFalsePositive("EMAIL_ADDRESS", email),
 			"corpus email %q must be filtered", email)
 		checked++
 	}
@@ -149,21 +209,21 @@ func TestIsPresidioFalsePositive_NegativesAndEntityScope(t *testing.T) {
 	// Real addresses still flow through. Consumer ISP IPs identify an end
 	// user and are deliberately not in the infra ASN regex, so they are
 	// still treated as PII.
-	assert.False(t, isPresidioFalsePositive("IP_ADDRESS", "71.126.87.167"), "residential Verizon")
-	assert.False(t, isPresidioFalsePositive("IP_ADDRESS", "82.15.226.61"), "residential Virgin Media")
-	assert.False(t, isPresidioFalsePositive("IP_ADDRESS", "dead::beef"), "two-group IPv6 still real")
+	assert.False(t, isValueFalsePositive("IP_ADDRESS", "71.126.87.167"), "residential Verizon")
+	assert.False(t, isValueFalsePositive("IP_ADDRESS", "82.15.226.61"), "residential Virgin Media")
+	assert.False(t, isValueFalsePositive("IP_ADDRESS", "dead::beef"), "two-group IPv6 still real")
 
 	// Whitespace-trimming applies to the IP_ADDRESS path.
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "  ::  "), "trimmed unspecified")
+	assert.True(t, isValueFalsePositive("IP_ADDRESS", "  ::  "), "trimmed unspecified")
 
 	// IP-shaped inputs that happen to land in the EMAIL_ADDRESS lane
 	// fall through cleanly (neither shape matches an email rule).
-	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "::"))
-	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "8.8.8.8"))
+	assert.False(t, isValueFalsePositive("EMAIL_ADDRESS", "::"))
+	assert.False(t, isValueFalsePositive("EMAIL_ADDRESS", "8.8.8.8"))
 
 	// Unknown entity types are never filtered.
-	assert.False(t, isPresidioFalsePositive("PERSON", "ada@speakeasy.com"))
-	assert.False(t, isPresidioFalsePositive("", "8.8.8.8"))
+	assert.False(t, isValueFalsePositive("PERSON", "ada@speakeasy.com"))
+	assert.False(t, isValueFalsePositive("", "8.8.8.8"))
 }
 
 func TestIsPresidioFalsePositive_Email(t *testing.T) {
@@ -172,104 +232,104 @@ func TestIsPresidioFalsePositive_Email(t *testing.T) {
 	// Real-shape emails flow through, including the lower-confidence
 	// buckets we deliberately do NOT filter so we err on the side of
 	// over-reporting rather than missing PII.
-	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "adam@speakeasy.com"))
-	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "alice.brown@techstartup.io"), "generic Faker localpart on a real domain is not filtered")
-	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "chadrick_quigley52@yahoo.com"), "generic Faker localpart on a real domain is not filtered")
-	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "support@speakeasy.com"), "role alias is not filtered")
-	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "u003ealice@speakeasy.com"), "JSON-escape prefix is not filtered")
-	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "170madam@speakeasy.com"), "ANSI prefix is not filtered")
-	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "47043212+thierry-dang@users.noreply.github.com"), "github noreply is not filtered")
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "git@github.com"), "ssh git pseudo-user is a known FP")
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "GIT@github.com"), "case-insensitive")
-	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "no-reply-0EWsEuUO0Gky10deUMh0Kg@mail.anthropic.com"))
-	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "private@privaterelay.appleid.com"))
-	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "BOT_TOKEN}@github.com"), "template placeholder without slash is not filtered")
-	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "npresidio|EMAIL_ADDRESS|1068|107331|walker@speakeasy.com"), "presidio log-row wrapper is not filtered")
-	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "user@acme.co.uk"), "placeholder SLD under an out-of-list TLD is not filtered")
-	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "user@invalid.com"), "invalid.com is a real registered domain; only the .invalid TLD is RFC 6761 reserved")
-	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "user@localhost.com"), "localhost.com is a real registered domain; only the .localhost TLD is RFC 6761 reserved")
+	assert.False(t, isValueFalsePositive("EMAIL_ADDRESS", "adam@speakeasy.com"))
+	assert.False(t, isValueFalsePositive("EMAIL_ADDRESS", "alice.brown@techstartup.io"), "generic Faker localpart on a real domain is not filtered")
+	assert.False(t, isValueFalsePositive("EMAIL_ADDRESS", "chadrick_quigley52@yahoo.com"), "generic Faker localpart on a real domain is not filtered")
+	assert.False(t, isValueFalsePositive("EMAIL_ADDRESS", "support@speakeasy.com"), "role alias is not filtered")
+	assert.False(t, isValueFalsePositive("EMAIL_ADDRESS", "u003ealice@speakeasy.com"), "JSON-escape prefix is not filtered")
+	assert.False(t, isValueFalsePositive("EMAIL_ADDRESS", "170madam@speakeasy.com"), "ANSI prefix is not filtered")
+	assert.False(t, isValueFalsePositive("EMAIL_ADDRESS", "47043212+thierry-dang@users.noreply.github.com"), "github noreply is not filtered")
+	assert.True(t, isValueFalsePositive("EMAIL_ADDRESS", "git@github.com"), "ssh git pseudo-user is a known FP")
+	assert.True(t, isValueFalsePositive("EMAIL_ADDRESS", "GIT@github.com"), "case-insensitive")
+	assert.False(t, isValueFalsePositive("EMAIL_ADDRESS", "no-reply-0EWsEuUO0Gky10deUMh0Kg@mail.anthropic.com"))
+	assert.False(t, isValueFalsePositive("EMAIL_ADDRESS", "private@privaterelay.appleid.com"))
+	assert.False(t, isValueFalsePositive("EMAIL_ADDRESS", "BOT_TOKEN}@github.com"), "template placeholder without slash is not filtered")
+	assert.False(t, isValueFalsePositive("EMAIL_ADDRESS", "npresidio|EMAIL_ADDRESS|1068|107331|walker@speakeasy.com"), "presidio log-row wrapper is not filtered")
+	assert.False(t, isValueFalsePositive("EMAIL_ADDRESS", "user@acme.co.uk"), "placeholder SLD under an out-of-list TLD is not filtered")
+	assert.False(t, isValueFalsePositive("EMAIL_ADDRESS", "user@invalid.com"), "invalid.com is a real registered domain; only the .invalid TLD is RFC 6761 reserved")
+	assert.False(t, isValueFalsePositive("EMAIL_ADDRESS", "user@localhost.com"), "localhost.com is a real registered domain; only the .localhost TLD is RFC 6761 reserved")
 
 	// Image file extensions mis-shaped as TLDs — Presidio sometimes
 	// extracts a bare asset filename when the leading URL prefix is
 	// stripped before the slash layer fires.
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "1f615@2x.png"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "icon@2x.SVG"), "case-insensitive")
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "logo@retina.jpg"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "hero@2x.jpeg"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "spinner@2x.gif"))
+	assert.True(t, isValueFalsePositive("EMAIL_ADDRESS", "1f615@2x.png"))
+	assert.True(t, isValueFalsePositive("EMAIL_ADDRESS", "icon@2x.SVG"), "case-insensitive")
+	assert.True(t, isValueFalsePositive("EMAIL_ADDRESS", "logo@retina.jpg"))
+	assert.True(t, isValueFalsePositive("EMAIL_ADDRESS", "hero@2x.jpeg"))
+	assert.True(t, isValueFalsePositive("EMAIL_ADDRESS", "spinner@2x.gif"))
 
 	// RFC 6761 reserved special-use TLDs (.example, .invalid,
 	// .localhost, .test) are guaranteed not to resolve to a public
 	// mailbox, regardless of SLD or subdomain depth.
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "user@host.test"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "user@host.invalid"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "user@host.example"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "user@host.localhost"))
+	assert.True(t, isValueFalsePositive("EMAIL_ADDRESS", "user@host.test"))
+	assert.True(t, isValueFalsePositive("EMAIL_ADDRESS", "user@host.invalid"))
+	assert.True(t, isValueFalsePositive("EMAIL_ADDRESS", "user@host.example"))
+	assert.True(t, isValueFalsePositive("EMAIL_ADDRESS", "user@host.localhost"))
 
 	// Fixture / placeholder domains — the primary motivation for the
 	// filter. example.com / .org, asdf.com, fake.com, nowhere.com,
 	// yourorg.com, acme.com, acmecorp.com, etc., regardless of the
 	// local-part. Subdomain depth is irrelevant.
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "test@example.com"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "TEST@EXAMPLE.COM"), "case-insensitive")
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "user@dev.example.com"), "subdomain depth doesn't matter")
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "sibling-a135@test.example.com"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "SuperSecret123!@db.example.com"), "any local-part still filtered")
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "asdf@asdf.com"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "fakey@fake.com"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "zzzunknown@nowhere.com"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "you@yourorg.com"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "alice@acme.com"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "alice@acme.io"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "john.smith@acmecorp.com"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "sarah.chen@acmestore.com"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "user@test.com"), "test.com is technically real but every match in the production corpus is fixture noise")
+	assert.True(t, isValueFalsePositive("EMAIL_ADDRESS", "test@example.com"))
+	assert.True(t, isValueFalsePositive("EMAIL_ADDRESS", "TEST@EXAMPLE.COM"), "case-insensitive")
+	assert.True(t, isValueFalsePositive("EMAIL_ADDRESS", "user@dev.example.com"), "subdomain depth doesn't matter")
+	assert.True(t, isValueFalsePositive("EMAIL_ADDRESS", "sibling-a135@test.example.com"))
+	assert.True(t, isValueFalsePositive("EMAIL_ADDRESS", "SuperSecret123!@db.example.com"), "any local-part still filtered")
+	assert.True(t, isValueFalsePositive("EMAIL_ADDRESS", "asdf@asdf.com"))
+	assert.True(t, isValueFalsePositive("EMAIL_ADDRESS", "fakey@fake.com"))
+	assert.True(t, isValueFalsePositive("EMAIL_ADDRESS", "zzzunknown@nowhere.com"))
+	assert.True(t, isValueFalsePositive("EMAIL_ADDRESS", "you@yourorg.com"))
+	assert.True(t, isValueFalsePositive("EMAIL_ADDRESS", "alice@acme.com"))
+	assert.True(t, isValueFalsePositive("EMAIL_ADDRESS", "alice@acme.io"))
+	assert.True(t, isValueFalsePositive("EMAIL_ADDRESS", "john.smith@acmecorp.com"))
+	assert.True(t, isValueFalsePositive("EMAIL_ADDRESS", "sarah.chen@acmestore.com"))
+	assert.True(t, isValueFalsePositive("EMAIL_ADDRESS", "user@test.com"), "test.com is technically real but every match in the production corpus is fixture noise")
 
 	// KV / env / config wrappers are NOT filtered: they usually wrap
 	// real production emails, so dropping them would mask PII.
-	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "DB_USERNAME=adam@speakeasy.com"))
-	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "identity=adam@speakeasy.com"))
-	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "user=david@speakeasyapi.dev"))
-	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "smtp.mailfrom=mail@hgstrust.org"))
-	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "nCLAUDE_CODE_USER_EMAIL=ecorella@moonpay.com"))
+	assert.False(t, isValueFalsePositive("EMAIL_ADDRESS", "DB_USERNAME=adam@speakeasy.com"))
+	assert.False(t, isValueFalsePositive("EMAIL_ADDRESS", "identity=adam@speakeasy.com"))
+	assert.False(t, isValueFalsePositive("EMAIL_ADDRESS", "user=david@speakeasyapi.dev"))
+	assert.False(t, isValueFalsePositive("EMAIL_ADDRESS", "smtp.mailfrom=mail@hgstrust.org"))
+	assert.False(t, isValueFalsePositive("EMAIL_ADDRESS", "nCLAUDE_CODE_USER_EMAIL=ecorella@moonpay.com"))
 
 	// GCP service accounts are NOT filtered: the `@…gserviceaccount.com`
 	// shape can carry IAM context worth flagging on first review, so we
 	// over-report rather than drop the bucket wholesale.
-	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "argocd-image-updater@moonpay-sre.iam.gserviceaccount.com"))
-	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "{project_number}@cloudbuild.gserviceaccount.com"))
+	assert.False(t, isValueFalsePositive("EMAIL_ADDRESS", "argocd-image-updater@moonpay-sre.iam.gserviceaccount.com"))
+	assert.False(t, isValueFalsePositive("EMAIL_ADDRESS", "{project_number}@cloudbuild.gserviceaccount.com"))
 
 	// Any '/' makes the string a URL or path, not an addr-spec.
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "medium.com/@abdelghani.alhijawi"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "mail.google.com/mail/u/adamjamesbull@googlemail.com"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "iam.googleapis.com/projects/-/serviceAccounts/privacy@moonpay-prod.iam.gserviceaccount.com"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "a.slack-edge.com/production-standard-emoji-assets/15.0/apple-medium/1f4a1@2x.png"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "github.com/GoogleCloudPlatform/cloudsql-proxy/cmd/cloud_sql_proxy@v1.37.6"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "honnef.co/go/tools/cmd/staticcheck@v0.7.0"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "cloud.google.com/go/storage@v1.62.1"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "deno.land/x/zod@v3.21.4"))
+	assert.True(t, isValueFalsePositive("EMAIL_ADDRESS", "medium.com/@abdelghani.alhijawi"))
+	assert.True(t, isValueFalsePositive("EMAIL_ADDRESS", "mail.google.com/mail/u/adamjamesbull@googlemail.com"))
+	assert.True(t, isValueFalsePositive("EMAIL_ADDRESS", "iam.googleapis.com/projects/-/serviceAccounts/privacy@moonpay-prod.iam.gserviceaccount.com"))
+	assert.True(t, isValueFalsePositive("EMAIL_ADDRESS", "a.slack-edge.com/production-standard-emoji-assets/15.0/apple-medium/1f4a1@2x.png"))
+	assert.True(t, isValueFalsePositive("EMAIL_ADDRESS", "github.com/GoogleCloudPlatform/cloudsql-proxy/cmd/cloud_sql_proxy@v1.37.6"))
+	assert.True(t, isValueFalsePositive("EMAIL_ADDRESS", "honnef.co/go/tools/cmd/staticcheck@v0.7.0"))
+	assert.True(t, isValueFalsePositive("EMAIL_ADDRESS", "cloud.google.com/go/storage@v1.62.1"))
+	assert.True(t, isValueFalsePositive("EMAIL_ADDRESS", "deno.land/x/zod@v3.21.4"))
 
 	// Domain ends in a digit → version suffix on a slashless path
 	// (TLDs are always letters per IANA).
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "go.opentelemetry.io/otel/sdk@v1.43.0"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "pkg@v1.2.3"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "react@18.3.1"))
+	assert.True(t, isValueFalsePositive("EMAIL_ADDRESS", "go.opentelemetry.io/otel/sdk@v1.43.0"))
+	assert.True(t, isValueFalsePositive("EMAIL_ADDRESS", "pkg@v1.2.3"))
+	assert.True(t, isValueFalsePositive("EMAIL_ADDRESS", "react@18.3.1"))
 
 	// Template-style local-parts and universally automated aliases that
 	// can never identify a real person, even on real-shape domains.
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "first.last@company.com"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "First.Last@company.com"), "case-insensitive")
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "firstname.lastname@company.com"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "noreply@speakeasy.com"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "no-reply@speakeasy.com"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "NoReply@somewhere.io"), "case-insensitive")
+	assert.True(t, isValueFalsePositive("EMAIL_ADDRESS", "first.last@company.com"))
+	assert.True(t, isValueFalsePositive("EMAIL_ADDRESS", "First.Last@company.com"), "case-insensitive")
+	assert.True(t, isValueFalsePositive("EMAIL_ADDRESS", "firstname.lastname@company.com"))
+	assert.True(t, isValueFalsePositive("EMAIL_ADDRESS", "noreply@speakeasy.com"))
+	assert.True(t, isValueFalsePositive("EMAIL_ADDRESS", "no-reply@speakeasy.com"))
+	assert.True(t, isValueFalsePositive("EMAIL_ADDRESS", "NoReply@somewhere.io"), "case-insensitive")
 
 	// Canonical placeholder person names are NOT filtered: real people
 	// share these names so we accept the corpus noise to avoid the
 	// over-filter risk.
-	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "john.doe@gmail.com"))
-	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "jane.doe@gmail.com"))
-	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "joe.bloggs@somewhere.co.uk"))
+	assert.False(t, isValueFalsePositive("EMAIL_ADDRESS", "john.doe@gmail.com"))
+	assert.False(t, isValueFalsePositive("EMAIL_ADDRESS", "jane.doe@gmail.com"))
+	assert.False(t, isValueFalsePositive("EMAIL_ADDRESS", "joe.bloggs@somewhere.co.uk"))
 }
 
 // TestIsPresidioFalsePositive_EquivalentIPFormsMatch verifies that
@@ -281,12 +341,12 @@ func TestIsPresidioFalsePositive_EquivalentIPFormsMatch(t *testing.T) {
 	t.Parallel()
 
 	// Cloudflare 2606:4700:4700::1111 spelled with explicit zero groups.
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "2606:4700:4700:0:0:0:0:1111"), "compressed-zero variant")
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "2606:4700:4700:0000:0000:0000:0000:1111"), "fully-expanded variant")
+	assert.True(t, isValueFalsePositive("IP_ADDRESS", "2606:4700:4700:0:0:0:0:1111"), "compressed-zero variant")
+	assert.True(t, isValueFalsePositive("IP_ADDRESS", "2606:4700:4700:0000:0000:0000:0000:1111"), "fully-expanded variant")
 	// Google 2001:4860:4860::8888 with explicit zero groups.
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "2001:4860:4860:0:0:0:0:8888"), "Google DNS expanded")
+	assert.True(t, isValueFalsePositive("IP_ADDRESS", "2001:4860:4860:0:0:0:0:8888"), "Google DNS expanded")
 	// AdGuard 2a10:50c0::bad1:ff in uppercase hex.
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "2A10:50C0::BAD1:FF"), "uppercase hex variant")
+	assert.True(t, isValueFalsePositive("IP_ADDRESS", "2A10:50C0::BAD1:FF"), "uppercase hex variant")
 }
 
 func TestStubPIIScannerReturnsEmptyResults(t *testing.T) {
@@ -295,8 +355,9 @@ func TestStubPIIScannerReturnsEmptyResults(t *testing.T) {
 	results, err := (&StubPIIScanner{}).AnalyzeBatch(t.Context(), []string{"one", "two"}, nil, 0, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 2)
-	for _, findings := range results {
-		assert.Empty(t, findings)
+	for _, result := range results {
+		assert.Empty(t, result.Findings)
+		assert.False(t, result.Completed)
 	}
 }
 
@@ -318,8 +379,9 @@ func TestPresidioClientShortCircuitsOnAllEmptyTexts(t *testing.T) {
 	results, err := client.AnalyzeBatch(t.Context(), []string{"", "", ""}, nil, 0, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 3)
-	for _, r := range results {
-		assert.Empty(t, r)
+	for _, result := range results {
+		assert.Empty(t, result.Findings)
+		assert.False(t, result.Completed)
 	}
 	assert.Equal(t, int64(0), calls.Load(), "presidio /analyze must not be called when every input is empty")
 }
@@ -413,7 +475,7 @@ func TestPresidioClientThrottleFiresHeartbeatWhileBlocked(t *testing.T) {
 }
 
 type callOutcome struct {
-	results [][]scanners.Finding
+	results []scanners.Result
 	err     error
 }
 
@@ -450,9 +512,11 @@ func TestPresidioClientRetriesThenSucceeds(t *testing.T) {
 	results, err := client.AnalyzeBatch(t.Context(), []string{"contact alice@globex.com"}, nil, 0, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
-	require.Len(t, results[0], 1)
-	assert.Equal(t, "alice@globex.com", results[0][0].Match)
-	assert.Empty(t, results[0][0].DeadLetterReason)
+	require.Len(t, results[0].Findings, 1)
+	assert.Equal(t, "alice@globex.com", results[0].Findings[0].Match)
+	assert.Empty(t, results[0].Findings[0].DeadLetterReason)
+	assert.True(t, results[0].Completed)
+	assert.Positive(t, results[0].STokens)
 	assert.GreaterOrEqual(t, hits.Load(), int64(2), "expected at least one retry before success")
 }
 
@@ -474,9 +538,10 @@ func TestPresidioClientDeadLettersAfterExhausting(t *testing.T) {
 	results, err := client.AnalyzeBatch(t.Context(), []string{"will be dead-lettered"}, nil, 0, nil)
 	require.NoError(t, err, "per-text failures must not bubble up as activity-layer errors")
 	require.Len(t, results, 1)
-	require.Len(t, results[0], 1)
+	require.Len(t, results[0].Findings, 1)
+	require.False(t, results[0].Completed)
 
-	dl := results[0][0]
+	dl := results[0].Findings[0]
 	assert.Equal(t, SourcePresidio, dl.Source)
 	assert.Equal(t, DeadLetterRuleID, dl.RuleID)
 	assert.NotEmpty(t, dl.DeadLetterReason)
@@ -510,13 +575,18 @@ func TestPresidioClientIsolatesPoisonedMessages(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, results, 3)
 
-	assert.Empty(t, results[0])
-	assert.Empty(t, results[2])
+	assert.Empty(t, results[0].Findings)
+	assert.True(t, results[0].Completed)
+	assert.Positive(t, results[0].STokens)
+	assert.Empty(t, results[2].Findings)
+	assert.True(t, results[2].Completed)
+	assert.Positive(t, results[2].STokens)
 
-	require.Len(t, results[1], 1)
-	assert.Equal(t, SourcePresidio, results[1][0].Source)
-	assert.Equal(t, DeadLetterRuleID, results[1][0].RuleID)
-	assert.NotEmpty(t, results[1][0].DeadLetterReason)
+	require.Len(t, results[1].Findings, 1)
+	assert.False(t, results[1].Completed)
+	assert.Equal(t, SourcePresidio, results[1].Findings[0].Source)
+	assert.Equal(t, DeadLetterRuleID, results[1].Findings[0].RuleID)
+	assert.NotEmpty(t, results[1].Findings[0].DeadLetterReason)
 }
 
 // TestPresidioClientSurfacesOuterContextCancellation asserts that an
@@ -571,9 +641,10 @@ func TestPresidioClientDeadLettersOnPerRequestTimeout(t *testing.T) {
 	results, err := client.AnalyzeBatch(t.Context(), []string{"hang"}, nil, 0, nil)
 	require.NoError(t, err, "inner per-request timeouts must not bubble up as activity-layer errors")
 	require.Len(t, results, 1)
-	require.Len(t, results[0], 1)
+	require.Len(t, results[0].Findings, 1)
+	require.False(t, results[0].Completed)
 
-	dl := results[0][0]
+	dl := results[0].Findings[0]
 	assert.Equal(t, SourcePresidio, dl.Source)
 	assert.Equal(t, DeadLetterRuleID, dl.RuleID)
 	assert.NotEmpty(t, dl.DeadLetterReason)
@@ -789,7 +860,7 @@ func TestAnalyzeOncePayloadIsYAMLForJSONInput(t *testing.T) {
 
 	client := newTestPresidioClient(t, srv.URL)
 	in := `{"body":"line one\nline two"}`
-	_, err := client.AnalyzeBatch(t.Context(), []string{in}, nil, 0, nil)
+	results, err := client.AnalyzeBatch(t.Context(), []string{in}, nil, 0, nil)
 	require.NoError(t, err)
 
 	require.Len(t, got.Text, 1)
@@ -798,6 +869,11 @@ func TestAnalyzeOncePayloadIsYAMLForJSONInput(t *testing.T) {
 	assert.Contains(t, wire, "body: |", "object key should be followed by a literal-block scalar marker")
 	assert.Contains(t, wire, "line one")
 	assert.Contains(t, wire, "line two")
+	expectedSTokens, err := stokens.NewCodec().Count(t.Context(), wire)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	require.True(t, results[0].Completed)
+	require.Equal(t, int64(expectedSTokens), results[0].STokens)
 }
 
 func TestResolvePresidioScoreThreshold(t *testing.T) {

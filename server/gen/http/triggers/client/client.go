@@ -25,6 +25,10 @@ type Client struct {
 	// listTriggerInstances endpoint.
 	ListTriggerInstancesDoer goahttp.Doer
 
+	// ListTriggerEvents Doer is the HTTP client used to make requests to the
+	// listTriggerEvents endpoint.
+	ListTriggerEventsDoer goahttp.Doer
+
 	// GetTriggerInstance Doer is the HTTP client used to make requests to the
 	// getTriggerInstance endpoint.
 	GetTriggerInstanceDoer goahttp.Doer
@@ -71,6 +75,7 @@ func NewClient(
 	return &Client{
 		ListTriggerDefinitionsDoer: doer,
 		ListTriggerInstancesDoer:   doer,
+		ListTriggerEventsDoer:      doer,
 		GetTriggerInstanceDoer:     doer,
 		CreateTriggerInstanceDoer:  doer,
 		UpdateTriggerInstanceDoer:  doer,
@@ -128,6 +133,30 @@ func (c *Client) ListTriggerInstances() goa.Endpoint {
 		resp, err := c.ListTriggerInstancesDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("triggers", "listTriggerInstances", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListTriggerEvents returns an endpoint that makes HTTP requests to the
+// triggers service listTriggerEvents server.
+func (c *Client) ListTriggerEvents() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListTriggerEventsRequest(c.encoder)
+		decodeResponse = DecodeListTriggerEventsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListTriggerEventsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListTriggerEventsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("triggers", "listTriggerEvents", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -1,4 +1,4 @@
-import { McpSidebarInfoLabel } from "@/components/mcp-sidebar-nav-shell";
+import { DetailSidebarInfoLabel } from "@/components/detail/detail-sidebar-nav";
 import { Button } from "@/components/ui/Button";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Dialog } from "@/components/ui/Dialog";
@@ -187,7 +187,7 @@ export function SkillSharingCardBlocks({
   return (
     <>
       <div className="flex flex-col gap-1.5">
-        <McpSidebarInfoLabel>Visibility</McpSidebarInfoLabel>
+        <DetailSidebarInfoLabel>Visibility</DetailSidebarInfoLabel>
         <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
           <DropdownMenuTrigger asChild disabled={!canWrite || pending}>
             <button
@@ -249,7 +249,7 @@ export function SkillSharingCardBlocks({
 
       {shareUrl && (
         <div className="flex flex-col gap-1">
-          <McpSidebarInfoLabel>Public link</McpSidebarInfoLabel>
+          <DetailSidebarInfoLabel>Public link</DetailSidebarInfoLabel>
           <div className="flex items-start gap-1">
             <Text
               variant="small"

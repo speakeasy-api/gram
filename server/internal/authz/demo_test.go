@@ -22,35 +22,40 @@ func demoTestCtx(t *testing.T) context.Context {
 	return contextvalues.SetAuthContext(ctx, authCtx)
 }
 
-func TestPrepareContext_demoOrgGetsReadOnlyGrants(t *testing.T) {
+func TestPrepareContext_demoOrgGetsEveryUserVisibleScope(t *testing.T) {
 	t.Parallel()
 
 	ctx := demoTestCtx(t)
 	conn := newTestDB(t)
-	chConn, err := newClickhouseClient(t)
-	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), conn, chConn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), conn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 
-	ctx, err = engine.PrepareContext(ctx)
+	ctx, err := engine.PrepareContext(ctx)
 	require.NoError(t, err)
 
 	grants, ok := GrantsFromContext(ctx)
 	require.True(t, ok)
 	require.NotEmpty(t, grants)
 
-	// Reads allowed.
+	// Demo sessions hold the same set access.ListGrants reports to the
+	// dashboard, so no page is offered that the server then refuses.
 	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: "project_demo"}))
 	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeOrgRead, ResourceID: constants.DemoOrganizationID}))
 	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeChatRead, ResourceID: "chat_demo"}))
+	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeOrgAdmin, ResourceID: constants.DemoOrganizationID}))
+	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeEnvironmentRead, ResourceID: "env_demo"}))
+	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeProjectWrite, ResourceID: "project_demo"}))
+	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeMCPWrite, ResourceID: "mcp_demo"}))
 
-	// Writes and environment reads denied.
-	require.Error(t, engine.Require(ctx, Check{Scope: ScopeProjectWrite, ResourceID: "project_demo"}))
-	require.Error(t, engine.Require(ctx, Check{Scope: ScopeMCPWrite, ResourceID: "mcp_demo"}))
-	require.Error(t, engine.Require(ctx, Check{Scope: ScopeOrgAdmin, ResourceID: constants.DemoOrganizationID}))
-	require.Error(t, engine.Require(ctx, Check{Scope: ScopeEnvironmentRead, ResourceID: "env_demo"}))
+	// Internal scopes stay internal: the demo set is the user-visible
+	// catalogue, not every scope the server declares.
+	for _, grant := range grants {
+		visibility, ok := ScopeVisibilityFor(grant.Scope)
+		require.True(t, ok, "scope %q has no declared visibility", grant.Scope)
+		require.Equal(t, ScopeVisibilityUserVisible, visibility, "scope %q is not user-visible", grant.Scope)
+	}
 }
 
-func TestPrepareContext_demoOrgReadOnlyEvenForAdminOverride(t *testing.T) {
+func TestPrepareContext_demoOrgIgnoresScopeOverrides(t *testing.T) {
 	t.Parallel()
 
 	ctx := demoTestCtx(t)
@@ -58,19 +63,18 @@ func TestPrepareContext_demoOrgReadOnlyEvenForAdminOverride(t *testing.T) {
 	require.True(t, ok)
 	authCtx.IsAdmin = true
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
-	ctx = contextvalues.SetAdminOverrideInContext(ctx, "acme-demo")
-	// An admin scope override must not widen the demo org back to writes.
+	// The demo branch runs before scope overrides, so an override neither
+	// widens nor narrows a demo session.
 	ctx = contextvalues.SetRBACScopeOverride(ctx, "project:write")
 
 	conn := newTestDB(t)
-	chConn, err := newClickhouseClient(t)
-	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), conn, chConn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), conn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 
-	ctx, err = engine.PrepareContext(ctx)
+	ctx, err := engine.PrepareContext(ctx)
 	require.NoError(t, err)
 
-	// The demo branch wins over the admin-override allScopeGrants branch.
+	// org:admin is outside the override, so passing it proves the demo branch
+	// produced these grants rather than GrantsFromOverrides.
+	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeOrgAdmin, ResourceID: constants.DemoOrganizationID}))
 	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: "project_demo"}))
-	require.Error(t, engine.Require(ctx, Check{Scope: ScopeProjectWrite, ResourceID: "project_demo"}))
 }

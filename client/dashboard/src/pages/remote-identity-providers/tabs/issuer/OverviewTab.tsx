@@ -85,6 +85,18 @@ export function OverviewTab({
   const supported = (value: boolean): ReactNode => (
     <InfoText>{value ? "Supported" : "Not supported"}</InfoText>
   );
+  // Unlike the other metadata arrays, absent and empty mean different things
+  // here (mirroring the nullable column): absent is "discovery has not
+  // captured this yet", empty is "the issuer advertises no methods".
+  const pkceMethods = (values: string[] | null | undefined): ReactNode => {
+    if (values == null) {
+      return <InfoText>Not captured</InfoText>;
+    }
+    if (values.length === 0) {
+      return <InfoText>None advertised</InfoText>;
+    }
+    return <InfoText mono>{values.join(", ")}</InfoText>;
+  };
 
   return (
     <div className="max-w-3xl space-y-8">
@@ -126,6 +138,9 @@ export function OverviewTab({
         </InfoField>
         <InfoField label="Token Endpoint Authentication Methods">
           {list(issuer.tokenEndpointAuthMethodsSupported)}
+        </InfoField>
+        <InfoField label="PKCE Code Challenge Methods">
+          {pkceMethods(issuer.codeChallengeMethodsSupported)}
         </InfoField>
         <InfoField label="Client ID Metadata Document">
           {supported(issuer.clientIdMetadataDocumentSupported)}

@@ -6,6 +6,7 @@ SELECT pg_advisory_xact_lock(hashtextextended('skill-observations:' || (@project
 
 -- name: CreateSkillFeedback :one
 INSERT INTO skill_feedback (
+  id,
   project_id,
   skill_id,
   skill_version_id,
@@ -17,6 +18,7 @@ INSERT INTO skill_feedback (
   user_id,
   user_email
 ) VALUES (
+  COALESCE(sqlc.narg(id)::uuid, generate_uuidv7()),
   @project_id,
   sqlc.narg(skill_id)::uuid,
   sqlc.narg(skill_version_id)::uuid,
@@ -28,6 +30,8 @@ INSERT INTO skill_feedback (
   sqlc.narg(user_id)::text,
   sqlc.narg(user_email)::text
 )
+ON CONFLICT (project_id, id) DO UPDATE
+SET id = EXCLUDED.id
 RETURNING *;
 
 -- name: GetActiveSkillByName :one
@@ -47,6 +51,7 @@ LIMIT GREATEST(@page_limit::int, 0);
 
 -- name: CountSkillFeedbackOutcomes :one
 SELECT
+  clock_timestamp()::timestamptz AS window_end,
   COUNT(*)::bigint AS total,
   COUNT(*) FILTER (WHERE outcome = 'helped')::bigint AS helped,
   COUNT(*) FILTER (WHERE outcome = 'partially_helped')::bigint AS partially_helped,
@@ -1308,6 +1313,31 @@ WHERE s.project_id = @project_id
   AND s.id = @skill_id
   AND s.archived_at IS NULL;
 
+-- name: ListSkillVersionPromptInjectionFindings :many
+SELECT DISTINCT
+  COALESCE(rr.rule_id, 'prompt_injection')::text AS rule_id,
+  COALESCE(rr.description, 'Detected a prompt injection attempt.')::text AS description,
+  COALESCE(rr.confidence, 0)::double precision AS confidence
+FROM risk_results rr
+JOIN skill_versions sv ON sv.id = rr.skill_version_id
+JOIN skills s ON s.id = sv.skill_id
+JOIN risk_policies rp
+  ON rp.id = rr.risk_policy_id
+  AND rp.project_id = s.project_id
+  AND rp.enabled IS TRUE
+  AND rp.deleted IS FALSE
+  AND rr.risk_policy_version = rp.version
+WHERE s.project_id = @project_id
+  AND s.id = @skill_id
+  AND s.archived_at IS NULL
+  AND sv.id = @skill_version_id
+  AND rr.project_id = s.project_id
+  AND rr.source = 'prompt_injection'
+  AND rr.found IS TRUE
+  AND rr.excluded_at IS NULL
+  AND rr.false_positive_at IS NULL
+ORDER BY 1, 2, 3 DESC;
+
 -- name: GetSkillState :one
 SELECT
   COALESCE(state.latest_version_id, '00000000-0000-0000-0000-000000000000'::uuid) AS latest_version_id,
@@ -1354,6 +1384,12 @@ WHERE project_id = @project_id
   AND (
     COALESCE(cardinality(@tags::text[]), 0) = 0
     OR tags && @tags::text[]
+  )
+  -- Mirrors the ListSkills restriction so an empty page still counts the same
+  -- set: NULL means unrestricted, an empty array means none.
+  AND (
+    sqlc.narg(skill_ids)::uuid[] IS NULL
+    OR id = ANY(sqlc.narg(skill_ids)::uuid[])
   );
 
 -- name: ListDistinctSkillTags :many
@@ -1397,6 +1433,14 @@ SELECT
         COALESCE(cardinality(@tags::text[]), 0) = 0
         OR counted.tags && @tags::text[]
       )
+      -- Restricts the page to an explicit id set (today: the skills one user is
+      -- authorized to reach, resolved by the access service so the RBAC rule
+      -- stays in one place). Callers that want no restriction pass NULL; an
+      -- EMPTY set is a real answer meaning "none", never "all".
+      AND (
+        sqlc.narg(skill_ids)::uuid[] IS NULL
+        OR counted.id = ANY(sqlc.narg(skill_ids)::uuid[])
+      )
   )::bigint AS total_count
 FROM skills s
 LEFT JOIN LATERAL (
@@ -1430,6 +1474,10 @@ WHERE s.project_id = @project_id
   AND (
     COALESCE(cardinality(@tags::text[]), 0) = 0
     OR s.tags && @tags::text[]
+  )
+  AND (
+    sqlc.narg(skill_ids)::uuid[] IS NULL
+    OR s.id = ANY(sqlc.narg(skill_ids)::uuid[])
   )
   AND (
     (

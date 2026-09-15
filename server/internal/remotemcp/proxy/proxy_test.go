@@ -67,22 +67,23 @@ func newProxyForTest(t *testing.T, upstreamURL string) *proxy.Proxy {
 			TunneledMCPServerID: "",
 			McpServerID:         "",
 		},
-		RemoteURL:                         upstreamURL,
-		Headers:                           nil,
-		AuthorizationOverride:             "",
-		UpstreamResponseRetryer:           nil,
-		UpstreamResponseInterceptor:       nil,
-		UserRequestInterceptors:           nil,
-		InitializeRequestInterceptors:     nil,
-		RemoteMessageInterceptors:         nil,
-		ToolsCallRequestInterceptors:      nil,
-		ToolsCallResponseInterceptors:     nil,
-		ToolsListRequestInterceptors:      nil,
-		ToolsListResponseInterceptors:     nil,
-		ResourcesReadRequestInterceptors:  nil,
-		ResourcesReadResponseInterceptors: nil,
-		ResourcesListRequestInterceptors:  nil,
-		ResourcesListResponseInterceptors: nil,
+		RemoteURL:                          upstreamURL,
+		Headers:                            nil,
+		AuthorizationOverride:              "",
+		UpstreamResponseRetryer:            nil,
+		UpstreamResponseInterceptor:        nil,
+		UserRequestObservationInterceptors: nil,
+		UserRequestInterceptors:            nil,
+		InitializeRequestInterceptors:      nil,
+		RemoteMessageInterceptors:          nil,
+		ToolsCallRequestInterceptors:       nil,
+		ToolsCallResponseInterceptors:      nil,
+		ToolsListRequestInterceptors:       nil,
+		ToolsListResponseInterceptors:      nil,
+		ResourcesReadRequestInterceptors:   nil,
+		ResourcesReadResponseInterceptors:  nil,
+		ResourcesListRequestInterceptors:   nil,
+		ResourcesListResponseInterceptors:  nil,
 	}
 }
 
@@ -1464,7 +1465,11 @@ func TestProxy_Post_InitializeRequestInterceptor_RunsAfterGeneric(t *testing.T) 
 	require.Equal(t, []string{"generic-req", "typed-req"}, order, "generic interceptors must run before typed interceptors")
 }
 
-const toolsCallRequest = `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_weather","arguments":{"location":"sf"}}}`
+// toolsCallRequest carries, alongside name and arguments, params members the
+// SDK's CallToolParamsRaw does not model — an invented future member and an
+// _meta value whose integer exceeds float64 precision. Mutation tests assert
+// both forward intact through SetArguments.
+const toolsCallRequest = `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_weather","arguments":{"location":"sf"},"_meta":{"trace":9007199254740993},"futureUnknownField":{"mode":"strict"}}}`
 
 func TestProxy_Post_ToolsCallRequestInterceptor_RunsForToolsCall(t *testing.T) {
 	t.Parallel()
@@ -1597,15 +1602,58 @@ func TestProxy_Post_ToolsCallRequest_SetArguments_RewritesForwardedBody(t *testi
 	require.NotContains(t, gotBody, `"sf"`, "original arguments must not leak upstream")
 	require.Contains(t, gotBody, `"tools/call"`, "method must survive re-encoding")
 	require.Contains(t, gotBody, `"id":1`, "request id must survive re-encoding")
+
+	// Params members the SDK types don't model must survive the mutation:
+	// SetArguments splices only the arguments member into the original
+	// payload instead of round-tripping through CallToolParamsRaw.
+	require.Contains(t, gotBody, `"futureUnknownField":{"mode":"strict"}`, "unmodeled params member must survive SetArguments")
+	require.Contains(t, gotBody, `"_meta":{"trace":9007199254740993}`,
+		"_meta must forward with its original bytes — no float64 precision loss")
+}
+
+func TestProxy_Post_ToolsCallRequest_SetArguments_EmptyRemovesArgumentsMember(t *testing.T) {
+	t.Parallel()
+
+	// A nil replacement removes the arguments member from the forwarded
+	// params, mirroring the omitempty encoding the typed field had. No
+	// production interceptor commits an empty replacement today, so this
+	// path is only exercised here.
+	var gotBody string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		gotBody = string(body)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"ok"}]}}`))
+	}))
+	t.Cleanup(upstream.Close)
+
+	p := newProxyForTest(t, upstream.URL)
+	p.ToolsCallRequestInterceptors = []proxy.ToolsCallRequestInterceptor{
+		&mutatingToolsCallRequestInterceptor{
+			name: "drop-arguments",
+			argsFn: func(_ json.RawMessage) json.RawMessage {
+				return nil
+			},
+		},
+	}
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(toolsCallRequest))
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, p.Post(rr, req))
+
+	require.NotContains(t, gotBody, `"arguments"`, "empty replacement must delete the arguments member, not send null")
+	require.Contains(t, gotBody, `"name":"get_weather"`, "modeled params members must survive the delete")
+	require.Contains(t, gotBody, `"futureUnknownField":{"mode":"strict"}`, "unmodeled params members must survive the delete")
 }
 
 func TestProxy_Post_ToolsCallRequest_SetArguments_MarshalFailureSurfacesAs5xx(t *testing.T) {
 	t.Parallel()
 
-	// Force a marshal failure inside SetArguments by handing it a
-	// json.RawMessage holding invalid JSON bytes. json.Marshal of the
-	// enclosing CallToolParamsRaw delegates to RawMessage.MarshalJSON
-	// and then validates the returned bytes; an invalid byte (0xff)
+	// Force a mutation failure inside SetArguments by handing it a
+	// json.RawMessage holding invalid JSON bytes. Re-encoding the spliced
+	// params members validates each raw value; an invalid byte (0xff)
 	// trips the validator. SetArguments must reject with a
 	// *MutationError before mutating any state, and the proxy must
 	// surface that as a 5xx rather than a JSON-RPC rejection.
@@ -2269,13 +2317,23 @@ func TestProxy_Post_ToolsListResponseInterceptor_RejectionWritesJSONRPCError(t *
 	require.Contains(t, rr.Body.String(), "listing blocked", "RejectError message must propagate")
 }
 
+// toolsListResponseThreeTools carries, alongside the tools array, result
+// members the SDK's ListToolsResult does not model — the MCP 2026-07-28
+// required resultType/ttlMs/cacheScope trio and an invented future member —
+// plus an _meta value whose integer exceeds float64 precision. Mutation
+// tests assert all of them relay intact through SetTools.
 const toolsListResponseThreeTools = `{
   "jsonrpc": "2.0",
   "id": 2,
   "result": {
+    "_meta": {"upstream/trace": 9007199254740993},
+    "resultType": "tools/list",
+    "ttlMs": 60000,
+    "cacheScope": "server",
+    "futureUnknownField": {"nested": ["ok"]},
     "tools": [
       {"name": "tool_a", "description": "first", "inputSchema": {"type": "object"}},
-      {"name": "tool_b", "description": "second", "inputSchema": {"type": "object"}},
+      {"name": "tool_b", "description": "second <b&c>", "inputSchema": {"type": "object"}},
       {"name": "tool_c", "description": "third", "inputSchema": {"type": "object"}}
     ]
   }
@@ -2511,6 +2569,18 @@ func TestProxy_Post_ToolsListResponse_SetTools_RewritesRelayedBody_JSONPath(t *t
 	require.NotContains(t, rr.Body.String(), `"tool_a"`, "filtered tool must not reach client")
 	require.NotContains(t, rr.Body.String(), `"tool_c"`, "filtered tool must not reach client")
 	require.Contains(t, rr.Body.String(), `"id":2`, "response id must survive re-encoding")
+
+	// Result members the SDK types don't model must survive the mutation:
+	// SetTools splices only the tools member into the original payload
+	// instead of round-tripping through ListToolsResult.
+	require.Contains(t, rr.Body.String(), `"resultType":"tools/list"`, "unmodeled required member must survive SetTools")
+	require.Contains(t, rr.Body.String(), `"ttlMs":60000`, "unmodeled required member must survive SetTools")
+	require.Contains(t, rr.Body.String(), `"cacheScope":"server"`, "unmodeled required member must survive SetTools")
+	require.Contains(t, rr.Body.String(), `"futureUnknownField":{"nested":["ok"]}`, "unknown future member must survive SetTools")
+	require.Contains(t, rr.Body.String(), `"_meta":{"upstream/trace":9007199254740993}`,
+		"_meta must relay with its original bytes — no float64 precision loss")
+	require.Contains(t, rr.Body.String(), `"description":"second <b&c>"`,
+		"kept tool bytes must not be HTML-escaped, matching the non-escaping relay of preserved members")
 }
 
 func TestProxy_Post_SSEResponse_TerminalEventDispatchesTypedToolsListInterceptor(t *testing.T) {
@@ -2628,6 +2698,12 @@ func TestProxy_Post_ToolsListResponse_SetTools_RewritesRelayedEvent_SSEPath(t *t
 	require.NotContains(t, out, `"tool_b"`, "filtered tool must not reach client")
 	require.NotContains(t, out, `"tool_c"`, "filtered tool must not reach client")
 
+	// Unmodeled result members must survive the SSE-path mutation the same
+	// way they do on the buffered JSON path.
+	require.Contains(t, out, `"resultType":"tools/list"`, "unmodeled required member must survive SetTools on SSE path")
+	require.Contains(t, out, `"_meta":{"upstream/trace":9007199254740993}`,
+		"_meta must relay with its original bytes on SSE path")
+
 	// Non-data SSE fields must survive the rebuild so the client's MCP
 	// runtime sees the same event type and id as the upstream sent.
 	require.Contains(t, out, "event: response\n", "event: field must be preserved on mutation re-emit")
@@ -2662,6 +2738,50 @@ func TestProxy_Post_UpstreamResponseInterceptorRuns(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, sawStatus)
 	require.Equal(t, "gram-sid", rr.Header().Get("Mcp-Session-Id"), "interceptor header mutation must reach the client")
+}
+
+func TestProxy_Post_UpstreamResponseInterceptorRejectionWritesJSONRPCError(t *testing.T) {
+	t.Parallel()
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("X-Gram-Tunnel-Error", "tunnel-busy")
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte("internal transport detail"))
+	}))
+	t.Cleanup(upstream.Close)
+
+	p := newProxyForTest(t, upstream.URL)
+	p.UpstreamResponseInterceptor = func(_ context.Context, _ *http.Response) error {
+		return &proxy.RejectError{
+			Code:    proxy.RejectCodeServerError,
+			Message: "The MCP server is temporarily unavailable. Please retry.",
+			Data: map[string]any{
+				"code":      "service_unavailable",
+				"retryable": true,
+			},
+		}
+	}
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, p.Post(rr, req))
+	require.Equal(t, http.StatusOK, rr.Code)
+	require.Equal(t, "application/json", rr.Header().Get("Content-Type"))
+	require.Empty(t, rr.Header().Get("X-Gram-Tunnel-Error"))
+	require.JSONEq(t, `{
+		"jsonrpc": "2.0",
+		"id": 1,
+		"error": {
+			"code": -32000,
+			"message": "The MCP server is temporarily unavailable. Please retry.",
+			"data": {
+				"code": "service_unavailable",
+				"retryable": true
+			}
+		}
+	}`, rr.Body.String())
 }
 
 // An interceptor error must abort the relay with nothing written to the

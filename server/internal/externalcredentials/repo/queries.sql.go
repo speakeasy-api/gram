@@ -99,15 +99,17 @@ INSERT INTO gcp_iam_credentials (
   impersonate_service_account,
   wif_pool_id,
   wif_provider_id,
-  wif_project_number
+  wif_project_number,
+  skip_project_verification
 ) VALUES (
   $1,
   $2,
   $3,
   $4,
-  $5
+  $5,
+  $6
 )
-RETURNING external_credential_id, external_credentials_provider, impersonate_service_account, wif_pool_id, wif_provider_id, wif_project_number, created_at, updated_at
+RETURNING external_credential_id, external_credentials_provider, impersonate_service_account, wif_pool_id, wif_provider_id, wif_project_number, skip_project_verification, created_at, updated_at
 `
 
 type CreateGcpIamCredentialParams struct {
@@ -116,6 +118,7 @@ type CreateGcpIamCredentialParams struct {
 	WifPoolID                 pgtype.Text
 	WifProviderID             pgtype.Text
 	WifProjectNumber          pgtype.Text
+	SkipProjectVerification   bool
 }
 
 func (q *Queries) CreateGcpIamCredential(ctx context.Context, arg CreateGcpIamCredentialParams) (GcpIamCredential, error) {
@@ -125,6 +128,7 @@ func (q *Queries) CreateGcpIamCredential(ctx context.Context, arg CreateGcpIamCr
 		arg.WifPoolID,
 		arg.WifProviderID,
 		arg.WifProjectNumber,
+		arg.SkipProjectVerification,
 	)
 	var i GcpIamCredential
 	err := row.Scan(
@@ -134,6 +138,7 @@ func (q *Queries) CreateGcpIamCredential(ctx context.Context, arg CreateGcpIamCr
 		&i.WifPoolID,
 		&i.WifProviderID,
 		&i.WifProjectNumber,
+		&i.SkipProjectVerification,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -196,7 +201,7 @@ func (q *Queries) GetAwsIamCredential(ctx context.Context, arg GetAwsIamCredenti
 }
 
 const getGcpIamCredential = `-- name: GetGcpIamCredential :one
-SELECT ec.id, ec.organization_id, ec.project_id, ec.provider, ec.name, ec.created_at, ec.updated_at, ec.deleted_at, ec.deleted, gcp.external_credential_id, gcp.external_credentials_provider, gcp.impersonate_service_account, gcp.wif_pool_id, gcp.wif_provider_id, gcp.wif_project_number, gcp.created_at, gcp.updated_at
+SELECT ec.id, ec.organization_id, ec.project_id, ec.provider, ec.name, ec.created_at, ec.updated_at, ec.deleted_at, ec.deleted, gcp.external_credential_id, gcp.external_credentials_provider, gcp.impersonate_service_account, gcp.wif_pool_id, gcp.wif_provider_id, gcp.wif_project_number, gcp.skip_project_verification, gcp.created_at, gcp.updated_at
 FROM external_credentials AS ec
 JOIN gcp_iam_credentials AS gcp ON gcp.external_credential_id = ec.id
 WHERE ec.id = $1
@@ -235,6 +240,7 @@ func (q *Queries) GetGcpIamCredential(ctx context.Context, arg GetGcpIamCredenti
 		&i.GcpIamCredential.WifPoolID,
 		&i.GcpIamCredential.WifProviderID,
 		&i.GcpIamCredential.WifProjectNumber,
+		&i.GcpIamCredential.SkipProjectVerification,
 		&i.GcpIamCredential.CreatedAt,
 		&i.GcpIamCredential.UpdatedAt,
 	)
@@ -286,6 +292,42 @@ func (q *Queries) ListExternalCredentials(ctx context.Context, arg ListExternalC
 	return items, nil
 }
 
+const lockExternalCredentialForUpdate = `-- name: LockExternalCredentialForUpdate :one
+SELECT id
+FROM external_credentials
+WHERE id = $1
+  AND organization_id IS NOT DISTINCT FROM $2
+  AND project_id IS NULL
+  AND provider = $3
+  AND deleted IS FALSE
+FOR UPDATE
+`
+
+type LockExternalCredentialForUpdateParams struct {
+	ID             uuid.UUID
+	OrganizationID pgtype.Text
+	Provider       string
+}
+
+// Locks the external credential row so a preflight run against it cannot be
+// raced by a concurrent key write. FOR UPDATE is load-bearing and must not be
+// weakened to FOR NO KEY UPDATE or FOR SHARE: inserting or re-pointing an
+// external_keys row takes FOR KEY SHARE on this parent row through
+// external_keys_external_credential_id_fkey, which conflicts with FOR UPDATE but
+// not with the weaker modes. Downgrading the lock would silently reopen the
+// TOCTOU window where a key write commits between the preflight and the soft
+// delete, leaving a live key behind a deleted credential.
+//
+// This is the only row lock the credential delete takes, and the key delete in
+// externalkeys locks only the key, so neither path holds one lock while waiting
+// on the other and the two cannot deadlock.
+func (q *Queries) LockExternalCredentialForUpdate(ctx context.Context, arg LockExternalCredentialForUpdateParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockExternalCredentialForUpdate, arg.ID, arg.OrganizationID, arg.Provider)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const softDeleteExternalCredential = `-- name: SoftDeleteExternalCredential :one
 UPDATE external_credentials
 SET deleted_at = clock_timestamp()
@@ -318,6 +360,39 @@ func (q *Queries) SoftDeleteExternalCredential(ctx context.Context, arg SoftDele
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const softDeleteExternalCredentialPreflight = `-- name: SoftDeleteExternalCredentialPreflight :one
+SELECT EXISTS (
+  SELECT 1
+  FROM external_keys
+  WHERE external_credential_id = $1::uuid
+    AND deleted IS FALSE
+)
+`
+
+// Reports whether any live external key still names the credential, which
+// refuses the delete. Run inside the delete transaction, after taking the row
+// lock.
+//
+// Soft-deleted keys do not count: a deleted key signs nothing, so it cannot be
+// broken by removing the credential that reached it.
+//
+// The database will not enforce this. external_credentials.deleted is a
+// generated column, so the soft delete is an UPDATE and
+// external_keys_external_credential_id_fkey never fires — which is exactly why
+// soft-deleting a credential today silently orphans every key behind it.
+//
+// The parameter is explicitly cast because external_keys carries its own
+// external_credential_id column, which leaves sqlc unable to infer the named
+// parameter's type from the column reference alone. The check is a single
+// EXISTS: sqlc types `EXISTS(...) OR EXISTS(...)` as pgtype.Bool, and an unset
+// value there would read as "not referenced" and fail this preflight open.
+func (q *Queries) SoftDeleteExternalCredentialPreflight(ctx context.Context, externalCredentialID uuid.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, softDeleteExternalCredentialPreflight, externalCredentialID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const updateAwsIamCredential = `-- name: UpdateAwsIamCredential :one
@@ -408,9 +483,10 @@ SET impersonate_service_account = $1,
     wif_pool_id = $2,
     wif_provider_id = $3,
     wif_project_number = $4,
+    skip_project_verification = $5,
     updated_at = clock_timestamp()
-WHERE external_credential_id = $5
-RETURNING external_credential_id, external_credentials_provider, impersonate_service_account, wif_pool_id, wif_provider_id, wif_project_number, created_at, updated_at
+WHERE external_credential_id = $6
+RETURNING external_credential_id, external_credentials_provider, impersonate_service_account, wif_pool_id, wif_provider_id, wif_project_number, skip_project_verification, created_at, updated_at
 `
 
 type UpdateGcpIamCredentialParams struct {
@@ -418,6 +494,7 @@ type UpdateGcpIamCredentialParams struct {
 	WifPoolID                 pgtype.Text
 	WifProviderID             pgtype.Text
 	WifProjectNumber          pgtype.Text
+	SkipProjectVerification   bool
 	ExternalCredentialID      uuid.UUID
 }
 
@@ -430,6 +507,7 @@ func (q *Queries) UpdateGcpIamCredential(ctx context.Context, arg UpdateGcpIamCr
 		arg.WifPoolID,
 		arg.WifProviderID,
 		arg.WifProjectNumber,
+		arg.SkipProjectVerification,
 		arg.ExternalCredentialID,
 	)
 	var i GcpIamCredential
@@ -440,6 +518,7 @@ func (q *Queries) UpdateGcpIamCredential(ctx context.Context, arg UpdateGcpIamCr
 		&i.WifPoolID,
 		&i.WifProviderID,
 		&i.WifProjectNumber,
+		&i.SkipProjectVerification,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

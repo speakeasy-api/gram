@@ -8,6 +8,14 @@ const (
 	TokenEndpointAuthMethodBasic TokenEndpointAuthMethod = "client_secret_basic"
 	TokenEndpointAuthMethodPost  TokenEndpointAuthMethod = "client_secret_post"
 	TokenEndpointAuthMethodNone  TokenEndpointAuthMethod = "none"
+	// TokenEndpointAuthMethodPrivateKeyJWT is not yet selectable: it is absent
+	// from tokenEndpointAuthMethodEnum in the Goa design, so no client can store
+	// it and ResolveTokenEndpointAuthMethod below deliberately does not handle
+	// it. It exists so the rules that guard the method — a key set is required
+	// to declare it, and cannot be detached while it is declared — land before
+	// AIM-156 makes it selectable. AIM-156 adds both the enum value and the
+	// resolution arm; until then this constant is only ever compared against.
+	TokenEndpointAuthMethodPrivateKeyJWT TokenEndpointAuthMethod = "private_key_jwt" //nolint:gosec // G101 false positive: an RFC 7591 token_endpoint_auth_method name, not a credential.
 )
 
 // ResolveTokenEndpointAuthMethod maps a client's stored

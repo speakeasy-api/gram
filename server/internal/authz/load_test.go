@@ -29,9 +29,7 @@ func TestLoadGrants_loadsUserAndRoleGrants(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx = GrantsToContext(ctx, grants)
-	chConn, err := newClickhouseClient(t)
-	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), conn, chConn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), conn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: "proj:123"}))
 	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeMCPConnect, ResourceID: "toolA"}))
 }
@@ -51,9 +49,17 @@ func TestSeedSystemRoleGrantsBootstrapsGlobalRoles(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "Admin", adminRole.WorkosName)
 
-	grants, err := GrantsForRole(ctx, testenv.NewLogger(t), conn, organizationID, SystemRoleAdmin, "role:global:"+adminRole.ID.String())
+	grants, err := GrantsForRole(ctx, testenv.NewLogger(t), conn, organizationID, "role:global:"+adminRole.ID.String())
 	require.NoError(t, err)
 	require.NotEmpty(t, grants)
+
+	seededScopes := make([]Scope, 0, len(grants))
+	for _, grant := range grants {
+		seededScopes = append(seededScopes, Scope(grant.Scope))
+	}
+	for _, scope := range []Scope{ScopeAgentRead, ScopeAgentWrite, ScopeAgentAuthorize, ScopeAgentTransfer} {
+		require.Contains(t, seededScopes, scope, "new Admin role must contain explicit %s grant", scope)
+	}
 
 	q := accessrepo.New(conn)
 	adminPrincipal := urn.NewPrincipal(urn.PrincipalTypeRole, "global:"+adminRole.ID.String())
@@ -164,9 +170,7 @@ func TestLoadGrants_returnsEmptyGrantSetWhenNoRowsMatch(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx = GrantsToContext(ctx, grants)
-	chConn, err := newClickhouseClient(t)
-	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), conn, chConn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), conn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 	projectIDs, err := engine.Filter(ctx, []Check{
 		{Scope: ScopeProjectRead, ResourceID: "proj:123"},
 	})

@@ -1,0 +1,48 @@
+{
+  "_comment": "Deterministic trusted-source registry for research citations. Matching is by registrable-domain suffix. This annotates citations on render — it never gates fetching and never overrides the model's source_reputation label; the two are shown side by side so a mismatch is visible. Initial list AI-authored 2026-08-18; curated by humans thereafter.",
+  "sources": [
+    { "domain": "nvd.nist.gov", "category": "vulnerability database" },
+    { "domain": "cve.org", "category": "vulnerability database" },
+    { "domain": "mitre.org", "category": "vulnerability database" },
+    { "domain": "github.com/advisories", "category": "vulnerability database" },
+    { "domain": "osv.dev", "category": "vulnerability database" },
+    { "domain": "cisa.gov", "category": "government advisory" },
+    { "domain": "cert.org", "category": "government advisory" },
+    { "domain": "ncsc.gov.uk", "category": "government advisory" },
+    { "domain": "owasp.org", "category": "security organization" },
+    { "domain": "sans.org", "category": "security organization" },
+    { "domain": "first.org", "category": "security organization" },
+    {
+      "domain": "cloudsecurityalliance.org",
+      "category": "security organization"
+    },
+    { "domain": "snyk.io", "category": "security research" },
+    { "domain": "trailofbits.com", "category": "security research" },
+    { "domain": "portswigger.net", "category": "security research" },
+    { "domain": "rapid7.com", "category": "security research" },
+    { "domain": "crowdstrike.com", "category": "security research" },
+    {
+      "domain": "unit42.paloaltonetworks.com",
+      "category": "security research"
+    },
+    { "domain": "mandiant.com", "category": "security research" },
+    { "domain": "wiz.io", "category": "security research" },
+    { "domain": "orca.security", "category": "security research" },
+    { "domain": "invariantlabs.ai", "category": "security research" },
+    { "domain": "krebsonsecurity.com", "category": "security press" },
+    { "domain": "bleepingcomputer.com", "category": "security press" },
+    { "domain": "thehackernews.com", "category": "security press" },
+    { "domain": "darkreading.com", "category": "security press" },
+    { "domain": "arstechnica.com", "category": "technology press" },
+    { "domain": "theregister.com", "category": "technology press" },
+    { "domain": "wired.com", "category": "technology press" },
+    { "domain": "reuters.com", "category": "major press" },
+    { "domain": "apnews.com", "category": "major press" },
+    { "domain": "bloomberg.com", "category": "major press" },
+    { "domain": "npmjs.com", "category": "package registry" },
+    { "domain": "pypi.org", "category": "package registry" },
+    { "domain": "crates.io", "category": "package registry" },
+    { "domain": "modelcontextprotocol.io", "category": "protocol authority" },
+    { "domain": "anthropic.com", "category": "protocol authority" }
+  ]
+}

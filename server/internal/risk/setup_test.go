@@ -15,6 +15,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	gen "github.com/speakeasy-api/gram/server/gen/risk"
+
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/assets/blobio"
@@ -30,6 +34,8 @@ import (
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/message"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
@@ -48,6 +54,35 @@ func testCELEngine(t *testing.T) *celenv.Engine {
 	eng, err := celenv.New()
 	require.NoError(t, err)
 	return eng
+}
+func realtimeScanRequest(organizationID string, projectID uuid.UUID, userID, text string, messageType message.Type, toolName string) risk.RealtimeScanRequest {
+	return risk.RealtimeScanRequest{
+		Provenance: metering.RiskProvenance{
+			OrganizationID:         organizationID,
+			ProjectID:              projectID,
+			RiskPolicyID:           uuid.Nil,
+			RiskPolicyVersion:      0,
+			PolicyLinkReason:       "",
+			ChatID:                 uuid.Nil,
+			ExternalConversationID: "external/session:local",
+			ChatMessageID:          uuid.Nil,
+			ContentPartID:          uuid.Nil,
+			MessageLinkReason:      "realtime_not_persisted",
+			OperationID:            uuid.NewString(),
+			ExecutionPath:          "realtime_local",
+			RequestID:              "",
+			MessageType:            messageType,
+			HookSource:             "test",
+			UserID:                 userID,
+			ToolCallID:             "",
+			ToolName:               toolName,
+			Model:                  "",
+			Provider:               "",
+		},
+		Text:        text,
+		MessageType: messageType,
+		ToolName:    toolName,
+	}
 }
 
 func testPresetLibrary(t *testing.T) *presetlib.Library {
@@ -163,21 +198,27 @@ func (s *stubJudge) Evaluate(_ context.Context, in promptpolicy.Input) (*promptp
 }
 
 type testInstance struct {
-	service                      *risk.Service
-	conn                         *pgxpool.Pool
-	sessionManager               *sessions.Manager
-	signaler                     *signalerStub
-	chatRepo                     *chatrepo.Queries
-	flags                        *feature.InMemory
-	cacheAdapter                 cache.Cache
-	judge                        *stubJudge
+	service        *risk.Service
+	conn           *pgxpool.Pool
+	sessionManager *sessions.Manager
+	signaler       *signalerStub
+	chatRepo       *chatrepo.Queries
+	flags          *feature.InMemory
+	cacheAdapter   cache.Cache
+	judge          *stubJudge
+	// approvalIntake routes shadow-MCP block-link redemptions into the MCP
+	// approval workflow. Nil in the default harness, so existing tests keep
+	// exercising the legacy bypass path; intake tests set it before the
+	// service is built.
+	approvalIntake               risk.ShadowMCPApprovalIntake
 	reconcileShadowMCPPolicyURLs risk.ShadowMCPPolicyURLReconciler
 	shadowMCPInventoryURLLookup  risk.ShadowMCPInventoryURLLookup
 	completionClient             openrouter.CompletionClient
 	cacheDeletes                 *countingCache
 	chConn                       clickhouse.Conn
 	// assetStorage backs content-part reads on the ClickHouse reveal path.
-	assetStorage blobio.Reader
+	assetStorage  blobio.Reader
+	riskPublisher gcp.Publisher[*meteringv1.MeterReading]
 }
 
 func newTestRiskService(t *testing.T, configure ...func(*testInstance)) (context.Context, *testInstance) {
@@ -203,7 +244,7 @@ func newTestRiskService(t *testing.T, configure ...func(*testInstance)) (context
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	cacheAdapter := &countingCache{Cache: cache.NewRedisCacheAdapter(redisClient), mu: sync.Mutex{}, deletes: nil}
 	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, nil)
@@ -229,15 +270,19 @@ func newTestRiskService(t *testing.T, configure ...func(*testInstance)) (context
 		cacheDeletes:     cacheAdapter,
 		chConn:           chConn,
 		assetStorage:     assetstest.NewTestBlobStore(t),
+		riskPublisher:    nil,
 	}
 	for _, configureInstance := range configure {
 		configureInstance(ti)
 	}
-	ti.service = risk.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, sig, nil, &syncResultsCleaner{conn: conn}, ti.completionClient, shadowMCPClient, auditLogger, cacheAdapter, "test-jwt-secret", nil, nil, flags, testCELEngine(t), testPresetLibrary(t), judge.Evaluate, func(ctx context.Context, db riskrepo.DBTX, input policybypass.ReconcilePolicyURLsInput) error {
+	if ti.riskPublisher == nil {
+		ti.riskPublisher = gcp.NewNoopPublisher[*meteringv1.MeterReading]()
+	}
+	ti.service = risk.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, sig, nil, &syncResultsCleaner{conn: conn}, ti.completionClient, shadowMCPClient, auditLogger, ti.cacheAdapter, "test-jwt-secret", ti.approvalIntake, nil, nil, flags, testCELEngine(t), testPresetLibrary(t), judge.Evaluate, func(ctx context.Context, db riskrepo.DBTX, input policybypass.ReconcilePolicyURLsInput) error {
 		return ti.reconcileShadowMCPPolicyURLs(ctx, db, input)
 	}, func(ctx context.Context, projectID uuid.UUID, canonicalURLs []string) ([]string, error) {
 		return ti.shadowMCPInventoryURLLookup(ctx, projectID, canonicalURLs)
-	}, chrepo.New(chConn), nil, ti.assetStorage)
+	}, chrepo.New(chConn), ti.assetStorage, metering.NewRiskRecorder(ti.riskPublisher))
 
 	return ctx, ti
 }
@@ -340,4 +385,24 @@ func riskPolicyExistsByName(t *testing.T, ctx context.Context, conn *pgxpool.Poo
 		}
 	}
 	return false
+}
+
+// redeemedBypassRow loads the full bypass request a redemption produced —
+// the create result is a slim redemption receipt, and assertions about the
+// stored row read it back through the list endpoint.
+func redeemedBypassRow(t *testing.T, ctx context.Context, ti *testInstance, redemption *gen.PolicyBypassRedemption) *gen.RiskPolicyBypassRequest {
+	t.Helper()
+
+	require.Equal(t, "bypass_request", redemption.Kind)
+	list, err := ti.service.ListRiskPolicyBypassRequests(ctx, &gen.ListRiskPolicyBypassRequestsPayload{
+		ApikeyToken: nil, SessionToken: nil, ProjectSlugInput: nil, PolicyID: nil, Status: nil,
+	})
+	require.NoError(t, err)
+	for _, row := range list.Requests {
+		if row.ID == redemption.ID {
+			return row
+		}
+	}
+	t.Fatalf("redeemed bypass request %s not found", redemption.ID)
+	return nil
 }

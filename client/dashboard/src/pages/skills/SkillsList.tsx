@@ -1,6 +1,12 @@
-import { defineFilters, useFilterState } from "@/components/filters";
+import {
+  accessibleByFilterOptions,
+  defineFilters,
+  useFilterState,
+} from "@/components/filters";
 import type { FilterValue } from "@/components/filters/filter-schema";
-import { Page } from "@/components/page-layout";
+import { useMembers } from "@gram/client/react-query/members.js";
+import { useSession } from "@/contexts/Auth";
+import { ResourceListPage } from "@/components/page-templates";
 import { RequireScope } from "@/components/require-scope";
 import { ErrorAlert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
@@ -18,6 +24,10 @@ import type {
 import { useSkillEfficacyInsights } from "@gram/client/react-query/skillEfficacyInsights.js";
 import { useSkillTags } from "@gram/client/react-query/skillTags.js";
 import {
+  invalidateAllRiskListPolicies,
+  useRiskListPolicies,
+} from "@gram/client/react-query/riskListPolicies.js";
+import {
   useSkills,
   useSkillsInfinite,
 } from "@gram/client/react-query/skills.js";
@@ -28,6 +38,7 @@ import { sortTableData } from "@/components/ui/Table/sorting";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { useRoutes } from "@/routes";
 import { useQueryState } from "nuqs";
+import { useQueryClient } from "@tanstack/react-query";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router";
 import { toast } from "sonner";
@@ -49,6 +60,7 @@ const SKILL_FILTERS = defineFilters([
     label: "Classification",
     kind: "multiselect",
     pinned: true,
+    description: "Whether a skill is your own or ships with a plugin.",
   },
   {
     id: "tags",
@@ -56,6 +68,13 @@ const SKILL_FILTERS = defineFilters([
     kind: "multiselect",
     pinned: true,
     allLabel: "All tags",
+  },
+  {
+    id: "accessibleBy",
+    label: "Accessible by",
+    kind: "multiselect",
+    description:
+      "Who is authorized to reach the skill, through a grant on them or on a role they hold. Plugin distribution is not access, so it does not widen this.",
   },
 ]);
 
@@ -110,6 +129,7 @@ function noResultsMessage(active: boolean, incomplete: boolean): string {
 export default function SkillsList(): JSX.Element {
   const routes = useRoutes();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const filters = useFilterState(SKILL_FILTERS);
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortDescriptor | null>(null);
@@ -131,7 +151,15 @@ export default function SkillsList(): JSX.Element {
   const sourceKinds = filters.values.sourceKind as SourceKinds[];
   const classifications = filters.values.classification as Classifications[];
   const tags = filters.values.tags as string[];
+  const accessibleBy = filters.values.accessibleBy as string[];
   const tagsQuery = useSkillTags(undefined, undefined, { throwOnError: false });
+  // The org's people, for the "Accessible by" options. The filter itself is
+  // applied server-side — this list is paginated, so filtering the page in the
+  // browser would leave later pages looking empty and the count disagreeing.
+  const membersQuery = useMembers(undefined, undefined, {
+    throwOnError: false,
+  });
+  const { user } = useSession();
   const filterOptions = useMemo(
     () => ({
       ...FILTER_OPTIONS,
@@ -139,8 +167,12 @@ export default function SkillsList(): JSX.Element {
         value: tag,
         label: tag,
       })),
+      accessibleBy: accessibleByFilterOptions(
+        membersQuery.data?.members ?? [],
+        user.id,
+      ),
     }),
-    [tagsQuery.data?.tags],
+    [tagsQuery.data?.tags, membersQuery.data?.members, user.id],
   );
   const pageQuery = useSkills(
     {
@@ -150,6 +182,7 @@ export default function SkillsList(): JSX.Element {
       sourceKinds,
       classifications,
       tags,
+      accessibleBy,
       sort: "updated",
     },
     undefined,
@@ -162,6 +195,7 @@ export default function SkillsList(): JSX.Element {
       sourceKinds,
       classifications,
       tags,
+      accessibleBy,
     },
     undefined,
     {
@@ -179,7 +213,13 @@ export default function SkillsList(): JSX.Element {
     ? metricSkills
     : (pageQuery.data?.result.skills ?? EMPTY_SKILLS);
   const insightsQuery = useSkillEfficacyInsights(
-    metricSort ? {} : { skillIds: insightSkills.map((skill) => skill.id) },
+    metricSort
+      ? { includeSessionCost: false, includeRegressionSignal: false }
+      : {
+          skillIds: insightSkills.map((skill) => skill.id),
+          includeSessionCost: false,
+          includeRegressionSignal: false,
+        },
     undefined,
     {
       throwOnError: false,
@@ -201,7 +241,8 @@ export default function SkillsList(): JSX.Element {
     deferredSearch.trim().length > 0 ||
     filters.values.sourceKind.length > 0 ||
     filters.values.classification.length > 0 ||
-    filters.values.tags.length > 0;
+    filters.values.tags.length > 0 ||
+    filters.values.accessibleBy.length > 0;
   const insightsUnavailable = !!insightsQuery.error && !insightsQuery.data;
   const effectiveMetricSort = metricSort !== null && !insightsUnavailable;
   const effectiveSort = insightsUnavailable && metricSort ? null : sort;
@@ -438,211 +479,250 @@ export default function SkillsList(): JSX.Element {
     setPage((current) => current + 1);
   };
 
-  const countLabel = `${totalCount} skill${totalCount === 1 ? "" : "s"}`;
-
   if (legacySkillId) {
     return <Navigate to={routes.skills.detail.href(legacySkillId)} replace />;
   }
 
   return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <Page.Section>
-          <Page.Section.Title>Skills</Page.Section.Title>
-          <Page.Section.Description>
-            Record, inspect, and version the skills available to this project.
-          </Page.Section.Description>
-          <Page.Section.CTA>
-            <AddSkillButton onClick={() => setDialogOpen(true)} />
-          </Page.Section.CTA>
-          <Page.Section.Body>
-            <div className="space-y-4">
-              {!isEmptyProject && (
-                <Page.Toolbar>
-                  <Page.Toolbar.Search
-                    value={search}
-                    onChange={(value) => {
-                      setSearch(value);
-                      resetPage();
-                    }}
-                    debounceMs={150}
-                    placeholder="Search skills"
-                  />
-                  <Page.Toolbar.Filters
-                    schema={SKILL_FILTERS}
-                    values={filters.values}
-                    optionsById={filterOptions}
-                    onChange={(id, value) => {
-                      (
-                        filters.setValue as (
-                          id: string,
-                          value: FilterValue,
-                        ) => void
-                      )(id, value);
-                      resetPage();
-                    }}
-                    onClear={(id) => {
-                      (filters.clearValue as (id: string) => void)(id);
-                      resetPage();
-                    }}
-                    onClearAll={() => {
-                      filters.clearAll();
-                      resetPage();
-                    }}
-                  />
-                  <Page.Toolbar.Count>{countLabel}</Page.Toolbar.Count>
-                  <Page.Toolbar.Refresh
-                    onRefresh={() => {
-                      void Promise.all([
-                        effectiveMetricSort
-                          ? metricQuery.refetch()
-                          : pageQuery.refetch(),
-                        insightsQuery.refetch(),
-                        openSuggestions.query.refetch(),
-                        tagsQuery.refetch(),
-                      ]);
-                    }}
-                    isRefreshing={
-                      pageQuery.isFetching ||
-                      metricQuery.isFetching ||
-                      insightsQuery.isFetching ||
-                      openSuggestions.query.isFetching ||
-                      tagsQuery.isFetching
-                    }
-                  />
-                </Page.Toolbar>
-              )}
+    <ResourceListPage
+      title="Skills"
+      description="Record, inspect, and version the skills available to this project."
+      primaryAction={<AddSkillButton onClick={() => setDialogOpen(true)} />}
+      hideToolbar={isEmptyProject}
+      search={{
+        value: search,
+        onChange: (value) => {
+          setSearch(value);
+          resetPage();
+        },
+        debounceMs: 150,
+        placeholder: "Search skills",
+      }}
+      filters={{
+        schema: SKILL_FILTERS,
+        values: filters.values,
+        optionsById: filterOptions,
+        onChange: (id, value) => {
+          (filters.setValue as (id: string, value: FilterValue) => void)(
+            id,
+            value,
+          );
+          resetPage();
+        },
+        onClear: (id) => {
+          (filters.clearValue as (id: string) => void)(id);
+          resetPage();
+        },
+        onClearAll: () => {
+          filters.clearAll();
+          resetPage();
+        },
+      }}
+      onRefresh={() => {
+        void Promise.all([
+          effectiveMetricSort ? metricQuery.refetch() : pageQuery.refetch(),
+          insightsQuery.refetch(),
+          openSuggestions.query.refetch(),
+          tagsQuery.refetch(),
+          invalidateAllRiskListPolicies(queryClient),
+        ]);
+      }}
+      isRefreshing={
+        pageQuery.isFetching ||
+        metricQuery.isFetching ||
+        insightsQuery.isFetching ||
+        openSuggestions.query.isFetching ||
+        tagsQuery.isFetching
+      }
+    >
+      <div className="space-y-4">
+        <RequireScope scope="org:admin" level="section">
+          <SkillPromptInjectionPolicyCard />
+        </RequireScope>
 
-              {draining && (
-                <Text small muted role="status" aria-live="polite">
-                  Loading all skills to finish this view...
-                </Text>
-              )}
+        {draining && (
+          <Text small muted role="status" aria-live="polite">
+            Loading all skills to finish this view...
+          </Text>
+        )}
 
-              {openSuggestions.query.error && (
-                <div className="space-y-2">
-                  <ErrorAlert
-                    title="Unable to load suggested edits"
-                    error={openSuggestions.query.error}
-                  />
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => void openSuggestions.query.refetch()}
-                  >
-                    Retry suggested edits
-                  </Button>
-                </div>
-              )}
-
-              {openSuggestions.total > 0 &&
-                !openSuggestions.fullyLoaded &&
-                !openSuggestions.query.error && (
-                  <Text small muted role="status" aria-live="polite">
-                    Loading all suggested edits...
-                  </Text>
-                )}
-
-              {insightsUnavailable && (
-                <div className="space-y-2">
-                  <ErrorAlert
-                    title="Unable to load skill insights"
-                    error={insightsQuery.error}
-                  />
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => void insightsQuery.refetch()}
-                  >
-                    Retry insights
-                  </Button>
-                </div>
-              )}
-
-              {query.isPending && !query.data && <SkeletonTable />}
-              {query.error && !query.data && (
-                <ErrorAlert
-                  title="Unable to load skills"
-                  error={
-                    query.error instanceof Error ? query.error : "Try again."
-                  }
-                />
-              )}
-              {isEmptyProject && (
-                <SkillsEmptyState onAdd={() => setDialogOpen(true)} />
-              )}
-              {query.data && !isEmptyProject && !draining && (
-                <div className="overflow-x-auto">
-                  <Table
-                    columns={columns}
-                    data={displayedSkills}
-                    rowKey={(skill) => skill.id}
-                    sort={effectiveSort}
-                    onSortChange={(nextSort) => {
-                      setSort(nextSort);
-                      resetPage();
-                    }}
-                    onRowClick={(skill) =>
-                      void navigate(routes.skills.detail.href(skill.id))
-                    }
-                    className="min-w-[1100px]"
-                    noResultsMessage={noResultsMessage(
-                      active,
-                      effectiveMetricSort && metricQuery.isFetchNextPageError,
-                    )}
-                  />
-                </div>
-              )}
-
-              {effectiveMetricSort && metricQuery.isFetchNextPageError && (
-                <LoadMoreError
-                  onRetry={() => void metricQuery.fetchNextPage()}
-                />
-              )}
-
-              {!draining && totalPages > 1 && (
-                <div className="flex items-center justify-between border-t px-4 py-3">
-                  <Text small muted>
-                    {page * RESULT_PAGE_SIZE + 1}-
-                    {Math.min((page + 1) * RESULT_PAGE_SIZE, paginationCount)}{" "}
-                    of {paginationCount}
-                  </Text>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => setPage((current) => current - 1)}
-                      disabled={page === 0}
-                    >
-                      Previous
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={nextPage}
-                      disabled={page >= totalPages - 1}
-                    >
-                      Next
-                    </Button>
-                  </div>
-                </div>
-              )}
-
-              <UnknownSkillActivationsSection />
-            </div>
-
-            <SkillManifestDialog
-              mode="create"
-              open={dialogOpen}
-              onOpenChange={setDialogOpen}
+        {openSuggestions.query.error && (
+          <div className="space-y-2">
+            <ErrorAlert
+              title="Unable to load suggested edits"
+              error={openSuggestions.query.error}
             />
-          </Page.Section.Body>
-        </Page.Section>
-      </Page.Body>
-    </Page>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => void openSuggestions.query.refetch()}
+            >
+              Retry suggested edits
+            </Button>
+          </div>
+        )}
+
+        {openSuggestions.total > 0 &&
+          !openSuggestions.fullyLoaded &&
+          !openSuggestions.query.error && (
+            <Text small muted role="status" aria-live="polite">
+              Loading all suggested edits...
+            </Text>
+          )}
+
+        {insightsUnavailable && (
+          <div className="space-y-2">
+            <ErrorAlert
+              title="Unable to load skill insights"
+              error={insightsQuery.error}
+            />
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => void insightsQuery.refetch()}
+            >
+              Retry insights
+            </Button>
+          </div>
+        )}
+
+        {query.isPending && !query.data && <SkeletonTable />}
+        {query.error && !query.data && (
+          <ErrorAlert
+            title="Unable to load skills"
+            error={query.error instanceof Error ? query.error : "Try again."}
+          />
+        )}
+        {isEmptyProject && (
+          <SkillsEmptyState onAdd={() => setDialogOpen(true)} />
+        )}
+        {query.data && !isEmptyProject && !draining && (
+          <div className="overflow-x-auto">
+            <Table
+              columns={columns}
+              data={displayedSkills}
+              rowKey={(skill) => skill.id}
+              sort={effectiveSort}
+              onSortChange={(nextSort) => {
+                setSort(nextSort);
+                resetPage();
+              }}
+              onRowClick={(skill) =>
+                void navigate(routes.skills.detail.href(skill.id))
+              }
+              className="min-w-[1100px]"
+              noResultsMessage={noResultsMessage(
+                active,
+                effectiveMetricSort && metricQuery.isFetchNextPageError,
+              )}
+            />
+          </div>
+        )}
+
+        {effectiveMetricSort && metricQuery.isFetchNextPageError && (
+          <LoadMoreError onRetry={() => void metricQuery.fetchNextPage()} />
+        )}
+
+        {!draining && totalPages > 1 && (
+          <div className="flex items-center justify-between border-t px-4 py-3">
+            <Text small muted>
+              {page * RESULT_PAGE_SIZE + 1}-
+              {Math.min((page + 1) * RESULT_PAGE_SIZE, paginationCount)} of{" "}
+              {paginationCount}
+            </Text>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => setPage((current) => current - 1)}
+                disabled={page === 0}
+              >
+                Previous
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={nextPage}
+                disabled={page >= totalPages - 1}
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+        )}
+
+        <UnknownSkillActivationsSection />
+      </div>
+
+      <SkillManifestDialog
+        mode="create"
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+      />
+    </ResourceListPage>
+  );
+}
+
+function SkillPromptInjectionPolicyCard(): JSX.Element | null {
+  const routes = useRoutes();
+  const policiesQuery = useRiskListPolicies(undefined, undefined, {
+    throwOnError: false,
+  });
+  if (policiesQuery.error && !policiesQuery.data) {
+    return (
+      <div className="space-y-2">
+        <ErrorAlert
+          title="Unable to load prompt injection policy"
+          error={policiesQuery.error}
+        />
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => void policiesQuery.refetch()}
+        >
+          Retry policy status
+        </Button>
+      </div>
+    );
+  }
+  if (!policiesQuery.data) return null;
+
+  const policy = policiesQuery.data.policies.find(
+    (candidate) =>
+      candidate.enabled && candidate.sources.includes("prompt_injection"),
+  );
+  const action = policy ? (
+    <routes.policyCenter.detail.Link params={[policy.id]}>
+      <Button size="sm" variant="secondary">
+        View policy
+      </Button>
+    </routes.policyCenter.detail.Link>
+  ) : (
+    <routes.policyCenter.new.Link
+      queryParams={{ kind: "standard", category: "prompt_injection" }}
+    >
+      <Button size="sm" variant="secondary">
+        Set up scanning
+      </Button>
+    </routes.policyCenter.new.Link>
+  );
+
+  return (
+    <div className="border-border bg-muted/20 flex flex-wrap items-center justify-between gap-4 border p-4">
+      <div className="space-y-1">
+        <Text variant="subheading">
+          {policy
+            ? "Prompt injection scanning configured"
+            : "Set up prompt injection scanning"}
+        </Text>
+        <Text small muted>
+          {policy
+            ? "Captured skill manifests are checked by an enabled policy."
+            : "Add a policy to check future captured skill manifests for hidden instructions."}
+        </Text>
+      </div>
+      {action}
+    </div>
   );
 }
 

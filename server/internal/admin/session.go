@@ -149,19 +149,45 @@ func (s *SessionStore) Delete(ctx context.Context, sessionID string) error {
 	return nil
 }
 
-// UpdateAccessToken re-encrypts and persists a freshly refreshed OAuth
-// access token onto an existing session record.
-func (s *SessionStore) UpdateAccessToken(ctx context.Context, session Session, accessToken string, expiresAt time.Time) (Session, error) {
-	enc, err := s.enc.Encrypt([]byte(accessToken))
+func (s *SessionStore) DeleteIfUnchanged(ctx context.Context, session Session) (bool, error) {
+	deleted, err := s.cache.CompareAndDelete(ctx, session)
+	if err != nil {
+		return false, fmt.Errorf("compare and delete admin session: %w", err)
+	}
+	return deleted, nil
+}
+
+// UpdateTokens encrypts and persists a refreshed OAuth token pair. Providers
+// may omit the refresh token when it did not rotate; retain the existing one
+// in that case.
+func (s *SessionStore) UpdateTokens(ctx context.Context, session Session, accessToken, refreshToken string, expiresAt time.Time) (Session, error) {
+	expected := session
+	accessEnc, err := s.enc.Encrypt([]byte(accessToken))
 	if err != nil {
 		return session, fmt.Errorf("encrypt access token: %w", err)
 	}
-	session.AccessTokenEnc = enc
-	session.AccessTokenExpiresAt = expiresAt
-	if err := s.cache.Store(ctx, session); err != nil {
-		return session, fmt.Errorf("store admin session: %w", err)
+	if refreshToken != "" {
+		refreshEnc, err := s.enc.Encrypt([]byte(refreshToken))
+		if err != nil {
+			return session, fmt.Errorf("encrypt refresh token: %w", err)
+		}
+		session.RefreshTokenEnc = refreshEnc
 	}
-	return session, nil
+	session.AccessTokenEnc = accessEnc
+	session.AccessTokenExpiresAt = expiresAt
+	swapped, err := s.cache.CompareAndSwap(ctx, expected, session)
+	if err != nil {
+		return expected, fmt.Errorf("compare and swap admin session tokens: %w", err)
+	}
+	if swapped {
+		return session, nil
+	}
+
+	current, err := s.Get(ctx, expected.SessionID)
+	if err != nil {
+		return current, fmt.Errorf("reload concurrently updated admin session: %w", err)
+	}
+	return current, nil
 }
 
 // DecryptAccessToken returns the plaintext OAuth access token for the given

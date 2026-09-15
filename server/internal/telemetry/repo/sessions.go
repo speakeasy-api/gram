@@ -62,17 +62,17 @@ const (
 	// the summaries cover agent surfaces only, and claude-code:usage
 	// duplicates the OTEL api_request stream.
 	sessionAgentUsageRowPredicate = "(startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage'))"
-	// sessionOpencodeUsageRowPredicate matches opencode's per-turn usage rows.
-	// opencode reports tokens and cost on its unified-ingest assistant.responded
-	// rows, under the canonical gen_ai.usage.* keys the generic fallback branches
-	// already read. It has no OTEL stream and the unified-ingest path stamps no
-	// gram_urn, so provenance anchors on hook_source. The AfterAgentResponse
-	// event guard keeps a session's other opencode rows (thoughts, usage.reported,
-	// tool calls, lifecycle) from double-counting as usage turns; cost is part of
-	// the guard so a cost-only turn still counts. Mirrors is_opencode_usage_row in
-	// the MVs (server/clickhouse/schema.sql).
-	sessionOpencodeUsageRowPredicate = "(" +
-		"hook_source = 'opencode' AND " +
+	// sessionHookTurnUsageRowPredicate matches opencode's and openclaw's
+	// per-turn usage rows. Both report tokens and cost on their unified-ingest
+	// assistant.responded rows, under the canonical gen_ai.usage.* keys the
+	// generic fallback branches already read. Neither has an OTEL stream and the
+	// unified-ingest path stamps no gram_urn, so provenance anchors on
+	// hook_source. The AfterAgentResponse event guard keeps a session's other
+	// rows (thoughts, usage.reported, tool calls, lifecycle) from double-counting
+	// as usage turns; cost is part of the guard so a cost-only turn still counts.
+	// Mirrors is_hook_turn_usage_row in the MVs (server/clickhouse/schema.sql).
+	sessionHookTurnUsageRowPredicate = "(" +
+		"hook_source IN ('opencode', 'openclaw') AND " +
 		"toString(attributes.gram.hook.event) = 'AfterAgentResponse' AND " +
 		"(toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')" +
 		")"
@@ -83,11 +83,12 @@ const (
 		"gram_urn = 'litellm:otel:traces' AND " +
 		"event_urn IN ('urn:telemetry:provider_otel:span:chat', 'urn:telemetry:provider_otel:span:embeddings', 'urn:telemetry:provider_otel:span:text_completion')" +
 		")"
-	// sessionAgentToolCallPredicate matches Codex/Cursor/opencode completed
-	// tool-call hook rows (they have no OTEL stream). The hook.event guard excludes
-	// the PreToolUse companion row; provider names are not tool calls.
+	// sessionAgentToolCallPredicate matches Codex/Cursor/opencode/openclaw
+	// completed tool-call hook rows (they have no OTEL stream). The hook.event
+	// guard excludes the PreToolUse companion row; provider names are not tool
+	// calls.
 	sessionAgentToolCallPredicate = "(" +
-		"hook_source IN ('codex', 'cursor', 'opencode') AND " +
+		"hook_source IN ('codex', 'cursor', 'opencode', 'openclaw') AND " +
 		"toString(attributes.gram.tool.name) != '' AND " +
 		"toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor') AND " +
 		"toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')" +
@@ -114,11 +115,11 @@ const (
 	// usage rows, and opencode assistant.responded rows. This is the sumIf guard
 	// for every token/cost measure, keeping session totals aligned with the
 	// aggregate.
-	sessionUsageMeasureFilter = "(" + sessionClaudeAPIRequestPredicate + " OR " + sessionCodexAPIRequestPredicate + " OR " + sessionAgentUsageRowPredicate + " OR " + sessionOpencodeUsageRowPredicate + " OR " + sessionLiteLLMUsageRowPredicate + ")"
+	sessionUsageMeasureFilter = "(" + sessionClaudeAPIRequestPredicate + " OR " + sessionCodexAPIRequestPredicate + " OR " + sessionAgentUsageRowPredicate + " OR " + sessionHookTurnUsageRowPredicate + " OR " + sessionLiteLLMUsageRowPredicate + ")"
 	// sessionSourceRowPredicate admits every row class the session list derives
 	// from, matching the aggregate MV's WHERE clause so the two views cover the
 	// same sessions.
-	sessionSourceRowPredicate = "(" + sessionClaudeAPIRequestPredicate + " OR " + sessionClaudeToolResultPredicate + " OR " + sessionCodexAPIRequestPredicate + " OR " + sessionAgentUsageRowPredicate + " OR " + sessionOpencodeUsageRowPredicate + " OR " + sessionLiteLLMUsageRowPredicate + " OR " + sessionAgentToolCallPredicate + ")"
+	sessionSourceRowPredicate = "(" + sessionClaudeAPIRequestPredicate + " OR " + sessionClaudeToolResultPredicate + " OR " + sessionCodexAPIRequestPredicate + " OR " + sessionAgentUsageRowPredicate + " OR " + sessionHookTurnUsageRowPredicate + " OR " + sessionLiteLLMUsageRowPredicate + " OR " + sessionAgentToolCallPredicate + ")"
 
 	// Token/cost measures are source-aware: Claude api_request rows carry usage
 	// on flat attributes (input_tokens, cost_usd, …), Codex response.completed
@@ -179,7 +180,7 @@ const (
 		"toString(attributes.prompt.id), " +
 		sessionLiteLLMUsageRowPredicate + " AND toString(attributes.gram.litellm.call_id) != '', toString(attributes.gram.litellm.call_id), " +
 		sessionLiteLLMUsageRowPredicate + " AND toString(attributes.gen_ai.response.id) != '', toString(attributes.gen_ai.response.id), " +
-		"(" + sessionCodexAPIRequestPredicate + " OR " + sessionOpencodeUsageRowPredicate + " OR " + sessionLiteLLMUsageRowPredicate + "), toString(id), " +
+		"(" + sessionCodexAPIRequestPredicate + " OR " + sessionHookTurnUsageRowPredicate + " OR " + sessionLiteLLMUsageRowPredicate + "), toString(id), " +
 		"toString(attributes.gen_ai.response.id))"
 	sessionMessageCountExpr = "uniqExactIf(" + sessionMessageIDExpr + ", " + sessionMessageIDExpr + " != '')"
 )
@@ -209,6 +210,11 @@ type ListSessionsParams struct {
 	CursorSortValue  *float64
 	CursorGramChatID string
 	Limit            int
+
+	// CanonicalIdentityOrg, when set, folds email filters through the
+	// identity_map so one employee's linked emails match as one identity.
+	// Empty disables folding.
+	CanonicalIdentityOrg string
 }
 
 // UsesSummaryPath reports whether the requested window is wide enough to be
@@ -249,7 +255,7 @@ type SessionSummary struct {
 // query_source/skill/agent/MCP values as a single api_request-row tuple. Keep
 // those filters co-located inside one countIf so drilling from the aggregate
 // table finds chats that have a row matching the same tuple.
-func applySessionFilters(sb squirrel.SelectBuilder, filters []AttributeMetricsFilter) (squirrel.SelectBuilder, error) {
+func applySessionFilters(sb squirrel.SelectBuilder, filters []AttributeMetricsFilter, canonicalOrgLit string) (squirrel.SelectBuilder, error) {
 	var coLocatedPredicates []squirrel.Sqlizer
 
 	for _, f := range filters {
@@ -264,11 +270,25 @@ func applySessionFilters(sb squirrel.SelectBuilder, filters []AttributeMetricsFi
 		case attributeDimProject:
 			sb = sb.Where(squirrel.Eq{dim.column: f.Values})
 		case attributeDimScalar:
-			if dim.coLocateSessionFilters {
-				coLocatedPredicates = append(coLocatedPredicates, sessionScalarRowPredicate(dim.column, f.Values))
+			if f.Dimension == "email" && canonicalOrgLit != "" {
+				if dim.coLocateSessionFilters {
+					coLocatedPredicates = append(coLocatedPredicates, canonicalScalarRowPredicate(canonicalOrgLit, "("+dim.column+")", f.Values))
+					continue
+				}
+				sb = sb.Having(canonicalScalarHaving(canonicalOrgLit, "("+dim.column+")", f.Values))
 				continue
 			}
-			sb = sb.Having(sessionScalarHaving(dim.column, f.Values))
+			values := f.Values
+			column := dim.column
+			if f.Dimension == "email" {
+				values = normalizedEmailDimensionValues(values)
+				column = "lower(" + column + ")"
+			}
+			if dim.coLocateSessionFilters {
+				coLocatedPredicates = append(coLocatedPredicates, sessionScalarRowPredicate(column, values))
+				continue
+			}
+			sb = sb.Having(sessionScalarHaving(column, values))
 		case attributeDimArray:
 			sb = sb.Having(sessionArrayHaving(dim.column, f.Values))
 		default:
@@ -441,7 +461,7 @@ func (q *Queries) listSessionsFromRawLogs(ctx context.Context, arg ListSessionsP
 		Where(sessionSourceRowPredicate).
 		Where("chat_id != ''")
 
-	sb, err := applySessionFilters(sb, arg.Filters)
+	sb, err := applySessionFilters(sb, arg.Filters, canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg))
 	if err != nil {
 		return nil, err
 	}
@@ -455,6 +475,7 @@ func (q *Queries) listSessionsFromRawLogs(ctx context.Context, arg ListSessionsP
 	sb = sb.OrderBy("sort_value DESC", "gram_chat_id DESC").
 		Limit(uint64(arg.Limit)) //nolint:gosec // Limit is validated by the service layer.
 
+	sb = withCanonicalFoldSettings(sb, canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg))
 	query, args, err := sb.ToSql()
 	if err != nil {
 		return nil, fmt.Errorf("building list sessions query: %w", err)
@@ -529,7 +550,7 @@ func (q *Queries) listSessionsFromSummaries(ctx context.Context, arg ListSession
 		Where("s.time_bucket >= toStartOfHour(fromUnixTimestamp64Nano(?, 'UTC'))", arg.TimeStart).
 		Where("s.time_bucket <= fromUnixTimestamp64Nano(?, 'UTC')", arg.TimeEnd)
 
-	sb, err := applySessionSummaryFilters(sb, arg.Filters)
+	sb, err := applySessionSummaryFilters(sb, arg.Filters, canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg))
 	if err != nil {
 		return nil, err
 	}
@@ -551,6 +572,7 @@ func (q *Queries) listSessionsFromSummaries(ctx context.Context, arg ListSession
 	sb = sb.OrderBy("sort_value DESC", "gram_chat_id DESC").
 		Limit(uint64(arg.Limit)) //nolint:gosec // Limit is validated by the service layer.
 
+	sb = withCanonicalFoldSettings(sb, canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg))
 	query, args, err := sb.ToSql()
 	if err != nil {
 		return nil, fmt.Errorf("building list sessions summary query: %w", err)
@@ -570,7 +592,7 @@ func (q *Queries) listSessionsFromSummaries(ctx context.Context, arg ListSession
 // co-located Claude attribution dimensions match a single per-row tuple in
 // attribution_tuples, preserving drill-down semantics from the aggregate
 // cost table.
-func applySessionSummaryFilters(sb squirrel.SelectBuilder, filters []AttributeMetricsFilter) (squirrel.SelectBuilder, error) {
+func applySessionSummaryFilters(sb squirrel.SelectBuilder, filters []AttributeMetricsFilter, canonicalOrgLit string) (squirrel.SelectBuilder, error) {
 	var tuplePredicates []string
 	var tupleArgs []any
 
@@ -598,7 +620,17 @@ func applySessionSummaryFilters(sb squirrel.SelectBuilder, filters []AttributeMe
 			tuplePredicates = append(tuplePredicates, pred)
 			tupleArgs = append(tupleArgs, args...)
 		default:
-			sb = sb.Having(sessionSummaryValuesHaving("s."+dim.column, f.Values))
+			column := "s." + dim.column
+			values := f.Values
+			if f.Dimension == "email" && canonicalOrgLit != "" {
+				sb = sb.Having(canonicalSummaryValuesHaving(canonicalOrgLit, column, f.Values))
+				continue
+			}
+			if f.Dimension == "email" {
+				column = "arrayMap(x -> lower(x), " + column + ")"
+				values = normalizedEmailDimensionValues(values)
+			}
+			sb = sb.Having(sessionSummaryValuesHaving(column, values))
 		}
 	}
 
@@ -640,6 +672,14 @@ func sessionSummaryValuesHaving(colExpr string, values []string) squirrel.Sqlize
 		return nonEmptyPred
 	}
 	return squirrel.Or{nonEmptyPred, emptyPred}
+}
+
+func normalizedEmailDimensionValues(values []string) []string {
+	out := make([]string, len(values))
+	for i, value := range values {
+		out[i] = strings.ToLower(value)
+	}
+	return out
 }
 
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
@@ -743,6 +783,69 @@ func (q *Queries) GetChatSessionFactsByChatIDs(ctx context.Context, arg GetChatS
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterating chat session facts: %w", err)
+	}
+	return result, nil
+}
+
+// ChatMetricsSummary is an exact range aggregate for a set of chat sessions.
+type ChatMetricsSummary struct {
+	TotalTokens int64   `ch:"total_tokens"`
+	TotalCost   float64 `ch:"total_cost"`
+}
+
+// GetChatMetricsSummaryByIDsParams scopes an activity summary to one project,
+// a set of chat ids, and an inclusive event-time range.
+type GetChatMetricsSummaryByIDsParams struct {
+	ProjectID string
+	ChatIDs   []string
+	From      time.Time
+	To        time.Time
+}
+
+// GetChatMetricsSummaryByIDs returns exact usage totals for the requested chats
+// and event-time range. Managed assistant completions are not represented in
+// chat_session_summaries, so this projection aggregates their canonical usage
+// attributes directly without loading individual log records.
+func (q *Queries) GetChatMetricsSummaryByIDs(ctx context.Context, arg GetChatMetricsSummaryByIDsParams) (ChatMetricsSummary, error) {
+	if len(arg.ChatIDs) == 0 {
+		return ChatMetricsSummary{
+			TotalTokens: 0,
+			TotalCost:   0,
+		}, nil
+	}
+
+	builder := sq.Select(
+		"toInt64("+totalTokensExpr+") as total_tokens",
+		"toFloat64(sumIf(toFloat64OrZero(toString(attributes.gen_ai.usage.cost)), toString(attributes.gen_ai.usage.cost) != '')) as total_cost",
+	).
+		From("telemetry_logs").
+		Where("gram_project_id = ?", arg.ProjectID).
+		Where(squirrel.Eq{"chat_id": arg.ChatIDs}).
+		Where("time_unix_nano >= ?", arg.From.UnixNano()).
+		Where("time_unix_nano <= ?", arg.To.UnixNano())
+	query, args, err := builder.ToSql()
+	if err != nil {
+		return ChatMetricsSummary{}, fmt.Errorf("building assistant session usage summary query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return ChatMetricsSummary{}, fmt.Errorf("querying assistant session summary: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return ChatMetricsSummary{}, fmt.Errorf("reading assistant session summary: %w", err)
+		}
+		return ChatMetricsSummary{
+			TotalTokens: 0,
+			TotalCost:   0,
+		}, nil
+	}
+
+	var result ChatMetricsSummary
+	if err := rows.ScanStruct(&result); err != nil {
+		return ChatMetricsSummary{}, fmt.Errorf("scanning assistant session summary: %w", err)
 	}
 	return result, nil
 }

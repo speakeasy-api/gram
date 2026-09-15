@@ -18,7 +18,7 @@
 
 - `/mcp` — Manage MCP server connections (add, remove, reauth). Most-used command by far.
 - `/plugin` and `/reload-plugins` — Install and refresh Claude Code plugins shared across the team.
-- Project skills are auto-loaded from CLAUDE.md based on task. Worth scanning the `## Skills` table in `/Users/adambull/dev/gram/CLAUDE.md` — covers `golang`, `postgresql`, `clickhouse`, `frontend`, `gram-functions`, `gram-management-api`, `gram-audit-logging`, `gram-rbac`, `glint`, `mise-tasks`, `jaeger`, `datadog`, `pitchfork`, `pr`, `spec`.
+- Project skills are auto-loaded from CLAUDE.md based on task. Worth scanning the `## Skills` table in `/Users/adambull/dev/gram/CLAUDE.md` — covers `golang`, `postgresql`, `clickhouse`, `frontend`, `gram-functions`, `gram-management-api`, `gram-audit-logging`, `gram-rbac`, `glint`, `mise-tasks`, `grafana-lgtm`, `datadog`, `pitchfork`, `pr`, `spec`.
 - `/pr` — Generates a PR for the current branch.
 
 ## Team Tips

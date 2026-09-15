@@ -24,10 +24,16 @@ func BuildCreateUserSessionIssuerPayload(userSessionIssuersCreateUserSessionIssu
 	{
 		err = json.Unmarshal([]byte(userSessionIssuersCreateUserSessionIssuerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authn_challenge_mode\": \"interactive\",\n      \"session_duration_hours\": 1,\n      \"slug\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authn_challenge_mode\": \"interactive\",\n      \"session_duration_hours\": 2,\n      \"slug\": \"abc123\"\n   }'")
 		}
 		if !(body.AuthnChallengeMode == "chain" || body.AuthnChallengeMode == "interactive") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authn_challenge_mode", body.AuthnChallengeMode, []any{"chain", "interactive"}))
+		}
+		if body.SessionDurationHours < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.session_duration_hours", body.SessionDurationHours, 1, true))
+		}
+		if body.SessionDurationHours > 2.562047e+06 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.session_duration_hours", body.SessionDurationHours, 2.562047e+06, false))
 		}
 		if err != nil {
 			return nil, err
@@ -71,12 +77,22 @@ func BuildUpdateUserSessionIssuerPayload(userSessionIssuersUpdateUserSessionIssu
 	{
 		err = json.Unmarshal([]byte(userSessionIssuersUpdateUserSessionIssuerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authn_challenge_mode\": \"interactive\",\n      \"client_id_metadata_admission_mode\": \"presets\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"session_duration_hours\": 1,\n      \"slug\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authn_challenge_mode\": \"interactive\",\n      \"client_id_metadata_admission_mode\": \"presets\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"session_duration_hours\": 2,\n      \"slug\": \"abc123\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if body.AuthnChallengeMode != nil {
 			if !(*body.AuthnChallengeMode == "chain" || *body.AuthnChallengeMode == "interactive") {
 				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authn_challenge_mode", *body.AuthnChallengeMode, []any{"chain", "interactive"}))
+			}
+		}
+		if body.SessionDurationHours != nil {
+			if *body.SessionDurationHours < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("body.session_duration_hours", *body.SessionDurationHours, 1, true))
+			}
+		}
+		if body.SessionDurationHours != nil {
+			if *body.SessionDurationHours > 2.562047e+06 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("body.session_duration_hours", *body.SessionDurationHours, 2.562047e+06, false))
 			}
 		}
 		if body.ClientIDMetadataAdmissionMode != nil {

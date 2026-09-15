@@ -26,8 +26,18 @@ import {
  */
 export const CATALOG_FILTERS = defineFilters([
   { id: "auth", label: "Auth type", kind: "multiselect" },
-  { id: "setup", label: "Setup", kind: "multiselect" },
-  { id: "behavior", label: "Tool behavior", kind: "multiselect" },
+  {
+    id: "setup",
+    label: "Setup",
+    kind: "multiselect",
+    description: "Whether clients register themselves or you add credentials.",
+  },
+  {
+    id: "behavior",
+    label: "Tool behavior",
+    kind: "multiselect",
+    description: "Whether the tools only read data or can also change it.",
+  },
   { id: "minUsers", label: "Popularity", kind: "select", allLabel: "All" },
   { id: "updated", label: "Last updated", kind: "select", allLabel: "All" },
   { id: "minTools", label: "Tool count", kind: "select", allLabel: "All" },

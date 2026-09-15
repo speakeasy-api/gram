@@ -5,7 +5,7 @@ import { iconNames } from "../Icon/names";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 
-const flexClasses = "flex flex-row items-center gap-3";
+const flexClasses = "flex flex-row gap-3";
 
 const alertVariants = cva<{
   variant: {
@@ -42,6 +42,12 @@ export type AlertProps = {
   iconName?: (typeof iconNames)[number];
   useContainer?: boolean;
   className?: string;
+
+  // alignTop pins the icon to the first line of the body instead of centering
+  // it against the whole alert. Opt in for an alert whose body runs to several
+  // lines, where a centered icon drifts into the middle of the text and stops
+  // reading as a marker for the message.
+  alignTop?: boolean;
 };
 
 const iconForVariant: Record<Variant, (typeof iconNames)[number] | undefined> =
@@ -63,6 +69,7 @@ export function Alert({
   iconName,
   useContainer = false,
   className,
+  alignTop = false,
 }: AlertProps): React.JSX.Element {
   const [isDismissing, setIsDismissing] = useState(false);
   const handleDismiss = () => {
@@ -71,7 +78,7 @@ export function Alert({
   };
   const icon = iconName ?? iconForVariant[variant];
   const innerContent = (
-    <div className={flexClasses}>
+    <div className={cn(flexClasses, alignTop ? "items-start" : "items-center")}>
       <div className="flex-shrink-0">
         {icon && <Icon name={icon} size="small" />}
       </div>

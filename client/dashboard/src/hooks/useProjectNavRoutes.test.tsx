@@ -32,7 +32,7 @@ const routes = {
   costs: route("Costs", "costs"),
   deployments: route("Deployments", "deployments"),
   detectionRules: route("Detection Rules", "detection-rules"),
-  employees: route("Employees", "employees"),
+  identities: route("Identities", "identities"),
   environments: route("Environments", "environments"),
   home: route("Home", ""),
   insights: route("Insights", "insights"),
@@ -41,9 +41,10 @@ const routes = {
   orgMemory: route("Org Memory", "org-memory"),
   playground: route("Playground", "playground"),
   plugins: route("Plugins", "plugins"),
-  policyCenter: route("Risk Policies", "risk-policies"),
+  policyCenter: route("Guardrails", "risk-policies"),
   riskEvents: route("Risk Events", "risk-events"),
   riskOverview: route("Risk Overview", "risk"),
+  watchdog: route("Watchdog", "watchdog"),
   settings: route("Project settings", "settings"),
   shadowMCP: route("Shadow MCP", "shadow-mcp"),
   sources: route("Sources", "sources"),
@@ -79,10 +80,19 @@ beforeEach(() => {
   testState.featureFlags = {
     [FEATURE_FLAGS.assistants]: unavailableFeatureFlag("loading"),
     [FEATURE_FLAGS.deploymentsPage]: unavailableFeatureFlag("loading"),
+    [FEATURE_FLAGS.riskWatchdog]: unavailableFeatureFlag("loading"),
   };
 });
 
 describe("useProjectNavRoutes", () => {
+  it("does not include a dedicated Shadow AI destination", () => {
+    const { result } = renderHook(() => useProjectNavRoutes());
+
+    expect(
+      result.current.some((entry) => entry.route.title === "Shadow AI"),
+    ).toBe(false);
+  });
+
   it("uses Shadow MCP as the sidebar destination while leaving Approval Requests out of nav", () => {
     const { result } = renderHook(() => useProjectNavRoutes());
 
@@ -124,13 +134,18 @@ describe("useProjectNavRoutes", () => {
       testState.featureFlags = {
         [FEATURE_FLAGS.assistants]: unavailableFeatureFlag(status),
         [FEATURE_FLAGS.deploymentsPage]: unavailableFeatureFlag(status),
+        [FEATURE_FLAGS.riskWatchdog]: unavailableFeatureFlag(status),
       };
 
       const { result } = renderHook(() => useProjectNavRoutes());
       const navRoutes = result.current.map((entry) => entry.route);
 
       expect(navRoutes).not.toContain(routes.assistants);
+      expect(navRoutes).not.toContain(routes.watchdog);
       expect(navRoutes).toContain(routes.deployments);
+      // Without Watchdog, the legacy risk pages stay in the nav.
+      expect(navRoutes).toContain(routes.riskOverview);
+      expect(navRoutes).toContain(routes.riskEvents);
     },
   );
 
@@ -138,12 +153,18 @@ describe("useProjectNavRoutes", () => {
     testState.featureFlags = {
       [FEATURE_FLAGS.assistants]: { status: "enabled" },
       [FEATURE_FLAGS.deploymentsPage]: { status: "disabled" },
+      [FEATURE_FLAGS.riskWatchdog]: { status: "enabled" },
     };
 
     const { result } = renderHook(() => useProjectNavRoutes());
     const navRoutes = result.current.map((entry) => entry.route);
 
     expect(navRoutes).toContain(routes.assistants);
+    expect(navRoutes).toContain(routes.watchdog);
     expect(navRoutes).not.toContain(routes.deployments);
+    // Watchdog supersedes the legacy overview in the nav; Risk Events shows
+    // in both modes.
+    expect(navRoutes).not.toContain(routes.riskOverview);
+    expect(navRoutes).toContain(routes.riskEvents);
   });
 });

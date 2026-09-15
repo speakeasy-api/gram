@@ -6,7 +6,48 @@
 // that a classic script cannot execute.
 const PREFERRED_THEME_STORAGE_KEY = "preferred-theme";
 
+// MUST equal PROJECT_FAVORITES_STORAGE_PREFIX in `src/lib/local-storage-keys.ts`.
+const PROJECT_FAVORITES_STORAGE_PREFIX = "gram:org-favorites:";
+
+// MUST equal LOGOUT_PRESERVE_WINDOW_NAME_PREFIX in `src/lib/logout-storage.ts`.
+// Logout's Clear-Site-Data header empties localStorage before /login paints;
+// the snapshot lives on window.name so this script can put theme (and the
+// other preserved keys) back before first paint.
+const LOGOUT_PRESERVE_WINDOW_NAME_PREFIX = "gram:logout-preserve:";
+
+function shouldRestorePreservedKey(key: string) {
+  return (
+    key === PREFERRED_THEME_STORAGE_KEY ||
+    key.startsWith(PROJECT_FAVORITES_STORAGE_PREFIX)
+  );
+}
+
 (function () {
+  try {
+    if (window.name.startsWith(LOGOUT_PRESERVE_WINDOW_NAME_PREFIX)) {
+      const parsed = JSON.parse(
+        window.name.slice(LOGOUT_PRESERVE_WINDOW_NAME_PREFIX.length),
+      );
+      if (Array.isArray(parsed)) {
+        for (const entry of parsed) {
+          if (
+            Array.isArray(entry) &&
+            entry.length === 2 &&
+            typeof entry[0] === "string" &&
+            typeof entry[1] === "string" &&
+            shouldRestorePreservedKey(entry[0])
+          ) {
+            localStorage.setItem(entry[0], entry[1]);
+          }
+        }
+      }
+      // Leave window.name in place. Impersonation is a new document and
+      // still needs this snapshot when that session logs out.
+    }
+  } catch {
+    // Backup unreadable — continue with whatever localStorage still has.
+  }
+
   try {
     const theme =
       localStorage.getItem(PREFERRED_THEME_STORAGE_KEY) === "dark"
@@ -15,21 +56,6 @@ const PREFERRED_THEME_STORAGE_KEY = "preferred-theme";
     const root = document.documentElement;
     root.classList.remove("light", "dark");
     root.classList.add(theme);
-
-    const favicon = document.getElementById(
-      "favicon",
-    ) as HTMLLinkElement | null;
-    const faviconAlt = document.getElementById(
-      "favicon-alt",
-    ) as HTMLLinkElement | null;
-
-    if (favicon) {
-      favicon.href = theme === "dark" ? "/favicon-dark.png" : "/favicon.png";
-    }
-
-    if (faviconAlt) {
-      faviconAlt.href = theme === "dark" ? "/favicon-dark.ico" : "/favicon.ico";
-    }
   } catch {
     // localStorage unavailable — fall back to CSS defaults.
   }

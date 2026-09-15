@@ -25,6 +25,10 @@ type Client struct {
 	// setProductFeature endpoint.
 	SetProductFeatureDoer goahttp.Doer
 
+	// SetRemoteSessionAutoRefreshPolicy Doer is the HTTP client used to make
+	// requests to the setRemoteSessionAutoRefreshPolicy endpoint.
+	SetRemoteSessionAutoRefreshPolicyDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -45,13 +49,14 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		GetProductFeaturesDoer: doer,
-		SetProductFeatureDoer:  doer,
-		RestoreResponseBody:    restoreBody,
-		scheme:                 scheme,
-		host:                   host,
-		decoder:                dec,
-		encoder:                enc,
+		GetProductFeaturesDoer:                doer,
+		SetProductFeatureDoer:                 doer,
+		SetRemoteSessionAutoRefreshPolicyDoer: doer,
+		RestoreResponseBody:                   restoreBody,
+		scheme:                                scheme,
+		host:                                  host,
+		decoder:                               dec,
+		encoder:                               enc,
 	}
 }
 
@@ -98,6 +103,30 @@ func (c *Client) SetProductFeature() goa.Endpoint {
 		resp, err := c.SetProductFeatureDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("features", "setProductFeature", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetRemoteSessionAutoRefreshPolicy returns an endpoint that makes HTTP
+// requests to the features service setRemoteSessionAutoRefreshPolicy server.
+func (c *Client) SetRemoteSessionAutoRefreshPolicy() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetRemoteSessionAutoRefreshPolicyRequest(c.encoder)
+		decodeResponse = DecodeSetRemoteSessionAutoRefreshPolicyResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetRemoteSessionAutoRefreshPolicyRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetRemoteSessionAutoRefreshPolicyDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("features", "setRemoteSessionAutoRefreshPolicy", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -2,12 +2,20 @@
 // inline scripts. Loaded by consent_template.html via a content-hashed
 // <script src>.
 //
-// Neutralises double-clicks on the consent controls. A second activation
-// while the first request is still pending sends the user to an authn
-// challenge that has already been consumed, producing "authn challenge
-// state not found or expired" (AIS-103). Both the "Give Access" submit and
-// the per-remote Connect/Reconnect links are guarded, and each swaps in a
-// loading spinner so the pending state is visible.
+// Two jobs:
+//
+//   1. Neutralise double-clicks on the consent controls. A second activation
+//      while the first request is still pending sends the user to an authn
+//      challenge that has already been consumed, producing "authn challenge
+//      state not found or expired" (AIS-103).
+//   2. Fan the page-level auto-refresh choice out to every card.
+//
+// Connect deliberately stays a full-page form POST. Running it in a popup kept
+// the page's state through the provider round trip, but handed the provider a
+// window.opener onto this consent screen — a reverse-tabnabbing target on the
+// one page where a spoof is worth the most — and reloading the parent when the
+// popup closed discarded any pending tool selection, silently widening the
+// grant back to "all tools".
 (function () {
   "use strict";
 
@@ -20,11 +28,25 @@
     }, 3000);
   }
 
+  // A card whose automatic verification was still running when the callback
+  // redirected reads "Connected · Verifying…". First-party pages can
+  // safely reload until the callback probe's absolute deadline; interactive
+  // consent pages do not poll because a reload would discard tool selections.
+  var cardList = document.querySelector("[data-verify-deadline-ms]");
+  if (cardList && document.querySelector('[data-validation="pending"]')) {
+    // The server only renders this attribute while its deadline is live.
+    // Let the next render stop polling: the browser's clock may be skewed.
+    window.setTimeout(function () {
+      window.location.reload();
+    }, 2000);
+  }
+
   // Replace an element's contents with a spinner + label.
   function showPending(el, label) {
     el.textContent = "";
     var spinner = document.createElement("span");
-    spinner.className = "spinner";
+    spinner.className =
+      "mr-2 inline-block size-3 animate-spin rounded-full border-2 border-current border-r-transparent align-[-0.125em]";
     spinner.setAttribute("aria-hidden", "true");
     el.appendChild(spinner);
     el.appendChild(document.createTextNode(label));
@@ -36,6 +58,63 @@
   if (form) {
     var button = form.querySelector('button[type="submit"]');
     var submitted = false;
+    var agentInputs = document.querySelectorAll("input[data-agent-select]");
+    var agentPolicy = document.querySelector("[data-agent-policy]");
+    var agentPolicyName = document.querySelector("[data-agent-policy-name]");
+    var subjectDisplay = document.querySelector(
+      "[data-consent-subject-display]",
+    );
+    var subjectMode = document.querySelector("[data-consent-subject-mode]");
+    var selfOnlySections = document.querySelectorAll("[data-agent-self-only]");
+    if (agentInputs.length > 0) {
+      var syncAgentSelection = function () {
+        var selected = null;
+        Array.prototype.forEach.call(agentInputs, function (input) {
+          if (input.checked) {
+            selected = input;
+          }
+        });
+        var authorizingAgent = Boolean(selected && selected.value !== "");
+        var selectedDisplay = selected
+          ? selected.getAttribute("data-subject-display") || ""
+          : "";
+        if (agentPolicy) {
+          agentPolicy.hidden = !authorizingAgent;
+        }
+        if (agentPolicyName) {
+          agentPolicyName.textContent = authorizingAgent ? selectedDisplay : "";
+        }
+        Array.prototype.forEach.call(selfOnlySections, function (section) {
+          section.hidden = authorizingAgent;
+        });
+        if (subjectDisplay && selected) {
+          subjectDisplay.textContent = selectedDisplay;
+        }
+        if (subjectMode) {
+          subjectMode.textContent = authorizingAgent
+            ? "Authorizing"
+            : "Signing in as";
+        }
+        if (button) {
+          button.textContent = authorizingAgent
+            ? button.getAttribute("data-agent-label")
+            : button.getAttribute("data-self-label");
+          button.setAttribute(
+            "data-agent-selected",
+            authorizingAgent ? "true" : "false",
+          );
+          button.value = authorizingAgent ? "approve_agent" : "approve";
+          button.disabled = authorizingAgent
+            ? false
+            : button.getAttribute("data-consent-self-ready") !== "true";
+        }
+      };
+      Array.prototype.forEach.call(agentInputs, function (input) {
+        input.addEventListener("change", syncAgentSelection);
+      });
+      syncAgentSelection();
+    }
+
     form.addEventListener("submit", function (event) {
       if (submitted) {
         event.preventDefault();
@@ -55,28 +134,47 @@
     });
   }
 
-  // Connect / Reconnect and Refresh now each make an upstream request. Guard
-  // both against repeat clicks and make their pending state visible.
+  // Connect / Reconnect, Refresh and Re-check each make an upstream request; guard repeat clicks and show pending.
   function guardActionButtons(selector, pendingLabel) {
     var buttons = document.querySelectorAll(selector);
-    Array.prototype.forEach.call(buttons, function (button) {
-      button.addEventListener("click", function (event) {
-        if (button.getAttribute("aria-disabled") === "true") {
+    Array.prototype.forEach.call(buttons, function (actionButton) {
+      actionButton.addEventListener("click", function (event) {
+        if (actionButton.getAttribute("aria-disabled") === "true") {
           event.preventDefault();
           return;
         }
-        button.setAttribute("aria-disabled", "true");
-        showPending(button, pendingLabel);
+        actionButton.setAttribute("aria-disabled", "true");
+        showPending(actionButton, pendingLabel);
         // Preserve the clicked button's action in the form submission, then
         // make the pending state native for keyboard and assistive technology.
         window.setTimeout(function () {
-          button.disabled = true;
+          actionButton.disabled = true;
         }, 0);
       });
     });
   }
   guardActionButtons("button[data-connect-link]", "Connecting…");
   guardActionButtons("button[data-refresh-link]", "Refreshing…");
+  guardActionButtons("button[data-validate-link]", "Checking…");
+
+  // Session length is stated on the summary line so it is visible without
+  // opening the configuration disclosure; keep the two in step when the
+  // control inside the disclosure changes.
+  var sessionDuration = document.querySelector(
+    'select[name="session_duration_hours"]',
+  );
+  var sessionDurationLabel = document.querySelector(
+    "[data-session-duration-label]",
+  );
+  if (sessionDuration && sessionDurationLabel) {
+    sessionDuration.addEventListener("change", function () {
+      var option = sessionDuration.options[sessionDuration.selectedIndex];
+      var short = option && option.getAttribute("data-short-label");
+      if (short) {
+        sessionDurationLabel.textContent = short;
+      }
+    });
+  }
 
   // Auto refresh: the page-level combobox drives every provider at once. A
   // change syncs each card's hidden auto_refresh input (so a subsequent
@@ -90,9 +188,12 @@
       Array.prototype.forEach.call(inputs, function (input) {
         input.value = value;
       });
-      var form = document.getElementById("auto-refresh-form");
-      if (form && form.hasAttribute("data-auto-refresh-persist")) {
-        form.submit();
+      var refreshForm = document.getElementById("auto-refresh-form");
+      if (
+        refreshForm &&
+        refreshForm.hasAttribute("data-auto-refresh-persist")
+      ) {
+        refreshForm.submit();
       }
     });
   }

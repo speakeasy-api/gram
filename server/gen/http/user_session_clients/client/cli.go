@@ -119,6 +119,45 @@ func BuildGetUserSessionClientPayload(userSessionClientsGetUserSessionClientID s
 	return v, nil
 }
 
+// BuildRefreshUserSessionClientCIMDPayload builds the payload for the
+// userSessionClients refreshUserSessionClientCIMD endpoint from CLI flags.
+func BuildRefreshUserSessionClientCIMDPayload(userSessionClientsRefreshUserSessionClientCIMDID string, userSessionClientsRefreshUserSessionClientCIMDSessionToken string, userSessionClientsRefreshUserSessionClientCIMDApikeyToken string, userSessionClientsRefreshUserSessionClientCIMDProjectSlugInput string) (*usersessionclients.RefreshUserSessionClientCIMDPayload, error) {
+	var err error
+	var id string
+	{
+		id = userSessionClientsRefreshUserSessionClientCIMDID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if userSessionClientsRefreshUserSessionClientCIMDSessionToken != "" {
+			sessionToken = &userSessionClientsRefreshUserSessionClientCIMDSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if userSessionClientsRefreshUserSessionClientCIMDApikeyToken != "" {
+			apikeyToken = &userSessionClientsRefreshUserSessionClientCIMDApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if userSessionClientsRefreshUserSessionClientCIMDProjectSlugInput != "" {
+			projectSlugInput = &userSessionClientsRefreshUserSessionClientCIMDProjectSlugInput
+		}
+	}
+	v := &usersessionclients.RefreshUserSessionClientCIMDPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildRevokeUserSessionClientPayload builds the payload for the
 // userSessionClients revokeUserSessionClient endpoint from CLI flags.
 func BuildRevokeUserSessionClientPayload(userSessionClientsRevokeUserSessionClientID string, userSessionClientsRevokeUserSessionClientSessionToken string, userSessionClientsRevokeUserSessionClientApikeyToken string, userSessionClientsRevokeUserSessionClientProjectSlugInput string) (*usersessionclients.RevokeUserSessionClientPayload, error) {

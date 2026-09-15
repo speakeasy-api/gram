@@ -326,13 +326,7 @@ Key points about `assert`:
 Generate a manifest of all registered tools:
 
 ```typescript
-const g = new Gram()
-  .tool({
-    /* ... */
-  })
-  .tool({
-    /* ... */
-  });
+const g = new Gram().tool({/* ... */}).tool({/* ... */});
 
 const manifest = g.manifest();
 // {
@@ -354,13 +348,7 @@ const manifest = g.manifest();
 Export the `handleToolCall` method to process incoming requests:
 
 ```typescript
-const g = new Gram()
-  .tool({
-    /* ... */
-  })
-  .tool({
-    /* ... */
-  });
+const g = new Gram().tool({/* ... */}).tool({/* ... */});
 
 export const handleToolCall = g.handleToolCall;
 ```

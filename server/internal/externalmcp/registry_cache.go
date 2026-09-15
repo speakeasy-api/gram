@@ -21,7 +21,7 @@ const registryCacheTTL = 24 * time.Hour
 // to its zero value rather than erroring — without this version, adding
 // `supports_dcr` made every cached server read back as supports_dcr=false (i.e.
 // "manual") for up to the 24h TTL.
-const registryCacheSchemaVersion = "v2"
+const registryCacheSchemaVersion = "v4"
 
 // CachedListServers wraps the full, deduplicated list of external MCP server
 // summaries for a registry. The catalog is small and stable, so the whole list

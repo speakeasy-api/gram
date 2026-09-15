@@ -3,6 +3,7 @@ package usersessions_test
 import (
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/user_session_issuers"
@@ -11,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 func TestCreateUserSessionIssuer(t *testing.T) {
@@ -34,6 +36,15 @@ func TestCreateUserSessionIssuer(t *testing.T) {
 	require.Equal(t, "issuer-one", created.Slug)
 	require.Equal(t, "chain", created.AuthnChallengeMode)
 	require.Equal(t, 24, created.SessionDurationHours)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	row, err := repo.New(ti.conn).GetUserSessionIssuerByID(ctx, repo.GetUserSessionIssuerByIDParams{
+		ID:        uuid.MustParse(created.ID),
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	requireOrganizationID(t, ctx, row.OrganizationID)
 
 	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionUserSessionIssuerCreate)
 	require.NoError(t, err)

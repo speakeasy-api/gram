@@ -1040,6 +1040,9 @@ func EncodeListRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.R
 		for _, value := range p.Tags {
 			values.Add("tags", value)
 		}
+		for _, value := range p.AccessibleBy {
+			values.Add("accessible_by", value)
+		}
 		values.Add("sort", p.Sort)
 		req.URL.RawQuery = values.Encode()
 		return nil
@@ -5827,6 +5830,19 @@ func unmarshalSkillDriftResponseBodyToSkillsSkillDrift(v *SkillDriftResponseBody
 	res.TargetVersionIds = make([]string, len(v.TargetVersionIds))
 	for i, val := range v.TargetVersionIds {
 		res.TargetVersionIds[i] = val
+	}
+
+	return res
+}
+
+// unmarshalSkillPromptInjectionFindingResponseBodyToSkillsSkillPromptInjectionFinding
+// builds a value of type *skills.SkillPromptInjectionFinding from a value of
+// type *SkillPromptInjectionFindingResponseBody.
+func unmarshalSkillPromptInjectionFindingResponseBodyToSkillsSkillPromptInjectionFinding(v *SkillPromptInjectionFindingResponseBody) *skills.SkillPromptInjectionFinding {
+	res := &skills.SkillPromptInjectionFinding{
+		RuleID:      *v.RuleID,
+		Description: *v.Description,
+		Confidence:  *v.Confidence,
 	}
 
 	return res

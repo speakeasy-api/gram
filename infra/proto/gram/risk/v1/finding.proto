@@ -50,6 +50,33 @@ message Finding {
   // to a tool call. Empty when not applicable or unknown.
   string tool_call_id = 23;
 
+  // Suppression state carried on republished findings, superseding
+  // false_positive_at as part of the suppression convergence. Set only when
+  // this message re-publishes an already-persisted finding to record a manual
+  // suppression state change (risk.markResultsFalsePositive /
+  // risk.unmarkResultsFalsePositive): excluded_at is the suppression time and
+  // must be UTC RFC3339 when present. Empty on every finding produced by a
+  // scanner — the ClickHouse writer computes rule-based exclusions at ingest
+  // itself and stamps excluded_reason=rule there.
+  string excluded_at = 24;
+  // Why the finding is suppressed: "rule" (exclusion rule), "manual" (user
+  // dismissal via UI or agent tool) or "automated" (offline false-positive
+  // sweep). Meaningful only alongside excluded_at.
+  string excluded_reason = 25;
+  // Free-form suppression context: the user-supplied dismissal reason for
+  // manual suppressions, the catalog reason for automated ones. Optional.
+  string excluded_detail = 26;
+
+  // Event-log kind of this message: "finding" for scanner output (dead-letter
+  // sentinels included), "suppression" / "unsuppression" for republished
+  // manual state changes (risk.markResultsFalsePositive and its undo). The
+  // ClickHouse writer persists it so read-time dedup can rank state-change
+  // rows above scanner rows for the same id — a redelivered scanner message
+  // must never clobber a later dismissal. Empty on messages from producers
+  // that predate the field: the writer derives "suppression" when
+  // excluded_at/false_positive_at is carried and "finding" otherwise.
+  string event_kind = 27;
+
   option (gcp.pubsub.v1.topic) = {
     retention_hint: {
       seconds: 604800 /* 7 days */

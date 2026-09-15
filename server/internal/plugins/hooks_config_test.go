@@ -46,7 +46,7 @@ func TestPluginsService_UpdateMarketplaceSettings_RenameRegeneratesHooksWhenElig
 
 	mock := &mockGitHubPublisher{}
 	features := &feature.InMemory{}
-	ctx, ti := newTestPluginsServiceWithGitHubAndFeatures(t, mock, features, nil)
+	ctx, ti := newTestPluginsServiceWithGitHubAndFeatures(t, mock, features)
 
 	orgID := marketplaceRenameFixture(t, ctx, ti, "Rename Eligible")
 
@@ -72,7 +72,7 @@ func TestPluginsService_UpdateMarketplaceSettings_RenameDefersHooksWhenNotEligib
 
 	mock := &mockGitHubPublisher{}
 	// Empty provider → no clearance payload, and the test org is not a canary.
-	ctx, ti := newTestPluginsServiceWithGitHubAndFeatures(t, mock, &feature.InMemory{}, nil)
+	ctx, ti := newTestPluginsServiceWithGitHubAndFeatures(t, mock, &feature.InMemory{})
 
 	orgID := marketplaceRenameFixture(t, ctx, ti, "Rename Deferred")
 	hooksKeysBefore := countPluginHooksKeys(t, ctx, ti.conn, orgID)

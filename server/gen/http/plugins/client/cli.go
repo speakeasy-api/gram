@@ -380,6 +380,28 @@ func BuildSetPluginAssignmentsPayload(pluginsSetPluginAssignmentsBody string, pl
 	return v, nil
 }
 
+// BuildListAudiencesPayload builds the payload for the plugins listAudiences
+// endpoint from CLI flags.
+func BuildListAudiencesPayload(pluginsListAudiencesSessionToken string, pluginsListAudiencesProjectSlugInput string) (*plugins.ListAudiencesPayload, error) {
+	var sessionToken *string
+	{
+		if pluginsListAudiencesSessionToken != "" {
+			sessionToken = &pluginsListAudiencesSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if pluginsListAudiencesProjectSlugInput != "" {
+			projectSlugInput = &pluginsListAudiencesProjectSlugInput
+		}
+	}
+	v := &plugins.ListAudiencesPayload{}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildDownloadPluginPackagePayload builds the payload for the plugins
 // downloadPluginPackage endpoint from CLI flags.
 func BuildDownloadPluginPackagePayload(pluginsDownloadPluginPackagePluginID string, pluginsDownloadPluginPackagePlatform string, pluginsDownloadPluginPackageSessionToken string, pluginsDownloadPluginPackageProjectSlugInput string) (*plugins.DownloadPluginPackagePayload, error) {
@@ -430,8 +452,8 @@ func BuildDownloadObservabilityPluginPayload(pluginsDownloadObservabilityPluginP
 	var platform string
 	{
 		platform = pluginsDownloadObservabilityPluginPlatform
-		if !(platform == "claude" || platform == "cursor" || platform == "codex" || platform == "opencode" || platform == "pi") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("platform", platform, []any{"claude", "cursor", "codex", "opencode", "pi"}))
+		if !(platform == "claude" || platform == "cursor" || platform == "codex" || platform == "opencode" || platform == "copilot" || platform == "openclaw" || platform == "pi") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("platform", platform, []any{"claude", "cursor", "codex", "opencode", "copilot", "openclaw", "pi"}))
 		}
 		if err != nil {
 			return nil, err
@@ -567,7 +589,7 @@ func BuildUpdateMarketplaceSettingsPayload(pluginsUpdateMarketplaceSettingsBody 
 	{
 		err = json.Unmarshal([]byte(pluginsUpdateMarketplaceSettingsBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"marketplace_name\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"marketplace_name\": \"abc123\",\n      \"observability_enabled\": false\n   }'")
 		}
 	}
 	var sessionToken *string
@@ -583,7 +605,8 @@ func BuildUpdateMarketplaceSettingsPayload(pluginsUpdateMarketplaceSettingsBody 
 		}
 	}
 	v := &plugins.UpdateMarketplaceSettingsPayload{
-		MarketplaceName: body.MarketplaceName,
+		MarketplaceName:      body.MarketplaceName,
+		ObservabilityEnabled: body.ObservabilityEnabled,
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

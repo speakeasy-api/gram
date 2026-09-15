@@ -54,6 +54,23 @@ func TestScopeVisibilityCoversKnownScopes(t *testing.T) {
 	}
 }
 
+func TestAgentManagementScopesAreIndependent(t *testing.T) {
+	t.Parallel()
+
+	managementScopes := []Scope{ScopeAgentRead, ScopeAgentWrite, ScopeAgentAuthorize, ScopeAgentTransfer}
+	for _, granted := range managementScopes {
+		grants := []Grant{NewGrant(granted, "agent_123")}
+		for _, checked := range managementScopes {
+			require.Equal(t, granted == checked, GrantsSatisfy(grants, Check{Scope: checked, ResourceID: "agent_123"}),
+				"grant %q checking %q", granted, checked)
+		}
+	}
+
+	for _, checked := range managementScopes {
+		require.False(t, GrantsSatisfy([]Grant{NewGrant(ScopeOrgAdmin, "agent_123")}, Check{Scope: checked, ResourceID: "agent_123"}))
+	}
+}
+
 func TestScopeExclusionsCoversKnownScopes(t *testing.T) {
 	t.Parallel()
 
@@ -90,8 +107,12 @@ func TestBlocklistScopeExpansions(t *testing.T) {
 
 	require.Equal(t, []Scope{ScopeOrgBlockedRead}, scopeExpansions[ScopeOrgBlockedAdmin])
 	require.Equal(t, []Scope{ScopeProjectBlockedRead}, scopeExpansions[ScopeProjectBlockedWrite])
-	require.Equal(t, []Scope{ScopeMCPBlockedConnect}, scopeExpansions[ScopeMCPBlockedRead])
-	require.Equal(t, []Scope{ScopeMCPBlockedRead, ScopeMCPBlockedConnect}, scopeExpansions[ScopeMCPBlockedWrite])
+	// The mcp:blocked_* scopes are the exception: they are independent of
+	// one another, so a block on connect leaves view and manage standing.
+	// Connecting to a server and administering it are different jobs.
+	require.Nil(t, scopeExpansions[ScopeMCPBlockedConnect])
+	require.Nil(t, scopeExpansions[ScopeMCPBlockedRead])
+	require.Nil(t, scopeExpansions[ScopeMCPBlockedWrite])
 	require.Equal(t, []Scope{ScopeEnvironmentBlockedRead}, scopeExpansions[ScopeEnvironmentBlockedWrite])
 	require.Equal(t, []Scope{ScopeSkillBlockedRead}, scopeExpansions[ScopeSkillBlockedWrite])
 }

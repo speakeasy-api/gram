@@ -122,6 +122,8 @@ async function $do(
     "cursor": payload?.cursor,
     "limit": payload?.limit,
     "provider": payload?.provider,
+    "user_emails": payload?.user_emails,
+    "user_ids": payload?.user_ids,
   });
 
   const headers = new Headers(compactMap({

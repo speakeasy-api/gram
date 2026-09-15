@@ -45,6 +45,14 @@ export type ListManagedDevicesRequest = {
    */
   coverageBucket?: CoverageBucket | undefined;
   /**
+   * Only devices assigned to these Gram users. Combined with user_emails as an OR, because a device only carries a resolved user id when the MDM's reported email matched a member.
+   */
+  userIds?: Array<string> | undefined;
+  /**
+   * Only devices whose MDM-reported assigned email is one of these, matched case-insensitively.
+   */
+  userEmails?: Array<string> | undefined;
+  /**
    * Pagination cursor from a previous page.
    */
   cursor?: string | undefined;
@@ -106,6 +114,8 @@ export const CoverageBucket$outboundSchema: z.ZodMiniEnum<
 export type ListManagedDevicesRequest$Outbound = {
   provider?: string | undefined;
   coverage_bucket?: string | undefined;
+  user_ids?: Array<string> | undefined;
+  user_emails?: Array<string> | undefined;
   cursor?: string | undefined;
   limit: number;
   "Gram-Key"?: string | undefined;
@@ -120,6 +130,8 @@ export const ListManagedDevicesRequest$outboundSchema: z.ZodMiniType<
   z.object({
     provider: z.optional(z.string()),
     coverageBucket: z.optional(CoverageBucket$outboundSchema),
+    userIds: z.optional(z.array(z.string())),
+    userEmails: z.optional(z.array(z.string())),
     cursor: z.optional(z.string()),
     limit: z._default(z.int(), 50),
     gramKey: z.optional(z.string()),
@@ -128,6 +140,8 @@ export const ListManagedDevicesRequest$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       coverageBucket: "coverage_bucket",
+      userIds: "user_ids",
+      userEmails: "user_emails",
       gramKey: "Gram-Key",
       gramSession: "Gram-Session",
     });

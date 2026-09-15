@@ -28,12 +28,19 @@ import (
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 var assistantsInfra *testenv.Environment
 
 func newTestAuditLogger() *audit.Logger { return audit.NewLogger() }
+
+type wakeCancellerFunc func(ctx context.Context, projectID, assistantID uuid.UUID) error
+
+func (f wakeCancellerFunc) CancelAssistantWakes(ctx context.Context, projectID, assistantID uuid.UUID) error {
+	return f(ctx, projectID, assistantID)
+}
 
 func TestMain(m *testing.M) {
 	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, ClickHouse: true})
@@ -1571,6 +1578,76 @@ func TestServiceCoreDeleteAssistantReapsRuntimes(t *testing.T) {
 	require.True(t, assistant.DeletedAt.Valid)
 }
 
+func TestServiceCoreDeleteAssistantDeletesTriggersWithoutDeletingWakes(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "delete_assistant_triggers")
+	require.NoError(t, err)
+
+	projectID, assistantID, _, _ := insertAssistantFixture(t, conn)
+	trigger, err := triggerrepo.New(conn).CreateTriggerInstance(t.Context(), triggerrepo.CreateTriggerInstanceParams{
+		OrganizationID: "org-test",
+		ProjectID:      projectID,
+		DefinitionSlug: bgtriggers.DefinitionSlugSlack,
+		Name:           "Slack",
+		EnvironmentID:  uuid.NullUUID{},
+		TargetKind:     bgtriggers.TargetKindAssistant,
+		TargetRef:      assistantID.String(),
+		TargetDisplay:  "Assistant",
+		ConfigJson:     []byte(`{"event_types":["message"]}`),
+		Status:         bgtriggers.StatusActive,
+	})
+	require.NoError(t, err)
+	wake, err := triggerrepo.New(conn).CreateTriggerInstance(t.Context(), triggerrepo.CreateTriggerInstanceParams{
+		OrganizationID: "org-test",
+		ProjectID:      projectID,
+		DefinitionSlug: bgtriggers.DefinitionSlugWake,
+		Name:           "Wake",
+		EnvironmentID:  uuid.NullUUID{},
+		TargetKind:     bgtriggers.TargetKindAssistant,
+		TargetRef:      assistantID.String(),
+		TargetDisplay:  "Assistant",
+		ConfigJson:     []byte(`{"fire_at":"2099-01-01T00:00:00Z","correlation_id":"test"}`),
+		Status:         bgtriggers.StatusActive,
+	})
+	require.NoError(t, err)
+
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger())
+	wakeCancellationCalled := false
+	core.SetWakeCanceller(wakeCancellerFunc(func(ctx context.Context, gotProjectID, gotAssistantID uuid.UUID) error {
+		wakeCancellationCalled = true
+		if gotProjectID != projectID || gotAssistantID != assistantID {
+			return fmt.Errorf("unexpected wake cancellation target")
+		}
+		preservedWake, err := triggerrepo.New(conn).GetTriggerInstanceByID(ctx, triggerrepo.GetTriggerInstanceByIDParams{
+			ID:        wake.ID,
+			ProjectID: projectID,
+		})
+		if err != nil {
+			return fmt.Errorf("get wake during cancellation: %w", err)
+		}
+		if preservedWake.Status != bgtriggers.StatusActive {
+			return fmt.Errorf("wake status during cancellation: %s", preservedWake.Status)
+		}
+		return nil
+	}))
+	require.NoError(t, core.DeleteAssistant(t.Context(), projectID, assistantID, urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"), nil))
+	require.True(t, wakeCancellationCalled)
+
+	_, err = triggerrepo.New(conn).GetTriggerInstanceByID(t.Context(), triggerrepo.GetTriggerInstanceByIDParams{
+		ID:        trigger.ID,
+		ProjectID: projectID,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+
+	preservedWake, err := triggerrepo.New(conn).GetTriggerInstanceByID(t.Context(), triggerrepo.GetTriggerInstanceByIDParams{
+		ID:        wake.ID,
+		ProjectID: projectID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, bgtriggers.StatusActive, preservedWake.Status)
+}
+
 func TestServiceCoreDeleteAssistantSucceedsEvenWhenReapErrors(t *testing.T) {
 	t.Parallel()
 
@@ -1896,39 +1973,42 @@ func TestServiceCoreRecycleActiveRuntimeImagesCountsBackendErrors(t *testing.T) 
 	require.JSONEq(t, `{"app_name":"gram-asst-flaky","machine_id":"m-1"}`, string(runtime.BackendMetadataJson))
 }
 
-// A non-reuse backend (GKE) has no in-place image swap: it rolls onto a new
-// image by terminating idle runtimes (warm-TTL expiry), so the in-place recycle
-// sweep is a no-op for it — it touches no rows and tears nothing down.
-func TestServiceCoreRecycleActiveRuntimeImagesNoOpsForNonReuseBackend(t *testing.T) {
+// The deploy sweep covers GKE rows like any other backend: RecycleImage rolls
+// the claim onto the configured image and the returned pod identity is
+// persisted on the runtime row.
+func TestServiceCoreRecycleActiveRuntimeImagesSweepsGKERows(t *testing.T) {
 	t.Parallel()
 
-	conn, err := assistantsInfra.CloneTestDatabase(t, "recycle_runtime_images_gke_noop")
+	conn, err := assistantsInfra.CloneTestDatabase(t, "recycle_runtime_images_gke")
 	require.NoError(t, err)
 
-	projectID, assistantID, threadID := insertReapableProject(t, conn, "recycle-gke-noop")
+	projectID, assistantID, threadID := insertReapableProject(t, conn, "recycle-gke")
 	runtimeID := insertActiveV2RuntimeRow(t, conn, projectID, assistantID, threadID, runtimeBackendGKE, runtimeStateActive, `{"claim_name":"gram-asst-idle"}`)
 
+	recycledMetadata := []byte(`{"claim_name":"gram-asst-idle","pod_ip":"10.52.0.9","image":"registry.example.com/gram-assistant-runtime:new"}`)
 	stopCalls := &atomic.Int64{}
 	recycleCalls := &atomic.Int64{}
 	backend := testRuntimeBackend{
-		backend:      runtimeBackendGKE,
-		statusResult: RuntimeBackendStatus{Configured: true, IdleSeconds: nil},
-		stopCalls:    stopCalls,
-		recycleCalls: recycleCalls,
+		backend:       runtimeBackendGKE,
+		statusResult:  RuntimeBackendStatus{Configured: true, IdleSeconds: nil},
+		stopCalls:     stopCalls,
+		recycleCalls:  recycleCalls,
+		recycleResult: RuntimeBackendRecycleResult{Recycled: true, BackendMetadataJSON: recycledMetadata},
 	}
 	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger())
 
 	result, err := core.RecycleActiveRuntimeImages(t.Context(), RecycleAssistantRuntimeImagesParams{OnRowProcessed: nil})
 	require.NoError(t, err)
-	require.Equal(t, 0, result.Recycled)
+	require.Equal(t, 1, result.Recycled)
 	require.Equal(t, 0, result.Skipped)
 	require.Equal(t, 0, result.Errors)
-	require.EqualValues(t, 0, stopCalls.Load(), "the in-place sweep must not tear down GKE runtimes")
-	require.EqualValues(t, 0, recycleCalls.Load(), "GKE has no in-place recycle")
+	require.EqualValues(t, 1, recycleCalls.Load(), "the deploy sweep rolls GKE rows via RecycleImage")
+	require.EqualValues(t, 0, stopCalls.Load(), "recycling must not tear the runtime row down")
 
 	runtime, err := assistantsrepo.New(conn).GetAssistantRuntime(t.Context(), assistantsrepo.GetAssistantRuntimeParams{ID: runtimeID, ProjectID: projectID})
 	require.NoError(t, err)
-	require.Equal(t, runtimeStateActive, runtime.State, "GKE rows roll via terminate-on-idle, not the sweep")
+	require.Equal(t, runtimeStateActive, runtime.State)
+	require.JSONEq(t, string(recycledMetadata), string(runtime.BackendMetadataJson), "post-recycle pod identity is persisted")
 }
 
 func TestServiceCoreReapInactiveAssistantRuntimesCollectsOnlyInactive(t *testing.T) {
@@ -2325,6 +2405,9 @@ type testRuntimeBackend struct {
 	runTurnErr        error
 	runTurnMCPServers *atomic.Pointer[[]runtimeMCPServer]
 	runTurnPrompt     *atomic.Pointer[string]
+	interruptErr      error
+	interruptResult   bool
+	interruptThreadID *atomic.Pointer[uuid.UUID]
 	statusResult      RuntimeBackendStatus
 	statusErr         error
 	stopErr           error
@@ -2366,12 +2449,6 @@ func (t testRuntimeBackend) ImageRef() string {
 	return t.imageRef
 }
 
-func (t testRuntimeBackend) ReusesIdleRuntimes() bool {
-	// Mirror production: GKE tears idle runtimes down (no warm reuse), every
-	// other backend preserves them for warm restart.
-	return t.backend != runtimeBackendGKE
-}
-
 func (t testRuntimeBackend) RecycleImage(ctx context.Context, record assistantRuntimeRecord) (RuntimeBackendRecycleResult, error) {
 	if t.recycleCalls != nil {
 		t.recycleCalls.Add(1)
@@ -2395,6 +2472,17 @@ func (t testRuntimeBackend) RunTurn(_ context.Context, _ assistantRuntimeRecord,
 		t.runTurnPrompt.Store(&prompt)
 	}
 	return t.runTurnErr
+}
+
+func (t testRuntimeBackend) InterruptTurn(_ context.Context, _ assistantRuntimeRecord, threadID uuid.UUID) (bool, error) {
+	if t.interruptThreadID != nil {
+		captured := threadID
+		t.interruptThreadID.Store(&captured)
+	}
+	if t.interruptErr != nil {
+		return false, t.interruptErr
+	}
+	return t.interruptResult, nil
 }
 
 func (t testRuntimeBackend) Status(context.Context, assistantRuntimeRecord) (RuntimeBackendStatus, error) {

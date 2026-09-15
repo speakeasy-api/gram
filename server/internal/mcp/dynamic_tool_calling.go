@@ -8,21 +8,17 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/google/uuid"
-
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/rag"
-	"github.com/speakeasy-api/gram/server/internal/temporal"
 )
 
-const (
-	searchToolsToolName = "search_tools"
-)
+const searchToolsToolName = "search_tools"
+
+var errToolSearchIndexUnavailable = errors.New("tool search index is unavailable")
 
 func buildDynamicSearchToolsSchema(availableTags []string) json.RawMessage {
 	return json.RawMessage(fmt.Sprintf(`{
@@ -63,14 +59,13 @@ func buildDynamicSessionTools(
 	logger *slog.Logger,
 	toolset *types.Toolset,
 	vectorToolStore *rag.ToolsetVectorStore,
-	temporalEnv *temporal.Environment,
 ) ([]*toolListEntry, error) {
-	if err := waitForIndexing(ctx, logger, toolset, vectorToolStore, temporalEnv); err != nil {
-		return nil, fmt.Errorf("failed to index toolset: %w", err)
+	if err := requireToolSearchIndex(ctx, toolset, vectorToolStore); err != nil {
+		return nil, fmt.Errorf("check tool search index: %w", err)
 	}
 
 	findDescription := "Search through the available tools in this MCP server using a search query. The result will be a list of tools that could help you complete your task."
-	executeDescription := "Execute a specific tool by name, passing through the correct arguments for that tool's schema. Do not call a tool without first describing it to get the input schema."
+	executeDescription := "Execute one tool. Pass its exact name as `name` and its JSON payload, matching the schema from describe_tools, as `arguments`. Do not call a tool without first describing it to get the input schema."
 
 	availableTags, _ := vectorToolStore.GetToolsetAvailableTags(ctx, *toolset)
 	if len(availableTags) > 0 {
@@ -156,9 +151,11 @@ func handleSearchToolsCall(
 	argsRaw json.RawMessage,
 	toolset *types.Toolset,
 	vectorToolStore *rag.ToolsetVectorStore,
-	temporalEnv *temporal.Environment,
 ) (json.RawMessage, error) {
-	if err := waitForIndexing(ctx, logger, toolset, vectorToolStore, temporalEnv); err != nil {
+	if err := requireToolSearchIndex(ctx, toolset, vectorToolStore); err != nil {
+		if errors.Is(err, errToolSearchIndexUnavailable) {
+			return nil, oops.E(oops.CodeUnavailable, err, "tool search is temporarily unavailable; try again later").LogError(ctx, logger)
+		}
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to index toolset").LogError(ctx, logger)
 	}
 
@@ -186,51 +183,9 @@ func handleSearchToolsCall(
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to search tools").LogError(ctx, logger)
 	}
 
-	// Build a map of tools by name for quick lookup
-	toolsByName := make(map[string]*types.Tool)
-	for _, tool := range toolset.Tools {
-		if conv.IsProxyTool(tool) {
-			return nil, fmt.Errorf("search tools with external mcp proxy: %s", tool.ExternalMcpToolDefinition.Name)
-		}
-
-		baseTool, err := conv.ToBaseTool(tool)
-		if err != nil {
-			continue
-		}
-		toolsByName[baseTool.Name] = tool
-	}
-
-	// construct full tool entries with similarity scores
-	results := make([]*toolListEntry, 0, len(searchResults))
-	for _, searchResult := range searchResults {
-		tool, exists := toolsByName[searchResult.ToolName]
-		if !exists {
-			continue
-		}
-
-		toolEntry, err := conv.ToToolListEntry(tool)
-		if err != nil {
-			continue
-		}
-		if toolEntry.Name == "" {
-			continue
-		}
-
-		// Add similarity score and tags to meta
-		meta := toolEntry.Meta
-		if meta == nil {
-			meta = make(map[string]any)
-		}
-		meta["similarity_score"] = searchResult.SimilarityScore
-		meta["tags"] = searchResult.Tags
-
-		results = append(results, &toolListEntry{
-			Name:        toolEntry.Name,
-			Description: toolEntry.Description,
-			Meta:        meta,
-			InputSchema: nil, // Intentional don't return to keep token usage down
-			Annotations: nil,
-		})
+	results, err := buildToolSearchResultEntries(toolset.Tools, searchResults)
+	if err != nil {
+		return nil, err
 	}
 
 	payload, err := json.Marshal(toolsListResultTools{Tools: results})
@@ -256,6 +211,8 @@ func handleSearchToolsCall(
 			StructuredContent: json.RawMessage(payload),
 			IsError:           false,
 		},
+		serverIdentity: serverInfoHostedToolset,
+		cacheHints:     nil,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize find_tools response").LogError(ctx, logger)
@@ -264,31 +221,66 @@ func handleSearchToolsCall(
 	return response, nil
 }
 
-func waitForIndexing(ctx context.Context, logger *slog.Logger, toolset *types.Toolset, vectorToolStore *rag.ToolsetVectorStore, temporalEnv *temporal.Environment) error {
+func buildToolSearchResultEntries(tools []*types.Tool, searchResults []*rag.ToolSearchResult) ([]*toolListEntry, error) {
+	toolsByURN := make(map[string]*types.Tool, len(tools))
+	for _, tool := range tools {
+		if conv.IsProxyTool(tool) {
+			return nil, fmt.Errorf("search tools with external mcp proxy: %s", tool.ExternalMcpToolDefinition.Name)
+		}
+
+		baseTool, err := conv.ToBaseTool(tool)
+		if err != nil {
+			continue
+		}
+		toolsByURN[baseTool.ToolUrn] = tool
+	}
+
+	results := make([]*toolListEntry, 0, len(searchResults))
+	for _, searchResult := range searchResults {
+		tool, exists := toolsByURN[searchResult.ToolURN]
+		if !exists {
+			continue
+		}
+
+		toolEntry, err := conv.ToToolListEntry(tool)
+		if err != nil {
+			continue
+		}
+		if toolEntry.Name == "" {
+			continue
+		}
+
+		meta := toolEntry.Meta
+		if meta == nil {
+			meta = make(map[string]any)
+		}
+		meta["similarity_score"] = searchResult.SimilarityScore
+		meta["tags"] = searchResult.Tags
+
+		results = append(results, &toolListEntry{
+			Name:        toolEntry.Name,
+			Description: toolEntry.Description,
+			Meta:        meta,
+			InputSchema: nil,
+			Annotations: nil,
+		})
+	}
+
+	return results, nil
+}
+
+func requireToolSearchIndex(ctx context.Context, toolset *types.Toolset, vectorToolStore *rag.ToolsetVectorStore) error {
+	if len(toolset.Tools) == 0 {
+		return nil
+	}
+
 	indexed, err := vectorToolStore.ToolsetToolsAreIndexed(ctx, *toolset)
 	if err != nil {
 		return fmt.Errorf("failed to check toolset indexing status: %w", err)
 	}
 
 	if !indexed {
-		wr, indexErr := background.ExecuteIndexToolset(
-			ctx,
-			temporalEnv,
-			background.IndexToolsetParams{
-				ProjectID:   uuid.MustParse(toolset.ProjectID),
-				ToolsetSlug: toolset.Slug,
-			},
-		)
-
-		if indexErr != nil {
-			return fmt.Errorf("failed to prepare tool search index: %w", indexErr)
-		}
-
-		wrError := wr.Get(ctx, nil)
-		if wrError != nil {
-			return fmt.Errorf("failed to build tool search index: %w", wrError)
-
-		}
+		return errToolSearchIndexUnavailable
 	}
 
 	return nil
@@ -371,6 +363,8 @@ func handleDescribeToolsCall(
 			StructuredContent: json.RawMessage(payload),
 			IsError:           false,
 		},
+		serverIdentity: serverInfoHostedToolset,
+		cacheHints:     nil,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize describe_tools response").LogError(ctx, logger)

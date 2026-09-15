@@ -167,13 +167,14 @@ func TestService_SetMcpMetadata(t *testing.T) {
 
 		assetsRepo := assets_repo.New(ti.conn)
 		asset, err := assetsRepo.CreateAsset(ctx, assets_repo.CreateAssetParams{
-			Name:          "test-logo.png",
-			Url:           "https://example.com/logo.png",
-			ProjectID:     *authCtx.ProjectID,
-			Sha256:        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-			Kind:          "image",
-			ContentType:   "image/png",
-			ContentLength: 1024,
+			Name:           "test-logo.png",
+			Url:            "https://example.com/logo.png",
+			ProjectID:      *authCtx.ProjectID,
+			OrganizationID: authCtx.ActiveOrganizationID,
+			Sha256:         "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+			Kind:           "image",
+			ContentType:    "image/png",
+			ContentLength:  1024,
 		})
 		require.NoError(t, err)
 

@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/sessionclientinfo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
@@ -98,10 +99,12 @@ func TestServePublic_InitializeBoundsCachedClientInfo(t *testing.T) {
 	require.Equal(t, "1.0", info.Version)
 }
 
-// TestServePublic_InitializeWithoutClientInfoCachesNothing keeps the cache free
-// of nameless entries so readers can treat a miss and an anonymous client the
-// same way.
-func TestServePublic_InitializeWithoutClientInfoCachesNothing(t *testing.T) {
+// TestServePublic_InitializeWithoutClientInfoCachesProtocolVersionOnly covers a
+// client that reports a protocol version but no name. The record it leaves
+// carries the version and nothing else, keeping the session attributable to a
+// protocol generation while still resolving to an anonymous identity — readers
+// of the identity treat that the same as a cache miss.
+func TestServePublic_InitializeWithoutClientInfoCachesProtocolVersionOnly(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -120,6 +123,9 @@ func TestServePublic_InitializeWithoutClientInfoCachesNothing(t *testing.T) {
 	sessionID := w.Header().Get("Mcp-Session-Id")
 	require.NotEmpty(t, sessionID)
 
-	_, err = newClientInfoStore(t).Load(ctx, *authCtx.ProjectID, toolset.Slug, sessionID, 0)
-	require.ErrorIs(t, err, sessionclientinfo.ErrNotFound)
+	info, err := newClientInfoStore(t).Load(ctx, *authCtx.ProjectID, toolset.Slug, sessionID, 0)
+	require.NoError(t, err)
+	require.Empty(t, info.Name)
+	require.Empty(t, info.Version)
+	require.Equal(t, mcpversions.Version20250326, info.ProtocolVersion)
 }

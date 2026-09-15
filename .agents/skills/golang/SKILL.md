@@ -24,7 +24,7 @@ This codebases uses features from Go 1.25 and above.
 - When using a slog logger, always use the context-aware methods: `DebugContext`, `InfoContext`, `WarnContext`, `ErrorContext`.
 - When logging errors make sure to always include them in the log payload using `attr.SlogError(err)`. Example: `logger.ErrorContext(ctx, "failed to write to database", attr.SlogError(err))`.
 - Any functions or methods that relate to making API calls or database queries or working with timers should take a `context.Context` value as their first argument.
-- IMPORTANT: never invoke `go` bare. Use a `mise` task where one exists, otherwise prefix with `mise exec --`, e.g. `mise exec -- go test ./server/internal/oops/`. A bare `go` can resolve to a system install (Homebrew, `asdf`, a distro package) whose patch version differs from the toolchain pinned in `mise.toml`, while `GOROOT` still points at the mise install. The build then fails on every stdlib package with `compile: version "go1.26.4" does not match go tool version "go1.26.5"`. The same applies to the other pinned Go tools (`golangci-lint`, `gotestsum`, `sqlc`, `gomigrate`), and to `goa`, which is a `go.mod` tool directive and so inherits whichever toolchain invoked it.
+- IMPORTANT: never invoke `go` bare. Prefer a `mise` task when one exists; for server tests, use `mise run test:server`, which runs from `server/` and accepts the same extra arguments as `go test`, e.g. `mise run test:server ./internal/oops/`. When no mise task exists, prefix with `mise exec --`, e.g. `mise exec -- go test ./server/internal/oops/`. A bare `go` can resolve to a system install (Homebrew, `asdf`, a distro package) whose patch version differs from the toolchain pinned in `mise.toml`, while `GOROOT` still points at the mise install. The build then fails on every stdlib package with `compile: version "go1.26.4" does not match go tool version "go1.26.5"`. The same applies to the other pinned Go tools (`golangci-lint`, `gotestsum`, `sqlc`, `gomigrate`), and to `goa`, which is a `go.mod` tool directive and so inherits whichever toolchain invoked it.
 - Always run linters as part of finalizing your code changes. Use `mise lint:server` to run the linters on the server codebase.
 - The `exhaustruct` linter requires all struct fields to be explicitly set in struct literals. When adding new fields to a type, update ALL call sites — including places that construct the struct with zero values (e.g., `MyStruct{}` → `MyStruct{NewField: nil}`).
 
@@ -262,12 +262,13 @@ Sending transactional email goes through `server/internal/email`. The package wr
 
 ### Adding a new template
 
-Follow these four steps:
+Follow the `craft-transactional-emails` skill. The Go integration is:
 
-1. Add a `TransactionalID` constant to `server/internal/email/templates.go` — single registry, grep-friendly.
-2. Create `server/internal/email/template_<name>.go` with a struct implementing the `Template` interface (`TransactionalID()`, `Variables()`, `AddToAudience()`).
-3. Append a zero value of the struct to `RegisteredTemplates` in `templates.go` so tests catch duplicate IDs (e.g. `AccessRequestCreated{}`).
-4. Write `server/internal/email/template_<name>_test.go` covering: `TransactionalID` returns the expected constant, `Variables` returns the correct snake_case keys with all keys present, `AddToAudience` returns the expected bool.
+1. Add a stable `TemplateKey` constant to `server/internal/email/templates.go`. Provider IDs never belong in application source.
+2. Create `server/internal/email/template_<name>.go` with a struct implementing `Key()`, `Variables()`, and `AddToAudience()`.
+3. Append a fully initialized zero value to `RegisteredTemplates` so the application/manifest contract checks include it.
+4. Add the matching LMX and `manifest.json` entry under `server/internal/email/loops/`; merge CI creates the Loops email and gram-infra supplies its environment-specific ID at runtime.
+5. Test the key, complete snake_case variable map, and audience behavior.
 
 To send: call `s.emailSvc.Send(ctx, recipientEmail, tmpl)` where `tmpl` is your populated template struct.
 

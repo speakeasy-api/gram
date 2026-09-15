@@ -12,6 +12,17 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const acquireDeviceAgentAIScanCatalogLock = `-- name: AcquireDeviceAgentAIScanCatalogLock :exec
+
+SELECT pg_advisory_xact_lock(hashtextextended('device_agent_ai_scan_catalog:' || $1::text, 0))
+`
+
+// Serializes an organization's scan target writes. Transaction-scoped.
+func (q *Queries) AcquireDeviceAgentAIScanCatalogLock(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, acquireDeviceAgentAIScanCatalogLock, organizationID)
+	return err
+}
+
 const acquireDeviceAgentConfigurationLock = `-- name: AcquireDeviceAgentConfigurationLock :exec
 
 SELECT pg_advisory_xact_lock(hashtextextended('device_agent_configurations:' || $1::text, 0))
@@ -27,6 +38,91 @@ func (q *Queries) AcquireDeviceAgentConfigurationLock(ctx context.Context, organ
 	return err
 }
 
+const bumpDeviceAgentAIScanCatalogVersion = `-- name: BumpDeviceAgentAIScanCatalogVersion :one
+INSERT INTO device_agent_ai_scan_catalogs (organization_id, list_version)
+VALUES ($1, 1)
+ON CONFLICT (organization_id) DO UPDATE
+SET list_version = device_agent_ai_scan_catalogs.list_version + 1
+  , updated_at = clock_timestamp()
+RETURNING list_version
+`
+
+func (q *Queries) BumpDeviceAgentAIScanCatalogVersion(ctx context.Context, organizationID string) (int32, error) {
+	row := q.db.QueryRow(ctx, bumpDeviceAgentAIScanCatalogVersion, organizationID)
+	var list_version int32
+	err := row.Scan(&list_version)
+	return list_version, err
+}
+
+const consumeSessionHandoffLink = `-- name: ConsumeSessionHandoffLink :one
+UPDATE session_handoff_links s
+SET consumed_at = clock_timestamp(), updated_at = clock_timestamp(), blob_url = ''
+FROM (
+  SELECT l.id, l.blob_url
+  FROM session_handoff_links l
+  JOIN projects p ON p.id = l.project_id
+  WHERE l.token = $1
+    AND l.consumed_at IS NULL
+    AND l.expires_at > clock_timestamp()
+    AND p.deleted IS FALSE
+    AND p.organization_id = l.organization_id
+  FOR UPDATE OF l
+) claimed
+WHERE s.id = claimed.id
+RETURNING claimed.blob_url
+`
+
+// Atomically claim a link on read: exactly one caller can flip consumed_at,
+// so a raced second fetch loses and gets no rows — burn-after-read without a
+// separate lock. Expired, already-consumed, and links whose project has since
+// been soft-deleted all return no rows; callers must serve every case as an
+// indistinguishable 404.
+//
+// The claim returns the blob URL and blanks the stored pointer in the same
+// statement; the caller reads the document from object storage and deletes
+// the blob best-effort (bucket lifecycle is the backstop). RETURNING reads
+// from the subquery because the outer UPDATE's own RETURNING would hand back
+// the blanked value. The join also pins l.organization_id to the project's
+// real owner as a fail-closed consistency guard.
+func (q *Queries) ConsumeSessionHandoffLink(ctx context.Context, token string) (string, error) {
+	row := q.db.QueryRow(ctx, consumeSessionHandoffLink, token)
+	var blob_url string
+	err := row.Scan(&blob_url)
+	return blob_url, err
+}
+
+const deleteDeviceAgentAIScanTarget = `-- name: DeleteDeviceAgentAIScanTarget :one
+DELETE FROM device_agent_ai_scan_targets
+WHERE organization_id = $1
+  AND id = $2
+RETURNING organization_id, id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, enabled, created_at, updated_at
+`
+
+type DeleteDeviceAgentAIScanTargetParams struct {
+	OrganizationID string
+	ID             string
+}
+
+func (q *Queries) DeleteDeviceAgentAIScanTarget(ctx context.Context, arg DeleteDeviceAgentAIScanTargetParams) (DeviceAgentAiScanTarget, error) {
+	row := q.db.QueryRow(ctx, deleteDeviceAgentAIScanTarget, arg.OrganizationID, arg.ID)
+	var i DeviceAgentAiScanTarget
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.ID,
+		&i.DisplayName,
+		&i.Category,
+		&i.BundleIds,
+		&i.Binaries,
+		&i.ConfigDirs,
+		&i.ProcessNames,
+		&i.VersionPlistKey,
+		&i.Enabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getAgentPluginSet = `-- name: GetAgentPluginSet :many
 SELECT
   pr.id AS project_id,
@@ -40,8 +136,13 @@ SELECT
   -- install the plugin that actually exists in the published repo.
   pgc.published_hooks_config,
   pms.marketplace_name AS marketplace_name_override,
-  -- The org's default project (oldest, by id ASC over ALL non-deleted projects,
-  -- not just published ones) keeps the bare org-derived marketplace name; others
+  -- NULL (no settings row, or the column unset) means enabled: observability
+  -- has always shipped with a published marketplace unless a project turns it
+  -- off. The view layer skips synthesizing the plugin when this is false.
+  COALESCE(pms.observability_enabled, TRUE) AS observability_enabled,
+  -- The org's default project (oldest by created_at, then id, over ALL
+  -- non-deleted projects, not just published ones) keeps the bare org-derived
+  -- marketplace name; others
   -- are project-scoped. Resolved the same way the publish path does so the names
   -- match. The subquery spans unpublished projects too, so an unpublished default
   -- doesn't hand the bare name to a different project.
@@ -53,7 +154,7 @@ SELECT
     FROM projects p2
     WHERE p2.organization_id = $1
       AND p2.deleted IS FALSE
-    ORDER BY p2.id ASC
+    ORDER BY p2.created_at ASC, p2.id ASC
     LIMIT 1
   )) AS is_default_project,
   p.id AS plugin_id,
@@ -79,16 +180,16 @@ LEFT JOIN plugins p
 WHERE pr.organization_id = $1
   AND pgc.marketplace_token IS NOT NULL
   AND (
-    -- The org's default project (oldest, by id ASC) is the org-wide baseline:
-    -- always surface its marketplace + observability, even when the caller has no
-    -- assignment there. Pinned to @organization_id (uncorrelated) so Postgres
+    -- The org's default project (oldest by created_at, then id) is the org-wide baseline:
+    -- always surface its marketplace + observability (when enabled), even when
+    -- the caller has no assignment there. Pinned to @organization_id (uncorrelated) so Postgres
     -- evaluates it once; the same subquery backs the is_default_project column.
     pr.id = (
       SELECT p2.id
       FROM projects p2
       WHERE p2.organization_id = $1
         AND p2.deleted IS FALSE
-      ORDER BY p2.id ASC
+      ORDER BY p2.created_at ASC, p2.id ASC
       LIMIT 1
     )
     -- A non-default project surfaces only when the caller has a matching assigned
@@ -96,7 +197,7 @@ WHERE pr.organization_id = $1
     -- marketplace and observability plugin are just noise for this user.
     OR p.id IS NOT NULL
   )
-ORDER BY pr.id, p.slug
+ORDER BY is_default_project DESC, pr.created_at, pr.id, p.slug
 `
 
 type GetAgentPluginSetParams struct {
@@ -113,6 +214,7 @@ type GetAgentPluginSetRow struct {
 	MarketplaceUpdatedAt    pgtype.Timestamptz
 	PublishedHooksConfig    []byte
 	MarketplaceNameOverride pgtype.Text
+	ObservabilityEnabled    bool
 	IsDefaultProject        bool
 	PluginID                uuid.NullUUID
 	PluginSlug              pgtype.Text
@@ -124,9 +226,9 @@ type GetAgentPluginSetRow struct {
 // The base is the org's *published* marketplaces (plugin_github_connections rows
 // with a marketplace_token), scoped so the device agent isn't flooded with every
 // project: the org's default project always appears (marketplace + its
-// always-required observability plugin, synthesized in the view layer) as the
-// org-wide baseline, while a non-default project appears only when the caller has
-// a matching assignment there. Plugins whose assignment principal_urn matches the
+// observability plugin when the project has not disabled it, synthesized in the
+// view layer) as the org-wide baseline, while a non-default project appears only
+// when the caller has a matching assignment there. Plugins whose assignment principal_urn matches the
 // caller's resolved principal set (email, user:<id>, user:all, role:<...>, or the
 // org wildcard) are LEFT JOINed on top; the default project still yields one row
 // with null plugin columns when the caller has no assignment there.
@@ -137,10 +239,10 @@ type GetAgentPluginSetRow struct {
 // distinct names surface as distinct marketplaces; projects that share a name
 // (e.g. several on the org default) still collapse to one in the view.
 //
-// Rows are ordered by pr.id so the org's default project (first by id ASC, the
-// one created at org setup) sorts first. When projects share a name and the view
-// collapses them, keeping the first row's token makes that collapse resolve to
-// the default project rather than the arbitrary alphabetically-first one.
+// Rows put the org's default project first, then use creation order and id for
+// deterministic grouping. When projects share a name and the view collapses
+// them, keeping the first row's token resolves to the default project rather
+// than whichever UUID happens to sort first.
 func (q *Queries) GetAgentPluginSet(ctx context.Context, arg GetAgentPluginSetParams) ([]GetAgentPluginSetRow, error) {
 	rows, err := q.db.Query(ctx, getAgentPluginSet, arg.OrganizationID, arg.PrincipalUrns)
 	if err != nil {
@@ -159,6 +261,7 @@ func (q *Queries) GetAgentPluginSet(ctx context.Context, arg GetAgentPluginSetPa
 			&i.MarketplaceUpdatedAt,
 			&i.PublishedHooksConfig,
 			&i.MarketplaceNameOverride,
+			&i.ObservabilityEnabled,
 			&i.IsDefaultProject,
 			&i.PluginID,
 			&i.PluginSlug,
@@ -172,6 +275,83 @@ func (q *Queries) GetAgentPluginSet(ctx context.Context, arg GetAgentPluginSetPa
 		return nil, err
 	}
 	return items, nil
+}
+
+const getChatTitleForMove = `-- name: GetChatTitleForMove :one
+SELECT c.title, c.user_id
+FROM chats c
+WHERE c.id = $1
+  AND c.project_id = $2
+  AND c.organization_id = $3
+  AND c.deleted IS FALSE
+`
+
+type GetChatTitleForMoveParams struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+type GetChatTitleForMoveRow struct {
+	Title  pgtype.Text
+	UserID pgtype.Text
+}
+
+// Best-effort display enrichment for the chat_session:move audit entry. The
+// move is recorded even when this returns no rows (the session may not have
+// been captured yet), so callers treat ErrNoRows as empty, not failure.
+func (q *Queries) GetChatTitleForMove(ctx context.Context, arg GetChatTitleForMoveParams) (GetChatTitleForMoveRow, error) {
+	row := q.db.QueryRow(ctx, getChatTitleForMove, arg.ID, arg.ProjectID, arg.OrganizationID)
+	var i GetChatTitleForMoveRow
+	err := row.Scan(&i.Title, &i.UserID)
+	return i, err
+}
+
+const getDeviceAgentAIScanCatalogVersion = `-- name: GetDeviceAgentAIScanCatalogVersion :one
+SELECT COALESCE(
+  (SELECT list_version FROM device_agent_ai_scan_catalogs WHERE organization_id = $1),
+  0
+)::integer AS list_version
+`
+
+func (q *Queries) GetDeviceAgentAIScanCatalogVersion(ctx context.Context, organizationID string) (int32, error) {
+	row := q.db.QueryRow(ctx, getDeviceAgentAIScanCatalogVersion, organizationID)
+	var list_version int32
+	err := row.Scan(&list_version)
+	return list_version, err
+}
+
+const getDeviceAgentAIScanTargetForUpdate = `-- name: GetDeviceAgentAIScanTargetForUpdate :one
+SELECT organization_id, id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, enabled, created_at, updated_at
+FROM device_agent_ai_scan_targets
+WHERE organization_id = $1
+  AND id = $2
+FOR UPDATE
+`
+
+type GetDeviceAgentAIScanTargetForUpdateParams struct {
+	OrganizationID string
+	ID             string
+}
+
+func (q *Queries) GetDeviceAgentAIScanTargetForUpdate(ctx context.Context, arg GetDeviceAgentAIScanTargetForUpdateParams) (DeviceAgentAiScanTarget, error) {
+	row := q.db.QueryRow(ctx, getDeviceAgentAIScanTargetForUpdate, arg.OrganizationID, arg.ID)
+	var i DeviceAgentAiScanTarget
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.ID,
+		&i.DisplayName,
+		&i.Category,
+		&i.BundleIds,
+		&i.Binaries,
+		&i.ConfigDirs,
+		&i.ProcessNames,
+		&i.VersionPlistKey,
+		&i.Enabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const getDeviceAgentConfiguration = `-- name: GetDeviceAgentConfiguration :one
@@ -217,6 +397,147 @@ func (q *Queries) GetDeviceAgentConfigurationForUpdate(ctx context.Context, orga
 	return i, err
 }
 
+const insertChatSessionLink = `-- name: InsertChatSessionLink :exec
+INSERT INTO chat_session_links (
+  project_id, organization_id, parent_chat_id, child_chat_id,
+  parent_session_id, child_session_id, kind, target_harness, source_surface,
+  actor_email, device_serial, device_hostname
+) VALUES (
+  $1, $2, $3, $4,
+  $5, $6, 'move', $7, $8,
+  $9, $10, $11
+)
+ON CONFLICT (project_id, parent_chat_id, child_chat_id) WHERE child_chat_id IS NOT NULL DO NOTHING
+`
+
+type InsertChatSessionLinkParams struct {
+	ProjectID       uuid.UUID
+	OrganizationID  string
+	ParentChatID    uuid.UUID
+	ChildChatID     uuid.NullUUID
+	ParentSessionID string
+	ChildSessionID  pgtype.Text
+	TargetHarness   string
+	SourceSurface   pgtype.Text
+	ActorEmail      pgtype.Text
+	DeviceSerial    pgtype.Text
+	DeviceHostname  pgtype.Text
+}
+
+// One lineage edge per reported session move. Both chat ids are DERIVED
+// (chat.SessionIDToChatID), so the edge is recordable before either chat is
+// captured; the composite (organization_id, project_id) foreign key pins
+// tenancy at insert time. ON CONFLICT makes daemon retries of the same
+// known-continuation move idempotent; NULL-child edges (unknowable
+// continuations, e.g. Cursor) may repeat because each is a distinct move.
+func (q *Queries) InsertChatSessionLink(ctx context.Context, arg InsertChatSessionLinkParams) error {
+	_, err := q.db.Exec(ctx, insertChatSessionLink,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.ParentChatID,
+		arg.ChildChatID,
+		arg.ParentSessionID,
+		arg.ChildSessionID,
+		arg.TargetHarness,
+		arg.SourceSurface,
+		arg.ActorEmail,
+		arg.DeviceSerial,
+		arg.DeviceHostname,
+	)
+	return err
+}
+
+const insertSessionHandoffLink = `-- name: InsertSessionHandoffLink :one
+INSERT INTO session_handoff_links (
+  project_id, organization_id, session_id, token, blob_url, created_by_email, expires_at
+)
+SELECT p.id, p.organization_id, $1, $2, $3, $4, $5
+FROM projects p
+WHERE p.id = $6
+  AND p.organization_id = $7
+  AND p.deleted IS FALSE
+RETURNING id, expires_at
+`
+
+type InsertSessionHandoffLinkParams struct {
+	SessionID      string
+	Token          string
+	BlobUrl        string
+	CreatedByEmail string
+	ExpiresAt      pgtype.Timestamptz
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+type InsertSessionHandoffLinkRow struct {
+	ID        uuid.UUID
+	ExpiresAt pgtype.Timestamptz
+}
+
+// Mint a session-handoff capability link. The token is the capability; TTL
+// and burn-after-read (consumed_at) bound a leaked link's exposure window.
+// Minting goes through the tenant-qualified project so a caller whose project
+// and organization disagree, or whose project is soft-deleted, gets no row
+// rather than a live capability URL.
+func (q *Queries) InsertSessionHandoffLink(ctx context.Context, arg InsertSessionHandoffLinkParams) (InsertSessionHandoffLinkRow, error) {
+	row := q.db.QueryRow(ctx, insertSessionHandoffLink,
+		arg.SessionID,
+		arg.Token,
+		arg.BlobUrl,
+		arg.CreatedByEmail,
+		arg.ExpiresAt,
+		arg.ProjectID,
+		arg.OrganizationID,
+	)
+	var i InsertSessionHandoffLinkRow
+	err := row.Scan(&i.ID, &i.ExpiresAt)
+	return i, err
+}
+
+const listDeviceAgentAIScanTargets = `-- name: ListDeviceAgentAIScanTargets :many
+
+SELECT organization_id, id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, enabled, created_at, updated_at
+FROM device_agent_ai_scan_targets
+WHERE organization_id = $1
+ORDER BY id
+`
+
+// An organization's Shadow AI scan targets: its own additions and its
+// overrides of the Speakeasy defaults compiled into the server. The served
+// list is built in code by overlaying these rows on the defaults.
+func (q *Queries) ListDeviceAgentAIScanTargets(ctx context.Context, organizationID string) ([]DeviceAgentAiScanTarget, error) {
+	rows, err := q.db.Query(ctx, listDeviceAgentAIScanTargets, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DeviceAgentAiScanTarget
+	for rows.Next() {
+		var i DeviceAgentAiScanTarget
+		if err := rows.Scan(
+			&i.OrganizationID,
+			&i.ID,
+			&i.DisplayName,
+			&i.Category,
+			&i.BundleIds,
+			&i.Binaries,
+			&i.ConfigDirs,
+			&i.ProcessNames,
+			&i.VersionPlistKey,
+			&i.Enabled,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDeviceAgentSyncs = `-- name: ListDeviceAgentSyncs :many
 SELECT organization_id, email, first_seen_at, last_seen_at
 FROM device_agent_syncs
@@ -256,6 +577,144 @@ func (q *Queries) ListDeviceAgentSyncs(ctx context.Context, organizationID strin
 		return nil, err
 	}
 	return items, nil
+}
+
+const listOwnedChatSessionMeta = `-- name: ListOwnedChatSessionMeta :many
+SELECT c.id, c.title, c.updated_at
+FROM chats c
+WHERE c.id = ANY($1::uuid[])
+  AND c.project_id = $2
+  AND c.organization_id = $3
+  AND c.user_id = $4::text
+  AND c.deleted IS FALSE
+`
+
+type ListOwnedChatSessionMetaParams struct {
+	ChatIds        []uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	UserID         string
+}
+
+type ListOwnedChatSessionMetaRow struct {
+	ID        uuid.UUID
+	Title     pgtype.Text
+	UpdatedAt pgtype.Timestamptz
+}
+
+// Session-picker metadata for captured agent sessions, strictly owner-matched:
+// only chats whose user_id is the authenticated per-user-key owner, in the
+// key's enrolled project. Personal-account sessions are included (decision on
+// session-portability question Q2, 2026-08-10): the caller is the
+// authenticated owner reading their own metadata. Revisit before any endpoint
+// serves session CONTENT or admin-facing listings — personal-account
+// ownership attribution is partly device-bridge-inferred, which is acceptable
+// for titles but not for transcripts.
+func (q *Queries) ListOwnedChatSessionMeta(ctx context.Context, arg ListOwnedChatSessionMetaParams) ([]ListOwnedChatSessionMetaRow, error) {
+	rows, err := q.db.Query(ctx, listOwnedChatSessionMeta,
+		arg.ChatIds,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.UserID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOwnedChatSessionMetaRow
+	for rows.Next() {
+		var i ListOwnedChatSessionMetaRow
+		if err := rows.Scan(&i.ID, &i.Title, &i.UpdatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const upsertDeviceAgentAIScanTarget = `-- name: UpsertDeviceAgentAIScanTarget :one
+INSERT INTO device_agent_ai_scan_targets (
+  organization_id,
+  id,
+  display_name,
+  category,
+  bundle_ids,
+  binaries,
+  config_dirs,
+  process_names,
+  version_plist_key,
+  enabled
+)
+VALUES (
+  $1,
+  $2,
+  $3,
+  $4,
+  $5::text[],
+  $6::text[],
+  $7::text[],
+  $8::text[],
+  $9,
+  $10
+)
+ON CONFLICT (organization_id, id) DO UPDATE
+SET display_name = EXCLUDED.display_name
+  , category = EXCLUDED.category
+  , bundle_ids = EXCLUDED.bundle_ids
+  , binaries = EXCLUDED.binaries
+  , config_dirs = EXCLUDED.config_dirs
+  , process_names = EXCLUDED.process_names
+  , version_plist_key = EXCLUDED.version_plist_key
+  , enabled = EXCLUDED.enabled
+  , updated_at = clock_timestamp()
+RETURNING organization_id, id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, enabled, created_at, updated_at
+`
+
+type UpsertDeviceAgentAIScanTargetParams struct {
+	OrganizationID  string
+	ID              string
+	DisplayName     string
+	Category        string
+	BundleIds       []string
+	Binaries        []string
+	ConfigDirs      []string
+	ProcessNames    []string
+	VersionPlistKey pgtype.Text
+	Enabled         bool
+}
+
+func (q *Queries) UpsertDeviceAgentAIScanTarget(ctx context.Context, arg UpsertDeviceAgentAIScanTargetParams) (DeviceAgentAiScanTarget, error) {
+	row := q.db.QueryRow(ctx, upsertDeviceAgentAIScanTarget,
+		arg.OrganizationID,
+		arg.ID,
+		arg.DisplayName,
+		arg.Category,
+		arg.BundleIds,
+		arg.Binaries,
+		arg.ConfigDirs,
+		arg.ProcessNames,
+		arg.VersionPlistKey,
+		arg.Enabled,
+	)
+	var i DeviceAgentAiScanTarget
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.ID,
+		&i.DisplayName,
+		&i.Category,
+		&i.BundleIds,
+		&i.Binaries,
+		&i.ConfigDirs,
+		&i.ProcessNames,
+		&i.VersionPlistKey,
+		&i.Enabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const upsertDeviceAgentConfiguration = `-- name: UpsertDeviceAgentConfiguration :one
@@ -340,6 +799,52 @@ func (q *Queries) UpsertDeviceAgentDeviceSync(ctx context.Context, arg UpsertDev
 		arg.OrganizationID,
 		arg.SerialNumber,
 		arg.Email,
+		arg.Hostname,
+	)
+	return err
+}
+
+const upsertDeviceAgentEnvironmentSync = `-- name: UpsertDeviceAgentEnvironmentSync :exec
+INSERT INTO device_agent_environment_syncs (organization_id, email, environment, hostname)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (organization_id, LOWER(email), environment) DO UPDATE
+SET last_seen_at = clock_timestamp()
+  , updated_at   = clock_timestamp()
+    -- An agent that stopped reporting a hostname must not blank a known one.
+  , hostname     = COALESCE(EXCLUDED.hostname, device_agent_environment_syncs.hostname)
+WHERE device_agent_environment_syncs.last_seen_at < clock_timestamp() - interval '1 minute'
+   OR (EXCLUDED.hostname IS NOT NULL AND device_agent_environment_syncs.hostname IS DISTINCT FROM EXCLUDED.hostname)
+`
+
+type UpsertDeviceAgentEnvironmentSyncParams struct {
+	OrganizationID string
+	Email          string
+	Environment    string
+	Hostname       pgtype.Text
+}
+
+// Best-effort record that an agent polled from a box that is not somebody's
+// laptop — a cloud sandbox, a container, a shared server. Sibling of
+// UpsertDeviceAgentSync, and deliberately a different table: coverage matches
+// an MDM device's assigned-user email against THAT one, so a cloud session
+// polling under a real person's address would otherwise mark their laptop
+// covered whether or not the laptop runs the agent.
+//
+// Only called when the agent declared a non-laptop environment. A laptop, and
+// every agent predating the header, still writes the sibling.
+//
+// The guard mirrors the device sibling's rather than the plain heartbeat
+// throttle, because hostname is mutable and a ~60s poll cadence keeps
+// last_seen_at almost always fresh — a changed hostname could otherwise go
+// unrecorded for a whole session.
+// Infers device_agent_environment_syncs_org_lower_email_env_key, the unique
+// expression index that is this table's dedup key. Matching the readers'
+// LOWER() comparison is what stops one identity from holding two rows.
+func (q *Queries) UpsertDeviceAgentEnvironmentSync(ctx context.Context, arg UpsertDeviceAgentEnvironmentSyncParams) error {
+	_, err := q.db.Exec(ctx, upsertDeviceAgentEnvironmentSync,
+		arg.OrganizationID,
+		arg.Email,
+		arg.Environment,
 		arg.Hostname,
 	)
 	return err

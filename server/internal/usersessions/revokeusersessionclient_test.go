@@ -263,3 +263,26 @@ func TestRevokeUserSessionClient_RBACForbidden(t *testing.T) {
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
+
+func TestRevokeUserSessionClient_SiblingProjectNotFound(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	sp := seedSiblingProject(t, ctx, ti, "revoke-cli-sibling")
+
+	err := ti.service.RevokeUserSessionClient(ctx, &gen.RevokeUserSessionClientPayload{
+		ID:               sp.clientID.String(),
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	requireOopsCode(t, err, oops.CodeNotFound)
+
+	live, err := repo.New(ti.conn).GetUserSessionClientByID(ctx, repo.GetUserSessionClientByIDParams{
+		ID:             sp.clientID,
+		ProjectID:      sp.projectID,
+		OrganizationID: "",
+	})
+	require.NoError(t, err, "sibling project's client must survive the caller's revoke")
+	require.False(t, live.Deleted)
+}

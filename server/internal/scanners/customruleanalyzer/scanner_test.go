@@ -30,11 +30,11 @@ func TestScan_MatchReturnsFinding(t *testing.T) {
 	scanner := newTestScanner(t, conn)
 	req := scanReq(p, "here is a secret value", "custom.secret")
 
-	findings, err := scanner.Scan(t.Context(), req)
+	result, err := scanner.Scan(t.Context(), req)
 	require.NoError(t, err)
-	require.Len(t, findings, 1)
+	require.Len(t, result.Findings, 1)
 
-	f := findings[0]
+	f := result.Findings[0]
 	require.Equal(t, "custom.secret", f.RuleID)
 	require.Equal(t, "test rule description", f.Description)
 	require.Equal(t, "custom", f.Source)
@@ -64,10 +64,10 @@ func TestScan_MultipleSpansYieldFindingPerMatch(t *testing.T) {
 	scanner := newTestScanner(t, conn)
 	req := scanReq(p, "secret then another secret", "custom.secret")
 
-	findings, err := scanner.Scan(t.Context(), req)
+	result, err := scanner.Scan(t.Context(), req)
 	require.NoError(t, err)
-	require.Len(t, findings, 2)
-	for _, f := range findings {
+	require.Len(t, result.Findings, 2)
+	for _, f := range result.Findings {
 		require.Equal(t, "secret", f.Match)
 		require.Equal(t, req.Content[f.StartPos:f.EndPos], f.Match)
 	}
@@ -86,10 +86,10 @@ func TestScan_MultipleRulesOnlyMatchingFire(t *testing.T) {
 	scanner := newTestScanner(t, conn)
 	req := scanReq(p, "here is a secret value", "custom.secret", "custom.token")
 
-	findings, err := scanner.Scan(t.Context(), req)
+	result, err := scanner.Scan(t.Context(), req)
 	require.NoError(t, err)
-	require.Len(t, findings, 1)
-	require.Equal(t, "custom.secret", findings[0].RuleID)
+	require.Len(t, result.Findings, 1)
+	require.Equal(t, "custom.secret", result.Findings[0].RuleID)
 }
 
 // A rule targeting tool_calls resolves against the tools rebuilt from the
@@ -110,11 +110,11 @@ func TestScan_ToolCallRuleMatches(t *testing.T) {
 		ToolCalls:     []customruleanalyzer.ScanToolCall{{Name: "mcp__fs__delete_file", Arguments: "{}"}},
 	}
 
-	findings, err := scanner.Scan(t.Context(), req)
+	result, err := scanner.Scan(t.Context(), req)
 	require.NoError(t, err)
-	require.Len(t, findings, 1)
+	require.Len(t, result.Findings, 1)
 
-	f := findings[0]
+	f := result.Findings[0]
 	require.Equal(t, "custom.deltool", f.RuleID)
 	require.Equal(t, "delete_file", f.Match)
 	// Span attribution: the match is on the tool.function field, grouped by the
@@ -143,11 +143,11 @@ func TestScan_ToolArgsGetPopulatesPath(t *testing.T) {
 		ToolCalls:     []customruleanalyzer.ScanToolCall{{Name: "shell:run_bash_command", Arguments: `{"command":"DROP TABLE users"}`}},
 	}
 
-	findings, err := scanner.Scan(t.Context(), req)
+	result, err := scanner.Scan(t.Context(), req)
 	require.NoError(t, err)
-	require.Len(t, findings, 1)
+	require.Len(t, result.Findings, 1)
 
-	f := findings[0]
+	f := result.Findings[0]
 	require.Equal(t, "custom.dropsql", f.RuleID)
 	require.Equal(t, "DROP TABLE", f.Match)
 	require.Equal(t, "tool.args", f.Field)
@@ -165,10 +165,12 @@ func TestScan_CleanContentNoFindings(t *testing.T) {
 	scanner := newTestScanner(t, conn)
 	req := scanReq(p, "totally benign message", "custom.secret")
 
-	findings, err := scanner.Scan(t.Context(), req)
+	result, err := scanner.Scan(t.Context(), req)
 	require.NoError(t, err)
-	require.NotNil(t, findings)
-	require.Empty(t, findings)
+	require.NotNil(t, result.Findings)
+	require.Empty(t, result.Findings)
+	require.True(t, result.Completed)
+	require.Positive(t, result.STokens)
 }
 
 // Content matches the rule, but the selected id does not, so nothing is
@@ -183,9 +185,11 @@ func TestScan_UnselectedRuleSkipped(t *testing.T) {
 	scanner := newTestScanner(t, conn)
 	req := scanReq(p, "here is a secret value", "custom.other")
 
-	findings, err := scanner.Scan(t.Context(), req)
+	result, err := scanner.Scan(t.Context(), req)
 	require.NoError(t, err)
-	require.Empty(t, findings)
+	require.Empty(t, result.Findings)
+	require.False(t, result.Completed)
+	require.Zero(t, result.STokens)
 }
 
 // With no rule ids selected LoadSelected short-circuits and Scan returns an
@@ -200,10 +204,12 @@ func TestScan_NoRulesSelectedReturnsEmpty(t *testing.T) {
 	scanner := newTestScanner(t, conn)
 	req := scanReq(p, "here is a secret value")
 
-	findings, err := scanner.Scan(t.Context(), req)
+	result, err := scanner.Scan(t.Context(), req)
 	require.NoError(t, err)
-	require.NotNil(t, findings)
-	require.Empty(t, findings)
+	require.NotNil(t, result.Findings)
+	require.Empty(t, result.Findings)
+	require.False(t, result.Completed)
+	require.Zero(t, result.STokens)
 }
 
 // A syntactically invalid CEL predicate surfaces as an evaluation error keyed by
@@ -245,13 +251,13 @@ func TestScanBatch_IndexAlignedFindings(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, out, 3)
 
-	require.Len(t, out[0], 1)
-	require.Equal(t, "custom.secret", out[0][0].RuleID)
+	require.Len(t, out[0].Findings, 1)
+	require.Equal(t, "custom.secret", out[0].Findings[0].RuleID)
 
-	require.NotNil(t, out[1])
-	require.Empty(t, out[1])
+	require.NotNil(t, out[1].Findings)
+	require.Empty(t, out[1].Findings)
 
-	require.Len(t, out[2], 2)
+	require.Len(t, out[2].Findings, 2)
 }
 
 // ScanBatch over an empty message slice returns an empty, non-nil result.
@@ -293,9 +299,9 @@ func TestScanBatch_NoRulesSelectedReturnsPerMessageEmpty(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, out, 2)
-	for _, findings := range out {
-		require.NotNil(t, findings)
-		require.Empty(t, findings)
+	for _, result := range out {
+		require.NotNil(t, result.Findings)
+		require.Empty(t, result.Findings)
 	}
 }
 
@@ -309,7 +315,7 @@ func TestScan_UnknownProjectNoFindings(t *testing.T) {
 	// A valid but unseeded project id: no rules exist for it.
 	req := scanReq(seededProject{projectID: uuid.New()}, "here is a secret value", "custom.secret")
 
-	findings, err := scanner.Scan(t.Context(), req)
+	result, err := scanner.Scan(t.Context(), req)
 	require.NoError(t, err)
-	require.Empty(t, findings)
+	require.Empty(t, result.Findings)
 }

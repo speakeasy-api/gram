@@ -28,42 +28,41 @@ import {
 import { useUpdateDeviceAgentConfigurationMutation } from "@gram/client/react-query/updateDeviceAgentConfiguration.js";
 import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
+import {
+  enforcementLayer,
+  recordValue,
+  type EnforcementLayer,
+} from "./platform-layers";
 import { useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useState } from "react";
 import { toast } from "sonner";
-
-type EnforcementLayer = "off" | "user" | "managed";
+import { AiScanTargetsSection } from "./ai-scan-targets";
 
 const PLATFORMS = [
   {
     key: "claude_code",
     label: "Claude Code",
     description: "Configure Claude Code plugins and MCP settings.",
-    defaultLayer: "user",
   },
   {
     key: "codex",
     label: "Codex",
     description: "Configure Codex plugins and MCP settings.",
-    defaultLayer: "off",
   },
   {
     key: "cursor",
     label: "Cursor",
     description: "Configure Cursor plugins and MCP settings.",
-    defaultLayer: "off",
   },
   {
     key: "opencode",
     label: "OpenCode",
     description: "Configure OpenCode plugins and MCP settings.",
-    defaultLayer: "off",
   },
 ] as const satisfies ReadonlyArray<{
   key: string;
   label: string;
   description: string;
-  defaultLayer: EnforcementLayer;
 }>;
 
 const MIN_SYNC_INTERVAL_SECONDS = 60;
@@ -92,23 +91,6 @@ const AUTO_UPDATE_POLICIES = [
     description: "Install updates as they release",
   },
 ] as const;
-
-function recordValue(value: unknown): Record<string, unknown> {
-  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
-    return value as Record<string, unknown>;
-  }
-  return {};
-}
-
-function enforcementLayer(
-  config: DeviceAgentConfiguration,
-  platform: (typeof PLATFORMS)[number],
-): EnforcementLayer {
-  const value = recordValue(config.config.platforms)[platform.key];
-  if (value === "user" || value === "managed") return value;
-  if (value === false) return "off";
-  return platform.defaultLayer;
-}
 
 function stringSetting(
   config: DeviceAgentConfiguration,
@@ -156,34 +138,36 @@ export function DeviceAgentConfigurationTab(): JSX.Element {
     throwOnError: false,
   });
 
+  let body: ReactNode;
   if (query.isLoading || !query.data) {
-    return (
-      <ConfigurationSection>
-        {query.error ? (
-          <Stack gap={4}>
-            <ErrorAlert
-              title="Unable to load device agent configuration"
-              error={query.error}
-              className="max-w-2xl"
-            />
-            <Button variant="secondary" onClick={() => void query.refetch()}>
-              Try again
-            </Button>
-          </Stack>
-        ) : (
-          <Skeleton className="h-[640px] w-full" />
-        )}
-      </ConfigurationSection>
+    body = query.error ? (
+      <Stack gap={4}>
+        <ErrorAlert
+          title="Unable to load device agent configuration"
+          error={query.error}
+          className="max-w-2xl"
+        />
+        <Button variant="secondary" onClick={() => void query.refetch()}>
+          Try again
+        </Button>
+      </Stack>
+    ) : (
+      <Skeleton className="h-[640px] w-full" />
     );
-  }
-
-  return (
-    <ConfigurationSection>
+  } else {
+    body = (
       <DeviceAgentConfigurationForm
         key={query.data.etag}
         configuration={query.data}
       />
-    </ConfigurationSection>
+    );
+  }
+
+  return (
+    <>
+      <ConfigurationSection>{body}</ConfigurationSection>
+      <AiScanTargetsSection />
+    </>
   );
 }
 
@@ -222,7 +206,7 @@ function DeviceAgentConfigurationForm({
     Object.fromEntries(
       PLATFORMS.map((platform) => [
         platform.key,
-        enforcementLayer(configuration, platform),
+        enforcementLayer(configuration.config.platforms, platform.key),
       ]),
     ),
   );
@@ -264,7 +248,7 @@ function DeviceAgentConfigurationForm({
   const currentPlatformLayers = Object.fromEntries(
     PLATFORMS.map((platform) => [
       platform.key,
-      enforcementLayer(configuration, platform),
+      enforcementLayer(configuration.config.platforms, platform.key),
     ]),
   );
   const isDirty =

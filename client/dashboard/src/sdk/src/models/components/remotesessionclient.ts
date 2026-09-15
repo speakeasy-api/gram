@@ -51,6 +51,10 @@ export type RemoteSessionClient = {
    */
   id: string;
   /**
+   * The organization JSON Web Key Set attached to this client, managed through attachKeySet and detachKeySet. Null when no key set is attached.
+   */
+  jsonWebKeySetId?: string | undefined;
+  /**
    * The owning organization id. Empty for legacy rows not yet backfilled and global clients.
    */
   organizationId: string;
@@ -73,6 +77,10 @@ export type RemoteSessionClient = {
     | RemoteSessionClientTokenEndpointAuthMethod
     | undefined;
   updatedAt: Date;
+  /**
+   * When the issuer's token endpoint last answered invalid_client for this client_id, meaning the issuer no longer recognizes the registration. Null while the registration is in good standing; cleared by a successful rotation, a successful refresh, or a replaced secret.
+   */
+  upstreamRejectedAt?: Date | undefined;
   /**
    * The user_session_issuers this client is attached to via the join table. Empty for a standalone client with no attachments.
    */
@@ -106,6 +114,7 @@ export const RemoteSessionClient$inboundSchema: z.ZodMiniType<
       z.transform(v => new Date(v)),
     ),
     id: z.string(),
+    json_web_key_set_id: z.optional(z.string()),
     organization_id: z.string(),
     project_id: z.string(),
     remote_session_issuer_id: z.string(),
@@ -117,6 +126,9 @@ export const RemoteSessionClient$inboundSchema: z.ZodMiniType<
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
+    upstream_rejected_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    ),
     user_session_issuer_ids: z.array(z.string()),
   }),
   z.transform((v) => {
@@ -126,11 +138,13 @@ export const RemoteSessionClient$inboundSchema: z.ZodMiniType<
       "client_id_metadata_uri": "clientIdMetadataUri",
       "client_secret_expires_at": "clientSecretExpiresAt",
       "created_at": "createdAt",
+      "json_web_key_set_id": "jsonWebKeySetId",
       "organization_id": "organizationId",
       "project_id": "projectId",
       "remote_session_issuer_id": "remoteSessionIssuerId",
       "token_endpoint_auth_method": "tokenEndpointAuthMethod",
       "updated_at": "updatedAt",
+      "upstream_rejected_at": "upstreamRejectedAt",
       "user_session_issuer_ids": "userSessionIssuerIds",
     });
   }),

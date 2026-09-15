@@ -18,14 +18,25 @@ import (
 
 // Server lists the usage service endpoint HTTP handlers.
 type Server struct {
-	Mounts                   []*MountPoint
-	GetPeriodUsage           http.Handler
-	GetTokensUnderManagement http.Handler
-	SetBillingMetadata       http.Handler
-	GetUsageTiers            http.Handler
-	CreateCustomerSession    http.Handler
-	CreateCheckout           http.Handler
-	CreateTopUpCheckout      http.Handler
+	Mounts                    []*MountPoint
+	GetPeriodUsage            http.Handler
+	GetMeterUsage             http.Handler
+	GetTokensUnderManagement  http.Handler
+	SetBillingMetadata        http.Handler
+	GetBillingEmail           http.Handler
+	SetBillingEmail           http.Handler
+	SetSpendCap               http.Handler
+	GetInferenceSpendCaps     http.Handler
+	GetUsageTiers             http.Handler
+	CreateCustomerSession     http.Handler
+	CreateCheckout            http.Handler
+	CreateStripeCheckout      http.Handler
+	GetStripeSubscription     http.Handler
+	GetPaygBillingSummary     http.Handler
+	CreateStripePortalSession http.Handler
+	CancelStripeSubscription  http.Handler
+	ResumeStripeSubscription  http.Handler
+	CreateTopUpCheckout       http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -56,20 +67,42 @@ func New(
 	return &Server{
 		Mounts: []*MountPoint{
 			{"GetPeriodUsage", "GET", "/rpc/usage.getPeriodUsage"},
+			{"GetMeterUsage", "GET", "/rpc/usage.getMeterUsage"},
 			{"GetTokensUnderManagement", "GET", "/rpc/usage.getTokensUnderManagement"},
 			{"SetBillingMetadata", "POST", "/rpc/usage.setBillingMetadata"},
+			{"GetBillingEmail", "GET", "/rpc/usage.getBillingEmail"},
+			{"SetBillingEmail", "POST", "/rpc/usage.setBillingEmail"},
+			{"SetSpendCap", "POST", "/rpc/usage.setSpendCap"},
+			{"GetInferenceSpendCaps", "GET", "/rpc/usage.getInferenceSpendCaps"},
 			{"GetUsageTiers", "GET", "/rpc/usage.getUsageTiers"},
 			{"CreateCustomerSession", "POST", "/rpc/usage.createCustomerSession"},
 			{"CreateCheckout", "POST", "/rpc/usage.createCheckout"},
+			{"CreateStripeCheckout", "POST", "/rpc/usage.createStripeCheckout"},
+			{"GetStripeSubscription", "GET", "/rpc/usage.getStripeSubscription"},
+			{"GetPaygBillingSummary", "GET", "/rpc/usage.getPaygBillingSummary"},
+			{"CreateStripePortalSession", "POST", "/rpc/usage.createStripePortalSession"},
+			{"CancelStripeSubscription", "POST", "/rpc/usage.cancelStripeSubscription"},
+			{"ResumeStripeSubscription", "POST", "/rpc/usage.resumeStripeSubscription"},
 			{"CreateTopUpCheckout", "POST", "/rpc/usage.createTopUpCheckout"},
 		},
-		GetPeriodUsage:           NewGetPeriodUsageHandler(e.GetPeriodUsage, mux, decoder, encoder, errhandler, formatter),
-		GetTokensUnderManagement: NewGetTokensUnderManagementHandler(e.GetTokensUnderManagement, mux, decoder, encoder, errhandler, formatter),
-		SetBillingMetadata:       NewSetBillingMetadataHandler(e.SetBillingMetadata, mux, decoder, encoder, errhandler, formatter),
-		GetUsageTiers:            NewGetUsageTiersHandler(e.GetUsageTiers, mux, decoder, encoder, errhandler, formatter),
-		CreateCustomerSession:    NewCreateCustomerSessionHandler(e.CreateCustomerSession, mux, decoder, encoder, errhandler, formatter),
-		CreateCheckout:           NewCreateCheckoutHandler(e.CreateCheckout, mux, decoder, encoder, errhandler, formatter),
-		CreateTopUpCheckout:      NewCreateTopUpCheckoutHandler(e.CreateTopUpCheckout, mux, decoder, encoder, errhandler, formatter),
+		GetPeriodUsage:            NewGetPeriodUsageHandler(e.GetPeriodUsage, mux, decoder, encoder, errhandler, formatter),
+		GetMeterUsage:             NewGetMeterUsageHandler(e.GetMeterUsage, mux, decoder, encoder, errhandler, formatter),
+		GetTokensUnderManagement:  NewGetTokensUnderManagementHandler(e.GetTokensUnderManagement, mux, decoder, encoder, errhandler, formatter),
+		SetBillingMetadata:        NewSetBillingMetadataHandler(e.SetBillingMetadata, mux, decoder, encoder, errhandler, formatter),
+		GetBillingEmail:           NewGetBillingEmailHandler(e.GetBillingEmail, mux, decoder, encoder, errhandler, formatter),
+		SetBillingEmail:           NewSetBillingEmailHandler(e.SetBillingEmail, mux, decoder, encoder, errhandler, formatter),
+		SetSpendCap:               NewSetSpendCapHandler(e.SetSpendCap, mux, decoder, encoder, errhandler, formatter),
+		GetInferenceSpendCaps:     NewGetInferenceSpendCapsHandler(e.GetInferenceSpendCaps, mux, decoder, encoder, errhandler, formatter),
+		GetUsageTiers:             NewGetUsageTiersHandler(e.GetUsageTiers, mux, decoder, encoder, errhandler, formatter),
+		CreateCustomerSession:     NewCreateCustomerSessionHandler(e.CreateCustomerSession, mux, decoder, encoder, errhandler, formatter),
+		CreateCheckout:            NewCreateCheckoutHandler(e.CreateCheckout, mux, decoder, encoder, errhandler, formatter),
+		CreateStripeCheckout:      NewCreateStripeCheckoutHandler(e.CreateStripeCheckout, mux, decoder, encoder, errhandler, formatter),
+		GetStripeSubscription:     NewGetStripeSubscriptionHandler(e.GetStripeSubscription, mux, decoder, encoder, errhandler, formatter),
+		GetPaygBillingSummary:     NewGetPaygBillingSummaryHandler(e.GetPaygBillingSummary, mux, decoder, encoder, errhandler, formatter),
+		CreateStripePortalSession: NewCreateStripePortalSessionHandler(e.CreateStripePortalSession, mux, decoder, encoder, errhandler, formatter),
+		CancelStripeSubscription:  NewCancelStripeSubscriptionHandler(e.CancelStripeSubscription, mux, decoder, encoder, errhandler, formatter),
+		ResumeStripeSubscription:  NewResumeStripeSubscriptionHandler(e.ResumeStripeSubscription, mux, decoder, encoder, errhandler, formatter),
+		CreateTopUpCheckout:       NewCreateTopUpCheckoutHandler(e.CreateTopUpCheckout, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -79,11 +112,22 @@ func (s *Server) Service() string { return "usage" }
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetPeriodUsage = m(s.GetPeriodUsage)
+	s.GetMeterUsage = m(s.GetMeterUsage)
 	s.GetTokensUnderManagement = m(s.GetTokensUnderManagement)
 	s.SetBillingMetadata = m(s.SetBillingMetadata)
+	s.GetBillingEmail = m(s.GetBillingEmail)
+	s.SetBillingEmail = m(s.SetBillingEmail)
+	s.SetSpendCap = m(s.SetSpendCap)
+	s.GetInferenceSpendCaps = m(s.GetInferenceSpendCaps)
 	s.GetUsageTiers = m(s.GetUsageTiers)
 	s.CreateCustomerSession = m(s.CreateCustomerSession)
 	s.CreateCheckout = m(s.CreateCheckout)
+	s.CreateStripeCheckout = m(s.CreateStripeCheckout)
+	s.GetStripeSubscription = m(s.GetStripeSubscription)
+	s.GetPaygBillingSummary = m(s.GetPaygBillingSummary)
+	s.CreateStripePortalSession = m(s.CreateStripePortalSession)
+	s.CancelStripeSubscription = m(s.CancelStripeSubscription)
+	s.ResumeStripeSubscription = m(s.ResumeStripeSubscription)
 	s.CreateTopUpCheckout = m(s.CreateTopUpCheckout)
 }
 
@@ -93,11 +137,22 @@ func (s *Server) MethodNames() []string { return usage.MethodNames[:] }
 // Mount configures the mux to serve the usage endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetPeriodUsageHandler(mux, h.GetPeriodUsage)
+	MountGetMeterUsageHandler(mux, h.GetMeterUsage)
 	MountGetTokensUnderManagementHandler(mux, h.GetTokensUnderManagement)
 	MountSetBillingMetadataHandler(mux, h.SetBillingMetadata)
+	MountGetBillingEmailHandler(mux, h.GetBillingEmail)
+	MountSetBillingEmailHandler(mux, h.SetBillingEmail)
+	MountSetSpendCapHandler(mux, h.SetSpendCap)
+	MountGetInferenceSpendCapsHandler(mux, h.GetInferenceSpendCaps)
 	MountGetUsageTiersHandler(mux, h.GetUsageTiers)
 	MountCreateCustomerSessionHandler(mux, h.CreateCustomerSession)
 	MountCreateCheckoutHandler(mux, h.CreateCheckout)
+	MountCreateStripeCheckoutHandler(mux, h.CreateStripeCheckout)
+	MountGetStripeSubscriptionHandler(mux, h.GetStripeSubscription)
+	MountGetPaygBillingSummaryHandler(mux, h.GetPaygBillingSummary)
+	MountCreateStripePortalSessionHandler(mux, h.CreateStripePortalSession)
+	MountCancelStripeSubscriptionHandler(mux, h.CancelStripeSubscription)
+	MountResumeStripeSubscriptionHandler(mux, h.ResumeStripeSubscription)
 	MountCreateTopUpCheckoutHandler(mux, h.CreateTopUpCheckout)
 }
 
@@ -136,6 +191,59 @@ func NewGetPeriodUsageHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getPeriodUsage")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "usage")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetMeterUsageHandler configures the mux to serve the "usage" service
+// "getMeterUsage" endpoint.
+func MountGetMeterUsageHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/usage.getMeterUsage", f)
+}
+
+// NewGetMeterUsageHandler creates a HTTP handler which loads the HTTP request
+// and calls the "usage" service "getMeterUsage" endpoint.
+func NewGetMeterUsageHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetMeterUsageRequest(mux, decoder)
+		encodeResponse = EncodeGetMeterUsageResponse(encoder)
+		encodeError    = EncodeGetMeterUsageError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getMeterUsage")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "usage")
 		payload, err := decodeRequest(r)
 		if err != nil {
@@ -243,6 +351,218 @@ func NewSetBillingMetadataHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "setBillingMetadata")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "usage")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetBillingEmailHandler configures the mux to serve the "usage" service
+// "getBillingEmail" endpoint.
+func MountGetBillingEmailHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/usage.getBillingEmail", f)
+}
+
+// NewGetBillingEmailHandler creates a HTTP handler which loads the HTTP
+// request and calls the "usage" service "getBillingEmail" endpoint.
+func NewGetBillingEmailHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetBillingEmailRequest(mux, decoder)
+		encodeResponse = EncodeGetBillingEmailResponse(encoder)
+		encodeError    = EncodeGetBillingEmailError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getBillingEmail")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "usage")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSetBillingEmailHandler configures the mux to serve the "usage" service
+// "setBillingEmail" endpoint.
+func MountSetBillingEmailHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/usage.setBillingEmail", f)
+}
+
+// NewSetBillingEmailHandler creates a HTTP handler which loads the HTTP
+// request and calls the "usage" service "setBillingEmail" endpoint.
+func NewSetBillingEmailHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetBillingEmailRequest(mux, decoder)
+		encodeResponse = EncodeSetBillingEmailResponse(encoder)
+		encodeError    = EncodeSetBillingEmailError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setBillingEmail")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "usage")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSetSpendCapHandler configures the mux to serve the "usage" service
+// "setSpendCap" endpoint.
+func MountSetSpendCapHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/usage.setSpendCap", f)
+}
+
+// NewSetSpendCapHandler creates a HTTP handler which loads the HTTP request
+// and calls the "usage" service "setSpendCap" endpoint.
+func NewSetSpendCapHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetSpendCapRequest(mux, decoder)
+		encodeResponse = EncodeSetSpendCapResponse(encoder)
+		encodeError    = EncodeSetSpendCapError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setSpendCap")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "usage")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetInferenceSpendCapsHandler configures the mux to serve the "usage"
+// service "getInferenceSpendCaps" endpoint.
+func MountGetInferenceSpendCapsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/usage.getInferenceSpendCaps", f)
+}
+
+// NewGetInferenceSpendCapsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "usage" service "getInferenceSpendCaps" endpoint.
+func NewGetInferenceSpendCapsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetInferenceSpendCapsRequest(mux, decoder)
+		encodeResponse = EncodeGetInferenceSpendCapsResponse(encoder)
+		encodeError    = EncodeGetInferenceSpendCapsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getInferenceSpendCaps")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "usage")
 		payload, err := decodeRequest(r)
 		if err != nil {
@@ -395,6 +715,327 @@ func NewCreateCheckoutHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "createCheckout")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "usage")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCreateStripeCheckoutHandler configures the mux to serve the "usage"
+// service "createStripeCheckout" endpoint.
+func MountCreateStripeCheckoutHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/usage.createStripeCheckout", f)
+}
+
+// NewCreateStripeCheckoutHandler creates a HTTP handler which loads the HTTP
+// request and calls the "usage" service "createStripeCheckout" endpoint.
+func NewCreateStripeCheckoutHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCreateStripeCheckoutRequest(mux, decoder)
+		encodeResponse = EncodeCreateStripeCheckoutResponse(encoder)
+		encodeError    = EncodeCreateStripeCheckoutError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "createStripeCheckout")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "usage")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetStripeSubscriptionHandler configures the mux to serve the "usage"
+// service "getStripeSubscription" endpoint.
+func MountGetStripeSubscriptionHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/usage.getStripeSubscription", f)
+}
+
+// NewGetStripeSubscriptionHandler creates a HTTP handler which loads the HTTP
+// request and calls the "usage" service "getStripeSubscription" endpoint.
+func NewGetStripeSubscriptionHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetStripeSubscriptionRequest(mux, decoder)
+		encodeResponse = EncodeGetStripeSubscriptionResponse(encoder)
+		encodeError    = EncodeGetStripeSubscriptionError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getStripeSubscription")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "usage")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetPaygBillingSummaryHandler configures the mux to serve the "usage"
+// service "getPaygBillingSummary" endpoint.
+func MountGetPaygBillingSummaryHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/usage.getPaygBillingSummary", f)
+}
+
+// NewGetPaygBillingSummaryHandler creates a HTTP handler which loads the HTTP
+// request and calls the "usage" service "getPaygBillingSummary" endpoint.
+func NewGetPaygBillingSummaryHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetPaygBillingSummaryRequest(mux, decoder)
+		encodeResponse = EncodeGetPaygBillingSummaryResponse(encoder)
+		encodeError    = EncodeGetPaygBillingSummaryError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getPaygBillingSummary")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "usage")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCreateStripePortalSessionHandler configures the mux to serve the
+// "usage" service "createStripePortalSession" endpoint.
+func MountCreateStripePortalSessionHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/usage.createStripePortalSession", f)
+}
+
+// NewCreateStripePortalSessionHandler creates a HTTP handler which loads the
+// HTTP request and calls the "usage" service "createStripePortalSession"
+// endpoint.
+func NewCreateStripePortalSessionHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCreateStripePortalSessionRequest(mux, decoder)
+		encodeResponse = EncodeCreateStripePortalSessionResponse(encoder)
+		encodeError    = EncodeCreateStripePortalSessionError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "createStripePortalSession")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "usage")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCancelStripeSubscriptionHandler configures the mux to serve the "usage"
+// service "cancelStripeSubscription" endpoint.
+func MountCancelStripeSubscriptionHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/usage.cancelStripeSubscription", f)
+}
+
+// NewCancelStripeSubscriptionHandler creates a HTTP handler which loads the
+// HTTP request and calls the "usage" service "cancelStripeSubscription"
+// endpoint.
+func NewCancelStripeSubscriptionHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCancelStripeSubscriptionRequest(mux, decoder)
+		encodeResponse = EncodeCancelStripeSubscriptionResponse(encoder)
+		encodeError    = EncodeCancelStripeSubscriptionError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "cancelStripeSubscription")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "usage")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountResumeStripeSubscriptionHandler configures the mux to serve the "usage"
+// service "resumeStripeSubscription" endpoint.
+func MountResumeStripeSubscriptionHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/usage.resumeStripeSubscription", f)
+}
+
+// NewResumeStripeSubscriptionHandler creates a HTTP handler which loads the
+// HTTP request and calls the "usage" service "resumeStripeSubscription"
+// endpoint.
+func NewResumeStripeSubscriptionHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeResumeStripeSubscriptionRequest(mux, decoder)
+		encodeResponse = EncodeResumeStripeSubscriptionResponse(encoder)
+		encodeError    = EncodeResumeStripeSubscriptionError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "resumeStripeSubscription")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "usage")
 		payload, err := decodeRequest(r)
 		if err != nil {

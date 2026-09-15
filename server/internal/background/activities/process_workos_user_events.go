@@ -13,9 +13,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/workos/workos-go/v6/pkg/events"
 
+	"github.com/speakeasy-api/gram/server/internal/agentownership"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/database"
+	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -213,7 +215,7 @@ func (p *ProcessWorkOSUserEvents) handleUserUpsert(ctx context.Context, logger *
 	}); err != nil {
 		return nil, fmt.Errorf("upsert synced user: %w", err)
 	}
-	if err := linkDirectoryUsersToUser(ctx, dbtx, resolved.userID, payload.Email); err != nil {
+	if err := linkDirectoryUsersToUser(ctx, dbtx, resolved.userID, payload.ID, payload.Email); err != nil {
 		return nil, err
 	}
 
@@ -267,12 +269,18 @@ func logRoleAssignmentLinkedToDifferentWorkOSUser(ctx context.Context, logger *s
 }
 
 func (p *ProcessWorkOSUserEvents) handleUserDeleted(ctx context.Context, dbtx database.DBTX, payload workosUserEventPayload) error {
-	if err := usersrepo.New(dbtx).DisableUser(ctx, usersrepo.DisableUserParams{
+	ownerUserIDs, err := usersrepo.New(dbtx).DisableUser(ctx, usersrepo.DisableUserParams{
 		WorkosUpdatedAt: conv.ToPGTimestamptz(payload.UpdatedAt),
 		WorkosDeletedAt: conv.ToPGTimestamptz(payload.DeletedAt),
 		WorkosID:        conv.ToPGText(payload.ID),
-	}); err != nil {
+	})
+	if err != nil {
 		return fmt.Errorf("disable user: %w", err)
+	}
+	for _, ownerUserID := range ownerUserIDs {
+		if err := agentownership.LatchOwnerLossByUser(ctx, dbtx, ownerUserID, agentownership.OwnerReassignmentReasonOwnerDeleted, agentownership.SystemActor, nil); err != nil {
+			return fmt.Errorf("latch deleted agent owner: %w", err)
+		}
 	}
 	return nil
 }
@@ -354,15 +362,16 @@ func linkExistingUserToWorkOS(ctx context.Context, userQueries *usersrepo.Querie
 	}
 }
 
-func linkDirectoryUsersToUser(ctx context.Context, dbtx database.DBTX, userID, email string) error {
+func linkDirectoryUsersToUser(ctx context.Context, dbtx database.DBTX, userID, workosUserID, email string) error {
 	email = conv.NormalizeEmail(email)
 	if email == "" {
 		return nil
 	}
 
-	if _, err := workosrepo.New(dbtx).LinkDirectoryUsersToUserByEmail(ctx, workosrepo.LinkDirectoryUsersToUserByEmailParams{
-		UserID: conv.ToPGText(userID),
-		Email:  conv.ToPGText(email),
+	if _, err := directoryrepo.New(dbtx).LinkDirectoryUsersToUserByEmail(ctx, directoryrepo.LinkDirectoryUsersToUserByEmailParams{
+		UserID:       conv.ToPGText(userID),
+		Email:        conv.ToPGText(email),
+		WorkosUserID: conv.ToPGText(workosUserID),
 	}); err != nil {
 		return fmt.Errorf("link directory users to user: %w", err)
 	}

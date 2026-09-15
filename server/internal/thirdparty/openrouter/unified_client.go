@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/tiktoken-go/tokenizer"
 	"go.opentelemetry.io/otel/trace"
 
 	or_base "github.com/OpenRouterTeam/go-sdk"
@@ -37,6 +38,10 @@ type TelemetryLogger interface {
 
 const (
 	DefaultChatModel = "anthropic/claude-opus-5"
+
+	openAITextEmbedding3Small     = "openai/text-embedding-3-small"
+	maxOpenAIEmbeddingInputTokens = 8_000
+	legacyMaxEmbeddingInputBytes  = 24_000
 )
 
 // ChatClient is the single HTTP client for all OpenRouter communication.
@@ -96,8 +101,8 @@ type initializeRequestResult struct {
 func (c *ChatClient) initializeRequest(ctx context.Context, req CompletionRequest) (*initializeRequestResult, error) {
 	// risk-analysis inference is always platform-initiated (the completions
 	// proxy clamps client-supplied claims to a customer surface), so a
-	// chat-key pairing can only be a miswired caller — fail fast instead of
-	// silently draining the customer's chat cap. The gram source cannot get
+	// Other-inference-key pairing can only be a miswired caller — fail fast
+	// instead of silently draining the customer's Other inference cap. The gram source cannot get
 	// the same mechanical check: the proxy legitimately accepts it from
 	// Elements on the chat key.
 	if req.UsageSource == billing.ModelUsageSourceRiskAnalysis && req.KeyType.OrDefault() != KeyTypeInternal {
@@ -161,6 +166,7 @@ func (c *ChatClient) initializeRequest(ctx context.Context, req CompletionReques
 		Messages:       outboundMessages,
 		Stream:         req.Stream,
 		Tools:          req.Tools,
+		ToolChoice:     req.ToolChoice,
 		Temperature:    temp,
 		ResponseFormat: nil,
 		Reasoning:      req.Reasoning,
@@ -169,6 +175,16 @@ func (c *ChatClient) initializeRequest(ctx context.Context, req CompletionReques
 		User:           req.OrgID,
 		Metadata:       nil,
 		Trace:          nil,
+		Plugins:        nil,
+	}
+
+	if req.WebSearch != nil {
+		reqBody.Plugins = append(reqBody.Plugins, RequestPlugin{ID: "web", Enabled: nil, MaxResults: req.WebSearch.MaxResults})
+	}
+
+	if req.DisableResponseHealing {
+		healingOff := false
+		reqBody.Plugins = append(reqBody.Plugins, RequestPlugin{ID: "response-healing", Enabled: &healingOff, MaxResults: 0})
 	}
 
 	if req.ChatID != uuid.Nil {
@@ -444,10 +460,12 @@ func (c *ChatClient) GetCompletion(ctx context.Context, req CompletionRequest) (
 		Message:      &message,
 		MessageID:    chatResp.ID,
 		Model:        chatResp.Model,
+		Provider:     chatResp.Provider,
 		Usage:        usage,
 		FinishReason: &finishReason,
 		ToolCalls:    toolCalls,
 		Content:      content,
+		Annotations:  chatResp.Choices[0].Annotations,
 	}
 
 	// Apply message capture and usage tracking strategies
@@ -462,6 +480,16 @@ func (c *ChatClient) GetCompletion(ctx context.Context, req CompletionRequest) (
 // - Parses SSE chunks internally to extract message metadata
 // - Automatically triggers capture/tracking strategies when the stream closes
 func (c *ChatClient) GetCompletionStream(ctx context.Context, req CompletionRequest) (StreamReader, error) {
+	// The streaming reader accumulates content and tool calls but never
+	// parses url_citation annotations, so a streamed web search would return
+	// its prose with every citation silently missing — and a search whose
+	// citations are gone is not a search result, it is unsourced text. Refuse
+	// rather than answer with less than the caller asked for; the
+	// non-streaming path carries annotations and is what search uses.
+	if req.WebSearch != nil {
+		return nil, fmt.Errorf("web search is not available on the streaming path: its citations would be dropped")
+	}
+
 	// Build request body (streaming)
 	initResult, err := c.initializeRequest(ctx, req)
 	if err != nil {
@@ -499,6 +527,7 @@ func (c *ChatClient) GetCompletionStream(ctx context.Context, req CompletionRequ
 		startTime:            time.Now(),
 		messageID:            "",
 		model:                "",
+		provider:             "",
 		finishReason:         nil,
 		usage: Usage{
 			PromptTokens:            0,
@@ -545,6 +574,7 @@ func (c *ChatClient) GetObjectCompletion(ctx context.Context, req ObjectCompleti
 		ProjectID:                 req.ProjectID,
 		Messages:                  messages,
 		Tools:                     nil,
+		ToolChoice:                nil,
 		Temperature:               req.Temperature,
 		Model:                     req.Model,
 		Stream:                    false,
@@ -561,6 +591,8 @@ func (c *ChatClient) GetObjectCompletion(ctx context.Context, req ObjectCompleti
 		APIKeyID:                  "",
 		Reasoning:                 reasoning,
 		NormalizeOutboundMessages: false,
+		WebSearch:                 nil,
+		DisableResponseHealing:    req.DisableResponseHealing,
 	}
 
 	return c.GetCompletion(ctx, completionReq)
@@ -586,6 +618,7 @@ type streamingResponseReader struct {
 
 	messageID    string
 	model        string
+	provider     string
 	finishReason *string
 	usage        Usage
 	usageSet     bool
@@ -620,11 +653,16 @@ func (r *streamingResponseReader) Close() error {
 	// If we have accumulated message data, trigger strategies
 	if r.messageID != "" {
 		response := CompletionResponse{
-			StartTime:    r.startTime,
-			Message:      nil, // Not available in streaming mode
-			MessageID:    r.messageID,
-			Model:        r.model,
-			Content:      r.messageContent.String(),
+			StartTime: r.startTime,
+			Message:   nil, // Not available in streaming mode
+			MessageID: r.messageID,
+			Model:     r.model,
+			Provider:  r.provider,
+			Content:   r.messageContent.String(),
+			// Never populated here: the reader does not parse annotations,
+			// and GetCompletionStream refuses the web plugin for that
+			// reason, so a stream has none to carry.
+			Annotations:  nil,
 			FinishReason: r.finishReason,
 			Usage:        r.usage,
 			ToolCalls:    make([]ToolCall, 0, len(r.accumulatedToolCalls)),
@@ -692,6 +730,9 @@ func (r *streamingResponseReader) processSSELine(line string) {
 	}
 	if chunk.Model != "" {
 		r.model = chunk.Model
+	}
+	if chunk.Provider != "" {
+		r.provider = chunk.Provider
 	}
 
 	// Process choices
@@ -834,6 +875,166 @@ func completionTelemetryIdentity(source string) (resourceURN, normalizedSource s
 	}
 }
 
+func limitEmbeddingInputs(model string, inputs []string) ([]string, int, error) {
+	if model == openAITextEmbedding3Small {
+		return limitOpenAIEmbeddingInputs(inputs)
+	}
+
+	var limited []string
+	truncatedCount := 0
+	for i, input := range inputs {
+		if len(input) <= legacyMaxEmbeddingInputBytes {
+			continue
+		}
+		if limited == nil {
+			limited = slices.Clone(inputs)
+		}
+		limited[i] = input[:legacyMaxEmbeddingInputBytes]
+		truncatedCount++
+	}
+	if limited == nil {
+		return inputs, 0, nil
+	}
+	return limited, truncatedCount, nil
+}
+
+// EmbeddingInputFallbackSelection describes a fallback chosen for one
+// embedding input.
+type EmbeddingInputFallbackSelection struct {
+	// InputIndex identifies the selected input in the request.
+	InputIndex int
+
+	// FallbackIndex is zero-based within the supplied fallback list, or -1 when
+	// the primary input remains selected.
+	FallbackIndex int
+
+	// RequiresTruncation reports whether the selected representation still
+	// exceeds the model's per-input token limit.
+	RequiresTruncation bool
+}
+
+// SelectEmbeddingInputFallbacks selects the first representation for each
+// input that fits the model's per-input token limit and reports inputs that
+// required a fallback. Selection is currently supported only for
+// openai/text-embedding-3-small; other models are returned unchanged because
+// their tokenizer and token limit are not declared here. If every
+// representation is oversized, the final fallback is returned for the client
+// to truncate.
+func SelectEmbeddingInputFallbacks(
+	model string,
+	inputs []string,
+	inputFallbacks [][]string,
+) ([]string, []EmbeddingInputFallbackSelection, error) {
+	if model != openAITextEmbedding3Small || len(inputFallbacks) == 0 {
+		return inputs, nil, nil
+	}
+
+	var (
+		codec              tokenizer.Codec
+		selected           []string
+		fallbackSelections []EmbeddingInputFallbackSelection
+	)
+	for i, input := range inputs {
+		candidate := input
+		fallbackIndex := -1
+		_, exceedsLimit, err := embeddingInputTokensOverLimit(&codec, candidate, i)
+		if err != nil {
+			return nil, nil, err
+		}
+		if !exceedsLimit {
+			continue
+		}
+
+		if i < len(inputFallbacks) {
+			for index, fallback := range inputFallbacks[i] {
+				if fallback == "" || fallback == candidate {
+					continue
+				}
+				candidate = fallback
+				fallbackIndex = index
+				_, exceedsLimit, err = embeddingInputTokensOverLimit(&codec, candidate, i)
+				if err != nil {
+					return nil, nil, err
+				}
+				if !exceedsLimit {
+					break
+				}
+			}
+		}
+
+		if candidate != input {
+			if selected == nil {
+				selected = slices.Clone(inputs)
+			}
+			selected[i] = candidate
+		}
+		fallbackSelections = append(fallbackSelections, EmbeddingInputFallbackSelection{
+			InputIndex:         i,
+			FallbackIndex:      fallbackIndex,
+			RequiresTruncation: exceedsLimit,
+		})
+	}
+
+	if selected == nil {
+		selected = inputs
+	}
+	return selected, fallbackSelections, nil
+}
+
+func limitOpenAIEmbeddingInputs(inputs []string) ([]string, int, error) {
+	var (
+		codec          tokenizer.Codec
+		limited        []string
+		truncatedCount int
+	)
+
+	for i, input := range inputs {
+		tokenIDs, exceedsLimit, err := embeddingInputTokensOverLimit(&codec, input, i)
+		if err != nil {
+			return nil, 0, err
+		}
+		if !exceedsLimit {
+			continue
+		}
+
+		truncated, err := codec.Decode(tokenIDs[:maxOpenAIEmbeddingInputTokens])
+		if err != nil {
+			return nil, 0, fmt.Errorf("decode truncated embedding input %d: %w", i, err)
+		}
+		if limited == nil {
+			limited = slices.Clone(inputs)
+		}
+		limited[i] = truncated
+		truncatedCount++
+	}
+
+	if limited == nil {
+		return inputs, 0, nil
+	}
+	return limited, truncatedCount, nil
+}
+
+func embeddingInputTokensOverLimit(codec *tokenizer.Codec, input string, index int) ([]uint, bool, error) {
+	// A tokenizer cannot emit more tokens than there are input bytes.
+	if len(input) <= maxOpenAIEmbeddingInputTokens {
+		return nil, false, nil
+	}
+
+	if *codec == nil {
+		loaded, err := tokenizer.Get(tokenizer.Cl100kBase)
+		if err != nil {
+			return nil, false, fmt.Errorf("load OpenAI embedding tokenizer: %w", err)
+		}
+		*codec = loaded
+	}
+
+	tokenIDs, _, err := (*codec).Encode(input)
+	if err != nil {
+		return nil, false, fmt.Errorf("tokenize embedding input %d: %w", index, err)
+	}
+	return tokenIDs, len(tokenIDs) > maxOpenAIEmbeddingInputTokens, nil
+}
+
 func (c *ChatClient) CreateEmbeddings(ctx context.Context, orgID string, model string, inputs []string, opts ...EmbeddingOption) ([][]float32, error) {
 	var resolved EmbeddingOptions
 	for _, opt := range opts {
@@ -857,19 +1058,19 @@ func (c *ChatClient) createEmbeddings(ctx context.Context, orgID string, model s
 		return nil, fmt.Errorf("at least one input is required")
 	}
 
-	// Truncate inputs that exceed token limits
-	// Embedding models have 8192 token limit, using ~3 chars/token as conservative estimate
-	const maxChars = 24_000
-	truncatedInputs := make([]string, len(inputs))
-	for i, input := range inputs {
-		if len(input) > maxChars {
-			c.logger.WarnContext(ctx, fmt.Sprintf("truncating input for embedding, orgID: %s, model: %s, input length: %d", orgID, model, len(input)))
-			truncatedInputs[i] = input[:maxChars]
-		} else {
-			truncatedInputs[i] = input
-		}
+	inputs, truncatedCount, err := limitEmbeddingInputs(model, inputs)
+	if err != nil {
+		return nil, err
 	}
-	inputs = truncatedInputs
+	if truncatedCount > 0 {
+		c.logger.WarnContext(
+			ctx,
+			"truncated oversized embedding inputs",
+			attr.SlogGenAIRequestModel(model),
+			attr.SlogEmbeddingInputCount(len(inputs)),
+			attr.SlogEmbeddingTruncatedInputCount(truncatedCount),
+		)
+	}
 
 	orClient := or_base.New(or_base.WithSecurity(openrouterKey))
 	result, err := orClient.Embeddings.Generate(ctx, or_operations.CreateEmbeddingsRequest{
@@ -882,7 +1083,7 @@ func (c *ChatClient) createEmbeddings(ctx context.Context, orgID string, model s
 		InputType:      nil,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("create embeddings error: %w", err)
+		return nil, fmt.Errorf("create embeddings error: %w", classifySDKError(ctx, err))
 	}
 
 	// The new SDK returns errors via err, not via HTTPMeta

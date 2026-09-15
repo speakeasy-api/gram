@@ -1,4 +1,4 @@
-import { MetricCard, MetricCardGroup } from "@/components/chart/MetricCard";
+import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
 import {
   formatDateRangeLabel,
   useDateRangeFilter,
@@ -245,15 +245,15 @@ function RiskOverviewCategoryDetailContent() {
         <Page.Section.CTA>{controls}</Page.Section.CTA>
         <Page.Section.Body>
           <div className="space-y-6">
-            <MetricCardGroup>
-              <MetricCard
+            <StatTileGroup>
+              <StatTile
                 title="Findings"
                 value={findingsCount}
                 tone={findingsCount > 0 ? "destructive" : "neutral"}
                 format="compact"
                 icon="flag"
               />
-            </MetricCardGroup>
+            </StatTileGroup>
             <RuleBreakdown
               rules={ruleBreakdownQuery.data?.rules ?? []}
               isLoading={ruleBreakdownQuery.isLoading}

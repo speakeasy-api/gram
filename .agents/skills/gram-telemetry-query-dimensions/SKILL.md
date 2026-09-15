@@ -160,9 +160,9 @@ mise gen:sdk          # regenerate the TypeScript SDK from the OpenAPI spec
 Then:
 
 ```sh
-go build ./server/internal/telemetry/...
+mise build:server
 mise lint:server
-pnpm -F dashboard type-check
+aube run -F dashboard type-check
 ```
 
 ### 5. Tests
@@ -176,7 +176,7 @@ pnpm -F dashboard type-check
   consistent.
 
 ```sh
-go test ./server/internal/telemetry/ -run TestQuery -count=1
+mise run test:server ./internal/telemetry/ -run TestQuery -count=1
 ```
 
 ## Gotchas

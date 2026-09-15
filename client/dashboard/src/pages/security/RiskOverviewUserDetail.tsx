@@ -1,8 +1,9 @@
-import { MetricCard, MetricCardGroup } from "@/components/chart/MetricCard";
+import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
 import {
   formatDateRangeLabel,
   useDateRangeFilter,
 } from "@/components/observe/useDateRangeFilter";
+import { ViewUserProfileLink } from "@/components/identity-link";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
@@ -136,11 +137,18 @@ function RiskOverviewUserDetailContent() {
           Risk findings and chat sessions for this user
           {rangeLabel && ` across ${rangeLabel}.`}
         </Page.Section.Description>
+        <Page.Section.CTA>
+          {/* This page is the risk slice of a person; the profile is where it
+              sits beside their access, spend and devices. */}
+          <ViewUserProfileLink
+            identifier={externalUserId ? { externalUserId } : null}
+          />
+        </Page.Section.CTA>
         <Page.Section.CTA>{controls}</Page.Section.CTA>
         <Page.Section.Body>
           <div className="space-y-6">
-            <MetricCardGroup>
-              <MetricCard
+            <StatTileGroup>
+              <StatTile
                 title="Findings"
                 value={userEntry?.findings ?? 0}
                 tone={
@@ -149,14 +157,14 @@ function RiskOverviewUserDetailContent() {
                 format="compact"
                 icon="flag"
               />
-              <MetricCard
+              <StatTile
                 title="Chat Sessions"
                 value={totalChats}
                 tone="information"
                 format="compact"
                 icon="message-square"
               />
-            </MetricCardGroup>
+            </StatTileGroup>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <CategoryBreakdown
                 categories={breakdownQuery.data?.categories ?? []}

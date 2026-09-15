@@ -1,6 +1,10 @@
 package shadowmcp
 
-import "slices"
+import (
+	"slices"
+
+	"github.com/jackc/pgx/v5/pgtype"
+)
 
 // Default dispositions for shadow MCP blocking policies. DispositionBlockAll
 // denies every non-Gram-hosted server unless explicitly allowed (the original
@@ -13,6 +17,19 @@ const (
 	DispositionBlockAll = "block_all"
 	DispositionAllowAll = "allow_all"
 )
+
+// EffectiveDisposition resolves the stored disposition for a policy. It
+// returns an empty string when dispositions do not apply, and block_all for
+// legacy blocking shadow-MCP policies with no stored value.
+func EffectiveDisposition(disposition pgtype.Text, sources []string, action string) string {
+	if action != "block" || !slices.Contains(sources, SourceShadowMCP) {
+		return ""
+	}
+	if disposition.Valid && disposition.String != "" {
+		return disposition.String
+	}
+	return DispositionBlockAll
+}
 
 // BlockedURLMatch reports whether fullURL canonicalizes to an entry in
 // blockedURLs — the canonical blocked-URL set of an allow_all policy. A URL

@@ -38,8 +38,7 @@ func IsGenerationBumped(err error) bool {
 	if errors.Is(err, ErrGenerationBumped) {
 		return true
 	}
-	var appErr *temporal.ApplicationError
-	if errors.As(err, &appErr) {
+	if appErr, ok := errors.AsType[*temporal.ApplicationError](err); ok {
 		return appErr.Type() == ErrTypeGenerationBumped
 	}
 	return false
@@ -63,8 +62,7 @@ func IsInsufficientCredits(err error) bool {
 	if openrouter.IsInsufficientCredits(err) {
 		return true
 	}
-	var appErr *temporal.ApplicationError
-	if errors.As(err, &appErr) {
+	if appErr, ok := errors.AsType[*temporal.ApplicationError](err); ok {
 		return appErr.Type() == ErrTypeInsufficientCredits
 	}
 	return false
@@ -88,8 +86,7 @@ func IsInferenceDisabled(err error) bool {
 	if openrouter.IsPlatformKeyDisabled(err) {
 		return true
 	}
-	var appErr *temporal.ApplicationError
-	if errors.As(err, &appErr) {
+	if appErr, ok := errors.AsType[*temporal.ApplicationError](err); ok {
 		return appErr.Type() == ErrTypeInferenceDisabled
 	}
 	return false

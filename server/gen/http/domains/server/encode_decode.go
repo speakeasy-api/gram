@@ -409,8 +409,11 @@ func EncodeListDomainsError(encoder func(context.Context, http.ResponseWriter) g
 // domains createDomain endpoint.
 func EncodeCreateDomainResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*domains.CustomDomain)
+		enc := encoder(ctx, w)
+		body := NewCreateDomainResponseBody(res)
 		w.WriteHeader(http.StatusOK)
-		return nil
+		return enc.Encode(body)
 	}
 }
 
@@ -1037,6 +1040,199 @@ func EncodeSetRootMcpEndpointError(encoder func(context.Context, http.ResponseWr
 	}
 }
 
+// EncodeListRootMcpServersResponse returns an encoder for responses returned
+// by the domains listRootMcpServers endpoint.
+func EncodeListRootMcpServersResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*domains.ListRootMcpServersResult)
+		enc := encoder(ctx, w)
+		body := NewListRootMcpServersResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeListRootMcpServersRequest returns a decoder for requests sent to the
+// domains listRootMcpServers endpoint.
+func DecodeListRootMcpServersRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*domains.ListRootMcpServersPayload, error) {
+	return func(r *http.Request) (*domains.ListRootMcpServersPayload, error) {
+		var payload *domains.ListRootMcpServersPayload
+		var (
+			sessionToken *string
+		)
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		payload = NewListRootMcpServersPayload(sessionToken)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeListRootMcpServersError returns an encoder for errors returned by the
+// listRootMcpServers domains endpoint.
+func EncodeListRootMcpServersError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListRootMcpServersUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListRootMcpServersForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListRootMcpServersBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListRootMcpServersNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListRootMcpServersConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListRootMcpServersUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListRootMcpServersInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListRootMcpServersInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListRootMcpServersUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListRootMcpServersGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeCheckHealthResponse returns an encoder for responses returned by the
 // domains checkHealth endpoint.
 func EncodeCheckHealthResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -1633,6 +1829,7 @@ func marshalDomainsCustomDomainToCustomDomainResponseBody(v *domains.CustomDomai
 		ConsecutiveFailures:      v.ConsecutiveFailures,
 		RootMcpEndpointID:        v.RootMcpEndpointID,
 		OpenaiAppsChallengeToken: v.OpenaiAppsChallengeToken,
+		SuggestedRecordType:      v.SuggestedRecordType,
 	}
 	if v.IPAllowlist != nil {
 		res.IPAllowlist = make([]string, len(v.IPAllowlist))
@@ -1646,20 +1843,58 @@ func marshalDomainsCustomDomainToCustomDomainResponseBody(v *domains.CustomDomai
 	return res
 }
 
+// marshalDomainsDomainDNSConfigToDomainDNSConfigResponseBody builds a value of
+// type *DomainDNSConfigResponseBody from a value of type
+// *domains.DomainDNSConfig.
+func marshalDomainsDomainDNSConfigToDomainDNSConfigResponseBody(v *domains.DomainDNSConfig) *DomainDNSConfigResponseBody {
+	res := &DomainDNSConfigResponseBody{
+		CnameTarget: v.CnameTarget,
+	}
+	if v.ARecords != nil {
+		res.ARecords = make([]string, len(v.ARecords))
+		for i, val := range v.ARecords {
+			res.ARecords[i] = val
+		}
+	} else {
+		res.ARecords = []string{}
+	}
+
+	return res
+}
+
+// marshalDomainsRootMcpServerOptionToRootMcpServerOptionResponseBody builds a
+// value of type *RootMcpServerOptionResponseBody from a value of type
+// *domains.RootMcpServerOption.
+func marshalDomainsRootMcpServerOptionToRootMcpServerOptionResponseBody(v *domains.RootMcpServerOption) *RootMcpServerOptionResponseBody {
+	res := &RootMcpServerOptionResponseBody{
+		McpServerID:          v.McpServerID,
+		Name:                 v.Name,
+		Slug:                 v.Slug,
+		ProjectID:            v.ProjectID,
+		ProjectName:          v.ProjectName,
+		AttachedEndpointID:   v.AttachedEndpointID,
+		AttachedEndpointSlug: v.AttachedEndpointSlug,
+		IsDomainRoot:         v.IsDomainRoot,
+	}
+
+	return res
+}
+
 // marshalDomainsCustomDomainMcpEndpointToCustomDomainMcpEndpointResponseBody
 // builds a value of type *CustomDomainMcpEndpointResponseBody from a value of
 // type *domains.CustomDomainMcpEndpoint.
 func marshalDomainsCustomDomainMcpEndpointToCustomDomainMcpEndpointResponseBody(v *domains.CustomDomainMcpEndpoint) *CustomDomainMcpEndpointResponseBody {
 	res := &CustomDomainMcpEndpointResponseBody{
-		ID:            v.ID,
-		Slug:          v.Slug,
-		ProjectID:     v.ProjectID,
-		ProjectName:   v.ProjectName,
-		ProjectSlug:   v.ProjectSlug,
-		McpServerID:   v.McpServerID,
-		McpServerName: v.McpServerName,
-		McpServerSlug: v.McpServerSlug,
-		IsDomainRoot:  v.IsDomainRoot,
+		ID:              v.ID,
+		Slug:            v.Slug,
+		ProjectID:       v.ProjectID,
+		ProjectName:     v.ProjectName,
+		ProjectSlug:     v.ProjectSlug,
+		McpServerID:     v.McpServerID,
+		MetaMcpServerID: v.MetaMcpServerID,
+		McpServerName:   v.McpServerName,
+		McpServerSlug:   v.McpServerSlug,
+		IsDomainRoot:    v.IsDomainRoot,
 	}
 
 	return res

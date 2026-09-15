@@ -11,10 +11,13 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 )
 
 var slugifyRe = regexp.MustCompile(`[^a-z0-9]+`)
+
+const minSlugChars = 2
 
 type Lookup interface {
 	GetOrganizationMetadataBySlug(ctx context.Context, slug string) (orgRepo.OrganizationMetadatum, error)
@@ -25,6 +28,34 @@ func Slugify(name string) string {
 	s = slugifyRe.ReplaceAllString(s, "-")
 	s = strings.Trim(s, "-")
 	return s
+}
+
+// Base returns a slug base for name, falling back to a generated one when the
+// name yields fewer than minSlugChars URL-safe characters.
+func Base(name string) (string, error) {
+	if s := Slugify(name); len(s) >= minSlugChars {
+		return s, nil
+	}
+
+	suffix, err := conv.GenerateRandomSlug(8)
+	if err != nil {
+		return "", fmt.Errorf("generate fallback slug base: %w", err)
+	}
+	return "org-" + suffix, nil
+}
+
+// StableBase applies the same floor as Base but falls back to seed instead of
+// randomness, so repeated calls for one organization agree.
+func StableBase(name, seed string) (string, error) {
+	if s := Slugify(name); len(s) >= minSlugChars {
+		return s, nil
+	}
+
+	fallback := Slugify(seed)
+	if len(fallback) < minSlugChars {
+		return "", fmt.Errorf("derive stable fallback slug from %q", seed)
+	}
+	return fallback, nil
 }
 
 const maxSlugAttempts = 10

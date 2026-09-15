@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/hooks/sdk/models/components"
 	"github.com/speakeasy-api/gram/hooks/sdk/models/operations"
 	"github.com/speakeasy-api/gram/hooks/sdk/retry"
+	"github.com/speakeasy-api/gram/hooks/wire"
 )
 
 const perAttemptTime = 10 * time.Second
@@ -26,6 +27,12 @@ const perAttemptTime = 10 * time.Second
 // provider's 60s timeout fails closed uncontrolled instead of returning a
 // verdict.
 const sendBudget = 45 * time.Second
+
+// gateSendBudget bounds the synchronous verdict exchange for gating events.
+// The chain is 5s network < the openclaw daemon's ~9s gate deadline < the
+// shim's 10s wall: a fail-closed block must land before an upstream deadline
+// expires and dissolves it into an allow. Observes keep the full sendBudget.
+const gateSendBudget = 5 * time.Second
 
 // skillUploadBudget bounds the content upload that runs inline after a
 // delivered event. The upload is best-effort — the server re-requests the
@@ -64,6 +71,9 @@ type ingestResult struct {
 	// org_settings effects; nil when the server sent none.
 	failOpen     *bool
 	skillCapture *skillCapture
+	// blockEffect carries the structured requestable-block metadata from the
+	// response's "block" effects; nil when the server sent none.
+	blockEffect *wire.BlockEffect
 }
 
 // accepted reports a definitive 2xx exchange — the server stored (or
@@ -217,7 +227,7 @@ func (cl *client) send(ctx context.Context, c creds, body components.IngestReque
 		}
 	}
 
-	out := ingestResult{statusCode: res.StatusCode, decision: decision{Decision: "", Reason: "", Message: ""}, authRejected: false, failOpen: nil, skillCapture: nil}
+	out := ingestResult{statusCode: res.StatusCode, decision: decision{Decision: "", Reason: "", Message: ""}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil}
 	if res.IngestHookResult != nil {
 		out.decision = decision{
 			Decision: string(res.IngestHookResult.Decision),
@@ -236,6 +246,7 @@ func (cl *client) send(ctx context.Context, c creds, body components.IngestReque
 				out.skillCapture = &skillCapture{rawSHA256: rawSHA256, contentRequired: contentRequired}
 			}
 		}
+		out.blockEffect = decodeBlockEffect(res.IngestHookResult.Effects["block"])
 	}
 	return out
 }
@@ -253,6 +264,7 @@ func interpretError(err error) ingestResult {
 			authRejected: status == http.StatusUnauthorized || status == http.StatusForbidden,
 			failOpen:     nil,
 			skillCapture: nil,
+			blockEffect:  nil,
 		}
 	}
 	var apiErr *apierrors.APIError
@@ -269,6 +281,7 @@ func interpretError(err error) ingestResult {
 				authRejected: false,
 				failOpen:     nil,
 				skillCapture: nil,
+				blockEffect:  nil,
 			}
 		}
 		return ingestResult{
@@ -277,9 +290,10 @@ func interpretError(err error) ingestResult {
 			authRejected: apiErr.StatusCode == http.StatusUnauthorized || apiErr.StatusCode == http.StatusForbidden,
 			failOpen:     nil,
 			skillCapture: nil,
+			blockEffect:  nil,
 		}
 	}
-	return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: ""}, authRejected: false, failOpen: nil, skillCapture: nil}
+	return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: ""}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil}
 }
 
 func validRawSHA256(value string) bool {

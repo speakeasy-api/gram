@@ -1,6 +1,7 @@
 import type { SessionSummary } from "@gram/client/models/components/sessionsummary.js";
 import { costMeasureLabel } from "@/components/estimated-cost-utils";
 import { formatDurationFromNanos } from "../chatLogs/claudeUsage";
+import { llmTokens } from "./taxonomy";
 import { toCsv } from "./csv";
 import type { SessionColumnId } from "./SessionTable";
 
@@ -56,7 +57,7 @@ function csvValue(id: SessionColumnId, s: SessionSummary): string | number {
     case "cost":
       return s.totalCost.toFixed(2);
     case "tokens":
-      return s.totalTokens;
+      return llmTokens(s);
     case "tools":
       return s.toolCallCount;
     case "messages":

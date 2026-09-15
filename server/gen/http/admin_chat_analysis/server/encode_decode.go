@@ -37,13 +37,22 @@ func DecodeGetSettingsRequest(mux goahttp.Muxer, decoder func(*http.Request) goa
 	return func(r *http.Request) (*adminchatanalysis.GetSettingsPayload, error) {
 		var payload *adminchatanalysis.GetSettingsPayload
 		var (
-			sessionToken *string
+			organizationID string
+			sessionToken   *string
+			err            error
 		)
+		organizationID = r.URL.Query().Get("organization_id")
+		if organizationID == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "query string"))
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		payload = NewGetSettingsPayload(sessionToken)
+		if err != nil {
+			return payload, err
+		}
+		payload = NewGetSettingsPayload(organizationID, sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -656,13 +665,33 @@ func DecodeTriggerAnalysisRequest(mux goahttp.Muxer, decoder func(*http.Request)
 	return func(r *http.Request) (*adminchatanalysis.TriggerAnalysisPayload, error) {
 		var payload *adminchatanalysis.TriggerAnalysisPayload
 		var (
+			body TriggerAnalysisRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateTriggerAnalysisRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
 			sessionToken *string
 		)
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		payload = NewTriggerAnalysisPayload(sessionToken)
+		payload = NewTriggerAnalysisPayload(&body, sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

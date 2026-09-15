@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	testidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	"github.com/speakeasy-api/gram/server/gen/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
@@ -42,13 +43,14 @@ func TestService_ServeChatAttachment_Success(t *testing.T) {
 
 	// Create asset in database using the URI from storage
 	asset, err := ti.repo.CreateAsset(ctx, repo.CreateAssetParams{
-		Name:          filename,
-		Url:           uri.String(),
-		ProjectID:     projectID,
-		Sha256:        "abc123",
-		Kind:          "chat_attachment",
-		ContentType:   contentType,
-		ContentLength: contentLength,
+		Name:           filename,
+		Url:            uri.String(),
+		ProjectID:      projectID,
+		OrganizationID: testidp.MockOrgID,
+		Sha256:         "abc123",
+		Kind:           "chat_attachment",
+		ContentType:    contentType,
+		ContentLength:  contentLength,
 	})
 	require.NoError(t, err)
 
@@ -218,13 +220,14 @@ func TestService_ServeChatAttachment_WrongProject(t *testing.T) {
 	differentProjectID := uuid.New()
 
 	asset, err := ti.repo.CreateAsset(ctx, repo.CreateAssetParams{
-		Name:          "test-attachment.txt",
-		Url:           "file://test-attachment.txt",
-		ProjectID:     differentProjectID,
-		Sha256:        "abc123",
-		Kind:          "chat_attachment",
-		ContentType:   "text/plain",
-		ContentLength: 1024,
+		Name:           "test-attachment.txt",
+		Url:            "file://test-attachment.txt",
+		ProjectID:      differentProjectID,
+		OrganizationID: testidp.MockOrgID,
+		Sha256:         "abc123",
+		Kind:           "chat_attachment",
+		ContentType:    "text/plain",
+		ContentLength:  1024,
 	})
 	require.NoError(t, err)
 
@@ -252,13 +255,14 @@ func TestService_ServeChatAttachment_FileNotInStorage(t *testing.T) {
 
 	// Create asset in database but don't put file in storage
 	asset, err := ti.repo.CreateAsset(ctx, repo.CreateAssetParams{
-		Name:          "missing-attachment.txt",
-		Url:           "file://missing-asset.txt",
-		ProjectID:     projectID,
-		Sha256:        "abc123",
-		Kind:          "chat_attachment",
-		ContentType:   "text/plain",
-		ContentLength: 1024,
+		Name:           "missing-attachment.txt",
+		Url:            "file://missing-asset.txt",
+		ProjectID:      projectID,
+		OrganizationID: testidp.MockOrgID,
+		Sha256:         "abc123",
+		Kind:           "chat_attachment",
+		ContentType:    "text/plain",
+		ContentLength:  1024,
 	})
 	require.NoError(t, err)
 
@@ -312,13 +316,14 @@ func TestService_ServeChatAttachment_CrossProjectAccess(t *testing.T) {
 	require.NoError(t, err)
 
 	asset, err := ti.repo.CreateAsset(ctx1, repo.CreateAssetParams{
-		Name:          filename,
-		Url:           uri.String(),
-		ProjectID:     project1ID,
-		Sha256:        "project1hash",
-		Kind:          "chat_attachment",
-		ContentType:   contentType,
-		ContentLength: contentLength,
+		Name:           filename,
+		Url:            uri.String(),
+		ProjectID:      project1ID,
+		OrganizationID: testidp.MockOrgID,
+		Sha256:         "project1hash",
+		Kind:           "chat_attachment",
+		ContentType:    contentType,
+		ContentLength:  contentLength,
 	})
 	require.NoError(t, err)
 
@@ -393,13 +398,14 @@ func TestService_ServeChatAttachment_WithChatSessionToken_Success(t *testing.T) 
 
 	// Create asset in database
 	asset, err := ti.repo.CreateAsset(ctx, repo.CreateAssetParams{
-		Name:          filename,
-		Url:           uri.String(),
-		ProjectID:     projectID,
-		Sha256:        "chatsessionhash123",
-		Kind:          "chat_attachment",
-		ContentType:   contentType,
-		ContentLength: contentLength,
+		Name:           filename,
+		Url:            uri.String(),
+		ProjectID:      projectID,
+		OrganizationID: testidp.MockOrgID,
+		Sha256:         "chatsessionhash123",
+		Kind:           "chat_attachment",
+		ContentType:    contentType,
+		ContentLength:  contentLength,
 	})
 	require.NoError(t, err)
 
@@ -516,13 +522,14 @@ func TestService_ServeChatAttachment_WithChatSessionToken_WrongProject(t *testin
 	require.NoError(t, err)
 
 	asset, err := ti.repo.CreateAsset(ctx1, repo.CreateAssetParams{
-		Name:          filename,
-		Url:           uri.String(),
-		ProjectID:     project1ID,
-		Sha256:        "project1hash",
-		Kind:          "chat_attachment",
-		ContentType:   contentType,
-		ContentLength: contentLength,
+		Name:           filename,
+		Url:            uri.String(),
+		ProjectID:      project1ID,
+		OrganizationID: testidp.MockOrgID,
+		Sha256:         "project1hash",
+		Kind:           "chat_attachment",
+		ContentType:    contentType,
+		ContentLength:  contentLength,
 	})
 	require.NoError(t, err)
 

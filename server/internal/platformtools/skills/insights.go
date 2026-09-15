@@ -180,7 +180,7 @@ func (t *Insights) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload i
 		}
 	} else {
 		listed, err := t.skills.List(ctx, &genskills.ListPayload{
-			Cursor: nil, Limit: 200, Search: nil, SourceKinds: nil, Classifications: nil, Tags: nil, Sort: "name",
+			Cursor: nil, Limit: 200, Search: nil, SourceKinds: nil, Classifications: nil, Tags: nil, AccessibleBy: nil, Sort: "name",
 			SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 		})
 		if err != nil {
@@ -201,13 +201,14 @@ func (t *Insights) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload i
 	}
 
 	rows, err := t.insights.QuerySkillInsights(ctx, telemetryrepo.QuerySkillInsightsParams{
-		OrganizationID:  authCtx.ActiveOrganizationID,
-		ProjectID:       authCtx.ProjectID.String(),
-		SkillIDs:        skillIDs,
-		SkillVersionIDs: nil,
-		From:            from,
-		To:              to,
-		IntervalSeconds: int64(insightInterval.Seconds()),
+		OrganizationID:      authCtx.ActiveOrganizationID,
+		ProjectID:           authCtx.ProjectID.String(),
+		SkillIDs:            skillIDs,
+		SkillVersionIDs:     nil,
+		From:                from,
+		To:                  to,
+		IntervalSeconds:     int64(insightInterval.Seconds()),
+		IncludeSessionUsage: true,
 	})
 	if err != nil {
 		return fmt.Errorf("query skill insights: %w", err)

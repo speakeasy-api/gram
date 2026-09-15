@@ -25,6 +25,7 @@ type Server struct {
 	UploadImage                   http.Handler
 	UploadFunctions               http.Handler
 	UploadOpenAPIv3               http.Handler
+	FetchImageFromURL             http.Handler
 	FetchOpenAPIv3FromURL         http.Handler
 	ServeOpenAPIv3                http.Handler
 	ServeFunction                 http.Handler
@@ -66,6 +67,7 @@ func New(
 			{"UploadImage", "POST", "/rpc/assets.uploadImage"},
 			{"UploadFunctions", "POST", "/rpc/assets.uploadFunctions"},
 			{"UploadOpenAPIv3", "POST", "/rpc/assets.uploadOpenAPIv3"},
+			{"FetchImageFromURL", "POST", "/rpc/assets.fetchImageFromURL"},
 			{"FetchOpenAPIv3FromURL", "POST", "/rpc/assets.fetchOpenAPIv3FromURL"},
 			{"ServeOpenAPIv3", "GET", "/rpc/assets.serveOpenAPIv3"},
 			{"ServeFunction", "GET", "/rpc/assets.serveFunction"},
@@ -79,6 +81,7 @@ func New(
 		UploadImage:                   NewUploadImageHandler(e.UploadImage, mux, decoder, encoder, errhandler, formatter),
 		UploadFunctions:               NewUploadFunctionsHandler(e.UploadFunctions, mux, decoder, encoder, errhandler, formatter),
 		UploadOpenAPIv3:               NewUploadOpenAPIv3Handler(e.UploadOpenAPIv3, mux, decoder, encoder, errhandler, formatter),
+		FetchImageFromURL:             NewFetchImageFromURLHandler(e.FetchImageFromURL, mux, decoder, encoder, errhandler, formatter),
 		FetchOpenAPIv3FromURL:         NewFetchOpenAPIv3FromURLHandler(e.FetchOpenAPIv3FromURL, mux, decoder, encoder, errhandler, formatter),
 		ServeOpenAPIv3:                NewServeOpenAPIv3Handler(e.ServeOpenAPIv3, mux, decoder, encoder, errhandler, formatter),
 		ServeFunction:                 NewServeFunctionHandler(e.ServeFunction, mux, decoder, encoder, errhandler, formatter),
@@ -99,6 +102,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.UploadImage = m(s.UploadImage)
 	s.UploadFunctions = m(s.UploadFunctions)
 	s.UploadOpenAPIv3 = m(s.UploadOpenAPIv3)
+	s.FetchImageFromURL = m(s.FetchImageFromURL)
 	s.FetchOpenAPIv3FromURL = m(s.FetchOpenAPIv3FromURL)
 	s.ServeOpenAPIv3 = m(s.ServeOpenAPIv3)
 	s.ServeFunction = m(s.ServeFunction)
@@ -118,6 +122,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountUploadImageHandler(mux, h.UploadImage)
 	MountUploadFunctionsHandler(mux, h.UploadFunctions)
 	MountUploadOpenAPIv3Handler(mux, h.UploadOpenAPIv3)
+	MountFetchImageFromURLHandler(mux, h.FetchImageFromURL)
 	MountFetchOpenAPIv3FromURLHandler(mux, h.FetchOpenAPIv3FromURL)
 	MountServeOpenAPIv3Handler(mux, h.ServeOpenAPIv3)
 	MountServeFunctionHandler(mux, h.ServeFunction)
@@ -369,6 +374,59 @@ func NewUploadOpenAPIv3Handler(
 		}
 		data := &assets.UploadOpenAPIv3RequestData{Payload: payload, Body: r.Body}
 		res, err := endpoint(ctx, data)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountFetchImageFromURLHandler configures the mux to serve the "assets"
+// service "fetchImageFromURL" endpoint.
+func MountFetchImageFromURLHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/assets.fetchImageFromURL", f)
+}
+
+// NewFetchImageFromURLHandler creates a HTTP handler which loads the HTTP
+// request and calls the "assets" service "fetchImageFromURL" endpoint.
+func NewFetchImageFromURLHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeFetchImageFromURLRequest(mux, decoder)
+		encodeResponse = EncodeFetchImageFromURLResponse(encoder)
+		encodeError    = EncodeFetchImageFromURLError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "fetchImageFromURL")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "assets")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
 		if err != nil {
 			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
 				errhandler(ctx, w, err)

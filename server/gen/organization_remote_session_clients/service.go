@@ -52,6 +52,24 @@ type Service interface {
 	// Update a remote_session_client's non-secret fields in the caller's
 	// organization. Requires org:admin.
 	UpdateClient(context.Context, *UpdateClientPayload) (res *types.RemoteSessionClient, err error)
+	// Attach an organization JSON Web Key Set to a remote_session_client in the
+	// caller's organization, opting it into signing private_key_jwt assertions.
+	// Requires org:admin and the customer_managed_encryption_keys entitlement.
+	AttachClientKeySet(context.Context, *AttachClientKeySetPayload) (res *types.RemoteSessionClient, err error)
+	// Detach the JSON Web Key Set from a remote_session_client in the caller's
+	// organization. Refused while the client declares
+	// token_endpoint_auth_method=private_key_jwt. A no-op when no set is attached.
+	// Requires org:admin and the customer_managed_encryption_keys entitlement.
+	DetachClientKeySet(context.Context, *DetachClientKeySetPayload) (res *types.RemoteSessionClient, err error)
+	// Re-register a dynamically registered remote_session_client with its issuer
+	// in place, replacing the client_id and secret while keeping the row's id,
+	// issuer bindings, MCP server attachments, and key set links. Every remote
+	// session minted against the old client_id is revoked, so users reconnect
+	// once. Use when the issuer reports the registration expired
+	// (upstream_rejected_at is set) or to rotate proactively. The replacement is
+	// registered at the registration_endpoint the client's issuer publishes, so
+	// the issuer must publish one. Requires org:admin.
+	RotateClient(context.Context, *RotateClientPayload) (res *types.RemoteSessionClient, err error)
 	// Soft-delete a remote_session_client in the caller's organization. Cascades
 	// to the remote_sessions minted against it. Requires org:admin.
 	DeleteClient(context.Context, *DeleteClientPayload) (err error)
@@ -80,7 +98,19 @@ const ServiceName = "organizationRemoteSessionClients"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [9]string{"listClients", "getClient", "getClientDeletePreflight", "listClientMcpServers", "createClient", "createCimdClient", "updateClient", "deleteClient", "removeClientFromMcpServer"}
+var MethodNames = [12]string{"listClients", "getClient", "getClientDeletePreflight", "listClientMcpServers", "createClient", "createCimdClient", "updateClient", "attachClientKeySet", "detachClientKeySet", "rotateClient", "deleteClient", "removeClientFromMcpServer"}
+
+// AttachClientKeySetPayload is the payload type of the
+// organizationRemoteSessionClients service attachClientKeySet method.
+type AttachClientKeySetPayload struct {
+	SessionToken *string
+	ApikeyToken  *string
+	// The remote_session_client id.
+	ID string
+	// The organization JSON Web Key Set to sign this client's private_key_jwt
+	// assertions with. Must belong to the client's organization.
+	JSONWebKeySetID string
+}
 
 // CreateCimdClientPayload is the payload type of the
 // organizationRemoteSessionClients service createCimdClient method.
@@ -130,11 +160,26 @@ type CreateClientPayload struct {
 	// Optional upstream OAuth audience to send on the authorize redirect and token
 	// exchange.
 	Audience *string
+	// When the issuer reported issuing the client_id (RFC 7591
+	// client_id_issued_at). Omit to record the time of this call.
+	ClientIDIssuedAt *string
+	// When the issuer reported the client secret expires (RFC 7591
+	// client_secret_expires_at). Omit when the issuer reported no expiry.
+	ClientSecretExpiresAt *string
 }
 
 // DeleteClientPayload is the payload type of the
 // organizationRemoteSessionClients service deleteClient method.
 type DeleteClientPayload struct {
+	// The remote_session_client id.
+	ID           string
+	SessionToken *string
+	ApikeyToken  *string
+}
+
+// DetachClientKeySetPayload is the payload type of the
+// organizationRemoteSessionClients service detachClientKeySet method.
+type DetachClientKeySetPayload struct {
 	// The remote_session_client id.
 	ID           string
 	SessionToken *string
@@ -245,6 +290,15 @@ type RemoveClientFromMcpServerPayload struct {
 	ApikeyToken  *string
 }
 
+// RotateClientPayload is the payload type of the
+// organizationRemoteSessionClients service rotateClient method.
+type RotateClientPayload struct {
+	// The remote_session_client id.
+	ID           string
+	SessionToken *string
+	ApikeyToken  *string
+}
+
 // UpdateClientPayload is the payload type of the
 // organizationRemoteSessionClients service updateClient method.
 type UpdateClientPayload struct {
@@ -312,4 +366,9 @@ func MakeUnexpected(err error) *goa.ServiceError {
 // MakeGatewayError builds a goa.ServiceError from an error.
 func MakeGatewayError(err error) *goa.ServiceError {
 	return goa.NewServiceError(err, "gateway_error", false, false, true)
+}
+
+// MakeFailedPrecondition builds a goa.ServiceError from an error.
+func MakeFailedPrecondition(err error) *goa.ServiceError {
+	return goa.NewServiceError(err, "failed_precondition", false, false, false)
 }

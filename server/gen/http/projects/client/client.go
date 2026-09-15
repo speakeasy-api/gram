@@ -25,6 +25,10 @@ type Client struct {
 	// createProject endpoint.
 	CreateProjectDoer goahttp.Doer
 
+	// UpdateProject Doer is the HTTP client used to make requests to the
+	// updateProject endpoint.
+	UpdateProjectDoer goahttp.Doer
+
 	// ListProjects Doer is the HTTP client used to make requests to the
 	// listProjects endpoint.
 	ListProjectsDoer goahttp.Doer
@@ -71,6 +75,7 @@ func NewClient(
 	return &Client{
 		GetProjectDoer:               doer,
 		CreateProjectDoer:            doer,
+		UpdateProjectDoer:            doer,
 		ListProjectsDoer:             doer,
 		SetLogoDoer:                  doer,
 		ListAllowedOriginsDoer:       doer,
@@ -128,6 +133,30 @@ func (c *Client) CreateProject() goa.Endpoint {
 		resp, err := c.CreateProjectDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("projects", "createProject", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// UpdateProject returns an endpoint that makes HTTP requests to the projects
+// service updateProject server.
+func (c *Client) UpdateProject() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUpdateProjectRequest(c.encoder)
+		decodeResponse = DecodeUpdateProjectResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUpdateProjectRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UpdateProjectDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("projects", "updateProject", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -116,6 +116,7 @@ export function setRiskListResultsData(
       category?: string | undefined;
       ruleId?: string | undefined;
       userId?: string | undefined;
+      externalUserIds?: Array<string> | undefined;
       uniqueMatch?: boolean | undefined;
       nonAssistant?: boolean | undefined;
       assistantId?: string | undefined;
@@ -144,6 +145,7 @@ export function invalidateRiskListResults(
       category?: string | undefined;
       ruleId?: string | undefined;
       userId?: string | undefined;
+      externalUserIds?: Array<string> | undefined;
       uniqueMatch?: boolean | undefined;
       nonAssistant?: boolean | undefined;
       assistantId?: string | undefined;
