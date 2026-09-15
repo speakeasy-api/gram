@@ -31,6 +31,10 @@ var ToolCalls = &Dataset{
 	Fields: []Field{
 		{Name: "tool_call", Type: TypeString, Role: RoleDimension, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "tool_call_id"},
 		{Name: "tool_name", Type: TypeString, Role: RoleDimension, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "tool_name"},
+		// Every MCP call carries the tool name mcp_tool; the server and tool the
+		// producer named are what tell them apart.
+		{Name: "mcp_server", Type: TypeString, Role: RoleDimension, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "mcp_server_name"},
+		{Name: "mcp_tool", Type: TypeString, Role: RoleDimension, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "mcp_tool_name"},
 		{Name: "session", Type: TypeString, Role: RoleDimension, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "session_id"},
 		{Name: "user", Type: TypeString, Role: RoleDimension, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "user_email"},
 		{Name: "surface", Type: TypeString, Role: RoleDimension, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "surface"},
