@@ -15,6 +15,7 @@ import {
   useIsCatalogServerInstalled,
   useListMCPCatalog,
 } from "@/pages/catalog/hooks";
+import { McpTabs } from "@/pages/mcp/McpTabs";
 import { useRoutes } from "@/routes";
 import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
 import { Button } from "@/components/ui/Button";
@@ -189,6 +190,7 @@ function CatalogInner() {
             .
           </>
         }
+        belowHeader={<McpTabs active="catalog" />}
         search={{
           value: searchQuery,
           onChange: setSearchQuery,
@@ -229,7 +231,7 @@ function CatalogInner() {
                 <ServerCard
                   key={serverKey}
                   server={server}
-                  detailHref={routes.mcp.add.catalog.detail.href(
+                  detailHref={routes.mcp.catalog.detail.href(
                     encodeURIComponent(server.registrySpecifier),
                   )}
                   isAdded={isServerAdded(server)}
@@ -256,7 +258,7 @@ function CatalogInner() {
                   <ServerTableRow
                     key={serverKey}
                     server={server}
-                    detailHref={routes.mcp.add.catalog.detail.href(
+                    detailHref={routes.mcp.catalog.detail.href(
                       encodeURIComponent(server.registrySpecifier),
                     )}
                     isAdded={isServerAdded(server)}

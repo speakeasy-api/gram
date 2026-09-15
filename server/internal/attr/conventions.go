@@ -235,10 +235,15 @@ const (
 	// admitted rather than a bare "admitted", so the values are
 	// "admitted_open", "admitted_open_not_listed",
 	// "admitted_open_oversized", "admitted_catalog_exact",
-	// "admitted_catalog_pattern", "admitted_custom", "denied_disabled",
+	// "admitted_catalog_pattern", "admitted_custom",
+	// "admitted_platform_assistant", "denied_disabled",
 	// "denied_not_listed", "denied_oversized", and "denied_unknown_mode".
 	// Chart the admitted_* values as a group; there is no single value
 	// meaning "admitted".
+	//
+	// "admitted_platform_assistant" is a document Gram publishes for one of
+	// its own assistants, admitted on every issuer that accepts CIMD at all
+	// and recorded under whichever mode that issuer runs.
 	//
 	// "admitted_open_not_listed" is the catalog-gap signal on an issuer that
 	// refuses nobody: the client got in, and no rule anywhere covered it.
@@ -418,6 +423,18 @@ const (
 	// gram.remote_session.upstream_refresh.
 	OAuthRefreshTriggerKey = attribute.Key("gram.oauth.refresh_trigger")
 
+	// OAuthValidationTriggerKey names which caller presented a stored remote
+	// session credential to its upstream: the consent page's Verify, the
+	// connect callback, or the idle keepalive re-check. Used as a metric
+	// dimension on gram.remote_session.validation.
+	OAuthValidationTriggerKey = attribute.Key("gram.oauth.validation_trigger")
+
+	// OAuthIssuerMetadataRefreshReasonKey names why a remote session issuer's
+	// metadata was refreshed: the on-use cadence or an upstream signal that the
+	// stored endpoints drifted. Used as a metric dimension on
+	// gram.remote_session_issuer.metadata_refresh.
+	OAuthIssuerMetadataRefreshReasonKey = attribute.Key("gram.oauth.issuer_metadata_refresh_reason")
+
 	OAuthPresentedAuthMethodKey = attribute.Key("gram.oauth.presented_auth_method")
 	// OAuthResourceKey is the RFC 8707 resource indicator sent to an
 	// upstream authorization server during the remote-session dance.
@@ -507,6 +524,8 @@ const (
 	RemoteSessionIDKey                  = attribute.Key("gram.remote_session.id")
 	RemoteSessionClientMigratedCountKey = attribute.Key("gram.remote_session_client.migrated_count")
 	RemoteSessionRevokeDroppedCountKey  = attribute.Key("gram.remote_session.revoke_dropped_count")
+	// RemoteSessionRecheckCountKey is how many grants one keepalive re-check pass actually probed; skipped and rate-limited claims are not counted.
+	RemoteSessionRecheckCountKey = attribute.Key("gram.remote_session.recheck_count")
 	// RemoteSessionAccessExpiresAtKey is the upstream-reported deadline of a
 	// remote session's access token.
 	RemoteSessionAccessExpiresAtKey = attribute.Key("gram.remote_session.access_expires_at")
@@ -1713,6 +1732,20 @@ func SlogOAuthRefreshTrigger(v string) slog.Attr {
 	return slog.String(string(OAuthRefreshTriggerKey), v)
 }
 
+func OAuthValidationTrigger[V ~string](v V) attribute.KeyValue {
+	return OAuthValidationTriggerKey.String(string(v))
+}
+func SlogOAuthValidationTrigger(v string) slog.Attr {
+	return slog.String(string(OAuthValidationTriggerKey), v)
+}
+
+func OAuthIssuerMetadataRefreshReason[V ~string](v V) attribute.KeyValue {
+	return OAuthIssuerMetadataRefreshReasonKey.String(string(v))
+}
+func SlogOAuthIssuerMetadataRefreshReason[V ~string](v V) slog.Attr {
+	return slog.String(string(OAuthIssuerMetadataRefreshReasonKey), string(v))
+}
+
 func OAuthErrorDescription(v string) attribute.KeyValue {
 	return OAuthErrorDescriptionKey.String(v)
 }
@@ -2079,6 +2112,11 @@ func SlogRemoteSessionIssuerID(v string) slog.Attr {
 func RemoteSessionID(v string) attribute.KeyValue { return RemoteSessionIDKey.String(v) }
 func SlogRemoteSessionID(v string) slog.Attr {
 	return slog.String(string(RemoteSessionIDKey), v)
+}
+
+func RemoteSessionRecheckCount(v int) attribute.KeyValue { return RemoteSessionRecheckCountKey.Int(v) }
+func SlogRemoteSessionRecheckCount(v int) slog.Attr {
+	return slog.Int(string(RemoteSessionRecheckCountKey), v)
 }
 
 func RemoteSessionClientMigratedCount(v int64) attribute.KeyValue {

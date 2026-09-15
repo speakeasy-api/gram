@@ -484,9 +484,9 @@ const routesToNavActions = (
       routeToNavAction(route, group, `${idPrefix}-${key}`),
     );
 
-// S-853 moved Sources and the catalog under /mcp. These keep the old top-level
-// URLs resolving. They live here rather than in the route structure so they
-// stay out of the sidebar, breadcrumbs, and the command palette.
+// S-853 moved Sources and the catalog under /mcp. These keep the old URLs
+// resolving. They live here rather than in the route structure so they stay
+// out of the sidebar, breadcrumbs, and the command palette.
 const legacyMcpRedirects = (
   <>
     <Route path="sources">
@@ -503,6 +503,12 @@ const legacyMcpRedirects = (
       />
     </Route>
     <Route path="catalog">
+      <Route index element={<RedirectToCatalog />} />
+      <Route path=":serverSpecifier" element={<RedirectToCatalogDetail />} />
+    </Route>
+    {/* The catalog briefly lived inside the add flow before becoming a tab of
+        the MCP index. */}
+    <Route path="mcp/add/catalog">
       <Route index element={<RedirectToCatalog />} />
       <Route path=":serverSpecifier" element={<RedirectToCatalogDetail />} />
     </Route>

@@ -280,6 +280,9 @@ func EnterpriseTrialConversionKeyReconcileWorkflow(ctx workflow.Context, params 
 
 // Called by your service to start (or restart) the workflow
 func ExecuteOpenrouterKeyRefreshWorkflow(ctx context.Context, temporalEnv *tenv.Environment, params OpenRouterKeyRefreshParams) (client.WorkflowRun, error) {
+	if temporalEnv == nil {
+		return nil, tenv.ErrNotConfigured
+	}
 	// A typoed key type must fail here, before the terminate-if-running id
 	// below can clobber the real chat refresh workflow.
 	if err := openrouter.KeyType(params.KeyType).Validate(); err != nil {

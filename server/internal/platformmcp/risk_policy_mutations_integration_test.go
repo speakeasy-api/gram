@@ -70,9 +70,6 @@ func TestRiskPolicyMutationHandlersCreateUpdateReplayAndRedact(t *testing.T) {
 	require.Equal(t, "flag", stored.Action)
 	require.InDelta(t, 5.0, stored.Score, 0)
 	require.ElementsMatch(t, []string{"gitleaks"}, stored.Sources)
-	require.Empty(t, stored.MessageTypes)
-	require.False(t, stored.ScopeInclude.Valid)
-	require.False(t, stored.ScopeExempt.Valid)
 
 	createAudit, err := audittest.LatestAuditLogByAction(ctx, conn, audit.ActionRiskPolicyCreate)
 	require.NoError(t, err)

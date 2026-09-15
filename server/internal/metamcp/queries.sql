@@ -72,7 +72,9 @@ ORDER BY meta_mcp_servers.created_at DESC, meta_mcp_servers.id DESC;
 -- issuer resolves to the preserved or freshly minted one), so the narg here
 -- never arrives null from production code. A null visibility preserves the
 -- stored value so callers that do not manage visibility cannot re-enable a
--- disabled gateway.
+-- disabled gateway. Instructions follow the same set-flag shape as
+-- network_access_mode because null is a meaningful stored value (serve the
+-- built-in instructions), so COALESCE cannot distinguish omit from clear.
 UPDATE meta_mcp_servers
 SET name = @name,
     user_session_issuer_id = sqlc.narg('user_session_issuer_id'),
@@ -80,6 +82,10 @@ SET name = @name,
     network_access_mode = CASE
         WHEN @network_access_mode_set::boolean THEN sqlc.narg('network_access_mode')
         ELSE network_access_mode
+    END,
+    instructions = CASE
+        WHEN @instructions_set::boolean THEN sqlc.narg('instructions')
+        ELSE instructions
     END,
     updated_at = clock_timestamp()
 WHERE id = @id

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"math"
 	"slices"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
@@ -239,6 +240,12 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
+	// Validate the same normalized text that will be persisted, not the raw input.
+	instructions := conv.PtrToPGTextTrimmed(conv.PtrStripNUL(payload.Instructions))
+	if utf8.RuneCountInString(instructions.String) > 10000 {
+		return nil, oops.E(oops.CodeBadRequest, nil, "instructions must not exceed 10000 characters after normalization")
+	}
+
 	serverID, err := uuid.Parse(payload.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid meta mcp server id").LogError(ctx, logger)
@@ -330,9 +337,12 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 		Visibility:           conv.PtrToPGText((*string)(payload.Visibility)),
 		NetworkAccessModeSet: payload.NetworkAccessMode != nil,
 		NetworkAccessMode:    storedMode,
-		ID:                   serverID,
-		OrganizationID:       authCtx.ActiveOrganizationID,
-		ProjectID:            *authCtx.ProjectID,
+		InstructionsSet:      payload.Instructions != nil,
+		// A blank submission restores the built-in instructions (NULL).
+		Instructions:   instructions,
+		ID:             serverID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "update meta mcp server").LogError(ctx, logger)

@@ -135,29 +135,32 @@ type Service struct {
 	// the token and revocation endpoints. Nil without Redis, in which case
 	// assertion clients are refused rather than admitted unverified.
 	clientAssertionVerifier *clientauth.Verifier
-	toolProxy               *gateway.ToolProxy
-	oauthRepo               *oauth_repo.Queries
-	billingTracker          billing.Tracker
-	billingRepository       billing.Repository
-	toolsetCache            cache.TypedCacheObject[mv.ToolsetBaseContents]
-	telemLogger             *tm.Logger
-	vectorToolStore         *rag.ToolsetVectorStore
-	assistantTokens         *assistanttokens.Manager
-	sessions                *sessions.Manager
-	identityResolver        IdentityResolver
-	identityValidator       *mcpidentity.ValidatorBoundary
-	chatSessionsManager     *chatsessions.Manager
-	externalmcpRepo         *externalmcp_repo.Queries
-	deploymentsRepo         *deployments_repo.Queries
-	enc                     *encryption.Client
-	authz                   *authz.Engine
-	shadowMCPClient         *shadowmcp.Client
-	auditLogger             *audit.Logger
-	platformExtras          []platformtools.ExternalTool
-	platformFeatureChecker  platformtools.FeatureChecker
-	platformToolsets        map[string]platformtools.Toolset
-	authnChallengeCache     cache.TypedCacheObject[AuthnChallengeState]
-	userSessionGrantCache   cache.TypedCacheObject[UserSessionGrant]
+	// aiToolBlockReads are the database reads behind the Shadow AI gateway
+	// block check, held as values so a test can make one of them fail.
+	aiToolBlockReads       aiToolBlockReads
+	toolProxy              *gateway.ToolProxy
+	oauthRepo              *oauth_repo.Queries
+	billingTracker         billing.Tracker
+	billingRepository      billing.Repository
+	toolsetCache           cache.TypedCacheObject[mv.ToolsetBaseContents]
+	telemLogger            *tm.Logger
+	vectorToolStore        *rag.ToolsetVectorStore
+	assistantTokens        *assistanttokens.Manager
+	sessions               *sessions.Manager
+	identityResolver       IdentityResolver
+	identityValidator      *mcpidentity.ValidatorBoundary
+	chatSessionsManager    *chatsessions.Manager
+	externalmcpRepo        *externalmcp_repo.Queries
+	deploymentsRepo        *deployments_repo.Queries
+	enc                    *encryption.Client
+	authz                  *authz.Engine
+	shadowMCPClient        *shadowmcp.Client
+	auditLogger            *audit.Logger
+	platformExtras         []platformtools.ExternalTool
+	platformFeatureChecker platformtools.FeatureChecker
+	platformToolsets       map[string]platformtools.Toolset
+	authnChallengeCache    cache.TypedCacheObject[AuthnChallengeState]
+	userSessionGrantCache  cache.TypedCacheObject[UserSessionGrant]
 	// userSessionRefreshReplayCache retains the encrypted rotation outcome.
 	userSessionRefreshReplayCache cache.TypedCacheObject[userSessionRefreshReplay]
 
@@ -185,6 +188,8 @@ type Service struct {
 	validationLimiter *ratelimit.Limiter
 	// autoVerifications admits and drains the probes a committed grant starts off the request path.
 	autoVerifications *autoVerifications
+	// remoteSessionRecheck sweeps idle grants with no refresh token; runs only where StartRemoteSessionRecheck is called.
+	remoteSessionRecheck *remoteSessionRecheck
 	// remoteProxyManager builds configured remotemcp proxies wired with the
 	// MCP-aware interceptor stack. Only consulted by ServeMCPEndpoint's
 	// remote-backed branch; may be nil in non-HTTP contexts (e.g. the
@@ -422,6 +427,7 @@ func NewService(
 		cimdResolver:              cimd.NewResolver(guardianPolicy, meterProvider, logger),
 		cimdAdmissionMetrics:      admission.NewMetrics(meterProvider, logger),
 		clientAssertionVerifier:   newClientAssertionVerifier(redisClient, guardianPolicy, meterProvider, logger),
+		aiToolBlockReads:          defaultAIToolBlockReads(),
 		toolProxy: gateway.NewToolProxy(
 			logger,
 			tracerProvider,
@@ -475,18 +481,19 @@ func NewService(
 			cacheImpl,
 			cache.SuffixNone,
 		),
-		sessionClientInfo:  sessionclientinfo.NewStore(redisClient, 0),
-		identityResolver:   identityResolver,
-		identityValidator:  mcpidentity.NewValidatorBoundary(),
-		userSessionSigner:  userSessionSigner,
-		remoteChallengeMgr: remoteChallengeMgr,
-		validationMetrics:  remotesessionmetrics.NewValidation(logger, meterProvider),
-		validationLimiter:  newValidationLimiter(redisClient, meterProvider),
-		autoVerifications:  newAutoVerifications(),
-		remoteProxyManager: remoteProxyManager,
-		tunnelManager:      newTunnelManager(tunnelRoutes, tunnelForwardToken, remoteProxyManager, tunnelGatewayCIDRs),
-		tunnelPublic:       newTunnelPublicRuntime(redisClient, meterProvider, metrics, tunnelPublicConfig),
-		metaRuntime:        metaRuntimeConfig.withDefaults(),
+		sessionClientInfo:    sessionclientinfo.NewStore(redisClient, 0),
+		identityResolver:     identityResolver,
+		identityValidator:    mcpidentity.NewValidatorBoundary(),
+		userSessionSigner:    userSessionSigner,
+		remoteChallengeMgr:   remoteChallengeMgr,
+		validationMetrics:    remotesessionmetrics.NewValidation(logger, meterProvider),
+		validationLimiter:    newValidationLimiter(redisClient, meterProvider),
+		autoVerifications:    newAutoVerifications(),
+		remoteSessionRecheck: newRemoteSessionRecheck(metaRuntimeConfig.withDefaults().RecheckInterval, redisClient, meterProvider),
+		remoteProxyManager:   remoteProxyManager,
+		tunnelManager:        newTunnelManager(tunnelRoutes, tunnelForwardToken, remoteProxyManager, tunnelGatewayCIDRs),
+		tunnelPublic:         newTunnelPublicRuntime(redisClient, meterProvider, metrics, tunnelPublicConfig),
+		metaRuntime:          metaRuntimeConfig.withDefaults(),
 	}
 	return service, nil
 }
