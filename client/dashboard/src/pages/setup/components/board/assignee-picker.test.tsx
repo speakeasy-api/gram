@@ -55,3 +55,45 @@ it.each(["loading", "error"])(
     });
   },
 );
+
+it.each([
+  { kind: "email" as const, email: "invite@example.test" },
+  {
+    kind: "user" as const,
+    userId: "member",
+    name: "Team member",
+    email: "member@example.test",
+  },
+])(
+  "replaces the suggested role with the assigned person or email: %o",
+  (assignee) => {
+    render(
+      <AssigneePicker
+        assignee={assignee}
+        placeholder="Engineering lead"
+        onChange={vi.fn()}
+      />,
+    );
+    expect(screen.queryByText("Engineering lead")).toBeNull();
+    const trigger = screen.getByRole("button", {
+      name: `Assigned to ${assignee.kind === "user" ? assignee.name : assignee.email}`,
+    });
+    expect(trigger.className).toContain("px-2");
+    expect(trigger.className).toContain("-ms-2");
+  },
+);
+
+it("requires an owner selection for a neutral workstream action", () => {
+  const onChange = vi.fn();
+  render(
+    <AssigneePicker
+      assignee={undefined}
+      placeholder="Assign workstream"
+      onChange={onChange}
+    />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Assign workstream" }));
+  expect(onChange).not.toHaveBeenCalled();
+  expect(screen.queryByText("Unassign")).toBeNull();
+  expect(screen.queryByText("Mixed assignments")).toBeNull();
+});

@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router";
+import { useOrgRoutes } from "@/routes";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Switch } from "@/components/ui/Switch";
 import { Button } from "@/components/ui/Button";
@@ -14,12 +15,7 @@ import { OnboardingFooter } from "../onboarding-footer";
 import { OnboardingHeader } from "../onboarding-header";
 import { SetupViewButton } from "../setup-view-button";
 import { TaskCard } from "./task-card";
-import { TaskDialog } from "./task-dialog";
-import {
-  isOnboardingTaskId,
-  type OnboardingTaskId,
-  ONBOARDING_WORKSTREAMS,
-} from "./tasks";
+import { isOnboardingTaskId, ONBOARDING_WORKSTREAMS } from "./tasks";
 import { useOnboardingBoard } from "./use-onboarding-board";
 import { WorkstreamColumn } from "./workstream-column";
 
@@ -34,8 +30,7 @@ function BoardHeader(): JSX.Element {
         Onboarding
       </h1>
       <p className="text-muted-foreground mt-2 text-sm">
-        Progress is now shared across your organization. Browser-only progress
-        is not imported; existing browser records are retained.
+        Assign and track the work required to prepare your organization.
       </p>
     </div>
   );
@@ -143,6 +138,7 @@ export function OnboardingBoard(): JSX.Element {
 
 function OnboardingBoardInner(): JSX.Element {
   const navigate = useNavigate();
+  const routes = useOrgRoutes();
   const { orgSlug } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const { markSetupStarted } = useOrgSetupStarted(orgSlug);
@@ -151,7 +147,6 @@ function OnboardingBoardInner(): JSX.Element {
     markSetupStarted();
   }, [markSetupStarted]);
 
-  const projectSlug = searchParams.get("projectSlug") ?? undefined;
   const board = useOnboardingBoard();
   const session = useSession();
   const [showMine, setShowMine] = useState(false);
@@ -166,33 +161,26 @@ function OnboardingBoardInner(): JSX.Element {
   const taskParam = new URLSearchParams(canonicalSearch).get("task");
   const openTaskId =
     taskParam && isOnboardingTaskId(taskParam) ? taskParam : null;
-  const openTask = useMemo(
-    () =>
-      board.tasks.find(
-        (task) =>
-          task.id === openTaskId && (!task.hidden || board.canHideTasks),
-      ) ?? null,
-    [board.tasks, openTaskId, board.canHideTasks],
+  const openTask = board.tasks.find(
+    (task) => task.id === openTaskId && (!task.hidden || board.canHideTasks),
   );
-
-  const setOpenTask = useCallback(
-    (id: OnboardingTaskId | null) => {
-      setSearchParams(
-        (prev) => {
-          const next = new URLSearchParams(prev);
-          next.delete("step");
-          if (id) {
-            next.set("task", id);
-          } else {
-            next.delete("task");
-          }
-          return next;
-        },
+  useEffect(() => {
+    if (!board.isLoading && !board.error && openTask) {
+      const search = new URLSearchParams(canonicalSearch);
+      search.delete("view");
+      void navigate(
+        { pathname: routes.setupWizard.href(), search: search.toString() },
         { replace: true },
       );
-    },
-    [setSearchParams],
-  );
+    }
+  }, [
+    board.isLoading,
+    board.error,
+    openTask,
+    canonicalSearch,
+    navigate,
+    routes,
+  ]);
 
   const activeTasks = board.tasks.filter((task) => !task.hidden);
   const requiredTasks = activeTasks.filter((task) => !task.badge);
@@ -214,12 +202,20 @@ function OnboardingBoardInner(): JSX.Element {
       key={task.id}
       task={task}
       canHide={board.canHideTasks}
-      canAssign={board.canAssign}
       canSetStatus={board.canSetStatus(task)}
       isPending={board.isPending}
-      onOpen={() => setOpenTask(task.id)}
+      onOpen={() => {
+        const search = new URLSearchParams(canonicalSearch);
+        search.delete("view");
+        search.delete("step");
+        search.set("task", task.id);
+        search.set("from", "workstreams");
+        void navigate({
+          pathname: routes.setupWizard.href(),
+          search: search.toString(),
+        });
+      }}
       onSetStatus={(next) => void board.setStatus(task.id, next)}
-      onAssign={(assignee) => void board.assign(task.id, assignee)}
       onToggleHidden={() => void board.setHidden(task.id, !task.hidden)}
     />
   );
@@ -279,6 +275,14 @@ function OnboardingBoardInner(): JSX.Element {
                     key={workstream.id}
                     workstream={workstream}
                     tasks={workstreamTasks}
+                    allTasks={board.tasks.filter((task) =>
+                      workstream.taskIds.includes(task.id),
+                    )}
+                    canAssign={board.canAssign}
+                    isPending={board.isPending}
+                    onAssign={(owner) =>
+                      void board.assignWorkstream(workstream, owner)
+                    }
                   >
                     {workstreamTasks.map(renderTask)}
                   </WorkstreamColumn>
@@ -290,20 +294,6 @@ function OnboardingBoardInner(): JSX.Element {
       </main>
 
       <OnboardingFooter />
-
-      <TaskDialog
-        task={board.error ? null : openTask}
-        projectSlug={projectSlug}
-        canAssign={board.canAssign}
-        canSetStatus={openTask !== null && board.canSetStatus(openTask)}
-        isPending={board.isPending}
-        error={
-          board.writeErrorTaskId === openTask?.id ? board.writeError : null
-        }
-        onClose={() => setOpenTask(null)}
-        onSetStatus={board.setStatus}
-        onAssign={(id, assignee) => void board.assign(id, assignee)}
-      />
     </div>
   );
 }

@@ -111,8 +111,9 @@ export function AssigneePicker({
         <Button
           variant="tertiary"
           size={size}
+          edge="start"
           disabled={disabled}
-          className="min-w-0 max-w-full gap-1.5 px-1.5 font-normal"
+          className="min-w-0 max-w-full font-normal"
           aria-label={
             assignee ? `Assigned to ${assigneeLabel(assignee)}` : placeholder
           }
@@ -145,7 +146,7 @@ export function AssigneePicker({
         onClick={(event) => event.stopPropagation()}
         onKeyDown={(event) => event.stopPropagation()}
       >
-        <Command shouldFilter={false} label="Assign task">
+        <Command shouldFilter={false} label="Assign workstream">
           <CommandInput
             placeholder="Search team or enter an email"
             value={query}

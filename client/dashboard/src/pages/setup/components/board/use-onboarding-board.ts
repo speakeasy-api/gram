@@ -15,7 +15,11 @@ import {
   type Assignee,
   type BoardTask,
 } from "./board-store";
-import type { OnboardingTaskId, TaskStatus } from "./tasks";
+import type {
+  OnboardingWorkstreamDefinition,
+  OnboardingTaskId,
+  TaskStatus,
+} from "./tasks";
 
 export interface OnboardingBoardState {
   tasks: BoardTask[];
@@ -29,8 +33,8 @@ export interface OnboardingBoardState {
   canHideTasks: boolean;
   canSetStatus: (task: BoardTask) => boolean;
   setStatus: (id: OnboardingTaskId, status: TaskStatus) => Promise<boolean>;
-  assign: (
-    id: OnboardingTaskId,
+  assignWorkstream: (
+    workstream: OnboardingWorkstreamDefinition,
     owner: Assignee | undefined,
   ) => Promise<boolean>;
   setHidden: (id: OnboardingTaskId, hidden: boolean) => Promise<boolean>;
@@ -110,14 +114,57 @@ export function useOnboardingBoard(): OnboardingBoardState {
         return Promise.resolve(false);
       return update({ taskKey: id, status });
     },
-    assign: (id: OnboardingTaskId, owner: Assignee | undefined) => {
-      if (!canAssign) return Promise.resolve(false);
-      if (!owner) return update({ taskKey: id, clearAssignee: true });
-      const assignee =
-        owner.kind === "user"
-          ? { userId: owner.userId }
-          : { email: owner.email };
-      return update({ taskKey: id, assignee });
+    assignWorkstream: async (workstream, owner) => {
+      if (!canAssign || inFlight.current || error || query.isPending)
+        return false;
+      // Use the full definition: non-staff reads omit hidden tasks.
+      const selected = workstream.taskIds;
+      if (selected.length === 0) return false;
+      inFlight.current = true;
+      setIsPending(true);
+      setWriteError(null);
+      setWriteErrorTaskId(null);
+      try {
+        const results = await Promise.allSettled(
+          selected.map((taskKey) =>
+            mutation.mutateAsync({
+              request: {
+                updateSetupTaskRequestBody: {
+                  taskKey,
+                  ...(owner
+                    ? {
+                        assignee:
+                          owner.kind === "user"
+                            ? { userId: owner.userId }
+                            : { email: owner.email },
+                      }
+                    : { clearAssignee: true }),
+                },
+              },
+            }),
+          ),
+        );
+        const failed = results.filter(
+          (result) => result.status === "rejected",
+        ).length;
+        const message =
+          failed > 0
+            ? `Could not assign ${failed} of ${selected.length} tasks in ${workstream.title}. ${selected.length - failed} changes were saved. Retry to apply the assignment to all tasks.`
+            : null;
+        setWriteError(message);
+        try {
+          await invalidateOrganizationSetupTasks(queryClient, organizationId);
+        } catch {
+          setWriteError(
+            `${message ?? "Assignment saved."} Could not refresh the board. Reload to see current assignments.`,
+          );
+          return false;
+        }
+        return failed === 0;
+      } finally {
+        inFlight.current = false;
+        setIsPending(false);
+      }
     },
     setHidden: (id: OnboardingTaskId, hidden: boolean) =>
       canHideTasks ? update({ taskKey: id, hidden }) : Promise.resolve(false),
