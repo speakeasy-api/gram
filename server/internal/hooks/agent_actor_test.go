@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -600,6 +601,65 @@ func TestLocalSessionCache_AgentFallbackHasNoHumanIdentity(t *testing.T) {
 	require.Empty(t, metadata.UserID, "the local-dev fallback never lends an agent a human identity")
 	require.Empty(t, metadata.UserEmail)
 	require.NotEmpty(t, metadata.ProjectID, "routing scope is still resolved")
+}
+
+// keyRecordingCache records every key read through it.
+type keyRecordingCache struct {
+	cache.Cache
+	mu   *sync.Mutex
+	keys *[]string
+}
+
+func (c keyRecordingCache) Get(ctx context.Context, key string, value any) error {
+	c.mu.Lock()
+	*c.keys = append(*c.keys, key)
+	c.mu.Unlock()
+	if err := c.Cache.Get(ctx, key, value); err != nil {
+		return fmt.Errorf("get: %w", err)
+	}
+	return nil
+}
+
+func TestClaude_AgentReusingHumanSessionNeverReadsHumanCache(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	sessionID := "human-claude-" + uuid.NewString()
+	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
+		SessionID:           sessionID,
+		ServiceName:         "cowork",
+		UserEmail:           "human@example.com",
+		UserID:              authCtx.UserID,
+		Provider:            providerAnthropic,
+		ExternalOrgID:       "",
+		ExternalAccountUUID: "",
+		ExternalAccountID:   "",
+		DeviceID:            "",
+		Hostname:            "",
+		Cwd:                 "",
+		AccountType:         "",
+		BillingMode:         "",
+		UserAccountID:       "",
+		ObservedUserEmail:   "",
+		GramOrgID:           authCtx.ActiveOrganizationID,
+		ProjectID:           authCtx.ProjectID.String(),
+	}, time.Hour))
+
+	agentCtx := grantedAgentContext(t, ctx, ti)
+	var mu sync.Mutex
+	var keys []string
+	ti.service.cache = keyRecordingCache{Cache: ti.service.cache, mu: &mu, keys: &keys}
+	ti.service.auth = stubAuthorizer(func() (context.Context, error) { return agentCtx, nil })
+
+	_, err := ti.service.Claude(t.Context(), claudePluginPrompt(sessionID))
+	require.NoError(t, err)
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.NotContains(t, keys, sessionCacheKey(sessionID), "an agent never reads the human's session cache entry")
+	require.Contains(t, keys, sessionCacheKey(agentSessionID(agentCtx, sessionID)), "the ServiceName lookup uses the namespaced id")
 }
 
 func TestAgentSessionID_ReservesAgentPrefix(t *testing.T) {

@@ -43,6 +43,10 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 		s.metrics.RecordHookEventDuration(ctx, "cursor", logHookEventName, outcome, cursorHookDecision(res), orgSlug, *riskScanned, time.Since(start))
 	}()
 
+	// APIKeyAuth already put the actor on ctx: scope the session ids first.
+	namespaceAgentSession(ctx, payload.ConversationID)
+	namespaceAgentSession(ctx, payload.SessionID)
+
 	logger := s.logger.With(
 		attr.SlogHookSource("cursor"),
 		attr.SlogHookEvent(logHookEventName),
@@ -70,8 +74,6 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 	orgID := authCtx.ActiveOrganizationID
 	orgSlug = authCtx.OrganizationSlug
 	projectID := authCtx.ProjectID.String()
-	namespaceAgentSession(ctx, payload.ConversationID)
-	namespaceAgentSession(ctx, payload.SessionID)
 	userEmail := strings.TrimSpace(conv.PtrValOr(payload.UserEmail, ""))
 	actorUserID := ""
 	switch {

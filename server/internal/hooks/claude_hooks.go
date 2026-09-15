@@ -219,29 +219,16 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (res *
 	projectSlugHint := conv.PtrValOr(payload.ProjectSlugInput, "")
 	hasPluginAuth := hasOptionalPluginAuth(payload)
 
-	// service.name lives in cached SessionMetadata seeded by the OTEL Logs
-	// endpoint. May be empty for the first hooks of a session (before OTEL
-	// catches up) or for OTEL-disabled clients — non-fatal, log either way.
-	serviceName := ""
-	if sid := conv.PtrValOr(payload.SessionID, ""); sid != "" {
-		if md, err := s.getSessionMetadata(ctx, sid); err == nil {
-			serviceName = md.ServiceName
-		}
-	}
-
 	logger := s.logger.With(
 		attr.SlogHookSource("claude"),
 		attr.SlogHookEvent(payload.HookEventName),
-		attr.SlogServiceName(serviceName),
 		attr.SlogToolName(conv.PtrValOr(payload.ToolName, "")),
-		attr.SlogGenAIConversationID(conv.PtrValOr(payload.SessionID, "")),
 		attr.SlogProjectSlug(projectSlugHint),
 		attr.SlogHookHasPluginAuth(hasPluginAuth),
 	)
+	// The actor is unknown until plugin auth, so pre-auth lines carry the raw id.
+	authLogger := logger.With(attr.SlogGenAIConversationID(conv.PtrValOr(payload.SessionID, "")))
 
-	logger.InfoContext(ctx, "claude hook received",
-		attr.SlogEvent("claude_hook"),
-	)
 	hookEventName := payload.HookEventName
 	if parsedEvent, ok := parseClaudeHookEvent(payload.HookEventName); ok {
 		hookEventName = string(parsedEvent)
@@ -268,14 +255,14 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (res *
 			// An authenticated agent key that fails its grant never falls back
 			// to the unauthenticated buffer, where OTEL could attribute it to a human.
 			outcome = hookMetricOutcomeUnauthorized
-			logger.WarnContext(ctx, "agent key denied on claude hook",
+			authLogger.WarnContext(ctx, "agent key denied on claude hook",
 				attr.SlogEvent("claude_hook_agent_denied"),
 				attr.SlogError(err),
 			)
 			return nil, oops.E(oops.CodeForbidden, err, "agent key is not permitted to send hook events")
 		} else if err != nil {
 			outcome = hookMetricOutcomeUnauthorized
-			logger.WarnContext(ctx, "plugin auth failed on claude hook; falling back to OTEL-buffered path",
+			authLogger.WarnContext(ctx, "plugin auth failed on claude hook; falling back to OTEL-buffered path",
 				attr.SlogEvent("claude_hook_auth_failed"),
 				attr.SlogError(err),
 			)
@@ -291,12 +278,31 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (res *
 		orgSlug = authCtx.OrganizationSlug
 	}
 
+	// Scope the session id before anything reads it: the actor is known now.
+	namespaceAgentSession(ctx, payload.SessionID)
+
+	// service.name lives in cached SessionMetadata seeded by the OTEL Logs
+	// endpoint. May be empty for the first hooks of a session (before OTEL
+	// catches up) or for OTEL-disabled clients — non-fatal, log either way.
+	serviceName := ""
+	if sid := conv.PtrValOr(payload.SessionID, ""); sid != "" {
+		if md, err := s.getSessionMetadata(ctx, sid); err == nil {
+			serviceName = md.ServiceName
+		}
+	}
+	logger = logger.With(
+		attr.SlogServiceName(serviceName),
+		attr.SlogGenAIConversationID(conv.PtrValOr(payload.SessionID, "")),
+	)
+	logger.InfoContext(ctx, "claude hook received",
+		attr.SlogEvent("claude_hook"),
+	)
+
 	// Claim the per-invocation idempotency token once, before persistence and
 	// the block side-effects in the handlers below. A retry re-sends the same
 	// token: the decision (scan) still re-runs so the user stays blocked, but
 	// tagging the context as a duplicate suppresses the duplicate writes
 	// (persistence, block-reason telemetry, shadow-MCP findings).
-	namespaceAgentSession(ctx, payload.SessionID)
 	if !s.claimHookIdempotency(ctx, conv.PtrValOr(payload.IdempotencyKey, ""), false) {
 		ctx = withHookDuplicate(ctx)
 	}
