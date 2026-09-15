@@ -333,11 +333,21 @@ export function GrantRuleDrawerContent({
   const isResourceSelected = (id: string) =>
     selectors?.some((s) => s.resourceId === id) ?? false;
 
+  // A project is chosen only by a project-wide selector, so the row's checkbox,
+  // its pinned entry, and what the toggle removes all read the same thing: a
+  // selector naming one server inside the project is that server's, not the
+  // project's, and unchecking the project must not take it away.
+  const isProjectSelected = (projectId: string) =>
+    selectedProjectIds.has(projectId);
+
   const toggleProject = (projectId: string) => {
     if (selectors === null) return;
-    const has = selectors.some((s) => s.projectId === projectId);
-    if (has) {
-      onChangeSelectors(selectors.filter((s) => s.projectId !== projectId));
+    if (isProjectSelected(projectId)) {
+      onChangeSelectors(
+        selectors.filter(
+          (s) => !(s.projectId === projectId && s.resourceId === "*"),
+        ),
+      );
     } else {
       onChangeSelectors([
         ...selectors,
@@ -345,9 +355,6 @@ export function GrantRuleDrawerContent({
       ]);
     }
   };
-
-  const isProjectSelected = (projectId: string) =>
-    selectors?.some((s) => s.projectId === projectId) ?? false;
 
   const switchPanel = (panel: ActivePanel) => {
     setPanelOverride(panel);
