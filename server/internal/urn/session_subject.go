@@ -33,7 +33,17 @@ const (
 // in front of the person who can shorten it; discovering it at token exchange
 // instead produces a workload that authenticates correctly and then cannot
 // hold a session, with nothing in the failure naming the cause.
-const MaxWorkloadExternalSubjectLength = MaxSessionSubjectIDLength - uuidStringLength - len(delimiter)
+const MaxWorkloadExternalSubjectLength = MaxWorkloadSubjectIDLength - uuidStringLength - len(delimiter)
+
+// MaxWorkloadSubjectIDLength is the byte limit for a workload subject's id
+// segment. It is higher than MaxSessionSubjectIDLength because the external
+// subject is chosen by the workload's platform, not by Gram: an AWS IAM role or
+// user ARN alone can carry a path of up to 512 characters.
+//
+// Still bounded. The subject is stored in indexed columns, whose B-tree entries
+// Postgres caps at roughly 2.7 KB, and it travels in bearer tokens, which
+// proxies commonly cap near 8 KB of headers.
+const MaxWorkloadSubjectIDLength = 1024
 
 // uuidStringLength is the width of a uuid in its canonical text form, so the
 // budget above is derived rather than written down as a number.
@@ -305,8 +315,12 @@ func (u *SessionSubject) validate() error {
 		return u.err
 	}
 
-	if len(u.ID) > MaxSessionSubjectIDLength {
-		u.err = fmt.Errorf("%w: id segment is too long (max %d, got %d)", ErrInvalid, MaxSessionSubjectIDLength, len(u.ID))
+	maxIDLength := MaxSessionSubjectIDLength
+	if u.Kind == SessionSubjectKindWorkload {
+		maxIDLength = MaxWorkloadSubjectIDLength
+	}
+	if len(u.ID) > maxIDLength {
+		u.err = fmt.Errorf("%w: id segment is too long (max %d, got %d)", ErrInvalid, maxIDLength, len(u.ID))
 		return u.err
 	}
 

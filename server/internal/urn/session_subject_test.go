@@ -578,3 +578,24 @@ func TestWorkloadSubject_ExternalSubjectBudgetIsEnforced(t *testing.T) {
 	_, err = urn.ParseSessionSubject(overLimit.String())
 	require.Error(t, err, "a subject one byte over the budget must be rejected, not truncated")
 }
+
+// Platform subjects can outgrow the shared URN cap: an AWS IAM role ARN may
+// carry a path of up to 512 characters, and GovCloud lengthens the partition.
+// Only the workload kind gets the larger cap.
+func TestWorkloadSubject_AcceptsSubjectsLongerThanOtherKinds(t *testing.T) {
+	t.Parallel()
+
+	arn := "arn:aws-us-gov:iam::123456789012:role/" + strings.Repeat("platform/", 20) + strings.Repeat("R", 64)
+	require.Greater(t, len(arn), urn.MaxSessionSubjectIDLength, "the fixture must exceed the cap other kinds keep")
+
+	subject := urn.NewWorkloadSubject(uuid.New(), arn)
+	parsed, err := urn.ParseSessionSubject(subject.String())
+	require.NoError(t, err)
+
+	_, externalSubject, err := parsed.Workload()
+	require.NoError(t, err)
+	require.Equal(t, arn, externalSubject, "a long platform subject must come back byte-identical")
+
+	_, err = urn.ParseSessionSubject("user:" + strings.Repeat("u", urn.MaxSessionSubjectIDLength+1))
+	require.Error(t, err, "every other kind keeps MaxSessionSubjectIDLength")
+}
