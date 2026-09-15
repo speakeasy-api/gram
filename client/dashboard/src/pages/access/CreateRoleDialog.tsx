@@ -878,6 +878,11 @@ export function CreateRoleDialog({
                         editingRole?.id,
                         member.roleIds,
                       );
+                      // Under directory sync the rows are read-only for
+                      // everyone, not only the mouse: a focusable checkbox
+                      // would let the keyboard edit an assignment the next
+                      // sync overwrites.
+                      const locked = organization.scimEnabled || alreadyHasRole;
                       return (
                         <label
                           key={member.id}
@@ -890,9 +895,9 @@ export function CreateRoleDialog({
                             checked={
                               alreadyHasRole || selectedMembers.has(member.id)
                             }
-                            disabled={alreadyHasRole}
+                            disabled={locked}
                             onCheckedChange={() => {
-                              void (!alreadyHasRole && toggleMember(member.id));
+                              void (!locked && toggleMember(member.id));
                             }}
                           />
                           <Avatar className="h-7 w-7">

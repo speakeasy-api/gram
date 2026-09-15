@@ -243,7 +243,11 @@ export function ToolSelectionPanel({
   const flat = flattenSingleServer && servers.length === 1;
 
   const selectedToolRows = useMemo(() => {
-    const serverNameById = new Map(servers.map((s) => [s.id, s.name]));
+    // The prefix is what separates two servers of the same name in different
+    // projects, so the pinned row carries it as the server rows do.
+    const serverNameById = new Map(
+      servers.map((s) => [s.id, `${s.namePrefix ?? ""}${s.name}`]),
+    );
     return selectedTools.map((t) => ({
       ...t,
       serverName: serverNameById.get(t.serverId) ?? "",
@@ -398,7 +402,7 @@ export function ToolSelectionPanel({
             {/* A picked tool sits inside a collapsed server, so the panel could
                 say "3 selected" while showing none of them. Held at the top,
                 unfiltered by the search below it. */}
-            {!flat && selectedToolRows.length > 0 && (
+            {(!flat || !!q) && selectedToolRows.length > 0 && (
               <div className="border-border mx-3 mb-3 border">
                 <div className="bg-muted/40 text-muted-foreground text-eyebrow border-border border-b px-3 py-1.5">
                   Selected ({selectedToolRows.length})
@@ -407,6 +411,8 @@ export function ToolSelectionPanel({
                   <button
                     key={`${row.serverId}:${row.toolName}`}
                     type="button"
+                    role="checkbox"
+                    aria-checked={true}
                     onClick={() => toggleTool(row.serverId, row.toolName)}
                     className="hover:bg-muted/40 border-border flex w-full items-center gap-3 border-b px-3 py-2 text-left text-sm last:border-b-0"
                   >
@@ -416,10 +422,16 @@ export function ToolSelectionPanel({
                     >
                       <Check className="size-3" />
                     </span>
-                    <span className="min-w-0 flex-1 truncate">
+                    <span
+                      title={row.toolName}
+                      className="min-w-0 flex-1 truncate"
+                    >
                       {row.toolName}
                     </span>
-                    <span className="text-muted-foreground shrink-0 text-xs">
+                    <span
+                      title={row.serverName}
+                      className="text-muted-foreground shrink-0 text-xs"
+                    >
                       {row.serverName}
                     </span>
                   </button>

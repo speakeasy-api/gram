@@ -237,10 +237,15 @@ export function GrantRuleDrawerContent({
   // What the rule already names, pinned above the list: the chosen row is
   // otherwise somewhere down a long scroll, so "except 1 server" never says
   // which one. Search does not filter these.
+  // Only project-wide selectors count as a selected project: one that pairs a
+  // project with a named server allows that server, and pinning the project
+  // would let its toggle drop the server selector.
   const selectedProjectIds = useMemo(
     () =>
       new Set(
-        (selectors ?? []).flatMap((s) => (s.projectId ? [s.projectId] : [])),
+        (selectors ?? []).flatMap((s) =>
+          s.projectId && s.resourceId === "*" ? [s.projectId] : [],
+        ),
       ),
     [selectors],
   );
@@ -452,8 +457,11 @@ export function GrantRuleDrawerContent({
                 id={server.id}
                 name={
                   <>
-                    {server.name}
-                    <span className="text-muted-foreground ml-2 text-xs font-normal">
+                    <span title={server.name}>{server.name}</span>
+                    <span
+                      title={projectName}
+                      className="text-muted-foreground ml-2 text-xs font-normal"
+                    >
                       {projectName}
                     </span>
                   </>
