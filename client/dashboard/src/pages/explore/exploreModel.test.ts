@@ -7,14 +7,19 @@ import {
   fieldsForOp,
   filterableFields,
   formatMeasureValue,
+  hasChartShape,
   initialSpec,
+  isRowsMode,
   measureAlias,
   measureLabel,
+  measureUnit,
+  numericCell,
   operatorsForField,
   opsForDataset,
   parseLimit,
   queryBodyFromSpec,
   specForDataset,
+  textCell,
   windowRange,
   type ExploreSpec,
 } from "./exploreModel";
@@ -101,13 +106,13 @@ describe("the describe-to-controls mapping", () => {
     expect(operatorsForField(undefined)).toEqual([]);
   });
 
-  it("opens a dataset counting rows, broken down by its summary field, on the chart its kind picks", () => {
+  it("opens a dataset counting rows over a short window, broken down by its summary field, on the chart its kind picks", () => {
     expect(specForDataset(sessions)).toMatchObject({
       dataset: "sessions",
       measures: [{ op: "count", field: "" }],
       dimensions: ["user"],
       chartType: "line",
-      window: "7d",
+      window: "24h",
       limit: 0,
     });
     expect(specForDataset(usage)).toMatchObject({
@@ -125,6 +130,14 @@ describe("the describe-to-controls mapping", () => {
   it("opens on the catalog's first dataset, or nothing", () => {
     expect(initialSpec([usage, sessions])?.dataset).toBe("usage");
     expect(initialSpec([])).toBeNull();
+  });
+
+  it("reads a measure's unit off its field", () => {
+    expect(measureUnit(sessions, { op: "count", field: "" })).toBe("");
+    expect(measureUnit(sessions, { op: "avg", field: "turn_count" })).toBe("");
+    expect(
+      measureUnit(sessions, { op: "p95", field: "duration_seconds" }),
+    ).toBe("s");
   });
 });
 
@@ -178,7 +191,7 @@ describe("measure and filter drafts", () => {
   });
 });
 
-describe("the query a spec describes", () => {
+describe("the queries a spec describes", () => {
   it("aligns the window to the hour so the key stays stable within it", () => {
     const now = Date.UTC(2026, 8, 14, 10, 17, 0);
     const { from, to } = windowRange("24h", now);
@@ -186,14 +199,23 @@ describe("the query a spec describes", () => {
     expect(from.toISOString()).toBe("2026-09-13T11:00:00.000Z");
   });
 
-  it("buckets a timeseries at the grain the window calls for", () => {
+  it("buckets the chart shape at the grain the window calls for, and the summary not at all", () => {
     expect(autoGrain("1h")).toBe("hour");
     expect(autoGrain("7d")).toBe("day");
     expect(autoGrain("90d")).toBe("week");
-    expect(
-      queryBodyFromSpec(spec({ chartType: "line", window: "30d" })).grain,
-    ).toBe("day");
-    expect(queryBodyFromSpec(spec({ chartType: "table" })).grain).toBe("none");
+    const monthly = spec({ chartType: "line", window: "30d" });
+    expect(queryBodyFromSpec(monthly, "chart").grain).toBe("day");
+    expect(queryBodyFromSpec(monthly, "summary").grain).toBe("none");
+  });
+
+  it("draws a chart only for a timeseries over at least one measure", () => {
+    expect(hasChartShape(spec({ chartType: "line" }))).toBe(true);
+    expect(hasChartShape(spec({ chartType: "bar" }))).toBe(true);
+    expect(hasChartShape(spec({ chartType: "table" }))).toBe(false);
+    expect(hasChartShape(spec({ chartType: "number" }))).toBe(false);
+    expect(hasChartShape(spec({ chartType: "line", measures: [] }))).toBe(
+      false,
+    );
   });
 
   it("sends complete measures with their aliases and the filters that survived", () => {
@@ -206,6 +228,7 @@ describe("the query a spec describes", () => {
         ],
         filters: [{ field: "surface", operator: "in", values: ["cli"] }],
       }),
+      "summary",
     );
     expect(body.dataset).toBe("sessions");
     expect(body.dimensions).toEqual(["user"]);
@@ -216,31 +239,53 @@ describe("the query a spec describes", () => {
     expect(body.filters).toEqual([
       { field: "surface", operator: "in", values: ["cli"] },
     ]);
+    expect(body.ungrouped).toBeUndefined();
+  });
+
+  it("caps the chart shape at the server's maximum and leaves order to time", () => {
+    const body = queryBodyFromSpec(
+      spec({ orderBy: "count", limit: 20 }),
+      "chart",
+    );
+    expect(body.limit).toBe(1000);
+    expect(body.orderBy).toBeUndefined();
   });
 
   it("drops the breakdown for a number chart", () => {
-    expect(queryBodyFromSpec(spec({ chartType: "number" })).dimensions).toEqual(
-      [],
-    );
+    expect(
+      queryBodyFromSpec(spec({ chartType: "number" }), "summary").dimensions,
+    ).toEqual([]);
   });
 
-  it("orders by a measure only while that measure is still in the query", () => {
+  it("orders the summary by a measure only while that measure is still in the query", () => {
     const ordered = spec({
       measures: [{ op: "sum", field: "turn_count" }],
       orderBy: "sum_turn_count",
     });
-    expect(queryBodyFromSpec(ordered).orderBy).toEqual([
+    expect(queryBodyFromSpec(ordered, "summary").orderBy).toEqual([
       { measure: "sum_turn_count", direction: "desc" },
     ]);
     expect(
-      queryBodyFromSpec({ ...ordered, measures: [{ op: "count", field: "" }] })
-        .orderBy,
+      queryBodyFromSpec(
+        { ...ordered, measures: [{ op: "count", field: "" }] },
+        "summary",
+      ).orderBy,
     ).toBeUndefined();
   });
 
-  it("leaves the limit to the server unless one was typed", () => {
-    expect(queryBodyFromSpec(spec()).limit).toBeUndefined();
-    expect(queryBodyFromSpec(spec({ limit: 20 })).limit).toBe(20);
+  it("leaves the summary limit to the server unless one was typed", () => {
+    expect(queryBodyFromSpec(spec(), "summary").limit).toBeUndefined();
+    expect(queryBodyFromSpec(spec({ limit: 20 }), "summary").limit).toBe(20);
+  });
+
+  it("asks for rows at the dataset's grain when nothing is measured", () => {
+    const rows = spec({ measures: [{ op: "sum", field: "" }] });
+    expect(isRowsMode(rows)).toBe(true);
+    const body = queryBodyFromSpec(rows, "summary");
+    expect(body.ungrouped).toBe(true);
+    expect(body.measures).toBeUndefined();
+    expect(body.grain).toBe("none");
+    expect(body.dimensions).toEqual(["user"]);
   });
 });
 
@@ -251,5 +296,18 @@ describe("formatting", () => {
     expect(formatMeasureValue(90, "s")).toBe("90 s");
     expect(formatMeasureValue(0.256, "ratio")).toBe("25.6%");
     expect(formatMeasureValue(12_500, "")).toBe("12.5K");
+  });
+
+  it("reads result cells as numbers or text", () => {
+    expect(numericCell(12)).toBe(12);
+    expect(numericCell("12.5")).toBe(12.5);
+    expect(numericCell(BigInt(7))).toBe(7);
+    expect(numericCell("cli")).toBeNull();
+    expect(numericCell(null)).toBeNull();
+    expect(textCell("cli")).toBe("cli");
+    expect(textCell("")).toBe("—");
+    expect(textCell(undefined)).toBe("—");
+    expect(textCell(3)).toBe("3");
+    expect(textCell(true)).toBe("true");
   });
 });
