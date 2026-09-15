@@ -44,7 +44,19 @@ type serverIdentity struct {
 	ChatSessions    *chatsessions.Manager
 }
 
+func parseSiteURL(raw string) (*url.URL, error) {
+	siteURL, err := url.Parse(raw)
+	if err != nil || siteURL.Hostname() == "" || (siteURL.Scheme != "http" && siteURL.Scheme != "https") {
+		return nil, fmt.Errorf("site URL must be an absolute HTTP(S) URL with a host")
+	}
+	return siteURL, nil
+}
+
 func newServerIdentity(ctx context.Context, c *cli.Context, logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, redisClient *redis.Client, guardianPolicy *guardian.Policy) (*serverIdentity, error) {
+	siteURL, err := parseSiteURL(c.String("site-url"))
+	if err != nil {
+		return nil, err
+	}
 	pylonClient, err := pylon.NewPylon(logger, c.String("pylon-verification-secret"))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create pylon client: %w", err)
@@ -72,10 +84,7 @@ func newServerIdentity(ctx context.Context, c *cli.Context, logger *slog.Logger,
 	}
 	idpClient := identity.NewWorkOSAdapter(umClient)
 	productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
-	siteURL, err := url.Parse(c.String("site-url"))
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse site url: %w", err)
-	}
+
 	growth := growthsignals.NewEmitter(logger, posthogClient, growthsignals.NewDatabaseEnricher(db), siteURL)
 	resolver := identity.NewResolver(logger, tracerProvider, cache.NewRedisCacheAdapter(redisClient), c.String("idp-base-url"), c.String("idp-client-id"), idpClient, workosClient, orgrepo.New(db), userrepo.New(db), pylonClient, posthogClient, growth, cache.SuffixNone)
 	manager := sessions.NewManager(logger, tracerProvider, db, redisClient, cache.SuffixNone, idpClient, billingRepo, resolver)

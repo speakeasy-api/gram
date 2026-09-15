@@ -27,6 +27,9 @@ func TestServerCommandsOwnSeparateListenerFlags(t *testing.T) {
 			}
 		}
 	}
+	for _, name := range []string{"address", "ssl-key-file", "ssl-cert-file"} {
+		requireFlag(t, newStartCommand().Flags, name)
+	}
 	requireFlag(t, newStartCommand().Flags, "network-ingress-enabled")
 	requireFlag(t, newStartCommand().Flags, networkIngressQueueFlag)
 }

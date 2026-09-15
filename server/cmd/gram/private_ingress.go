@@ -99,15 +99,21 @@ func newNetworkIngressServerCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
-			defer deps.Close(ctx)
-			controlServer := control.Server{Address: c.String("control-address"), Logger: logger, DisableProfiling: false}
+			defer func() {
+				cancel()
+				deps.Close(ctx)
+			}()
+			controlServer := control.Server{Address: c.String("control-address"), Logger: logger, DisableProfiling: true}
 			temporalHealth := []*o11y.NamedResource[client.Client]{}
 			if deps.Temporal != nil {
 				temporalHealth = append(temporalHealth, &o11y.NamedResource[client.Client]{Name: "default", Resource: deps.Temporal.Client()})
 			}
-			stopControl, err := controlServer.Start(ctx, o11y.NewHealthCheckHandler(nil,
+			healthHandler := o11y.NewHealthCheckHandler(nil,
 				[]*o11y.NamedResource[*pgxpool.Pool]{{Name: "default", Resource: deps.DB}},
-				[]*o11y.NamedResource[*redis.Client]{{Name: "default", Resource: deps.Redis}}, temporalHealth))
+				[]*o11y.NamedResource[*redis.Client]{{Name: "default", Resource: deps.Redis}}, temporalHealth)
+			stopControl, err := controlServer.Start(ctx, privateIngressReadinessHandler(
+				deps.Kubernetes.Clientset.AuthenticationV1().TokenReviews(),
+				"/var/run/secrets/kubernetes.io/serviceaccount/token", healthHandler))
 			if err != nil {
 				return fmt.Errorf("start private ingress control server: %w", err)
 			}
@@ -222,6 +228,8 @@ func servePrivateIngress(
 	}
 	defer func() { _ = listener.Close() }()
 
+	requestCtx, cancelRequests := context.WithCancel(ctx)
+	defer cancelRequests()
 	server := &http.Server{
 		Addr:              address,
 		Handler:           mux,
@@ -231,7 +239,7 @@ func servePrivateIngress(
 			MinVersion:   tls.VersionTLS12,
 			Certificates: []tls.Certificate{certificate},
 		},
-		BaseContext: func(net.Listener) context.Context { return ctx },
+		BaseContext: func(net.Listener) context.Context { return requestCtx },
 	}
 
 	sigctx, cancel := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
@@ -240,15 +248,7 @@ func servePrivateIngress(
 	go func() {
 		defer close(shutdownDone)
 		<-sigctx.Done()
-		graceCtx, graceCancel := context.WithTimeoutCause(
-			context.WithoutCancel(ctx),
-			shutdownDrainTimeout,
-			errors.New("graceful shutdown timed out"),
-		)
-		defer graceCancel()
-		if err := server.Shutdown(graceCtx); err != nil {
-			deps.Logger.ErrorContext(ctx, "failed to shutdown private network ingress listener", attr.SlogError(err))
-		}
+		shutdownPrivateIngress(ctx, deps.Logger, server, cancelRequests, shutdownDrainTimeout)
 	}()
 
 	deps.Logger.InfoContext(ctx, "private network ingress listener started", attr.SlogServerAddress(listener.Addr().String()))
@@ -260,4 +260,17 @@ func servePrivateIngress(
 	}
 	<-shutdownDone
 	return nil
+}
+
+func shutdownPrivateIngress(ctx context.Context, logger *slog.Logger, server *http.Server, cancelRequests context.CancelFunc, timeout time.Duration) {
+	graceCtx, graceCancel := context.WithTimeoutCause(context.WithoutCancel(ctx), timeout, errors.New("graceful shutdown timed out"))
+	defer graceCancel()
+	defer cancelRequests()
+	if err := server.Shutdown(graceCtx); err != nil {
+		logger.ErrorContext(ctx, "failed to shutdown private network ingress listener", attr.SlogError(err))
+		cancelRequests()
+		if err := server.Close(); err != nil {
+			logger.ErrorContext(ctx, "close private network ingress connections", attr.SlogError(err))
+		}
+	}
 }

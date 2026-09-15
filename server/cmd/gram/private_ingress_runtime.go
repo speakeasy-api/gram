@@ -63,7 +63,17 @@ func (r *privateIngressRuntime) Close(ctx context.Context) {
 	}
 }
 
+func validatePrivateIngressTemporalConfig(c *cli.Context) error {
+	if c.String("temporal-address") == "" || c.String("temporal-namespace") == "" || c.String("temporal-task-queue") == "" {
+		return fmt.Errorf("private ingress Temporal address, namespace, and task queue are required")
+	}
+	return validateNetworkIngressWorkerTemporalTLS(c.String("environment"), c.String("temporal-client-cert"), c.String("temporal-client-key"))
+}
+
 func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.Logger) (_ *privateIngressRuntime, err error) {
+	if err := validatePrivateIngressTemporalConfig(c); err != nil {
+		return nil, err
+	}
 	r := &privateIngressRuntime{DB: nil, Redis: nil, Temporal: nil, Kubernetes: nil, Runtime: nil, cleanup: nil}
 	defer func() {
 		if err != nil {
