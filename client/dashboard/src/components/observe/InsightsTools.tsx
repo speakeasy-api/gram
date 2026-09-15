@@ -94,6 +94,7 @@ import { useCallback, useEffect, useMemo } from "react";
 import { Link } from "react-router";
 import { useObserveFilters } from "@/components/observe/useObserveFilters";
 import { useToolUsagePayload } from "@/components/observe/toolUsagePayload";
+import { useObserveLogsLink } from "@/components/observe/observeDeepLink";
 import { HooksEmptyState } from "@/pages/hooks/HooksEmptyState";
 import { HooksSetupButton } from "@/pages/hooks/HooksSetupDialog";
 import type { MultiSelectGroup } from "@/components/ui/MultiSelect";
@@ -715,7 +716,10 @@ function UsersPerServerChart({
   onExpand,
   loading,
   error,
+  logsHref,
 }: {
+  /** Deep link into Tool Logs at this panel's slice of the data. */
+  logsHref?: string;
   title: string;
   breakdown: ToolUsageUsersByTargetRow[];
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
@@ -778,6 +782,7 @@ function UsersPerServerChart({
   return (
     <ChartCard
       title={title}
+      titleHref={logsHref}
       chartId={chartId}
       expandedChart={expandedChart}
       onExpand={onExpand}
@@ -809,7 +814,10 @@ function UserEventCountsChart({
   onExpand,
   loading,
   error,
+  logsHref,
 }: {
+  /** Deep link into Tool Logs at this panel's slice of the data. */
+  logsHref?: string;
   title: string;
   users: ToolUsageUserSummary[];
   handleFilter?: (datasetLabel: string, userEmail: string) => void;
@@ -842,6 +850,7 @@ function UserEventCountsChart({
   return (
     <ChartCard
       title={title}
+      titleHref={logsHref}
       chartId={chartId}
       expandedChart={expandedChart}
       onExpand={onExpand}
@@ -873,7 +882,10 @@ function ServerErrorRateChart({
   onExpand,
   loading,
   error,
+  logsHref,
 }: {
+  /** Deep link into Tool Logs at this panel's slice of the data. */
+  logsHref?: string;
   title: string;
   breakdown: ToolUsageTargetToolBreakdownRow[];
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
@@ -982,6 +994,7 @@ function ServerErrorRateChart({
   return (
     <ChartCard
       title={title}
+      titleHref={logsHref}
       chartId={chartId}
       expandedChart={expandedChart}
       onExpand={onExpand}
@@ -1029,7 +1042,10 @@ function ServerUsageTimeSeries({
   onRangeSelect,
   isZoomed,
   onResetZoom,
+  logsHref,
 }: {
+  /** Deep link into Tool Logs at this panel's slice of the data. */
+  logsHref?: string;
   timeSeries: ToolUsageTargetTimeSeriesPoint[];
   from: Date;
   to: Date;
@@ -1061,6 +1077,7 @@ function ServerUsageTimeSeries({
   return (
     <ChartCard
       title="Activity by Source"
+      titleHref={logsHref}
       chartId={chartId}
       expandedChart={expandedChart}
       onExpand={onExpand}
@@ -1097,7 +1114,10 @@ function UserUsageTimeSeries({
   onRangeSelect,
   isZoomed,
   onResetZoom,
+  logsHref,
 }: {
+  /** Deep link into Tool Logs at this panel's slice of the data. */
+  logsHref?: string;
   timeSeries: ToolUsageUserTimeSeriesPoint[];
   from: Date;
   to: Date;
@@ -1127,6 +1147,7 @@ function UserUsageTimeSeries({
   return (
     <ChartCard
       title="User Usage"
+      titleHref={logsHref}
       chartId={chartId}
       expandedChart={expandedChart}
       onExpand={onExpand}
@@ -1163,7 +1184,10 @@ function SkillUsageTimeSeries({
   onRangeSelect,
   isZoomed,
   onResetZoom,
+  logsHref,
 }: {
+  /** Deep link into Tool Logs at this panel's slice of the data. */
+  logsHref?: string;
   skillTimeSeries: ToolUsageTargetTimeSeriesPoint[];
   from: Date;
   to: Date;
@@ -1193,6 +1217,7 @@ function SkillUsageTimeSeries({
   return (
     <ChartCard
       title="Skill Usage"
+      titleHref={logsHref}
       chartId={chartId}
       expandedChart={expandedChart}
       onExpand={onExpand}
@@ -1225,7 +1250,10 @@ function UsersPerSkillChart({
   onExpand,
   loading,
   error,
+  logsHref,
 }: {
+  /** Deep link into Tool Logs at this panel's slice of the data. */
+  logsHref?: string;
   title: string;
   skillBreakdown: ToolUsageUsersByTargetRow[];
   expandedChart: string | null;
@@ -1280,6 +1308,7 @@ function UsersPerSkillChart({
   return (
     <ChartCard
       title={title}
+      titleHref={logsHref}
       chartId={chartId}
       expandedChart={expandedChart}
       onExpand={onExpand}
@@ -1314,7 +1343,10 @@ function ErrorsOverTimeChart({
   onRangeSelect,
   isZoomed,
   onResetZoom,
+  logsHref,
 }: {
+  /** Deep link into Tool Logs at this panel's slice of the data. */
+  logsHref?: string;
   timeSeries: ToolUsageTargetTimeSeriesPoint[];
   from: Date;
   to: Date;
@@ -1400,6 +1432,7 @@ function ErrorsOverTimeChart({
   return (
     <ChartCard
       title="Errors Over Time"
+      titleHref={logsHref}
       chartId={chartId}
       expandedChart={expandedChart}
       onExpand={onExpand}
@@ -1507,6 +1540,8 @@ function HooksAnalytics({
       uniqueTools,
     };
   }, [summaryData]);
+
+  const logsLink = useObserveLogsLink();
 
   const targetFiltersByLabel = useMemo(() => {
     const filters = new Map<string, string[]>();
@@ -1657,6 +1692,7 @@ function HooksAnalytics({
         )}
       >
         <ServerUsageTimeSeries
+          logsHref={logsLink()}
           loading={sectionStatus.targetTimeSeries.pending}
           error={sectionStatus.targetTimeSeries.error}
           timeSeries={timeSeries}
@@ -1671,6 +1707,7 @@ function HooksAnalytics({
         />
 
         <UsersPerServerChart
+          logsHref={logsLink()}
           loading={sectionStatus.usersByTarget.pending}
           error={sectionStatus.usersByTarget.error}
           title="Users by Source"
@@ -1685,6 +1722,7 @@ function HooksAnalytics({
         />
 
         <UserUsageTimeSeries
+          logsHref={logsLink()}
           loading={sectionStatus.userTimeSeries.pending}
           error={sectionStatus.userTimeSeries.error}
           timeSeries={userTimeSeries}
@@ -1698,6 +1736,7 @@ function HooksAnalytics({
         />
 
         <UserEventCountsChart
+          logsHref={logsLink()}
           loading={sectionStatus.users.pending}
           error={sectionStatus.users.error}
           title="Tool Calls by User"
@@ -1708,6 +1747,7 @@ function HooksAnalytics({
         />
 
         <SkillUsageTimeSeries
+          logsHref={logsLink({ targetTypes: ["skill"] })}
           loading={sectionStatus.targetTimeSeries.pending}
           error={sectionStatus.targetTimeSeries.error}
           skillTimeSeries={skillTimeSeries}
@@ -1721,6 +1761,7 @@ function HooksAnalytics({
         />
 
         <UsersPerSkillChart
+          logsHref={logsLink({ targetTypes: ["skill"] })}
           loading={sectionStatus.usersByTarget.pending}
           error={sectionStatus.usersByTarget.error}
           title="Users per Skill"
@@ -1730,6 +1771,7 @@ function HooksAnalytics({
         />
 
         <ErrorsOverTimeChart
+          logsHref={logsLink({ statuses: ["error"] })}
           loading={sectionStatus.targetTimeSeries.pending}
           error={sectionStatus.targetTimeSeries.error}
           timeSeries={timeSeries}
@@ -1744,6 +1786,7 @@ function HooksAnalytics({
         />
 
         <ServerErrorRateChart
+          logsHref={logsLink({ statuses: ["error"] })}
           loading={sectionStatus.targetToolBreakdown.pending}
           error={sectionStatus.targetToolBreakdown.error}
           title="Failures by Source and Tool"

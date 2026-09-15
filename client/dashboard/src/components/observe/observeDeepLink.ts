@@ -6,7 +6,10 @@ import {
 } from "@/components/observe/observeTargetFilters";
 import { applyFilterAdd } from "@/pages/logs/log-filter-types";
 import { parseFilters, serializeFilters } from "@/pages/logs/log-filter-url";
+import { useSlugs } from "@/contexts/Sdk";
 import { Operator } from "@gram/client/models/components/logfilter";
+import { useCallback } from "react";
+import { useSearchParams } from "react-router";
 
 /**
  * The observe filter params both pages share. Anything listed here survives a
@@ -124,4 +127,20 @@ export function buildObserveHref(
 
   const query = params.toString();
   return query ? `${base}?${query}` : base;
+}
+
+/**
+ * Binds {@link buildObserveHref} to the current project and URL, for panels
+ * that only know what they are showing, not where they are.
+ */
+export function useObserveLogsLink(): (scope?: ObserveDeepLinkScope) => string {
+  const { orgSlug, projectSlug } = useSlugs();
+  const [searchParams] = useSearchParams();
+  const base = `/${orgSlug}/projects/${projectSlug}/logs`;
+
+  return useCallback(
+    (scope?: ObserveDeepLinkScope) =>
+      buildObserveHref(base, searchParams, scope),
+    [base, searchParams],
+  );
 }
