@@ -282,6 +282,7 @@ func TestCreateOIDCApplicationSendsExactPayloadAndDropsResponseSecret(t *testing
 	logger := slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	app, err := newTestClientWithLogger(t, server.URL, logger).CreateOIDCApplication(t.Context(), "example.okta.com", "test-access-token", okta.CreateOIDCApplicationInput{
 		RedirectURIs: []string{"https://auth.example.com/sso/callback", "https://app.example.com/oauth/callback"},
+		ClientSecret: "caller-minted-secret",
 	})
 	require.NoError(t, err)
 	require.Equal(t, okta.Application{ID: "app-1", Status: "ACTIVE", Label: "Speakeasy", ClientID: "client-1"}, app)
@@ -296,10 +297,10 @@ func TestCreateOIDCApplicationSendsExactPayloadAndDropsResponseSecret(t *testing
 		"name":"oidc_client",
 		"label":"Speakeasy",
 		"signOnMode":"OPENID_CONNECT",
-		"credentials":{"oauthClient":{"token_endpoint_auth_method":"client_secret_post","autoKeyRotation":true,"pkce_required":true}},
+		"credentials":{"oauthClient":{"client_secret":"caller-minted-secret","token_endpoint_auth_method":"client_secret_post","autoKeyRotation":true,"pkce_required":true}},
 		"settings":{"oauthClient":{"application_type":"web","grant_types":["authorization_code","refresh_token"],"response_types":["code"],"redirect_uris":["https://auth.example.com/sso/callback","https://app.example.com/oauth/callback"],"consent_method":"TRUSTED"}}
 	}`, string(body))
-	require.NotContains(t, string(body), `"client_secret":`)
+	require.Contains(t, string(body), `"client_secret":"caller-minted-secret"`)
 	_, exposesSecret := reflect.TypeOf(app).FieldByName("ClientSecret")
 	require.False(t, exposesSecret)
 	encoded, err := json.Marshal(app)
@@ -307,6 +308,28 @@ func TestCreateOIDCApplicationSendsExactPayloadAndDropsResponseSecret(t *testing
 	require.NotContains(t, string(encoded), responseSecret)
 	require.NotContains(t, fmt.Sprintf("%+v", app), responseSecret)
 	require.NotContains(t, logs.String(), responseSecret)
+	require.NotContains(t, logs.String(), "caller-minted-secret")
+}
+
+func TestCreateOIDCApplicationRedactsReflectedClientSecret(t *testing.T) {
+	t.Parallel()
+
+	const clientSecret = "caller-minted-secret"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"errorCode":"E0000001","errorSummary":"Rejected ` + clientSecret + `"}`))
+	}))
+	t.Cleanup(server.Close)
+
+	_, err := newTestClient(t, server.URL).CreateOIDCApplication(t.Context(), "example.okta.com", "test-access-token", okta.CreateOIDCApplicationInput{
+		RedirectURIs: []string{"https://auth.example.com/sso/callback"},
+		ClientSecret: clientSecret,
+	})
+	var apiErr *okta.APIError
+	require.ErrorAs(t, err, &apiErr)
+	require.NotContains(t, apiErr.Description, clientSecret)
+	require.Contains(t, apiErr.Description, "[redacted]")
 }
 
 func TestGetApplicationReturnsOnlyNonSecretFields(t *testing.T) {
@@ -429,7 +452,7 @@ func TestOIDCApplicationMutationsDoNotRetry(t *testing.T) {
 	t.Cleanup(server.Close)
 	client := newTestClientWithRetries(t, server.URL, 3)
 
-	_, createErr := client.CreateOIDCApplication(t.Context(), "example.okta.com", "test-access-token", okta.CreateOIDCApplicationInput{RedirectURIs: []string{"https://auth.example.com/callback"}})
+	_, createErr := client.CreateOIDCApplication(t.Context(), "example.okta.com", "test-access-token", okta.CreateOIDCApplicationInput{RedirectURIs: []string{"https://auth.example.com/callback"}, ClientSecret: "caller-minted-secret"})
 	require.Error(t, createErr)
 	assignErr := client.AssignGroupToApplication(t.Context(), "example.okta.com", "test-access-token", "app-123", "group-123")
 	require.Error(t, assignErr)

@@ -8,6 +8,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/identity_providers"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/identityproviders/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -93,6 +94,35 @@ func TestDescribeSetupBuildsDeepLinksOnlyForSupportedOktaTenants(t *testing.T) {
 		require.Equal(t, testCase.deepLink, setup.Steps[0].DeepLink, testCase.tenantURL)
 		require.Nil(t, setup.Steps[1].DeepLink, testCase.tenantURL)
 	}
+}
+
+func TestDescribeSetupOmitsLastOutcomeWhenStoredEvidenceHasNoOutcome(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	createConnection(t, ctx, ti, "https://example.okta.com")
+	setStoredClientID(t, ctx, ti)
+	queries := repo.New(ti.conn)
+	row, err := queries.GetIdentityProviderConnectionByOrganization(ctx, ti.orgID)
+	require.NoError(t, err)
+	updated, err := queries.UpdateIdentityProviderVerification(ctx, repo.UpdateIdentityProviderVerificationParams{
+		Status:                       row.Status,
+		StatusDetail:                 row.StatusDetail,
+		Capabilities:                 row.Capabilities,
+		LastVerifiedAt:               row.LastVerifiedAt,
+		VerifyEvidence:               []byte(`{"checked_at":"2026-09-15T00:00:00Z","reads":[]}`),
+		OrganizationID:               ti.orgID,
+		IdentityProviderConnectionID: row.ID,
+		ClientID:                     row.ClientID,
+		SigningKeyID:                 row.SigningKeyID,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, updated)
+
+	setup, err := ti.service.DescribeSetup(ctx, &gen.DescribeSetupPayload{SessionToken: nil, ApikeyToken: nil})
+	require.NoError(t, err)
+	require.Len(t, setup.Steps, 2)
+	require.Nil(t, setup.Steps[0].LastOutcome)
 }
 
 func TestDescribeSetupReturnsNotFoundWhenAbsent(t *testing.T) {

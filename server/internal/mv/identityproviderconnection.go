@@ -3,6 +3,7 @@ package mv
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 
 	gen "github.com/speakeasy-api/gram/server/gen/identity_providers"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -71,15 +72,24 @@ func BuildIdentityProviderVerifyResultView(row repo.GetIdentityProviderConnectio
 	if err := json.Unmarshal(row.VerifyEvidence, &stored); err != nil {
 		return nil, fmt.Errorf("decode identity provider verification evidence: %w", err)
 	}
-	reads := make([]*gen.IdentityProviderCapabilityRead, len(stored.Reads))
-	for i, read := range stored.Reads {
-		reads[i] = &gen.IdentityProviderCapabilityRead{
+	if !validIdentityProviderVerifyOutcome(stored.Outcome) {
+		return nil, nil
+	}
+	if _, err := time.Parse(time.RFC3339, stored.CheckedAt); err != nil {
+		return nil, nil
+	}
+	reads := make([]*gen.IdentityProviderCapabilityRead, 0, len(stored.Reads))
+	for _, read := range stored.Reads {
+		if !validIdentityProviderCapabilityResource(read.Resource) {
+			continue
+		}
+		reads = append(reads, &gen.IdentityProviderCapabilityRead{
 			Capability: read.Capability,
 			Resource:   read.Resource,
 			OK:         read.OK,
 			Count:      read.Count,
 			Detail:     read.Detail,
-		}
+		})
 	}
 	return &gen.IdentityProviderVerifyResult{
 		Outcome:       stored.Outcome,
@@ -91,4 +101,22 @@ func BuildIdentityProviderVerifyResultView(row repo.GetIdentityProviderConnectio
 			Reads:     reads,
 		},
 	}, nil
+}
+
+func validIdentityProviderVerifyOutcome(outcome string) bool {
+	switch outcome {
+	case "passed", "unreachable", "refused", "mismatched_value", "capability_missing":
+		return true
+	default:
+		return false
+	}
+}
+
+func validIdentityProviderCapabilityResource(resource string) bool {
+	switch resource {
+	case "groups", "users", "apps", "sign_in_application", "sign_in_connection":
+		return true
+	default:
+		return false
+	}
 }

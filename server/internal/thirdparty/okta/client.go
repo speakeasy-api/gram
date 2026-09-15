@@ -139,6 +139,9 @@ type Page struct {
 type CreateOIDCApplicationInput struct {
 	// RedirectURIs are the allowed authorization-code callback URLs.
 	RedirectURIs []string
+
+	// ClientSecret is written to Okta and must not be retained after the request.
+	ClientSecret string
 }
 
 // Application is the non-secret subset of an Okta OIDC application used by Gram.
@@ -189,6 +192,7 @@ type applicationCredentialsRequest struct {
 }
 
 type oauthClientCredentialsRequest struct {
+	ClientSecret            string `json:"client_secret"`
 	TokenEndpointAuthMethod string `json:"token_endpoint_auth_method"`
 	AutoKeyRotation         bool   `json:"autoKeyRotation"`
 	PKCERequired            bool   `json:"pkce_required"`
@@ -368,8 +372,7 @@ func (c *Client) acquireToken(ctx context.Context, request TokenRequest) (Token,
 		Scope       string `json:"scope"`
 	}
 	if _, err := c.do(c.nonRetryingHTTPClient, httpRequest, &response); err != nil {
-		var apiErr *APIError
-		if errors.As(err, &apiErr) {
+		if apiErr, ok := errors.AsType[*APIError](err); ok {
 			c.logger.WarnContext(ctx, "Okta token request failed",
 				attr.SlogOAuthError(apiErr.Code),
 				attr.SlogOAuthErrorDescription(apiErr.Description),
@@ -415,14 +418,18 @@ func (c *Client) ListApplications(ctx context.Context, tenantDomain, accessToken
 	return c.list(ctx, tenantDomain, accessToken, "/api/v1/apps", page)
 }
 
-// CreateOIDCApplication creates the Speakeasy OIDC web application without supplying a client secret.
+// CreateOIDCApplication creates the Speakeasy OIDC web application with a caller-minted client secret.
 func (c *Client) CreateOIDCApplication(ctx context.Context, tenantDomain, accessToken string, input CreateOIDCApplicationInput) (Application, error) {
+	if input.ClientSecret == "" {
+		return Application{}, errors.New("create Okta OIDC application: client secret is required")
+	}
 	payload := createOIDCApplicationRequest{
 		Name:       "oidc_client",
 		Label:      "Speakeasy",
 		SignOnMode: "OPENID_CONNECT",
 		Credentials: applicationCredentialsRequest{
 			OAuthClient: oauthClientCredentialsRequest{
+				ClientSecret:            input.ClientSecret,
 				TokenEndpointAuthMethod: "client_secret_post",
 				AutoKeyRotation:         true,
 				PKCERequired:            true,
@@ -788,6 +795,12 @@ func redactRequestCredentials(request *http.Request, value string) string {
 						credentials = append(credentials, assertion)
 					}
 				}
+				if strings.Contains(request.Header.Get("Content-Type"), "application/json") {
+					var payload any
+					if json.Unmarshal(encoded, &payload) == nil {
+						credentials = appendJSONCredentials(credentials, payload)
+					}
+				}
 			}
 		}
 	}
@@ -795,6 +808,26 @@ func redactRequestCredentials(request *http.Request, value string) string {
 		value = strings.ReplaceAll(value, credential, "[redacted]")
 	}
 	return value
+}
+
+func appendJSONCredentials(credentials []string, value any) []string {
+	switch typed := value.(type) {
+	case map[string]any:
+		for key, child := range typed {
+			if key == "client_secret" {
+				if secret, ok := child.(string); ok && secret != "" {
+					credentials = append(credentials, secret)
+				}
+				continue
+			}
+			credentials = appendJSONCredentials(credentials, child)
+		}
+	case []any:
+		for _, child := range typed {
+			credentials = appendJSONCredentials(credentials, child)
+		}
+	}
+	return credentials
 }
 
 func cloneToken(token Token) Token {

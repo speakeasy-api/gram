@@ -1,9 +1,12 @@
 package identityproviders_test
 
 import (
+	"encoding/base64"
 	"encoding/json"
+	"net/http"
 	"testing"
 
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/identity_providers"
@@ -12,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/identityproviders/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
 func TestSubmitSetupStepSavesTrimmedClientIDAndAwaitsVerification(t *testing.T) {
@@ -126,6 +130,7 @@ func TestSubmitSignInStepProvisionsExactOktaApplicationAndAssignsEveryone(t *tes
 	fake := newFakeOktaServer(t, fakeOktaPassed)
 	ctx, ti := newTestServiceWithOktaEndpoint(t, fake.server.URL)
 	prepareActiveConnection(t, ctx, ti, fake)
+	workOSSecret := expectDirectWorkOSConnection(t, ti, testSignInClientID)
 	beforeAudits, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionIdentityProviderConnectionUpdated)
 	require.NoError(t, err)
 
@@ -136,15 +141,27 @@ func TestSubmitSignInStepProvisionsExactOktaApplicationAndAssignsEveryone(t *tes
 		ApikeyToken:  nil,
 	})
 	require.NoError(t, err)
-	require.Equal(t, configuredSignInStep(testSignInClientID), result.Step)
+	require.Equal(t, configuredSignInStep(testSignInClientID, false), result.Step)
 	require.Empty(t, result.FieldOutcomes)
 	require.Nil(t, result.NextStepKey)
+	createdApplication := fake.CreatedApplication()
+	credentials, ok := createdApplication["credentials"].(map[string]any)
+	require.True(t, ok)
+	oauthClient, ok := credentials["oauthClient"].(map[string]any)
+	require.True(t, ok)
+	clientSecret, ok := oauthClient["client_secret"].(string)
+	require.True(t, ok)
+	decodedSecret, err := base64.RawURLEncoding.DecodeString(clientSecret)
+	require.NoError(t, err)
+	require.Len(t, decodedSecret, 32)
+	require.Equal(t, clientSecret, *workOSSecret)
 	require.Equal(t, map[string]any{
 		"name":       "oidc_client",
 		"label":      "Speakeasy",
 		"signOnMode": "OPENID_CONNECT",
 		"credentials": map[string]any{
 			"oauthClient": map[string]any{
+				"client_secret":              clientSecret,
 				"token_endpoint_auth_method": "client_secret_post",
 				"autoKeyRotation":            true,
 				"pkce_required":              true,
@@ -159,7 +176,7 @@ func TestSubmitSignInStepProvisionsExactOktaApplicationAndAssignsEveryone(t *tes
 				"consent_method":   "TRUSTED",
 			},
 		},
-	}, fake.CreatedApplication())
+	}, createdApplication)
 	assignedAppID, assignedGroupID := fake.Assignment()
 	require.Equal(t, testSignInAppID, assignedAppID)
 	require.Equal(t, testEveryoneGroupID, assignedGroupID)
@@ -169,6 +186,7 @@ func TestSubmitSignInStepProvisionsExactOktaApplicationAndAssignsEveryone(t *tes
 	require.NoError(t, err)
 	require.Equal(t, testClientID, stored.ClientID.String)
 	require.Equal(t, testSignInAppID, stored.SignInApplicationID.String)
+	require.Equal(t, "conn-example", stored.WorkosConnectionID.String)
 	require.Equal(t, "application_created", stored.SignInState.String)
 	var evidence map[string]any
 	require.NoError(t, json.Unmarshal(stored.SignInEvidence, &evidence))
@@ -184,7 +202,7 @@ func TestSubmitSignInStepProvisionsExactOktaApplicationAndAssignsEveryone(t *tes
 	require.NoError(t, err)
 	require.Equal(t, "application_created", afterSnapshot["sign_in_state"])
 	auditJSON := string(record.Metadata) + string(record.BeforeSnapshot) + string(record.AfterSnapshot)
-	for _, sensitive := range []string{testAccessToken, testClientID, testSignInClientID, testSignInAppID, testFakeClientSecret} {
+	for _, sensitive := range []string{testAccessToken, testClientID, testSignInClientID, testSignInAppID, testFakeClientSecret, clientSecret} {
 		require.NotContains(t, auditJSON, sensitive)
 	}
 	for _, expected := range result.Step.ExpectedValues {
@@ -201,17 +219,22 @@ func TestSubmitSignInStepFallsBackToPublicClientIDResolution(t *testing.T) {
 	fake.SetSignInClientID(manualClientID)
 	ctx, ti := newTestServiceWithOktaEndpoint(t, fake.server.URL)
 	prepareActiveConnection(t, ctx, ti, fake)
+	workOSSecret := expectDirectWorkOSConnection(t, ti, manualClientID)
 
 	setup, err := ti.service.DescribeSetup(ctx, &gen.DescribeSetupPayload{SessionToken: nil, ApikeyToken: nil})
 	require.NoError(t, err)
 	require.Equal(t, "their_console", setup.Steps[1].Where)
-	require.Equal(t, []*gen.IdentityProviderExpectedValue{{Key: "client_id", Label: "Client ID", Secret: false, CurrentValue: nil}}, setup.Steps[1].ExpectedValues)
+	require.Equal(t, []*gen.IdentityProviderExpectedValue{
+		{Key: "client_id", Label: "Client ID", Secret: false, CurrentValue: nil},
+		{Key: "client_secret", Label: "Client secret", Secret: true, CurrentValue: nil},
+	}, setup.Steps[1].ExpectedValues)
 
 	invalidValues := [][]*gen.IdentityProviderSetupValue{
 		{},
 		{{Key: "other", Value: "not-accepted"}},
 		{{Key: "client_id", Value: manualClientID}, {Key: "client_id", Value: "second-public-client-example"}},
-		{{Key: "client_id", Value: "  "}},
+		{{Key: "client_id", Value: "  "}, {Key: "client_secret", Value: "manual-secret"}},
+		{{Key: "client_id", Value: manualClientID}, {Key: "client_secret", Value: "  "}},
 	}
 	for _, values := range invalidValues {
 		_, err := ti.service.SubmitSetupStep(ctx, &gen.SubmitSetupStepPayload{StepKey: "sign_in", Values: values, SessionToken: nil, ApikeyToken: nil})
@@ -219,8 +242,11 @@ func TestSubmitSignInStepFallsBackToPublicClientIDResolution(t *testing.T) {
 	}
 
 	result, err := ti.service.SubmitSetupStep(ctx, &gen.SubmitSetupStepPayload{
-		StepKey:      "sign_in",
-		Values:       []*gen.IdentityProviderSetupValue{{Key: "client_id", Value: "  " + manualClientID + "  "}},
+		StepKey: "sign_in",
+		Values: []*gen.IdentityProviderSetupValue{
+			{Key: "client_id", Value: "  " + manualClientID + "  "},
+			{Key: "client_secret", Value: "manual-secret"},
+		},
 		SessionToken: nil,
 		ApikeyToken:  nil,
 	})
@@ -230,13 +256,18 @@ func TestSubmitSignInStepFallsBackToPublicClientIDResolution(t *testing.T) {
 	assignedAppID, assignedGroupID := fake.Assignment()
 	require.Empty(t, assignedAppID)
 	require.Empty(t, assignedGroupID)
-	require.Equal(t, configuredSignInStep(manualClientID), result.Step)
-	require.Equal(t, []*gen.IdentityProviderFieldOutcome{{Key: "client_id", Outcome: "accepted", Detail: "Okta sign-in Client ID saved."}}, result.FieldOutcomes)
+	require.Equal(t, "manual-secret", *workOSSecret)
+	require.Equal(t, configuredSignInStep(manualClientID, false), result.Step)
+	require.Equal(t, []*gen.IdentityProviderFieldOutcome{
+		{Key: "client_id", Outcome: "accepted", Detail: "Okta sign-in Client ID saved."},
+		{Key: "client_secret", Outcome: "accepted", Detail: "Client secret sent to WorkOS and not retained."},
+	}, result.FieldOutcomes)
 	require.NoError(t, fake.ValidationError())
 
 	stored, err := repo.New(ti.conn).GetIdentityProviderConnectionByOrganization(ctx, ti.orgID)
 	require.NoError(t, err)
 	require.Equal(t, testSignInAppID, stored.SignInApplicationID.String)
+	require.Equal(t, "conn-example", stored.WorkosConnectionID.String)
 	require.Equal(t, "application_created", stored.SignInState.String)
 	var evidence map[string]any
 	require.NoError(t, json.Unmarshal(stored.SignInEvidence, &evidence))
@@ -244,8 +275,11 @@ func TestSubmitSignInStepFallsBackToPublicClientIDResolution(t *testing.T) {
 	require.NotContains(t, string(stored.SignInEvidence), testFakeClientSecret)
 
 	retry, err := ti.service.SubmitSetupStep(ctx, &gen.SubmitSetupStepPayload{
-		StepKey:      "sign_in",
-		Values:       []*gen.IdentityProviderSetupValue{{Key: "client_id", Value: manualClientID}},
+		StepKey: "sign_in",
+		Values: []*gen.IdentityProviderSetupValue{
+			{Key: "client_id", Value: manualClientID},
+			{Key: "client_secret", Value: "manual-secret"},
+		},
 		SessionToken: nil,
 		ApikeyToken:  nil,
 	})
@@ -256,6 +290,35 @@ func TestSubmitSignInStepFallsBackToPublicClientIDResolution(t *testing.T) {
 	assignedAppID, assignedGroupID = fake.Assignment()
 	require.Empty(t, assignedAppID)
 	require.Empty(t, assignedGroupID)
+}
+
+func TestSubmitSignInStepFallsBackToWorkOSAdminPortalForCapability404(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeOktaServer(t, fakeOktaPassed)
+	ctx, ti := newTestServiceWithOktaEndpoint(t, fake.server.URL)
+	prepareActiveConnection(t, ctx, ti, fake)
+	ti.workos.On("CreateOIDCConnection", mock.Anything, mock.Anything).Return(workos.Connection{}, &workos.APIError{
+		Method:     http.MethodPost,
+		Path:       "/connections",
+		StatusCode: http.StatusNotFound,
+		Body:       `{"message":"This endpoint is part of the Connections API migration capabilities, which are not enabled for your environment. Contact support@workos.com to enable them."}`,
+	}).Once()
+
+	result, err := ti.service.SubmitSetupStep(ctx, &gen.SubmitSetupStepPayload{
+		StepKey:      "sign_in",
+		Values:       []*gen.IdentityProviderSetupValue{},
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, configuredSignInStep(testSignInClientID, true), result.Step)
+	require.Equal(t, new("sso"), result.Step.PortalIntent)
+
+	stored, err := repo.New(ti.conn).GetIdentityProviderConnectionByOrganization(ctx, ti.orgID)
+	require.NoError(t, err)
+	require.Equal(t, testSignInAppID, stored.SignInApplicationID.String)
+	require.False(t, stored.WorkosConnectionID.Valid)
 }
 
 func TestSubmitSignInStepDoesNotPersistWhenEveryoneAssignmentFails(t *testing.T) {
@@ -336,22 +399,33 @@ func TestSubmitSignInStepSelectsDirectoryGroups(t *testing.T) {
 	require.Equal(t, "directory", stored.GroupsSource.String)
 }
 
-func configuredSignInStep(clientID string) *gen.IdentityProviderSetupStep {
-	return &gen.IdentityProviderSetupStep{
-		Key:   "sign_in",
-		Title: "Configure Okta sign-in",
-		Where: "their_console",
-		Instructions: []string{
+func configuredSignInStep(clientID string, portalFallback bool) *gen.IdentityProviderSetupStep {
+	instructions := []string{
+		"Speakeasy created the Okta sign-in application and WorkOS OIDC connection.",
+		"Configure the groups claim in Okta, then confirm whether sign-in tokens or the directory will supply groups.",
+	}
+	deepLink := new("https://example-admin.okta.com/admin/app/oidc_client/instance/" + testSignInAppID + "/#tab-sign-on")
+	var portalIntent *string
+	if portalFallback {
+		instructions = []string{
 			"Open WorkOS Admin Portal and choose the OpenID Connect connection.",
-			"Copy the Okta-generated client secret directly from Okta into WorkOS Admin Portal. It never enters Speakeasy.",
+			"Copy the client secret from the Okta application directly into WorkOS Admin Portal. It is not retained by Speakeasy.",
 			"Use the Client ID, issuer, and discovery URL shown below, then activate the connection.",
-		},
-		DeepLink: new("https://example-admin.okta.com/admin/app/oidc_client/instance/" + testSignInAppID + "/#tab-general"),
+		}
+		deepLink = new("https://example-admin.okta.com/admin/app/oidc_client/instance/" + testSignInAppID + "/#tab-general")
+		portalIntent = new("sso")
+	}
+	return &gen.IdentityProviderSetupStep{
+		Key:          "sign_in",
+		Title:        "Configure Okta sign-in",
+		Where:        "their_console",
+		Instructions: instructions,
+		DeepLink:     deepLink,
 		PrintedValues: []*gen.IdentityProviderPrintedValue{
 			{Label: "Client ID", Value: clientID, Copyable: true},
 			{Label: "Issuer", Value: "https://example.okta.com", Copyable: true},
 			{Label: "Discovery URL", Value: "https://example.okta.com/.well-known/openid-configuration", Copyable: true},
-			{Label: "WorkOS redirect URI", Value: "https://api.workos.com/sso/callback", Copyable: true},
+			{Label: "Sign-in redirect URI", Value: "https://api.workos.com/sso/callback", Copyable: true},
 		},
 		ExpectedValues: []*gen.IdentityProviderExpectedValue{
 			{Key: "groups_claim_confirmed", Label: "Groups claim confirmed", Secret: false, CurrentValue: new("false")},
@@ -374,7 +448,7 @@ func configuredSignInStep(clientID string) *gen.IdentityProviderSetupStep {
 			DeepLink:          new("https://example-admin.okta.com/admin/app/oidc_client/instance/" + testSignInAppID + "/#tab-sign-on"),
 			FallbackAvailable: true,
 		},
-		PortalIntent: new("sso"),
+		PortalIntent: portalIntent,
 		State:        "awaiting_verification",
 		LastOutcome:  nil,
 	}

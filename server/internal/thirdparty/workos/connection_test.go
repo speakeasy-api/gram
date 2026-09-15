@@ -2,6 +2,9 @@ package workos_test
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -13,6 +16,146 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
+
+func TestClientCreateOIDCConnectionSendsExactPayload(t *testing.T) {
+	t.Parallel()
+
+	requests := make(chan *http.Request, 1)
+	bodies := make(chan []byte, 1)
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "invalid body", http.StatusBadRequest)
+			return
+		}
+		requests <- r.Clone(t.Context())
+		bodies <- body
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"conn_example","organization_id":"org_example","connection_type":"GenericOIDC","name":"Okta","state":"active","created_at":"2026-09-15T00:00:00Z","updated_at":"2026-09-15T00:00:00Z"}`))
+	})
+
+	connection, err := newClientWithHandler(t, handler).CreateOIDCConnection(t.Context(), workos.CreateOIDCConnectionInput{
+		OrganizationID:    "org_example",
+		Name:              "Okta",
+		DiscoveryEndpoint: "https://example.okta.com/.well-known/openid-configuration",
+		ClientID:          "client_example",
+		ClientSecret:      "secret_example",
+	})
+	require.NoError(t, err)
+	require.Equal(t, workos.Connection{
+		ID:             "conn_example",
+		OrganizationID: "org_example",
+		ConnectionType: "GenericOIDC",
+		Name:           "Okta",
+		State:          "active",
+		CreatedAt:      "2026-09-15T00:00:00Z",
+		UpdatedAt:      "2026-09-15T00:00:00Z",
+	}, connection)
+
+	request := <-requests
+	require.Equal(t, http.MethodPost, request.Method)
+	require.Equal(t, "/connections", request.URL.Path)
+	require.Equal(t, "Bearer test-api-key", request.Header.Get("Authorization"))
+	require.JSONEq(t, `{
+		"organization_id":"org_example",
+		"name":"Okta",
+		"connection_type":"GenericOIDC",
+		"oidc_options":{
+			"discovery_endpoint":"https://example.okta.com/.well-known/openid-configuration",
+			"client_id":"client_example",
+			"client_secret":"secret_example",
+			"token_authentication_method":"client_secret_post",
+			"pkce":true
+		},
+		"attribute_maps":{
+			"standard_attributes":{"email":"email","first_name":"first_name","last_name":"last_name","groups":"groups","name":"name"},
+			"custom_attributes":{"department":"department","title":"title"}
+		}
+	}`, string(<-bodies))
+}
+
+func TestClientCreateOIDCConnectionRedactsReflectedSecret(t *testing.T) {
+	t.Parallel()
+
+	const secret = "secret-must-not-escape"
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		_ = json.NewEncoder(w).Encode(map[string]string{"message": "rejected " + secret})
+	})
+	_, err := newClientWithHandler(t, handler).CreateOIDCConnection(t.Context(), workos.CreateOIDCConnectionInput{
+		OrganizationID:    "org_example",
+		Name:              "Okta",
+		DiscoveryEndpoint: "https://example.okta.com/.well-known/openid-configuration",
+		ClientID:          "client_example",
+		ClientSecret:      secret,
+	})
+	var apiErr *workos.APIError
+	require.ErrorAs(t, err, &apiErr)
+	require.NotContains(t, apiErr.Body, secret)
+	require.NotContains(t, err.Error(), secret)
+	require.Contains(t, apiErr.Body, "[redacted]")
+}
+
+func TestClientCreateOIDCConnectionDoesNotRetryAndRedactsEscapedSecret(t *testing.T) {
+	t.Parallel()
+
+	const secret = "secret-with-\"quote\\slash"
+	var calls atomic.Int64
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"message": "rejected " + secret})
+	})
+	_, err := newClientWithHandler(t, handler).CreateOIDCConnection(t.Context(), workos.CreateOIDCConnectionInput{
+		OrganizationID:    "org_example",
+		Name:              "Okta",
+		DiscoveryEndpoint: "https://example.okta.com/.well-known/openid-configuration",
+		ClientID:          "client_example",
+		ClientSecret:      secret,
+	})
+	require.Equal(t, int64(1), calls.Load())
+	var apiErr *workos.APIError
+	require.ErrorAs(t, err, &apiErr)
+	require.NotContains(t, apiErr.Body, secret)
+	require.NotContains(t, apiErr.Body, `secret-with-\"quote\\slash`)
+	require.Contains(t, apiErr.Body, "[redacted]")
+}
+
+func TestClientGetConnectionReadsByID(t *testing.T) {
+	t.Parallel()
+
+	requests := make(chan *http.Request, 1)
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests <- r.Clone(t.Context())
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"conn_example","organization_id":"org_example","connection_type":"GenericOIDC","name":"Okta","state":"draft"}`))
+	})
+	connection, err := newClientWithHandler(t, handler).GetConnection(t.Context(), "conn_example")
+	require.NoError(t, err)
+	request := <-requests
+	require.Equal(t, http.MethodGet, request.Method)
+	require.Equal(t, "/connections/conn_example", request.URL.Path)
+	require.Equal(t, "conn_example", connection.ID)
+	require.Equal(t, "org_example", connection.OrganizationID)
+	require.Equal(t, "GenericOIDC", connection.ConnectionType)
+	require.Equal(t, "draft", connection.State)
+}
+
+func TestIsConnectionsWriteUnavailableMatchesOnlyCapabilityError(t *testing.T) {
+	t.Parallel()
+
+	capabilityErr := &workos.APIError{
+		Method:     http.MethodPost,
+		Path:       "/connections",
+		StatusCode: http.StatusNotFound,
+		Body:       `{"message":"This endpoint is part of the Connections API migration capabilities, which are not enabled for your environment. Contact support@workos.com to enable them."}`,
+	}
+	require.True(t, workos.IsConnectionsWriteUnavailable(capabilityErr))
+	require.False(t, workos.IsConnectionsWriteUnavailable(&workos.APIError{Method: http.MethodPost, Path: "/connections", StatusCode: http.StatusNotFound, Body: `{"message":"not found"}`}))
+	require.False(t, workos.IsConnectionsWriteUnavailable(errors.New("network failure")))
+}
 
 // newClientWithHandler builds a workos.Client pointed at an httptest server
 // driven by the supplied handler. Used by tests that need to assert request

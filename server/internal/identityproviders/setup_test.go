@@ -64,6 +64,55 @@ func (m *mockWorkOSClient) ListConnections(ctx context.Context, organizationID s
 	return connections, args.Error(1)
 }
 
+func (m *mockWorkOSClient) CreateOIDCConnection(ctx context.Context, input workos.CreateOIDCConnectionInput) (workos.Connection, error) {
+	args := m.Called(ctx, input)
+	connection, _ := args.Get(0).(workos.Connection)
+	return connection, args.Error(1)
+}
+
+func (m *mockWorkOSClient) GetConnection(ctx context.Context, connectionID string) (workos.Connection, error) {
+	args := m.Called(ctx, connectionID)
+	connection, _ := args.Get(0).(workos.Connection)
+	return connection, args.Error(1)
+}
+
+func expectDirectWorkOSConnection(t *testing.T, ti *testInstance, clientID string) *string {
+	t.Helper()
+
+	var clientSecret string
+	ti.workos.On("CreateOIDCConnection", mock.Anything, mock.MatchedBy(func(input workos.CreateOIDCConnectionInput) bool {
+		clientSecret = input.ClientSecret
+		return input.OrganizationID != "" &&
+			input.Name == "Okta" &&
+			input.DiscoveryEndpoint == "https://example.okta.com/.well-known/openid-configuration" &&
+			input.ClientID == clientID &&
+			input.ClientSecret != ""
+	})).Return(workos.Connection{
+		ID:             "conn-example",
+		OrganizationID: "550e8400-e29b-41d4-a716-446655440000",
+		ConnectionType: "GenericOIDC",
+		Name:           "Okta",
+		State:          "active",
+		CreatedAt:      "2026-09-15T00:00:00Z",
+		UpdatedAt:      "2026-09-15T00:00:00Z",
+	}, nil).Once()
+	return &clientSecret
+}
+
+func expectWorkOSConnectionRead(t *testing.T, ti *testInstance, organizationID, state string) {
+	t.Helper()
+
+	ti.workos.On("GetConnection", mock.Anything, "conn-example").Return(workos.Connection{
+		ID:             "conn-example",
+		OrganizationID: organizationID,
+		ConnectionType: "GenericOIDC",
+		Name:           "Okta",
+		State:          state,
+		CreatedAt:      "2026-09-15T00:00:00Z",
+		UpdatedAt:      "2026-09-15T00:00:00Z",
+	}, nil).Once()
+}
+
 func newTestService(t *testing.T) (context.Context, *testInstance) {
 	t.Helper()
 	return newTestServiceWithOktaEndpoint(t, "")

@@ -294,15 +294,7 @@ func TestVerifySignInStepPassesForActiveOktaAndGenericOIDCConnections(t *testing
 	storedBefore, err := repo.New(ti.conn).GetIdentityProviderConnectionByOrganization(ctx, ti.orgID)
 	require.NoError(t, err)
 	require.True(t, storedBefore.WorkosID.Valid)
-	ti.workos.On("ListConnections", mock.Anything, storedBefore.WorkosID.String).Return([]workos.Connection{{
-		ID:             "conn-example",
-		OrganizationID: storedBefore.WorkosID.String,
-		ConnectionType: "GenericOIDC",
-		Name:           "Example OIDC",
-		State:          "active",
-		CreatedAt:      "2026-09-14T00:00:00Z",
-		UpdatedAt:      "2026-09-14T00:00:00Z",
-	}}, nil).Once()
+	expectWorkOSConnectionRead(t, ti, storedBefore.WorkosID.String, "active")
 	beforeAudits, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionIdentityProviderConnectionVerified)
 	require.NoError(t, err)
 
@@ -364,6 +356,56 @@ func TestVerifySignInStepPassesForActiveOktaAndGenericOIDCConnections(t *testing
 	require.Equal(t, "passed", setup.Steps[1].LastOutcome.Outcome)
 }
 
+func TestVerifySignInStepDiscoversPortalFallbackConnectionThenReadsItByID(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeOktaServer(t, fakeOktaPassed)
+	ctx, ti := newTestServiceWithOktaEndpoint(t, fake.server.URL)
+	prepareActiveConnection(t, ctx, ti, fake)
+	ti.workos.On("CreateOIDCConnection", mock.Anything, mock.Anything).Return(workos.Connection{}, &workos.APIError{
+		Method:     http.MethodPost,
+		Path:       "/connections",
+		StatusCode: http.StatusNotFound,
+		Body:       `{"message":"This endpoint is part of the Connections API migration capabilities, which are not enabled for your environment. Contact support@workos.com to enable them."}`,
+	}).Once()
+	_, err := ti.service.SubmitSetupStep(ctx, &gen.SubmitSetupStepPayload{
+		StepKey:      "sign_in",
+		Values:       []*gen.IdentityProviderSetupValue{},
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	require.NoError(t, err)
+
+	stored, err := repo.New(ti.conn).GetIdentityProviderConnectionByOrganization(ctx, ti.orgID)
+	require.NoError(t, err)
+	ti.workos.On("ListConnections", mock.Anything, stored.WorkosID.String).Return([]workos.Connection{{
+		ID:             "conn-portal-example",
+		OrganizationID: stored.WorkosID.String,
+		ConnectionType: "GenericOIDC",
+		Name:           "Okta",
+		State:          "active",
+		CreatedAt:      "2026-09-15T00:00:00Z",
+		UpdatedAt:      "2026-09-15T00:00:00Z",
+	}}, nil).Once()
+	ti.workos.On("GetConnection", mock.Anything, "conn-portal-example").Return(workos.Connection{
+		ID:             "conn-portal-example",
+		OrganizationID: stored.WorkosID.String,
+		ConnectionType: "GenericOIDC",
+		Name:           "Okta",
+		State:          "active",
+		CreatedAt:      "2026-09-15T00:00:00Z",
+		UpdatedAt:      "2026-09-15T00:00:00Z",
+	}, nil).Once()
+
+	result, err := ti.service.VerifySetupStep(ctx, &gen.VerifySetupStepPayload{StepKey: "sign_in", SessionToken: nil, ApikeyToken: nil})
+	require.NoError(t, err)
+	require.Equal(t, "passed", result.Outcome)
+
+	stored, err = repo.New(ti.conn).GetIdentityProviderConnectionByOrganization(ctx, ti.orgID)
+	require.NoError(t, err)
+	require.Equal(t, "conn-portal-example", stored.WorkosConnectionID.String)
+}
+
 func TestVerifySignInStepFailsForDraftWorkOSConnection(t *testing.T) {
 	t.Parallel()
 
@@ -371,27 +413,19 @@ func TestVerifySignInStepFailsForDraftWorkOSConnection(t *testing.T) {
 	ctx, ti := prepareProvisionedSignInApplication(t, fake)
 	stored, err := repo.New(ti.conn).GetIdentityProviderConnectionByOrganization(ctx, ti.orgID)
 	require.NoError(t, err)
-	ti.workos.On("ListConnections", mock.Anything, stored.WorkosID.String).Return([]workos.Connection{{
-		ID:             "conn-draft-example",
-		OrganizationID: stored.WorkosID.String,
-		ConnectionType: "GenericOIDC",
-		Name:           "Draft OIDC",
-		State:          "draft",
-		CreatedAt:      "2026-09-14T00:00:00Z",
-		UpdatedAt:      "2026-09-14T00:00:00Z",
-	}}, nil).Once()
+	expectWorkOSConnectionRead(t, ti, stored.WorkosID.String, "draft")
 
 	result, err := ti.service.VerifySetupStep(ctx, &gen.VerifySetupStepPayload{StepKey: "sign_in", SessionToken: nil, ApikeyToken: nil})
 	require.NoError(t, err)
-	require.Equal(t, "mismatched_value", result.Outcome)
-	require.Equal(t, "Finish the OIDC connection in WorkOS Admin Portal, then verify again.", result.Detail)
+	require.Equal(t, "refused", result.Outcome)
+	require.Equal(t, "WorkOS reported the sign-in connection state as draft.", result.Detail)
 	require.True(t, result.Evidence.Reads[0].OK)
 	require.False(t, result.Evidence.Reads[1].OK)
 
 	stored, err = repo.New(ti.conn).GetIdentityProviderConnectionByOrganization(ctx, ti.orgID)
 	require.NoError(t, err)
 	require.Equal(t, "failed", stored.SignInState.String)
-	require.False(t, stored.WorkosConnectionID.Valid)
+	require.Equal(t, "conn-example", stored.WorkosConnectionID.String)
 }
 
 func TestVerifySignInStepFailsWhenWorkOSConnectionIsMissing(t *testing.T) {
@@ -399,14 +433,17 @@ func TestVerifySignInStepFailsWhenWorkOSConnectionIsMissing(t *testing.T) {
 
 	fake := newFakeOktaServer(t, fakeOktaPassed)
 	ctx, ti := prepareProvisionedSignInApplication(t, fake)
-	stored, err := repo.New(ti.conn).GetIdentityProviderConnectionByOrganization(ctx, ti.orgID)
-	require.NoError(t, err)
-	ti.workos.On("ListConnections", mock.Anything, stored.WorkosID.String).Return([]workos.Connection{}, nil).Once()
+	ti.workos.On("GetConnection", mock.Anything, "conn-example").Return(workos.Connection{}, &workos.APIError{
+		Method:     http.MethodGet,
+		Path:       "/connections/conn-example",
+		StatusCode: http.StatusNotFound,
+		Body:       `{"message":"connection not found"}`,
+	}).Once()
 
 	result, err := ti.service.VerifySetupStep(ctx, &gen.VerifySetupStepPayload{StepKey: "sign_in", SessionToken: nil, ApikeyToken: nil})
 	require.NoError(t, err)
 	require.Equal(t, "mismatched_value", result.Outcome)
-	require.Equal(t, "Finish the OIDC connection in WorkOS Admin Portal, then verify again.", result.Detail)
+	require.Equal(t, "The WorkOS sign-in connection no longer exists.", result.Detail)
 	require.True(t, result.Evidence.Reads[0].OK)
 	require.False(t, result.Evidence.Reads[1].OK)
 }
@@ -419,15 +456,7 @@ func TestVerifySignInStepFailsForInactiveOktaApplication(t *testing.T) {
 	fake.SetMode(fakeOktaAppInactive)
 	stored, err := repo.New(ti.conn).GetIdentityProviderConnectionByOrganization(ctx, ti.orgID)
 	require.NoError(t, err)
-	ti.workos.On("ListConnections", mock.Anything, stored.WorkosID.String).Return([]workos.Connection{{
-		ID:             "conn-example",
-		OrganizationID: stored.WorkosID.String,
-		ConnectionType: "GenericOIDC",
-		Name:           "Example OIDC",
-		State:          "active",
-		CreatedAt:      "2026-09-14T00:00:00Z",
-		UpdatedAt:      "2026-09-14T00:00:00Z",
-	}}, nil).Once()
+	expectWorkOSConnectionRead(t, ti, stored.WorkosID.String, "active")
 
 	result, err := ti.service.VerifySetupStep(ctx, &gen.VerifySetupStepPayload{StepKey: "sign_in", SessionToken: nil, ApikeyToken: nil})
 	require.NoError(t, err)
@@ -445,7 +474,7 @@ func TestVerifySignInStepReportsOktaForbidden(t *testing.T) {
 	fake.SetMode(fakeOktaAppForbidden)
 	stored, err := repo.New(ti.conn).GetIdentityProviderConnectionByOrganization(ctx, ti.orgID)
 	require.NoError(t, err)
-	ti.workos.On("ListConnections", mock.Anything, stored.WorkosID.String).Return([]workos.Connection{}, nil).Once()
+	expectWorkOSConnectionRead(t, ti, stored.WorkosID.String, "active")
 
 	result, err := ti.service.VerifySetupStep(ctx, &gen.VerifySetupStepPayload{StepKey: "sign_in", SessionToken: nil, ApikeyToken: nil})
 	require.NoError(t, err)
@@ -462,7 +491,7 @@ func TestVerifySignInStepReportsOktaRefusal(t *testing.T) {
 	fake.SetMode(fakeOktaAppRefused)
 	stored, err := repo.New(ti.conn).GetIdentityProviderConnectionByOrganization(ctx, ti.orgID)
 	require.NoError(t, err)
-	ti.workos.On("ListConnections", mock.Anything, stored.WorkosID.String).Return([]workos.Connection{}, nil).Once()
+	expectWorkOSConnectionRead(t, ti, stored.WorkosID.String, "active")
 
 	result, err := ti.service.VerifySetupStep(ctx, &gen.VerifySetupStepPayload{StepKey: "sign_in", SessionToken: nil, ApikeyToken: nil})
 	require.NoError(t, err)
@@ -477,7 +506,7 @@ func TestVerifySignInStepReportsOktaUnreachable(t *testing.T) {
 	ctx, ti := prepareProvisionedSignInApplication(t, fake)
 	stored, err := repo.New(ti.conn).GetIdentityProviderConnectionByOrganization(ctx, ti.orgID)
 	require.NoError(t, err)
-	ti.workos.On("ListConnections", mock.Anything, stored.WorkosID.String).Return([]workos.Connection{}, nil).Once()
+	expectWorkOSConnectionRead(t, ti, stored.WorkosID.String, "active")
 	fake.server.Close()
 
 	result, err := ti.service.VerifySetupStep(ctx, &gen.VerifySetupStepPayload{StepKey: "sign_in", SessionToken: nil, ApikeyToken: nil})
@@ -491,11 +520,9 @@ func TestVerifySignInStepReportsWorkOSRefusal(t *testing.T) {
 
 	fake := newFakeOktaServer(t, fakeOktaPassed)
 	ctx, ti := prepareProvisionedSignInApplication(t, fake)
-	stored, err := repo.New(ti.conn).GetIdentityProviderConnectionByOrganization(ctx, ti.orgID)
-	require.NoError(t, err)
-	ti.workos.On("ListConnections", mock.Anything, stored.WorkosID.String).Return([]workos.Connection(nil), &workos.APIError{
+	ti.workos.On("GetConnection", mock.Anything, "conn-example").Return(workos.Connection{}, &workos.APIError{
 		Method:     http.MethodGet,
-		Path:       "/sso/connections",
+		Path:       "/connections/conn-example",
 		StatusCode: http.StatusForbidden,
 		Body:       "example refusal",
 	}).Once()
@@ -511,14 +538,12 @@ func TestVerifySignInStepReportsWorkOSUnreachable(t *testing.T) {
 
 	fake := newFakeOktaServer(t, fakeOktaPassed)
 	ctx, ti := prepareProvisionedSignInApplication(t, fake)
-	stored, err := repo.New(ti.conn).GetIdentityProviderConnectionByOrganization(ctx, ti.orgID)
-	require.NoError(t, err)
-	ti.workos.On("ListConnections", mock.Anything, stored.WorkosID.String).Return([]workos.Connection(nil), errors.New("example network failure")).Once()
+	ti.workos.On("GetConnection", mock.Anything, "conn-example").Return(workos.Connection{}, errors.New("example network failure")).Once()
 
 	result, err := ti.service.VerifySetupStep(ctx, &gen.VerifySetupStepPayload{StepKey: "sign_in", SessionToken: nil, ApikeyToken: nil})
 	require.NoError(t, err)
 	require.Equal(t, "unreachable", result.Outcome)
-	require.Equal(t, "Unable to reach WorkOS while reading sign-in connections.", result.Detail)
+	require.Equal(t, "Unable to reach WorkOS while reading the sign-in connection.", result.Detail)
 }
 
 func newFakeOktaServer(t *testing.T, mode string) *fakeOktaServer {
@@ -860,6 +885,7 @@ func prepareProvisionedSignInApplication(t *testing.T, fake *fakeOktaServer) (co
 	t.Helper()
 	ctx, ti := newTestServiceWithOktaEndpoint(t, fake.server.URL)
 	prepareActiveConnection(t, ctx, ti, fake)
+	expectDirectWorkOSConnection(t, ti, testSignInClientID)
 	_, err := ti.service.SubmitSetupStep(ctx, &gen.SubmitSetupStepPayload{
 		StepKey:      "sign_in",
 		Values:       []*gen.IdentityProviderSetupValue{},

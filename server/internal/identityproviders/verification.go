@@ -56,6 +56,8 @@ type OktaClient interface {
 // WorkOSClient is the provider boundary used by sign-in verification.
 type WorkOSClient interface {
 	ListConnections(context.Context, string) ([]workos.Connection, error)
+	CreateOIDCConnection(context.Context, workos.CreateOIDCConnectionInput) (workos.Connection, error)
+	GetConnection(context.Context, string) (workos.Connection, error)
 }
 
 type storedVerification struct {
@@ -278,8 +280,7 @@ func probeOktaCollection(
 	page, err := read(ctx)
 	if err != nil {
 		detail := "Unable to read Okta " + resource + "."
-		var apiErr *okta.APIError
-		if errors.As(err, &apiErr) {
+		if apiErr, ok := errors.AsType[*okta.APIError](err); ok {
 			if apiErr.Description != "" {
 				detail = apiErr.Description
 			} else {
@@ -300,8 +301,7 @@ func probeOktaCollection(
 func tokenFailureResult(checkedAt time.Time, err error) *gen.IdentityProviderVerifyResult {
 	outcome := "unreachable"
 	detail := "Unable to reach the Okta token endpoint."
-	var apiErr *okta.APIError
-	if errors.As(err, &apiErr) {
+	if apiErr, ok := errors.AsType[*okta.APIError](err); ok {
 		if apiErr.StatusCode == http.StatusBadRequest || apiErr.StatusCode == http.StatusUnauthorized {
 			outcome = "refused"
 			switch {

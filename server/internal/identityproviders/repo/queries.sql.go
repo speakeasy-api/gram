@@ -602,18 +602,20 @@ const updateOktaIdentityProviderSignInApplication = `-- name: UpdateOktaIdentity
 UPDATE okta_identity_provider_connections AS o
 SET
   sign_in_application_id = $1,
+  workos_connection_id = $2,
   sign_in_state = 'application_created',
-  sign_in_evidence = $2,
+  sign_in_evidence = $3,
   updated_at = clock_timestamp()
 FROM identity_provider_connections AS c
 WHERE o.identity_provider_connection_id = c.id
-  AND c.organization_id = $3
-  AND c.id = $4
+  AND c.organization_id = $4
+  AND c.id = $5
   AND c.deleted IS FALSE
 `
 
 type UpdateOktaIdentityProviderSignInApplicationParams struct {
 	SignInApplicationID          pgtype.Text
+	WorkosConnectionID           pgtype.Text
 	SignInEvidence               []byte
 	OrganizationID               string
 	IdentityProviderConnectionID uuid.UUID
@@ -622,6 +624,7 @@ type UpdateOktaIdentityProviderSignInApplicationParams struct {
 func (q *Queries) UpdateOktaIdentityProviderSignInApplication(ctx context.Context, arg UpdateOktaIdentityProviderSignInApplicationParams) error {
 	_, err := q.db.Exec(ctx, updateOktaIdentityProviderSignInApplication,
 		arg.SignInApplicationID,
+		arg.WorkosConnectionID,
 		arg.SignInEvidence,
 		arg.OrganizationID,
 		arg.IdentityProviderConnectionID,

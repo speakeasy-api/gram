@@ -23,6 +23,7 @@ type StubClient struct {
 	orgExternalIDUpdates  []OrgExternalIDUpdate
 	directories           map[string][]Directory
 	directoryUsers        map[string][]DirectoryUser
+	connections           map[string]Connection
 	next                  int
 	nowFn                 func() time.Time
 }
@@ -60,6 +61,7 @@ func NewStubClient() *StubClient {
 		orgExternalIDUpdates:  make([]OrgExternalIDUpdate, 0),
 		directories:           make(map[string][]Directory),
 		directoryUsers:        make(map[string][]DirectoryUser),
+		connections:           make(map[string]Connection),
 		next:                  1,
 		nowFn:                 time.Now,
 	}
@@ -334,8 +336,47 @@ func (s *StubClient) GenerateAdminPortalLink(_ context.Context, workosOrgID stri
 	return fmt.Sprintf("https://stub.workos.com/portal?intent=%s&organization=%s", string(intent), workosOrgID), nil
 }
 
-func (s *StubClient) ListConnections(_ context.Context, _ string) ([]Connection, error) {
-	return nil, nil
+func (s *StubClient) ListConnections(_ context.Context, organizationID string) ([]Connection, error) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	connections := make([]Connection, 0, len(s.connections))
+	for _, connection := range s.connections {
+		if connection.OrganizationID == organizationID {
+			connections = append(connections, connection)
+		}
+	}
+	return connections, nil
+}
+
+func (s *StubClient) CreateOIDCConnection(_ context.Context, input CreateOIDCConnectionInput) (Connection, error) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	now := s.nowFn().UTC().Format(time.RFC3339)
+	connection := Connection{
+		ID:             fmt.Sprintf("stub_connection_%d", s.next),
+		OrganizationID: input.OrganizationID,
+		ConnectionType: "GenericOIDC",
+		Name:           input.Name,
+		State:          "active",
+		CreatedAt:      now,
+		UpdatedAt:      now,
+	}
+	s.next++
+	s.connections[connection.ID] = connection
+	return connection, nil
+}
+
+func (s *StubClient) GetConnection(_ context.Context, connectionID string) (Connection, error) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	connection, ok := s.connections[connectionID]
+	if !ok {
+		return Connection{}, &APIError{Method: "GET", Path: "/stub/connections/" + connectionID, StatusCode: 404, Body: "connection not found"}
+	}
+	return connection, nil
 }
 
 func (s *StubClient) ListDirectories(_ context.Context, organizationID string) ([]Directory, error) {

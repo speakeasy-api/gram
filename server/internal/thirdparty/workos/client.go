@@ -61,11 +61,13 @@ type Client struct {
 	clientID   string // IDP client ID (GRAM_IDP_CLIENT_ID), needed for SSO code exchange
 	endpoint   string // base URL for raw HTTP calls; defaults to workosBaseURL
 	httpClient *guardian.HTTPClient
-	orgs       *organizations.Client
-	um         *usermanagement.Client
-	events     *events.Client
-	sso        *sso.Client
-	dsync      *directorysync.Client
+	// nonRetryingHTTPClient is used for non-idempotent credential-bearing mutations.
+	nonRetryingHTTPClient *guardian.HTTPClient
+	orgs                  *organizations.Client
+	um                    *usermanagement.Client
+	events                *events.Client
+	sso                   *sso.Client
+	dsync                 *directorysync.Client
 }
 
 // ClientOpts configures optional overrides for New.
@@ -90,14 +92,13 @@ func NewClient(guardianPolicy *guardian.Policy, apiKey string, opts ...ClientOpt
 
 	retryCfg := guardian.DefaultRetryConfig()
 	retryCfg.WaitMax = 10 * time.Second
-	httpClient := guardianPolicy.PooledClient(
-		guardian.WithRetryConfig(retryCfg),
-		guardian.WithResilience("workos", guardian.ResilienceConfig{
-			Partition: partitionByHostAndAPIKey(apiKey),
-			Limit:     guardian.PerMinute(6000),
-			Breaker:   guardian.NoBreaker(),
-		}),
-	)
+	resilience := guardian.WithResilience("workos", guardian.ResilienceConfig{
+		Partition: partitionByHostAndAPIKey(apiKey),
+		Limit:     guardian.PerMinute(6000),
+		Breaker:   guardian.NoBreaker(),
+	})
+	httpClient := guardianPolicy.PooledClient(guardian.WithRetryConfig(retryCfg), resilience)
+	nonRetryingHTTPClient := guardianPolicy.PooledClient(resilience)
 
 	um := usermanagement.NewClient(apiKey)
 	um.HTTPClient = httpClient
@@ -106,15 +107,16 @@ func NewClient(guardianPolicy *guardian.Policy, apiKey string, opts ...ClientOpt
 	}
 
 	return &Client{
-		apiKey:     apiKey,
-		clientID:   opt.ClientID,
-		endpoint:   endpoint,
-		httpClient: httpClient,
-		orgs:       &organizations.Client{APIKey: apiKey, HTTPClient: httpClient, Endpoint: opt.Endpoint, JSONEncode: nil},
-		um:         um,
-		events:     &events.Client{APIKey: apiKey, HTTPClient: httpClient, Endpoint: opt.Endpoint},
-		sso:        &sso.Client{APIKey: apiKey, HTTPClient: httpClient, Endpoint: opt.Endpoint, JSONEncode: nil, ClientID: opt.ClientID},
-		dsync:      &directorysync.Client{APIKey: apiKey, HTTPClient: httpClient, Endpoint: opt.Endpoint},
+		apiKey:                apiKey,
+		clientID:              opt.ClientID,
+		endpoint:              endpoint,
+		httpClient:            httpClient,
+		nonRetryingHTTPClient: nonRetryingHTTPClient,
+		orgs:                  &organizations.Client{APIKey: apiKey, HTTPClient: httpClient, Endpoint: opt.Endpoint, JSONEncode: nil},
+		um:                    um,
+		events:                &events.Client{APIKey: apiKey, HTTPClient: httpClient, Endpoint: opt.Endpoint},
+		sso:                   &sso.Client{APIKey: apiKey, HTTPClient: httpClient, Endpoint: opt.Endpoint, JSONEncode: nil, ClientID: opt.ClientID},
+		dsync:                 &directorysync.Client{APIKey: apiKey, HTTPClient: httpClient, Endpoint: opt.Endpoint},
 	}
 }
 
@@ -141,12 +143,20 @@ func (wc *Client) ListEvents(ctx context.Context, opts events.ListEventsOpts) (e
 // do performs a raw HTTP request against the WorkOS REST API.
 // Pass a non-nil out pointer to decode a JSON response body; pass nil to discard it (e.g. DELETE).
 func (wc *Client) do(ctx context.Context, method, path string, body []byte, out any) error {
+	return wc.doWithClient(ctx, wc.httpClient, method, path, body, out)
+}
+
+func (wc *Client) doWithoutRetry(ctx context.Context, method, path string, body []byte, out any) error {
+	return wc.doWithClient(ctx, wc.nonRetryingHTTPClient, method, path, body, out)
+}
+
+func (wc *Client) doWithClient(ctx context.Context, client *guardian.HTTPClient, method, path string, body []byte, out any) error {
 	req, err := wc.newRequest(ctx, method, path, body)
 	if err != nil {
 		return err
 	}
 
-	resp, err := wc.httpClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("send request: %w", err)
 	}

@@ -83,6 +83,7 @@ WHERE c.organization_id = @organization_id
 UPDATE okta_identity_provider_connections AS o
 SET
   sign_in_application_id = @sign_in_application_id,
+  workos_connection_id = @workos_connection_id,
   sign_in_state = 'application_created',
   sign_in_evidence = @sign_in_evidence,
   updated_at = clock_timestamp()
