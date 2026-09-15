@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -20,6 +21,7 @@ import (
 	"github.com/hashicorp/go-retryablehttp"
 	"golang.org/x/sync/singleflight"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
@@ -146,6 +148,7 @@ type cachedToken struct {
 
 // Client performs authenticated Okta API requests.
 type Client struct {
+	logger          *slog.Logger
 	httpClient      *guardian.HTTPClient
 	tokenHTTPClient *guardian.HTTPClient
 	endpoint        string
@@ -156,7 +159,7 @@ type Client struct {
 }
 
 // NewClient constructs an Okta client using a shared outbound-request policy.
-func NewClient(guardianPolicy *guardian.Policy, opts ...ClientOpts) *Client {
+func NewClient(logger *slog.Logger, guardianPolicy *guardian.Policy, opts ...ClientOpts) *Client {
 	if guardianPolicy == nil {
 		panic("okta client requires a guardian policy")
 	}
@@ -189,6 +192,7 @@ func NewClient(guardianPolicy *guardian.Policy, opts ...ClientOpts) *Client {
 	}
 
 	return &Client{
+		logger:          logger,
 		httpClient:      httpClient,
 		tokenHTTPClient: tokenHTTPClient,
 		endpoint:        strings.TrimRight(opt.Endpoint, "/"),
@@ -252,7 +256,7 @@ func (c *Client) acquireToken(ctx context.Context, request TokenRequest) (Token,
 		return Token{AccessToken: "", ExpiresAt: time.Time{}, GrantedScopes: nil}, fmt.Errorf("create Okta assertion signer: %w", err)
 	}
 	now := c.now()
-	assertion, err := jwt.Signed(signer).Claims(jwt.Claims{
+	claims := jwt.Claims{
 		Issuer:    request.ClientID,
 		Subject:   request.ClientID,
 		Audience:  jwt.Audience{tokenEndpoint},
@@ -260,7 +264,16 @@ func (c *Client) acquireToken(ctx context.Context, request TokenRequest) (Token,
 		NotBefore: nil,
 		IssuedAt:  jwt.NewNumericDate(now),
 		ID:        uuid.NewString(),
-	}).Serialize()
+	}
+	c.logger.DebugContext(ctx, "minting Okta client assertion",
+		attr.SlogOAuthAssertionIssuer(claims.Issuer),
+		attr.SlogOAuthAssertionSubject(claims.Subject),
+		attr.SlogOAuthAssertionAudience(tokenEndpoint),
+		attr.SlogOAuthAssertionKeyID(request.KeyID),
+		attr.SlogOAuthAssertionAlgorithm(string(jose.RS256)),
+		attr.SlogOAuthAssertionExpiresAt(claims.Expiry.Time()),
+	)
+	assertion, err := jwt.Signed(signer).Claims(claims).Serialize()
 	if err != nil {
 		return Token{AccessToken: "", ExpiresAt: time.Time{}, GrantedScopes: nil}, fmt.Errorf("sign Okta client assertion: %w", err)
 	}
@@ -283,6 +296,16 @@ func (c *Client) acquireToken(ctx context.Context, request TokenRequest) (Token,
 		Scope       string `json:"scope"`
 	}
 	if _, err := c.do(c.tokenHTTPClient, httpRequest, &response); err != nil {
+		var apiErr *APIError
+		if errors.As(err, &apiErr) {
+			c.logger.WarnContext(ctx, "Okta token request failed",
+				attr.SlogOAuthError(apiErr.Code),
+				attr.SlogOAuthErrorDescription(apiErr.Description),
+				attr.SlogHTTPResponseStatusCode(apiErr.StatusCode),
+				attr.SlogURLDomain(request.TenantDomain),
+				attr.SlogError(err),
+			)
+		}
 		return Token{AccessToken: "", ExpiresAt: time.Time{}, GrantedScopes: nil}, err
 	}
 	if response.AccessToken == "" || response.ExpiresIn <= 0 {

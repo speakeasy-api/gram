@@ -1,11 +1,13 @@
 package okta_test
 
 import (
+	"bytes"
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -129,18 +131,22 @@ func TestAcquireTokenReturnsTypedOktaError(t *testing.T) {
 
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	assertions := make(chan string, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if err := r.ParseForm(); err != nil {
 			http.Error(w, "invalid form", http.StatusBadRequest)
 			return
 		}
+		assertions <- r.Form.Get("client_assertion")
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid_client", "error_description": "Rejected assertion " + r.Form.Get("client_assertion")})
 	}))
 	t.Cleanup(server.Close)
 
-	_, err = newTestClient(t, server.URL).AcquireToken(t.Context(), okta.TokenRequest{
+	_, err = newTestClientWithLogger(t, server.URL, logger).AcquireToken(t.Context(), okta.TokenRequest{
 		ConnectionID: uuid.New(),
 		TenantDomain: "example.okta.com",
 		ClientID:     "test-client-id",
@@ -154,6 +160,18 @@ func TestAcquireTokenReturnsTypedOktaError(t *testing.T) {
 	require.Equal(t, "invalid_client", apiErr.Code)
 	require.Equal(t, "Rejected assertion [redacted]", apiErr.Description)
 	require.NotContains(t, apiErr.Error(), "test-access-token")
+	rawAssertion := <-assertions
+	require.Contains(t, logs.String(), "Okta token request failed")
+	require.Contains(t, logs.String(), "invalid_client")
+	require.Contains(t, logs.String(), "Rejected assertion [redacted]")
+	require.Contains(t, logs.String(), "example.okta.com")
+	require.Contains(t, logs.String(), "test-client-id")
+	require.Contains(t, logs.String(), "test-kid")
+	require.Contains(t, logs.String(), "RS256")
+	require.Contains(t, logs.String(), "gram.oauth.assertion_audience")
+	require.Contains(t, logs.String(), "gram.oauth.assertion_expires_at")
+	require.Contains(t, logs.String(), server.URL+"/oauth2/v1/token")
+	require.NotContains(t, logs.String(), rawAssertion)
 }
 
 func TestAcquireTokenDoesNotReuseTokenAfterClientIDChanges(t *testing.T) {
@@ -241,15 +259,25 @@ func TestListGroupsBoundsSuccessfulResponseBody(t *testing.T) {
 
 func newTestClient(t *testing.T, endpoint string) *okta.Client {
 	t.Helper()
-	return newTestClientWithRetries(t, endpoint, 0)
+	return newTestClientWithLoggerAndRetries(t, endpoint, testenv.NewLogger(t), 0)
 }
 
 func newTestClientWithRetries(t *testing.T, endpoint string, attempts int) *okta.Client {
+	t.Helper()
+	return newTestClientWithLoggerAndRetries(t, endpoint, testenv.NewLogger(t), attempts)
+}
+
+func newTestClientWithLogger(t *testing.T, endpoint string, logger *slog.Logger) *okta.Client {
+	t.Helper()
+	return newTestClientWithLoggerAndRetries(t, endpoint, logger, 0)
+}
+
+func newTestClientWithLoggerAndRetries(t *testing.T, endpoint string, logger *slog.Logger, attempts int) *okta.Client {
 	t.Helper()
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
 	retries := guardian.DefaultRetryConfig()
 	retries.MaxAttempts = attempts
 	retries.ErrorHandler = retryablehttp.PassthroughErrorHandler
-	return okta.NewClient(policy, okta.ClientOpts{Endpoint: endpoint, RetryConfig: retries})
+	return okta.NewClient(logger, policy, okta.ClientOpts{Endpoint: endpoint, RetryConfig: retries})
 }

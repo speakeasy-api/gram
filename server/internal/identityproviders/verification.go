@@ -301,6 +301,7 @@ func tokenFailureResult(checkedAt time.Time, err error) *gen.IdentityProviderVer
 		} else {
 			detail = fmt.Sprintf("Okta token endpoint returned status %d.", apiErr.StatusCode)
 		}
+		detail += fmt.Sprintf(" Okta said: %s: %s", apiErr.Code, apiErr.Description)
 	}
 	return &gen.IdentityProviderVerifyResult{
 		Outcome:       outcome,

@@ -406,6 +406,18 @@ const (
 	// OAuthAssertionAudienceKey records which accepted audience form a verified client assertion carried.
 	OAuthAssertionAudienceKey = attribute.Key("gram.oauth.assertion_audience")
 
+	// OAuthAssertionIssuerKey records the issuer claim carried by a client assertion.
+	OAuthAssertionIssuerKey = attribute.Key("gram.oauth.assertion_issuer")
+
+	// OAuthAssertionSubjectKey records the subject claim carried by a client assertion.
+	OAuthAssertionSubjectKey = attribute.Key("gram.oauth.assertion_subject")
+
+	// OAuthAssertionKeyIDKey records the key ID in a client assertion header.
+	OAuthAssertionKeyIDKey = attribute.Key("gram.oauth.assertion_key_id")
+
+	// OAuthAssertionAlgorithmKey records the signing algorithm in a client assertion header.
+	OAuthAssertionAlgorithmKey = attribute.Key("gram.oauth.assertion_algorithm")
+
 	// OAuthAssertionExpiresAtKey records a verified client assertion's expiry.
 	OAuthAssertionExpiresAtKey = attribute.Key("gram.oauth.assertion_expires_at")
 
@@ -1771,6 +1783,18 @@ func SlogOAuthDeclaredAuthMethod(v string) slog.Attr {
 }
 func SlogOAuthAssertionAudience(v string) slog.Attr {
 	return slog.String(string(OAuthAssertionAudienceKey), v)
+}
+func SlogOAuthAssertionIssuer(v string) slog.Attr {
+	return slog.String(string(OAuthAssertionIssuerKey), v)
+}
+func SlogOAuthAssertionSubject(v string) slog.Attr {
+	return slog.String(string(OAuthAssertionSubjectKey), v)
+}
+func SlogOAuthAssertionKeyID(v string) slog.Attr {
+	return slog.String(string(OAuthAssertionKeyIDKey), v)
+}
+func SlogOAuthAssertionAlgorithm(v string) slog.Attr {
+	return slog.String(string(OAuthAssertionAlgorithmKey), v)
 }
 func SlogOAuthAssertionExpiresAt(v time.Time) slog.Attr {
 	return slog.Time(string(OAuthAssertionExpiresAtKey), v)

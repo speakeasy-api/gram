@@ -27,6 +27,7 @@ import (
 const (
 	fakeOktaPassed      = "passed"
 	fakeOktaRefused     = "refused"
+	fakeOktaUnavailable = "unavailable"
 	fakeOktaAppsBlocked = "apps_blocked"
 	testAccessToken     = "test-access-token"
 	testClientID        = "test-client-id"
@@ -115,6 +116,7 @@ func TestVerifySetupStepPersistsInvalidClientRefusal(t *testing.T) {
 	require.Equal(t, "refused", result.Outcome)
 	require.Contains(t, result.Detail, "JWKS URL")
 	require.Contains(t, result.Detail, "Client ID")
+	require.Contains(t, result.Detail, "Okta said: invalid_client: The client assertion could not be verified.")
 	require.Empty(t, result.Capabilities)
 	require.Empty(t, result.GrantedScopes)
 	require.Empty(t, result.Evidence.Reads)
@@ -178,6 +180,23 @@ func TestVerifySetupStepPersistsUnreachableOutcome(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, mustUUID(t, connection.ID), stored.ID)
 	require.Equal(t, "failed", stored.Status)
+}
+
+func TestVerifySetupStepPersistsProviderUnreachableDetail(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeOktaServer(t, fakeOktaUnavailable)
+	ctx, ti := newTestServiceWithOktaEndpoint(t, fake.server.URL)
+	prepareConnectionForVerification(t, ctx, ti, fake)
+
+	result, err := ti.service.VerifySetupStep(ctx, &gen.VerifySetupStepPayload{StepKey: "connect", SessionToken: nil, ApikeyToken: nil})
+	require.NoError(t, err)
+	require.Equal(t, "unreachable", result.Outcome)
+	require.Contains(t, result.Detail, "Okta said: server_error: The token service is temporarily unavailable.")
+
+	stored, err := repo.New(ti.conn).GetIdentityProviderConnectionByOrganization(ctx, ti.orgID)
+	require.NoError(t, err)
+	require.Equal(t, result.Detail, stored.StatusDetail.String)
 }
 
 func TestVerifySetupStepRejectsPendingConnectionWithoutClientID(t *testing.T) {
@@ -319,6 +338,12 @@ func (f *fakeOktaServer) handleToken(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
 		_, _ = w.Write([]byte(`{"error":"invalid_client","error_description":"The client assertion could not be verified."}`))
+		return
+	}
+	if f.mode == fakeOktaUnavailable {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte(`{"error":"server_error","error_description":"The token service is temporarily unavailable."}`))
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")

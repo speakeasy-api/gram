@@ -101,7 +101,7 @@ func newTestServiceWithURLs(t *testing.T, oktaEndpoint, publicURL string) (conte
 		authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
 		audit.NewLogger(),
 		encryptionClient,
-		okta.NewClient(guardianPolicy, okta.ClientOpts{Endpoint: oktaEndpoint, RetryConfig: retryConfig}),
+		okta.NewClient(logger, guardianPolicy, okta.ClientOpts{Endpoint: oktaEndpoint, RetryConfig: retryConfig}),
 		serverURL,
 	)
 
