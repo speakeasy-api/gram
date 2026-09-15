@@ -1,0 +1,12 @@
+{
+  "mcp": {
+    "crm": {
+      "type": "remote",
+      "url": "http://127.0.0.1:8931/mcp",
+      "enabled": true,
+      "headers": {
+        "Authorization": "Bearer gram-consumer-key"
+      }
+    }
+  }
+}
