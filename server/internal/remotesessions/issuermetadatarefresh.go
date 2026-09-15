@@ -623,10 +623,13 @@ func (r *IssuerMetadataRefresher) apply(ctx context.Context, logger *slog.Logger
 	return success, nil
 }
 
-// issuerViewChanged compares the audited views ignoring updated_at, which every write moves; the view carries none of the tracking columns.
+// issuerViewChanged ignores write and JWKS-cache freshness timestamps. A
+// refresh can move those without changing issuer configuration or capabilities.
 func issuerViewChanged(before, after *types.RemoteSessionIssuer) bool {
 	b, a := *before, *after
 	b.UpdatedAt, a.UpdatedAt = "", ""
+	b.JwksFetchedAt, a.JwksFetchedAt = nil, nil
+	b.JwksCacheExpiresAt, a.JwksCacheExpiresAt = nil, nil
 	return !reflect.DeepEqual(b, a)
 }
 
