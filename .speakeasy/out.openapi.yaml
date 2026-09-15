@@ -39570,6 +39570,7 @@ paths:
               - opencode
               - copilot
               - openclaw
+              - pi
             type: string
         - allowEmptyValue: true
           description: Session header
