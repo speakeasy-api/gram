@@ -103,6 +103,18 @@ WHERE c.organization_id = @organization_id
   AND c.deleted IS FALSE
 FOR UPDATE OF o;
 
+-- name: UpdateOktaIdentityProviderWorkOSConnection :execrows
+UPDATE okta_identity_provider_connections AS o
+SET
+  workos_connection_id = @workos_connection_id,
+  updated_at = clock_timestamp()
+FROM identity_provider_connections AS c
+WHERE o.identity_provider_connection_id = c.id
+  AND c.organization_id = @organization_id
+  AND c.id = @identity_provider_connection_id
+  AND c.deleted IS FALSE
+  AND o.sign_in_application_id = @sign_in_application_id;
+
 -- name: UpdateOktaIdentityProviderSignInAcknowledgement :exec
 UPDATE okta_identity_provider_connections AS o
 SET

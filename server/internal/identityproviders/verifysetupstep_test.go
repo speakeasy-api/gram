@@ -35,6 +35,7 @@ const (
 	fakeOktaAppsBlocked   = "apps_blocked"
 	fakeOktaManageDenied  = "manage_scope_denied"
 	fakeOktaManageOmitted = "manage_scope_omitted"
+	fakeOktaExistingApp   = "existing_sign_in_app"
 	fakeOktaAppInactive   = "sign_in_app_inactive"
 	fakeOktaAppForbidden  = "sign_in_app_forbidden"
 	fakeOktaAppRefused    = "sign_in_app_refused"
@@ -55,6 +56,8 @@ type fakeOktaServer struct {
 	publicJWK        jose.JSONWebKey
 	validationErr    error
 	createdApp       map[string]any
+	createdAppCount  int
+	applicationReads int
 	resolvedClientID string
 	assignedAppID    string
 	assignedGroupID  string
@@ -573,6 +576,8 @@ func newFakeOktaServer(t *testing.T, mode string) *fakeOktaServer {
 		publicJWK:        jose.JSONWebKey{},
 		validationErr:    nil,
 		createdApp:       nil,
+		createdAppCount:  0,
+		applicationReads: 0,
 		resolvedClientID: "",
 		assignedAppID:    "",
 		assignedGroupID:  "",
@@ -686,6 +691,7 @@ func (f *fakeOktaServer) handleApplications(w http.ResponseWriter, r *http.Reque
 		}
 		f.mu.Lock()
 		f.createdApp = created
+		f.createdAppCount++
 		clientID := f.signInClientID
 		f.mu.Unlock()
 		f.writeApplication(w, "ACTIVE", clientID)
@@ -697,6 +703,15 @@ func (f *fakeOktaServer) handleApplications(w http.ResponseWriter, r *http.Reque
 			return
 		}
 		filter := r.URL.Query().Get("filter")
+		if filter == "" {
+			w.Header().Set("Content-Type", "application/json")
+			if f.Mode() == fakeOktaExistingApp {
+				_, _ = w.Write([]byte(`[{"id":"` + testSignInAppID + `","status":"ACTIVE","label":"Speakeasy sign-in","credentials":{"oauthClient":{"client_id":"` + f.SignInClientID() + `","client_secret":"` + testFakeClientSecret + `"}}}]`))
+				return
+			}
+			_, _ = w.Write([]byte(`[]`))
+			return
+		}
 		const prefix = `credentials.oauthClient.client_id eq "`
 		clientID, hasPrefix := strings.CutPrefix(filter, prefix)
 		clientID, hasSuffix := strings.CutSuffix(clientID, `"`)
@@ -713,7 +728,7 @@ func (f *fakeOktaServer) handleApplications(w http.ResponseWriter, r *http.Reque
 			_, _ = w.Write([]byte(`[]`))
 			return
 		}
-		_, _ = w.Write([]byte(`[{"id":"` + testSignInAppID + `","status":"ACTIVE","label":"Speakeasy","credentials":{"oauthClient":{"client_id":"` + expectedClientID + `","client_secret":"` + testFakeClientSecret + `"}}}]`))
+		_, _ = w.Write([]byte(`[{"id":"` + testSignInAppID + `","status":"ACTIVE","label":"Speakeasy sign-in","credentials":{"oauthClient":{"client_id":"` + expectedClientID + `","client_secret":"` + testFakeClientSecret + `"}}}]`))
 		return
 	}
 	f.handleCollection(w, r, "apps")
@@ -733,6 +748,9 @@ func (f *fakeOktaServer) handleSignInApplication(w http.ResponseWriter, r *http.
 		f.fail(w, errors.New("unexpected sign-in application request"))
 		return
 	}
+	f.mu.Lock()
+	f.applicationReads++
+	f.mu.Unlock()
 	switch f.Mode() {
 	case fakeOktaAppForbidden:
 		w.Header().Set("Content-Type", "application/json")
@@ -782,7 +800,7 @@ func (f *fakeOktaServer) handleApplicationAssignment(w http.ResponseWriter, r *h
 
 func (f *fakeOktaServer) writeApplication(w http.ResponseWriter, status, clientID string) {
 	w.Header().Set("Content-Type", "application/json")
-	_, _ = w.Write([]byte(`{"id":"` + testSignInAppID + `","status":"` + status + `","label":"Speakeasy","credentials":{"oauthClient":{"client_id":"` + clientID + `","client_secret":"` + testFakeClientSecret + `"}}}`))
+	_, _ = w.Write([]byte(`{"id":"` + testSignInAppID + `","status":"` + status + `","label":"Speakeasy sign-in","credentials":{"oauthClient":{"client_id":"` + clientID + `","client_secret":"` + testFakeClientSecret + `"}}}`))
 }
 
 func (f *fakeOktaServer) handleCollection(w http.ResponseWriter, r *http.Request, resource string) {
@@ -861,6 +879,12 @@ func (f *fakeOktaServer) CreatedApplication() map[string]any {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return maps.Clone(f.createdApp)
+}
+
+func (f *fakeOktaServer) ApplicationCounts() (int, int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.createdAppCount, f.applicationReads
 }
 
 func (f *fakeOktaServer) ResolvedClientID() string {

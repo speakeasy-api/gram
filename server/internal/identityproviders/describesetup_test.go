@@ -56,10 +56,9 @@ func TestDescribeSetupReturnsConnectStep(t *testing.T) {
 		ExpectedValues: []*gen.IdentityProviderExpectedValue{},
 		Claims: []*gen.IdentityProviderClaim{
 			{Name: "email", Purpose: "identity", CarriesAccess: false},
-			{Name: "name", Purpose: "display", CarriesAccess: false},
+			{Name: "first_name", Purpose: "display", CarriesAccess: false},
+			{Name: "last_name", Purpose: "display", CarriesAccess: false},
 			{Name: "groups", Purpose: "used by access rules", CarriesAccess: true},
-			{Name: "department", Purpose: "reporting", CarriesAccess: false},
-			{Name: "title", Purpose: "reporting", CarriesAccess: false},
 		},
 		Repair:       nil,
 		PortalIntent: nil,

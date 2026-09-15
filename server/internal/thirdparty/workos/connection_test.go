@@ -68,8 +68,7 @@ func TestClientCreateOIDCConnectionSendsExactPayload(t *testing.T) {
 			"pkce":true
 		},
 		"attribute_maps":{
-			"standard_attributes":{"email":"email","first_name":"first_name","last_name":"last_name","groups":"groups","name":"name"},
-			"custom_attributes":{"department":"department","title":"title"}
+			"standard_attributes":{"email":"email","first_name":"first_name","last_name":"last_name","groups":"groups"}
 		}
 	}`, string(<-bodies))
 }

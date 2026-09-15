@@ -72,7 +72,6 @@ type createOIDCOptions struct {
 
 type createOIDCAttributeMaps struct {
 	StandardAttributes map[string]string `json:"standard_attributes"`
-	CustomAttributes   map[string]string `json:"custom_attributes"`
 }
 
 // CreateOIDCConnection creates a GenericOIDC connection using the field names
@@ -95,11 +94,6 @@ func (wc *Client) CreateOIDCConnection(ctx context.Context, input CreateOIDCConn
 				"first_name": "first_name",
 				"last_name":  "last_name",
 				"groups":     "groups",
-				"name":       "name",
-			},
-			CustomAttributes: map[string]string{
-				"department": "department",
-				"title":      "title",
 			},
 		},
 	}

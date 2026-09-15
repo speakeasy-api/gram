@@ -41,6 +41,9 @@ const (
 	dpopNonceHeader      = "DPoP-Nonce"
 )
 
+// SignInApplicationLabel identifies Gram's Okta OIDC sign-in application.
+const SignInApplicationLabel = "Speakeasy sign-in"
+
 // APIError describes an error response from Okta without retaining request credentials.
 type APIError struct {
 	// Method is the HTTP method used for the request.
@@ -180,7 +183,8 @@ type applicationResponse struct {
 	Label       string `json:"label"`
 	Credentials struct {
 		OAuthClient struct {
-			ClientID string `json:"client_id"`
+			ClientID     string `json:"client_id"`
+			ClientSecret string `json:"client_secret"`
 		} `json:"oauthClient"`
 	} `json:"credentials"`
 }
@@ -605,7 +609,7 @@ func (c *Client) CreateOIDCApplication(ctx context.Context, tenantDomain, access
 	}
 	payload := createOIDCApplicationRequest{
 		Name:       "oidc_client",
-		Label:      "Speakeasy",
+		Label:      SignInApplicationLabel,
 		SignOnMode: "OPENID_CONNECT",
 		Credentials: applicationCredentialsRequest{
 			OAuthClient: oauthClientCredentialsRequest{
@@ -646,6 +650,36 @@ func (c *Client) CreateOIDCApplication(ctx context.Context, tenantDomain, access
 		return Application{}, err
 	}
 	return applicationFromResponse(response), nil
+}
+
+// FindActiveApplicationByLabel returns an existing active application and its
+// transient client secret when Okta includes it in the list response.
+func (c *Client) FindActiveApplicationByLabel(ctx context.Context, tenantDomain, accessToken, label string) (Application, string, bool, error) {
+	if label == "" {
+		return Application{}, "", false, errors.New("find Okta application: label is required")
+	}
+	seenCursors := make(map[string]struct{})
+	after := ""
+	for {
+		responses, next, err := c.listApplicationResponses(ctx, tenantDomain, accessToken, "", after)
+		if err != nil {
+			return Application{}, "", false, err
+		}
+		for _, response := range responses {
+			if response.Label == label && response.Status == "ACTIVE" {
+				return applicationFromResponse(response), response.Credentials.OAuthClient.ClientSecret, true, nil
+			}
+		}
+		if next == "" {
+			break
+		}
+		if _, exists := seenCursors[next]; exists {
+			return Application{}, "", false, errors.New("find Okta application: repeated pagination cursor")
+		}
+		seenCursors[next] = struct{}{}
+		after = next
+	}
+	return Application{ID: "", Status: "", Label: "", ClientID: ""}, "", false, nil
 }
 
 // GetApplication retrieves an Okta OIDC application by its application instance ID.

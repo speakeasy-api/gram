@@ -673,3 +673,36 @@ func (q *Queries) UpdateOktaIdentityProviderSignInVerification(ctx context.Conte
 	}
 	return result.RowsAffected(), nil
 }
+
+const updateOktaIdentityProviderWorkOSConnection = `-- name: UpdateOktaIdentityProviderWorkOSConnection :execrows
+UPDATE okta_identity_provider_connections AS o
+SET
+  workos_connection_id = $1,
+  updated_at = clock_timestamp()
+FROM identity_provider_connections AS c
+WHERE o.identity_provider_connection_id = c.id
+  AND c.organization_id = $2
+  AND c.id = $3
+  AND c.deleted IS FALSE
+  AND o.sign_in_application_id = $4
+`
+
+type UpdateOktaIdentityProviderWorkOSConnectionParams struct {
+	WorkosConnectionID           pgtype.Text
+	OrganizationID               string
+	IdentityProviderConnectionID uuid.UUID
+	SignInApplicationID          pgtype.Text
+}
+
+func (q *Queries) UpdateOktaIdentityProviderWorkOSConnection(ctx context.Context, arg UpdateOktaIdentityProviderWorkOSConnectionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateOktaIdentityProviderWorkOSConnection,
+		arg.WorkosConnectionID,
+		arg.OrganizationID,
+		arg.IdentityProviderConnectionID,
+		arg.SignInApplicationID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}

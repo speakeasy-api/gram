@@ -464,7 +464,7 @@ func TestCreateOIDCApplicationSendsExactPayloadAndDropsResponseSecret(t *testing
 		requests <- r.Clone(t.Context())
 		bodies <- body
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"id":"app-1","status":"ACTIVE","label":"Speakeasy","credentials":{"oauthClient":{"client_id":"client-1","client_secret":"` + responseSecret + `"}}}`))
+		_, _ = w.Write([]byte(`{"id":"app-1","status":"ACTIVE","label":"Speakeasy sign-in","credentials":{"oauthClient":{"client_id":"client-1","client_secret":"` + responseSecret + `"}}}`))
 	}))
 	t.Cleanup(server.Close)
 
@@ -475,7 +475,7 @@ func TestCreateOIDCApplicationSendsExactPayloadAndDropsResponseSecret(t *testing
 		ClientSecret: "caller-minted-secret",
 	})
 	require.NoError(t, err)
-	require.Equal(t, okta.Application{ID: "app-1", Status: "ACTIVE", Label: "Speakeasy", ClientID: "client-1"}, app)
+	require.Equal(t, okta.Application{ID: "app-1", Status: "ACTIVE", Label: "Speakeasy sign-in", ClientID: "client-1"}, app)
 
 	request := <-requests
 	require.Equal(t, http.MethodPost, request.Method)
@@ -485,7 +485,7 @@ func TestCreateOIDCApplicationSendsExactPayloadAndDropsResponseSecret(t *testing
 	body := <-bodies
 	require.JSONEq(t, `{
 		"name":"oidc_client",
-		"label":"Speakeasy",
+		"label":"Speakeasy sign-in",
 		"signOnMode":"OPENID_CONNECT",
 		"credentials":{"oauthClient":{"client_secret":"caller-minted-secret","token_endpoint_auth_method":"client_secret_post","autoKeyRotation":true,"pkce_required":true}},
 		"settings":{"oauthClient":{"application_type":"web","grant_types":["authorization_code","refresh_token"],"response_types":["code"],"redirect_uris":["https://auth.example.com/sso/callback","https://app.example.com/oauth/callback"],"consent_method":"TRUSTED"}}
@@ -499,6 +499,30 @@ func TestCreateOIDCApplicationSendsExactPayloadAndDropsResponseSecret(t *testing
 	require.NotContains(t, fmt.Sprintf("%+v", app), responseSecret)
 	require.NotContains(t, logs.String(), responseSecret)
 	require.NotContains(t, logs.String(), "caller-minted-secret")
+}
+
+func TestFindActiveApplicationByLabelReturnsTransientSecret(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/api/v1/apps" || r.URL.Query().Get("limit") != "200" || r.URL.Query().Has("filter") || r.Header.Get("Authorization") != "Bearer test-access-token" {
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[
+			{"id":"inactive-app","status":"INACTIVE","label":"Speakeasy sign-in","credentials":{"oauthClient":{"client_id":"inactive-client","client_secret":"inactive-secret"}}},
+			{"id":"active-app","status":"ACTIVE","label":"Speakeasy sign-in","credentials":{"oauthClient":{"client_id":"active-client","client_secret":"active-secret"}}}
+		]`))
+	}))
+	t.Cleanup(server.Close)
+
+	app, secret, found, err := newTestClient(t, server.URL).FindActiveApplicationByLabel(t.Context(), "example.okta.com", "test-access-token", okta.SignInApplicationLabel)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, okta.Application{ID: "active-app", Status: "ACTIVE", Label: "Speakeasy sign-in", ClientID: "active-client"}, app)
+	require.Equal(t, "active-secret", secret)
+	require.NotContains(t, fmt.Sprintf("%+v", app), secret)
 }
 
 func TestCreateOIDCApplicationRedactsReflectedClientSecret(t *testing.T) {

@@ -157,7 +157,7 @@ func TestSubmitSignInStepProvisionsExactOktaApplicationAndAssignsEveryone(t *tes
 	require.Equal(t, clientSecret, *workOSSecret)
 	require.Equal(t, map[string]any{
 		"name":       "oidc_client",
-		"label":      "Speakeasy",
+		"label":      "Speakeasy sign-in",
 		"signOnMode": "OPENID_CONNECT",
 		"credentials": map[string]any{
 			"oauthClient": map[string]any{
@@ -195,7 +195,7 @@ func TestSubmitSignInStepProvisionsExactOktaApplicationAndAssignsEveryone(t *tes
 
 	afterAudits, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionIdentityProviderConnectionUpdated)
 	require.NoError(t, err)
-	require.Equal(t, beforeAudits+1, afterAudits)
+	require.Equal(t, beforeAudits+2, afterAudits)
 	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionIdentityProviderConnectionUpdated)
 	require.NoError(t, err)
 	afterSnapshot, err := audittest.DecodeAuditData(record.AfterSnapshot)
@@ -321,7 +321,73 @@ func TestSubmitSignInStepFallsBackToWorkOSAdminPortalForCapability404(t *testing
 	require.False(t, stored.WorkosConnectionID.Valid)
 }
 
-func TestSubmitSignInStepDoesNotPersistWhenEveryoneAssignmentFails(t *testing.T) {
+func TestSubmitSignInStepMapsWorkOSBadRequestAndKeepsPersistedApplication(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeOktaServer(t, fakeOktaPassed)
+	ctx, ti := newTestServiceWithOktaEndpoint(t, fake.server.URL)
+	prepareActiveConnection(t, ctx, ti, fake)
+	ti.workos.On("CreateOIDCConnection", mock.Anything, mock.Anything).Return(workos.Connection{}, &workos.APIError{
+		Method:     http.MethodPost,
+		Path:       "/connections",
+		StatusCode: http.StatusBadRequest,
+		Body:       `{"code":"custom_attribute_not_found","message":"No matching custom attribute exists."}`,
+	}).Once()
+
+	result, err := ti.service.SubmitSetupStep(ctx, &gen.SubmitSetupStepPayload{StepKey: "sign_in", Values: []*gen.IdentityProviderSetupValue{}, SessionToken: nil, ApikeyToken: nil})
+	require.NoError(t, err)
+	require.Equal(t, []*gen.IdentityProviderFieldOutcome{{
+		Key:     "workos_connection",
+		Outcome: "rejected",
+		Detail:  "custom_attribute_not_found: No matching custom attribute exists.",
+	}}, result.FieldOutcomes)
+	require.Equal(t, new("sso"), result.Step.PortalIntent)
+	stored, err := repo.New(ti.conn).GetIdentityProviderConnectionByOrganization(ctx, ti.orgID)
+	require.NoError(t, err)
+	require.Equal(t, testSignInAppID, stored.SignInApplicationID.String)
+	require.Equal(t, "application_created", stored.SignInState.String)
+	require.False(t, stored.WorkosConnectionID.Valid)
+}
+
+func TestSubmitSignInStepRetriesWorkOSForPersistedManualApplication(t *testing.T) {
+	t.Parallel()
+
+	const manualClientID = "manual-public-client-example"
+	fake := newFakeOktaServer(t, fakeOktaManageDenied)
+	fake.SetSignInClientID(manualClientID)
+	ctx, ti := newTestServiceWithOktaEndpoint(t, fake.server.URL)
+	prepareActiveConnection(t, ctx, ti, fake)
+	ti.workos.On("CreateOIDCConnection", mock.Anything, mock.Anything).Return(workos.Connection{}, &workos.APIError{
+		Method:     http.MethodPost,
+		Path:       "/connections",
+		StatusCode: http.StatusBadRequest,
+		Body:       `{"code":"invalid_client_secret","message":"The client secret was rejected."}`,
+	}).Once()
+
+	values := []*gen.IdentityProviderSetupValue{
+		{Key: "client_id", Value: manualClientID},
+		{Key: "client_secret", Value: "manual-secret"},
+	}
+	result, err := ti.service.SubmitSetupStep(ctx, &gen.SubmitSetupStepPayload{StepKey: "sign_in", Values: values, SessionToken: nil, ApikeyToken: nil})
+	require.NoError(t, err)
+	require.Equal(t, []*gen.IdentityProviderFieldOutcome{{
+		Key:     "client_secret",
+		Outcome: "rejected",
+		Detail:  "invalid_client_secret: The client secret was rejected.",
+	}}, result.FieldOutcomes)
+	require.Equal(t, []string{"client_id", "client_secret"}, []string{result.Step.ExpectedValues[0].Key, result.Step.ExpectedValues[1].Key})
+
+	workOSSecret := expectDirectWorkOSConnection(t, ti, manualClientID)
+	retry, err := ti.service.SubmitSetupStep(ctx, &gen.SubmitSetupStepPayload{StepKey: "sign_in", Values: values, SessionToken: nil, ApikeyToken: nil})
+	require.NoError(t, err)
+	require.Equal(t, configuredSignInStep(manualClientID, false), retry.Step)
+	require.Equal(t, "manual-secret", *workOSSecret)
+	created, reads := fake.ApplicationCounts()
+	require.Zero(t, created)
+	require.Equal(t, 1, reads)
+}
+
+func TestSubmitSignInStepPersistsApplicationBeforeAssignmentAndDoesNotRecreateOnRetry(t *testing.T) {
 	t.Parallel()
 
 	fake := newFakeOktaServer(t, fakeOktaAssignFails)
@@ -332,9 +398,34 @@ func TestSubmitSignInStepDoesNotPersistWhenEveryoneAssignmentFails(t *testing.T)
 	requireOopsCode(t, err, oops.CodeGatewayError)
 	stored, err := repo.New(ti.conn).GetIdentityProviderConnectionByOrganization(ctx, ti.orgID)
 	require.NoError(t, err)
-	require.False(t, stored.SignInApplicationID.Valid)
-	require.False(t, stored.SignInState.Valid)
-	require.Empty(t, stored.SignInEvidence)
+	require.Equal(t, testSignInAppID, stored.SignInApplicationID.String)
+	require.Equal(t, "application_created", stored.SignInState.String)
+	created, reads := fake.ApplicationCounts()
+	require.Equal(t, 1, created)
+	require.Zero(t, reads)
+
+	_, err = ti.service.SubmitSetupStep(ctx, &gen.SubmitSetupStepPayload{StepKey: "sign_in", Values: []*gen.IdentityProviderSetupValue{}, SessionToken: nil, ApikeyToken: nil})
+	requireOopsCode(t, err, oops.CodeGatewayError)
+	created, reads = fake.ApplicationCounts()
+	require.Equal(t, 1, created)
+	require.Equal(t, 1, reads)
+}
+
+func TestSubmitSignInStepAdoptsExistingActiveApplication(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeOktaServer(t, fakeOktaExistingApp)
+	ctx, ti := newTestServiceWithOktaEndpoint(t, fake.server.URL)
+	prepareActiveConnection(t, ctx, ti, fake)
+	workOSSecret := expectDirectWorkOSConnection(t, ti, testSignInClientID)
+
+	result, err := ti.service.SubmitSetupStep(ctx, &gen.SubmitSetupStepPayload{StepKey: "sign_in", Values: []*gen.IdentityProviderSetupValue{}, SessionToken: nil, ApikeyToken: nil})
+	require.NoError(t, err)
+	require.Equal(t, configuredSignInStep(testSignInClientID, false), result.Step)
+	require.Equal(t, testFakeClientSecret, *workOSSecret)
+	require.Nil(t, fake.CreatedApplication())
+	created, _ := fake.ApplicationCounts()
+	require.Zero(t, created)
 }
 
 func TestSubmitSignInStepRejectsConflictingGroupAcknowledgements(t *testing.T) {
@@ -433,10 +524,9 @@ func configuredSignInStep(clientID string, portalFallback bool) *gen.IdentityPro
 		},
 		Claims: []*gen.IdentityProviderClaim{
 			{Name: "email", Purpose: "identity", CarriesAccess: false},
-			{Name: "name", Purpose: "display", CarriesAccess: false},
+			{Name: "first_name", Purpose: "display", CarriesAccess: false},
+			{Name: "last_name", Purpose: "display", CarriesAccess: false},
 			{Name: "groups", Purpose: "used by access rules", CarriesAccess: true},
-			{Name: "department", Purpose: "reporting", CarriesAccess: false},
-			{Name: "title", Purpose: "reporting", CarriesAccess: false},
 		},
 		Repair: &gen.IdentityProviderRepair{
 			Title: "Repair the groups claim",

@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/identityproviders"
+	"github.com/speakeasy-api/gram/server/internal/identityproviders/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/okta"
@@ -87,7 +88,12 @@ func expectDirectWorkOSConnection(t *testing.T, ti *testInstance, clientID strin
 			input.DiscoveryEndpoint == "https://example.okta.com/.well-known/openid-configuration" &&
 			input.ClientID == clientID &&
 			input.ClientSecret != ""
-	})).Return(workos.Connection{
+	})).Run(func(_ mock.Arguments) {
+		stored, err := repo.New(ti.conn).GetIdentityProviderConnectionByOrganization(t.Context(), ti.orgID)
+		require.NoError(t, err)
+		require.Equal(t, testSignInAppID, stored.SignInApplicationID.String)
+		require.Equal(t, "application_created", stored.SignInState.String)
+	}).Return(workos.Connection{
 		ID:             "conn-example",
 		OrganizationID: "550e8400-e29b-41d4-a716-446655440000",
 		ConnectionType: "GenericOIDC",
