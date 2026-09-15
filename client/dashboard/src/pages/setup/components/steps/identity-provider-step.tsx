@@ -9,6 +9,8 @@ import {
 } from "lucide-react";
 import { useConfig as useMoonshineConfig } from "@/components/ui/hooks/useConfig";
 import { useGenerateWorkOSAdminPortalLinkMutation } from "@gram/client/react-query/generateWorkOSAdminPortalLink.js";
+import type { IdentityProviderConnection } from "@gram/client/models/components/identityproviderconnection.js";
+import { useIdentityProvider } from "@gram/client/react-query/identityProvider.js";
 import { useOnboardingStatus } from "@gram/client/react-query/onboardingStatus";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/Badge";
@@ -93,7 +95,14 @@ export function IdentityProviderStep({
   // lives here rather than inside the sign-on section that renders the grid.
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
   const provider = IDP_PROVIDERS.find((p) => p.id === selectedProvider);
-  const guided = provider?.guided === true;
+  const identityProvider = useIdentityProvider(undefined, undefined, {
+    throwOnError: false,
+  });
+  const connection = identityProvider.data?.connection;
+  // An explicit pick wins. With no pick, a connection that already exists is
+  // what the card is about: coming back to this page must not read as though
+  // nothing had been set up.
+  const guided = provider ? provider.guided === true : !!connection;
 
   return (
     <StepContainer
@@ -108,7 +117,11 @@ export function IdentityProviderStep({
     >
       <div className="space-y-8">
         {guided ? (
-          <GuidedSections onChangeProvider={() => setSelectedProvider(null)} />
+          <GuidedSections
+            onChangeProvider={() => setSelectedProvider(null)}
+            connection={connection}
+            isLoadingConnection={identityProvider.isPending}
+          />
         ) : (
           <>
             <SingleSignOnSection
@@ -135,8 +148,12 @@ export function IdentityProviderStep({
 // from the start.
 function GuidedSections({
   onChangeProvider,
+  connection,
+  isLoadingConnection,
 }: {
   onChangeProvider: () => void;
+  connection: IdentityProviderConnection | undefined;
+  isLoadingConnection: boolean;
 }): JSX.Element {
   return (
     <>
@@ -145,8 +162,13 @@ function GuidedSections({
         slug="connect-okta"
         title="Connect Okta"
         description="Give Speakeasy read access to your Okta tenant, and permission to create the sign-in application."
+        complete={connection?.status === "active"}
       >
-        <OktaConnectSection onChangeProvider={onChangeProvider} />
+        <OktaConnectSection
+          onChangeProvider={onChangeProvider}
+          connection={connection}
+          isLoadingConnection={isLoadingConnection}
+        />
       </StepSection>
       {GUIDED_UPCOMING_STEPS.map((step) => (
         <StepSection key={step.slug} locked {...step} />

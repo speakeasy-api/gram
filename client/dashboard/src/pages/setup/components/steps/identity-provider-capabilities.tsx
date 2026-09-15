@@ -1,0 +1,108 @@
+import type { IdentityProviderCapabilityRead } from "@gram/client/models/components/identityprovidercapabilityread.js";
+import { Badge } from "@/components/ui/Badge";
+import { Column, Table } from "@/components/ui/Table";
+import { Text } from "@/components/ui/Text";
+
+interface CapabilityCopy {
+  label: string;
+  access: string;
+  /** The sub-step that stops working without this capability. */
+  usedBy: string;
+}
+
+// What each capability means in the administrator's terms. The server names
+// capabilities, not scopes, so this says what the capability buys rather than
+// which Okta scope carries it.
+const CAPABILITY_COPY: Record<string, CapabilityCopy> = {
+  directory_read: {
+    label: "People and group membership",
+    access: "Read",
+    usedBy: "Directory",
+  },
+  application_assignment_read: {
+    label: "Application assignments",
+    access: "Read",
+    usedBy: "Applications and access",
+  },
+  sign_in_provisioning: {
+    label: "Sign-in application",
+    access: "Create",
+    usedBy: "Single sign-on",
+  },
+};
+
+function capabilityCopy(capability: string): CapabilityCopy {
+  // A capability this build has no copy for is still worth showing: the read
+  // either worked or it did not, and inventing a friendly name would be worse
+  // than printing what the server called it.
+  return (
+    CAPABILITY_COPY[capability] ?? {
+      label: capability,
+      access: "—",
+      usedBy: "—",
+    }
+  );
+}
+
+function readResult(read: IdentityProviderCapabilityRead): string {
+  if (!read.ok) return read.detail ?? "No answer";
+  if (read.count === undefined) return "Answered";
+  return `${read.count.toLocaleString()} ${read.resource}`;
+}
+
+const columns: Column<IdentityProviderCapabilityRead>[] = [
+  {
+    key: "capability",
+    header: "Capability",
+    width: "2fr",
+    render: (read) => (
+      <Text className="font-medium">
+        {capabilityCopy(read.capability).label}
+      </Text>
+    ),
+  },
+  {
+    key: "access",
+    header: "Access",
+    width: "1fr",
+    render: (read) => <Text>{capabilityCopy(read.capability).access}</Text>,
+  },
+  {
+    key: "usedBy",
+    header: "Used by",
+    width: "1.5fr",
+    render: (read) => (
+      <Text muted>{capabilityCopy(read.capability).usedBy}</Text>
+    ),
+  },
+  {
+    key: "result",
+    header: "Last read",
+    render: (read) => (
+      <Badge variant={read.ok ? "success" : "warning"} background size="sm">
+        <Badge.Text>{readResult(read)}</Badge.Text>
+      </Badge>
+    ),
+  },
+];
+
+/**
+ * What the connection proved it can do in Okta, one row per read the check
+ * actually made. Shared by the verification result and the connected state so
+ * the same evidence reads the same way in both places.
+ */
+export function IdentityProviderCapabilities({
+  reads,
+}: {
+  reads: IdentityProviderCapabilityRead[];
+}): JSX.Element | null {
+  if (reads.length === 0) return null;
+
+  return (
+    <Table
+      columns={columns}
+      data={reads}
+      rowKey={(read) => `${read.capability}:${read.resource}`}
+    />
+  );
+}

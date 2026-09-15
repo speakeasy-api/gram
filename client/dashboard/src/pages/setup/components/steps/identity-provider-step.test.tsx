@@ -21,6 +21,46 @@ vi.mock("@/components/ui/hooks/useConfig", () => ({
   useConfig: () => ({ theme: "light" }),
 }));
 
+// The guided path reads the identity provider connection. This file covers the
+// fork and the grid; okta-connect-section.test.tsx covers the exchange itself,
+// so here there is never a connection.
+vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({}) }));
+vi.mock("@gram/client/react-query/identityProvider.js", () => ({
+  useIdentityProvider: () => ({
+    data: { connection: undefined },
+    isPending: false,
+  }),
+  invalidateAllIdentityProvider: vi.fn(),
+}));
+vi.mock("@gram/client/react-query/identityProviderSetup.js", () => ({
+  useIdentityProviderSetup: () => ({ data: undefined, isPending: false }),
+  invalidateAllIdentityProviderSetup: vi.fn(),
+}));
+vi.mock("@gram/client/react-query/createIdentityProvider.js", () => ({
+  useCreateIdentityProviderMutation: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+  }),
+}));
+vi.mock("@gram/client/react-query/submitIdentityProviderSetupStep.js", () => ({
+  useSubmitIdentityProviderSetupStepMutation: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+  }),
+}));
+vi.mock("@gram/client/react-query/verifyIdentityProviderSetupStep.js", () => ({
+  useVerifyIdentityProviderSetupStepMutation: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+  }),
+}));
+vi.mock("@gram/client/react-query/deleteIdentityProvider.js", () => ({
+  useDeleteIdentityProviderMutation: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+  }),
+}));
+
 /** The Okta entry Speakeasy walks itself. */
 const guidedOkta = () => screen.getByRole("button", { name: /Okta Guided/ });
 /** The Okta entry that still hands off to the WorkOS portal. */
@@ -96,7 +136,7 @@ describe("IdentityProviderStep", () => {
       "Applications and access",
       "Token exchange with Okta",
     ]) {
-      expect(screen.getByText(title)).toBeTruthy();
+      expect(screen.getByRole("heading", { name: title })).toBeTruthy();
     }
 
     // The console ceremony, explained inline rather than in a dialog.
@@ -107,6 +147,9 @@ describe("IdentityProviderStep", () => {
     // Granted as one of four scopes, then called out on its own as the only
     // write among them.
     expect(screen.getAllByText("okta.apps.manage")).toHaveLength(2);
+
+    // With nothing connected the step asks for the tenant first.
+    expect(screen.getByLabelText("Okta organization URL")).toBeTruthy();
 
     // The portal round trip is gone: this provider is walked in-product.
     expect(
@@ -139,13 +182,13 @@ describe("IdentityProviderStep", () => {
   it("lets the administrator back out to the grid before anything is submitted", () => {
     render(<IdentityProviderStep onComplete={() => {}} />);
     fireEvent.click(guidedOkta());
-    expect(screen.getByText("Connect Okta")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Connect Okta" })).toBeTruthy();
 
     fireEvent.click(
       screen.getByRole("button", { name: "Choose a different provider" }),
     );
 
-    expect(screen.queryByText("Connect Okta")).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Connect Okta" })).toBeNull();
     expect(screen.getByText("Directory sync")).toBeTruthy();
     expect(
       screen.getByRole("button", { name: "Connect" }).hasAttribute("disabled"),
