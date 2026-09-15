@@ -1,0 +1,19 @@
+server/internal/scanners/promptpolicy/openrouter/judge.go
+  s_031c3ddf6446b8::t_f3d8e0bc6321f2 127,143-145,148,208-218
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "d23184fa56fb31190e63cdf8af809f5b92187802",
+  "prompts": {},
+  "sessions": {
+    "s_031c3ddf6446b8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "03c8c097-4772-4d39-9f72-fa8367b76441",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
