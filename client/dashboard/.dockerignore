@@ -2,4 +2,4 @@
 
 !/dist
 !nginx.conf
-!40-admin-server-url.sh
+!preview-runtime-values.sh
