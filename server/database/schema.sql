@@ -1295,14 +1295,13 @@ CREATE TABLE IF NOT EXISTS device_agent_configurations (
 
 -- ai_scan_targets is an organization's overlay on the Shadow AI scan target
 -- catalog its device agents probe for. A row is whatever the organization has
--- said about one target: an extra tool it added, or its choices about a
+-- said about one target: an extra tool it added, or its decision about a
 -- built-in compiled into the server.
 --
 -- The definition columns are filled only for a target the organization added.
 -- A row under a built-in's id carries no definition — the built-in's own stays
 -- authoritative, so a registry update still reaches an organization that has
--- switched one off or decided about it. Only enabled, status and rationale
--- come from the row in that case.
+-- decided about it. Only status and rationale come from the row in that case.
 --
 -- status is one table with the target rather than beside it so that deciding
 -- about a tool and editing it are one write under one lock, and a decision
