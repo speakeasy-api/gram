@@ -1,7 +1,6 @@
 package triggers
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -11,35 +10,36 @@ import (
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 )
 
-// TestWorkflowHelpersWithoutTemporal covers the trigger workflow helpers that
-// the platform trigger tools reach from MCP tool calls. A process without a
-// Temporal environment must get an error back, not a nil pointer dereference.
-func TestWorkflowHelpersWithoutTemporal(t *testing.T) {
+// These tests cover the trigger workflow helpers that the platform trigger
+// tools reach from MCP tool calls. A process without a Temporal environment
+// must get an error back, not a nil pointer dereference.
+
+func TestScheduleTriggerCronWorkflowWithoutTemporal(t *testing.T) {
 	t.Parallel()
 
-	var nilEnv *tenv.Environment
-	cases := map[string]func(ctx context.Context) error{
-		"schedule cron": func(ctx context.Context) error {
-			return ScheduleTriggerCronWorkflow(ctx, nilEnv, ScheduleTriggerCronWorkflowOptions{})
-		},
-		"delete cron schedule": func(ctx context.Context) error {
-			return DeleteTriggerCronWorkflowSchedule(ctx, nilEnv, uuid.New())
-		},
-		"dispatch": func(ctx context.Context) error {
-			return ExecuteTriggerDispatchWorkflow(ctx, nilEnv, TriggerDispatchWorkflowInput{})
-		},
-		"wake": func(ctx context.Context) error {
-			return ExecuteTriggerWakeWorkflow(ctx, nilEnv, uuid.New(), time.Now())
-		},
-		"cancel wake": func(ctx context.Context) error {
-			return CancelTriggerWakeWorkflow(ctx, nilEnv, uuid.New())
-		},
-	}
+	require.ErrorIs(t, ScheduleTriggerCronWorkflow(t.Context(), nil, ScheduleTriggerCronWorkflowOptions{}), tenv.ErrNotConfigured)
+}
 
-	for name, run := range cases {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			require.ErrorIs(t, run(t.Context()), tenv.ErrNotConfigured)
-		})
-	}
+func TestDeleteTriggerCronWorkflowScheduleWithoutTemporal(t *testing.T) {
+	t.Parallel()
+
+	require.ErrorIs(t, DeleteTriggerCronWorkflowSchedule(t.Context(), nil, uuid.New()), tenv.ErrNotConfigured)
+}
+
+func TestExecuteTriggerDispatchWorkflowWithoutTemporal(t *testing.T) {
+	t.Parallel()
+
+	require.ErrorIs(t, ExecuteTriggerDispatchWorkflow(t.Context(), nil, TriggerDispatchWorkflowInput{}), tenv.ErrNotConfigured)
+}
+
+func TestExecuteTriggerWakeWorkflowWithoutTemporal(t *testing.T) {
+	t.Parallel()
+
+	require.ErrorIs(t, ExecuteTriggerWakeWorkflow(t.Context(), nil, uuid.New(), time.Now()), tenv.ErrNotConfigured)
+}
+
+func TestCancelTriggerWakeWorkflowWithoutTemporal(t *testing.T) {
+	t.Parallel()
+
+	require.ErrorIs(t, CancelTriggerWakeWorkflow(t.Context(), nil, uuid.New()), tenv.ErrNotConfigured)
 }
