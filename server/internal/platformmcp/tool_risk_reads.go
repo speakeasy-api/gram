@@ -82,7 +82,7 @@ func registerRiskAnalysisStatusTool(reg *Registrar, status *RiskAnalysisStatusSe
 	addTool(reg, &mcp.Tool{
 		Name:        riskAnalysisStatusToolName,
 		Title:       riskAnalysisStatusToolTitle,
-		Description: "Report whether the Watchdog analysis is running for an exact project or the organization's literal default project, and when it last ran. The analysis is event-driven: it starts shortly after new chat traffic is captured rather than on a schedule, so a project with no recent traffic has no recent run. Use this when an administrator asks whether risk findings are up to date or why none have appeared.",
+		Description: "Report whether the Watchdog analysis is running for an exact project or the organization's literal default project, and when it last ran. The analysis is event-driven: it starts shortly after new chat traffic is captured rather than on a schedule, so a project with no recent traffic has no recent run. A run that hit a failure waits about five minutes before retrying and still reports as running during that wait. Use this when an administrator asks whether risk findings are up to date or why none have appeared.",
 		Annotations: readOnlyAnnotations(),
 		InputSchema: riskAnalysisStatusSchema(),
 	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetRiskAnalysisStatusInput) (*mcp.CallToolResult, GetRiskAnalysisStatusOutput, error) {

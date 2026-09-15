@@ -129,6 +129,11 @@ func riskAnalysisStatusOutput(project ResolvedProject, status analysisstatus.Sta
 	}
 }
 
+// riskAnalysisNormalOutcomes are the close outcomes that mean the last run
+// ended as intended. continued_as_new is a long-lived run rolling its history
+// over, not a failure; it matches the badge's NORMAL_OUTCOMES set.
+var riskAnalysisNormalOutcomes = map[string]bool{"completed": true, "continued_as_new": true}
+
 // riskAnalysisExplanation describes the run state in product language. It
 // never names the mechanism behind the analysis; the administrator needs to
 // know whether it ran, when, and what makes it run again.
@@ -145,7 +150,7 @@ func riskAnalysisExplanation(status analysisstatus.Status, now time.Time) string
 		if finished == nil {
 			finished = status.LastRunStartedAt
 		}
-		if status.LastRunOutcome != "" && status.LastRunOutcome != "completed" {
+		if status.LastRunOutcome != "" && !riskAnalysisNormalOutcomes[status.LastRunOutcome] {
 			ended := "The last analysis ended with outcome " + strings.ReplaceAll(status.LastRunOutcome, "_", " ")
 			if finished != nil {
 				ended += " " + humanDuration(now.Sub(*finished)) + " ago"

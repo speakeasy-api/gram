@@ -37,7 +37,9 @@ const (
 	// StateIdle means the latest run has closed and the coordinator is
 	// waiting for the next chat write to wake it.
 	StateIdle State = "idle"
-	// StateRunning means a coordinator run is in flight right now.
+	// StateRunning means a coordinator run is in flight right now. This
+	// includes the retry backoff: a run that saw a failed batch sleeps
+	// before continuing as new, and the workflow is running while it waits.
 	StateRunning State = "running"
 )
 
