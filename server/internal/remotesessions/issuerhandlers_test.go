@@ -2122,13 +2122,17 @@ func TestFetchRemoteSessionIssuerMetadata_DoesNotMergeAnotherIssuersDocument(t *
 		doc["userinfo_endpoint"] = "https://other-tenant.example/userinfo"
 	}})
 
-	_, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{
+	draft, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{
 		Issuer:           server.URL,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 	})
-	requireOopsCode(t, err, oops.CodeInvalid)
+	require.NoError(t, err)
+	require.Equal(t, server.URL+"/authorize", *draft.AuthorizationEndpoint)
+	require.Equal(t, server.URL+"/token", *draft.TokenEndpoint)
+	require.Nil(t, draft.JwksURI, "the sibling issuer cannot supply a key URL")
+	require.Nil(t, draft.UserinfoEndpoint, "the sibling issuer cannot supply userinfo")
 }
 
 // A document naming no issuer cannot be tied to the primary, so it
@@ -2226,7 +2230,7 @@ func TestFetchRemoteSessionIssuerMetadata_RejectsTrailingSlashIssuerMismatch(t *
 
 	ctx, ti := newTestService(t)
 	var server *httptest.Server
-	server = metadataServer(t, metadataServerOptions{mutateOIDC: func(doc map[string]any) {
+	server = metadataServer(t, metadataServerOptions{mutateOAuth: func(doc map[string]any) { doc["issuer"] = server.URL + "/" }, mutateOIDC: func(doc map[string]any) {
 		doc["issuer"] = server.URL + "/"
 	}})
 
@@ -2272,7 +2276,15 @@ func TestDiscoverIssuerMetadata_OtherIssuersDocumentStaysOutOfMetadata(t *testin
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil, guardian.WithTLSRootCAs(testIssuerTLSRootCAs))
 	require.NoError(t, err)
 
-	_, err = remotesessions.DiscoverIssuerMetadata(t.Context(), policy, server.URL)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "another authorization server")
+	discovered, err := remotesessions.DiscoverIssuerMetadata(t.Context(), policy, server.URL)
+	require.NoError(t, err)
+	require.Equal(t, server.URL, discovered.Issuer)
+	require.Empty(t, discovered.UserinfoEndpoint)
+	var document map[string]any
+	require.NoError(t, json.Unmarshal(discovered.Metadata, &document))
+	require.Equal(t, server.URL, document["issuer"])
+	require.Equal(t, "kept", document["oauth_only_extension"])
+	require.NotContains(t, document, "jwks_uri")
+	require.NotContains(t, document, "userinfo_endpoint")
+	require.NotContains(t, document, "claims_supported")
 }

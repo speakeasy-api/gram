@@ -503,8 +503,8 @@ func TestRefreshRemoteSessionIssuerMetadata_DoesNotRetainUnstorableDocument(t *t
 
 // The stored document only fills gaps after the fetched one has passed the
 // distrust gate on its own. A primary that advertises no issuer is rejected
-// even when a transient miss on the other candidate would otherwise have let
-// the stored issuer stand in for it.
+// without borrowing the stored issuer. An unread candidate keeps the failure
+// transient until discovery can determine whether an exact match is available.
 func TestRefreshRemoteSessionIssuerMetadata_UnreadableCandidateDoesNotBorrowStoredIssuer(t *testing.T) {
 	t.Parallel()
 
@@ -514,6 +514,11 @@ func TestRefreshRemoteSessionIssuerMetadata_UnreadableCandidateDoesNotBorrowStor
 	var dropIssuer atomic.Bool
 	upstream := metadataServer(t, metadataServerOptions{
 		oidcStatus: &oidcStatus,
+		mutateOIDC: func(doc map[string]any) {
+			if dropIssuer.Load() {
+				delete(doc, "issuer")
+			}
+		},
 		mutateOAuth: func(doc map[string]any) {
 			if dropIssuer.Load() {
 				delete(doc, "issuer")
@@ -527,6 +532,7 @@ func TestRefreshRemoteSessionIssuerMetadata_UnreadableCandidateDoesNotBorrowStor
 	complete := refreshIssuer(t, ctx, ti, created.ID)
 	require.Equal(t, upstream.URL+"/jwks", *complete.Issuer.JwksURI)
 
+	before := loadIssuerRow(t, ctx, ti, created)
 	dropIssuer.Store(true)
 	oidcStatus.Store(http.StatusServiceUnavailable)
 	_, err = ti.service.RefreshRemoteSessionIssuerMetadata(ctx, &gen.RefreshRemoteSessionIssuerMetadataPayload{
@@ -535,9 +541,19 @@ func TestRefreshRemoteSessionIssuerMetadata_UnreadableCandidateDoesNotBorrowStor
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 	})
-	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeGatewayError)
+	kept := loadIssuerRow(t, ctx, ti, created)
+	require.Equal(t, before.Metadata, kept.Metadata)
+	require.Equal(t, before.MetadataFetchedAt, kept.MetadataFetchedAt)
+	require.True(t, kept.MetadataLastErrorUrl.Valid)
+	// Once the outage ends, neither candidate identifies the requested issuer.
+	oidcStatus.Store(http.StatusOK)
+	_, err = ti.service.RefreshRemoteSessionIssuerMetadata(ctx, &gen.RefreshRemoteSessionIssuerMetadataPayload{ID: created.ID})
 	requireOopsCode(t, err, oops.CodeInvalid)
 	require.Contains(t, err.Error(), "advertises no issuer")
+	kept = loadIssuerRow(t, ctx, ti, created)
+	require.Equal(t, before.Metadata, kept.Metadata)
+	require.Equal(t, before.MetadataFetchedAt, kept.MetadataFetchedAt)
 }
 
 // loadIssuerRow reads the stored row for an issuer the test service created
