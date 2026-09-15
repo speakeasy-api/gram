@@ -214,9 +214,13 @@ var registry = []Product{
 				Enabled:     true,
 			},
 			{
-				// The stable shared Codex document. No released Codex version
-				// has presented it, but OpenAI's docs say Codex will switch to
-				// it for authorization servers advertising RFC 9207.
+				// The stable shared Codex document. Verified 2026-09: Codex
+				// CLI 0.154.0 presents this one, not the per-server document
+				// above, when it authorizes against a Gram MCP server.
+				// OpenAI's docs tie that switch to authorization servers
+				// advertising RFC 9207. Both forms stay registered: older
+				// CLIs still mint a document per server, and which one a
+				// given release sends is OpenAI's to change.
 				//
 				// The ChatGPT connector wildcard also admits this URL. That
 				// overlap is fine and is why this entry has to exist: a
