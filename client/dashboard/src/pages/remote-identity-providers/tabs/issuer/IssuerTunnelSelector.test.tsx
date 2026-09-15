@@ -80,7 +80,9 @@ describe("IssuerTunnelSelector", () => {
     });
     expect(listTunnels.mock.calls[0]?.[2]).toMatchObject({ enabled: true });
     expect(
-      screen.getByText(/OAuth paths are delivered to the tunnel agent/),
+      screen.getByText(
+        /delivered to the tunnel agent's configured local target, so use a local reverse proxy/,
+      ),
     ).toBeTruthy();
   });
 });
