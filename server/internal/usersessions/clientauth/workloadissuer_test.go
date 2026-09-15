@@ -15,13 +15,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usersessions/replay"
 )
 
-// The subject a platform puts in a workload assertion: a declared, bounded
-// resource rather than the ephemeral job.
+// The external subject the issuer vouches for.
 const testExternalSubject = "repo:acme/payments-api:ref:refs/heads/main"
 
-// launchWorkloadIssuer starts a dev-idp over HTTPS and discovers the key set
-// it publishes. Discovery runs before anything is presented, so a test that
-// takes the issuer offline still holds a jwks_uri to fail to reach.
+// launchWorkloadIssuer starts a dev-idp over HTTPS and discovers its jwks_uri
+// before any test takes it offline.
 func launchWorkloadIssuer(t *testing.T) (*devidptest.Instance, string) {
 	t.Helper()
 
@@ -29,10 +27,8 @@ func launchWorkloadIssuer(t *testing.T) (*devidptest.Instance, string) {
 	return issuer, oauthtest.DiscoverWorkloadJWKSURI(t, issuer)
 }
 
-// liveWorkloadExpectationFor is workloadExpectationFor against a live issuer:
-// iss is the platform that vouched for the workload and sub is the machine,
-// and the key set is resolved from the jwks_uri the issuer advertises rather
-// than handed over inline.
+// liveWorkloadExpectationFor is workloadExpectationFor with the key set
+// resolved from the issuer's advertised jwks_uri.
 func liveWorkloadExpectationFor(t *testing.T, issuer *devidptest.Instance, jwksURI string) clientauth.Expectation {
 	t.Helper()
 
@@ -57,8 +53,7 @@ func liveWorkloadExpectationFor(t *testing.T, issuer *devidptest.Instance, jwksU
 }
 
 // newWorkloadVerifier is newVerifier with a key resolver that trusts the
-// issuer's certificate, because these assertions verify against a key set
-// fetched over the network rather than one handed over inline.
+// issuer's certificate.
 func newWorkloadVerifier(t *testing.T, issuer *devidptest.Instance) *clientauth.Verifier {
 	t.Helper()
 
@@ -95,9 +90,7 @@ func newWorkloadVerifier(t *testing.T, issuer *devidptest.Instance) *clientauth.
 	return verifier
 }
 
-// The baseline the negative cases below are departures from: a real issuer,
-// its key set fetched over HTTPS from the jwks_uri it advertises, and an
-// assertion that verifies.
+// An assertion verifies against a key set fetched over HTTPS from a real issuer.
 func TestWorkloadIssuer_AssertionFromALiveIssuerVerifies(t *testing.T) {
 	t.Parallel()
 
@@ -110,27 +103,14 @@ func TestWorkloadIssuer_AssertionFromALiveIssuerVerifies(t *testing.T) {
 	require.NotNil(t, result)
 }
 
-// Key rotation is the issuer behaviour most likely to break in production, and
-// it cannot be posed against an inline key set: there is no server to rotate.
-// Here the issuer really replaces its key and republishes it at the same URL.
+// A key retired by rotation is refused once the resolver holds the new set.
 //
-// Each presentation uses a resolver with a cold cache, which is what makes
-// this deterministic. A warm cache behaves differently, for a reason that is
-// easy to miss:
+// Each presentation uses a cold resolver cache. A warm cache keeps the stored
+// set for jwks's 30s refreshCooldown, during which a retired key still
+// verifies; that window is by design and not asserted here.
 //
-// jwks holds a 30s refreshCooldown after any successful consult: a forced
-// refresh inside that window re-selects from the stored set rather than
-// spending refresh budget, which is what makes probing with random kids free
-// after the first refresh. So on a replica that has already fetched, for up to
-// the cooldown, a retired key still verifies and a just-published one is
-// refused as unknown. Both are the documented cost of that design rather than
-// defects, and neither is asserted here: pinning them would be pinning a
-// 30-second timing window.
-//
-// The assertions below are minted with distinct jti values on purpose. The
-// replay guard is Redis-backed and scoped per test, not per verifier, so
-// presenting one assertion twice is refused as a replay before the key is
-// looked at — which would pass this test for entirely the wrong reason.
+// Assertions use distinct jti values, since the replay guard would otherwise
+// refuse the second before its key is checked.
 func TestWorkloadIssuer_RetiredKeyIsRejectedOnceTheCurrentSetIsHeld(t *testing.T) {
 	t.Parallel()
 
@@ -148,24 +128,18 @@ func TestWorkloadIssuer_RetiredKeyIsRejectedOnceTheCurrentSetIsHeld(t *testing.T
 	_, err = newWorkloadVerifier(t, issuer).Verify(t.Context(), assertionFor(retired), liveWorkloadExpectationFor(t, issuer, jwksURI))
 	requireRejected(t, err, clientauth.ReasonKeyUnknown)
 
-	// And the issuer is still healthy: the rejection above is about the key
-	// that was retired, not about a server the rotation broke.
+	// The issuer itself is still healthy.
 	current := oauthtest.MintWorkloadAssertion(t, issuer, oauthtest.WorkloadClaims(issuer, testExternalSubject, testIssuer))
 	_, err = newWorkloadVerifier(t, issuer).Verify(t.Context(), assertionFor(current), liveWorkloadExpectationFor(t, issuer, jwksURI))
 	require.NoError(t, err, "the republished key must verify against a resolver that fetched it")
 }
 
-// An issuer that goes off the network is the availability coupling this
-// feature accepts, and it has to be refused rather than admitted: the
-// assertion is still perfectly well-formed, and only the key set is missing.
-//
-// Also unavailable against an inline source, which has nothing to take away.
+// An unreachable key set is refused even though the assertion is well-formed.
 func TestWorkloadIssuer_UnreachableKeySetIsRefused(t *testing.T) {
 	t.Parallel()
 
 	issuer, jwksURI := launchWorkloadIssuer(t)
-	// Minted while the issuer is up, so the assertion itself is beyond
-	// reproach when it is presented.
+	// Minted while the issuer is up, so only the key set is missing.
 	assertion := oauthtest.MintWorkloadAssertion(t, issuer, oauthtest.WorkloadClaims(issuer, testExternalSubject, testIssuer))
 
 	issuer.Stop()
@@ -175,16 +149,13 @@ func TestWorkloadIssuer_UnreachableKeySetIsRefused(t *testing.T) {
 	requireRejected(t, err, clientauth.ReasonKeyUnresolvable)
 }
 
-// A genuine assertion from a trusted issuer, naming a workload nobody
-// admitted. The verifier is the wrong layer to catch this by identity — it
-// catches it because the expectation names the admitted subject, so an
-// assertion for any other one fails to match.
+// A valid assertion from a trusted issuer for another subject fails to match
+// the expected subject.
 func TestWorkloadIssuer_SubjectOtherThanTheAdmittedOneIsRejected(t *testing.T) {
 	t.Parallel()
 
 	issuer, jwksURI := launchWorkloadIssuer(t)
-	// Somebody else's job on the same CI provider: correctly signed, genuinely
-	// issued, and not ours.
+	// Another workload on the same issuer.
 	assertion := oauthtest.MintWorkloadAssertion(t, issuer, oauthtest.WorkloadClaims(issuer, "repo:someone-else/their-api:ref:refs/heads/main", testIssuer))
 
 	_, err := newWorkloadVerifier(t, issuer).Verify(t.Context(), assertionFor(assertion), liveWorkloadExpectationFor(t, issuer, jwksURI))
@@ -192,8 +163,7 @@ func TestWorkloadIssuer_SubjectOtherThanTheAdmittedOneIsRejected(t *testing.T) {
 	requireRejected(t, err, clientauth.ReasonSubjectMismatch)
 }
 
-// The audience mismatch is the dominant rollout failure and is invisible from
-// the client side, so it is worth pinning against a real issuer too.
+// An assertion addressed to another audience is refused.
 func TestWorkloadIssuer_AudienceForAnotherServerIsRejected(t *testing.T) {
 	t.Parallel()
 
@@ -205,9 +175,7 @@ func TestWorkloadIssuer_AudienceForAnotherServerIsRejected(t *testing.T) {
 	requireRejected(t, err, clientauth.ReasonAudienceMismatch)
 }
 
-// Replay protection has to hold across a real fetch too: the second
-// presentation of one assertion is refused even though its signature still
-// verifies and its key set is still reachable.
+// A replayed assertion is refused even though it still verifies.
 func TestWorkloadIssuer_ReplayedAssertionIsRejected(t *testing.T) {
 	t.Parallel()
 

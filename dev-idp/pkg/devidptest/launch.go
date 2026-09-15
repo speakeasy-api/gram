@@ -121,11 +121,9 @@ type LaunchOpts struct {
 	// kid-mismatch). Most tests should leave this nil.
 	Key *rsa.PrivateKey
 
-	// TLS serves the instance over HTTPS with httptest's self-signed
-	// certificate, so every URL on the Instance is https. Needed by callers
-	// that refuse a non-https issuer or jwks_uri, such as Gram's JWKS
-	// resolver. Reach the server with Instance.Client, or trust it in a
-	// transport of your own with Instance.RootCAs.
+	// TLS serves the instance over HTTPS with a self-signed certificate,
+	// for callers that require https, such as Gram's JWKS resolver. Trust
+	// it with Instance.Client or Instance.RootCAs.
 	TLS bool
 }
 
@@ -164,8 +162,7 @@ func Launch(t *testing.T, opts LaunchOpts) *Instance {
 	ks, err := keystore.New(pemBytes, logger)
 	require.NoError(t, err, "init dev-idp keystore")
 
-	// Every request is counted before routing, so a test can tell that
-	// nothing reached the server on any mode.
+	// Counted before routing, so every mode is covered.
 	requests := &atomic.Int64{}
 	outer := http.NewServeMux()
 	counted := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -179,9 +176,8 @@ func Launch(t *testing.T, opts LaunchOpts) *Instance {
 	// time, so they must know the public URL up front.
 	server := httptest.NewUnstartedServer(counted)
 
-	// Every accepted connection is counted as well, including one whose TLS
-	// handshake fails or that closes before sending a request, neither of
-	// which reaches the handler above.
+	// Connections are counted too, including ones that never reach the
+	// handler, such as a failed TLS handshake.
 	connections := &atomic.Int64{}
 	server.Config.ConnState = func(_ net.Conn, state http.ConnState) {
 		if state == http.StateNew {
@@ -266,13 +262,8 @@ func (i *Instance) SigningKey() *rsa.PrivateKey { return i.keystore.PrivateKey()
 // the header, or the token names a key the published set does not contain.
 func (i *Instance) KeyID() string { return i.keystore.KID() }
 
-// RotateKey replaces the signing key with a freshly generated one, as an
-// issuer rotating on its own schedule would. From then on the JWKS publishes
-// only the new key, so anything signed earlier names a kid it no longer
-// contains, and the issuer URL does not change.
-//
-// Rotate between requests: a token signed while RotateKey runs can carry one
-// key's kid and the other key's signature.
+// RotateKey replaces the signing key at the same issuer URL; the JWKS then
+// publishes only the new key. Rotate between requests, not during one.
 func (i *Instance) RotateKey(t *testing.T) {
 	t.Helper()
 
@@ -281,23 +272,17 @@ func (i *Instance) RotateKey(t *testing.T) {
 	require.NoError(t, i.keystore.Rotate(key), "rotate dev-idp signing key")
 }
 
-// Stop takes the server off the network before the test ends, which is the
-// shape of an issuer outage: tokens it already signed stay well-formed, and
-// its discovery and key set stop answering. Safe to call more than once, and
-// alongside the cleanup Launch registers.
+// Stop takes the server offline, emulating an issuer outage. Safe to call
+// more than once and alongside Launch's cleanup.
 func (i *Instance) Stop() { i.server.Close() }
 
-// Requests counts the HTTP requests the server has received, on every mode.
-// Only requests that were read reach the count: a connection that fails its
-// TLS handshake or closes early is not one. Use Connections to assert that a
-// code path made no attempt to reach the server at all.
+// Requests counts HTTP requests the server has read, on every mode. Use
+// Connections to assert that nothing tried to reach the server at all.
 func (i *Instance) Requests() int64 { return i.requests.Load() }
 
-// Connections counts every connection the server has accepted, whether or
-// not it went on to carry a request. A test asserting that a code path never
-// reached the issuer compares it before and after, since fixture setup may
-// itself connect. A stopped server accepts nothing, so it cannot count an
-// attempt made after Stop.
+// Connections counts every connection the server has accepted, including ones
+// that carried no request. Compare against a baseline taken after fixture
+// setup.
 func (i *Instance) Connections() int64 { return i.connections.Load() }
 
 // Client returns an HTTP client that reaches this server, trusting its

@@ -70,13 +70,9 @@ func New(pemBytes []byte, logger *slog.Logger) (*Keystore, error) {
 	return ks, nil
 }
 
-// Rotate replaces the signing key, as an issuer rotating on its own schedule
-// would. The JWKS publishes only the new key from then on, so a token signed
-// with the old one names a kid the key set no longer contains.
-//
-// Meant for tests emulating rotation. Signers read KID and PrivateKey as two
-// calls, so a token signed while Rotate runs can pair one key's kid with the
-// other key's signature: rotate between requests, not during them.
+// Rotate replaces the signing key; the JWKS then publishes only the new key.
+// Signers read KID and PrivateKey separately, so rotate between requests, not
+// during them.
 func (k *Keystore) Rotate(priv *rsa.PrivateKey) error {
 	if priv == nil {
 		return errors.New("rotate dev-idp keypair: key is nil")

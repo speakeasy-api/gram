@@ -25,17 +25,12 @@ var (
 	ErrWorkloadNotAdmitted     = errWorkloadNotAdmitted
 )
 
-// AdmitWorkloadAssertion runs the workload grant's stages in the order the
-// token endpoint runs them: resolve iss to a workload issuer row in the
-// endpoint's tenancy, verify the assertion against that row's published key
-// set, then check the subject is admitted. Every stage reads real rows, so a
-// test can drive it against a live issuer.
+// AdmitWorkloadAssertion runs the workload grant's stages in token endpoint
+// order against real rows: resolve iss to a workload issuer in the endpoint's
+// tenancy, verify against that issuer's key set, then check admission.
 //
-// iss and sub are read before the signature is checked because the issuer row
-// is what supplies the keys. Neither is trusted on that read: Verify requires
-// iss to equal the row's issuer and sub to equal the subject being admitted.
-// The read accepts the verifier's own algorithm allowlist, so an assertion the
-// verifier would accept is never refused here first.
+// iss and sub are read unverified to find the issuer; Verify then requires both
+// to match. The read uses the verifier's algorithm allowlist.
 func AdmitWorkloadAssertion(
 	ctx context.Context,
 	db *pgxpool.Pool,

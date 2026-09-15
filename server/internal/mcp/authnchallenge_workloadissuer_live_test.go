@@ -22,8 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usersessions/replay"
 )
 
-// The subject a platform vouches for: a declared, bounded resource rather than
-// the ephemeral job.
+// The external subject the issuer vouches for.
 const liveWorkloadSubject = "repo:acme/payments-api:ref:refs/heads/main"
 
 // liveWorkloadAudience is the authorization server the assertions address.
@@ -44,11 +43,8 @@ type liveWorkloadFixture struct {
 	// recorded on issuer rows exactly as registration would store it.
 	jwksURI string
 
-	// connectionsAtSetup is how many connections the issuer had accepted once
-	// the fixture was built. Discovery made one, so a test asserting that a
-	// rejection never reached the issuer compares against this, not zero. It
-	// counts connections so that an attempt failing before it sends a request
-	// still registers.
+	// connectionsAtSetup is the issuer's connection count after fixture setup,
+	// which includes discovery. No-egress assertions compare against it.
 	connectionsAtSetup int64
 }
 
@@ -109,10 +105,8 @@ func newLiveWorkloadOrganization(t *testing.T, conn *pgxpool.Pool) string {
 	return id
 }
 
-// newLiveWorkloadProject adds a project to an organization that already
-// exists. A sibling has to be built this way: both workload tables pin
-// project_id to the row's own organization through a composite key, so a
-// project from another organization cannot be written at all.
+// newLiveWorkloadProject adds a project to an existing organization. The
+// workload tables' composite keys reject a project from another organization.
 func newLiveWorkloadProject(t *testing.T, conn *pgxpool.Pool, organizationID string) uuid.UUID {
 	t.Helper()
 
@@ -171,8 +165,7 @@ func (f liveWorkloadFixture) endpoint(organizationID string, projectID uuid.UUID
 }
 
 // present mints a fresh assertion for the admitted subject and runs it through
-// every admission stage. Fresh on each call, so a second presentation is never
-// refused as a replay before the stage under test is reached.
+// every admission stage. Fresh each call, so it is never refused as a replay.
 func (f liveWorkloadFixture) present(t *testing.T, endpoint *mcp.ResolvedMcpEndpoint) error {
 	t.Helper()
 
@@ -189,9 +182,7 @@ func (f liveWorkloadFixture) present(t *testing.T, endpoint *mcp.ResolvedMcpEndp
 	return nil
 }
 
-// The baseline the rejections below depart from, and the proof the request
-// counter they rely on counts: an admitted workload passes every stage, and
-// doing so reaches the issuer.
+// An admitted workload passes every stage and reaches the issuer.
 func TestWorkloadAssertionPipeline_AdmittedWorkloadFromALiveIssuerPasses(t *testing.T) {
 	t.Parallel()
 
@@ -205,13 +196,9 @@ func TestWorkloadAssertionPipeline_AdmittedWorkloadFromALiveIssuerPasses(t *test
 	require.Greater(t, f.issuer.Connections(), f.connectionsAtSetup, "an admitted assertion must have fetched the key set, or the no-egress tests assert against a counter that never moves")
 }
 
-// An issuer registered by a different organization is not trusted here, and
-// the refusal costs no outbound request. Pinned at the issuer itself: the only
-// server a fetch could have reached records none, rather than the test
-// inferring the absence of egress from the verdict.
-//
-// The other organization has registered and admitted this very issuer and
-// subject, so nothing but tenancy separates the two.
+// An issuer registered by another organization is untrusted here, and the
+// refusal makes no connection to it. That organization has registered and
+// admitted the same issuer and subject, so only tenancy separates them.
 func TestWorkloadAssertionPipeline_IssuerOutsideTheTenancyMakesNoOutboundRequest(t *testing.T) {
 	t.Parallel()
 
@@ -226,9 +213,8 @@ func TestWorkloadAssertionPipeline_IssuerOutsideTheTenancyMakesNoOutboundRequest
 	require.Equal(t, f.connectionsAtSetup, f.issuer.Connections(), "an untrusted issuer must be refused before any connection to it is attempted")
 }
 
-// A soft-deleted issuer row is how an administrator withdraws trust. It stops
-// resolving, so the assertion is refused at the issuer stage, and nothing is
-// fetched for it, though its admission row is still in place.
+// A soft-deleted issuer stops resolving, so the assertion is refused at the
+// issuer stage with no fetch, even though its admission row remains.
 func TestWorkloadAssertionPipeline_SoftDeletedIssuerIsUntrusted(t *testing.T) {
 	t.Parallel()
 
@@ -243,13 +229,8 @@ func TestWorkloadAssertionPipeline_SoftDeletedIssuerIsUntrusted(t *testing.T) {
 	require.Equal(t, f.connectionsAtSetup, f.issuer.Connections(), "a withdrawn issuer must be refused before any connection to it is attempted")
 }
 
-// A subject admitted in one project is not admitted in a sibling project of the
-// same organization. The assertion is genuine and verifies, since the issuer
-// is shared at the organization tier, so the refusal is subject admission
-// doing the isolation the project tier exists for.
-//
-// The sibling itself passing is the control: without it, a pipeline refusing
-// every project-tier admission would pass this test too.
+// A subject admitted in one project is not admitted in a sibling project of
+// the same organization. The sibling admitting its own subject is the control.
 func TestWorkloadAssertionPipeline_ASiblingProjectsAdmissionDoesNotAdmit(t *testing.T) {
 	t.Parallel()
 
@@ -266,8 +247,7 @@ func TestWorkloadAssertionPipeline_ASiblingProjectsAdmissionDoesNotAdmit(t *test
 }
 
 // An organization-tier admission admits the workload in every project of the
-// organization. The positive counterpart to the sibling test, so the tier
-// check cannot be satisfied by refusing everything.
+// organization.
 func TestWorkloadAssertionPipeline_OrganizationTierAdmissionAdmitsEveryProject(t *testing.T) {
 	t.Parallel()
 

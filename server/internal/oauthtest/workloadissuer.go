@@ -14,25 +14,15 @@ import (
 	"github.com/speakeasy-api/gram/dev-idp/pkg/devidptest"
 )
 
-// A dev-idp stands in for the platform that vouches for a workload: its OAuth
-// 2.1 issuer, OAuth21URL, is the issuer identifier, and it serves a real
-// discovery document and key set over HTTP. Launch it with LaunchOpts.TLS,
-// because jwks.NewRemoteSource refuses a jwks_uri that is not https, which is
-// a rule worth exercising rather than working around.
+// A dev-idp stands in for a workload platform: its OAuth 2.1 issuer, OAuth21URL,
+// is the issuer identifier, and it serves real discovery and a key set. Launch
+// it with LaunchOpts.TLS, since jwks.NewRemoteSource requires an https jwks_uri.
 //
-// dev-idp mints id_tokens for its own users and clients, whose sub and aud do
-// not describe a workload addressed to Gram. So assertions are signed here
-// with the key the dev-idp publishes, and verification reaches the dev-idp the
-// way it reaches a customer's issuer: discovery, a fetch, a cache. What an
-// in-process key source cannot express becomes real as well: the dev-idp can
-// rotate its key, go offline, and count what reached it.
+// dev-idp's own id_tokens do not describe a workload addressed to Gram, so
+// assertions are signed here with the key the dev-idp publishes.
 
-// DiscoverWorkloadJWKSURI reads the dev-idp's OpenID discovery document and
-// returns the jwks_uri it advertises, so a key source is built from what the
-// issuer publishes rather than a path the test assumes.
-//
-// This is a request to the dev-idp. A test counting requests takes its
-// baseline after calling it.
+// DiscoverWorkloadJWKSURI returns the jwks_uri the dev-idp's OpenID discovery
+// document advertises. It makes a request, so take count baselines after it.
 func DiscoverWorkloadJWKSURI(t *testing.T, issuer *devidptest.Instance) string {
 	t.Helper()
 
@@ -72,12 +62,9 @@ func MintWorkloadAssertion(t *testing.T, issuer *devidptest.Instance, claims jwt
 	return raw
 }
 
-// WorkloadClaims is an assertion the dev-idp vouching for externalSubject,
-// addressed to audience. Every field satisfies the verifier, so a test can
-// change exactly one and know what it is testing.
-//
-// iss is the issuer and sub is the workload, unlike a client assertion, where
-// RFC 7523 §3 requires both to be the client_id.
+// WorkloadClaims is a valid assertion from the dev-idp for externalSubject,
+// addressed to audience. iss is the issuer and sub is the workload, unlike a
+// client assertion, where RFC 7523 §3 requires both to be the client_id.
 func WorkloadClaims(issuer *devidptest.Instance, externalSubject, audience string) jwt.Claims {
 	now := time.Now()
 	return jwt.Claims{

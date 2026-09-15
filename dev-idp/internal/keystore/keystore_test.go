@@ -111,9 +111,7 @@ func TestJWKSHandlerServesValidDocument(t *testing.T) {
 	require.NotEmpty(t, jwk.E)
 }
 
-// The handler is taken before the rotation on purpose: modes mount it once at
-// boot, so a handler that captured the key it was built with would keep
-// serving the retired set.
+// Take the handler before rotating, as modes mount it once at boot.
 func TestRotateRepublishesOnlyTheNewKey(t *testing.T) {
 	t.Parallel()
 

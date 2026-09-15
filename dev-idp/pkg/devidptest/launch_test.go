@@ -149,8 +149,7 @@ func TestLaunch_PlainHTTPHasNoCertificateToTrust(t *testing.T) {
 	require.Nil(t, inst.RootCAs())
 }
 
-// The issuer URL stays put across a rotation, which is what makes it a
-// rotation rather than a second issuer.
+// A rotation keeps the issuer URL.
 func TestLaunch_RotateKeyRepublishesTheKeySet(t *testing.T) {
 	t.Parallel()
 
@@ -196,9 +195,8 @@ func TestLaunch_RequestsCountsWhatReachesTheServer(t *testing.T) {
 	require.Equal(t, before+2, inst.Requests())
 }
 
-// A client that does not trust the certificate connects and fails the
-// handshake without ever sending a request. That attempt is exactly what a
-// request count misses and a connection count must not.
+// An untrusting client fails the handshake without sending a request, which
+// only the connection count sees.
 func TestLaunch_ConnectionsCountsAttemptsThatNeverBecomeRequests(t *testing.T) {
 	t.Parallel()
 
