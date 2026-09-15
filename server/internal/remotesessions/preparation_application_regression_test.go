@@ -69,6 +69,11 @@ func TestPreparationRejectedChangesReturnPersistedBinding(t *testing.T) {
 		t.Run(scenario, func(t *testing.T) {
 			t.Parallel()
 			ctx, ti, in := preparationFixture(t)
+			auth, _ := contextvalues.GetAuthContext(ctx)
+			if scenario == "unsupported_scopes" {
+				_, err := repo.New(ti.conn).UpdateRemoteSessionClient(ctx, repo.UpdateRemoteSessionClientParams{ID: in.ClientID, ProjectID: conv.ToNullUUID(*auth.ProjectID), Scope: []string{"openid"}})
+				require.NoError(t, err)
+			}
 			preparationRecordGrants(t, ctx, ti, in.ClientID, []string{preparationJWTGrant})
 			prepared, err := ti.service.PrepareIdentityChaining(ctx, in)
 			require.NoError(t, err)
@@ -80,7 +85,6 @@ func TestPreparationRejectedChangesReturnPersistedBinding(t *testing.T) {
 				in.ExpectedGeneration = prepared.Generation
 				in.ClientID = uuid.Nil
 			}
-			auth, _ := contextvalues.GetAuthContext(ctx)
 			q := repo.New(ti.conn)
 			key := repo.GetEMABindingParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, UserSessionIssuerID: in.UserSessionIssuerID, RemoteSessionIssuerID: in.RemoteSessionIssuerID, Resource: in.Resource}
 			before, err := q.GetEMABinding(ctx, key)
