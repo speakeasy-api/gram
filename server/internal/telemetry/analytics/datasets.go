@@ -4,7 +4,7 @@ package analytics
 var Sessions = &Dataset{
 	Name:        "sessions",
 	Kind:        KindEvent,
-	Grain:       "One row per agent session.",
+	Grain:       "session",
 	Description: "One row per agent session, collapsed from observed events. count counts sessions.",
 	TimeExpr:    "started_at",
 	Fields: []Field{
@@ -25,7 +25,7 @@ var Sessions = &Dataset{
 var ToolCalls = &Dataset{
 	Name:        "tool_calls",
 	Kind:        KindEvent,
-	Grain:       "One row per tool call.",
+	Grain:       "tool call",
 	Description: "One row per tool call, resolved to its latest observation. count counts tool calls; failed calls are count with a status filter.",
 	TimeExpr:    "started_at",
 	Fields: []Field{
