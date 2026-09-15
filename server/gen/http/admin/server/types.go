@@ -86,8 +86,12 @@ type ExtendTrialRequestBody struct {
 // CreateOrganizationRequestBody is the type of the "admin" service
 // "createOrganization" endpoint HTTP request body.
 type CreateOrganizationRequestBody struct {
-	// Display name for the new organization.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Company HTTP(S) URL or bare hostname. The exact normalized hostname becomes
+	// the name and verified email domain.
+	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
+	// The operator confirms that domain ownership was established outside this
+	// form.
+	OwnershipConfirmed *bool `form:"ownership_confirmed,omitempty" json:"ownership_confirmed,omitempty" xml:"ownership_confirmed,omitempty"`
 }
 
 // RearmTrialRequestBody is the type of the "admin" service "rearmTrial"
@@ -19547,7 +19551,8 @@ func NewExtendTrialPayload(body *ExtendTrialRequestBody, adminSessionToken *stri
 // endpoint payload.
 func NewCreateOrganizationPayload(body *CreateOrganizationRequestBody, adminSessionToken *string) *admin.CreateOrganizationPayload {
 	v := &admin.CreateOrganizationPayload{
-		Name: *body.Name,
+		URL:                *body.URL,
+		OwnershipConfirmed: *body.OwnershipConfirmed,
 	}
 	v.AdminSessionToken = adminSessionToken
 
@@ -20148,12 +20153,15 @@ func ValidateExtendTrialRequestBody(body *ExtendTrialRequestBody) (err error) {
 // ValidateCreateOrganizationRequestBody runs the validations defined on
 // CreateOrganizationRequestBody
 func ValidateCreateOrganizationRequestBody(body *CreateOrganizationRequestBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	if body.URL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("url", "body"))
 	}
-	if body.Name != nil {
-		if utf8.RuneCountInString(*body.Name) < 1 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 1, true))
+	if body.OwnershipConfirmed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("ownership_confirmed", "body"))
+	}
+	if body.URL != nil {
+		if utf8.RuneCountInString(*body.URL) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.url", *body.URL, utf8.RuneCountInString(*body.URL), 1, true))
 		}
 	}
 	return

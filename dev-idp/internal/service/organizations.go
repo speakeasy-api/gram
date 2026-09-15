@@ -55,6 +55,8 @@ func (s *OrganizationsService) Create(ctx context.Context, p *gen.CreatePayload)
 		Slug:        p.Slug,
 		AccountType: conv.PtrToNullString(p.AccountType),
 		WorkosID:    conv.PtrToNullString(p.WorkosID),
+		ExternalID:  sql.NullString{String: "", Valid: false},
+		Domains:     nil,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create organization").Log(ctx, s.logger)

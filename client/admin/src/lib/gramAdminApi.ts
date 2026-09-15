@@ -480,7 +480,8 @@ export const MIN_TRIAL_START_DAYS = 1;
 export const MAX_TRIAL_START_DAYS = 365;
 
 export type CreateOrganizationRequest = {
-  name: string;
+  url: string;
+  ownership_confirmed: boolean;
 };
 
 export function createOrganization(

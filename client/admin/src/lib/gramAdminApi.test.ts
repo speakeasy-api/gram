@@ -3,6 +3,7 @@ import {
   GramAdminError,
   bulkUpdateAccountType,
   cancelStripeSubscription,
+  createOrganization,
   errorMessage,
   getStripeCustomer,
   getInferenceKeys,
@@ -350,8 +351,8 @@ describe("errorMessage", () => {
   });
 });
 
-// The writes that still leave through this hand-written client: enterprise
-// conversion and the bulk account-type update. A test naming each path is what
+// The writes that still leave through this hand-written client: organization.create,
+// enterprise conversion, and the bulk account-type update. A test naming each path is what
 // keeps a review from reading two identical-looking calls as the same one. The
 // trial day-count bounds are checked here too, because the browser mirrors them
 // by hand rather than reading them from the design.
@@ -392,6 +393,28 @@ describe("the organization write endpoints", () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it("serializes the URL and explicit ownership confirmation without a name", async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(ORG), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetch);
+    await expect(
+      createOrganization({
+        url: "https://example.com/path",
+        ownership_confirmed: true,
+      }),
+    ).resolves.toEqual(ORG);
+    expect(requestOf(fetch)).toEqual({
+      path: "/admin/organization.create",
+      method: "POST",
+      contentType: "application/json",
+      body: { url: "https://example.com/path", ownership_confirmed: true },
+    });
   });
 
   // The two ends of the range the server takes, written out rather than

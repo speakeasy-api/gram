@@ -700,10 +700,10 @@ func BuildCreateOrganizationPayload(adminCreateOrganizationBody string, adminCre
 	{
 		err = json.Unmarshal([]byte(adminCreateOrganizationBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"aa\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"ownership_confirmed\": false,\n      \"url\": \"aa\"\n   }'")
 		}
-		if utf8.RuneCountInString(body.Name) < 1 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 1, true))
+		if utf8.RuneCountInString(body.URL) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.url", body.URL, utf8.RuneCountInString(body.URL), 1, true))
 		}
 		if err != nil {
 			return nil, err
@@ -716,7 +716,8 @@ func BuildCreateOrganizationPayload(adminCreateOrganizationBody string, adminCre
 		}
 	}
 	v := &admin.CreateOrganizationPayload{
-		Name: body.Name,
+		URL:                body.URL,
+		OwnershipConfirmed: body.OwnershipConfirmed,
 	}
 	v.AdminSessionToken = adminSessionToken
 
