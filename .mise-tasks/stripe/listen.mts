@@ -26,12 +26,22 @@ try {
   if (issue) throw new Error(issue);
   registerStripeListener();
   try {
-    execFileSync("pitchfork", ["supervisor", "start"], { stdio: "pipe" });
+    execFileSync("pitchfork", ["supervisor", "start"], {
+      stdio: "pipe",
+      timeout: 30_000,
+      killSignal: "SIGKILL",
+    });
     // Force a fresh mise environment even when forwarding is already running.
     execFileSync("pitchfork", ["start", "stripe-listener", "--force"], {
       stdio: "pipe",
+      timeout: 120_000,
+      killSignal: "SIGKILL",
     });
-  } catch {
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ETIMEDOUT")
+      throw new Error(
+        "Timed out waiting for Stripe forwarding. The daemon may still be starting; run mise run stripe:status for diagnostics, then retry mise run stripe:listen.",
+      );
     throw new Error(
       "Cannot start Stripe forwarding. Check Pitchfork and server readiness, then rerun mise run stripe:listen; use mise run stripe:status for diagnostics.",
     );

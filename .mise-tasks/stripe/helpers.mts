@@ -28,7 +28,7 @@ export function registerStripeListener(root = process.cwd()): void {
         "--depends",
         "server",
       ],
-      { cwd: root, stdio: "pipe" },
+      { cwd: root, stdio: "pipe", timeout: 30_000, killSignal: "SIGKILL" },
     );
   } catch {
     throw new Error(

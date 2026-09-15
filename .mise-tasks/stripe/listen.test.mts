@@ -139,7 +139,7 @@ for (const [stage, count] of [
       assert.equal(result.status, 1);
       assert.doesNotMatch(
         result.stderr + result.stdout,
-        /sk_test_private|whsec_private|raw child error/,
+        /sk_test_|sk_live_|rk_test_|rk_live_|whsec_|raw child error/,
       );
       assert.match(result.stderr, /Cannot (register|start)/);
       assert.equal(
@@ -147,6 +147,40 @@ for (const [stage, count] of [
           .length,
         count,
       );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+}
+
+for (const stage of ["supervisor", "start"] as const) {
+  test(`public listen bounds ${stage} wait and sanitizes timeout diagnostics`, () => {
+    const { dir, run } = fixture();
+    try {
+      const preload = join(dir, "timeout.cjs");
+      writeFileSync(
+        preload,
+        `
+const cp = require('node:child_process');
+const original = cp.execFileSync;
+cp.execFileSync = (file, args, options) => {
+  if (file === 'pitchfork' && args[0] === '${stage}') {
+    require('node:assert/strict').equal(options.timeout, ${stage === "start" ? 120000 : 30000});
+    require('node:assert/strict').equal(options.killSignal, 'SIGKILL');
+    const error = new Error('sk_test_fixture whsec_fixture');
+    error.code = 'ETIMEDOUT';
+    throw error;
+  }
+  return original(file, args, options);
+};
+require('node:module').syncBuiltinESMExports();
+`,
+      );
+      const result = run({ NODE_OPTIONS: `--require=${preload}` });
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, /Timed out waiting for Stripe forwarding/);
+      assert.match(result.stderr, /mise run stripe:status/);
+      assert.doesNotMatch(result.stderr + result.stdout, /sk_test_|whsec_/);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
