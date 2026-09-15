@@ -1797,6 +1797,35 @@ func (q *Queries) DeleteUserSessionIssuerAttachmentsForRemoteSessionClient(ctx c
 	return err
 }
 
+const detachOrganizationRemoteSessionClientFromUserSessionIssuer = `-- name: DetachOrganizationRemoteSessionClientFromUserSessionIssuer :execrows
+DELETE FROM remote_session_client_user_session_issuers link
+USING remote_session_clients c, user_session_issuers u
+WHERE link.remote_session_client_id = $1
+AND link.user_session_issuer_id = $2
+AND c.id = link.remote_session_client_id AND c.deleted IS FALSE
+AND u.id = link.user_session_issuer_id AND u.deleted IS FALSE
+AND ((c.project_id IS NULL AND c.organization_id = $3::text) OR EXISTS (
+    SELECT 1 FROM projects p WHERE p.id = c.project_id AND p.organization_id = $3::text AND p.deleted IS FALSE
+))
+AND ((u.project_id IS NULL AND u.organization_id = $3::text) OR EXISTS (
+    SELECT 1 FROM projects p WHERE p.id = u.project_id AND p.organization_id = $3::text AND p.deleted IS FALSE
+))
+`
+
+type DetachOrganizationRemoteSessionClientFromUserSessionIssuerParams struct {
+	RemoteSessionClientID uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+	OrganizationID        string
+}
+
+func (q *Queries) DetachOrganizationRemoteSessionClientFromUserSessionIssuer(ctx context.Context, arg DetachOrganizationRemoteSessionClientFromUserSessionIssuerParams) (int64, error) {
+	result, err := q.db.Exec(ctx, detachOrganizationRemoteSessionClientFromUserSessionIssuer, arg.RemoteSessionClientID, arg.UserSessionIssuerID, arg.OrganizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const detachProjectRemoteSessionClientFromUserSessionIssuer = `-- name: DetachProjectRemoteSessionClientFromUserSessionIssuer :execrows
 DELETE FROM remote_session_client_user_session_issuers link
 USING remote_session_clients c, user_session_issuers u, projects p
@@ -6791,6 +6820,33 @@ func (q *Queries) LockJsonWebKeySetForClientAttach(ctx context.Context, arg Lock
 	return id, err
 }
 
+const lockOrganizationMCPServerForDetach = `-- name: LockOrganizationMCPServerForDetach :one
+SELECT s.id FROM mcp_servers s WHERE s.id = $1 AND s.deleted IS FALSE
+AND s.project_id = $2 AND s.user_session_issuer_id = $3
+AND EXISTS (SELECT 1 FROM projects p WHERE p.id = s.project_id
+    AND p.organization_id = $4::text AND p.deleted IS FALSE FOR SHARE)
+FOR UPDATE
+`
+
+type LockOrganizationMCPServerForDetachParams struct {
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+	UserSessionIssuerID uuid.NullUUID
+	OrganizationID      string
+}
+
+func (q *Queries) LockOrganizationMCPServerForDetach(ctx context.Context, arg LockOrganizationMCPServerForDetachParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockOrganizationMCPServerForDetach,
+		arg.ID,
+		arg.ProjectID,
+		arg.UserSessionIssuerID,
+		arg.OrganizationID,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const lockOrganizationRemoteSessionClientForAuthMethodWrite = `-- name: LockOrganizationRemoteSessionClientForAuthMethodWrite :one
 SELECT c.id
 FROM remote_session_clients AS c
@@ -6814,6 +6870,26 @@ type LockOrganizationRemoteSessionClientForAuthMethodWriteParams struct {
 // FOR UPDATE OF c leaves the issuer row unlocked; only the client is written.
 func (q *Queries) LockOrganizationRemoteSessionClientForAuthMethodWrite(ctx context.Context, arg LockOrganizationRemoteSessionClientForAuthMethodWriteParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, lockOrganizationRemoteSessionClientForAuthMethodWrite, arg.ID, arg.OrganizationID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const lockOrganizationUserIssuerForDetach = `-- name: LockOrganizationUserIssuerForDetach :one
+SELECT u.id FROM user_session_issuers u WHERE u.id = $1 AND u.deleted IS FALSE
+AND ((u.project_id IS NULL AND u.organization_id = $2::text) OR EXISTS (
+    SELECT 1 FROM projects p WHERE p.id = u.project_id
+    AND p.organization_id = $2::text AND p.deleted IS FALSE FOR SHARE
+)) FOR UPDATE
+`
+
+type LockOrganizationUserIssuerForDetachParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) LockOrganizationUserIssuerForDetach(ctx context.Context, arg LockOrganizationUserIssuerForDetachParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockOrganizationUserIssuerForDetach, arg.ID, arg.OrganizationID)
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
@@ -7320,6 +7396,8 @@ SET client_id = $1,
     client_id_issued_at = $3,
     client_secret_expires_at = $4,
     token_endpoint_auth_method = $5,
+    -- Grant evidence belongs to the old external registration, not this row ID.
+    grant_types = NULL,
     legacy_callback_url = FALSE,
     upstream_rejected_at = NULL,
     updated_at = clock_timestamp()

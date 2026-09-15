@@ -684,6 +684,8 @@ SET client_id = @client_id,
     client_id_issued_at = @client_id_issued_at,
     client_secret_expires_at = @client_secret_expires_at,
     token_endpoint_auth_method = @token_endpoint_auth_method,
+    -- Grant evidence belongs to the old external registration, not this row ID.
+    grant_types = NULL,
     legacy_callback_url = FALSE,
     upstream_rejected_at = NULL,
     updated_at = clock_timestamp()
@@ -3668,3 +3670,31 @@ SELECT pg_advisory_lock(hashtextextended(@binding_key::text, 0));
 
 -- name: UnlockPreparationSubmission :exec
 SELECT pg_advisory_unlock(hashtextextended(@binding_key::text, 0));
+
+-- name: LockOrganizationUserIssuerForDetach :one
+SELECT u.id FROM user_session_issuers u WHERE u.id = @id AND u.deleted IS FALSE
+AND ((u.project_id IS NULL AND u.organization_id = @organization_id::text) OR EXISTS (
+    SELECT 1 FROM projects p WHERE p.id = u.project_id
+    AND p.organization_id = @organization_id::text AND p.deleted IS FALSE FOR SHARE
+)) FOR UPDATE;
+
+-- name: LockOrganizationMCPServerForDetach :one
+SELECT s.id FROM mcp_servers s WHERE s.id = @id AND s.deleted IS FALSE
+AND s.project_id = @project_id AND s.user_session_issuer_id = @user_session_issuer_id
+AND EXISTS (SELECT 1 FROM projects p WHERE p.id = s.project_id
+    AND p.organization_id = @organization_id::text AND p.deleted IS FALSE FOR SHARE)
+FOR UPDATE;
+
+-- name: DetachOrganizationRemoteSessionClientFromUserSessionIssuer :execrows
+DELETE FROM remote_session_client_user_session_issuers link
+USING remote_session_clients c, user_session_issuers u
+WHERE link.remote_session_client_id = @remote_session_client_id
+AND link.user_session_issuer_id = @user_session_issuer_id
+AND c.id = link.remote_session_client_id AND c.deleted IS FALSE
+AND u.id = link.user_session_issuer_id AND u.deleted IS FALSE
+AND ((c.project_id IS NULL AND c.organization_id = @organization_id::text) OR EXISTS (
+    SELECT 1 FROM projects p WHERE p.id = c.project_id AND p.organization_id = @organization_id::text AND p.deleted IS FALSE
+))
+AND ((u.project_id IS NULL AND u.organization_id = @organization_id::text) OR EXISTS (
+    SELECT 1 FROM projects p WHERE p.id = u.project_id AND p.organization_id = @organization_id::text AND p.deleted IS FALSE
+));

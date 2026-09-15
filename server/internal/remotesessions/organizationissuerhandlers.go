@@ -769,6 +769,15 @@ func (s *Service) DeleteIssuer(ctx context.Context, payload *orgissuersgen.Delet
 
 	txRepo := repo.New(dbtx)
 
+	// Authorize before entering the UUID-wide advisory lock domain. Keep the
+	// established advisory-before-row order, then revalidate after any wait.
+	if _, err := txRepo.GetOrganizationRemoteSessionIssuerByID(ctx, repo.GetOrganizationRemoteSessionIssuerByIDParams{ID: issuerID, OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID), IncludeGlobal: false}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.E(oops.CodeNotFound, err, "remote session issuer not found")
+		}
+		return oops.E(oops.CodeUnexpected, err, "authorize issuer deletion")
+	}
+
 	// Serialize the count-then-delete below against client creation: every
 	// client writer takes this advisory lock before binding a client to the
 	// issuer. Without it a create commits in the gap and strands a live client

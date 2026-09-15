@@ -846,11 +846,20 @@ func (s *Service) RemoveClientFromMcpServer(ctx context.Context, payload *orgcli
 		return oops.E(oops.CodeNotFound, nil, "mcp server is not attached to this client").LogError(ctx, logger)
 	}
 
+	// Match preparation's user-issuer-before-client lock order, rechecking each
+	// tenant after waits. The server lock also stabilizes its issuer association.
+	if _, err := txRepo.LockOrganizationUserIssuerForDetach(ctx, repo.LockOrganizationUserIssuerForDetachParams{ID: server.UserSessionIssuerID.UUID, OrganizationID: authCtx.ActiveOrganizationID}); err != nil {
+		return lifecycleLockError(err)
+	}
+	if _, err := txRepo.LockOrganizationMCPServerForDetach(ctx, repo.LockOrganizationMCPServerForDetachParams{ID: server.ID, ProjectID: server.ProjectID, UserSessionIssuerID: server.UserSessionIssuerID, OrganizationID: authCtx.ActiveOrganizationID}); err != nil {
+		return lifecycleLockError(err)
+	}
 	if _, err := txRepo.LockEMAClientForLifecycle(ctx, repo.LockEMAClientForLifecycleParams{ID: clientID, ProjectID: client.ProjectID.UUID, OrganizationID: authCtx.ActiveOrganizationID}); err != nil {
 		return lifecycleLockError(err)
 	}
 
-	affected, err := txRepo.DetachRemoteSessionClientFromUserSessionIssuer(ctx, repo.DetachRemoteSessionClientFromUserSessionIssuerParams{
+	affected, err := txRepo.DetachOrganizationRemoteSessionClientFromUserSessionIssuer(ctx, repo.DetachOrganizationRemoteSessionClientFromUserSessionIssuerParams{
+		OrganizationID:        authCtx.ActiveOrganizationID,
 		RemoteSessionClientID: clientID,
 		UserSessionIssuerID:   server.UserSessionIssuerID.UUID,
 	})

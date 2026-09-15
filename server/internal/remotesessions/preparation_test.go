@@ -223,3 +223,16 @@ func TestPreparationPublicClientOmittedAuthMethods(t *testing.T) {
 		require.Equal(t, tc.want, preparationClientConfigurationValid(t.Context(), nil, client, repo.RemoteSessionIssuer{TokenEndpointAuthMethodsSupported: tc.methods}, ""))
 	}
 }
+
+func TestPreparationDCRRejectsUnsupportedConfidentialMethods(t *testing.T) {
+	t.Parallel()
+	for _, method := range []string{"", "none", "private_key_jwt", "unknown"} {
+		t.Run(method, func(t *testing.T) {
+			t.Parallel()
+			_, state := (&Service{}).submitPreparationDCR(t.Context(), PreparationInput{}, "https://issuer.example/register", method)
+			require.Equal(t, "manual_setup_required", state, "invalid authentication must fail before any HTTP submission")
+			response := preparationDCRResponse{ClientID: "client", ClientSecret: "secret", TokenEndpointAuthMethod: method, GrantTypes: []string{PreparationJWTBearerGrant}}
+			require.Equal(t, "indeterminate", validatePreparationDCR(response, nil, method))
+		})
+	}
+}

@@ -197,10 +197,28 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 		return r.locks.Delete(releaseCtx, leaseKey)
 	})
 
-	q := repo.New(r.db)
+	conn, err := r.db.Acquire(ctx)
+	if err != nil {
+		return zero, fmt.Errorf("reserve client rotation connection: %w", err)
+	}
+	defer conn.Release()
+	q := repo.New(conn)
 	row, err := q.GetRemoteSessionClientForRotation(ctx, params.ClientID)
 	if err != nil {
 		return zero, fmt.Errorf("load remote session client for rotation: %w", err)
+	}
+	issuerID := row.RemoteSessionClient.RemoteSessionIssuerID
+	releaseRegistration, err := lockRegistrationIssuer(ctx, conn, issuerID)
+	if err != nil {
+		return zero, fmt.Errorf("lock issuer registration for rotation: %w", err)
+	}
+	defer releaseRegistration()
+	row, err = q.GetRemoteSessionClientForRotation(ctx, params.ClientID)
+	if err != nil {
+		return zero, fmt.Errorf("revalidate client rotation: %w", err)
+	}
+	if row.RemoteSessionClient.RemoteSessionIssuerID != issuerID {
+		return zero, ErrClientNotRotatable
 	}
 	current := row.RemoteSessionClient
 
@@ -300,14 +318,14 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 		secretExpiresAt = pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
 	}
 
-	dbtx, err := r.db.Begin(ctx)
+	dbtx, err := conn.Begin(ctx)
 	if err != nil {
 		return zero, fmt.Errorf("begin client rotation transaction: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 	txRepo := repo.New(dbtx)
-	// Re-check under the same client row lock as preparation after the network
-	// call. A newly installed binding wins over this stale rotation completion.
+	// Re-check lifecycle scope after HTTP. The registration session lock has
+	// prevented EMA preparation from installing a binding during submission.
 	if err := guardEMABindingsForClient(ctx, txRepo, rotationOrganizationID, current.ProjectID.UUID, current.ID); err != nil {
 		return zero, err
 	}
