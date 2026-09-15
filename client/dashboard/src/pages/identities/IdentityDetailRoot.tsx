@@ -18,8 +18,10 @@ import { encodeIdentityUrn } from "@/lib/identity-urn";
 import { isBadRequestError, isNotFoundError } from "@/lib/route-errors";
 import { useRoutes } from "@/routes";
 import type { IdentityModel } from "@gram/client/models/components/identitymodel.js";
-import { useIdentity } from "@gram/client/react-query/identity.js";
-import { Navigate, Outlet, useLocation, useParams } from "react-router";
+import { useIdentitySubject } from "./useIdentitySubject";
+import { registeredAgentHref } from "./identityRoster";
+import { Button } from "@/components/ui/Button";
+import { Link, Navigate, Outlet, useLocation, useParams } from "react-router";
 import type { IdentityOutletContext } from "./identityRoute";
 import { useIdentityIsKnown } from "./useIdentityQueries";
 
@@ -78,10 +80,7 @@ function IdentityDetailContent(): JSX.Element {
   const routes = useRoutes();
   const location = useLocation();
 
-  const identityQuery = useIdentity({ urn }, undefined, {
-    throwOnError: false,
-    enabled: !!urn,
-  });
+  const identityQuery = useIdentitySubject(urn);
   // Without this the recents entry is the sub-page segment ("overview"), since
   // the URN is neither an id nor long enough for the label heuristic to reject.
   useRecentLabelOverride(location.pathname, identityQuery.data?.displayName);
@@ -193,6 +192,8 @@ function IdentityHeader({
     clearCustomRange,
   } = useDateRangeFilter();
 
+  const routes = useRoutes();
+  const location = useLocation();
   const primaryEmail = identity.emails[0];
   // Tobias is for names. When the only name we have is the address itself, the
   // display face loses the punctuation that makes it readable, and repeating it
@@ -243,6 +244,19 @@ function IdentityHeader({
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          {identity.kind === "agent" && (
+            <Button asChild variant="primary">
+              <Link
+                to={registeredAgentHref(
+                  routes.agents.href(),
+                  location.search,
+                  identity.canonicalUrn.slice("agent:".length),
+                )}
+              >
+                Edit Agent Identity
+              </Link>
+            </Button>
+          )}
           <TimeRangePicker
             preset={customRange ? null : dateRange}
             customRange={customRange}

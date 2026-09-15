@@ -3,21 +3,11 @@ import { Icon } from "@/components/ui/Icon";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { useRBAC } from "@/hooks/useRBAC";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
-import { useOrgRoutes } from "@/routes";
+import { useRoutes } from "@/routes";
 
-/**
- * Deep link from a project-scoped sessions listing to the org-level MCP
- * Sessions page, where sessions are governed across every project.
- *
- * Hidden rather than disabled when the viewer can't reach that page. The
- * destination guards itself twice — it redirects to org home when the
- * `user-sessions-dashboard` flag is off, and wraps its body in a page-level
- * `org:read` check — so an ungated link would silently bounce exactly the
- * people this button is for. Both gates are mirrored here, matching how the
- * org sidebar decides to show the same destination.
- */
+/** Link to the active project’s MCP sessions, matching the destination gates. */
 export function ViewOrgSessionsButton(): JSX.Element | null {
-  const orgRoutes = useOrgRoutes();
+  const routes = useRoutes();
   const { hasAnyScope } = useRBAC();
   const flag = useFeatureFlag(FEATURE_FLAGS.userSessionsDashboard);
 
@@ -28,13 +18,13 @@ export function ViewOrgSessionsButton(): JSX.Element | null {
   if (!hasAnyScope(["org:read", "org:admin"])) return null;
 
   return (
-    <orgRoutes.mcpSessions.Link className="hover:no-underline">
+    <routes.mcpSessions.Link className="hover:no-underline">
       <Button variant="secondary" size="sm">
-        <Button.Text>View all organization sessions</Button.Text>
+        <Button.Text>View all project sessions</Button.Text>
         <Button.RightIcon>
           <Icon name="arrow-right" size="small" />
         </Button.RightIcon>
       </Button>
-    </orgRoutes.mcpSessions.Link>
+    </routes.mcpSessions.Link>
   );
 }

@@ -24,6 +24,12 @@ function route(title: string, url: string): AppRoute {
 }
 
 const routes = {
+  mcpSessions: route("MCP Sessions", "mcp-sessions"),
+  remoteIdentityProviders: route(
+    "Remote Identity Providers",
+    "remote-identity-providers",
+  ),
+  agents: route("Agent Identity", "agent-management"),
   agentSessions: route("Agent Sessions", "agent-sessions"),
   assistants: route("Assistants", "assistants"),
   catalog: route("Catalog", "catalog"),
@@ -78,6 +84,8 @@ beforeEach(() => {
   testState.projectId = "project_a";
   testState.orgMemoryEnabled = false;
   testState.featureFlags = {
+    [FEATURE_FLAGS.agentManagement]: { status: "enabled" },
+    [FEATURE_FLAGS.userSessionsDashboard]: { status: "enabled" },
     [FEATURE_FLAGS.assistants]: unavailableFeatureFlag("loading"),
     [FEATURE_FLAGS.deploymentsPage]: unavailableFeatureFlag("loading"),
     [FEATURE_FLAGS.riskWatchdog]: unavailableFeatureFlag("loading"),
@@ -85,6 +93,36 @@ beforeEach(() => {
 });
 
 describe("useProjectNavRoutes", () => {
+  it.each(["loading", "disabled", "missing", "error"] as const)(
+    "hides agent management when its rollout is %s",
+    (status) => {
+      testState.featureFlags[FEATURE_FLAGS.agentManagement] = { status };
+      const { result } = renderHook(() => useProjectNavRoutes());
+      expect(
+        result.current.some((entry) => entry.route === routes.agents),
+      ).toBe(false);
+    },
+  );
+
+  it("includes sessions and remote providers in project navigation", () => {
+    const { result } = renderHook(() => useProjectNavRoutes());
+    expect(result.current.map((entry) => entry.route)).toEqual(
+      expect.arrayContaining([
+        routes.mcpSessions,
+        routes.remoteIdentityProviders,
+      ]),
+    );
+  });
+
+  it("includes Agent Identity for owners without requiring org-wide read", () => {
+    const { result } = renderHook(() => useProjectNavRoutes());
+    const agents = result.current.find(
+      (entry) => entry.route === routes.agents,
+    );
+
+    expect(agents?.scope).toEqual(["project:read"]);
+  });
+
   it("does not include a dedicated Shadow AI destination", () => {
     const { result } = renderHook(() => useProjectNavRoutes());
 
@@ -132,6 +170,8 @@ describe("useProjectNavRoutes", () => {
     "preserves opt-in and opt-out navigation while flags are %s",
     (status) => {
       testState.featureFlags = {
+        [FEATURE_FLAGS.agentManagement]: { status: "enabled" },
+        [FEATURE_FLAGS.userSessionsDashboard]: { status: "enabled" },
         [FEATURE_FLAGS.assistants]: unavailableFeatureFlag(status),
         [FEATURE_FLAGS.deploymentsPage]: unavailableFeatureFlag(status),
         [FEATURE_FLAGS.riskWatchdog]: unavailableFeatureFlag(status),
@@ -151,6 +191,8 @@ describe("useProjectNavRoutes", () => {
 
   it("uses resolved values for feature-gated navigation", () => {
     testState.featureFlags = {
+      [FEATURE_FLAGS.agentManagement]: { status: "enabled" },
+      [FEATURE_FLAGS.userSessionsDashboard]: { status: "enabled" },
       [FEATURE_FLAGS.assistants]: { status: "enabled" },
       [FEATURE_FLAGS.deploymentsPage]: { status: "disabled" },
       [FEATURE_FLAGS.riskWatchdog]: { status: "enabled" },

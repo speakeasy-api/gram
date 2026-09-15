@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/Sheet";
 import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
-import { useOrgRoutes } from "@/routes";
+import { useRoutes } from "@/routes";
 import { useCreateOrganizationRemoteSessionIssuerMutation } from "@gram/client/react-query/createOrganizationRemoteSessionIssuer.js";
 import { useListProjects } from "@gram/client/react-query/listProjects.js";
 import { invalidateAllOrganizationRemoteSessionIssuers } from "@gram/client/react-query/organizationRemoteSessionIssuers.js";
@@ -61,7 +61,7 @@ export function CreateRemoteIdentityProviderSheet({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }): JSX.Element {
-  const orgRoutes = useOrgRoutes();
+  const routes = useRoutes();
   const queryClient = useQueryClient();
   const organization = useOrganization();
 
@@ -132,7 +132,7 @@ export function CreateRemoteIdentityProviderSheet({
       });
       toast.success("Remote identity provider created");
       onOpenChange(false);
-      orgRoutes.remoteIdentityProviders.issuerDetail.goTo(created.id);
+      routes.remoteIdentityProviders.issuerDetail.goTo(created.id);
     },
     onError: (error) => {
       // useMutation surfaces error.message via createMutation.error (shown in
@@ -248,7 +248,7 @@ export function CreateRemoteIdentityProviderSheet({
                   renderLink={(match) => (
                     <Button asChild variant="secondary">
                       <Link
-                        to={orgRoutes.remoteIdentityProviders.issuerDetail.href(
+                        to={routes.remoteIdentityProviders.issuerDetail.href(
                           match.id,
                         )}
                         onClick={() => onOpenChange(false)}

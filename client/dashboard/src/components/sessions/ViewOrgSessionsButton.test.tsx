@@ -20,10 +20,10 @@ vi.mock("@/hooks/useRBAC", () => ({
 // The route helper resolves :orgSlug from the URL and renders a react-router
 // Link; stubbing it keeps this test off the router.
 vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({
+  useRoutes: () => ({
     mcpSessions: {
       Link: ({ children }: { children: React.ReactNode }) => (
-        <a href="/org-slug/mcp-sessions">{children}</a>
+        <a href="/org-slug/projects/project-slug/mcp-sessions">{children}</a>
       ),
     },
   }),
@@ -31,7 +31,7 @@ vi.mock("@/routes", () => ({
 
 function link() {
   return screen.queryByRole("link", {
-    name: /view all organization sessions/i,
+    name: /view all project sessions/i,
   });
 }
 
@@ -46,14 +46,16 @@ describe("ViewOrgSessionsButton", () => {
     vi.clearAllMocks();
   });
 
-  it("links to the org MCP Sessions page when the flag and scopes allow it", () => {
+  it("links to the project MCP Sessions page when the flag and scopes allow it", () => {
     render(<ViewOrgSessionsButton />);
 
-    expect(link()?.getAttribute("href")).toBe("/org-slug/mcp-sessions");
+    expect(link()?.getAttribute("href")).toBe(
+      "/org-slug/projects/project-slug/mcp-sessions",
+    );
     expect(hasAnyScope).toHaveBeenCalledWith(["org:read", "org:admin"]);
   });
 
-  // The destination redirects to org home when the flag is off, so the link
+  // The destination redirects to project home when the flag is off, so the link
   // has to disappear rather than dead-end.
   it.each([
     ["disabled", { status: "disabled" }],

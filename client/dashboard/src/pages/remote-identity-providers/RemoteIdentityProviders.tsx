@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/Select";
 import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
-import { useOrgRoutes } from "@/routes";
+import { useRoutes } from "@/routes";
 import type { OrganizationRemoteSessionIssuer } from "@gram/client/models/components/organizationremotesessionissuer.js";
 import { useDeleteOrganizationRemoteSessionIssuerMutation } from "@gram/client/react-query/deleteOrganizationRemoteSessionIssuer.js";
 import { useListProjects } from "@gram/client/react-query/listProjects.js";
@@ -333,7 +333,7 @@ function IssuerTable({
   onRefreshMetadata: (item: OrganizationRemoteSessionIssuer) => void;
   refreshPending: boolean;
 }) {
-  const orgRoutes = useOrgRoutes();
+  const routes = useRoutes();
 
   const showActions = !readOnly || !!onAddClient;
   const actionsHeader = showActions ? [{ label: "" }] : [];
@@ -379,7 +379,7 @@ function IssuerTable({
               />
             )
           }
-          href={orgRoutes.remoteIdentityProviders.issuerDetail.href(
+          href={routes.remoteIdentityProviders.issuerDetail.href(
             item.issuer.id,
           )}
           ariaLabel={`View remote identity provider ${issuerDisplayName(item.issuer)}`}

@@ -12,7 +12,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { RemoteIdentityProvidersPage } from "./RemoteIdentityProviders";
 
 vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({
+  useRoutes: () => ({
     remoteIdentityProviders: {
       issuerDetail: {
         href: (id: string) => `/example/remote-identity-providers/${id}`,

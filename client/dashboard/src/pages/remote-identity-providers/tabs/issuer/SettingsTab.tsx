@@ -2,7 +2,7 @@ import { AssetImageUploadField } from "@/components/asset-image-upload-field";
 import { RequireScope } from "@/components/require-scope";
 import { useRBAC } from "@/hooks/useRBAC";
 import { Text } from "@/components/ui/Text";
-import { useOrgRoutes } from "@/routes";
+import { useRoutes } from "@/routes";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { invalidateAllOrganizationRemoteSessionIssuer } from "@gram/client/react-query/organizationRemoteSessionIssuer.js";
 import { invalidateAllOrganizationRemoteSessionIssuers } from "@gram/client/react-query/organizationRemoteSessionIssuers.js";
@@ -31,7 +31,7 @@ export function SettingsTab({
 }: {
   issuer: RemoteSessionIssuer;
 }): JSX.Element {
-  const orgRoutes = useOrgRoutes();
+  const routes = useRoutes();
   const queryClient = useQueryClient();
   const [name, setName] = useState(issuer.name ?? "");
   // Seeded from the saved issuer like name: buildUpdateIssuerForm always sends
@@ -250,7 +250,7 @@ export function SettingsTab({
               renderLink={(match) => (
                 <Button asChild variant="secondary">
                   <Link
-                    to={orgRoutes.remoteIdentityProviders.issuerDetail.href(
+                    to={routes.remoteIdentityProviders.issuerDetail.href(
                       match.id,
                     )}
                   >
@@ -391,7 +391,7 @@ export function SettingsTab({
           issuerId={issuer.id}
           issuerLabel={issuerDisplayName(issuer)}
           onClose={() => setShowDelete(false)}
-          onDeleted={() => orgRoutes.remoteIdentityProviders.goTo()}
+          onDeleted={() => routes.remoteIdentityProviders.goTo()}
         />
       )}
     </div>

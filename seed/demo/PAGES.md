@@ -63,8 +63,10 @@ behavior is covered by editor tests; browser verification remains pending.
 ### Managed agents
 
 The Identities roster also reads these three existing registered-agent fixtures
-in an ordinary local session. Agent names open the existing agent-management
-screen; unmatched telemetry identifiers without an email are Unknown, not Agent.
+in an ordinary local session. Agent names open the shared identity overview at
+`/:orgSlug/projects/:projectSlug/identities/agent%3A<AGENT_ID>/overview`, with an
+"Edit Agent Identity" link to the agent-management screen. The roster toggle
+selects All, Humans, or Agents; unmatched telemetry identifiers without an email are Unknown, not Agent.
 The shared demo skips the restricted inventory read and keeps its people roster.
 
 Verify in the local rewritten seed with an ordinary human session: shared demo

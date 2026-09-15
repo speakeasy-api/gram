@@ -1,5 +1,5 @@
 import { useDeferredValue, useMemo, useState } from "react";
-import { Navigate, useSearchParams } from "react-router";
+import { Navigate } from "react-router";
 import {
   defineFilters,
   useFilterState,
@@ -9,7 +9,7 @@ import {
 import { Page } from "@/components/page-layout";
 import { ResourceListPage } from "@/components/page-templates";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { useOrgRoutes } from "@/routes";
+import { useRoutes } from "@/routes";
 import { ConnectionsList } from "@/components/connections/ConnectionsList";
 import {
   CONNECTION_GROUPING_LABELS,
@@ -19,7 +19,7 @@ import { Button } from "@/components/ui/Button";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
-import { useOrganization, useProject } from "@/contexts/Auth";
+import { useProject } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { subjectLabel } from "@/lib/user-session-status";
 import { useUserSessionFacets } from "@gram/client/react-query/userSessionFacets.js";
@@ -29,18 +29,6 @@ import { ConsentToolFilteringSetting } from "./ConsentToolFilteringSetting";
 import { RemoteSessionRefreshPolicySetting } from "./RemoteSessionRefreshPolicySetting";
 
 const USER_SESSION_FILTERS = defineFilters([
-  // Project leads: it re-scopes every other filter's options rather than
-  // narrowing the same set, so it reads first in the bar.
-  // `required`: the query cannot run without a project, so the chip offers no
-  // × — clearing it would resolve straight back to the working project and read
-  // as a broken button.
-  {
-    id: "project",
-    label: "Project",
-    kind: "select",
-    pinned: true,
-    required: true,
-  },
   // Unpinned: the list already splits itself into active and inactive, so a
   // status chip sat in the bar restating the layout. Still reachable under
   // "More filters" for the narrower cuts the split does not make — expired
@@ -75,13 +63,13 @@ const GROUPING_OPTIONS: { value: ConnectionGrouping; label: string }[] = [
 
 export default function UserSessions(): JSX.Element {
   const telemetry = useTelemetry();
-  const orgRoutes = useOrgRoutes();
+  const routes = useRoutes();
 
   // Gated behind the `user-sessions-dashboard` PostHog flag (internal rollout).
   // Redirect direct-URL access when the flag has resolved to disabled; while it
   // is still loading (undefined) we render and let RBAC guard the data.
   if (telemetry.isFeatureEnabled("user-sessions-dashboard") === false) {
-    return <Navigate to={orgRoutes.home.href()} replace />;
+    return <Navigate to={routes.home.href()} replace />;
   }
 
   return <UserSessionsInner />;
@@ -89,73 +77,21 @@ export default function UserSessions(): JSX.Element {
 
 function UserSessionsInner(): JSX.Element {
   const project = useProject();
-  const organization = useOrganization();
-
-  const projects = useMemo(
-    () =>
-      [...organization.projects].sort((a, b) => a.slug.localeCompare(b.slug)),
-    [organization.projects],
-  );
-
   const { hasScope } = useRBAC();
-
   const filters = useFilterState(USER_SESSION_FILTERS);
-  const [, setSearchParams] = useSearchParams();
-
-  // A select filter's empty value is null, but the query always needs a project,
-  // so an unset filter means "the one I'm working in" rather than "all". The
-  // resolved slug is fed back into the chip's value so it names a real project
-  // instead of falling back to an "All projects" that cannot exist.
-  const projectSlug = filters.values.project ?? project.slug;
-  const filterValues = useMemo(
-    () => ({ ...filters.values, project: projectSlug }),
-    [filters.values, projectSlug],
-  );
-
-  // Revoke is a write mutation (backend requires project:write). Scope the check
-  // to the *selected* project — a user with project:write on one project must
-  // not see revoke affordances after switching to another (they'd only fail at
-  // mutation time).
-  const selectedProjectId = projects.find((p) => p.slug === projectSlug)?.id;
-  const canRevoke =
-    !!selectedProjectId && hasScope("project:write", selectedProjectId);
+  const projectSlug = project.slug;
+  const canRevoke = hasScope("project:write", project.id);
   const [searchQuery, setSearchQuery] = useState("");
   const [grouping, setGrouping] = useState<ConnectionGrouping>("subject");
 
-  // Server and user options are facets of one project, so a value chosen in one
-  // means nothing in another and has to go when the project does. Written in a
-  // single navigation rather than a setValue followed by clears: react-router
-  // reads a memoized snapshot per render, so chained updates clobber each other
-  // and only the last would survive.
   const handleFilterChange = (id: string, value: FilterValue) => {
-    if (id !== "project") {
-      filters.setValue(id as keyof typeof filters.values, value as never);
-      return;
-    }
-
-    setSearchParams(
-      (prev) => {
-        const next = new URLSearchParams(prev);
-        if (typeof value === "string" && value) {
-          next.set("project", value);
-        } else {
-          next.delete("project");
-        }
-        next.delete("status");
-        next.delete("issuerId");
-        next.delete("subjectUrn");
-        return next;
-      },
-      { replace: true },
-    );
-    setSearchQuery("");
+    filters.setValue(id as keyof typeof filters.values, value as never);
   };
 
   const { data: facets } = useUserSessionFacets({ gramProject: projectSlug });
 
   const optionsById: OptionsById = useMemo(
     () => ({
-      project: projects.map((p) => ({ value: p.slug, label: p.slug })),
       status: STATUS_TOOLBAR_OPTIONS,
       issuerId: (facets?.servers ?? []).map((s) => ({
         value: s.value,
@@ -166,7 +102,7 @@ function UserSessionsInner(): JSX.Element {
         label: u.displayName,
       })),
     }),
-    [facets, projects],
+    [facets],
   );
 
   const {
@@ -254,11 +190,7 @@ function UserSessionsInner(): JSX.Element {
         canRevoke={canRevoke}
         onRevoked={() => void refetch()}
         killswitchContext={{ capabilityKey: "mcp_tool_calls" }}
-        project={
-          selectedProjectId
-            ? { slug: projectSlug, id: selectedProjectId }
-            : undefined
-        }
+        project={project}
       />
     );
   }
@@ -267,7 +199,7 @@ function UserSessionsInner(): JSX.Element {
     <ResourceListPage
       scope="org:read"
       title="MCP Sessions"
-      description="Every connection Gram brokers. Revoking ends current sessions immediately, but clients can authenticate and reconnect. A killswitch is a separate action that blocks matching MCP tool calls without ending sessions; revocation never creates or lifts one."
+      description="Connections Gram brokers for this project. Revoking ends current sessions immediately, but clients can authenticate and reconnect. A killswitch is a separate action that blocks matching MCP tool calls without ending sessions; revocation never creates or lifts one."
     >
       <div className="space-y-8">
         {/* `Page.Section` stacks two `mb-6`s under the description, which reads
@@ -290,7 +222,7 @@ function UserSessionsInner(): JSX.Element {
             />
             <Page.Toolbar.Filters
               schema={USER_SESSION_FILTERS}
-              values={filterValues}
+              values={filters.values}
               optionsById={optionsById}
               onChange={handleFilterChange}
               onClear={filters.clearValue as (id: string) => void}

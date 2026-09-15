@@ -30,19 +30,23 @@ import { useSdkClient, useProjectSlugForRequests } from "@/contexts/Sdk";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
+import { Button } from "@/components/ui/Button";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { Badge } from "@/components/ui/Badge";
 import { Column, type SortDescriptor, Table } from "@/components/ui/Table";
 import { sortTableData } from "@/components/ui/Table/sorting";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Text } from "@/components/ui/Text";
 import { IdentityLink } from "@/components/identity-link";
 import { getInitials } from "@/lib/initials";
 import { encodeIdentityUrn } from "@/lib/identity-urn";
-import { useOrgRoutes, useRoutes } from "@/routes";
+import { useRoutes } from "@/routes";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
 import { useQuery } from "@tanstack/react-query";
-import { Bot } from "lucide-react";
+import { Bot, Plus, User } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
   Link,
@@ -57,7 +61,6 @@ import {
   identityKindOf,
   identityUrnForEmployee,
   IDENTITY_KIND_LABELS,
-  type IdentityKind,
 } from "./identityKind";
 import {
   coverageForIdentity,
@@ -70,7 +73,6 @@ import {
   identityRosterQueryKey,
   fetchRegisteredAgents,
   registeredAgentIdentity,
-  registeredAgentHref,
   matchesIdentityTelemetryFilters,
 } from "./identityRoster";
 
@@ -217,12 +219,27 @@ const DEVICE_STATUS_LABELS: Record<string, string> = {
   [NO_DEVICE_BUCKET]: "No managed device",
 };
 
-const KIND_OPTIONS = (["person", "agent", "unknown"] as IdentityKind[]).map(
-  (kind) => ({
-    value: kind,
-    label: IDENTITY_KIND_LABELS[kind],
-  }),
-);
+const KIND_OPTIONS = [
+  { value: "", label: "All" },
+  {
+    value: "person",
+    label: (
+      <span className="flex items-center gap-2">
+        <User className="size-4" aria-hidden="true" />
+        Humans
+      </span>
+    ),
+  },
+  {
+    value: "agent",
+    label: (
+      <span className="flex items-center gap-2">
+        <Bot className="size-4" aria-hidden="true" />
+        Agents
+      </span>
+    ),
+  },
+];
 
 // One em dash for every kind of "no role": an agent has none by definition, a
 // person with no account has none yet, and the roster reports an absent role
@@ -355,7 +372,6 @@ export default function IdentitiesIndex(): JSX.Element {
 function IdentitiesIndexContent(): JSX.Element {
   const location = useLocation();
   const routes = useRoutes();
-  const orgRoutes = useOrgRoutes();
   const organization = useOrganization();
   const projectSlug = useProjectSlugForRequests();
   const navigate = useNavigate();
@@ -363,6 +379,7 @@ function IdentitiesIndexContent(): JSX.Element {
   const sdk = useSdkClient();
   const session = useSession();
   const isPlatformAdmin = useIsPlatformAdmin();
+  const agentManagementFlag = useFeatureFlag(FEATURE_FLAGS.agentManagement);
   // Match the existing agent screen's supported sessions, without changing scope.
   const agentsEnabled =
     organization.slug !== DEMO_ORG_SLUG &&
@@ -528,6 +545,7 @@ function IdentitiesIndexContent(): JSX.Element {
   const filterSchema = useMemo(
     () =>
       IDENTITY_FILTERS.filter((dimension) => {
+        if (dimension.id === "kind") return false;
         const selected = (values[dimension.id as keyof typeof values] ??
           []) as string[];
         if (selected.length > 0) return true;
@@ -548,9 +566,10 @@ function IdentitiesIndexContent(): JSX.Element {
     ],
   );
 
-  // Joined rather than held as an array: the filter state hands back a fresh
-  // array each render, which would defeat the memo below.
-  const kindKey = (values.kind ?? []).join(",");
+  // Keep the existing kind URL parameter while presenting a single choice.
+  const selectedKind = values.kind?.length === 1 ? values.kind[0] : "";
+  const kindKey =
+    selectedKind === "person" || selectedKind === "agent" ? selectedKind : "";
   const accountType = (values.account_type as string | undefined) ?? "";
   const personalAccount = (values.personal_account as string | undefined) ?? "";
   const enrollment = (values.enrollment as string | undefined) ?? "";
@@ -671,6 +690,16 @@ function IdentitiesIndexContent(): JSX.Element {
           ? "Every person and agent the platform knows about, account here or not."
           : `${rows.length} of ${identities.length} — every person and agent the platform knows about, account here or not.`}
       </Page.Section.Description>
+      <Page.Section.CTA>
+        {agentsEnabled && agentManagementFlag.status === "enabled" && (
+          <Button asChild variant="primary">
+            <Link to={`${routes.agents.href()}?create=true`}>
+              <Plus className="size-4" aria-hidden="true" />
+              New agent identity
+            </Link>
+          </Button>
+        )}
+      </Page.Section.CTA>
       <Page.Section.Body>
         {/* The section stacks its body children at 8px, which reads as one
             block: the tiles, the controls and the table are three things. */}
@@ -729,30 +758,38 @@ function IdentitiesIndexContent(): JSX.Element {
             )}
           </StatTileGroup>
           <Page.Toolbar>
+            <Page.Toolbar.Leading>
+              <SegmentedControl
+                value={kindKey}
+                onChange={(kind) => setValue("kind", kind ? [kind] : [])}
+                options={KIND_OPTIONS}
+              />
+            </Page.Toolbar.Leading>
             <Page.Toolbar.Search
               value={search}
               onChange={setSearch}
               placeholder="Search identities…"
               debounceMs={200}
             />
-            <Page.Toolbar.Filters
-              schema={filterSchema}
-              values={values}
-              optionsById={{
-                kind: KIND_OPTIONS,
-                enrollment: ENROLLMENT_OPTIONS,
-                activity: ACTIVITY_OPTIONS,
-                device_status: deviceStatusOptions,
-                role: roleOptions,
-                department: departmentOptions,
-                team: teamOptions,
-                account_type: ACCOUNT_TYPE_OPTIONS,
-                personal_account: PERSONAL_ACCOUNT_OPTIONS,
-              }}
-              onChange={setValue as (id: string, value: unknown) => void}
-              onClear={clearValue as (id: string) => void}
-              onClearAll={clearAll}
-            />
+            <Page.Toolbar.Actions>
+              <Page.Toolbar.Filters
+                schema={filterSchema}
+                values={values}
+                optionsById={{
+                  enrollment: ENROLLMENT_OPTIONS,
+                  activity: ACTIVITY_OPTIONS,
+                  device_status: deviceStatusOptions,
+                  role: roleOptions,
+                  department: departmentOptions,
+                  team: teamOptions,
+                  account_type: ACCOUNT_TYPE_OPTIONS,
+                  personal_account: PERSONAL_ACCOUNT_OPTIONS,
+                }}
+                onChange={setValue as (id: string, value: unknown) => void}
+                onClear={clearValue as (id: string) => void}
+                onClearAll={clearAll}
+              />
+            </Page.Toolbar.Actions>
           </Page.Toolbar>
           <Table
             columns={IDENTITY_COLUMNS}
@@ -766,15 +803,9 @@ function IdentitiesIndexContent(): JSX.Element {
             rowKey={(row) => row.id}
             onRowClick={(row) =>
               void navigate(
-                row.registeredAgentId
-                  ? registeredAgentHref(
-                      orgRoutes.agents.href(),
-                      location.search,
-                      row.registeredAgentId,
-                    )
-                  : routes.identities.detail.overview.href(
-                      encodeIdentityUrn(identityUrnForEmployee(row)),
-                    ),
+                routes.identities.detail.overview.href(
+                  encodeIdentityUrn(identityUrnForEmployee(row)),
+                ),
               )
             }
             noResultsMessage={
@@ -912,8 +943,6 @@ function personInitials(name: string): string {
  * and quietly.
  */
 function IdentityCell({ identity }: { identity: Employee }): JSX.Element {
-  const location = useLocation();
-  const orgRoutes = useOrgRoutes();
   const isAgent = identityKindOf(identity) === "agent";
   // A person with no member row has only their address, which is already the
   // name; repeating it underneath would be noise.
@@ -938,25 +967,11 @@ function IdentityCell({ identity }: { identity: Employee }): JSX.Element {
           {/* An agent's name may be a long unbroken id, so it wraps anywhere
               and stops at two lines rather than running past the row. */}
           <Text className="line-clamp-2 min-w-0 font-medium wrap-anywhere">
-            {identity.registeredAgentId ? (
-              <Link
-                to={registeredAgentHref(
-                  orgRoutes.agents.href(),
-                  location.search,
-                  identity.registeredAgentId,
-                )}
-                onClick={(event) => event.stopPropagation()}
-                className="decoration-foreground/30 hover:decoration-foreground underline underline-offset-4"
-              >
-                {identity.name}
-              </Link>
-            ) : (
-              <IdentityLink
-                identifier={{ urn: identityUrnForEmployee(identity) }}
-              >
-                {identity.name}
-              </IdentityLink>
-            )}
+            <IdentityLink
+              identifier={{ urn: identityUrnForEmployee(identity) }}
+            >
+              {identity.name}
+            </IdentityLink>
           </Text>
         </div>
         {secondary && (

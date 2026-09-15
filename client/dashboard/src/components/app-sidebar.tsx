@@ -42,6 +42,8 @@ import { useRBAC } from "@/hooks/useRBAC";
 import { useSidebar } from "@/components/ui/Sidebar/sidebar-context";
 import { useSlugs } from "@/contexts/Sdk";
 
+/** Scopes that make an org-level nav item visible. */
+
 function ScopeGatedTopLevelItem({
   item,
   scope,
@@ -88,6 +90,8 @@ export function AppSidebar({
   const isAssistantsEnabled = navAccess.has(routes.assistants.url);
   const isOrgMemoryEnabled = navAccess.has(routes.orgMemory.url);
   const isRiskWatchdogEnabled = navAccess.has(routes.watchdog.url);
+  const isUserSessionsEnabled = navAccess.has(routes.mcpSessions.url);
+  const isAgentManagementEnabled = navAccess.has(routes.agents.url);
 
   // Shared with the page-title eyebrow (Page.Eyebrow) so the sidebar group
   // highlight and the page header always agree on the area. "Organization"
@@ -198,27 +202,6 @@ export function AppSidebar({
             <div className="border-border border-t" />
           </li>
 
-          {/* Observability group */}
-          <ScopeGatedNavGroup
-            label="Observability"
-            Icon={(p) => <Icon {...p} name="eye" />}
-            items={[
-              // First in the group: an identity is the subject the rest of
-              // these pages measure.
-              { item: routes.identities, ...accessFor(routes.identities) },
-              { item: routes.costs, ...accessFor(routes.costs) },
-              { item: routes.insights, ...accessFor(routes.insights) },
-              {
-                item: routes.agentSessions,
-                ...accessFor(routes.agentSessions),
-              },
-              ...(isOrgMemoryEnabled
-                ? [{ item: routes.orgMemory, ...accessFor(routes.orgMemory) }]
-                : []),
-              { item: routes.logs, ...accessFor(routes.logs) },
-            ]}
-          />
-
           {/* MCP Gateway group */}
           <ScopeGatedNavGroup
             label="MCP Gateway"
@@ -254,6 +237,48 @@ export function AppSidebar({
               { item: routes.riskEvents, ...accessFor(routes.riskEvents) },
               { item: routes.policyCenter, ...accessFor(routes.policyCenter) },
               { item: routes.shadowMCP, ...accessFor(routes.shadowMCP) },
+            ]}
+          />
+
+          {/* Identity group */}
+          <ScopeGatedNavGroup
+            label="Identity"
+            Icon={(p) => <Icon {...p} name="fingerprint" />}
+            items={[
+              { item: routes.identities, ...accessFor(routes.identities) },
+              ...(isAgentManagementEnabled
+                ? [{ item: routes.agents, ...accessFor(routes.agents) }]
+                : []),
+              ...(isUserSessionsEnabled
+                ? [
+                    {
+                      item: routes.mcpSessions,
+                      ...accessFor(routes.mcpSessions),
+                    },
+                  ]
+                : []),
+              {
+                item: routes.remoteIdentityProviders,
+                ...accessFor(routes.remoteIdentityProviders),
+              },
+            ]}
+          />
+
+          {/* Observability group */}
+          <ScopeGatedNavGroup
+            label="Observability"
+            Icon={(p) => <Icon {...p} name="eye" />}
+            items={[
+              { item: routes.costs, ...accessFor(routes.costs) },
+              { item: routes.insights, ...accessFor(routes.insights) },
+              {
+                item: routes.agentSessions,
+                ...accessFor(routes.agentSessions),
+              },
+              ...(isOrgMemoryEnabled
+                ? [{ item: routes.orgMemory, ...accessFor(routes.orgMemory) }]
+                : []),
+              { item: routes.logs, ...accessFor(routes.logs) },
             ]}
           />
 
