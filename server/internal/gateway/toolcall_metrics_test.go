@@ -80,18 +80,19 @@ func newMetricToolProxy(t *testing.T, reader sdkmetric.Reader) *ToolProxy {
 	tracerProvider := testenv.NewTracerProvider(t)
 	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
+	meterProvider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
 
 	return NewToolProxy(
 		testenv.NewLogger(t),
 		tracerProvider,
-		sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)),
+		meterProvider,
 		ToolCallSourceMCP,
 		testenv.NewEncryptionClient(t),
 		nil,
 		policy,
 		funcs,
 		nil,
-		mcpriskscan.NewNoop(tracerProvider),
+		mcpriskscan.NewNoop(tracerProvider, meterProvider, testenv.NewLogger(t)),
 	)
 }
 

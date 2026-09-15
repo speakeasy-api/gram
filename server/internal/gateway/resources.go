@@ -52,7 +52,7 @@ func (tp *ToolProxy) ReadResource(
 		attr.SlogToolCallSource(string(tp.source)),
 	)
 
-	tp.riskScan.Scan(ctx, mcpriskscan.Event{
+	tp.scanObserver.Scan(ctx, mcpriskscan.Event{
 		Surface:        target.Surface,
 		OrganizationID: plan.Descriptor.OrganizationID,
 		ProjectID:      plan.Descriptor.ProjectID,

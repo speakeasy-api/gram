@@ -3,10 +3,13 @@ package mcpriskscan
 
 import (
 	"context"
+	"log/slog"
+	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -68,32 +71,60 @@ type Event struct {
 	Phase string
 
 	// Payload borrows already-materialized request arguments: json.RawMessage for
-	// tool calls or map[string]string for prompts. Hooks must not mutate it.
+	// tool calls or map[string]string for prompts. Observers must not mutate it.
 	// Resource reads leave it nil because they have no meaningful request body.
 	Payload any
 }
 
-// Hook observes a seam without returning a decision or modifying its request.
-type Hook interface {
+// Observer observes a seam without returning a decision or modifying its request.
+type Observer interface {
 	Scan(ctx context.Context, event Event)
 }
 
 type noop struct {
-	tracer trace.Tracer
+	tracer   trace.Tracer
+	scans    metric.Int64Counter
+	duration metric.Float64Histogram
 }
 
-// NewNoop records reachability only; it performs no risk evaluation.
-func NewNoop(provider trace.TracerProvider) Hook {
-	return &noop{tracer: provider.Tracer("github.com/speakeasy-api/gram/server/internal/mcpriskscan")}
+// NewNoop records reachability and the scan cost baseline; it performs no risk evaluation.
+func NewNoop(tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, logger *slog.Logger) Observer {
+	const scope = "github.com/speakeasy-api/gram/server/internal/mcpriskscan"
+	meter := meterProvider.Meter(scope)
+	scans, err := meter.Int64Counter(
+		"mcp.risk.scan",
+		metric.WithDescription("MCP risk scans by serving surface and phase"),
+		metric.WithUnit("{scan}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to create metric", attr.SlogMetricName("mcp.risk.scan"), attr.SlogError(err))
+	}
+	duration, err := meter.Float64Histogram(
+		"mcp.risk.scan.duration",
+		metric.WithDescription("Duration of an MCP risk scan in seconds"),
+		metric.WithUnit("s"),
+		metric.WithExplicitBucketBoundaries(0.000001, 0.00001, 0.0001, 0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to create metric", attr.SlogMetricName("mcp.risk.scan.duration"), attr.SlogError(err))
+	}
+	return &noop{
+		tracer:   tracerProvider.Tracer(scope),
+		scans:    scans,
+		duration: duration,
+	}
 }
 
 func (n *noop) Scan(ctx context.Context, event Event) {
+	start := time.Now()
+	surface := attribute.String("gram.mcp.risk.scan.surface", event.Surface)
+	phase := attribute.String("gram.mcp.risk.scan.phase", event.Phase)
 	identity, stamped := mcpidentity.FromContext(ctx)
 	// Deliberately select identifiers only. Payload can contain customer data;
 	// never serialize the event or attach its payload to tracing.
 	_, span := n.tracer.Start(ctx, "mcp.risk.scan", trace.WithAttributes(
-		attribute.String("gram.mcp.risk.scan.surface", event.Surface),
-		attribute.String("gram.mcp.risk.scan.phase", event.Phase),
+		surface,
+		phase,
 		attr.OrganizationID(event.OrganizationID),
 		attr.ProjectID(event.ProjectID),
 		attr.McpServerID(event.ServerID),
@@ -106,4 +137,16 @@ func (n *noop) Scan(ctx context.Context, event Event) {
 		attr.UserID(identity.UserID()),
 	))
 	span.End()
+
+	// Count every scan, independent of trace sampling. Only the closed surface
+	// and phase dimensions belong on metrics; identifiers and payloads do not.
+	opts := metric.WithAttributes(surface, phase)
+	if n.scans != nil {
+		n.scans.Add(ctx, 1, opts)
+	}
+	if n.duration != nil {
+		// The near-zero no-op duration is the instrumentation floor against
+		// which real evaluation cost is measured, never upstream execution time.
+		n.duration.Record(ctx, time.Since(start).Seconds(), opts)
+	}
 }

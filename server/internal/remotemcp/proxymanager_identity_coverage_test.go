@@ -13,7 +13,7 @@ import (
 func TestProxyBuildOption_ToolsCallIdentityCoverage(t *testing.T) {
 	t.Parallel()
 
-	manager := &ProxyManager{riskScan: mcpriskscan.NewNoop(testenv.NewTracerProvider(t))}
+	manager := &ProxyManager{scanObserver: mcpriskscan.NewNoop(testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), testenv.NewLogger(t))}
 	build := func(options ...BuildOption) *proxy.Proxy {
 		return manager.BuildTarget(
 			testenv.NewLogger(t),

@@ -27,7 +27,7 @@ type promptGetResult struct {
 	Messages    []promptMessage `json:"messages"`
 }
 
-func handlePromptsGet(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, payload *mcpInputs, req *rawRequest, scan mcpriskscan.Hook) (json.RawMessage, error) {
+func handlePromptsGet(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, payload *mcpInputs, req *rawRequest, scan mcpriskscan.Observer) (json.RawMessage, error) {
 	var params prompGetParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "failed to parse get prompt request").LogError(ctx, logger)

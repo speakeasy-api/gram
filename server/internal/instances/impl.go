@@ -124,7 +124,7 @@ func NewService(
 			guardianPolicy,
 			funcCaller,
 			platformTools,
-			mcpriskscan.NewNoop(traceProvider),
+			mcpriskscan.NewNoop(traceProvider, meterProvider, logger),
 		),
 		toolsetCache:      cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
 		telemLogger:       telemLogger,

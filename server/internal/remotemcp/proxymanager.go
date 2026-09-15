@@ -68,7 +68,7 @@ type ProxyManager struct {
 	authz          *authz.Engine
 	posthog        *posthog.Posthog
 	telemLogger    *tm.Logger
-	riskScan       mcpriskscan.Hook
+	scanObserver   mcpriskscan.Observer
 
 	proxyMetrics         *proxy.Metrics
 	mcpMetrics           *ProxyMetrics
@@ -126,7 +126,7 @@ func NewProxyManager(
 		authz:                                 authzEngine,
 		posthog:                               posthogClient,
 		telemLogger:                           telemLogger,
-		riskScan:                              mcpriskscan.NewNoop(tracerProvider),
+		scanObserver:                          mcpriskscan.NewNoop(tracerProvider, meterProvider, logger),
 		proxyMetrics:                          proxy.NewMetrics(meter, logger),
 		mcpMetrics:                            mcpMetrics,
 		identityCoverage:                      mcptoolexecution.NewIdentityCoverageCheckpoint(db, mcpMetrics),
@@ -287,7 +287,7 @@ func (f *ProxyManager) BuildTarget(
 		toolsListRespInterceptors = append(toolsListRespInterceptors, selectionInterceptor)
 	}
 	toolsCallReqInterceptors = append(toolsCallReqInterceptors, &toolsCallRiskScanInterceptor{
-		hook: f.riskScan,
+		observer: f.scanObserver,
 		event: mcpriskscan.Event{
 			Surface:        mcpriskscan.SurfaceRemoteMCP,
 			OrganizationID: organizationID,

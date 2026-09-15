@@ -284,7 +284,7 @@ func TestToolProxy_Do_PathParams(t *testing.T) {
 				policy,
 				funcs,
 				nil,
-				mcpriskscan.NewNoop(tracerProvider),
+				mcpriskscan.NewNoop(tracerProvider, testenv.NewMeterProvider(t), testenv.NewLogger(t)),
 			)
 
 			// Create response recorder
@@ -415,7 +415,7 @@ func TestToolProxy_Do_HeaderParams(t *testing.T) {
 				policy,
 				funcs,
 				nil,
-				mcpriskscan.NewNoop(tracerProvider),
+				mcpriskscan.NewNoop(tracerProvider, testenv.NewMeterProvider(t), testenv.NewLogger(t)),
 			)
 
 			// Create response recorder
@@ -767,7 +767,7 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 				policy,
 				funcs,
 				nil,
-				mcpriskscan.NewNoop(tracerProvider),
+				mcpriskscan.NewNoop(tracerProvider, testenv.NewMeterProvider(t), testenv.NewLogger(t)),
 			)
 
 			// Create response recorder
@@ -989,7 +989,7 @@ func TestToolProxy_Do_Body(t *testing.T) {
 				policy,
 				funcs,
 				nil,
-				mcpriskscan.NewNoop(tracerProvider),
+				mcpriskscan.NewNoop(tracerProvider, testenv.NewMeterProvider(t), testenv.NewLogger(t)),
 			)
 
 			// Create response recorder
@@ -1331,7 +1331,7 @@ func TestToolProxy_Do_StringifiedJSONBody(t *testing.T) {
 				policy,
 				funcs,
 				nil,
-				mcpriskscan.NewNoop(tracerProvider),
+				mcpriskscan.NewNoop(tracerProvider, testenv.NewMeterProvider(t), testenv.NewLogger(t)),
 			)
 
 			// Create response recorder
@@ -1680,7 +1680,7 @@ func TestToolProxy_Do_PlatformTool_UsesWrappedBodyPayload(t *testing.T) {
 		policy,
 		funcs,
 		platformExecutor,
-		mcpriskscan.NewNoop(tracerProvider),
+		mcpriskscan.NewNoop(tracerProvider, testenv.NewMeterProvider(t), testenv.NewLogger(t)),
 	)
 
 	recorder := httptest.NewRecorder()
@@ -1748,7 +1748,7 @@ func TestToolProxy_Do_PlatformTool_PreservesRawBodyFieldPayload(t *testing.T) {
 		policy,
 		funcs,
 		platformExecutor,
-		mcpriskscan.NewNoop(tracerProvider),
+		mcpriskscan.NewNoop(tracerProvider, testenv.NewMeterProvider(t), testenv.NewLogger(t)),
 	)
 
 	recorder := httptest.NewRecorder()
@@ -1892,7 +1892,7 @@ func TestToolProxy_Do_HTTPTool_UserConfigVariablesSent(t *testing.T) {
 		policy,
 		funcs,
 		nil,
-		mcpriskscan.NewNoop(tracerProvider),
+		mcpriskscan.NewNoop(tracerProvider, testenv.NewMeterProvider(t), testenv.NewLogger(t)),
 	)
 
 	// Create response recorder
@@ -1979,7 +1979,7 @@ func TestToolProxy_Do_HTTPTool_UserConfigNotInPlanNotSent(t *testing.T) {
 		policy,
 		funcs,
 		nil,
-		mcpriskscan.NewNoop(tracerProvider),
+		mcpriskscan.NewNoop(tracerProvider, testenv.NewMeterProvider(t), testenv.NewLogger(t)),
 	)
 
 	// Create response recorder
@@ -2077,7 +2077,7 @@ func TestToolProxy_Do_FunctionTool_UserConfigNotInPlanNotSent(t *testing.T) {
 		policy,
 		mockFuncCaller,
 		nil,
-		mcpriskscan.NewNoop(tracerProvider),
+		mcpriskscan.NewNoop(tracerProvider, testenv.NewMeterProvider(t), testenv.NewLogger(t)),
 	)
 
 	// Create request body
@@ -2190,7 +2190,7 @@ func TestToolProxy_Do_HTTPTool_SystemEnvSentWhenInPlan(t *testing.T) {
 		policy,
 		funcs,
 		nil,
-		mcpriskscan.NewNoop(tracerProvider),
+		mcpriskscan.NewNoop(tracerProvider, testenv.NewMeterProvider(t), testenv.NewLogger(t)),
 	)
 
 	// Create response recorder
@@ -2275,7 +2275,7 @@ func TestToolProxy_Do_HTTPTool_SystemEnvKeysConvertedToHTTPHeaders(t *testing.T)
 		policy,
 		funcs,
 		nil,
-		mcpriskscan.NewNoop(tracerProvider),
+		mcpriskscan.NewNoop(tracerProvider, testenv.NewMeterProvider(t), testenv.NewLogger(t)),
 	)
 
 	recorder := httptest.NewRecorder()
@@ -2372,7 +2372,7 @@ func TestToolProxy_Do_FunctionTool_SystemEnvSentWhenInPlan(t *testing.T) {
 		policy,
 		mockFuncCaller,
 		nil,
-		mcpriskscan.NewNoop(tracerProvider),
+		mcpriskscan.NewNoop(tracerProvider, testenv.NewMeterProvider(t), testenv.NewLogger(t)),
 	)
 
 	// Create request body
@@ -2487,7 +2487,7 @@ func TestToolProxy_Do_HTTPTool_UserConfigPrefersOverSystemEnv(t *testing.T) {
 		policy,
 		funcs,
 		nil,
-		mcpriskscan.NewNoop(tracerProvider),
+		mcpriskscan.NewNoop(tracerProvider, testenv.NewMeterProvider(t), testenv.NewLogger(t)),
 	)
 
 	// Create response recorder
@@ -2586,7 +2586,7 @@ func TestToolProxy_Do_FunctionTool_UserConfigPrefersOverSystemEnv(t *testing.T) 
 		policy,
 		mockFuncCaller,
 		nil,
-		mcpriskscan.NewNoop(tracerProvider),
+		mcpriskscan.NewNoop(tracerProvider, testenv.NewMeterProvider(t), testenv.NewLogger(t)),
 	)
 
 	// Create request body
@@ -2705,7 +2705,7 @@ func TestToolProxy_Do_FunctionTool_AuthInputSentWhenInUserConfig(t *testing.T) {
 		policy,
 		mockFuncCaller,
 		nil,
-		mcpriskscan.NewNoop(tracerProvider),
+		mcpriskscan.NewNoop(tracerProvider, testenv.NewMeterProvider(t), testenv.NewLogger(t)),
 	)
 
 	// Create request body
@@ -2818,7 +2818,7 @@ func TestToolProxy_Do_FunctionTool_AuthInputNotSentWhenNotInUserConfig(t *testin
 		policy,
 		mockFuncCaller,
 		nil,
-		mcpriskscan.NewNoop(tracerProvider),
+		mcpriskscan.NewNoop(tracerProvider, testenv.NewMeterProvider(t), testenv.NewLogger(t)),
 	)
 
 	// Create request body
@@ -2931,7 +2931,7 @@ func TestToolProxy_Do_FunctionTool_AuthInputPrefersUserConfigOverSystemEnv(t *te
 		policy,
 		mockFuncCaller,
 		nil,
-		mcpriskscan.NewNoop(tracerProvider),
+		mcpriskscan.NewNoop(tracerProvider, testenv.NewMeterProvider(t), testenv.NewLogger(t)),
 	)
 
 	// Create request body
@@ -3050,7 +3050,7 @@ func TestToolProxy_Do_FunctionTool_AuthInputSentWithRegularVariables(t *testing.
 		policy,
 		mockFuncCaller,
 		nil,
-		mcpriskscan.NewNoop(tracerProvider),
+		mcpriskscan.NewNoop(tracerProvider, testenv.NewMeterProvider(t), testenv.NewLogger(t)),
 	)
 
 	// Create request body
@@ -3164,7 +3164,7 @@ func TestToolProxy_Do_FunctionTool_AuthInputNilNotSent(t *testing.T) {
 		policy,
 		mockFuncCaller,
 		nil,
-		mcpriskscan.NewNoop(tracerProvider),
+		mcpriskscan.NewNoop(tracerProvider, testenv.NewMeterProvider(t), testenv.NewLogger(t)),
 	)
 
 	// Create request body

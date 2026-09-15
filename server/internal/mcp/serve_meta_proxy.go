@@ -611,7 +611,7 @@ func (s *Service) executeProxiedMemberTool(
 		return nil, oops.E(oops.CodeUnexpected, err, "dial meta MCP member").LogError(ctx, logger)
 	}
 
-	s.riskScan.Scan(ctx, mcpriskscan.Event{
+	s.scanObserver.Scan(ctx, mcpriskscan.Event{
 		Surface:        mcpriskscan.SurfaceMetaMCP,
 		OrganizationID: gate.organizationID,
 		ProjectID:      gate.projectID.String(),

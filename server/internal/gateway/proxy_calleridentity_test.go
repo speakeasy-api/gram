@@ -59,7 +59,7 @@ func callFunctionToolWithClient(t *testing.T, client toolconfig.MCPClientIdentit
 			onRequest: func(req functions.RunnerToolCallRequest) { captured = req.Meta },
 		},
 		nil,
-		mcpriskscan.NewNoop(tracerProvider),
+		mcpriskscan.NewNoop(tracerProvider, testenv.NewMeterProvider(t), testenv.NewLogger(t)),
 	)
 
 	bodyBytes, err := json.Marshal(ToolCallBody{
