@@ -7,11 +7,12 @@ import {
   useFilterState,
   type FilterValue,
 } from "@/components/filters";
+import { useIdentityTint } from "@/components/gradient-colors";
+import { InlineEmptyState } from "@/components/inline-empty-state";
 import { Page } from "@/components/page-layout";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { SkeletonTable } from "@/components/ui/Skeleton";
-import { Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
 import { StepSection } from "../step-section";
 import { errorMessage } from "./identity-provider-errors";
@@ -79,35 +80,54 @@ function tenantHostOf(tenantIdentifier: string): string {
     .toLowerCase();
 }
 
-function buildColumns(
-  tenantHost: string,
-): Column<IdentityProviderApplication>[] {
-  return [
-    {
-      key: "label",
-      header: "Application",
-      width: "2.5fr",
-      render: (application) => {
-        const host = signOnHost(application);
-        const distinct = host && host.toLowerCase() !== tenantHost;
-        return (
-          <div className="min-w-0">
-            <Text className="truncate font-medium">{application.label}</Text>
-            {distinct ? (
-              <Text variant="small" muted className="truncate">
-                {host}
-              </Text>
-            ) : null}
-          </div>
-        );
-      },
-    },
-    {
-      key: "status",
-      header: "Status",
-      width: "1fr",
-      render: (application) =>
-        application.providerStatus ? (
+/** Two letters of the name, which is what a tenant's own applications have. */
+function initials(label: string): string {
+  const words = label.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return "?";
+  if (words.length === 1) return words[0]!.slice(0, 2).toUpperCase();
+  return (words[0]![0]! + words[1]![0]!).toUpperCase();
+}
+
+// Okta does not hand us a logo with the inventory, so every card wears the
+// same deterministic tile its name earns. Swap this for the image the moment
+// the read carries one.
+function ApplicationMark({ label }: { label: string }): JSX.Element {
+  const tint = useIdentityTint(label);
+
+  return (
+    <div
+      aria-hidden="true"
+      className="flex h-9 w-9 flex-shrink-0 items-center justify-center text-xs font-semibold"
+      style={tint}
+    >
+      {initials(label)}
+    </div>
+  );
+}
+
+function ApplicationCard({
+  application,
+  tenantHost,
+}: {
+  application: IdentityProviderApplication;
+  tenantHost: string;
+}): JSX.Element {
+  const host = signOnHost(application);
+  const distinct = host && host.toLowerCase() !== tenantHost;
+
+  return (
+    <div className="border-border bg-card flex flex-col gap-3 border p-4">
+      <div className="flex items-start gap-3">
+        <ApplicationMark label={application.label} />
+        <div className="min-w-0 flex-1">
+          <Text className="font-medium break-words">{application.label}</Text>
+          {distinct ? (
+            <Text variant="small" muted className="break-all">
+              {host}
+            </Text>
+          ) : null}
+        </div>
+        {application.providerStatus ? (
           <Badge
             variant={isActive(application) ? "success" : "neutral"}
             background
@@ -115,27 +135,19 @@ function buildColumns(
           >
             <Badge.Text>{application.providerStatus}</Badge.Text>
           </Badge>
-        ) : (
-          <Text muted>—</Text>
-        ),
-    },
-    {
-      key: "signOnMode",
-      header: "Sign-on",
-      width: "1.2fr",
-      render: (application) => (
-        <Text muted className="break-words whitespace-normal">
+        ) : null}
+      </div>
+
+      <div className="border-border flex flex-wrap items-baseline gap-x-4 gap-y-1 border-t pt-3">
+        <Text variant="small" muted>
           {signOnModeLabel(application.signOnMode)}
         </Text>
-      ),
-    },
-    {
-      key: "assigned",
-      header: "Assigned to",
-      width: "1.5fr",
-      render: (application) => <Text>{assignedTo(application)}</Text>,
-    },
-  ];
+        <Text variant="small" className="ml-auto">
+          {assignedTo(application)}
+        </Text>
+      </div>
+    </div>
+  );
 }
 
 function readAtLabel(readAt: Date): string {
@@ -166,7 +178,6 @@ export function OktaApplicationsSection({
   // has no meaning once the reader leaves it, so it does not belong in the URL.
   const [search, setSearch] = useState("");
   const tenantHost = tenantHostOf(connection?.tenantIdentifier ?? "");
-  const columns = useMemo(() => buildColumns(tenantHost), [tenantHost]);
 
   // The tenant list is read whole, so filtering is local; deferring keeps the
   // box responsive on a tenant with hundreds of applications.
@@ -252,12 +263,23 @@ export function OktaApplicationsSection({
           />
         </Page.Toolbar>
 
-        <Table
-          columns={columns}
-          data={rows}
-          rowKey={(application) => application.sourceApplicationId}
-          noResultsMessage={<Text>No applications match those filters.</Text>}
-        />
+        {rows.length === 0 ? (
+          <InlineEmptyState
+            icon="search-x"
+            heading="No applications match those filters"
+            description="Clear the search or the status filter to see the rest of the tenant."
+          />
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {rows.map((application) => (
+              <ApplicationCard
+                key={application.sourceApplicationId}
+                application={application}
+                tenantHost={tenantHost}
+              />
+            ))}
+          </div>
+        )}
       </div>
     );
   }
