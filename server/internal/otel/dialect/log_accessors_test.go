@@ -93,6 +93,30 @@ func TestClaudeCodeLogEventAccessors(t *testing.T) {
 			subjectKey: "tool_use_id", subject: "t3", outcome: "", text: "accept",
 		},
 		{
+			name:       "api_response_body lands beside the request it answers",
+			record:     accessorTestRecord(claudeScope, "api_response_body", accessorTestKV("request_id", "req_4"), accessorTestKV("body", `{"content":[]}`)),
+			eventType:  EventTypeAPIResponseBody,
+			subjectKey: "request_id", subject: "req_4", outcome: "", text: "",
+		},
+		{
+			name:       "api_request_body is given no id of its own",
+			record:     accessorTestRecord(claudeScope, "api_request_body", accessorTestKV("body", `{"messages":[]}`), accessorTestKV("query_source", "compact")),
+			eventType:  EventTypeAPIRequestBody,
+			subjectKey: "", subject: "", outcome: "", text: "",
+		},
+		{
+			name:       "a completed compaction succeeded",
+			record:     accessorTestRecord(claudeScope, "compaction", accessorTestKV("trigger", "auto"), accessorTestKV("success", "true"), accessorTestIntKV("pre_tokens", 150_000), accessorTestIntKV("post_tokens", 20_000)),
+			eventType:  EventTypeCompaction,
+			subjectKey: "", subject: "", outcome: OutcomeOK, text: "",
+		},
+		{
+			name:       "a compaction that did not finish failed",
+			record:     accessorTestRecord(claudeScope, "compaction", accessorTestKV("trigger", "manual"), accessorTestKV("success", "false"), accessorTestKV("error", "context window exceeded")),
+			eventType:  EventTypeCompaction,
+			subjectKey: "", subject: "", outcome: OutcomeError, text: "",
+		},
+		{
 			name:       "legacy body prefix names the event",
 			record:     withBody(accessorTestRecord(claudeScope, ""), "claude_code.api_request"),
 			eventType:  EventTypeAPIRequest,
@@ -376,4 +400,31 @@ func TestClaudeCodeLogOutputContentIsTheResponse(t *testing.T) {
 	_, output, err = ClaudeCodeLog{}.OutputContent(prompt)
 	require.NoError(t, err)
 	require.Nil(t, output)
+}
+
+func TestClaudeCodeLogReadsWhyACompactionFailed(t *testing.T) {
+	t.Parallel()
+
+	failed := accessorTestRecord(claudeScope, "compaction",
+		accessorTestKV("success", "false"),
+		accessorTestKV("error", "context window exceeded"),
+	)
+	key, message, err := ClaudeCodeLog{}.OutcomeMessage(failed)
+	require.NoError(t, err)
+	require.Equal(t, "error", key)
+	require.Equal(t, "context window exceeded", message)
+
+	// Compaction's before and after token counts are not a request's usage,
+	// so nothing reads them into the token columns.
+	done := accessorTestRecord(claudeScope, "compaction",
+		accessorTestKV("success", "true"),
+		accessorTestIntKV("pre_tokens", 150_000),
+		accessorTestIntKV("post_tokens", 20_000),
+	)
+	_, input, err := ClaudeCodeLog{}.InputTokens(done)
+	require.NoError(t, err)
+	require.Zero(t, input)
+	_, output, err := ClaudeCodeLog{}.OutputTokens(done)
+	require.NoError(t, err)
+	require.Zero(t, output)
 }
