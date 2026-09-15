@@ -470,8 +470,10 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 
 			s.captureSignupTelemetry(ctx, userInfo.Email, intent.OrgName, org)
 
+			// The landing page reports the signup conversion to ad platforms;
+			// only a redirect that just created an organization carries the mark.
 			return &gen.CallbackResult{
-				Location:      s.callbackRedirectURL(ctx, payload),
+				Location:      withSignedUpParam(s.callbackRedirectURL(ctx, payload)),
 				SessionToken:  session.SessionID,
 				SessionCookie: session.SessionID,
 			}, nil
@@ -482,8 +484,10 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 			if err != nil {
 				return redirectWithError(authErrInit, err)
 			}
+			// Same signup mark as the intent branch above: this path also turns a
+			// brand-new user into an organization.
 			return &gen.CallbackResult{
-				Location:      location,
+				Location:      withSignedUpParam(location),
 				SessionToken:  session.SessionID,
 				SessionCookie: session.SessionID,
 			}, nil

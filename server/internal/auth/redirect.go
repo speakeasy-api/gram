@@ -104,3 +104,26 @@ func safeRedirectPath(raw string, allowedOrigin string) string {
 
 	return dest
 }
+
+// signedUpParam marks a post-login destination as the landing page of a
+// self-serve signup that just provisioned an organization. The dashboard reads
+// it once, reports the signup conversion to ad platforms, and strips it from
+// the URL so a reload cannot count the same signup twice.
+const signedUpParam = "signed_up"
+
+// withSignedUpParam appends signed_up=1 to a redirect location, keeping any
+// query and fragment the destination already carries. A location that does not
+// parse is returned untouched: the conversion is a best-effort signal, the
+// landing page is not.
+func withSignedUpParam(location string) string {
+	parsed, err := url.Parse(location)
+	if err != nil {
+		return location
+	}
+
+	query := parsed.Query()
+	query.Set(signedUpParam, "1")
+	parsed.RawQuery = query.Encode()
+
+	return parsed.String()
+}
