@@ -8587,7 +8587,7 @@ CREATE INDEX IF NOT EXISTS killswitch_operations_expires_at_idx ON killswitch_op
 
 -- Purpose-specific downstream registrations; interactive attachments remain separate.
 -- Tombstones retain generation so an in-flight registration cannot revive an unlink.
-CREATE UNIQUE INDEX remote_session_clients_id_issuer_key ON remote_session_clients (id, remote_session_issuer_id);
+CREATE UNIQUE INDEX IF NOT EXISTS remote_session_clients_id_issuer_key ON remote_session_clients (id, remote_session_issuer_id);
 
 CREATE TABLE IF NOT EXISTS remote_session_ema_bindings (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -8606,16 +8606,16 @@ CREATE TABLE IF NOT EXISTS remote_session_ema_bindings (
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY (id),
-  FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE SET NULL,
+  FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON UPDATE CASCADE ON DELETE SET NULL,
   FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE SET NULL,
   FOREIGN KEY (remote_session_issuer_id) REFERENCES remote_session_issuers (id) ON DELETE SET NULL,
   FOREIGN KEY (remote_session_client_id, remote_session_issuer_id) REFERENCES remote_session_clients (id, remote_session_issuer_id) ON DELETE SET NULL
 );
-CREATE UNIQUE INDEX remote_session_ema_bindings_resource_key ON remote_session_ema_bindings
+CREATE UNIQUE INDEX IF NOT EXISTS remote_session_ema_bindings_resource_key ON remote_session_ema_bindings
   (project_id, user_session_issuer_id, remote_session_issuer_id, resource);
-CREATE INDEX remote_session_ema_bindings_client_idx ON remote_session_ema_bindings (remote_session_client_id);
-CREATE INDEX remote_session_ema_bindings_issuer_idx ON remote_session_ema_bindings (remote_session_issuer_id);
-CREATE INDEX remote_session_ema_bindings_user_issuer_idx ON remote_session_ema_bindings (user_session_issuer_id);
+CREATE INDEX IF NOT EXISTS remote_session_ema_bindings_client_idx ON remote_session_ema_bindings (remote_session_client_id);
+CREATE INDEX IF NOT EXISTS remote_session_ema_bindings_issuer_idx ON remote_session_ema_bindings (remote_session_issuer_id);
+CREATE INDEX IF NOT EXISTS remote_session_ema_bindings_user_issuer_idx ON remote_session_ema_bindings (user_session_issuer_id);
 
 -- Row locks acquired by UPDATE/DELETE serialize these lifecycle guards with
 -- preparation's scoped FOR UPDATE reads, including before the first binding.
