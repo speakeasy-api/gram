@@ -4638,19 +4638,15 @@ CREATE TABLE IF NOT EXISTS workload_agent_assignments (
   -- to one organization.
   organization_id TEXT NOT NULL,
 
-  -- The workload principal is the pair (workload_issuer_id, subject), the same
-  -- identity as a workload: session subject. Keyed on that identity rather than
-  -- on an admission row: the principal is organization-scoped while admissions
-  -- are tiered by project, so withdrawing one tier's admission must not change
-  -- what the workload may do under another.
+  -- The workload principal, the same identity as a workload: session subject.
+  -- Not keyed on an admission row, because admissions are tiered by project.
   workload_issuer_id uuid NOT NULL,
   subject TEXT NOT NULL CHECK (subject <> ''),
 
   agent_id uuid NOT NULL,
 
-  -- The human who made the assignment: the workload authorizer, recorded as
-  -- approval attribution for the authority the assignment confers. Never
-  -- updated, and kept when that user leaves the organization.
+  -- The workload authorizer, the user who made the assignment. Never updated,
+  -- and kept if the user leaves the organization.
   created_by_user_id TEXT NOT NULL,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -4660,23 +4656,19 @@ CREATE TABLE IF NOT EXISTS workload_agent_assignments (
 
   CONSTRAINT workload_agent_assignments_pkey PRIMARY KEY (id),
   CONSTRAINT workload_agent_assignments_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  -- Composite rather than plain references, so an assignment naming another
-  -- organization's issuer or agent is a schema error rather than a row a
-  -- handler has to reject.
+  -- Composite so an assignment cannot name another organization's issuer or agent.
   CONSTRAINT workload_agent_assignments_workload_issuer_fkey FOREIGN KEY (organization_id, workload_issuer_id) REFERENCES workload_issuers (organization_id, id) ON DELETE CASCADE,
   CONSTRAINT workload_agent_assignments_agent_fkey FOREIGN KEY (organization_id, agent_id) REFERENCES agents (organization_id, id) ON DELETE CASCADE
 );
 
--- One live assignment per workload principal and agent, so re-assigning
--- restores rather than duplicates. Also serves listing a workload's agents,
--- which filters on the leading three columns.
+-- One live assignment per workload principal and agent. Also serves listing a
+-- workload's agents.
 CREATE UNIQUE INDEX IF NOT EXISTS workload_agent_assignments_workload_agent_key
 ON workload_agent_assignments (organization_id, workload_issuer_id, subject, agent_id)
 WHERE deleted IS FALSE;
 
--- Supports listing the workloads an agent is assigned to, and the agent
--- foreign-key cascade, which sees soft-deleted rows the partial index above
--- excludes.
+-- Serves listing an agent's workloads and the agent foreign-key cascade, which
+-- also reaches soft-deleted rows.
 CREATE INDEX IF NOT EXISTS workload_agent_assignments_agent_idx
 ON workload_agent_assignments (organization_id, agent_id);
 
