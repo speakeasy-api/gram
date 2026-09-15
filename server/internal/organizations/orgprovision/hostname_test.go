@@ -26,6 +26,7 @@ func TestNameFromHostname(t *testing.T) {
 		{"example.com.", "example.com."},
 	} {
 		t.Run(tc.hostname, func(t *testing.T) {
+			t.Parallel()
 			require.Equal(t, tc.name, orgprovision.NameFromHostname(tc.hostname))
 		})
 	}

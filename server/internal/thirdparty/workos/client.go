@@ -115,9 +115,10 @@ func NewClient(guardianPolicy *guardian.Policy, apiKey string, opts ...ClientOpt
 		orgs:       &organizations.Client{APIKey: apiKey, HTTPClient: httpClient, Endpoint: opt.Endpoint, JSONEncode: nil},
 		orgsNoRetry: &organizations.Client{APIKey: apiKey, HTTPClient: guardianPolicy.PooledClient(
 			guardian.WithResilience("workos", guardian.ResilienceConfig{
-				Partition: partitionByHostAndAPIKey(apiKey),
-				Limit:     guardian.PerMinute(6000),
-				Breaker:   guardian.NoBreaker(),
+				Partition:       partitionByHostAndAPIKey(apiKey),
+				Limit:           guardian.PerMinute(6000),
+				WaitForCapacity: false,
+				Breaker:         guardian.NoBreaker(),
 			}),
 		), Endpoint: opt.Endpoint, JSONEncode: nil},
 		um:     um,
