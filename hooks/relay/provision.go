@@ -52,13 +52,13 @@ const configFileName = "speakeasy.json"
 // receives a .pi/extensions module usable as a project directory (or copied
 // into ~/.pi/agent).
 func WritePlugin(ctx context.Context, provider, dir string, cfg PluginConfig) error {
-	if err := writeConfigFile(dir, cfg); err != nil {
-		return err
-	}
 	// Pi is rendered here rather than by agenthooks/install: it has no hook
 	// config dialect to render, only a TypeScript extension module, and the
 	// frame protocol that module speaks is this package's own.
 	if provider == "pi" {
+		if err := writeConfigFile(dir, cfg); err != nil {
+			return err
+		}
 		return writePiExtensionPackage(dir, cfg)
 	}
 
@@ -78,6 +78,11 @@ func WritePlugin(ctx context.Context, provider, dir string, cfg PluginConfig) er
 		target = install.Target{Provider: agenthooks.ProviderOpenClaw, Scope: install.ScopeProject, Dir: dir}
 	default:
 		return fmt.Errorf("unknown provider %q", provider)
+	}
+	// Written only once the provider is known, so a misspelled provider leaves
+	// no credential-bearing file behind.
+	if err := writeConfigFile(dir, cfg); err != nil {
+		return err
 	}
 	if err := install.Install(ctx, manifest(target.Provider, cfg, dir), target); err != nil {
 		return err

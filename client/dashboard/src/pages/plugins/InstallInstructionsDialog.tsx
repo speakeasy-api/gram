@@ -914,6 +914,10 @@ speakeasy-hooks install --provider=pi --dir=. --project=your-project-slug`;
           <code className="bg-muted px-1 py-0.5">
             unzip observability-pi.zip -d .pi
           </code>
+          , or for every repo:{" "}
+          <code className="bg-muted px-1 py-0.5">
+            unzip observability-pi.zip -d ~/.pi/agent
+          </code>
         </p>
         <p className="text-muted-foreground mt-2 text-xs">
           Project-local extensions load only after you trust the project, so

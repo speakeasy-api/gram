@@ -98,21 +98,47 @@ const HOOK_TIMEOUT_MS = 30_000
 // The cap bounds one frame; the relay redacts and the server stores what it
 // receives.
 const MAX_TEXT_BYTES = 32_000
+// The relay drops any line over 8 MiB without a reply, so frames stay well
+// under it. A larger one is sent as its identifying fields only, flagged
+// oversized, and the relay blocks it if it is a gate.
+const MAX_FRAME_BYTES = 4_000_000
 
 type Reply = { block?: boolean; reason?: string }
 
+// Cuts text to at most maxBytes of UTF-8 without splitting a character. Every
+// UTF-16 code unit encodes to at least one byte, so slicing first bounds the
+// encode.
+const truncateUtf8 = (text: string, maxBytes: number): string => {
+  if (maxBytes <= 0) return ""
+  const bytes = Buffer.from(text.slice(0, maxBytes), "utf8")
+  if (bytes.length <= maxBytes) return bytes.toString("utf8")
+  let end = maxBytes
+  while (end > 0 && (bytes[end] & 0xc0) === 0x80) end--
+  return bytes.subarray(0, end).toString("utf8")
+}
+
+// Each block is truncated before it is joined, so an oversized tool result is
+// never copied whole.
 const textOf = (content: unknown): string => {
-  const parts: string[] = []
-  if (typeof content === "string") parts.push(content)
+  const texts: string[] = []
+  if (typeof content === "string") texts.push(content)
   else if (Array.isArray(content)) {
     for (const block of content) {
       if (block && typeof block === "object" && (block as any).type === "text" && typeof (block as any).text === "string") {
-        parts.push((block as any).text)
+        texts.push((block as any).text)
       }
     }
   }
-  const joined = parts.join("\n")
-  return joined.length > MAX_TEXT_BYTES ? joined.slice(0, MAX_TEXT_BYTES) : joined
+  let out = ""
+  let used = 0
+  for (const text of texts) {
+    const room = MAX_TEXT_BYTES - used - (out ? 1 : 0)
+    if (room <= 0) break
+    const piece = (out ? "\n" : "") + truncateUtf8(text, room)
+    out += piece
+    used += Buffer.byteLength(piece, "utf8")
+  }
+  return out
 }
 
 const usageOf = (usage: any): Record<string, unknown> | null => {
@@ -133,28 +159,36 @@ export default function (pi: any) {
   let turnIndex = 0
   const pending = new Map<number, (reply: Reply) => void>()
 
+  const failPending = () => {
+    for (const [, resolve] of pending) resolve({})
+    pending.clear()
+  }
+
   // Pi may load extensions in invocations that never start a session, so the
   // relay is spawned on the first event rather than in this factory.
   const relay = (): ChildProcess | undefined => {
     if (stopped) return undefined
     if (child) return child
+    let proc: ChildProcess
     try {
-      child = spawn(COMMAND[0], COMMAND.slice(1), { stdio: ["pipe", "pipe", "inherit"] })
+      proc = spawn(COMMAND[0], COMMAND.slice(1), { stdio: ["pipe", "pipe", "inherit"] })
     } catch {
       stopped = true
       return undefined
     }
-    child.on("error", () => {
+    child = proc
+    // A relay that has since been replaced must not fail the requests of the
+    // one that replaced it.
+    proc.on("error", () => {
+      if (child !== proc) return
       stopped = true
-      for (const [, resolve] of pending) resolve({})
-      pending.clear()
+      failPending()
     })
-    child.on("exit", () => {
-      for (const [, resolve] of pending) resolve({})
-      pending.clear()
+    proc.on("exit", () => {
+      if (child === proc) failPending()
     })
-    if (child.stdout) {
-      createInterface({ input: child.stdout }).on("line", (line: string) => {
+    if (proc.stdout) {
+      createInterface({ input: proc.stdout }).on("line", (line: string) => {
         if (!line.trim()) return
         let reply: any
         try {
@@ -168,7 +202,20 @@ export default function (pi: any) {
         resolve(reply as Reply)
       })
     }
-    return child
+    return proc
+  }
+
+  // The relay answers frames strictly in order, so one that missed its
+  // deadline would hold every later frame behind it. Retire it; the next event
+  // spawns a fresh relay.
+  const replace = (proc: ChildProcess) => {
+    if (child !== proc) return
+    child = undefined
+    failPending()
+    try {
+      proc.stdin?.end()
+      proc.kill()
+    } catch {}
   }
 
   const session = (ctx: any): Record<string, string> => {
@@ -189,14 +236,27 @@ export default function (pi: any) {
     if (!proc || proc.exitCode !== null || !proc.stdin?.writable) return Promise.resolve({})
     const id = ++seq
     try {
-      proc.stdin.write(JSON.stringify({ seq: id, hook, session: session(ctx), input }) + "\n")
+      let line = JSON.stringify({ seq: id, hook, session: session(ctx), input })
+      if (Buffer.byteLength(line, "utf8") > MAX_FRAME_BYTES) {
+        const fields = (input ?? {}) as any
+        line = JSON.stringify({
+          seq: id,
+          hook,
+          session: session(ctx),
+          oversized: true,
+          input: { tool_call_id: fields.tool_call_id ?? "", tool_name: fields.tool_name ?? "" },
+        })
+      }
+      proc.stdin.write(line + "\n")
     } catch {
       return Promise.resolve({})
     }
     return new Promise<Reply>((resolve) => {
       pending.set(id, resolve)
       const timer = setTimeout(() => {
-        if (pending.delete(id)) resolve({})
+        if (!pending.delete(id)) return
+        resolve({})
+        replace(proc)
       }, HOOK_TIMEOUT_MS)
       // A pending hook reply must not hold the process open.
       if (typeof timer.unref === "function") timer.unref()
@@ -205,8 +265,7 @@ export default function (pi: any) {
 
   const dispose = () => {
     stopped = true
-    for (const [, resolve] of pending) resolve({})
-    pending.clear()
+    failPending()
     try {
       child?.stdin?.end()
       child?.kill()

@@ -62,6 +62,11 @@ type piFrame struct {
 	// Input is the flattened event payload. It rides onto the event as the
 	// verbatim provider payload.
 	Input json.RawMessage `json:"input"`
+
+	// Oversized marks a frame whose payload exceeded the shim's frame cap and
+	// was replaced by its identifying fields. A gated action the relay cannot
+	// see in full is blocked rather than allowed unevaluated.
+	Oversized bool `json:"oversized"`
 }
 
 // piFrameSession is the session identity the shim reads off Pi's extension
@@ -165,7 +170,12 @@ func RunPiServe(ctx context.Context, cfg Config, stdin io.Reader, stdout io.Writ
 		}
 		reply := piReply{Seq: frame.Seq, Block: false, Reason: ""}
 		if frame.Hook != piHookInitialize {
-			inventory.report(ctx, r, frame)
+			// The report precedes the tool call's verdict, so it gets the gate
+			// budget: a slow control plane must not push the verdict past the
+			// shim's deadline, where it dissolves into an allow.
+			inventoryCtx, cancel := context.WithTimeout(ctx, gateSendBudget)
+			inventory.report(inventoryCtx, r, frame)
+			cancel()
 			block, reason := r.dispatchPiFrame(ctx, frame)
 			reply.Block = block
 			reply.Reason = reason
@@ -216,7 +226,10 @@ func (r *Relay) dispatchPiFrame(ctx context.Context, frame piFrame) (bool, strin
 			Event:  piEvent(frame, agenthooks.KindPromptSubmitted),
 			Prompt: data.Text,
 		})
-		return piDecision(dec, "Speakeasy blocked this prompt.")
+		if block, reason := piDecision(dec, "Speakeasy blocked this prompt."); block || !frame.Oversized {
+			return block, reason
+		}
+		return true, "Speakeasy blocked this prompt: it is too large to evaluate against policy."
 
 	case piHookToolCall:
 		var data piToolData
@@ -229,7 +242,10 @@ func (r *Relay) dispatchPiFrame(ctx context.Context, frame piFrame) (bool, strin
 			Event: event,
 			Tool:  piToolCall(event.Session, &data),
 		})
-		return piDecision(dec, "Speakeasy blocked this tool call.")
+		if block, reason := piDecision(dec, "Speakeasy blocked this tool call."); block || !frame.Oversized {
+			return block, reason
+		}
+		return true, "Speakeasy blocked this tool call: its input is too large to evaluate against policy."
 
 	case piHookToolResult:
 		var data piToolData
@@ -494,9 +510,25 @@ type piMCPServer struct {
 	Enabled *bool    `json:"enabled"`
 }
 
+// maxPiMCPConfigBytes bounds one MCP config read. The file is read on the
+// tool-call gating path, so it must never stall or balloon the relay.
+const maxPiMCPConfigBytes = 1 << 20
+
 func readPiMCPConfig(path string) []agenthooks.MCPServer {
-	data, err := os.ReadFile(path)
+	// The project config is repository-controlled: a FIFO or a symlink to a
+	// device would block the read past the shim's deadline, turning the tool
+	// call's verdict into an allow. Only regular files are read.
+	info, err := os.Stat(path)
+	if err != nil || !info.Mode().IsRegular() || info.Size() > maxPiMCPConfigBytes {
+		return nil
+	}
+	f, err := os.Open(path)
 	if err != nil {
+		return nil
+	}
+	defer func() { _ = f.Close() }()
+	data, err := io.ReadAll(io.LimitReader(f, maxPiMCPConfigBytes+1))
+	if err != nil || len(data) > maxPiMCPConfigBytes {
 		return nil
 	}
 	var doc piMCPConfig

@@ -61,6 +61,13 @@ When plugins are published, all platform configs land in a single repo. The root
 │       ├── bootstrap.sh
 │       └── bootstrap.ps1
 │
+├── <org-slug>-observability-pi/       # Pi observability extension
+│   ├── extensions/speakeasy-observability/index.ts
+│   ├── speakeasy.json
+│   └── hooks/
+│       ├── bootstrap.sh
+│       └── bootstrap.ps1
+│
 ├── <org-slug>-observability-copilot/  # Copilot observability plugin
 │   ├── plugin.json                    # at the package root, not a vendor dir
 │   ├── speakeasy.json
@@ -420,6 +427,16 @@ OpenClaw has no marketplace track: the observability package is the only OpenCla
 
 See the [OpenClaw install runbook](../runbooks/openclaw-install.md) for the customer-facing install and the model-auth modes that determine coverage.
 
+### Pi observability
+
+Directory: `<org-slug>-observability-pi/`
+
+Pi has no hook configuration dialect and no MCP client, so the package is a TypeScript extension at `extensions/speakeasy-observability/index.ts`. Pi discovers extensions under `<config>/extensions/<name>/index.ts`, so extracting the package into `~/.pi/agent/` (all projects) or a repository's `.pi/` (that project only) installs it; project-local extensions load only after the project is trusted.
+
+The extension spawns `speakeasy-hooks pi serve` through the package's bootstrap script on the first event and forwards Pi's events as NDJSON frames. `tool_call` and `input` are gates: the relay's verdict comes back as `{ block: true, reason }` or `{ action: "handled" }`. The extension bounds each request at 30s and replaces the relay if it misses that deadline. A frame too large to send whole is reduced to its identifying fields and the relay blocks it.
+
+MCP servers reach Pi only through third-party extensions, which register them as ordinary Pi tools. The relay reads the config those extensions share (`.pi/mcp.json`, then `~/.pi/agent/mcp.json`) to report inventory and attribute tool calls by name.
+
 ### Copilot marketplace manifest
 
 Path: **`marketplace.json` at the repo root** — not a vendor subdirectory.
@@ -474,4 +491,4 @@ The auto-generated `README.md` contains:
 
 `downloadPluginPackage` returns a ZIP containing only the files for one plugin on one platform. Native ZIPs mirror their platform package layout. The `agent-plugin` platform returns a credential-free Agent Plugins 1.0 package rooted at `plugin.json`.
 
-`downloadObservabilityPlugin` returns the observability ZIP for a single platform — `claude`, `cursor`, `codex`, `opencode` or `copilot` — minting a fresh hooks-scoped API key each time. The ZIP is rooted at the package files themselves (no per-platform subdirectory), so `copilot --plugin-dir <extracted>` works directly.
+`downloadObservabilityPlugin` returns the observability ZIP for a single platform — `claude`, `cursor`, `codex`, `opencode`, `openclaw`, `pi` or `copilot` — minting a fresh hooks-scoped API key each time. The ZIP is rooted at the package files themselves (no per-platform subdirectory), so `copilot --plugin-dir <extracted>` works directly.

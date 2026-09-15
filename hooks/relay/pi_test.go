@@ -273,6 +273,32 @@ func TestPiUnknownHookIsIgnored(t *testing.T) {
 	require.Equal(t, 0, fs.count())
 }
 
+// A gated action the shim could not send whole must not be allowed
+// unevaluated, even when the server would have allowed what it saw.
+func TestPiOversizedGatedFramesBlock(t *testing.T) {
+	fs := newFakeServer(t, nil)
+	oversized := func(seq int64, hook string, input map[string]any) string {
+		var frame map[string]any
+		require.NoError(t, json.Unmarshal([]byte(piFrameJSON(t, seq, hook, t.TempDir(), input)), &frame))
+		frame["oversized"] = true
+		b, err := json.Marshal(frame)
+		require.NoError(t, err)
+		return string(b)
+	}
+	replies := piServe(t, authedConfig(t, fs.URL),
+		oversized(1, piHookToolCall, map[string]any{"tool_call_id": "call-1", "tool_name": "bash"}),
+		oversized(2, piHookInput, map[string]any{"tool_call_id": "", "tool_name": ""}),
+		oversized(3, piHookToolResult, map[string]any{"tool_call_id": "call-1", "tool_name": "bash"}),
+	)
+
+	require.Len(t, replies, 3)
+	require.True(t, replies[0].Block)
+	require.Contains(t, replies[0].Reason, "too large")
+	require.True(t, replies[1].Block)
+	require.Contains(t, replies[1].Reason, "too large")
+	require.False(t, replies[2].Block)
+}
+
 // The initialize frame only starts the relay; it carries no event.
 func TestPiInitializeFrameReportsNothing(t *testing.T) {
 	fs := newFakeServer(t, nil)
@@ -454,6 +480,23 @@ func TestPiMCPConfigSkipsDisabledServers(t *testing.T) {
 	require.Equal(t, "internal", servers[0].Name)
 }
 
+// The project config is repository-controlled and read on the gating path, so
+// anything but a bounded regular file is ignored rather than read.
+func TestPiMCPConfigIgnoresNonRegularAndOversizedFiles(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", t.TempDir())
+
+	notAFile := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(notAFile, ".pi", "mcp.json"), 0o755))
+	require.Empty(t, loadPiMCPServers(notAFile))
+
+	oversized := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(oversized, ".pi"), 0o755))
+	body := `{"mcpServers":{"linear":{"url":"https://mcp.example.com/sse"}}}` + strings.Repeat(" ", maxPiMCPConfigBytes)
+	require.NoError(t, os.WriteFile(filepath.Join(oversized, ".pi", "mcp.json"), []byte(body), 0o600))
+	require.Empty(t, loadPiMCPServers(oversized))
+}
+
 // Project entries win over global ones of the same name, matching the
 // precedence Pi applies to its own project-local configuration.
 func TestPiMCPConfigProjectOverridesGlobal(t *testing.T) {
@@ -509,4 +552,31 @@ func TestRenderPiExtensionForBootstrapResolvesPackageRelativePaths(t *testing.T)
 	require.Contains(t, body, `join(ROOT, "hooks", "bootstrap.ps1")`)
 	require.Contains(t, body, `"pi","serve"`)
 	require.NotContains(t, body, piExtensionCommandMarker)
+}
+
+// The shim's side of the oversized-frame contract: it must flag the frame the
+// relay then blocks, and retire a relay that missed its deadline.
+func TestRenderPiExtensionBoundsFramesAndReplacesStalledRelay(t *testing.T) {
+	body := string(RenderPiExtensionForBootstrap())
+
+	require.Contains(t, body, "oversized: true")
+	require.Contains(t, body, "MAX_FRAME_BYTES")
+	require.Contains(t, body, "replace(proc)")
+}
+
+func TestWritePluginUnknownProviderWritesNothing(t *testing.T) {
+	dir := t.TempDir()
+	err := WritePlugin(t.Context(), "pie", dir, PluginConfig{
+		ServerURL:    "https://gram.test",
+		ProjectSlug:  "default",
+		OrgID:        "org-1",
+		HooksAPIKey:  "shared-key",
+		BrowserLogin: false,
+		BinaryPath:   "/tmp/speakeasy-hooks",
+	})
+	require.ErrorContains(t, err, "unknown provider")
+
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	require.Empty(t, entries)
 }
