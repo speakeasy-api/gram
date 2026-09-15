@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
+	"github.com/speakeasy-api/gram/server/internal/riskscan"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 )
@@ -476,7 +477,9 @@ func (s *Service) callPlatformToolsetTool(
 		})
 	}()
 
-	if err := s.toolProxy.Do(ctx, rw, bytes.NewReader(requestBodyBytes), toolCallEnv, plan, logAttrs); err != nil {
+	if err := s.toolProxy.Do(ctx, rw, bytes.NewReader(requestBodyBytes), toolCallEnv, plan, logAttrs, riskscan.Target{
+		Surface: riskscan.SurfacePlatformMCP, ServerID: "", ToolsetID: "",
+	}); err != nil {
 		failure := platformToolCallError(ctx, logger, err, attr.SlogToolName(params.Name))
 		recordToolCallErrorStatus(ctx, rw, failure)
 		return nil, failure

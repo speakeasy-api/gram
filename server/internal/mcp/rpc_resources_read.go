@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
+	"github.com/speakeasy-api/gram/server/internal/riskscan"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
@@ -202,6 +203,10 @@ func handleResourcesRead(
 		telemLogger.Log(ctx, params)
 	}()
 
+	target := riskscan.Target{Surface: riskscan.SurfaceResourceRead, ServerID: "", ToolsetID: toolset.ID}
+	if payload.mcpServerID != nil {
+		target.ServerID = payload.mcpServerID.String()
+	}
 	err = toolProxy.ReadResource(ctx, rw, strings.NewReader("{}"), toolconfig.ToolCallEnv{
 		UserConfig: userConfig,
 		SystemEnv:  systemConfig,
@@ -212,7 +217,7 @@ func handleResourcesRead(
 		// carries no caller identity, and the functions SDK exposes none on a
 		// resource handler.
 		MCPClient: toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: ""},
-	}, plan, logAttrs)
+	}, plan, logAttrs, target)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to execute resource call").LogError(ctx, logger)
 	}

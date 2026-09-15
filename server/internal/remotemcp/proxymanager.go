@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/interceptors"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/riskscan"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/toolcallobserver"
@@ -67,6 +68,7 @@ type ProxyManager struct {
 	authz          *authz.Engine
 	posthog        *posthog.Posthog
 	telemLogger    *tm.Logger
+	riskScan       riskscan.Hook
 
 	proxyMetrics         *proxy.Metrics
 	mcpMetrics           *ProxyMetrics
@@ -124,6 +126,7 @@ func NewProxyManager(
 		authz:                                 authzEngine,
 		posthog:                               posthogClient,
 		telemLogger:                           telemLogger,
+		riskScan:                              riskscan.NewNoop(tracerProvider),
 		proxyMetrics:                          proxy.NewMetrics(meter, logger),
 		mcpMetrics:                            mcpMetrics,
 		identityCoverage:                      mcptoolexecution.NewIdentityCoverageCheckpoint(db, mcpMetrics),
@@ -283,6 +286,20 @@ func (f *ProxyManager) BuildTarget(
 		toolsCallReqInterceptors = append(toolsCallReqInterceptors, selectionInterceptor)
 		toolsListRespInterceptors = append(toolsListRespInterceptors, selectionInterceptor)
 	}
+	toolsCallReqInterceptors = append(toolsCallReqInterceptors, &toolsCallRiskScanInterceptor{
+		hook: f.riskScan,
+		event: riskscan.Event{
+			Surface:        riskscan.SurfaceRemoteMCP,
+			OrganizationID: organizationID,
+			ProjectID:      projectID,
+			ServerID:       identity.McpServerID,
+			ToolsetID:      "",
+			ToolName:       "",
+			ResourceURI:    "",
+			PromptName:     "",
+			Phase:          riskscan.PhaseBeforeExecution,
+		},
+	})
 
 	// Resources request chain: free-tier ToolCalls usage limits apply to
 	// resources/read invocations alongside tools/call. Per-resource RBAC

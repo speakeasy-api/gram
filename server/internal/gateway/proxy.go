@@ -37,6 +37,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/riskscan"
 	"github.com/speakeasy-api/gram/server/internal/serialization"
 )
 
@@ -127,6 +128,7 @@ type ToolProxy struct {
 	policy        *guardian.Policy
 	functions     functions.ToolCaller
 	platformTools PlatformExecutor
+	riskScan      riskscan.Hook
 }
 
 func NewToolProxy(
@@ -139,6 +141,7 @@ func NewToolProxy(
 	policy *guardian.Policy,
 	funcCaller functions.ToolCaller,
 	platformTools PlatformExecutor,
+	riskScan riskscan.Hook,
 ) *ToolProxy {
 	tracer := tracerProivder.Tracer("github.com/speakeasy-api/gram/server/internal/gateway")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/gateway")
@@ -153,6 +156,7 @@ func NewToolProxy(
 		policy:        policy,
 		functions:     funcCaller,
 		platformTools: platformTools,
+		riskScan:      riskScan,
 	}
 }
 
@@ -163,6 +167,7 @@ func (tp *ToolProxy) Do(
 	env toolconfig.ToolCallEnv,
 	plan *ToolCallPlan,
 	attrs tm.HTTPLogAttributes,
+	target riskscan.Target,
 ) (err error) {
 	ctx, span := tp.tracer.Start(ctx, "gateway.toolCall", trace.WithAttributes(
 		attr.ToolName(plan.Descriptor.Name),
@@ -193,6 +198,23 @@ func (tp *ToolProxy) Do(
 		attr.SlogToolName(plan.Descriptor.Name),
 		attr.SlogToolCallSource(string(tp.source)),
 	)
+
+	toolName := plan.Descriptor.Name
+	if plan.Kind == ToolKindExternalMCP {
+		toolName = plan.ExternalMCP.ToolName
+	}
+
+	tp.riskScan.Scan(ctx, riskscan.Event{
+		Surface:        target.Surface,
+		OrganizationID: plan.Descriptor.OrganizationID,
+		ProjectID:      plan.Descriptor.ProjectID,
+		ServerID:       target.ServerID,
+		ToolsetID:      target.ToolsetID,
+		ToolName:       toolName,
+		ResourceURI:    "",
+		PromptName:     "",
+		Phase:          riskscan.PhaseBeforeExecution,
+	})
 
 	switch plan.Kind {
 	case "":

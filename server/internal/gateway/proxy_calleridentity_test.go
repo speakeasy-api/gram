@@ -12,6 +12,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/riskscan"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
@@ -59,6 +60,7 @@ func callFunctionToolWithClient(t *testing.T, client toolconfig.MCPClientIdentit
 			onRequest: func(req functions.RunnerToolCallRequest) { captured = req.Meta },
 		},
 		nil,
+		riskscan.NewNoop(tracerProvider),
 	)
 
 	bodyBytes, err := json.Marshal(ToolCallBody{
@@ -79,7 +81,7 @@ func callFunctionToolWithClient(t *testing.T, client toolconfig.MCPClientIdentit
 		GramEmail:  "",
 		GramChatID: "",
 		MCPClient:  client,
-	}, toolCallPlan, tm.HTTPLogAttributes{})
+	}, toolCallPlan, tm.HTTPLogAttributes{}, riskscan.Target{Surface: riskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
 	require.NoError(t, err)
 
 	return captured

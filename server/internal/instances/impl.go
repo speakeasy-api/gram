@@ -52,6 +52,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/riskscan"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 )
@@ -123,6 +124,7 @@ func NewService(
 			guardianPolicy,
 			funcCaller,
 			platformTools,
+			riskscan.NewNoop(traceProvider),
 		),
 		toolsetCache:      cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
 		telemLogger:       telemLogger,
@@ -371,6 +373,10 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 
 	interceptor := newResponseInterceptor(w)
 
+	target := riskscan.Target{Surface: riskscan.SurfaceInstances, ServerID: "", ToolsetID: ""}
+	if toolset != nil {
+		target.ToolsetID = toolset.ID
+	}
 	err = s.toolProxy.Do(ctx, interceptor, requestBody, toolconfig.ToolCallEnv{
 		SystemEnv:  systemConfig,
 		UserConfig: ciEnv,
@@ -379,7 +385,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		GramChatID: "",
 		// Direct invocation — there is no MCP client on the other end.
 		MCPClient: toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: ""},
-	}, plan, attrRecorder)
+	}, plan, attrRecorder, target)
 	if err != nil {
 		return fmt.Errorf("failed to proxy tool call: %w", err)
 	}

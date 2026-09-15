@@ -39,6 +39,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/riskscan"
 )
 
 // metaMemberUpstreamProtocolVersion is the version the meta MCP speaks to
@@ -609,6 +610,18 @@ func (s *Service) executeProxiedMemberTool(
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "dial meta MCP member").LogError(ctx, logger)
 	}
+
+	s.riskScan.Scan(ctx, riskscan.Event{
+		Surface:        riskscan.SurfaceMetaMCP,
+		OrganizationID: gate.organizationID,
+		ProjectID:      gate.projectID.String(),
+		ServerID:       member.serverID.String(),
+		ToolsetID:      "",
+		ToolName:       toolName,
+		ResourceURI:    "",
+		PromptName:     "",
+		Phase:          riskscan.PhaseBeforeExecution,
+	})
 
 	// The caller's _meta stays on our side of the wire: WireMeta is a lossy
 	// observability parse (re-serializing it emits empty/null fields that
