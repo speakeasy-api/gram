@@ -42,7 +42,7 @@ func TestAcquireTokenSignsPrivateKeyJWTAndCachesByConnectionAndKey(t *testing.T)
 	var requests atomic.Int64
 	var endpoint string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requests.Add(1)
+		requestNumber := requests.Add(1)
 		if err := r.ParseForm(); err != nil {
 			validation <- err
 			http.Error(w, "invalid form", http.StatusBadRequest)
@@ -77,7 +77,7 @@ func TestAcquireTokenSignsPrivateKeyJWTAndCachesByConnectionAndKey(t *testing.T)
 		}
 		validation <- nil
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"access_token":"test-access-token","expires_in":3600,"scope":"scope.one scope.two"}`))
+		_, _ = fmt.Fprintf(w, `{"access_token":"test-access-token-%d","expires_in":3600,"scope":"scope.one scope.two"}`, requestNumber)
 	}))
 	t.Cleanup(server.Close)
 	endpoint = server.URL
@@ -97,7 +97,19 @@ func TestAcquireTokenSignsPrivateKeyJWTAndCachesByConnectionAndKey(t *testing.T)
 	second, err := client.AcquireToken(t.Context(), request)
 	require.NoError(t, err)
 	require.Equal(t, first, second)
-	require.Equal(t, int64(1), requests.Load())
+	fresh, err := client.AcquireFreshToken(t.Context(), request)
+	require.NoError(t, err)
+	require.NoError(t, <-validation)
+	require.NotEqual(t, first.AccessToken, fresh.AccessToken)
+	require.Equal(t, int64(2), requests.Load())
+	replacement, err := client.AcquireToken(t.Context(), request)
+	require.NoError(t, err)
+	require.Equal(t, fresh, replacement)
+	client.InvalidateToken(connectionID)
+	_, err = client.AcquireToken(t.Context(), request)
+	require.NoError(t, err)
+	require.NoError(t, <-validation)
+	require.Equal(t, int64(3), requests.Load())
 }
 
 func TestAcquireTokenAdaptsToDPoPAndRetriesTokenAndResourceNonces(t *testing.T) {

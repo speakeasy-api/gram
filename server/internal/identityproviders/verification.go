@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	gen "github.com/speakeasy-api/gram/server/gen/identity_providers"
@@ -49,6 +50,8 @@ var requiredOktaReadScopes = []string{
 // OktaClient is the provider boundary used by identity provider verification.
 type OktaClient interface {
 	AcquireToken(context.Context, okta.TokenRequest) (okta.Token, error)
+	AcquireFreshToken(context.Context, okta.TokenRequest) (okta.Token, error)
+	InvalidateToken(uuid.UUID)
 	ListGroups(context.Context, string, string, okta.PageRequest) (okta.Page, error)
 	ListUsers(context.Context, string, string, okta.PageRequest) (okta.Page, error)
 	ListApplications(context.Context, string, string, okta.PageRequest) (okta.Page, error)
@@ -133,7 +136,7 @@ func (s *Service) VerifySetupStep(ctx context.Context, payload *gen.VerifySetupS
 
 	tenantDomain := normalizeOktaDomain(before.TenantIdentifier)
 	checkedAt := time.Now().UTC()
-	token, tokenErr := s.okta.AcquireToken(ctx, okta.TokenRequest{
+	token, tokenErr := s.okta.AcquireFreshToken(ctx, okta.TokenRequest{
 		ConnectionID: before.ID,
 		TenantDomain: tenantDomain,
 		ClientID:     before.ClientID.String,
@@ -142,7 +145,7 @@ func (s *Service) VerifySetupStep(ctx context.Context, payload *gen.VerifySetupS
 		Scopes:       append([]string(nil), requiredOktaScopes...),
 	})
 	if apiErr, ok := errors.AsType[*okta.APIError](tokenErr); ok && apiErr.Code == "invalid_scope" {
-		token, tokenErr = s.okta.AcquireToken(ctx, okta.TokenRequest{
+		token, tokenErr = s.okta.AcquireFreshToken(ctx, okta.TokenRequest{
 			ConnectionID: before.ID,
 			TenantDomain: tenantDomain,
 			ClientID:     before.ClientID.String,
@@ -226,6 +229,9 @@ func (s *Service) VerifySetupStep(ctx context.Context, payload *gen.VerifySetupS
 	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error saving identity provider verification").LogError(ctx, logger)
+	}
+	if tokenErr != nil || result.Outcome == "capability_missing" {
+		s.okta.InvalidateToken(before.ID)
 	}
 	return result, nil
 }

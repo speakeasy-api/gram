@@ -29,21 +29,22 @@ import (
 )
 
 const (
-	fakeOktaPassed       = "passed"
-	fakeOktaRefused      = "refused"
-	fakeOktaUnavailable  = "unavailable"
-	fakeOktaAppsBlocked  = "apps_blocked"
-	fakeOktaManageDenied = "manage_scope_denied"
-	fakeOktaAppInactive  = "sign_in_app_inactive"
-	fakeOktaAppForbidden = "sign_in_app_forbidden"
-	fakeOktaAppRefused   = "sign_in_app_refused"
-	fakeOktaAssignFails  = "sign_in_assignment_fails"
-	testAccessToken      = "test-access-token"
-	testClientID         = "test-client-id"
-	testSignInAppID      = "app-example"
-	testSignInClientID   = "public-client-example"
-	testEveryoneGroupID  = "group-everyone"
-	testFakeClientSecret = "FAKE_SECRET_SENTINEL_DO_NOT_USE"
+	fakeOktaPassed        = "passed"
+	fakeOktaRefused       = "refused"
+	fakeOktaUnavailable   = "unavailable"
+	fakeOktaAppsBlocked   = "apps_blocked"
+	fakeOktaManageDenied  = "manage_scope_denied"
+	fakeOktaManageOmitted = "manage_scope_omitted"
+	fakeOktaAppInactive   = "sign_in_app_inactive"
+	fakeOktaAppForbidden  = "sign_in_app_forbidden"
+	fakeOktaAppRefused    = "sign_in_app_refused"
+	fakeOktaAssignFails   = "sign_in_assignment_fails"
+	testAccessToken       = "test-access-token"
+	testClientID          = "test-client-id"
+	testSignInAppID       = "app-example"
+	testSignInClientID    = "public-client-example"
+	testEveryoneGroupID   = "group-everyone"
+	testFakeClientSecret  = "FAKE_SECRET_SENTINEL_DO_NOT_USE"
 )
 
 type fakeOktaServer struct {
@@ -120,6 +121,25 @@ func TestVerifySetupStepPassesAndPersistsEvidence(t *testing.T) {
 	getResult, err := ti.service.Get(ctx, &gen.GetPayload{SessionToken: nil, ApikeyToken: nil})
 	require.NoError(t, err)
 	require.Equal(t, result.Evidence, getResult.Connection.VerifyEvidence)
+}
+
+func TestVerifySetupStepMintsFreshTokenAfterScopeGrantChanges(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeOktaServer(t, fakeOktaManageOmitted)
+	ctx, ti := newTestServiceWithOktaEndpoint(t, fake.server.URL)
+	prepareConnectionForVerification(t, ctx, ti, fake)
+
+	first, err := ti.service.VerifySetupStep(ctx, &gen.VerifySetupStepPayload{StepKey: "connect", SessionToken: nil, ApikeyToken: nil})
+	require.NoError(t, err)
+	require.Equal(t, "passed", first.Outcome)
+	require.NotContains(t, first.Capabilities, "sign_in_provisioning")
+
+	fake.SetMode(fakeOktaPassed)
+	second, err := ti.service.VerifySetupStep(ctx, &gen.VerifySetupStepPayload{StepKey: "connect", SessionToken: nil, ApikeyToken: nil})
+	require.NoError(t, err)
+	require.Equal(t, "passed", second.Outcome)
+	require.Contains(t, second.Capabilities, "sign_in_provisioning")
 }
 
 func TestVerifySetupStepPersistsInvalidClientRefusal(t *testing.T) {
@@ -645,8 +665,12 @@ func (f *fakeOktaServer) handleToken(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"error":"invalid_scope","error_description":"The requested scope is not granted"}`))
 		return
 	}
+	grantedScopes := requestedScopes
+	if mode == fakeOktaManageOmitted {
+		grantedScopes = readScopes
+	}
 	w.Header().Set("Content-Type", "application/json")
-	_, _ = w.Write([]byte(`{"access_token":"` + testAccessToken + `","expires_in":3600,"scope":"` + requestedScopes + `"}`))
+	_, _ = w.Write([]byte(`{"access_token":"` + testAccessToken + `","expires_in":3600,"scope":"` + grantedScopes + `"}`))
 }
 
 func (f *fakeOktaServer) handleApplications(w http.ResponseWriter, r *http.Request) {

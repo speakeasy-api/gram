@@ -335,6 +335,23 @@ func (c *Client) AcquireToken(ctx context.Context, request TokenRequest) (Token,
 	return cloneToken(token), nil
 }
 
+// AcquireFreshToken bypasses the token cache and replaces it after a successful exchange.
+func (c *Client) AcquireFreshToken(ctx context.Context, request TokenRequest) (Token, error) {
+	c.InvalidateToken(request.ConnectionID)
+	return c.acquireToken(ctx, request)
+}
+
+// InvalidateToken removes cached tokens for a connection.
+func (c *Client) InvalidateToken(connectionID uuid.UUID) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for key := range c.tokens {
+		if key.connectionID == connectionID {
+			delete(c.tokens, key)
+		}
+	}
+}
+
 func (c *Client) cachedToken(key cacheKey, request TokenRequest) (Token, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
