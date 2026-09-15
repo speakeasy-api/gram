@@ -143,6 +143,15 @@ func (a *LiveOrgAdminAuthorizer) AuthorizeExternalCall(ctx context.Context, prin
 	}
 	var check authz.Check
 	switch policy {
+	case ExternalAuthorizationMember:
+		enforce, err := a.engine.ShouldEnforce(ctx)
+		if err != nil || !enforce {
+			return ErrUnavailable
+		}
+		if _, ok := authz.GrantsFromContext(ctx); !ok {
+			return ErrUnavailable
+		}
+		return nil
 	case ExternalAuthorizationOrgAdmin:
 		check = authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: principal.OrganizationID, Dimensions: nil}
 	default:

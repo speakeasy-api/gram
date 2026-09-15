@@ -17,6 +17,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -33,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // The skills lane is only as good as its slowest-moving joint: a Platform MCP
@@ -206,8 +208,57 @@ func TestPlatformMCPSkillsToolsRefuseReadablyWhenTheCapabilityIsOff(t *testing.T
 }
 
 // Authorization is the acting user's, not the surface's. A connection whose
-// user holds no role in an RBAC-enabled organization reaches Postgres and is
-// refused there, rather than being trusted because it authenticated.
+// user only holds skill:read can inspect existing skills but cannot author one.
+func TestPlatformMCPSkillReadsAllowSkillReaderButWritesStillRequireAdmin(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	fixture := newSkillsVerticalFixture(t, ctx, "platform_mcp_skills_reader", skillsVerticalOptions{capabilityEnabled: true, grantSkillRead: true})
+	manifest := skillsFixtureManifest("reader-visible", "Visible to a permitted reader.", "Read-only body.")
+	queries := skillsrepo.New(fixture.conn)
+	skill, err := queries.CreateSkill(ctx, skillsrepo.CreateSkillParams{
+		ProjectID:   fixture.project.ID,
+		Name:        "reader-visible",
+		DisplayName: "Reader visible",
+		Summary:     pgtype.Text{String: "Visible to a permitted reader.", Valid: true},
+	})
+	require.NoError(t, err)
+	version, err := queries.CreateSkillVersion(ctx, skillsrepo.CreateSkillVersionParams{
+		Content:          manifest,
+		CanonicalSha256:  uuid.NewString(),
+		RawSha256:        uuid.NewString(),
+		Description:      pgtype.Text{String: "Visible to a permitted reader.", Valid: true},
+		Metadata:         []byte(`{}`),
+		SpecValid:        true,
+		ValidationErrors: []byte(`[]`),
+		CreatedByUserID:  fixture.principal.UserID,
+		ProjectID:        fixture.project.ID,
+		SkillID:          skill.ID,
+	})
+	require.NoError(t, err)
+
+	result := callSkillsTool[ListSkillsOutput](t, ctx, fixture.session, "list_skills", map[string]any{
+		"project_slug": fixture.project.Slug,
+	})
+	require.Len(t, result.Skills, 1)
+	require.Equal(t, skill.ID.String(), result.Skills[0].ID)
+	require.Equal(t, version.ID.String(), result.Skills[0].LatestVersionID)
+
+	read := callSkillsTool[GetSkillOutput](t, ctx, fixture.session, "get_skill", map[string]any{
+		"project_slug":    fixture.project.Slug,
+		"skill_id":        skill.ID.String(),
+		"include_content": true,
+	})
+	require.Equal(t, skill.ID.String(), read.Skill.ID)
+	require.Equal(t, manifest, read.LatestVersion.Content)
+
+	refusal := callSkillsRefusal(t, ctx, fixture.session, "create_skill", map[string]any{
+		"project_slug": fixture.project.Slug,
+		"content":      skillsFixtureManifest("reader-write", "Must remain admin-only in this PR.", "Body."),
+	})
+	require.Equal(t, "permission_denied", refusal.Code)
+}
+
 func TestPlatformMCPSkillsToolsRefuseAUserWithoutGrants(t *testing.T) {
 	t.Parallel()
 
@@ -246,7 +297,8 @@ type skillsVerticalOptions struct {
 	capabilityEnabled bool
 	// grantAdmin gives the acting user real organization-admin grants. Off, the
 	// call travels the whole path and is refused by RBAC at the end of it.
-	grantAdmin bool
+	grantAdmin     bool
+	grantSkillRead bool
 }
 
 func newSkillsVerticalFixture(t *testing.T, ctx context.Context, name string, options skillsVerticalOptions) *skillsVerticalFixture {
@@ -301,6 +353,17 @@ func newSkillsVerticalFixture(t *testing.T, ctx context.Context, name string, op
 		// assigning one is what makes this "authenticated but unauthorized"
 		// rather than an organization that predates RBAC.
 		require.NoError(t, authz.SeedSystemRoleGrants(ctx, conn, principal.OrganizationID))
+		if options.grantSkillRead {
+			selector, marshalErr := authz.NewSelector(authz.ScopeSkillRead, project.ID.String()).MarshalJSON()
+			require.NoError(t, marshalErr)
+			_, grantErr := accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
+				OrganizationID: principal.OrganizationID,
+				PrincipalUrn:   urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID),
+				Scope:          string(authz.ScopeSkillRead),
+				Selectors:      selector,
+			})
+			require.NoError(t, grantErr)
+		}
 	}
 
 	plugins := pluginsrepo.New(conn)
@@ -342,8 +405,12 @@ func newSkillsVerticalFixture(t *testing.T, ctx context.Context, name string, op
 		OperationBudget{Connection: allow(), Organization: allow()},
 	)
 
+	runtimeAuthorizer := Authorizer(&testAuthorizer{})
+	if options.grantSkillRead {
+		runtimeAuthorizer = NewLiveOrgAdminAuthorizer(conn, authzEngine)
+	}
 	runtime := NewRuntimeWithLifecycle(
-		logger, &testAuthenticator{principal: principal}, testGate{enabled: true}, &testAuthorizer{},
+		logger, &testAuthenticator{principal: principal}, testGate{enabled: true}, runtimeAuthorizer,
 		"", "test-cursor-key", nil, nil, nil, nil, nil, nil, nil, nil, skillsSurface, nil, nil, nil, CatalogDescriptor{},
 	)
 	server := httptest.NewServer(runtime.Handler())

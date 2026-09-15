@@ -798,10 +798,23 @@ WHERE remote_mcp_server_id = @remote_mcp_server_id
   AND deleted IS FALSE
 ORDER BY id;
 
+-- name: ListPlatformMCPInventoryAuthorizationCandidates :many
+SELECT m.id, m.project_id
+FROM mcp_servers AS m
+JOIN projects AS project
+  ON project.id = m.project_id
+ AND project.organization_id = @organization_id
+ AND project.deleted IS FALSE
+WHERE m.deleted IS FALSE
+ORDER BY m.id;
+
 -- name: ListPlatformMCPInventory :many
 -- One bounded, tenant-qualified inventory projection for every Platform MCP
--- read surface. It reads persisted readiness/distribution state only; it never
--- contacts a remote MCP or provider.
+-- read surface. Callers supply the live RBAC-filtered MCP IDs so authorization
+-- is applied before LIMIT/cursor pagination. It reads persisted readiness and
+-- distribution state only; it never contacts a remote MCP or provider.
+-- skip_authorization_filter is reserved for trusted internal services whose own
+-- authorization boundary is broader than this member-facing read path.
 SELECT
     m.id AS mcp_server_id,
     m.project_id,
@@ -861,6 +874,7 @@ LEFT JOIN LATERAL (
     LIMIT 1
 ) AS readiness ON TRUE
 WHERE m.deleted IS FALSE
+  AND (@skip_authorization_filter::boolean OR m.id = ANY(@allowed_mcp_ids::uuid[]))
   AND (sqlc.narg(project_id)::uuid IS NULL OR m.project_id = sqlc.narg(project_id)::uuid)
   AND (sqlc.narg(after_mcp_id)::uuid IS NULL OR m.id > sqlc.narg(after_mcp_id)::uuid)
   AND (

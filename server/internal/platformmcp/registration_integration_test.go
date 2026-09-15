@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	platformoauth "github.com/speakeasy-api/gram/server/internal/platformmcp/oauth"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
@@ -38,6 +39,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -114,11 +116,80 @@ func TestLiveExternalAuthorizationUsesCurrentMemberGrants(t *testing.T) {
 	require.Equal(t, memberID, authCtx.UserID)
 	require.Equal(t, organizationSlug, authCtx.OrganizationSlug)
 
+	require.NoError(t, authorizer.AuthorizeExternalCall(prepared, principal, ExternalAuthorizationMember))
+	require.ErrorIs(t, authorizer.AuthorizeExternalCall(contextvalues.SetAuthContext(ctx, authCtx), principal, ExternalAuthorizationMember), ErrUnavailable)
 	err = authorizer.AuthorizeExternalCall(prepared, principal, ExternalAuthorizationOrgAdmin)
 	var denied *ExternalAuthorizationError
 	require.ErrorAs(t, err, &denied)
 	require.Equal(t, "org:admin", denied.RequiredScope)
 	require.Equal(t, "https://app.example.test/"+organizationSlug+"/request-access?resource_id="+organizationID+"&scope=org%3Aadmin", denied.RequestAccessURL)
+}
+
+func TestMemberResourceDiscoveryUsesLiveRBAC(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_member_discovery")
+	require.NoError(t, err)
+	principal, allowedProject := seedRegistrationLifecycle(t, ctx, conn)
+	seedPlatformMCPAuthorizationMember(t, ctx, conn, principal.OrganizationID, principal.UserID, authz.SystemRoleMember)
+	deniedProject, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name: "Hidden project", Slug: "hidden-" + uuid.NewString()[:8], OrganizationID: principal.OrganizationID,
+	})
+	require.NoError(t, err)
+	seedRegistrationEligibleCohort(t, ctx, conn, deniedProject.ID)
+
+	allowedInventory, err := platformrepo.New(conn).ListPlatformMCPInventoryAuthorizationCandidates(ctx, principal.OrganizationID)
+	require.NoError(t, err)
+	var allowedMCPID, deniedMCPID uuid.UUID
+	for _, candidate := range allowedInventory {
+		switch candidate.ProjectID {
+		case allowedProject.ID:
+			allowedMCPID = candidate.ID
+		case deniedProject.ID:
+			deniedMCPID = candidate.ID
+		}
+	}
+	require.NotEqual(t, uuid.Nil, allowedMCPID)
+	require.NotEqual(t, uuid.Nil, deniedMCPID)
+
+	grant := func(scope authz.Scope, selector authz.Selector) {
+		encoded, encodeErr := selector.MarshalJSON()
+		require.NoError(t, encodeErr)
+		_, grantErr := accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
+			OrganizationID: principal.OrganizationID,
+			PrincipalUrn:   urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID),
+			Scope:          string(scope),
+			Selectors:      encoded,
+		})
+		require.NoError(t, grantErr)
+	}
+	grant(authz.ScopeProjectRead, authz.NewSelector(authz.ScopeProjectRead, allowedProject.ID.String()))
+	mcpSelector := authz.NewSelector(authz.ScopeMCPRead, allowedMCPID.String())
+	mcpSelector[authz.SelectorKeyProjectID] = allowedProject.ID.String()
+	grant(authz.ScopeMCPRead, mcpSelector)
+
+	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient())
+	prepared, err := NewLiveOrgAdminAuthorizer(conn, engine).PrepareExternalContext(ctx, principal)
+	require.NoError(t, err)
+	reader := NewPostgresReader(testenv.NewLogger(t), conn).WithAuthorization(engine)
+	reader.setInventoryCursorKey("member-discovery-key")
+
+	projects, err := reader.ListProjects(prepared, principal, ListProjectsInput{})
+	require.NoError(t, err)
+	require.Equal(t, []Project{{ID: allowedProject.ID.String(), Name: allowedProject.Name, Slug: allowedProject.Slug}}, projects.Projects)
+	require.True(t, projects.Filtered)
+
+	inventory, err := reader.FindMCP(prepared, principal, FindMCPInput{Query: "cohort"})
+	require.NoError(t, err)
+	require.Len(t, inventory.MCPs, 1)
+	require.Equal(t, allowedMCPID.String(), inventory.MCPs[0].ID)
+
+	_, err = reader.GetMCP(prepared, principal, GetMCPInput{ProjectID: deniedProject.ID.String(), MCPID: deniedMCPID.String()})
+	require.Error(t, err)
+	var denied *oops.ShareableError
+	require.ErrorAs(t, err, &denied)
+	require.Equal(t, oops.CodeForbidden, denied.Code)
 }
 
 func TestLiveOrganizationSelectorAdmitsMembersWithoutOrgAdmin(t *testing.T) {
