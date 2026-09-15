@@ -494,7 +494,8 @@ func preparationClientConfigurationValid(ctx context.Context, q *repo.Queries, c
 	if client.ClientSecretExpiresAt.Valid && !client.ClientSecretExpiresAt.Time.After(time.Now()) {
 		return false
 	}
-	if method == "" || !(slices.Contains(issuer.TokenEndpointAuthMethodsSupported, method) || (method == "none" && len(issuer.TokenEndpointAuthMethodsSupported) == 0)) || ((method == "client_secret_basic" || method == "client_secret_post") && !client.ClientSecretEncrypted.Valid) || (method == "private_key_jwt" && !client.JsonWebKeySetID.Valid) {
+	authMethodSupported := slices.Contains(issuer.TokenEndpointAuthMethodsSupported, method) || (method == "none" && len(issuer.TokenEndpointAuthMethodsSupported) == 0)
+	if method == "" || !authMethodSupported || ((method == "client_secret_basic" || method == "client_secret_post") && !client.ClientSecretEncrypted.Valid) || (method == "private_key_jwt" && !client.JsonWebKeySetID.Valid) {
 		return false
 	}
 	if method == "private_key_jwt" && client.JsonWebKeySetID.Valid {
