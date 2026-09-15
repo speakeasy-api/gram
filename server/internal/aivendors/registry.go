@@ -159,11 +159,35 @@ var registry = []Product{
 		VendorKey:   "openai",
 		DisplayName: "ChatGPT Classic",
 		Category:    CategoryAssistant,
+		// Verified 2026-09 against the Homebrew cask (chatgpt-classic
+		// 1.2026.184): Classic kept com.openai.chat, the identifier the
+		// desktop app shipped under originally, while the current ChatGPT app
+		// has moved on to com.openai.codex. So the bundle id is what tells the
+		// two apart, and it is why activity can be attributed to Classic
+		// rather than merely to "ChatGPT".
+		//
+		// The process name is the main executable, which is what an installed
+		// bundle is launched as. Its helpers (ChatGPTHelper,
+		// ChatGPTCodexUpgradeHelper) are unique to Classic too, but they are
+		// implementation detail that a release can rename; the executable
+		// matching the bundle name is the stable running signal.
+		//
+		// No config dir on purpose, though Classic keeps one at
+		// ~/Library/Application Support/com.openai.chat. That path is the
+		// original desktop app's, which Classic inherited along with the
+		// bundle id, and macOS leaves it behind when an app is removed. So it
+		// reports "has ever run the original ChatGPT app", not "Classic is
+		// installed" — true for a large share of people who have since moved
+		// to the current app, which keeps its own state under
+		// com.openai.codex. The bundle id already detects the install exactly,
+		// and all the config dir would add is the app having been renamed or
+		// moved out of /Applications. That is not worth a false positive
+		// across everyone who used ChatGPT desktop before the split.
 		Signatures: Signatures{
 			BundleIDs:    []string{"com.openai.chat"},
 			Binaries:     nil,
 			ConfigDirs:   nil,
-			ProcessNames: nil,
+			ProcessNames: []string{"ChatGPT Classic"},
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"ChatGPT", "chatgpt"},
