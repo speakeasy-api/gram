@@ -50,6 +50,7 @@ import {
   type SignalGroupMode,
   type SignalSeverity,
 } from "./signals-helpers";
+import { AnalysisStatusBadge } from "./AnalysisStatusBadge";
 import { collectFindingsForRules } from "./collect-findings";
 import { SuppressFindingsDialog } from "./SuppressFindingsDialog";
 import { SuppressMenu } from "./SuppressMenu";
@@ -288,6 +289,7 @@ function WatchdogContent(): JSX.Element {
 
   const controls = (
     <span className="flex items-center gap-2">
+      <AnalysisStatusBadge />
       <TimeRangePicker
         preset={customRange ? null : dateRange}
         customRange={customRange}

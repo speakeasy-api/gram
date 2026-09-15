@@ -547,6 +547,7 @@ trackedFiles:
   src/funcs/riskRulesTest.ts: {}
   src/funcs/riskSessionQuarantinesListSessionQuarantines.ts: {}
   src/funcs/riskSessionQuarantinesReleaseSessionQuarantine.ts: {}
+  src/funcs/riskSignalsAnalysisStatus.ts: {}
   src/funcs/riskSignalsGet.ts: {}
   src/funcs/skillEfficacyGetSettings.ts: {}
   src/funcs/skillEfficacyQueryInsights.ts: {}
@@ -1390,6 +1391,7 @@ trackedFiles:
   src/models/components/retryschedulerequestbody.ts: {}
   src/models/components/revokeallremotesessionsresult.ts: {}
   src/models/components/revokesessionrequestbody.ts: {}
+  src/models/components/riskanalysisstatusresult.ts: {}
   src/models/components/riskblock.ts: {}
   src/models/components/riskcategoriesresult.ts: {}
   src/models/components/riskcategorydefinition.ts: {}
@@ -1972,6 +1974,7 @@ trackedFiles:
   src/models/operations/getremotesessionclient.ts: {}
   src/models/operations/getremotesessionissuer.ts: {}
   src/models/operations/getremotesessionissuerduplicatepreflight.ts: {}
+  src/models/operations/getriskanalysisstatus.ts: {}
   src/models/operations/getriskblock.ts: {}
   src/models/operations/getriskoverview.ts: {}
   src/models/operations/getriskpolicy.ts: {}
@@ -3063,6 +3066,8 @@ trackedFiles:
   src/react-query/revokeUserSessionClient.ts: {}
   src/react-query/revokeUserSessionConsent.ts: {}
   src/react-query/riskAcknowledgePolicyChallenge.ts: {}
+  src/react-query/riskAnalysisStatus.core.ts: {}
+  src/react-query/riskAnalysisStatus.ts: {}
   src/react-query/riskApprovePolicyBypassRequest.ts: {}
   src/react-query/riskCategories.core.ts: {}
   src/react-query/riskCategories.ts: {}
@@ -6535,6 +6540,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  getRiskAnalysisStatus:
+    speakeasy-default-get-risk-analysis-status:
+      responses:
+        "200":
+          application/json: {"state": "never"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   getRiskBlock:
     speakeasy-default-get-risk-block:
       parameters:
