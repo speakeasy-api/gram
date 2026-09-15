@@ -2,6 +2,7 @@ import type { AiScanTarget } from "@gram/client/models/components/aiscantarget.j
 import { describe, expect, it } from "vitest";
 import {
   categoryLabel,
+  clientIdFromCimdInput,
   draftFromTarget,
   draftToUpsertBody,
   emptyDraft,
@@ -9,6 +10,7 @@ import {
   signatureSummary,
   slugFromName,
   validateDraft,
+  withCategory,
 } from "./ai-scan-target-draft";
 
 const classic: AiScanTarget = {
@@ -23,8 +25,8 @@ const classic: AiScanTarget = {
   },
   gatewayClient: {
     cimdVendorKeys: [],
-    clientInfoNames: [],
     oauthClientIds: [],
+    clientInfoNames: [],
   },
   origin: "default",
   customized: false,
@@ -106,6 +108,128 @@ describe("validateDraft", () => {
     });
     expect(errors.binaries).toContain("at least one install signature");
   });
+
+  // The same shape rules the server applies to a stored client id, so a
+  // draft that passes here is not refused on save for its matchers.
+  it("holds a client id to the shape the server accepts", () => {
+    const base = draftFromTarget(classic);
+    expect(
+      validateDraft({
+        ...base,
+        oauthClientIds: ["https://client.example/oauth/client-metadata.json"],
+      }).oauthClientIds,
+    ).toBeUndefined();
+    expect(
+      validateDraft({ ...base, oauthClientIds: ["https://client.example"] })
+        .oauthClientIds,
+    ).toContain("must include a path");
+    expect(
+      validateDraft({
+        ...base,
+        oauthClientIds: ["https://client.example/a#fragment"],
+      }).oauthClientIds,
+    ).toContain("fragment");
+  });
+});
+
+describe("withCategory", () => {
+  const withMatchers = {
+    ...draftFromTarget(classic),
+    cimdVendorKeys: ["vendor"],
+    oauthClientIds: ["https://client.example/oauth/client-metadata.json"],
+    clientInfoNames: ["client"],
+  };
+
+  // The form hides the matcher fields for an open model, so matchers left
+  // behind by a switch could be neither seen nor cleared — and would block
+  // the save with an error the form has nowhere to show.
+  it("drops the gateway matchers on a switch to a kind that never calls the gateway", () => {
+    const switched = withCategory(withMatchers, "local_model");
+    expect(switched.category).toBe("local_model");
+    expect(switched.cimdVendorKeys).toEqual([]);
+    expect(switched.oauthClientIds).toEqual([]);
+    expect(switched.clientInfoNames).toEqual([]);
+    expect(validateDraft(switched)).toEqual({});
+  });
+
+  it("keeps the matchers on a switch between kinds that call the gateway", () => {
+    const switched = withCategory(withMatchers, "assistant");
+    expect(switched.category).toBe("assistant");
+    expect(switched.cimdVendorKeys).toEqual(withMatchers.cimdVendorKeys);
+    expect(switched.oauthClientIds).toEqual(withMatchers.oauthClientIds);
+    expect(switched.clientInfoNames).toEqual(withMatchers.clientInfoNames);
+  });
+});
+
+describe("clientIdFromCimdInput", () => {
+  const url = "https://client.example/oauth/client-metadata.json";
+
+  it("takes the document URL, or the document whose client_id is that URL", () => {
+    expect(clientIdFromCimdInput(` ${url} `)).toEqual({ clientId: url });
+    expect(
+      clientIdFromCimdInput(
+        JSON.stringify({ client_id: url, client_name: "Client" }),
+      ),
+    ).toEqual({ clientId: url });
+  });
+
+  it("explains what a document without a usable client_id is missing", () => {
+    expect(clientIdFromCimdInput("")).toHaveProperty("error");
+    expect(clientIdFromCimdInput("not a url")).toHaveProperty("error");
+    expect(clientIdFromCimdInput("{")).toHaveProperty("error");
+    expect(clientIdFromCimdInput("[]")).toHaveProperty("error");
+    expect(clientIdFromCimdInput("{}")).toHaveProperty("error");
+    expect(
+      clientIdFromCimdInput(
+        JSON.stringify({ client_id: "http://x.example/a" }),
+      ),
+    ).toHaveProperty("error");
+  });
+
+  // Mirrors the server's validateClientIDURLShape: every one of these is
+  // refused on save, so it is refused before it reaches the list.
+  it("refuses a client id the server would refuse", () => {
+    const refused: Array<[string, string]> = [
+      ["https://client.example", "must include a path"],
+      ["https://client.example?x=1", "must include a path"],
+      ["https:///client-metadata.json", "must include a host"],
+      ["https://user@client.example/a", "userinfo"],
+      ["https://client.example/a#fragment", "fragment"],
+      ["https://client.example/./a", '"." or ".."'],
+      ["https://client.example/a/../b", '"." or ".."'],
+      ["https://client.example/%2e%2e/a", '"." or ".."'],
+      // Go decodes the whole path before splitting it, so an encoded slash
+      // separates segments there; the client has to split the same way.
+      ["https://client.example/a%2F..%2Fb", '"." or ".."'],
+      // A C1 control, which unicode.IsControl rejects alongside the C0 range.
+      ["https://client.example/a\u0085b", "spaces"],
+      ["https://client.example/%gh", "parseable"],
+      ["https://[bad/a", "parseable"],
+    ];
+    for (const [input, problem] of refused) {
+      // Whether typed as the URL or carried by a pasted document.
+      const typed = clientIdFromCimdInput(input);
+      expect(typed, input).toHaveProperty("error");
+      expect((typed as { error: string }).error, input).toContain(problem);
+      const pasted = clientIdFromCimdInput(
+        JSON.stringify({ client_id: input }),
+      );
+      expect(pasted, input).toHaveProperty("error");
+      expect((pasted as { error: string }).error, input).toContain(problem);
+    }
+  });
+
+  it("accepts the shapes the server accepts", () => {
+    for (const input of [
+      url,
+      "https://client.example/",
+      "https://client.example/a?x=1",
+      "https://client.example:8443/a/b.json",
+      "https://client.example/a%20b/c",
+    ]) {
+      expect(clientIdFromCimdInput(input), input).toEqual({ clientId: input });
+    }
+  });
 });
 
 describe("draftToUpsertBody", () => {
@@ -128,6 +252,11 @@ describe("draftToUpsertBody", () => {
         binaries: [],
         configDirs: [],
         processNames: ["ChatGPT"],
+      },
+      gatewayClient: {
+        cimdVendorKeys: [],
+        oauthClientIds: [],
+        clientInfoNames: [],
       },
       versionPlistKey: undefined,
     });
@@ -173,7 +302,7 @@ describe("categoryLabel", () => {
   it("labels every category the editor offers", () => {
     expect(categoryLabel("harness")).toBe("Harness");
     expect(categoryLabel("assistant")).toBe("Assistant");
-    expect(categoryLabel("local_model")).toBe("Local model");
+    expect(categoryLabel("local_model")).toBe("Open model");
   });
 
   it("falls back to the raw value for an unknown category", () => {

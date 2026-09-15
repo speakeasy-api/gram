@@ -8,32 +8,39 @@ export type TargetCategory = "harness" | "assistant" | "local_model";
 
 export const TARGET_CATEGORIES: ReadonlyArray<{
   value: TargetCategory;
+  // label names one tool of this kind: a row, a select option. plural names
+  // the kind as a group heading. The two read wrong in each other's place.
   label: string;
+  plural: string;
   description: string;
 }> = [
   {
     value: "harness",
     label: "Harness",
+    plural: "Harnesses",
     description:
       "An agentic coding tool or AI IDE, such as Claude Code or Cursor.",
   },
   {
     value: "assistant",
     label: "Assistant",
+    plural: "Assistants",
     description:
-      "A general-purpose AI assistant or agent, such as Goose or Hermes.",
+      "A general-purpose AI assistant or agent, such as OpenClaw or Hermes.",
   },
   {
     value: "local_model",
-    label: "Local model",
-    description: "A local model runtime, such as Ollama or LM Studio.",
+    label: "Open model",
+    plural: "Open models",
+    description: "An open model run locally, such as Ollama or LM Studio.",
   },
 ];
 
-// The form edits the name, category, binaries, config dirs, and process
-// names. The other fields ride along from an existing target so an edit never
-// wipes them: the id is derived from the name on create and fixed afterwards,
-// and bundle ids and the plist key are only set outside the form.
+// The form edits the name, category, binaries, config dirs, process names,
+// and the gateway-client matchers. The other fields ride along from an
+// existing target so an edit never wipes them: the id is derived from the
+// name on create and fixed afterwards, and bundle ids and the plist key are
+// only set outside the form.
 export type Draft = {
   id: string;
   displayName: string;
@@ -43,11 +50,16 @@ export type Draft = {
   configDirs: string[];
   processNames: string[];
   versionPlistKey: string;
+  cimdVendorKeys: string[];
+  oauthClientIds: string[];
+  clientInfoNames: string[];
 };
 
 export type DraftErrors = Partial<Record<keyof Draft, string>>;
 
 const MAX_SIGNATURE_ENTRIES = 16;
+const MAX_GATEWAY_CLIENT_ENTRIES = 16;
+const MAX_CLIENT_ID_LENGTH = 512;
 const ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const BUNDLE_ID_PATTERN = /^[A-Za-z0-9._-]{1,128}$/;
 const BINARY_PATTERN = /^[A-Za-z0-9._-]{1,64}$/;
@@ -64,6 +76,9 @@ export function emptyDraft(): Draft {
     configDirs: [],
     processNames: [],
     versionPlistKey: "",
+    cimdVendorKeys: [],
+    oauthClientIds: [],
+    clientInfoNames: [],
   };
 }
 
@@ -82,6 +97,9 @@ export function draftFromTarget(target: AiScanTarget): Draft {
     configDirs: [...target.signatures.configDirs],
     processNames: [...target.signatures.processNames],
     versionPlistKey: target.versionPlistKey ?? "",
+    cimdVendorKeys: [...target.gatewayClient.cimdVendorKeys],
+    oauthClientIds: [...target.gatewayClient.oauthClientIds],
+    clientInfoNames: [...target.gatewayClient.clientInfoNames],
   };
 }
 
@@ -105,6 +123,16 @@ function codePoints(value: string): number {
   return Array.from(value).length;
 }
 
+// hasControlCharacter covers what Go's unicode.IsControl does on the server:
+// the C0 range, DEL and the C1 range. Scanned rather than matched in a regex,
+// which the lint rules forbid for control characters.
+function hasControlCharacter(value: string): boolean {
+  return Array.from(value).some((char) => {
+    const code = char.codePointAt(0) ?? 0;
+    return code < 0x20 || (code >= 0x7f && code <= 0x9f);
+  });
+}
+
 // normalizeConfigDir just trims what was typed. The path is taken as
 // home-relative unless it starts with /, and the device agent resolves it.
 export function normalizeConfigDir(dir: string): string {
@@ -124,6 +152,43 @@ function listProblem(
     if (problem) return problem;
   }
   return undefined;
+}
+
+function gatewayListProblem(
+  entries: string[],
+  noun: string,
+  accept: (entry: string) => string | undefined,
+): string | undefined {
+  if (entries.length > MAX_GATEWAY_CLIENT_ENTRIES) {
+    return `At most ${MAX_GATEWAY_CLIENT_ENTRIES} ${noun} are allowed`;
+  }
+  for (const entry of entries) {
+    const problem = accept(entry);
+    if (problem) return problem;
+  }
+  return undefined;
+}
+
+// callsGateway mirrors the server's aitargets.CallsGateway: which categories
+// ever reach Gram's MCP gateway, and so which ones it is meaningful to name a
+// caller for. An open model run locally never connects.
+export function callsGateway(category: TargetCategory): boolean {
+  return category === "harness" || category === "assistant";
+}
+
+// withCategory switches the kind of tool a draft describes. The gateway
+// matchers go with a switch to a kind that never calls the gateway: the form
+// hides those fields for an open model, so anything left in them could be
+// neither seen nor cleared, and the server refuses a target that carries them.
+export function withCategory(draft: Draft, category: TargetCategory): Draft {
+  if (callsGateway(category)) return { ...draft, category };
+  return {
+    ...draft,
+    category,
+    cimdVendorKeys: [],
+    oauthClientIds: [],
+    clientInfoNames: [],
+  };
 }
 
 export function validateDraft(draft: Draft): DraftErrors {
@@ -175,10 +240,130 @@ export function validateDraft(draft: Draft): DraftErrors {
       "Use an Info.plist key made of letters and digits only";
   }
 
+  // A harness and an assistant both reach Gram's MCP gateway, so both may
+  // carry matchers. An open model never does, and its draft never holds any:
+  // withCategory drops them on the switch and draftToUpsertBody sends none.
+  // There is nothing to check for it, and nowhere to show a finding, since
+  // the form hides the matcher fields for that category.
+  if (callsGateway(draft.category)) {
+    errors.oauthClientIds = gatewayListProblem(
+      draft.oauthClientIds,
+      "documents",
+      clientIdProblem,
+    );
+    errors.clientInfoNames = gatewayListProblem(
+      draft.clientInfoNames,
+      "client names",
+      (name) =>
+        codePoints(name) > 128
+          ? `"${name}" is longer than 128 characters`
+          : undefined,
+    );
+  }
+
   for (const key of Object.keys(errors) as Array<keyof Draft>) {
     if (errors[key] === undefined) delete errors[key];
   }
   return errors;
+}
+
+// clientIdProblem holds a client id to the shape the server accepts (its
+// validateClientIDURLShape), so an entry the save would refuse is turned away
+// when it is typed. Blocking is CIMD-only, and a CIMD client_id is the https
+// URL its document is served from: a bare origin, a fragment, a userinfo
+// component or a dot segment is a shape no client_id can take.
+//
+// The server stays the final gate. A malformed percent-escape in the path is
+// caught because decoding the segment throws, the way Go's url.Parse rejects
+// it; the host is judged by the URL parser.
+function clientIdProblem(id: string): string | undefined {
+  if (codePoints(id) > MAX_CLIENT_ID_LENGTH) {
+    return `"${id}" is longer than ${MAX_CLIENT_ID_LENGTH} characters`;
+  }
+  if (/\s/.test(id) || hasControlCharacter(id)) {
+    return `"${id}" must not contain spaces`;
+  }
+  if (!id.startsWith("https://")) {
+    return `"${id}" must be an https URL to a client ID metadata document`;
+  }
+  if (id.includes("#")) return `"${id}" must not contain a fragment`;
+  let rest = id.slice("https://".length);
+  const query = rest.indexOf("?");
+  if (query >= 0) rest = rest.slice(0, query);
+  const slash = rest.indexOf("/");
+  if (slash < 0) {
+    return `"${id}" must include a path; a bare origin is not a client id`;
+  }
+  const host = rest.slice(0, slash);
+  if (host === "") return `"${id}" must include a host`;
+  if (host.includes("@")) {
+    return `"${id}" must not contain a userinfo component`;
+  }
+  if (!URL.canParse(id)) return `"${id}" must be a parseable https URL`;
+  // Dot segments are judged on the decoded path, as the server does: Go's
+  // url.Parse decodes the whole path before it is split, so an encoded slash
+  // separates segments too and "a%2F.." hides nothing. The path is read from
+  // the string rather than from URL.pathname, which resolves dot segments
+  // away.
+  let decodedPath: string;
+  try {
+    decodedPath = decodeURIComponent(rest.slice(slash));
+  } catch {
+    return `"${id}" must be a parseable https URL`;
+  }
+  for (const segment of decodedPath.split("/")) {
+    if (segment === "." || segment === "..") {
+      return `"${id}" must not contain "." or ".." path segments`;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * clientIdFromCimdInput reads what someone put in the CIMD documents field and
+ * returns the client_id to store.
+ *
+ * Two shapes are accepted because both are what people have to hand: the URL
+ * the document is served from, or the document itself. They collapse to one
+ * value — draft-ietf-oauth-client-id-metadata-document requires a document's
+ * `client_id` member to equal the URL it was fetched from — so pasting the
+ * JSON is a convenience, not a second kind of matcher.
+ */
+export function clientIdFromCimdInput(
+  input: string,
+): { clientId: string } | { error: string } {
+  const trimmed = input.trim();
+  if (trimmed === "") return { error: "Enter a document URL, or paste one" };
+
+  if (!trimmed.startsWith("{")) {
+    if (!trimmed.startsWith("https://")) {
+      return {
+        error:
+          "Enter an https URL to a client ID metadata document, or paste the document itself",
+      };
+    }
+    const problem = clientIdProblem(trimmed);
+    return problem === undefined ? { clientId: trimmed } : { error: problem };
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    return { error: "That is not valid JSON" };
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    return { error: "A client ID metadata document must be a JSON object" };
+  }
+  const clientId = (parsed as { client_id?: unknown }).client_id;
+  if (typeof clientId !== "string" || !clientId.startsWith("https://")) {
+    return {
+      error:
+        "The document has no client_id member, or it is not an https URL. A document's client_id must equal the URL it is served from.",
+    };
+  }
+  const problem = clientIdProblem(clientId);
+  return problem === undefined ? { clientId } : { error: problem };
 }
 
 export function draftToUpsertBody(draft: Draft): UpsertAiScanTargetRequestBody {
@@ -193,6 +378,13 @@ export function draftToUpsertBody(draft: Draft): UpsertAiScanTargetRequestBody {
       configDirs: draft.configDirs,
       processNames: draft.processNames,
     },
+    gatewayClient: callsGateway(draft.category)
+      ? {
+          cimdVendorKeys: draft.cimdVendorKeys,
+          oauthClientIds: draft.oauthClientIds,
+          clientInfoNames: draft.clientInfoNames,
+        }
+      : { cimdVendorKeys: [], oauthClientIds: [], clientInfoNames: [] },
     versionPlistKey: plistKey === "" ? undefined : plistKey,
   };
 }
