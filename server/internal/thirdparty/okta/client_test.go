@@ -318,6 +318,74 @@ func TestListGroupsSurfacesCursorAndRateLimit(t *testing.T) {
 	require.Equal(t, resetAt, page.RateLimit.Reset.Unix())
 }
 
+func TestListApplicationAssignmentsUsesApplicationEndpoints(t *testing.T) {
+	t.Parallel()
+
+	requests := make(chan string, 2)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests <- r.URL.RequestURI()
+		if r.Header.Get("Authorization") != "Bearer test-access-token" {
+			http.Error(w, "invalid authorization", http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[{"id":"assignment-1"}]`))
+	}))
+	t.Cleanup(server.Close)
+	client := newTestClient(t, server.URL)
+
+	groups, err := client.ListApplicationGroups(t.Context(), "example.okta.com", "test-access-token", "app-123", okta.PageRequest{Limit: 200, After: "group-cursor"})
+	require.NoError(t, err)
+	require.Len(t, groups.Items, 1)
+	users, err := client.ListApplicationUsers(t.Context(), "example.okta.com", "test-access-token", "app-123", okta.PageRequest{Limit: 200, After: "user-cursor"})
+	require.NoError(t, err)
+	require.Len(t, users.Items, 1)
+	require.Equal(t, "/api/v1/apps/app-123/groups?after=group-cursor&limit=200", <-requests)
+	require.Equal(t, "/api/v1/apps/app-123/users?after=user-cursor&limit=200", <-requests)
+}
+
+func TestDecodeApplicationPrefersFirstAppLink(t *testing.T) {
+	t.Parallel()
+
+	application, err := okta.DecodeApplication(json.RawMessage(`{
+		"id":"app-123",
+		"status":"ACTIVE",
+		"label":"Example",
+		"signOnMode":"SAML_2_0",
+		"settings":{"app":{"url":"https://fallback.example.test"}},
+		"_links":{"appLinks":[{"href":"https://launch.example.test"}]}
+	}`))
+	require.NoError(t, err)
+	require.Equal(t, okta.Application{
+		ID: "app-123", Status: "ACTIVE", Label: "Example", ClientID: "", SignOnMode: "SAML_2_0", SignOnURL: "https://launch.example.test",
+	}, application)
+}
+
+func TestDecodeApplicationFallsBackToConfiguredURL(t *testing.T) {
+	t.Parallel()
+
+	application, err := okta.DecodeApplication(json.RawMessage(`{
+		"id":"app-123",
+		"label":"Example",
+		"settings":{"app":{"url":"https://fallback.example.test"}}
+	}`))
+	require.NoError(t, err)
+	require.Equal(t, "https://fallback.example.test", application.SignOnURL)
+}
+
+func TestIsDirectApplicationUserUsesAssignmentScope(t *testing.T) {
+	t.Parallel()
+
+	direct, err := okta.IsDirectApplicationUser(json.RawMessage(`{"id":"user-1","scope":"USER"}`))
+	require.NoError(t, err)
+	require.True(t, direct)
+	direct, err = okta.IsDirectApplicationUser(json.RawMessage(`{"id":"user-2","scope":"GROUP"}`))
+	require.NoError(t, err)
+	require.False(t, direct)
+	_, err = okta.IsDirectApplicationUser(json.RawMessage(`{"id":"user-3"}`))
+	require.ErrorContains(t, err, "unexpected scope")
+}
+
 func TestAcquireTokenReturnsTypedOktaError(t *testing.T) {
 	t.Parallel()
 
@@ -712,7 +780,7 @@ func TestCreateOIDCApplicationSendsExactPayloadAndDropsResponseSecret(t *testing
 		ClientSecret: "caller-minted-secret",
 	})
 	require.NoError(t, err)
-	require.Equal(t, okta.Application{ID: "app-1", Status: "ACTIVE", Label: "Speakeasy sign-in", ClientID: "client-1"}, app)
+	require.Equal(t, okta.Application{ID: "app-1", Status: "ACTIVE", Label: "Speakeasy sign-in", ClientID: "client-1", SignOnMode: "", SignOnURL: ""}, app)
 
 	request := <-requests
 	require.Equal(t, http.MethodPost, request.Method)
@@ -757,7 +825,7 @@ func TestFindActiveApplicationByLabelReturnsTransientSecret(t *testing.T) {
 	app, secret, found, err := newTestClient(t, server.URL).FindActiveApplicationByLabel(t.Context(), "example.okta.com", "test-access-token", okta.SignInApplicationLabel)
 	require.NoError(t, err)
 	require.True(t, found)
-	require.Equal(t, okta.Application{ID: "active-app", Status: "ACTIVE", Label: "Speakeasy sign-in", ClientID: "active-client"}, app)
+	require.Equal(t, okta.Application{ID: "active-app", Status: "ACTIVE", Label: "Speakeasy sign-in", ClientID: "active-client", SignOnMode: "", SignOnURL: ""}, app)
 	require.Equal(t, "active-secret", secret)
 	require.NotContains(t, fmt.Sprintf("%+v", app), secret)
 }
@@ -798,7 +866,7 @@ func TestGetApplicationReturnsOnlyNonSecretFields(t *testing.T) {
 
 	app, err := newTestClient(t, server.URL).GetApplication(t.Context(), "example.okta.com", "test-access-token", "app-123")
 	require.NoError(t, err)
-	require.Equal(t, okta.Application{ID: "app-123", Status: "INACTIVE", Label: "Speakeasy", ClientID: "client-123"}, app)
+	require.Equal(t, okta.Application{ID: "app-123", Status: "INACTIVE", Label: "Speakeasy", ClientID: "client-123", SignOnMode: "", SignOnURL: ""}, app)
 	require.NotContains(t, fmt.Sprintf("%+v", app), "discard-me")
 }
 
@@ -1025,7 +1093,7 @@ func TestResolveApplicationByClientIDUsesSafeFilterAndExactFallbackMatch(t *test
 
 	app, err := newTestClient(t, server.URL).ResolveApplicationByClientID(t.Context(), "example.okta.com", "test-access-token", clientID)
 	require.NoError(t, err)
-	require.Equal(t, okta.Application{ID: "matching-app", Status: "ACTIVE", Label: "Speakeasy", ClientID: clientID}, app)
+	require.Equal(t, okta.Application{ID: "matching-app", Status: "ACTIVE", Label: "Speakeasy", ClientID: clientID, SignOnMode: "", SignOnURL: ""}, app)
 	require.NotContains(t, fmt.Sprintf("%+v", app), "discard-me")
 	require.Equal(t, int64(2), requests.Load())
 }

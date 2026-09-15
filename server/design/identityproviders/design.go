@@ -54,6 +54,24 @@ var _ = Service("identityProviders", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"IdentityProvider"}`)
 	})
 
+	Method("listApplications", func() {
+		Description("List applications directly from the organization's identity provider.")
+		Payload(func() {
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+		Result(ListIdentityProviderApplicationsResult)
+		HTTP(func() {
+			GET("/rpc/identityProviders.listApplications")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "listIdentityProviderApplications")
+		Meta("openapi:extension:x-speakeasy-name-override", "listApplications")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"ListIdentityProviderApplications"}`)
+	})
+
 	Method("describeSetup", func() {
 		Description("Describe the guided setup steps for the organization's identity provider connection.")
 		Payload(func() {
@@ -161,6 +179,28 @@ var IdentityProviderConnection = Type("IdentityProviderConnection", func() {
 var GetIdentityProviderResult = Type("GetIdentityProviderResult", func() {
 	Description("The organization's live identity provider connection, when configured.")
 	Attribute("connection", IdentityProviderConnection)
+})
+
+var IdentityProviderApplication = Type("IdentityProviderApplication", func() {
+	Description("An application read directly from an identity provider.")
+	Attribute("source_application_id", String, "Provider-assigned application identifier.")
+	Attribute("label", String, "Application display label.")
+	Attribute("provider_status", String, "Provider lifecycle status.")
+	Attribute("sign_on_mode", String, "Provider sign-on mode.")
+	Attribute("sign_on_url", String, "Application launch URL.", func() { Format(FormatURI) })
+	Attribute("group_assignment_count", Int, "Number of directly assigned groups, when read.")
+	Attribute("user_assignment_count", Int, "Number of directly assigned users, when read.")
+	Required("source_application_id", "label")
+})
+
+var ListIdentityProviderApplicationsResult = Type("ListIdentityProviderApplicationsResult", func() {
+	Description("A capped live application inventory from the identity provider.")
+	Attribute("applications", ArrayOf(IdentityProviderApplication))
+	Attribute("read_at", String, func() { Format(FormatDateTime) })
+	Attribute("application_count", Int)
+	Attribute("truncated", Boolean)
+	Attribute("detail", String)
+	Required("applications", "read_at", "application_count", "truncated", "detail")
 })
 
 var IdentityProviderSetup = Type("IdentityProviderSetup", func() {

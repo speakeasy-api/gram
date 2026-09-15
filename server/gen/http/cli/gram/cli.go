@@ -135,7 +135,7 @@ func UsageCommands() []string {
 		"hooks-server-names (list|upsert|delete)",
 		"hooks (claude|cursor|codex|ingest|upload-skill-content|skill-feedback|logs|metrics)",
 		"identity resolve",
-		"identity-providers (create|get|describe-setup|submit-setup-step|verify-setup-step|delete)",
+		"identity-providers (create|get|list-applications|describe-setup|submit-setup-step|verify-setup-step|delete)",
 		"instances get-instance",
 		"integrations (get|list)",
 		"json-web-key-sets (create-set|update-set|list-sets|get-set|get-set-delete-preflight|delete-set|list-keys|publish-key|activate-key|retire-key|revoke-key)",
@@ -1399,6 +1399,10 @@ func ParseEndpoint(
 		identityProvidersGetFlags            = flag.NewFlagSet("get", flag.ExitOnError)
 		identityProvidersGetSessionTokenFlag = identityProvidersGetFlags.String("session-token", "", "")
 		identityProvidersGetApikeyTokenFlag  = identityProvidersGetFlags.String("apikey-token", "", "")
+
+		identityProvidersListApplicationsFlags            = flag.NewFlagSet("list-applications", flag.ExitOnError)
+		identityProvidersListApplicationsSessionTokenFlag = identityProvidersListApplicationsFlags.String("session-token", "", "")
+		identityProvidersListApplicationsApikeyTokenFlag  = identityProvidersListApplicationsFlags.String("apikey-token", "", "")
 
 		identityProvidersDescribeSetupFlags            = flag.NewFlagSet("describe-setup", flag.ExitOnError)
 		identityProvidersDescribeSetupSessionTokenFlag = identityProvidersDescribeSetupFlags.String("session-token", "", "")
@@ -4482,6 +4486,7 @@ func ParseEndpoint(
 	identityProvidersFlags.Usage = identityProvidersUsage
 	identityProvidersCreateFlags.Usage = identityProvidersCreateUsage
 	identityProvidersGetFlags.Usage = identityProvidersGetUsage
+	identityProvidersListApplicationsFlags.Usage = identityProvidersListApplicationsUsage
 	identityProvidersDescribeSetupFlags.Usage = identityProvidersDescribeSetupUsage
 	identityProvidersSubmitSetupStepFlags.Usage = identityProvidersSubmitSetupStepUsage
 	identityProvidersVerifySetupStepFlags.Usage = identityProvidersVerifySetupStepUsage
@@ -6073,6 +6078,9 @@ func ParseEndpoint(
 
 			case "get":
 				epf = identityProvidersGetFlags
+
+			case "list-applications":
+				epf = identityProvidersListApplicationsFlags
 
 			case "describe-setup":
 				epf = identityProvidersDescribeSetupFlags
@@ -8629,6 +8637,9 @@ func ParseEndpoint(
 			case "get":
 				endpoint = c.Get()
 				data, err = identityprovidersc.BuildGetPayload(*identityProvidersGetSessionTokenFlag, *identityProvidersGetApikeyTokenFlag)
+			case "list-applications":
+				endpoint = c.ListApplications()
+				data, err = identityprovidersc.BuildListApplicationsPayload(*identityProvidersListApplicationsSessionTokenFlag, *identityProvidersListApplicationsApikeyTokenFlag)
 			case "describe-setup":
 				endpoint = c.DescribeSetup()
 				data, err = identityprovidersc.BuildDescribeSetupPayload(*identityProvidersDescribeSetupSessionTokenFlag, *identityProvidersDescribeSetupApikeyTokenFlag)
@@ -15746,6 +15757,7 @@ func identityProvidersUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    create: Create the organization's identity provider connection and Speakeasy-held signing key.`)
 	fmt.Fprintln(os.Stderr, `    get: Get the organization's live identity provider connection, when configured.`)
+	fmt.Fprintln(os.Stderr, `    list-applications: List applications directly from the organization's identity provider.`)
 	fmt.Fprintln(os.Stderr, `    describe-setup: Describe the guided setup steps for the organization's identity provider connection.`)
 	fmt.Fprintln(os.Stderr, `    submit-setup-step: Submit administrator-provided values for an identity provider setup step.`)
 	fmt.Fprintln(os.Stderr, `    verify-setup-step: Verify an identity provider setup step.`)
@@ -15794,6 +15806,26 @@ func identityProvidersGetUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity-providers get --session-token \"abc123\" --apikey-token \"abc123\"")
+}
+
+func identityProvidersListApplicationsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] identity-providers list-applications", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List applications directly from the organization's identity provider.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity-providers list-applications --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func identityProvidersDescribeSetupUsage() {

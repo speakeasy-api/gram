@@ -76,6 +76,28 @@ func BuildGetPayload(identityProvidersGetSessionToken string, identityProvidersG
 	return v, nil
 }
 
+// BuildListApplicationsPayload builds the payload for the identityProviders
+// listApplications endpoint from CLI flags.
+func BuildListApplicationsPayload(identityProvidersListApplicationsSessionToken string, identityProvidersListApplicationsApikeyToken string) (*identityproviders.ListApplicationsPayload, error) {
+	var sessionToken *string
+	{
+		if identityProvidersListApplicationsSessionToken != "" {
+			sessionToken = &identityProvidersListApplicationsSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if identityProvidersListApplicationsApikeyToken != "" {
+			apikeyToken = &identityProvidersListApplicationsApikeyToken
+		}
+	}
+	v := &identityproviders.ListApplicationsPayload{}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}
+
 // BuildDescribeSetupPayload builds the payload for the identityProviders
 // describeSetup endpoint from CLI flags.
 func BuildDescribeSetupPayload(identityProvidersDescribeSetupSessionToken string, identityProvidersDescribeSetupApikeyToken string) (*identityproviders.DescribeSetupPayload, error) {

@@ -23,6 +23,10 @@ type Client struct {
 	// Get Doer is the HTTP client used to make requests to the get endpoint.
 	GetDoer goahttp.Doer
 
+	// ListApplications Doer is the HTTP client used to make requests to the
+	// listApplications endpoint.
+	ListApplicationsDoer goahttp.Doer
+
 	// DescribeSetup Doer is the HTTP client used to make requests to the
 	// describeSetup endpoint.
 	DescribeSetupDoer goahttp.Doer
@@ -59,17 +63,18 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		CreateDoer:          doer,
-		GetDoer:             doer,
-		DescribeSetupDoer:   doer,
-		SubmitSetupStepDoer: doer,
-		VerifySetupStepDoer: doer,
-		DeleteDoer:          doer,
-		RestoreResponseBody: restoreBody,
-		scheme:              scheme,
-		host:                host,
-		decoder:             dec,
-		encoder:             enc,
+		CreateDoer:           doer,
+		GetDoer:              doer,
+		ListApplicationsDoer: doer,
+		DescribeSetupDoer:    doer,
+		SubmitSetupStepDoer:  doer,
+		VerifySetupStepDoer:  doer,
+		DeleteDoer:           doer,
+		RestoreResponseBody:  restoreBody,
+		scheme:               scheme,
+		host:                 host,
+		decoder:              dec,
+		encoder:              enc,
 	}
 }
 
@@ -116,6 +121,30 @@ func (c *Client) Get() goa.Endpoint {
 		resp, err := c.GetDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("identityProviders", "get", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListApplications returns an endpoint that makes HTTP requests to the
+// identityProviders service listApplications server.
+func (c *Client) ListApplications() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListApplicationsRequest(c.encoder)
+		decodeResponse = DecodeListApplicationsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListApplicationsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListApplicationsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("identityProviders", "listApplications", err)
 		}
 		return decodeResponse(resp)
 	}

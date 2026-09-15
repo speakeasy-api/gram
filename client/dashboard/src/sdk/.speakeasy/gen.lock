@@ -271,6 +271,7 @@ trackedFiles:
   src/funcs/identityProvidersDelete.ts: {}
   src/funcs/identityProvidersDescribeSetup.ts: {}
   src/funcs/identityProvidersGet.ts: {}
+  src/funcs/identityProvidersListApplications.ts: {}
   src/funcs/identityProvidersSubmitSetupStep.ts: {}
   src/funcs/identityProvidersVerifySetupStep.ts: {}
   src/funcs/identityResolve.ts: {}
@@ -1044,6 +1045,7 @@ trackedFiles:
   src/models/components/httptooldefinition.ts: {}
   src/models/components/identitydirectory.ts: {}
   src/models/components/identitymodel.ts: {}
+  src/models/components/identityproviderapplication.ts: {}
   src/models/components/identityprovidercapabilityread.ts: {}
   src/models/components/identityproviderclaim.ts: {}
   src/models/components/identityproviderconnection.ts: {}
@@ -1149,6 +1151,7 @@ trackedFiles:
   src/models/components/listhookstracespayload.ts: {}
   src/models/components/listhookstracesresult.ts: {}
   src/models/components/listidentityaccessresult.ts: {}
+  src/models/components/listidentityproviderapplicationsresult.ts: {}
   src/models/components/listinstancesresponsebody.ts: {}
   src/models/components/listintegrationsresult.ts: {}
   src/models/components/listinvitesresult.ts: {}
@@ -2106,6 +2109,7 @@ trackedFiles:
   src/models/operations/listgrants.ts: {}
   src/models/operations/listhookstraces.ts: {}
   src/models/operations/listidentityaccess.ts: {}
+  src/models/operations/listidentityproviderapplications.ts: {}
   src/models/operations/listintegrations.ts: {}
   src/models/operations/listinvites.ts: {}
   src/models/operations/listjsonwebkeys.ts: {}
@@ -2865,6 +2869,8 @@ trackedFiles:
   src/react-query/listGcpKmsKeys.ts: {}
   src/react-query/listHooksTraces.core.ts: {}
   src/react-query/listHooksTraces.ts: {}
+  src/react-query/listIdentityProviderApplications.core.ts: {}
+  src/react-query/listIdentityProviderApplications.ts: {}
   src/react-query/listIntegrations.core.ts: {}
   src/react-query/listIntegrations.ts: {}
   src/react-query/listInvites.core.ts: {}
@@ -7989,6 +7995,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listIdentityProviderApplications:
+    speakeasy-default-list-identity-provider-applications:
+      responses:
+        "200":
+          application/json: {"application_count": 956358, "applications": [], "detail": "<value>", "read_at": "2025-10-01T18:10:01.028Z", "truncated": false}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   listIntegrations:
     speakeasy-default-list-integrations:
       responses:

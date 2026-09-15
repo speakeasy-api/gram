@@ -18,13 +18,14 @@ import (
 
 // Server lists the identityProviders service endpoint HTTP handlers.
 type Server struct {
-	Mounts          []*MountPoint
-	Create          http.Handler
-	Get             http.Handler
-	DescribeSetup   http.Handler
-	SubmitSetupStep http.Handler
-	VerifySetupStep http.Handler
-	Delete          http.Handler
+	Mounts           []*MountPoint
+	Create           http.Handler
+	Get              http.Handler
+	ListApplications http.Handler
+	DescribeSetup    http.Handler
+	SubmitSetupStep  http.Handler
+	VerifySetupStep  http.Handler
+	Delete           http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -56,17 +57,19 @@ func New(
 		Mounts: []*MountPoint{
 			{"Create", "POST", "/rpc/identityProviders.create"},
 			{"Get", "GET", "/rpc/identityProviders.get"},
+			{"ListApplications", "GET", "/rpc/identityProviders.listApplications"},
 			{"DescribeSetup", "GET", "/rpc/identityProviders.describeSetup"},
 			{"SubmitSetupStep", "POST", "/rpc/identityProviders.submitSetupStep"},
 			{"VerifySetupStep", "POST", "/rpc/identityProviders.verifySetupStep"},
 			{"Delete", "DELETE", "/rpc/identityProviders.delete"},
 		},
-		Create:          NewCreateHandler(e.Create, mux, decoder, encoder, errhandler, formatter),
-		Get:             NewGetHandler(e.Get, mux, decoder, encoder, errhandler, formatter),
-		DescribeSetup:   NewDescribeSetupHandler(e.DescribeSetup, mux, decoder, encoder, errhandler, formatter),
-		SubmitSetupStep: NewSubmitSetupStepHandler(e.SubmitSetupStep, mux, decoder, encoder, errhandler, formatter),
-		VerifySetupStep: NewVerifySetupStepHandler(e.VerifySetupStep, mux, decoder, encoder, errhandler, formatter),
-		Delete:          NewDeleteHandler(e.Delete, mux, decoder, encoder, errhandler, formatter),
+		Create:           NewCreateHandler(e.Create, mux, decoder, encoder, errhandler, formatter),
+		Get:              NewGetHandler(e.Get, mux, decoder, encoder, errhandler, formatter),
+		ListApplications: NewListApplicationsHandler(e.ListApplications, mux, decoder, encoder, errhandler, formatter),
+		DescribeSetup:    NewDescribeSetupHandler(e.DescribeSetup, mux, decoder, encoder, errhandler, formatter),
+		SubmitSetupStep:  NewSubmitSetupStepHandler(e.SubmitSetupStep, mux, decoder, encoder, errhandler, formatter),
+		VerifySetupStep:  NewVerifySetupStepHandler(e.VerifySetupStep, mux, decoder, encoder, errhandler, formatter),
+		Delete:           NewDeleteHandler(e.Delete, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -77,6 +80,7 @@ func (s *Server) Service() string { return "identityProviders" }
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.Create = m(s.Create)
 	s.Get = m(s.Get)
+	s.ListApplications = m(s.ListApplications)
 	s.DescribeSetup = m(s.DescribeSetup)
 	s.SubmitSetupStep = m(s.SubmitSetupStep)
 	s.VerifySetupStep = m(s.VerifySetupStep)
@@ -90,6 +94,7 @@ func (s *Server) MethodNames() []string { return identityproviders.MethodNames[:
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountCreateHandler(mux, h.Create)
 	MountGetHandler(mux, h.Get)
+	MountListApplicationsHandler(mux, h.ListApplications)
 	MountDescribeSetupHandler(mux, h.DescribeSetup)
 	MountSubmitSetupStepHandler(mux, h.SubmitSetupStep)
 	MountVerifySetupStepHandler(mux, h.VerifySetupStep)
@@ -184,6 +189,60 @@ func NewGetHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "get")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "identityProviders")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListApplicationsHandler configures the mux to serve the
+// "identityProviders" service "listApplications" endpoint.
+func MountListApplicationsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/identityProviders.listApplications", f)
+}
+
+// NewListApplicationsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "identityProviders" service "listApplications"
+// endpoint.
+func NewListApplicationsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListApplicationsRequest(mux, decoder)
+		encodeResponse = EncodeListApplicationsResponse(encoder)
+		encodeError    = EncodeListApplicationsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listApplications")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "identityProviders")
 		payload, err := decodeRequest(r)
 		if err != nil {

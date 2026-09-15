@@ -22,6 +22,8 @@ type Service interface {
 	Create(context.Context, *CreatePayload) (res *IdentityProviderConnection, err error)
 	// Get the organization's live identity provider connection, when configured.
 	Get(context.Context, *GetPayload) (res *GetIdentityProviderResult, err error)
+	// List applications directly from the organization's identity provider.
+	ListApplications(context.Context, *ListApplicationsPayload) (res *ListIdentityProviderApplicationsResult, err error)
 	// Describe the guided setup steps for the organization's identity provider
 	// connection.
 	DescribeSetup(context.Context, *DescribeSetupPayload) (res *IdentityProviderSetup, err error)
@@ -53,7 +55,7 @@ const ServiceName = "identityProviders"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [6]string{"create", "get", "describeSetup", "submitSetupStep", "verifySetupStep", "delete"}
+var MethodNames = [7]string{"create", "get", "listApplications", "describeSetup", "submitSetupStep", "verifySetupStep", "delete"}
 
 // CreatePayload is the payload type of the identityProviders service create
 // method.
@@ -92,6 +94,24 @@ type GetIdentityProviderResult struct {
 type GetPayload struct {
 	SessionToken *string
 	ApikeyToken  *string
+}
+
+// An application read directly from an identity provider.
+type IdentityProviderApplication struct {
+	// Provider-assigned application identifier.
+	SourceApplicationID string
+	// Application display label.
+	Label string
+	// Provider lifecycle status.
+	ProviderStatus *string
+	// Provider sign-on mode.
+	SignOnMode *string
+	// Application launch URL.
+	SignOnURL *string
+	// Number of directly assigned groups, when read.
+	GroupAssignmentCount *int
+	// Number of directly assigned users, when read.
+	UserAssignmentCount *int
 }
 
 type IdentityProviderCapabilityRead struct {
@@ -209,6 +229,23 @@ type IdentityProviderVerifyResult struct {
 	Capabilities  []string
 	GrantedScopes []string
 	Evidence      *IdentityProviderVerifyEvidence
+}
+
+// ListApplicationsPayload is the payload type of the identityProviders service
+// listApplications method.
+type ListApplicationsPayload struct {
+	SessionToken *string
+	ApikeyToken  *string
+}
+
+// ListIdentityProviderApplicationsResult is the result type of the
+// identityProviders service listApplications method.
+type ListIdentityProviderApplicationsResult struct {
+	Applications     []*IdentityProviderApplication
+	ReadAt           string
+	ApplicationCount int
+	Truncated        bool
+	Detail           string
 }
 
 // SubmitSetupStepPayload is the payload type of the identityProviders service

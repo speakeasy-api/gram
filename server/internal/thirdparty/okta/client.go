@@ -167,6 +167,12 @@ type Application struct {
 
 	// ClientID is the application's public OAuth client identifier.
 	ClientID string `json:"client_id"`
+
+	// SignOnMode is the application's Okta sign-on mode.
+	SignOnMode string `json:"sign_on_mode"`
+
+	// SignOnURL is the first Okta app link, or the configured application URL.
+	SignOnURL string `json:"sign_on_url"`
 }
 
 // Group identifies an Okta group that can be assigned to an application.
@@ -191,12 +197,23 @@ type applicationResponse struct {
 	ID          string `json:"id"`
 	Status      string `json:"status"`
 	Label       string `json:"label"`
+	SignOnMode  string `json:"signOnMode"`
 	Credentials struct {
 		OAuthClient struct {
 			ClientID     string `json:"client_id"`
 			ClientSecret string `json:"client_secret"`
 		} `json:"oauthClient"`
 	} `json:"credentials"`
+	Settings struct {
+		App struct {
+			URL string `json:"url"`
+		} `json:"app"`
+	} `json:"settings"`
+	Links struct {
+		AppLinks []struct {
+			Href string `json:"href"`
+		} `json:"appLinks"`
+	} `json:"_links"`
 }
 
 type createOIDCApplicationRequest struct {
@@ -631,6 +648,49 @@ func (c *Client) ListApplications(ctx context.Context, tenantDomain, accessToken
 	return c.list(ctx, tenantDomain, accessToken, "/api/v1/apps", page)
 }
 
+// ListApplicationGroups reads one page of groups assigned to an Okta application.
+func (c *Client) ListApplicationGroups(ctx context.Context, tenantDomain, accessToken, applicationID string, page PageRequest) (Page, error) {
+	if strings.TrimSpace(applicationID) == "" {
+		return Page{}, errors.New("list Okta application groups: application ID is required")
+	}
+	return c.list(ctx, tenantDomain, accessToken, "/api/v1/apps/"+url.PathEscape(applicationID)+"/groups", page)
+}
+
+// ListApplicationUsers reads one page of users assigned to an Okta application.
+func (c *Client) ListApplicationUsers(ctx context.Context, tenantDomain, accessToken, applicationID string, page PageRequest) (Page, error) {
+	if strings.TrimSpace(applicationID) == "" {
+		return Page{}, errors.New("list Okta application users: application ID is required")
+	}
+	return c.list(ctx, tenantDomain, accessToken, "/api/v1/apps/"+url.PathEscape(applicationID)+"/users", page)
+}
+
+// DecodeApplication converts an Okta application response into its non-secret inventory fields.
+func DecodeApplication(raw json.RawMessage) (Application, error) {
+	var response applicationResponse
+	if err := json.Unmarshal(raw, &response); err != nil {
+		return Application{ID: "", Status: "", Label: "", ClientID: "", SignOnMode: "", SignOnURL: ""}, fmt.Errorf("decode Okta application: %w", err)
+	}
+	return applicationFromResponse(response), nil
+}
+
+// IsDirectApplicationUser reports whether an application user was assigned directly rather than through a group.
+func IsDirectApplicationUser(raw json.RawMessage) (bool, error) {
+	var response struct {
+		Scope string `json:"scope"`
+	}
+	if err := json.Unmarshal(raw, &response); err != nil {
+		return false, fmt.Errorf("decode Okta application user: %w", err)
+	}
+	switch response.Scope {
+	case "USER":
+		return true, nil
+	case "GROUP":
+		return false, nil
+	default:
+		return false, fmt.Errorf("decode Okta application user: unexpected scope %q", response.Scope)
+	}
+}
+
 // ListAuthorizationServers returns the tenant's custom authorization servers.
 func (c *Client) ListAuthorizationServers(ctx context.Context, tenantDomain, accessToken string) ([]AuthorizationServer, error) {
 	requestURL, err := c.urlFor(tenantDomain, "/api/v1/authorizationServers")
@@ -1006,7 +1066,7 @@ func (c *Client) FindActiveApplicationByLabel(ctx context.Context, tenantDomain,
 		seenCursors[next] = struct{}{}
 		after = next
 	}
-	return Application{ID: "", Status: "", Label: "", ClientID: ""}, "", false, nil
+	return Application{ID: "", Status: "", Label: "", ClientID: "", SignOnMode: "", SignOnURL: ""}, "", false, nil
 }
 
 // GetApplication retrieves an Okta OIDC application by its application instance ID.
@@ -1573,10 +1633,16 @@ func cloneToken(token Token) Token {
 }
 
 func applicationFromResponse(response applicationResponse) Application {
+	signOnURL := response.Settings.App.URL
+	if len(response.Links.AppLinks) > 0 && response.Links.AppLinks[0].Href != "" {
+		signOnURL = response.Links.AppLinks[0].Href
+	}
 	return Application{
-		ID:       response.ID,
-		Status:   response.Status,
-		Label:    response.Label,
-		ClientID: response.Credentials.OAuthClient.ClientID,
+		ID:         response.ID,
+		Status:     response.Status,
+		Label:      response.Label,
+		ClientID:   response.Credentials.OAuthClient.ClientID,
+		SignOnMode: response.SignOnMode,
+		SignOnURL:  signOnURL,
 	}
 }

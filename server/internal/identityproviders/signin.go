@@ -472,14 +472,14 @@ func (s *Service) getActiveStoredSignInApplication(
 ) (okta.Application, error) {
 	token, err := s.acquireOktaManagementToken(ctx, organizationID, row, requiredOktaReadScopes)
 	if err != nil {
-		return okta.Application{ID: "", Status: "", Label: "", ClientID: ""}, err
+		return okta.Application{ID: "", Status: "", Label: "", ClientID: "", SignOnMode: "", SignOnURL: ""}, err
 	}
 	application, err := s.okta.GetApplication(ctx, normalizeOktaDomain(row.TenantIdentifier), token.AccessToken, row.SignInApplicationID.String)
 	if err != nil {
-		return okta.Application{ID: "", Status: "", Label: "", ClientID: ""}, fmt.Errorf("get Okta sign-in application: %w", err)
+		return okta.Application{ID: "", Status: "", Label: "", ClientID: "", SignOnMode: "", SignOnURL: ""}, fmt.Errorf("get Okta sign-in application: %w", err)
 	}
 	if application.ID != row.SignInApplicationID.String || application.ClientID == "" || application.Status != "ACTIVE" {
-		return okta.Application{ID: "", Status: "", Label: "", ClientID: ""}, errors.New("the existing Okta sign-in application is not active")
+		return okta.Application{ID: "", Status: "", Label: "", ClientID: "", SignOnMode: "", SignOnURL: ""}, errors.New("the existing Okta sign-in application is not active")
 	}
 	return application, nil
 }

@@ -23236,6 +23236,96 @@ paths:
       x-speakeasy-name-override: get
       x-speakeasy-react-hook:
         name: IdentityProvider
+  /rpc/identityProviders.listApplications:
+    get:
+      description: List applications directly from the organization's identity provider.
+      operationId: listIdentityProviderApplications
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListIdentityProviderApplicationsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: listApplications identityProviders
+      tags:
+        - identityProviders
+      x-speakeasy-name-override: listApplications
+      x-speakeasy-react-hook:
+        name: ListIdentityProviderApplications
   /rpc/identityProviders.submitSetupStep:
     post:
       description: Submit administrator-provided values for an identity provider setup step.
@@ -77152,6 +77242,37 @@ components:
         - emails
         - external_user_ids
         - directory
+    IdentityProviderApplication:
+      type: object
+      properties:
+        group_assignment_count:
+          type: integer
+          description: Number of directly assigned groups, when read.
+          format: int64
+        label:
+          type: string
+          description: Application display label.
+        provider_status:
+          type: string
+          description: Provider lifecycle status.
+        sign_on_mode:
+          type: string
+          description: Provider sign-on mode.
+        sign_on_url:
+          type: string
+          description: Application launch URL.
+          format: uri
+        source_application_id:
+          type: string
+          description: Provider-assigned application identifier.
+        user_assignment_count:
+          type: integer
+          description: Number of directly assigned users, when read.
+          format: int64
+      description: An application read directly from an identity provider.
+      required:
+        - source_application_id
+        - label
     IdentityProviderCapabilityRead:
       type: object
       properties:
@@ -79066,6 +79187,30 @@ components:
       required:
         - servers
         - skills
+    ListIdentityProviderApplicationsResult:
+      type: object
+      properties:
+        application_count:
+          type: integer
+          format: int64
+        applications:
+          type: array
+          items:
+            $ref: '#/components/schemas/IdentityProviderApplication'
+        detail:
+          type: string
+        read_at:
+          type: string
+          format: date-time
+        truncated:
+          type: boolean
+      description: A capped live application inventory from the identity provider.
+      required:
+        - applications
+        - read_at
+        - application_count
+        - truncated
+        - detail
     ListInstancesResponseBody:
       type: object
       properties:

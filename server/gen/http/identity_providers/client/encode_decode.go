@@ -490,6 +490,241 @@ func DecodeGetResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody
 	}
 }
 
+// BuildListApplicationsRequest instantiates a HTTP request object with method
+// and path set to call the "identityProviders" service "listApplications"
+// endpoint
+func (c *Client) BuildListApplicationsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListApplicationsIdentityProvidersPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("identityProviders", "listApplications", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListApplicationsRequest returns an encoder for requests sent to the
+// identityProviders listApplications server.
+func EncodeListApplicationsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*identityproviders.ListApplicationsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("identityProviders", "listApplications", "*identityproviders.ListApplicationsPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		return nil
+	}
+}
+
+// DecodeListApplicationsResponse returns a decoder for responses returned by
+// the identityProviders listApplications endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeListApplicationsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListApplicationsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListApplicationsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviders", "listApplications", err)
+			}
+			err = ValidateListApplicationsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviders", "listApplications", err)
+			}
+			res := NewListApplicationsListIdentityProviderApplicationsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListApplicationsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviders", "listApplications", err)
+			}
+			err = ValidateListApplicationsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviders", "listApplications", err)
+			}
+			return nil, NewListApplicationsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListApplicationsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviders", "listApplications", err)
+			}
+			err = ValidateListApplicationsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviders", "listApplications", err)
+			}
+			return nil, NewListApplicationsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListApplicationsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviders", "listApplications", err)
+			}
+			err = ValidateListApplicationsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviders", "listApplications", err)
+			}
+			return nil, NewListApplicationsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListApplicationsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviders", "listApplications", err)
+			}
+			err = ValidateListApplicationsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviders", "listApplications", err)
+			}
+			return nil, NewListApplicationsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListApplicationsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviders", "listApplications", err)
+			}
+			err = ValidateListApplicationsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviders", "listApplications", err)
+			}
+			return nil, NewListApplicationsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListApplicationsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviders", "listApplications", err)
+			}
+			err = ValidateListApplicationsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviders", "listApplications", err)
+			}
+			return nil, NewListApplicationsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListApplicationsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviders", "listApplications", err)
+			}
+			err = ValidateListApplicationsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviders", "listApplications", err)
+			}
+			return nil, NewListApplicationsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListApplicationsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("identityProviders", "listApplications", err)
+				}
+				err = ValidateListApplicationsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("identityProviders", "listApplications", err)
+				}
+				return nil, NewListApplicationsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListApplicationsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("identityProviders", "listApplications", err)
+				}
+				err = ValidateListApplicationsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("identityProviders", "listApplications", err)
+				}
+				return nil, NewListApplicationsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("identityProviders", "listApplications", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListApplicationsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviders", "listApplications", err)
+			}
+			err = ValidateListApplicationsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviders", "listApplications", err)
+			}
+			return nil, NewListApplicationsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("identityProviders", "listApplications", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildDescribeSetupRequest instantiates a HTTP request object with method and
 // path set to call the "identityProviders" service "describeSetup" endpoint
 func (c *Client) BuildDescribeSetupRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -1498,6 +1733,23 @@ func unmarshalIdentityProviderConnectionResponseBodyToIdentityprovidersIdentityP
 	}
 	if v.VerifyEvidence != nil {
 		res.VerifyEvidence = unmarshalIdentityProviderVerifyEvidenceResponseBodyToIdentityprovidersIdentityProviderVerifyEvidence(v.VerifyEvidence)
+	}
+
+	return res
+}
+
+// unmarshalIdentityProviderApplicationResponseBodyToIdentityprovidersIdentityProviderApplication
+// builds a value of type *identityproviders.IdentityProviderApplication from a
+// value of type *IdentityProviderApplicationResponseBody.
+func unmarshalIdentityProviderApplicationResponseBodyToIdentityprovidersIdentityProviderApplication(v *IdentityProviderApplicationResponseBody) *identityproviders.IdentityProviderApplication {
+	res := &identityproviders.IdentityProviderApplication{
+		SourceApplicationID:  *v.SourceApplicationID,
+		Label:                *v.Label,
+		ProviderStatus:       v.ProviderStatus,
+		SignOnMode:           v.SignOnMode,
+		SignOnURL:            v.SignOnURL,
+		GroupAssignmentCount: v.GroupAssignmentCount,
+		UserAssignmentCount:  v.UserAssignmentCount,
 	}
 
 	return res

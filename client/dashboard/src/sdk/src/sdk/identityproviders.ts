@@ -6,6 +6,7 @@ import { identityProvidersCreate } from "../funcs/identityProvidersCreate.js";
 import { identityProvidersDelete } from "../funcs/identityProvidersDelete.js";
 import { identityProvidersDescribeSetup } from "../funcs/identityProvidersDescribeSetup.js";
 import { identityProvidersGet } from "../funcs/identityProvidersGet.js";
+import { identityProvidersListApplications } from "../funcs/identityProvidersListApplications.js";
 import { identityProvidersSubmitSetupStep } from "../funcs/identityProvidersSubmitSetupStep.js";
 import { identityProvidersVerifySetupStep } from "../funcs/identityProvidersVerifySetupStep.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
@@ -13,6 +14,7 @@ import { GetIdentityProviderResult } from "../models/components/getidentityprovi
 import { IdentityProviderConnection } from "../models/components/identityproviderconnection.js";
 import { IdentityProviderSetup } from "../models/components/identityprovidersetup.js";
 import { IdentityProviderVerifyResult } from "../models/components/identityproviderverifyresult.js";
+import { ListIdentityProviderApplicationsResult } from "../models/components/listidentityproviderapplicationsresult.js";
 import { SubmitSetupStepResult } from "../models/components/submitsetupstepresult.js";
 import {
   CreateIdentityProviderRequest,
@@ -30,6 +32,10 @@ import {
   GetIdentityProviderRequest,
   GetIdentityProviderSecurity,
 } from "../models/operations/getidentityprovider.js";
+import {
+  ListIdentityProviderApplicationsRequest,
+  ListIdentityProviderApplicationsSecurity,
+} from "../models/operations/listidentityproviderapplications.js";
 import {
   SubmitIdentityProviderSetupStepRequest,
   SubmitIdentityProviderSetupStepSecurity,
@@ -110,6 +116,25 @@ export class IdentityProviders extends ClientSDK {
     options?: RequestOptions,
   ): Promise<GetIdentityProviderResult> {
     return unwrapAsync(identityProvidersGet(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listApplications identityProviders
+   *
+   * @remarks
+   * List applications directly from the organization's identity provider.
+   */
+  async listApplications(
+    request?: ListIdentityProviderApplicationsRequest | undefined,
+    security?: ListIdentityProviderApplicationsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListIdentityProviderApplicationsResult> {
+    return unwrapAsync(identityProvidersListApplications(
       this,
       request,
       security,
