@@ -24,11 +24,13 @@ CREATE TABLE "remote_session_ema_bindings" (
   "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY ("id"),
-  CONSTRAINT "remote_session_ema_bindings_organization_id_project_id_fkey" FOREIGN KEY ("organization_id", "project_id") REFERENCES "projects" ("organization_id", "id") ON UPDATE CASCADE ON DELETE SET NULL,
-  CONSTRAINT "remote_session_ema_bindings_remote_session_client_id_remot_fkey" FOREIGN KEY ("remote_session_client_id", "remote_session_issuer_id") REFERENCES "remote_session_clients" ("id", "remote_session_issuer_id") ON UPDATE NO ACTION ON DELETE SET NULL,
-  CONSTRAINT "remote_session_ema_bindings_remote_session_issuer_id_fkey" FOREIGN KEY ("remote_session_issuer_id") REFERENCES "remote_session_issuers" ("id") ON UPDATE NO ACTION ON DELETE SET NULL,
-  CONSTRAINT "remote_session_ema_bindings_user_session_issuer_id_fkey" FOREIGN KEY ("user_session_issuer_id") REFERENCES "user_session_issuers" ("id") ON UPDATE NO ACTION ON DELETE SET NULL
+  CONSTRAINT "remote_session_ema_bindings_organization_id_project_id_fkey" FOREIGN KEY ("organization_id", "project_id") REFERENCES "projects" ("organization_id", "id") ON UPDATE CASCADE ON DELETE NO ACTION,
+  CONSTRAINT "remote_session_ema_bindings_remote_session_client_id_remot_fkey" FOREIGN KEY ("remote_session_client_id", "remote_session_issuer_id") REFERENCES "remote_session_clients" ("id", "remote_session_issuer_id") ON UPDATE NO ACTION ON DELETE NO ACTION,
+  CONSTRAINT "remote_session_ema_bindings_remote_session_issuer_id_fkey" FOREIGN KEY ("remote_session_issuer_id") REFERENCES "remote_session_issuers" ("id") ON UPDATE NO ACTION ON DELETE NO ACTION,
+  CONSTRAINT "remote_session_ema_bindings_user_session_issuer_id_fkey" FOREIGN KEY ("user_session_issuer_id") REFERENCES "user_session_issuers" ("id") ON UPDATE NO ACTION ON DELETE NO ACTION
 );
+-- Create index "remote_session_ema_bindings_claim_key" to table: "remote_session_ema_bindings"
+CREATE UNIQUE INDEX "remote_session_ema_bindings_claim_key" ON "remote_session_ema_bindings" ("claim_id") WHERE (claim_id IS NOT NULL);
 -- Create index "remote_session_ema_bindings_client_idx" to table: "remote_session_ema_bindings"
 CREATE INDEX "remote_session_ema_bindings_client_idx" ON "remote_session_ema_bindings" ("remote_session_client_id");
 -- Create index "remote_session_ema_bindings_issuer_idx" to table: "remote_session_ema_bindings"
@@ -115,8 +117,9 @@ BEGIN
     RAISE EXCEPTION 'identity-chaining project scope mismatch'
       USING ERRCODE = '23503', CONSTRAINT = 'remote_session_ema_bindings_project_scope_fkey';
   END IF;
+  -- The user issuer trusts an upstream IdP; this binding selects a downstream
+  -- resource AS. Their issuer IDs need not match. Validate each parent scope.
   PERFORM 1 FROM user_session_issuers WHERE id = NEW.user_session_issuer_id AND deleted IS FALSE
-    AND trusted_remote_session_issuer_id = NEW.remote_session_issuer_id
     AND (project_id = NEW.project_id OR (project_id IS NULL AND organization_id = NEW.organization_id)) FOR SHARE;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'identity-chaining user issuer scope mismatch'

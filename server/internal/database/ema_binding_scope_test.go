@@ -31,7 +31,6 @@ INSERT INTO remote_session_issuers (id, project_id, organization_id, slug, issue
 SELECT fixture_scope_id(n), CASE WHEN n <= 3 THEN fixture_scope_id(n) END,
  CASE WHEN n IN (1,2,4) THEN 'fixture-org-a' WHEN n IN (3,5) THEN 'fixture-org-b' END,
  'fixture-' || n, 'https://issuer.example.invalid/' || n FROM generate_series(1,6) n;
-UPDATE user_session_issuers SET trusted_remote_session_issuer_id = fixture_scope_id(6);
 INSERT INTO remote_session_clients (id, project_id, organization_id, remote_session_issuer_id, client_id)
 SELECT fixture_scope_id(n), CASE WHEN n <= 3 THEN fixture_scope_id(n) END,
  CASE WHEN n IN (1,2,4) THEN 'fixture-org-a' WHEN n IN (3,5) THEN 'fixture-org-b' END,
@@ -69,8 +68,6 @@ func TestEMABindingScope(t *testing.T) {
 				tx, err := pool.Begin(ctx)
 				require.NoError(t, err)
 				defer func() { _ = tx.Rollback(ctx) }()
-				_, err = tx.Exec(ctx, `UPDATE user_session_issuers SET trusted_remote_session_issuer_id = fixture_scope_id($2) WHERE id = fixture_scope_id($1)`, u, r)
-				require.NoError(t, err)
 				_, err = tx.Exec(ctx, `INSERT INTO remote_session_ema_bindings
  (project_id, organization_id, user_session_issuer_id, remote_session_issuer_id, resource)
  VALUES (fixture_scope_id(1), 'fixture-org-a', fixture_scope_id($1), fixture_scope_id($2), 'https://resource.example.invalid')`, u, r)
@@ -113,7 +110,63 @@ func TestEMABindingScope(t *testing.T) {
 			requireEMAScopeError(t, err)
 		})
 	}
-	for name, trusted := range map[string]string{"untrusted_sibling": "fixture_scope_id(4)", "no_trusted_issuer": "NULL"} {
+	t.Run("claim_ids_are_unique", func(t *testing.T) {
+		tx, err := pool.Begin(ctx)
+		require.NoError(t, err)
+		defer func() { _ = tx.Rollback(ctx) }()
+		_, err = tx.Exec(ctx, emaScopeInsert)
+		require.NoError(t, err)
+		_, err = tx.Exec(ctx, `INSERT INTO remote_session_ema_bindings
+ (project_id, organization_id, user_session_issuer_id, remote_session_issuer_id, resource)
+ VALUES (fixture_scope_id(1), 'fixture-org-a', fixture_scope_id(1), fixture_scope_id(6), 'https://resource.example.invalid/second')`)
+		require.NoError(t, err)
+		// Multiple NULL claims are valid. A non-NULL claim has exactly one owner.
+		_, err = tx.Exec(ctx, `UPDATE remote_session_ema_bindings SET state = 'in_progress', claim_id = fixture_scope_id(100)
+ WHERE resource = 'https://resource.example.invalid'`)
+		require.NoError(t, err)
+		_, err = tx.Exec(ctx, "SAVEPOINT duplicate_claim")
+		require.NoError(t, err)
+		_, err = tx.Exec(ctx, `UPDATE remote_session_ema_bindings SET state = 'in_progress', claim_id = fixture_scope_id(100)
+ WHERE resource = 'https://resource.example.invalid/second'`)
+		var pgErr *pgconn.PgError
+		require.ErrorAs(t, err, &pgErr)
+		require.Equal(t, "23505", pgErr.Code)
+		require.Equal(t, "remote_session_ema_bindings_claim_key", pgErr.ConstraintName)
+		_, err = tx.Exec(ctx, "ROLLBACK TO SAVEPOINT duplicate_claim")
+		require.NoError(t, err)
+		completed, err := tx.Exec(ctx, `UPDATE remote_session_ema_bindings SET state = 'ready', claim_id = NULL
+ WHERE project_id = fixture_scope_id(1) AND generation = 1 AND claim_id = fixture_scope_id(100) AND state = 'in_progress'`)
+		require.NoError(t, err)
+		require.EqualValues(t, 1, completed.RowsAffected())
+	})
+	t.Run("parent_fks_preserve_required_provenance", func(t *testing.T) {
+		tx, err := pool.Begin(ctx)
+		require.NoError(t, err)
+		defer func() { _ = tx.Rollback(ctx) }()
+		var count int
+		err = tx.QueryRow(ctx, `SELECT count(*) FROM pg_constraint
+ WHERE conrelid = 'remote_session_ema_bindings'::regclass AND contype = 'f' AND confdeltype = 'a'`).Scan(&count)
+		require.NoError(t, err)
+		require.Equal(t, 4, count)
+		_, err = tx.Exec(ctx, emaScopeInsert)
+		require.NoError(t, err)
+		// Even without the lifecycle trigger, the FK must reject deletion,
+		// not attempt to clear a required parent ID.
+		_, err = tx.Exec(ctx, `ALTER TABLE remote_session_clients DISABLE TRIGGER remote_session_ema_client_delete_guard;
+ SAVEPOINT delete_parent`)
+		require.NoError(t, err)
+		_, err = tx.Exec(ctx, "DELETE FROM remote_session_clients WHERE id = fixture_scope_id(1)")
+		requireEMAScopeError(t, err)
+		_, err = tx.Exec(ctx, `ROLLBACK TO SAVEPOINT delete_parent;
+ ALTER TABLE remote_session_clients ENABLE TRIGGER remote_session_ema_client_delete_guard;
+ UPDATE remote_session_ema_bindings SET state = 'unlinked', generation = generation + 1;
+ DELETE FROM remote_session_clients WHERE id = fixture_scope_id(1)`)
+		require.NoError(t, err)
+		err = tx.QueryRow(ctx, "SELECT count(*) FROM remote_session_ema_bindings").Scan(&count)
+		require.NoError(t, err)
+		require.Zero(t, count)
+	})
+	for name, trusted := range map[string]string{"distinct_upstream_and_downstream": "fixture_scope_id(4)", "no_upstream_trust_configured": "NULL"} {
 		t.Run(name, func(t *testing.T) {
 			tx, err := pool.Begin(ctx)
 			require.NoError(t, err)
@@ -121,7 +174,7 @@ func TestEMABindingScope(t *testing.T) {
 			_, err = tx.Exec(ctx, "UPDATE user_session_issuers SET trusted_remote_session_issuer_id = "+trusted+" WHERE id = fixture_scope_id(1)")
 			require.NoError(t, err)
 			_, err = tx.Exec(ctx, emaScopeInsert)
-			requireEMAScopeError(t, err)
+			require.NoError(t, err)
 		})
 	}
 	for _, field := range []string{"authorization_endpoint", "token_endpoint", "revocation_endpoint", "registration_endpoint", "jwks_uri", "userinfo_endpoint", "introspection_endpoint", "tunneled_mcp_server_id"} {
