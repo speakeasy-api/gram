@@ -219,6 +219,9 @@ func DogfoodPluginFiles() (map[string][]byte, error) {
 	if err := generateOpenCodeObservabilityPluginInDir(files, "plugin-opencode", cfg); err != nil {
 		return nil, fmt.Errorf("generate dogfood opencode plugin: %w", err)
 	}
+	if err := generatePiObservabilityPluginInDir(files, "plugin-pi", cfg); err != nil {
+		return nil, fmt.Errorf("generate dogfood pi plugin: %w", err)
+	}
 	for p := range files {
 		if strings.Contains(p, ".claude-plugin/") || strings.Contains(p, ".cursor-plugin/") {
 			delete(files, p)

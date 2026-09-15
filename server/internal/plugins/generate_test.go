@@ -1718,6 +1718,20 @@ func TestGeneratePiObservabilityPluginPackage(t *testing.T) {
 	require.True(t, ok, "pi package must ship the Windows bootstrapper the extension spawns")
 }
 
+// The dogfood trees are what `hooks:test` renders for local development, so a
+// platform missing here cannot be exercised against a dev server at all.
+func TestDogfoodPluginFilesCoverPi(t *testing.T) {
+	t.Parallel()
+	files, err := DogfoodPluginFiles()
+	require.NoError(t, err)
+
+	extension, ok := files["plugin-pi/"+relay.PiExtensionFile]
+	require.True(t, ok, "dogfood tree must ship the pi extension")
+	require.Contains(t, string(extension), `"pi","serve"`)
+	require.Contains(t, files, "plugin-pi/speakeasy.json")
+	require.Contains(t, files, "plugin-pi/hooks/bootstrap.sh")
+}
+
 // The published hooks subtree carries one directory per platform, and the
 // rollout carries it forward by prefix, so a platform missing from either the
 // generator or hooksSubtreePrefixes silently stops publishing.
