@@ -692,10 +692,10 @@ WITH
     -- OTEL stream above. Deliberately NOT claude-code:usage, which stays
     -- excluded as a duplicate of the OTEL api_request stream.
     (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage')) AS is_agent_usage_row,
-    -- opencode and openclaw report per-turn tokens and cost on their
+    -- opencode, openclaw and Pi report per-turn tokens and cost on their
     -- unified-ingest assistant.responded rows, under the canonical
     -- gen_ai.usage.* keys that every fallback branch below already reads.
-    -- Neither has an OTEL stream and the unified ingest path stamps no
+    -- None of them has an OTEL stream and the unified ingest path stamps no
     -- gram_urn, so provenance anchors on hook_source instead. The
     -- AfterAgentResponse event guard scopes this to the turn-closing row: a
     -- session's other rows (thoughts, usage.reported, tool calls, session
@@ -704,9 +704,10 @@ WITH
     -- turn (no token fields) still counts. openclaw's turn close is agenthooks'
     -- KindStop, with usage spliced from the cached llm_output frame; it has no
     -- raw-vocabulary parser, so it resolves through the canonical event map to
-    -- the same AfterAgentResponse name.
+    -- the same AfterAgentResponse name. Pi reports usage on its message_end
+    -- event, decoded as the same stop kind and resolved through the same map.
     (
-        toString(attributes.gram.hook.source) IN ('opencode', 'openclaw')
+        toString(attributes.gram.hook.source) IN ('opencode', 'openclaw', 'pi')
         AND toString(attributes.gram.hook.event) = 'AfterAgentResponse'
         AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')
     ) AS is_hook_turn_usage_row,
@@ -723,14 +724,14 @@ WITH
     ) AS is_litellm_usage_row,
     -- Rows that carry token usage: the sumIf guard for every token/cost sum.
     (is_claude_api_request OR is_codex_api_request OR is_agent_usage_row OR is_hook_turn_usage_row OR is_litellm_usage_row) AS is_usage_row,
-    -- Codex/Cursor/opencode/openclaw tool calls arrive as hook rows, one
+    -- Codex/Cursor/opencode/openclaw/Pi tool calls arrive as hook rows, one
     -- PostToolUse/PostToolUseFailure row per completed call (Codex raw OTEL
     -- tool events are deliberately not counted — hook rows stay the sole
     -- source). The hook.event guard is required: every call also emits a
     -- PreToolUse row with the same gram.tool.name. Provider names (the
     -- usage-metrics rows' tool.name) are excluded — they are not tool calls.
     (
-        toString(attributes.gram.hook.source) IN ('codex', 'cursor', 'opencode', 'openclaw')
+        toString(attributes.gram.hook.source) IN ('codex', 'cursor', 'opencode', 'openclaw', 'pi')
         AND toString(attributes.gram.tool.name) != ''
         AND toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor')
         AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')
@@ -1091,13 +1092,13 @@ WITH
     -- chat_id guard below — listed here only to keep this predicate textually
     -- aligned with attribute_metrics_summaries_mv and the Go session path.
     (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage')) AS is_agent_usage_row,
-    -- opencode and openclaw usage rides on their unified-ingest
+    -- opencode, openclaw and Pi usage rides on their unified-ingest
     -- assistant.responded rows, anchored on hook_source because that path
     -- stamps no gram_urn, and gated on the AfterAgentResponse event so
     -- thoughts/usage.reported/tool-call rows are not double-counted as usage
     -- turns; see attribute_metrics_summaries_mv above.
     (
-        hook_source IN ('opencode', 'openclaw')
+        hook_source IN ('opencode', 'openclaw', 'pi')
         AND toString(attributes.gram.hook.event) = 'AfterAgentResponse'
         AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')
     ) AS is_hook_turn_usage_row,
@@ -1110,7 +1111,7 @@ WITH
         )
     ) AS is_litellm_usage_row,
     (
-        hook_source IN ('codex', 'cursor', 'opencode', 'openclaw')
+        hook_source IN ('codex', 'cursor', 'opencode', 'openclaw', 'pi')
         AND toString(attributes.gram.tool.name) != ''
         AND toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor')
         AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')
