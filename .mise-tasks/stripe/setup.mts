@@ -465,6 +465,10 @@ export async function provisionCatalog(key: string) {
     [["active", product.active, true]],
     "Use an active sandbox product/price; setup will not reactivate archived products.",
   );
+  if (product.name !== PRODUCT_NAME)
+    log.warn(
+      "Reusing a compatible PAYG product with a different display name; leaving its name unchanged.",
+    );
   const productTag = product.metadata?.speakeasy_product;
   if (productTag && productTag !== PRODUCT_METADATA_SPEAKEASY_PRODUCT) {
     throw new Error(

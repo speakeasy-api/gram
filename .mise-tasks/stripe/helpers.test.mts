@@ -9,7 +9,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { execFileSync, spawn } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { setTimeout as delay } from "node:timers/promises";
 import {
   classifyStripeOutput,
@@ -29,6 +29,27 @@ const config: StripeConfig = {
   target: "http://localhost:18080/rpc/stripe.webhook",
 };
 const root = resolve(".");
+
+for (const environment of ["production", "staging", ""]) {
+  test(`listener rejects non-local environment: ${environment || "unset"}`, () => {
+    const result = spawnSync(
+      process.execPath,
+      [
+        "--experimental-strip-types",
+        join(root, ".mise-tasks/stripe/listen.mts"),
+      ],
+      {
+        env: { ...process.env, GRAM_ENVIRONMENT: environment },
+        encoding: "utf8",
+      },
+    );
+    assert.equal(result.status, 1);
+    assert.match(
+      result.stderr,
+      /Stripe forwarding requires GRAM_ENVIRONMENT=local/,
+    );
+  });
+}
 
 test("forwarding is restricted to the worktree loopback port", () => {
   assert.equal(
@@ -325,6 +346,7 @@ ${mode === "mismatch" ? "console.log('whsec_other');" : "console.error('expired_
         cwd: dir,
         env: {
           ...process.env,
+          GRAM_ENVIRONMENT: "local",
           PATH: `${join(dir, "bin")}:${process.env.PATH}`,
           GRAM_SERVER_URL: "http://localhost:18080",
           GRAM_SERVER_PORT: "18080",
@@ -364,8 +386,8 @@ const fs = require('node:fs');
 if (process.env.STRIPE_API_KEY !== 'sk_test_fixture') process.exit(8);
 if (process.argv.includes('--print-secret')) { console.log('whsec_fixture'); process.exit(0); }
 if (!process.argv.includes('--log-level') || !process.argv.includes('debug')) process.exit(9);
+console.error('time="fixture" level=debug msg="Disconnected from Stripe" prefix=websocket.Client.Run');
 console.error('time="fixture" level=debug msg="Connected!" prefix=websocket.Client.connect');
-console.error('Ready! Your webhook signing secret is whsec_fixture');
 console.error('<-- [200] POST http://localhost:18080/rpc/stripe.webhook [evt_fixture]');
 let disconnected = false;
 let reconnected = false;
@@ -394,6 +416,7 @@ setInterval(() => {
       cwd: dir,
       env: {
         ...process.env,
+        GRAM_ENVIRONMENT: "local",
         PATH: `${join(dir, "bin")}:${process.env.PATH}`,
         STRIPE_API_KEY: "sk_live_ambient",
         GRAM_SERVER_URL: "http://localhost:18080",
@@ -449,7 +472,7 @@ setInterval(() => {
     assert.doesNotMatch(output, /whsec_|sk_test_|sk_live_|evt_fixture/);
   } finally {
     child.kill("SIGTERM");
-    await exited;
+    assert.equal(await exited, 0, "intentional stop must exit successfully");
     rmSync(dir, { recursive: true, force: true });
   }
 });

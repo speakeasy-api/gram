@@ -18,6 +18,8 @@ import {
 import type { ListenerPhase } from "./helpers.mts";
 
 try {
+  if (process.env.GRAM_ENVIRONMENT !== "local")
+    throw new Error("Stripe forwarding requires GRAM_ENVIRONMENT=local.");
   const config = persistedStripeConfig();
   const issue = stripeConfigIssue(config);
   if (issue) throw new Error(issue);
@@ -96,8 +98,9 @@ try {
     { env, stdio: ["ignore", "pipe", "pipe"] },
   );
   // Raw CLI output includes the signing secret and must never reach Pitchfork logs.
-  let verified = false;
+  // Preflight already matched the signing secret; the socket must still connect.
   let connected = false;
+  let shutdownRequested = false;
   const deadline = setTimeout(() => {
     save("stopped");
     child.kill("SIGTERM");
@@ -123,17 +126,15 @@ try {
       );
       return;
     }
-    // The Ready banner verifies the secret once; reconnects only emit Connected!.
-    if (next === "ready") verified = true;
     if (next === "connected") connected = true;
     if (next === "ready" || next === "connected") {
-      if (!verified || !connected) return;
+      if (!connected) return;
       clearTimeout(deadline);
       save("ready");
       console.log(
         "Stripe listener ready (signing secret matched; delivery unverified).",
       );
-    } else if (verified && phase !== "disconnected") {
+    } else if (connected) {
       save(next);
       console.log(
         next === "delivered"
@@ -146,6 +147,8 @@ try {
   createInterface({ input: child.stderr }).on("line", consume);
   for (const signal of ["SIGINT", "SIGTERM"] as const)
     process.on(signal, () => {
+      shutdownRequested = true;
+      clearTimeout(deadline);
       child.kill(signal);
     });
   child.on("error", () => {
@@ -158,7 +161,7 @@ try {
     clearTimeout(deadline);
     if (!["expired", "auth-failed", "secret-mismatch"].includes(phase))
       save("stopped");
-    process.exitCode = code ?? 1;
+    process.exitCode = shutdownRequested ? 0 : (code ?? 1);
   });
 } catch (error) {
   // Only our own fixed messages are safe; unexpected process errors may contain secrets.
