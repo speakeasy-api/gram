@@ -22,6 +22,7 @@ export function StackedTimeBarChart({
   onRangeSelect,
   height = 200,
   expanded = false,
+  compact = false,
 }: {
   labels: string[];
   timestamps: number[];
@@ -32,6 +33,8 @@ export function StackedTimeBarChart({
   onRangeSelect?: (from: Date, to: Date) => void;
   height?: number;
   expanded?: boolean;
+  /** Strip variant: no legend, no axis furniture — just the silhouette. */
+  compact?: boolean;
 }) {
   const { chartRef, zoomPluginOptions, resetZoom } = useChartZoom<"bar">({
     onRangeSelect,
@@ -61,9 +64,25 @@ export function StackedTimeBarChart({
     maintainAspectRatio: false,
     interaction: { mode: "index", intersect: false },
     plugins: {
-      legend: expanded ? EXPANDED_LEGEND : SHARED_LEGEND,
+      legend: expanded && !compact ? EXPANDED_LEGEND : SHARED_LEGEND,
       tooltip: {
         ...SHARED_TOOLTIP,
+        // A tooltip is drawn inside the canvas, so on a 76px strip a
+        // three-line box has nowhere to sit and ends up over the bars it is
+        // describing. Compact keeps it above the cursor and small enough to
+        // clear them.
+        ...(compact
+          ? {
+              yAlign: "bottom" as const,
+              xAlign: "center" as const,
+              displayColors: false,
+              padding: 6,
+              caretPadding: 6,
+              titleFont: { size: 10 },
+              bodyFont: { size: 10 },
+              titleMarginBottom: 2,
+            }
+          : {}),
         // Index-mode hover activates every series at that x. Drop zeros so a
         // sparse multi-series chart doesn't build a tooltip listing every
         // inactive source (which balloons until it covers the chart). Returning
@@ -90,11 +109,29 @@ export function StackedTimeBarChart({
       x: {
         stacked: true,
         grid: { display: false },
-        ticks: { maxTicksLimit: 8, color: CHART_COLORS.labelFaded },
+        ticks: compact
+          ? {
+              // The strip labels day boundaries, which the caller marks by
+              // giving only those buckets a label. autoSkip would drop them by
+              // its own spacing rules, so it is off and the empty labels do
+              // the skipping.
+              display: true,
+              autoSkip: false,
+              maxRotation: 0,
+              padding: 2,
+              font: { size: 10 },
+              color: CHART_COLORS.labelFaded,
+            }
+          : { maxTicksLimit: 8, color: CHART_COLORS.labelFaded },
+        // The strip keeps its baseline: without one the bars float and the
+        // short buckets read as gaps rather than as small values.
+        border: { display: true, color: CHART_COLORS.gridLine },
+        ...(compact ? { barPercentage: 0.92, categoryPercentage: 0.98 } : {}),
       },
       y: {
         stacked: true,
         beginAtZero: true,
+        display: !compact,
         grid: { color: "rgba(128, 128, 128, 0.2)" },
         ticks: { precision: 0, color: CHART_COLORS.labelFaded },
       },
