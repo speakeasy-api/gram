@@ -599,6 +599,9 @@ type CreateGlobalClientResponseBody struct {
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Identifier used as the aud claim in private_key_jwt assertions. Null
+	// resolves to issuer.
+	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
 	// The organization JSON Web Key Set attached to this client, managed through
 	// attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
@@ -653,6 +656,9 @@ type GetGlobalClientResponseBody struct {
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Identifier used as the aud claim in private_key_jwt assertions. Null
+	// resolves to issuer.
+	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
 	// The organization JSON Web Key Set attached to this client, managed through
 	// attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
@@ -699,6 +705,9 @@ type UpdateGlobalClientResponseBody struct {
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Identifier used as the aud claim in private_key_jwt assertions. Null
+	// resolves to issuer.
+	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
 	// The organization JSON Web Key Set attached to this client, managed through
 	// attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
@@ -3978,6 +3987,9 @@ type RemoteSessionClientResponseBody struct {
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Identifier used as the aud claim in private_key_jwt assertions. Null
+	// resolves to issuer.
+	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
 	// The organization JSON Web Key Set attached to this client, managed through
 	// attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
@@ -4385,20 +4397,21 @@ func NewRefreshGlobalIssuerMetadataResponseBody(res *types.RemoteSessionIssuerRe
 // service.
 func NewCreateGlobalClientResponseBody(res *types.RemoteSessionClient) *CreateGlobalClientResponseBody {
 	body := &CreateGlobalClientResponseBody{
-		ID:                      res.ID,
-		ProjectID:               res.ProjectID,
-		OrganizationID:          res.OrganizationID,
-		RemoteSessionIssuerID:   res.RemoteSessionIssuerID,
-		ClientID:                res.ClientID,
-		ClientIDMetadataURI:     res.ClientIDMetadataURI,
-		ClientIDIssuedAt:        res.ClientIDIssuedAt,
-		ClientSecretExpiresAt:   res.ClientSecretExpiresAt,
-		UpstreamRejectedAt:      res.UpstreamRejectedAt,
-		TokenEndpointAuthMethod: res.TokenEndpointAuthMethod,
-		JSONWebKeySetID:         res.JSONWebKeySetID,
-		Audience:                res.Audience,
-		CreatedAt:               res.CreatedAt,
-		UpdatedAt:               res.UpdatedAt,
+		ID:                              res.ID,
+		ProjectID:                       res.ProjectID,
+		OrganizationID:                  res.OrganizationID,
+		RemoteSessionIssuerID:           res.RemoteSessionIssuerID,
+		ClientID:                        res.ClientID,
+		ClientIDMetadataURI:             res.ClientIDMetadataURI,
+		ClientIDIssuedAt:                res.ClientIDIssuedAt,
+		ClientSecretExpiresAt:           res.ClientSecretExpiresAt,
+		UpstreamRejectedAt:              res.UpstreamRejectedAt,
+		TokenEndpointAuthMethod:         res.TokenEndpointAuthMethod,
+		TokenEndpointAuthAudienceFormat: res.TokenEndpointAuthAudienceFormat,
+		JSONWebKeySetID:                 res.JSONWebKeySetID,
+		Audience:                        res.Audience,
+		CreatedAt:                       res.CreatedAt,
+		UpdatedAt:                       res.UpdatedAt,
 	}
 	if res.UserSessionIssuerIds != nil {
 		body.UserSessionIssuerIds = make([]string, len(res.UserSessionIssuerIds))
@@ -4443,20 +4456,21 @@ func NewListGlobalClientsResponseBody(res *adminremotesessions.ListRemoteSession
 // of the "getGlobalClient" endpoint of the "adminRemoteSessions" service.
 func NewGetGlobalClientResponseBody(res *types.RemoteSessionClient) *GetGlobalClientResponseBody {
 	body := &GetGlobalClientResponseBody{
-		ID:                      res.ID,
-		ProjectID:               res.ProjectID,
-		OrganizationID:          res.OrganizationID,
-		RemoteSessionIssuerID:   res.RemoteSessionIssuerID,
-		ClientID:                res.ClientID,
-		ClientIDMetadataURI:     res.ClientIDMetadataURI,
-		ClientIDIssuedAt:        res.ClientIDIssuedAt,
-		ClientSecretExpiresAt:   res.ClientSecretExpiresAt,
-		UpstreamRejectedAt:      res.UpstreamRejectedAt,
-		TokenEndpointAuthMethod: res.TokenEndpointAuthMethod,
-		JSONWebKeySetID:         res.JSONWebKeySetID,
-		Audience:                res.Audience,
-		CreatedAt:               res.CreatedAt,
-		UpdatedAt:               res.UpdatedAt,
+		ID:                              res.ID,
+		ProjectID:                       res.ProjectID,
+		OrganizationID:                  res.OrganizationID,
+		RemoteSessionIssuerID:           res.RemoteSessionIssuerID,
+		ClientID:                        res.ClientID,
+		ClientIDMetadataURI:             res.ClientIDMetadataURI,
+		ClientIDIssuedAt:                res.ClientIDIssuedAt,
+		ClientSecretExpiresAt:           res.ClientSecretExpiresAt,
+		UpstreamRejectedAt:              res.UpstreamRejectedAt,
+		TokenEndpointAuthMethod:         res.TokenEndpointAuthMethod,
+		TokenEndpointAuthAudienceFormat: res.TokenEndpointAuthAudienceFormat,
+		JSONWebKeySetID:                 res.JSONWebKeySetID,
+		Audience:                        res.Audience,
+		CreatedAt:                       res.CreatedAt,
+		UpdatedAt:                       res.UpdatedAt,
 	}
 	if res.UserSessionIssuerIds != nil {
 		body.UserSessionIssuerIds = make([]string, len(res.UserSessionIssuerIds))
@@ -4480,20 +4494,21 @@ func NewGetGlobalClientResponseBody(res *types.RemoteSessionClient) *GetGlobalCl
 // service.
 func NewUpdateGlobalClientResponseBody(res *types.RemoteSessionClient) *UpdateGlobalClientResponseBody {
 	body := &UpdateGlobalClientResponseBody{
-		ID:                      res.ID,
-		ProjectID:               res.ProjectID,
-		OrganizationID:          res.OrganizationID,
-		RemoteSessionIssuerID:   res.RemoteSessionIssuerID,
-		ClientID:                res.ClientID,
-		ClientIDMetadataURI:     res.ClientIDMetadataURI,
-		ClientIDIssuedAt:        res.ClientIDIssuedAt,
-		ClientSecretExpiresAt:   res.ClientSecretExpiresAt,
-		UpstreamRejectedAt:      res.UpstreamRejectedAt,
-		TokenEndpointAuthMethod: res.TokenEndpointAuthMethod,
-		JSONWebKeySetID:         res.JSONWebKeySetID,
-		Audience:                res.Audience,
-		CreatedAt:               res.CreatedAt,
-		UpdatedAt:               res.UpdatedAt,
+		ID:                              res.ID,
+		ProjectID:                       res.ProjectID,
+		OrganizationID:                  res.OrganizationID,
+		RemoteSessionIssuerID:           res.RemoteSessionIssuerID,
+		ClientID:                        res.ClientID,
+		ClientIDMetadataURI:             res.ClientIDMetadataURI,
+		ClientIDIssuedAt:                res.ClientIDIssuedAt,
+		ClientSecretExpiresAt:           res.ClientSecretExpiresAt,
+		UpstreamRejectedAt:              res.UpstreamRejectedAt,
+		TokenEndpointAuthMethod:         res.TokenEndpointAuthMethod,
+		TokenEndpointAuthAudienceFormat: res.TokenEndpointAuthAudienceFormat,
+		JSONWebKeySetID:                 res.JSONWebKeySetID,
+		Audience:                        res.Audience,
+		CreatedAt:                       res.CreatedAt,
+		UpdatedAt:                       res.UpdatedAt,
 	}
 	if res.UserSessionIssuerIds != nil {
 		body.UserSessionIssuerIds = make([]string, len(res.UserSessionIssuerIds))

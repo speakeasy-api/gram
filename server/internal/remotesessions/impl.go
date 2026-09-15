@@ -91,7 +91,7 @@ var (
 
 func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, authzEngine *authz.Engine, enc *encryption.Client, env *environments.EnvironmentEntries, policy *guardian.Policy, auditLogger *audit.Logger, serverURL *url.URL, refresher *RefreshService, productFeatures *productfeatures.Client) *Service {
 	logger = logger.With(attr.SlogComponent("remotesessions"))
-	revoker := NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, policy)
+	revoker := NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, policy, refresher.assertions)
 
 	return &Service{
 		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/remotesessions"),

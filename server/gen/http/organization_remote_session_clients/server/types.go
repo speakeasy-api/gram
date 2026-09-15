@@ -35,6 +35,10 @@ type CreateClientRequestBody struct {
 	// How the client authenticates at the issuer's token endpoint. Omit to default
 	// to client_secret_basic.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Identifier used as the aud claim in private_key_jwt assertions. Omit to use
+	// the issuer identifier; token_endpoint is available for providers that
+	// require the token endpoint URL.
+	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
 	// Explicit upstream OAuth scopes the dance should request for this client.
 	// Omit to fall back to the issuer's scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
@@ -79,6 +83,9 @@ type UpdateClientRequestBody struct {
 	ClientSecret *string `form:"client_secret,omitempty" json:"client_secret,omitempty" xml:"client_secret,omitempty"`
 	// Change how the client authenticates at the issuer's token endpoint.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Change the aud claim format used in private_key_jwt assertions. Omit to
+	// leave unchanged.
+	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
 	// Replace the explicit upstream OAuth scopes for this client. Omit to leave
 	// unchanged.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
@@ -158,6 +165,9 @@ type GetClientResponseBody struct {
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Identifier used as the aud claim in private_key_jwt assertions. Null
+	// resolves to issuer.
+	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
 	// The organization JSON Web Key Set attached to this client, managed through
 	// attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
@@ -222,6 +232,9 @@ type CreateClientResponseBody struct {
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Identifier used as the aud claim in private_key_jwt assertions. Null
+	// resolves to issuer.
+	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
 	// The organization JSON Web Key Set attached to this client, managed through
 	// attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
@@ -269,6 +282,9 @@ type CreateCimdClientResponseBody struct {
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Identifier used as the aud claim in private_key_jwt assertions. Null
+	// resolves to issuer.
+	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
 	// The organization JSON Web Key Set attached to this client, managed through
 	// attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
@@ -316,6 +332,9 @@ type UpdateClientResponseBody struct {
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Identifier used as the aud claim in private_key_jwt assertions. Null
+	// resolves to issuer.
+	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
 	// The organization JSON Web Key Set attached to this client, managed through
 	// attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
@@ -363,6 +382,9 @@ type AttachClientKeySetResponseBody struct {
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Identifier used as the aud claim in private_key_jwt assertions. Null
+	// resolves to issuer.
+	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
 	// The organization JSON Web Key Set attached to this client, managed through
 	// attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
@@ -410,6 +432,9 @@ type DetachClientKeySetResponseBody struct {
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Identifier used as the aud claim in private_key_jwt assertions. Null
+	// resolves to issuer.
+	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
 	// The organization JSON Web Key Set attached to this client, managed through
 	// attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
@@ -457,6 +482,9 @@ type RotateClientResponseBody struct {
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Identifier used as the aud claim in private_key_jwt assertions. Null
+	// resolves to issuer.
+	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
 	// The organization JSON Web Key Set attached to this client, managed through
 	// attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
@@ -2833,6 +2861,9 @@ type RemoteSessionClientResponseBody struct {
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Identifier used as the aud claim in private_key_jwt assertions. Null
+	// resolves to issuer.
+	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
 	// The organization JSON Web Key Set attached to this client, managed through
 	// attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
@@ -2888,20 +2919,21 @@ func NewListClientsResponseBody(res *organizationremotesessionclients.ListOrgani
 // the "getClient" endpoint of the "organizationRemoteSessionClients" service.
 func NewGetClientResponseBody(res *types.RemoteSessionClient) *GetClientResponseBody {
 	body := &GetClientResponseBody{
-		ID:                      res.ID,
-		ProjectID:               res.ProjectID,
-		OrganizationID:          res.OrganizationID,
-		RemoteSessionIssuerID:   res.RemoteSessionIssuerID,
-		ClientID:                res.ClientID,
-		ClientIDMetadataURI:     res.ClientIDMetadataURI,
-		ClientIDIssuedAt:        res.ClientIDIssuedAt,
-		ClientSecretExpiresAt:   res.ClientSecretExpiresAt,
-		UpstreamRejectedAt:      res.UpstreamRejectedAt,
-		TokenEndpointAuthMethod: res.TokenEndpointAuthMethod,
-		JSONWebKeySetID:         res.JSONWebKeySetID,
-		Audience:                res.Audience,
-		CreatedAt:               res.CreatedAt,
-		UpdatedAt:               res.UpdatedAt,
+		ID:                              res.ID,
+		ProjectID:                       res.ProjectID,
+		OrganizationID:                  res.OrganizationID,
+		RemoteSessionIssuerID:           res.RemoteSessionIssuerID,
+		ClientID:                        res.ClientID,
+		ClientIDMetadataURI:             res.ClientIDMetadataURI,
+		ClientIDIssuedAt:                res.ClientIDIssuedAt,
+		ClientSecretExpiresAt:           res.ClientSecretExpiresAt,
+		UpstreamRejectedAt:              res.UpstreamRejectedAt,
+		TokenEndpointAuthMethod:         res.TokenEndpointAuthMethod,
+		TokenEndpointAuthAudienceFormat: res.TokenEndpointAuthAudienceFormat,
+		JSONWebKeySetID:                 res.JSONWebKeySetID,
+		Audience:                        res.Audience,
+		CreatedAt:                       res.CreatedAt,
+		UpdatedAt:                       res.UpdatedAt,
 	}
 	if res.UserSessionIssuerIds != nil {
 		body.UserSessionIssuerIds = make([]string, len(res.UserSessionIssuerIds))
@@ -2963,20 +2995,21 @@ func NewListClientMcpServersResponseBody(res *organizationremotesessionclients.L
 // service.
 func NewCreateClientResponseBody(res *types.RemoteSessionClient) *CreateClientResponseBody {
 	body := &CreateClientResponseBody{
-		ID:                      res.ID,
-		ProjectID:               res.ProjectID,
-		OrganizationID:          res.OrganizationID,
-		RemoteSessionIssuerID:   res.RemoteSessionIssuerID,
-		ClientID:                res.ClientID,
-		ClientIDMetadataURI:     res.ClientIDMetadataURI,
-		ClientIDIssuedAt:        res.ClientIDIssuedAt,
-		ClientSecretExpiresAt:   res.ClientSecretExpiresAt,
-		UpstreamRejectedAt:      res.UpstreamRejectedAt,
-		TokenEndpointAuthMethod: res.TokenEndpointAuthMethod,
-		JSONWebKeySetID:         res.JSONWebKeySetID,
-		Audience:                res.Audience,
-		CreatedAt:               res.CreatedAt,
-		UpdatedAt:               res.UpdatedAt,
+		ID:                              res.ID,
+		ProjectID:                       res.ProjectID,
+		OrganizationID:                  res.OrganizationID,
+		RemoteSessionIssuerID:           res.RemoteSessionIssuerID,
+		ClientID:                        res.ClientID,
+		ClientIDMetadataURI:             res.ClientIDMetadataURI,
+		ClientIDIssuedAt:                res.ClientIDIssuedAt,
+		ClientSecretExpiresAt:           res.ClientSecretExpiresAt,
+		UpstreamRejectedAt:              res.UpstreamRejectedAt,
+		TokenEndpointAuthMethod:         res.TokenEndpointAuthMethod,
+		TokenEndpointAuthAudienceFormat: res.TokenEndpointAuthAudienceFormat,
+		JSONWebKeySetID:                 res.JSONWebKeySetID,
+		Audience:                        res.Audience,
+		CreatedAt:                       res.CreatedAt,
+		UpdatedAt:                       res.UpdatedAt,
 	}
 	if res.UserSessionIssuerIds != nil {
 		body.UserSessionIssuerIds = make([]string, len(res.UserSessionIssuerIds))
@@ -3000,20 +3033,21 @@ func NewCreateClientResponseBody(res *types.RemoteSessionClient) *CreateClientRe
 // "organizationRemoteSessionClients" service.
 func NewCreateCimdClientResponseBody(res *types.RemoteSessionClient) *CreateCimdClientResponseBody {
 	body := &CreateCimdClientResponseBody{
-		ID:                      res.ID,
-		ProjectID:               res.ProjectID,
-		OrganizationID:          res.OrganizationID,
-		RemoteSessionIssuerID:   res.RemoteSessionIssuerID,
-		ClientID:                res.ClientID,
-		ClientIDMetadataURI:     res.ClientIDMetadataURI,
-		ClientIDIssuedAt:        res.ClientIDIssuedAt,
-		ClientSecretExpiresAt:   res.ClientSecretExpiresAt,
-		UpstreamRejectedAt:      res.UpstreamRejectedAt,
-		TokenEndpointAuthMethod: res.TokenEndpointAuthMethod,
-		JSONWebKeySetID:         res.JSONWebKeySetID,
-		Audience:                res.Audience,
-		CreatedAt:               res.CreatedAt,
-		UpdatedAt:               res.UpdatedAt,
+		ID:                              res.ID,
+		ProjectID:                       res.ProjectID,
+		OrganizationID:                  res.OrganizationID,
+		RemoteSessionIssuerID:           res.RemoteSessionIssuerID,
+		ClientID:                        res.ClientID,
+		ClientIDMetadataURI:             res.ClientIDMetadataURI,
+		ClientIDIssuedAt:                res.ClientIDIssuedAt,
+		ClientSecretExpiresAt:           res.ClientSecretExpiresAt,
+		UpstreamRejectedAt:              res.UpstreamRejectedAt,
+		TokenEndpointAuthMethod:         res.TokenEndpointAuthMethod,
+		TokenEndpointAuthAudienceFormat: res.TokenEndpointAuthAudienceFormat,
+		JSONWebKeySetID:                 res.JSONWebKeySetID,
+		Audience:                        res.Audience,
+		CreatedAt:                       res.CreatedAt,
+		UpdatedAt:                       res.UpdatedAt,
 	}
 	if res.UserSessionIssuerIds != nil {
 		body.UserSessionIssuerIds = make([]string, len(res.UserSessionIssuerIds))
@@ -3037,20 +3071,21 @@ func NewCreateCimdClientResponseBody(res *types.RemoteSessionClient) *CreateCimd
 // service.
 func NewUpdateClientResponseBody(res *types.RemoteSessionClient) *UpdateClientResponseBody {
 	body := &UpdateClientResponseBody{
-		ID:                      res.ID,
-		ProjectID:               res.ProjectID,
-		OrganizationID:          res.OrganizationID,
-		RemoteSessionIssuerID:   res.RemoteSessionIssuerID,
-		ClientID:                res.ClientID,
-		ClientIDMetadataURI:     res.ClientIDMetadataURI,
-		ClientIDIssuedAt:        res.ClientIDIssuedAt,
-		ClientSecretExpiresAt:   res.ClientSecretExpiresAt,
-		UpstreamRejectedAt:      res.UpstreamRejectedAt,
-		TokenEndpointAuthMethod: res.TokenEndpointAuthMethod,
-		JSONWebKeySetID:         res.JSONWebKeySetID,
-		Audience:                res.Audience,
-		CreatedAt:               res.CreatedAt,
-		UpdatedAt:               res.UpdatedAt,
+		ID:                              res.ID,
+		ProjectID:                       res.ProjectID,
+		OrganizationID:                  res.OrganizationID,
+		RemoteSessionIssuerID:           res.RemoteSessionIssuerID,
+		ClientID:                        res.ClientID,
+		ClientIDMetadataURI:             res.ClientIDMetadataURI,
+		ClientIDIssuedAt:                res.ClientIDIssuedAt,
+		ClientSecretExpiresAt:           res.ClientSecretExpiresAt,
+		UpstreamRejectedAt:              res.UpstreamRejectedAt,
+		TokenEndpointAuthMethod:         res.TokenEndpointAuthMethod,
+		TokenEndpointAuthAudienceFormat: res.TokenEndpointAuthAudienceFormat,
+		JSONWebKeySetID:                 res.JSONWebKeySetID,
+		Audience:                        res.Audience,
+		CreatedAt:                       res.CreatedAt,
+		UpdatedAt:                       res.UpdatedAt,
 	}
 	if res.UserSessionIssuerIds != nil {
 		body.UserSessionIssuerIds = make([]string, len(res.UserSessionIssuerIds))
@@ -3074,20 +3109,21 @@ func NewUpdateClientResponseBody(res *types.RemoteSessionClient) *UpdateClientRe
 // "organizationRemoteSessionClients" service.
 func NewAttachClientKeySetResponseBody(res *types.RemoteSessionClient) *AttachClientKeySetResponseBody {
 	body := &AttachClientKeySetResponseBody{
-		ID:                      res.ID,
-		ProjectID:               res.ProjectID,
-		OrganizationID:          res.OrganizationID,
-		RemoteSessionIssuerID:   res.RemoteSessionIssuerID,
-		ClientID:                res.ClientID,
-		ClientIDMetadataURI:     res.ClientIDMetadataURI,
-		ClientIDIssuedAt:        res.ClientIDIssuedAt,
-		ClientSecretExpiresAt:   res.ClientSecretExpiresAt,
-		UpstreamRejectedAt:      res.UpstreamRejectedAt,
-		TokenEndpointAuthMethod: res.TokenEndpointAuthMethod,
-		JSONWebKeySetID:         res.JSONWebKeySetID,
-		Audience:                res.Audience,
-		CreatedAt:               res.CreatedAt,
-		UpdatedAt:               res.UpdatedAt,
+		ID:                              res.ID,
+		ProjectID:                       res.ProjectID,
+		OrganizationID:                  res.OrganizationID,
+		RemoteSessionIssuerID:           res.RemoteSessionIssuerID,
+		ClientID:                        res.ClientID,
+		ClientIDMetadataURI:             res.ClientIDMetadataURI,
+		ClientIDIssuedAt:                res.ClientIDIssuedAt,
+		ClientSecretExpiresAt:           res.ClientSecretExpiresAt,
+		UpstreamRejectedAt:              res.UpstreamRejectedAt,
+		TokenEndpointAuthMethod:         res.TokenEndpointAuthMethod,
+		TokenEndpointAuthAudienceFormat: res.TokenEndpointAuthAudienceFormat,
+		JSONWebKeySetID:                 res.JSONWebKeySetID,
+		Audience:                        res.Audience,
+		CreatedAt:                       res.CreatedAt,
+		UpdatedAt:                       res.UpdatedAt,
 	}
 	if res.UserSessionIssuerIds != nil {
 		body.UserSessionIssuerIds = make([]string, len(res.UserSessionIssuerIds))
@@ -3111,20 +3147,21 @@ func NewAttachClientKeySetResponseBody(res *types.RemoteSessionClient) *AttachCl
 // "organizationRemoteSessionClients" service.
 func NewDetachClientKeySetResponseBody(res *types.RemoteSessionClient) *DetachClientKeySetResponseBody {
 	body := &DetachClientKeySetResponseBody{
-		ID:                      res.ID,
-		ProjectID:               res.ProjectID,
-		OrganizationID:          res.OrganizationID,
-		RemoteSessionIssuerID:   res.RemoteSessionIssuerID,
-		ClientID:                res.ClientID,
-		ClientIDMetadataURI:     res.ClientIDMetadataURI,
-		ClientIDIssuedAt:        res.ClientIDIssuedAt,
-		ClientSecretExpiresAt:   res.ClientSecretExpiresAt,
-		UpstreamRejectedAt:      res.UpstreamRejectedAt,
-		TokenEndpointAuthMethod: res.TokenEndpointAuthMethod,
-		JSONWebKeySetID:         res.JSONWebKeySetID,
-		Audience:                res.Audience,
-		CreatedAt:               res.CreatedAt,
-		UpdatedAt:               res.UpdatedAt,
+		ID:                              res.ID,
+		ProjectID:                       res.ProjectID,
+		OrganizationID:                  res.OrganizationID,
+		RemoteSessionIssuerID:           res.RemoteSessionIssuerID,
+		ClientID:                        res.ClientID,
+		ClientIDMetadataURI:             res.ClientIDMetadataURI,
+		ClientIDIssuedAt:                res.ClientIDIssuedAt,
+		ClientSecretExpiresAt:           res.ClientSecretExpiresAt,
+		UpstreamRejectedAt:              res.UpstreamRejectedAt,
+		TokenEndpointAuthMethod:         res.TokenEndpointAuthMethod,
+		TokenEndpointAuthAudienceFormat: res.TokenEndpointAuthAudienceFormat,
+		JSONWebKeySetID:                 res.JSONWebKeySetID,
+		Audience:                        res.Audience,
+		CreatedAt:                       res.CreatedAt,
+		UpdatedAt:                       res.UpdatedAt,
 	}
 	if res.UserSessionIssuerIds != nil {
 		body.UserSessionIssuerIds = make([]string, len(res.UserSessionIssuerIds))
@@ -3148,20 +3185,21 @@ func NewDetachClientKeySetResponseBody(res *types.RemoteSessionClient) *DetachCl
 // service.
 func NewRotateClientResponseBody(res *types.RemoteSessionClient) *RotateClientResponseBody {
 	body := &RotateClientResponseBody{
-		ID:                      res.ID,
-		ProjectID:               res.ProjectID,
-		OrganizationID:          res.OrganizationID,
-		RemoteSessionIssuerID:   res.RemoteSessionIssuerID,
-		ClientID:                res.ClientID,
-		ClientIDMetadataURI:     res.ClientIDMetadataURI,
-		ClientIDIssuedAt:        res.ClientIDIssuedAt,
-		ClientSecretExpiresAt:   res.ClientSecretExpiresAt,
-		UpstreamRejectedAt:      res.UpstreamRejectedAt,
-		TokenEndpointAuthMethod: res.TokenEndpointAuthMethod,
-		JSONWebKeySetID:         res.JSONWebKeySetID,
-		Audience:                res.Audience,
-		CreatedAt:               res.CreatedAt,
-		UpdatedAt:               res.UpdatedAt,
+		ID:                              res.ID,
+		ProjectID:                       res.ProjectID,
+		OrganizationID:                  res.OrganizationID,
+		RemoteSessionIssuerID:           res.RemoteSessionIssuerID,
+		ClientID:                        res.ClientID,
+		ClientIDMetadataURI:             res.ClientIDMetadataURI,
+		ClientIDIssuedAt:                res.ClientIDIssuedAt,
+		ClientSecretExpiresAt:           res.ClientSecretExpiresAt,
+		UpstreamRejectedAt:              res.UpstreamRejectedAt,
+		TokenEndpointAuthMethod:         res.TokenEndpointAuthMethod,
+		TokenEndpointAuthAudienceFormat: res.TokenEndpointAuthAudienceFormat,
+		JSONWebKeySetID:                 res.JSONWebKeySetID,
+		Audience:                        res.Audience,
+		CreatedAt:                       res.CreatedAt,
+		UpdatedAt:                       res.UpdatedAt,
 	}
 	if res.UserSessionIssuerIds != nil {
 		body.UserSessionIssuerIds = make([]string, len(res.UserSessionIssuerIds))
@@ -5060,14 +5098,15 @@ func NewListClientMcpServersPayload(clientID string, sessionToken *string, apike
 // createClient endpoint payload.
 func NewCreateClientPayload(body *CreateClientRequestBody, sessionToken *string, apikeyToken *string) *organizationremotesessionclients.CreateClientPayload {
 	v := &organizationremotesessionclients.CreateClientPayload{
-		RemoteSessionIssuerID:   *body.RemoteSessionIssuerID,
-		ProjectID:               body.ProjectID,
-		ClientID:                *body.ClientID,
-		ClientSecret:            body.ClientSecret,
-		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
-		Audience:                body.Audience,
-		ClientIDIssuedAt:        body.ClientIDIssuedAt,
-		ClientSecretExpiresAt:   body.ClientSecretExpiresAt,
+		RemoteSessionIssuerID:           *body.RemoteSessionIssuerID,
+		ProjectID:                       body.ProjectID,
+		ClientID:                        *body.ClientID,
+		ClientSecret:                    body.ClientSecret,
+		TokenEndpointAuthMethod:         body.TokenEndpointAuthMethod,
+		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
+		Audience:                        body.Audience,
+		ClientIDIssuedAt:                body.ClientIDIssuedAt,
+		ClientSecretExpiresAt:           body.ClientSecretExpiresAt,
 	}
 	if body.Scope != nil {
 		v.Scope = make([]string, len(body.Scope))
@@ -5105,10 +5144,11 @@ func NewCreateCimdClientPayload(body *CreateCimdClientRequestBody, sessionToken 
 // updateClient endpoint payload.
 func NewUpdateClientPayload(body *UpdateClientRequestBody, sessionToken *string, apikeyToken *string) *organizationremotesessionclients.UpdateClientPayload {
 	v := &organizationremotesessionclients.UpdateClientPayload{
-		ID:                      *body.ID,
-		ClientSecret:            body.ClientSecret,
-		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
-		Audience:                body.Audience,
+		ID:                              *body.ID,
+		ClientSecret:                    body.ClientSecret,
+		TokenEndpointAuthMethod:         body.TokenEndpointAuthMethod,
+		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
+		Audience:                        body.Audience,
 	}
 	if body.Scope != nil {
 		v.Scope = make([]string, len(body.Scope))
@@ -5199,8 +5239,13 @@ func ValidateCreateClientRequestBody(body *CreateClientRequestBody) (err error) 
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
 	if body.TokenEndpointAuthMethod != nil {
-		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none"}))
+		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none" || *body.TokenEndpointAuthMethod == "private_key_jwt") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none", "private_key_jwt"}))
+		}
+	}
+	if body.TokenEndpointAuthAudienceFormat != nil {
+		if !(*body.TokenEndpointAuthAudienceFormat == "issuer" || *body.TokenEndpointAuthAudienceFormat == "token_endpoint") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_audience_format", *body.TokenEndpointAuthAudienceFormat, []any{"issuer", "token_endpoint"}))
 		}
 	}
 	for _, e := range body.Scope {
@@ -5265,8 +5310,13 @@ func ValidateUpdateClientRequestBody(body *UpdateClientRequestBody) (err error) 
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
 	if body.TokenEndpointAuthMethod != nil {
-		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none"}))
+		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none" || *body.TokenEndpointAuthMethod == "private_key_jwt") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none", "private_key_jwt"}))
+		}
+	}
+	if body.TokenEndpointAuthAudienceFormat != nil {
+		if !(*body.TokenEndpointAuthAudienceFormat == "issuer" || *body.TokenEndpointAuthAudienceFormat == "token_endpoint") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_audience_format", *body.TokenEndpointAuthAudienceFormat, []any{"issuer", "token_endpoint"}))
 		}
 	}
 	for _, e := range body.Scope {
