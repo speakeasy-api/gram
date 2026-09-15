@@ -32,7 +32,14 @@ import { Button } from "@/components/ui/Button";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router";
 import { useOrgRoutes } from "@/routes";
-import { ArrowLeft, Bot, Check, ChevronRight, Loader2 } from "lucide-react";
+import {
+  ArrowLeft,
+  Bot,
+  Check,
+  ChevronRight,
+  Loader2,
+  Lock,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 import {
   getSelectableMembers,
@@ -781,68 +788,90 @@ export function CreateRoleDialog({
               }}
             />
 
-            {/* ─── Assign Members (hidden when directory sync manages assignment) ─── */}
-            {!organization.scimEnabled && (
-              <div className="border-border border-t pt-4 pb-4">
-                <button
-                  type="button"
-                  onClick={() => setShowMembers(!showMembers)}
-                  className="flex w-full items-center gap-1 text-left"
-                >
-                  <ChevronRight
-                    className={cn(
-                      "h-4 w-4 transition-transform",
-                      showMembers && "rotate-90",
-                    )}
-                  />
-                  <Text variant="body" className="font-medium">
-                    Assign Members
-                  </Text>
-                  <Text variant="body" className="text-muted-foreground ml-1">
-                    (optional, {selectedMembers.size} selected)
-                  </Text>
-                </button>
+            {/* ─── Assign Members (read-only when directory sync manages assignment) ─── */}
+            <div className="border-border border-t pt-4 pb-4">
+              <button
+                type="button"
+                onClick={() => setShowMembers(!showMembers)}
+                className="flex w-full items-center gap-1 text-left"
+              >
+                <ChevronRight
+                  className={cn(
+                    "h-4 w-4 transition-transform",
+                    showMembers && "rotate-90",
+                  )}
+                />
+                <Text variant="body" className="font-medium">
+                  Assign Members
+                </Text>
+                <Text variant="body" className="text-muted-foreground ml-1">
+                  {organization.scimEnabled
+                    ? `(${selectedMembers.size} assigned by directory sync)`
+                    : `(optional, ${selectedMembers.size} selected)`}
+                </Text>
+              </button>
 
-                {showMembers && (
-                  <div className="border-border divide-border mt-3 divide-y border">
+              {showMembers && (
+                <div className="relative mt-3">
+                  {/* The rows stay visible — who holds the role is still worth
+                        reading — but a directory owns the answer, so nothing here
+                        is clickable. */}
+                  {organization.scimEnabled && (
+                    <div className="bg-background/60 absolute inset-0 z-10 flex items-center justify-center">
+                      <div className="border-border bg-background flex items-center gap-2 border px-3 py-1.5 shadow-sm">
+                        <Lock className="text-muted-foreground h-3.5 w-3.5" />
+                        <Text variant="body" className="text-xs">
+                          Managed by directory sync
+                        </Text>
+                      </div>
+                    </div>
+                  )}
+                  <div
+                    className={cn(
+                      "border-border divide-border divide-y border",
+                      organization.scimEnabled &&
+                        "pointer-events-none opacity-50 select-none",
+                    )}
+                  >
                     {/* Select-all header */}
-                    {(() => {
-                      const selectableMembers = getSelectableMembers(
-                        members,
-                        isEditing,
-                        editingRole?.id,
-                      );
-                      const allSelected =
-                        selectableMembers.length > 0 &&
-                        selectableMembers.every((m) =>
-                          selectedMembers.has(m.id),
+                    {!organization.scimEnabled &&
+                      (() => {
+                        const selectableMembers = getSelectableMembers(
+                          members,
+                          isEditing,
+                          editingRole?.id,
                         );
-                      const someSelected =
-                        !allSelected &&
-                        selectableMembers.some((m) =>
-                          selectedMembers.has(m.id),
+                        const allSelected =
+                          selectableMembers.length > 0 &&
+                          selectableMembers.every((m) =>
+                            selectedMembers.has(m.id),
+                          );
+                        const someSelected =
+                          !allSelected &&
+                          selectableMembers.some((m) =>
+                            selectedMembers.has(m.id),
+                          );
+                        return (
+                          <label className="bg-muted/60 flex cursor-pointer items-center gap-3 px-3 py-2">
+                            <Checkbox
+                              checked={
+                                allSelected
+                                  ? true
+                                  : someSelected
+                                    ? "indeterminate"
+                                    : false
+                              }
+                              onCheckedChange={() => toggleAllMembers()}
+                            />
+                            <Text
+                              variant="body"
+                              className="text-muted-foreground text-sm font-medium"
+                            >
+                              Select all
+                            </Text>
+                          </label>
                         );
-                      return (
-                        <label className="bg-muted/60 flex cursor-pointer items-center gap-3 px-3 py-2">
-                          <Checkbox
-                            checked={
-                              allSelected
-                                ? true
-                                : someSelected
-                                  ? "indeterminate"
-                                  : false
-                            }
-                            onCheckedChange={() => toggleAllMembers()}
-                          />
-                          <Text
-                            variant="body"
-                            className="text-muted-foreground text-sm font-medium"
-                          >
-                            Select all
-                          </Text>
-                        </label>
-                      );
-                    })()}
+                      })()}
                     {members.map((member) => {
                       const alreadyHasRole = isMemberLockedToRole(
                         isEditing,
@@ -900,9 +929,9 @@ export function CreateRoleDialog({
                       );
                     })}
                   </div>
-                )}
-              </div>
-            )}
+                </div>
+              )}
+            </div>
 
             {/* ─── Assign Agents ─────────────────────────────────────
                 Not gated on SCIM: a directory syncs people, never agents,

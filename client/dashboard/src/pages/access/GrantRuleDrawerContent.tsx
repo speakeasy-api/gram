@@ -234,6 +234,46 @@ export function GrantRuleDrawerContent({
       .filter((g) => g.servers.length > 0);
   }, [scopedMcpServers, resourceSearch]);
 
+  // What the rule already names, pinned above the list: the chosen row is
+  // otherwise somewhere down a long scroll, so "except 1 server" never says
+  // which one. Search does not filter these.
+  const selectedProjectIds = useMemo(
+    () =>
+      new Set(
+        (selectors ?? []).flatMap((s) => (s.projectId ? [s.projectId] : [])),
+      ),
+    [selectors],
+  );
+
+  const selectedResourceIds = useMemo(
+    () =>
+      new Set(
+        (selectors ?? []).flatMap((s) =>
+          s.resourceId && s.resourceId !== "*" && !s.tool ? [s.resourceId] : [],
+        ),
+      ),
+    [selectors],
+  );
+
+  const selectedProjectRows = useMemo(
+    () => projectList.filter((p) => selectedProjectIds.has(p.id)),
+    [projectList, selectedProjectIds],
+  );
+
+  const selectedResourceProjects = useMemo(
+    () => projectList.filter((p) => selectedResourceIds.has(p.id)),
+    [projectList, selectedResourceIds],
+  );
+
+  const selectedServerRows = useMemo(() => {
+    if (selectedResourceIds.size === 0) return [];
+    return mcpServers.flatMap((group) =>
+      group.servers
+        .filter((s) => selectedResourceIds.has(s.id))
+        .map((server) => ({ server, projectName: group.projectName })),
+    );
+  }, [mcpServers, selectedResourceIds]);
+
   // The "Specific tools" picker shows servers with enumerable deploy-time tools
   // plus remote/tunneled (dynamic-tools) servers. Remote-backed ones resolve
   // their tools from the stored metadata table on expand; tunneled ones stay a
@@ -393,6 +433,38 @@ export function GrantRuleDrawerContent({
         className="border-border divide-border min-h-0 flex-1 divide-y overflow-y-auto border"
       >
         {projectSelectable ? (
+          <SelectedGroup count={selectedResourceProjects.length}>
+            {selectedResourceProjects.map((project) => (
+              <ResourceCheckbox
+                key={`selected-${project.id}`}
+                id={project.id}
+                name={project.name}
+                checked
+                onToggle={toggleResource}
+              />
+            ))}
+          </SelectedGroup>
+        ) : (
+          <SelectedGroup count={selectedServerRows.length}>
+            {selectedServerRows.map(({ server, projectName }) => (
+              <ResourceCheckbox
+                key={`selected-${server.id}`}
+                id={server.id}
+                name={
+                  <>
+                    {server.name}
+                    <span className="text-muted-foreground ml-2 text-xs font-normal">
+                      {projectName}
+                    </span>
+                  </>
+                }
+                checked
+                onToggle={toggleResource}
+              />
+            ))}
+          </SelectedGroup>
+        )}
+        {projectSelectable ? (
           filteredProjectList.length === 0 ? (
             <div className="text-muted-foreground px-3 py-3 text-sm">
               {projectList.length === 0
@@ -471,6 +543,17 @@ export function GrantRuleDrawerContent({
         onWheel={handleResourceWheel}
         className="border-border divide-border min-h-0 flex-1 divide-y overflow-y-auto border"
       >
+        <SelectedGroup count={selectedProjectRows.length}>
+          {selectedProjectRows.map((project) => (
+            <ResourceCheckbox
+              key={`selected-${project.id}`}
+              id={project.id}
+              name={project.name}
+              checked
+              onToggle={toggleProject}
+            />
+          ))}
+        </SelectedGroup>
         {filteredProjectList.length === 0 ? (
           <div className="text-muted-foreground px-3 py-3 text-sm">
             {projectList.length === 0
@@ -948,6 +1031,25 @@ function RoleToolSelectionPanel({
         className={className}
       />
     </>
+  );
+}
+
+/** What the rule already names, held at the top of a picker it could scroll out of. */
+function SelectedGroup({
+  count,
+  children,
+}: {
+  count: number;
+  children: React.ReactNode;
+}): JSX.Element | null {
+  if (count === 0) return null;
+  return (
+    <div>
+      <div className="bg-muted/40 text-muted-foreground text-eyebrow border-border border-b px-4 py-1.5">
+        Selected ({count})
+      </div>
+      {children}
+    </div>
   );
 }
 
