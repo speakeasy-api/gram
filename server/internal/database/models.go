@@ -3077,6 +3077,25 @@ type TriggerInstance struct {
 	Deleted        bool
 }
 
+type TrustedIssuerSession struct {
+	ID                             uuid.UUID
+	RemoteSessionClientID          uuid.NullUUID
+	OrganizationID                 pgtype.Text
+	ProjectID                      uuid.NullUUID
+	SubjectUrn                     string
+	IdentityAssertionEncrypted     pgtype.Text
+	IdentityAssertionExpiresAt     pgtype.Timestamptz
+	RefreshTokenEncrypted          pgtype.Text
+	RefreshExpiresAt               pgtype.Timestamptz
+	LastRefreshAttemptAt           pgtype.Timestamptz
+	OfflineAccessRefusedAt         pgtype.Timestamptz
+	OfflineAccessRequestConfigHash pgtype.Text
+	CreatedAt                      pgtype.Timestamptz
+	UpdatedAt                      pgtype.Timestamptz
+	DeletedAt                      pgtype.Timestamptz
+	Deleted                        bool
+}
+
 // Customer-hosted MCP server sources that connect to Gram through outbound tunnels.
 type TunneledMcpServer struct {
 	// Stable UUID for the tunneled MCP source. Used by management APIs, dashboard routes, and Redis connection cache keys.
@@ -3267,6 +3286,7 @@ type UserSessionIssuer struct {
 	Classification                string
 	ClientIDMetadataAdmissionMode pgtype.Text
 	TrustedRemoteSessionIssuerID  uuid.NullUUID
+	TrustedRemoteSessionClientID  uuid.NullUUID
 	CreatedAt                     pgtype.Timestamptz
 	UpdatedAt                     pgtype.Timestamptz
 	DeletedAt                     pgtype.Timestamptz
