@@ -47,7 +47,8 @@ INSERT INTO remote_session_issuers (
     metadata_last_error_at,
     metadata_last_error_url,
     oidc,
-    passthrough
+    passthrough,
+    tunneled_mcp_server_id
 )
 VALUES (
     @project_id,
@@ -93,7 +94,8 @@ VALUES (
     CASE WHEN @metadata_last_error::text = '' THEN NULL ELSE clock_timestamp() END,
     NULLIF(@metadata_last_error_url::text, ''),
     @oidc,
-    @passthrough
+    @passthrough,
+    @tunneled_mcp_server_id
 )
 RETURNING *;
 
@@ -350,13 +352,14 @@ SET
         WHEN sqlc.narg('registration_endpoint')::text = '' THEN NULL
         ELSE COALESCE(sqlc.narg('registration_endpoint'), registration_endpoint)
     END,
-    -- A manually changed key URL invalidates every value derived from the old
-    -- source. Omitting the field or explicitly restating the same URL keeps the
-    -- cache; clearing or replacing it clears the cache atomically.
-    jwks = CASE WHEN sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri) THEN jwks ELSE NULL END,
-    jwks_fetched_at = CASE WHEN sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri) THEN jwks_fetched_at ELSE NULL END,
-    jwks_cache_expires_at = CASE WHEN sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri) THEN jwks_cache_expires_at ELSE NULL END,
-    jwks_etag = CASE WHEN sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri) THEN jwks_etag ELSE NULL END,
+    -- Changing the issuer identity or key URL invalidates every value derived
+    -- from the old source. Restating either value keeps the cache.
+    jwks = CASE WHEN (sqlc.narg('issuer')::text IS NULL OR sqlc.narg('issuer')::text = issuer) AND (sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks ELSE NULL END,
+    jwks_fetched_at = CASE WHEN (sqlc.narg('issuer')::text IS NULL OR sqlc.narg('issuer')::text = issuer) AND (sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_fetched_at ELSE NULL END,
+    jwks_last_error = CASE WHEN (sqlc.narg('issuer')::text IS NULL OR sqlc.narg('issuer')::text = issuer) AND (sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_last_error ELSE NULL END,
+    jwks_last_error_at = CASE WHEN (sqlc.narg('issuer')::text IS NULL OR sqlc.narg('issuer')::text = issuer) AND (sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_last_error_at ELSE NULL END,
+    jwks_cache_expires_at = CASE WHEN (sqlc.narg('issuer')::text IS NULL OR sqlc.narg('issuer')::text = issuer) AND (sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_cache_expires_at ELSE NULL END,
+    jwks_etag = CASE WHEN (sqlc.narg('issuer')::text IS NULL OR sqlc.narg('issuer')::text = issuer) AND (sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_etag ELSE NULL END,
     jwks_uri = CASE
         WHEN sqlc.narg('jwks_uri')::text = '' THEN NULL
         ELSE COALESCE(sqlc.narg('jwks_uri'), jwks_uri)
@@ -401,6 +404,11 @@ SET
     resource_indicator_supported = COALESCE(sqlc.narg('resource_indicator_supported'), resource_indicator_supported),
     oidc = COALESCE(sqlc.narg('oidc'), oidc),
     passthrough = COALESCE(sqlc.narg('passthrough'), passthrough),
+    tunneled_mcp_server_id = CASE
+        WHEN sqlc.narg('tunneled_mcp_server_id')::text = '' THEN NULL
+        WHEN sqlc.narg('tunneled_mcp_server_id')::text IS NULL THEN tunneled_mcp_server_id
+        ELSE (sqlc.narg('tunneled_mcp_server_id')::text)::uuid
+    END,
     updated_at = clock_timestamp()
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
@@ -467,6 +475,8 @@ SET
     jwks_uri = CASE WHEN @jwks_uri::text = '' THEN NULL ELSE @jwks_uri::text END,
     jwks = NULLIF(@jwks::text, '')::jsonb,
     jwks_fetched_at = sqlc.narg('jwks_fetched_at')::timestamptz,
+    jwks_last_error = NULL,
+    jwks_last_error_at = NULL,
     jwks_cache_expires_at = sqlc.narg('jwks_cache_expires_at')::timestamptz,
     jwks_etag = NULLIF(@jwks_etag::text, ''),
     service_documentation = CASE WHEN @service_documentation::text = '' THEN NULL ELSE @service_documentation::text END,
@@ -620,15 +630,17 @@ WHERE id = @id
 -- name: GetRemoteSessionClientForRotation :one
 -- The client row plus the issuer endpoints a re-registration needs: the token
 -- endpoint to probe and the registration endpoint to re-register at, both as
--- discovery last refreshed them on the issuer. Not locked: the rotation talks
--- to the issuer between this read and its write, and the write compares the
--- client_id it read here so a concurrent rotation is detected rather than
--- blocked.
+-- discovery last refreshed them on the issuer, and the issuer's transport
+-- binding, since both of those endpoints are only reachable over the tunnel
+-- when one is set. Not locked: the rotation talks to the issuer between this
+-- read and its write, and the write compares the client_id it read here so a
+-- concurrent rotation is detected rather than blocked.
 SELECT
     sqlc.embed(c),
-    i.issuer                 AS issuer_url,
-    i.token_endpoint         AS issuer_token_endpoint,
-    i.registration_endpoint  AS issuer_registration_endpoint
+    i.issuer                   AS issuer_url,
+    i.token_endpoint           AS issuer_token_endpoint,
+    i.registration_endpoint    AS issuer_registration_endpoint,
+    i.tunneled_mcp_server_id   AS issuer_tunneled_mcp_server_id
 FROM remote_session_clients AS c
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
 WHERE c.id = @id
@@ -906,6 +918,7 @@ WHERE organization_id = @organization_id
 -- name: GetRemoteSessionClientByID :one
 SELECT
     sqlc.embed(c),
+    i.tunneled_mcp_server_id,
     (
         SELECT COALESCE(array_agg(link.user_session_issuer_id ORDER BY link.user_session_issuer_id), '{}'::uuid[])
         FROM remote_session_client_user_session_issuers AS link
@@ -914,6 +927,7 @@ SELECT
           AND (usi.project_id = @project_id::uuid OR (usi.project_id IS NULL AND usi.organization_id = @organization_id::text))
     )::uuid[] AS user_session_issuer_ids
 FROM remote_session_clients AS c
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
 WHERE c.id = @id
   AND (c.project_id = @project_id::uuid OR (c.project_id IS NULL AND c.organization_id = @organization_id))
   AND c.deleted IS FALSE;
@@ -996,6 +1010,18 @@ SET
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
 
+-- name: GetTunneledMcpServerBinding :one
+-- Validates an issuer tunnel binding at create/update time: the tunnel must
+-- exist, be active, and live in the same project and organization as the issuer.
+SELECT t.id, t.project_id, t.name
+FROM tunneled_mcp_servers AS t
+JOIN projects AS p ON p.id = t.project_id
+WHERE t.id = @id
+  AND t.project_id = @project_id
+  AND p.organization_id = @organization_id
+  AND t.status <> 'revoked'
+  AND t.deleted IS FALSE
+  AND p.deleted IS FALSE;
 -- Serializes the two halves of the private_key_jwt coupling, which live in
 -- different handlers and each read a column the other writes. Under READ
 -- COMMITTED both can pass against the same starting row and commit, landing
@@ -1557,6 +1583,7 @@ SELECT
     c.resource_tos_uri                     AS resource_tos_uri,
     c.upstream_rejected_at                 AS upstream_rejected_at,
     c.remote_session_issuer_id             AS remote_session_issuer_id,
+    i.tunneled_mcp_server_id               AS tunneled_mcp_server_id,
     i.slug                                 AS issuer_slug,
     i.issuer                               AS issuer_url,
     i.metadata                             AS issuer_metadata,
@@ -1632,6 +1659,7 @@ SELECT
     c.token_endpoint_auth_audience_format  AS token_endpoint_auth_audience_format,
     c.json_web_key_set_id                  AS json_web_key_set_id,
     c.remote_session_issuer_id             AS remote_session_issuer_id,
+    i.tunneled_mcp_server_id               AS tunneled_mcp_server_id,
     i.slug                                 AS issuer_slug,
     i.issuer                               AS issuer_url,
     i.metadata                             AS issuer_metadata,
@@ -1664,6 +1692,7 @@ SELECT
     c.client_secret_expires_at             AS client_secret_expires_at,
     c.upstream_rejected_at                 AS upstream_rejected_at,
     c.remote_session_issuer_id             AS remote_session_issuer_id,
+    i.tunneled_mcp_server_id               AS tunneled_mcp_server_id,
     i.slug                                 AS issuer_slug,
     i.name                                 AS issuer_name,
     i.registration_endpoint                AS issuer_registration_endpoint,
@@ -2452,10 +2481,12 @@ SET
     -- A manually changed key URL invalidates every value derived from the old
     -- source. Omitting the field or explicitly restating the same URL keeps the
     -- cache; clearing or replacing it clears the cache atomically.
-    jwks = CASE WHEN sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri) THEN jwks ELSE NULL END,
-    jwks_fetched_at = CASE WHEN sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri) THEN jwks_fetched_at ELSE NULL END,
-    jwks_cache_expires_at = CASE WHEN sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri) THEN jwks_cache_expires_at ELSE NULL END,
-    jwks_etag = CASE WHEN sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri) THEN jwks_etag ELSE NULL END,
+    jwks = CASE WHEN (sqlc.narg('issuer')::text IS NULL OR sqlc.narg('issuer')::text = issuer) AND (sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks ELSE NULL END,
+    jwks_fetched_at = CASE WHEN (sqlc.narg('issuer')::text IS NULL OR sqlc.narg('issuer')::text = issuer) AND (sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_fetched_at ELSE NULL END,
+    jwks_last_error = CASE WHEN (sqlc.narg('issuer')::text IS NULL OR sqlc.narg('issuer')::text = issuer) AND (sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_last_error ELSE NULL END,
+    jwks_last_error_at = CASE WHEN (sqlc.narg('issuer')::text IS NULL OR sqlc.narg('issuer')::text = issuer) AND (sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_last_error_at ELSE NULL END,
+    jwks_cache_expires_at = CASE WHEN (sqlc.narg('issuer')::text IS NULL OR sqlc.narg('issuer')::text = issuer) AND (sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_cache_expires_at ELSE NULL END,
+    jwks_etag = CASE WHEN (sqlc.narg('issuer')::text IS NULL OR sqlc.narg('issuer')::text = issuer) AND (sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_etag ELSE NULL END,
     jwks_uri = CASE
         WHEN sqlc.narg('jwks_uri')::text = '' THEN NULL
         ELSE COALESCE(sqlc.narg('jwks_uri'), jwks_uri)
@@ -2500,6 +2531,11 @@ SET
     resource_indicator_supported = COALESCE(sqlc.narg('resource_indicator_supported'), resource_indicator_supported),
     oidc = COALESCE(sqlc.narg('oidc'), oidc),
     passthrough = COALESCE(sqlc.narg('passthrough'), passthrough),
+    tunneled_mcp_server_id = CASE
+        WHEN sqlc.narg('tunneled_mcp_server_id')::text = '' THEN NULL
+        WHEN sqlc.narg('tunneled_mcp_server_id')::text IS NULL THEN tunneled_mcp_server_id
+        ELSE (sqlc.narg('tunneled_mcp_server_id')::text)::uuid
+    END,
     updated_at = clock_timestamp()
 WHERE id = @id AND organization_id = @organization_id AND deleted IS FALSE
 RETURNING *;
@@ -2755,6 +2791,73 @@ WHERE id = @id
   AND project_id IS NULL
   AND (organization_id = @organization_id::text OR organization_id IS NULL)
   AND deleted IS FALSE;
+
+-- name: CreateTestTrustedIssuerJWKSCache :one
+-- Test fixture for conditional issuer-key cache writes.
+INSERT INTO remote_session_issuers (organization_id, slug, issuer, jwks_uri)
+VALUES (sqlc.narg('organization_id')::text, @slug, @issuer, @jwks_uri)
+RETURNING id;
+
+-- name: CreateTestTrustedIssuerOrganization :exec
+INSERT INTO organization_metadata (id, name, slug)
+VALUES (@id, @name, @slug);
+
+-- name: UpdateTestTrustedIssuerConfiguration :exec
+UPDATE remote_session_issuers
+SET issuer = @issuer, jwks_uri = @jwks_uri, updated_at = clock_timestamp()
+WHERE id = @id;
+
+-- name: GetTrustedIssuerJWKSCache :one
+-- Only administrator-configurable organization and global issuers can back
+-- ID-JAG verification. The row id is selected through a trusted link first.
+SELECT jwks, jwks_uri, jwks_fetched_at, jwks_cache_expires_at, jwks_etag,
+       jwks_last_error, jwks_last_error_at, xmin::text AS revision
+FROM remote_session_issuers
+WHERE id = @id
+  AND (organization_id = @organization_id::text OR organization_id IS NULL)
+  AND project_id IS NULL
+  AND issuer = @issuer::text
+  AND jwks_uri = @jwks_uri::text
+  AND deleted IS FALSE;
+
+-- name: UpdateTrustedIssuerJWKSCache :execrows
+-- A rotated URI or changed cache state must not be overwritten by the
+-- result of an older fetch. project_id IS NULL keeps this write on the
+-- organization/global trusted-issuer tiers.
+UPDATE remote_session_issuers
+SET jwks = @jwks::jsonb,
+    jwks_fetched_at = @fetched_at::timestamptz,
+    jwks_cache_expires_at = @cache_expires_at::timestamptz,
+    jwks_etag = NULLIF(@etag::text, ''),
+    jwks_last_error = NULLIF(@last_error::text, ''),
+    jwks_last_error_at = @last_error_at::timestamptz,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND (organization_id = @organization_id::text OR organization_id IS NULL)
+  AND project_id IS NULL
+  AND issuer = @issuer::text
+  AND jwks_uri = @jwks_uri
+  AND deleted IS FALSE
+  AND xmin::text = @prior_revision::text
+  AND jwks IS NOT DISTINCT FROM @prior_jwks::jsonb
+  AND jwks_fetched_at IS NOT DISTINCT FROM @prior_fetched_at::timestamptz
+  AND jwks_cache_expires_at IS NOT DISTINCT FROM @prior_cache_expires_at::timestamptz;
+
+-- name: MarkTrustedIssuerJWKSConsultFailure :execrows
+UPDATE remote_session_issuers
+SET jwks_last_error = @reason::text,
+    jwks_last_error_at = @consulted_at::timestamptz,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND (organization_id = @organization_id::text OR organization_id IS NULL)
+  AND project_id IS NULL
+  AND issuer = @issuer::text
+  AND jwks_uri = @jwks_uri
+  AND deleted IS FALSE
+  AND xmin::text = @prior_revision::text
+  AND jwks IS NOT DISTINCT FROM @prior_jwks::jsonb
+  AND jwks_fetched_at IS NOT DISTINCT FROM @prior_fetched_at::timestamptz
+  AND jwks_cache_expires_at IS NOT DISTINCT FROM @prior_cache_expires_at::timestamptz;
 
 -- name: ListConflictingClientBindingsForIssuerMigration :many
 -- The user_session_issuers that already have an active remote_session_client on
@@ -3035,10 +3138,12 @@ SET
     -- A manually changed key URL invalidates every value derived from the old
     -- source. Omitting the field or explicitly restating the same URL keeps the
     -- cache; clearing or replacing it clears the cache atomically.
-    jwks = CASE WHEN sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri) THEN jwks ELSE NULL END,
-    jwks_fetched_at = CASE WHEN sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri) THEN jwks_fetched_at ELSE NULL END,
-    jwks_cache_expires_at = CASE WHEN sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri) THEN jwks_cache_expires_at ELSE NULL END,
-    jwks_etag = CASE WHEN sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri) THEN jwks_etag ELSE NULL END,
+    jwks = CASE WHEN (sqlc.narg('issuer')::text IS NULL OR sqlc.narg('issuer')::text = issuer) AND (sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks ELSE NULL END,
+    jwks_fetched_at = CASE WHEN (sqlc.narg('issuer')::text IS NULL OR sqlc.narg('issuer')::text = issuer) AND (sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_fetched_at ELSE NULL END,
+    jwks_last_error = CASE WHEN (sqlc.narg('issuer')::text IS NULL OR sqlc.narg('issuer')::text = issuer) AND (sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_last_error ELSE NULL END,
+    jwks_last_error_at = CASE WHEN (sqlc.narg('issuer')::text IS NULL OR sqlc.narg('issuer')::text = issuer) AND (sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_last_error_at ELSE NULL END,
+    jwks_cache_expires_at = CASE WHEN (sqlc.narg('issuer')::text IS NULL OR sqlc.narg('issuer')::text = issuer) AND (sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_cache_expires_at ELSE NULL END,
+    jwks_etag = CASE WHEN (sqlc.narg('issuer')::text IS NULL OR sqlc.narg('issuer')::text = issuer) AND (sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_etag ELSE NULL END,
     jwks_uri = CASE
         WHEN sqlc.narg('jwks_uri')::text = '' THEN NULL
         ELSE COALESCE(sqlc.narg('jwks_uri'), jwks_uri)

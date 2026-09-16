@@ -62,12 +62,12 @@ func registerUnavailableClientAdmissionTools(reg *Registrar) {
 		Title:       "Which Apps Can Sign In",
 		Description: "Show which apps can sign in to an MCP server. This is not switched on for your organization yet.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("client_admission"))
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("client_admission"))
 	addTool(reg, &mcp.Tool{
 		Name:        "set_mcp_client_admission",
 		Title:       "Choose Which Apps Can Sign In",
 		Description: "Choose which apps can sign in to an MCP server. This is not switched on for your organization yet.",
-	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("client_admission"))
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("client_admission"))
 }
 
 // registerClientAdmissionTools serves the CIMD half of MCP Server -> Settings
@@ -80,7 +80,7 @@ func registerClientAdmissionTools(reg *Registrar, registrations *RegistrationSer
 		Title:       "Which Apps Can Sign In",
 		Description: "Show which MCP clients are allowed to sign in to one MCP server: the setting in force now, the settings you can choose, and any custom client ID metadata URLs this MCP server allows on top. Read this before proposing a change.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMCPClientAdmissionToolInput) (*mcp.CallToolResult, MCPClientAdmissionToolOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMCPClientAdmissionToolInput) (*mcp.CallToolResult, MCPClientAdmissionToolOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
 			return nil, MCPClientAdmissionToolOutput{}, err
@@ -99,7 +99,7 @@ func registerClientAdmissionTools(reg *Registrar, registrations *RegistrationSer
 		Name:        "set_mcp_client_admission",
 		Title:       "Choose Which Apps Can Sign In",
 		Description: "Choose which MCP clients may sign in to one MCP server. Show the user the setting in force now, from get_mcp_client_admission, and what the new one would mean, ask them to confirm out loud, then call this with confirmed: true. Constraints: \"known apps only\" turns away every app that is not on the list, with no way through — make sure the user accepts that. This tool never accepts or returns credentials, OAuth codes, tokens, or client secrets.",
-	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input SetMCPClientAdmissionToolInput) (*mcp.CallToolResult, MCPClientAdmissionToolOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input SetMCPClientAdmissionToolInput) (*mcp.CallToolResult, MCPClientAdmissionToolOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
 			return nil, MCPClientAdmissionToolOutput{}, err

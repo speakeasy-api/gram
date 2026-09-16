@@ -91,7 +91,7 @@ type oauthPageData struct {
 type BrowserIdentity interface {
 	BuildAuthorizationURL(ctx context.Context, params identity.AuthorizationURLParams) (*url.URL, error)
 	ExchangeCodeForTokens(ctx context.Context, code string) (*identity.IDPUserInfo, error)
-	UpsertUserFromIDP(ctx context.Context, idpUser *identity.IDPUserInfo) (string, error)
+	CompleteIDPLogin(ctx context.Context, idpUser *identity.IDPUserInfo, opts identity.IDPLoginOptions) (identity.IDPLoginResult, error)
 }
 
 type OrganizationOption struct {
@@ -392,13 +392,13 @@ func (s *OAuthHTTP) IDPCallbackHandler() http.Handler {
 			writeOAuthError(w, http.StatusUnauthorized, "access_denied", "login could not be completed")
 			return
 		}
-		userID, err := s.identity.UpsertUserFromIDP(r.Context(), idpUser)
+		login, err := s.identity.CompleteIDPLogin(r.Context(), idpUser, identity.IDPLoginOptions{SkipMembershipSync: false})
 		if err != nil {
 			writeOAuthError(w, http.StatusInternalServerError, "server_error", "login could not be completed")
 			return
 		}
 		challenge.ID = uuid.NewString()
-		challenge.Subject = urn.NewUserSubject(userID).String()
+		challenge.Subject = urn.NewUserSubject(login.UserID).String()
 		if err := s.cache.Store(r.Context(), challenge); err != nil {
 			writeOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "could not continue authorization")
 			return
@@ -876,11 +876,11 @@ func (s *OAuthHTTP) gateAndAuthorize(ctx context.Context, principal Principal) e
 	if !enabled {
 		return errPlatformMCPDisabled
 	}
-	if err := s.authorizer.RequireLiveOrgAdmin(ctx, principal); err != nil {
+	if err := s.authorizer.RequireLiveMembership(ctx, principal); err != nil {
 		if isAuthorizationDenied(err) {
 			return ErrForbidden
 		}
-		return fmt.Errorf("require live organization admin: %w: %w", ErrUnavailable, err)
+		return fmt.Errorf("require live organization membership: %w: %w", ErrUnavailable, err)
 	}
 	return nil
 }
@@ -891,14 +891,14 @@ func writeAuthorizationGateError(w http.ResponseWriter, r *http.Request, challen
 		redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "temporarily_unavailable", Description: "organization access could not be verified"})
 		return
 	}
-	// The gate and the live org-admin check both deny with ErrForbidden, and
-	// they need different advice: naming the entitlement to someone who simply
-	// is not an admin sends them to a setting that is already on.
+	// The gate and the live membership check both deny with ErrForbidden, and
+	// they need different advice: naming the entitlement to someone whose
+	// membership ended sends them to a setting that is already on.
 	if errors.Is(err, errPlatformMCPDisabled) {
 		redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "access_denied", Description: "Platform MCP is not enabled for this organization. An organization admin can enable it in the Speakeasy dashboard."})
 		return
 	}
-	redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "access_denied", Description: "Your account does not have organization administrator access to Platform MCP."})
+	redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "access_denied", Description: "Your account is not an active member of this organization."})
 }
 
 func writeTokenStateError(w http.ResponseWriter, err error, credential string) {

@@ -92,8 +92,8 @@ func (testIdentity) BuildAuthorizationURL(_ context.Context, params identity.Aut
 func (testIdentity) ExchangeCodeForTokens(_ context.Context, _ string) (*identity.IDPUserInfo, error) {
 	return &identity.IDPUserInfo{}, nil
 }
-func (testIdentity) UpsertUserFromIDP(_ context.Context, _ *identity.IDPUserInfo) (string, error) {
-	return "user-1", nil
+func (testIdentity) CompleteIDPLogin(_ context.Context, _ *identity.IDPUserInfo, _ identity.IDPLoginOptions) (identity.IDPLoginResult, error) {
+	return identity.IDPLoginResult{UserID: "user-1", Reactivated: false, UserInfo: nil}, nil
 }
 
 type allowGate struct{}
@@ -109,12 +109,28 @@ func (g oauthTestGate) Enabled(context.Context, string) (bool, error) { return g
 
 type allowAuthorizer struct{}
 
-func (allowAuthorizer) RequireLiveOrgAdmin(context.Context, Principal) error { return nil }
+func (allowAuthorizer) PrepareExternalContext(ctx context.Context, principal Principal) (context.Context, error) {
+	return contextWithPrincipal(ctx, principal), nil
+}
+func (allowAuthorizer) AuthorizeExternalCall(context.Context, Principal, ExternalAuthorization) error {
+	return nil
+}
+func (allowAuthorizer) RequireLiveMembership(context.Context, Principal) error { return nil }
+func (allowAuthorizer) RequireLiveOrgAdmin(context.Context, Principal) error   { return nil }
 
 type oauthTestAuthorizer struct {
 	err error
 }
 
+func (a oauthTestAuthorizer) PrepareExternalContext(ctx context.Context, principal Principal) (context.Context, error) {
+	return contextWithPrincipal(ctx, principal), a.err
+}
+func (a oauthTestAuthorizer) AuthorizeExternalCall(context.Context, Principal, ExternalAuthorization) error {
+	return a.err
+}
+func (a oauthTestAuthorizer) RequireLiveMembership(context.Context, Principal) error {
+	return a.err
+}
 func (a oauthTestAuthorizer) RequireLiveOrgAdmin(context.Context, Principal) error { return a.err }
 
 type testOrganizationSelector struct {

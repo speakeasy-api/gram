@@ -120,14 +120,6 @@ func (c *captureFeatureCache) snapshot() []productfeatures.Feature {
 	return append([]productfeatures.Feature(nil), c.enabled...)
 }
 
-func (f *fakeStripeWebhookClient) CreateMeterEvent(context.Context, stripeclient.CreateMeterEventInput) error {
-	return errors.New("not implemented")
-}
-
-func (f *fakeStripeWebhookClient) GetMeterEventSummary(context.Context, stripeclient.GetMeterEventSummaryInput) (float64, error) {
-	return 0, errors.New("not implemented")
-}
-
 func (f *fakeStripeWebhookClient) GetInvoice(context.Context, string) (*stripeclient.InvoiceState, error) {
 	f.invoiceCalls.Add(1)
 	return f.invoice, f.invoiceError
@@ -155,7 +147,7 @@ func (f *fakeStripeWebhookClient) VerifyWebhook(payload []byte, signature string
 }
 
 func (f *fakeStripeWebhookClient) Catalog() stripeclient.Catalog {
-	return stripeclient.Catalog{PriceIDTUM: "", MeterIDTUM: "", MeterEventName: "", PortalConfigurationID: ""}
+	return stripeclient.Catalog{PriceIDTUM: "", PortalConfigurationID: ""}
 }
 
 func testStripeWebhookHandler(context.Context, *slog.Logger, pgx.Tx, string, *stripeclient.WebhookEvent, *stripeclient.CheckoutSessionState, *stripeclient.InvoiceState) (stripeWebhookResult, error) {

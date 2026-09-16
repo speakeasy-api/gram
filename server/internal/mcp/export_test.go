@@ -14,11 +14,15 @@ import (
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/clientauth"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/workload"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
 	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
 	workloadidentity_repo "github.com/speakeasy-api/gram/server/internal/workloadidentity/repo"
 )
+
+// WorkloadAssertionMaxLifetime is the lifetime ceiling AdmitWorkloadAssertion
+// applies, which a test's replay guard must cover.
+const WorkloadAssertionMaxLifetime = time.Hour
 
 // ErrWorkloadIssuerUntrusted and ErrWorkloadNotAdmitted expose the workload
 // admission sentinels, so a test can tell which stage refused an assertion.
@@ -37,9 +41,9 @@ var (
 func AdmitWorkloadAssertion(
 	ctx context.Context,
 	db *pgxpool.Pool,
-	verifier *clientauth.Verifier,
+	verifier *workload.Verifier,
 	endpoint *ResolvedMcpEndpoint,
-	audiences clientauth.Audiences,
+	audiences []string,
 	raw string,
 ) error {
 	parsed, err := jwt.ParseSigned(raw, jwks.AllowedSignatureAlgorithms())
@@ -81,17 +85,16 @@ func AdmitWorkloadAssertion(
 		return err
 	}
 
-	expectation := clientauth.WorkloadExpectation(
-		issuer.Issuer,
-		claims.Subject,
-		source,
-		endpoint.UserSessionIssuerID.String(),
-		issuer.ID.String(),
-		claims.Subject,
-		audiences,
-		clientauth.DefaultMaxLifetime,
-	)
-	if _, err := verifier.Verify(ctx, clientauth.Assertion{Value: raw, Type: clientauth.AssertionType}, expectation); err != nil {
+	expectation := workload.Expectation{
+		Issuer:       issuer.Issuer,
+		Subject:      claims.Subject,
+		KeySource:    source,
+		ReplayIssuer: endpoint.UserSessionIssuerID.String(),
+		ReplayParty:  issuer.ID.String(),
+		Audiences:    audiences,
+		MaxLifetime:  WorkloadAssertionMaxLifetime,
+	}
+	if _, err := verifier.Verify(ctx, raw, expectation); err != nil {
 		return fmt.Errorf("verify workload assertion: %w", err)
 	}
 

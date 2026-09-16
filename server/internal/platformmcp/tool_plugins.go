@@ -24,7 +24,7 @@ func registerPluginTools(reg *Registrar, plugins *PluginsService) {
 		Name:        operationSetPluginAssignments,
 		Title:       "Set Plugin Assignments",
 		Description: setDescription,
-	}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input SetPluginAssignmentsInput) (*mcp.CallToolResult, SetPluginAssignmentsOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input SetPluginAssignmentsInput) (*mcp.CallToolResult, SetPluginAssignmentsOutput, error) {
 		return principalToolCall(ctx, pluginToolResult, func(principal Principal) (SetPluginAssignmentsOutput, error) {
 			return plugins.SetPluginAssignments(ctx, principal, input)
 		})
@@ -35,7 +35,7 @@ func registerPluginTools(reg *Registrar, plugins *PluginsService) {
 		Title:       "List Plugin Assignments",
 		Description: "List up to 100 existing roles and directory assignment targets that can receive plugins in an explicit project. Each assignment has a short-lived opaque reference and, where available, a privacy-safe member count; Everyone has no member count. Raw principal identifiers are never returned. If truncated is true, use the dashboard to choose from the complete assignment set.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListPluginAssignmentsInput) (*mcp.CallToolResult, ListPluginAssignmentsOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListPluginAssignmentsInput) (*mcp.CallToolResult, ListPluginAssignmentsOutput, error) {
 		return principalToolCall(ctx, pluginToolResult, func(principal Principal) (ListPluginAssignmentsOutput, error) {
 			return plugins.ListPluginAssignments(ctx, principal, input)
 		})
@@ -46,7 +46,7 @@ func registerPluginTools(reg *Registrar, plugins *PluginsService) {
 		Title:       "List Plugins",
 		Description: "List the plugins in a named project. A plugin is the bundle of MCP servers and skills an administrator shares with people, so this is the level to answer \"what do we ship\" at, rather than adding up individual servers. Each entry reports how much the plugin carries, who receives it, and whether it has been published — that is, whether the people it is shared with have it yet.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListPluginsInput) (*mcp.CallToolResult, ListPluginsOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListPluginsInput) (*mcp.CallToolResult, ListPluginsOutput, error) {
 		return principalToolCall(ctx, pluginToolResult, func(principal Principal) (ListPluginsOutput, error) {
 			return plugins.ListPlugins(ctx, principal, input)
 		})
@@ -57,7 +57,7 @@ func registerPluginTools(reg *Registrar, plugins *PluginsService) {
 		Title:       "Get One Plugin",
 		Description: "Get one plugin — the bundle of MCP servers and skills you share with people — and what it carries: its MCP servers, skills, up to 100 current assignments, and an assignment version for safe follow-up edits. Assignment references expire at the returned time; if assignments_truncated is true or assignment_details_complete is false, use the dashboard before editing assignments. The general truncated field applies only to MCP servers and skills. Constraints: name the plugin exactly by ID, slug, or name; a name matching nothing is refused as not_found and a name matching more than one plugin as ambiguous_target, never silently answered with the default plugin.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetPluginInput) (*mcp.CallToolResult, GetPluginOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetPluginInput) (*mcp.CallToolResult, GetPluginOutput, error) {
 		return principalToolCall(ctx, pluginToolResult, func(principal Principal) (GetPluginOutput, error) {
 			return plugins.GetPlugin(ctx, principal, input)
 		})
@@ -80,7 +80,7 @@ func registerUnavailablePluginTools(reg *Registrar) {
 		if tool.readOnly {
 			manifest.Annotations = readOnlyAnnotations()
 		}
-		addTool(reg, manifest, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, unavailableTool("plugins"))
+		addTool(reg, manifest, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, unavailableTool("plugins"))
 	}
 }
 

@@ -18,6 +18,7 @@ import type { AuditLog } from "@gram/admin-client/models/components/auditlog";
 const TRIAL_ACTIONS = new Set([
   "organization:enterprise_trial_armed",
   "organization:enterprise_trial_extended",
+  "organization:enterprise_trial_end_changed",
   "organization:enterprise_trial_rearmed",
   "organization:enterprise_trial_demoted",
   "organization:enterprise_trial_converted",
@@ -56,6 +57,8 @@ function activityAction(log: AuditLog): string {
   switch (log.action) {
     case "organization:enterprise_trial_armed":
       return "started enterprise trial";
+    case "organization:enterprise_trial_end_changed":
+      return "changed enterprise trial end date";
     case "organization:enterprise_trial_extended":
       return "extended enterprise trial";
     case "organization:enterprise_trial_rearmed":
@@ -387,8 +390,12 @@ function TrialFacts({ log }: { log: AuditLog }): JSX.Element {
         ["Tier", recorded(tier)],
       );
       break;
+    case "organization:enterprise_trial_end_changed":
     case "organization:enterprise_trial_extended":
-      title = "Enterprise trial extended";
+      title =
+        log.action === "organization:enterprise_trial_end_changed"
+          ? "Enterprise trial end date changed"
+          : "Enterprise trial extended";
       facts.push(
         ["Previous trial end", factDate(beforeEnd)],
         ["New trial end", factDate(afterEnd)],

@@ -29,7 +29,6 @@ const (
 	stripeAllocationMaxBatchSize      = 64
 
 	stripeAllocationSourceOpenRouter = "openrouter_daily_spend"
-	stripeAllocationSourceTUM        = "tum_cycle"
 
 	stripeAllocationIdempotencyKeyIndex = "stripe_invoice_allocations_idempotency_key_key"
 )
@@ -45,8 +44,8 @@ type SettleStripeInvoiceAllocationsArgs struct {
 	OpenRouterBillableKeyPolicyFingerprint string
 }
 
-// SettleStripeInvoiceAllocations freezes OpenRouter charges, attaches TUM
-// carries, and drains a bounded allocation batch for each organization.
+// SettleStripeInvoiceAllocations freezes OpenRouter charges and drains a
+// bounded allocation batch for each organization.
 type SettleStripeInvoiceAllocations struct {
 	logger       *slog.Logger
 	db           *pgxpool.Pool
@@ -134,9 +133,6 @@ func (s *SettleStripeInvoiceAllocations) settleOrganization(
 		}
 	}
 
-	if _, err := queries.AttachTUMCarryToOriginalInvoice(ctx, organizationIDParam); err != nil {
-		return fmt.Errorf("attach TUM carry to original invoice: %w", err)
-	}
 	if _, err := queries.AssignPositiveCarryToStripeInvoice(ctx, organizationIDParam); err != nil {
 		return fmt.Errorf("assign positive carry to draft invoice: %w", err)
 	}
@@ -699,13 +695,6 @@ func allocationPeriodAndDescription(claim repo.ClaimNextStripeInvoiceAllocationR
 		start := time.Date(claim.SourceDay.Time.Year(), claim.SourceDay.Time.Month(), claim.SourceDay.Time.Day(), 0, 0, 0, 0, time.UTC)
 		return start, start.AddDate(0, 0, 1), allocationDescription(claim), nil
 	}
-	if claim.SourceKind == stripeAllocationSourceTUM && claim.SourcePeriodStart.Valid && claim.SourcePeriodEnd.Valid {
-		start := claim.SourcePeriodStart.Time.UTC()
-		end := claim.SourcePeriodEnd.Time.UTC()
-		if end.After(start) {
-			return start, end, allocationDescription(claim), nil
-		}
-	}
 	return time.Time{}, time.Time{}, "", fmt.Errorf("allocation %s has invalid source bounds", claim.ID)
 }
 
@@ -719,11 +708,6 @@ func allocationDescription(claim repo.ClaimNextStripeInvoiceAllocationRow) strin
 			label = "Security inference"
 		}
 		return label + " usage for " + claim.SourceDay.Time.UTC().Format(time.DateOnly)
-	}
-	if claim.SourceKind == stripeAllocationSourceTUM && claim.SourcePeriodStart.Valid && claim.SourcePeriodEnd.Valid {
-		return fmt.Sprintf("TUM usage adjustment for %s to %s",
-			claim.SourcePeriodStart.Time.UTC().Format(time.DateOnly),
-			claim.SourcePeriodEnd.Time.UTC().Format(time.DateOnly))
 	}
 	return "Usage adjustment"
 }

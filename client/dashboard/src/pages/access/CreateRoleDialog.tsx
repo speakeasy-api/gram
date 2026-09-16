@@ -132,7 +132,8 @@ interface CreateRoleDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   editingRole?: Role | null;
-  onRoleCreated?: (roleName: string) => void;
+  onRoleCreated?: (role: Role) => void;
+  confirmAssignmentFor?: string;
   presentation?: RoleEditorPresentation;
 }
 
@@ -141,6 +142,7 @@ export function CreateRoleDialog({
   onOpenChange,
   editingRole,
   onRoleCreated,
+  confirmAssignmentFor,
   presentation = "sheet",
 }: CreateRoleDialogProps): JSX.Element {
   const isEditing = !!editingRole;
@@ -161,6 +163,7 @@ export function CreateRoleDialog({
   const [initialDescription, setInitialDescription] = useState("");
   const [initialGrantKeys, setInitialGrantKeys] = useState("");
   const [showMembers, setShowMembers] = useState(false);
+  const [assignmentConfirmed, setAssignmentConfirmed] = useState(false);
   const [initialized, setInitialized] = useState(false);
 
   // ─── Rule editor state ────────────────────────────────────────
@@ -279,12 +282,12 @@ export function CreateRoleDialog({
 
   // ─── Mutations ────────────────────────────────────────────────
   const createRole = useCreateRoleMutation({
-    onSuccess: async () => {
+    onSuccess: async (role) => {
       await Promise.all([
         invalidateAllRoles(queryClient),
         invalidateAllMembers(queryClient),
       ]);
-      onRoleCreated?.(name);
+      onRoleCreated?.(role);
       handleClose();
     },
   });
@@ -303,6 +306,7 @@ export function CreateRoleDialog({
 
   const saveDisabled =
     !scopeDefinitions ||
+    (!!confirmAssignmentFor && !assignmentConfirmed) ||
     isSaveDisabled({
       isMutating,
       isEditing,
@@ -323,8 +327,15 @@ export function CreateRoleDialog({
 
   // ─── Scope / grant operations ─────────────────────────────────
 
+  const updateGrants = (
+    update: (previous: Record<string, RoleGrant>) => Record<string, RoleGrant>,
+  ) => {
+    setAssignmentConfirmed(false);
+    setGrants(update);
+  };
+
   const toggleScope = (scope: Scope) => {
-    setGrants((prev) => {
+    updateGrants((prev) => {
       const next = { ...prev };
       if (next[scope]) {
         delete next[scope];
@@ -384,7 +395,7 @@ export function CreateRoleDialog({
       const hasContent =
         draftRule.selectors === null || draftRule.selectors.length > 0;
       if (hasContent) {
-        setGrants((prev) => {
+        updateGrants((prev) => {
           const grant = prev[editingScopeSlug] ?? {
             scope: editingScopeSlug,
             rules: [],
@@ -433,7 +444,7 @@ export function CreateRoleDialog({
   // "All servers" is the unrestricted rule, which the model stores as null
   // selectors rather than as a list naming everything.
   const resetRuleToAll = (scopeSlug: string) => {
-    setGrants((prev) => {
+    updateGrants((prev) => {
       const grant = prev[scopeSlug];
       if (!grant) return prev;
       return {
@@ -449,7 +460,7 @@ export function CreateRoleDialog({
   };
 
   const removeRule = (scopeSlug: string, ruleIndex: number) => {
-    setGrants((prev) => {
+    updateGrants((prev) => {
       const grant = prev[scopeSlug];
       if (!grant) return prev;
       const result = applyRemoveRule(grant, ruleIndex);
@@ -572,6 +583,7 @@ export function CreateRoleDialog({
     setInitialDescription("");
     setInitialGrantKeys("");
     setShowMembers(false);
+    setAssignmentConfirmed(false);
     setInitialized(false);
     setDialogStep("form");
     setEditingScopeSlug(null);
@@ -1079,26 +1091,44 @@ export function CreateRoleDialog({
       )}
 
       {(dialogStep === "form" || isPage) && (
-        <Footer className="border-border flex-row justify-end border-t">
-          <Button variant="secondary" onClick={handleClose}>
-            Cancel
-          </Button>
-          <Button onClick={handleSubmit} disabled={saveDisabled}>
-            {isMutating && (
-              <Button.LeftIcon>
-                <Loader2 className="h-4 w-4 animate-spin" />
-              </Button.LeftIcon>
-            )}
-            <Button.Text>
-              {isMutating
-                ? isEditing
-                  ? "Saving\u2026"
-                  : "Creating\u2026"
-                : isEditing
-                  ? "Save Changes"
-                  : "Create Role"}
-            </Button.Text>
-          </Button>
+        <Footer className="border-border flex-col border-t">
+          {confirmAssignmentFor && !isEditing && (
+            <label className="flex cursor-pointer items-start gap-3 self-stretch text-left">
+              <Checkbox
+                checked={assignmentConfirmed}
+                onCheckedChange={(checked) =>
+                  setAssignmentConfirmed(checked === true)
+                }
+                aria-label="Confirm role assignment"
+                className="mt-0.5"
+              />
+              <Text variant="body" className="text-sm">
+                Assign <strong>{confirmAssignmentFor}</strong> to this role
+                after creation. I reviewed all permissions configured above.
+              </Text>
+            </label>
+          )}
+          <div className="flex justify-end gap-2 self-stretch">
+            <Button variant="secondary" onClick={handleClose}>
+              Cancel
+            </Button>
+            <Button onClick={handleSubmit} disabled={saveDisabled}>
+              {isMutating && (
+                <Button.LeftIcon>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                </Button.LeftIcon>
+              )}
+              <Button.Text>
+                {isMutating
+                  ? isEditing
+                    ? "Saving\u2026"
+                    : "Creating\u2026"
+                  : isEditing
+                    ? "Save Changes"
+                    : "Create Role"}
+              </Button.Text>
+            </Button>
+          </div>
         </Footer>
       )}
     </Frame>

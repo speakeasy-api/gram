@@ -710,10 +710,12 @@ type memberRoleUpdateContext struct {
 }
 
 // MemberRoleState is the privacy-safe, complete state exposed to an optimistic
-// validation callback while the member's relationship row is locked.
+// validation callback while the member's relationship row and selected role are locked.
 type MemberRoleState struct {
-	MemberID string
-	RoleIDs  []string
+	MemberID         string
+	RoleIDs          []string
+	RoleSlug         string
+	RolePrincipalURN string
 }
 
 // MemberRoleValidation runs after the member and role are resolved in the
@@ -958,6 +960,9 @@ func (r *RoleManager) AddMemberRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID,
 	case err != nil:
 		return MemberRoleAddResult{}, MemberRoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "load connected member").LogError(ctx, r.logger)
 	}
+	if connected.DeletedAt.Valid {
+		return MemberRoleAddResult{}, MemberRoleReconciliation{}, oops.E(oops.CodeNotFound, nil, "member has not joined this organization").LogError(ctx, r.logger)
+	}
 	if !connected.WorkosID.Valid || connected.WorkosID.String == "" {
 		return MemberRoleAddResult{}, MemberRoleReconciliation{}, oops.E(oops.CodeBadRequest, nil, "member is not linked to WorkOS").LogError(ctx, r.logger)
 	}
@@ -986,7 +991,12 @@ func (r *RoleManager) AddMemberRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID,
 	}
 	slices.Sort(roleIDs)
 	if validate != nil {
-		state := MemberRoleState{MemberID: connected.ID, RoleIDs: slices.Clone(roleIDs)}
+		state := MemberRoleState{
+			MemberID:         connected.ID,
+			RoleIDs:          slices.Clone(roleIDs),
+			RoleSlug:         role.Slug,
+			RolePrincipalURN: role.PrincipalURN,
+		}
 		if err := validate(state); err != nil {
 			return MemberRoleAddResult{}, MemberRoleReconciliation{}, err
 		}
@@ -1040,7 +1050,12 @@ func (r *RoleManager) AddMemberRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID,
 		Department:   nil,
 		Groups:       nil,
 	}
-	safeAfter := MemberRoleState{MemberID: connected.ID, RoleIDs: slices.Clone(afterRoleIDs)}
+	safeAfter := MemberRoleState{
+		MemberID:         connected.ID,
+		RoleIDs:          slices.Clone(afterRoleIDs),
+		RoleSlug:         role.Slug,
+		RolePrincipalURN: role.PrincipalURN,
+	}
 	reconciliation := MemberRoleReconciliation{organizationID: gramOrgID, workosUserID: connected.WorkosID.String, membershipID: membershipID}
 	if alreadyAssigned && !linkRepaired {
 		return MemberRoleAddResult{After: safeAfter, Member: after, Changed: false}, reconciliation, nil

@@ -176,7 +176,7 @@ func registerDataExportTools(reg *Registrar, reader *PostgresReader) {
 		Title:       "List Data Exports",
 		Description: "List the organization's configured OpenTelemetry data exports, optionally narrowed to one project. Returns destinations, routes, enabled state, endpoint URLs, the sensitive-data policy, and only header names plus whether each has a value; secret header values are never returned. The structured route-to-destination relationships can be rendered as a Mermaid diagram. The management URL opens the dashboard where exports can be changed.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListDataExportsInput) (*mcp.CallToolResult, ListDataExportsOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListDataExportsInput) (*mcp.CallToolResult, ListDataExportsOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
 			return nil, ListDataExportsOutput{}, err
@@ -192,5 +192,5 @@ func registerUnavailableDataExportTools(reg *Registrar) {
 		Title:       "List Data Exports",
 		Description: "List configured OpenTelemetry data exports and the route-to-destination relationships. This is not switched on for your organization yet.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, unavailableTool("data_exports"))
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, unavailableTool("data_exports"))
 }

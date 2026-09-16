@@ -2,10 +2,19 @@ package remotesessions
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
 func TestOverwritableIdentitySources(t *testing.T) {
@@ -157,4 +166,44 @@ func TestIntrospectedTokenFromEnrichment(t *testing.T) {
 	require.False(t, ok, "a null active is no verdict, not an inactive one")
 	_, ok = IntrospectedTokenFromEnrichment([]byte(`{"introspection":{"active":"true"}}`))
 	require.False(t, ok, "only a JSON boolean is a verdict")
+}
+
+// A bound issuer's userinfo endpoint is served from inside the customer
+// network, so the call must take the tunnel. With no live route published the
+// forward fails closed; what matters is that the advertised endpoint — which
+// direct egress can still reach here — was never dialed.
+func TestEnrichmentUserinfoTakesTheIssuerTunnel(t *testing.T) {
+	t.Parallel()
+
+	var direct atomic.Int64
+	userinfo := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		direct.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"sub":"owner"}`))
+	}))
+	defer userinfo.Close()
+
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
+	require.NoError(t, err)
+	enricher := NewSessionEnricher(testenv.NewLogger(t), nil, policy, nil, nil,
+		tunnelrouting.NewHTTPClient(route.NewRouteTable(), "forward-token", policy, nil), nil)
+
+	target := enrichmentTarget{
+		issuerID:            uuid.New(),
+		issuerURL:           "https://idp.private.test",
+		organizationID:      "org-1",
+		userinfoEndpoint:    userinfo.URL,
+		tunneledMcpServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true},
+	}
+	result := enricher.userinfo(t.Context(), target, "access-token")
+	require.True(t, result.ran)
+	require.Nil(t, result.identity)
+	require.Zero(t, direct.Load(), "a bound issuer's userinfo must not be dialed over direct egress")
+
+	target.tunneledMcpServerID = uuid.NullUUID{}
+	unbound := enricher.userinfo(t.Context(), target, "access-token")
+	require.True(t, unbound.ran)
+	require.NotNil(t, unbound.identity)
+	require.Equal(t, "owner", unbound.identity.Subject)
+	require.Equal(t, int64(1), direct.Load())
 }

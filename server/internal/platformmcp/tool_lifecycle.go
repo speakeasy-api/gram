@@ -32,6 +32,7 @@ func registerSetupHandoffTool(reg *Registrar, registrations *RegistrationService
 		Title:       "Open Setup in the Dashboard",
 		Description: "Open the dashboard where the rest of an MCP server's setup is finished — its source and its authentication. Catalogue entries and user-supplied remote MCP servers return a dashboard settings URL; the local test fixture returns a single-use link instead. Constraints: never persist, log, or share the returned link.",
 	}, ToolMeta{
+		Authorization: ExternalAuthorizationOrgAdmin,
 		// The handoff carries the caller to the dashboard, which completes setup
 		// under its own session. A connection-less caller issues a handoff bound
 		// to its user rather than to a connection.

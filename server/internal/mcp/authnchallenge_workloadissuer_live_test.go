@@ -17,7 +17,8 @@ import (
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/clientauth"
+	assertioncore "github.com/speakeasy-api/gram/server/internal/usersessions/assertion"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/workload"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/replay"
 )
@@ -34,7 +35,7 @@ const liveWorkloadAudience = "https://gram.example.com/mcp/workload-live"
 // holds them is what the tests vary.
 type liveWorkloadFixture struct {
 	conn           *pgxpool.Pool
-	verifier       *clientauth.Verifier
+	verifier       *workload.Verifier
 	issuer         *devidptest.Instance
 	organizationID string
 	projectID      uuid.UUID
@@ -74,10 +75,10 @@ func newLiveWorkloadFixture(t *testing.T) liveWorkloadFixture {
 	)
 	require.NoError(t, err)
 
-	guard, err := replay.NewRedisGuard(client, string(testenv.NewCacheSuffix(t, "workload-live-replay")), clientauth.DefaultMaxReplayHold)
+	guard, err := replay.NewRedisGuard(client, string(testenv.NewCacheSuffix(t, "workload-live-replay")), assertioncore.ReplayHoldFor(mcp.WorkloadAssertionMaxLifetime))
 	require.NoError(t, err)
 
-	verifier, err := clientauth.NewVerifier(keys, guard)
+	verifier, err := workload.NewVerifier(keys, guard)
 	require.NoError(t, err)
 
 	organizationID := newLiveWorkloadOrganization(t, conn)
@@ -171,9 +172,9 @@ func (f liveWorkloadFixture) present(t *testing.T, endpoint *mcp.ResolvedMcpEndp
 
 	raw := oauthtest.MintWorkloadAssertion(t, f.issuer, oauthtest.WorkloadClaims(f.issuer, liveWorkloadSubject, liveWorkloadAudience))
 
-	err := mcp.AdmitWorkloadAssertion(t.Context(), f.conn, f.verifier, endpoint, clientauth.Audiences{
-		Issuer:   liveWorkloadAudience,
-		Endpoint: liveWorkloadAudience + "/token",
+	err := mcp.AdmitWorkloadAssertion(t.Context(), f.conn, f.verifier, endpoint, []string{
+		liveWorkloadAudience,
+		liveWorkloadAudience + "/token",
 	}, raw)
 	if err != nil {
 		return fmt.Errorf("admit workload assertion: %w", err)
