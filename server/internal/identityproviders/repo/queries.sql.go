@@ -133,7 +133,7 @@ INSERT INTO okta_identity_provider_connections (
   $3,
   '{}'
 )
-RETURNING identity_provider_connection_id, identity_provider_connections_kind, okta_domain, auth_method, client_id, signing_key_id, granted_scopes, sign_in_application_id, workos_connection_id, sign_in_state, groups_source, groups_claim_confirmed, sign_in_evidence, created_at, updated_at
+RETURNING identity_provider_connection_id, identity_provider_connections_kind, okta_domain, auth_method, client_id, signing_key_id, granted_scopes, sign_in_application_id, workos_connection_id, sign_in_state, groups_source, groups_claim_confirmed, sign_in_evidence, directory_application_id, directory_state, directory_group_count, directory_user_count, directory_evidence, created_at, updated_at
 `
 
 type CreateOktaIdentityProviderConnectionParams struct {
@@ -159,6 +159,11 @@ func (q *Queries) CreateOktaIdentityProviderConnection(ctx context.Context, arg 
 		&i.GroupsSource,
 		&i.GroupsClaimConfirmed,
 		&i.SignInEvidence,
+		&i.DirectoryApplicationID,
+		&i.DirectoryState,
+		&i.DirectoryGroupCount,
+		&i.DirectoryUserCount,
+		&i.DirectoryEvidence,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

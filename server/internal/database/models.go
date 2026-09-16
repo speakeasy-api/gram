@@ -1590,6 +1590,11 @@ type OktaIdentityProviderConnection struct {
 	GroupsSource                    pgtype.Text
 	GroupsClaimConfirmed            bool
 	SignInEvidence                  []byte
+	DirectoryApplicationID          pgtype.Text
+	DirectoryState                  pgtype.Text
+	DirectoryGroupCount             pgtype.Int4
+	DirectoryUserCount              pgtype.Int4
+	DirectoryEvidence               []byte
 	CreatedAt                       pgtype.Timestamptz
 	UpdatedAt                       pgtype.Timestamptz
 }
@@ -1701,11 +1706,18 @@ type OrganizationMetadatum struct {
 }
 
 type OrganizationOnboarding struct {
-	ID             uuid.UUID
-	OrganizationID string
-	Preset         pgtype.Text
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
+	ID                            uuid.UUID
+	OrganizationID                string
+	Preset                        pgtype.Text
+	DirectoryScimBaseUrl          pgtype.Text
+	DirectoryScimTokenEncrypted   pgtype.Text
+	DirectoryScimTokenKeyID       uuid.NullUUID
+	DirectoryScimTokenFingerprint pgtype.Text
+	DirectoryWorkosID             pgtype.Text
+	DirectoryHandoffSetByUserID   pgtype.Text
+	DirectoryHandoffUpdatedAt     pgtype.Timestamptz
+	CreatedAt                     pgtype.Timestamptz
+	UpdatedAt                     pgtype.Timestamptz
 }
 
 type OrganizationRole struct {
