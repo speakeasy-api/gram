@@ -113,7 +113,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 		revoker:      revoker,
 		// The refresher's lease cache single-flights rotations the same way it
 		// single-flights refreshes, so the two never race on one client.
-		rotator: NewClientRotator(logger, db, enc, policy, refresher.locks, serverURL, revoker, auditLogger),
+		rotator: NewClientRotator(logger, db, enc, policy, tunnels, refresher.locks, serverURL, revoker, auditLogger),
 
 		productFeatures: productFeatures,
 	}

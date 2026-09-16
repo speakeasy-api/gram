@@ -627,15 +627,17 @@ WHERE id = @id
 -- name: GetRemoteSessionClientForRotation :one
 -- The client row plus the issuer endpoints a re-registration needs: the token
 -- endpoint to probe and the registration endpoint to re-register at, both as
--- discovery last refreshed them on the issuer. Not locked: the rotation talks
--- to the issuer between this read and its write, and the write compares the
--- client_id it read here so a concurrent rotation is detected rather than
--- blocked.
+-- discovery last refreshed them on the issuer, and the issuer's transport
+-- binding, since both of those endpoints are only reachable over the tunnel
+-- when one is set. Not locked: the rotation talks to the issuer between this
+-- read and its write, and the write compares the client_id it read here so a
+-- concurrent rotation is detected rather than blocked.
 SELECT
     sqlc.embed(c),
-    i.issuer                 AS issuer_url,
-    i.token_endpoint         AS issuer_token_endpoint,
-    i.registration_endpoint  AS issuer_registration_endpoint
+    i.issuer                   AS issuer_url,
+    i.token_endpoint           AS issuer_token_endpoint,
+    i.registration_endpoint    AS issuer_registration_endpoint,
+    i.tunneled_mcp_server_id   AS issuer_tunneled_mcp_server_id
 FROM remote_session_clients AS c
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
 WHERE c.id = @id

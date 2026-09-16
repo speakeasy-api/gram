@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 )
 
 // rotationUpstream is a fake issuer whose token endpoint answers refresh
@@ -559,4 +560,58 @@ func TestBuildAuthorizationUrl_AdoptsConcurrentReplacementWhenIssuerLostRegistra
 
 	require.Zero(t, upstream.refreshAttempts.Load())
 	require.Zero(t, upstream.registrationAttempts.Load())
+}
+
+// bindIssuerToTunnel points the fixture issuer at a tunneled MCP server, the
+// way a platform admin does from the issuer settings page.
+func bindIssuerToTunnel(t *testing.T, env syntheticExpiryEnv) {
+	t.Helper()
+	ctx := t.Context()
+
+	tunnel, err := tunneledmcprepo.New(env.db).CreateServer(ctx, tunneledmcprepo.CreateServerParams{
+		ID:                 uuid.New(),
+		ProjectID:          env.projectID,
+		Name:               "rotation tunnel " + uuid.NewString(),
+		KeyHash:            "rotation-key-hash-" + uuid.NewString(),
+		KeyPrefix:          "rotation-key-prefix",
+		ResourceIdentifier: pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+
+	// Every other column keeps its stored value under the query's three-state
+	// narg semantics.
+	_, err = env.q.UpdateRemoteSessionIssuer(ctx, repo.UpdateRemoteSessionIssuerParams{
+		ID:                  env.issuerID,
+		ProjectID:           conv.ToNullUUID(env.projectID),
+		TunneledMcpServerID: conv.ToPGText(tunnel.ID.String()),
+	})
+	require.NoError(t, err)
+}
+
+// A bound issuer's token and registration endpoints are private addresses, so
+// both legs of a rotation ride the tunnel. The fixture manager holds no tunnel
+// client, so they fail closed here — what matters is that neither leg is
+// dialed over direct egress, which is where they would land if the rotator
+// still ignored the binding. The unbound counterpart is
+// TestBuildAuthorizationUrl_RotatesRejectedRegistration above.
+func TestBuildAuthorizationUrl_RotationOfBoundIssuerNeverUsesDirectEgress(t *testing.T) {
+	t.Parallel()
+
+	upstream := &rotationUpstream{refreshStatus: http.StatusUnauthorized, refreshBody: invalidClientBody}
+	_, env := newSyntheticExpiryEnv(t, "rotate-tunnel-bound", upstream.handler())
+	rejectedAt := time.Now().Add(-time.Hour)
+	stageRegistration(t, env, issuerTokenEndpoint(t, env)+"/register", &rejectedAt, nil)
+	bindIssuerToTunnel(t, env)
+
+	require.Equal(t, "synthetic-cid-rotate-tunnel-bound", mintLogin(t, env),
+		"the stored client is sent onward, unrotated")
+
+	require.Zero(t, upstream.refreshAttempts.Load(),
+		"a bound issuer's token endpoint must not be probed over direct egress")
+	require.Zero(t, upstream.registrationAttempts.Load(),
+		"a bound issuer's registration endpoint must not be reached over direct egress")
+
+	client := loadClient(t, env)
+	require.Equal(t, "synthetic-cid-rotate-tunnel-bound", client.ClientID)
+	require.True(t, client.UpstreamRejectedAt.Valid, "the marker stays so the next login tries again")
 }

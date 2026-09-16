@@ -2892,9 +2892,10 @@ func (q *Queries) GetRemoteSessionClientForClientMetadataDocument(ctx context.Co
 const getRemoteSessionClientForRotation = `-- name: GetRemoteSessionClientForRotation :one
 SELECT
     c.id, c.project_id, c.organization_id, c.attachment_scope, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.resource_identifier, c.resource_name, c.resource_documentation, c.resource_policy_uri, c.resource_tos_uri, c.upstream_rejected_at, c.created_at, c.updated_at, c.deleted_at, c.deleted,
-    i.issuer                 AS issuer_url,
-    i.token_endpoint         AS issuer_token_endpoint,
-    i.registration_endpoint  AS issuer_registration_endpoint
+    i.issuer                   AS issuer_url,
+    i.token_endpoint           AS issuer_token_endpoint,
+    i.registration_endpoint    AS issuer_registration_endpoint,
+    i.tunneled_mcp_server_id   AS issuer_tunneled_mcp_server_id
 FROM remote_session_clients AS c
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
 WHERE c.id = $1
@@ -2907,14 +2908,16 @@ type GetRemoteSessionClientForRotationRow struct {
 	IssuerUrl                  string
 	IssuerTokenEndpoint        pgtype.Text
 	IssuerRegistrationEndpoint pgtype.Text
+	IssuerTunneledMcpServerID  uuid.NullUUID
 }
 
 // The client row plus the issuer endpoints a re-registration needs: the token
 // endpoint to probe and the registration endpoint to re-register at, both as
-// discovery last refreshed them on the issuer. Not locked: the rotation talks
-// to the issuer between this read and its write, and the write compares the
-// client_id it read here so a concurrent rotation is detected rather than
-// blocked.
+// discovery last refreshed them on the issuer, and the issuer's transport
+// binding, since both of those endpoints are only reachable over the tunnel
+// when one is set. Not locked: the rotation talks to the issuer between this
+// read and its write, and the write compares the client_id it read here so a
+// concurrent rotation is detected rather than blocked.
 func (q *Queries) GetRemoteSessionClientForRotation(ctx context.Context, id uuid.UUID) (GetRemoteSessionClientForRotationRow, error) {
 	row := q.db.QueryRow(ctx, getRemoteSessionClientForRotation, id)
 	var i GetRemoteSessionClientForRotationRow
@@ -2948,6 +2951,7 @@ func (q *Queries) GetRemoteSessionClientForRotation(ctx context.Context, id uuid
 		&i.IssuerUrl,
 		&i.IssuerTokenEndpoint,
 		&i.IssuerRegistrationEndpoint,
+		&i.IssuerTunneledMcpServerID,
 	)
 	return i, err
 }
