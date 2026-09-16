@@ -89,8 +89,8 @@ type httpClient struct {
 	now        func() time.Time
 	sleep      func(ctx context.Context, d time.Duration) error
 
-	// mintMu serializes token minting so concurrent callers share one handshake.
-	mintMu sync.Mutex
+	// mintAdmission serializes handshakes while allowing waiters to cancel.
+	mintAdmission chan struct{}
 
 	mu        sync.Mutex
 	cached    cachedToken
@@ -137,22 +137,22 @@ func NewClient(logger *slog.Logger, client *guardian.HTTPClient, signer remotese
 	noRedirect.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 
 	return &httpClient{
-		logger:     logger.With(attr.SlogComponent("okta_client")),
-		cfg:        cfg,
-		httpClient: &noRedirect,
-		signer:     signer,
-		key:        key,
-		orgURL:     orgURL,
-		tokenURL:   tokenURL,
-		audience:   audience,
-		maxPages:   maxPages,
-		now:        time.Now,
-		sleep:      sleepContext,
-		mintMu:     sync.Mutex{},
-		mu:         sync.Mutex{},
-		cached:     noToken,
-		nonce:      "",
-		slowUntil:  time.Time{},
+		logger:        logger.With(attr.SlogComponent("okta_client")),
+		cfg:           cfg,
+		httpClient:    &noRedirect,
+		signer:        signer,
+		key:           key,
+		orgURL:        orgURL,
+		tokenURL:      tokenURL,
+		audience:      audience,
+		maxPages:      maxPages,
+		now:           time.Now,
+		sleep:         sleepContext,
+		mintAdmission: make(chan struct{}, 1),
+		mu:            sync.Mutex{},
+		cached:        noToken,
+		nonce:         "",
+		slowUntil:     time.Time{},
 	}, nil
 }
 
@@ -274,7 +274,10 @@ func (c *httpClient) ListAppGroups(ctx context.Context, req ListAppGroupsRequest
 
 func (c *httpClient) ListGroups(ctx context.Context, req ListGroupsRequest) ([]Group, error) {
 	q := url.Values{}
-	setQuery(q, "q", req.Search)
+	if req.Search != "" {
+		prefix, _ := json.Marshal(req.Search)
+		q.Set("search", "profile.name sw "+string(prefix))
+	}
 	setLimit(q, req.Limit)
 
 	raw, err := listAll[groupJSON](ctx, c, "/api/v1/groups", q)
@@ -298,8 +301,10 @@ func (c *httpClient) ListGroups(ctx context.Context, req ListGroupsRequest) ([]G
 // VerifyScopes always mints a fresh token for the required scopes; the
 // verification token is never cached because it may lack default scopes.
 func (c *httpClient) VerifyScopes(ctx context.Context, required []string) (*ScopeVerification, error) {
-	c.mintMu.Lock()
-	defer c.mintMu.Unlock()
+	if err := c.acquireMint(ctx); err != nil {
+		return nil, err
+	}
+	defer c.releaseMint()
 	c.evictToken()
 
 	tok, err := c.mint(ctx, required)
@@ -508,14 +513,38 @@ func (c *httpClient) evictToken() {
 	c.mu.Unlock()
 }
 
-// token returns the cached DPoP token or mints one under mintMu.
+// acquireMint admits one handshake, unless the caller has been canceled.
+func (c *httpClient) acquireMint(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("wait for okta token mint: %w", err)
+	}
+	select {
+	case <-ctx.Done():
+		return fmt.Errorf("wait for okta token mint: %w", ctx.Err())
+	case c.mintAdmission <- struct{}{}:
+		if err := ctx.Err(); err != nil {
+			c.releaseMint()
+			return fmt.Errorf("wait for okta token mint: %w", err)
+		}
+		return nil
+	}
+}
+
+func (c *httpClient) releaseMint() { <-c.mintAdmission }
+
+// token returns the cached DPoP token or mints one under mint admission.
 func (c *httpClient) token(ctx context.Context) (cachedToken, error) {
+	if err := ctx.Err(); err != nil {
+		return noToken, fmt.Errorf("get okta token: %w", err)
+	}
 	if tok, ok := c.cachedToken(); ok {
 		return tok, nil
 	}
 
-	c.mintMu.Lock()
-	defer c.mintMu.Unlock()
+	if err := c.acquireMint(ctx); err != nil {
+		return noToken, err
+	}
+	defer c.releaseMint()
 	if tok, ok := c.cachedToken(); ok {
 		return tok, nil
 	}
@@ -694,25 +723,26 @@ func (c *httpClient) observeRateLimit(header http.Header) {
 	c.mu.Unlock()
 }
 
-// waitForSlowdown sleeps until slowUntil and clears it only if no concurrent
-// observer moved the deadline while this waiter slept.
+// waitForSlowdown rechecks the shared deadline after every wake so concurrent
+// extensions are honored before another request is sent.
 func (c *httpClient) waitForSlowdown(ctx context.Context) error {
-	c.mu.Lock()
-	deadline := c.slowUntil
-	wait := deadline.Sub(c.now())
-	c.mu.Unlock()
-	if wait <= 0 {
-		return nil
+	for {
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("wait for okta slowdown: %w", err)
+		}
+		c.mu.Lock()
+		wait := c.slowUntil.Sub(c.now())
+		if wait <= 0 {
+			c.slowUntil = time.Time{}
+		}
+		c.mu.Unlock()
+		if wait <= 0 {
+			return nil
+		}
+		if err := c.sleep(ctx, min(wait, maxRateLimitWait)); err != nil {
+			return err
+		}
 	}
-	if err := c.sleep(ctx, min(wait, maxRateLimitWait)); err != nil {
-		return err
-	}
-	c.mu.Lock()
-	if c.slowUntil.Equal(deadline) {
-		c.slowUntil = time.Time{}
-	}
-	c.mu.Unlock()
-	return nil
 }
 
 func (c *httpClient) rateLimitWait(header http.Header) time.Duration {
