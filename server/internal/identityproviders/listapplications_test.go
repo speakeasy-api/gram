@@ -34,8 +34,8 @@ func TestListApplicationsReadsTwoPagesAndAssignmentCounts(t *testing.T) {
 	require.NotEmpty(t, result.ReadAt)
 	require.Contains(t, result.Detail, "Assignment counts were read for every application.")
 	require.Equal(t, []*gen.IdentityProviderApplication{
-		{SourceApplicationID: "app-one", Label: "First app", ProviderStatus: new("ACTIVE"), SignOnMode: new("SAML_2_0"), SignOnURL: new("https://apps.example.test/first"), GroupAssignmentCount: new(2), UserAssignmentCount: new(3)},
-		{SourceApplicationID: "app-two", Label: "Second app", ProviderStatus: new("INACTIVE"), SignOnMode: new("BOOKMARK"), SignOnURL: new("https://apps.example.test/second"), GroupAssignmentCount: new(0), UserAssignmentCount: new(1)},
+		{SourceApplicationID: "app-one", Label: "First app", ProviderStatus: new("ACTIVE"), SignOnMode: new("SAML_2_0"), SignOnURL: new("https://apps.example.test/first"), LogoURL: new("https://apps.example.test/logos/app-one.png"), GroupAssignmentCount: new(2), UserAssignmentCount: new(3)},
+		{SourceApplicationID: "app-two", Label: "Second app", ProviderStatus: new("INACTIVE"), SignOnMode: new("BOOKMARK"), SignOnURL: new("https://apps.example.test/second"), LogoURL: nil, GroupAssignmentCount: new(0), UserAssignmentCount: new(1)},
 	}, result.Applications)
 	require.Equal(t, 4, fake.AssignmentReads())
 	require.NoError(t, fake.ValidationError())
@@ -165,7 +165,13 @@ func inventoryApplication(id, label, status, signOnMode, signOnURL string, appLi
 		"settings": map[string]any{"app": map[string]any{"url": signOnURL}},
 	}
 	if appLink {
-		application["_links"] = map[string]any{"appLinks": []map[string]any{{"href": signOnURL}}}
+		application["_links"] = map[string]any{
+			"appLinks": []map[string]any{{"href": signOnURL}},
+			"logo": []map[string]any{
+				{"name": "large", "href": "https://apps.example.test/logos/large.png", "type": "image/png"},
+				{"name": "medium", "href": "https://apps.example.test/logos/" + id + ".png", "type": "image/png"},
+			},
+		}
 	}
 	if strings.TrimSpace(signOnURL) == "" {
 		application["settings"] = map[string]any{"app": map[string]any{}}

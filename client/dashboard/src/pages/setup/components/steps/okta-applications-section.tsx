@@ -88,19 +88,34 @@ function initials(label: string): string {
   return (words[0]![0]! + words[1]![0]!).toUpperCase();
 }
 
-// Okta does not hand us a logo with the inventory, so every card wears the
-// same deterministic tile its name earns. Swap this for the image the moment
-// the read carries one.
-function ApplicationMark({ label }: { label: string }): JSX.Element {
+function ApplicationMark({
+  label,
+  logoUrl,
+}: {
+  label: string;
+  logoUrl?: string;
+}): JSX.Element {
   const tint = useIdentityTint(label);
+  const [failedLogoUrl, setFailedLogoUrl] = useState<string>();
+  const showLogo = logoUrl && logoUrl !== failedLogoUrl;
 
   return (
     <div
       aria-hidden="true"
       className="flex h-9 w-9 flex-shrink-0 items-center justify-center text-xs font-semibold"
-      style={tint}
+      style={showLogo ? undefined : tint}
     >
-      {initials(label)}
+      {showLogo ? (
+        <img
+          src={logoUrl}
+          alt=""
+          referrerPolicy="no-referrer"
+          className="size-full object-contain"
+          onError={() => setFailedLogoUrl(logoUrl)}
+        />
+      ) : (
+        initials(label)
+      )}
     </div>
   );
 }
@@ -118,7 +133,10 @@ function ApplicationCard({
   return (
     <div className="border-border bg-card flex flex-col gap-3 border p-4">
       <div className="flex items-start gap-3">
-        <ApplicationMark label={application.label} />
+        <ApplicationMark
+          label={application.label}
+          logoUrl={application.logoUrl}
+        />
         <div className="min-w-0 flex-1">
           <Text className="font-medium break-words">{application.label}</Text>
           {distinct ? (

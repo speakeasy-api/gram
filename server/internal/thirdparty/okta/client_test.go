@@ -353,11 +353,17 @@ func TestDecodeApplicationPrefersFirstAppLink(t *testing.T) {
 		"label":"Example",
 		"signOnMode":"SAML_2_0",
 		"settings":{"app":{"url":"https://fallback.example.test"}},
-		"_links":{"appLinks":[{"href":"https://launch.example.test"}]}
+		"_links":{
+			"appLinks":[{"href":"https://launch.example.test"}],
+			"logo":[
+				{"name":"large","href":"https://cdn.example.test/large.png","type":"image/png"},
+				{"name":"medium","href":"https://cdn.example.test/medium.png","type":"image/png"}
+			]
+		}
 	}`))
 	require.NoError(t, err)
 	require.Equal(t, okta.Application{
-		ID: "app-123", Status: "ACTIVE", Label: "Example", ClientID: "", SignOnMode: "SAML_2_0", SignOnURL: "https://launch.example.test",
+		ID: "app-123", Status: "ACTIVE", Label: "Example", ClientID: "", SignOnMode: "SAML_2_0", SignOnURL: "https://launch.example.test", LogoURL: "https://cdn.example.test/medium.png",
 	}, application)
 }
 
@@ -780,7 +786,7 @@ func TestCreateOIDCApplicationSendsExactPayloadAndDropsResponseSecret(t *testing
 		ClientSecret: "caller-minted-secret",
 	})
 	require.NoError(t, err)
-	require.Equal(t, okta.Application{ID: "app-1", Status: "ACTIVE", Label: "Speakeasy sign-in", ClientID: "client-1", SignOnMode: "", SignOnURL: ""}, app)
+	require.Equal(t, okta.Application{ID: "app-1", Status: "ACTIVE", Label: "Speakeasy sign-in", ClientID: "client-1", SignOnMode: "", SignOnURL: "", LogoURL: ""}, app)
 
 	request := <-requests
 	require.Equal(t, http.MethodPost, request.Method)
@@ -825,7 +831,7 @@ func TestFindActiveApplicationByLabelReturnsTransientSecret(t *testing.T) {
 	app, secret, found, err := newTestClient(t, server.URL).FindActiveApplicationByLabel(t.Context(), "example.okta.com", "test-access-token", okta.SignInApplicationLabel)
 	require.NoError(t, err)
 	require.True(t, found)
-	require.Equal(t, okta.Application{ID: "active-app", Status: "ACTIVE", Label: "Speakeasy sign-in", ClientID: "active-client", SignOnMode: "", SignOnURL: ""}, app)
+	require.Equal(t, okta.Application{ID: "active-app", Status: "ACTIVE", Label: "Speakeasy sign-in", ClientID: "active-client", SignOnMode: "", SignOnURL: "", LogoURL: ""}, app)
 	require.Equal(t, "active-secret", secret)
 	require.NotContains(t, fmt.Sprintf("%+v", app), secret)
 }
@@ -866,7 +872,7 @@ func TestGetApplicationReturnsOnlyNonSecretFields(t *testing.T) {
 
 	app, err := newTestClient(t, server.URL).GetApplication(t.Context(), "example.okta.com", "test-access-token", "app-123")
 	require.NoError(t, err)
-	require.Equal(t, okta.Application{ID: "app-123", Status: "INACTIVE", Label: "Speakeasy", ClientID: "client-123", SignOnMode: "", SignOnURL: ""}, app)
+	require.Equal(t, okta.Application{ID: "app-123", Status: "INACTIVE", Label: "Speakeasy", ClientID: "client-123", SignOnMode: "", SignOnURL: "", LogoURL: ""}, app)
 	require.NotContains(t, fmt.Sprintf("%+v", app), "discard-me")
 }
 
@@ -1093,7 +1099,7 @@ func TestResolveApplicationByClientIDUsesSafeFilterAndExactFallbackMatch(t *test
 
 	app, err := newTestClient(t, server.URL).ResolveApplicationByClientID(t.Context(), "example.okta.com", "test-access-token", clientID)
 	require.NoError(t, err)
-	require.Equal(t, okta.Application{ID: "matching-app", Status: "ACTIVE", Label: "Speakeasy", ClientID: clientID, SignOnMode: "", SignOnURL: ""}, app)
+	require.Equal(t, okta.Application{ID: "matching-app", Status: "ACTIVE", Label: "Speakeasy", ClientID: clientID, SignOnMode: "", SignOnURL: "", LogoURL: ""}, app)
 	require.NotContains(t, fmt.Sprintf("%+v", app), "discard-me")
 	require.Equal(t, int64(2), requests.Load())
 }

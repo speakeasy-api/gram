@@ -108,6 +108,8 @@ type IdentityProviderApplication struct {
 	SignOnMode *string
 	// Application launch URL.
 	SignOnURL *string
+	// Application logo URL.
+	LogoURL *string
 	// Number of directly assigned groups, when read.
 	GroupAssignmentCount *int
 	// Number of directly assigned users, when read.

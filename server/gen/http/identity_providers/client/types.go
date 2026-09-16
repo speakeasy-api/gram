@@ -1471,6 +1471,8 @@ type IdentityProviderApplicationResponseBody struct {
 	SignOnMode *string `form:"sign_on_mode,omitempty" json:"sign_on_mode,omitempty" xml:"sign_on_mode,omitempty"`
 	// Application launch URL.
 	SignOnURL *string `form:"sign_on_url,omitempty" json:"sign_on_url,omitempty" xml:"sign_on_url,omitempty"`
+	// Application logo URL.
+	LogoURL *string `form:"logo_url,omitempty" json:"logo_url,omitempty" xml:"logo_url,omitempty"`
 	// Number of directly assigned groups, when read.
 	GroupAssignmentCount *int `form:"group_assignment_count,omitempty" json:"group_assignment_count,omitempty" xml:"group_assignment_count,omitempty"`
 	// Number of directly assigned users, when read.
@@ -4776,6 +4778,9 @@ func ValidateIdentityProviderApplicationResponseBody(body *IdentityProviderAppli
 	}
 	if body.SignOnURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.sign_on_url", *body.SignOnURL, goa.FormatURI))
+	}
+	if body.LogoURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.logo_url", *body.LogoURL, goa.FormatURI))
 	}
 	return
 }

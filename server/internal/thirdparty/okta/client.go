@@ -173,6 +173,9 @@ type Application struct {
 
 	// SignOnURL is the first Okta app link, or the configured application URL.
 	SignOnURL string `json:"sign_on_url"`
+
+	// LogoURL is the preferred application logo published by Okta.
+	LogoURL string `json:"logo_url"`
 }
 
 // Group identifies an Okta group that can be assigned to an application.
@@ -213,6 +216,10 @@ type applicationResponse struct {
 		AppLinks []struct {
 			Href string `json:"href"`
 		} `json:"appLinks"`
+		Logo []struct {
+			Href string `json:"href"`
+			Name string `json:"name"`
+		} `json:"logo"`
 	} `json:"_links"`
 }
 
@@ -668,7 +675,7 @@ func (c *Client) ListApplicationUsers(ctx context.Context, tenantDomain, accessT
 func DecodeApplication(raw json.RawMessage) (Application, error) {
 	var response applicationResponse
 	if err := json.Unmarshal(raw, &response); err != nil {
-		return Application{ID: "", Status: "", Label: "", ClientID: "", SignOnMode: "", SignOnURL: ""}, fmt.Errorf("decode Okta application: %w", err)
+		return Application{ID: "", Status: "", Label: "", ClientID: "", SignOnMode: "", SignOnURL: "", LogoURL: ""}, fmt.Errorf("decode Okta application: %w", err)
 	}
 	return applicationFromResponse(response), nil
 }
@@ -1066,7 +1073,7 @@ func (c *Client) FindActiveApplicationByLabel(ctx context.Context, tenantDomain,
 		seenCursors[next] = struct{}{}
 		after = next
 	}
-	return Application{ID: "", Status: "", Label: "", ClientID: "", SignOnMode: "", SignOnURL: ""}, "", false, nil
+	return Application{ID: "", Status: "", Label: "", ClientID: "", SignOnMode: "", SignOnURL: "", LogoURL: ""}, "", false, nil
 }
 
 // GetApplication retrieves an Okta OIDC application by its application instance ID.
@@ -1637,6 +1644,19 @@ func applicationFromResponse(response applicationResponse) Application {
 	if len(response.Links.AppLinks) > 0 && response.Links.AppLinks[0].Href != "" {
 		signOnURL = response.Links.AppLinks[0].Href
 	}
+	logoURL := ""
+	for _, logo := range response.Links.Logo {
+		if logo.Href == "" {
+			continue
+		}
+		if logoURL == "" {
+			logoURL = logo.Href
+		}
+		if strings.EqualFold(logo.Name, "medium") {
+			logoURL = logo.Href
+			break
+		}
+	}
 	return Application{
 		ID:         response.ID,
 		Status:     response.Status,
@@ -1644,5 +1664,6 @@ func applicationFromResponse(response applicationResponse) Application {
 		ClientID:   response.Credentials.OAuthClient.ClientID,
 		SignOnMode: response.SignOnMode,
 		SignOnURL:  signOnURL,
+		LogoURL:    logoURL,
 	}
 }

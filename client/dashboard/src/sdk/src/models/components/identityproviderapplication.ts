@@ -21,6 +21,10 @@ export type IdentityProviderApplication = {
    */
   label: string;
   /**
+   * Application logo URL.
+   */
+  logoUrl?: string | undefined;
+  /**
    * Provider lifecycle status.
    */
   providerStatus?: string | undefined;
@@ -50,6 +54,7 @@ export const IdentityProviderApplication$inboundSchema: z.ZodMiniType<
   z.object({
     group_assignment_count: z.optional(z.int()),
     label: z.string(),
+    logo_url: z.optional(z.string()),
     provider_status: z.optional(z.string()),
     sign_on_mode: z.optional(z.string()),
     sign_on_url: z.optional(z.string()),
@@ -59,6 +64,7 @@ export const IdentityProviderApplication$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "group_assignment_count": "groupAssignmentCount",
+      "logo_url": "logoUrl",
       "provider_status": "providerStatus",
       "sign_on_mode": "signOnMode",
       "sign_on_url": "signOnUrl",

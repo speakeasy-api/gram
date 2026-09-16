@@ -1620,6 +1620,7 @@ func marshalIdentityprovidersIdentityProviderApplicationToIdentityProviderApplic
 		ProviderStatus:       v.ProviderStatus,
 		SignOnMode:           v.SignOnMode,
 		SignOnURL:            v.SignOnURL,
+		LogoURL:              v.LogoURL,
 		GroupAssignmentCount: v.GroupAssignmentCount,
 		UserAssignmentCount:  v.UserAssignmentCount,
 	}

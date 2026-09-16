@@ -67,6 +67,7 @@ function application(
     providerStatus: "ACTIVE",
     signOnMode: "OPENID_CONNECT",
     signOnUrl: "https://chat.example.test/sso",
+    logoUrl: "https://cdn.example.test/example-chat.png",
     groupAssignmentCount: 3,
     userAssignmentCount: 12,
     ...overrides,
@@ -123,11 +124,14 @@ describe("OktaApplicationsSection", () => {
         providerStatus: "INACTIVE",
         signOnMode: "SAML_2_0",
         signOnUrl: "https://docs.example.test/acs",
+        logoUrl: undefined,
         groupAssignmentCount: 1,
         userAssignmentCount: 1,
       }),
     ]);
-    render(<OktaApplicationsSection index={4} connection={connection()} />);
+    const { container } = render(
+      <OktaApplicationsSection index={4} connection={connection()} />,
+    );
 
     expect(screen.getByText("Example Chat")).toBeTruthy();
     // The host is what tells two similarly named applications apart.
@@ -136,6 +140,12 @@ describe("OktaApplicationsSection", () => {
     // One of each reads as one of each, not "1 groups, 1 people".
     expect(screen.getByText("1 group, 1 person")).toBeTruthy();
     expect(screen.getByText(/2 applications read from Okta at/)).toBeTruthy();
+    const logo = container.querySelector(
+      'img[src="https://cdn.example.test/example-chat.png"]',
+    );
+    expect(logo).toBeTruthy();
+    fireEvent.error(logo!);
+    expect(screen.getByText("EC")).toBeTruthy();
   });
 
   it("says a dash where Okta did not give a count, and why", () => {

@@ -88,6 +88,7 @@ func (s *Service) ListApplications(ctx context.Context, _ *gen.ListApplicationsP
 				ProviderStatus:       conv.PtrEmpty(application.Status),
 				SignOnMode:           conv.PtrEmpty(application.SignOnMode),
 				SignOnURL:            conv.PtrEmpty(application.SignOnURL),
+				LogoURL:              conv.PtrEmpty(application.LogoURL),
 				GroupAssignmentCount: nil,
 				UserAssignmentCount:  nil,
 			})

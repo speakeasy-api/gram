@@ -188,6 +188,7 @@ var IdentityProviderApplication = Type("IdentityProviderApplication", func() {
 	Attribute("provider_status", String, "Provider lifecycle status.")
 	Attribute("sign_on_mode", String, "Provider sign-on mode.")
 	Attribute("sign_on_url", String, "Application launch URL.", func() { Format(FormatURI) })
+	Attribute("logo_url", String, "Application logo URL.", func() { Format(FormatURI) })
 	Attribute("group_assignment_count", Int, "Number of directly assigned groups, when read.")
 	Attribute("user_assignment_count", Int, "Number of directly assigned users, when read.")
 	Required("source_application_id", "label")

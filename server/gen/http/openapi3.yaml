@@ -81628,6 +81628,10 @@ components:
                 label:
                     type: string
                     description: Application display label.
+                logo_url:
+                    type: string
+                    description: Application logo URL.
+                    format: uri
                 provider_status:
                     type: string
                     description: Provider lifecycle status.
