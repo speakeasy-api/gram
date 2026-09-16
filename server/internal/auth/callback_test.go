@@ -400,6 +400,7 @@ func TestService_Callback(t *testing.T) {
 
 		require.NotContains(t, result.Location, "signin_error=", "auto-provision should not surface a signin error")
 		require.Contains(t, result.Location, "/projects/default/assistants/new?disposition=assistants", "auto-provisioned redirect should target the assistants/new page on the new org with the disposition marker")
+		require.Contains(t, result.Location, "signed_up=1", "auto-provisioning is a signup too, so the landing page must report the conversion")
 		require.NotEmpty(t, result.SessionToken)
 		require.Equal(t, result.SessionToken, result.SessionCookie)
 	})
@@ -828,6 +829,7 @@ func TestService_Callback_SignupIntent(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.NotContains(t, result.Location, "signin_error=")
+		require.Contains(t, result.Location, "signed_up=1", "the landing page reports the signup conversion off this mark")
 		require.NotEmpty(t, result.SessionToken)
 
 		session, err := instance.sessionManager.GetSession(ctx, result.SessionToken)

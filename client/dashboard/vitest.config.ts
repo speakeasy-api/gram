@@ -15,6 +15,7 @@ export default defineConfig({
   define: {
     __GRAM_SERVER_URL__: JSON.stringify(""),
     __GRAM_GIT_SHA__: JSON.stringify(""),
+    __GRAM_GOOGLE_TAG_ID__: JSON.stringify(""),
     __GRAM_API_URL__: JSON.stringify(""),
     __GRAM_DEV_WORKTREE__: JSON.stringify(""),
     __GRAM_DEV_BRANCH__: JSON.stringify(""),
