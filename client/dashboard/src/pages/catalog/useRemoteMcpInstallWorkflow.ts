@@ -4,6 +4,7 @@ import {
   createDefaultMcpEndpoint,
   DEFAULT_ENDPOINT_FAILED_MESSAGE,
 } from "@/lib/mcpEndpoints";
+import { createRemoteMcpServerPair } from "@/lib/remoteMcpServers";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { getServerURL } from "@/lib/utils";
 import type { PulseMCPServer } from "@/pages/catalog/hooks";
@@ -555,57 +556,19 @@ export function useRemoteMcpInstallWorkflow({
         return installUnproxiedTarget(client, target, reqOpts);
       }
 
-      const remoteMcpServer = await client.remoteMcp.createServer(
+      const { remoteMcpServer, mcpServer } = await createRemoteMcpServerPair(
+        client,
         {
-          createServerForm: {
-            name: target.name,
-            url: target.remote.url,
-            transportType: "streamable-http",
-          },
+          name: target.name,
+          url: target.remote.url,
+          // Private (user-session gated) rather than the sources flow's
+          // "disabled": catalog installs promise a usable server, and the
+          // pre-staged endpoint must actually serve. Public would expose
+          // any stored upstream API-key headers to anyone with the URL.
+          visibility: "private",
         },
-        undefined,
         reqOpts,
       );
-
-      let mcpServer: McpServer;
-      try {
-        mcpServer = await client.mcpServers.create(
-          {
-            createMcpServerForm: {
-              name: target.name,
-              remoteMcpServerId: remoteMcpServer.id,
-              // Private (user-session gated) rather than the sources flow's
-              // "disabled": catalog installs promise a usable server, and the
-              // pre-staged endpoint must actually serve. Public would expose
-              // any stored upstream API-key headers to anyone with the URL.
-              visibility: "private",
-            },
-          },
-          undefined,
-          reqOpts,
-        );
-      } catch (linkError) {
-        try {
-          await client.remoteMcp.deleteServer(
-            { id: remoteMcpServer.id },
-            undefined,
-            reqOpts,
-          );
-        } catch (rollbackError) {
-          const linkMsg =
-            linkError instanceof Error ? linkError.message : String(linkError);
-          const rollbackMsg =
-            rollbackError instanceof Error
-              ? rollbackError.message
-              : String(rollbackError);
-          throw new Error(
-            `Created remote MCP server ${remoteMcpServer.id} but failed to link an MCP server, and the rollback also failed. Delete it manually before retrying. Cause: ${linkMsg}. Rollback: ${rollbackMsg}.`,
-          );
-        }
-        throw linkError instanceof Error
-          ? linkError
-          : new Error(String(linkError));
-      }
 
       // Persist user-provided upstream headers. Best-effort per header: the
       // server is already linked and headers can always be (re)configured from
