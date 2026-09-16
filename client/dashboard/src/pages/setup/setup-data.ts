@@ -138,6 +138,16 @@ const SETUP_AGENT_PLATFORMS: Array<{
         code: `{{GRAM_CLAUDE_PLUGIN_NAME}}`,
         language: "text",
       },
+      {
+        title: "Enable OTEL export",
+        description:
+          "In the Cowork tab of the Claude org settings, scroll to Monitoring and enter the values below. Save the settings.",
+        code: `OTLP endpoint: https://app.getgram.ai/rpc/hooks.otel
+OTLP protocol: http/json
+OTLP headers: Gram-Project=default,Gram-Key={{GRAM_API_KEY}}`,
+        language: "text",
+        requiresApiKey: true,
+      },
     ],
   },
   {

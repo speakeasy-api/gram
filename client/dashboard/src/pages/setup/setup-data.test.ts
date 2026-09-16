@@ -42,6 +42,22 @@ describe("AGENT_PLATFORMS", () => {
     });
   });
 
+  it("ends Cowork setup with authenticated OTEL export instructions", () => {
+    const cowork = AGENT_PLATFORMS.find(({ id }) => id === "claude-cowork");
+    const step = cowork?.setupSteps.at(-1);
+
+    expect(step).toMatchObject({
+      title: "Enable OTEL export",
+      description:
+        "In the Cowork tab of the Claude org settings, scroll to Monitoring and enter the values below. Save the settings.",
+      code: `OTLP endpoint: https://app.getgram.ai/rpc/hooks.otel
+OTLP protocol: http/json
+OTLP headers: Gram-Project=default,Gram-Key={{GRAM_API_KEY}}`,
+      language: "text",
+      requiresApiKey: true,
+    });
+  });
+
   it("delegates Codex telemetry configuration to the device agent", () => {
     const codex = AGENT_PLATFORMS.find(({ id }) => id === "codex");
 
