@@ -19,10 +19,13 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/directory"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	plugindelivery "github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
@@ -259,6 +262,7 @@ type PluginsService struct {
 	cursors              *pluginCursorCodec
 	assignmentReferences *subjectReferenceCodec
 	assignmentVersionKey []byte
+	remoteSessions       MemberMCPConnectionReader
 	now                  func() time.Time
 
 	mutationFlags             feature.Provider
@@ -293,6 +297,7 @@ func NewPluginsService(db *pgxpool.Pool, budget OperationBudget, cursorKeyMateri
 		cursors:               cursor,
 		assignmentReferences:  references,
 		assignmentVersionKey:  versionKey,
+		remoteSessions:        nil,
 		now:                   time.Now,
 		mutationFlags:         nil,
 		organizations:         nil,
@@ -306,6 +311,20 @@ func NewPluginsService(db *pgxpool.Pool, budget OperationBudget, cursorKeyMateri
 func (s *PluginsService) WithAuthorization(engine *authz.Engine) *PluginsService {
 	if s != nil {
 		s.authorization = engine
+	}
+	return s
+}
+
+func (s *PluginsService) WithRemoteSessions(remoteSessions *remotesessions.ChallengeManager) *PluginsService {
+	if remoteSessions == nil {
+		return s
+	}
+	return s.withMemberMCPConnectionReader(remoteSessions)
+}
+
+func (s *PluginsService) withMemberMCPConnectionReader(reader MemberMCPConnectionReader) *PluginsService {
+	if s != nil {
+		s.remoteSessions = reader
 	}
 	return s
 }
@@ -343,6 +362,19 @@ func (s *PluginsService) ResolveAssignmentReferences(ctx context.Context, tx pgx
 
 func (s *PluginsService) valid() bool {
 	return s != nil && s.db != nil && s.budget.valid() && s.cursors != nil && s.assignmentReferences != nil && len(s.assignmentVersionKey) > 0 && s.now != nil
+}
+
+func (s *PluginsService) requestMCPAccessURL(ctx context.Context, organizationID, mcpID, name string) string {
+	if s == nil || s.dashboardURL == nil || mcpID == "" {
+		return ""
+	}
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ActiveOrganizationID != organizationID || strings.TrimSpace(authCtx.OrganizationSlug) == "" {
+		return ""
+	}
+	return mcpaccess.RequestAccessURL(s.dashboardURL, authCtx.OrganizationSlug, mcpaccess.RequestAccessURLParams{
+		Scope: string(authz.ScopeMCPConnect), ResourceID: mcpID, ResourceName: name,
+	})
 }
 
 func (s *PluginsService) ListPlugins(ctx context.Context, principal Principal, input ListPluginsInput) (ListPluginsOutput, error) {
