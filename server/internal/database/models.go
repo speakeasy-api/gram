@@ -2306,6 +2306,7 @@ type RemoteSessionClient struct {
 	TokenEndpointAuthMethod         pgtype.Text
 	JsonWebKeySetID                 uuid.NullUUID
 	Scope                           []string
+	GrantTypes                      []string
 	Audience                        pgtype.Text
 	TokenEndpointAuthAudienceFormat pgtype.Text
 	ClientIDMetadataUri             pgtype.Text
@@ -2326,6 +2327,24 @@ type RemoteSessionClientUserSessionIssuer struct {
 	RemoteSessionClientID uuid.UUID
 	UserSessionIssuerID   uuid.UUID
 	CreatedAt             pgtype.Timestamptz
+}
+
+type RemoteSessionEmaBinding struct {
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	UserSessionIssuerID   uuid.UUID
+	RemoteSessionIssuerID uuid.UUID
+	Resource              string
+	RemoteSessionClientID uuid.NullUUID
+	Generation            int64
+	State                 pgtype.Text
+	GrantSource           pgtype.Text
+	RequestedScopes       []string
+	ClaimID               uuid.NullUUID
+	ClaimedAt             pgtype.Timestamptz
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
 }
 
 type RemoteSessionIssuer struct {
@@ -2350,6 +2369,7 @@ type RemoteSessionIssuer struct {
 	OpTosUri                                   pgtype.Text
 	ScopesSupported                            []string
 	GrantTypesSupported                        []string
+	AuthorizationGrantProfilesSupported        []string
 	ResponseTypesSupported                     []string
 	TokenEndpointAuthMethodsSupported          []string
 	CodeChallengeMethodsSupported              []string
