@@ -4560,11 +4560,20 @@ func EncodeListOrganizationsRequest(encoder func(*http.Request) goahttp.Encoder)
 		for _, value := range p.TrialStates {
 			values.Add("trial_states", value)
 		}
-		for _, value := range p.DisabledStates {
-			values.Add("disabled_states", value)
+		if p.DisabledStatus != nil {
+			values.Add("disabled_status", *p.DisabledStatus)
 		}
-		if p.IncludeDisabled != nil {
-			values.Add("include_disabled", fmt.Sprintf("%v", *p.IncludeDisabled))
+		if p.MinMembers != nil {
+			values.Add("min_members", fmt.Sprintf("%v", *p.MinMembers))
+		}
+		if p.MaxMembers != nil {
+			values.Add("max_members", fmt.Sprintf("%v", *p.MaxMembers))
+		}
+		if p.CreatedFrom != nil {
+			values.Add("created_from", *p.CreatedFrom)
+		}
+		if p.CreatedTo != nil {
+			values.Add("created_to", *p.CreatedTo)
 		}
 		if p.Cursor != nil {
 			values.Add("cursor", *p.Cursor)

@@ -3,7 +3,7 @@ import { RequireScope } from "@/components/require-scope";
 import { useIsPlatformAdmin } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { Text } from "@/components/ui/Text";
-import { useOrgRoutes } from "@/routes";
+import { useRoutes } from "@/routes";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { invalidateAllOrganizationRemoteSessionIssuer } from "@gram/client/react-query/organizationRemoteSessionIssuer.js";
 import { invalidateAllOrganizationRemoteSessionIssuers } from "@gram/client/react-query/organizationRemoteSessionIssuers.js";
@@ -11,7 +11,7 @@ import { useRefreshOrganizationRemoteSessionIssuerMetadataMutation } from "@gram
 import { useUpdateOrganizationRemoteSessionIssuerMutation } from "@gram/client/react-query/updateOrganizationRemoteSessionIssuer.js";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
-import { Link } from "react-router";
+import { ExistingIssuerLink } from "../../ExistingIssuerLink";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -33,7 +33,7 @@ export function SettingsTab({
 }: {
   issuer: RemoteSessionIssuer;
 }): JSX.Element {
-  const orgRoutes = useOrgRoutes();
+  const routes = useRoutes();
   const queryClient = useQueryClient();
   const [name, setName] = useState(issuer.name ?? "");
   // Seeded from the saved issuer like name: buildUpdateIssuerForm always sends
@@ -263,17 +263,7 @@ export function SettingsTab({
             <IssuerDuplicateWarning
               viewerScope="organization"
               matches={duplicateMatches}
-              renderLink={(match) => (
-                <Button asChild variant="secondary">
-                  <Link
-                    to={orgRoutes.remoteIdentityProviders.issuerDetail.href(
-                      match.id,
-                    )}
-                  >
-                    View existing provider
-                  </Link>
-                </Button>
-              )}
+              renderLink={(match) => <ExistingIssuerLink match={match} />}
             />
           }
           onIssuerUrlChange={(value) => {
@@ -407,7 +397,7 @@ export function SettingsTab({
           issuerId={issuer.id}
           issuerLabel={issuerDisplayName(issuer)}
           onClose={() => setShowDelete(false)}
-          onDeleted={() => orgRoutes.remoteIdentityProviders.goTo()}
+          onDeleted={() => routes.remoteIdentityProviders.goTo()}
         />
       )}
     </div>

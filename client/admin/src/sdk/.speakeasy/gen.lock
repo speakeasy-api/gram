@@ -8,6 +8,7 @@ management:
 features:
   typescript:
     additionalDependencies: 0.1.0
+    bigint: 0.0.3
     core: 3.31.6
     defaultEnabledRetries: 0.1.0
     devContainers: 2.90.1
