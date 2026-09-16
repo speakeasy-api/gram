@@ -42,26 +42,28 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
 )
 
 type Service struct {
-	tracer       trace.Tracer
-	logger       *slog.Logger
-	db           *pgxpool.Pool
-	auth         *auth.Auth
-	sessions     *sessions.Manager
-	authz        *authz.Engine
-	enc          *encryption.Client
-	environments *environments.EnvironmentEntries
-	policy       *guardian.Policy
-	auditLogger  *audit.Logger
-	serverURL    *url.URL
-	refresher    *RefreshService
-	revoker      *UpstreamRevoker
-	jwksResolver *jwks.Resolver
+	tracer                trace.Tracer
+	logger                *slog.Logger
+	db                    *pgxpool.Pool
+	auth                  *auth.Auth
+	sessions              *sessions.Manager
+	authz                 *authz.Engine
+	enc                   *encryption.Client
+	environments          *environments.EnvironmentEntries
+	policy                *guardian.Policy
+	auditLogger           *audit.Logger
+	serverURL             *url.URL
+	refresher             *RefreshService
+	revoker               *UpstreamRevoker
+	jwksResolver          *jwks.Resolver
+	registrationTelemetry registration.Recorder
 	// Only the JSON Web Key Set attach and detach paths consult this. The rest
 	// of remote_session_client management is not entitlement-gated, and must
 	// not become so: a set is always backed by a customer-provisioned KMS key,
@@ -104,6 +106,8 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 		refresher:    refresher,
 		revoker:      NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, policy),
 		jwksResolver: jwks.NewResolver(policy, meterProvider, logger),
+
+		registrationTelemetry: registration.NewMetrics(logger, meterProvider),
 
 		productFeatures: productFeatures,
 	}

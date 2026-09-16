@@ -199,6 +199,36 @@ WHERE id = @id
   )
   AND deleted IS FALSE;
 
+-- name: GetRemoteSessionIssuerByIDForConfigurationCommit :one
+-- GetRemoteSessionIssuerByID holding a row lock until the transaction ends,
+-- for the atomic dashboard commit in dashboard.go. That handler reads the
+-- provider once before the transaction to learn the capabilities it registers
+-- against, performs the upstream registration, then re-reads here to confirm
+-- the provider still matches what it registered for.
+--
+-- Only the lock makes that confirmation authoritative. UpdateRemoteSessionIssuer
+-- takes no advisory lock, so without FOR UPDATE a concurrent edit can commit
+-- between the re-read and the client insert, and the credentials are persisted
+-- against configuration that no longer exists -- a client registered at the old
+-- registration_endpoint, or a CIMD client created after CIMD support was
+-- switched off. Registration has already finished by the time this is taken, so
+-- no lock is held across an upstream HTTP call.
+--
+-- Scoping matches GetRemoteSessionIssuerByID rather than the ProjectOwned
+-- variant: the commit may select an inherited organization-level or global
+-- provider, and locking only project-owned rows would leave exactly those
+-- unprotected.
+SELECT *
+FROM remote_session_issuers
+WHERE id = @id
+  AND (
+    project_id = @project_id
+    OR (@include_organizational::boolean AND project_id IS NULL AND organization_id = @organization_id)
+    OR (@include_global::boolean AND project_id IS NULL AND organization_id IS NULL)
+  )
+  AND deleted IS FALSE
+FOR UPDATE;
+
 -- name: GetRemoteSessionIssuerByIDProjectOwned :one
 -- Strictly project-owned read. Unlike GetRemoteSessionIssuerByID this does not
 -- resolve inherited organization-level issuers: it backs refreshMetadata, which

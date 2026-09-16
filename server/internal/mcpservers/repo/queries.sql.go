@@ -515,6 +515,43 @@ func (q *Queries) ListLiveMCPServerIDsInOrganization(ctx context.Context, arg Li
 	return items, nil
 }
 
+const listMCPServerIDsByUserSessionIssuerID = `-- name: ListMCPServerIDsByUserSessionIssuerID :many
+SELECT id
+FROM mcp_servers
+WHERE project_id = $1
+  AND user_session_issuer_id = $2
+  AND deleted IS FALSE
+ORDER BY id
+`
+
+type ListMCPServerIDsByUserSessionIssuerIDParams struct {
+	ProjectID           uuid.UUID
+	UserSessionIssuerID uuid.NullUUID
+}
+
+// Every live MCP server in the project bound to one user session issuer.
+// A user session issuer is not unique per MCP server, so an operation that
+// mutates the issuer's client binding reaches every server listed here.
+func (q *Queries) ListMCPServerIDsByUserSessionIssuerID(ctx context.Context, arg ListMCPServerIDsByUserSessionIssuerIDParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listMCPServerIDsByUserSessionIssuerID, arg.ProjectID, arg.UserSessionIssuerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMCPServerToolMetadata = `-- name: ListMCPServerToolMetadata :many
 SELECT id, project_id, mcp_server_id, tool_name, title, read_only_hint, destructive_hint, idempotent_hint, open_world_hint, created_at, updated_at, deleted_at, deleted
 FROM mcp_server_tool_metadata

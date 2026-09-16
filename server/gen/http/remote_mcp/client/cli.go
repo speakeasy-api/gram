@@ -273,6 +273,49 @@ func BuildDiscoverProtectedResourceMetadataPayload(remoteMcpDiscoverProtectedRes
 	return v, nil
 }
 
+// BuildProbeURLPayload builds the payload for the remoteMcp probeURL endpoint
+// from CLI flags.
+func BuildProbeURLPayload(remoteMcpProbeURLBody string, remoteMcpProbeURLSessionToken string, remoteMcpProbeURLApikeyToken string, remoteMcpProbeURLProjectSlugInput string) (*remotemcp.ProbeURLPayload, error) {
+	var err error
+	var body ProbeURLRequestBody
+	{
+		err = json.Unmarshal([]byte(remoteMcpProbeURLBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"url\": \"https://example.com/foo\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.url", body.URL, goa.FormatURI))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if remoteMcpProbeURLSessionToken != "" {
+			sessionToken = &remoteMcpProbeURLSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if remoteMcpProbeURLApikeyToken != "" {
+			apikeyToken = &remoteMcpProbeURLApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if remoteMcpProbeURLProjectSlugInput != "" {
+			projectSlugInput = &remoteMcpProbeURLProjectSlugInput
+		}
+	}
+	v := &remotemcp.ProbeURLPayload{
+		URL: body.URL,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildVerifyURLPayload builds the payload for the remoteMcp verifyURL
 // endpoint from CLI flags.
 func BuildVerifyURLPayload(remoteMcpVerifyURLBody string, remoteMcpVerifyURLSessionToken string, remoteMcpVerifyURLApikeyToken string, remoteMcpVerifyURLProjectSlugInput string) (*remotemcp.VerifyURLPayload, error) {

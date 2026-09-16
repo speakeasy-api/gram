@@ -18,9 +18,10 @@ import (
 
 // Server lists the remoteSessions service endpoint HTTP handlers.
 type Server struct {
-	Mounts              []*MountPoint
-	ListRemoteSessions  http.Handler
-	RevokeRemoteSession http.Handler
+	Mounts                            []*MountPoint
+	CommitServerIdentityConfiguration http.Handler
+	ListRemoteSessions                http.Handler
+	RevokeRemoteSession               http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -50,11 +51,13 @@ func New(
 ) *Server {
 	return &Server{
 		Mounts: []*MountPoint{
+			{"CommitServerIdentityConfiguration", "POST", "/rpc/remoteSessions.commitServerIdentityConfiguration"},
 			{"ListRemoteSessions", "GET", "/rpc/remoteSessions.list"},
 			{"RevokeRemoteSession", "POST", "/rpc/remoteSessions.revoke"},
 		},
-		ListRemoteSessions:  NewListRemoteSessionsHandler(e.ListRemoteSessions, mux, decoder, encoder, errhandler, formatter),
-		RevokeRemoteSession: NewRevokeRemoteSessionHandler(e.RevokeRemoteSession, mux, decoder, encoder, errhandler, formatter),
+		CommitServerIdentityConfiguration: NewCommitServerIdentityConfigurationHandler(e.CommitServerIdentityConfiguration, mux, decoder, encoder, errhandler, formatter),
+		ListRemoteSessions:                NewListRemoteSessionsHandler(e.ListRemoteSessions, mux, decoder, encoder, errhandler, formatter),
+		RevokeRemoteSession:               NewRevokeRemoteSessionHandler(e.RevokeRemoteSession, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -63,6 +66,7 @@ func (s *Server) Service() string { return "remoteSessions" }
 
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
+	s.CommitServerIdentityConfiguration = m(s.CommitServerIdentityConfiguration)
 	s.ListRemoteSessions = m(s.ListRemoteSessions)
 	s.RevokeRemoteSession = m(s.RevokeRemoteSession)
 }
@@ -72,6 +76,7 @@ func (s *Server) MethodNames() []string { return remotesessions.MethodNames[:] }
 
 // Mount configures the mux to serve the remoteSessions endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
+	MountCommitServerIdentityConfigurationHandler(mux, h.CommitServerIdentityConfiguration)
 	MountListRemoteSessionsHandler(mux, h.ListRemoteSessions)
 	MountRevokeRemoteSessionHandler(mux, h.RevokeRemoteSession)
 }
@@ -79,6 +84,60 @@ func Mount(mux goahttp.Muxer, h *Server) {
 // Mount configures the mux to serve the remoteSessions endpoints.
 func (s *Server) Mount(mux goahttp.Muxer) {
 	Mount(mux, s)
+}
+
+// MountCommitServerIdentityConfigurationHandler configures the mux to serve
+// the "remoteSessions" service "commitServerIdentityConfiguration" endpoint.
+func MountCommitServerIdentityConfigurationHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/remoteSessions.commitServerIdentityConfiguration", f)
+}
+
+// NewCommitServerIdentityConfigurationHandler creates a HTTP handler which
+// loads the HTTP request and calls the "remoteSessions" service
+// "commitServerIdentityConfiguration" endpoint.
+func NewCommitServerIdentityConfigurationHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCommitServerIdentityConfigurationRequest(mux, decoder)
+		encodeResponse = EncodeCommitServerIdentityConfigurationResponse(encoder)
+		encodeError    = EncodeCommitServerIdentityConfigurationError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "commitServerIdentityConfiguration")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "remoteSessions")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
 }
 
 // MountListRemoteSessionsHandler configures the mux to serve the

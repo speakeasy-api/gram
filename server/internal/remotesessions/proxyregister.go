@@ -18,6 +18,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -40,18 +42,9 @@ type ProxyRegisterResponse struct {
 	TokenEndpointAuthMethod string             `json:"token_endpoint_auth_method,omitempty"`
 }
 
-// DynamicClientRegistrationError classifies a refusal from the upstream
-// registration endpoint without retaining the response body. Callers can keep
-// the existing dashboard distinction between non-retryable 4xx rejections and
-// retryable upstream failures without exposing provider details.
-type DynamicClientRegistrationError struct {
-	StatusCode int
-	Detail     string
-}
-
-func (e *DynamicClientRegistrationError) Error() string {
-	return fmt.Sprintf("registration endpoint returned %d: %s", e.StatusCode, e.Detail)
-}
+// DynamicClientRegistrationError is retained as the remotesessions-facing name
+// for the shared automatic registration HTTP error.
+type DynamicClientRegistrationError = registration.HTTPError
 
 // DCRRequest is the RFC 7591 Dynamic Client Registration request Gram sends to
 // an upstream provider on the caller's behalf.
@@ -83,7 +76,7 @@ type DCRResponse struct {
 // registration endpoint were discovered from a persisted resource, never from
 // an MCP or browser input. The returned secret is transient and callers must
 // encrypt it before persistence without returning or logging it.
-func RegisterDynamicClient(ctx context.Context, policy *guardian.Policy, serverURL *url.URL, request ProxyRegisterRequest) (ProxyRegisterResponse, error) {
+func RegisterDynamicClient(ctx context.Context, policy *guardian.Policy, serverURL *url.URL, request ProxyRegisterRequest, telemetry registration.Recorder) (ProxyRegisterResponse, error) {
 	if policy == nil || serverURL == nil {
 		return ProxyRegisterResponse{}, fmt.Errorf("dynamic client registration is not configured")
 	}
@@ -91,6 +84,11 @@ func RegisterDynamicClient(ctx context.Context, policy *guardian.Policy, serverU
 	endpoint, err := url.Parse(request.RegistrationEndpoint)
 	if err != nil || (endpoint.Scheme != "http" && endpoint.Scheme != "https") || endpoint.Host == "" {
 		return ProxyRegisterResponse{}, ErrInvalidDynamicClientRegistrationEndpoint
+	}
+	recordFailure := func(err error) {
+		if telemetry != nil && !errors.Is(err, context.Canceled) {
+			telemetry.RecordFailure(ctx, registration.MethodDCR, registration.ClassifyDCR(err))
+		}
 	}
 
 	origin := serverURL.String()
@@ -135,27 +133,52 @@ func RegisterDynamicClient(ctx context.Context, policy *guardian.Policy, serverU
 	}
 	resp, err := httpClient.Do(httpReq)
 	if err != nil {
-		return ProxyRegisterResponse{}, fmt.Errorf("reach registration endpoint: %w", err)
+		if exhausted, ok := errors.AsType[*guardian.RetriesExhaustedError](err); ok && exhausted.StatusCode != 0 {
+			httpErr := &registration.HTTPError{
+				StatusCode:      exhausted.StatusCode,
+				ProviderMessage: registration.SanitizeProviderMessage(dcrErrorDetail([]byte(exhausted.Body))),
+			}
+			recordFailure(httpErr)
+			return ProxyRegisterResponse{}, httpErr
+		}
+		reachErr := fmt.Errorf("reach registration endpoint: %w", err)
+		recordFailure(reachErr)
+		return ProxyRegisterResponse{}, reachErr
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
 
 	respBody, err := io.ReadAll(io.LimitReader(resp.Body, proxyRegisterMaxBodyBytes))
 	if err != nil {
-		return ProxyRegisterResponse{}, fmt.Errorf("read DCR response: %w", err)
+		readErr := fmt.Errorf("read DCR response: %w", err)
+		recordFailure(readErr)
+		return ProxyRegisterResponse{}, readErr
 	}
-	if resp.StatusCode >= http.StatusMultipleChoices && resp.StatusCode < http.StatusMultipleChoices+100 {
-		return ProxyRegisterResponse{}, fmt.Errorf("registration endpoint redirected")
+	if resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusMultipleChoices && resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		invalidErr := &registration.InvalidSuccessResponseError{Err: fmt.Errorf("unsupported DCR success status %d", resp.StatusCode), StatusCode: resp.StatusCode}
+		recordFailure(invalidErr)
+		return ProxyRegisterResponse{}, invalidErr
+	}
+	if resp.StatusCode >= http.StatusMultipleChoices && resp.StatusCode < http.StatusBadRequest {
+		httpErr := &registration.HTTPError{StatusCode: resp.StatusCode, ProviderMessage: registration.SanitizeProviderMessage(dcrErrorDetail(respBody))}
+		recordFailure(httpErr)
+		return ProxyRegisterResponse{}, httpErr
 	}
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		return ProxyRegisterResponse{}, &DynamicClientRegistrationError{StatusCode: resp.StatusCode, Detail: dcrErrorDetail(respBody, resp.StatusCode)}
+		httpErr := &registration.HTTPError{StatusCode: resp.StatusCode, ProviderMessage: registration.SanitizeProviderMessage(dcrErrorDetail(respBody))}
+		recordFailure(httpErr)
+		return ProxyRegisterResponse{}, httpErr
 	}
 
 	var dcrResp DCRResponse
 	if err := json.Unmarshal(respBody, &dcrResp); err != nil {
-		return ProxyRegisterResponse{}, fmt.Errorf("decode DCR response: %w", err)
+		invalidErr := &registration.InvalidSuccessResponseError{Err: fmt.Errorf("decode DCR response: %w", err), StatusCode: resp.StatusCode}
+		recordFailure(invalidErr)
+		return ProxyRegisterResponse{}, invalidErr
 	}
 	if dcrResp.ClientID == "" {
-		return ProxyRegisterResponse{}, errors.New("DCR response missing client_id")
+		invalidErr := &registration.InvalidSuccessResponseError{Err: errors.New("DCR response missing client_id"), StatusCode: resp.StatusCode}
+		recordFailure(invalidErr)
+		return ProxyRegisterResponse{}, invalidErr
 	}
 	clientSecretExpiresAt := pgtype.Timestamptz{}
 	if dcrResp.ClientSecretExpiresAt > 0 {
@@ -200,16 +223,13 @@ func (s *Service) handleProxyRegister(w http.ResponseWriter, r *http.Request) er
 		return oops.E(oops.CodeBadRequest, err, "invalid JSON in request body").LogError(ctx, s.logger)
 	}
 
-	registered, err := RegisterDynamicClient(ctx, s.policy, s.serverURL, req)
+	registered, err := RegisterDynamicClient(ctx, s.policy, s.serverURL, req, s.registrationTelemetry)
 	if err != nil {
-		if errors.Is(err, ErrInvalidDynamicClientRegistrationEndpoint) {
-			return oops.E(oops.CodeBadRequest, err, "invalid identity provider registration endpoint").LogWarn(ctx, s.logger)
+		mapped := proxyRegistrationError(err)
+		if mapped.Code == oops.CodeBadRequest {
+			return mapped.LogWarn(ctx, s.logger)
 		}
-		var registrationErr *DynamicClientRegistrationError
-		if errors.As(err, &registrationErr) && registrationErr.StatusCode >= http.StatusBadRequest && registrationErr.StatusCode < http.StatusInternalServerError {
-			return oops.E(oops.CodeBadRequest, err, "identity provider rejected the client registration: %s", registrationErr.Detail).LogWarn(ctx, s.logger)
-		}
-		return oops.E(oops.CodeGatewayError, err, "failed to register client with identity provider").LogError(ctx, s.logger)
+		return mapped.LogError(ctx, s.logger)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -220,10 +240,23 @@ func (s *Service) handleProxyRegister(w http.ResponseWriter, r *http.Request) er
 	return nil
 }
 
+func proxyRegistrationError(err error) *oops.ShareableError {
+	if errors.Is(err, ErrInvalidDynamicClientRegistrationEndpoint) {
+		return oops.E(oops.CodeBadRequest, err, "invalid identity provider registration endpoint")
+	}
+	if registrationErr, ok := errors.AsType[*DynamicClientRegistrationError](err); ok && registrationErr.StatusCode >= http.StatusBadRequest && registrationErr.StatusCode < http.StatusInternalServerError && registration.ClassifyDCR(err).Outcome == registration.OutcomeRefused {
+		if registrationErr.ProviderMessage != "" {
+			return oops.E(oops.CodeBadRequest, err, "identity provider rejected the client registration: %s", registrationErr.ProviderMessage)
+		}
+		return oops.E(oops.CodeBadRequest, err, "identity provider rejected the client registration")
+	}
+	return oops.E(oops.CodeGatewayError, err, "failed to register client with identity provider")
+}
+
 // dcrErrorDetail extracts a human-readable reason from an RFC 7591 error
-// response body, preferring the machine-readable error/error_description fields
-// and falling back to the status code when the body carries neither.
-func dcrErrorDetail(body []byte, statusCode int) string {
+// response body, preferring the machine-readable error/error_description fields.
+// An unstructured body is not surfaced as a provider message.
+func dcrErrorDetail(body []byte) string {
 	var e struct {
 		Error            string `json:"error"`
 		ErrorDescription string `json:"error_description"`
@@ -238,5 +271,5 @@ func dcrErrorDetail(body []byte, statusCode int) string {
 			return e.Error
 		}
 	}
-	return fmt.Sprintf("HTTP %d", statusCode)
+	return ""
 }
