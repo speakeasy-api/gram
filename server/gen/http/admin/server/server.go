@@ -69,6 +69,9 @@ type Server struct {
 	UploadPlatformImage                   http.Handler
 	ServeImage                            http.Handler
 	StartTrial                            http.Handler
+	GetOrganizationDirectoryHandoff       http.Handler
+	SetOrganizationDirectoryHandoff       http.Handler
+	ClearOrganizationDirectoryHandoff     http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -146,6 +149,9 @@ func New(
 			{"UploadPlatformImage", "POST", "/admin/assets.uploadImage"},
 			{"ServeImage", "GET", "/admin/assets.serveImage"},
 			{"StartTrial", "POST", "/admin/trial.start"},
+			{"GetOrganizationDirectoryHandoff", "GET", "/admin/organization.directoryHandoff"},
+			{"SetOrganizationDirectoryHandoff", "POST", "/admin/organization.setDirectoryHandoff"},
+			{"ClearOrganizationDirectoryHandoff", "POST", "/admin/organization.clearDirectoryHandoff"},
 		},
 		Login:                                 NewLoginHandler(e.Login, mux, decoder, encoder, errhandler, formatter),
 		Callback:                              NewCallbackHandler(e.Callback, mux, decoder, encoder, errhandler, formatter),
@@ -195,6 +201,9 @@ func New(
 		UploadPlatformImage:                   NewUploadPlatformImageHandler(e.UploadPlatformImage, mux, decoder, encoder, errhandler, formatter),
 		ServeImage:                            NewServeImageHandler(e.ServeImage, mux, decoder, encoder, errhandler, formatter),
 		StartTrial:                            NewStartTrialHandler(e.StartTrial, mux, decoder, encoder, errhandler, formatter),
+		GetOrganizationDirectoryHandoff:       NewGetOrganizationDirectoryHandoffHandler(e.GetOrganizationDirectoryHandoff, mux, decoder, encoder, errhandler, formatter),
+		SetOrganizationDirectoryHandoff:       NewSetOrganizationDirectoryHandoffHandler(e.SetOrganizationDirectoryHandoff, mux, decoder, encoder, errhandler, formatter),
+		ClearOrganizationDirectoryHandoff:     NewClearOrganizationDirectoryHandoffHandler(e.ClearOrganizationDirectoryHandoff, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -251,6 +260,9 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.UploadPlatformImage = m(s.UploadPlatformImage)
 	s.ServeImage = m(s.ServeImage)
 	s.StartTrial = m(s.StartTrial)
+	s.GetOrganizationDirectoryHandoff = m(s.GetOrganizationDirectoryHandoff)
+	s.SetOrganizationDirectoryHandoff = m(s.SetOrganizationDirectoryHandoff)
+	s.ClearOrganizationDirectoryHandoff = m(s.ClearOrganizationDirectoryHandoff)
 }
 
 // MethodNames returns the methods served.
@@ -306,6 +318,9 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountUploadPlatformImageHandler(mux, h.UploadPlatformImage)
 	MountServeImageHandler(mux, h.ServeImage)
 	MountStartTrialHandler(mux, h.StartTrial)
+	MountGetOrganizationDirectoryHandoffHandler(mux, h.GetOrganizationDirectoryHandoff)
+	MountSetOrganizationDirectoryHandoffHandler(mux, h.SetOrganizationDirectoryHandoff)
+	MountClearOrganizationDirectoryHandoffHandler(mux, h.ClearOrganizationDirectoryHandoff)
 }
 
 // Mount configures the mux to serve the admin endpoints.
@@ -2888,6 +2903,168 @@ func NewStartTrialHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "startTrial")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetOrganizationDirectoryHandoffHandler configures the mux to serve the
+// "admin" service "getOrganizationDirectoryHandoff" endpoint.
+func MountGetOrganizationDirectoryHandoffHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/organization.directoryHandoff", f)
+}
+
+// NewGetOrganizationDirectoryHandoffHandler creates a HTTP handler which loads
+// the HTTP request and calls the "admin" service
+// "getOrganizationDirectoryHandoff" endpoint.
+func NewGetOrganizationDirectoryHandoffHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetOrganizationDirectoryHandoffRequest(mux, decoder)
+		encodeResponse = EncodeGetOrganizationDirectoryHandoffResponse(encoder)
+		encodeError    = EncodeGetOrganizationDirectoryHandoffError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getOrganizationDirectoryHandoff")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSetOrganizationDirectoryHandoffHandler configures the mux to serve the
+// "admin" service "setOrganizationDirectoryHandoff" endpoint.
+func MountSetOrganizationDirectoryHandoffHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/organization.setDirectoryHandoff", f)
+}
+
+// NewSetOrganizationDirectoryHandoffHandler creates a HTTP handler which loads
+// the HTTP request and calls the "admin" service
+// "setOrganizationDirectoryHandoff" endpoint.
+func NewSetOrganizationDirectoryHandoffHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetOrganizationDirectoryHandoffRequest(mux, decoder)
+		encodeResponse = EncodeSetOrganizationDirectoryHandoffResponse(encoder)
+		encodeError    = EncodeSetOrganizationDirectoryHandoffError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setOrganizationDirectoryHandoff")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountClearOrganizationDirectoryHandoffHandler configures the mux to serve
+// the "admin" service "clearOrganizationDirectoryHandoff" endpoint.
+func MountClearOrganizationDirectoryHandoffHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/organization.clearDirectoryHandoff", f)
+}
+
+// NewClearOrganizationDirectoryHandoffHandler creates a HTTP handler which
+// loads the HTTP request and calls the "admin" service
+// "clearOrganizationDirectoryHandoff" endpoint.
+func NewClearOrganizationDirectoryHandoffHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeClearOrganizationDirectoryHandoffRequest(mux, decoder)
+		encodeResponse = EncodeClearOrganizationDirectoryHandoffResponse(encoder)
+		encodeError    = EncodeClearOrganizationDirectoryHandoffError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "clearOrganizationDirectoryHandoff")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {

@@ -37,6 +37,7 @@ var (
 	AIToolDecisionV1                       = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.ai_tool_decision_event_v1", "Emitted when an organization decides whether a detected AI tool may reach its MCP gateway")
 	DeviceIntegrationV1                    = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.device_integration_event_v1", "Emitted when changes to device integration configs are made")
 	DeploymentV1                           = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.deployment_event_v1", "Emitted when changes to deployments are made")
+	DirectoryHandoffV1                     = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.directory_handoff_event_v1", "Emitted when a directory handoff is stored or cleared")
 	EnvironmentV1                          = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.environment_event_v1", "Emitted when changes to environments are made")
 	GcpIamCredentialV1                     = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.gcp_iam_credential_event_v1", "Emitted when changes to GCP IAM external credentials are made")
 	GcpKmsKeyV1                            = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.gcp_kms_key_event_v1", "Emitted when changes to GCP KMS external keys are made")

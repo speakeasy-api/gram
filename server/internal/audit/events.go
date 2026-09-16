@@ -26,6 +26,7 @@ const (
 	subjectTypeCustomDomain                subjectType = "custom_domain"
 	subjectTypeDataExportRoute             subjectType = "data_export_route"
 	subjectTypeDeployment                  subjectType = "deployment"
+	subjectTypeDirectoryHandoff            subjectType = "directory_handoff"
 	subjectTypeAiScanTarget                subjectType = "device_agent_ai_scan_target"
 	subjectTypeAIToolDecision              subjectType = "ai_tool_decision"
 	subjectTypeDeviceIntegration           subjectType = "device_integration_config"

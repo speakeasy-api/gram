@@ -125,6 +125,23 @@ func TestNewAdminWorkOSOrganizationCreator(t *testing.T) {
 	}
 }
 
+func TestAdminWorkOSEnvironment(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "development", adminWorkOSEnvironment(newAdminCLIContext(t, map[string]string{
+		"environment": "prod", "workos-api-key": "sk_test_placeholder",
+	})))
+	require.Equal(t, "production", adminWorkOSEnvironment(newAdminCLIContext(t, map[string]string{
+		"environment": "prod", "workos-api-key": "sk_live_placeholder",
+	})))
+	require.Equal(t, "unknown", adminWorkOSEnvironment(newAdminCLIContext(t, map[string]string{
+		"environment": "local", "workos-api-key": "sk_test_placeholder", "workos-endpoint": "http://127.0.0.1:35000", "idp-client-secret": "local-proxy-credential",
+	})))
+	require.Equal(t, "unknown", adminWorkOSEnvironment(newAdminCLIContext(t, map[string]string{
+		"environment": "prod", "workos-api-key": "",
+	})))
+}
+
 // unsetEnv removes a variable for the duration of a test and puts it back
 // afterwards. testing.T can set a variable but not remove one, and an empty
 // value is not the same thing to urfave/cli.

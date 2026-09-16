@@ -166,7 +166,7 @@ func UsageCommands() []string {
 		"organization-remote-session-issuers (create-issuer|list-issuers|get-issuer|get-issuer-delete-preflight|get-issuer-duplicate-preflight|update-issuer|delete-issuer|move-issuer|get-issuer-migrate-preflight|migrate-issuer|fetch-issuer-metadata|refresh-issuer-metadata)",
 		"remote-session-issuers (fetch-remote-session-issuer-metadata|refresh-remote-session-issuer-metadata|create-remote-session-issuer|update-remote-session-issuer|list-remote-session-issuers|get-remote-session-issuer|get-remote-session-issuer-duplicate-preflight|delete-remote-session-issuer)",
 		"admin-remote-sessions (create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|create-global-client|list-global-clients|get-global-client|update-global-client|delete-global-client|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer)",
-		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-organization-activity|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial)",
+		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-organization-activity|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|get-organization-directory-handoff|set-organization-directory-handoff|clear-organization-directory-handoff)",
 		"organization-remote-sessions (list-client-sessions|revoke-session|refresh-session|revoke-all-client-sessions)",
 		"remote-sessions (list-remote-sessions|revoke-remote-session)",
 		"resources list-resources",
@@ -2861,6 +2861,18 @@ func ParseEndpoint(
 		adminStartTrialBodyFlag              = adminStartTrialFlags.String("body", "REQUIRED", "")
 		adminStartTrialAdminSessionTokenFlag = adminStartTrialFlags.String("admin-session-token", "", "")
 
+		adminGetOrganizationDirectoryHandoffFlags                 = flag.NewFlagSet("get-organization-directory-handoff", flag.ExitOnError)
+		adminGetOrganizationDirectoryHandoffOrganizationIDFlag    = adminGetOrganizationDirectoryHandoffFlags.String("organization-id", "REQUIRED", "")
+		adminGetOrganizationDirectoryHandoffAdminSessionTokenFlag = adminGetOrganizationDirectoryHandoffFlags.String("admin-session-token", "", "")
+
+		adminSetOrganizationDirectoryHandoffFlags                 = flag.NewFlagSet("set-organization-directory-handoff", flag.ExitOnError)
+		adminSetOrganizationDirectoryHandoffBodyFlag              = adminSetOrganizationDirectoryHandoffFlags.String("body", "REQUIRED", "")
+		adminSetOrganizationDirectoryHandoffAdminSessionTokenFlag = adminSetOrganizationDirectoryHandoffFlags.String("admin-session-token", "", "")
+
+		adminClearOrganizationDirectoryHandoffFlags                 = flag.NewFlagSet("clear-organization-directory-handoff", flag.ExitOnError)
+		adminClearOrganizationDirectoryHandoffBodyFlag              = adminClearOrganizationDirectoryHandoffFlags.String("body", "REQUIRED", "")
+		adminClearOrganizationDirectoryHandoffAdminSessionTokenFlag = adminClearOrganizationDirectoryHandoffFlags.String("admin-session-token", "", "")
+
 		organizationRemoteSessionsFlags = flag.NewFlagSet("organization-remote-sessions", flag.ContinueOnError)
 
 		organizationRemoteSessionsListClientSessionsFlags            = flag.NewFlagSet("list-client-sessions", flag.ExitOnError)
@@ -4844,6 +4856,9 @@ func ParseEndpoint(
 	adminUploadPlatformImageFlags.Usage = adminUploadPlatformImageUsage
 	adminServeImageFlags.Usage = adminServeImageUsage
 	adminStartTrialFlags.Usage = adminStartTrialUsage
+	adminGetOrganizationDirectoryHandoffFlags.Usage = adminGetOrganizationDirectoryHandoffUsage
+	adminSetOrganizationDirectoryHandoffFlags.Usage = adminSetOrganizationDirectoryHandoffUsage
+	adminClearOrganizationDirectoryHandoffFlags.Usage = adminClearOrganizationDirectoryHandoffUsage
 
 	organizationRemoteSessionsFlags.Usage = organizationRemoteSessionsUsage
 	organizationRemoteSessionsListClientSessionsFlags.Usage = organizationRemoteSessionsListClientSessionsUsage
@@ -7074,6 +7089,15 @@ func ParseEndpoint(
 
 			case "start-trial":
 				epf = adminStartTrialFlags
+
+			case "get-organization-directory-handoff":
+				epf = adminGetOrganizationDirectoryHandoffFlags
+
+			case "set-organization-directory-handoff":
+				epf = adminSetOrganizationDirectoryHandoffFlags
+
+			case "clear-organization-directory-handoff":
+				epf = adminClearOrganizationDirectoryHandoffFlags
 
 			}
 
@@ -9654,6 +9678,15 @@ func ParseEndpoint(
 			case "start-trial":
 				endpoint = c.StartTrial()
 				data, err = adminc.BuildStartTrialPayload(*adminStartTrialBodyFlag, *adminStartTrialAdminSessionTokenFlag)
+			case "get-organization-directory-handoff":
+				endpoint = c.GetOrganizationDirectoryHandoff()
+				data, err = adminc.BuildGetOrganizationDirectoryHandoffPayload(*adminGetOrganizationDirectoryHandoffOrganizationIDFlag, *adminGetOrganizationDirectoryHandoffAdminSessionTokenFlag)
+			case "set-organization-directory-handoff":
+				endpoint = c.SetOrganizationDirectoryHandoff()
+				data, err = adminc.BuildSetOrganizationDirectoryHandoffPayload(*adminSetOrganizationDirectoryHandoffBodyFlag, *adminSetOrganizationDirectoryHandoffAdminSessionTokenFlag)
+			case "clear-organization-directory-handoff":
+				endpoint = c.ClearOrganizationDirectoryHandoff()
+				data, err = adminc.BuildClearOrganizationDirectoryHandoffPayload(*adminClearOrganizationDirectoryHandoffBodyFlag, *adminClearOrganizationDirectoryHandoffAdminSessionTokenFlag)
 			}
 		case "organization-remote-sessions":
 			c := organizationremotesessionsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -21694,6 +21727,9 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    upload-platform-image: Upload a global issuer logo, limited to 4 MiB and PNG, JPEG, GIF or WebP.`)
 	fmt.Fprintln(os.Stderr, `    serve-image: Serve a public image, preserving the existing image serving contract.`)
 	fmt.Fprintln(os.Stderr, `    start-trial: Starts a new enterprise trial for an organization that has never trialled, or restarts one that has expired without converting or being demoted. Sets the account type, whitelist flag, trial entitlements and a fresh runway counted from now. A running, demoted or converted trial is rejected: those are extend, re-arm and a contract.`)
+	fmt.Fprintln(os.Stderr, `    get-organization-directory-handoff: Returns non-secret directory handoff details and live WorkOS directory state for an organization.`)
+	fmt.Fprintln(os.Stderr, `    set-organization-directory-handoff: Stores the SCIM endpoint and encrypted bearer token used for an organization's guided directory setup.`)
+	fmt.Fprintln(os.Stderr, `    clear-organization-directory-handoff: Clears an organization's stored directory handoff values.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s admin COMMAND --help\n", os.Args[0])
@@ -22694,6 +22730,66 @@ func adminStartTrialUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin start-trial --body '{\n      \"days\": 2,\n      \"id\": \"aa\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminGetOrganizationDirectoryHandoffUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin get-organization-directory-handoff", os.Args[0])
+	fmt.Fprint(os.Stderr, " -organization-id STRING")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Returns non-secret directory handoff details and live WorkOS directory state for an organization.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -organization-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-organization-directory-handoff --organization-id \"abc123\" --admin-session-token \"abc123\"")
+}
+
+func adminSetOrganizationDirectoryHandoffUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin set-organization-directory-handoff", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Stores the SCIM endpoint and encrypted bearer token used for an organization's guided directory setup.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin set-organization-directory-handoff --body '{\n      \"organization_id\": \"abc123\",\n      \"scim_base_url\": \"https://example.com/foo\",\n      \"scim_token\": \"aa\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminClearOrganizationDirectoryHandoffUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin clear-organization-directory-handoff", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Clears an organization's stored directory handoff values.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin clear-organization-directory-handoff --body '{\n      \"organization_id\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
 }
 
 // organizationRemoteSessionsUsage displays the usage of the
