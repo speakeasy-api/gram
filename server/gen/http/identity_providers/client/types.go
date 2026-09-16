@@ -1478,8 +1478,12 @@ type IdentityProviderApplicationResponseBody struct {
 	// Number of additional directly assigned groups omitted from assigned_groups,
 	// when read.
 	AssignedGroupOverflow *int `form:"assigned_group_overflow,omitempty" json:"assigned_group_overflow,omitempty" xml:"assigned_group_overflow,omitempty"`
-	// Number of directly assigned users, when read.
+	// Number of distinct users assigned to the application, including users
+	// assigned through groups, when read.
 	UserAssignmentCount *int `form:"user_assignment_count,omitempty" json:"user_assignment_count,omitempty" xml:"user_assignment_count,omitempty"`
+	// Number of distinct users assigned directly to the application rather than
+	// through a group, when read.
+	DirectUserAssignmentCount *int `form:"direct_user_assignment_count,omitempty" json:"direct_user_assignment_count,omitempty" xml:"direct_user_assignment_count,omitempty"`
 	// Speakeasy catalogue match for this application, when one has a concrete MCP
 	// server endpoint.
 	Match *IdentityProviderApplicationMatchResponseBody `form:"match,omitempty" json:"match,omitempty" xml:"match,omitempty"`

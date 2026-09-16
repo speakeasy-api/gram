@@ -178,6 +178,15 @@ type Application struct {
 	LogoURL string `json:"logo_url"`
 }
 
+// ApplicationUser identifies an Okta user assigned to an application.
+type ApplicationUser struct {
+	// ID is Okta's user identifier.
+	ID string
+
+	// Direct reports whether the user was assigned directly rather than through a group.
+	Direct bool
+}
+
 // Group identifies an Okta group that can be assigned to an application.
 type Group struct {
 	// ID is Okta's group identifier.
@@ -732,21 +741,25 @@ func DecodeApplicationGroup(raw json.RawMessage) (Group, error) {
 	return Group{ID: response.ID, Name: response.Embedded.Group.Profile.Name}, nil
 }
 
-// IsDirectApplicationUser reports whether an application user was assigned directly rather than through a group.
-func IsDirectApplicationUser(raw json.RawMessage) (bool, error) {
+// DecodeApplicationUser converts an Okta application user assignment into its source user fields.
+func DecodeApplicationUser(raw json.RawMessage) (ApplicationUser, error) {
 	var response struct {
+		ID    string `json:"id"`
 		Scope string `json:"scope"`
 	}
 	if err := json.Unmarshal(raw, &response); err != nil {
-		return false, fmt.Errorf("decode Okta application user: %w", err)
+		return ApplicationUser{ID: "", Direct: false}, fmt.Errorf("decode Okta application user: %w", err)
+	}
+	if response.ID == "" {
+		return ApplicationUser{ID: "", Direct: false}, errors.New("decode Okta application user: id is required")
 	}
 	switch response.Scope {
 	case "USER":
-		return true, nil
+		return ApplicationUser{ID: response.ID, Direct: true}, nil
 	case "GROUP":
-		return false, nil
+		return ApplicationUser{ID: response.ID, Direct: false}, nil
 	default:
-		return false, fmt.Errorf("decode Okta application user: unexpected scope %q", response.Scope)
+		return ApplicationUser{ID: "", Direct: false}, fmt.Errorf("decode Okta application user: unexpected scope %q", response.Scope)
 	}
 }
 

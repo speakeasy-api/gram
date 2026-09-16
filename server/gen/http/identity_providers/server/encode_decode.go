@@ -1615,16 +1615,17 @@ func marshalIdentityprovidersIdentityProviderConnectionToIdentityProviderConnect
 // of type *identityproviders.IdentityProviderApplication.
 func marshalIdentityprovidersIdentityProviderApplicationToIdentityProviderApplicationResponseBody(v *identityproviders.IdentityProviderApplication) *IdentityProviderApplicationResponseBody {
 	res := &IdentityProviderApplicationResponseBody{
-		SourceApplicationID:   v.SourceApplicationID,
-		Label:                 v.Label,
-		ProviderStatus:        v.ProviderStatus,
-		SignOnURL:             v.SignOnURL,
-		LogoURL:               v.LogoURL,
-		GroupAssignmentCount:  v.GroupAssignmentCount,
-		AssignedGroupOverflow: v.AssignedGroupOverflow,
-		UserAssignmentCount:   v.UserAssignmentCount,
-		Pickable:              v.Pickable,
-		UnpickableReason:      v.UnpickableReason,
+		SourceApplicationID:       v.SourceApplicationID,
+		Label:                     v.Label,
+		ProviderStatus:            v.ProviderStatus,
+		SignOnURL:                 v.SignOnURL,
+		LogoURL:                   v.LogoURL,
+		GroupAssignmentCount:      v.GroupAssignmentCount,
+		AssignedGroupOverflow:     v.AssignedGroupOverflow,
+		UserAssignmentCount:       v.UserAssignmentCount,
+		DirectUserAssignmentCount: v.DirectUserAssignmentCount,
+		Pickable:                  v.Pickable,
+		UnpickableReason:          v.UnpickableReason,
 	}
 	if v.AssignedGroups != nil {
 		res.AssignedGroups = make([]*IdentityProviderAssignedGroupResponseBody, len(v.AssignedGroups))

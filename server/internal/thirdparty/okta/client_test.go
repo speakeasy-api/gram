@@ -379,17 +379,19 @@ func TestDecodeApplicationFallsBackToConfiguredURL(t *testing.T) {
 	require.Equal(t, "https://fallback.example.test", application.SignOnURL)
 }
 
-func TestIsDirectApplicationUserUsesAssignmentScope(t *testing.T) {
+func TestDecodeApplicationUserUsesAssignmentScope(t *testing.T) {
 	t.Parallel()
 
-	direct, err := okta.IsDirectApplicationUser(json.RawMessage(`{"id":"user-1","scope":"USER"}`))
+	user, err := okta.DecodeApplicationUser(json.RawMessage(`{"id":"user-1","scope":"USER"}`))
 	require.NoError(t, err)
-	require.True(t, direct)
-	direct, err = okta.IsDirectApplicationUser(json.RawMessage(`{"id":"user-2","scope":"GROUP"}`))
+	require.Equal(t, okta.ApplicationUser{ID: "user-1", Direct: true}, user)
+	user, err = okta.DecodeApplicationUser(json.RawMessage(`{"id":"user-2","scope":"GROUP"}`))
 	require.NoError(t, err)
-	require.False(t, direct)
-	_, err = okta.IsDirectApplicationUser(json.RawMessage(`{"id":"user-3"}`))
+	require.Equal(t, okta.ApplicationUser{ID: "user-2", Direct: false}, user)
+	_, err = okta.DecodeApplicationUser(json.RawMessage(`{"id":"user-3"}`))
 	require.ErrorContains(t, err, "unexpected scope")
+	_, err = okta.DecodeApplicationUser(json.RawMessage(`{"scope":"USER"}`))
+	require.ErrorContains(t, err, "id is required")
 }
 
 func TestAcquireTokenReturnsTypedOktaError(t *testing.T) {

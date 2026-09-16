@@ -42,6 +42,10 @@ export type IdentityProviderApplication = {
    */
   assignedGroups?: Array<IdentityProviderAssignedGroup> | undefined;
   /**
+   * Number of distinct users assigned directly to the application rather than through a group, when read.
+   */
+  directUserAssignmentCount?: number | undefined;
+  /**
    * Number of directly assigned groups, when read.
    */
   groupAssignmentCount?: number | undefined;
@@ -78,7 +82,7 @@ export type IdentityProviderApplication = {
    */
   unpickableReason?: UnpickableReason | undefined;
   /**
-   * Number of directly assigned users, when read.
+   * Number of distinct users assigned to the application, including users assigned through groups, when read.
    */
   userAssignmentCount?: number | undefined;
 };
@@ -98,6 +102,7 @@ export const IdentityProviderApplication$inboundSchema: z.ZodMiniType<
     assigned_groups: z.optional(
       z.array(IdentityProviderAssignedGroup$inboundSchema),
     ),
+    direct_user_assignment_count: z.optional(z.int()),
     group_assignment_count: z.optional(z.int()),
     label: z.string(),
     logo_url: z.optional(z.string()),
@@ -113,6 +118,7 @@ export const IdentityProviderApplication$inboundSchema: z.ZodMiniType<
     return remap$(v, {
       "assigned_group_overflow": "assignedGroupOverflow",
       "assigned_groups": "assignedGroups",
+      "direct_user_assignment_count": "directUserAssignmentCount",
       "group_assignment_count": "groupAssignmentCount",
       "logo_url": "logoUrl",
       "provider_status": "providerStatus",

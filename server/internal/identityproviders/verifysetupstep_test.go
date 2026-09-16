@@ -69,6 +69,7 @@ type fakeOktaServer struct {
 	inventoryApps        []map[string]any
 	assignmentCounts     map[string][2]int
 	indirectUserCounts   map[string]int
+	duplicateUserCounts  map[string]int
 	assignmentFailures   map[string]bool
 	assignmentStalls     map[string]bool
 	assignmentCanceled   chan string
@@ -642,6 +643,7 @@ func newFakeOktaServer(t *testing.T, mode string) *fakeOktaServer {
 		inventoryApps:        nil,
 		assignmentCounts:     make(map[string][2]int),
 		indirectUserCounts:   make(map[string]int),
+		duplicateUserCounts:  make(map[string]int),
 		assignmentFailures:   make(map[string]bool),
 		assignmentStalls:     make(map[string]bool),
 		assignmentCanceled:   make(chan string, 1),
@@ -885,6 +887,7 @@ func (f *fakeOktaServer) handleInventoryAssignments(w http.ResponseWriter, r *ht
 	f.assignmentReads++
 	counts := f.assignmentCounts[applicationID]
 	indirectUserCount := f.indirectUserCounts[applicationID]
+	duplicateUserCount := f.duplicateUserCounts[applicationID]
 	failure := f.assignmentFailures[applicationID+"/"+resource]
 	stall := f.assignmentStalls[applicationID+"/"+resource]
 	embedInventoryGroups := f.embedInventoryGroups
@@ -904,7 +907,7 @@ func (f *fakeOktaServer) handleInventoryAssignments(w http.ResponseWriter, r *ht
 	}
 	total := count
 	if resource == "users" {
-		total += indirectUserCount
+		total += indirectUserCount + duplicateUserCount
 	}
 	start := 0
 	if after := r.URL.Query().Get("after"); after != "" {
@@ -920,7 +923,11 @@ func (f *fakeOktaServer) handleInventoryAssignments(w http.ResponseWriter, r *ht
 	end := min(start+limit, total)
 	items := make([]map[string]any, end-start)
 	for i := start; i < end; i++ {
-		id := fmt.Sprintf("%s-%s-%d", applicationID, resource, i)
+		itemIndex := i
+		if resource == "users" && i >= count+indirectUserCount && count+indirectUserCount > 0 {
+			itemIndex = (i - count - indirectUserCount) % (count + indirectUserCount)
+		}
+		id := fmt.Sprintf("%s-%s-%d", applicationID, resource, itemIndex)
 		item := map[string]any{"id": id}
 		if resource == "users" {
 			item["scope"] = "USER"
@@ -1146,6 +1153,12 @@ func (f *fakeOktaServer) SetIndirectUserAssignments(applicationID string, count 
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.indirectUserCounts[applicationID] = count
+}
+
+func (f *fakeOktaServer) SetDuplicateUserAssignments(applicationID string, count int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.duplicateUserCounts[applicationID] = count
 }
 
 func (f *fakeOktaServer) SetEmbeddedInventoryGroups(enabled bool) {

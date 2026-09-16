@@ -93,18 +93,19 @@ func (s *Service) ListApplications(ctx context.Context, _ *gen.ListApplicationsP
 				return nil, oops.E(oops.CodeGatewayError, nil, "Okta returned an incomplete application").LogError(ctx, logger)
 			}
 			applications = append(applications, &gen.IdentityProviderApplication{
-				SourceApplicationID:   application.ID,
-				Label:                 application.Label,
-				ProviderStatus:        conv.PtrEmpty(application.Status),
-				SignOnURL:             conv.PtrEmpty(application.SignOnURL),
-				LogoURL:               conv.PtrEmpty(application.LogoURL),
-				GroupAssignmentCount:  nil,
-				AssignedGroups:        nil,
-				AssignedGroupOverflow: nil,
-				UserAssignmentCount:   nil,
-				Match:                 nil,
-				Pickable:              false,
-				UnpickableReason:      nil,
+				SourceApplicationID:       application.ID,
+				Label:                     application.Label,
+				ProviderStatus:            conv.PtrEmpty(application.Status),
+				SignOnURL:                 conv.PtrEmpty(application.SignOnURL),
+				LogoURL:                   conv.PtrEmpty(application.LogoURL),
+				GroupAssignmentCount:      nil,
+				AssignedGroups:            nil,
+				AssignedGroupOverflow:     nil,
+				UserAssignmentCount:       nil,
+				DirectUserAssignmentCount: nil,
+				Match:                     nil,
+				Pickable:                  false,
+				UnpickableReason:          nil,
 			})
 			if len(applications) == applicationInventoryLimit && (i+1 < len(page.Items) || page.NextCursor != "") {
 				truncated = true
@@ -160,13 +161,14 @@ func (s *Service) ListApplications(ctx context.Context, _ *gen.ListApplicationsP
 					}
 				}
 
-				userCount, err := countOktaCollection(assignmentCtx, rateLimits, func(ctx context.Context, page okta.PageRequest) (okta.Page, error) {
+				userCount, directUserCount, err := countOktaApplicationUsers(assignmentCtx, rateLimits, func(ctx context.Context, page okta.PageRequest) (okta.Page, error) {
 					return s.okta.ListApplicationUsers(ctx, tenantDomain, token.AccessToken, application.SourceApplicationID, page)
-				}, countDirectOktaApplicationUsers)
+				})
 				if err != nil {
 					partial.Store(true)
 				} else {
 					application.UserAssignmentCount = &userCount
+					application.DirectUserAssignmentCount = &directUserCount
 				}
 				return nil
 			})
@@ -509,54 +511,45 @@ func (s *Service) resolveOktaApplicationGroupNames(
 	return assignedGroups, nil
 }
 
-func countOktaCollection(
+func countOktaApplicationUsers(
 	ctx context.Context,
 	rateLimits *oktaRateLimitGate,
 	list func(context.Context, okta.PageRequest) (okta.Page, error),
-	countPage func(okta.Page) (int, error),
-) (int, error) {
-	count := 0
+) (int, int, error) {
+	users := make(map[string]struct{})
+	directUsers := make(map[string]struct{})
 	after := ""
 	seenCursors := make(map[string]struct{})
 	for {
 		if after != "" {
 			if _, seen := seenCursors[after]; seen {
-				return 0, errors.New("okta assignment pagination returned a repeated cursor")
+				return 0, 0, errors.New("okta assignment pagination returned a repeated cursor")
 			}
 			seenCursors[after] = struct{}{}
 		}
 		if err := rateLimits.Wait(ctx); err != nil {
-			return 0, err
+			return 0, 0, err
 		}
 		page, err := list(ctx, okta.PageRequest{Limit: oktaCollectionPageLimit, After: after})
 		if err != nil {
-			return 0, err
+			return 0, 0, err
 		}
 		rateLimits.Observe(page.RateLimit)
-		pageCount, err := countPage(page)
-		if err != nil {
-			return 0, err
+		for _, raw := range page.Items {
+			user, err := okta.DecodeApplicationUser(raw)
+			if err != nil {
+				return 0, 0, fmt.Errorf("count Okta application users: %w", err)
+			}
+			users[user.ID] = struct{}{}
+			if user.Direct {
+				directUsers[user.ID] = struct{}{}
+			}
 		}
-		count += pageCount
 		if page.NextCursor == "" {
-			return count, nil
+			return len(users), len(directUsers), nil
 		}
 		after = page.NextCursor
 	}
-}
-
-func countDirectOktaApplicationUsers(page okta.Page) (int, error) {
-	count := 0
-	for _, raw := range page.Items {
-		direct, err := okta.IsDirectApplicationUser(raw)
-		if err != nil {
-			return 0, fmt.Errorf("count direct Okta application users: %w", err)
-		}
-		if direct {
-			count++
-		}
-	}
-	return count, nil
 }
 
 type oktaRateLimitGate struct {

@@ -25,9 +25,11 @@ func TestListApplicationsReadsTwoPagesAndAssignmentCounts(t *testing.T) {
 		inventoryApplication("app-two", "Second app", "INACTIVE", "BOOKMARK", "https://apps.example.test/second", false),
 	}, map[string][2]int{
 		"app-one": {2, 3},
-		"app-two": {0, 1},
+		"app-two": {0, 0},
 	})
 	fake.SetIndirectUserAssignments("app-one", 2)
+	fake.SetDuplicateUserAssignments("app-one", 1)
+	fake.SetIndirectUserAssignments("app-two", 2)
 
 	result, err := ti.service.ListApplications(ctx, &gen.ListApplicationsPayload{SessionToken: nil, ApikeyToken: nil})
 	require.NoError(t, err)
@@ -36,8 +38,8 @@ func TestListApplicationsReadsTwoPagesAndAssignmentCounts(t *testing.T) {
 	require.NotEmpty(t, result.ReadAt)
 	require.Contains(t, result.Detail, "Assignment counts were read for every application.")
 	require.Equal(t, []*gen.IdentityProviderApplication{
-		{SourceApplicationID: "app-one", Label: "First app", ProviderStatus: new("ACTIVE"), SignOnURL: new("https://apps.example.test/first"), LogoURL: new("https://apps.example.test/logos/app-one.png"), GroupAssignmentCount: new(2), AssignedGroups: []*gen.IdentityProviderAssignedGroup{{SourceGroupID: "app-one-groups-0", Name: "Group app-one-groups-0"}, {SourceGroupID: "app-one-groups-1", Name: "Group app-one-groups-1"}}, AssignedGroupOverflow: new(0), UserAssignmentCount: new(3), Match: nil, Pickable: false, UnpickableReason: new("no_match")},
-		{SourceApplicationID: "app-two", Label: "Second app", ProviderStatus: new("INACTIVE"), SignOnURL: new("https://apps.example.test/second"), LogoURL: nil, GroupAssignmentCount: new(0), AssignedGroups: []*gen.IdentityProviderAssignedGroup{}, AssignedGroupOverflow: new(0), UserAssignmentCount: new(1), Match: nil, Pickable: false, UnpickableReason: new("inactive")},
+		{SourceApplicationID: "app-one", Label: "First app", ProviderStatus: new("ACTIVE"), SignOnURL: new("https://apps.example.test/first"), LogoURL: new("https://apps.example.test/logos/app-one.png"), GroupAssignmentCount: new(2), AssignedGroups: []*gen.IdentityProviderAssignedGroup{{SourceGroupID: "app-one-groups-0", Name: "Group app-one-groups-0"}, {SourceGroupID: "app-one-groups-1", Name: "Group app-one-groups-1"}}, AssignedGroupOverflow: new(0), UserAssignmentCount: new(5), DirectUserAssignmentCount: new(3), Match: nil, Pickable: false, UnpickableReason: new("no_match")},
+		{SourceApplicationID: "app-two", Label: "Second app", ProviderStatus: new("INACTIVE"), SignOnURL: new("https://apps.example.test/second"), LogoURL: nil, GroupAssignmentCount: new(0), AssignedGroups: []*gen.IdentityProviderAssignedGroup{}, AssignedGroupOverflow: new(0), UserAssignmentCount: new(2), DirectUserAssignmentCount: new(0), Match: nil, Pickable: false, UnpickableReason: new("inactive")},
 	}, result.Applications)
 	require.Equal(t, 4, fake.AssignmentReads())
 	require.Zero(t, fake.InventoryGroupReads())
@@ -69,6 +71,7 @@ func TestListApplicationsOmitsAssignmentCountsAboveFifty(t *testing.T) {
 		require.Nil(t, application.AssignedGroups)
 		require.Nil(t, application.AssignedGroupOverflow)
 		require.Nil(t, application.UserAssignmentCount)
+		require.Nil(t, application.DirectUserAssignmentCount)
 	}
 	require.Zero(t, fake.AssignmentReads())
 	searchCalls, inspectCalls, maxSearches := ti.catalog.Stats()
@@ -197,6 +200,7 @@ func TestListApplicationsKeepsInventoryWhenAnAssignmentReadFails(t *testing.T) {
 	require.NotNil(t, result.Applications[0].GroupAssignmentCount)
 	require.Equal(t, 1, *result.Applications[1].GroupAssignmentCount)
 	require.Nil(t, result.Applications[1].UserAssignmentCount)
+	require.Nil(t, result.Applications[1].DirectUserAssignmentCount)
 }
 
 func TestListApplicationsLimitsSlowApplicationAssignmentReads(t *testing.T) {
@@ -218,9 +222,11 @@ func TestListApplicationsLimitsSlowApplicationAssignmentReads(t *testing.T) {
 	require.Equal(t, "Fast app", result.Applications[0].Label)
 	require.Equal(t, 1, *result.Applications[0].GroupAssignmentCount)
 	require.Equal(t, 1, *result.Applications[0].UserAssignmentCount)
+	require.Equal(t, 1, *result.Applications[0].DirectUserAssignmentCount)
 	require.Equal(t, "Slow app", result.Applications[1].Label)
 	require.Nil(t, result.Applications[1].GroupAssignmentCount)
 	require.Nil(t, result.Applications[1].UserAssignmentCount)
+	require.Nil(t, result.Applications[1].DirectUserAssignmentCount)
 }
 
 func TestListApplicationsCapsInventoryAtFiveHundred(t *testing.T) {
@@ -282,7 +288,8 @@ func TestListApplicationsReadsPaginatedAssignments(t *testing.T) {
 	require.Equal(t, 201, *result.Applications[0].GroupAssignmentCount)
 	require.Len(t, result.Applications[0].AssignedGroups, 10)
 	require.Equal(t, 191, *result.Applications[0].AssignedGroupOverflow)
-	require.Equal(t, 201, *result.Applications[0].UserAssignmentCount)
+	require.Equal(t, 206, *result.Applications[0].UserAssignmentCount)
+	require.Equal(t, 201, *result.Applications[0].DirectUserAssignmentCount)
 	require.Equal(t, 4, fake.AssignmentReads())
 	require.NoError(t, fake.ValidationError())
 }

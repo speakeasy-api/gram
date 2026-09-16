@@ -81920,6 +81920,10 @@ components:
                     items:
                         $ref: '#/components/schemas/IdentityProviderAssignedGroup'
                     description: Up to 10 directly assigned groups, when read.
+                direct_user_assignment_count:
+                    type: integer
+                    description: Number of distinct users assigned directly to the application rather than through a group, when read.
+                    format: int64
                 group_assignment_count:
                     type: integer
                     description: Number of directly assigned groups, when read.
@@ -81954,7 +81958,7 @@ components:
                         - no_match
                 user_assignment_count:
                     type: integer
-                    description: Number of directly assigned users, when read.
+                    description: Number of distinct users assigned to the application, including users assigned through groups, when read.
                     format: int64
             description: An application read directly from an identity provider.
             required:

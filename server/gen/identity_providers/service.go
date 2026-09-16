@@ -115,8 +115,12 @@ type IdentityProviderApplication struct {
 	// Number of additional directly assigned groups omitted from assigned_groups,
 	// when read.
 	AssignedGroupOverflow *int
-	// Number of directly assigned users, when read.
+	// Number of distinct users assigned to the application, including users
+	// assigned through groups, when read.
 	UserAssignmentCount *int
+	// Number of distinct users assigned directly to the application rather than
+	// through a group, when read.
+	DirectUserAssignmentCount *int
 	// Speakeasy catalogue match for this application, when one has a concrete MCP
 	// server endpoint.
 	Match *IdentityProviderApplicationMatch
