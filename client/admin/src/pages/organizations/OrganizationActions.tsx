@@ -1,6 +1,7 @@
 import { CalendarIcon, MoreHorizontalIcon } from "lucide-react";
 import {
   useContext,
+  useSyncExternalStore,
   useId,
   useRef,
   useState,
@@ -35,10 +36,8 @@ import {
 } from "@/components/ui/popover";
 import {
   errorMessage,
-  MAX_TRIAL_EXTENSION_DAYS,
   MAX_TRIAL_REARM_DAYS,
   MAX_TRIAL_START_DAYS,
-  MIN_TRIAL_EXTENSION_DAYS,
   MIN_TRIAL_REARM_DAYS,
   MIN_TRIAL_START_DAYS,
   type AdminOrganization,
@@ -58,7 +57,7 @@ import {
   canStartTrial,
   useDisableOrganization,
   useEnableOrganization,
-  useExtendTrial,
+  useChangeTrialEndDate,
   useRearmTrial,
   useStartTrial,
 } from "./rowActions";
@@ -66,18 +65,10 @@ import { WriteReportContext, type WriteReporter } from "./writeReport";
 
 export type { WriteReporter } from "./writeReport";
 
-// The trial length the rest of the system assumes, so the operator doing the
-// usual thing picks nothing. It is the starting value of both day counts.
+// Restarted trials keep the same fourteen-day default as new trials.
 const DEFAULT_TRIAL_DAYS = 14;
 
-// Each action carries the bounds of its own endpoint. They hold the same pair
-// today and they are separate on the server so they can stop doing that.
 type DayBounds = { min: number; max: number };
-
-const EXTEND_BOUNDS: DayBounds = {
-  min: MIN_TRIAL_EXTENSION_DAYS,
-  max: MAX_TRIAL_EXTENSION_DAYS,
-};
 
 const REARM_BOUNDS: DayBounds = {
   min: MIN_TRIAL_REARM_DAYS,
@@ -96,21 +87,19 @@ function boundsHint({ min, max }: DayBounds): string {
 type DayRange = {
   anchor: number;
   earliest: number;
-  latest: number;
+  latest?: number;
   // Start counts from the UTC day of submit. Extend counts from the trial's
   // current end, which does not move if the dialog sits overnight.
   fromToday?: boolean;
 };
 
-// The days the server would accept, as the calendar's own range. `undefined`
-// where the record carries no end date to add days to.
-function extensionRange(org: AdminOrganization): DayRange | undefined {
+// Trial dates are displayed in UTC. Tomorrow is the first future calendar day.
+function trialDateRange(org: AdminOrganization): DayRange | undefined {
   const anchor = trialEndDay(org.trial_ends_at);
   if (anchor === undefined) return undefined;
   return {
     anchor,
-    earliest: anchor + MIN_TRIAL_EXTENSION_DAYS,
-    latest: anchor + MAX_TRIAL_EXTENSION_DAYS,
+    earliest: trialEndDay(new Date().toISOString())! + 1,
   };
 }
 
@@ -124,15 +113,35 @@ function startTrialRange(): DayRange {
   };
 }
 
+// UTC midnight is an external clock boundary, not state derived from a form.
+function subscribeUtcDay(onChange: () => void): () => void {
+  let timer: ReturnType<typeof setTimeout>;
+  const schedule = (): void => {
+    timer = setTimeout(
+      () => {
+        onChange();
+        schedule();
+      },
+      Math.max(1, (utcTodayDay() + 1) * 86_400_000 - Date.now()),
+    );
+  };
+  schedule();
+  return () => clearTimeout(timer);
+}
+
 function liveRange(range: DayRange): DayRange {
-  if (!range.fromToday) return range;
+  if (!range.fromToday)
+    return { ...range, earliest: Math.max(range.earliest, utcTodayDay() + 1) };
   const anchor = utcTodayDay();
   if (anchor === range.anchor) return range;
   return {
     ...range,
     anchor,
     earliest: anchor + (range.earliest - range.anchor),
-    latest: anchor + (range.latest - range.anchor),
+    latest:
+      range.latest === undefined
+        ? undefined
+        : anchor + (range.latest - range.anchor),
   };
 }
 
@@ -195,7 +204,7 @@ export function OrganizationActions({
   // the write it started has to keep its cache update and its announcement.
   const disable = useDisableOrganization();
   const enable = useEnableOrganization();
-  const extend = useExtendTrial();
+  const extend = useChangeTrialEndDate();
   const rearm = useRearmTrial();
   const start = useStartTrial();
 
@@ -209,20 +218,21 @@ export function OrganizationActions({
 
   // The two failures a trial dialog reports, written once so the bounds refusal
   // and the server's own refusal are led by the same words.
-  const extendFailureLead = `Could not extend the trial for ${org.name}`;
+  const extendFailureLead = `Could not change the trial end date for ${org.name}`;
   const rearmFailureLead = `Could not re-arm the trial for ${org.name}`;
   const startCopy = startTrialCopy(org);
   const startFailureLead = startCopy.failureLead;
 
-  // Only extend has a date to add days to. Re-arm counts from now, so it gets
+  // Changing the end date uses a calendar. Re-arm counts from now, so it gets
   // no calendar and its dialog falls back to a day count.
-  const extendRange = extensionRange(org);
+  const extendRange = trialDateRange(org);
   const startRange = startTrialRange();
 
   // Read once and used by both layouts, so a menu caller cannot get a
   // different answer from a buttons caller passing the same `actions`.
   const showLifecycle = actions !== "trial";
-  const showExtend = actions !== "lifecycle" && canExtendTrial(org);
+  const showExtend =
+    actions !== "lifecycle" && canExtendTrial(org) && extendRange !== undefined;
   const showStart = actions !== "lifecycle" && canStartTrial(org);
   const showRearm = actions !== "lifecycle" && canRearmTrial(org);
 
@@ -321,14 +331,16 @@ export function OrganizationActions({
     });
   };
 
-  const runExtend = (days: number): void => {
+  const runExtend = (day: number): void => {
     extend.mutate(
-      { id: org.id, days },
+      { id: org.id, endsAt: new Date(dayISO(day)) },
       {
         onSuccess: () => {
           closeAfterWrite();
           showFailure(null);
-          announce(`${org.name} trial extended by ${dayCount(days)}.`);
+          announce(
+            `${org.name} trial end date changed to ${fmtDateShort(dayISO(day))}.`,
+          );
         },
         onError: (error) =>
           announce(`${extendFailureLead}: ${errorMessage(error)}`),
@@ -380,16 +392,15 @@ export function OrganizationActions({
       )}
       {open === "extend" && (
         <TrialDaysDialog
-          bounds={EXTEND_BOUNDS}
           range={extendRange}
-          title={`Extend the trial for ${org.name}?`}
+          title={`Change end date for ${org.name}?`}
           description={
             extendRange
               ? `The trial ends on ${fmtDateShort(org.trial_ends_at)} now.`
-              : "The days are added to the date the trial ends on now, not to today."
+              : "Pick a future date (UTC)."
           }
-          submitLabel="Extend"
-          pendingLabel="Extending..."
+          submitLabel="Save"
+          pendingLabel="Saving..."
           failureLead={extendFailureLead}
           pending={extend.isPending}
           failure={extend.error}
@@ -490,12 +501,12 @@ export function OrganizationActions({
           <Button
             variant="outline"
             size="xs"
-            aria-label={`Extend trial for ${org.name}`}
+            aria-label={`Change end date for ${org.name}`}
             aria-busy={busy}
             className={buttonClassName}
             onClick={(event) => openDialog("extend", event.currentTarget)}
           >
-            Extend trial
+            Change end date
           </Button>
         )}
         {showRearm && (
@@ -572,7 +583,7 @@ export function OrganizationActions({
             <DropdownMenuItem
               onSelect={() => openDialog("extend", menuTrigger.current)}
             >
-              Extend trial
+              Change end date
             </DropdownMenuItem>
           )}
           {showRearm && (
@@ -726,7 +737,7 @@ function ConfirmDisable({
 // Both real pairs hold 1 and 365, so nothing else can tell a dialog that reads
 // the `bounds` prop from one that hardcodes the extension bounds.
 export function TrialDaysDialog({
-  bounds,
+  bounds = REARM_BOUNDS,
   range,
   title,
   description,
@@ -739,10 +750,8 @@ export function TrialDaysDialog({
   onCloseAutoFocus,
   onSubmit,
 }: {
-  bounds: DayBounds;
-  // The dates the operator can pick between, where the write has an end date to
-  // add days to. Without one there is nothing to pick against, so the dialog
-  // falls back to a day count. Re-arm is always that case.
+  bounds?: DayBounds;
+  // A calendar sets the absolute end date; without it, re-arm takes a day count.
   range: DayRange | undefined;
   title: string;
   description: string;
@@ -756,9 +765,12 @@ export function TrialDaysDialog({
   onSubmit: (days: number) => void;
 }): JSX.Element {
   const { announce } = useContext(WriteReportContext);
+  useSyncExternalStore(subscribeUtcDay, utcTodayDay);
   const [days, setDays] = useState(String(DEFAULT_TRIAL_DAYS));
   const [endsOn, setEndsOn] = useState<Date | undefined>(
-    () => range && calendarDate(range.anchor + DEFAULT_TRIAL_DAYS),
+    () =>
+      range &&
+      calendarDate(range.anchor + (range.fromToday ? DEFAULT_TRIAL_DAYS : 0)),
   );
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [rejected, setRejected] = useState(false);
@@ -772,13 +784,17 @@ export function TrialDaysDialog({
   const activeRange = range ? liveRange(range) : undefined;
 
   const hint = activeRange
-    ? `Pick a date between ${fmtDateShort(dayISO(activeRange.earliest))} and ${fmtDateShort(dayISO(activeRange.latest))}.`
+    ? activeRange.fromToday
+      ? `Pick a date between ${fmtDateShort(dayISO(activeRange.earliest))} and ${fmtDateShort(dayISO(activeRange.latest!))}.`
+      : "Pick a future date (UTC)."
     : boundsHint(bounds);
 
   // What the picked date is worth as the request the server takes. NaN where
   // nothing is picked, so the guard below refuses it rather than sending it.
   const picked =
-    endsOn && activeRange ? dayOf(endsOn) - activeRange.anchor : Number.NaN;
+    endsOn && activeRange
+      ? dayOf(endsOn) - (activeRange.fromToday ? activeRange.anchor : 0)
+      : Number.NaN;
 
   const submit = (event: FormEvent): void => {
     event.preventDefault();
@@ -787,7 +803,7 @@ export function TrialDaysDialog({
     const currentRange = range ? liveRange(range) : undefined;
     const parsed = currentRange
       ? endsOn
-        ? dayOf(endsOn) - currentRange.anchor
+        ? dayOf(endsOn) - (currentRange.fromToday ? currentRange.anchor : 0)
         : Number.NaN
       : Number(days);
     // The endpoint's own bounds, refused here so a request that cannot succeed
@@ -795,8 +811,10 @@ export function TrialDaysDialog({
     // server works in is a count of days.
     if (
       !Number.isInteger(parsed) ||
-      parsed < bounds.min ||
-      parsed > bounds.max
+      (range && !range.fromToday
+        ? parsed <
+          Math.max(range.earliest, trialEndDay(new Date().toISOString())! + 1)
+        : parsed < bounds.min || parsed > bounds.max)
     ) {
       setRejected(true);
       // Spoken as well as shown, because showing it a second time shows
@@ -858,20 +876,24 @@ export function TrialDaysDialog({
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent align="start" className="w-auto p-0">
-                  {/* Bounded rather than validated afterwards, so a day the
-                      server would refuse cannot be pressed at all. The months
-                      are bounded too, or the operator can page through years
-                      of days that are all dead. */}
+                  {/* Past UTC dates cannot be selected. */}
                   <Calendar
                     mode="single"
                     autoFocus
                     selected={endsOn}
                     defaultMonth={endsOn}
                     startMonth={calendarDate(activeRange.earliest)}
-                    endMonth={calendarDate(activeRange.latest)}
+                    endMonth={
+                      activeRange.latest === undefined
+                        ? undefined
+                        : calendarDate(activeRange.latest)
+                    }
                     disabled={{
                       before: calendarDate(activeRange.earliest),
-                      after: calendarDate(activeRange.latest),
+                      after:
+                        activeRange.latest === undefined
+                          ? undefined
+                          : calendarDate(activeRange.latest),
                     }}
                     onSelect={(date) => {
                       setEndsOn(date);
@@ -905,8 +927,8 @@ export function TrialDaysDialog({
               dialog says the date that count reaches. */}
           {activeRange && endsOn && (
             <p className="text-muted-foreground text-sm">
-              The trial will end on {fmtDateShort(dayISO(dayOf(endsOn)))},{" "}
-              {dayCount(picked)} later than it does now.
+              The trial will end on {fmtDateShort(dayISO(dayOf(endsOn)))} (UTC).
+              {activeRange.fromToday && ` ${dayCount(picked)} from today.`}
             </p>
           )}
 

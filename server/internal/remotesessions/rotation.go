@@ -463,7 +463,16 @@ func (r *ClientRotator) upstreamRecognizesClient(ctx context.Context, row repo.G
 
 	probeCtx, cancel := context.WithTimeout(ctx, registrationProbeTimeout)
 	defer cancel()
-	req, err := newTokenEndpointRequest(probeCtx, tokenEndpoint, form, method, client.ClientID, clientSecret)
+	req, err := newTokenEndpointRequest(probeCtx, tokenEndpoint, form, tokenEndpointClientAuth{
+		Method:                method,
+		RemoteSessionClientID: client.ID,
+		OrganizationID:        client.OrganizationID.String,
+		JSONWebKeySetID:       client.JsonWebKeySetID.UUID,
+		ClientID:              client.ClientID,
+		ClientSecret:          clientSecret,
+		AssertionAudience:     "",
+		AssertionSigner:       nil,
+	})
 	if err != nil {
 		return false, fmt.Errorf("build probe request: %w", err)
 	}

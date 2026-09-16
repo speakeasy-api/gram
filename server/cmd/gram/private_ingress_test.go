@@ -32,6 +32,9 @@ func TestServerCommandsOwnSeparateListenerFlags(t *testing.T) {
 	}
 	requireFlag(t, newStartCommand().Flags, "network-ingress-enabled")
 	requireFlag(t, newStartCommand().Flags, networkIngressQueueFlag)
+	for _, name := range []string{"gcp-project-id", "local-kms-signing-algorithm", "pubsub-emulator-host"} {
+		requireFlag(t, newNetworkIngressServerCommand().Flags, name)
+	}
 }
 
 func TestPrivateIngressActionRejectsDisabledRuntimeBeforeDependencies(t *testing.T) {

@@ -1327,6 +1327,19 @@ CREATE TABLE IF NOT EXISTS ai_scan_targets (
 
   -- Whether the tool may reach Gram's MCP gateway: unreviewed, approved or
   -- blocked. Who set it and when is the audit log's job, not a column here.
+  --
+  -- The only per-organization state there is. Two kinds of row share this
+  -- table and the id alone tells them apart, by whether it names a compiled-in
+  -- default. A built-in's row records only this decision, because the
+  -- definition is compiled in and stays there: display_name, category and
+  -- version_plist_key stay null, and the list-valued columns stay at their
+  -- empty-array default, since they are NOT NULL. An organization's own
+  -- target's row carries the full definition as well.
+  -- Being in the organization's inventory is what makes a target probed for;
+  -- there is no separate on/off switch that could leave a recorded decision
+  -- inert or disagree with this column mid-write. A built-in leaves the
+  -- inventory by being deleted from the registry, an organization's own
+  -- target by having this row deleted.
   status TEXT NOT NULL DEFAULT 'unreviewed',
   rationale TEXT,
 
@@ -1337,38 +1350,6 @@ CREATE TABLE IF NOT EXISTS ai_scan_targets (
   CONSTRAINT ai_scan_targets_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
 );
 
--- Superseded by ai_scan_targets / ai_scan_catalogs above. Left in place so the
--- rename lands without a backfill; dropped by a follow-up migration once the
--- code reading them is deployed.
-CREATE TABLE IF NOT EXISTS device_agent_ai_scan_targets (
-  organization_id TEXT NOT NULL,
-  id TEXT NOT NULL,
-  display_name TEXT NOT NULL,
-  category TEXT NOT NULL,
-  bundle_ids TEXT[] NOT NULL DEFAULT '{}',
-  binaries TEXT[] NOT NULL DEFAULT '{}',
-  config_dirs TEXT[] NOT NULL DEFAULT '{}',
-  process_names TEXT[] NOT NULL DEFAULT '{}',
-  version_plist_key TEXT,
-  enabled boolean NOT NULL DEFAULT true,
-
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-
-  CONSTRAINT device_agent_ai_scan_targets_pkey PRIMARY KEY (organization_id, id),
-  CONSTRAINT device_agent_ai_scan_targets_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS device_agent_ai_scan_catalogs (
-  organization_id TEXT NOT NULL,
-  list_version integer NOT NULL DEFAULT 0,
-
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-
-  CONSTRAINT device_agent_ai_scan_catalogs_pkey PRIMARY KEY (organization_id),
-  CONSTRAINT device_agent_ai_scan_catalogs_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
-);
 
 CREATE TABLE IF NOT EXISTS deployments_openapiv3_assets (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -2229,6 +2210,10 @@ CREATE TABLE IF NOT EXISTS remote_session_issuers (
   -- Last successful JWK Set fetch, including conditional fetches that confirm
   -- the stored keys remain current.
   jwks_fetched_at timestamptz,
+  -- Public-safe reason and time of the last failed JWK Set consult. Kept
+  -- separate so failed refreshes do not appear to confirm the stored keys.
+  jwks_last_error TEXT,
+  jwks_last_error_at timestamptz,
   -- Cache TTL derived from upstream response headers and bounded by the
   -- resolver's refresh policy. NULL means no cache lifetime is known yet.
   jwks_cache_expires_at timestamptz,
@@ -5869,19 +5854,25 @@ CREATE TABLE IF NOT EXISTS assistant_mcp_servers (
 CREATE INDEX IF NOT EXISTS assistant_mcp_servers_mcp_server_id_idx ON assistant_mcp_servers (mcp_server_id);
 CREATE INDEX IF NOT EXISTS assistant_mcp_servers_project_id_idx ON assistant_mcp_servers (project_id);
 
--- Reusable dynamic client registrations for assistant-initiated MCP OAuth flows.
--- OAuth issuer identity lets one client serve MCP resources that share an
--- authorization server, even if its endpoint paths change.
+-- Reusable OAuth clients for assistant-initiated MCP auth flows. One live
+-- row per (project, assistant, issuer): confidential DCR clients (secret
+-- present) or public CIMD clients (client_id_metadata_uri present). Issuer
+-- identity lets one client serve MCP resources that share an authorization
+-- server, even if its endpoint paths change.
 CREATE TABLE IF NOT EXISTS assistant_mcp_oauth_clients (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
   assistant_id uuid NOT NULL,
   oauth_server_issuer TEXT NOT NULL,
   redirect_uri TEXT NOT NULL,
-  -- Assistant MCP auth only registers confidential client_secret_basic clients.
   client_id TEXT,
   client_secret_encrypted TEXT,
   client_secret_expires_at timestamptz,
+  -- CIMD: when non-null, Gram publishes a Client ID Metadata Document at
+  -- this URL and sends the URL as client_id. Public clients carry no secret.
+  -- draft-ietf-oauth-client-id-metadata-document requires client_id equal
+  -- this URL; the CHECK below enforces that.
+  client_id_metadata_uri TEXT,
   registration_owner uuid,
   registration_started_at timestamptz,
 
@@ -5894,18 +5885,40 @@ CREATE TABLE IF NOT EXISTS assistant_mcp_oauth_clients (
   CONSTRAINT assistant_mcp_oauth_clients_oauth_server_issuer_check CHECK (oauth_server_issuer <> '' AND CHAR_LENGTH(oauth_server_issuer) <= 500),
   CONSTRAINT assistant_mcp_oauth_clients_registration_state_check CHECK (
     (
+      -- Confidential DCR client (complete).
       client_id IS NOT NULL
       AND client_secret_encrypted IS NOT NULL
+      AND client_id_metadata_uri IS NULL
       AND registration_owner IS NULL
       AND registration_started_at IS NULL
     )
     OR
     (
+      -- Public CIMD client (complete). client_secret_expires_at may be set
+      -- to invalidate the row so the next flow can fall back to DCR.
+      client_id IS NOT NULL
+      AND client_secret_encrypted IS NULL
+      AND client_id_metadata_uri IS NOT NULL
+      AND registration_owner IS NULL
+      AND registration_started_at IS NULL
+    )
+    OR
+    (
+      -- In-progress registration claim.
       client_id IS NULL
       AND client_secret_encrypted IS NULL
       AND client_secret_expires_at IS NULL
+      AND client_id_metadata_uri IS NULL
       AND registration_owner IS NOT NULL
       AND registration_started_at IS NOT NULL
+    )
+  ),
+  CONSTRAINT assistant_mcp_oauth_clients_client_id_metadata_uri_check CHECK (
+    client_id_metadata_uri IS NULL
+    OR (
+      client_id_metadata_uri <> ''
+      AND client_secret_encrypted IS NULL
+      AND client_id = client_id_metadata_uri
     )
   ),
   -- Intentional exception to the usual SET NULL policy: tenant and owner IDs

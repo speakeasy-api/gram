@@ -185,6 +185,7 @@ type AssistantMcpOauthClient struct {
 	ClientID              pgtype.Text
 	ClientSecretEncrypted pgtype.Text
 	ClientSecretExpiresAt pgtype.Timestamptz
+	ClientIDMetadataUri   pgtype.Text
 	RegistrationOwner     uuid.NullUUID
 	RegistrationStartedAt pgtype.Timestamptz
 	CreatedAt             pgtype.Timestamptz
@@ -674,28 +675,6 @@ type DeploymentsPackage struct {
 	DeploymentID uuid.UUID
 	PackageID    uuid.UUID
 	VersionID    uuid.UUID
-}
-
-type DeviceAgentAiScanCatalog struct {
-	OrganizationID string
-	ListVersion    int32
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-}
-
-type DeviceAgentAiScanTarget struct {
-	OrganizationID  string
-	ID              string
-	DisplayName     string
-	Category        string
-	BundleIds       []string
-	Binaries        []string
-	ConfigDirs      []string
-	ProcessNames    []string
-	VersionPlistKey pgtype.Text
-	Enabled         bool
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
 }
 
 type DeviceAgentConfiguration struct {
@@ -2362,6 +2341,8 @@ type RemoteSessionIssuer struct {
 	JwksUri                                    pgtype.Text
 	Jwks                                       []byte
 	JwksFetchedAt                              pgtype.Timestamptz
+	JwksLastError                              pgtype.Text
+	JwksLastErrorAt                            pgtype.Timestamptz
 	JwksCacheExpiresAt                         pgtype.Timestamptz
 	JwksEtag                                   pgtype.Text
 	ServiceDocumentation                       pgtype.Text

@@ -30,7 +30,7 @@ func NewTestClickhouse(ctx context.Context) (*clickhousecontainer.ClickHouseCont
 		testcontainers.WithWaitStrategy(
 			// The image initializes through a localhost-only bootstrap server.
 			// Dial its hostname so readiness requires the final network listener.
-			wait.ForExec([]string{"sh", "-c", `clickhouse-client --host "$HOSTNAME" --user gram --password gram --query "SELECT 1"`}),
+			wait.ForExec([]string{"sh", "-c", `clickhouse-client --host "$(hostname)" --user gram --password gram --query "SELECT 1"`}),
 		),
 		WithPublishedPortWait("9000/tcp"),
 		WithoutPublishedPorts(),

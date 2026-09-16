@@ -52,6 +52,7 @@ const routes = {
   riskOverview: route("Risk Overview", "risk"),
   watchdog: route("Watchdog", "watchdog"),
   settings: route("Project settings", "settings"),
+  shadowAI: route("Shadow AI", "shadow-ai"),
   shadowMCP: route("Shadow MCP", "shadow-mcp"),
   sources: route("Sources", "sources"),
 };
@@ -123,20 +124,19 @@ describe("useProjectNavRoutes", () => {
     expect(agents?.scope).toEqual(["project:read"]);
   });
 
-  it("does not include a dedicated Shadow AI destination", () => {
+  it("uses Shadow AI as the nav destination, with Shadow MCP folded into it", () => {
     const { result } = renderHook(() => useProjectNavRoutes());
 
-    expect(
-      result.current.some((entry) => entry.route.title === "Shadow AI"),
-    ).toBe(false);
+    const titles = result.current.map((entry) => entry.route.title);
+    expect(titles).toContain("Shadow AI");
+    expect(titles).not.toContain("Shadow MCP");
   });
 
-  it("uses Shadow MCP as the sidebar destination while leaving Approval Requests out of nav", () => {
+  it("leaves Approval Requests out of nav", () => {
     const { result } = renderHook(() => useProjectNavRoutes());
 
     const navTitles = result.current.map((entry) => entry.route.title);
 
-    expect(navTitles).toContain("Shadow MCP");
     expect(navTitles).not.toContain("Approval Requests");
   });
 

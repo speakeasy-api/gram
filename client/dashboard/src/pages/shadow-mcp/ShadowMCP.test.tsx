@@ -88,9 +88,16 @@ vi.mock("@/components/ui/Skeleton", () => ({
 
 vi.mock("@/routes", () => ({
   useRoutes: () => ({
-    shadowMCP: {
-      detail: {
-        href: (serverURL: string) => `/shadow-mcp/${serverURL}`,
+    shadowAI: {
+      harnesses: { href: () => "/shadow-ai/harnesses" },
+      assistants: { href: () => "/shadow-ai/assistants" },
+      models: { href: () => "/shadow-ai/models" },
+      mcps: {
+        href: () => "/shadow-ai/mcps",
+        detail: {
+          href: (serverURL: string) => `/shadow-ai/mcps/${serverURL}`,
+          goTo: () => undefined,
+        },
       },
     },
   }),
@@ -156,8 +163,12 @@ describe("ShadowMCP", () => {
       name: "Demo",
       slug: "demo",
     });
+    // The tab is reachable at project read now; org admin still gates every
+    // action on it.
+    const granted = ["org:admin", "project:read", "project:write"];
     mocks.useRBAC.mockReturnValue({
-      hasAnyScope: (scopes: string[]) => scopes.includes("org:admin"),
+      hasAnyScope: (scopes: string[]) =>
+        scopes.some((scope) => granted.includes(scope)),
       hasAllScopes: () => true,
       isLoading: false,
     });
@@ -181,7 +192,7 @@ describe("ShadowMCP", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole("heading", { name: "Shadow MCP" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "MCPs" })).toBeTruthy();
     expect(
       screen.getByText(/Every MCP server this project knows about/),
     ).toBeTruthy();

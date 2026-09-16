@@ -1593,3 +1593,36 @@ func BuildStartTrialPayload(adminStartTrialBody string, adminStartTrialAdminSess
 
 	return v, nil
 }
+
+// BuildChangeTrialEndDatePayload builds the payload for the admin
+// changeTrialEndDate endpoint from CLI flags.
+func BuildChangeTrialEndDatePayload(adminChangeTrialEndDateBody string, adminChangeTrialEndDateAdminSessionToken string) (*admin.ChangeTrialEndDatePayload, error) {
+	var err error
+	var body ChangeTrialEndDateRequestBody
+	{
+		err = json.Unmarshal([]byte(adminChangeTrialEndDateBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"ends_at\": \"1970-01-01T00:00:01Z\",\n      \"id\": \"aa\"\n   }'")
+		}
+		if utf8.RuneCountInString(body.ID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.id", body.ID, utf8.RuneCountInString(body.ID), 1, true))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.ends_at", body.EndsAt, goa.FormatDateTime))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminChangeTrialEndDateAdminSessionToken != "" {
+			adminSessionToken = &adminChangeTrialEndDateAdminSessionToken
+		}
+	}
+	v := &admin.ChangeTrialEndDatePayload{
+		ID:     body.ID,
+		EndsAt: body.EndsAt,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
