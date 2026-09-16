@@ -1560,6 +1560,7 @@ type OktaIdentityProviderConnection struct {
 	IdentityProviderConnectionID        uuid.UUID
 	IdentityProviderConnectionsProvider string
 	OrganizationID                      string
+	AttachmentScope                     pgtype.Text
 	OrgUrl                              string
 	IssuerUrl                           string
 	IssuerUrlOverrideReason             pgtype.Text
@@ -2388,6 +2389,7 @@ type RemoteSessionIssuer struct {
 	ID                                         uuid.UUID
 	ProjectID                                  uuid.NullUUID
 	OrganizationID                             pgtype.Text
+	AttachmentScope                            pgtype.Text
 	Slug                                       string
 	Issuer                                     string
 	AuthorizationEndpoint                      pgtype.Text

@@ -2243,6 +2243,12 @@ CREATE TABLE IF NOT EXISTS remote_session_issuers (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid,
   organization_id TEXT,
+  -- Match the client scope key: project ownership takes precedence over org.
+  attachment_scope TEXT GENERATED ALWAYS AS (
+    CASE WHEN project_id IS NOT NULL THEN 'project:' || project_id::text
+         WHEN organization_id IS NOT NULL THEN 'organization:' || organization_id
+         ELSE 'global' END
+  ) STORED,
 
   slug TEXT NOT NULL,
 
@@ -2394,9 +2400,13 @@ CREATE INDEX IF NOT EXISTS remote_session_issuers_jwks_cache_expires_at_idx
 ON remote_session_issuers (jwks_cache_expires_at)
 WHERE jwks_uri IS NOT NULL AND deleted IS FALSE;
 
--- Composite FK target so org-scoped children pin an issuer to one org.
+-- Retain the existing tenant key during the scope-FK rollout.
 CREATE UNIQUE INDEX IF NOT EXISTS remote_session_issuers_organization_id_id_key
 ON remote_session_issuers (organization_id, id);
+
+-- Scope-qualified FK target for identity provider connections.
+CREATE UNIQUE INDEX IF NOT EXISTS remote_session_issuers_attachment_scope_key
+ON remote_session_issuers (id, issuer, attachment_scope);
 
 -- Remote Session Clients are records of Gram's client registrations with
 -- upstream authorization servers
@@ -2551,15 +2561,19 @@ CREATE INDEX IF NOT EXISTS remote_session_clients_identity_provider_connection_i
 ON remote_session_clients (organization_id, identity_provider_connection_id)
 WHERE identity_provider_connection_id IS NOT NULL;
 
--- Composite FK target so org-scoped children pin a client to one org.
+-- Retain the existing tenant key during the scope-FK rollout.
 CREATE UNIQUE INDEX IF NOT EXISTS remote_session_clients_organization_id_id_key
 ON remote_session_clients (organization_id, id);
 
+-- Pin both client scope and issuer, including subsequent client reparenting.
+CREATE UNIQUE INDEX IF NOT EXISTS remote_session_clients_issuer_attachment_scope_key
+ON remote_session_clients (id, remote_session_issuer_id, attachment_scope);
+
 -- Okta subtype of identity_provider_connections (CTI: the discriminator column
 -- pins provider = 'okta' so the composite FK enforces 1:1 with the parent).
--- The issuer and client rows it points at are pinned to the same org through
--- composite FKs; organization_id on those parents is nullable, so the NOT NULL
--- columns here keep MATCH SIMPLE from skipping the check. Holds no secrets:
+-- The issuer and client must both be org-scoped, and the client must belong
+-- to the selected issuer. The generated scope is non-null because organization_id
+-- is NOT NULL, so MATCH SIMPLE cannot skip either check. Holds no secrets:
 -- the client_id lives on remote_session_clients and private key material
 -- stays in KMS.
 -- Tombstoned with the parent in the same transaction. The connection->subtype
@@ -2569,10 +2583,10 @@ CREATE TABLE IF NOT EXISTS okta_identity_provider_connections (
   identity_provider_connection_id uuid NOT NULL,
   identity_provider_connections_provider TEXT NOT NULL DEFAULT 'okta',
   organization_id TEXT NOT NULL,
+  attachment_scope TEXT GENERATED ALWAYS AS ('organization:' || organization_id) STORED,
   org_url TEXT NOT NULL,
   -- Normalized issuer URL from discovery; globally unique across orgs.
-  -- Mirrors remote_session_issuers.issuer for the referenced issuer; written
-  -- in the same transaction; the issuer row is authoritative.
+  -- Pinned to the authoritative remote_session_issuers.issuer by the scope FK.
   issuer_url TEXT NOT NULL,
   -- Set only by a platform admin to allow one Okta tenant on more than one
   -- Speakeasy org.
@@ -2594,10 +2608,13 @@ CREATE TABLE IF NOT EXISTS okta_identity_provider_connections (
   CONSTRAINT okta_identity_provider_connections_pkey PRIMARY KEY (identity_provider_connection_id),
   CONSTRAINT okta_identity_provider_connections_provider_check CHECK (identity_provider_connections_provider = 'okta'),
   CONSTRAINT okta_identity_provider_connections_listing_mode_check CHECK (listing_mode IN ('custom_app', 'oin')),
+  CONSTRAINT okta_identity_provider_connections_override_reason_check CHECK (
+    issuer_url_override_reason IS NULL OR issuer_url_override_reason ~ '[^[:space:]]'
+  ),
   CONSTRAINT okta_identity_provider_connections_fkey FOREIGN KEY (identity_provider_connection_id, identity_provider_connections_provider) REFERENCES identity_provider_connections (id, provider) ON DELETE CASCADE,
   CONSTRAINT okta_identity_provider_connections_connection_tenant_fkey FOREIGN KEY (organization_id, identity_provider_connection_id) REFERENCES identity_provider_connections (organization_id, id) ON DELETE CASCADE,
-  CONSTRAINT okta_identity_provider_connections_issuer_tenant_fkey FOREIGN KEY (organization_id, remote_session_issuer_id) REFERENCES remote_session_issuers (organization_id, id),
-  CONSTRAINT okta_identity_provider_connections_client_tenant_fkey FOREIGN KEY (organization_id, remote_session_client_id) REFERENCES remote_session_clients (organization_id, id)
+  CONSTRAINT okta_identity_provider_connections_issuer_scope_fkey FOREIGN KEY (remote_session_issuer_id, issuer_url, attachment_scope) REFERENCES remote_session_issuers (id, issuer, attachment_scope),
+  CONSTRAINT okta_identity_provider_connections_client_issuer_scope_fkey FOREIGN KEY (remote_session_client_id, remote_session_issuer_id, attachment_scope) REFERENCES remote_session_clients (id, remote_session_issuer_id, attachment_scope)
 );
 
 -- One Okta tenant connects to one Speakeasy org unless a platform admin
