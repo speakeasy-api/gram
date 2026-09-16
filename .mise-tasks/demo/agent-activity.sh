@@ -55,6 +55,9 @@ codex_profile_marker="# Written by mise run demo:agent-activity; removed when it
 plugin_out=""
 turn_log=""
 org_id=""
+codex_profile_owned=false
+current_turn_pid=""
+current_watchdog_pid=""
 
 db_query() {
   docker exec -i "${COMPOSE_PROJECT_NAME:-gram}-gram-db-1" psql -U gram -d gram -tA -v ON_ERROR_STOP=1 "$@"
@@ -65,11 +68,34 @@ fail() {
   exit 1
 }
 
+# Depth-first, because an agent is not one process. `pkill -P` reaps the
+# subshell's direct child and leaves its grandchildren running, reparented and
+# still working -- which on an interrupt means a turn carrying on against a key
+# this script has already revoked. Children first, so the parent cannot spawn
+# more while its own tree is being taken down.
+kill_tree() {
+  local pid="$1" child
+  [ -n "$pid" ] || return 0
+  for child in $(pgrep -P "$pid" 2>/dev/null); do
+    kill_tree "$child"
+  done
+  kill "$pid" 2>/dev/null || true
+}
+
 # The key is minted for this run and must not outlive it. Revoking at the top
 # of the next run is no help on a machine where this run was the last one, and
 # no help at all if the developer interrupts this one.
 cleanup() {
   local rc=$?
+  # An interrupt reaches this trap with a turn still running. Take the agent
+  # down first: otherwise it carries on working with a key this trap is about
+  # to revoke and a config file it is about to delete.
+  if [ -n "$current_turn_pid" ]; then
+    kill_tree "$current_turn_pid"
+  fi
+  if [ -n "$current_watchdog_pid" ]; then
+    kill_tree "$current_watchdog_pid"
+  fi
   # Spelled out rather than `[ ... ] && ...`: a false test there returns
   # non-zero, and under `set -e` that would leave the trap before it got to
   # the revocation, which is the one step that matters.
@@ -79,7 +105,12 @@ cleanup() {
   if [ -n "$turn_log" ]; then
     rm -f "$turn_log"
   fi
-  rm -f "$codex_profile_file"
+  # Only ever the file this run wrote. Removing it unconditionally would
+  # delete a developer's own profile of the same name -- including, when the
+  # name is already taken, the very file write_codex_profile refused to touch.
+  if $codex_profile_owned; then
+    rm -f "$codex_profile_file"
+  fi
   if [ -n "$org_id" ]; then
     db_query -v org_id="$org_id" >/dev/null 2>&1 <<<"UPDATE api_keys SET deleted_at = NOW() WHERE organization_id = :'org_id' AND name = 'dev-demo-activity' AND deleted IS FALSE" || true
   fi
@@ -189,6 +220,8 @@ demo_resource_attrs() {
 # here rather than in a -c override so it stays out of the process arguments,
 # where any local user could read it off `ps` for the length of the run.
 write_codex_profile() {
+  # A Codex that has been installed but never run has no CODEX_HOME yet.
+  mkdir -p "$(dirname "$codex_profile_file")"
   if [ -e "$codex_profile_file" ] && ! head -1 "$codex_profile_file" | grep -qF "$codex_profile_marker"; then
     fail "${codex_profile_file} already exists and was not written by this task — move it aside first"
   fi
@@ -210,6 +243,7 @@ protocol = "json"
 headers = { "Gram-Key" = "${api_key}", "Gram-Project" = "${project_slug}" }
 TOML
   )
+  codex_profile_owned=true
 }
 
 # An allowlist rather than `--permission-mode bypassPermissions` with the
@@ -245,8 +279,12 @@ run_claude() {
 
 # The MCP servers are replaced for the same reason the otel block is: a
 # developer's own point at production, and a generated prompt asking for a tool
-# call has no business reaching one. Everything not named here — provider,
-# auth, model — stays theirs.
+# call has no business reaching one. The local server that replaces them is
+# narrowed to the single tool the prompts name, because a read-only filesystem
+# sandbox says nothing about what an MCP call can do -- dev-mcp otherwise
+# offers assistant and trigger mutation. That matches the allowlist the Claude
+# Code path runs under. Everything not named here — provider, auth, model —
+# stays theirs.
 run_codex() {
   local model_args=()
   if [ -n "$codex_model" ]; then
@@ -262,14 +300,15 @@ run_codex() {
       --sandbox read-only \
       ${model_args[@]+"${model_args[@]}"} \
       -c 'approval_policy="never"' \
-      -c 'mcp_servers={ "assistants-dev" = { command = "mise", args = ["x", "--", "go", "run", "./server/cmd/dev-mcp"] } }' \
+      -c 'mcp_servers={ "assistants-dev" = { command = "mise", args = ["x", "--", "go", "run", "./server/cmd/dev-mcp"], enabled_tools = ["whoami"] } }' \
       -c 'plugins={}' \
       -- "$2" > "$turn_log" 2>&1
 }
 
 # The deadline is only read between turns, so without this a session that
 # wedges runs past the advertised limit indefinitely. The watchdog takes the
-# turn's children too: killing the subshell alone would leave the agent behind.
+# turn's whole process tree: killing the subshell alone would leave the agent
+# behind, and killing only its direct child would leave that agent's own.
 run_with_budget() {
   local budget="$1"
   shift
@@ -280,16 +319,19 @@ run_with_budget() {
   # Code that line carries the run's API key in its environment prefix.
   "$@" 2>/dev/null &
   local turn_pid=$!
+  current_turn_pid="$turn_pid"
 
   ( sleep "$budget"
-    pkill -P "$turn_pid" 2>/dev/null
-    kill "$turn_pid" 2>/dev/null ) &
+    kill_tree "$turn_pid" ) &
   local watchdog_pid=$!
+  current_watchdog_pid="$watchdog_pid"
 
   local rc=0
   wait "$turn_pid" || rc=$?
   kill "$watchdog_pid" 2>/dev/null || true
   wait "$watchdog_pid" 2>/dev/null || true
+  current_turn_pid=""
+  current_watchdog_pid=""
   return "$rc"
 }
 
