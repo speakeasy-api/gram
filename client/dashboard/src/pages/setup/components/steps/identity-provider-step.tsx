@@ -12,7 +12,6 @@ import type { IdentityProviderConnection } from "@gram/client/models/components/
 import { useIdentityProvider } from "@gram/client/react-query/identityProvider.js";
 import { useOnboardingStatus } from "@gram/client/react-query/onboardingStatus";
 import { toast } from "sonner";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -588,20 +587,6 @@ function DirectorySyncSection({
   } else {
     body = (
       <div className="space-y-4">
-        {guided ? (
-          <Alert variant="info" alignTop>
-            <div>
-              <AlertTitle>
-                This is the one step that leaves Speakeasy
-              </AlertTitle>
-              <AlertDescription>
-                Everything else about Okta is set up from here, but a directory
-                is created in Speakeasy&apos;s sign-in provider portal rather
-                than over its API. You go there once, and come back.
-              </AlertDescription>
-            </div>
-          </Alert>
-        ) : null}
         <PortalNote>
           {portalOpened
             ? `Finish configuring the directory connection in the ${guided ? "portal" : "WorkOS"} tab, then verify it here.`

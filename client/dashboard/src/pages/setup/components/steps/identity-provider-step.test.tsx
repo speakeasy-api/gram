@@ -199,9 +199,6 @@ describe("IdentityProviderStep", () => {
     // The directory is the one step Speakeasy cannot do over the API, and it
     // opens on the connection alone rather than waiting on sign-on.
     expect(
-      screen.getByText("This is the one step that leaves Speakeasy"),
-    ).toBeTruthy();
-    expect(
       screen.getByRole("button", { name: "Connect directory" }),
     ).toBeTruthy();
     // No group mirroring here: the portal owns the directory.
