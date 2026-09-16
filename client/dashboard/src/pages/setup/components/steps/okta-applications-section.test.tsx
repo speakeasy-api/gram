@@ -1,5 +1,11 @@
 import type { ReactNode } from "react";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { IdentityProviderApplication } from "@gram/client/models/components/identityproviderapplication.js";
 import type { IdentityProviderConnection } from "@gram/client/models/components/identityproviderconnection.js";
@@ -465,8 +471,54 @@ describe("OktaApplicationsSection", () => {
     expect(bar!.contains(screen.getByRole("button", { name: /^Create/ }))).toBe(
       true,
     );
+    // The button sits at the frame's right edge, padded like the grid above it.
+    expect(bar!.className).toContain("justify-end");
+    expect(bar!.className).toContain("p-3");
+    expect(scroller!.className).toContain("p-3");
     // Not floating over the page any more.
     expect(container.querySelector(".fixed")).toBeNull();
+  });
+
+  it("counts through the picks while it creates them, and stays disabled", async () => {
+    let releaseFirst = () => {};
+    const firstCreated = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    let createCalls = 0;
+    sdk.createRemoteServer = vi.fn(async () => {
+      createCalls += 1;
+      if (createCalls === 1) await firstCreated;
+      return {
+        id: `remote-${createCalls}`,
+        url: "https://mcp.example.test/mcp",
+      };
+    });
+    withApplications([
+      application(),
+      application({
+        sourceApplicationId: "0oaexampleapp2",
+        label: "Example Docs",
+      }),
+    ]);
+    render(<OktaApplicationsSection index={4} connection={connection()} />);
+
+    pressCreate();
+
+    // Held on the first of the two picks: the button says where the run is and
+    // cannot be pressed again while it gets there.
+    const button = await screen.findByRole("button", { name: /^Creating/ });
+    expect(button.textContent).toBe("Creating 1 of 2…");
+    expect(button.hasAttribute("disabled")).toBe(true);
+
+    releaseFirst();
+
+    // Both drafts made, so there is nothing left picked to create.
+    await waitFor(() =>
+      expect(screen.getAllByText(/Draft created/)).toHaveLength(2),
+    );
+    const done = screen.getByRole("button", { name: /^Create/ });
+    expect(done.textContent).toBe("Create MCP Servers");
+    expect(done.hasAttribute("disabled")).toBe(true);
   });
 
   it("says why a card cannot be picked, in the server's two reasons", () => {

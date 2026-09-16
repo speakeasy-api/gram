@@ -44,6 +44,12 @@ export interface ApplicationDrafts {
   /** The project the drafts are created in, and whose page they link to. */
   projectSlug: string;
   creating: boolean;
+  /**
+   * Which of the picked applications the run is on, while a whole selection is
+   * being created. Absent for a single card's own retry, which has no run to
+   * count through.
+   */
+  progress: { current: number; total: number } | undefined;
   /** Creates one draft per application, in the order given. */
   create: (applications: IdentityProviderApplication[]) => Promise<void>;
   /** Runs the sign-in provider steps again for a draft that already exists. */
@@ -80,6 +86,10 @@ export function useApplicationDrafts(): ApplicationDrafts {
 
   const [outcomes, setOutcomes] = useState<Record<string, DraftOutcome>>({});
   const [creating, setCreating] = useState(false);
+  const [progress, setProgress] = useState<{
+    current: number;
+    total: number;
+  }>();
 
   const existingByName = useMemo(() => {
     const byName = new Map<string, string>();
@@ -137,7 +147,8 @@ export function useApplicationDrafts(): ApplicationDrafts {
       setCreating(true);
 
       try {
-        for (const application of applications) {
+        for (const [index, application] of applications.entries()) {
+          setProgress({ current: index + 1, total: applications.length });
           const id = application.sourceApplicationId;
           const remoteUrl = application.match?.remoteUrl;
           if (!remoteUrl) continue;
@@ -192,6 +203,7 @@ export function useApplicationDrafts(): ApplicationDrafts {
         }
       } finally {
         setCreating(false);
+        setProgress(undefined);
       }
     },
     [client, existingByName, queryClient, record, runIdentity],
@@ -209,5 +221,12 @@ export function useApplicationDrafts(): ApplicationDrafts {
     [runIdentity],
   );
 
-  return { outcomes, projectSlug, creating, create, configureIdentity };
+  return {
+    outcomes,
+    projectSlug,
+    creating,
+    progress,
+    create,
+    configureIdentity,
+  };
 }

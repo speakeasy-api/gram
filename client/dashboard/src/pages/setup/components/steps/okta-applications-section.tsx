@@ -145,6 +145,14 @@ function createLabel(count: number): string {
   return `Create ${count} MCP ${count === 1 ? "Server" : "Servers"}`;
 }
 
+/** Mid-run it counts through the picks instead, so a long run says where it is. */
+function runningLabel(
+  progress: { current: number; total: number } | undefined,
+): string {
+  if (!progress) return "Creating…";
+  return `Creating ${progress.current} of ${progress.total}…`;
+}
+
 function ApplicationMark({
   label,
   logoUrl,
@@ -453,21 +461,23 @@ function ApplicationCard({
 function CreateBar({
   count,
   creating,
+  progress,
   onCreate,
 }: {
   count: number;
   creating: boolean;
+  progress: { current: number; total: number } | undefined;
   onCreate: () => void;
 }): JSX.Element {
   return (
-    <div className="border-border bg-card flex flex-shrink-0 justify-center border-t p-3">
+    <div className="border-border bg-card flex flex-shrink-0 justify-end border-t p-3">
       <Button
         variant="primary"
         size="md"
         disabled={count === 0 || creating}
         onClick={onCreate}
       >
-        {creating ? "Creating…" : createLabel(count)}
+        {creating ? runningLabel(progress) : createLabel(count)}
       </Button>
     </div>
   );
@@ -623,6 +633,7 @@ function ApplicationsInventory({
         <CreateBar
           count={pending.length}
           creating={drafts.creating}
+          progress={drafts.progress}
           onCreate={() => void drafts.create(pending)}
         />
       </div>
