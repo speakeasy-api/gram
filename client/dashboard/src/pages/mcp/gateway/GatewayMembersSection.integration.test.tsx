@@ -9,7 +9,7 @@ import {
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { MemoryRouter } from "react-router";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
 import { queryKeyMcpServers } from "@gram/client/react-query/mcpServers.js";
@@ -22,6 +22,8 @@ const api = vi.hoisted(() => ({
   create: vi.fn(),
   attach: vi.fn(),
   markSettled: vi.fn(),
+  readServers: vi.fn(),
+  readMembers: vi.fn(),
 }));
 // Generated query hooks, keys and invalidators remain production code.
 // Observe the settlement callback without replacing its reconciliation behavior.
@@ -56,8 +58,8 @@ vi.mock("@gram/client/react-query/_context.js", () => ({
 vi.mock("@/contexts/Sdk", () => ({
   useProjectSlugForRequests: () => "project",
   useSdkClient: () => ({
-    mcpServers: { create: api.create },
-    metaMcp: { addMember: api.attach },
+    mcpServers: { create: api.create, list: api.readServers },
+    metaMcp: { addMember: api.attach, listMembers: api.readMembers },
   }),
 }));
 vi.mock("@/hooks/useRBAC", () => {
@@ -102,6 +104,11 @@ vi.mock("@/routes", () => ({
 }));
 
 const ok = <T,>(value: T) => ({ ok: true as const, value });
+
+beforeEach(() => {
+  api.readServers.mockResolvedValue({ mcpServers: [] });
+  api.readMembers.mockResolvedValue({ members: [] });
+});
 
 afterEach(() => {
   cleanup();
@@ -265,3 +272,122 @@ it("reconciles a failed wrapper attachment through parent invalidation and retri
     client.clear();
   }
 });
+
+it.each(["create", "attach", "create-retry", "attach-retry"])(
+  "recovers a committed %s with a lost response",
+  async (lostResponse) => {
+    const existing = {
+      id: "existing",
+      name: "Existing",
+      slug: "existing",
+      remoteMcpServerId: "remote",
+    } as McpServer;
+    const wrapper = {
+      id: "wrapper",
+      name: "Alpha",
+      slug: "alpha",
+      toolsetId: "toolset",
+    } as McpServer;
+    const members = [{ id: "member", mcpServerId: existing.id, sortOrder: 4 }];
+    api.servers.mockResolvedValue(ok({ mcpServers: [existing] }));
+    api.members.mockResolvedValue(ok({ members }));
+    api.toolsets.mockResolvedValue(
+      ok({ toolsets: [{ id: "toolset", name: "Alpha", slug: "alpha" }] }),
+    );
+    api.create.mockImplementation(async () => {
+      if (lostResponse !== "create-retry") {
+        api.servers.mockResolvedValue(ok({ mcpServers: [existing, wrapper] }));
+      }
+      api.readServers.mockResolvedValue({ mcpServers: [wrapper] });
+      if (lostResponse === "create-retry") {
+        api.readServers.mockRejectedValueOnce(
+          new Error("Recovery read failed"),
+        );
+      }
+      if (lostResponse.startsWith("create")) throw new Error("Response lost");
+      return wrapper;
+    });
+    let committed = false;
+    api.attach.mockImplementation(async () => {
+      if (committed) throw new Error("Already a member");
+      committed = true;
+      const attached = [
+        ...members,
+        { id: "added", mcpServerId: wrapper.id, sortOrder: 5 },
+      ];
+      if (lostResponse !== "attach-retry") {
+        api.members.mockResolvedValue(ok({ members: attached }));
+      }
+      api.readMembers.mockResolvedValue({ members: attached });
+      if (lostResponse === "attach-retry") {
+        api.readMembers.mockRejectedValueOnce(
+          new Error("Recovery read failed"),
+        );
+      }
+      if (lostResponse.startsWith("attach")) throw new Error("Response lost");
+    });
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    try {
+      render(
+        <QueryClientProvider client={client}>
+          <MemoryRouter>
+            <TooltipProvider>
+              <GatewayMembersSection
+                metaMcpServer={
+                  { id: "gateway", projectId: "project" } as MetaMcpServer
+                }
+              />
+            </TooltipProvider>
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+      await screen.findByText("Existing");
+      fireEvent.click(screen.getByRole("button", { name: "Add servers" }));
+      fireEvent.click(await screen.findByRole("checkbox", { name: "Alpha" }));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Add selected servers" }),
+      );
+      if (lostResponse.endsWith("retry")) {
+        await screen.findByText("Alpha: Recovery read failed");
+        expect(
+          screen
+            .getByRole("checkbox", { name: "Alpha" })
+            .getAttribute("aria-checked"),
+        ).toBe("true");
+        api.servers.mockResolvedValue(ok({ mcpServers: [existing, wrapper] }));
+        api.members.mockResolvedValue(
+          ok({
+            members: [
+              ...members,
+              { id: "added", mcpServerId: wrapper.id, sortOrder: 5 },
+            ],
+          }),
+        );
+        fireEvent.click(
+          screen.getByRole("button", { name: "Add selected servers" }),
+        );
+      }
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+      expect(api.create).toHaveBeenCalledTimes(1);
+      expect(api.attach).toHaveBeenCalledTimes(
+        lostResponse === "attach-retry" ? 2 : 1,
+      );
+      expect(api.attach).toHaveBeenCalledWith({
+        addMetaMcpMemberForm: {
+          metaMcpServerId: "gateway",
+          mcpServerId: "wrapper",
+          sortOrder: 5,
+        },
+      });
+      expect(await screen.findByText("Alpha")).toBeTruthy();
+    } finally {
+      cleanup();
+      client.clear();
+    }
+  },
+);

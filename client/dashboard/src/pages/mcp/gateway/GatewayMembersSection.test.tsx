@@ -35,8 +35,10 @@ vi.mock("@/components/sources/SourceCard", () => ({
 }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
-    hasScope: (scope: string, resource: string) =>
-      permissions.scopes.has(`${scope}:${resource}`),
+    hasScope: (scope: string, resource?: string) =>
+      resource === undefined
+        ? [...permissions.scopes].some((grant) => grant.startsWith(`${scope}:`))
+        : permissions.scopes.has(`${scope}:${resource}`),
     isLoading: false,
   }),
 }));
@@ -541,11 +543,7 @@ describe("Add servers sheet", () => {
             .getAttribute("aria-disabled") === "true",
         ).toBe(scope === "mcp:write");
       }
-      for (const label of [
-        "From the catalog",
-        "From your API",
-        "Write custom code",
-      ]) {
+      for (const label of ["From your API", "Write custom code"]) {
         expect(
           screen
             .getByRole("menuitem", { name: new RegExp(`^${label}`) })
@@ -751,4 +749,50 @@ describe("Add servers sheet", () => {
       expect(screen.queryByText(/: Added/)).toBeNull();
     },
   );
+});
+
+it.each([{ toolsetsFailed: true }, { toolsetsLoading: true }])(
+  "allows available servers while hosted inventory is unavailable: %j",
+  async (props) => {
+    const onRetryLoad = vi.fn<() => void>();
+    const { onAdd } = setup({ ...props, onRetryLoad });
+    expect(
+      screen.queryByText(
+        "No existing servers yet. Create a new server to get started.",
+      ),
+    ).toBeNull();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Alpha" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Add selected servers" }),
+    );
+    await waitFor(() => expect(onAdd).toHaveBeenCalledTimes(1));
+    if (props.toolsetsFailed) {
+      fireEvent.click(
+        screen.getByRole("button", { name: "Retry loading hosted servers" }),
+      );
+      expect(onRetryLoad).toHaveBeenCalledTimes(1);
+    }
+  },
+);
+
+it.each([
+  ["project:read:project", true],
+  ["mcp:write:gateway", true],
+  ["project:write:project", false],
+] as const)("matches catalog browse access for %s", (grant, allowed) => {
+  permissions.scopes = new Set([grant]);
+  setup();
+  fireEvent.pointerDown(screen.getByRole("button", { name: "Add new" }), {
+    button: 0,
+    ctrlKey: false,
+    pointerType: "mouse",
+  });
+  const item = screen.getByRole("menuitem", { name: /^From the catalog/ });
+  expect(item.getAttribute("aria-disabled") === "true").toBe(!allowed);
+  fireEvent.click(item);
+  if (allowed)
+    expect(permissions.navigate).toHaveBeenCalledWith(
+      "/catalog?attachToGateway=gateway",
+    );
+  else expect(permissions.navigate).not.toHaveBeenCalled();
 });

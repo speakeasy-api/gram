@@ -339,23 +339,57 @@ export function GatewayMembersSection({
         batchState,
         {
           createWrapper: async (toolset) => {
-            const wrapper = await client.mcpServers.create({
-              createMcpServerForm: {
-                name: toolset.name,
+            const findWrapper = async () => {
+              // Read from the server, not the picker cache: a previous create
+              // may have committed even when its response never reached us.
+              const { mcpServers } = await client.mcpServers.list({
                 toolsetId: toolset.id,
-                visibility: "private",
-              },
-            });
-            return wrapper.id;
+              });
+              if (mcpServers.length > 1) {
+                throw new Error(
+                  "Multiple servers use this source. Select the intended existing server.",
+                );
+              }
+              return mcpServers[0]?.id;
+            };
+            const existing = await findWrapper();
+            if (existing) return existing;
+            try {
+              const wrapper = await client.mcpServers.create({
+                createMcpServerForm: {
+                  name: toolset.name,
+                  toolsetId: toolset.id,
+                  visibility: "private",
+                },
+              });
+              return wrapper.id;
+            } catch (error) {
+              const recovered = await findWrapper();
+              if (recovered) return recovered;
+              throw error;
+            }
           },
           attach: async (mcpServerId, sortOrder) => {
-            await client.metaMcp.addMember({
-              addMetaMcpMemberForm: {
+            try {
+              await client.metaMcp.addMember({
+                addMetaMcpMemberForm: {
+                  metaMcpServerId: metaMcpServer.id,
+                  mcpServerId,
+                  sortOrder,
+                },
+              });
+            } catch (error) {
+              // A lost response (or a retry conflict) is success only when a
+              // fresh read confirms this exact server's membership.
+              const { members } = await client.metaMcp.listMembers({
                 metaMcpServerId: metaMcpServer.id,
-                mcpServerId,
-                sortOrder,
-              },
-            });
+              });
+              if (
+                !members.some((member) => member.mcpServerId === mcpServerId)
+              ) {
+                throw error;
+              }
+            }
           },
         },
       );
@@ -563,9 +597,11 @@ export function GatewayMembersSection({
           if (!batchRunning.current) setAddOpen(open);
         }}
         servers={servers}
-        toolsets={toolsets}
-        isLoading={isLoading || toolsets.isLoading}
-        loadFailed={isError || toolsets.isError}
+        toolsets={toolsets.isError ? [] : toolsets}
+        toolsetsLoading={toolsets.isLoading}
+        toolsetsFailed={toolsets.isError}
+        isLoading={isLoading}
+        loadFailed={isError}
         onRetryLoad={() => {
           void refetch();
           void toolsets.refetch();
@@ -629,6 +665,8 @@ export function AddServersSheet({
   onOpenChange,
   servers,
   toolsets,
+  toolsetsLoading = false,
+  toolsetsFailed = false,
   isLoading,
   loadFailed,
   onRetryLoad,
@@ -643,6 +681,8 @@ export function AddServersSheet({
   onOpenChange: (open: boolean) => void;
   servers: McpServer[];
   toolsets: ToolsetEntry[];
+  toolsetsLoading?: boolean;
+  toolsetsFailed?: boolean;
   isLoading: boolean;
   loadFailed: boolean;
   onRetryLoad: () => void;
@@ -661,6 +701,9 @@ export function AddServersSheet({
   const canCreate = !permissionsLoading && hasScope("mcp:write", projectId);
   const canWriteProject =
     !permissionsLoading && hasScope("project:write", projectId);
+  // Match the Catalog page's browse permission; installation checks stay there.
+  const canBrowseCatalog =
+    !permissionsLoading && (hasScope("project:read") || hasScope("mcp:write"));
   const [selected, setSelected] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   const searchContainerRef = useRef<HTMLLabelElement>(null);
@@ -784,7 +827,7 @@ export function AddServersSheet({
       Icon: Blocks,
       group: "Recommended",
       href: routes.mcp.catalog.href() + "?attachToGateway=" + gatewayId,
-      allowed: canWriteProject,
+      allowed: canBrowseCatalog,
     },
     {
       label: "Hosted remotely",
@@ -959,6 +1002,22 @@ export function AddServersSheet({
                 disabled={busy}
               />
             </label>
+            {toolsetsLoading && <Text muted>Loading hosted servers…</Text>}
+            {toolsetsFailed && (
+              <div role="alert" className="space-y-2">
+                <Text muted>
+                  Couldn't load hosted servers. Existing servers are still
+                  available.
+                </Text>
+                <Button
+                  variant="secondary"
+                  onClick={onRetryLoad}
+                  disabled={busy}
+                >
+                  <Button.Text>Retry loading hosted servers</Button.Text>
+                </Button>
+              </div>
+            )}
             {isLoading ? (
               <Text muted>Loading servers…</Text>
             ) : loadFailed ? (
@@ -974,7 +1033,9 @@ export function AddServersSheet({
                   <Button.Text>Retry loading</Button.Text>
                 </Button>
               </div>
-            ) : candidates.length === 0 ? (
+            ) : candidates.length === 0 &&
+              (toolsetsLoading || toolsetsFailed) ? null : candidates.length ===
+              0 ? (
               <div className="bg-muted/20 flex min-h-24 items-center justify-center border border-dashed px-6 py-8 text-center">
                 <Text muted>
                   {servers.length === 0 && toolsets.length === 0
