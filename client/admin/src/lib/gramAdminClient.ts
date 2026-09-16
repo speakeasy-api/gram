@@ -60,6 +60,7 @@ import {
   type AdminListOrganizationActivityPageParams,
 } from "@gram/admin-client/react-query/adminListOrganizationActivity.core";
 import { buildAdminOrganizationFeaturesQuery } from "@gram/admin-client/react-query/adminOrganizationFeatures.core";
+import { buildAdminOrganizationGuidedReadinessQuery } from "@gram/admin-client/react-query/adminOrganizationGuidedReadiness.core";
 import { buildAdminGetOrganizationDirectoryHandoffQuery } from "@gram/admin-client/react-query/adminGetOrganizationDirectoryHandoff.core";
 import { buildAdminSetOrganizationDirectoryHandoffMutation } from "@gram/admin-client/react-query/adminSetOrganizationDirectoryHandoff";
 import { buildAdminClearOrganizationDirectoryHandoffMutation } from "@gram/admin-client/react-query/adminClearOrganizationDirectoryHandoff";
@@ -70,6 +71,7 @@ import { buildSetAdminOrganizationFeatureMutation } from "@gram/admin-client/rea
 import type { ProductFeatures } from "@gram/admin-client/models/components/productfeatures";
 import type { SetOrganizationFeatureRequestBody } from "@gram/admin-client/models/components/setorganizationfeaturerequestbody";
 import type { AdminGetOrganizationFeaturesRequest } from "@gram/admin-client/models/operations/admingetorganizationfeatures";
+import type { AdminGetOrganizationGuidedReadinessRequest } from "@gram/admin-client/models/operations/admingetorganizationguidedreadiness";
 
 // Speakeasy requires an absolute base URL. Keep the generated client private so
 // callers cannot replace this origin or supply raw SDK/request options. Browser
@@ -158,6 +160,28 @@ export function organizationFeaturesQuery(
   organizationId: string,
 ): ReturnType<typeof createOrganizationFeaturesQuery> {
   return createOrganizationFeaturesQuery(organizationId);
+}
+
+// Readiness reports why the guided identity provider flow is or is not offered
+// to an organization. It reads; there is nothing here to write.
+function createOrganizationGuidedReadinessQuery(organizationId: string) {
+  const request: AdminGetOrganizationGuidedReadinessRequest = {
+    organizationId,
+  };
+  const generated = buildAdminOrganizationGuidedReadinessQuery(
+    redirectingClient,
+    request,
+  );
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+  });
+}
+
+export function organizationGuidedReadinessQuery(
+  organizationId: string,
+): ReturnType<typeof createOrganizationGuidedReadinessQuery> {
+  return createOrganizationGuidedReadinessQuery(organizationId);
 }
 
 function createOrganizationActivityQuery(organizationId: string) {

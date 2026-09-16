@@ -130,6 +130,26 @@ func BuildGetOrganizationFeaturesPayload(adminGetOrganizationFeaturesOrganizatio
 	return v, nil
 }
 
+// BuildGetOrganizationGuidedReadinessPayload builds the payload for the admin
+// getOrganizationGuidedReadiness endpoint from CLI flags.
+func BuildGetOrganizationGuidedReadinessPayload(adminGetOrganizationGuidedReadinessOrganizationID string, adminGetOrganizationGuidedReadinessAdminSessionToken string) (*admin.GetOrganizationGuidedReadinessPayload, error) {
+	var organizationID string
+	{
+		organizationID = adminGetOrganizationGuidedReadinessOrganizationID
+	}
+	var adminSessionToken *string
+	{
+		if adminGetOrganizationGuidedReadinessAdminSessionToken != "" {
+			adminSessionToken = &adminGetOrganizationGuidedReadinessAdminSessionToken
+		}
+	}
+	v := &admin.GetOrganizationGuidedReadinessPayload{}
+	v.OrganizationID = organizationID
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
 // BuildSetOrganizationFeaturePayload builds the payload for the admin
 // setOrganizationFeature endpoint from CLI flags.
 func BuildSetOrganizationFeaturePayload(adminSetOrganizationFeatureBody string, adminSetOrganizationFeatureAdminSessionToken string) (*admin.SetOrganizationFeaturePayload, error) {

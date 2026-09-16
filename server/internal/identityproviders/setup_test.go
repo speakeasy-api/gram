@@ -22,9 +22,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/identityproviderreadiness"
 	"github.com/speakeasy-api/gram/server/internal/identityproviders"
 	"github.com/speakeasy-api/gram/server/internal/identityproviders/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/okta"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -168,10 +170,21 @@ func (m *mockWorkOSClient) GetConnection(ctx context.Context, connectionID strin
 	return connection, args.Error(1)
 }
 
+func (m *mockWorkOSClient) GetOrganizationDomainPolicy(ctx context.Context, organizationID string) (*workos.OrganizationDomainPolicy, error) {
+	args := m.Called(ctx, organizationID)
+	policy, _ := args.Get(0).(*workos.OrganizationDomainPolicy)
+	return policy, args.Error(1)
+}
+
 func (m *mockWorkOSClient) ListDirectories(ctx context.Context, organizationID string) ([]workos.Directory, error) {
 	args := m.Called(ctx, organizationID)
 	directories, _ := args.Get(0).([]workos.Directory)
 	return directories, args.Error(1)
+}
+
+func (m *mockWorkOSClient) ConnectionsAPIAvailable(ctx context.Context) (bool, error) {
+	args := m.Called(ctx)
+	return args.Bool(0), args.Error(1)
 }
 
 func (m *mockWorkOSClient) ListDirectoryGroups(ctx context.Context, directoryID string) ([]workos.DirectoryGroup, error) {
@@ -296,6 +309,8 @@ func newTestServiceWithURLs(t *testing.T, oktaEndpoint, publicURL string) (conte
 	workOSClient.Test(t)
 	t.Cleanup(func() { workOSClient.AssertExpectations(t) })
 	catalog := newCatalogDouble()
+	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
+	readiness := identityproviderreadiness.New(workOSClient, features, identityproviderreadiness.NewDatabaseDirectoryHandoffChecker(conn))
 	service := identityproviders.NewService(
 		logger,
 		tracerProvider,
@@ -307,6 +322,7 @@ func newTestServiceWithURLs(t *testing.T, oktaEndpoint, publicURL string) (conte
 		okta.NewClient(logger, guardianPolicy, okta.ClientOpts{Endpoint: oktaEndpoint, RetryConfig: retryConfig}),
 		workOSClient,
 		catalog,
+		readiness,
 		serverURL,
 	)
 

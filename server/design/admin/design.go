@@ -412,6 +412,24 @@ var _ = Service("admin", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"AdminOrganizationFeatures"}`)
 	})
 
+	Method("getOrganizationGuidedReadiness", func() {
+		Description("Get an organization's readiness for guided identity provider setup.")
+		Payload(func() {
+			security.AdminAuthPayload()
+			Attribute("organization_id", String)
+			Required("organization_id")
+		})
+		Result(shared.IdentityProviderReadiness)
+		HTTP(func() {
+			GET("/admin/organization.guidedReadiness")
+			Param("organization_id")
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "adminGetOrganizationGuidedReadiness")
+		Meta("openapi:extension:x-speakeasy-name-override", "getOrganizationGuidedReadiness")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"AdminOrganizationGuidedReadiness"}`)
+	})
+
 	Method("setOrganizationFeature", func() {
 		Payload(func() {
 			Meta("openapi:typename", "SetOrganizationFeatureRequestBody")

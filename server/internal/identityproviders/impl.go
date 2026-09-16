@@ -29,6 +29,7 @@ import (
 
 	srv "github.com/speakeasy-api/gram/server/gen/http/identity_providers/server"
 	gen "github.com/speakeasy-api/gram/server/gen/identity_providers"
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -39,11 +40,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/httpcache"
+	"github.com/speakeasy-api/gram/server/internal/identityproviderreadiness"
 	"github.com/speakeasy-api/gram/server/internal/identityproviders/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -72,6 +75,7 @@ type Service struct {
 	catalog              ApplicationCatalog
 	appMatches           *applicationMatchCache
 	applicationInventory *applicationInventoryCache
+	readiness            identityproviderreadiness.Checker
 	publicURL            *url.URL
 }
 
@@ -91,6 +95,7 @@ func NewService(
 	oktaClient OktaClient,
 	workosClient WorkOSClient,
 	applicationCatalog ApplicationCatalog,
+	readiness identityproviderreadiness.Checker,
 	publicURL *url.URL,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("identity_providers"))
@@ -107,6 +112,7 @@ func NewService(
 		catalog:              applicationCatalog,
 		appMatches:           newApplicationMatchCache(),
 		applicationInventory: newApplicationInventoryCache(),
+		readiness:            readiness,
 		publicURL:            publicURL,
 	}
 }
@@ -239,6 +245,19 @@ func (s *Service) Get(ctx context.Context, _ *gen.GetPayload) (*gen.GetIdentityP
 		return nil, oops.E(oops.CodeUnexpected, err, "error building identity provider connection response").LogError(ctx, logger)
 	}
 	return &gen.GetIdentityProviderResult{Connection: view}, nil
+}
+
+func (s *Service) GetGuidedReadiness(ctx context.Context, _ *gen.GetGuidedReadinessPayload) (*types.IdentityProviderReadiness, error) {
+	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeOrgRead)
+	if err != nil {
+		return nil, err
+	}
+
+	organization, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error loading organization readiness").LogError(ctx, logger)
+	}
+	return s.readiness.Evaluate(ctx, organization.ID, conv.FromPGTextOrEmpty[string](organization.WorkosID)), nil
 }
 
 func (s *Service) DescribeSetup(ctx context.Context, _ *gen.DescribeSetupPayload) (*gen.IdentityProviderSetup, error) {

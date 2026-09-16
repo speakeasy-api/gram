@@ -35,6 +35,20 @@ vi.mock("sonner", () => ({
   toast: { success: mocks.toastSuccess },
 }));
 
+// The readiness panel is a sibling on this page, not what these tests are
+// about, and an unserved read would draw its own failure line — which the write
+// assertions below would pick up, because they find the failure banner by its
+// destructive class. Held at "still reading" so only writes fail here.
+vi.mock("@/lib/guidedReadiness", () => ({
+  useOrganizationGuidedReadiness: () => ({
+    data: undefined,
+    isPending: true,
+    isFetching: false,
+    error: null,
+    refetch: () => undefined,
+  }),
+}));
+
 vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/gramAdminApi")>();
   return {

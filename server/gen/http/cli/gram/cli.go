@@ -135,7 +135,7 @@ func UsageCommands() []string {
 		"hooks-server-names (list|upsert|delete)",
 		"hooks (claude|cursor|codex|ingest|upload-skill-content|skill-feedback|logs|metrics)",
 		"identity resolve",
-		"identity-providers (create|get|list-applications|describe-setup|submit-setup-step|verify-setup-step|delete)",
+		"identity-providers (create|get|get-guided-readiness|list-applications|describe-setup|submit-setup-step|verify-setup-step|delete)",
 		"instances get-instance",
 		"integrations (get|list)",
 		"json-web-key-sets (create-set|update-set|list-sets|get-set|get-set-delete-preflight|delete-set|list-keys|publish-key|activate-key|retire-key|revoke-key)",
@@ -166,7 +166,7 @@ func UsageCommands() []string {
 		"organization-remote-session-issuers (create-issuer|list-issuers|get-issuer|get-issuer-delete-preflight|get-issuer-duplicate-preflight|update-issuer|delete-issuer|move-issuer|get-issuer-migrate-preflight|migrate-issuer|fetch-issuer-metadata|refresh-issuer-metadata)",
 		"remote-session-issuers (fetch-remote-session-issuer-metadata|refresh-remote-session-issuer-metadata|create-remote-session-issuer|update-remote-session-issuer|list-remote-session-issuers|get-remote-session-issuer|get-remote-session-issuer-duplicate-preflight|delete-remote-session-issuer)",
 		"admin-remote-sessions (create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|create-global-client|list-global-clients|get-global-client|update-global-client|delete-global-client|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer)",
-		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-organization-activity|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|get-organization-directory-handoff|set-organization-directory-handoff|clear-organization-directory-handoff)",
+		"admin (login|callback|logout|get-session|get-organization-features|get-organization-guided-readiness|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-organization-activity|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|get-organization-directory-handoff|set-organization-directory-handoff|clear-organization-directory-handoff)",
 		"organization-remote-sessions (list-client-sessions|revoke-session|refresh-session|revoke-all-client-sessions)",
 		"remote-sessions (commit-server-identity-configuration|list-remote-sessions|revoke-remote-session)",
 		"resources list-resources",
@@ -1403,6 +1403,10 @@ func ParseEndpoint(
 		identityProvidersGetFlags            = flag.NewFlagSet("get", flag.ExitOnError)
 		identityProvidersGetSessionTokenFlag = identityProvidersGetFlags.String("session-token", "", "")
 		identityProvidersGetApikeyTokenFlag  = identityProvidersGetFlags.String("apikey-token", "", "")
+
+		identityProvidersGetGuidedReadinessFlags            = flag.NewFlagSet("get-guided-readiness", flag.ExitOnError)
+		identityProvidersGetGuidedReadinessSessionTokenFlag = identityProvidersGetGuidedReadinessFlags.String("session-token", "", "")
+		identityProvidersGetGuidedReadinessApikeyTokenFlag  = identityProvidersGetGuidedReadinessFlags.String("apikey-token", "", "")
 
 		identityProvidersListApplicationsFlags            = flag.NewFlagSet("list-applications", flag.ExitOnError)
 		identityProvidersListApplicationsForceFlag        = identityProvidersListApplicationsFlags.String("force", "", "")
@@ -2679,6 +2683,10 @@ func ParseEndpoint(
 		adminGetOrganizationFeaturesFlags                 = flag.NewFlagSet("get-organization-features", flag.ExitOnError)
 		adminGetOrganizationFeaturesOrganizationIDFlag    = adminGetOrganizationFeaturesFlags.String("organization-id", "REQUIRED", "")
 		adminGetOrganizationFeaturesAdminSessionTokenFlag = adminGetOrganizationFeaturesFlags.String("admin-session-token", "", "")
+
+		adminGetOrganizationGuidedReadinessFlags                 = flag.NewFlagSet("get-organization-guided-readiness", flag.ExitOnError)
+		adminGetOrganizationGuidedReadinessOrganizationIDFlag    = adminGetOrganizationGuidedReadinessFlags.String("organization-id", "REQUIRED", "")
+		adminGetOrganizationGuidedReadinessAdminSessionTokenFlag = adminGetOrganizationGuidedReadinessFlags.String("admin-session-token", "", "")
 
 		adminSetOrganizationFeatureFlags                 = flag.NewFlagSet("set-organization-feature", flag.ExitOnError)
 		adminSetOrganizationFeatureBodyFlag              = adminSetOrganizationFeatureFlags.String("body", "REQUIRED", "")
@@ -4521,6 +4529,7 @@ func ParseEndpoint(
 	identityProvidersFlags.Usage = identityProvidersUsage
 	identityProvidersCreateFlags.Usage = identityProvidersCreateUsage
 	identityProvidersGetFlags.Usage = identityProvidersGetUsage
+	identityProvidersGetGuidedReadinessFlags.Usage = identityProvidersGetGuidedReadinessUsage
 	identityProvidersListApplicationsFlags.Usage = identityProvidersListApplicationsUsage
 	identityProvidersDescribeSetupFlags.Usage = identityProvidersDescribeSetupUsage
 	identityProvidersSubmitSetupStepFlags.Usage = identityProvidersSubmitSetupStepUsage
@@ -4827,6 +4836,7 @@ func ParseEndpoint(
 	adminLogoutFlags.Usage = adminLogoutUsage
 	adminGetSessionFlags.Usage = adminGetSessionUsage
 	adminGetOrganizationFeaturesFlags.Usage = adminGetOrganizationFeaturesUsage
+	adminGetOrganizationGuidedReadinessFlags.Usage = adminGetOrganizationGuidedReadinessUsage
 	adminSetOrganizationFeatureFlags.Usage = adminSetOrganizationFeatureUsage
 	adminGetOrganizationChatAnalysisSettingsFlags.Usage = adminGetOrganizationChatAnalysisSettingsUsage
 	adminSetOrganizationChatAnalysisSettingsFlags.Usage = adminSetOrganizationChatAnalysisSettingsUsage
@@ -6123,6 +6133,9 @@ func ParseEndpoint(
 			case "get":
 				epf = identityProvidersGetFlags
 
+			case "get-guided-readiness":
+				epf = identityProvidersGetGuidedReadinessFlags
+
 			case "list-applications":
 				epf = identityProvidersListApplicationsFlags
 
@@ -6978,6 +6991,9 @@ func ParseEndpoint(
 
 			case "get-organization-features":
 				epf = adminGetOrganizationFeaturesFlags
+
+			case "get-organization-guided-readiness":
+				epf = adminGetOrganizationGuidedReadinessFlags
 
 			case "set-organization-feature":
 				epf = adminSetOrganizationFeatureFlags
@@ -8702,6 +8718,9 @@ func ParseEndpoint(
 			case "get":
 				endpoint = c.Get()
 				data, err = identityprovidersc.BuildGetPayload(*identityProvidersGetSessionTokenFlag, *identityProvidersGetApikeyTokenFlag)
+			case "get-guided-readiness":
+				endpoint = c.GetGuidedReadiness()
+				data, err = identityprovidersc.BuildGetGuidedReadinessPayload(*identityProvidersGetGuidedReadinessSessionTokenFlag, *identityProvidersGetGuidedReadinessApikeyTokenFlag)
 			case "list-applications":
 				endpoint = c.ListApplications()
 				data, err = identityprovidersc.BuildListApplicationsPayload(*identityProvidersListApplicationsForceFlag, *identityProvidersListApplicationsSessionTokenFlag, *identityProvidersListApplicationsApikeyTokenFlag)
@@ -9570,6 +9589,9 @@ func ParseEndpoint(
 			case "get-organization-features":
 				endpoint = c.GetOrganizationFeatures()
 				data, err = adminc.BuildGetOrganizationFeaturesPayload(*adminGetOrganizationFeaturesOrganizationIDFlag, *adminGetOrganizationFeaturesAdminSessionTokenFlag)
+			case "get-organization-guided-readiness":
+				endpoint = c.GetOrganizationGuidedReadiness()
+				data, err = adminc.BuildGetOrganizationGuidedReadinessPayload(*adminGetOrganizationGuidedReadinessOrganizationIDFlag, *adminGetOrganizationGuidedReadinessAdminSessionTokenFlag)
 			case "set-organization-feature":
 				endpoint = c.SetOrganizationFeature()
 				data, err = adminc.BuildSetOrganizationFeaturePayload(*adminSetOrganizationFeatureBodyFlag, *adminSetOrganizationFeatureAdminSessionTokenFlag)
@@ -15861,6 +15883,7 @@ func identityProvidersUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    create: Create the organization's identity provider connection and Speakeasy-held signing key.`)
 	fmt.Fprintln(os.Stderr, `    get: Get the organization's live identity provider connection, when configured.`)
+	fmt.Fprintln(os.Stderr, `    get-guided-readiness: Get the organization's readiness for guided identity provider setup.`)
 	fmt.Fprintln(os.Stderr, `    list-applications: List applications from the organization's identity provider, using a five-minute in-memory cache unless force is true.`)
 	fmt.Fprintln(os.Stderr, `    describe-setup: Describe the guided setup steps for the organization's identity provider connection.`)
 	fmt.Fprintln(os.Stderr, `    submit-setup-step: Submit administrator-provided values for an identity provider setup step.`)
@@ -15910,6 +15933,26 @@ func identityProvidersGetUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity-providers get --session-token \"abc123\" --apikey-token \"abc123\"")
+}
+
+func identityProvidersGetGuidedReadinessUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] identity-providers get-guided-readiness", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get the organization's readiness for guided identity provider setup.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity-providers get-guided-readiness --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func identityProvidersListApplicationsUsage() {
@@ -21738,6 +21781,7 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    logout: Logout implements logout.`)
 	fmt.Fprintln(os.Stderr, `    get-session: GetSession implements getSession.`)
 	fmt.Fprintln(os.Stderr, `    get-organization-features: GetOrganizationFeatures implements getOrganizationFeatures.`)
+	fmt.Fprintln(os.Stderr, `    get-organization-guided-readiness: Get an organization's readiness for guided identity provider setup.`)
 	fmt.Fprintln(os.Stderr, `    set-organization-feature: SetOrganizationFeature implements setOrganizationFeature.`)
 	fmt.Fprintln(os.Stderr, `    get-organization-chat-analysis-settings: GetOrganizationChatAnalysisSettings implements getOrganizationChatAnalysisSettings.`)
 	fmt.Fprintln(os.Stderr, `    set-organization-chat-analysis-settings: SetOrganizationChatAnalysisSettings implements setOrganizationChatAnalysisSettings.`)
@@ -21892,6 +21936,26 @@ func adminGetOrganizationFeaturesUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-organization-features --organization-id \"abc123\" --admin-session-token \"abc123\"")
+}
+
+func adminGetOrganizationGuidedReadinessUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin get-organization-guided-readiness", os.Args[0])
+	fmt.Fprint(os.Stderr, " -organization-id STRING")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get an organization's readiness for guided identity provider setup.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -organization-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-organization-guided-readiness --organization-id \"abc123\" --admin-session-token \"abc123\"")
 }
 
 func adminSetOrganizationFeatureUsage() {

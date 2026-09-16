@@ -27,6 +27,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	adminserver "github.com/speakeasy-api/gram/server/gen/http/admin/server"
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -41,6 +42,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/identityproviderreadiness"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -83,6 +85,7 @@ type Service struct {
 	openRouterSpendCap   OpenRouterSpendCapScheduler
 	openRouterUsage      OpenRouterUsageReader
 	productFeatures      *productfeatures.Client
+	readiness            identityproviderreadiness.Checker
 	chatAnalysisSignaler analysis.Signaler
 
 	audit *audit.Logger
@@ -189,6 +192,7 @@ func NewService(
 	openRouter AdminOpenRouter,
 	trialNotifier trialemails.Notifier,
 	productFeatures *productfeatures.Client,
+	readiness identityproviderreadiness.Checker,
 	chatAnalysisSignaler analysis.Signaler,
 	openRouterSpendCap OpenRouterSpendCapScheduler,
 	billing BillingOperations,
@@ -230,6 +234,7 @@ func NewService(
 		openRouterSpendCap:    openRouterSpendCap,
 		openRouterUsage:       openRouter,
 		productFeatures:       productFeatures,
+		readiness:             readiness,
 		chatAnalysisSignaler:  chatAnalysisSignaler,
 		audit:                 audit.NewLogger(),
 		loginStates: cache.NewTypedObjectCache[LoginState](
@@ -269,6 +274,18 @@ func (s *Service) GetOrganizationFeatures(ctx context.Context, payload *gen.GetO
 		return nil, err
 	}
 	return productFeaturesResult(s.productFeatures.Snapshot(ctx, organizationID)), nil
+}
+
+func (s *Service) GetOrganizationGuidedReadiness(ctx context.Context, payload *gen.GetOrganizationGuidedReadinessPayload) (*types.IdentityProviderReadiness, error) {
+	organizationID, err := s.canonicalAdminOrganizationForRequest(ctx, payload.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	organization, err := orgRepo.New(s.db).GetOrganizationMetadata(ctx, organizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load organization readiness").LogError(ctx, s.logger)
+	}
+	return s.readiness.Evaluate(ctx, organization.ID, conv.FromPGTextOrEmpty[string](organization.WorkosID)), nil
 }
 
 func (s *Service) SetOrganizationFeature(ctx context.Context, payload *gen.SetOrganizationFeaturePayload) (*gen.ProductFeatures, error) {
@@ -376,6 +393,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server := adminserver.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, goahttp.NewErrorResponse)
 	server.GetSession = service.preauthorizeAdmin(server.GetSession)
 	server.GetOrganizationFeatures = service.preauthorizeAdmin(server.GetOrganizationFeatures)
+	server.GetOrganizationGuidedReadiness = service.preauthorizeAdmin(server.GetOrganizationGuidedReadiness)
 	server.GetOrganizationChatAnalysisSettings = service.preauthorizeAdmin(server.GetOrganizationChatAnalysisSettings)
 	server.GetStripeCustomer = service.preauthorizeAdmin(server.GetStripeCustomer)
 	server.OpenOrganizationInDashboard = service.preauthorizeAdmin(server.OpenOrganizationInDashboard)

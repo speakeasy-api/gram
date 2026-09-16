@@ -32,6 +32,11 @@ func GetOrganizationFeaturesAdminPath() string {
 	return "/admin/organization.features"
 }
 
+// GetOrganizationGuidedReadinessAdminPath returns the URL path to the admin service getOrganizationGuidedReadiness HTTP endpoint.
+func GetOrganizationGuidedReadinessAdminPath() string {
+	return "/admin/organization.guidedReadiness"
+}
+
 // SetOrganizationFeatureAdminPath returns the URL path to the admin service setOrganizationFeature HTTP endpoint.
 func SetOrganizationFeatureAdminPath() string {
 	return "/admin/organization.features"

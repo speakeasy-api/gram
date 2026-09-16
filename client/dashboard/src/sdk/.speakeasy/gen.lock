@@ -273,6 +273,7 @@ trackedFiles:
   src/funcs/identityProvidersDelete.ts: {}
   src/funcs/identityProvidersDescribeSetup.ts: {}
   src/funcs/identityProvidersGet.ts: {}
+  src/funcs/identityProvidersGetGuidedReadiness.ts: {}
   src/funcs/identityProvidersListApplications.ts: {}
   src/funcs/identityProvidersSubmitSetupStep.ts: {}
   src/funcs/identityProvidersVerifySetupStep.ts: {}
@@ -1063,6 +1064,8 @@ trackedFiles:
   src/models/components/identityproviderexpectedvalue.ts: {}
   src/models/components/identityproviderfieldoutcome.ts: {}
   src/models/components/identityproviderprintedvalue.ts: {}
+  src/models/components/identityproviderreadiness.ts: {}
+  src/models/components/identityproviderreadinesscheck.ts: {}
   src/models/components/identityproviderrepair.ts: {}
   src/models/components/identityprovidersetup.ts: {}
   src/models/components/identityprovidersetupstep.ts: {}
@@ -1969,6 +1972,7 @@ trackedFiles:
   src/models/operations/getglobalremotesessionissuermigratepreflight.ts: {}
   src/models/operations/gethookssummary.ts: {}
   src/models/operations/getidentityprovider.ts: {}
+  src/models/operations/getidentityproviderguidedreadiness.ts: {}
   src/models/operations/getinferencespendcaps.ts: {}
   src/models/operations/getinstance.ts: {}
   src/models/operations/getjsonwebkeyset.ts: {}
@@ -2802,6 +2806,8 @@ trackedFiles:
   src/react-query/globalVariations.ts: {}
   src/react-query/grants.core.ts: {}
   src/react-query/grants.ts: {}
+  src/react-query/guidedReadiness.core.ts: {}
+  src/react-query/guidedReadiness.ts: {}
   src/react-query/hooksHooksNumberClaude.ts: {}
   src/react-query/hooksHooksNumberCodex.ts: {}
   src/react-query/hooksHooksNumberCursor.ts: {}
@@ -6128,6 +6134,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  getIdentityProviderGuidedReadiness:
+    speakeasy-default-get-identity-provider-guided-readiness:
+      responses:
+        "200":
+          application/json: {"checked_at": "2025-09-05T03:49:33.860Z", "checks": [], "eligible": true, "provider": "okta"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   getInferenceSpendCaps:
     speakeasy-default-get-inference-spend-caps:
       responses:

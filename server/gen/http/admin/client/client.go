@@ -36,6 +36,10 @@ type Client struct {
 	// getOrganizationFeatures endpoint.
 	GetOrganizationFeaturesDoer goahttp.Doer
 
+	// GetOrganizationGuidedReadiness Doer is the HTTP client used to make requests
+	// to the getOrganizationGuidedReadiness endpoint.
+	GetOrganizationGuidedReadinessDoer goahttp.Doer
+
 	// SetOrganizationFeature Doer is the HTTP client used to make requests to the
 	// setOrganizationFeature endpoint.
 	SetOrganizationFeatureDoer goahttp.Doer
@@ -245,6 +249,7 @@ func NewClient(
 		LogoutDoer:                                doer,
 		GetSessionDoer:                            doer,
 		GetOrganizationFeaturesDoer:               doer,
+		GetOrganizationGuidedReadinessDoer:        doer,
 		SetOrganizationFeatureDoer:                doer,
 		GetOrganizationChatAnalysisSettingsDoer:   doer,
 		SetOrganizationChatAnalysisSettingsDoer:   doer,
@@ -414,6 +419,30 @@ func (c *Client) GetOrganizationFeatures() goa.Endpoint {
 		resp, err := c.GetOrganizationFeaturesDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "getOrganizationFeatures", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetOrganizationGuidedReadiness returns an endpoint that makes HTTP requests
+// to the admin service getOrganizationGuidedReadiness server.
+func (c *Client) GetOrganizationGuidedReadiness() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetOrganizationGuidedReadinessRequest(c.encoder)
+		decodeResponse = DecodeGetOrganizationGuidedReadinessResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetOrganizationGuidedReadinessRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetOrganizationGuidedReadinessDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getOrganizationGuidedReadiness", err)
 		}
 		return decodeResponse(resp)
 	}

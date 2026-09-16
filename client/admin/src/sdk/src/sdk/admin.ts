@@ -21,6 +21,7 @@ import { adminGetOrganization } from "../funcs/adminGetOrganization.js";
 import { adminGetOrganizationChatAnalysisSettings } from "../funcs/adminGetOrganizationChatAnalysisSettings.js";
 import { adminGetOrganizationDirectoryHandoff } from "../funcs/adminGetOrganizationDirectoryHandoff.js";
 import { adminGetOrganizationFeatures } from "../funcs/adminGetOrganizationFeatures.js";
+import { adminGetOrganizationGuidedReadiness } from "../funcs/adminGetOrganizationGuidedReadiness.js";
 import { adminGetOrganizationStats } from "../funcs/adminGetOrganizationStats.js";
 import { adminGetPaygBillingSummary } from "../funcs/adminGetPaygBillingSummary.js";
 import { adminGetProject } from "../funcs/adminGetProject.js";
@@ -78,6 +79,7 @@ import { EnableOrganizationRequestBody } from "../models/components/enableorgani
 import { ExtendTrialRequestBody } from "../models/components/extendtrialrequestbody.js";
 import { FetchIssuerMetadataRequestBody } from "../models/components/fetchissuermetadatarequestbody.js";
 import { GlobalRemoteSessionIssuer } from "../models/components/globalremotesessionissuer.js";
+import { IdentityProviderReadiness } from "../models/components/identityproviderreadiness.js";
 import { IssuerMigratePreflight } from "../models/components/issuermigratepreflight.js";
 import { MarkEnterpriseTrialConvertedRequestBody } from "../models/components/markenterprisetrialconvertedrequestbody.js";
 import { MarkEnterpriseTrialConvertedResult } from "../models/components/markenterprisetrialconvertedresult.js";
@@ -111,6 +113,7 @@ import { AdminGetOrganizationRequest } from "../models/operations/admingetorgani
 import { AdminGetOrganizationChatAnalysisSettingsRequest } from "../models/operations/admingetorganizationchatanalysissettings.js";
 import { AdminGetOrganizationDirectoryHandoffRequest } from "../models/operations/admingetorganizationdirectoryhandoff.js";
 import { AdminGetOrganizationFeaturesRequest } from "../models/operations/admingetorganizationfeatures.js";
+import { AdminGetOrganizationGuidedReadinessRequest } from "../models/operations/admingetorganizationguidedreadiness.js";
 import { AdminGetPaygBillingSummaryRequest } from "../models/operations/admingetpaygbillingsummary.js";
 import { AdminGetProjectRequest } from "../models/operations/admingetproject.js";
 import { AdminGetStripeCustomerRequest } from "../models/operations/admingetstripecustomer.js";
@@ -389,6 +392,23 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AdminOrganization> {
     return unwrapAsync(adminGetOrganization(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * getOrganizationGuidedReadiness admin
+   *
+   * @remarks
+   * Get an organization's readiness for guided identity provider setup.
+   */
+  async getOrganizationGuidedReadiness(
+    request: AdminGetOrganizationGuidedReadinessRequest,
+    options?: RequestOptions,
+  ): Promise<IdentityProviderReadiness> {
+    return unwrapAsync(adminGetOrganizationGuidedReadiness(
       this,
       request,
       options,

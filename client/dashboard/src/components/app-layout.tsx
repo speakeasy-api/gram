@@ -86,7 +86,7 @@ export const ImpersonationBanner = (): JSX.Element => {
     label = "Demo org — sample data";
     actionLabel = "Exit demo";
   } else if (isWorkOSImpersonation) {
-    label = `WorkOS impersonation active — signed in as ${session.user.email} in ${organizationLabel}`;
+    label = `Impersonation active — signed in as ${session.user.email} in ${organizationLabel}`;
   } else if (session.organizationOverride) {
     label = `Support access active for ${organizationLabel}`;
     actionLabel = "Exit support access";

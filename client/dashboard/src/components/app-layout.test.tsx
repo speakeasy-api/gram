@@ -123,7 +123,7 @@ describe("trusted support banner", () => {
     });
   });
 
-  it("preserves WorkOS impersonation messaging", () => {
+  it("says a session is impersonated without naming the vendor", () => {
     mocks.useSession.mockReturnValue({
       ...baseSession,
       impersonatorEmail: "initiator@example.test",
@@ -133,7 +133,7 @@ describe("trusted support banner", () => {
 
     expect(
       screen.getByText(
-        "WorkOS impersonation active — signed in as support@example.test in Target organization",
+        "Impersonation active — signed in as support@example.test in Target organization",
       ),
     ).toBeTruthy();
     expect(

@@ -279,6 +279,77 @@ func TestIsConnectionsWriteUnavailableMatchesOnlyCapabilityError(t *testing.T) {
 	require.False(t, workos.IsConnectionsWriteUnavailable(errors.New("network failure")))
 }
 
+func TestClientConnectionsAPIAvailableCachesEnabledCapability(t *testing.T) {
+	t.Parallel()
+
+	var calls atomic.Int64
+	requests := make(chan *http.Request, 1)
+	bodies := make(chan []byte, 1)
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "invalid body", http.StatusBadRequest)
+			return
+		}
+		requests <- r.Clone(t.Context())
+		bodies <- body
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"code":"connection_type_or_options_required"}`))
+	})
+	client := newClientWithHandler(t, handler)
+
+	available, err := client.ConnectionsAPIAvailable(t.Context())
+	require.NoError(t, err)
+	require.True(t, available)
+	request := <-requests
+	require.Equal(t, http.MethodPost, request.Method)
+	require.Equal(t, "/connections", request.URL.Path)
+	require.JSONEq(t, `{}`, string(<-bodies))
+	available, err = client.ConnectionsAPIAvailable(t.Context())
+	require.NoError(t, err)
+	require.True(t, available)
+	require.Equal(t, int64(1), calls.Load())
+}
+
+func TestClientConnectionsAPIAvailableCachesDisabledCapability(t *testing.T) {
+	t.Parallel()
+
+	var calls atomic.Int64
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"message":"This endpoint is part of the Connections API migration capabilities, which are not enabled for your environment. Contact support@workos.com to enable them."}`))
+	})
+	client := newClientWithHandler(t, handler)
+
+	available, err := client.ConnectionsAPIAvailable(t.Context())
+	require.NoError(t, err)
+	require.False(t, available)
+	available, err = client.ConnectionsAPIAvailable(t.Context())
+	require.NoError(t, err)
+	require.False(t, available)
+	require.Equal(t, int64(1), calls.Load())
+}
+
+func TestClientConnectionsAPIAvailableDoesNotCacheFailures(t *testing.T) {
+	t.Parallel()
+
+	var calls atomic.Int64
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"message":"try again"}`))
+	})
+	client := newClientWithHandler(t, handler)
+
+	_, err := client.ConnectionsAPIAvailable(t.Context())
+	require.Error(t, err)
+	_, err = client.ConnectionsAPIAvailable(t.Context())
+	require.Error(t, err)
+	require.Equal(t, int64(2), calls.Load())
+}
+
 // newClientWithHandler builds a workos.Client pointed at an httptest server
 // driven by the supplied handler. Used by tests that need to assert request
 // paths or stub WorkOS responses without the broader fakeWorkOS state machine.

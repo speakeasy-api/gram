@@ -54,6 +54,24 @@ var _ = Service("identityProviders", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"IdentityProvider"}`)
 	})
 
+	Method("getGuidedReadiness", func() {
+		Description("Get the organization's readiness for guided identity provider setup.")
+		Payload(func() {
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+		Result(shared.IdentityProviderReadiness)
+		HTTP(func() {
+			GET("/rpc/identityProviders.getGuidedReadiness")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "getIdentityProviderGuidedReadiness")
+		Meta("openapi:extension:x-speakeasy-name-override", "getGuidedReadiness")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"GuidedReadiness"}`)
+	})
+
 	Method("listApplications", func() {
 		Description("List applications from the organization's identity provider, using a five-minute in-memory cache unless force is true.")
 		Payload(func() {

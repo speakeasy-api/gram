@@ -385,6 +385,10 @@ func (s *StubClient) GetConnection(_ context.Context, connectionID string) (Conn
 	return connection, nil
 }
 
+func (s *StubClient) ConnectionsAPIAvailable(context.Context) (bool, error) {
+	return true, nil
+}
+
 func (s *StubClient) UpdateOIDCConnectionDiscoveryEndpoint(_ context.Context, connectionID, discoveryEndpoint string) (Connection, error) {
 	if err := validateOIDCConnectionDiscoveryEndpointUpdate(connectionID, discoveryEndpoint); err != nil {
 		return emptyConnection(), err

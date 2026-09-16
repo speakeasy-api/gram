@@ -7,6 +7,7 @@ import { useOrganization, useSessionData } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { openSafeExternalUrl } from "@/lib/safe-external-url";
 import { useOrgRoutes } from "@/routes";
+import { GuidedReadinessPanel } from "@/components/guided-readiness/guided-readiness-panel";
 import { IdentityProviderConnectionSection } from "./identity-provider-connection-section";
 import { useGenerateWorkOSAdminPortalLinkMutation } from "@gram/client/react-query/generateWorkOSAdminPortalLink.js";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
@@ -116,9 +117,9 @@ function SSOConfigureButton() {
       {
         onSuccess: (data) => {
           if (openSafeExternalUrl(data.url)) {
-            toast.info("Continue setup in the WorkOS portal");
+            toast.info("Continue setup in the sign-in provider portal");
           } else {
-            toast.error("Unable to open the WorkOS portal");
+            toast.error("Unable to open the sign-in provider portal");
           }
         },
       },
@@ -168,9 +169,9 @@ function DirectorySyncConfigureButton() {
       {
         onSuccess: (data) => {
           if (openSafeExternalUrl(data.url)) {
-            toast.info("Continue setup in the WorkOS portal");
+            toast.info("Continue setup in the sign-in provider portal");
           } else {
-            toast.error("Unable to open the WorkOS portal");
+            toast.error("Unable to open the sign-in provider portal");
           }
         },
       },
@@ -304,6 +305,9 @@ function OrgIdentityInner() {
   return (
     <SettingsPage scope={["org:read", "org:admin"]} title="Identity">
       <div className="flex flex-col gap-6">
+        {/* Staff only: why the guided Okta flow is or is not offered here. */}
+        <GuidedReadinessPanel />
+
         {/* Only rendered once a guided connection exists; the two sections
             below stay the way in for every other provider. */}
         <IdentityProviderConnectionSection />

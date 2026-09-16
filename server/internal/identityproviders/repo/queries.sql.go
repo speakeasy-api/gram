@@ -409,6 +409,23 @@ func (q *Queries) GetIdentityProviderSigningKey(ctx context.Context, arg GetIden
 	return i, err
 }
 
+const hasDirectoryHandoff = `-- name: HasDirectoryHandoff :one
+SELECT EXISTS (
+  SELECT 1
+  FROM organization_onboarding
+  WHERE organization_id = $1
+    AND NULLIF(BTRIM(directory_scim_base_url), '') IS NOT NULL
+    AND NULLIF(BTRIM(directory_scim_token_fingerprint), '') IS NOT NULL
+)
+`
+
+func (q *Queries) HasDirectoryHandoff(ctx context.Context, organizationID string) (bool, error) {
+	row := q.db.QueryRow(ctx, hasDirectoryHandoff, organizationID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const lockOktaIdentityProviderDirectory = `-- name: LockOktaIdentityProviderDirectory :one
 SELECT c.id
 FROM identity_provider_connections AS c

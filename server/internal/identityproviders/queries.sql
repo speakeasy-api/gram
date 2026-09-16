@@ -321,3 +321,12 @@ LEFT JOIN identity_provider_signing_keys AS k
 WHERE c.id = @identity_provider_connection_id
   AND c.deleted IS FALSE
 GROUP BY c.id;
+
+-- name: HasDirectoryHandoff :one
+SELECT EXISTS (
+  SELECT 1
+  FROM organization_onboarding
+  WHERE organization_id = @organization_id
+    AND NULLIF(BTRIM(directory_scim_base_url), '') IS NOT NULL
+    AND NULLIF(BTRIM(directory_scim_token_fingerprint), '') IS NOT NULL
+);

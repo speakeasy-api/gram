@@ -1221,6 +1221,240 @@ func DecodeGetOrganizationFeaturesResponse(decoder func(*http.Response) goahttp.
 	}
 }
 
+// BuildGetOrganizationGuidedReadinessRequest instantiates a HTTP request
+// object with method and path set to call the "admin" service
+// "getOrganizationGuidedReadiness" endpoint
+func (c *Client) BuildGetOrganizationGuidedReadinessRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetOrganizationGuidedReadinessAdminPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "getOrganizationGuidedReadiness", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetOrganizationGuidedReadinessRequest returns an encoder for requests
+// sent to the admin getOrganizationGuidedReadiness server.
+func EncodeGetOrganizationGuidedReadinessRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.GetOrganizationGuidedReadinessPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "getOrganizationGuidedReadiness", "*admin.GetOrganizationGuidedReadinessPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		values := req.URL.Query()
+		values.Add("organization_id", p.OrganizationID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetOrganizationGuidedReadinessResponse returns a decoder for responses
+// returned by the admin getOrganizationGuidedReadiness endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeGetOrganizationGuidedReadinessResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetOrganizationGuidedReadinessResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetOrganizationGuidedReadinessResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationGuidedReadiness", err)
+			}
+			err = ValidateGetOrganizationGuidedReadinessResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationGuidedReadiness", err)
+			}
+			res := NewGetOrganizationGuidedReadinessIdentityProviderReadinessOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetOrganizationGuidedReadinessUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationGuidedReadiness", err)
+			}
+			err = ValidateGetOrganizationGuidedReadinessUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationGuidedReadiness", err)
+			}
+			return nil, NewGetOrganizationGuidedReadinessUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetOrganizationGuidedReadinessForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationGuidedReadiness", err)
+			}
+			err = ValidateGetOrganizationGuidedReadinessForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationGuidedReadiness", err)
+			}
+			return nil, NewGetOrganizationGuidedReadinessForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetOrganizationGuidedReadinessBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationGuidedReadiness", err)
+			}
+			err = ValidateGetOrganizationGuidedReadinessBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationGuidedReadiness", err)
+			}
+			return nil, NewGetOrganizationGuidedReadinessBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetOrganizationGuidedReadinessNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationGuidedReadiness", err)
+			}
+			err = ValidateGetOrganizationGuidedReadinessNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationGuidedReadiness", err)
+			}
+			return nil, NewGetOrganizationGuidedReadinessNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetOrganizationGuidedReadinessConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationGuidedReadiness", err)
+			}
+			err = ValidateGetOrganizationGuidedReadinessConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationGuidedReadiness", err)
+			}
+			return nil, NewGetOrganizationGuidedReadinessConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetOrganizationGuidedReadinessUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationGuidedReadiness", err)
+			}
+			err = ValidateGetOrganizationGuidedReadinessUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationGuidedReadiness", err)
+			}
+			return nil, NewGetOrganizationGuidedReadinessUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetOrganizationGuidedReadinessInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationGuidedReadiness", err)
+			}
+			err = ValidateGetOrganizationGuidedReadinessInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationGuidedReadiness", err)
+			}
+			return nil, NewGetOrganizationGuidedReadinessInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetOrganizationGuidedReadinessInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getOrganizationGuidedReadiness", err)
+				}
+				err = ValidateGetOrganizationGuidedReadinessInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getOrganizationGuidedReadiness", err)
+				}
+				return nil, NewGetOrganizationGuidedReadinessInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetOrganizationGuidedReadinessUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getOrganizationGuidedReadiness", err)
+				}
+				err = ValidateGetOrganizationGuidedReadinessUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getOrganizationGuidedReadiness", err)
+				}
+				return nil, NewGetOrganizationGuidedReadinessUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "getOrganizationGuidedReadiness", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetOrganizationGuidedReadinessGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationGuidedReadiness", err)
+			}
+			err = ValidateGetOrganizationGuidedReadinessGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationGuidedReadiness", err)
+			}
+			return nil, NewGetOrganizationGuidedReadinessGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "getOrganizationGuidedReadiness", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildSetOrganizationFeatureRequest instantiates a HTTP request object with
 // method and path set to call the "admin" service "setOrganizationFeature"
 // endpoint
@@ -12381,6 +12615,22 @@ func DecodeClearOrganizationDirectoryHandoffResponse(decoder func(*http.Response
 			return nil, goahttp.ErrInvalidResponse("admin", "clearOrganizationDirectoryHandoff", resp.StatusCode, string(body))
 		}
 	}
+}
+
+// unmarshalIdentityProviderReadinessCheckResponseBodyToTypesIdentityProviderReadinessCheck
+// builds a value of type *types.IdentityProviderReadinessCheck from a value of
+// type *IdentityProviderReadinessCheckResponseBody.
+func unmarshalIdentityProviderReadinessCheckResponseBodyToTypesIdentityProviderReadinessCheck(v *IdentityProviderReadinessCheckResponseBody) *types.IdentityProviderReadinessCheck {
+	res := &types.IdentityProviderReadinessCheck{
+		Key:       *v.Key,
+		OK:        *v.OK,
+		Detail:    *v.Detail,
+		Remedy:    *v.Remedy,
+		Owner:     *v.Owner,
+		CheckedAt: *v.CheckedAt,
+	}
+
+	return res
 }
 
 // unmarshalAdminOrganizationMemberResponseBodyToAdminAdminOrganizationMember

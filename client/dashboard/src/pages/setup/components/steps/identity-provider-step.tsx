@@ -12,6 +12,8 @@ import type { IdentityProviderConnection } from "@gram/client/models/components/
 import { useIdentityProvider } from "@gram/client/react-query/identityProvider.js";
 import { useOnboardingStatus } from "@gram/client/react-query/onboardingStatus";
 import { toast } from "sonner";
+import { GuidedReadinessPanel } from "@/components/guided-readiness/guided-readiness-panel";
+import { useGuidedReadiness } from "@/components/guided-readiness/use-guided-readiness";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -90,10 +92,18 @@ export function IdentityProviderStep({
     throwOnError: false,
   });
   const connection = identityProvider.data?.connection;
+  const readiness = useGuidedReadiness(true);
+  // A live connection is proof the pre-work was done, so it keeps the advanced
+  // flow whatever the checks say about the organization now.
+  const advancedOffered = !!connection || readiness.data?.eligible === true;
+  // Until the check answers, the card behaves as though the advanced flow is
+  // not offered. Offering it and then taking it back is worse than waiting.
+  const readinessSettled = !readiness.isPending;
   // An explicit pick wins. With no pick, a connection that already exists is
   // what the card is about: coming back to this page must not read as though
   // nothing had been set up.
-  const guided = provider ? provider.guided === true : !!connection;
+  const picked = provider ? provider.guided === true : !!connection;
+  const guided = picked && advancedOffered;
 
   return (
     <StepContainer
@@ -111,11 +121,16 @@ export function IdentityProviderStep({
           takes over step 1 and waits on the rest, and one it does not hands
           steps 2 and 3 to the portal. */}
       <div className="space-y-8">
+        {/* Staff only, and outside the numbered sections on purpose: it says
+            why the card looks the way it does, whichever step is showing. */}
+        <GuidedReadinessPanel />
         <SelectIdpSection
           index={1}
           selectedProvider={selectedProvider}
           onSelectProvider={setSelectedProvider}
           guided={guided}
+          advancedOffered={advancedOffered}
+          readinessSettled={readinessSettled}
           connection={connection}
           isLoadingConnection={identityProvider.isPending}
         />
@@ -241,6 +256,8 @@ function SelectIdpSection({
   selectedProvider,
   onSelectProvider,
   guided,
+  advancedOffered,
+  readinessSettled,
   connection,
   isLoadingConnection,
 }: {
@@ -248,6 +265,10 @@ function SelectIdpSection({
   selectedProvider: string | null;
   onSelectProvider: (id: string | null) => void;
   guided: boolean;
+  /** Whether this organization can be taken down the advanced Okta flow. */
+  advancedOffered: boolean;
+  /** Whether the check behind that answer has come back yet. */
+  readinessSettled: boolean;
   connection: IdentityProviderConnection | undefined;
   isLoadingConnection: boolean;
 }): JSX.Element {
@@ -329,7 +350,10 @@ function SelectIdpSection({
                     <span className="text-foreground truncate text-sm font-medium">
                       {p.name}
                     </span>
-                    {p.badge ? (
+                    {/* The guided entry keeps its place in the grid whatever
+                        the checks say, but it only carries the badge where the
+                        flow behind it is actually offered. */}
+                    {p.badge && (!p.guided || advancedOffered) ? (
                       <Badge variant="success" background size="sm">
                         <Badge.Text>{p.badge}</Badge.Text>
                       </Badge>
@@ -349,6 +373,16 @@ function SelectIdpSection({
               </button>
             ))}
           </div>
+          {/* Said once, to the administrator who picked Okta and will be
+              taken through the portal like everybody else. Why it is not
+              offered is Speakeasy's business, not theirs. */}
+          {shown === GUIDED_PROVIDER_ID &&
+          readinessSettled &&
+          !advancedOffered ? (
+            <p className="text-muted-foreground mt-3 text-sm">
+              Guided setup for Okta is not available for this organization yet.
+            </p>
+          ) : null}
           {!isSearching &&
             !showAll &&
             !locked &&
@@ -435,7 +469,7 @@ function SingleSignOnSection({
       const result = await refetchOnboardingStatus();
       if (!result.data?.ssoConfigured) {
         toast.error(
-          "SSO connection not detected yet. Finish setup in the WorkOS tab, then try again.",
+          "SSO connection not detected yet. Finish setup in the sign-in provider tab, then try again.",
         );
       }
     } finally {
@@ -461,8 +495,8 @@ function SingleSignOnSection({
         {provider && !isPending && (
           <PortalNote>
             {portalOpened
-              ? `Finish configuring your ${provider.name} SSO connection in the WorkOS tab, then verify it here.`
-              : `After clicking Connect, the WorkOS portal opens in a new browser tab to configure your ${provider.name} SSO connection. Finish setup there, then come back and verify.`}
+              ? `Finish configuring your ${provider.name} SSO connection in the sign-in provider tab, then verify it here.`
+              : `After clicking Connect, the sign-in provider portal opens in a new browser tab to configure your ${provider.name} SSO connection. Finish setup there, then come back and verify.`}
           </PortalNote>
         )}
 
@@ -560,7 +594,7 @@ function DirectorySyncSection({
       const result = await refetchOnboardingStatus();
       if (!result.data?.dsyncConfigured) {
         toast.error(
-          "Directory sync not detected yet. Finish setup in the WorkOS tab, then try again.",
+          "Directory sync not detected yet. Finish setup in the sign-in provider tab, then try again.",
         );
       }
     } finally {
@@ -585,8 +619,8 @@ function DirectorySyncSection({
       <div className="space-y-4">
         <PortalNote>
           {portalOpened
-            ? "Finish configuring the directory connection in the WorkOS tab, then verify it here."
-            : "After clicking Connect directory, the WorkOS portal opens in a new browser tab. Finish configuring the connection there, then come back and verify."}
+            ? "Finish configuring the directory connection in the sign-in provider tab, then verify it here."
+            : "After clicking Connect directory, the sign-in provider portal opens in a new browser tab. Finish configuring the connection there, then come back and verify."}
         </PortalNote>
         <div className="flex justify-end">
           {portalOpened ? (

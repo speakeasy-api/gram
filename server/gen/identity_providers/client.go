@@ -10,31 +10,34 @@ package identityproviders
 import (
 	"context"
 
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
 )
 
 // Client is the "identityProviders" service client.
 type Client struct {
-	CreateEndpoint           goa.Endpoint
-	GetEndpoint              goa.Endpoint
-	ListApplicationsEndpoint goa.Endpoint
-	DescribeSetupEndpoint    goa.Endpoint
-	SubmitSetupStepEndpoint  goa.Endpoint
-	VerifySetupStepEndpoint  goa.Endpoint
-	DeleteEndpoint           goa.Endpoint
+	CreateEndpoint             goa.Endpoint
+	GetEndpoint                goa.Endpoint
+	GetGuidedReadinessEndpoint goa.Endpoint
+	ListApplicationsEndpoint   goa.Endpoint
+	DescribeSetupEndpoint      goa.Endpoint
+	SubmitSetupStepEndpoint    goa.Endpoint
+	VerifySetupStepEndpoint    goa.Endpoint
+	DeleteEndpoint             goa.Endpoint
 }
 
 // NewClient initializes a "identityProviders" service client given the
 // endpoints.
-func NewClient(create, get, listApplications, describeSetup, submitSetupStep, verifySetupStep, delete_ goa.Endpoint) *Client {
+func NewClient(create, get, getGuidedReadiness, listApplications, describeSetup, submitSetupStep, verifySetupStep, delete_ goa.Endpoint) *Client {
 	return &Client{
-		CreateEndpoint:           create,
-		GetEndpoint:              get,
-		ListApplicationsEndpoint: listApplications,
-		DescribeSetupEndpoint:    describeSetup,
-		SubmitSetupStepEndpoint:  submitSetupStep,
-		VerifySetupStepEndpoint:  verifySetupStep,
-		DeleteEndpoint:           delete_,
+		CreateEndpoint:             create,
+		GetEndpoint:                get,
+		GetGuidedReadinessEndpoint: getGuidedReadiness,
+		ListApplicationsEndpoint:   listApplications,
+		DescribeSetupEndpoint:      describeSetup,
+		SubmitSetupStepEndpoint:    submitSetupStep,
+		VerifySetupStepEndpoint:    verifySetupStep,
+		DeleteEndpoint:             delete_,
 	}
 }
 
@@ -80,6 +83,29 @@ func (c *Client) Get(ctx context.Context, p *GetPayload) (res *GetIdentityProvid
 		return
 	}
 	return ires.(*GetIdentityProviderResult), nil
+}
+
+// GetGuidedReadiness calls the "getGuidedReadiness" endpoint of the
+// "identityProviders" service.
+// GetGuidedReadiness may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetGuidedReadiness(ctx context.Context, p *GetGuidedReadinessPayload) (res *types.IdentityProviderReadiness, err error) {
+	var ires any
+	ires, err = c.GetGuidedReadinessEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.IdentityProviderReadiness), nil
 }
 
 // ListApplications calls the "listApplications" endpoint of the

@@ -30,6 +30,8 @@ type Service interface {
 	GetSession(context.Context, *GetSessionPayload) (res *AdminSession, err error)
 	// GetOrganizationFeatures implements getOrganizationFeatures.
 	GetOrganizationFeatures(context.Context, *GetOrganizationFeaturesPayload) (res *ProductFeatures, err error)
+	// Get an organization's readiness for guided identity provider setup.
+	GetOrganizationGuidedReadiness(context.Context, *GetOrganizationGuidedReadinessPayload) (res *types.IdentityProviderReadiness, err error)
 	// SetOrganizationFeature implements setOrganizationFeature.
 	SetOrganizationFeature(context.Context, *SetOrganizationFeaturePayload) (res *ProductFeatures, err error)
 	// GetOrganizationChatAnalysisSettings implements
@@ -221,7 +223,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [51]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizationActivity", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "getOrganizationDirectoryHandoff", "setOrganizationDirectoryHandoff", "clearOrganizationDirectoryHandoff"}
+var MethodNames = [52]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "getOrganizationGuidedReadiness", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizationActivity", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "getOrganizationDirectoryHandoff", "setOrganizationDirectoryHandoff", "clearOrganizationDirectoryHandoff"}
 
 // AdminBulkUpdateAccountTypeResult is the result type of the admin service
 // bulkUpdateAccountType method.
@@ -805,6 +807,13 @@ type GetOrganizationDirectoryHandoffPayload struct {
 // GetOrganizationFeaturesPayload is the payload type of the admin service
 // getOrganizationFeatures method.
 type GetOrganizationFeaturesPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+}
+
+// GetOrganizationGuidedReadinessPayload is the payload type of the admin
+// service getOrganizationGuidedReadiness method.
+type GetOrganizationGuidedReadinessPayload struct {
 	AdminSessionToken *string
 	OrganizationID    string
 }
