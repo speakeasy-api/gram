@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // MembershipFetcher retrieves a WorkOS membership for a user+org pair.
@@ -27,6 +28,12 @@ type EngineOpts struct {
 	AdmitPrincipalCredential PrincipalCredentialAdmitter
 	// AdmitPrincipalCredentialWithDBTX must be configured for atomic credential refresh.
 	AdmitPrincipalCredentialWithDBTX PrincipalCredentialDBTXAdmitter
+	// AdmitWorkloadSession must be configured to accept workload sessions.
+	// Omission disables them rather than falling back to user authorization,
+	// which would hand a machine the user:all grant set.
+	AdmitWorkloadSession WorkloadSessionAdmitter
+	// AdmitWorkloadSessionWithDBTX must be configured for atomic workload refresh.
+	AdmitWorkloadSessionWithDBTX WorkloadSessionDBTXAdmitter
 }
 
 // ChallengeLoggingEnabled checks whether authz challenge logging to ClickHouse
@@ -36,6 +43,8 @@ type ChallengeLoggingEnabled func(ctx context.Context, organizationID string) (b
 type Engine struct {
 	admitPrincipalCredential         PrincipalCredentialAdmitter
 	admitPrincipalCredentialWithDBTX PrincipalCredentialDBTXAdmitter
+	admitWorkloadSession             WorkloadSessionAdmitter
+	admitWorkloadSessionWithDBTX     WorkloadSessionDBTXAdmitter
 	logger                           *slog.Logger
 	db                               *pgxpool.Pool
 	challengeLoggingEnabled          ChallengeLoggingEnabled
@@ -53,10 +62,14 @@ func NewEngine(
 	var devMode bool
 	var admitPrincipalCredential PrincipalCredentialAdmitter
 	var admitPrincipalCredentialWithDBTX PrincipalCredentialDBTXAdmitter
+	var admitWorkloadSession WorkloadSessionAdmitter
+	var admitWorkloadSessionWithDBTX WorkloadSessionDBTXAdmitter
 	if len(opts) > 0 {
 		devMode = opts[0].DevMode
 		admitPrincipalCredential = opts[0].AdmitPrincipalCredential
 		admitPrincipalCredentialWithDBTX = opts[0].AdmitPrincipalCredentialWithDBTX
+		admitWorkloadSession = opts[0].AdmitWorkloadSession
+		admitWorkloadSessionWithDBTX = opts[0].AdmitWorkloadSessionWithDBTX
 	}
 
 	authzLogger := logger.With(attr.SlogComponent("authz"))
@@ -64,6 +77,8 @@ func NewEngine(
 	return &Engine{
 		admitPrincipalCredential:         admitPrincipalCredential,
 		admitPrincipalCredentialWithDBTX: admitPrincipalCredentialWithDBTX,
+		admitWorkloadSession:             admitWorkloadSession,
+		admitWorkloadSessionWithDBTX:     admitWorkloadSessionWithDBTX,
 		logger:                           authzLogger,
 		db:                               db,
 		challengeLoggingEnabled:          challengeLogging,
@@ -110,6 +125,16 @@ func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
 	if authCtx.APIKeyID != "" {
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
+	// A workload inherits its authority from the agent assigned to it, so it
+	// admits through its own path. Checked before the credential branch below
+	// because a workload session carries the same credential profile, and ahead
+	// of user resolution because ResolveUserPrincipals seeds user:all before it
+	// looks at the caller — which would hand a machine every grant written for
+	// every member.
+	if actor, hasActor := contextvalues.AuthenticatedActor(ctx); hasActor && actor.Type == urn.PrincipalTypeWorkload {
+		return e.AdmitWorkloadSession(ctx)
+	}
+
 	// Future principal-backed transports, including agent MCP sessions, attach
 	// the same immutable credential profile and reuse this admission path.
 	if _, hasCredential := contextvalues.PrincipalCredentialAuthorization(ctx); hasCredential {

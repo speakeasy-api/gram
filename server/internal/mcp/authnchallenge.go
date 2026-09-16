@@ -312,6 +312,8 @@ func issuerGateFailureReason(err error) string {
 		return "tool_selection_load_failed"
 	case errors.Is(err, errAgentSessionCredentialLoad):
 		return "agent_session_load_failed"
+	case errors.Is(err, errWorkloadSessionCredentialLoad):
+		return "workload_session_load_failed"
 	default:
 		return "invalid_bearer_token"
 	}
@@ -425,6 +427,26 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token string, en
 			return ctx, nil, nil, err
 		}
 	}
+	if subject.Kind == urn.SessionSubjectKindWorkload {
+		row, qerr := usersessions_repo.New(s.db).GetUserSessionPrincipalCredentialByJTI(ctx, usersessions_repo.GetUserSessionPrincipalCredentialByJTIParams{
+			UserSessionIssuerID: endpoint.UserSessionIssuerID,
+			Jti:                 session.JTI(),
+		})
+		if qerr != nil {
+			if errors.Is(qerr, pgx.ErrNoRows) {
+				return ctx, nil, nil, oops.C(oops.CodeUnauthorized)
+			}
+			return ctx, nil, nil, fmt.Errorf("%w: %w", errWorkloadSessionCredentialLoad, qerr)
+		}
+		credential, cerr := loadWorkloadSessionCredential(endpoint, subject, row.SubjectUrn, row.OrganizationID, row.DelegatedGrants, row.DelegatedGrantsVersion)
+		if cerr != nil {
+			return ctx, nil, nil, cerr
+		}
+		newCtx, err = s.admitWorkloadSession(newCtx, endpoint, subject, credential)
+		if err != nil {
+			return ctx, nil, nil, err
+		}
+	}
 	newCtx = s.identityValidator.StampValidatedSession(newCtx, session)
 	return newCtx, &subject, toolSelection, nil
 }
@@ -526,9 +548,16 @@ func (s *Service) contextForSessionSubject(
 		// for exhaustiveness so the linter doesn't flag the switch.
 		return ctx, nil
 	case urn.SessionSubjectKindWorkload:
-		// This path resolves no actor for a workload, and the anonymous
-		// treatment would skip authorization for an issuer-vouched machine.
-		return nil, fmt.Errorf("%w: %q", errUnsupportedSessionSubject, subject.Kind)
+		workloadIssuerID, externalSubject, workloadErr := subject.Workload()
+		if workloadErr != nil {
+			return nil, fmt.Errorf("%w: %w", errUnsupportedSessionSubject, workloadErr)
+		}
+		// The actor carries the whole identity, as for an agent. What the
+		// machine may do comes from the agent assigned to it, resolved during
+		// admission rather than here.
+		return contextvalues.WithAuthenticatedActor(
+			ctx, authCtx, urn.NewWorkloadPrincipal(workloadIssuerID, externalSubject),
+		), nil
 	}
 	return ctx, oops.C(oops.CodeUnauthorized)
 }
