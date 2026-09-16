@@ -81,13 +81,13 @@ func newAnalysis(body string) *riskv1.LLMAnalysis {
 	}.Build()
 }
 
-func newHandler(t *testing.T, stub *llmanalyzer.StubCompleter, findingsPub gcp.Publisher[*riskv1.Finding], meterPub gcp.Publisher[*meteringv1.MeterReading]) *llmanalyzer.Handler {
+func newHandler(t *testing.T, stub *llmanalyzer.StubCompleter, findingsPub gcp.Publisher[*riskv1.Finding], meterPub gcp.Publisher[*meteringv1.MeterReading], opts ...llmanalyzer.AnalyzerOption) *llmanalyzer.Handler {
 	t.Helper()
 	var completer llmanalyzer.Completer
 	if stub != nil {
 		completer = stub
 	}
-	analyzer := llmanalyzer.NewAnalyzer(testenv.NewLogger(t), testenv.NewTracerProvider(t), completer)
+	analyzer := llmanalyzer.NewAnalyzer(testenv.NewLogger(t), testenv.NewTracerProvider(t), completer, opts...)
 	return llmanalyzer.NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), analyzer, findingsPub, metering.NewRiskRecorder(meterPub))
 }
 
@@ -194,6 +194,46 @@ func TestHandle_CleanVerdictPublishesNothingButMeters(t *testing.T) {
 	require.Empty(t, *findings)
 	require.Len(t, *readings, 1)
 	require.Equal(t, string(metering.MeterRiskLLMAnalyzer), (*readings)[0].GetMeterId())
+}
+
+func TestHandle_IdenticalContentAcrossPoliciesCallsModelOnce(t *testing.T) {
+	t.Parallel()
+
+	pub, findings := capturingFindingsPub(t)
+	meterPub, readings := capturingMeterPub(t)
+	stub := &llmanalyzer.StubCompleter{
+		Response:         llmanalyzer.VerdictJSON(map[string]int{llmanalyzer.KeySecretsLeak: 1}, "Plaintext credential."),
+		Err:              nil,
+		PromptTokens:     120,
+		CompletionTokens: 40,
+		Model:            "risk-judge-4b",
+		Calls:            nil,
+		ParseFailures:    0,
+	}
+	h := newHandler(t, stub, pub, meterPub, llmanalyzer.WithVerdictCache(llmanalyzer.NewMemoryVerdictCache()))
+
+	const otherPolicyID = "018ffad2-1c32-7f73-8a54-85306c37a316"
+	first := newAnalysis("AKIA0000000000000000")
+	second := newAnalysis("AKIA0000000000000000")
+	second.SetRequestId("req-2")
+	second.SetRiskPolicyId(otherPolicyID)
+	second.SetOriginRiskPolicyId(otherPolicyID)
+
+	require.NoError(t, h.Handle(t.Context(), first, gcp.MessageMetadata{}))
+	require.NoError(t, h.Handle(t.Context(), second, gcp.MessageMetadata{}))
+
+	require.Len(t, stub.CallsSnapshot(), 1, "the second policy's request is answered from the cache")
+	require.Len(t, *findings, 2)
+	require.Equal(t, testPolicyID, (*findings)[0].GetRiskPolicyId())
+	require.Equal(t, "req-1", (*findings)[0].GetRequestId())
+	require.Equal(t, otherPolicyID, (*findings)[1].GetRiskPolicyId())
+	require.Equal(t, "req-2", (*findings)[1].GetRequestId())
+	for _, f := range *findings {
+		require.Equal(t, llmanalyzer.RuleSecret, f.GetRuleId())
+		require.Equal(t, "Plaintext credential.", f.GetDescription())
+	}
+	require.Len(t, *readings, 2, "scanned content is metered per request, hit or miss")
+	require.Equal(t, (*readings)[0].GetValue(), (*readings)[1].GetValue())
 }
 
 func TestHandle_AnalyzerFailureAcksWithoutFindingsOrUsage(t *testing.T) {

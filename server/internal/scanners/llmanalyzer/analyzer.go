@@ -9,6 +9,8 @@ import (
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/metric/noop"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -45,6 +47,10 @@ type Completer interface {
 	// RecordParseFailure records that a completion could not be parsed as a
 	// verdict.
 	RecordParseFailure(ctx context.Context, info CallInfo)
+
+	// ModelName is the served model name Complete requests. It keys the
+	// verdict cache so a model swap never serves its predecessor's verdicts.
+	ModelName() string
 }
 
 // Analyzer turns one message into analyzer findings: it renders the training
@@ -52,22 +58,58 @@ type Completer interface {
 // a finding. Model failures never surface as Go errors to the lanes; they
 // become a dead-letter result the lanes fail closed on.
 type Analyzer struct {
-	logger    *slog.Logger
-	tracer    trace.Tracer
-	completer Completer
-	stokens   *stokens.Codec
+	logger        *slog.Logger
+	tracer        trace.Tracer
+	meterProvider metric.MeterProvider
+	metrics       *analyzerMetrics
+	completer     Completer
+	cache         VerdictCache
+	stokens       *stokens.Codec
+}
+
+// AnalyzerOption customizes an Analyzer.
+type AnalyzerOption func(*Analyzer)
+
+// WithVerdictCache stores model replies in cache and answers repeated prompts
+// from it without calling the model. Without it every Analyze calls the
+// model.
+func WithVerdictCache(cache VerdictCache) AnalyzerOption {
+	return func(a *Analyzer) {
+		if cache != nil {
+			a.cache = cache
+		}
+	}
+}
+
+// WithMeterProvider records the analyzer's own metrics (the verdict cache
+// lookups) on meterProvider. Without it they go to a noop provider.
+func WithMeterProvider(meterProvider metric.MeterProvider) AnalyzerOption {
+	return func(a *Analyzer) {
+		if meterProvider != nil {
+			a.meterProvider = meterProvider
+		}
+	}
 }
 
 // NewAnalyzer builds an analyzer over completer. A nil completer yields a
 // disabled analyzer whose Analyze always returns a dead-letter result, so the
 // lanes need no nil checks of their own.
-func NewAnalyzer(logger *slog.Logger, tracerProvider trace.TracerProvider, completer Completer) *Analyzer {
-	return &Analyzer{
-		logger:    logger.With(attr.SlogComponent("risk-llm-analyzer")),
-		tracer:    tracerProvider.Tracer(tracerName),
-		completer: completer,
-		stokens:   stokens.NewCodec(),
+func NewAnalyzer(logger *slog.Logger, tracerProvider trace.TracerProvider, completer Completer, opts ...AnalyzerOption) *Analyzer {
+	logger = logger.With(attr.SlogComponent("risk-llm-analyzer"))
+	a := &Analyzer{
+		logger:        logger,
+		tracer:        tracerProvider.Tracer(tracerName),
+		meterProvider: noop.NewMeterProvider(),
+		metrics:       nil,
+		completer:     completer,
+		cache:         NoopVerdictCache{},
+		stokens:       stokens.NewCodec(),
 	}
+	for _, opt := range opts {
+		opt(a)
+	}
+	a.metrics = newAnalyzerMetrics(a.meterProvider, logger)
+	return a
 }
 
 // Enabled reports whether a model is wired in. Disabled analyzers reply
@@ -116,6 +158,10 @@ type Analysis struct {
 	// message to stay within the content caps.
 	Truncated bool
 
+	// Cached reports whether the verdict came from the verdict cache instead
+	// of a model call. Completion then carries zero tokens and attempts.
+	Cached bool
+
 	// Err is the typed failure behind a dead-letter result: ErrDisabled,
 	// ErrTimeout, ErrEmptyCompletion, *UpstreamError, an error wrapping
 	// ErrParse, or a transport error. Nil on success.
@@ -125,7 +171,9 @@ type Analysis struct {
 // Analyze evaluates the message and maps the verdict to findings. It never
 // returns a Go error: any failure yields Analysis.Result as DeadLetterResult
 // with the reason classified from Analysis.Err. Result.Completed is true only
-// when a verdict parsed, and Result.STokens counts the rendered user prompt.
+// when a verdict parsed, and Result.STokens counts the rendered user prompt
+// whether the verdict came from the model or the cache: metering measures the
+// content scanned, not the model spend.
 func (a *Analyzer) Analyze(ctx context.Context, req Request) Analysis {
 	ctx, span := a.tracer.Start(ctx, "risk.llm.analyze", trace.WithAttributes(
 		attr.OrganizationID(req.OrgID),
@@ -156,17 +204,40 @@ func (a *Analyzer) Analyze(ctx context.Context, req Request) Analysis {
 
 	messages := BuildMessages(in)
 	userPrompt := messages[len(messages)-1].Content
+	cacheKey := VerdictCacheKey(a.completer.ModelName(), messages[0].Content, userPrompt)
 
-	completion, err := a.completer.Complete(ctx, info, messages)
-	span.SetAttributes(attr.RiskLLMModel(completion.Model))
-	if err != nil {
-		return a.fail(ctx, span, info, completion, truncated, err)
-	}
+	completion, verdict, cached := a.lookupVerdict(ctx, info, cacheKey)
+	span.SetAttributes(attribute.Bool("gram.risk.llm.cached", cached))
+	if !cached {
+		var err error
+		completion, err = a.completer.Complete(ctx, info, messages)
+		span.SetAttributes(attr.RiskLLMModel(completion.Model))
+		if err != nil {
+			return a.fail(ctx, span, info, completion, truncated, err)
+		}
 
-	verdict, err := ParseVerdict(completion.Content)
-	if err != nil {
-		a.completer.RecordParseFailure(ctx, info)
-		return a.fail(ctx, span, info, completion, truncated, err)
+		verdict, err = ParseVerdict(completion.Content)
+		if err != nil {
+			a.completer.RecordParseFailure(ctx, info)
+			return a.fail(ctx, span, info, completion, truncated, err)
+		}
+
+		// Only a parsed verdict is worth replaying; failures always retry
+		// the model.
+		if err := a.cache.Set(ctx, cacheKey, CachedVerdict{
+			Raw:              completion.Content,
+			Model:            completion.Model,
+			PromptTokens:     completion.PromptTokens,
+			CompletionTokens: completion.CompletionTokens,
+		}); err != nil {
+			a.logger.WarnContext(ctx, "risk llm verdict cache write failed",
+				attr.SlogError(err),
+				attr.SlogOrganizationID(info.OrgID),
+				attr.SlogRiskLane(info.Lane),
+			)
+		}
+	} else {
+		span.SetAttributes(attr.RiskLLMModel(completion.Model))
 	}
 
 	stokenCount, countErr := a.stokens.Count(ctx, userPrompt)
@@ -194,8 +265,53 @@ func (a *Analyzer) Analyze(ctx context.Context, req Request) Analysis {
 		Verdict:    verdict,
 		Completion: completion,
 		Truncated:  truncated,
+		Cached:     cached,
 		Err:        nil,
 	}
+}
+
+// lookupVerdict consults the verdict cache. A hit yields the cached reply as
+// a zero-token, zero-attempt completion together with its parsed verdict.
+// Cache errors and unparsable entries are logged, counted as errors and then
+// treated as misses, so the cache can only ever save a model call, never
+// fail an analysis.
+func (a *Analyzer) lookupVerdict(ctx context.Context, info CallInfo, key string) (Completion, Verdict, bool) {
+	none := Completion{Content: "", PromptTokens: 0, CompletionTokens: 0, Model: "", Attempts: 0}
+
+	hit, ok, err := a.cache.Get(ctx, key)
+	if err != nil {
+		a.logger.WarnContext(ctx, "risk llm verdict cache read failed; calling the model",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(info.OrgID),
+			attr.SlogRiskLane(info.Lane),
+		)
+		a.metrics.RecordCacheLookup(ctx, info, CacheResultError)
+		return none, Verdict{Risks: nil, Raw: ""}, false
+	}
+	if !ok {
+		a.metrics.RecordCacheLookup(ctx, info, CacheResultMiss)
+		return none, Verdict{Risks: nil, Raw: ""}, false
+	}
+
+	verdict, err := ParseVerdict(hit.Raw)
+	if err != nil {
+		a.logger.WarnContext(ctx, "risk llm verdict cache entry unparsable; calling the model",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(info.OrgID),
+			attr.SlogRiskLane(info.Lane),
+		)
+		a.metrics.RecordCacheLookup(ctx, info, CacheResultError)
+		return none, Verdict{Risks: nil, Raw: ""}, false
+	}
+
+	a.metrics.RecordCacheLookup(ctx, info, CacheResultHit)
+	return Completion{
+		Content:          hit.Raw,
+		PromptTokens:     0,
+		CompletionTokens: 0,
+		Model:            hit.Model,
+		Attempts:         0,
+	}, verdict, true
 }
 
 func (a *Analyzer) fail(ctx context.Context, span trace.Span, info CallInfo, completion Completion, truncated bool, err error) Analysis {
@@ -213,6 +329,7 @@ func (a *Analyzer) fail(ctx context.Context, span trace.Span, info CallInfo, com
 		Verdict:    Verdict{Risks: nil, Raw: ""},
 		Completion: completion,
 		Truncated:  truncated,
+		Cached:     false,
 		Err:        err,
 	}
 }

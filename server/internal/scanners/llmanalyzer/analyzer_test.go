@@ -17,9 +17,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-func newAnalyzer(t *testing.T, completer llmanalyzer.Completer) *llmanalyzer.Analyzer {
+func newAnalyzer(t *testing.T, completer llmanalyzer.Completer, opts ...llmanalyzer.AnalyzerOption) *llmanalyzer.Analyzer {
 	t.Helper()
-	return llmanalyzer.NewAnalyzer(testenv.NewLogger(t), testenv.NewTracerProvider(t), completer)
+	return llmanalyzer.NewAnalyzer(testenv.NewLogger(t), testenv.NewTracerProvider(t), completer, opts...)
 }
 
 func userRequest(body string) llmanalyzer.Request {

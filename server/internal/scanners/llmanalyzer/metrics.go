@@ -17,6 +17,7 @@ const (
 	meterUsage         = "risk.llm.tokens"
 	meterRetries       = "risk.llm.retries"
 	meterParseFailures = "risk.llm.parse_failures"
+	meterCache         = "risk.llm.cache"
 
 	// TokenKindInput and TokenKindOutput are the gram.risk.llm.token_kind
 	// values on risk.llm.tokens.
@@ -190,5 +191,39 @@ func (m *metrics) RecordParseFailure(ctx context.Context, info CallInfo, model s
 		attr.OrganizationSlug(info.OrgSlug),
 		attr.RiskScanMode(info.ScanMode),
 		attr.RiskLLMModel(model),
+	))
+}
+
+// analyzerMetrics are the instruments the Analyzer owns, as opposed to the
+// per-call ones the Client records.
+type analyzerMetrics struct {
+	cacheLookups metric.Int64Counter
+}
+
+func newAnalyzerMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *analyzerMetrics {
+	ctx := context.Background()
+	meter := meterProvider.Meter(tracerName)
+
+	cacheLookups, err := meter.Int64Counter(
+		meterCache,
+		metric.WithDescription("Verdict cache lookups made before calling the risk model, split by gram.risk.llm.cache_result"),
+		metric.WithUnit("{lookup}"),
+	)
+	if err != nil {
+		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterCache), attr.SlogError(err))
+	}
+
+	return &analyzerMetrics{cacheLookups: cacheLookups}
+}
+
+// RecordCacheLookup records one verdict cache lookup and its result.
+func (m *analyzerMetrics) RecordCacheLookup(ctx context.Context, info CallInfo, result string) {
+	if m.cacheLookups == nil {
+		return
+	}
+	m.cacheLookups.Add(ctx, 1, metric.WithAttributes(
+		attr.OrganizationID(info.OrgID),
+		attr.RiskLane(info.Lane),
+		attr.RiskLLMCacheResult(result),
 	))
 }

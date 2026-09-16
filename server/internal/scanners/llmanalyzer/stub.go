@@ -78,6 +78,11 @@ func (s *StubCompleter) RecordParseFailure(context.Context, CallInfo) {
 	s.ParseFailures++
 }
 
+// ModelName reports the configured Model.
+func (s *StubCompleter) ModelName() string {
+	return s.Model
+}
+
 // CallsSnapshot returns a copy of the recorded calls.
 func (s *StubCompleter) CallsSnapshot() []CompleteCall {
 	s.mu.Lock()

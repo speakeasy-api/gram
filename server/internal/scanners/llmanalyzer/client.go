@@ -220,6 +220,11 @@ func (c *Client) RecordParseFailure(ctx context.Context, info CallInfo) {
 	c.metrics.RecordParseFailure(ctx, info, c.cfg.Model)
 }
 
+// ModelName is the configured served model name sent on every request.
+func (c *Client) ModelName() string {
+	return c.cfg.Model
+}
+
 type chatRequest struct {
 	Model              string             `json:"model"`
 	Messages           []Message          `json:"messages"`

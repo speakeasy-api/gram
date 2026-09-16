@@ -569,6 +569,7 @@ const (
 	RiskScanModeKey                = attribute.Key("gram.risk.scan_mode")
 	RiskLLMTokenKindKey            = attribute.Key("gram.risk.llm.token_kind")
 	RiskLLMModelKey                = attribute.Key("gram.risk.llm.model")
+	RiskLLMCacheResultKey          = attribute.Key("gram.risk.llm.cache_result")
 	SecretNameKey                  = attribute.Key("gram.secret.name")
 	SecurityPlacementKey           = attribute.Key("gram.security.placement")
 	SecuritySchemeKey              = attribute.Key("gram.security.scheme")
@@ -2337,6 +2338,11 @@ func SlogRiskLLMTokenKind(v string) slog.Attr      { return slog.String(string(R
 // RiskLLMModel is the served model name the risk analyzer called.
 func RiskLLMModel(v string) attribute.KeyValue { return RiskLLMModelKey.String(v) }
 func SlogRiskLLMModel(v string) slog.Attr      { return slog.String(string(RiskLLMModelKey), v) }
+
+// RiskLLMCacheResult is the outcome of a risk analyzer verdict cache lookup:
+// "hit", "miss" or "error".
+func RiskLLMCacheResult(v string) attribute.KeyValue { return RiskLLMCacheResultKey.String(v) }
+func SlogRiskLLMCacheResult(v string) slog.Attr      { return slog.String(string(RiskLLMCacheResultKey), v) }
 
 func SecretName(v string) attribute.KeyValue { return SecretNameKey.String(v) }
 func SlogSecretName(v string) slog.Attr      { return slog.String(string(SecretNameKey), v) }
