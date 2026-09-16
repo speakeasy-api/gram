@@ -220,6 +220,68 @@ describe("configureCreatedRemoteMcpIdentity", () => {
     });
     expect(mocks.commit).toHaveBeenCalledOnce();
   });
+  it("reuses a saved provider without discovering its metadata", async () => {
+    // A private issuer cannot be reached from the browser at all. Asking for a
+    // saved provider first is what makes one reusable: if this fetched
+    // metadata anyway the private case would fail on a provider that is
+    // already configured and working.
+    mocks.getIssuer.mockResolvedValue({
+      id: "issuer-saved",
+      issuer: "https://id.example.com",
+      authorizationEndpoint: "https://id.example.com/authorize",
+      tokenEndpoint: "https://id.example.com/token",
+      scopesSupported: ["saved.read"],
+      tokenEndpointAuthMethodsSupported: ["client_secret_post"],
+    });
+
+    const result = await configureCreatedRemoteMcpIdentity({
+      client,
+      remoteMcpServer: remoteServer(),
+      mcpServer: mcpServer(),
+      identityMode: "user",
+    });
+
+    expect(result.status).toBe("configured");
+    expect(mocks.fetchIssuer).not.toHaveBeenCalled();
+    expect(mocks.getIssuer).toHaveBeenCalledWith(
+      { issuer: "https://id.example.com" },
+      undefined,
+      undefined,
+    );
+    expect(mocks.commit).toHaveBeenCalledWith(
+      {
+        commitServerIdentityConfigurationForm: expect.objectContaining({
+          providerId: "issuer-saved",
+          createProvider: undefined,
+          clientConfiguration: expect.objectContaining({
+            tokenEndpointAuthMethod: "client_secret_post",
+          }),
+        }),
+      },
+      undefined,
+      undefined,
+    );
+  });
+
+  it("leaves the server disabled when the commit reports manual setup", async () => {
+    mocks.commit.mockResolvedValue({
+      status: "registered",
+      registrationMethod: "manual",
+      manualSetupRequired: true,
+    });
+
+    const result = await configureCreatedRemoteMcpIdentity({
+      client,
+      remoteMcpServer: remoteServer(),
+      mcpServer: mcpServer(),
+      identityMode: "user",
+    });
+
+    // The provider exists but nothing can sign in through it yet, so the
+    // server must not be advertised as ready.
+    expect(result.status).toBe("setup-required");
+    expect(mocks.updateServer).not.toHaveBeenCalled();
+  });
 });
 
 function remoteServer(): RemoteMcpServer {

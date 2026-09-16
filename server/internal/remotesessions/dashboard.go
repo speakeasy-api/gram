@@ -209,9 +209,12 @@ func (r serverIdentityRequest) plan(authCtx *contextvalues.AuthContext, target m
 		client = LinkClient(r.existingClientID)
 	case serverIdentityClientModeManual:
 		client = ManualClient(ClientCredentials{
-			ClientID:                conv.PtrValOr(r.clientConfiguration.ClientID, ""),
-			ClientSecret:            conv.PtrValOr(r.clientConfiguration.ClientSecret, ""),
-			SecretExpiresAt:         pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+			ClientID:        conv.PtrValOr(r.clientConfiguration.ClientID, ""),
+			ClientSecret:    conv.PtrValOr(r.clientConfiguration.ClientSecret, ""),
+			SecretExpiresAt: pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+			// A hand-entered credential carries no provider-reported issue
+			// time, so the row is stamped when it is stored.
+			IssuedAt:                pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 			TokenEndpointAuthMethod: r.clientConfiguration.TokenEndpointAuthMethod,
 			Scope:                   r.clientConfiguration.Scope,
 			Audience:                r.clientConfiguration.Audience,
@@ -231,6 +234,8 @@ func (r serverIdentityRequest) plan(authCtx *contextvalues.AuthContext, target m
 			ProjectID:        *authCtx.ProjectID,
 			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
 			ActorDisplayName: authCtx.Email,
+			// Gates tunnel-bound registration, which reaches a private network.
+			ActorIsPlatformAdmin: authCtx.IsAdmin,
 		},
 		UserSessionIssuerID: target.UserSessionIssuerID.UUID,
 		Provider:            provider,
@@ -291,6 +296,8 @@ func identityOopsError(err error, message string) *oops.ShareableError {
 		code = oops.CodeNotFound
 	case errors.Is(refusal.Kind, ErrIdentityInvalid):
 		code = oops.CodeBadRequest
+	case errors.Is(refusal.Kind, ErrIdentityForbidden):
+		code = oops.CodeForbidden
 	case errors.Is(refusal.Kind, ErrIdentityConflict), errors.Is(refusal.Kind, ErrIdentityOrgWideBinding):
 		code = oops.CodeConflict
 	case errors.Is(refusal.Kind, ErrIdentityInvariant):

@@ -165,27 +165,14 @@ export async function configureCreatedRemoteMcpIdentity({
     );
   }
 
-  let draft: RemoteSessionIssuerDraft;
-  try {
-    draft = await client.remoteSessionIssuers.fetchMetadata(
-      {
-        fetchIssuerMetadataRequestBody: { issuer: authorizationServer },
-      },
-      undefined,
-      options,
-    );
-  } catch {
-    return setupRequired(
-      mcpServer,
-      identityMode,
-      "The authorization server metadata could not be discovered. Configure User Identity in Settings > Identity.",
-    );
-  }
-
+  // Look for a provider this project already has for that authorization
+  // server BEFORE reaching for metadata. A saved provider carries the
+  // capabilities this call needs, and a private issuer cannot be discovered
+  // from the browser at all — asking first is what lets one be reused.
   let provider: RemoteSessionIssuer | null;
   try {
     provider = await client.remoteSessionIssuers.get(
-      { issuer: draft.issuer },
+      { issuer: authorizationServer },
       undefined,
       options,
     );
@@ -210,17 +197,44 @@ export async function configureCreatedRemoteMcpIdentity({
       "The matching identity provider is missing OAuth endpoints. Update it in Remote Identity Providers.",
     );
   }
-  if (!provider && (!draft.authorizationEndpoint || !draft.tokenEndpoint)) {
-    return setupRequired(
-      mcpServer,
-      identityMode,
-      "OAuth metadata is missing required endpoints. Configure User Identity in Settings > Identity.",
-    );
+
+  // Only a provider that does not exist yet needs a draft: the draft exists to
+  // build the creation form, and fetching one for a saved provider would fail
+  // for exactly the private issuers reuse is meant to serve.
+  let draft: RemoteSessionIssuerDraft | null = null;
+  if (!provider) {
+    try {
+      draft = await client.remoteSessionIssuers.fetchMetadata(
+        { fetchIssuerMetadataRequestBody: { issuer: authorizationServer } },
+        undefined,
+        options,
+      );
+    } catch {
+      return setupRequired(
+        mcpServer,
+        identityMode,
+        "The authorization server metadata could not be discovered. Configure User Identity in Settings > Identity.",
+      );
+    }
+    if (!draft.authorizationEndpoint || !draft.tokenEndpoint) {
+      return setupRequired(
+        mcpServer,
+        identityMode,
+        "OAuth metadata is missing required endpoints. Configure User Identity in Settings > Identity.",
+      );
+    }
   }
+
+  // Capabilities come from whichever side actually knows them.
+  const issuerScopes = provider?.scopesSupported ?? draft?.scopesSupported;
+  const issuerAuthMethods =
+    provider?.tokenEndpointAuthMethodsSupported ??
+    draft?.tokenEndpointAuthMethodsSupported ??
+    [];
 
   const scopes = preferredScopes(
     protectedResource.metadata?.scopesSupported,
-    draft.scopesSupported,
+    issuerScopes,
   );
   let result: CommitServerIdentityConfigurationResult;
   try {
@@ -229,13 +243,12 @@ export async function configureCreatedRemoteMcpIdentity({
         commitServerIdentityConfigurationForm: {
           mcpServerId: mcpServer.id,
           providerId: provider?.id,
-          createProvider: provider ? undefined : providerForm(draft, mcpServer),
+          createProvider:
+            provider || !draft ? undefined : providerForm(draft, mcpServer),
           clientMode: "auto",
           clientConfiguration: {
             scope: scopes.length > 0 ? scopes : undefined,
-            tokenEndpointAuthMethod: rpcAuthMethod(
-              draft.tokenEndpointAuthMethodsSupported ?? [],
-            ),
+            tokenEndpointAuthMethod: rpcAuthMethod(issuerAuthMethods),
           },
         },
       },
@@ -255,6 +268,18 @@ export async function configureCreatedRemoteMcpIdentity({
       mcpServer,
       identityMode,
       commitFailureMessage(result),
+      result,
+    );
+  }
+
+  // The provider landed but the upstream needs a human to finish registering
+  // the client, so nobody can sign in yet. Enabling the server here would
+  // advertise it as ready when the first connection is going to fail.
+  if (result.manualSetupRequired) {
+    return setupRequired(
+      mcpServer,
+      identityMode,
+      "The identity provider needs its client registered by hand. Finish setup in Settings > Identity.",
       result,
     );
   }
