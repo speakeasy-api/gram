@@ -252,6 +252,25 @@ func TestPlatformMCPSkillReadsAllowSkillReaderButWritesRequireSkillWrite(t *test
 	require.Equal(t, skill.ID.String(), read.Skill.ID)
 	require.Equal(t, manifest, read.LatestVersion.Content)
 
+	feedback := callSkillsTool[ListSkillFeedbackOutput](t, ctx, fixture.session, "list_skill_feedback", map[string]any{
+		"project_slug": fixture.project.Slug,
+		"skill_id":     skill.ID.String(),
+	})
+	require.Equal(t, skill.ID.String(), feedback.SkillID)
+	require.Empty(t, feedback.Feedback)
+
+	suggestions := callSkillsTool[ListSkillSuggestionsOutput](t, ctx, fixture.session, "list_skill_suggestions", map[string]any{
+		"project_slug": fixture.project.Slug,
+		"skill_id":     skill.ID.String(),
+	})
+	require.Empty(t, suggestions.Suggestions)
+
+	missingSuggestionFeedback := callSkillsRefusal(t, ctx, fixture.session, "list_skill_suggestion_feedback", map[string]any{
+		"project_slug": fixture.project.Slug,
+		"change_id":    uuid.NewString(),
+	})
+	require.Equal(t, "not_found", missingSuggestionFeedback.Code)
+
 	refusal := callSkillsRefusal(t, ctx, fixture.session, "create_skill", map[string]any{
 		"project_slug": fixture.project.Slug,
 		"content":      skillsFixtureManifest("reader-write", "Requires skill write access.", "Body."),
@@ -263,12 +282,36 @@ func TestPlatformMCPSkillWriterCanAuthorButCannotDistribute(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	fixture := newSkillsVerticalFixture(t, ctx, "platform_mcp_skills_writer", skillsVerticalOptions{capabilityEnabled: true, grantSkillWrite: true})
+	fixture := newSkillsVerticalFixture(t, ctx, "platform_mcp_skills_writer", skillsVerticalOptions{capabilityEnabled: true, grantSkillRead: true, grantSkillWrite: true})
 	created := callSkillsTool[SkillAuthoringResult](t, ctx, fixture.session, "create_skill", map[string]any{
 		"project_slug": fixture.project.Slug,
 		"content":      skillsFixtureManifest("delegated-writer", "Authored with skill write.", "Body."),
 	})
 	require.True(t, created.CreatedSkill)
+
+	current := callSkillsTool[GetSkillOutput](t, ctx, fixture.session, "get_skill", map[string]any{
+		"project_slug": fixture.project.Slug,
+		"skill_id":     created.Skill.ID,
+	})
+	require.Equal(t, created.Version.ID, current.LatestVersion.ID)
+
+	revised := callSkillsTool[SkillAuthoringResult](t, ctx, fixture.session, "add_skill_version", map[string]any{
+		"project_slug":               fixture.project.Slug,
+		"skill_id":                   created.Skill.ID,
+		"content":                    skillsFixtureManifest("delegated-writer", "Authored with delegated skill write.", "Revised body."),
+		"expected_latest_version_id": current.LatestVersion.ID,
+	})
+	require.True(t, revised.CreatedVersion)
+
+	updated := callSkillsTool[UpdateSkillMetadataOutput](t, ctx, fixture.session, "update_skill_metadata", map[string]any{
+		"project_slug":               fixture.project.Slug,
+		"skill_id":                   created.Skill.ID,
+		"display_name":               "Delegated writer updated",
+		"summary":                    "Updated with delegated skill write.",
+		"expected_latest_version_id": revised.Version.ID,
+	})
+	require.Equal(t, "Delegated writer updated", updated.Skill.DisplayName)
+	require.Equal(t, "Updated with delegated skill write.", updated.Skill.Summary)
 
 	refusal := callSkillsRefusal(t, ctx, fixture.session, "distribute_skill", map[string]any{
 		"project_slug": fixture.project.Slug,
@@ -288,8 +331,19 @@ func TestPlatformMCPSkillsToolsRefuseAUserWithoutGrants(t *testing.T) {
 		"project_slug": fixture.project.Slug,
 		"content":      skillsFixtureManifest("ungranted", "Written without grants.", "Body."),
 	})
-
 	require.Equal(t, "forbidden", refusal.Code)
+
+	for _, call := range []struct {
+		name      string
+		arguments map[string]any
+	}{
+		{name: "list_skill_feedback", arguments: map[string]any{"project_slug": fixture.project.Slug, "skill_id": uuid.NewString()}},
+		{name: "list_skill_suggestions", arguments: map[string]any{"project_slug": fixture.project.Slug}},
+		{name: "list_skill_suggestion_feedback", arguments: map[string]any{"project_slug": fixture.project.Slug, "change_id": uuid.NewString()}},
+	} {
+		refusal = callSkillsRefusal(t, ctx, fixture.session, call.name, call.arguments)
+		require.Equal(t, "forbidden", refusal.Code, call.name)
+	}
 
 	skills, err := skillsrepo.New(fixture.conn).ListSkills(ctx, skillsrepo.ListSkillsParams{ProjectID: fixture.project.ID, PageLimit: 10})
 	require.NoError(t, err)
@@ -373,14 +427,14 @@ func newSkillsVerticalFixture(t *testing.T, ctx context.Context, name string, op
 		// assigning one is what makes this "authenticated but unauthorized"
 		// rather than an organization that predates RBAC.
 		require.NoError(t, authz.SeedSystemRoleGrants(ctx, conn, principal.OrganizationID))
-		grantedScope := authz.Scope("")
-		switch {
-		case options.grantSkillWrite:
-			grantedScope = authz.ScopeSkillWrite
-		case options.grantSkillRead:
-			grantedScope = authz.ScopeSkillRead
+		grantedScopes := make([]authz.Scope, 0, 2)
+		if options.grantSkillRead {
+			grantedScopes = append(grantedScopes, authz.ScopeSkillRead)
 		}
-		if grantedScope != "" {
+		if options.grantSkillWrite {
+			grantedScopes = append(grantedScopes, authz.ScopeSkillWrite)
+		}
+		for _, grantedScope := range grantedScopes {
 			selector, marshalErr := authz.NewSelector(grantedScope, project.ID.String()).MarshalJSON()
 			require.NoError(t, marshalErr)
 			_, grantErr := accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
