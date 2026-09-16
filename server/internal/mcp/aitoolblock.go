@@ -14,10 +14,14 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
+	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
+	"github.com/speakeasy-api/gram/server/internal/mcp/sessionclientinfo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 )
 
@@ -162,4 +166,119 @@ func (s *Service) checkAIToolGatewayBlock(ctx context.Context, logger *slog.Logg
 		TargetID:    target.ID,
 		DisplayName: target.DisplayName,
 	}
+}
+
+// reportedClientName is the name the client behind this request claims for
+// itself, or empty when it claims none.
+//
+// Three sources, in the order the protocol makes them authoritative. An
+// initialize request carries the name in its own body. Under the stateless
+// model (SEP-2575 / 2026-07-28) a client repeats it in `_meta` on every
+// request and may never handshake at all, so that per-request value is
+// preferred next: it is the fresher of the two and the only one such a client
+// ever supplies. Otherwise it comes from the record written at initialize,
+// which is how a handshake-era client is identified for the rest of its
+// session.
+//
+// This mirrors resolveClientIdentity's precedence deliberately. If the two
+// disagreed, a client could be attributed one way for telemetry and judged
+// another way here.
+func (s *Service) reportedClientName(ctx context.Context, logger *slog.Logger, payload *mcpInputs, req *rawRequest) string {
+	if req.Method == "initialize" {
+		params, _, err := parseInitializeParams(req.Params)
+		if err == nil {
+			if name := mcprequests.SanitizeClientInfoField(params.ClientInfo.Name); name != "" {
+				return name
+			}
+		}
+	}
+
+	if info := mcprequests.ParseMeta(req.Params).ClientInfo; info != nil && info.Name != "" {
+		return info.Name
+	}
+
+	if payload.sessionID == "" {
+		return ""
+	}
+	info, err := s.sessionClientInfo.Load(ctx, payload.projectID, payload.toolset, payload.sessionID, time.Now().UnixMilli())
+	switch {
+	case errors.Is(err, sessionclientinfo.ErrNotFound):
+		return ""
+	case err != nil:
+		// Losing the record means this request is unattributable, which is the
+		// same position as a client that reported no name: the verified layer
+		// has already had its say, and this one abstains.
+		logger.WarnContext(ctx, "failed to load mcp session client info for the ai tool block", attr.SlogError(err))
+		return ""
+	}
+	return info.Name
+}
+
+// checkAIToolSessionBlock refuses a request from an AI tool the organization
+// has blocked, identified by the name the client reports about itself. Nil
+// means not blocked, the usual answer.
+//
+// This is the second of two layers enforcing one decision. checkAIToolGatewayBlock
+// runs first, before authentication, against a verified client_id; a caller it
+// resolves and refuses never reaches here. This layer then runs on every
+// request of every session that got through, so passing the first is necessary
+// and not sufficient.
+//
+// It exists because the first layer cannot see most of the catalogue. Blocking
+// before authentication requires a client ID metadata document, and most AI
+// tools publish none: they authenticate some other way and then say who they
+// are at initialize. Without this layer a decision about any of them is
+// recorded and inert.
+//
+// A self-reported name is not a credential, and this never treats it as one.
+// It is only ever grounds to refuse. Nothing here admits a caller, relaxes a
+// decision, or overrides what the verified layer concluded, so a client that
+// lies about its name can evade a block it would otherwise have met and can
+// never talk its way into access. That asymmetry is what makes an unverifiable
+// signal safe to act on.
+//
+// The read ordering carries the cost argument. The cheap "does this
+// organization block anything at all?" query runs first and answers no for
+// almost every organization, so the common path costs one indexed query and
+// never loads the catalog or touches the session store. The failure modes
+// match the first layer's: unknown whether anything is blocked allows, and
+// unknown which target a blocked caller is refuses as retryable.
+func (s *Service) checkAIToolSessionBlock(ctx context.Context, logger *slog.Logger, payload *mcpInputs, req *rawRequest) error {
+	if payload == nil || req == nil || payload.organizationID == "" {
+		return nil
+	}
+
+	queries := agentrepo.New(s.db)
+	blocked, err := s.aiToolBlockReads.blockedTargetIDs(ctx, queries, payload.organizationID)
+	if err != nil {
+		logger.WarnContext(ctx, "ai tool session block unavailable; allowing the request", attr.SlogError(err))
+		return nil
+	}
+	if len(blocked) == 0 {
+		return nil
+	}
+
+	name := s.reportedClientName(ctx, logger, payload, req)
+	if name == "" {
+		return nil
+	}
+
+	list, err := s.aiToolBlockReads.catalog(ctx, queries, payload.organizationID)
+	if err != nil {
+		logger.ErrorContext(ctx, "ai scan targets unavailable while a block is in force", attr.SlogError(err))
+		return fmt.Errorf("%w: %w", ErrAIToolBlockCheckUnavailable, err)
+	}
+
+	target, matched := aitargets.MatchReportedClientName(list.Snapshot.Targets(), name)
+	if !matched {
+		return nil
+	}
+	if !slices.Contains(blocked, target.ID) {
+		return nil
+	}
+
+	logger.InfoContext(ctx, "ai tool blocked at the mcp session",
+		attr.SlogMcpMethod(req.Method),
+	)
+	return &AIToolBlockedError{TargetID: target.ID, DisplayName: target.DisplayName}
 }

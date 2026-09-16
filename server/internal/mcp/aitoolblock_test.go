@@ -76,10 +76,15 @@ func authorizeRequest(t *testing.T, mcpSlug string, clientID string, redirectURI
 	return req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
 }
 
-// TestHandleAuthorize_BlockedAITool_RefusedBeforeATokenExists is the point of
-// the whole enforcement half: the block lands at the OAuth boundary, where
-// the caller's identity is a credential the server verified, rather than at
-// tools/call where it would only be a name the client claimed.
+// TestHandleAuthorize_BlockedAITool_RefusedBeforeATokenExists covers the first
+// of the two layers: the block lands at the OAuth boundary, where the caller's
+// identity is a credential the server verified, so a tool that publishes a
+// document never gets a token at all.
+//
+// The session layer in aitoolsessionblock_test.go runs after this one, on a
+// name the client reports about itself. It is weaker by construction and it is
+// additive: it reaches the tools this layer cannot see, and it never relaxes
+// what this one decided.
 //
 // It runs against the shipped default catalog — claude-code carries the
 // "anthropic" vendor key — so a regression in the defaults fails here too.

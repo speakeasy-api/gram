@@ -1,6 +1,9 @@
 package aitargets
 
-import "slices"
+import (
+	"slices"
+	"strings"
+)
 
 // GatewayCaller is what an MCP gateway request proved about the client behind
 // it. Every field is optional: an OAuth bearer carries a verified client_id, a
@@ -51,6 +54,39 @@ func MatchGatewayCaller(targets []Target, caller GatewayCaller) (Target, bool) {
 		}
 		for _, target := range targets {
 			if slices.Contains(layer.lookup(target), layer.value) {
+				return target.Clone(), true
+			}
+		}
+	}
+	return ZeroTarget(), false
+}
+
+// MatchReportedClientName resolves the target whose ClientInfoNames claim a
+// name an MCP client reported about itself at initialize, matched without
+// regard to case.
+//
+// This is the post-authentication layer, and everything about it is weaker
+// than MatchGatewayCaller above: the name is self-reported, so any client may
+// claim any name, and one that lies is not resolved at all.
+//
+// It is safe despite that because of what the caller does with the answer: the
+// result is only ever used to REFUSE. A name never admits anyone and never
+// upgrades a decision, so lying can lose a caller access it would otherwise
+// have had, or fail to save it, and can never gain it access that the verified
+// layer would have denied. Spoofing is an evasion risk, not an escalation one.
+//
+// Which is why this must never become an input to MatchGatewayCaller, whose
+// answer decides an approval as well as a block. The two are kept apart
+// deliberately, and the ordering is the whole safety argument: a verified
+// credential is resolved first and decides, and this runs afterwards against
+// what is left.
+func MatchReportedClientName(targets []Target, reportedName string) (Target, bool) {
+	if reportedName == "" {
+		return ZeroTarget(), false
+	}
+	for _, target := range targets {
+		for _, claimed := range target.GatewayClient.ClientInfoNames {
+			if strings.EqualFold(claimed, reportedName) {
 				return target.Clone(), true
 			}
 		}

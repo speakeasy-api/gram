@@ -1616,6 +1616,27 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 		}()
 	}
 
+	// The second of the two layers enforcing an organization's AI tool
+	// decisions, after the pre-authentication one on the OAuth paths. It sits
+	// ahead of the whole switch rather than inside a handler because a blocked
+	// tool should get no further than this: not a tool list, not a prompt, not
+	// a resource read.
+	//
+	// Notifications are exempt because JSON-RPC gives them no response to
+	// carry an error, not because they are permitted. They cannot act on
+	// anything; every method that can is covered.
+	if !strings.HasPrefix(req.Method, "notifications/") {
+		if err := s.checkAIToolSessionBlock(ctx, s.logger, payload, req); err != nil {
+			if blockedErr, ok := errors.AsType[*AIToolBlockedError](err); ok {
+				return nil, oops.E(oops.CodeForbidden, err, "%s", blockedErr.Description())
+			}
+			if errors.Is(err, ErrAIToolBlockCheckUnavailable) {
+				return nil, oops.E(oops.CodeUnavailable, err, "cannot determine whether this client is permitted right now")
+			}
+			return nil, oops.E(oops.CodeUnexpected, err, "check ai tool session block").LogError(ctx, s.logger)
+		}
+	}
+
 	switch req.Method {
 	case "ping":
 		return handlePing(ctx, s.logger, req.ID, serverInfoHostedToolset)

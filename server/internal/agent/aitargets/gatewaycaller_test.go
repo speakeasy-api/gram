@@ -349,3 +349,123 @@ func TestOverlappingVendorDocumentsDoNotCrossAttribute(t *testing.T) {
 		})
 	}
 }
+
+// Most of the catalogue publishes no client ID metadata document, so the
+// pre-authentication layer cannot see it at all. Those targets name themselves
+// instead, and a decision about them is only worth recording because the
+// session layer acts on that name.
+func TestReportedClientNameResolvesTargetsTheVerifiedLayerCannotSee(t *testing.T) {
+	t.Parallel()
+
+	defaults := aitargets.Defaults()
+
+	target, matched := aitargets.MatchReportedClientName(defaults, "Cursor")
+	require.True(t, matched, "Cursor publishes no document; the reported name is the only handle on it")
+	require.Equal(t, "cursor", target.ID)
+
+	// Nothing about a verified caller resolves Cursor, which is the gap this
+	// layer exists to cover.
+	_, verified := aitargets.MatchGatewayCaller(defaults, aitargets.GatewayCaller{
+		OAuthClientID:  "https://cursor.com/oauth/client.json",
+		CIMDVendorKey:  "",
+		CIMDCatalogURL: "",
+	})
+	require.False(t, verified, "Cursor has no verified matcher, so the first layer cannot refuse it")
+}
+
+// Case is not a credential. A client that capitalizes its name differently is
+// the same client, and treating it otherwise would make evasion a matter of
+// pressing shift.
+func TestReportedClientNameIgnoresCase(t *testing.T) {
+	t.Parallel()
+
+	for _, reported := range []string{"cursor", "CURSOR", "CuRsOr"} {
+		target, matched := aitargets.MatchReportedClientName(aitargets.Defaults(), reported)
+		require.Truef(t, matched, "%q names Cursor", reported)
+		require.Equal(t, "cursor", target.ID)
+	}
+}
+
+// A name nobody claims resolves nothing, so an unrecognized client is left
+// alone rather than swept into someone else's decision.
+func TestReportedClientNameDoesNotGuess(t *testing.T) {
+	t.Parallel()
+
+	for _, reported := range []string{"", "not-a-tool", "curso", "cursor-fork"} {
+		_, matched := aitargets.MatchReportedClientName(aitargets.Defaults(), reported)
+		require.Falsef(t, matched, "%q must resolve no target", reported)
+	}
+}
+
+// The two layers must stay apart. A self-reported name decides only a refusal;
+// letting it reach the verified matcher would let a caller pick the decision it
+// is judged under, including an approval it was never granted.
+func TestAReportedNameNeverResolvesThroughTheVerifiedLayer(t *testing.T) {
+	t.Parallel()
+
+	for _, claimed := range []string{"Cursor", "codex", "ChatGPT", "claude-code"} {
+		_, matched := aitargets.MatchGatewayCaller(aitargets.Defaults(), aitargets.GatewayCaller{
+			OAuthClientID:  claimed,
+			CIMDVendorKey:  claimed,
+			CIMDCatalogURL: claimed,
+		})
+		require.Falsef(t, matched, "%q is a claim, not a credential, and must not resolve a target", claimed)
+	}
+}
+
+// Enforceable is what stops an administrator recording a decision that could
+// never be acted on. Now that the session layer enforces on a reported name, a
+// target carrying only that name is enforceable, and blocking it means what it
+// says.
+func TestATargetKnownOnlyByNameIsEnforceableAndReadsBlocked(t *testing.T) {
+	t.Parallel()
+
+	var cursor aitargets.Target
+	for _, target := range aitargets.Defaults() {
+		if target.ID == "cursor" {
+			cursor = target
+			break
+		}
+	}
+	require.Equal(t, "cursor", cursor.ID)
+	require.Empty(t, cursor.GatewayClient.CIMDVendorKeys)
+	require.Empty(t, cursor.GatewayClient.OAuthClientIDs)
+	require.NotEmpty(t, cursor.GatewayClient.ClientInfoNames)
+
+	require.True(t, aitargets.Enforceable(cursor))
+
+	summary := aitargets.SummarizeAccess(cursor, aitargets.DecisionRecord{
+		TargetID:  "cursor",
+		Decision:  aitargets.DecisionBlocked,
+		Rationale: "not approved for this organization",
+	})
+	require.Equal(t, aitargets.AccessBlocked, summary.State,
+		"an administrator who blocks Cursor must see it blocked, not silently downgraded")
+	require.True(t, summary.Enforceable)
+}
+
+// A target with no document and no name still cannot be acted on, and saying
+// so is the whole point of the predicate.
+func TestATargetWithNoMatcherAtAllStaysUnenforceable(t *testing.T) {
+	t.Parallel()
+
+	var ollama aitargets.Target
+	for _, target := range aitargets.Defaults() {
+		if target.ID == "ollama" {
+			ollama = target
+			break
+		}
+	}
+	require.Equal(t, "ollama", ollama.ID)
+	require.True(t, ollama.GatewayClient.IsZero(), "a local model runner never calls the gateway")
+	require.False(t, aitargets.Enforceable(ollama))
+
+	summary := aitargets.SummarizeAccess(ollama, aitargets.DecisionRecord{
+		TargetID:  "ollama",
+		Decision:  aitargets.DecisionBlocked,
+		Rationale: "recorded but unenforceable",
+	})
+	require.Equal(t, aitargets.AccessUnreviewed, summary.State,
+		"claiming blocked would be untrue in the one place an admin checks")
+	require.False(t, summary.Enforceable)
+}

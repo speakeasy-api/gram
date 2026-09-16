@@ -103,15 +103,25 @@ func SummarizeAccess(target Target, decision DecisionRecord) AccessSummary {
 	}
 }
 
-// Enforceable reports whether a decision could reach the gateway at all: the
-// target carries a verifiable matcher, which in practice means it publishes a
-// client ID metadata document.
+// Enforceable reports whether a decision could be acted on at all: the target
+// carries some matcher that a request can be held against.
 //
-// Nothing else gates it. Inventory membership decides whether a target is
-// probed for; matcher presence decides whether a decision about it can be
-// enforced. A target with no verifiable matcher stays in the inventory and is
-// still probed for, it simply cannot be blocked at the gateway. There is no
-// separate switch that can leave a decision recorded but inert.
+// Two mechanisms enforce, and either one is enough. A target that publishes a
+// client ID metadata document is refused before authentication, on a verified
+// client_id. A target that only names itself is refused after authentication,
+// at the MCP session, on what the client reported. The second is weaker,
+// because a name is self-reported, and it is still the only control that
+// reaches the majority of the catalogue: most AI tools publish no document.
+//
+// Both mean the same thing to an administrator. "Blocked" is one decision, and
+// the difference between the two is which layer turns the caller away, not how
+// much the decision is worth. What Enforceable exists to separate is a target
+// nothing can be done about: no document and no name, so a block would be
+// recorded and inert, and SummarizeAccess reports it as unreviewed rather than
+// claim otherwise.
+//
+// Inventory membership is unrelated and decides only whether a target is
+// probed for on the device.
 func Enforceable(target Target) bool {
-	return len(target.GatewayClient.CIMDVendorKeys)+len(target.GatewayClient.OAuthClientIDs) > 0
+	return !target.GatewayClient.IsZero()
 }

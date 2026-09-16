@@ -73,8 +73,14 @@ type WireClientInfo struct {
 
 // SanitizedClientInfo is an MCP `Implementation` value as self-reported by a
 // client, with both fields passed through [SanitizeClientInfoField].
-// Untrusted in origin — display/analytics data, never an input to
-// authorization — but safe to store and record as-is.
+// Untrusted in origin, but safe to store and record as-is.
+//
+// It may be read to REFUSE a request, which the Shadow AI session block does
+// to reach tools that publish no verifiable identity. It must never be read to
+// grant one, or to relax a decision reached from a verified credential: a
+// client chooses what it reports, so anything it can talk itself into is
+// something an attacker can too. Refusal is safe for exactly that reason, as
+// lying can only cost a caller access it would otherwise have had.
 type SanitizedClientInfo struct {
 	// Name is the client's self-reported name, e.g. "claude-code".
 	Name string
