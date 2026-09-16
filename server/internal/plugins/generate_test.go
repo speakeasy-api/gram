@@ -2738,6 +2738,21 @@ func TestGenerateReadmeIncludesCodexInstallation(t *testing.T) {
 	require.Contains(t, readme, "codex plugin marketplace add")
 }
 
+func TestGenerateReadmeDescribesAdminAccessAndCursorServing(t *testing.T) {
+	t.Parallel()
+	files, err := GeneratePluginPackages(nil, GenerateConfig{
+		OrgName:   "Acme",
+		ServerURL: "https://app.getgram.ai",
+	})
+	require.NoError(t, err)
+
+	readme := string(files["README.md"])
+	require.Contains(t, readme, "**Admin access.**")
+	require.Contains(t, readme, "Serve Marketplace From Cursor")
+	require.Contains(t, readme, "keep their original permission until they are re-added")
+	require.NotContains(t, readme, "Collaborators are granted pull permission")
+}
+
 func TestGenerateReadmeIncludesOpenClawInstallation(t *testing.T) {
 	t.Parallel()
 	files, err := GeneratePluginPackages(nil, GenerateConfig{
