@@ -165,9 +165,11 @@ describe("Add servers sheet", () => {
   });
 
   it("dismisses only the dropdown on the first outside click, then the sheet", async () => {
-    const onOpenChange = vi.fn();
+    const onOpenChange = vi.fn<(open: boolean) => void>();
     setup({ onOpenChange });
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 0);
+    });
     fireEvent.pointerDown(screen.getByRole("button", { name: "Add new" }), {
       button: 0,
       ctrlKey: false,
@@ -175,7 +177,9 @@ describe("Add servers sheet", () => {
     });
     expect(screen.getByRole("menu")).toBeTruthy();
     // Radix registers its document pointer listener on the next task.
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 0);
+    });
     const overlay = document.querySelector('[data-slot="sheet-overlay"]')!;
     fireEvent.pointerDown(overlay, { button: 0, pointerType: "mouse" });
     fireEvent.click(overlay);
@@ -188,7 +192,7 @@ describe("Add servers sheet", () => {
   });
 
   it("clears focused search on Escape before allowing the sheet to close", () => {
-    const onOpenChange = vi.fn();
+    const onOpenChange = vi.fn<(open: boolean) => void>();
     setup({ onOpenChange });
     const search = screen.getByRole("textbox", {
       name: "Search existing servers",
@@ -203,7 +207,7 @@ describe("Add servers sheet", () => {
   });
 
   it("allows Escape outside a nonempty search to close the sheet", () => {
-    const onOpenChange = vi.fn();
+    const onOpenChange = vi.fn<(open: boolean) => void>();
     setup({ onOpenChange });
     fireEvent.change(screen.getByRole("textbox"), {
       target: { value: "Alpha" },
@@ -215,7 +219,7 @@ describe("Add servers sheet", () => {
   });
 
   it("closes only the dropdown on Escape while search is nonempty", async () => {
-    const onOpenChange = vi.fn();
+    const onOpenChange = vi.fn<(open: boolean) => void>();
     setup({ onOpenChange });
     fireEvent.change(screen.getByRole("textbox"), {
       target: { value: "Alpha" },
@@ -424,7 +428,7 @@ describe("Add servers sheet", () => {
       "Couldn't load all servers. Retry to refresh the list.",
     ],
   ])("keeps creation discoverable in each list state", (props, message) => {
-    const onRetryLoad = vi.fn();
+    const onRetryLoad = vi.fn<() => void>();
     setup({ ...props, onRetryLoad });
     if ("loadFailed" in props) {
       fireEvent.click(screen.getByRole("button", { name: "Retry loading" }));
@@ -632,7 +636,7 @@ describe("Add servers sheet", () => {
           finish = resolve;
         }),
     );
-    const onOpenChange = vi.fn();
+    const onOpenChange = vi.fn<(open: boolean) => void>();
     setup({ onAdd, onOpenChange });
     fireEvent.click(screen.getByText("Alpha"));
     const button = screen.getByRole("button", {
@@ -651,7 +655,7 @@ describe("Add servers sheet", () => {
     );
   });
   it("closes after full success with one counted toast and no success list", async () => {
-    const onOpenChange = vi.fn();
+    const onOpenChange = vi.fn<(open: boolean) => void>();
     const onAdd = vi.fn(async () => [
       { key: "server-a", name: "Alpha" },
       { key: "server-b", name: "Beta" },
@@ -671,7 +675,7 @@ describe("Add servers sheet", () => {
   it.each(["partial", "full", "rejected", "missing"] as const)(
     "keeps %s failures open and selected, then closes on successful retry",
     async (mode) => {
-      const onOpenChange = vi.fn();
+      const onOpenChange = vi.fn<(open: boolean) => void>();
       const onAdd = vi.fn(async () => {
         if (mode === "rejected") throw new Error("Connection failed. Retry.");
         if (mode === "missing") return [];

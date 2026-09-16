@@ -239,6 +239,7 @@ export function GatewayMembersSection({
   const [addOpen, setAddOpen] = useState(false);
   const batchState = useMemo<AddBatchState>(
     () => ({ wrappers: new Map(), orders: new Map(), completed: new Set() }),
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- reset retry caches when navigating to another gateway
     [metaMcpServer.id],
   );
   const batchRunning = useRef(false);
