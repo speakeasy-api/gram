@@ -40,9 +40,8 @@ const DEFAULT_DESCRIPTION =
 const GUIDED_DESCRIPTION =
   "Connect Okta once. Speakeasy then configures single sign-on, reads your directory, and proposes MCP server access that matches the application assignments you already maintain in Okta.";
 
-// The two outcomes no provider can reach yet. They are named and numbered from
-// the start so the shape of the journey is the same whoever is walking it, and
-// locked because nothing behind them exists to open.
+// Named and numbered from the start so the shape of the journey is the same
+// whoever is walking it, and locked because nothing behind it exists to open.
 /** Okta-only, and locked for every other provider until there is one. */
 const APPLICATIONS_STEP = {
   index: 4,
@@ -51,22 +50,6 @@ const APPLICATIONS_STEP = {
   description:
     "Read what your identity provider assigns to each application and carry it into MCP server access as a reviewed proposal.",
   badge: "Waiting",
-};
-
-/**
- * The outcome no provider can reach yet. Named and numbered from the start so
- * the shape of the journey is the same whoever is walking it, and locked
- * because nothing behind it exists to open.
- */
-const ENTERPRISE_STEP = {
-  index: 5,
-  slug: "enterprise-managed-auth",
-  title: "Enterprise managed auth setup",
-  // Not merely later in the queue: setup is complete without it, and it opens
-  // on a capability Speakeasy does not have yet.
-  description:
-    "Setup finishes without this. It becomes available when Speakeasy can acquire credentials on a person's behalf, so people's agents stop signing in to each server separately.",
-  badge: "Later",
 };
 
 interface IdentityProviderStepProps {
@@ -116,7 +99,7 @@ export function IdentityProviderStep({
       description={guided ? GUIDED_DESCRIPTION : DEFAULT_DESCRIPTION}
       onContinue={onComplete}
     >
-      {/* The same five steps whoever the provider is. Picking one fills them
+      {/* The same four steps whoever the provider is. Picking one fills them
           in rather than replacing them: a provider Speakeasy walks itself
           takes over step 1 and waits on the rest, and one it does not hands
           steps 2 and 3 to the portal. */}
@@ -157,7 +140,6 @@ export function IdentityProviderStep({
         ) : (
           <StepSection locked {...APPLICATIONS_STEP} />
         )}
-        <StepSection locked {...ENTERPRISE_STEP} />
       </div>
     </StepContainer>
   );

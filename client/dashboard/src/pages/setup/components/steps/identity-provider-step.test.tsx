@@ -235,7 +235,7 @@ describe("IdentityProviderStep", () => {
     expect(screen.getByText("Recommended over SAML")).toBeTruthy();
   });
 
-  it("keeps the same five steps and fills them in when Okta is picked", () => {
+  it("keeps the same four steps and fills them in when Okta is picked", () => {
     render(<IdentityProviderStep onComplete={() => {}} />);
 
     const steps = [
@@ -243,7 +243,6 @@ describe("IdentityProviderStep", () => {
       "Single sign-on",
       "Directory sync",
       "Applications and access",
-      "Enterprise managed auth setup",
     ];
     // The list is the same before and after a provider is chosen; picking one
     // fills the steps in rather than swapping them for a different set.
@@ -311,15 +310,16 @@ describe("IdentityProviderStep", () => {
     const locked = screen
       .getAllByRole("region", { hidden: true })
       .filter((section) => section.getAttribute("aria-disabled") === "true");
-    expect(locked).toHaveLength(4);
+    expect(locked).toHaveLength(3);
     // A locked step names its outcome and stops there — no body, no controls.
     for (const section of locked) {
       expect(section.querySelectorAll("button, a, input")).toHaveLength(0);
     }
 
     expect(screen.getAllByText("Waiting")).toHaveLength(3);
-    expect(screen.getByText("Later")).toBeTruthy();
-    expect(screen.getByText(/Setup finishes without this/)).toBeTruthy();
+    // The journey ends at Applications and access; nothing is named beyond it.
+    expect(screen.queryByText("Later")).toBeNull();
+    expect(screen.queryByText(/Setup finishes without this/)).toBeNull();
   });
 
   it("never names the sign-in provider vendor to the customer", () => {
