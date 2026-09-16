@@ -114,11 +114,11 @@ type mintedSession struct {
 	Subject                urn.SessionSubject
 }
 
-type sessionIssuancePolicy uint8
+type sessionIssuancePolicy string
 
 const (
-	sessionIssuancePolicyLegacy sessionIssuancePolicy = iota
-	sessionIssuancePolicyEMA
+	sessionIssuancePolicyIssuerScoped   sessionIssuancePolicy = "issuer_scoped"
+	sessionIssuancePolicyResourceScoped sessionIssuancePolicy = "resource_scoped"
 )
 
 const idJAGRefreshTokenHashPrefix = "id-jag:"
@@ -357,7 +357,7 @@ func (s *Service) handleTokenJWTBearerGrant(
 		DelegatedGrantsVersion: pgtype.Int4{Int32: 0, Valid: false},
 		DesiredSessionDuration: nil,
 		Replayable:             false,
-		Policy:                 sessionIssuancePolicyEMA,
+		Policy:                 sessionIssuancePolicyResourceScoped,
 		Subject:                result.Subject,
 		ToolSelection:          nil,
 	}, logger)
@@ -567,7 +567,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		DelegatedGrantsVersion: delegatedGrantsVersion,
 		DesiredSessionDuration: desiredSessionDuration,
 		Replayable:             false,
-		Policy:                 sessionIssuancePolicyLegacy,
+		Policy:                 sessionIssuancePolicyIssuerScoped,
 		Subject:                subject,
 		ToolSelection:          toolSelection,
 	}, logger)
@@ -921,7 +921,7 @@ func (s *Service) rotateRefreshToken(
 		DelegatedGrantsVersion: oldSession.DelegatedGrantsVersion,
 		DesiredSessionDuration: nil,
 		Replayable:             true,
-		Policy:                 sessionIssuancePolicyLegacy,
+		Policy:                 sessionIssuancePolicyIssuerScoped,
 		Subject:                oldSession.SubjectUrn,
 		ToolSelection:          oldSession.ToolSelection,
 	}, logger)
@@ -1194,10 +1194,10 @@ func (s *Service) mintUserSessionAccessToken(params mintUserSessionAccessTokenPa
 const accessTokenLifetime = 1 * time.Hour
 
 // mintSession applies a typed issuance policy, mints a new access-token JWT
-// (HS256), and persists a fresh user_sessions row through queries. Legacy OAuth
-// sessions also receive an opaque refresh token. Refresh rotation supplies a
-// transaction-backed repository so consuming the old refresh token and
-// creating its successor commit atomically.
+// (HS256), and persists a fresh user_sessions row through queries.
+// Issuer-scoped sessions also receive an opaque refresh token. Refresh rotation
+// supplies a transaction-backed repository so consuming the old refresh token
+// and creating its successor commit atomically.
 //
 // Lifetimes:
 //   - authorization: the subject's consent choice, capped by the issuer's
@@ -1208,9 +1208,9 @@ const accessTokenLifetime = 1 * time.Hour
 //
 // `iss` / audience: the JWT issuer claim is built from baseURL (which the
 // caller computes from custom-domain context so it matches what the AS
-// metadata document advertises). Legacy sessions retain their issuer-scoped
-// endpoint audience. EMA sessions use the exact MCP resource URL and are not
-// refreshable.
+// metadata document advertises). Issuer-scoped sessions retain the endpoint's
+// issuer audience and are refreshable. Resource-scoped sessions use the exact
+// MCP resource URL and are not refreshable.
 // Params.DesiredSessionDuration is used only for an initial authorization: nil
 // means "no explicit choice", falling back to the issuer's session_duration.
 // Params.AuthorizationExpiresAt is used only for rotation and is carried from
@@ -1229,13 +1229,13 @@ func (s *Service) mintSession(
 	audience := endpoint.AudienceURN
 	refreshable := true
 	switch params.Policy {
-	case sessionIssuancePolicyLegacy:
+	case sessionIssuancePolicyIssuerScoped:
 		if params.Audience != "" {
-			return nil, oops.E(oops.CodeUnexpected, nil, "legacy session must not override its audience").LogError(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, nil, "issuer-scoped session must not override its audience").LogError(ctx, logger)
 		}
-	case sessionIssuancePolicyEMA:
+	case sessionIssuancePolicyResourceScoped:
 		if params.Audience == "" || params.AuthorizationExpiresAt != nil || params.DesiredSessionDuration != nil || params.Replayable || params.AuthorizerUserID.Valid || params.DelegatedGrants != nil || params.DelegatedGrantsVersion.Valid || params.ToolSelection != nil {
-			return nil, oops.E(oops.CodeUnexpected, nil, "invalid EMA session issuance parameters").LogError(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, nil, "invalid resource-scoped session issuance parameters").LogError(ctx, logger)
 		}
 		audience = params.Audience
 		refreshable = false
