@@ -18,6 +18,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/speakeasy-api/gram/server/internal/assistants"
+	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
@@ -229,6 +231,33 @@ func (s *Service) admitCIMDClient(ctx context.Context, logger *slog.Logger, endp
 		logger.ErrorContext(ctx, "unrecognized cimd admission mode stored on issuer, failing closed",
 			attr.SlogCIMDAdmissionMode(endpoint.CIMDAdmissionModeRaw.String),
 		)
+	}
+
+	if assistantID, ok := assistants.ParseAssistantClientMetadataDocumentURL(s.serverURL, clientID); ok && mode != admission.ModeDisabled {
+		// Gram's own assistants are first-party clients of every Gram-hosted
+		// issuer. Their document URL is never a catalog preset (the host is
+		// the deployment's own) and must not depend on an operator adding
+		// it as a custom URL, so it is admitted ahead of the policy on any
+		// issuer that accepts CIMD at all. The assistant must exist: an
+		// unknown id is an ordinary client_id for the policy below, so a
+		// guessed URL cannot force a document fetch on a presets issuer.
+		_, err := assistantrepo.New(s.db).GetAssistantForClientMetadataDocument(ctx, assistantID)
+		switch {
+		case err == nil:
+			s.cimdAdmissionMetrics.RecordAdmitted(ctx, mode, admission.AdmitPlatformAssistant)
+			return nil
+		case !errors.Is(err, pgx.ErrNoRows):
+			if mode == admission.ModeOpen {
+				// Open admission must not depend on a lookup used only to
+				// classify traffic. Preserve the shadow's failure semantics.
+				if !errors.Is(err, context.Canceled) {
+					logger.ErrorContext(ctx, "cimd admission platform assistant lookup failed", attr.SlogError(err))
+				}
+				s.cimdAdmissionMetrics.RecordAdmitted(ctx, mode, admission.AdmitOpen)
+				return nil
+			}
+			return fmt.Errorf("lookup platform assistant for cimd admission: %w", err)
+		}
 	}
 
 	if mode == admission.ModeOpen {

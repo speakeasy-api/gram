@@ -548,9 +548,9 @@ export function DistributeServersStep({
                   (DCR) are shown here — Speakeasy can configure these
                   automatically. More servers, including those that need manual
                   OAuth or API key setup, are available in the{" "}
-                  <routes.mcp.add.catalog.Link className="underline underline-offset-2 hover:text-foreground">
+                  <routes.mcp.catalog.Link className="underline underline-offset-2 hover:text-foreground">
                     catalog
-                  </routes.mcp.add.catalog.Link>
+                  </routes.mcp.catalog.Link>
                   .
                 </p>
               )}

@@ -371,7 +371,7 @@ var _ efficacy.Signaler = (*TemporalSkillEfficacySignaler)(nil)
 // is in flight joins that run instead of starting a second one.
 func (s *TemporalSkillEfficacySignaler) Signal(ctx context.Context, projectID uuid.UUID) error {
 	if s == nil || s.TemporalEnv == nil {
-		return ErrTemporalUnavailable
+		return tenv.ErrNotConfigured
 	}
 
 	workflowID := skillEfficacyCoordinatorWorkflowID(projectID)

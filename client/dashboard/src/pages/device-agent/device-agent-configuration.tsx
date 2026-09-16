@@ -36,7 +36,6 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useState } from "react";
 import { toast } from "sonner";
-import { AiScanTargetsSection } from "./ai-scan-targets";
 
 const PLATFORMS = [
   {
@@ -163,12 +162,10 @@ export function DeviceAgentConfigurationTab(): JSX.Element {
     );
   }
 
-  return (
-    <>
-      <ConfigurationSection>{body}</ConfigurationSection>
-      <AiScanTargetsSection />
-    </>
-  );
+  // Scan targets used to sit under this tab. They are their own tab now: the
+  // catalog an agent probes for is a different question from how the fleet is
+  // configured, and burying a list behind a form made it hard to find.
+  return <ConfigurationSection>{body}</ConfigurationSection>;
 }
 
 // The Device Agent page already renders the area eyebrow and display-serif

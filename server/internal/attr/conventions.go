@@ -235,10 +235,15 @@ const (
 	// admitted rather than a bare "admitted", so the values are
 	// "admitted_open", "admitted_open_not_listed",
 	// "admitted_open_oversized", "admitted_catalog_exact",
-	// "admitted_catalog_pattern", "admitted_custom", "denied_disabled",
+	// "admitted_catalog_pattern", "admitted_custom",
+	// "admitted_platform_assistant", "denied_disabled",
 	// "denied_not_listed", "denied_oversized", and "denied_unknown_mode".
 	// Chart the admitted_* values as a group; there is no single value
 	// meaning "admitted".
+	//
+	// "admitted_platform_assistant" is a document Gram publishes for one of
+	// its own assistants, admitted on every issuer that accepts CIMD at all
+	// and recorded under whichever mode that issuer runs.
 	//
 	// "admitted_open_not_listed" is the catalog-gap signal on an issuer that
 	// refuses nobody: the client got in, and no rule anywhere covered it.

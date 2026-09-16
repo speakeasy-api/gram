@@ -804,7 +804,7 @@ function PolicyCenterContent() {
     {
       key: "action",
       header: "Action",
-      width: "0.5fr",
+      width: "0.7fr",
       render: (row) => (
         <span className="inline-flex">
           <ActionBadge action={(row.policy.action as PolicyAction) ?? "flag"} />

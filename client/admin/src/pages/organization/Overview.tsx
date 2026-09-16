@@ -19,6 +19,7 @@ import { GuidedReadinessFacts } from "@/pages/organization/GuidedReadiness";
 import { TrialFacts, TrialSummary } from "@/pages/organization/TrialFacts";
 import { OrganizationActions } from "@/pages/organizations/OrganizationActions";
 import { canStartTrial } from "@/pages/organizations/rowActions";
+import { DirectoryHandoffSection } from "@/pages/organization/DirectoryHandoff";
 import { SetStripeCustomer } from "@/pages/organization/SetStripeCustomer";
 import {
   Select,
@@ -451,6 +452,13 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
 
         <Panel title="Guided setup readiness">
           <GuidedReadinessFacts organizationID={org.id} />
+        </Panel>
+
+        {/* Below the details rather than beside them: it is the first half of
+            one flow that finishes in the customer's own onboarding, and the
+            operator reads it after they know which organization they are on. */}
+        <Panel title="Directory handoff">
+          <DirectoryHandoffSection org={org} />
         </Panel>
 
         <Panel

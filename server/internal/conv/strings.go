@@ -76,3 +76,13 @@ func DedupeNonEmpty(values []string) []string {
 func StripNUL(s string) string {
 	return strings.ReplaceAll(s, "\x00", "")
 }
+
+// PtrStripNUL removes NUL bytes without modifying the input or trimming whitespace.
+// A nil input returns nil; a non-nil input returns a new string pointer.
+func PtrStripNUL(s *string) *string {
+	if s == nil {
+		return nil
+	}
+	stripped := StripNUL(*s)
+	return &stripped
+}

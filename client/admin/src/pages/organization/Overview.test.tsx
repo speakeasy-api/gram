@@ -27,6 +27,7 @@ const mocks = vi.hoisted(() => ({
   getOrganizationStats: vi.fn(),
   updateOrganization: vi.fn(),
   markEnterpriseTrialConverted: vi.fn(),
+  getOrganizationDirectoryHandoff: vi.fn(),
   toastSuccess: vi.fn(),
 }));
 
@@ -45,6 +46,7 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
     getOrganizationStats: mocks.getOrganizationStats,
     updateOrganization: mocks.updateOrganization,
     markEnterpriseTrialConverted: mocks.markEnterpriseTrialConverted,
+    getOrganizationDirectoryHandoff: mocks.getOrganizationDirectoryHandoff,
   };
 });
 
@@ -146,6 +148,14 @@ beforeEach(() => {
   mocks.getOrganizationStats.mockReset();
   mocks.updateOrganization.mockReset();
   mocks.markEnterpriseTrialConverted.mockReset();
+  // The directory handoff panel reads this on every render of the record.
+  // Unmocked it reaches the real fetch, the way the project list above does,
+  // and the panel then draws a read failure over a view about something else.
+  mocks.getOrganizationDirectoryHandoff.mockReset();
+  mocks.getOrganizationDirectoryHandoff.mockResolvedValue({
+    handoff: null,
+    workos_environment: "production",
+  });
   mocks.toastSuccess.mockReset();
   mocks.markEnterpriseTrialConverted.mockResolvedValue({
     organization_id: ORG.id,

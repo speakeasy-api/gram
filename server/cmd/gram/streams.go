@@ -360,7 +360,7 @@ func newStreamsCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to create Stripe client: %w", err)
 			}
-			stripeMeterEvents, err := newStripeMeterEventClient(guardianPolicy, c)
+			stripeMeterEvents, err := newStripeMeterEventClient(logger, guardianPolicy, c)
 			if err != nil {
 				return fmt.Errorf("failed to create Stripe meter event client: %w", err)
 			}

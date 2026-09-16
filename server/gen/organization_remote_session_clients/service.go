@@ -61,6 +61,15 @@ type Service interface {
 	// token_endpoint_auth_method=private_key_jwt. A no-op when no set is attached.
 	// Requires org:admin and the customer_managed_encryption_keys entitlement.
 	DetachClientKeySet(context.Context, *DetachClientKeySetPayload) (res *types.RemoteSessionClient, err error)
+	// Re-register a dynamically registered remote_session_client with its issuer
+	// in place, replacing the client_id and secret while keeping the row's id,
+	// issuer bindings, MCP server attachments, and key set links. Every remote
+	// session minted against the old client_id is revoked, so users reconnect
+	// once. Use when the issuer reports the registration expired
+	// (upstream_rejected_at is set) or to rotate proactively. The replacement is
+	// registered at the registration_endpoint the client's issuer publishes, so
+	// the issuer must publish one. Requires org:admin.
+	RotateClient(context.Context, *RotateClientPayload) (res *types.RemoteSessionClient, err error)
 	// Soft-delete a remote_session_client in the caller's organization. Cascades
 	// to the remote_sessions minted against it. Requires org:admin.
 	DeleteClient(context.Context, *DeleteClientPayload) (err error)
@@ -89,7 +98,7 @@ const ServiceName = "organizationRemoteSessionClients"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [11]string{"listClients", "getClient", "getClientDeletePreflight", "listClientMcpServers", "createClient", "createCimdClient", "updateClient", "attachClientKeySet", "detachClientKeySet", "deleteClient", "removeClientFromMcpServer"}
+var MethodNames = [12]string{"listClients", "getClient", "getClientDeletePreflight", "listClientMcpServers", "createClient", "createCimdClient", "updateClient", "attachClientKeySet", "detachClientKeySet", "rotateClient", "deleteClient", "removeClientFromMcpServer"}
 
 // AttachClientKeySetPayload is the payload type of the
 // organizationRemoteSessionClients service attachClientKeySet method.
@@ -145,12 +154,22 @@ type CreateClientPayload struct {
 	// How the client authenticates at the issuer's token endpoint. Omit to default
 	// to client_secret_basic.
 	TokenEndpointAuthMethod *string
+	// Identifier used as the aud claim in private_key_jwt assertions. Omit to use
+	// the issuer identifier; token_endpoint is available for providers that
+	// require the token endpoint URL.
+	TokenEndpointAuthAudienceFormat *string
 	// Explicit upstream OAuth scopes the dance should request for this client.
 	// Omit to fall back to the issuer's scopes_supported.
 	Scope []string
 	// Optional upstream OAuth audience to send on the authorize redirect and token
 	// exchange.
 	Audience *string
+	// When the issuer reported issuing the client_id (RFC 7591
+	// client_id_issued_at). Omit to record the time of this call.
+	ClientIDIssuedAt *string
+	// When the issuer reported the client secret expires (RFC 7591
+	// client_secret_expires_at). Omit when the issuer reported no expiry.
+	ClientSecretExpiresAt *string
 }
 
 // DeleteClientPayload is the payload type of the
@@ -275,6 +294,15 @@ type RemoveClientFromMcpServerPayload struct {
 	ApikeyToken  *string
 }
 
+// RotateClientPayload is the payload type of the
+// organizationRemoteSessionClients service rotateClient method.
+type RotateClientPayload struct {
+	// The remote_session_client id.
+	ID           string
+	SessionToken *string
+	ApikeyToken  *string
+}
+
 // UpdateClientPayload is the payload type of the
 // organizationRemoteSessionClients service updateClient method.
 type UpdateClientPayload struct {
@@ -286,6 +314,9 @@ type UpdateClientPayload struct {
 	ClientSecret *string
 	// Change how the client authenticates at the issuer's token endpoint.
 	TokenEndpointAuthMethod *string
+	// Change the aud claim format used in private_key_jwt assertions. Omit to
+	// leave unchanged.
+	TokenEndpointAuthAudienceFormat *string
 	// Replace the explicit upstream OAuth scopes for this client. Omit to leave
 	// unchanged.
 	Scope []string

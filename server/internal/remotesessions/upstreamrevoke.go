@@ -37,6 +37,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -89,18 +90,24 @@ type UpstreamRevoker struct {
 	// against.
 	client *guardian.HTTPClient
 
-	metrics *remotesessionmetrics.Revoke
+	metrics    *remotesessionmetrics.Revoke
+	assertions TokenEndpointAssertionSigner
 }
 
-func NewUpstreamRevoker(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, enc *encryption.Client, policy *guardian.Policy) *UpstreamRevoker {
+func NewUpstreamRevoker(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, enc *encryption.Client, policy *guardian.Policy, signers ...TokenEndpointAssertionSigner) *UpstreamRevoker {
 	logger = logger.With(attr.SlogComponent("remote-session-upstream-revoke"))
+	var signer TokenEndpointAssertionSigner = unavailableTokenEndpointAssertionSigner{}
+	if len(signers) > 0 {
+		signer = signers[0]
+	}
 	return &UpstreamRevoker{
-		logger:  logger,
-		tracer:  tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/remotesessions"),
-		db:      db,
-		enc:     enc,
-		client:  noRedirectClient(policy.PooledClient()),
-		metrics: remotesessionmetrics.NewRevoke(logger, meterProvider),
+		logger:     logger,
+		tracer:     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/remotesessions"),
+		db:         db,
+		enc:        enc,
+		client:     noRedirectClient(policy.PooledClient()),
+		metrics:    remotesessionmetrics.NewRevoke(logger, meterProvider),
+		assertions: signer,
 	}
 }
 
@@ -523,7 +530,7 @@ func (r *UpstreamRevoker) revokeOnce(ctx context.Context, clientID uuid.UUID, to
 	}
 
 	var clientSecret string
-	if client.ClientSecretEncrypted.Valid {
+	if client.ClientSecretEncrypted.Valid && client.TokenEndpointAuthMethod.String != string(TokenEndpointAuthMethodPrivateKeyJWT) {
 		clientSecret, err = r.enc.Decrypt(client.ClientSecretEncrypted.String)
 		if err != nil {
 			logger.WarnContext(ctx, "upstream revoke: client secret could not be read", attr.SlogError(err))
@@ -540,12 +547,33 @@ func (r *UpstreamRevoker) revokeOnce(ctx context.Context, clientID uuid.UUID, to
 		logger.WarnContext(ctx, "upstream revoke: client auth configuration is invalid", attr.SlogError(err))
 		return client.IssuerUrl, remotesessionmetrics.RevokeOutcomeInternal
 	}
+	assertionAudience := ""
+	if authMethod == TokenEndpointAuthMethodPrivateKeyJWT {
+		assertionAudience, err = ResolveTokenEndpointAuthAudience(
+			client.TokenEndpointAuthAudienceFormat.String,
+			clientAssertionIssuer(client.IssuerMetadata, client.IssuerUrl),
+			conv.FromPGTextOrEmpty[string](client.TokenEndpoint),
+		)
+		if err != nil {
+			logger.WarnContext(ctx, "upstream revoke: client assertion audience is invalid", attr.SlogError(err))
+			return client.IssuerUrl, remotesessionmetrics.RevokeOutcomeInternal
+		}
+	}
 
 	form := url.Values{}
 	form.Set("token", token)
 	form.Set("token_type_hint", hint)
 
-	req, err := newTokenEndpointRequest(ctx, endpoint, form, authMethod, client.ExternalClientID, clientSecret)
+	req, err := newTokenEndpointRequest(ctx, endpoint, form, tokenEndpointClientAuth{
+		Method:                authMethod,
+		RemoteSessionClientID: clientID,
+		OrganizationID:        client.ClientOrganizationID.String,
+		JSONWebKeySetID:       client.JsonWebKeySetID.UUID,
+		ClientID:              client.ExternalClientID,
+		ClientSecret:          clientSecret,
+		AssertionAudience:     assertionAudience,
+		AssertionSigner:       r.assertions,
+	})
 	if err != nil {
 		logger.WarnContext(ctx, "upstream revoke: could not build request", attr.SlogError(err))
 		return client.IssuerUrl, remotesessionmetrics.RevokeOutcomeInternal

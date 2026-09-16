@@ -789,9 +789,8 @@ func revokeJsonWebKey(t *testing.T, ctx context.Context, conn *pgxpool.Pool, org
 	require.NoError(t, err)
 }
 
-// forceTokenEndpointAuthMethod writes a token_endpoint_auth_method the Goa enum
-// does not yet accept. private_key_jwt arrives with AIM-156; until then the only
-// way to exercise the rules that guard it is to plant the value directly.
+// forceTokenEndpointAuthMethod writes a client auth method directly for fixture
+// scenarios that need to bypass the management handler's coupling checks.
 func forceTokenEndpointAuthMethod(t *testing.T, ctx context.Context, conn *pgxpool.Pool, clientID uuid.UUID, projectID uuid.UUID, method string) {
 	t.Helper()
 
