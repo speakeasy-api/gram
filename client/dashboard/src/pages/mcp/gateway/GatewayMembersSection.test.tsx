@@ -96,6 +96,100 @@ function setup(
 }
 
 describe("Add servers sheet", () => {
+  it("uses one primary trigger with grouped creation choices and matching icons", () => {
+    setup();
+    const triggers = screen.getAllByRole("button", { name: "Add new" });
+    expect(triggers).toHaveLength(1);
+    const trigger = triggers[0]!;
+    expect(trigger.classList.contains("bg-btn-primary")).toBe(true);
+    fireEvent.pointerDown(trigger, {
+      button: 0,
+      ctrlKey: false,
+      pointerType: "mouse",
+    });
+    const menu = screen.getByRole("menu");
+    const groups = within(menu).getAllByRole("group");
+    expect(groups.map((group) => group.getAttribute("aria-label"))).toEqual([
+      "Recommended",
+      "Advanced",
+    ]);
+    const expected = [
+      [
+        [
+          "From the catalog",
+          "blocks",
+          "Pick a reviewed third-party server — Salesforce, Datadog, Linear, Slack, Okta and more.",
+        ],
+        [
+          "Hosted remotely",
+          "cloud",
+          "Add a server that already runs elsewhere by its URL, proxied or not.",
+        ],
+        [
+          "Reachable through a tunnel",
+          "cable",
+          "Connect a server running inside your own network through a tunnel.",
+        ],
+      ],
+      [
+        [
+          "From your API",
+          "file-code",
+          "Upload an OpenAPI document to generate tools.",
+        ],
+        [
+          "From an existing source",
+          "boxes",
+          "Build a server from an OpenAPI document or function this project already has.",
+        ],
+        [
+          "Write custom code",
+          "code",
+          "Create tools with TypeScript functions.",
+        ],
+      ],
+    ] as const;
+    groups.forEach((group, index) => {
+      const items = within(group).getAllByRole("menuitem");
+      expect(items.map((item) => item.textContent)).toEqual(
+        expected[index]!.map(([label, , description]) => label + description),
+      );
+      items.forEach((item, itemIndex) => {
+        expect(
+          item.firstElementChild?.classList.contains(
+            `lucide-${expected[index]![itemIndex]![1]}`,
+          ),
+        ).toBe(true);
+      });
+    });
+    const separator = within(menu).getByRole("separator");
+    expect(separator.previousElementSibling).toBe(groups[0]);
+    expect(separator.nextElementSibling).toBe(groups[1]);
+  });
+
+  it("dismisses only the dropdown on the first outside click, then the sheet", async () => {
+    const onOpenChange = vi.fn();
+    setup({ onOpenChange });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Add new" }), {
+      button: 0,
+      ctrlKey: false,
+      pointerType: "mouse",
+    });
+    expect(screen.getByRole("menu")).toBeTruthy();
+    // Radix registers its document pointer listener on the next task.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const overlay = document.querySelector('[data-slot="sheet-overlay"]')!;
+    fireEvent.pointerDown(overlay, { button: 0, pointerType: "mouse" });
+    fireEvent.click(overlay);
+    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    fireEvent.pointerDown(overlay, { button: 0, pointerType: "mouse" });
+    fireEvent.click(overlay);
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
   it("clears focused search on Escape before allowing the sheet to close", () => {
     const onOpenChange = vi.fn();
     setup({ onOpenChange });
@@ -117,7 +211,7 @@ describe("Add servers sheet", () => {
     fireEvent.change(screen.getByRole("textbox"), {
       target: { value: "Alpha" },
     });
-    const button = screen.getByRole("button", { name: "Add new server" });
+    const button = screen.getByRole("button", { name: "Add new" });
     button.focus();
     fireEvent.keyDown(button, { key: "Escape" });
     expect(onOpenChange).toHaveBeenCalledWith(false);
@@ -129,7 +223,7 @@ describe("Add servers sheet", () => {
     fireEvent.change(screen.getByRole("textbox"), {
       target: { value: "Alpha" },
     });
-    const button = screen.getByRole("button", { name: "Add new server" });
+    const button = screen.getByRole("button", { name: "Add new" });
     button.focus();
     fireEvent.keyDown(button, { key: "ArrowDown" });
     const menu = await screen.findByRole("menu");
@@ -144,10 +238,19 @@ describe("Add servers sheet", () => {
   it("shows both sections and existing checkboxes immediately", () => {
     setup();
     expect(
-      screen.getByRole("heading", { name: "Add a New Server" }),
+      screen.getByRole("heading", { name: "Add servers to gateway" }),
     ).toBeTruthy();
     expect(
-      screen.getByRole("heading", { name: "Add Existing Server" }),
+      screen.getByText(
+        "Choose existing servers to add, or get started with a new one.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: "Create a new server" }),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Add new" })).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: "Add existing servers" }),
     ).toBeTruthy();
     expect(screen.getByRole("list", { name: "Existing servers" })).toBeTruthy();
     expect(screen.getAllByRole("checkbox")).toHaveLength(2);
@@ -207,7 +310,7 @@ describe("Add servers sheet", () => {
     }
     fireEvent.click(row);
     fireEvent.click(
-      screen.getByRole("button", { name: "Add selected servers (1)" }),
+      screen.getByRole("button", { name: "Add selected servers" }),
     );
     await waitFor(() => expect(onAdd).toHaveBeenCalledOnce());
   });
@@ -228,7 +331,7 @@ describe("Add servers sheet", () => {
       expect(screen.getByRole("checkbox", { name: "Alpha" })).toBeTruthy();
       expect(screen.queryByRole("checkbox", { name: "Beta" })).toBeNull();
       expect(
-        screen.getByRole("button", { name: "Add selected servers (1)" }),
+        screen.getByRole("button", { name: "Add selected servers" }),
       ).toBeTruthy();
       fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
       expect(
@@ -253,7 +356,7 @@ describe("Add servers sheet", () => {
     });
     fireEvent.click(screen.getByText("Beta"));
     fireEvent.click(
-      screen.getByRole("button", { name: "Add selected servers (1)" }),
+      screen.getByRole("button", { name: "Add selected servers" }),
     );
     await waitFor(() => expect(onAdd).toHaveBeenCalledTimes(1));
     expect(onAdd.mock.calls[0]?.[0]).toEqual([
@@ -293,7 +396,7 @@ describe("Add servers sheet", () => {
     );
     fireEvent.click(screen.getByRole("checkbox", { name: "Hosted" }));
     fireEvent.click(
-      screen.getByRole("button", { name: "Add selected servers (1)" }),
+      screen.getByRole("button", { name: "Add selected servers" }),
     );
     await screen.findByText("Hosted: Try again");
     view.rerender(
@@ -315,7 +418,7 @@ describe("Add servers sheet", () => {
       </MemoryRouter>,
     );
     fireEvent.click(
-      screen.getByRole("button", { name: "Add selected servers (1)" }),
+      screen.getByRole("button", { name: "Add selected servers" }),
     );
     await waitFor(() => expect(onAdd).toHaveBeenCalledTimes(2));
     expect(onAdd).toHaveBeenLastCalledWith([
@@ -330,7 +433,7 @@ describe("Add servers sheet", () => {
     fireEvent.click(screen.getByText("Alpha"));
     fireEvent.click(screen.getByText("Beta"));
     fireEvent.click(
-      screen.getByRole("button", { name: "Add selected servers (2)" }),
+      screen.getByRole("button", { name: "Add selected servers" }),
     );
     await waitFor(() => expect(onAdd).toHaveBeenCalledTimes(1));
     expect(onAdd.mock.calls[0]?.[0]).toHaveLength(2);
@@ -351,14 +454,14 @@ describe("Add servers sheet", () => {
         .getAttribute("aria-checked"),
     ).toBe("true");
     fireEvent.click(
-      screen.getByRole("button", { name: "Add selected servers (1)" }),
+      screen.getByRole("button", { name: "Add selected servers" }),
     );
     await waitFor(() => expect(onAdd).toHaveBeenCalledTimes(2));
     expect(onAdd).toHaveBeenLastCalledWith([
       expect.objectContaining({ server: expect.objectContaining({ id: "b" }) }),
     ]);
     expect(
-      screen.getByRole("button", { name: "Add selected servers (1)" }),
+      screen.getByRole("button", { name: "Add selected servers" }),
     ).toBeTruthy();
   });
 
@@ -379,7 +482,27 @@ describe("Add servers sheet", () => {
   ])("keeps creation discoverable in each list state", (props, message) => {
     setup(props);
     expect(screen.getByText(message)).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Add new server" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Add new" })).toBeTruthy();
+  });
+
+  it.each([{ servers: [] }, { memberServerIds: new Set(["a", "b"]) }])(
+    "hides the bulk action when no candidates remain",
+    (props) => {
+      setup(props);
+      expect(
+        screen.queryByRole("button", { name: "Add selected servers" }),
+      ).toBeNull();
+    },
+  );
+
+  it("centers the empty-state copy in a shaded box without extra controls", () => {
+    setup({ servers: [] });
+    const panel = screen.getByText(
+      "No existing servers yet. Create a new server to get started.",
+    ).parentElement!;
+    expect(panel.classList.contains("bg-muted/20")).toBe(true);
+    expect(panel.classList.contains("text-center")).toBe(true);
+    expect(panel.querySelector("button, svg")).toBeNull();
   });
 
   it("searches existing candidates without hiding creation", () => {
@@ -425,7 +548,7 @@ describe("Add servers sheet", () => {
       expect(checkbox.getAttribute("aria-checked")).toBe("false");
     }
     expect(
-      screen.getByRole("button", { name: "Add selected servers (0)" }),
+      screen.getByRole("button", { name: "Add selected servers" }),
     ).toBeTruthy();
   });
 
@@ -464,7 +587,7 @@ describe("Add servers sheet", () => {
     expect(
       (
         screen.getByRole("button", {
-          name: "Add selected servers (0)",
+          name: "Add selected servers",
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
@@ -479,27 +602,32 @@ describe("Add servers sheet", () => {
     ["Write custom code", "/function"],
   ])("opens %s directly without an all-route attach handoff", (label, href) => {
     setup();
-    fireEvent.pointerDown(
-      screen.getByRole("button", { name: "Add new server" }),
-      { button: 0, ctrlKey: false, pointerType: "mouse" },
-    );
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Add new" }), {
+      button: 0,
+      ctrlKey: false,
+      pointerType: "mouse",
+    });
     expect(screen.queryByRole("menuitem", { name: "New gateway" })).toBeNull();
-    fireEvent.click(screen.getByRole("menuitem", { name: label }));
+    const item = screen.getByRole("menuitem", {
+      name: new RegExp(`^${label}`),
+    });
+    fireEvent.click(item.querySelector(".text-muted-foreground")!);
     expect(permissions.navigate).toHaveBeenCalledWith(href);
   });
 
   it("hides flagged creation routes when disabled", () => {
     permissions.flags = false;
     setup();
-    fireEvent.pointerDown(
-      screen.getByRole("button", { name: "Add new server" }),
-      { button: 0, ctrlKey: false, pointerType: "mouse" },
-    );
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Add new" }), {
+      button: 0,
+      ctrlKey: false,
+      pointerType: "mouse",
+    });
     expect(
-      screen.queryByRole("menuitem", { name: "Reachable through a tunnel" }),
+      screen.queryByRole("menuitem", { name: /^Reachable through a tunnel/ }),
     ).toBeNull();
     expect(
-      screen.queryByRole("menuitem", { name: "Write custom code" }),
+      screen.queryByRole("menuitem", { name: /^Write custom code/ }),
     ).toBeNull();
     expect(screen.getAllByRole("menuitem")).toHaveLength(4);
   });
@@ -516,7 +644,7 @@ describe("Add servers sheet", () => {
     setup({ onAdd, onOpenChange });
     fireEvent.click(screen.getByText("Alpha"));
     const button = screen.getByRole("button", {
-      name: "Add selected servers (1)",
+      name: "Add selected servers",
     });
     fireEvent.click(button);
     fireEvent.click(button);
@@ -541,7 +669,7 @@ describe("Add servers sheet", () => {
     fireEvent.click(screen.getByText("Alpha"));
     fireEvent.click(screen.getByText("Beta"));
     fireEvent.click(
-      screen.getByRole("button", { name: "Add selected servers (2)" }),
+      screen.getByRole("button", { name: "Add selected servers" }),
     );
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
     expect(toast.success).toHaveBeenCalledExactlyOnceWith("2 servers added");
@@ -569,7 +697,7 @@ describe("Add servers sheet", () => {
       fireEvent.click(screen.getByText("Alpha"));
       fireEvent.click(screen.getByText("Beta"));
       fireEvent.click(
-        screen.getByRole("button", { name: "Add selected servers (2)" }),
+        screen.getByRole("button", { name: "Add selected servers" }),
       );
       const count = mode === "partial" ? 1 : 2;
       await waitFor(() =>
@@ -591,7 +719,7 @@ describe("Add servers sheet", () => {
             ],
       );
       fireEvent.click(
-        screen.getByRole("button", { name: `Add selected servers (${count})` }),
+        screen.getByRole("button", { name: "Add selected servers" }),
       );
       await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
       expect(onAdd.mock.calls).toHaveLength(2);

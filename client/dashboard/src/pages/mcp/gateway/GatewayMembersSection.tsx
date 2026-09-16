@@ -9,7 +9,10 @@ import { SearchBar } from "@/components/ui/SearchBar";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -40,15 +43,20 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   ArrowDown,
   ArrowUp,
+  Blocks,
+  Boxes,
   Cable,
   ChevronDown,
+  Cloud,
+  Code,
+  FileCode,
   Globe,
   Loader2,
   Plus,
   Server,
   Trash2,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
 import {
@@ -638,6 +646,7 @@ export function AddServersSheet({
   const [selected, setSelected] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   const searchContainerRef = useRef<HTMLLabelElement>(null);
+  const creationMenuOutsideEventRef = useRef<Event | null>(null);
   const [results, setResults] = useState<AddResult[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const submittingRef = useRef(false);
@@ -757,11 +766,19 @@ export function AddServersSheet({
   const creationOptions = [
     {
       label: "From the catalog",
+      description:
+        "Pick a reviewed third-party server — Salesforce, Datadog, Linear, Slack, Okta and more.",
+      Icon: Blocks,
+      group: "Recommended",
       href: routes.mcp.catalog.href() + "?attachToGateway=" + gatewayId,
       allowed: canWriteProject,
     },
     {
       label: "Hosted remotely",
+      description:
+        "Add a server that already runs elsewhere by its URL, proxied or not.",
+      Icon: Cloud,
+      group: "Recommended",
       href: routes.mcp.add.remote.href(),
       allowed: canCreate,
     },
@@ -769,6 +786,10 @@ export function AddServersSheet({
       ? [
           {
             label: "Reachable through a tunnel",
+            description:
+              "Connect a server running inside your own network through a tunnel.",
+            Icon: Cable,
+            group: "Recommended",
             href: routes.mcp.add.tunneled.href(),
             allowed: canCreate,
           },
@@ -776,11 +797,18 @@ export function AddServersSheet({
       : []),
     {
       label: "From your API",
+      description: "Upload an OpenAPI document to generate tools.",
+      Icon: FileCode,
+      group: "Advanced",
       href: routes.mcp.add.openapi.href(),
       allowed: canWriteProject,
     },
     {
       label: "From an existing source",
+      description:
+        "Build a server from an OpenAPI document or function this project already has.",
+      Icon: Boxes,
+      group: "Advanced",
       href: routes.mcp.add.fromSource.href(),
       allowed: canCreate,
     },
@@ -788,6 +816,9 @@ export function AddServersSheet({
       ? [
           {
             label: "Write custom code",
+            description: "Create tools with TypeScript functions.",
+            Icon: Code,
+            group: "Advanced",
             href: routes.mcp.add.function.href(),
             allowed: canWriteProject,
           },
@@ -803,6 +834,15 @@ export function AddServersSheet({
     >
       <SheetContent
         className="flex w-full flex-col gap-0 p-0 sm:max-w-xl"
+        onPointerDownOutside={(event) => {
+          // Dialog defers dismissal until click, after the menu has closed.
+          // Consume only the pointer interaction that dismissed the menu.
+          if (
+            event.detail.originalEvent === creationMenuOutsideEventRef.current
+          ) {
+            event.preventDefault();
+          }
+        }}
         onEscapeKeyDown={(event) => {
           if (
             search &&
@@ -815,14 +855,16 @@ export function AddServersSheet({
         }}
       >
         <SheetHeader className="px-6 pt-6 pb-4">
-          <SheetTitle>Add servers</SheetTitle>
-          <SheetDescription>Add servers to this gateway.</SheetDescription>
+          <SheetTitle>Add servers to gateway</SheetTitle>
+          <SheetDescription>
+            Choose existing servers to add, or get started with a new one.
+          </SheetDescription>
         </SheetHeader>
         <div className="flex-1 space-y-4 overflow-y-auto px-6 pb-6">
           <section aria-labelledby="add-new-server" className="space-y-3">
-            <h3 id="add-new-server" className="text-sm font-medium">
-              Add a New Server
-            </h3>
+            <Text as="h3" id="add-new-server" variant="subheading">
+              Create a new server
+            </Text>
             <DropdownMenu>
               <DropdownMenuTrigger
                 asChild
@@ -831,7 +873,7 @@ export function AddServersSheet({
                 }
               >
                 <Button
-                  variant="secondary"
+                  variant="primary"
                   disabled={
                     busy || !creationOptions.some((option) => option.allowed)
                   }
@@ -839,23 +881,51 @@ export function AddServersSheet({
                   <Button.LeftIcon>
                     <Plus className="size-4" />
                   </Button.LeftIcon>
-                  <Button.Text>Add new server</Button.Text>
+                  <Button.Text>Add new</Button.Text>
                   <Button.RightIcon>
                     <ChevronDown className="size-4" />
                   </Button.RightIcon>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="start">
-                {creationOptions.map((option) => (
-                  <DropdownMenuItem
-                    key={option.href}
-                    disabled={busy || !option.allowed}
-                    onSelect={() => {
-                      if (!busy && option.allowed) void navigate(option.href);
-                    }}
-                  >
-                    {option.label}
-                  </DropdownMenuItem>
+              <DropdownMenuContent
+                onPointerDownOutside={(event) => {
+                  creationMenuOutsideEventRef.current =
+                    event.detail.originalEvent;
+                }}
+                align="start"
+                className="w-80 max-w-[calc(100vw-2rem)]"
+              >
+                {["Recommended", "Advanced"].map((group, index) => (
+                  <Fragment key={group}>
+                    {index > 0 && <DropdownMenuSeparator />}
+                    <DropdownMenuGroup aria-label={group}>
+                      <DropdownMenuLabel className="text-muted-foreground text-xs">
+                        {group}
+                      </DropdownMenuLabel>
+                      {creationOptions
+                        .filter((option) => option.group === group)
+                        .map((option) => (
+                          <DropdownMenuItem
+                            key={option.href}
+                            className="items-start"
+                            textValue={option.label}
+                            disabled={busy || !option.allowed}
+                            onSelect={() => {
+                              if (!busy && option.allowed)
+                                void navigate(option.href);
+                            }}
+                          >
+                            <option.Icon className="mt-0.5" />
+                            <span className="min-w-0">
+                              <span className="block">{option.label}</span>
+                              <span className="text-muted-foreground mt-0.5 block text-xs leading-relaxed">
+                                {option.description}
+                              </span>
+                            </span>
+                          </DropdownMenuItem>
+                        ))}
+                    </DropdownMenuGroup>
+                  </Fragment>
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
@@ -864,9 +934,9 @@ export function AddServersSheet({
             aria-labelledby="add-existing-server"
             className="space-y-4 border-t pt-4"
           >
-            <h3 id="add-existing-server" className="text-sm font-medium">
-              Add Existing Server
-            </h3>
+            <Text as="h3" id="add-existing-server" variant="subheading">
+              Add existing servers
+            </Text>
             <label ref={searchContainerRef} className="block">
               <span className="sr-only">Search existing servers</span>
               <SearchBar
@@ -892,11 +962,13 @@ export function AddServersSheet({
                 </Button>
               </div>
             ) : candidates.length === 0 ? (
-              <Text muted>
-                {servers.length === 0 && toolsets.length === 0
-                  ? "No existing servers yet. Create a new server to get started."
-                  : "All existing servers have already been added."}
-              </Text>
+              <div className="bg-muted/20 flex min-h-24 items-center justify-center border border-dashed px-6 py-8 text-center">
+                <Text muted>
+                  {servers.length === 0 && toolsets.length === 0
+                    ? "No existing servers yet. Create a new server to get started."
+                    : "All existing servers have already been added."}
+                </Text>
+              </div>
             ) : (
               <ul aria-label="Existing servers" className="space-y-2">
                 {visibleOptions.length === 0 ? (
@@ -996,24 +1068,26 @@ export function AddServersSheet({
                 You need MCP write permission on this gateway to add servers.
               </Text>
             )}
-            <Button
-              disabled={
-                busy ||
-                !canWrite ||
-                isLoading ||
-                loadFailed ||
-                selectedCandidates.length === 0
-              }
-              aria-busy={busy}
-              onClick={() => void submit()}
-            >
-              {busy && (
-                <Button.LeftIcon>
-                  <Loader2 className="size-4 animate-spin" aria-hidden />
-                </Button.LeftIcon>
-              )}
-              <Button.Text>{`Add selected servers (${selectedCandidates.length})`}</Button.Text>
-            </Button>
+            {(busy || candidates.length > 0) && (
+              <Button
+                disabled={
+                  busy ||
+                  !canWrite ||
+                  isLoading ||
+                  loadFailed ||
+                  selectedCandidates.length === 0
+                }
+                aria-busy={busy}
+                onClick={() => void submit()}
+              >
+                {busy && (
+                  <Button.LeftIcon>
+                    <Loader2 className="size-4 animate-spin" aria-hidden />
+                  </Button.LeftIcon>
+                )}
+                <Button.Text>Add selected servers</Button.Text>
+              </Button>
+            )}
             <div aria-live="polite" className="space-y-2">
               {busy && <Text muted>Adding selected servers…</Text>}
             </div>
