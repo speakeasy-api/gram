@@ -35,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -232,9 +233,16 @@ type syntheticLoginOptions struct {
 	issuerMetadataRefresh bool
 	// issuerMetadataFetchedAt stamps the issuer row as fetched then, so the on-use cadence stays silent.
 	issuerMetadataFetchedAt time.Time
+	// tunnels, when set, is the back-channel transport the manager and the
+	// refresher carry, so a test can exercise an issuer bound to a tunnel.
+	tunnels *tunnelrouting.HTTPClient
 }
 
 type syntheticLoginOption func(*syntheticLoginOptions)
+
+func withTunnels(tunnels *tunnelrouting.HTTPClient) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.tunnels = tunnels }
+}
 
 func withIssuerScopes(scopes ...string) syntheticLoginOption {
 	return func(o *syntheticLoginOptions) { o.issuerScopes = scopes }
@@ -423,12 +431,12 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		ti.conn,
 		enc,
 		policy,
-		nil,
+		options.tunnels,
 		cache.NewRedisCacheAdapter(redisClient),
 		mustURL(t, "http://localhost"),
 		managerOptions...,
 	)
-	refresher := remotesessions.NewRefreshService(logger, testenv.NewMeterProvider(t), ti.conn, enc, policy, nil, cache.NewRedisCacheAdapter(redisClient), refreshOptions...)
+	refresher := remotesessions.NewRefreshService(logger, testenv.NewMeterProvider(t), ti.conn, enc, policy, options.tunnels, cache.NewRedisCacheAdapter(redisClient), refreshOptions...)
 	// Detached restatements finish before the pool closes.
 	t.Cleanup(mgr.WaitIdentityRestatements)
 	t.Cleanup(refresher.WaitIdentityRestatements)

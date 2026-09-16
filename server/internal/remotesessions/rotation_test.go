@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"sync/atomic"
 	"testing"
@@ -17,10 +18,15 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
+	"github.com/speakeasy-api/gram/tunnel/route"
+	"github.com/speakeasy-api/gram/tunnel/wire"
 )
 
 // rotationUpstream is a fake issuer whose token endpoint answers refresh
@@ -564,7 +570,7 @@ func TestBuildAuthorizationUrl_AdoptsConcurrentReplacementWhenIssuerLostRegistra
 
 // bindIssuerToTunnel points the fixture issuer at a tunneled MCP server, the
 // way a platform admin does from the issuer settings page.
-func bindIssuerToTunnel(t *testing.T, env syntheticExpiryEnv) {
+func bindIssuerToTunnel(t *testing.T, env syntheticExpiryEnv) uuid.UUID {
 	t.Helper()
 	ctx := t.Context()
 
@@ -586,6 +592,7 @@ func bindIssuerToTunnel(t *testing.T, env syntheticExpiryEnv) {
 		TunneledMcpServerID: conv.ToPGText(tunnel.ID.String()),
 	})
 	require.NoError(t, err)
+	return tunnel.ID
 }
 
 // A bound issuer's token and registration endpoints are private addresses, so
@@ -614,4 +621,67 @@ func TestBuildAuthorizationUrl_RotationOfBoundIssuerNeverUsesDirectEgress(t *tes
 	client := loadClient(t, env)
 	require.Equal(t, "synthetic-cid-rotate-tunnel-bound", client.ClientID)
 	require.True(t, client.UpstreamRejectedAt.Valid, "the marker stays so the next login tries again")
+}
+
+// tunnelGateway stands in for a tunnel gateway and the agent behind it: it
+// counts the forwards it carries and hands each one to the fake issuer, which
+// is what the agent's pinned local target does in production.
+type tunnelGateway struct {
+	forwards atomic.Int64
+	paths    chan string
+	upstream http.Handler
+}
+
+func (g *tunnelGateway) handler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get(wire.HeaderTunnelForwardToken) == "" || r.Header.Get(wire.HeaderTunnelID) == "" {
+			http.Error(w, "missing tunnel forwarding headers", http.StatusBadRequest)
+			return
+		}
+		g.forwards.Add(1)
+		select {
+		case g.paths <- r.URL.Path:
+		default:
+		}
+		g.upstream.ServeHTTP(w, r)
+	}
+}
+
+// The positive counterpart to the fail-closed test above: with a live route
+// published for the bound issuer's tunnel, both legs of the rotation are
+// carried over it and the replacement lands. The fake issuer is only reachable
+// through the gateway here, so a leg that slipped back onto direct egress —
+// or was dropped — could not complete the rotation.
+func TestBuildAuthorizationUrl_RotationOfBoundIssuerRidesTheTunnel(t *testing.T) {
+	t.Parallel()
+
+	upstream := &rotationUpstream{refreshStatus: http.StatusUnauthorized, refreshBody: invalidClientBody}
+	gateway := &tunnelGateway{paths: make(chan string, 8), upstream: upstream.handler()}
+	gatewayServer := httptest.NewServer(gateway.handler())
+	defer gatewayServer.Close()
+
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
+	require.NoError(t, err)
+	routes := route.NewRouteTable()
+	tunnels := tunnelrouting.NewHTTPClient(routes, "forward-token", policy, nil)
+
+	_, env := newSyntheticExpiryEnv(t, "rotate-tunnel-live", upstream.handler(), withTunnels(tunnels))
+	rejectedAt := time.Now().Add(-time.Hour)
+	stageRegistration(t, env, issuerTokenEndpoint(t, env)+"/register", &rejectedAt, nil)
+	tunnelID := bindIssuerToTunnel(t, env)
+	require.NoError(t, routes.Publish(t.Context(), tunnelID.String(), gatewayServer.URL, time.Minute))
+
+	require.Equal(t, "rotated-cid", mintLogin(t, env), "the replacement registered over the tunnel is sent onward")
+
+	require.EqualValues(t, 2, gateway.forwards.Load(), "the probe and the registration both crossed the tunnel")
+	close(gateway.paths)
+	var carried []string
+	for path := range gateway.paths {
+		carried = append(carried, path)
+	}
+	require.Contains(t, carried, "/register", "the registration endpoint's path is preserved across the forward")
+
+	client := loadClient(t, env)
+	require.Equal(t, "rotated-cid", client.ClientID)
+	require.False(t, client.UpstreamRejectedAt.Valid, "a completed rotation clears the marker")
 }
