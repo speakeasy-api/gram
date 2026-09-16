@@ -1,0 +1,371 @@
+package llmanalyzer
+
+import (
+	"context"
+	"errors"
+	"log/slog"
+	"net/http"
+	"strings"
+
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/judgemessage"
+	"github.com/speakeasy-api/gram/server/internal/risk/categories"
+	"github.com/speakeasy-api/gram/server/internal/scanners"
+	"github.com/speakeasy-api/gram/server/internal/stokens"
+)
+
+// Dead-letter reasons written on the sentinel finding when the model could
+// not be consulted. They are short classifications meant for metrics and the
+// user-facing "risk analysis unavailable" copy, never upstream error text.
+const (
+	ReasonDisabled        = "disabled"
+	ReasonTimeout         = "timeout"
+	ReasonRateLimited     = "rate_limited"
+	ReasonUpstream5xx     = "upstream_5xx"
+	ReasonUpstream4xx     = "upstream_4xx"
+	ReasonEmptyCompletion = "empty_completion"
+	ReasonParseError      = "parse_error"
+	ReasonRequestError    = "request_error"
+)
+
+// ErrDisabled is the Analysis.Err of an analyzer constructed without a
+// completer: the deployment has no risk model URL configured.
+var ErrDisabled = errors.New("risk llm: analyzer disabled")
+
+// Completer is the model call the analyzer depends on. *Client satisfies it;
+// tests substitute a StubCompleter.
+type Completer interface {
+	// Complete sends the chat turns to the model and returns its reply.
+	Complete(ctx context.Context, info CallInfo, messages []Message) (Completion, error)
+
+	// RecordParseFailure records that a completion could not be parsed as a
+	// verdict.
+	RecordParseFailure(ctx context.Context, info CallInfo)
+}
+
+// Analyzer turns one message into analyzer findings: it renders the training
+// prompt, calls the model, parses the verdict and maps each positive score to
+// a finding. Model failures never surface as Go errors to the lanes; they
+// become a dead-letter result the lanes fail closed on.
+type Analyzer struct {
+	logger    *slog.Logger
+	tracer    trace.Tracer
+	completer Completer
+	stokens   *stokens.Codec
+}
+
+// NewAnalyzer builds an analyzer over completer. A nil completer yields a
+// disabled analyzer whose Analyze always returns a dead-letter result, so the
+// lanes need no nil checks of their own.
+func NewAnalyzer(logger *slog.Logger, tracerProvider trace.TracerProvider, completer Completer) *Analyzer {
+	return &Analyzer{
+		logger:    logger.With(attr.SlogComponent("risk-llm-analyzer")),
+		tracer:    tracerProvider.Tracer(tracerName),
+		completer: completer,
+		stokens:   stokens.NewCodec(),
+	}
+}
+
+// Enabled reports whether a model is wired in. Disabled analyzers reply
+// dead-letter on the sync lane and publish nothing on the async lane.
+func (a *Analyzer) Enabled() bool {
+	return a.completer != nil
+}
+
+// Request is one message to analyze together with its attribution.
+type Request struct {
+	// OrgID is the organization the message belongs to.
+	OrgID string
+
+	// OrgSlug is the organization's slug, for dashboards that slice by name.
+	OrgSlug string
+
+	// ProjectID is the project the message belongs to.
+	ProjectID string
+
+	// Lane is "sync" for realtime enforcement and "async" for batch scans.
+	Lane string
+
+	// Message is the message under evaluation.
+	Message judgemessage.Message
+
+	// ToolCallIDs optionally carries the real tool call ids, aligned index for
+	// index with Message.ToolCalls (or a single id for a Message rendered
+	// from ToolName). When absent or misaligned the ids are synthesized.
+	ToolCallIDs []string
+}
+
+// Analysis is the outcome of one Analyze call.
+type Analysis struct {
+	// Result carries the findings. On failure it is a dead-letter result.
+	Result scanners.Result
+
+	// Verdict is the parsed model reply. Zero on failure.
+	Verdict Verdict
+
+	// Completion is the raw model reply, populated whenever the model was
+	// reached. Attempts and Model are set even when the call failed.
+	Completion Completion
+
+	// Truncated reports whether the rendered prompt dropped part of the
+	// message to stay within the content caps.
+	Truncated bool
+
+	// Err is the typed failure behind a dead-letter result: ErrDisabled,
+	// ErrTimeout, ErrEmptyCompletion, *UpstreamError, an error wrapping
+	// ErrParse, or a transport error. Nil on success.
+	Err error
+}
+
+// Analyze evaluates the message and maps the verdict to findings. It never
+// returns a Go error: any failure yields Analysis.Result as DeadLetterResult
+// with the reason classified from Analysis.Err. Result.Completed is true only
+// when a verdict parsed, and Result.STokens counts the rendered user prompt.
+func (a *Analyzer) Analyze(ctx context.Context, req Request) Analysis {
+	ctx, span := a.tracer.Start(ctx, "risk.llm.analyze", trace.WithAttributes(
+		attr.OrganizationID(req.OrgID),
+		attr.OrganizationSlug(req.OrgSlug),
+		attr.ProjectID(req.ProjectID),
+		attr.RiskLane(req.Lane),
+	))
+	defer span.End()
+
+	info := CallInfo{OrgID: req.OrgID, OrgSlug: req.OrgSlug, Lane: req.Lane}
+
+	if a.completer == nil {
+		return a.fail(ctx, span, info, Completion{
+			Content:          "",
+			PromptTokens:     0,
+			CompletionTokens: 0,
+			Model:            "",
+			Attempts:         0,
+		}, false, ErrDisabled)
+	}
+
+	// The training set stripped surrounding whitespace from every content
+	// block, so trim before the caps apply.
+	req.Message.Body = strings.TrimSpace(req.Message.Body)
+	in, truncated := PromptInputFromJudgeMessage(req.Message)
+	applyToolCallIDs(in.ToolCalls, req.Message, req.ToolCallIDs)
+	span.SetAttributes(attribute.Bool("gram.risk.llm.truncated", truncated))
+
+	messages := BuildMessages(in)
+	userPrompt := messages[len(messages)-1].Content
+
+	completion, err := a.completer.Complete(ctx, info, messages)
+	span.SetAttributes(attr.RiskLLMModel(completion.Model))
+	if err != nil {
+		return a.fail(ctx, span, info, completion, truncated, err)
+	}
+
+	verdict, err := ParseVerdict(completion.Content)
+	if err != nil {
+		a.completer.RecordParseFailure(ctx, info)
+		return a.fail(ctx, span, info, completion, truncated, err)
+	}
+
+	stokenCount, countErr := a.stokens.Count(ctx, userPrompt)
+	if countErr != nil {
+		a.logger.WarnContext(ctx, "risk llm stoken count failed",
+			attr.SlogError(countErr),
+			attr.SlogOrganizationID(req.OrgID),
+			attr.SlogRiskLane(req.Lane),
+		)
+	}
+
+	flagged := verdict.Flagged()
+	findings := make([]scanners.Finding, 0, len(flagged))
+	for _, key := range flagged {
+		findings = append(findings, NewFinding(key, verdict.Risks[key].Reasoning))
+	}
+	span.SetAttributes(attribute.Int("gram.risk.llm.flagged_count", len(flagged)))
+
+	return Analysis{
+		Result: scanners.Result{
+			Findings:  findings,
+			STokens:   int64(stokenCount),
+			Completed: countErr == nil,
+		},
+		Verdict:    verdict,
+		Completion: completion,
+		Truncated:  truncated,
+		Err:        nil,
+	}
+}
+
+func (a *Analyzer) fail(ctx context.Context, span trace.Span, info CallInfo, completion Completion, truncated bool, err error) Analysis {
+	reason := DeadLetterReason(err)
+	span.RecordError(err)
+	span.SetStatus(codes.Error, "risk llm analysis failed")
+	span.SetAttributes(attribute.String("gram.risk.llm.dead_letter_reason", reason))
+	a.logger.WarnContext(ctx, "risk llm analysis failed; returning dead-letter result",
+		attr.SlogError(err),
+		attr.SlogOrganizationID(info.OrgID),
+		attr.SlogRiskLane(info.Lane),
+	)
+	return Analysis{
+		Result:     DeadLetterResult(reason),
+		Verdict:    Verdict{Risks: nil, Raw: ""},
+		Completion: completion,
+		Truncated:  truncated,
+		Err:        err,
+	}
+}
+
+// applyToolCallIDs overwrites the synthetic ids on rendered with the real ids
+// when they line up with the source message: one id per Message.ToolCalls
+// entry with no cap applied, or a single id for a message rendered from
+// ToolName. Empty ids keep their synthetic value.
+func applyToolCallIDs(rendered []ToolCall, m judgemessage.Message, ids []string) {
+	if len(ids) == 0 || len(rendered) == 0 {
+		return
+	}
+	switch {
+	case len(m.ToolCalls) > 0:
+		if len(ids) != len(m.ToolCalls) || len(rendered) != len(m.ToolCalls) {
+			return
+		}
+	case len(rendered) != 1:
+		return
+	}
+	for i := range rendered {
+		if ids[i] != "" {
+			rendered[i].ID = ids[i]
+		}
+	}
+}
+
+// DeadLetterReason classifies an analyzer failure into the short reason
+// written on the dead-letter sentinel.
+func DeadLetterReason(err error) string {
+	switch {
+	case err == nil:
+		return ""
+	case errors.Is(err, ErrDisabled):
+		return ReasonDisabled
+	case errors.Is(err, ErrTimeout):
+		return ReasonTimeout
+	case errors.Is(err, ErrEmptyCompletion):
+		return ReasonEmptyCompletion
+	case errors.Is(err, ErrParse):
+		return ReasonParseError
+	}
+	if upstream, ok := errors.AsType[*UpstreamError](err); ok {
+		switch {
+		case upstream.Status == http.StatusTooManyRequests:
+			return ReasonRateLimited
+		case upstream.Status >= http.StatusInternalServerError:
+			return ReasonUpstream5xx
+		default:
+			return ReasonUpstream4xx
+		}
+	}
+	return ReasonRequestError
+}
+
+// NewFinding builds the finding for a positive score on key. The reasoning
+// becomes the description (ParseVerdict already caps it at 500 runes), the
+// match stays empty because the model reports no offsets, and confidence is
+// 1 because the score is binary.
+func NewFinding(key, reasoning string) scanners.Finding {
+	return scanners.Finding{
+		RuleID:              RuleIDForKey(key),
+		Description:         reasoning,
+		Match:               "",
+		StartPos:            0,
+		EndPos:              0,
+		Tags:                []string{CategoryForKey(key)},
+		Source:              Source,
+		Confidence:          1,
+		DeadLetterReason:    "",
+		McpLookupToolCallID: "",
+		SpanGroupKey:        "",
+		Field:               "",
+		Path:                "",
+	}
+}
+
+// DeadLetterResult is the result the lanes fail closed on when the model
+// could not be consulted: a single sentinel finding carrying the reason,
+// with Completed false so it is never metered.
+func DeadLetterResult(reason string) scanners.Result {
+	return scanners.Result{
+		Findings: []scanners.Finding{{
+			RuleID:              RuleDeadLetter,
+			Description:         "Risk analysis unavailable: " + reason,
+			Match:               "",
+			StartPos:            0,
+			EndPos:              0,
+			Tags:                []string{},
+			Source:              Source,
+			Confidence:          0,
+			DeadLetterReason:    reason,
+			McpLookupToolCallID: "",
+			SpanGroupKey:        "",
+			Field:               "",
+			Path:                "",
+		}},
+		STokens:   0,
+		Completed: false,
+	}
+}
+
+// IsDeadLetter reports whether f is the analyzer's dead-letter sentinel.
+func IsDeadLetter(f scanners.Finding) bool {
+	return f.Source == Source && f.RuleID == RuleDeadLetter
+}
+
+// FindingsForSources keeps the findings a policy with the given sources acts
+// on: those whose rule id belongs to a risk key covering one of the sources.
+// A dead-letter sentinel is kept whenever at least one source is covered, so
+// a degraded lane still blocks every covered policy; policies with no covered
+// source get nothing. Order is preserved.
+func FindingsForSources(findings []scanners.Finding, sources []string) []scanners.Finding {
+	ruleIDs := make(map[string]struct{}, len(sources))
+	for _, source := range sources {
+		if key, ok := RiskKeyForSource(source); ok {
+			ruleIDs[RuleIDForKey(key)] = struct{}{}
+		}
+	}
+
+	kept := make([]scanners.Finding, 0, len(findings))
+	if len(ruleIDs) == 0 {
+		return kept
+	}
+	for _, f := range findings {
+		if IsDeadLetter(f) {
+			kept = append(kept, f)
+			continue
+		}
+		if _, ok := ruleIDs[f.RuleID]; ok && f.Source == Source {
+			kept = append(kept, f)
+		}
+	}
+	return kept
+}
+
+// FindingsForSource is FindingsForSources for a single policy source.
+func FindingsForSource(findings []scanners.Finding, source string) []scanners.Finding {
+	return FindingsForSources(findings, []string{source})
+}
+
+// CategoryForKey returns the category name tagged on findings for a model
+// risk key, or an empty string for an unknown key.
+func CategoryForKey(key string) string {
+	switch key {
+	case KeySecretsLeak:
+		return string(categories.CategorySecrets)
+	case KeyPersonalDataLeak:
+		return string(categories.CategoryPII)
+	case KeyPromptInjection:
+		return string(categories.CategoryPromptInjection)
+	case KeyDestructiveToolCall:
+		return string(categories.CategoryDestructiveTool)
+	default:
+		return ""
+	}
+}
