@@ -57,7 +57,7 @@ type CreateResponseBody struct {
 	LastVerifiedAt *string                                     `form:"last_verified_at,omitempty" json:"last_verified_at,omitempty" xml:"last_verified_at,omitempty"`
 	VerifyEvidence *IdentityProviderVerifyEvidenceResponseBody `form:"verify_evidence,omitempty" json:"verify_evidence,omitempty" xml:"verify_evidence,omitempty"`
 	SignInState    *string                                     `form:"sign_in_state,omitempty" json:"sign_in_state,omitempty" xml:"sign_in_state,omitempty"`
-	// Identifier of the WorkOS connection used for sign-in.
+	// Identifier of the sign-in provider connection used for sign-in.
 	SignInConnectionID *string `form:"sign_in_connection_id,omitempty" json:"sign_in_connection_id,omitempty" xml:"sign_in_connection_id,omitempty"`
 	GroupsSource       *string `form:"groups_source,omitempty" json:"groups_source,omitempty" xml:"groups_source,omitempty"`
 	// Whether an administrator confirmed the Okta groups claim filter is
@@ -1448,7 +1448,7 @@ type IdentityProviderConnectionResponseBody struct {
 	LastVerifiedAt *string                                     `form:"last_verified_at,omitempty" json:"last_verified_at,omitempty" xml:"last_verified_at,omitempty"`
 	VerifyEvidence *IdentityProviderVerifyEvidenceResponseBody `form:"verify_evidence,omitempty" json:"verify_evidence,omitempty" xml:"verify_evidence,omitempty"`
 	SignInState    *string                                     `form:"sign_in_state,omitempty" json:"sign_in_state,omitempty" xml:"sign_in_state,omitempty"`
-	// Identifier of the WorkOS connection used for sign-in.
+	// Identifier of the sign-in provider connection used for sign-in.
 	SignInConnectionID *string `form:"sign_in_connection_id,omitempty" json:"sign_in_connection_id,omitempty" xml:"sign_in_connection_id,omitempty"`
 	GroupsSource       *string `form:"groups_source,omitempty" json:"groups_source,omitempty" xml:"groups_source,omitempty"`
 	// Whether an administrator confirmed the Okta groups claim filter is
@@ -1532,7 +1532,7 @@ type IdentityProviderSetupStepResponseBody struct {
 	// Claims Speakeasy intends sign-in to carry.
 	Claims []*IdentityProviderClaimResponseBody `form:"claims,omitempty" json:"claims,omitempty" xml:"claims,omitempty"`
 	Repair *IdentityProviderRepairResponseBody  `form:"repair,omitempty" json:"repair,omitempty" xml:"repair,omitempty"`
-	// WorkOS Admin Portal intent the dashboard should open for this step.
+	// Intent the dashboard should open in the setup portal for this step.
 	PortalIntent *string                                   `form:"portal_intent,omitempty" json:"portal_intent,omitempty" xml:"portal_intent,omitempty"`
 	State        *string                                   `form:"state,omitempty" json:"state,omitempty" xml:"state,omitempty"`
 	LastOutcome  *IdentityProviderVerifyResultResponseBody `form:"last_outcome,omitempty" json:"last_outcome,omitempty" xml:"last_outcome,omitempty"`

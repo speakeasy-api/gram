@@ -361,14 +361,14 @@ func TestVerifySignInStepPassesForActiveOktaAndGenericOIDCConnections(t *testing
 	require.NoError(t, err)
 	require.Equal(t, &gen.IdentityProviderVerifyResult{
 		Outcome:       "passed",
-		Detail:        "Okta sign-in application and WorkOS OIDC connection verified.",
+		Detail:        "Okta sign-in application and sign-in provider connection verified.",
 		Capabilities:  []string{"directory_read", "application_assignment_read", "sign_in_provisioning", "claims_provisioning"},
 		GrantedScopes: []string{"okta.apps.read", "okta.groups.read", "okta.users.read", "okta.apps.manage", "okta.authorizationServers.read", "okta.authorizationServers.manage"},
 		Evidence: &gen.IdentityProviderVerifyEvidence{
 			CheckedAt: result.Evidence.CheckedAt,
 			Reads: []*gen.IdentityProviderCapabilityRead{
 				{Capability: "sign_in", Resource: "sign_in_application", OK: true, Count: nil, Detail: new("Okta sign-in application is active.")},
-				{Capability: "sign_in", Resource: "sign_in_connection", OK: true, Count: nil, Detail: new("WorkOS OIDC connection is active.")},
+				{Capability: "sign_in", Resource: "sign_in_connection", OK: true, Count: nil, Detail: new("The sign-in provider connection is active.")},
 			},
 		},
 	}, result)
@@ -477,7 +477,7 @@ func TestVerifySignInStepFailsForDraftWorkOSConnection(t *testing.T) {
 	result, err := ti.service.VerifySetupStep(ctx, &gen.VerifySetupStepPayload{StepKey: "sign_in", SessionToken: nil, ApikeyToken: nil})
 	require.NoError(t, err)
 	require.Equal(t, "refused", result.Outcome)
-	require.Equal(t, "WorkOS reported the sign-in connection state as draft.", result.Detail)
+	require.Equal(t, "The sign-in provider reported the connection state as draft.", result.Detail)
 	require.True(t, result.Evidence.Reads[0].OK)
 	require.False(t, result.Evidence.Reads[1].OK)
 
@@ -502,7 +502,7 @@ func TestVerifySignInStepWaitsForFirstSignInWhileWorkOSIsValidating(t *testing.T
 	require.Equal(t, "Speakeasy has configured sign-in. It becomes active after the first successful sign-in through Okta; run a test sign-in from the sign-in provider or sign in to Speakeasy with Okta, then check again.", result.Detail)
 	require.True(t, result.Evidence.Reads[0].OK)
 	require.False(t, result.Evidence.Reads[1].OK)
-	require.Equal(t, "WorkOS has the sign-in configuration and is waiting for the first successful sign-in.", *result.Evidence.Reads[1].Detail)
+	require.Equal(t, "The sign-in provider has the sign-in configuration and is waiting for the first successful sign-in.", *result.Evidence.Reads[1].Detail)
 
 	stored, err = repo.New(ti.conn).GetIdentityProviderConnectionByOrganization(ctx, ti.orgID)
 	require.NoError(t, err)
@@ -524,7 +524,7 @@ func TestVerifySignInStepFailsWhenWorkOSConnectionIsMissing(t *testing.T) {
 	result, err := ti.service.VerifySetupStep(ctx, &gen.VerifySetupStepPayload{StepKey: "sign_in", SessionToken: nil, ApikeyToken: nil})
 	require.NoError(t, err)
 	require.Equal(t, "mismatched_value", result.Outcome)
-	require.Equal(t, "The WorkOS sign-in connection no longer exists.", result.Detail)
+	require.Equal(t, "The sign-in provider connection no longer exists.", result.Detail)
 	require.True(t, result.Evidence.Reads[0].OK)
 	require.False(t, result.Evidence.Reads[1].OK)
 }
@@ -611,7 +611,7 @@ func TestVerifySignInStepReportsWorkOSRefusal(t *testing.T) {
 	result, err := ti.service.VerifySetupStep(ctx, &gen.VerifySetupStepPayload{StepKey: "sign_in", SessionToken: nil, ApikeyToken: nil})
 	require.NoError(t, err)
 	require.Equal(t, "refused", result.Outcome)
-	require.Equal(t, "WorkOS refused the sign-in connection read.", result.Detail)
+	require.Equal(t, "The sign-in provider refused the connection read.", result.Detail)
 }
 
 func TestVerifySignInStepReportsWorkOSUnreachable(t *testing.T) {
@@ -624,7 +624,7 @@ func TestVerifySignInStepReportsWorkOSUnreachable(t *testing.T) {
 	result, err := ti.service.VerifySetupStep(ctx, &gen.VerifySetupStepPayload{StepKey: "sign_in", SessionToken: nil, ApikeyToken: nil})
 	require.NoError(t, err)
 	require.Equal(t, "unreachable", result.Outcome)
-	require.Equal(t, "Unable to reach WorkOS while reading the sign-in connection.", result.Detail)
+	require.Equal(t, "Unable to reach the sign-in provider while reading the connection.", result.Detail)
 }
 
 func newFakeOktaServer(t *testing.T, mode string) *fakeOktaServer {

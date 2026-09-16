@@ -117,7 +117,7 @@ func (s *Service) submitSignInSetupStep(
 				Step: step,
 				FieldOutcomes: []*gen.IdentityProviderFieldOutcome{
 					{Key: setupValueClientID, Outcome: "accepted", Detail: "Okta sign-in Client ID saved."},
-					{Key: setupValueClientSecret, Outcome: "accepted", Detail: "Client secret sent to WorkOS and not retained."},
+					{Key: setupValueClientSecret, Outcome: "accepted", Detail: "Client secret sent to the sign-in provider and not retained."},
 				},
 				NextStepKey: nil,
 			}, nil
@@ -241,7 +241,7 @@ func (s *Service) submitSignInApplication(
 		return nil, oops.E(oops.CodeConflict, nil, "Okta capabilities changed during sign-in setup").LogError(ctx, logger)
 	}
 	if !before.WorkosID.Valid || strings.TrimSpace(before.WorkosID.String) == "" {
-		return nil, oops.E(oops.CodeBadRequest, nil, "organization is not linked to WorkOS").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, nil, "organization is not linked to the sign-in provider").LogError(ctx, logger)
 	}
 
 	tokenScopes := requiredOktaReadScopes
@@ -403,24 +403,24 @@ func (s *Service) createWorkOSSignInConnection(
 		if fieldOutcome := workOSConnectionFieldOutcome(connectionErr, canProvision); fieldOutcome != nil {
 			return &gen.SubmitSetupStepResult{Step: step, FieldOutcomes: []*gen.IdentityProviderFieldOutcome{fieldOutcome}, NextStepKey: nil}, nil
 		}
-		return nil, oops.E(oops.CodeGatewayError, connectionErr, "error creating the WorkOS sign-in connection").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeGatewayError, connectionErr, "error creating the sign-in provider connection").LogError(ctx, logger)
 	}
 	if connection.ID == "" || connection.OrganizationID != before.WorkosID.String || connection.ConnectionType != "GenericOIDC" {
-		return nil, oops.E(oops.CodeGatewayError, nil, "WorkOS returned an incomplete sign-in connection").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeGatewayError, nil, "the sign-in provider returned an incomplete connection").LogError(ctx, logger)
 	}
 	connection, err := s.workos.GetConnection(ctx, connection.ID)
 	if err != nil {
-		return nil, oops.E(oops.CodeGatewayError, err, "error reading the created WorkOS sign-in connection").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeGatewayError, err, "error reading the created sign-in provider connection").LogError(ctx, logger)
 	}
 	if connection.ID == "" || connection.OrganizationID != before.WorkosID.String || connection.ConnectionType != "GenericOIDC" {
-		return nil, oops.E(oops.CodeGatewayError, nil, "WorkOS returned an incomplete sign-in connection").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeGatewayError, nil, "the sign-in provider returned an incomplete connection").LogError(ctx, logger)
 	}
 	redirectURI := strings.TrimSpace(connection.OIDCRedirectURI)
 	if redirectURI == "" {
 		redirectURI = strings.TrimSpace(connection.CallbackEndpoint)
 	}
 	if redirectURI == "" {
-		return nil, oops.E(oops.CodeGatewayError, nil, "WorkOS did not report the OIDC redirect URI").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeGatewayError, nil, "the sign-in provider did not report the OIDC redirect URI").LogError(ctx, logger)
 	}
 	if canProvision {
 		token, err := s.acquireOktaManagementToken(ctx, authCtx.ActiveOrganizationID, before, oktaApplicationProvisioningScopes)
@@ -473,7 +473,7 @@ func (s *Service) createWorkOSSignInConnection(
 	if !canProvision {
 		fieldOutcomes = append(fieldOutcomes,
 			&gen.IdentityProviderFieldOutcome{Key: setupValueClientID, Outcome: "accepted", Detail: "Okta sign-in Client ID saved."},
-			&gen.IdentityProviderFieldOutcome{Key: setupValueClientSecret, Outcome: "accepted", Detail: "Client secret sent to WorkOS and not retained."},
+			&gen.IdentityProviderFieldOutcome{Key: setupValueClientSecret, Outcome: "accepted", Detail: "Client secret sent to the sign-in provider and not retained."},
 		)
 	}
 	return &gen.SubmitSetupStepResult{Step: step, FieldOutcomes: fieldOutcomes, NextStepKey: nil}, nil
@@ -664,17 +664,17 @@ func (s *Service) verifySignInSetupStep(
 		connectionErr = errors.New("organization is not linked to WorkOS")
 	}
 	connectionOK := connectionErr == nil && connection.ID == connectionID && connection.State == "active" && connection.ConnectionType == "GenericOIDC" && before.WorkosID.Valid && connection.OrganizationID == before.WorkosID.String
-	connectionDetail := "WorkOS OIDC connection is active."
+	connectionDetail := "The sign-in provider connection is active."
 	if connectionErr != nil {
-		connectionDetail = "Unable to read the WorkOS sign-in connection."
+		connectionDetail = "Unable to read the sign-in provider connection."
 	} else if connectionID == "" {
-		connectionDetail = "WorkOS does not have an active OIDC connection for this organization."
+		connectionDetail = "The sign-in provider does not have an active OIDC connection for this organization."
 	} else if connection.State == "validating" {
-		connectionDetail = "WorkOS has the sign-in configuration and is waiting for the first successful sign-in."
+		connectionDetail = "The sign-in provider has the sign-in configuration and is waiting for the first successful sign-in."
 	} else if connection.State != "active" {
-		connectionDetail = "WorkOS OIDC connection state is " + connection.State + "."
+		connectionDetail = "The sign-in provider connection state is " + connection.State + "."
 	} else if connection.ConnectionType != "GenericOIDC" || !before.WorkosID.Valid || connection.OrganizationID != before.WorkosID.String {
-		connectionDetail = "WorkOS sign-in connection does not match the configured organization and type."
+		connectionDetail = "The sign-in provider connection does not match the configured organization and type."
 	}
 	reads = append(reads, &gen.IdentityProviderCapabilityRead{
 		Capability: "sign_in",
@@ -790,16 +790,16 @@ func signInVerificationOutcome(
 	if connectionErr != nil {
 		if apiErr, ok := errors.AsType[*workos.APIError](connectionErr); ok {
 			if apiErr.StatusCode == http.StatusNotFound {
-				return "mismatched_value", "The WorkOS sign-in connection no longer exists."
+				return "mismatched_value", "The sign-in provider connection no longer exists."
 			}
 			if apiErr.StatusCode == http.StatusRequestTimeout || apiErr.StatusCode == http.StatusTooManyRequests {
-				return "unreachable", "WorkOS temporarily could not complete the sign-in connection read."
+				return "unreachable", "The sign-in provider temporarily could not complete the connection read."
 			}
 			if apiErr.StatusCode >= http.StatusBadRequest && apiErr.StatusCode < http.StatusInternalServerError {
-				return "refused", "WorkOS refused the sign-in connection read."
+				return "refused", "The sign-in provider refused the connection read."
 			}
 		}
-		return "unreachable", "Unable to reach WorkOS while reading the sign-in connection."
+		return "unreachable", "Unable to reach the sign-in provider while reading the connection."
 	}
 	if !applicationOK {
 		if application.Status != "ACTIVE" {
@@ -813,15 +813,15 @@ func signInVerificationOutcome(
 			case "validating":
 				return "pending_validation", "Speakeasy has configured sign-in. It becomes active after the first successful sign-in through Okta; run a test sign-in from the sign-in provider or sign in to Speakeasy with Okta, then check again."
 			case "draft", "inactive", "requires_type":
-				return "refused", "WorkOS reported the sign-in connection state as " + connection.State + "."
+				return "refused", "The sign-in provider reported the connection state as " + connection.State + "."
 			}
 		}
 		if !portalFallback {
-			return "mismatched_value", "The WorkOS sign-in connection does not match the configured organization and type."
+			return "mismatched_value", "The sign-in provider connection does not match the configured organization and type."
 		}
-		return "mismatched_value", "Finish the OIDC connection in WorkOS Admin Portal, then verify again."
+		return "mismatched_value", "Finish the OIDC connection in the setup portal, then verify again."
 	}
-	return "passed", "Okta sign-in application and WorkOS OIDC connection verified."
+	return "passed", "Okta sign-in application and sign-in provider connection verified."
 }
 
 func (s *Service) acquireOktaManagementToken(
@@ -926,7 +926,7 @@ func buildSignInSetupStep(row repo.GetIdentityProviderConnectionByOrganizationRo
 			step.Instructions = []string{
 				"Create an OIDC Web Application named Speakeasy sign-in in the Okta Admin Console.",
 				"Use Authorization Code and Refresh Token grants, require PKCE, and assign the app to Everyone.",
-				"Enter the application's Client ID and client secret in Speakeasy. The secret is sent to WorkOS and not retained.",
+				"Enter the application's Client ID and client secret in Speakeasy. The secret is sent to the sign-in provider and not retained.",
 			}
 			step.DeepLink = oktaAdminAppsURL(row.TenantIdentifier)
 			step.PrintedValues = signInPrintedValues(row.TenantIdentifier, "", false, "")
@@ -943,9 +943,9 @@ func buildSignInSetupStep(row repo.GetIdentityProviderConnectionByOrganizationRo
 	canProvisionClaims := slices.Contains(row.Capabilities, capabilityClaimsProvisioning)
 	if workOSConnectionMissing && !slices.Contains(row.Capabilities, capabilitySignInProvisioning) {
 		step.Instructions = []string{
-			"Open WorkOS Admin Portal and choose the OpenID Connect connection.",
-			"Enter the Okta application's Client ID and client secret again, or copy them directly into WorkOS Admin Portal.",
-			"The client secret is sent to WorkOS and not retained by Speakeasy.",
+			"Open the setup portal and choose the OpenID Connect connection.",
+			"Enter the Okta application's Client ID and client secret again, or copy them directly into the setup portal.",
+			"The client secret is sent to the sign-in provider and not retained by Speakeasy.",
 		}
 		step.DeepLink = oktaAdminApplicationURL(row.TenantIdentifier, row.SignInApplicationID.String, "general")
 		step.PrintedValues = signInPrintedValues(row.TenantIdentifier, evidence.ClientID, canProvisionClaims, evidence.RedirectURI)
@@ -959,14 +959,14 @@ func buildSignInSetupStep(row repo.GetIdentityProviderConnectionByOrganizationRo
 	if canProvisionClaims {
 		step.Where = "our_page"
 		step.Instructions = []string{
-			"Speakeasy created the Okta sign-in application, identity claims, and WorkOS OIDC connection.",
+			"Speakeasy created the Okta sign-in application, identity claims, and sign-in provider connection.",
 		}
 		step.PrintedValues = signInPrintedValues(row.TenantIdentifier, evidence.ClientID, true, evidence.RedirectURI)
 		if workOSConnectionMissing {
 			step.Where = "their_console"
 			step.Instructions = []string{
-				"Open WorkOS Admin Portal and choose the OpenID Connect connection.",
-				"Copy the client secret from the Okta application directly into WorkOS Admin Portal. It is not retained by Speakeasy.",
+				"Open the setup portal and choose the OpenID Connect connection.",
+				"Copy the client secret from the Okta application directly into the setup portal. It is not retained by Speakeasy.",
 				"Use the Client ID, issuer, and discovery URL shown below, then activate the connection.",
 			}
 			step.DeepLink = oktaAdminApplicationURL(row.TenantIdentifier, row.SignInApplicationID.String, "general")
@@ -975,7 +975,7 @@ func buildSignInSetupStep(row repo.GetIdentityProviderConnectionByOrganizationRo
 		return step, nil
 	}
 	step.Instructions = []string{
-		"Speakeasy created the Okta sign-in application and WorkOS OIDC connection.",
+		"Speakeasy created the Okta sign-in application and sign-in provider connection.",
 		"Configure the groups claim in Okta, then confirm whether sign-in tokens or the directory will supply groups.",
 	}
 	step.DeepLink = oktaAdminApplicationURL(row.TenantIdentifier, row.SignInApplicationID.String, "sign-on")
@@ -996,8 +996,8 @@ func buildSignInSetupStep(row repo.GetIdentityProviderConnectionByOrganizationRo
 	}
 	if workOSConnectionMissing {
 		step.Instructions = []string{
-			"Open WorkOS Admin Portal and choose the OpenID Connect connection.",
-			"Copy the client secret from the Okta application directly into WorkOS Admin Portal. It is not retained by Speakeasy.",
+			"Open the setup portal and choose the OpenID Connect connection.",
+			"Copy the client secret from the Okta application directly into the setup portal. It is not retained by Speakeasy.",
 			"Use the Client ID, issuer, and discovery URL shown below, then activate the connection.",
 		}
 		step.DeepLink = oktaAdminApplicationURL(row.TenantIdentifier, row.SignInApplicationID.String, "general")

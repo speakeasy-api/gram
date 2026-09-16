@@ -82108,7 +82108,7 @@ components:
                     format: date-time
                 sign_in_connection_id:
                     type: string
-                    description: Identifier of the WorkOS connection used for sign-in.
+                    description: Identifier of the sign-in provider connection used for sign-in.
                 sign_in_state:
                     type: string
                     enum:
@@ -82248,7 +82248,7 @@ components:
                     $ref: '#/components/schemas/IdentityProviderVerifyResult'
                 portal_intent:
                     type: string
-                    description: WorkOS Admin Portal intent the dashboard should open for this step.
+                    description: Intent the dashboard should open in the setup portal for this step.
                     enum:
                         - sso
                 printed_values:
