@@ -796,3 +796,31 @@ it.each([
     );
   else expect(permissions.navigate).not.toHaveBeenCalled();
 });
+
+it.each([
+  [true, { toolsetsLoading: true }],
+  [true, { toolsetsFailed: true }],
+  [false, { toolsetsLoading: true }],
+  [false, { toolsetsFailed: true }],
+] as const)(
+  "keeps creation guidance for an empty project (%s) during hosted inventory issues (%j)",
+  (empty, props) => {
+    setup({
+      ...props,
+      servers: empty ? [] : servers,
+      memberServerIds: new Set(["a", "b"]),
+    });
+    expect(
+      screen.queryByText(
+        "No existing servers yet. Create a new server to get started.",
+      ) !== null,
+    ).toBe(empty);
+    expect(
+      screen.queryByText("All existing servers have already been added."),
+    ).toBeNull();
+    expect(screen.getByRole("button", { name: "Add new" })).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Add selected servers" }),
+    ).toBeNull();
+  },
+);

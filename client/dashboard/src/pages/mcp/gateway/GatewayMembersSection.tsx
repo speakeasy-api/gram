@@ -1034,8 +1034,9 @@ export function AddServersSheet({
                 </Button>
               </div>
             ) : candidates.length === 0 &&
-              (toolsetsLoading || toolsetsFailed) ? null : candidates.length ===
-              0 ? (
+              (toolsetsLoading || toolsetsFailed) &&
+              (servers.length > 0 ||
+                toolsets.length > 0) ? null : candidates.length === 0 ? (
               <div className="bg-muted/20 flex min-h-24 items-center justify-center border border-dashed px-6 py-8 text-center">
                 <Text muted>
                   {servers.length === 0 && toolsets.length === 0
