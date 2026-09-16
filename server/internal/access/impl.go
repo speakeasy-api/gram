@@ -1409,11 +1409,11 @@ func (s *Service) assignChallengeRole(ctx context.Context, tx pgx.Tx, authCtx *c
 	_, reconciliation, err := s.roleMgr.AddMemberRoleTx(ctx, tx, authCtx.ActiveOrganizationID, principal.ID, role.ID, RoleAuditActor{
 		Principal:   urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
 		DisplayName: authCtx.Email,
-	}, func(_ MemberRoleState, lockedRole localRole) error {
-		if lockedRole.Slug != *payload.RoleSlug {
+	}, func(state MemberRoleState) error {
+		if state.RoleSlug != *payload.RoleSlug {
 			return oops.E(oops.CodeConflict, nil, "selected role changed; refresh and try again").LogError(ctx, s.logger)
 		}
-		rolePrincipal, parseErr := urn.ParsePrincipal(lockedRole.PrincipalURN)
+		rolePrincipal, parseErr := urn.ParsePrincipal(state.RolePrincipalURN)
 		if parseErr != nil {
 			return oops.E(oops.CodeUnexpected, parseErr, "parse challenge role principal").LogError(ctx, s.logger)
 		}

@@ -710,15 +710,17 @@ type memberRoleUpdateContext struct {
 }
 
 // MemberRoleState is the privacy-safe, complete state exposed to an optimistic
-// validation callback while the member's relationship row is locked.
+// validation callback while the member's relationship row and selected role are locked.
 type MemberRoleState struct {
-	MemberID string
-	RoleIDs  []string
+	MemberID         string
+	RoleIDs          []string
+	RoleSlug         string
+	RolePrincipalURN string
 }
 
 // MemberRoleValidation runs after the member and role are resolved in the
 // current organization and after the complete active role set is read under lock.
-type MemberRoleValidation func(MemberRoleState, localRole) error
+type MemberRoleValidation func(MemberRoleState) error
 
 // MemberRoleAddResult is the safe local result of an additive role assignment.
 type MemberRoleAddResult struct {
@@ -989,8 +991,13 @@ func (r *RoleManager) AddMemberRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID,
 	}
 	slices.Sort(roleIDs)
 	if validate != nil {
-		state := MemberRoleState{MemberID: connected.ID, RoleIDs: slices.Clone(roleIDs)}
-		if err := validate(state, role); err != nil {
+		state := MemberRoleState{
+			MemberID:         connected.ID,
+			RoleIDs:          slices.Clone(roleIDs),
+			RoleSlug:         role.Slug,
+			RolePrincipalURN: role.PrincipalURN,
+		}
+		if err := validate(state); err != nil {
 			return MemberRoleAddResult{}, MemberRoleReconciliation{}, err
 		}
 	}
