@@ -66,6 +66,8 @@ export const AUDIT_ACTIONS = [
   "device_integration:retry_schedule",
   "device_integration:update_schedule",
   "device_integration:upsert",
+  "directory_handoff:cleared",
+  "directory_handoff:set",
   "environment:create",
   "environment:delete",
   "environment:update",
@@ -358,6 +360,10 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated GCP KMS key";
     case "gcp_kms_key:delete":
       return "removed GCP KMS key";
+    case "directory_handoff:set":
+      return "stored directory handoff";
+    case "directory_handoff:cleared":
+      return "cleared directory handoff";
     case "identity_provider_connection:created":
       return "created identity provider connection";
     case "identity_provider_connection:deleted":

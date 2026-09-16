@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { IdentityProviderSetupStep } from "@gram/client/models/components/identityprovidersetupstep.js";
 import { IdentityProviderStep } from "./identity-provider-step";
 
 const onboardingStatus = vi.hoisted(() => ({
@@ -27,7 +28,19 @@ const applications = vi.hoisted(() => ({
 }));
 const identityProvider = vi.hoisted(() => ({
   current: { data: { connection: undefined }, isPending: false } as {
-    data: { connection: { status: string } | undefined };
+    data: {
+      connection:
+        | { status: string; directoryState?: string | undefined }
+        | undefined;
+    };
+    isPending: boolean;
+  },
+}));
+const identityProviderSetup = vi.hoisted(() => ({
+  current: { data: undefined, isPending: false } as {
+    data:
+      | { connectionId: string; steps: IdentityProviderSetupStep[] }
+      | undefined;
     isPending: boolean;
   },
 }));
@@ -60,7 +73,7 @@ vi.mock("@gram/client/react-query/identityProvider.js", () => ({
   invalidateAllIdentityProvider: vi.fn(),
 }));
 vi.mock("@gram/client/react-query/identityProviderSetup.js", () => ({
-  useIdentityProviderSetup: () => ({ data: undefined, isPending: false }),
+  useIdentityProviderSetup: () => identityProviderSetup.current,
   invalidateAllIdentityProviderSetup: vi.fn(),
 }));
 vi.mock("@gram/client/react-query/createIdentityProvider.js", () => ({
@@ -105,6 +118,7 @@ beforeEach(() => {
     data: { connection: undefined },
     isPending: false,
   };
+  identityProviderSetup.current = { data: undefined, isPending: false };
 });
 
 describe("IdentityProviderStep", () => {
@@ -189,23 +203,40 @@ describe("IdentityProviderStep", () => {
     ).toBeNull();
   });
 
-  it("opens the directory step on the portal once Okta is connected", () => {
+  it("offers guided directory setup once Okta is connected", () => {
     identityProvider.current = {
-      data: { connection: { status: "active" } },
+      data: {
+        connection: { status: "active", directoryState: "not_started" },
+      },
+      isPending: false,
+    };
+    identityProviderSetup.current = {
+      data: {
+        connectionId: "conn-1",
+        steps: [
+          {
+            key: "directory",
+            title: "Directory sync",
+            where: "our_page",
+            instructions: [
+              "Speakeasy creates the directory application in Okta.",
+            ],
+            printedValues: [],
+            expectedValues: [],
+            state: "not_started",
+          },
+        ],
+      },
       isPending: false,
     };
     render(<IdentityProviderStep onComplete={() => {}} />);
 
-    // The directory is the one step Speakeasy cannot do over the API, and it
-    // opens on the connection alone rather than waiting on sign-on.
     expect(
-      screen.getByText("This is the one step that leaves Speakeasy"),
+      screen.getByRole("button", { name: "Set up directory sync" }),
     ).toBeTruthy();
     expect(
-      screen.getByRole("button", { name: "Connect directory" }),
-    ).toBeTruthy();
-    // No group mirroring here: the portal owns the directory.
-    expect(screen.queryByText(/one Speakeasy role per Okta group/)).toBeNull();
+      screen.queryByText(/WorkOS portal opens in a new browser tab/),
+    ).toBeNull();
   });
 
   it("names the rest of the journey without opening it", () => {
