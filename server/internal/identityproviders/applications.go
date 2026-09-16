@@ -26,7 +26,8 @@ import (
 const (
 	applicationInventoryLimit            = 500
 	applicationAssignmentCountLimit      = 50
-	applicationAssignmentConcurrency     = 4
+	applicationAssignmentConcurrency     = 6
+	applicationAssignmentTimeout         = 20 * time.Second
 	applicationAssignedGroupLimit        = 10
 	applicationAssignedGroupPageLimit    = 20
 	applicationCatalogMatchLimit         = 50
@@ -120,6 +121,13 @@ func (s *Service) ListApplications(ctx context.Context, _ *gen.ListApplicationsP
 	if truncated {
 		detail = "Application inventory was capped at 500 applications."
 	}
+	var matchResults []applicationMatchResult
+	var matchFailed bool
+	matchDone := make(chan struct{})
+	go func() {
+		matchResults, matchFailed = s.appMatches.match(requestCtx, authCtx.ActiveOrganizationID, applications, s.catalog)
+		close(matchDone)
+	}()
 	if len(applications) > applicationAssignmentCountLimit {
 		detail += " Assignment counts were omitted because the tenant has more than 50 applications. Assigned group names were also omitted."
 	} else if len(applications) > 0 {
@@ -129,13 +137,16 @@ func (s *Service) ListApplications(ctx context.Context, _ *gen.ListApplicationsP
 		group.SetLimit(applicationAssignmentConcurrency)
 		for _, application := range applications {
 			group.Go(func() error {
-				groupCount, assignedGroups, err := s.readOktaApplicationGroups(groupCtx, rateLimits, tenantDomain, token.AccessToken, application.SourceApplicationID)
+				assignmentCtx, cancel := context.WithTimeout(groupCtx, applicationAssignmentTimeout)
+				defer cancel()
+
+				groupCount, assignedGroups, err := s.readOktaApplicationGroups(assignmentCtx, rateLimits, tenantDomain, token.AccessToken, application.SourceApplicationID)
 				if err != nil {
 					partial.Store(true)
 				} else {
 					application.GroupAssignmentCount = &groupCount
 					application.AssignedGroupOverflow = new(max(0, groupCount-len(assignedGroups)))
-					assignedGroups, err = s.resolveOktaApplicationGroupNames(groupCtx, rateLimits, groupLookupSlots, tenantDomain, token.AccessToken, assignedGroups)
+					assignedGroups, err = s.resolveOktaApplicationGroupNames(assignmentCtx, rateLimits, groupLookupSlots, tenantDomain, token.AccessToken, assignedGroups)
 					if err != nil {
 						partial.Store(true)
 					} else {
@@ -149,7 +160,7 @@ func (s *Service) ListApplications(ctx context.Context, _ *gen.ListApplicationsP
 					}
 				}
 
-				userCount, err := countOktaCollection(groupCtx, rateLimits, func(ctx context.Context, page okta.PageRequest) (okta.Page, error) {
+				userCount, err := countOktaCollection(assignmentCtx, rateLimits, func(ctx context.Context, page okta.PageRequest) (okta.Page, error) {
 					return s.okta.ListApplicationUsers(ctx, tenantDomain, token.AccessToken, application.SourceApplicationID, page)
 				}, countDirectOktaApplicationUsers)
 				if err != nil {
@@ -168,7 +179,7 @@ func (s *Service) ListApplications(ctx context.Context, _ *gen.ListApplicationsP
 		}
 	}
 
-	matchResults, matchFailed := s.appMatches.match(requestCtx, authCtx.ActiveOrganizationID, applications, s.catalog)
+	<-matchDone
 	for i, application := range applications {
 		if i < len(matchResults) && matchResults[i].match != nil {
 			match := matchResults[i].match
@@ -316,7 +327,7 @@ func matchApplicationToCatalog(ctx context.Context, label string, catalog Applic
 	if err != nil {
 		return applicationMatchResult{match: nil, failed: true}
 	}
-	normalizedLabel := normalizeApplicationCatalogName(label)
+	normalizedLabel := normalizeApplicationCatalogName(label, false)
 	if normalizedLabel == "" {
 		return applicationMatchResult{match: nil, failed: false}
 	}
@@ -324,14 +335,30 @@ func matchApplicationToCatalog(ctx context.Context, label string, catalog Applic
 	var selected *ApplicationCatalogCandidate
 	confidence := ""
 	for i := range candidates {
-		if normalizeApplicationCatalogName(candidates[i].Name) == normalizedLabel {
+		if normalizeApplicationCatalogName(candidates[i].Name, false) == normalizedLabel {
 			selected = &candidates[i]
 			confidence = "exact"
 			break
 		}
 	}
+	if selected == nil {
+		genericLabel := normalizeApplicationCatalogName(label, true)
+		for i := range candidates {
+			if genericLabel != "" && normalizeApplicationCatalogName(candidates[i].Name, true) == genericLabel {
+				if selected != nil {
+					selected = nil
+					break
+				}
+				selected = &candidates[i]
+			}
+		}
+		if selected != nil {
+			confidence = "likely"
+		}
+	}
 	if selected == nil && len(candidates) == 1 {
-		normalizedCandidate := normalizeApplicationCatalogName(candidates[0].Name)
+		normalizedCandidate := normalizeApplicationCatalogName(candidates[0].Name, true)
+		normalizedLabel = normalizeApplicationCatalogName(label, true)
 		if normalizedCandidate != "" && (strings.Contains(normalizedLabel, normalizedCandidate) || strings.Contains(normalizedCandidate, normalizedLabel)) {
 			selected = &candidates[0]
 			confidence = "likely"
@@ -360,7 +387,7 @@ func matchApplicationToCatalog(ctx context.Context, label string, catalog Applic
 	}
 }
 
-func normalizeApplicationCatalogName(name string) string {
+func normalizeApplicationCatalogName(name string, trimTrailingGeneric bool) string {
 	words := make([]string, 0, 4)
 	var word strings.Builder
 	flush := func() {
@@ -384,6 +411,16 @@ func normalizeApplicationCatalogName(name string) string {
 		}
 	}
 	flush()
+	if trimTrailingGeneric {
+		for len(words) > 0 {
+			switch words[len(words)-1] {
+			case "cloud", "online", "enterprise", "workspace", "business":
+				words = words[:len(words)-1]
+			default:
+				return strings.Join(words, "")
+			}
+		}
+	}
 	return strings.Join(words, "")
 }
 

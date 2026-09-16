@@ -155,6 +155,29 @@ func TestListApplicationsKeepsInventoryWhenCatalogueReadFails(t *testing.T) {
 	require.Contains(t, result.Detail, "Speakeasy MCP server matching is partial because one or more catalogue reads failed.")
 }
 
+func TestListApplicationsMatchesTrailingGenericCatalogueName(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeOktaServer(t, fakeOktaPassed)
+	ctx, ti := newTestServiceWithOktaEndpoint(t, fake.server.URL)
+	prepareActiveConnection(t, ctx, ti, fake)
+	fake.SetApplicationInventory([]map[string]any{
+		inventoryApplication("atlassian", "Atlassian Cloud", "ACTIVE", "SAML_2_0", "", false),
+	}, map[string][2]int{"atlassian": {0, 0}})
+	ti.catalog.SetMatch("Atlassian Cloud", "provider-atlassian", "catalog/atlassian", "Atlassian", "https://mcp.example.test/atlassian")
+	ti.catalog.SetCandidates("Atlassian Cloud", []identityproviders.ApplicationCatalogCandidate{
+		{ProviderKey: "provider-atlassian", CatalogRef: "catalog/atlassian", Name: "Atlassian"},
+		{ProviderKey: "provider-other", CatalogRef: "catalog/other", Name: "Unrelated Cloud"},
+	})
+
+	result, err := ti.service.ListApplications(ctx, &gen.ListApplicationsPayload{SessionToken: nil, ApikeyToken: nil})
+	require.NoError(t, err)
+	require.Len(t, result.Applications, 1)
+	require.True(t, result.Applications[0].Pickable)
+	require.Equal(t, "Atlassian", result.Applications[0].Match.Name)
+	require.Equal(t, "likely", result.Applications[0].Match.Confidence)
+}
+
 func TestListApplicationsKeepsInventoryWhenAnAssignmentReadFails(t *testing.T) {
 	t.Parallel()
 
@@ -173,6 +196,30 @@ func TestListApplicationsKeepsInventoryWhenAnAssignmentReadFails(t *testing.T) {
 	require.Contains(t, result.Detail, "Assignment counts are partial")
 	require.NotNil(t, result.Applications[0].GroupAssignmentCount)
 	require.Equal(t, 1, *result.Applications[1].GroupAssignmentCount)
+	require.Nil(t, result.Applications[1].UserAssignmentCount)
+}
+
+func TestListApplicationsLimitsSlowApplicationAssignmentReads(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeOktaServer(t, fakeOktaPassed)
+	ctx, ti := newTestServiceWithOktaEndpoint(t, fake.server.URL)
+	prepareActiveConnection(t, ctx, ti, fake)
+	fake.SetApplicationInventory([]map[string]any{
+		inventoryApplication("slow", "Slow app", "ACTIVE", "SAML_2_0", "", false),
+		inventoryApplication("fast", "Fast app", "ACTIVE", "SAML_2_0", "", false),
+	}, map[string][2]int{"slow": {1, 1}, "fast": {1, 1}})
+	fake.SetAssignmentStall("slow", "groups")
+
+	result, err := ti.service.ListApplications(ctx, &gen.ListApplicationsPayload{SessionToken: nil, ApikeyToken: nil})
+	require.NoError(t, err)
+	require.Contains(t, result.Detail, "Assignment counts are partial")
+	require.Equal(t, "slow/groups", <-fake.assignmentCanceled)
+	require.Equal(t, "Fast app", result.Applications[0].Label)
+	require.Equal(t, 1, *result.Applications[0].GroupAssignmentCount)
+	require.Equal(t, 1, *result.Applications[0].UserAssignmentCount)
+	require.Equal(t, "Slow app", result.Applications[1].Label)
+	require.Nil(t, result.Applications[1].GroupAssignmentCount)
 	require.Nil(t, result.Applications[1].UserAssignmentCount)
 }
 

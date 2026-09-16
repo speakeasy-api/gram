@@ -70,6 +70,8 @@ type fakeOktaServer struct {
 	assignmentCounts     map[string][2]int
 	indirectUserCounts   map[string]int
 	assignmentFailures   map[string]bool
+	assignmentStalls     map[string]bool
+	assignmentCanceled   chan string
 	assignmentReads      int
 	embedInventoryGroups bool
 	inventoryGroupReads  int
@@ -641,6 +643,8 @@ func newFakeOktaServer(t *testing.T, mode string) *fakeOktaServer {
 		assignmentCounts:     make(map[string][2]int),
 		indirectUserCounts:   make(map[string]int),
 		assignmentFailures:   make(map[string]bool),
+		assignmentStalls:     make(map[string]bool),
+		assignmentCanceled:   make(chan string, 1),
 		assignmentReads:      0,
 		embedInventoryGroups: true,
 		inventoryGroupReads:  0,
@@ -882,10 +886,16 @@ func (f *fakeOktaServer) handleInventoryAssignments(w http.ResponseWriter, r *ht
 	counts := f.assignmentCounts[applicationID]
 	indirectUserCount := f.indirectUserCounts[applicationID]
 	failure := f.assignmentFailures[applicationID+"/"+resource]
+	stall := f.assignmentStalls[applicationID+"/"+resource]
 	embedInventoryGroups := f.embedInventoryGroups
 	f.mu.Unlock()
 	if failure {
 		http.Error(w, "assignment read failed", http.StatusServiceUnavailable)
+		return
+	}
+	if stall {
+		<-r.Context().Done()
+		f.assignmentCanceled <- applicationID + "/" + resource
 		return
 	}
 	count := counts[0]
@@ -1148,6 +1158,12 @@ func (f *fakeOktaServer) SetAssignmentFailure(applicationID, resource string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.assignmentFailures[applicationID+"/"+resource] = true
+}
+
+func (f *fakeOktaServer) SetAssignmentStall(applicationID, resource string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.assignmentStalls[applicationID+"/"+resource] = true
 }
 
 func (f *fakeOktaServer) AssignmentReads() int {
