@@ -8,6 +8,7 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/scanners/llmanalyzer"
 )
 
 // riskFingerprintPepperFlag carries the keyring every risk host needs: the
@@ -66,4 +67,40 @@ func parseOptionalPepperKeyRing(ctx context.Context, logger *slog.Logger, raw st
 		return fingerprinter, fmt.Errorf("parse risk fingerprint pepper keyring: %w", err)
 	}
 	return fingerprinter, nil
+}
+
+// riskLLMFlags configure the fine-tuned risk model client. Only the streams
+// process consumes them: both analyzer lanes run there, while the server and
+// worker only publish requests.
+func riskLLMFlags() []cli.Flag {
+	return []cli.Flag{
+		&cli.StringFlag{
+			Name:    "risk-llm-url",
+			Usage:   "OpenAI-compatible base URL of the fine-tuned risk model, including the /v1 segment. Empty disables the LLM risk analyzer.",
+			EnvVars: []string{"GRAM_RISK_LLM_URL"},
+		},
+		&cli.StringFlag{
+			Name:    "risk-llm-api-key",
+			Usage:   "Bearer token for the fine-tuned risk model endpoint",
+			EnvVars: []string{"GRAM_RISK_LLM_API_KEY"},
+		},
+		&cli.StringFlag{
+			Name:    "risk-llm-model",
+			Usage:   "Served model name of the fine-tuned risk model; must equal the deployment's --served-model-name",
+			EnvVars: []string{"GRAM_RISK_LLM_MODEL"},
+			Value:   llmanalyzer.DefaultModel,
+		},
+	}
+}
+
+// llmAnalyzerConfigFromCLI reads the risk LLM flags into a client config.
+// Timeout and max tokens are code constants, not flags.
+func llmAnalyzerConfigFromCLI(c *cli.Context) llmanalyzer.Config {
+	return llmanalyzer.Config{
+		BaseURL:   c.String("risk-llm-url"),
+		APIKey:    c.String("risk-llm-api-key"),
+		Model:     c.String("risk-llm-model"),
+		Timeout:   llmanalyzer.DefaultTimeout,
+		MaxTokens: llmanalyzer.DefaultMaxTokens,
+	}
 }
