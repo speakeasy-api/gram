@@ -187,6 +187,20 @@ type Group struct {
 	Name string
 }
 
+type groupResponse struct {
+	ID      string `json:"id"`
+	Profile struct {
+		Name string `json:"name"`
+	} `json:"profile"`
+}
+
+type applicationGroupAssignmentResponse struct {
+	ID       string `json:"id"`
+	Embedded struct {
+		Group groupResponse `json:"group"`
+	} `json:"_embedded"`
+}
+
 // AuthorizationServer identifies an Okta custom authorization server.
 type AuthorizationServer struct {
 	// ID is Okta's authorization server identifier.
@@ -660,7 +674,33 @@ func (c *Client) ListApplicationGroups(ctx context.Context, tenantDomain, access
 	if strings.TrimSpace(applicationID) == "" {
 		return Page{}, errors.New("list Okta application groups: application ID is required")
 	}
-	return c.list(ctx, tenantDomain, accessToken, "/api/v1/apps/"+url.PathEscape(applicationID)+"/groups", page)
+	return c.listWithQuery(ctx, tenantDomain, accessToken, "/api/v1/apps/"+url.PathEscape(applicationID)+"/groups", page, url.Values{"expand": {"group"}})
+}
+
+// GetGroup reads one Okta group by its provider identifier.
+func (c *Client) GetGroup(ctx context.Context, tenantDomain, accessToken, groupID string) (Group, error) {
+	if strings.TrimSpace(groupID) == "" {
+		return Group{ID: "", Name: ""}, errors.New("get Okta group: group ID is required")
+	}
+	requestURL, err := c.urlFor(tenantDomain, "/api/v1/groups/"+url.PathEscape(groupID))
+	if err != nil {
+		return Group{ID: "", Name: ""}, fmt.Errorf("get Okta group: %w", err)
+	}
+	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
+	if err != nil {
+		return Group{ID: "", Name: ""}, fmt.Errorf("create Okta group request: %w", err)
+	}
+	httpRequest.Header.Set("Accept", "application/json")
+	httpRequest.Header.Set("Authorization", "Bearer "+accessToken)
+
+	var response groupResponse
+	if _, err := c.doAuthorized(c.httpClient, httpRequest, accessToken, &response); err != nil {
+		return Group{ID: "", Name: ""}, err
+	}
+	if response.ID == "" || response.Profile.Name == "" {
+		return Group{ID: "", Name: ""}, errors.New("decode Okta group: id and profile name are required")
+	}
+	return Group{ID: response.ID, Name: response.Profile.Name}, nil
 }
 
 // ListApplicationUsers reads one page of users assigned to an Okta application.
@@ -678,6 +718,18 @@ func DecodeApplication(raw json.RawMessage) (Application, error) {
 		return Application{ID: "", Status: "", Label: "", ClientID: "", SignOnMode: "", SignOnURL: "", LogoURL: ""}, fmt.Errorf("decode Okta application: %w", err)
 	}
 	return applicationFromResponse(response), nil
+}
+
+// DecodeApplicationGroup converts an Okta application group assignment into its source group fields.
+func DecodeApplicationGroup(raw json.RawMessage) (Group, error) {
+	var response applicationGroupAssignmentResponse
+	if err := json.Unmarshal(raw, &response); err != nil {
+		return Group{ID: "", Name: ""}, fmt.Errorf("decode Okta application group: %w", err)
+	}
+	if response.ID == "" {
+		return Group{ID: "", Name: ""}, errors.New("decode Okta application group: id is required")
+	}
+	return Group{ID: response.ID, Name: response.Embedded.Group.Profile.Name}, nil
 }
 
 // IsDirectApplicationUser reports whether an application user was assigned directly rather than through a group.
@@ -1347,6 +1399,10 @@ func (c *Client) AssignGroupToApplication(ctx context.Context, tenantDomain, acc
 }
 
 func (c *Client) list(ctx context.Context, tenantDomain, accessToken, path string, page PageRequest) (Page, error) {
+	return c.listWithQuery(ctx, tenantDomain, accessToken, path, page, nil)
+}
+
+func (c *Client) listWithQuery(ctx context.Context, tenantDomain, accessToken, path string, page PageRequest, extraQuery url.Values) (Page, error) {
 	if page.Limit <= 0 {
 		return Page{}, errors.New("list Okta resources: limit must be positive")
 	}
@@ -1359,6 +1415,11 @@ func (c *Client) list(ctx context.Context, tenantDomain, accessToken, path strin
 		return Page{}, fmt.Errorf("parse Okta resource URL: %w", err)
 	}
 	query := parsed.Query()
+	for key, values := range extraQuery {
+		for _, value := range values {
+			query.Add(key, value)
+		}
+	}
 	query.Set("limit", strconv.Itoa(page.Limit))
 	if page.After != "" {
 		query.Set("after", page.After)

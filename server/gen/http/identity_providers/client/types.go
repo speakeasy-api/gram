@@ -1467,16 +1467,28 @@ type IdentityProviderApplicationResponseBody struct {
 	Label *string `form:"label,omitempty" json:"label,omitempty" xml:"label,omitempty"`
 	// Provider lifecycle status.
 	ProviderStatus *string `form:"provider_status,omitempty" json:"provider_status,omitempty" xml:"provider_status,omitempty"`
-	// Provider sign-on mode.
-	SignOnMode *string `form:"sign_on_mode,omitempty" json:"sign_on_mode,omitempty" xml:"sign_on_mode,omitempty"`
 	// Application launch URL.
 	SignOnURL *string `form:"sign_on_url,omitempty" json:"sign_on_url,omitempty" xml:"sign_on_url,omitempty"`
 	// Application logo URL.
 	LogoURL *string `form:"logo_url,omitempty" json:"logo_url,omitempty" xml:"logo_url,omitempty"`
 	// Number of directly assigned groups, when read.
 	GroupAssignmentCount *int `form:"group_assignment_count,omitempty" json:"group_assignment_count,omitempty" xml:"group_assignment_count,omitempty"`
+	// Up to 10 directly assigned groups, when read.
+	AssignedGroups []*IdentityProviderAssignedGroupResponseBody `form:"assigned_groups,omitempty" json:"assigned_groups,omitempty" xml:"assigned_groups,omitempty"`
+	// Number of additional directly assigned groups omitted from assigned_groups,
+	// when read.
+	AssignedGroupOverflow *int `form:"assigned_group_overflow,omitempty" json:"assigned_group_overflow,omitempty" xml:"assigned_group_overflow,omitempty"`
 	// Number of directly assigned users, when read.
 	UserAssignmentCount *int `form:"user_assignment_count,omitempty" json:"user_assignment_count,omitempty" xml:"user_assignment_count,omitempty"`
+}
+
+// IdentityProviderAssignedGroupResponseBody is used to define fields on
+// response body types.
+type IdentityProviderAssignedGroupResponseBody struct {
+	// Provider-assigned group identifier.
+	SourceGroupID *string `form:"source_group_id,omitempty" json:"source_group_id,omitempty" xml:"source_group_id,omitempty"`
+	// Group display name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 }
 
 // IdentityProviderSetupStepResponseBody is used to define fields on response
@@ -4781,6 +4793,25 @@ func ValidateIdentityProviderApplicationResponseBody(body *IdentityProviderAppli
 	}
 	if body.LogoURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.logo_url", *body.LogoURL, goa.FormatURI))
+	}
+	for _, e := range body.AssignedGroups {
+		if e != nil {
+			if err2 := ValidateIdentityProviderAssignedGroupResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateIdentityProviderAssignedGroupResponseBody runs the validations
+// defined on IdentityProviderAssignedGroupResponseBody
+func ValidateIdentityProviderAssignedGroupResponseBody(body *IdentityProviderAssignedGroupResponseBody) (err error) {
+	if body.SourceGroupID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("source_group_id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
 	return
 }

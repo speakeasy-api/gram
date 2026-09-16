@@ -77245,6 +77245,15 @@ components:
     IdentityProviderApplication:
       type: object
       properties:
+        assigned_group_overflow:
+          type: integer
+          description: Number of additional directly assigned groups omitted from assigned_groups, when read.
+          format: int64
+        assigned_groups:
+          type: array
+          items:
+            $ref: '#/components/schemas/IdentityProviderAssignedGroup'
+          description: Up to 10 directly assigned groups, when read.
         group_assignment_count:
           type: integer
           description: Number of directly assigned groups, when read.
@@ -77259,9 +77268,6 @@ components:
         provider_status:
           type: string
           description: Provider lifecycle status.
-        sign_on_mode:
-          type: string
-          description: Provider sign-on mode.
         sign_on_url:
           type: string
           description: Application launch URL.
@@ -77277,6 +77283,19 @@ components:
       required:
         - source_application_id
         - label
+    IdentityProviderAssignedGroup:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Group display name.
+        source_group_id:
+          type: string
+          description: Provider-assigned group identifier.
+      description: An identity provider group assigned directly to an application.
+      required:
+        - source_group_id
+        - name
     IdentityProviderCapabilityRead:
       type: object
       properties:

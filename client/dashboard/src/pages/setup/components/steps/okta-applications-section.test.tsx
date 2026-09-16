@@ -64,7 +64,6 @@ function application(
     sourceApplicationId: "0oaexampleapp1",
     label: "Example Chat",
     providerStatus: "ACTIVE",
-    signOnMode: "OPENID_CONNECT",
     signOnUrl: "https://chat.example.test/sso",
     logoUrl: "https://cdn.example.test/example-chat.png",
     groupAssignmentCount: 3,

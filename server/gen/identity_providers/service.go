@@ -104,16 +104,27 @@ type IdentityProviderApplication struct {
 	Label string
 	// Provider lifecycle status.
 	ProviderStatus *string
-	// Provider sign-on mode.
-	SignOnMode *string
 	// Application launch URL.
 	SignOnURL *string
 	// Application logo URL.
 	LogoURL *string
 	// Number of directly assigned groups, when read.
 	GroupAssignmentCount *int
+	// Up to 10 directly assigned groups, when read.
+	AssignedGroups []*IdentityProviderAssignedGroup
+	// Number of additional directly assigned groups omitted from assigned_groups,
+	// when read.
+	AssignedGroupOverflow *int
 	// Number of directly assigned users, when read.
 	UserAssignmentCount *int
+}
+
+// An identity provider group assigned directly to an application.
+type IdentityProviderAssignedGroup struct {
+	// Provider-assigned group identifier.
+	SourceGroupID string
+	// Group display name.
+	Name string
 }
 
 type IdentityProviderCapabilityRead struct {

@@ -34,10 +34,11 @@ func TestListApplicationsReadsTwoPagesAndAssignmentCounts(t *testing.T) {
 	require.NotEmpty(t, result.ReadAt)
 	require.Contains(t, result.Detail, "Assignment counts were read for every application.")
 	require.Equal(t, []*gen.IdentityProviderApplication{
-		{SourceApplicationID: "app-one", Label: "First app", ProviderStatus: new("ACTIVE"), SignOnMode: new("SAML_2_0"), SignOnURL: new("https://apps.example.test/first"), LogoURL: new("https://apps.example.test/logos/app-one.png"), GroupAssignmentCount: new(2), UserAssignmentCount: new(3)},
-		{SourceApplicationID: "app-two", Label: "Second app", ProviderStatus: new("INACTIVE"), SignOnMode: new("BOOKMARK"), SignOnURL: new("https://apps.example.test/second"), LogoURL: nil, GroupAssignmentCount: new(0), UserAssignmentCount: new(1)},
+		{SourceApplicationID: "app-one", Label: "First app", ProviderStatus: new("ACTIVE"), SignOnURL: new("https://apps.example.test/first"), LogoURL: new("https://apps.example.test/logos/app-one.png"), GroupAssignmentCount: new(2), AssignedGroups: []*gen.IdentityProviderAssignedGroup{{SourceGroupID: "app-one-groups-0", Name: "Group app-one-groups-0"}, {SourceGroupID: "app-one-groups-1", Name: "Group app-one-groups-1"}}, AssignedGroupOverflow: new(0), UserAssignmentCount: new(3)},
+		{SourceApplicationID: "app-two", Label: "Second app", ProviderStatus: new("INACTIVE"), SignOnURL: new("https://apps.example.test/second"), LogoURL: nil, GroupAssignmentCount: new(0), AssignedGroups: []*gen.IdentityProviderAssignedGroup{}, AssignedGroupOverflow: new(0), UserAssignmentCount: new(1)},
 	}, result.Applications)
 	require.Equal(t, 4, fake.AssignmentReads())
+	require.Zero(t, fake.InventoryGroupReads())
 	require.NoError(t, fake.ValidationError())
 }
 
@@ -60,6 +61,8 @@ func TestListApplicationsOmitsAssignmentCountsAboveFifty(t *testing.T) {
 	require.Contains(t, result.Detail, "Assignment counts were omitted because the tenant has more than 50 applications.")
 	for _, application := range result.Applications {
 		require.Nil(t, application.GroupAssignmentCount)
+		require.Nil(t, application.AssignedGroups)
+		require.Nil(t, application.AssignedGroupOverflow)
 		require.Nil(t, application.UserAssignmentCount)
 	}
 	require.Zero(t, fake.AssignmentReads())
@@ -144,8 +147,35 @@ func TestListApplicationsReadsPaginatedAssignments(t *testing.T) {
 	result, err := ti.service.ListApplications(ctx, &gen.ListApplicationsPayload{SessionToken: nil, ApikeyToken: nil})
 	require.NoError(t, err)
 	require.Equal(t, 201, *result.Applications[0].GroupAssignmentCount)
+	require.Len(t, result.Applications[0].AssignedGroups, 10)
+	require.Equal(t, 191, *result.Applications[0].AssignedGroupOverflow)
 	require.Equal(t, 201, *result.Applications[0].UserAssignmentCount)
 	require.Equal(t, 4, fake.AssignmentReads())
+	require.NoError(t, fake.ValidationError())
+}
+
+func TestListApplicationsFallsBackToIndividualGroupReads(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeOktaServer(t, fakeOktaPassed)
+	ctx, ti := newTestServiceWithOktaEndpoint(t, fake.server.URL)
+	prepareActiveConnection(t, ctx, ti, fake)
+	fake.SetApplicationInventory([]map[string]any{
+		inventoryApplication("app-one", "First app", "ACTIVE", "SAML_2_0", "", false),
+	}, map[string][2]int{"app-one": {12, 0}})
+	fake.SetEmbeddedInventoryGroups(false)
+
+	result, err := ti.service.ListApplications(ctx, &gen.ListApplicationsPayload{SessionToken: nil, ApikeyToken: nil})
+	require.NoError(t, err)
+	require.Len(t, result.Applications, 1)
+	require.Equal(t, 12, *result.Applications[0].GroupAssignmentCount)
+	require.Equal(t, 2, *result.Applications[0].AssignedGroupOverflow)
+	require.Len(t, result.Applications[0].AssignedGroups, 10)
+	for i, assignedGroup := range result.Applications[0].AssignedGroups {
+		require.Equal(t, fmt.Sprintf("app-one-groups-%d", i), assignedGroup.SourceGroupID)
+		require.Equal(t, fmt.Sprintf("Group app-one-groups-%d", i), assignedGroup.Name)
+	}
+	require.Equal(t, 10, fake.InventoryGroupReads())
 	require.NoError(t, fake.ValidationError())
 }
 

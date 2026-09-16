@@ -79,6 +79,7 @@ type OktaClient interface {
 	ListUsers(context.Context, string, string, okta.PageRequest) (okta.Page, error)
 	ListApplications(context.Context, string, string, okta.PageRequest) (okta.Page, error)
 	ListApplicationGroups(context.Context, string, string, string, okta.PageRequest) (okta.Page, error)
+	GetGroup(context.Context, string, string, string) (okta.Group, error)
 	ListApplicationUsers(context.Context, string, string, string, okta.PageRequest) (okta.Page, error)
 	ListAuthorizationServers(context.Context, string, string) ([]okta.AuthorizationServer, error)
 	CreateOIDCApplication(context.Context, string, string, okta.CreateOIDCApplicationInput) (okta.Application, error)

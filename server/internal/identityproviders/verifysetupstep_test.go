@@ -55,27 +55,29 @@ type fakeOktaServer struct {
 	server *httptest.Server
 	mode   string
 
-	mu                 sync.Mutex
-	publicJWK          jose.JSONWebKey
-	validationErr      error
-	createdApp         map[string]any
-	createdAppCount    int
-	applicationReads   int
-	resolvedClientID   string
-	assignedAppID      string
-	assignedGroupID    string
-	createdClaim       map[string]any
-	createdClaimCount  int
-	inventoryApps      []map[string]any
-	assignmentCounts   map[string][2]int
-	indirectUserCounts map[string]int
-	assignmentFailures map[string]bool
-	assignmentReads    int
-	signInClientID     string
-	tokenStarted       chan struct{}
-	releaseToken       chan struct{}
-	startOnce          sync.Once
-	releaseOnce        sync.Once
+	mu                   sync.Mutex
+	publicJWK            jose.JSONWebKey
+	validationErr        error
+	createdApp           map[string]any
+	createdAppCount      int
+	applicationReads     int
+	resolvedClientID     string
+	assignedAppID        string
+	assignedGroupID      string
+	createdClaim         map[string]any
+	createdClaimCount    int
+	inventoryApps        []map[string]any
+	assignmentCounts     map[string][2]int
+	indirectUserCounts   map[string]int
+	assignmentFailures   map[string]bool
+	assignmentReads      int
+	embedInventoryGroups bool
+	inventoryGroupReads  int
+	signInClientID       string
+	tokenStarted         chan struct{}
+	releaseToken         chan struct{}
+	startOnce            sync.Once
+	releaseOnce          sync.Once
 }
 
 func TestVerifySetupStepPassesAndPersistsEvidence(t *testing.T) {
@@ -622,29 +624,31 @@ func TestVerifySignInStepReportsWorkOSUnreachable(t *testing.T) {
 func newFakeOktaServer(t *testing.T, mode string) *fakeOktaServer {
 	t.Helper()
 	fake := &fakeOktaServer{
-		server:             nil,
-		mode:               mode,
-		mu:                 sync.Mutex{},
-		publicJWK:          jose.JSONWebKey{},
-		validationErr:      nil,
-		createdApp:         nil,
-		createdAppCount:    0,
-		applicationReads:   0,
-		resolvedClientID:   "",
-		assignedAppID:      "",
-		assignedGroupID:    "",
-		createdClaim:       nil,
-		createdClaimCount:  0,
-		inventoryApps:      nil,
-		assignmentCounts:   make(map[string][2]int),
-		indirectUserCounts: make(map[string]int),
-		assignmentFailures: make(map[string]bool),
-		assignmentReads:    0,
-		signInClientID:     testSignInClientID,
-		tokenStarted:       nil,
-		releaseToken:       nil,
-		startOnce:          sync.Once{},
-		releaseOnce:        sync.Once{},
+		server:               nil,
+		mode:                 mode,
+		mu:                   sync.Mutex{},
+		publicJWK:            jose.JSONWebKey{},
+		validationErr:        nil,
+		createdApp:           nil,
+		createdAppCount:      0,
+		applicationReads:     0,
+		resolvedClientID:     "",
+		assignedAppID:        "",
+		assignedGroupID:      "",
+		createdClaim:         nil,
+		createdClaimCount:    0,
+		inventoryApps:        nil,
+		assignmentCounts:     make(map[string][2]int),
+		indirectUserCounts:   make(map[string]int),
+		assignmentFailures:   make(map[string]bool),
+		assignmentReads:      0,
+		embedInventoryGroups: true,
+		inventoryGroupReads:  0,
+		signInClientID:       testSignInClientID,
+		tokenStarted:         nil,
+		releaseToken:         nil,
+		startOnce:            sync.Once{},
+		releaseOnce:          sync.Once{},
 	}
 	fake.server = httptest.NewServer(http.HandlerFunc(fake.handle))
 	t.Cleanup(fake.server.Close)
@@ -654,6 +658,10 @@ func newFakeOktaServer(t *testing.T, mode string) *fakeOktaServer {
 func (f *fakeOktaServer) handle(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/v1/apps/") && (strings.HasSuffix(r.URL.Path, "/groups") || strings.HasSuffix(r.URL.Path, "/users")) {
 		f.handleInventoryAssignments(w, r)
+		return
+	}
+	if r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/v1/groups/") {
+		f.handleInventoryGroup(w, r)
 		return
 	}
 	switch r.URL.Path {
@@ -694,7 +702,7 @@ func (f *fakeOktaServer) handleToken(w http.ResponseWriter, r *http.Request) {
 	readScopes := "okta.apps.read okta.groups.read okta.users.read"
 	claimScopes := "okta.authorizationServers.read okta.authorizationServers.manage"
 	mode := f.Mode()
-	validScopes := requestedScopes == allScopes || requestedScopes == claimVerificationScopes || requestedScopes == applicationScopes || requestedScopes == readScopes || requestedScopes == claimScopes || requestedScopes == "okta.apps.read"
+	validScopes := requestedScopes == allScopes || requestedScopes == claimVerificationScopes || requestedScopes == applicationScopes || requestedScopes == readScopes || requestedScopes == claimScopes || requestedScopes == "okta.apps.read" || requestedScopes == "okta.apps.read okta.groups.read"
 	if r.Method != http.MethodPost || r.Form.Get("grant_type") != "client_credentials" || !validScopes || r.Form.Get("client_assertion_type") != "urn:ietf:params:oauth:client-assertion-type:jwt-bearer" {
 		f.fail(w, errors.New("unexpected token request"))
 		return
@@ -857,8 +865,16 @@ func (f *fakeOktaServer) handleApplications(w http.ResponseWriter, r *http.Reque
 func (f *fakeOktaServer) handleInventoryAssignments(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/api/v1/apps/")
 	applicationID, resource, ok := strings.Cut(path, "/")
-	if !ok || applicationID == "" || (resource != "groups" && resource != "users") || r.URL.Query().Get("limit") != "200" || r.Header.Get("Authorization") != "Bearer "+testAccessToken {
+	if !ok || applicationID == "" || (resource != "groups" && resource != "users") || r.Header.Get("Authorization") != "Bearer "+testAccessToken {
 		f.fail(w, errors.New("unexpected application assignments request"))
+		return
+	}
+	limit := 200
+	if resource == "groups" && r.URL.Query().Get("after") == "" {
+		limit = 20
+	}
+	if r.URL.Query().Get("limit") != fmt.Sprintf("%d", limit) || (resource == "groups" && r.URL.Query().Get("expand") != "group") {
+		f.fail(w, errors.New("unexpected application assignments query"))
 		return
 	}
 	f.mu.Lock()
@@ -866,6 +882,7 @@ func (f *fakeOktaServer) handleInventoryAssignments(w http.ResponseWriter, r *ht
 	counts := f.assignmentCounts[applicationID]
 	indirectUserCount := f.indirectUserCounts[applicationID]
 	failure := f.assignmentFailures[applicationID+"/"+resource]
+	embedInventoryGroups := f.embedInventoryGroups
 	f.mu.Unlock()
 	if failure {
 		http.Error(w, "assignment read failed", http.StatusServiceUnavailable)
@@ -886,15 +903,26 @@ func (f *fakeOktaServer) handleInventoryAssignments(w http.ResponseWriter, r *ht
 			return
 		}
 		start = 200
+		if resource == "groups" {
+			start = 20
+		}
 	}
-	end := min(start+200, total)
-	items := make([]map[string]string, end-start)
+	end := min(start+limit, total)
+	items := make([]map[string]any, end-start)
 	for i := start; i < end; i++ {
-		item := map[string]string{"id": fmt.Sprintf("%s-%s-%d", applicationID, resource, i)}
+		id := fmt.Sprintf("%s-%s-%d", applicationID, resource, i)
+		item := map[string]any{"id": id}
 		if resource == "users" {
 			item["scope"] = "USER"
 			if i >= count {
 				item["scope"] = "GROUP"
+			}
+		} else if embedInventoryGroups {
+			item["_embedded"] = map[string]any{
+				"group": map[string]any{
+					"id":      id,
+					"profile": map[string]any{"name": inventoryGroupName(id)},
+				},
 			}
 		}
 		items[i-start] = item
@@ -904,6 +932,26 @@ func (f *fakeOktaServer) handleInventoryAssignments(w http.ResponseWriter, r *ht
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(items)
+}
+
+func (f *fakeOktaServer) handleInventoryGroup(w http.ResponseWriter, r *http.Request) {
+	groupID := strings.TrimPrefix(r.URL.Path, "/api/v1/groups/")
+	if groupID == "" || r.Header.Get("Authorization") != "Bearer "+testAccessToken {
+		f.fail(w, errors.New("unexpected group request"))
+		return
+	}
+	f.mu.Lock()
+	f.inventoryGroupReads++
+	f.mu.Unlock()
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"id":      groupID,
+		"profile": map[string]any{"name": inventoryGroupName(groupID)},
+	})
+}
+
+func inventoryGroupName(groupID string) string {
+	return "Group " + groupID
 }
 
 func (f *fakeOktaServer) handleEveryoneGroup(w http.ResponseWriter, r *http.Request) {
@@ -1090,6 +1138,12 @@ func (f *fakeOktaServer) SetIndirectUserAssignments(applicationID string, count 
 	f.indirectUserCounts[applicationID] = count
 }
 
+func (f *fakeOktaServer) SetEmbeddedInventoryGroups(enabled bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.embedInventoryGroups = enabled
+}
+
 func (f *fakeOktaServer) SetAssignmentFailure(applicationID, resource string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -1100,6 +1154,12 @@ func (f *fakeOktaServer) AssignmentReads() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.assignmentReads
+}
+
+func (f *fakeOktaServer) InventoryGroupReads() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.inventoryGroupReads
 }
 
 func (f *fakeOktaServer) BlockTokenResponse() {

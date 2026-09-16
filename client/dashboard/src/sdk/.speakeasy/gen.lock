@@ -1046,6 +1046,7 @@ trackedFiles:
   src/models/components/identitydirectory.ts: {}
   src/models/components/identitymodel.ts: {}
   src/models/components/identityproviderapplication.ts: {}
+  src/models/components/identityproviderassignedgroup.ts: {}
   src/models/components/identityprovidercapabilityread.ts: {}
   src/models/components/identityproviderclaim.ts: {}
   src/models/components/identityproviderconnection.ts: {}

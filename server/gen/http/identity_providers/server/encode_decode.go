@@ -1615,14 +1615,39 @@ func marshalIdentityprovidersIdentityProviderConnectionToIdentityProviderConnect
 // of type *identityproviders.IdentityProviderApplication.
 func marshalIdentityprovidersIdentityProviderApplicationToIdentityProviderApplicationResponseBody(v *identityproviders.IdentityProviderApplication) *IdentityProviderApplicationResponseBody {
 	res := &IdentityProviderApplicationResponseBody{
-		SourceApplicationID:  v.SourceApplicationID,
-		Label:                v.Label,
-		ProviderStatus:       v.ProviderStatus,
-		SignOnMode:           v.SignOnMode,
-		SignOnURL:            v.SignOnURL,
-		LogoURL:              v.LogoURL,
-		GroupAssignmentCount: v.GroupAssignmentCount,
-		UserAssignmentCount:  v.UserAssignmentCount,
+		SourceApplicationID:   v.SourceApplicationID,
+		Label:                 v.Label,
+		ProviderStatus:        v.ProviderStatus,
+		SignOnURL:             v.SignOnURL,
+		LogoURL:               v.LogoURL,
+		GroupAssignmentCount:  v.GroupAssignmentCount,
+		AssignedGroupOverflow: v.AssignedGroupOverflow,
+		UserAssignmentCount:   v.UserAssignmentCount,
+	}
+	if v.AssignedGroups != nil {
+		res.AssignedGroups = make([]*IdentityProviderAssignedGroupResponseBody, len(v.AssignedGroups))
+		for i, val := range v.AssignedGroups {
+			if val == nil {
+				res.AssignedGroups[i] = nil
+				continue
+			}
+			res.AssignedGroups[i] = marshalIdentityprovidersIdentityProviderAssignedGroupToIdentityProviderAssignedGroupResponseBody(val)
+		}
+	}
+
+	return res
+}
+
+// marshalIdentityprovidersIdentityProviderAssignedGroupToIdentityProviderAssignedGroupResponseBody
+// builds a value of type *IdentityProviderAssignedGroupResponseBody from a
+// value of type *identityproviders.IdentityProviderAssignedGroup.
+func marshalIdentityprovidersIdentityProviderAssignedGroupToIdentityProviderAssignedGroupResponseBody(v *identityproviders.IdentityProviderAssignedGroup) *IdentityProviderAssignedGroupResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &IdentityProviderAssignedGroupResponseBody{
+		SourceGroupID: v.SourceGroupID,
+		Name:          v.Name,
 	}
 
 	return res

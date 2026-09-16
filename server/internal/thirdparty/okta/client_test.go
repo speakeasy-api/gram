@@ -340,7 +340,7 @@ func TestListApplicationAssignmentsUsesApplicationEndpoints(t *testing.T) {
 	users, err := client.ListApplicationUsers(t.Context(), "example.okta.com", "test-access-token", "app-123", okta.PageRequest{Limit: 200, After: "user-cursor"})
 	require.NoError(t, err)
 	require.Len(t, users.Items, 1)
-	require.Equal(t, "/api/v1/apps/app-123/groups?after=group-cursor&limit=200", <-requests)
+	require.Equal(t, "/api/v1/apps/app-123/groups?after=group-cursor&expand=group&limit=200", <-requests)
 	require.Equal(t, "/api/v1/apps/app-123/users?after=user-cursor&limit=200", <-requests)
 }
 

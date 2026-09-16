@@ -186,12 +186,20 @@ var IdentityProviderApplication = Type("IdentityProviderApplication", func() {
 	Attribute("source_application_id", String, "Provider-assigned application identifier.")
 	Attribute("label", String, "Application display label.")
 	Attribute("provider_status", String, "Provider lifecycle status.")
-	Attribute("sign_on_mode", String, "Provider sign-on mode.")
 	Attribute("sign_on_url", String, "Application launch URL.", func() { Format(FormatURI) })
 	Attribute("logo_url", String, "Application logo URL.", func() { Format(FormatURI) })
 	Attribute("group_assignment_count", Int, "Number of directly assigned groups, when read.")
+	Attribute("assigned_groups", ArrayOf(IdentityProviderAssignedGroup), "Up to 10 directly assigned groups, when read.")
+	Attribute("assigned_group_overflow", Int, "Number of additional directly assigned groups omitted from assigned_groups, when read.")
 	Attribute("user_assignment_count", Int, "Number of directly assigned users, when read.")
 	Required("source_application_id", "label")
+})
+
+var IdentityProviderAssignedGroup = Type("IdentityProviderAssignedGroup", func() {
+	Description("An identity provider group assigned directly to an application.")
+	Attribute("source_group_id", String, "Provider-assigned group identifier.")
+	Attribute("name", String, "Group display name.")
+	Required("source_group_id", "name")
 })
 
 var ListIdentityProviderApplicationsResult = Type("ListIdentityProviderApplicationsResult", func() {

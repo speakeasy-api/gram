@@ -7,11 +7,23 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  IdentityProviderAssignedGroup,
+  IdentityProviderAssignedGroup$inboundSchema,
+} from "./identityproviderassignedgroup.js";
 
 /**
  * An application read directly from an identity provider.
  */
 export type IdentityProviderApplication = {
+  /**
+   * Number of additional directly assigned groups omitted from assigned_groups, when read.
+   */
+  assignedGroupOverflow?: number | undefined;
+  /**
+   * Up to 10 directly assigned groups, when read.
+   */
+  assignedGroups?: Array<IdentityProviderAssignedGroup> | undefined;
   /**
    * Number of directly assigned groups, when read.
    */
@@ -28,10 +40,6 @@ export type IdentityProviderApplication = {
    * Provider lifecycle status.
    */
   providerStatus?: string | undefined;
-  /**
-   * Provider sign-on mode.
-   */
-  signOnMode?: string | undefined;
   /**
    * Application launch URL.
    */
@@ -52,21 +60,25 @@ export const IdentityProviderApplication$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    assigned_group_overflow: z.optional(z.int()),
+    assigned_groups: z.optional(
+      z.array(IdentityProviderAssignedGroup$inboundSchema),
+    ),
     group_assignment_count: z.optional(z.int()),
     label: z.string(),
     logo_url: z.optional(z.string()),
     provider_status: z.optional(z.string()),
-    sign_on_mode: z.optional(z.string()),
     sign_on_url: z.optional(z.string()),
     source_application_id: z.string(),
     user_assignment_count: z.optional(z.int()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      "assigned_group_overflow": "assignedGroupOverflow",
+      "assigned_groups": "assignedGroups",
       "group_assignment_count": "groupAssignmentCount",
       "logo_url": "logoUrl",
       "provider_status": "providerStatus",
-      "sign_on_mode": "signOnMode",
       "sign_on_url": "signOnUrl",
       "source_application_id": "sourceApplicationId",
       "user_assignment_count": "userAssignmentCount",

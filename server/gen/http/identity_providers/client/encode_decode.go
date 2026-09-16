@@ -1743,14 +1743,39 @@ func unmarshalIdentityProviderConnectionResponseBodyToIdentityprovidersIdentityP
 // value of type *IdentityProviderApplicationResponseBody.
 func unmarshalIdentityProviderApplicationResponseBodyToIdentityprovidersIdentityProviderApplication(v *IdentityProviderApplicationResponseBody) *identityproviders.IdentityProviderApplication {
 	res := &identityproviders.IdentityProviderApplication{
-		SourceApplicationID:  *v.SourceApplicationID,
-		Label:                *v.Label,
-		ProviderStatus:       v.ProviderStatus,
-		SignOnMode:           v.SignOnMode,
-		SignOnURL:            v.SignOnURL,
-		LogoURL:              v.LogoURL,
-		GroupAssignmentCount: v.GroupAssignmentCount,
-		UserAssignmentCount:  v.UserAssignmentCount,
+		SourceApplicationID:   *v.SourceApplicationID,
+		Label:                 *v.Label,
+		ProviderStatus:        v.ProviderStatus,
+		SignOnURL:             v.SignOnURL,
+		LogoURL:               v.LogoURL,
+		GroupAssignmentCount:  v.GroupAssignmentCount,
+		AssignedGroupOverflow: v.AssignedGroupOverflow,
+		UserAssignmentCount:   v.UserAssignmentCount,
+	}
+	if v.AssignedGroups != nil {
+		res.AssignedGroups = make([]*identityproviders.IdentityProviderAssignedGroup, len(v.AssignedGroups))
+		for i, val := range v.AssignedGroups {
+			if val == nil {
+				res.AssignedGroups[i] = nil
+				continue
+			}
+			res.AssignedGroups[i] = unmarshalIdentityProviderAssignedGroupResponseBodyToIdentityprovidersIdentityProviderAssignedGroup(val)
+		}
+	}
+
+	return res
+}
+
+// unmarshalIdentityProviderAssignedGroupResponseBodyToIdentityprovidersIdentityProviderAssignedGroup
+// builds a value of type *identityproviders.IdentityProviderAssignedGroup from
+// a value of type *IdentityProviderAssignedGroupResponseBody.
+func unmarshalIdentityProviderAssignedGroupResponseBodyToIdentityprovidersIdentityProviderAssignedGroup(v *IdentityProviderAssignedGroupResponseBody) *identityproviders.IdentityProviderAssignedGroup {
+	if v == nil {
+		return nil
+	}
+	res := &identityproviders.IdentityProviderAssignedGroup{
+		SourceGroupID: *v.SourceGroupID,
+		Name:          *v.Name,
 	}
 
 	return res
