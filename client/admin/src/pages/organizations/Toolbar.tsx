@@ -25,6 +25,7 @@ import {
   type FilterControlKey,
   type FilterSelection,
 } from "@/lib/organizationFilters";
+import { createdRangeSummary } from "@/lib/createdRange";
 import { cn } from "@/lib/utils";
 import type { OrganizationsSearch } from "@/routes/organizations.index";
 
@@ -130,6 +131,8 @@ export function Toolbar({
     type: search.type ?? [],
     trial: search.trial ?? [],
     disabled: statusSelection(search),
+    createdFrom: search.createdFrom,
+    createdTo: search.createdTo,
     minMembers: search.minMembers,
     maxMembers: search.maxMembers,
   };
@@ -142,8 +145,8 @@ export function Toolbar({
   };
 
   return (
-    <div className="mb-2 flex items-center gap-2">
-      <div className="relative w-80">
+    <div className="mb-2 flex flex-wrap items-center gap-2">
+      <div className="relative w-80 shrink-0">
         <SearchIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-2 size-4 -translate-y-1/2" />
         <Input
           aria-label="Search organizations"
@@ -213,6 +216,38 @@ export function Toolbar({
               }}
             >
               Members {key === "minMembers" ? "≥" : "≤"} {filters[key]} ×
+            </Button>
+          ),
+      )}
+
+      <Button
+        ref={(node) => {
+          if (node) triggers.current.created = node;
+        }}
+        variant={
+          filters.createdFrom || filters.createdTo ? "secondary" : "ghost"
+        }
+        size="xs"
+        aria-label={`Created date filter: ${createdRangeSummary(filters)}`}
+        onClick={() => openFilters("created")}
+      >
+        Created date
+        {(filters.createdFrom || filters.createdTo) && <Badge>1</Badge>}
+      </Button>
+      {(["createdFrom", "createdTo"] as const).map(
+        (key) =>
+          filters[key] && (
+            <Button
+              key={key}
+              variant="ghost"
+              size="xs"
+              aria-label={`Clear created ${key === "createdFrom" ? "from" : "to"}`}
+              onClick={() => {
+                applyFilters({ ...filters, [key]: undefined });
+                triggers.current.created?.focus();
+              }}
+            >
+              Created {key === "createdFrom" ? "≥" : "≤"} {filters[key]} UTC ×
             </Button>
           ),
       )}

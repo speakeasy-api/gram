@@ -44,6 +44,14 @@ import {
   type FilterOption,
   type FilterSelection,
 } from "@/lib/organizationFilters";
+import {
+  CREATED_PRESETS,
+  createdPresetRange,
+  createdRange,
+  createdRangeErrors,
+  recognizeCreatedPreset,
+  type CreatedPreset,
+} from "@/lib/createdRange";
 import { cn } from "@/lib/utils";
 
 /**
@@ -75,6 +83,11 @@ export function FilterSheet({
 }): JSX.Element {
   const disabledId = useId();
   const membersId = useId();
+  const createdId = useId();
+  const [createdPreset, setCreatedPreset] = useState<CreatedPreset>(() =>
+    recognizeCreatedPreset(value),
+  );
+  const focusCustom = useRef(false);
   const open = openGroup !== null;
   const [draft, setDraft] = useState(value);
   const [lastOpened, setLastOpened] = useState(openGroup);
@@ -85,19 +98,29 @@ export function FilterSheet({
   if (openGroup !== lastOpened || signature !== lastValue) {
     setLastValue(signature);
     setLastOpened(openGroup);
-    if (open) setDraft(value);
+    if (open) {
+      setDraft(value);
+      setCreatedPreset(recognizeCreatedPreset(value));
+    }
   }
 
   const pickers = useRef<
     Partial<Record<FilterControlKey, HTMLButtonElement | HTMLInputElement>>
   >({});
 
-  const errors = memberRangeErrors(draft);
+  const errors = {
+    ...memberRangeErrors(draft),
+    ...(createdPreset === "custom" ? createdRangeErrors(draft) : {}),
+  };
   const invalid = Object.keys(errors).length > 0;
 
-  const apply = (next: FilterSelection): void => {
+  const apply = (next: FilterSelection, preset = createdPreset): void => {
     if (Object.keys(memberRangeErrors(next)).length > 0) return;
-    onApply({ ...next, ...memberRange(next) });
+    if (preset === "custom" && Object.keys(createdRangeErrors(next)).length > 0)
+      return;
+    const dates =
+      preset === "custom" ? createdRange(next) : createdPresetRange(preset);
+    onApply({ ...next, ...memberRange(next), ...dates });
     onOpenChange(false);
   };
 
@@ -180,6 +203,104 @@ export function FilterSheet({
             ),
           )}
           <fieldset className="grid gap-2">
+            <legend className="mb-2 text-sm font-medium">
+              Created date (UTC)
+            </legend>
+            <Select
+              value={createdPreset}
+              onValueChange={(value) => {
+                const preset = CREATED_PRESETS.find(
+                  (option) => option.value === value,
+                )?.value;
+                if (!preset) return;
+                if (preset === "custom" && createdPreset !== "custom") {
+                  setDraft((previous) => ({
+                    ...previous,
+                    ...createdPresetRange(createdPreset),
+                  }));
+                  focusCustom.current = true;
+                } else if (preset === "all") {
+                  setDraft((previous) => ({
+                    ...previous,
+                    ...createdPresetRange("all"),
+                  }));
+                }
+                setCreatedPreset(preset);
+              }}
+            >
+              <SelectTrigger
+                id={createdId}
+                aria-label="Created date (UTC)"
+                className="w-full"
+                ref={(node) => {
+                  if (node) pickers.current.created = node;
+                }}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent
+                onCloseAutoFocus={(event) => {
+                  if (focusCustom.current) {
+                    event.preventDefault();
+                    pickers.current.createdFrom?.focus();
+                    focusCustom.current = false;
+                  }
+                }}
+              >
+                {CREATED_PRESETS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {createdPreset === "custom" && (
+              <div className="grid grid-cols-2 gap-3">
+                {(["createdFrom", "createdTo"] as const).map((key) => (
+                  <div key={key} className="grid content-start gap-1.5">
+                    <label
+                      htmlFor={`${createdId}-${key}`}
+                      className="text-sm font-medium"
+                    >
+                      {key === "createdFrom" ? "From (UTC)" : "To (UTC)"}
+                    </label>
+                    {/* Native date inputs erase malformed/incomplete values to an
+                    empty string, indistinguishable from an unrestricted bound. */}
+                    <Input
+                      id={`${createdId}-${key}`}
+                      type="text"
+                      placeholder="YYYY-MM-DD"
+                      autoComplete="off"
+                      value={draft[key] ?? ""}
+                      aria-invalid={Boolean(errors[key])}
+                      aria-describedby={
+                        errors[key] ? `${createdId}-${key}-error` : undefined
+                      }
+                      onChange={(event) =>
+                        setDraft((previous) => ({
+                          ...previous,
+                          [key]: event.target.value,
+                        }))
+                      }
+                      ref={(node) => {
+                        if (node) pickers.current[key] = node;
+                      }}
+                    />
+                    {errors[key] && (
+                      <p
+                        id={`${createdId}-${key}-error`}
+                        role="alert"
+                        className="text-destructive text-sm"
+                      >
+                        {errors[key]}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </fieldset>
+          <fieldset className="grid gap-2">
             <legend className="mb-2 text-sm font-medium">Member count</legend>
             <div className="grid grid-cols-2 gap-3">
               {(["minMembers", "maxMembers"] as const).map((key) => (
@@ -228,7 +349,7 @@ export function FilterSheet({
           {/* Clears the filters and nothing else. The search term is not a
               filter this sheet holds, and an operator who reset the filters has
               not asked to type their term again. */}
-          <Button variant="ghost" onClick={() => apply(NO_FILTERS)}>
+          <Button variant="ghost" onClick={() => apply(NO_FILTERS, "all")}>
             Clear all
           </Button>
           <Button variant="outline" onClick={() => onOpenChange(false)}>

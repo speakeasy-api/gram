@@ -4705,3 +4705,206 @@ describe("member range filters", () => {
     );
   });
 });
+
+describe("created date filters", () => {
+  async function chooseCreated(option: string): Promise<void> {
+    openOn(picker("Created date"));
+    fireEvent.click(await screen.findByRole("option", { name: option }));
+  }
+  function dateInput(name: "From" | "To"): HTMLInputElement {
+    return screen.getByRole("textbox", { name: `${name} (UTC)` });
+  }
+  function changeDate(name: "From" | "To", value: string): void {
+    fireEvent.change(dateInput(name), { target: { value } });
+  }
+  it("validates URL endpoints independently and reversed pairs together", () => {
+    expect(
+      organizationsSearchSchema({
+        createdFrom: "2023-02-29",
+        createdTo: "2024-02-29",
+      }),
+    ).toMatchObject({ createdFrom: undefined, createdTo: "2024-02-29" });
+    expect(
+      organizationsSearchSchema({
+        createdFrom: "2024-03-01",
+        createdTo: "2024-02-29",
+      }),
+    ).toMatchObject({ createdFrom: undefined, createdTo: undefined });
+  });
+  it("opens on the selector, focuses Custom, preserves invalid drafts and recovers", async () => {
+    const { router } = await renderRouteTree(routeTree, {
+      initialPath: "/organizations",
+    });
+    await openFilters("Created date");
+    await waitFor(() =>
+      expect(document.activeElement).toBe(picker("Created date")),
+    );
+    await chooseCreated("Custom");
+    await waitFor(() => expect(document.activeElement).toBe(dateInput("From")));
+    for (const bad of ["2023-02-29", "2024-02-", "2024-04-31"]) {
+      changeDate("From", bad);
+      expect(dateInput("From").value).toBe(bad);
+      expect(dateInput("From").getAttribute("aria-invalid")).toBe("true");
+      expect(dateInput("From").getAttribute("aria-describedby")).toBeTruthy();
+      expect(screen.getByRole("alert").textContent).toContain("YYYY-MM-DD");
+      expect(
+        (screen.getByRole("button", { name: "Apply" }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(true);
+      expect(currentSearch(router)).not.toContain("created");
+    }
+    changeDate("From", "2024-03-01");
+    changeDate("To", "2024-02-29");
+    expect(screen.getByRole("alert").textContent).toContain("on or after");
+    changeDate("From", "2024-02-29");
+    applyFilters();
+    await waitFor(() =>
+      expect(lastListParams()).toMatchObject({
+        created_from: "2024-02-29",
+        created_to: "2024-02-29",
+      }),
+    );
+    expect(currentSearch(router)).toContain("createdFrom=2024-02-29");
+    await waitFor(() =>
+      expect(document.activeElement).toBe(filterTrigger("Created date")),
+    );
+    await openFilters("Created date");
+    changeDate("From", "2020-01-01");
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await openFilters("Created date");
+    expect(dateInput("From").value).toBe("2024-02-29");
+  });
+  it("resolves selected presets at Apply across UTC midnight, then stores only dates", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2024-12-31T23:59:59Z"));
+    try {
+      const { router } = await renderRouteTree(routeTree, {
+        initialPath: "/organizations",
+      });
+      await openFilters("Created date");
+      await chooseCreated("Today");
+      vi.setSystemTime(new Date("2025-01-01T00:00:01Z"));
+      applyFilters();
+      await waitFor(() =>
+        expect(lastListParams()).toMatchObject({
+          created_from: "2025-01-01",
+          created_to: "2025-01-01",
+        }),
+      );
+      expect(currentSearch(router)).not.toContain("preset");
+      vi.setSystemTime(new Date("2025-01-02T00:00:01Z"));
+      await openFilters("Created date");
+      expect(picker("Created date").textContent).toContain("Custom");
+      expect(dateInput("From").value).toBe("2025-01-01");
+      for (const [label, from] of [
+        ["Last 7 days", "2024-12-27"],
+        ["Last 14 days", "2024-12-20"],
+        ["Last 30 days", "2024-12-04"],
+      ]) {
+        await chooseCreated(label!);
+        await chooseCreated("Custom");
+        expect(dateInput("From").value).toBe(from);
+        expect(dateInput("To").value).toBe("2025-01-02");
+      }
+      await chooseCreated("All time");
+      applyFilters();
+      await waitFor(() =>
+        expect(lastListParams().created_from).toBeUndefined(),
+      );
+      expect(lastListParams().created_to).toBeUndefined();
+      expect(currentSearch(router)).not.toContain("created");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it("preserves other filters, resets either page direction, clears bounds separately and together", async () => {
+    mocks.listOrganizations.mockResolvedValue({
+      organizations: ORGS,
+      total: 101,
+    });
+    const { router } = await renderRouteTree(routeTree, {
+      initialPath:
+        "/organizations?q=fixture&type=pro&trial=running&disabledStatus=active&minMembers=%220%22&maxMembers=%225%22&dir=asc&createdFrom=2024-01-01&createdTo=2024-02-29",
+    });
+    await waitFor(() =>
+      expect(lastListParams()).toMatchObject({
+        created_from: "2024-01-01",
+        created_to: "2024-02-29",
+      }),
+    );
+    expect(filterTrigger("Created date").textContent).toBe("Created date1");
+    for (const bound of ["from", "to"]) {
+      fireEvent.click(screen.getByRole("button", { name: "Next" }));
+      await waitFor(() => expect(lastListParams().page).toBe(2));
+      fireEvent.click(
+        screen.getByRole("button", { name: `Clear created ${bound}` }),
+      );
+      await waitFor(() => expect(lastListParams().page).toBe(1));
+      expect(lastListParams()).toMatchObject({
+        q: "fixture",
+        account_types: ["pro"],
+        trial_states: ["running"],
+        disabled_status: "active",
+        min_members: "0",
+        max_members: "5",
+        direction: "asc",
+      });
+      expect(document.activeElement).toBe(filterTrigger("Created date"));
+    }
+    expect(currentSearch(router)).not.toContain("created");
+    await openFilters("Created date");
+    await chooseCreated("Custom");
+    changeDate("To", "2024-02-29");
+    applyFilters();
+    await waitFor(() =>
+      expect(lastListParams()).toMatchObject({
+        created_from: undefined,
+        created_to: "2024-02-29",
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    await waitFor(() => expect(lastListParams().page).toBe(2));
+    await act(async () => {
+      router.history.back();
+    });
+    await waitFor(() =>
+      expect(lastListParams()).toMatchObject({
+        page: 1,
+        created_to: undefined,
+      }),
+    );
+    await act(async () => {
+      router.history.forward();
+    });
+    await waitFor(() =>
+      expect(lastListParams()).toMatchObject({
+        page: 1,
+        created_to: "2024-02-29",
+      }),
+    );
+    await openFilters("Created date");
+    changeDate("To", "2023-01-01");
+    await act(async () => {
+      router.history.back();
+    });
+    await waitFor(() =>
+      expect(picker("Created date").textContent).toContain("All time"),
+    );
+    await act(async () => {
+      router.history.forward();
+    });
+    await waitFor(() => expect(dateInput("To").value).toBe("2024-02-29"));
+    fireEvent.click(screen.getByRole("button", { name: "Clear all" }));
+    await waitFor(() =>
+      expect(lastListParams()).toMatchObject({
+        created_from: undefined,
+        created_to: undefined,
+        min_members: undefined,
+        max_members: undefined,
+        disabled_status: "all",
+        q: "fixture",
+        direction: "asc",
+      }),
+    );
+  });
+});

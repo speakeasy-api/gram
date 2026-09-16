@@ -129,6 +129,8 @@ export function OrganizationsList(): JSX.Element {
     account_types: search.type,
     trial_states: search.trial,
     ...statusParams(search),
+    created_from: search.createdFrom,
+    created_to: search.createdTo,
     min_members: search.minMembers,
     max_members: search.maxMembers,
   };

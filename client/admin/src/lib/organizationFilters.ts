@@ -6,6 +6,11 @@
 // A group declared in the sheet would close that circle, and a circular import
 // leaves whichever module evaluates second holding an undefined constant.
 
+import {
+  createdRange,
+  type CreatedRange,
+  type CreatedRangeKey,
+} from "@/lib/createdRange";
 import { ACCOUNT_TYPE_OPTIONS, isAccountType } from "@/lib/accountTypes";
 import { TRIAL_STATES, type TrialState } from "@/lib/gramAdminApi";
 import { TRIAL_LABELS } from "@/lib/trialLabels";
@@ -22,9 +27,15 @@ export type FilterGroupKey = (typeof FILTER_GROUP_KEYS)[number];
 
 export type MemberRange = { minMembers?: string; maxMembers?: string };
 export type MemberRangeKey = keyof MemberRange;
-export type FilterControlKey = FilterGroupKey | MemberRangeKey;
+export type FilterControlKey =
+  | FilterGroupKey
+  | MemberRangeKey
+  | CreatedRangeKey
+  | "created";
 /** Chosen values per group; status is empty (All) or a single state. */
-export type FilterSelection = Record<FilterGroupKey, string[]> & MemberRange;
+export type FilterSelection = Record<FilterGroupKey, string[]> &
+  MemberRange &
+  CreatedRange;
 
 export const NO_FILTERS: FilterSelection = {
   type: [],
@@ -184,23 +195,26 @@ export function disabledStates(chosen: string[]): DisabledState[] | undefined {
 }
 
 /** Canonical status; old fields are read only for bookmark compatibility. */
-export type FilterSearch = MemberRange & {
-  type?: string[];
-  trial?: TrialState[];
-  disabledStatus?: "all" | DisabledState;
-  disabled?: DisabledState[];
-  disabledOnly?: boolean;
-};
+export type FilterSearch = MemberRange &
+  CreatedRange & {
+    type?: string[];
+    trial?: TrialState[];
+    disabledStatus?: "all" | DisabledState;
+    disabled?: DisabledState[];
+    disabledOnly?: boolean;
+  };
 
 /** New navigations only write the canonical status, omitting All. */
-export function filtersToSearch(filters: FilterSelection): MemberRange & {
-  type?: string[];
-  trial?: TrialState[];
-  disabledStatus?: DisabledState;
-} {
+export function filtersToSearch(filters: FilterSelection): MemberRange &
+  CreatedRange & {
+    type?: string[];
+    trial?: TrialState[];
+    disabledStatus?: DisabledState;
+  } {
   const status = disabledStates(filters.disabled);
   return {
     ...memberRange(filters),
+    ...createdRange(filters),
     type: accountTypes(filters.type),
     trial: trialStates(filters.trial),
     disabledStatus: status?.length === 1 ? status[0] : undefined,

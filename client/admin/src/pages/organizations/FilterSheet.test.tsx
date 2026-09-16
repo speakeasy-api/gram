@@ -30,3 +30,36 @@ it("opens directly on Max and calls focus restoration on cancel", async () => {
   rerender(<FilterSheet {...props} openGroup={null} />);
   await waitFor(() => expect(props.onReturnFocus).toHaveBeenCalled());
 });
+
+it("opens directly on a custom endpoint and clearing an invalid bound recovers", async () => {
+  const onApply = vi.fn();
+  render(
+    <FilterSheet
+      value={{
+        ...NO_FILTERS,
+        createdFrom: "2024-02-29",
+        createdTo: "2024-03-01",
+      }}
+      openGroup="createdTo"
+      onApply={onApply}
+      onOpenChange={vi.fn()}
+      onReturnFocus={vi.fn()}
+    />,
+  );
+  const to = screen.getByRole("textbox", { name: "To (UTC)" });
+  await waitFor(() => expect(document.activeElement).toBe(to));
+  fireEvent.change(to, { target: { value: "2024-02-30" } });
+  expect(
+    (screen.getByRole("button", { name: "Apply" }) as HTMLButtonElement)
+      .disabled,
+  ).toBe(true);
+  fireEvent.change(to, { target: { value: "" } });
+  fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+  expect(onApply).toHaveBeenCalledWith({
+    ...NO_FILTERS,
+    minMembers: undefined,
+    maxMembers: undefined,
+    createdFrom: "2024-02-29",
+    createdTo: undefined,
+  });
+});

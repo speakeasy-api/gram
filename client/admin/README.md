@@ -156,3 +156,19 @@ not by editing generated files or adding a custom post-generation script.
 these factories, update the patch and run the real QueryClient regression tests
 in `src/lib/gramAdminApi.test.ts`; missing targets can otherwise be reported only
 as generator warnings. See [Speakeasy patch files](https://www.speakeasy.com/docs/sdks/customize/code/patch-files/patch-files).
+
+## Organization created-date filters
+
+`createdFrom` and `createdTo` are optional, independently inclusive UTC calendar
+dates (`YYYY-MM-DD`). The default is All time. URLs store only absolute dates,
+not a moving preset: shared links retain the same boundaries tomorrow. Invalid
+URL bounds are dropped individually; a reversed pair is dropped together.
+
+Today and Last 7/14/30 days include the current UTC day (Last 7 starts six days
+before today). Apply resolves the selected preset against the clock at that
+moment, even if the sheet crossed midnight. Opening the sheet recognizes presets
+against the current day; an old Today becomes Custom. Applied summaries always
+show absolute inclusive bounds, never stale relative labels. Custom edits and
+Cancel do not alter the applied dates. Custom fields intentionally use text with
+strict validation: native date inputs can erase incomplete/invalid drafts into
+an empty value, which would otherwise silently remove an optional bound.
