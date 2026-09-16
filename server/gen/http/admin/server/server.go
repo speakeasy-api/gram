@@ -70,6 +70,7 @@ type Server struct {
 	ServeImage                            http.Handler
 	StartTrial                            http.Handler
 	ChangeTrialEndDate                    http.Handler
+	GetMeterUsage                         http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -148,6 +149,7 @@ func New(
 			{"ServeImage", "GET", "/admin/assets.serveImage"},
 			{"StartTrial", "POST", "/admin/trial.start"},
 			{"ChangeTrialEndDate", "POST", "/admin/trial.changeEndDate"},
+			{"GetMeterUsage", "GET", "/admin/organizations.getMeterUsage"},
 		},
 		Login:                                 NewLoginHandler(e.Login, mux, decoder, encoder, errhandler, formatter),
 		Callback:                              NewCallbackHandler(e.Callback, mux, decoder, encoder, errhandler, formatter),
@@ -198,6 +200,7 @@ func New(
 		ServeImage:                            NewServeImageHandler(e.ServeImage, mux, decoder, encoder, errhandler, formatter),
 		StartTrial:                            NewStartTrialHandler(e.StartTrial, mux, decoder, encoder, errhandler, formatter),
 		ChangeTrialEndDate:                    NewChangeTrialEndDateHandler(e.ChangeTrialEndDate, mux, decoder, encoder, errhandler, formatter),
+		GetMeterUsage:                         NewGetMeterUsageHandler(e.GetMeterUsage, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -255,6 +258,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ServeImage = m(s.ServeImage)
 	s.StartTrial = m(s.StartTrial)
 	s.ChangeTrialEndDate = m(s.ChangeTrialEndDate)
+	s.GetMeterUsage = m(s.GetMeterUsage)
 }
 
 // MethodNames returns the methods served.
@@ -311,6 +315,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountServeImageHandler(mux, h.ServeImage)
 	MountStartTrialHandler(mux, h.StartTrial)
 	MountChangeTrialEndDateHandler(mux, h.ChangeTrialEndDate)
+	MountGetMeterUsageHandler(mux, h.GetMeterUsage)
 }
 
 // Mount configures the mux to serve the admin endpoints.
@@ -2946,6 +2951,59 @@ func NewChangeTrialEndDateHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "changeTrialEndDate")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetMeterUsageHandler configures the mux to serve the "admin" service
+// "getMeterUsage" endpoint.
+func MountGetMeterUsageHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/organizations.getMeterUsage", f)
+}
+
+// NewGetMeterUsageHandler creates a HTTP handler which loads the HTTP request
+// and calls the "admin" service "getMeterUsage" endpoint.
+func NewGetMeterUsageHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetMeterUsageRequest(mux, decoder)
+		encodeResponse = EncodeGetMeterUsageResponse(encoder)
+		encodeError    = EncodeGetMeterUsageError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getMeterUsage")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {

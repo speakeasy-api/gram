@@ -1631,3 +1631,57 @@ func BuildChangeTrialEndDatePayload(adminChangeTrialEndDateBody string, adminCha
 
 	return v, nil
 }
+
+// BuildGetMeterUsagePayload builds the payload for the admin getMeterUsage
+// endpoint from CLI flags.
+func BuildGetMeterUsagePayload(adminGetMeterUsageOrganizationID string, adminGetMeterUsageFamily string, adminGetMeterUsageFrom string, adminGetMeterUsageTo string, adminGetMeterUsageAdminSessionToken string) (*admin.GetMeterUsagePayload, error) {
+	var err error
+	var organizationID string
+	{
+		organizationID = adminGetMeterUsageOrganizationID
+	}
+	var family string
+	{
+		family = adminGetMeterUsageFamily
+		if !(family == "agent_session_storage" || family == "mcp_bandwidth" || family == "risk_content_scans") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("family", family, []any{"agent_session_storage", "mcp_bandwidth", "risk_content_scans"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var from *string
+	{
+		if adminGetMeterUsageFrom != "" {
+			from = &adminGetMeterUsageFrom
+			err = goa.MergeErrors(err, goa.ValidateFormat("from", *from, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var to *string
+	{
+		if adminGetMeterUsageTo != "" {
+			to = &adminGetMeterUsageTo
+			err = goa.MergeErrors(err, goa.ValidateFormat("to", *to, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminGetMeterUsageAdminSessionToken != "" {
+			adminSessionToken = &adminGetMeterUsageAdminSessionToken
+		}
+	}
+	v := &admin.GetMeterUsagePayload{}
+	v.OrganizationID = organizationID
+	v.Family = family
+	v.From = from
+	v.To = to
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
