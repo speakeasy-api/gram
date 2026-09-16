@@ -95,7 +95,7 @@ export function registeredAgentIdentity(agent: ManagedAgent): Employee {
   };
 }
 
-/** Preserve roster context while selecting the agent at the org-level destination. */
+/** Preserve roster context while selecting the agent at the management destination. */
 export function registeredAgentHref(
   path: string,
   search: string,
