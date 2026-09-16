@@ -1,0 +1,18 @@
+client/dashboard/src/pages/org/PrivateNetworkSection.test.tsx
+  h_9630b74bdac540 2,144,146-150,152-153
+  h_9630b74bdac540 154
+client/dashboard/src/pages/org/PrivateNetworkSetupSheet.tsx
+  h_9630b74bdac540 140,146,154-159
+  h_9630b74bdac540 139,141
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9ebb53311017d7adfce52179f3fbd527b3671fa7",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
