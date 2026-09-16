@@ -64,19 +64,20 @@ func TestValidatorBoundaryValidatedSessions(t *testing.T) {
 	}
 }
 
-// No provenance kind describes a workload session, so the request stays
-// unattributed.
-func TestValidatorBoundaryLeavesWorkloadSessionUnattributed(t *testing.T) {
+// A workload session is attributable as a machine, and never as an acting user.
+func TestValidatorBoundaryStampsWorkloadSession(t *testing.T) {
 	t.Parallel()
 
 	subject := urn.NewWorkloadSubject(uuid.MustParse("33333333-3333-3333-3333-333333333333"), "repo:acme/payments-api:ref:refs/heads/main")
-	_, ok := mcpidentity.FromContext(mcpidentity.NewValidatorBoundary().StampValidatedSession(t.Context(), validatedSession(t, subject)))
-	require.False(t, ok)
+	identity, ok := mcpidentity.FromContext(mcpidentity.NewValidatorBoundary().StampValidatedSession(t.Context(), validatedSession(t, subject)))
+	require.True(t, ok)
+	require.Equal(t, mcpidentity.KindWorkload, identity.Kind())
+	require.Empty(t, identity.UserID())
 }
 
 // Provenance already on the context belongs to another credential, so a
-// workload session must not inherit it.
-func TestValidatorBoundaryWorkloadSessionClearsEarlierProvenance(t *testing.T) {
+// workload session must replace it rather than inherit it.
+func TestValidatorBoundaryWorkloadSessionReplacesEarlierProvenance(t *testing.T) {
 	t.Parallel()
 
 	boundary := mcpidentity.NewValidatorBoundary()
@@ -86,8 +87,9 @@ func TestValidatorBoundaryWorkloadSessionClearsEarlierProvenance(t *testing.T) {
 
 	subject := urn.NewWorkloadSubject(uuid.MustParse("33333333-3333-3333-3333-333333333333"), "repo:acme/payments-api:ref:refs/heads/main")
 	identity, ok := mcpidentity.FromContext(boundary.StampValidatedSession(stamped, validatedSession(t, subject)))
-	require.False(t, ok, "a workload session must not carry an earlier credential's provenance")
-	require.Empty(t, identity.UserID())
+	require.True(t, ok)
+	require.Equal(t, mcpidentity.KindWorkload, identity.Kind())
+	require.Empty(t, identity.UserID(), "a workload session must not carry an earlier credential's user")
 }
 
 // A zero boundary cannot stamp provenance, so it cannot clear it either.
