@@ -13,7 +13,7 @@ func registerSkillUsageTools(reg *Registrar, diagnostics *DiagnosticsService) {
 		Title:       "Skill Usage",
 		Description: "Summarize observed skill activations for one project, with exact activation counts and privacy-suppressed user counts. An activation proves use, not success or efficacy, so error evidence is reported as not recorded.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input QuerySkillUsageInput) (*mcp.CallToolResult, QuerySkillUsageOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input QuerySkillUsageInput) (*mcp.CallToolResult, QuerySkillUsageOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
 			return nil, QuerySkillUsageOutput{}, err
@@ -33,7 +33,7 @@ func registerSkillUsageTools(reg *Registrar, diagnostics *DiagnosticsService) {
 		Title:       "Skill Users",
 		Description: "List masked people observed activating one exact skill, with short-lived references for a focused follow-up. Individual activation counts and raw identities are never returned; skill outcomes are not recorded.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListSkillUsageUsersInput) (*mcp.CallToolResult, ListSkillUsageUsersOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListSkillUsageUsersInput) (*mcp.CallToolResult, ListSkillUsageUsersOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
 			return nil, ListSkillUsageUsersOutput{}, err
@@ -53,7 +53,7 @@ func registerSkillUsageTools(reg *Registrar, diagnostics *DiagnosticsService) {
 		Title:       "One Person's Skill Status",
 		Description: "Use a person reference from list_skill_usage_users to confirm whether that person was observed activating the same skill in the same window. Returns categorical activity only; skill success and errors are not inferred from the surrounding session.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetUserSkillStatusInput) (*mcp.CallToolResult, GetUserSkillStatusOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetUserSkillStatusInput) (*mcp.CallToolResult, GetUserSkillStatusOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
 			return nil, GetUserSkillStatusOutput{}, err
@@ -84,6 +84,6 @@ func registerUnavailableSkillUsageTools(reg *Registrar) {
 			Title:       tool.title,
 			Description: tool.description,
 			Annotations: readOnlyAnnotations(),
-		}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("skill_usage"))
+		}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("skill_usage"))
 	}
 }

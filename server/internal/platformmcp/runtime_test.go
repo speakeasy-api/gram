@@ -87,7 +87,7 @@ func TestRuntimeHandlerClassifiesAuthenticationFailures(t *testing.T) {
 	}
 }
 
-func TestRuntimeHandlerRequiresLiveOrganizationAdmin(t *testing.T) {
+func TestRuntimeHandlerRequiresLiveOrganizationMembership(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
@@ -96,9 +96,9 @@ func TestRuntimeHandlerRequiresLiveOrganizationAdmin(t *testing.T) {
 		status    int
 		telemetry OAuthEvent
 	}{
-		{name: "denied", err: ErrForbidden, status: http.StatusForbidden, telemetry: OAuthEvent{Operation: "runtime_auth", Outcome: "access_denied", Reason: "authorization_denied"}},
-		{name: "unavailable", err: ErrUnavailable, status: http.StatusServiceUnavailable, telemetry: OAuthEvent{Operation: "runtime_auth", Outcome: "temporarily_unavailable"}},
-		{name: "unexpected error", err: errors.New("authorization store unavailable"), status: http.StatusServiceUnavailable, telemetry: OAuthEvent{Operation: "runtime_auth", Outcome: "temporarily_unavailable"}},
+		{name: "denied", err: ErrForbidden, status: http.StatusForbidden, telemetry: OAuthEvent{Operation: "runtime_auth", Outcome: "access_denied", Reason: "membership_denied"}},
+		{name: "unavailable", err: ErrUnavailable, status: http.StatusServiceUnavailable, telemetry: OAuthEvent{Operation: "runtime_auth", Outcome: "temporarily_unavailable", Reason: "authorization_unavailable"}},
+		{name: "unexpected error", err: errors.New("authorization store unavailable"), status: http.StatusServiceUnavailable, telemetry: OAuthEvent{Operation: "runtime_auth", Outcome: "temporarily_unavailable", Reason: "authorization_unavailable"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -227,6 +227,22 @@ func (g testGate) Enabled(_ context.Context, _ string) (bool, error) {
 type testAuthorizer struct {
 	err   error
 	calls int
+}
+
+func (a *testAuthorizer) PrepareExternalContext(ctx context.Context, principal Principal) (context.Context, error) {
+	a.calls++
+	if a.err != nil {
+		return ctx, a.err
+	}
+	return contextWithPrincipal(ctx, principal), nil
+}
+
+func (a *testAuthorizer) AuthorizeExternalCall(_ context.Context, _ Principal, _ ExternalAuthorization) error {
+	return a.err
+}
+
+func (a *testAuthorizer) RequireLiveMembership(_ context.Context, _ Principal) error {
+	return a.err
 }
 
 func (a *testAuthorizer) RequireLiveOrgAdmin(_ context.Context, _ Principal) error {

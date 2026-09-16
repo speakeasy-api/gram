@@ -109,12 +109,28 @@ func (g oauthTestGate) Enabled(context.Context, string) (bool, error) { return g
 
 type allowAuthorizer struct{}
 
-func (allowAuthorizer) RequireLiveOrgAdmin(context.Context, Principal) error { return nil }
+func (allowAuthorizer) PrepareExternalContext(ctx context.Context, principal Principal) (context.Context, error) {
+	return contextWithPrincipal(ctx, principal), nil
+}
+func (allowAuthorizer) AuthorizeExternalCall(context.Context, Principal, ExternalAuthorization) error {
+	return nil
+}
+func (allowAuthorizer) RequireLiveMembership(context.Context, Principal) error { return nil }
+func (allowAuthorizer) RequireLiveOrgAdmin(context.Context, Principal) error   { return nil }
 
 type oauthTestAuthorizer struct {
 	err error
 }
 
+func (a oauthTestAuthorizer) PrepareExternalContext(ctx context.Context, principal Principal) (context.Context, error) {
+	return contextWithPrincipal(ctx, principal), a.err
+}
+func (a oauthTestAuthorizer) AuthorizeExternalCall(context.Context, Principal, ExternalAuthorization) error {
+	return a.err
+}
+func (a oauthTestAuthorizer) RequireLiveMembership(context.Context, Principal) error {
+	return a.err
+}
 func (a oauthTestAuthorizer) RequireLiveOrgAdmin(context.Context, Principal) error { return a.err }
 
 type testOrganizationSelector struct {

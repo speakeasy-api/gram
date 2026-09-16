@@ -71,8 +71,7 @@ type Describer interface {
 // error is returned as-is so callers can decide whether to degrade.
 func FromDescribe(resp *workflowservice.DescribeWorkflowExecutionResponse, err error) (Status, error) {
 	if err != nil {
-		var notFound *serviceerror.NotFound
-		if errors.As(err, &notFound) {
+		if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 			return Status{State: StateNever, RunningSince: nil, LastRunStartedAt: nil, LastRunAt: nil, LastRunOutcome: ""}, nil
 		}
 		return Status{}, fmt.Errorf("describe risk analysis coordinator: %w", err)

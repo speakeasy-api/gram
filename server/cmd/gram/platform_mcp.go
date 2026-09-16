@@ -157,7 +157,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	}
 
 	gate := platformmcp.NewOrganizationGate(config.ProductFeatures)
-	authorizer := platformmcp.NewLiveOrgAdminAuthorizer(config.DB, config.Authz)
+	authorizer := platformmcp.NewLiveOrgAdminAuthorizer(config.DB, config.Authz).WithDashboardURL(config.DashboardURL)
 	oauthTelemetry := platformmcp.NewOAuthTelemetry(config.Logger, config.MeterProvider)
 	oauthStore := platformmcp.NewPostgresOAuthStore(config.DB).WithTelemetry(oauthTelemetry)
 	oauth, err := platformmcp.NewOAuthHTTP(platformmcp.OAuthHTTPConfig{
@@ -594,7 +594,7 @@ func loadBrowserPlatformMCPCatalogDescriptors(ctx context.Context, catalog *exte
 
 func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) (AssistantSurface, error) {
 	gate := platformmcp.NewOrganizationGate(config.ProductFeatures)
-	authorizer := platformmcp.NewLiveOrgAdminAuthorizer(config.DB, config.Authz)
+	authorizer := platformmcp.NewLiveOrgAdminAuthorizer(config.DB, config.Authz).WithDashboardURL(config.DashboardURL)
 	oauthTelemetry := platformmcp.NewOAuthTelemetry(config.Logger, config.MeterProvider)
 	oauthStore := platformmcp.NewPostgresOAuthStore(config.DB).WithTelemetry(oauthTelemetry)
 	oauth, err := platformmcp.NewOAuthHTTP(platformmcp.OAuthHTTPConfig{
