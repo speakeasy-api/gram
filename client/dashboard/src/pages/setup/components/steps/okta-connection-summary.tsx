@@ -3,7 +3,6 @@ import type { IdentityProviderConnection } from "@gram/client/models/components/
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Text } from "@/components/ui/Text";
-import { IdentityProviderCapabilities } from "@/components/identity-provider-capabilities";
 
 function formatTimestamp(value: Date): string {
   return value.toLocaleString([], {
@@ -32,8 +31,6 @@ export function OktaConnectionSummary({
   onRecheck?: () => void;
   isChecking?: boolean;
 }): JSX.Element {
-  const reads = connection.verifyEvidence?.reads ?? [];
-
   return (
     <div className="border-border bg-card space-y-5 border p-5">
       <div className="flex flex-wrap items-center gap-3">
@@ -69,8 +66,6 @@ export function OktaConnectionSummary({
           </span>
         </Text>
       ) : null}
-
-      <IdentityProviderCapabilities reads={reads} />
     </div>
   );
 }

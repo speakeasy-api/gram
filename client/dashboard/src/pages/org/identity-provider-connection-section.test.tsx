@@ -55,7 +55,7 @@ describe("IdentityProviderConnectionSection", () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it("shows the tenant, the key and what the last check proved", () => {
+  it("shows the tenant and when it was last checked", () => {
     identityProvider.current = {
       data: {
         connection: connection({
@@ -80,8 +80,10 @@ describe("IdentityProviderConnectionSection", () => {
 
     expect(screen.getByText(TENANT)).toBeTruthy();
     expect(screen.getByText("Connected")).toBeTruthy();
-    expect(screen.getByText("People and group membership")).toBeTruthy();
-    expect(screen.getByText("18 groups")).toBeTruthy();
+    // The per-capability rows are gone from every surface: they repeated the
+    // outcome without adding anything anyone could act on.
+    expect(screen.queryByText("People and group membership")).toBeNull();
+    expect(screen.queryByText("18 groups")).toBeNull();
     // Sign-on has not been checked, so there is still setup to go back to.
     expect(screen.getByText(/created in Okta/)).toBeTruthy();
     expect(screen.getByRole("link", { name: "Continue setup" })).toBeTruthy();

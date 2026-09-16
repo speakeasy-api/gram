@@ -113,9 +113,6 @@ export function OktaDirectorySection({
         }
         allowSubmitWithoutValues={Boolean(guided && !applicationExists)}
         verifyLabel="Check the directory"
-        // The directory evidence rows repeat what the sentence beside them
-        // already says, so the outcome reports as one line here.
-        compactVerifyResult
         deepLinkLabel="Open the Provisioning tab in Okta"
         isVerifying={verify.isPending}
         onVerify={() => {

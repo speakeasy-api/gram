@@ -2,7 +2,6 @@ import type { ReactNode } from "react";
 import { KeyRound } from "lucide-react";
 import type { IdentityProviderConnection } from "@gram/client/models/components/identityproviderconnection.js";
 import { useIdentityProvider } from "@gram/client/react-query/identityProvider.js";
-import { IdentityProviderCapabilities } from "@/components/identity-provider-capabilities";
 import { Badge } from "@/components/ui/Badge";
 import { Heading } from "@/components/ui/Heading";
 import { Text } from "@/components/ui/Text";
@@ -60,7 +59,7 @@ function signInLine(connection: IdentityProviderConnection): string {
 /**
  * The guided connection, read only. Setup itself lives on the setup task page;
  * this is where an administrator comes later to see what Speakeasy can do in
- * their tenant, which key Okta reads, and when any of it was last proved.
+ * their tenant, and when it was last proved.
  */
 export function IdentityProviderConnectionSection(): JSX.Element | null {
   const orgRoutes = useOrgRoutes();
@@ -78,7 +77,6 @@ export function IdentityProviderConnectionSection(): JSX.Element | null {
   // proved out; anything earlier is still setup.
   const settled =
     connection.status === "active" && connection.signInState === "passed";
-  const reads = connection.verifyEvidence?.reads ?? [];
 
   return (
     <section>
@@ -125,15 +123,6 @@ export function IdentityProviderConnectionSection(): JSX.Element | null {
               </Text>
             </Fact>
           </div>
-
-          {reads.length > 0 ? (
-            <div className="border-border border-t p-4">
-              <Text variant="small" muted className="mb-2">
-                What the last check proved
-              </Text>
-              <IdentityProviderCapabilities reads={reads} />
-            </div>
-          ) : null}
         </div>
       </div>
     </section>

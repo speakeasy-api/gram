@@ -286,13 +286,9 @@ describe("OktaSignOnSection", () => {
       />,
     );
 
-    expect(
-      screen.getByText(
-        "Sign-in is configured and waiting for its first sign-in",
-      ),
-    ).toBeTruthy();
+    expect(screen.getByText("Waiting")).toBeTruthy();
     // The server says what happens next better than we can, so its own
-    // sentence is the body rather than a footnote under ours.
+    // sentence is the whole of the outcome.
     expect(
       screen.getByText(/becomes active after the first successful/),
     ).toBeTruthy();
@@ -304,7 +300,7 @@ describe("OktaSignOnSection", () => {
     expect(section.querySelector(".lucide-check")).toBeNull();
   });
 
-  it("shows both reads once the check passes, and completes the step", () => {
+  it("reports a passed check in one line, and completes the step", () => {
     withStep(
       signInStep({
         state: "passed",
@@ -341,11 +337,11 @@ describe("OktaSignOnSection", () => {
     );
 
     // Two reads, one per side of the same capability.
-    expect(screen.getByText("Sign-in application in Okta")).toBeTruthy();
-    expect(screen.getByText("Speakeasy's sign-in provider")).toBeTruthy();
-    expect(
-      screen.getByText("Okta sign-in application is active."),
-    ).toBeTruthy();
+    expect(screen.getByText("Passed")).toBeTruthy();
+    expect(screen.getByText("Sign-on is configured.")).toBeTruthy();
+    // The per-capability rows are gone from every surface.
+    expect(screen.queryByText("Sign-in application in Okta")).toBeNull();
+    expect(screen.queryByText("Speakeasy's sign-in provider")).toBeNull();
     // The step's own tick: a check mark replaces its number.
     const section = screen.getByRole("region", { hidden: true });
     expect(section.querySelector(".lucide-check")).toBeTruthy();

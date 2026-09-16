@@ -281,8 +281,10 @@ describe("OktaConnectSection", () => {
     expect(screen.getByText(TENANT)).toBeTruthy();
     expect(screen.getByText("Connected")).toBeTruthy();
     expect(screen.getByText("0oaexampleclientid")).toBeTruthy();
-    expect(screen.getByText("People and group membership")).toBeTruthy();
-    expect(screen.getByText("18 groups")).toBeTruthy();
+    // The per-capability rows are gone from every surface: they repeated the
+    // outcome without adding anything anyone could act on.
+    expect(screen.queryByText("People and group membership")).toBeNull();
+    expect(screen.queryByText("18 groups")).toBeNull();
     // The exchange gives way to the connection once it has worked.
     expect(screen.queryByLabelText("Client ID")).toBeNull();
   });

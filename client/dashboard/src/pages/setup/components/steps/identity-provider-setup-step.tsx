@@ -20,7 +20,6 @@ import { Input } from "@/components/ui/Input";
 import { Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
 import { openSafeExternalUrl } from "@/lib/safe-external-url";
-import { IdentityProviderCapabilities } from "@/components/identity-provider-capabilities";
 
 type VerifyCopy = {
   title: string;
@@ -317,64 +316,6 @@ function VerifyResultLine({
   );
 }
 
-function VerifyResultBlock({
-  result,
-}: {
-  result: IdentityProviderVerifyResult;
-}): JSX.Element {
-  const checkedAt = result.evidence.checkedAt.toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-
-  if (result.outcome === "passed") {
-    return (
-      <div className="space-y-3">
-        <Alert variant="success" alignTop>
-          <div>
-            <AlertTitle>Checked at {checkedAt}</AlertTitle>
-            <AlertDescription>
-              {result.detail ||
-                "Speakeasy acquired a token and made one read for each capability."}
-            </AlertDescription>
-          </div>
-        </Alert>
-        <IdentityProviderCapabilities reads={result.evidence.reads} />
-      </div>
-    );
-  }
-
-  const copy = VERIFY_COPY[result.outcome];
-  // With nothing of our own to add, the server's sentence is the body rather
-  // than a footnote under a sentence that says less.
-  const body =
-    copy?.body ??
-    result.detail ??
-    "Speakeasy could not confirm the connection. Check the values above and try again.";
-  const quoted = copy?.body ? result.detail : undefined;
-
-  return (
-    <div className="space-y-3">
-      <Alert variant={copy?.tone ?? "warning"} alignTop>
-        <div>
-          <AlertTitle>{copy?.title ?? "The check did not pass"}</AlertTitle>
-          <AlertDescription>
-            {body}
-            {quoted ? (
-              <span className="text-muted-foreground mt-1 block">
-                Okta said: {quoted}
-              </span>
-            ) : null}
-          </AlertDescription>
-        </div>
-      </Alert>
-      {result.evidence.reads.length > 0 ? (
-        <IdentityProviderCapabilities reads={result.evidence.reads} />
-      ) : null}
-    </div>
-  );
-}
-
 interface IdentityProviderSetupStepPanelProps {
   step: IdentityProviderSetupStep;
   /** Outcomes from the last save, keyed to the expected values above. */
@@ -386,11 +327,6 @@ interface IdentityProviderSetupStepPanelProps {
   isVerifying: boolean;
   /** The last check, whether from this session or a previous one. */
   verifyResult?: IdentityProviderVerifyResult;
-  /**
-   * Report the outcome as a single line instead of an alert and the evidence
-   * table. For a step where the rows repeat what the sentence already said.
-   */
-  compactVerifyResult?: boolean;
   /** Shown in place of a result when verification cannot run at all. */
   verifyUnavailable?: string;
   /** Overrides the primary action's label, e.g. "Create the sign-in application". */
@@ -452,7 +388,6 @@ export function IdentityProviderSetupStepPanel({
   onVerify,
   isVerifying,
   verifyResult,
-  compactVerifyResult = false,
   verifyUnavailable,
   submitLabel,
   verifyLabel,
@@ -659,11 +594,7 @@ export function IdentityProviderSetupStepPanel({
       ) : null}
 
       {!verifyUnavailable && verifyResult ? (
-        compactVerifyResult ? (
-          <VerifyResultLine result={verifyResult} />
-        ) : (
-          <VerifyResultBlock result={verifyResult} />
-        )
+        <VerifyResultLine result={verifyResult} />
       ) : null}
 
       {step.repair && repair ? (
