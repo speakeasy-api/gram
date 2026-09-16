@@ -75,8 +75,25 @@ func TestIssuerKeyCachePreservesLastSuccessfulFetchAcrossError(t *testing.T) {
 	require.True(t, successAt.Equal(failed.RefreshedAt))
 	require.True(t, successAt.Add(time.Minute).Equal(failed.LastErrorAt))
 	require.Equal(t, "JWKS endpoint temporarily unavailable (HTTP 503)", failed.LastError)
+	reconciled := failed
+	reconciled.Document = []byte(`{"keys":[{"kid":"rotated"}]}`)
+	reconciled.ETag = `"rotated"`
+	written, err = cache.PutIfUnchanged(ctx, key, failed, reconciled)
+	require.NoError(t, err)
+	require.True(t, written)
+	reconciled, err = cache.Get(ctx, key)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"keys":[{"kid":"rotated"}]}`, string(reconciled.Document))
+	require.Equal(t, `"rotated"`, reconciled.ETag)
+	require.True(t, state.ExpiresAt.Equal(reconciled.ExpiresAt))
+	require.True(t, successAt.Equal(reconciled.RefreshedAt))
+	require.True(t, failed.LastErrorAt.Equal(reconciled.LastErrorAt))
+	require.Equal(t, failed.LastError, reconciled.LastError)
+
+	state.Document = reconciled.Document
+	state.ETag = reconciled.ETag
 	state.RefreshedAt = successAt.Add(2 * time.Minute)
-	written, err = cache.PutIfUnchanged(ctx, key, failed, state)
+	written, err = cache.PutIfUnchanged(ctx, key, reconciled, state)
 	require.NoError(t, err)
 	require.True(t, written)
 	recovered, err := cache.Get(ctx, key)

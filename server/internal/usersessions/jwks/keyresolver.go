@@ -420,8 +420,10 @@ func (k *KeyResolver) cachedState(ctx context.Context, source Source) (CacheStat
 // post-rotation) document. The atomic conditional write keeps that newer
 // result when the state has changed since this resolution began. A failed
 // consult may update only the error metadata while this successful fetch is
-// in flight; that conflict is safe to retry once because the key material and
-// its successful-fetch metadata are still the state this fetch started from.
+// in flight. If the fetch returned changed key material, reconcile only that
+// material while preserving the newer failure marker and the original
+// freshness bound; the in-flight response cannot prove it superseded the
+// failed consult.
 func (k *KeyResolver) store(ctx context.Context, source Source, prior CacheState, result *Result) {
 	if result.Outcome != CacheOutcomeRefreshed && result.Outcome != CacheOutcomeNotModified {
 		return
@@ -449,13 +451,24 @@ func (k *KeyResolver) store(ctx context.Context, source Source, prior CacheState
 		k.logCacheWriteFailure(ctx, source, err)
 		return
 	}
-	if !onlyConsultFailureChanged(prior, current) {
+	reconciled, ok := reconcileKeysAfterConsultFailure(prior, current, result)
+	if !ok {
 		return
 	}
-	_, err = k.cache.PutIfUnchanged(ctx, source.CacheKey(), current, state)
+	_, err = k.cache.PutIfUnchanged(ctx, source.CacheKey(), current, reconciled)
 	if err != nil {
 		k.logCacheWriteFailure(ctx, source, err)
 	}
+}
+
+func reconcileKeysAfterConsultFailure(prior, current CacheState, result *Result) (CacheState, bool) {
+	if result.Outcome != CacheOutcomeRefreshed || bytes.Equal(result.Document, prior.Document) || !onlyConsultFailureChanged(prior, current) {
+		return CacheState{Document: nil, ETag: "", ExpiresAt: time.Time{}, RefreshedAt: time.Time{}, LastErrorAt: time.Time{}, LastError: "", Revision: ""}, false
+	}
+
+	current.Document = result.Document
+	current.ETag = result.ETag
+	return current, true
 }
 
 func onlyConsultFailureChanged(prior, current CacheState) bool {

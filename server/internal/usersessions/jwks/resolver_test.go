@@ -265,7 +265,7 @@ func TestResolverResolve_ZeroSourceRejected(t *testing.T) {
 
 	resolver := newResolver(nil, testenv.NewMeterProvider(t), testenv.NewLogger(t))
 
-	_, err := resolver.Resolve(t.Context(), Source{kind: "", inline: nil, uri: "", origin: "", cacheKey: "", fetchScope: ""}, zeroCacheState())
+	_, err := resolver.Resolve(t.Context(), Source{kind: "", inline: nil, uri: "", origin: "", cacheKey: "", refreshNamespace: "", fetchScope: "", doer: nil}, zeroCacheState())
 	require.ErrorContains(t, err, "zero Source")
 }
 

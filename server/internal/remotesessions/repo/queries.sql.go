@@ -9453,19 +9453,19 @@ SET jwks = $1::jsonb,
     jwks_fetched_at = $2::timestamptz,
     jwks_cache_expires_at = $3::timestamptz,
     jwks_etag = NULLIF($4::text, ''),
-    jwks_last_error = NULL,
-    jwks_last_error_at = NULL,
+    jwks_last_error = NULLIF($5::text, ''),
+    jwks_last_error_at = $6::timestamptz,
     updated_at = clock_timestamp()
-WHERE id = $5
-  AND (organization_id = $6::text OR organization_id IS NULL)
+WHERE id = $7
+  AND (organization_id = $8::text OR organization_id IS NULL)
   AND project_id IS NULL
-  AND issuer = $7::text
-  AND jwks_uri = $8
+  AND issuer = $9::text
+  AND jwks_uri = $10
   AND deleted IS FALSE
-  AND xmin::text = $9::text
-  AND jwks IS NOT DISTINCT FROM $10::jsonb
-  AND jwks_fetched_at IS NOT DISTINCT FROM $11::timestamptz
-  AND jwks_cache_expires_at IS NOT DISTINCT FROM $12::timestamptz
+  AND xmin::text = $11::text
+  AND jwks IS NOT DISTINCT FROM $12::jsonb
+  AND jwks_fetched_at IS NOT DISTINCT FROM $13::timestamptz
+  AND jwks_cache_expires_at IS NOT DISTINCT FROM $14::timestamptz
 `
 
 type UpdateTrustedIssuerJWKSCacheParams struct {
@@ -9473,6 +9473,8 @@ type UpdateTrustedIssuerJWKSCacheParams struct {
 	FetchedAt           pgtype.Timestamptz
 	CacheExpiresAt      pgtype.Timestamptz
 	Etag                string
+	LastError           string
+	LastErrorAt         pgtype.Timestamptz
 	ID                  uuid.UUID
 	OrganizationID      string
 	Issuer              string
@@ -9492,6 +9494,8 @@ func (q *Queries) UpdateTrustedIssuerJWKSCache(ctx context.Context, arg UpdateTr
 		arg.FetchedAt,
 		arg.CacheExpiresAt,
 		arg.Etag,
+		arg.LastError,
+		arg.LastErrorAt,
 		arg.ID,
 		arg.OrganizationID,
 		arg.Issuer,

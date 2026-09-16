@@ -596,7 +596,7 @@ func TestVerificationKey_CacheWriteFailureDoesNotFailResolution(t *testing.T) {
 	require.Equal(t, "a", key.KeyID)
 }
 
-func TestStoreRetriesAfterConcurrentConsultFailure(t *testing.T) {
+func TestStoreReconcilesKeysAfterConcurrentConsultFailure(t *testing.T) {
 	t.Parallel()
 
 	server := newKeySetServer(t, keySetJSON(t, testKey(t, "rotated")))
@@ -633,8 +633,72 @@ func TestStoreRetriesAfterConcurrentConsultFailure(t *testing.T) {
 	stored, err := cache.Get(t.Context(), source.CacheKey())
 	require.NoError(t, err)
 	require.JSONEq(t, string(rotated), string(stored.Document))
-	require.Empty(t, stored.LastError)
-	require.Zero(t, stored.LastErrorAt)
+	require.Equal(t, `"rotated"`, stored.ETag)
+	require.Equal(t, prior.ExpiresAt, stored.ExpiresAt)
+	require.Equal(t, prior.RefreshedAt, stored.RefreshedAt)
+	require.Equal(t, marked.LastError, stored.LastError)
+	require.Equal(t, marked.LastErrorAt, stored.LastErrorAt)
+}
+
+func TestStoreDoesNotReconcileNotModifiedAfterConcurrentConsultFailure(t *testing.T) {
+	t.Parallel()
+
+	server := newKeySetServer(t, keySetJSON(t, testKey(t, "old")))
+	kr, cache := newTestKeyResolver(t, server, generousRate())
+	source := remoteSourceFor(t, server)
+	prior := CacheState{
+		Document:    keySetJSON(t, testKey(t, "old")),
+		ETag:        `"old"`,
+		ExpiresAt:   time.Now().Add(time.Hour),
+		RefreshedAt: time.Now().Add(-time.Hour),
+		LastErrorAt: time.Time{},
+		LastError:   "",
+		Revision:    "revision-1",
+	}
+	marked := prior
+	marked.LastErrorAt = time.Now()
+	marked.LastError = transientErrorReasonPrefix
+	marked.Revision = "revision-2"
+	require.NoError(t, cache.Put(t.Context(), source.CacheKey(), marked))
+
+	kr.store(t.Context(), source, prior, &Result{
+		Outcome:  CacheOutcomeNotModified,
+		KeySet:   jose.JSONWebKeySet{},
+		Document: prior.Document,
+		ETag:     prior.ETag,
+		TTL:      time.Hour,
+	})
+
+	stored, err := cache.Get(t.Context(), source.CacheKey())
+	require.NoError(t, err)
+	require.Equal(t, marked, stored)
+}
+
+func TestReconcileKeysAfterConsultFailureRejectsUnchangedRefresh(t *testing.T) {
+	t.Parallel()
+
+	prior := CacheState{
+		Document:    keySetJSON(t, testKey(t, "old")),
+		ETag:        `"old"`,
+		ExpiresAt:   time.Now().Add(time.Hour),
+		RefreshedAt: time.Now().Add(-time.Hour),
+		LastErrorAt: time.Time{},
+		LastError:   "",
+		Revision:    "revision-1",
+	}
+	marked := prior
+	marked.LastErrorAt = time.Now()
+	marked.LastError = transientErrorReasonPrefix
+	marked.Revision = "revision-2"
+
+	_, ok := reconcileKeysAfterConsultFailure(prior, marked, &Result{
+		Outcome:  CacheOutcomeRefreshed,
+		KeySet:   jose.JSONWebKeySet{},
+		Document: prior.Document,
+		ETag:     prior.ETag,
+		TTL:      time.Hour,
+	})
+	require.False(t, ok)
 }
 
 func TestStoreDoesNotRetryRevisionOnlyConflict(t *testing.T) {
