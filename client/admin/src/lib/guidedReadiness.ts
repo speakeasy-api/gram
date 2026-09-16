@@ -3,13 +3,15 @@
  * one seam between the admin readiness panel and the server.
  *
  * The admin method that will serve it — admin.getOrganizationGuidedReadiness —
- * is still being written, so nothing is generated for it yet and the hook below
- * reports the read as still in flight, which is what the panel already draws
- * for a slow one. Repointing that body at the generated query is the only edit
- * the panel needs, and it is where whatever the server hands back is mapped
- * into the shape below. The dashboard carries the same shape for the same
- * reason, in client/dashboard/src/components/guided-readiness/types.ts; the two
- * answer one server type and should be repointed together.
+ * is still being written, so the hook below reports the read as still in
+ * flight, which is what the panel already draws for a slow one. These pages
+ * read the admin API through the hand-written `gramAdminFetch`, so the wire
+ * shape is snake_case JSON: `toGuidedReadiness` maps it into the shape the
+ * panel draws, and repointing the hook at a real query that calls it is the
+ * only edit the panel needs. The dashboard carries the same panel shape for
+ * the same reason, in the SDK's own casing, in
+ * client/dashboard/src/components/guided-readiness/types.ts; the two answer one
+ * server type and should be repointed together.
  */
 
 /** Who has to act on a check that did not pass. */
@@ -33,6 +35,41 @@ export interface GuidedReadiness {
   eligible: boolean;
   checks: GuidedReadinessCheck[];
   checkedAt: Date;
+}
+
+/** The admin API's own JSON, as `gramAdminFetch` hands it back. */
+export interface GuidedReadinessCheckResponse {
+  key: string;
+  ok: boolean;
+  detail: string;
+  remedy: string;
+  owner: GuidedReadinessOwner;
+  checked_at: string;
+}
+
+export interface GuidedReadinessResponse {
+  provider: string;
+  eligible: boolean;
+  checks: GuidedReadinessCheckResponse[];
+  checked_at: string;
+}
+
+export function toGuidedReadiness(
+  response: GuidedReadinessResponse,
+): GuidedReadiness {
+  return {
+    provider: response.provider,
+    eligible: response.eligible,
+    checkedAt: new Date(response.checked_at),
+    checks: response.checks.map((check) => ({
+      key: check.key,
+      ok: check.ok,
+      detail: check.detail,
+      remedy: check.remedy,
+      owner: check.owner,
+      checkedAt: new Date(check.checked_at),
+    })),
+  };
 }
 
 /** The parts of a React Query result the readiness panel draws. */
