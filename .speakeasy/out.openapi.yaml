@@ -2286,7 +2286,7 @@ paths:
         type: mutation
   /rpc/access.resolveChallenge:
     post:
-      description: Record resolutions for one or more denied authz challenges. The caller is responsible for assigning the role first.
+      description: Dismiss one or more denied authz challenges, or atomically add one custom role to the denied user before recording the challenges as resolved.
       operationId: resolveChallenge
       parameters:
         - allowEmptyValue: true
@@ -69682,6 +69682,11 @@ components:
         scope:
           type: string
           description: Scope that was checked.
+        selector:
+          type: object
+          description: Complete selector captured for the check. Omitted for legacy or malformed challenge data.
+          additionalProperties:
+            type: string
         timestamp:
           type: string
           description: When the authz decision was made.
@@ -84588,6 +84593,7 @@ components:
           items:
             type: string
           description: IDs of the challenges in ClickHouse to resolve.
+          minItems: 1
         principal_urn:
           type: string
           description: Principal that was denied.
@@ -84603,9 +84609,12 @@ components:
         resource_kind:
           type: string
           description: Resource kind from the challenge.
+        role_assignment_confirmed:
+          type: boolean
+          description: Confirms the administrator reviewed and accepts every permission granted by the complete role. Must be true when resolution_type=role_assigned.
         role_slug:
           type: string
-          description: Role slug to assign (required when resolution_type=role_assigned).
+          description: Custom role slug to add to the denied user before resolving (required when resolution_type=role_assigned).
         scope:
           type: string
           description: Scope that was denied.

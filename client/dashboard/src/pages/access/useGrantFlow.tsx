@@ -9,7 +9,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CreateRoleDialog } from "./CreateRoleDialog";
 import { GrantDrawer } from "./GrantDrawer";
-import { toRoleSlug } from "./types";
+import { principalDisplayName } from "./challengeHelpers";
 
 const RESOLVE_LINGER_MS = 3_000;
 const FADE_OUT_MS = 1_000;
@@ -133,7 +133,15 @@ export function useGrantFlow(): {
           }
         }}
         editingRole={null}
-        onRoleCreated={(roleName) => {
+        confirmAssignmentFor={
+          createChallenge
+            ? principalDisplayName(
+                createChallenge.userEmail,
+                createChallenge.principalUrn,
+              )
+            : undefined
+        }
+        onRoleCreated={(role) => {
           if (!createChallenge) return;
           const ids = createChallenge.challengeIds;
           resolveChallenge.mutate(
@@ -145,7 +153,10 @@ export function useGrantFlow(): {
                   scope: createChallenge.scope,
                   resolutionType:
                     ResolveChallengeFormResolutionType.RoleAssigned,
-                  roleSlug: toRoleSlug(roleName),
+                  roleSlug: role.slug,
+                  // The role editor requires explicit acknowledgement before
+                  // creating and assigning the complete role.
+                  roleAssignmentConfirmed: true,
                   resourceKind: createChallenge.resourceKind,
                   resourceId: createChallenge.resourceId,
                 },
