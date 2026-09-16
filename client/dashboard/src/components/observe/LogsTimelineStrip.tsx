@@ -39,6 +39,7 @@ export function LogsTimelineStrip({
   isZoomed = false,
   loading = false,
   degraded = false,
+  height = 88,
 }: {
   timeSeries: ToolUsageTargetTimeSeriesPoint[];
   from: Date;
@@ -50,6 +51,8 @@ export function LogsTimelineStrip({
   isZoomed?: boolean;
   loading?: boolean;
   degraded?: boolean;
+  /** Shorter on a short viewport, where the list needs the pixels more. */
+  height?: number;
 }): JSX.Element {
   // Each bucket carries a total and a failure count, and nothing else. That
   // expresses exactly one filter — errors — by dropping the successful half.
@@ -177,7 +180,7 @@ export function LogsTimelineStrip({
         tooltipLabels={chart.tooltipLabels}
         datasets={chart.datasets}
         onRangeSelect={onRangeSelect}
-        height={88}
+        height={height}
         compact
       />
     </div>

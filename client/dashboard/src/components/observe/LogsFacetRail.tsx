@@ -15,6 +15,12 @@ export type FacetGroup = {
   id: string;
   label: string;
   values: FacetValue[];
+  /**
+   * Whether the group's current selection is the one it ships with rather than
+   * one the reader made. A default selection is not a reason to open the group
+   * and spend the rail's vertical space on it.
+   */
+  isDefaultSelection?: boolean;
 };
 
 /**
@@ -69,12 +75,13 @@ function FacetSection({
   onClearGroup: (groupId: string) => void;
 }) {
   const selectedCount = group.values.filter((value) => value.selected).length;
+  const appliedCount = group.isDefaultSelection ? 0 : selectedCount;
   // A group with something applied opens: its state is the reason the rows
   // below look the way they do, and a reader arriving on a filtered link
   // should see why without hunting. Tracked as an override rather than seeded
   // state because the selection arrives with the options, a fetch after mount.
   const [override, setOverride] = useState<boolean | null>(null);
-  const open = override ?? selectedCount > 0;
+  const open = override ?? appliedCount > 0;
   const [showAll, setShowAll] = useState(false);
 
   const visible = showAll ? group.values : group.values.slice(0, 6);

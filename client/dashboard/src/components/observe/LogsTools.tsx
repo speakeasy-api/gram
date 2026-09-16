@@ -318,6 +318,7 @@ export function LogsTools(): JSX.Element {
       {
         id: "type",
         label: "Type",
+        isDefaultSelection: isDefaultToolUsageTypeSelection(selectedHookTypes),
         values: TOOL_USAGE_TYPE_OPTIONS.map((option) => ({
           value: option.value,
           label: option.label,
@@ -777,6 +778,61 @@ export function LogsTools(): JSX.Element {
 }
 
 /** One cell of the summary row: quiet label, the number doing the talking. */
+/** The viewport heights a laptop lands on, matching the `short:` variant. */
+const SHORT_VIEWPORT_QUERY = "(max-height: 900px)";
+
+function useIsShortViewport(): boolean {
+  const [isShort, setIsShort] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia(SHORT_VIEWPORT_QUERY).matches,
+  );
+
+  useEffect(() => {
+    const query = window.matchMedia(SHORT_VIEWPORT_QUERY);
+    const update = () => setIsShort(query.matches);
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+
+  return isShort;
+}
+
+const SUMMARY_PANEL_STORAGE_KEY = "gram.observe.logs.summaryOpen";
+
+/**
+ * Whether the summary panel is unfolded.
+ *
+ * The default follows the viewport — a short screen cannot afford the panel
+ * and the list at once — but a reader's own choice outlives it, so once they
+ * fold or unfold it the answer comes from storage instead. Kept per browser
+ * rather than in the URL: it is a preference about this screen, not part of
+ * the query a link describes.
+ */
+function useSummaryPanelOpen(): [boolean, (open: boolean) => void] {
+  const isShort = useIsShortViewport();
+  const [stored, setStored] = useState<boolean | null>(() => {
+    try {
+      const raw = localStorage.getItem(SUMMARY_PANEL_STORAGE_KEY);
+      return raw === null ? null : raw === "true";
+    } catch {
+      return null;
+    }
+  });
+
+  const setOpen = useCallback((open: boolean) => {
+    setStored(open);
+    try {
+      localStorage.setItem(SUMMARY_PANEL_STORAGE_KEY, String(open));
+    } catch {
+      // A browser that refuses storage still gets a working toggle.
+    }
+  }, []);
+
+  return [stored ?? !isShort, setOpen];
+}
+
 function SummaryStat({
   label,
   value,
@@ -787,7 +843,7 @@ function SummaryStat({
   tone?: "default" | "destructive";
 }) {
   return (
-    <div className="flex flex-col gap-1 px-4 py-3">
+    <div className="flex flex-col gap-1 px-4 py-3 short:py-2">
       <span className="text-eyebrow">{label}</span>
       <span
         className={cn(
@@ -913,6 +969,8 @@ function LogsToolsContent({
   // Below xl the rail does not fit beside the table. It is the only filter
   // surface on this page, so it moves into a drawer rather than disappearing.
   const [facetsOpen, setFacetsOpen] = useState(false);
+  const [summaryOpen, setSummaryOpen] = useSummaryPanelOpen();
+  const stripHeight = useIsShortViewport() ? 64 : 88;
 
   const rail = (
     <LogsFacetRail
@@ -948,7 +1006,7 @@ function LogsToolsContent({
       </Sheet>
 
       <div className="flex min-h-0 w-full flex-1 flex-col">
-        <div className="flex min-h-0 flex-1 flex-col gap-6 px-8 pt-8">
+        <div className="flex min-h-0 flex-1 flex-col gap-6 px-8 pt-8 short:gap-3 short:px-5 short:pt-4">
           <div className="flex shrink-0 items-start justify-between gap-4">
             <LoggingPageHeader
               title="Tool Logs"
@@ -987,64 +1045,101 @@ function LogsToolsContent({
 
           {/* Summary and the window's shape are one statement about the range,
               so they share a panel: four numbers, then the silhouette they
-              came from. */}
+              came from. It folds because on a laptop those ~300px are the
+              difference between five rows of the list and eighteen. */}
           <div className="border-border bg-card shrink-0 border">
-            <div className="divide-border grid grid-cols-2 divide-x md:grid-cols-4">
-              <SummaryStat
-                label="Tool calls"
-                value={
-                  totals ? Number(totals.eventCount).toLocaleString() : "—"
-                }
+            <button
+              type="button"
+              aria-expanded={summaryOpen}
+              onClick={() => setSummaryOpen(!summaryOpen)}
+              className="text-eyebrow hover:bg-muted/40 flex w-full items-center gap-2 px-4 py-2 text-left transition-colors"
+            >
+              <Icon
+                name={summaryOpen ? "chevron-down" : "chevron-right"}
+                className="text-muted-foreground size-3.5 shrink-0"
               />
-              <SummaryStat
-                label="Failures"
-                value={
-                  totals ? Number(totals.failureCount).toLocaleString() : "—"
-                }
-                tone={
-                  totals && Number(totals.failureCount) > 0
-                    ? "destructive"
-                    : "default"
-                }
-              />
-              <SummaryStat
-                label="Failure rate"
-                value={
-                  totals ? `${(totals.failureRate * 100).toFixed(1)}%` : "—"
-                }
-                tone={
-                  totals && totals.failureRate > 0 ? "destructive" : "default"
-                }
-              />
-              <SummaryStat
-                label="Tools"
-                value={
-                  totals ? Number(totals.uniqueTools).toLocaleString() : "—"
-                }
-              />
-            </div>
+              <span>Summary and timeline</span>
+              {/* Folded, the panel still has to answer the question it exists
+                  for, or folding it costs the reader the headline. */}
+              {!summaryOpen && totals && (
+                <span className="text-muted-foreground ml-auto normal-case">
+                  {Number(totals.eventCount).toLocaleString()} calls ·{" "}
+                  <span
+                    className={cn(
+                      Number(totals.failureCount) > 0 &&
+                        "text-destructive-default",
+                    )}
+                  >
+                    {Number(totals.failureCount).toLocaleString()} failed
+                  </span>
+                </span>
+              )}
+            </button>
+            {summaryOpen && (
+              <>
+                <div className="divide-border border-border grid grid-cols-2 divide-x border-t md:grid-cols-4">
+                  <SummaryStat
+                    label="Tool calls"
+                    value={
+                      totals ? Number(totals.eventCount).toLocaleString() : "—"
+                    }
+                  />
+                  <SummaryStat
+                    label="Failures"
+                    value={
+                      totals
+                        ? Number(totals.failureCount).toLocaleString()
+                        : "—"
+                    }
+                    tone={
+                      totals && Number(totals.failureCount) > 0
+                        ? "destructive"
+                        : "default"
+                    }
+                  />
+                  <SummaryStat
+                    label="Failure rate"
+                    value={
+                      totals ? `${(totals.failureRate * 100).toFixed(1)}%` : "—"
+                    }
+                    tone={
+                      totals && totals.failureRate > 0
+                        ? "destructive"
+                        : "default"
+                    }
+                  />
+                  <SummaryStat
+                    label="Tools"
+                    value={
+                      totals ? Number(totals.uniqueTools).toLocaleString() : "—"
+                    }
+                  />
+                </div>
 
-            <div className="border-border border-t px-4 pt-3 pb-2">
-              <LogsTimelineStrip
-                loading={timeSeriesPending}
-                timeSeries={timeSeries}
-                from={from}
-                to={to}
-                statuses={selectedStatuses}
-                onRangeSelect={onRangeSelect}
-                onResetRange={onResetRange}
-                isZoomed={isZoomed}
-                degraded={
-                  // The strip can express an errors-only filter and nothing
-                  // else: the summary series has no per-status counts, and a
-                  // free-text search has no time series at all.
-                  isCustomSearchActive(
-                    attributeSearchQuery,
-                    attributeFilters,
-                  ) || selectedStatuses.some((status) => status !== "error")
-                }
-              />
-            </div>
+                <div className="border-border border-t px-4 pt-3 pb-2">
+                  <LogsTimelineStrip
+                    height={stripHeight}
+                    loading={timeSeriesPending}
+                    timeSeries={timeSeries}
+                    from={from}
+                    to={to}
+                    statuses={selectedStatuses}
+                    onRangeSelect={onRangeSelect}
+                    onResetRange={onResetRange}
+                    isZoomed={isZoomed}
+                    degraded={
+                      // The strip can express an errors-only filter and nothing
+                      // else: the summary series has no per-status counts, and a
+                      // free-text search has no time series at all.
+                      isCustomSearchActive(
+                        attributeSearchQuery,
+                        attributeFilters,
+                      ) || selectedStatuses.some((status) => status !== "error")
+                    }
+                  />
+                </div>
+              </>
+            )}
           </div>
 
           <div className="border-border bg-card flex min-h-0 flex-1 flex-col overflow-hidden border">
