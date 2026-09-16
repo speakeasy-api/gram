@@ -1050,7 +1050,12 @@ func (r *RoleManager) AddMemberRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID,
 		Department:   nil,
 		Groups:       nil,
 	}
-	safeAfter := MemberRoleState{MemberID: connected.ID, RoleIDs: slices.Clone(afterRoleIDs)}
+	safeAfter := MemberRoleState{
+		MemberID:         connected.ID,
+		RoleIDs:          slices.Clone(afterRoleIDs),
+		RoleSlug:         role.Slug,
+		RolePrincipalURN: role.PrincipalURN,
+	}
 	reconciliation := MemberRoleReconciliation{organizationID: gramOrgID, workosUserID: connected.WorkosID.String, membershipID: membershipID}
 	if alreadyAssigned && !linkRepaired {
 		return MemberRoleAddResult{After: safeAfter, Member: after, Changed: false}, reconciliation, nil
