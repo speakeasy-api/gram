@@ -123,6 +123,34 @@ describe("GuidedReadinessPanel", () => {
     expect(readiness.enabledWith).toEqual([false]);
   });
 
+  // The panel sits above the provider grid on a page whose job is the grid, so
+  // what it costs when nobody is reading it is the whole point.
+  it("reports in one row and opens only on request", () => {
+    readiness.current = aQuery({ data: aReadiness({ eligible: false }) });
+    const { container } = render(<GuidedReadinessPanel />);
+
+    const disclosure = container.querySelector("details");
+    expect(disclosure).toBeTruthy();
+    expect(disclosure!.open).toBe(false);
+
+    // The verdict is on the closed row: the answer most readers want is the
+    // one thing they should not have to open anything to get.
+    expect(screen.getByText("Guided setup readiness")).toBeTruthy();
+    expect(screen.getByText("Not eligible")).toBeTruthy();
+    expect(screen.getByText(/checked /)).toBeTruthy();
+
+    fireEvent.click(container.querySelector("summary")!);
+    expect(disclosure!.open).toBe(true);
+  });
+
+  it("stays closed when the organization is eligible", () => {
+    readiness.current = aQuery({ data: aReadiness({ eligible: true }) });
+    const { container } = render(<GuidedReadinessPanel />);
+
+    expect(container.querySelector("details")!.open).toBe(false);
+    expect(screen.getByText("Eligible")).toBeTruthy();
+  });
+
   it("re-checks on demand", () => {
     const refetch = vi.fn<() => void>();
     readiness.current = aQuery({ refetch });

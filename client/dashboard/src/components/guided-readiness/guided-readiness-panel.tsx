@@ -1,8 +1,6 @@
-import { Check, X } from "lucide-react";
-import { PlatformAdminOnlyPanel } from "@/components/platform-admin-only-panel";
+import { Check, ChevronDown, ShieldAlert, X } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Heading } from "@/components/ui/Heading";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { useIsPlatformAdmin } from "@/contexts/Auth";
@@ -82,20 +80,9 @@ function ReadinessBody({
 }): JSX.Element {
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <Badge
-          variant={readiness.eligible ? "success" : "warning"}
-          background
-          size="sm"
-        >
-          <Badge.Text>
-            {readiness.eligible ? "Eligible" : "Not eligible"}
-          </Badge.Text>
-        </Badge>
-        <Text variant="small" muted>
-          {readiness.provider} · checked {formatTimestamp(readiness.checkedAt)}
-        </Text>
-      </div>
+      <Text variant="small" muted>
+        {readiness.provider}
+      </Text>
       <div className="border-border bg-card border px-4 py-1">
         {readiness.checks.map((check) => (
           <CheckRow key={check.key} check={check} />
@@ -119,6 +106,10 @@ export function GuidedReadinessPanel(): JSX.Element | null {
   // Gated here as well as in the wrapper so the read never fires for someone
   // who could not be shown the answer.
   const readiness = useGuidedReadiness(isPlatformAdmin);
+
+  // The platform-admin flag is presentation only, so this gate is about who is
+  // shown the answer; the endpoint behind it enforces the flag itself.
+  if (!isPlatformAdmin) return null;
 
   let body: JSX.Element;
   if (readiness.isPending) {
@@ -148,11 +139,56 @@ export function GuidedReadinessPanel(): JSX.Element | null {
     );
   }
 
+  let verdict: JSX.Element;
+  if (readiness.data) {
+    verdict = (
+      <>
+        <Badge
+          variant={readiness.data.eligible ? "success" : "warning"}
+          background
+          size="sm"
+        >
+          <Badge.Text>
+            {readiness.data.eligible ? "Eligible" : "Not eligible"}
+          </Badge.Text>
+        </Badge>
+        {readiness.data.checkedAt ? (
+          <Text variant="small" muted>
+            checked {formatTimestamp(readiness.data.checkedAt)}
+          </Text>
+        ) : null}
+      </>
+    );
+  } else {
+    verdict = (
+      <Text variant="small" muted>
+        {readiness.isPending ? "checking..." : "not checked"}
+      </Text>
+    );
+  }
+
   return (
-    <PlatformAdminOnlyPanel>
-      <div className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <Heading variant="h5">Guided setup readiness</Heading>
+    <details className="border-destructive-default bg-card group border">
+      {/* One line closed. This sits above the provider grid on a page whose
+          job is the grid, so it reports in a row and gets out of the way;
+          opening it is what costs the reader vertical space. */}
+      <summary className="flex cursor-pointer list-none flex-wrap items-center gap-2 px-3 py-2 [&::-webkit-details-marker]:hidden">
+        <ShieldAlert
+          className="text-default-destructive h-4 w-4 flex-shrink-0"
+          aria-hidden="true"
+        />
+        <span className="sr-only">Platform admin only.</span>
+        <Text variant="small" className="font-medium">
+          Guided setup readiness
+        </Text>
+        {verdict}
+        <ChevronDown
+          className="text-muted-foreground ml-auto h-4 w-4 flex-shrink-0 transition-transform group-open:rotate-180"
+          aria-hidden="true"
+        />
+      </summary>
+      <div className="border-border space-y-3 border-t px-3 py-3">
+        <div className="flex justify-end">
           <Button
             variant="tertiary"
             size="sm"
@@ -164,6 +200,6 @@ export function GuidedReadinessPanel(): JSX.Element | null {
         </div>
         {body}
       </div>
-    </PlatformAdminOnlyPanel>
+    </details>
   );
 }

@@ -14,6 +14,9 @@ const onboardingStatus = vi.hoisted(() => ({
 const portal = vi.hoisted(() => ({ mutate: vi.fn(), isPending: false }));
 // The wizard reads and writes ?step=, so routing can only be exercised with a
 // real parameter behind it: the default mock hands back an empty one.
+// Staff-only surfaces render nothing for everyone else, so this stays false
+// except where a test is about one of them.
+const platformAdmin = vi.hoisted(() => ({ current: false }));
 const router = vi.hoisted(() => ({
   params: new URLSearchParams(),
   setParams: vi.fn(),
@@ -46,7 +49,14 @@ const applications = vi.hoisted(() => ({
 }));
 const readiness = vi.hoisted(() => ({
   current: { data: undefined, isPending: false } as {
-    data: { eligible: boolean } | undefined;
+    data:
+      | {
+          eligible: boolean;
+          provider?: string;
+          checkedAt?: Date;
+          checks?: unknown[];
+        }
+      | undefined;
     isPending: boolean;
   },
 }));
@@ -89,6 +99,10 @@ vi.mock("@/components/ui/hooks/useConfig", () => ({
 vi.mock("@tanstack/react-query", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-query")>()),
   useQueryClient: () => ({}),
+}));
+vi.mock("@/contexts/Auth", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/contexts/Auth")>()),
+  useIsPlatformAdmin: () => platformAdmin.current,
 }));
 vi.mock("react-router", () => ({
   useSearchParams: () => [
@@ -158,6 +172,7 @@ beforeEach(() => {
     refetch: vi.fn(),
   };
   portal.mutate.mockReset();
+  platformAdmin.current = false;
   router.params = new URLSearchParams();
   router.setParams.mockReset();
   submitStep.mutate.mockReset();
@@ -434,6 +449,49 @@ describe("IdentityProviderStep", () => {
 
       expect(submitStep.mutate).toHaveBeenCalledOnce();
       expect(router.params.get("step")).toBe("directory-sync");
+    });
+
+    // Readiness explains what the provider grid is offering. On the later
+    // steps it explains nothing and only pushes the work below the fold.
+    it("shows readiness with the provider grid and on no other step", () => {
+      platformAdmin.current = true;
+      readiness.current = {
+        data: {
+          eligible: false,
+          provider: "okta",
+          checkedAt: new Date("2026-09-15T12:30:00Z"),
+          checks: [],
+        },
+        isPending: false,
+      };
+      identityProvider.current = {
+        data: {
+          connection: { status: "active", directoryState: "not_started" },
+        },
+        isPending: false,
+      };
+      router.params = new URLSearchParams("step=select-idp");
+      const { unmount } = render(
+        <JourneyStepsProvider>
+          <IdentityProviderStep onComplete={() => {}} />
+        </JourneyStepsProvider>,
+      );
+
+      expect(
+        screen.getByText("Guided setup readiness").closest("section")!.hidden,
+      ).toBe(false);
+      unmount();
+
+      router.params = new URLSearchParams("step=directory-sync");
+      render(
+        <JourneyStepsProvider>
+          <IdentityProviderStep onComplete={() => {}} />
+        </JourneyStepsProvider>,
+      );
+
+      expect(
+        screen.getByText("Guided setup readiness").closest("section")!.hidden,
+      ).toBe(true);
     });
 
     it("tells the customer nothing about why", () => {

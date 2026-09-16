@@ -121,9 +121,6 @@ export function IdentityProviderStep({
           takes over step 1 and waits on the rest, and one it does not hands
           steps 2 and 3 to the portal. */}
       <div className="space-y-8">
-        {/* Staff only, and outside the numbered sections on purpose: it says
-            why the card looks the way it does, whichever step is showing. */}
-        <GuidedReadinessPanel />
         <SelectIdpSection
           index={1}
           selectedProvider={selectedProvider}
@@ -309,6 +306,9 @@ function SelectIdpSection({
       complete={complete}
     >
       <div className="space-y-6">
+        {/* Staff only. It says why this grid offers what it offers, so it sits
+            with the grid and nowhere else in the journey. */}
+        <GuidedReadinessPanel />
         <div>
           <div className="relative">
             <Search className="text-muted-foreground pointer-events-none absolute top-[18px] left-3 h-4 w-4 -translate-y-1/2" />
