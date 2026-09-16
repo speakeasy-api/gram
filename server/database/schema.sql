@@ -2493,12 +2493,8 @@ CREATE TABLE IF NOT EXISTS user_session_issuers (
   -- External authorization server whose assertions this issuer trusts.
   -- NULL preserves the standard interactive or chained authentication flow.
   trusted_remote_session_issuer_id uuid,
-  -- Gram's explicit upstream IdP registration: which client Gram authenticates
-  -- as, not whose assertions it trusts (trusted_remote_session_issuer_id), nor
-  -- the downstream-client attachment join. NULL preserves existing login flows.
-  -- AIM-67/AIM-69 transactionally require a live, same-organization client
-  -- belonging to the trusted issuer; a global provider does not share tenant
-  -- credentials. Never select an arbitrary first matching client.
+  -- Gram's upstream IdP registration, not a downstream-client attachment.
+  -- Must be a live, same-organization client of the trusted issuer.
   trusted_remote_session_client_id uuid,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -2969,32 +2965,19 @@ CREATE TABLE IF NOT EXISTS remote_session_client_user_session_issuers (
 CREATE INDEX IF NOT EXISTS remote_session_client_user_session_issuers_issuer_idx
 ON remote_session_client_user_session_issuers (user_session_issuer_id, remote_session_client_id);
 
--- Human-owned identity infrastructure, not a downstream service session/card.
--- Reuses Gram's upstream registration without duplicating its client secrets,
--- authentication method or key set, or coupling credentials to one integration.
--- AIM-69 runtime writes require a non-null organization and client; project_id
--- stays NULL for this milestone. Nullable FKs permit safe hard deletion only.
--- Before reading/decrypting, consumers must require a live session, live client,
--- live tenant and matching scope. Orphaned or soft-deleted references are never
--- usable credentials. Same-organization access and client-belongs-to-trusted-
--- issuer checks are transactional application invariants (AIM-67/AIM-69).
--- AIM-67 guards normal client deletion. AIM-69 separately owns encrypted-data
--- erasure, including orphaned rows: SET NULL and soft deletion do not erase
--- secrets or define retention policy. It also owns encryption, expiry checks,
--- secret-free diagnostics and any additive generation/refresh-coordination and
--- sanitized current-observation metadata before enabling runtime consumers.
+-- Human delegation credentials, independent of downstream service sessions.
+-- Consumers require a live session, client and tenant with matching scope.
+-- Writes require an organization and client; project_id remains NULL.
+-- Orphaned or soft-deleted references are unusable; deletion does not erase secrets.
 CREATE TABLE IF NOT EXISTS trusted_issuer_sessions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   remote_session_client_id uuid,
   organization_id TEXT,
   project_id uuid,
 
-  -- Canonical, provisioned Gram human subject (resolved by AIM-75), never an
-  -- arbitrary external sub, email, workload or agent identifier.
+  -- Provisioned Gram human subject, not an external identifier.
   subject_urn TEXT NOT NULL,
-  -- Encrypted, validated OIDC ID token and verified expiry. Generic assertion
-  -- naming does not implement SAML validation/storage. Payloads contain personal
-  -- information and remain bearer material; consumers reuse existing encryption.
+  -- Validated OIDC ID token and verified expiry.
   identity_assertion_encrypted TEXT,
   identity_assertion_expires_at timestamptz,
   -- Independent optional upstream refresh credential and best-effort expiry.
@@ -3004,8 +2987,7 @@ CREATE TABLE IF NOT EXISTS trusted_issuer_sessions (
   last_refresh_attempt_at timestamptz,
   -- Completed offline request returned no refresh token, versus never requested.
   offline_access_refused_at timestamptz,
-  -- Binds refusal suppression to normalized non-secret configuration/version
-  -- inputs defined by AIM-69. Not a secret digest.
+  -- Non-secret configuration fingerprint used to invalidate refusal suppression.
   offline_access_request_config_hash TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -3027,9 +3009,7 @@ ON trusted_issuer_sessions (organization_id);
 CREATE INDEX IF NOT EXISTS trusted_issuer_sessions_project_id_idx
 ON trusted_issuer_sessions (project_id);
 
--- Deliberate organization-client/human ownership policy, not an assertion that
--- an IdP issues only one grant per user/client. Project, MCP server and downstream
--- resource are intentionally absent from this credential key.
+-- One live credential per client and human, independent of downstream resources.
 CREATE UNIQUE INDEX IF NOT EXISTS trusted_issuer_sessions_client_subject_key
 ON trusted_issuer_sessions (remote_session_client_id, subject_urn)
 WHERE deleted IS FALSE;
