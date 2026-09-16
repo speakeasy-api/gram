@@ -278,6 +278,12 @@ var (
 	errAgentSessionCredentialLoad = errors.New("load agent session credential")
 )
 
+// errUnsupportedSessionSubject marks a session subject kind that parses but
+// that this path cannot describe as a caller. It is an error rather than a
+// fallback because a context with no actor reads to authz.Engine as an
+// authenticated session belonging to nobody.
+var errUnsupportedSessionSubject = errors.New("session subject kind cannot be described as a caller")
+
 // The gram.oauth.failure_reason values the issuer gate emits on its rejection
 // logs and on the mcp.request.rejected counter, beyond the bearer-token
 // classification issuerGateFailureReason produces. Together they are a closed
@@ -558,6 +564,10 @@ func (s *Service) contextForSessionSubject(
 		// Unreachable: anonymous subjects return ctx untouched above. Listed
 		// for exhaustiveness so the linter doesn't flag the switch.
 		return ctx, nil
+	case urn.SessionSubjectKindWorkload:
+		// This path resolves no actor for a workload, and the anonymous
+		// treatment would skip authorization for an issuer-vouched machine.
+		return nil, fmt.Errorf("%w: %q", errUnsupportedSessionSubject, subject.Kind)
 	}
 	return ctx, oops.C(oops.CodeUnauthorized)
 }
