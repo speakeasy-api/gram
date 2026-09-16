@@ -32,7 +32,7 @@ func NewMetrics(logger *slog.Logger, meterProvider metric.MeterProvider) *Metric
 	}
 	failures, err := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/oauth/registration").Int64Counter(
 		failureMetric,
-		metric.WithDescription("Automatic OAuth client registration failures by bounded method and classification"),
+		metric.WithDescription("Automatic OAuth client registration failures by bounded method, outcome, reason, and retryability, with HTTP status where the provider answered"),
 		metric.WithUnit("{failure}"),
 	)
 	if err != nil && logger != nil {
