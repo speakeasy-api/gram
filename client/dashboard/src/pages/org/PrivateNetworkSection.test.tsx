@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 
 import { PrivateNetworkSection } from "./PrivateNetworkSection";
 
@@ -141,10 +141,17 @@ describe("PrivateNetworkSection", () => {
     expect(container.textContent).toBe("");
   });
 
-  it("shows setup only for an entitled admin", () => {
+  it("explains that the private hostname is shared across the organization", () => {
     render(<PrivateNetworkSection />);
+    fireEvent.click(screen.getByRole("button", { name: "Connect Tailscale" }));
+
     expect(
-      screen.getByRole("button", { name: "Connect Tailscale" }),
+      screen.getByRole("textbox", { name: "Organization private hostname" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        /MCP servers opt in separately and keep their own endpoint paths/,
+      ),
     ).toBeTruthy();
   });
 
