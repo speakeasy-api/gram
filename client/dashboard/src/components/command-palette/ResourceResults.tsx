@@ -3,12 +3,14 @@ import { useProjectSlugForRequests, useSlugs } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useEnvironments } from "@/pages/environments/useEnvironments";
+import { CATALOG_STALE_TIME_MS } from "@/pages/catalog/hooks";
 import { BUILTIN_RULES_BY_CATEGORY } from "@/pages/security/detection-rules-data";
 import { encodeIdentityUrn, withIdentityWindow } from "@/lib/identity-urn";
 import { useRoutes } from "@/routes";
 import { useAssistantsListSuspense } from "@gram/client/react-query/assistantsList.js";
 import { useLatestDeploymentSuspense } from "@gram/client/react-query/latestDeployment.js";
 import { useListDeploymentsSuspense } from "@gram/client/react-query/listDeployments.js";
+import { useListMCPCatalogSuspense } from "@gram/client/react-query/listMCPCatalog.js";
 import { useListToolsetsSuspense } from "@gram/client/react-query/listToolsets.js";
 import { useMcpServersSuspense } from "@gram/client/react-query/mcpServers.js";
 import { useMembersSuspense } from "@gram/client/react-query/members.js";
@@ -142,6 +144,74 @@ function McpServersGroup({ onNavigate }: GroupProps) {
           icon="network"
           onSelect={() => {
             routes.mcp.x.overview.goTo(mcpServerRouteParam(server));
+            onNavigate();
+          }}
+        />
+      ))}
+    </CommandGroup>
+  );
+}
+
+/**
+ * Third-party servers offered by the registry catalog.
+ *
+ * Kept in a group of its own, under its own icon, rather than folded into "MCP
+ * Servers": a catalog hit is something this project could run, not something it
+ * runs, and the two legitimately share a name once an entry has been added. The
+ * registry specifier rides along as the sublabel, so a row is never mistaken
+ * for one of the project's own slugs.
+ *
+ * The typed query filters the fetched list here rather than being sent to
+ * listCatalog, which keeps what this group can reach identical to what the
+ * catalog page can show. Both read the same capped response: listCatalog
+ * concatenates its sources in priority order and truncates the merged list, so
+ * the day a second source is enabled, entries past the cap fall out of the
+ * page, out of this group, and out of the detail page — which resolves a
+ * selected row by finding it in that same list. Searching server-side here
+ * alone would filter per source before the merge and so surface rows the
+ * detail page then fails to resolve. The cap is the thing to lift, and the
+ * handler already marks it as standing until cursor pagination lands.
+ */
+function McpCatalogGroup({ onNavigate }: GroupProps) {
+  const routes = useRoutes();
+  const gramProject = useProjectSlugForRequests();
+  // Same request the catalog page makes, down to the freshness window: staleness
+  // is per-observer, so without it this reader would refetch the registry on
+  // every palette mount despite sharing a cache entry the page still considers
+  // fresh.
+  const { data } = useListMCPCatalogSuspense({ gramProject }, undefined, {
+    staleTime: CATALOG_STALE_TIME_MS,
+  });
+  // A specifier is unique within a registry but not across them, and the detail
+  // route is addressed by specifier alone — it resolves the first entry that
+  // matches. Two registries publishing one server would otherwise render as two
+  // identical rows that lead to the same page, so only the row that page
+  // actually opens is offered.
+  const servers = useMemo(() => {
+    const bySpecifier = new Map<string, (typeof data.servers)[number]>();
+    for (const server of data.servers ?? []) {
+      if (!bySpecifier.has(server.registrySpecifier)) {
+        bySpecifier.set(server.registrySpecifier, server);
+      }
+    }
+    return Array.from(bySpecifier.values());
+  }, [data]);
+  if (!servers.length) return null;
+  return (
+    <CommandGroup heading="MCP Catalog">
+      {servers.map((server) => (
+        <ResultItem
+          key={server.registrySpecifier}
+          value={`catalog ${server.title ?? ""} ${server.registrySpecifier}`}
+          label={server.title || server.registrySpecifier}
+          // Dropped when it is standing in as the label: an untitled entry
+          // would otherwise print its specifier twice on the same row.
+          sublabel={server.title ? server.registrySpecifier : undefined}
+          icon="store"
+          onSelect={() => {
+            routes.mcp.catalog.detail.goTo(
+              encodeURIComponent(server.registrySpecifier),
+            );
             onNavigate();
           }}
         />
@@ -476,9 +546,14 @@ export function ResourceResults({
   // Approval requests are an org-admin surface, matching the queue page's
   // own gate.
   const canReadApprovals = hasScope("org:admin");
-  // Detection rules are high-cardinality (dozens of built-ins), so they'd flood
-  // the default view and fetch on open. Make them search-only: render (and
-  // fetch) the group only once the user types, letting cmdk filter the results.
+  // What listCatalog itself requires, rather than the looser any-of gate the
+  // catalog page renders behind: an mcp:write-only reader would pass that one
+  // and then have the request refused.
+  const canBrowseCatalog = hasScope("project:read");
+  // Detection rules and the catalog are high-cardinality (dozens of built-ins;
+  // hundreds of registry entries), so they'd flood the default view and fetch
+  // on open. Make them search-only: render (and fetch) the group only once the
+  // user types, letting cmdk filter the results.
   const hasQuery = query.length > 0;
 
   return (
@@ -486,6 +561,13 @@ export function ResourceResults({
       <LazyGroup>
         <McpServersGroup onNavigate={onNavigate} />
       </LazyGroup>
+      {/* Directly below the project's own servers: when a name matches both,
+          what you already run should read first and the catalog offer second. */}
+      {canBrowseCatalog && hasQuery && (
+        <LazyGroup>
+          <McpCatalogGroup onNavigate={onNavigate} />
+        </LazyGroup>
+      )}
       <LazyGroup>
         <SourcesGroup onNavigate={onNavigate} />
       </LazyGroup>

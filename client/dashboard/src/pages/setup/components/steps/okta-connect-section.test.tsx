@@ -87,6 +87,7 @@ function connectStep(
         value:
           "https://app.example.test/.well-known/identity-provider/abc/jwks.json",
         copyable: true,
+        secret: false,
       },
     ],
     expectedValues: [{ key: "client_id", label: "Client ID", secret: false }],

@@ -11,15 +11,15 @@ import { AiScanTarget, AiScanTarget$inboundSchema } from "./aiscantarget.js";
 
 export type ListAiScanTargetsResult = {
   /**
-   * Fingerprint of the served list; changes whenever the enabled set changes.
+   * Fingerprint of the served list; changes whenever the targets or their definitions change.
    */
   etag: string;
   /**
-   * Version of the served list; the value agents echo as target_list_version once they receive it.
+   * Version of the served catalog; the value agents echo as target_list_version once they receive it.
    */
   listVersion: number;
   /**
-   * Every target in the organization's list, enabled or not, ordered by id.
+   * Every target in the organization's list, ordered by id.
    */
   targets: Array<AiScanTarget>;
 };

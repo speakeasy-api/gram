@@ -95,7 +95,7 @@ func TestService_ListSetupTasksAppliesCompletionFactsWithoutWriting(t *testing.T
 	require.Empty(t, rows, "completion projection must not persist catalog defaults or facts")
 }
 
-func TestService_ListSetupTasksCompletesIdentityProviderForPassedOktaSignIn(t *testing.T) {
+func TestService_ListSetupTasksCompletesIdentityProviderForPassedOktaSetup(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsService(t)
@@ -114,13 +114,25 @@ func TestService_ListSetupTasksCompletesIdentityProviderForPassedOktaSignIn(t *t
 		SigningKeyID:                 uuid.NullUUID{},
 	})
 	require.NoError(t, err)
-	require.NoError(t, orgrepo.New(ti.conn).SetOktaIdentityProviderSignInStateForTest(ctx, orgrepo.SetOktaIdentityProviderSignInStateForTestParams{
+	require.NoError(t, orgrepo.New(ti.conn).SetOktaIdentityProviderSetupStateForTest(ctx, orgrepo.SetOktaIdentityProviderSetupStateForTestParams{
 		SignInState:                  conv.ToPGText("passed"),
+		DirectoryState:               conv.ToPGText("configured"),
 		OrganizationID:               authCtx.ActiveOrganizationID,
 		IdentityProviderConnectionID: connection.ID,
 	}))
 
 	result, err := ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{})
+	require.NoError(t, err)
+	require.Equal(t, "todo", setupTask(result.Tasks, "identity-provider").Status)
+	require.False(t, setupTask(result.Tasks, "identity-provider").CompletedByFact)
+
+	require.NoError(t, orgrepo.New(ti.conn).SetOktaIdentityProviderSetupStateForTest(ctx, orgrepo.SetOktaIdentityProviderSetupStateForTestParams{
+		SignInState:                  conv.ToPGText("passed"),
+		DirectoryState:               conv.ToPGText("passed"),
+		OrganizationID:               authCtx.ActiveOrganizationID,
+		IdentityProviderConnectionID: connection.ID,
+	}))
+	result, err = ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{})
 	require.NoError(t, err)
 	require.Equal(t, "done", setupTask(result.Tasks, "identity-provider").Status)
 	require.True(t, setupTask(result.Tasks, "identity-provider").CompletedByFact)

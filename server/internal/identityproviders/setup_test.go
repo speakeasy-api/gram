@@ -166,6 +166,24 @@ func (m *mockWorkOSClient) GetConnection(ctx context.Context, connectionID strin
 	return connection, args.Error(1)
 }
 
+func (m *mockWorkOSClient) ListDirectories(ctx context.Context, organizationID string) ([]workos.Directory, error) {
+	args := m.Called(ctx, organizationID)
+	directories, _ := args.Get(0).([]workos.Directory)
+	return directories, args.Error(1)
+}
+
+func (m *mockWorkOSClient) ListDirectoryGroups(ctx context.Context, directoryID string) ([]workos.DirectoryGroup, error) {
+	args := m.Called(ctx, directoryID)
+	groups, _ := args.Get(0).([]workos.DirectoryGroup)
+	return groups, args.Error(1)
+}
+
+func (m *mockWorkOSClient) ListDirectoryUsers(ctx context.Context, directoryID string) ([]workos.DirectoryUser, error) {
+	args := m.Called(ctx, directoryID)
+	users, _ := args.Get(0).([]workos.DirectoryUser)
+	return users, args.Error(1)
+}
+
 func expectDirectWorkOSConnection(t *testing.T, ti *testInstance, clientID string, customAuthorizationServer bool) *string {
 	t.Helper()
 

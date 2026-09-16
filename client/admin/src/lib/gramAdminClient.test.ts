@@ -13,6 +13,8 @@ vi.mock("@tanstack/react-query", async (importOriginal) => {
 });
 
 import type { SetOrganizationFeatureRequestBody } from "@gram/admin-client/models/components/setorganizationfeaturerequestbody";
+import type { SetOrganizationDirectoryHandoffRequestBody } from "@gram/admin-client/models/components/setorganizationdirectoryhandoffrequestbody";
+import type { ClearOrganizationDirectoryHandoffRequestBody } from "@gram/admin-client/models/components/clearorganizationdirectoryhandoffrequestbody";
 import { queryKeyAdminListOrganizationActivityInfinite } from "@gram/admin-client/react-query/adminListOrganizationActivity.core";
 
 import {
@@ -67,12 +69,27 @@ describe("generated admin boundary", () => {
         "redirectOnUnauthorized",
         "setAdminOrganizationFeature",
         "useSetAdminOrganizationFeatureMutation",
+        "organizationDirectoryHandoffQuery",
+        "setOrganizationDirectoryHandoff",
+        "clearOrganizationDirectoryHandoff",
       ].sort(),
     );
 
     expectTypeOf(boundary.adminSessionQuery).parameters.toEqualTypeOf<[]>();
     expectTypeOf(boundary.setAdminOrganizationFeature).parameters.toEqualTypeOf<
       [request: SetOrganizationFeatureRequestBody]
+    >();
+    // The handoff writes take the request body and nothing else. An options
+    // parameter here is how a caller would reach the token's transport.
+    expectTypeOf(
+      boundary.setOrganizationDirectoryHandoff,
+    ).parameters.toEqualTypeOf<
+      [request: SetOrganizationDirectoryHandoffRequestBody]
+    >();
+    expectTypeOf(
+      boundary.clearOrganizationDirectoryHandoff,
+    ).parameters.toEqualTypeOf<
+      [request: ClearOrganizationDirectoryHandoffRequestBody]
     >();
   });
 

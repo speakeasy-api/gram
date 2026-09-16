@@ -20,6 +20,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgid "github.com/speakeasy-api/gram/server/internal/organizations/id"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
 // WorkOSOrganizationCreator is the WorkOS surface CreateInWorkOS needs. It
@@ -107,6 +108,11 @@ func (Unavailable) CreateOrganization(context.Context, string, string) (string, 
 // UpdateOrganizationExternalID always fails with ErrUnavailable.
 func (Unavailable) UpdateOrganizationExternalID(context.Context, string, string) error {
 	return ErrUnavailable
+}
+
+// ListDirectories always fails with ErrUnavailable.
+func (Unavailable) ListDirectories(context.Context, string) ([]workos.Directory, error) {
+	return nil, ErrUnavailable
 }
 
 // MaxNameLength is the longest accepted organization name, measured in Unicode

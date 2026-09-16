@@ -51,6 +51,9 @@ actions:
   - target: $.paths.*[?@.operationId=='adminCancelStripeSubscription']
     update:
       x-speakeasy-name-override: cancelStripeSubscription
+  - target: $.paths.*[?@.operationId=='adminClearOrganizationDirectoryHandoff']
+    update:
+      x-speakeasy-name-override: clearOrganizationDirectoryHandoff
   - target: $.paths.*[?@.operationId=='adminCreateOrganization']
     update:
       x-speakeasy-name-override: createOrganization
@@ -75,6 +78,9 @@ actions:
   - target: $.paths.*[?@.operationId=='adminGetOrganizationChatAnalysisSettings']
     update:
       x-speakeasy-name-override: getOrganizationChatAnalysisSettings
+  - target: $.paths.*[?@.operationId=='adminGetOrganizationDirectoryHandoff']
+    update:
+      x-speakeasy-name-override: getOrganizationDirectoryHandoff
   - target: $.paths.*[?@.operationId=='adminGetOrganizationFeatures']
     update:
       x-speakeasy-name-override: getOrganizationFeatures
@@ -120,6 +126,9 @@ actions:
   - target: $.paths.*[?@.operationId=='adminSetInferenceKeyMonthlyLimit']
     update:
       x-speakeasy-name-override: setInferenceKeyMonthlyLimit
+  - target: $.paths.*[?@.operationId=='adminSetOrganizationDirectoryHandoff']
+    update:
+      x-speakeasy-name-override: setOrganizationDirectoryHandoff
   - target: $.paths.*[?@.operationId=='adminSetOrganizationChatAnalysisSettings']
     update:
       x-speakeasy-name-override: setOrganizationChatAnalysisSettings

@@ -39,6 +39,7 @@ func NewGlobalService(logger *slog.Logger, tp trace.TracerProvider, mp metric.Me
 		auditLogger:           nil,
 		serverURL:             nil,
 		refresher:             nil,
+		rotator:               nil,
 		jwksResolver:          jwks.NewResolver(policy, mp, logger),
 		registrationTelemetry: nil,
 		productFeatures:       nil,

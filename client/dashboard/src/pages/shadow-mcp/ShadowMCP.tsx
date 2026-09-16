@@ -1,5 +1,5 @@
 import { Page } from "@/components/page-layout";
-import { RequireScope } from "@/components/require-scope";
+import { ShadowAISection } from "@/pages/shadow-ai/ShadowAI";
 import { ShadowMCPInventoryTable } from "@/components/shadow-mcp/ShadowMCPInventoryTable";
 import { ShadowMCPPolicyStatus } from "@/components/shadow-mcp/ShadowMCPPolicyStatus";
 import {
@@ -32,22 +32,13 @@ function ShadowMCPLoadingState(): JSX.Element {
   );
 }
 
+// The MCP servers tab of the Shadow AI section. The page chrome and the
+// project-read gate live in ShadowAISection, which both tabs share.
 export default function ShadowMCP(): JSX.Element {
-  const pageTitle = "Shadow MCP";
-
   return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs
-          substitutions={{ ["shadow-mcp"]: pageTitle }}
-        />
-      </Page.Header>
-      <Page.Body fullHeight className="pb-8">
-        <RequireScope scope="org:admin" level="page">
-          <ShadowMCPInventory pageTitle={pageTitle} />
-        </RequireScope>
-      </Page.Body>
-    </Page>
+    <ShadowAISection activeTab="mcps">
+      <ShadowMCPInventory pageTitle="MCPs" />
+    </ShadowAISection>
   );
 }
 
@@ -90,7 +81,7 @@ function ShadowMCPInventory({ pageTitle }: { pageTitle: string }): JSX.Element {
             <ShadowMCPInventoryTable
               members={membersQuery.data?.members ?? []}
               onOpenServer={(server) =>
-                routes.shadowMCP.detail.goTo(server.serverSlug)
+                routes.shadowAI.mcps.detail.goTo(server.serverSlug)
               }
               projectID={project.id}
               roles={rolesQuery.data?.roles ?? []}

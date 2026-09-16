@@ -95,8 +95,8 @@ func TestVerifySetupStepPassesAndPersistsEvidence(t *testing.T) {
 	result, err := ti.service.VerifySetupStep(ctx, &gen.VerifySetupStepPayload{StepKey: "connect", SessionToken: nil, ApikeyToken: nil})
 	require.NoError(t, err)
 	require.Equal(t, "passed", result.Outcome)
-	require.Equal(t, []string{"directory_read", "application_assignment_read", "sign_in_provisioning", "claims_provisioning"}, result.Capabilities)
-	require.Equal(t, []string{"okta.apps.read", "okta.groups.read", "okta.users.read", "okta.apps.manage", "okta.authorizationServers.read", "okta.authorizationServers.manage"}, result.GrantedScopes)
+	require.Equal(t, []string{"directory_read", "application_assignment_read", "sign_in_provisioning", "group_assignment", "claims_provisioning"}, result.Capabilities)
+	require.Equal(t, []string{"okta.apps.read", "okta.groups.read", "okta.groups.manage", "okta.users.read", "okta.apps.manage", "okta.authorizationServers.read", "okta.authorizationServers.manage"}, result.GrantedScopes)
 	require.Len(t, result.Evidence.Reads, 4)
 	require.True(t, result.Evidence.Reads[0].OK)
 	require.Contains(t, *result.Evidence.Reads[0].Detail, "more pages are available")
@@ -129,7 +129,7 @@ func TestVerifySetupStepPassesAndPersistsEvidence(t *testing.T) {
 	afterSnapshot, err := audittest.DecodeAuditData(record.AfterSnapshot)
 	require.NoError(t, err)
 	require.Equal(t, "passed", afterSnapshot["outcome"])
-	require.Equal(t, []any{"directory_read", "application_assignment_read", "sign_in_provisioning", "claims_provisioning"}, afterSnapshot["capabilities"])
+	require.Equal(t, []any{"directory_read", "application_assignment_read", "sign_in_provisioning", "group_assignment", "claims_provisioning"}, afterSnapshot["capabilities"])
 	auditJSON := string(record.Metadata) + string(record.BeforeSnapshot) + string(record.AfterSnapshot)
 	require.NotContains(t, auditJSON, testAccessToken)
 	require.NotContains(t, auditJSON, "PRIVATE KEY")
@@ -359,8 +359,8 @@ func TestVerifySignInStepPassesForActiveOktaAndGenericOIDCConnections(t *testing
 	require.Equal(t, &gen.IdentityProviderVerifyResult{
 		Outcome:       "passed",
 		Detail:        "Okta sign-in application and WorkOS OIDC connection verified.",
-		Capabilities:  []string{"directory_read", "application_assignment_read", "sign_in_provisioning", "claims_provisioning"},
-		GrantedScopes: []string{"okta.apps.read", "okta.groups.read", "okta.users.read", "okta.apps.manage", "okta.authorizationServers.read", "okta.authorizationServers.manage"},
+		Capabilities:  []string{"directory_read", "application_assignment_read", "sign_in_provisioning", "group_assignment", "claims_provisioning"},
+		GrantedScopes: []string{"okta.apps.read", "okta.groups.read", "okta.groups.manage", "okta.users.read", "okta.apps.manage", "okta.authorizationServers.read", "okta.authorizationServers.manage"},
 		Evidence: &gen.IdentityProviderVerifyEvidence{
 			CheckedAt: result.Evidence.CheckedAt,
 			Reads: []*gen.IdentityProviderCapabilityRead{
@@ -702,13 +702,14 @@ func (f *fakeOktaServer) handleToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	requestedScopes := r.Form.Get("scope")
-	allScopes := "okta.apps.read okta.groups.read okta.users.read okta.apps.manage okta.authorizationServers.read okta.authorizationServers.manage"
+	allScopes := "okta.apps.read okta.groups.read okta.groups.manage okta.users.read okta.apps.manage okta.authorizationServers.read okta.authorizationServers.manage"
 	claimVerificationScopes := "okta.apps.read okta.groups.read okta.users.read okta.authorizationServers.read okta.authorizationServers.manage"
+	directoryScopes := "okta.apps.read okta.groups.read okta.groups.manage okta.users.read okta.apps.manage"
 	applicationScopes := "okta.apps.read okta.groups.read okta.users.read okta.apps.manage"
 	readScopes := "okta.apps.read okta.groups.read okta.users.read"
 	claimScopes := "okta.authorizationServers.read okta.authorizationServers.manage"
 	mode := f.Mode()
-	validScopes := requestedScopes == allScopes || requestedScopes == claimVerificationScopes || requestedScopes == applicationScopes || requestedScopes == readScopes || requestedScopes == claimScopes || requestedScopes == "okta.apps.read" || requestedScopes == "okta.apps.read okta.groups.read"
+	validScopes := requestedScopes == allScopes || requestedScopes == claimVerificationScopes || requestedScopes == directoryScopes || requestedScopes == applicationScopes || requestedScopes == readScopes || requestedScopes == claimScopes || requestedScopes == "okta.apps.read" || requestedScopes == "okta.apps.read okta.groups.read"
 	if r.Method != http.MethodPost || r.Form.Get("grant_type") != "client_credentials" || !validScopes || r.Form.Get("client_assertion_type") != "urn:ietf:params:oauth:client-assertion-type:jwt-bearer" {
 		f.fail(w, errors.New("unexpected token request"))
 		return

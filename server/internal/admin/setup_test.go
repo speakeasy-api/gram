@@ -62,14 +62,16 @@ func newTestAdminService(t *testing.T) (context.Context, *Service, *pgxpool.Pool
 	)
 	tracerProvider := testenv.NewTracerProvider(t)
 	svc := &Service{
-		tracer:          tracerProvider.Tracer("admin_test"),
-		logger:          logger,
-		db:              conn,
-		audit:           audit.NewLogger(),
-		trial:           trialemails.NoopNotifier{},
-		sessions:        sessions,
-		loginStates:     cache.NewTypedObjectCache[LoginState](logger, adminCache, cache.SuffixNone),
-		productFeatures: productfeatures.NewClient(logger, tracerProvider, conn, redisClient),
+		tracer:                tracerProvider.Tracer("admin_test"),
+		logger:                logger,
+		db:                    conn,
+		audit:                 audit.NewLogger(),
+		trial:                 trialemails.NoopNotifier{},
+		sessions:              sessions,
+		loginStates:           cache.NewTypedObjectCache[LoginState](logger, adminCache, cache.SuffixNone),
+		productFeatures:       productfeatures.NewClient(logger, tracerProvider, conn, redisClient),
+		applicationEncryption: enc,
+		workosEnvironment:     "unknown",
 	}
 	svc.oidc = newTestOIDCClient(t, userinfoOK("sub-admin", "operator@example.com"))
 	svc.verifier = NewVerifier(logger, sessions, svc.oidc, adminCache)

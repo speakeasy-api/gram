@@ -35,7 +35,10 @@ import {
   type ListOrganizationsParams,
   type ListOrganizationsResult,
 } from "@/lib/gramAdminApi";
-import { organizationActivityQuery } from "@/lib/gramAdminClient";
+import {
+  organizationActivityQuery,
+  organizationDirectoryHandoffQuery,
+} from "@/lib/gramAdminClient";
 
 // What queryOptions infers, named so the exports can carry the return type that
 // `typescript/explicit-module-boundary-types` demands. Writing the shape out by
@@ -115,6 +118,20 @@ export function organizationChatAnalysisSettingsQuery(
       organizationID,
     ] as const,
     queryFn: () => getOrganizationChatAnalysisSettings(organizationID),
+  });
+}
+
+// Both writes answer with the stored record or with nothing, and neither can
+// say what WorkOS will report about the directory, so the read is asked again
+// rather than written from a response. The key comes from the generated query,
+// the way the activity one above does.
+export function invalidateOrganizationDirectoryHandoff(
+  qc: QueryClient,
+  organizationID: string,
+): void {
+  void qc.invalidateQueries({
+    queryKey: organizationDirectoryHandoffQuery(organizationID).queryKey,
+    exact: true,
   });
 }
 

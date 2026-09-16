@@ -109,7 +109,7 @@ func UsageCommands() []string {
 		"external receive-work-os-webhook",
 		"killswitches (list-capabilities|list-mcp-servers|list|get|create|edit|lift|preview-overlaps|batch-user-badges)",
 		"about openapi",
-		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|list-shadow-mcp-inventory-servers-for-user|resolve-shadow-mcp-inventory-request|list-ai-detections|list-employee-ai-detections|list-resource-audience|set-resource-audience|list-audience-options|request-access|list-challenges|list-challenge-buckets|resolve-challenge|list-identity-access)",
+		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|list-shadow-mcp-inventory-servers-for-user|resolve-shadow-mcp-inventory-request|list-ai-detections|list-employee-ai-detections|set-ai-tool-decision|list-resource-audience|set-resource-audience|list-audience-options|request-access|list-challenges|list-challenge-buckets|resolve-challenge|list-identity-access)",
 		"agent (get-plugins|list-synced-users|get-configuration|update-configuration|list-ai-scan-targets|upsert-ai-scan-target|delete-ai-scan-target|get-session-meta|report-session-moved|report-ai-scan|create-session-handoff)",
 		"agents (list-sessions|revoke-session|list|create|get|rename|list-delegable-grants|list-policy-grants|create-policy-grant|update-policy-grant|delete-policy-grant|transfer|reassign|suspend|resume|revoke|delete)",
 		"ai-integrations (get-anthropic-inference-config|upsert-anthropic-inference-config|delete-anthropic-inference-config|get-config|upsert-config|delete-config|list-schedules|set-schedule-enabled|retry-schedule)",
@@ -161,12 +161,12 @@ func UsageCommands() []string {
 		"features (get-product-features|set-product-feature|set-remote-session-auto-refresh-policy)",
 		"projects (get-project|create-project|update-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
 		"remote-mcp (create-server|create-server-and-mcp-server|list-servers|get-server|update-server|discover-protected-resource-metadata|probe-url|verify-url|delete-server|list-server-headers|get-server-header|create-server-header|update-server-header|delete-server-header)",
-		"organization-remote-session-clients (list-clients|get-client|get-client-delete-preflight|list-client-mcp-servers|create-client|create-cimd-client|update-client|attach-client-key-set|detach-client-key-set|delete-client|remove-client-from-mcp-server)",
+		"organization-remote-session-clients (list-clients|get-client|get-client-delete-preflight|list-client-mcp-servers|create-client|create-cimd-client|update-client|attach-client-key-set|detach-client-key-set|rotate-client|delete-client|remove-client-from-mcp-server)",
 		"remote-session-clients (create-remote-session-client|create-cimd|update-remote-session-client|attach-user-session-issuer|detach-user-session-issuer|attach-key-set|detach-key-set|list-remote-session-clients|get-remote-session-client|delete-remote-session-client)",
 		"organization-remote-session-issuers (create-issuer|list-issuers|get-issuer|get-issuer-delete-preflight|get-issuer-duplicate-preflight|update-issuer|delete-issuer|move-issuer|get-issuer-migrate-preflight|migrate-issuer|fetch-issuer-metadata|refresh-issuer-metadata)",
 		"remote-session-issuers (fetch-remote-session-issuer-metadata|refresh-remote-session-issuer-metadata|create-remote-session-issuer|update-remote-session-issuer|list-remote-session-issuers|get-remote-session-issuer|get-remote-session-issuer-duplicate-preflight|delete-remote-session-issuer)",
 		"admin-remote-sessions (create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|create-global-client|list-global-clients|get-global-client|update-global-client|delete-global-client|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer)",
-		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-organization-activity|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial)",
+		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-organization-activity|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|get-organization-directory-handoff|set-organization-directory-handoff|clear-organization-directory-handoff)",
 		"organization-remote-sessions (list-client-sessions|revoke-session|refresh-session|revoke-all-client-sessions)",
 		"remote-sessions (commit-server-identity-configuration|list-remote-sessions|revoke-remote-session)",
 		"resources list-resources",
@@ -349,6 +349,10 @@ func ParseEndpoint(
 		accessListEmployeeAIDetectionsUserEmailFlag        = accessListEmployeeAIDetectionsFlags.String("user-email", "REQUIRED", "")
 		accessListEmployeeAIDetectionsSessionTokenFlag     = accessListEmployeeAIDetectionsFlags.String("session-token", "", "")
 		accessListEmployeeAIDetectionsProjectSlugInputFlag = accessListEmployeeAIDetectionsFlags.String("project-slug-input", "", "")
+
+		accessSetAIToolDecisionFlags            = flag.NewFlagSet("set-ai-tool-decision", flag.ExitOnError)
+		accessSetAIToolDecisionBodyFlag         = accessSetAIToolDecisionFlags.String("body", "REQUIRED", "")
+		accessSetAIToolDecisionSessionTokenFlag = accessSetAIToolDecisionFlags.String("session-token", "", "")
 
 		accessListResourceAudienceFlags            = flag.NewFlagSet("list-resource-audience", flag.ExitOnError)
 		accessListResourceAudienceResourceKindFlag = accessListResourceAudienceFlags.String("resource-kind", "REQUIRED", "")
@@ -2383,6 +2387,11 @@ func ParseEndpoint(
 		organizationRemoteSessionClientsDetachClientKeySetSessionTokenFlag = organizationRemoteSessionClientsDetachClientKeySetFlags.String("session-token", "", "")
 		organizationRemoteSessionClientsDetachClientKeySetApikeyTokenFlag  = organizationRemoteSessionClientsDetachClientKeySetFlags.String("apikey-token", "", "")
 
+		organizationRemoteSessionClientsRotateClientFlags            = flag.NewFlagSet("rotate-client", flag.ExitOnError)
+		organizationRemoteSessionClientsRotateClientBodyFlag         = organizationRemoteSessionClientsRotateClientFlags.String("body", "REQUIRED", "")
+		organizationRemoteSessionClientsRotateClientSessionTokenFlag = organizationRemoteSessionClientsRotateClientFlags.String("session-token", "", "")
+		organizationRemoteSessionClientsRotateClientApikeyTokenFlag  = organizationRemoteSessionClientsRotateClientFlags.String("apikey-token", "", "")
+
 		organizationRemoteSessionClientsDeleteClientFlags            = flag.NewFlagSet("delete-client", flag.ExitOnError)
 		organizationRemoteSessionClientsDeleteClientIDFlag           = organizationRemoteSessionClientsDeleteClientFlags.String("id", "REQUIRED", "")
 		organizationRemoteSessionClientsDeleteClientSessionTokenFlag = organizationRemoteSessionClientsDeleteClientFlags.String("session-token", "", "")
@@ -2857,6 +2866,18 @@ func ParseEndpoint(
 		adminStartTrialFlags                 = flag.NewFlagSet("start-trial", flag.ExitOnError)
 		adminStartTrialBodyFlag              = adminStartTrialFlags.String("body", "REQUIRED", "")
 		adminStartTrialAdminSessionTokenFlag = adminStartTrialFlags.String("admin-session-token", "", "")
+
+		adminGetOrganizationDirectoryHandoffFlags                 = flag.NewFlagSet("get-organization-directory-handoff", flag.ExitOnError)
+		adminGetOrganizationDirectoryHandoffOrganizationIDFlag    = adminGetOrganizationDirectoryHandoffFlags.String("organization-id", "REQUIRED", "")
+		adminGetOrganizationDirectoryHandoffAdminSessionTokenFlag = adminGetOrganizationDirectoryHandoffFlags.String("admin-session-token", "", "")
+
+		adminSetOrganizationDirectoryHandoffFlags                 = flag.NewFlagSet("set-organization-directory-handoff", flag.ExitOnError)
+		adminSetOrganizationDirectoryHandoffBodyFlag              = adminSetOrganizationDirectoryHandoffFlags.String("body", "REQUIRED", "")
+		adminSetOrganizationDirectoryHandoffAdminSessionTokenFlag = adminSetOrganizationDirectoryHandoffFlags.String("admin-session-token", "", "")
+
+		adminClearOrganizationDirectoryHandoffFlags                 = flag.NewFlagSet("clear-organization-directory-handoff", flag.ExitOnError)
+		adminClearOrganizationDirectoryHandoffBodyFlag              = adminClearOrganizationDirectoryHandoffFlags.String("body", "REQUIRED", "")
+		adminClearOrganizationDirectoryHandoffAdminSessionTokenFlag = adminClearOrganizationDirectoryHandoffFlags.String("admin-session-token", "", "")
 
 		organizationRemoteSessionsFlags = flag.NewFlagSet("organization-remote-sessions", flag.ContinueOnError)
 
@@ -4254,6 +4275,7 @@ func ParseEndpoint(
 	accessResolveShadowMCPInventoryRequestFlags.Usage = accessResolveShadowMCPInventoryRequestUsage
 	accessListAIDetectionsFlags.Usage = accessListAIDetectionsUsage
 	accessListEmployeeAIDetectionsFlags.Usage = accessListEmployeeAIDetectionsUsage
+	accessSetAIToolDecisionFlags.Usage = accessSetAIToolDecisionUsage
 	accessListResourceAudienceFlags.Usage = accessListResourceAudienceUsage
 	accessSetResourceAudienceFlags.Usage = accessSetResourceAudienceUsage
 	accessListAudienceOptionsFlags.Usage = accessListAudienceOptionsUsage
@@ -4740,6 +4762,7 @@ func ParseEndpoint(
 	organizationRemoteSessionClientsUpdateClientFlags.Usage = organizationRemoteSessionClientsUpdateClientUsage
 	organizationRemoteSessionClientsAttachClientKeySetFlags.Usage = organizationRemoteSessionClientsAttachClientKeySetUsage
 	organizationRemoteSessionClientsDetachClientKeySetFlags.Usage = organizationRemoteSessionClientsDetachClientKeySetUsage
+	organizationRemoteSessionClientsRotateClientFlags.Usage = organizationRemoteSessionClientsRotateClientUsage
 	organizationRemoteSessionClientsDeleteClientFlags.Usage = organizationRemoteSessionClientsDeleteClientUsage
 	organizationRemoteSessionClientsRemoveClientFromMcpServerFlags.Usage = organizationRemoteSessionClientsRemoveClientFromMcpServerUsage
 
@@ -4846,6 +4869,9 @@ func ParseEndpoint(
 	adminUploadPlatformImageFlags.Usage = adminUploadPlatformImageUsage
 	adminServeImageFlags.Usage = adminServeImageUsage
 	adminStartTrialFlags.Usage = adminStartTrialUsage
+	adminGetOrganizationDirectoryHandoffFlags.Usage = adminGetOrganizationDirectoryHandoffUsage
+	adminSetOrganizationDirectoryHandoffFlags.Usage = adminSetOrganizationDirectoryHandoffUsage
+	adminClearOrganizationDirectoryHandoffFlags.Usage = adminClearOrganizationDirectoryHandoffUsage
 
 	organizationRemoteSessionsFlags.Usage = organizationRemoteSessionsUsage
 	organizationRemoteSessionsListClientSessionsFlags.Usage = organizationRemoteSessionsListClientSessionsUsage
@@ -5412,6 +5438,9 @@ func ParseEndpoint(
 
 			case "list-employee-ai-detections":
 				epf = accessListEmployeeAIDetectionsFlags
+
+			case "set-ai-tool-decision":
+				epf = accessSetAIToolDecisionFlags
 
 			case "list-resource-audience":
 				epf = accessListResourceAudienceFlags
@@ -6767,6 +6796,9 @@ func ParseEndpoint(
 			case "detach-client-key-set":
 				epf = organizationRemoteSessionClientsDetachClientKeySetFlags
 
+			case "rotate-client":
+				epf = organizationRemoteSessionClientsRotateClientFlags
+
 			case "delete-client":
 				epf = organizationRemoteSessionClientsDeleteClientFlags
 
@@ -7074,6 +7106,15 @@ func ParseEndpoint(
 
 			case "start-trial":
 				epf = adminStartTrialFlags
+
+			case "get-organization-directory-handoff":
+				epf = adminGetOrganizationDirectoryHandoffFlags
+
+			case "set-organization-directory-handoff":
+				epf = adminSetOrganizationDirectoryHandoffFlags
+
+			case "clear-organization-directory-handoff":
+				epf = adminClearOrganizationDirectoryHandoffFlags
 
 			}
 
@@ -7962,6 +8003,9 @@ func ParseEndpoint(
 			case "list-employee-ai-detections":
 				endpoint = c.ListEmployeeAIDetections()
 				data, err = accessc.BuildListEmployeeAIDetectionsPayload(*accessListEmployeeAIDetectionsUserEmailFlag, *accessListEmployeeAIDetectionsSessionTokenFlag, *accessListEmployeeAIDetectionsProjectSlugInputFlag)
+			case "set-ai-tool-decision":
+				endpoint = c.SetAIToolDecision()
+				data, err = accessc.BuildSetAIToolDecisionPayload(*accessSetAIToolDecisionBodyFlag, *accessSetAIToolDecisionSessionTokenFlag)
 			case "list-resource-audience":
 				endpoint = c.ListResourceAudience()
 				data, err = accessc.BuildListResourceAudiencePayload(*accessListResourceAudienceResourceKindFlag, *accessListResourceAudienceResourceIDFlag, *accessListResourceAudienceApikeyTokenFlag, *accessListResourceAudienceSessionTokenFlag)
@@ -9343,6 +9387,9 @@ func ParseEndpoint(
 			case "detach-client-key-set":
 				endpoint = c.DetachClientKeySet()
 				data, err = organizationremotesessionclientsc.BuildDetachClientKeySetPayload(*organizationRemoteSessionClientsDetachClientKeySetIDFlag, *organizationRemoteSessionClientsDetachClientKeySetSessionTokenFlag, *organizationRemoteSessionClientsDetachClientKeySetApikeyTokenFlag)
+			case "rotate-client":
+				endpoint = c.RotateClient()
+				data, err = organizationremotesessionclientsc.BuildRotateClientPayload(*organizationRemoteSessionClientsRotateClientBodyFlag, *organizationRemoteSessionClientsRotateClientSessionTokenFlag, *organizationRemoteSessionClientsRotateClientApikeyTokenFlag)
 			case "delete-client":
 				endpoint = c.DeleteClient()
 				data, err = organizationremotesessionclientsc.BuildDeleteClientPayload(*organizationRemoteSessionClientsDeleteClientIDFlag, *organizationRemoteSessionClientsDeleteClientSessionTokenFlag, *organizationRemoteSessionClientsDeleteClientApikeyTokenFlag)
@@ -9654,6 +9701,15 @@ func ParseEndpoint(
 			case "start-trial":
 				endpoint = c.StartTrial()
 				data, err = adminc.BuildStartTrialPayload(*adminStartTrialBodyFlag, *adminStartTrialAdminSessionTokenFlag)
+			case "get-organization-directory-handoff":
+				endpoint = c.GetOrganizationDirectoryHandoff()
+				data, err = adminc.BuildGetOrganizationDirectoryHandoffPayload(*adminGetOrganizationDirectoryHandoffOrganizationIDFlag, *adminGetOrganizationDirectoryHandoffAdminSessionTokenFlag)
+			case "set-organization-directory-handoff":
+				endpoint = c.SetOrganizationDirectoryHandoff()
+				data, err = adminc.BuildSetOrganizationDirectoryHandoffPayload(*adminSetOrganizationDirectoryHandoffBodyFlag, *adminSetOrganizationDirectoryHandoffAdminSessionTokenFlag)
+			case "clear-organization-directory-handoff":
+				endpoint = c.ClearOrganizationDirectoryHandoff()
+				data, err = adminc.BuildClearOrganizationDirectoryHandoffPayload(*adminClearOrganizationDirectoryHandoffBodyFlag, *adminClearOrganizationDirectoryHandoffAdminSessionTokenFlag)
 			}
 		case "organization-remote-sessions":
 			c := organizationremotesessionsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -10700,14 +10756,15 @@ func accessUsage() {
 	fmt.Fprintln(os.Stderr, `    list-members: List all team members with their role assignments.`)
 	fmt.Fprintln(os.Stderr, `    list-grants: List the current user's effective grants, including inherited role grants.`)
 	fmt.Fprintln(os.Stderr, `    update-member-roles: Update a team member's role assignments.`)
-	fmt.Fprintln(os.Stderr, `    list-shadow-mcp-inventory: List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and policy-bypass state.`)
-	fmt.Fprintln(os.Stderr, `    get-shadow-mcp-inventory-server: Get one project-scoped Shadow MCP server inventory URL with usage and policy-bypass state.`)
+	fmt.Fprintln(os.Stderr, `    list-shadow-mcp-inventory: List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and policy-bypass state. Requires an authenticated session authorized for org:admin on the active organization.`)
+	fmt.Fprintln(os.Stderr, `    get-shadow-mcp-inventory-server: Get one project-scoped Shadow MCP server inventory URL with usage and policy-bypass state. Requires an authenticated session authorized for org:admin on the active organization.`)
 	fmt.Fprintln(os.Stderr, `    update-shadow-mcp-inventory-server-name: Update or clear the administrator-defined display name for one project-scoped Shadow MCP inventory server URL.`)
 	fmt.Fprintln(os.Stderr, `    list-shadow-mcp-inventory-users: List users with observed telemetry usage for one project-scoped Shadow MCP server URL.`)
 	fmt.Fprintln(os.Stderr, `    list-shadow-mcp-inventory-servers-for-user: List the Shadow MCP servers one person reached, with each server's access state. The inverse of listShadowMCPInventoryUsers, which expands a single server into its users.`)
 	fmt.Fprintln(os.Stderr, `    resolve-shadow-mcp-inventory-request: Review the latest pending Shadow MCP URL request and resolve all pending requests for that URL.`)
-	fmt.Fprintln(os.Stderr, `    list-ai-detections: List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. Org-scoped — detections attach to devices and enrolled users, not projects. Requires an authenticated session authorized for org:admin on the active organization. Display names and categories are decorated from the server's detection target catalog at read time; targets the catalog does not know are listed under their raw reported id.`)
-	fmt.Fprintln(os.Stderr, `    list-employee-ai-detections: List AI tools detected for one enrolled employee in the active organization. The employee email is required so project viewers cannot broaden the request into an organization-wide inventory. Linked alias emails are folded to the canonical identity. Requires project:read on the active project.`)
+	fmt.Fprintln(os.Stderr, `    list-ai-detections: List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. Org-scoped — detections attach to devices and enrolled users, not projects. Requires an authenticated session authorized for org:admin on the active organization. Each row carries the organization's gateway access decision for that tool. Display names and categories are decorated from the server's detection target catalog at read time; targets the catalog does not know are listed under their raw reported id.`)
+	fmt.Fprintln(os.Stderr, `    list-employee-ai-detections: List AI tools detected for one enrolled employee in the active organization. The employee email is required so project viewers cannot broaden the request into an organization-wide inventory. Linked alias emails are folded to the canonical identity. Requires project:read on the active project; the access decision on each row carries its state but not who recorded it, when, or why.`)
+	fmt.Fprintln(os.Stderr, `    set-ai-tool-decision: Record whether a detected AI tool may reach this organization's MCP gateway. The decision is organization-level and applies to every server: a blocked tool is refused when it authenticates, so its users see an error their client cannot recover from. Enforcement needs a credential Gram can verify, so a tool that carries no verifiable gateway matcher — one linked only by a self-reported client name, or by nothing at all — cannot be decided on: the request is rejected with bad_request, nothing is recorded, and no summary is returned. An id the organization's scan target catalog does not know is rejected with not_found. Requires an authenticated session authorized for org:admin on the active organization.`)
 	fmt.Fprintln(os.Stderr, `    list-resource-audience: List who can reach one resource: the principals granted or blocked on it, and the organization-wide rules they inherit.`)
 	fmt.Fprintln(os.Stderr, `    set-resource-audience: Replace the rules that name one resource. Organization-wide rules are left untouched.`)
 	fmt.Fprintln(os.Stderr, `    list-audience-options: List the principals that can be given access: everyone, roles, people, and agents.`)
@@ -10921,7 +10978,7 @@ func accessListShadowMCPInventoryUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and policy-bypass state.`)
+	fmt.Fprintln(os.Stderr, `List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and policy-bypass state. Requires an authenticated session authorized for org:admin on the active organization.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -project-id STRING: `)
@@ -10944,7 +11001,7 @@ func accessGetShadowMCPInventoryServerUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Get one project-scoped Shadow MCP server inventory URL with usage and policy-bypass state.`)
+	fmt.Fprintln(os.Stderr, `Get one project-scoped Shadow MCP server inventory URL with usage and policy-bypass state. Requires an authenticated session authorized for org:admin on the active organization.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -project-id STRING: `)
@@ -11060,7 +11117,7 @@ func accessListAIDetectionsUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. Org-scoped — detections attach to devices and enrolled users, not projects. Requires an authenticated session authorized for org:admin on the active organization. Display names and categories are decorated from the server's detection target catalog at read time; targets the catalog does not know are listed under their raw reported id.`)
+	fmt.Fprintln(os.Stderr, `List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. Org-scoped — detections attach to devices and enrolled users, not projects. Requires an authenticated session authorized for org:admin on the active organization. Each row carries the organization's gateway access decision for that tool. Display names and categories are decorated from the server's detection target catalog at read time; targets the catalog does not know are listed under their raw reported id.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -category STRING: `)
@@ -11069,7 +11126,7 @@ func accessListAIDetectionsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-ai-detections --category \"local_model\" --directory-group-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-ai-detections --category \"assistant\" --directory-group-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
 }
 
 func accessListEmployeeAIDetectionsUsage() {
@@ -11082,7 +11139,7 @@ func accessListEmployeeAIDetectionsUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List AI tools detected for one enrolled employee in the active organization. The employee email is required so project viewers cannot broaden the request into an organization-wide inventory. Linked alias emails are folded to the canonical identity. Requires project:read on the active project.`)
+	fmt.Fprintln(os.Stderr, `List AI tools detected for one enrolled employee in the active organization. The employee email is required so project viewers cannot broaden the request into an organization-wide inventory. Linked alias emails are folded to the canonical identity. Requires project:read on the active project; the access decision on each row carries its state but not who recorded it, when, or why.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -user-email STRING: `)
@@ -11092,6 +11149,26 @@ func accessListEmployeeAIDetectionsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-employee-ai-detections --user-email \"aaa\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func accessSetAIToolDecisionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access set-ai-tool-decision", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Record whether a detected AI tool may reach this organization's MCP gateway. The decision is organization-level and applies to every server: a blocked tool is refused when it authenticates, so its users see an error their client cannot recover from. Enforcement needs a credential Gram can verify, so a tool that carries no verifiable gateway matcher — one linked only by a self-reported client name, or by nothing at all — cannot be decided on: the request is rejected with bad_request, nothing is recorded, and no summary is returned. An id the organization's scan target catalog does not know is rejected with not_found. Requires an authenticated session authorized for org:admin on the active organization.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access set-ai-tool-decision --body '{\n      \"decision\": \"approved\",\n      \"rationale\": \"aaa\",\n      \"target_id\": \"1\"\n   }' --session-token \"abc123\"")
 }
 
 func accessListResourceAudienceUsage() {
@@ -11307,9 +11384,9 @@ func agentUsage() {
 	fmt.Fprintln(os.Stderr, `    list-synced-users: List users in the current organization who are actively running the Speakeasy device agent, attributed by the email each agent reports on sync. Dashboard-only; requires an org admin session.`)
 	fmt.Fprintln(os.Stderr, `    get-configuration: Get the organization-wide device-agent configuration for the dashboard. Requires a session with the org:admin scope. An unconfigured organization returns an empty document with is_configured=false; enrolled agents do not receive a remote layer until an administrator saves one.`)
 	fmt.Fprintln(os.Stderr, `    update-configuration: Create or replace the organization-wide, non-secret device-agent configuration. Requires a session with the org:admin scope. Known settings are replaced wholesale — omitting one removes it — while stored keys this server does not recognize are preserved for forward compatibility; identity and credential keys are rejected.`)
-	fmt.Fprintln(os.Stderr, `    list-ai-scan-targets: List the Shadow AI scan targets this organization's device agents probe for: the Speakeasy defaults overlaid with the organization's own additions and customizations, with the list version agents echo on scan receipts. Requires a session with the org:admin scope.`)
-	fmt.Fprintln(os.Stderr, `    upsert-ai-scan-target: Add a scan target for this organization, replace one it added earlier, or customize a Speakeasy default under the same id, which is how a default is disabled for the organization. Agents pick the change up on their next policy poll. Requires a session with the org:admin scope.`)
-	fmt.Fprintln(os.Stderr, `    delete-ai-scan-target: Remove a target the organization added, or drop the organization's customization of a Speakeasy default so the default is served again. Requires a session with the org:admin scope.`)
+	fmt.Fprintln(os.Stderr, `    list-ai-scan-targets: List the Shadow AI scan targets this organization's device agents probe for: the Speakeasy built-ins plus the organization's own additions, with the catalog version agents echo on scan receipts. Everything listed is probed for; a built-in leaves the list by leaving Speakeasy's catalog, an organization target by being deleted. Requires a session with the org:admin scope.`)
+	fmt.Fprintln(os.Stderr, `    upsert-ai-scan-target: Add a scan target for this organization or replace one it added earlier. Built-in targets are system-supplied and read-only: a write under a built-in's id is accepted only when it carries that built-in's definition unchanged. Every field is a full replacement except gateway_client, which an existing target keeps when the field is omitted, so a write need not restate the target's matchers; sending gateway_client with empty lists still clears them. Clearing a target's last verifiable matcher also clears any access decision recorded about it, since nothing could enforce it any more; the organization decides again once the target can be recognized at the gateway. Agents pick the change up on their next policy poll. Requires a session with the org:admin scope.`)
+	fmt.Fprintln(os.Stderr, `    delete-ai-scan-target: Remove a target the organization added, or clear the row a built-in carries so it returns to having no recorded decision. A built-in itself cannot be removed here; it leaves the list only by leaving Speakeasy's catalog. Requires a session with the org:admin scope.`)
 	fmt.Fprintln(os.Stderr, `    get-session-meta: Resolve display metadata (Gram chat id, generated title, last activity) for captured agent sessions the calling user owns. Used by the device agent's session picker to overlay server-generated titles on locally discovered transcripts; unknown or non-owned session ids are silently omitted, so the picker degrades gracefully. Requires a per-user key: the fleet-shared org install key is refused because session metadata is per-user data.`)
 	fmt.Fprintln(os.Stderr, `    report-session-moved: Record that a captured agent session was moved to another harness on a device (session portability). Carries no session content — only the session identity, the target harness, and device attribution — and lands as a chat_session:move audit event so organizations retain governance visibility over local-first moves. Accepts both the per-user key and the org install key (with a vouched email), mirroring getPlugins, because fleet devices must be able to report moves. Fire-and-forget from the agent's perspective: the daemon must never fail a move because this call failed.`)
 	fmt.Fprintln(os.Stderr, `    report-ai-scan: Report the result of a device-agent AI scan: which AI tools from the served scan target catalog (or the list embedded in the agent as a fallback) were found installed or running on the device. A scan with zero matches still reports, so organizations can prove a device was scanned and came back clean. Accepts both the per-user key and the org install key (with a vouched email), mirroring getPlugins, because fleet devices must be able to report scans. Fire-and-forget from the agent's perspective: the daemon must never block on this call.`)
@@ -11410,7 +11487,7 @@ func agentListAiScanTargetsUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List the Shadow AI scan targets this organization's device agents probe for: the Speakeasy defaults overlaid with the organization's own additions and customizations, with the list version agents echo on scan receipts. Requires a session with the org:admin scope.`)
+	fmt.Fprintln(os.Stderr, `List the Shadow AI scan targets this organization's device agents probe for: the Speakeasy built-ins plus the organization's own additions, with the catalog version agents echo on scan receipts. Everything listed is probed for; a built-in leaves the list by leaving Speakeasy's catalog, an organization target by being deleted. Requires a session with the org:admin scope.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
@@ -11429,7 +11506,7 @@ func agentUpsertAiScanTargetUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Add a scan target for this organization, replace one it added earlier, or customize a Speakeasy default under the same id, which is how a default is disabled for the organization. Agents pick the change up on their next policy poll. Requires a session with the org:admin scope.`)
+	fmt.Fprintln(os.Stderr, `Add a scan target for this organization or replace one it added earlier. Built-in targets are system-supplied and read-only: a write under a built-in's id is accepted only when it carries that built-in's definition unchanged. Every field is a full replacement except gateway_client, which an existing target keeps when the field is omitted, so a write need not restate the target's matchers; sending gateway_client with empty lists still clears them. Clearing a target's last verifiable matcher also clears any access decision recorded about it, since nothing could enforce it any more; the organization decides again once the target can be recognized at the gateway. Agents pick the change up on their next policy poll. Requires a session with the org:admin scope.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -11437,7 +11514,7 @@ func agentUpsertAiScanTargetUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agent upsert-ai-scan-target --body '{\n      \"category\": \"local_model\",\n      \"display_name\": \"aa\",\n      \"enabled\": false,\n      \"id\": \"1\",\n      \"signatures\": {\n         \"binaries\": [\n            \".\",\n            \".\",\n            \".\"\n         ],\n         \"bundle_ids\": [\n            \".\",\n            \".\",\n            \".\"\n         ],\n         \"config_dirs\": [\n            \"abc123\",\n            \"abc123\",\n            \"abc123\"\n         ],\n         \"process_names\": [\n            \"-\",\n            \"-\",\n            \"-\"\n         ]\n      },\n      \"version_plist_key\": \"1\"\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agent upsert-ai-scan-target --body '{\n      \"category\": \"assistant\",\n      \"display_name\": \"aa\",\n      \"gateway_client\": {\n         \"cimd_vendor_keys\": [\n            \"1\",\n            \"1\",\n            \"1\"\n         ],\n         \"client_info_names\": [\n            \"aaa\",\n            \"aaa\",\n            \"aaa\"\n         ],\n         \"oauth_client_ids\": [\n            \"aaa\",\n            \"aaa\",\n            \"aaa\"\n         ]\n      },\n      \"id\": \"1\",\n      \"signatures\": {\n         \"binaries\": [\n            \".\",\n            \".\",\n            \".\"\n         ],\n         \"bundle_ids\": [\n            \".\",\n            \".\",\n            \".\"\n         ],\n         \"config_dirs\": [\n            \"abc123\",\n            \"abc123\",\n            \"abc123\"\n         ],\n         \"process_names\": [\n            \"-\",\n            \"-\",\n            \"-\"\n         ]\n      },\n      \"version_plist_key\": \"1\"\n   }' --session-token \"abc123\"")
 }
 
 func agentDeleteAiScanTargetUsage() {
@@ -11449,7 +11526,7 @@ func agentDeleteAiScanTargetUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Remove a target the organization added, or drop the organization's customization of a Speakeasy default so the default is served again. Requires a session with the org:admin scope.`)
+	fmt.Fprintln(os.Stderr, `Remove a target the organization added, or clear the row a built-in carries so it returns to having no recorded decision. A built-in itself cannot be removed here; it leaves the list only by leaving Speakeasy's catalog. Requires a session with the org:admin scope.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -17427,7 +17504,7 @@ func metaMcpUpdateMetaMcpServerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "meta-mcp update-meta-mcp-server --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"aa\",\n      \"network_access_mode\": \"dual\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"visibility\": \"private\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "meta-mcp update-meta-mcp-server --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"instructions\": \"abc123\",\n      \"name\": \"aa\",\n      \"network_access_mode\": \"dual\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"visibility\": \"private\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func metaMcpDeleteMetaMcpServerUsage() {
@@ -20211,6 +20288,7 @@ func organizationRemoteSessionClientsUsage() {
 	fmt.Fprintln(os.Stderr, `    update-client: Update a remote_session_client's non-secret fields in the caller's organization. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    attach-client-key-set: Attach an organization JSON Web Key Set to a remote_session_client in the caller's organization, opting it into signing private_key_jwt assertions. Requires org:admin and the customer_managed_encryption_keys entitlement.`)
 	fmt.Fprintln(os.Stderr, `    detach-client-key-set: Detach the JSON Web Key Set from a remote_session_client in the caller's organization. Refused while the client declares token_endpoint_auth_method=private_key_jwt. A no-op when no set is attached. Requires org:admin and the customer_managed_encryption_keys entitlement.`)
+	fmt.Fprintln(os.Stderr, `    rotate-client: Re-register a dynamically registered remote_session_client with its issuer in place, replacing the client_id and secret while keeping the row's id, issuer bindings, MCP server attachments, and key set links. Every remote session minted against the old client_id is revoked, so users reconnect once. Use when the issuer reports the registration expired (upstream_rejected_at is set) or to rotate proactively. The replacement is registered at the registration_endpoint the client's issuer publishes, so the issuer must publish one. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    delete-client: Soft-delete a remote_session_client in the caller's organization. Cascades to the remote_sessions minted against it. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    remove-client-from-mcp-server: Detach a remote_session_client from an MCP server (clears the MCP server's user_session_issuer link) in the caller's organization. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr)
@@ -20328,7 +20406,7 @@ func organizationRemoteSessionClientsCreateClientUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-clients create-client --body '{\n      \"audience\": \"aaa\",\n      \"client_id\": \"abc123\",\n      \"client_secret\": \"abc123\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_method\": \"client_secret_post\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-clients create-client --body '{\n      \"audience\": \"aaa\",\n      \"client_id\": \"abc123\",\n      \"client_id_issued_at\": \"1970-01-01T00:00:01Z\",\n      \"client_secret\": \"abc123\",\n      \"client_secret_expires_at\": \"1970-01-01T00:00:01Z\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_audience_format\": \"token_endpoint\",\n      \"token_endpoint_auth_method\": \"client_secret_post\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func organizationRemoteSessionClientsCreateCimdClientUsage() {
@@ -20372,7 +20450,7 @@ func organizationRemoteSessionClientsUpdateClientUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-clients update-client --body '{\n      \"audience\": \"aaa\",\n      \"client_secret\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_method\": \"client_secret_post\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-clients update-client --body '{\n      \"audience\": \"aaa\",\n      \"client_secret\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_audience_format\": \"token_endpoint\",\n      \"token_endpoint_auth_method\": \"client_secret_post\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func organizationRemoteSessionClientsAttachClientKeySetUsage() {
@@ -20417,6 +20495,28 @@ func organizationRemoteSessionClientsDetachClientKeySetUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-clients detach-client-key-set --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\"")
+}
+
+func organizationRemoteSessionClientsRotateClientUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organization-remote-session-clients rotate-client", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Re-register a dynamically registered remote_session_client with its issuer in place, replacing the client_id and secret while keeping the row's id, issuer bindings, MCP server attachments, and key set links. Every remote session minted against the old client_id is revoked, so users reconnect once. Use when the issuer reports the registration expired (upstream_rejected_at is set) or to rotate proactively. The replacement is registered at the registration_endpoint the client's issuer publishes, so the issuer must publish one. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-clients rotate-client --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func organizationRemoteSessionClientsDeleteClientUsage() {
@@ -20504,7 +20604,7 @@ func remoteSessionClientsCreateRemoteSessionClientUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-clients create-remote-session-client --body '{\n      \"audience\": \"aaa\",\n      \"client_id\": \"abc123\",\n      \"client_secret\": \"abc123\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_method\": \"client_secret_post\",\n      \"user_session_issuer_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-clients create-remote-session-client --body '{\n      \"audience\": \"aaa\",\n      \"client_id\": \"abc123\",\n      \"client_id_issued_at\": \"1970-01-01T00:00:01Z\",\n      \"client_secret\": \"abc123\",\n      \"client_secret_expires_at\": \"1970-01-01T00:00:01Z\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_audience_format\": \"token_endpoint\",\n      \"token_endpoint_auth_method\": \"client_secret_post\",\n      \"user_session_issuer_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func remoteSessionClientsCreateCimdUsage() {
@@ -20552,7 +20652,7 @@ func remoteSessionClientsUpdateRemoteSessionClientUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-clients update-remote-session-client --body '{\n      \"audience\": \"aaa\",\n      \"client_secret\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_method\": \"client_secret_post\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-clients update-remote-session-client --body '{\n      \"audience\": \"aaa\",\n      \"client_secret\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_audience_format\": \"token_endpoint\",\n      \"token_endpoint_auth_method\": \"client_secret_post\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func remoteSessionClientsAttachUserSessionIssuerUsage() {
@@ -21682,6 +21782,9 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    upload-platform-image: Upload a global issuer logo, limited to 4 MiB and PNG, JPEG, GIF or WebP.`)
 	fmt.Fprintln(os.Stderr, `    serve-image: Serve a public image, preserving the existing image serving contract.`)
 	fmt.Fprintln(os.Stderr, `    start-trial: Starts a new enterprise trial for an organization that has never trialled, or restarts one that has expired without converting or being demoted. Sets the account type, whitelist flag, trial entitlements and a fresh runway counted from now. A running, demoted or converted trial is rejected: those are extend, re-arm and a contract.`)
+	fmt.Fprintln(os.Stderr, `    get-organization-directory-handoff: Returns non-secret directory handoff details and live WorkOS directory state for an organization.`)
+	fmt.Fprintln(os.Stderr, `    set-organization-directory-handoff: Stores the SCIM endpoint and encrypted bearer token used for an organization's guided directory setup.`)
+	fmt.Fprintln(os.Stderr, `    clear-organization-directory-handoff: Clears an organization's stored directory handoff values.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s admin COMMAND --help\n", os.Args[0])
@@ -22682,6 +22785,66 @@ func adminStartTrialUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin start-trial --body '{\n      \"days\": 2,\n      \"id\": \"aa\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminGetOrganizationDirectoryHandoffUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin get-organization-directory-handoff", os.Args[0])
+	fmt.Fprint(os.Stderr, " -organization-id STRING")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Returns non-secret directory handoff details and live WorkOS directory state for an organization.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -organization-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-organization-directory-handoff --organization-id \"abc123\" --admin-session-token \"abc123\"")
+}
+
+func adminSetOrganizationDirectoryHandoffUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin set-organization-directory-handoff", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Stores the SCIM endpoint and encrypted bearer token used for an organization's guided directory setup.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin set-organization-directory-handoff --body '{\n      \"organization_id\": \"abc123\",\n      \"scim_base_url\": \"https://example.com/foo\",\n      \"scim_token\": \"aa\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminClearOrganizationDirectoryHandoffUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin clear-organization-directory-handoff", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Clears an organization's stored directory handoff values.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin clear-organization-directory-handoff --body '{\n      \"organization_id\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
 }
 
 // organizationRemoteSessionsUsage displays the usage of the

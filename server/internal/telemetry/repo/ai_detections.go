@@ -3,6 +3,7 @@ package repo
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sort"
 	"time"
 
@@ -11,6 +12,14 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
+
+// aiDetectionCategories is the category vocabulary accepted on the way into
+// ClickHouse. The column is LowCardinality(String), so extending it needs no
+// migration — but it must stay in step with aitargets.KnownCategories, which
+// the scan-report ingest enforces at the API boundary. This layer cannot
+// import that package without inverting the dependency, so
+// TestUpsertAIDetectionsAcceptsEveryKnownCategory holds the two in step.
+var aiDetectionCategories = []string{"harness", "assistant", "local_model"}
 
 // UpsertAIDetectionParams is one (organization, target, device, user, signal)
 // detection observation from a device-agent AI scan.
@@ -99,7 +108,7 @@ func (q *Queries) UpsertAIDetections(ctx context.Context, args []UpsertAIDetecti
 		if arg.Signal != "installed" && arg.Signal != "running" {
 			return nil, fmt.Errorf("validating ai detection: invalid signal %q", arg.Signal)
 		}
-		if arg.Category != "harness" && arg.Category != "local_model" {
+		if !slices.Contains(aiDetectionCategories, arg.Category) {
 			return nil, fmt.Errorf("validating ai detection: invalid category %q", arg.Category)
 		}
 		if arg.SeenAt.IsZero() {

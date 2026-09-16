@@ -56,11 +56,6 @@ func (r *IssuerMetadataRefresher) Refresh(ctx context.Context, candidate IssuerM
 	return r.refresh(ctx, existing, remotesessionmetrics.IssuerMetadataRefreshReasonOnUse)
 }
 
-// SetIssuerMetadataRefreshSeam replaces the AIM-260 seam so a test can observe the refresh request a 404 makes.
-func (e *SessionEnricher) SetIssuerMetadataRefreshSeam(fn func(context.Context, uuid.UUID)) {
-	e.requestIssuerMetadataRefresh = fn
-}
-
 // JWTAccessTokenTarget exposes the inputs to local JWT access-token enrichment to external tests.
 type JWTAccessTokenTarget struct {
 	IssuerID         uuid.UUID
@@ -112,3 +107,7 @@ func (e *SessionEnricher) JWTAccessToken(ctx context.Context, target JWTAccessTo
 	}
 	return out
 }
+
+// ClientRotationLeaseKey exposes the rotation lease key so a test can hold
+// the lease and drive the waiting side of a concurrent rotation.
+func ClientRotationLeaseKey(clientID uuid.UUID) string { return clientRotationLeaseKey(clientID) }

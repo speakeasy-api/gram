@@ -59,19 +59,46 @@ export function parseScopes(raw: string): string[] {
     .filter((scope) => scope.length > 0);
 }
 
+// DCR callers leave private_key_jwt disabled because a newly registered client
+// cannot already have Gram's JWKS attached. Existing-client settings opt in
+// after the key set has been attached through its dedicated endpoint.
 export function narrowTokenEndpointAuthMethod(
   value: string | null | undefined,
+  allowPrivateKeyJwt = false,
 ): CreateRemoteSessionClientFormTokenEndpointAuthMethod | undefined {
   if (
     value ===
       CreateRemoteSessionClientFormTokenEndpointAuthMethod.ClientSecretBasic ||
     value ===
       CreateRemoteSessionClientFormTokenEndpointAuthMethod.ClientSecretPost ||
-    value === CreateRemoteSessionClientFormTokenEndpointAuthMethod.None
+    value === CreateRemoteSessionClientFormTokenEndpointAuthMethod.None ||
+    (allowPrivateKeyJwt &&
+      value ===
+        CreateRemoteSessionClientFormTokenEndpointAuthMethod.PrivateKeyJwt)
   ) {
     return value;
   }
   return undefined;
+}
+
+export function isPrivateKeyJwtAuthMethod(
+  method: CreateRemoteSessionClientFormTokenEndpointAuthMethod | "",
+): boolean {
+  return (
+    method ===
+    CreateRemoteSessionClientFormTokenEndpointAuthMethod.PrivateKeyJwt
+  );
+}
+
+// The server retains an existing secret when this update omits clientSecret.
+// Never rotate a dormant secret while private_key_jwt is selected, even if a
+// value was typed before switching authentication methods in the form.
+export function clientSecretUpdateValue(
+  method: CreateRemoteSessionClientFormTokenEndpointAuthMethod | "",
+  secret: string,
+): string | undefined {
+  if (isPrivateKeyJwtAuthMethod(method)) return undefined;
+  return secret.trim() || undefined;
 }
 
 // Picks the preferred auth method from the issuer's advertised list.
@@ -82,7 +109,10 @@ export function narrowTokenEndpointAuthMethod(
 // Method provided."). This fallback was the pre-#2910 server-side default.
 export function pickPreferredAuthMethod(
   supported: string[],
-): CreateRemoteSessionClientFormTokenEndpointAuthMethod {
+): Exclude<
+  CreateRemoteSessionClientFormTokenEndpointAuthMethod,
+  "private_key_jwt"
+> {
   const { ClientSecretBasic, ClientSecretPost, None } =
     CreateRemoteSessionClientFormTokenEndpointAuthMethod;
   for (const preferred of [ClientSecretBasic, ClientSecretPost, None]) {

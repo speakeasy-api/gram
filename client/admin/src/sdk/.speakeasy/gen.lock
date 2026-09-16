@@ -32,6 +32,7 @@ trackedFiles:
   src/core.ts: {}
   src/funcs/adminBulkUpdateAccountType.ts: {}
   src/funcs/adminCancelStripeSubscription.ts: {}
+  src/funcs/adminClearOrganizationDirectoryHandoff.ts: {}
   src/funcs/adminCreateGlobalIssuer.ts: {}
   src/funcs/adminCreateOrganization.ts: {}
   src/funcs/adminDeleteGlobalIssuer.ts: {}
@@ -46,6 +47,7 @@ trackedFiles:
   src/funcs/adminGetInferenceSpendHistory.ts: {}
   src/funcs/adminGetOrganization.ts: {}
   src/funcs/adminGetOrganizationChatAnalysisSettings.ts: {}
+  src/funcs/adminGetOrganizationDirectoryHandoff.ts: {}
   src/funcs/adminGetOrganizationFeatures.ts: {}
   src/funcs/adminGetOrganizationStats.ts: {}
   src/funcs/adminGetPaygBillingSummary.ts: {}
@@ -68,6 +70,7 @@ trackedFiles:
   src/funcs/adminServeImage.ts: {}
   src/funcs/adminSetInferenceKeyMonthlyLimit.ts: {}
   src/funcs/adminSetOrganizationChatAnalysisSettings.ts: {}
+  src/funcs/adminSetOrganizationDirectoryHandoff.ts: {}
   src/funcs/adminSetOrganizationFeature.ts: {}
   src/funcs/adminSetStripeCustomer.ts: {}
   src/funcs/adminStartTrial.ts: {}
@@ -115,8 +118,11 @@ trackedFiles:
   src/models/components/auditlog.ts: {}
   src/models/components/bulkupdateaccounttyperequestbody.ts: {}
   src/models/components/cancelstripesubscriptionrequestbody.ts: {}
+  src/models/components/clearorganizationdirectoryhandoffrequestbody.ts: {}
   src/models/components/createorganizationrequestbody.ts: {}
   src/models/components/createremotesessionissuerform.ts: {}
+  src/models/components/directoryhandoff.ts: {}
+  src/models/components/directoryhandoffresult.ts: {}
   src/models/components/disableorganizationrequestbody.ts: {}
   src/models/components/enableorganizationrequestbody.ts: {}
   src/models/components/extendtrialrequestbody.ts: {}
@@ -142,6 +148,7 @@ trackedFiles:
   src/models/components/riskidrequestbody.ts: {}
   src/models/components/setinferencekeymonthlylimitrequestbody.ts: {}
   src/models/components/setorganizationchatanalysissettingsrequestbody.ts: {}
+  src/models/components/setorganizationdirectoryhandoffrequestbody.ts: {}
   src/models/components/setorganizationfeaturerequestbody.ts: {}
   src/models/components/setstripecustomerrequestbody.ts: {}
   src/models/components/starttrialrequestbody.ts: {}
@@ -163,6 +170,7 @@ trackedFiles:
   src/models/operations/admingetinferencespendhistory.ts: {}
   src/models/operations/admingetorganization.ts: {}
   src/models/operations/admingetorganizationchatanalysissettings.ts: {}
+  src/models/operations/admingetorganizationdirectoryhandoff.ts: {}
   src/models/operations/admingetorganizationfeatures.ts: {}
   src/models/operations/admingetpaygbillingsummary.ts: {}
   src/models/operations/admingetproject.ts: {}
@@ -179,6 +187,7 @@ trackedFiles:
   src/react-query/_types.ts: {}
   src/react-query/adminBulkUpdateAccountType.ts: {}
   src/react-query/adminCancelStripeSubscription.ts: {}
+  src/react-query/adminClearOrganizationDirectoryHandoff.ts: {}
   src/react-query/adminCreateGlobalIssuer.ts: {}
   src/react-query/adminCreateOrganization.ts: {}
   src/react-query/adminDeleteGlobalIssuer.ts: {}
@@ -200,6 +209,8 @@ trackedFiles:
   src/react-query/adminGetOrganization.ts: {}
   src/react-query/adminGetOrganizationChatAnalysisSettings.core.ts: {}
   src/react-query/adminGetOrganizationChatAnalysisSettings.ts: {}
+  src/react-query/adminGetOrganizationDirectoryHandoff.core.ts: {}
+  src/react-query/adminGetOrganizationDirectoryHandoff.ts: {}
   src/react-query/adminGetOrganizationStats.core.ts: {}
   src/react-query/adminGetOrganizationStats.ts: {}
   src/react-query/adminGetPaygBillingSummary.core.ts: {}
@@ -236,6 +247,7 @@ trackedFiles:
   src/react-query/adminServeImage.ts: {}
   src/react-query/adminSetInferenceKeyMonthlyLimit.ts: {}
   src/react-query/adminSetOrganizationChatAnalysisSettings.ts: {}
+  src/react-query/adminSetOrganizationDirectoryHandoff.ts: {}
   src/react-query/adminSetStripeCustomer.ts: {}
   src/react-query/adminStartTrial.ts: {}
   src/react-query/adminTriggerOrganizationChatAnalysis.ts: {}
@@ -278,6 +290,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  adminClearOrganizationDirectoryHandoff:
+    speakeasy-default-admin-clear-organization-directory-handoff:
+      requestBody:
+        application/json: {"organization_id": "<id>"}
+      responses:
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   adminCreateGlobalIssuer:
     speakeasy-default-admin-create-global-issuer:
       requestBody:
@@ -502,6 +523,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  adminGetOrganizationDirectoryHandoff:
+    speakeasy-default-admin-get-organization-directory-handoff:
+      parameters:
+        query:
+          organization_id: "<id>"
+      responses:
+        "200":
+          application/json: {"workos_environment": "production"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   adminGetOrganizationFeatures:
     speakeasy-default-admin-get-organization-features:
       parameters:
@@ -782,6 +815,17 @@ examples:
       responses:
         "200":
           application/json: {"business_memory_daily_cap": 982419, "business_memory_enabled": false, "is_default": false, "organization_id": "<id>", "work_units_daily_cap": 119468, "work_units_enabled": true}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  adminSetOrganizationDirectoryHandoff:
+    speakeasy-default-admin-set-organization-directory-handoff:
+      requestBody:
+        application/json: {"organization_id": "<id>", "scim_base_url": "https://energetic-accountability.com", "scim_token": "<value>"}
+      responses:
+        "200":
+          application/json: {"organization_id": "<id>", "scim_base_url": "https://profitable-government.org/", "set_by": "<value>", "token_fingerprint": "<value>", "updated_at": "2026-02-21T11:32:03.072Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":

@@ -6,38 +6,38 @@ import (
 
 const deviceAgentAiScanTargetPrefix = "device_agent_ai_scan_target"
 
-// DeviceAgentAiScanTarget identifies a Shadow AI scan target in an
+// AiScanTarget identifies a Shadow AI scan target in an
 // organization's list. The table is keyed by (organization_id, id), so the
 // URN id is the two values joined with a slash (e.g. "org_123/chatgpt").
-type DeviceAgentAiScanTarget struct {
+type AiScanTarget struct {
 	ID string
 }
 
-func NewDeviceAgentAiScanTarget(organizationID string, targetID string) DeviceAgentAiScanTarget {
-	return DeviceAgentAiScanTarget{ID: organizationID + "/" + targetID}
+func NewAiScanTarget(organizationID string, targetID string) AiScanTarget {
+	return AiScanTarget{ID: organizationID + "/" + targetID}
 }
 
-func ParseDeviceAgentAiScanTarget(value string) (DeviceAgentAiScanTarget, error) {
+func ParseAiScanTarget(value string) (AiScanTarget, error) {
 	id, err := settingsURNParse(deviceAgentAiScanTargetPrefix, value)
 	if err != nil {
-		return DeviceAgentAiScanTarget{}, err
+		return AiScanTarget{}, err
 	}
-	return DeviceAgentAiScanTarget{ID: id}, nil
+	return AiScanTarget{ID: id}, nil
 }
 
-func (u DeviceAgentAiScanTarget) IsZero() bool {
+func (u AiScanTarget) IsZero() bool {
 	return u.ID == ""
 }
 
-func (u DeviceAgentAiScanTarget) String() string {
+func (u AiScanTarget) String() string {
 	return settingsURNString(deviceAgentAiScanTargetPrefix, u.ID)
 }
 
-func (u DeviceAgentAiScanTarget) MarshalJSON() ([]byte, error) {
+func (u AiScanTarget) MarshalJSON() ([]byte, error) {
 	return settingsURNMarshalJSON(deviceAgentAiScanTargetPrefix, u.ID)
 }
 
-func (u *DeviceAgentAiScanTarget) UnmarshalJSON(data []byte) error {
+func (u *AiScanTarget) UnmarshalJSON(data []byte) error {
 	id, err := settingsURNUnmarshalJSON(deviceAgentAiScanTargetPrefix, data)
 	if err != nil {
 		return err
@@ -46,11 +46,11 @@ func (u *DeviceAgentAiScanTarget) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (u *DeviceAgentAiScanTarget) Scan(value any) error {
+func (u *AiScanTarget) Scan(value any) error {
 	if value == nil {
 		return nil
 	}
-	id, err := settingsURNScan(deviceAgentAiScanTargetPrefix, "DeviceAgentAiScanTarget", value)
+	id, err := settingsURNScan(deviceAgentAiScanTargetPrefix, "AiScanTarget", value)
 	if err != nil {
 		return err
 	}
@@ -58,15 +58,15 @@ func (u *DeviceAgentAiScanTarget) Scan(value any) error {
 	return nil
 }
 
-func (u DeviceAgentAiScanTarget) Value() (driver.Value, error) {
+func (u AiScanTarget) Value() (driver.Value, error) {
 	return settingsURNValue(deviceAgentAiScanTargetPrefix, u.ID)
 }
 
-func (u DeviceAgentAiScanTarget) MarshalText() ([]byte, error) {
+func (u AiScanTarget) MarshalText() ([]byte, error) {
 	return settingsURNMarshalText(deviceAgentAiScanTargetPrefix, u.ID)
 }
 
-func (u *DeviceAgentAiScanTarget) UnmarshalText(text []byte) error {
+func (u *AiScanTarget) UnmarshalText(text []byte) error {
 	id, err := settingsURNUnmarshalText(deviceAgentAiScanTargetPrefix, text)
 	if err != nil {
 		return err

@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/urls"
 )
 
 // proxyRegisterMaxBodyBytes caps both the inbound request body and the upstream
@@ -35,11 +36,20 @@ type ProxyRegisterRequest struct {
 	TokenEndpointAuthMethod *string `json:"token_endpoint_auth_method,omitempty"`
 }
 
+// ProxyRegisterResponse is what a dynamic registration produced. The wire form
+// carries the issuer's issuance and expiry stamps as RFC 3339 strings so the
+// dashboard can hand them back on the create call; the timestamp fields are
+// the same values for server-side callers that persist the client directly.
 type ProxyRegisterResponse struct {
 	ClientID                string             `json:"client_id"`
 	ClientSecret            string             `json:"client_secret,omitempty"`
+	ClientIDIssuedAt        pgtype.Timestamptz `json:"-"`
 	ClientSecretExpiresAt   pgtype.Timestamptz `json:"-"`
 	TokenEndpointAuthMethod string             `json:"token_endpoint_auth_method,omitempty"`
+	// ClientIDIssuedAtRFC3339 and ClientSecretExpiresAtRFC3339 are the wire
+	// renderings of the timestamp fields; empty when the issuer reported none.
+	ClientIDIssuedAtRFC3339      string `json:"client_id_issued_at,omitempty"`
+	ClientSecretExpiresAtRFC3339 string `json:"client_secret_expires_at,omitempty"`
 }
 
 // DynamicClientRegistrationError is retained as the remotesessions-facing name
@@ -81,8 +91,17 @@ func RegisterDynamicClient(ctx context.Context, policy *guardian.Policy, serverU
 		return ProxyRegisterResponse{}, fmt.Errorf("dynamic client registration is not configured")
 	}
 
+	// The response carries a client secret, so the endpoint must be HTTPS,
+	// with the RFC 8252 loopback exception for local development and tests
+	// (guardian's egress policy blocks loopback in production regardless).
+	// This is the one choke point for both the dashboard's proxy registration
+	// and the rotator's re-registration, which posts under the system
+	// principal to whatever endpoint the issuer row carries.
+	if !urls.IsAbsoluteHTTPSOrLoopback(request.RegistrationEndpoint) {
+		return ProxyRegisterResponse{}, ErrInvalidDynamicClientRegistrationEndpoint
+	}
 	endpoint, err := url.Parse(request.RegistrationEndpoint)
-	if err != nil || (endpoint.Scheme != "http" && endpoint.Scheme != "https") || endpoint.Host == "" {
+	if err != nil || endpoint.Host == "" {
 		return ProxyRegisterResponse{}, ErrInvalidDynamicClientRegistrationEndpoint
 	}
 	recordFailure := func(err error) {
@@ -180,15 +199,30 @@ func RegisterDynamicClient(ctx context.Context, policy *guardian.Policy, serverU
 		recordFailure(invalidErr)
 		return ProxyRegisterResponse{}, invalidErr
 	}
+	// RFC 7591 §3.2.1: client_secret_expires_at of 0 means the secret does not
+	// expire, and an absent client_id_issued_at means the issuer did not say.
 	clientSecretExpiresAt := pgtype.Timestamptz{}
+	clientSecretExpiresAtRFC3339 := ""
 	if dcrResp.ClientSecretExpiresAt > 0 {
-		clientSecretExpiresAt = conv.ToPGTimestamptz(time.Unix(dcrResp.ClientSecretExpiresAt, 0).UTC())
+		expiresAt := time.Unix(dcrResp.ClientSecretExpiresAt, 0).UTC()
+		clientSecretExpiresAt = conv.ToPGTimestamptz(expiresAt)
+		clientSecretExpiresAtRFC3339 = expiresAt.Format(time.RFC3339)
+	}
+	clientIDIssuedAt := pgtype.Timestamptz{}
+	clientIDIssuedAtRFC3339 := ""
+	if dcrResp.ClientIDIssuedAt > 0 {
+		issuedAt := time.Unix(dcrResp.ClientIDIssuedAt, 0).UTC()
+		clientIDIssuedAt = conv.ToPGTimestamptz(issuedAt)
+		clientIDIssuedAtRFC3339 = issuedAt.Format(time.RFC3339)
 	}
 	return ProxyRegisterResponse{
-		ClientID:                dcrResp.ClientID,
-		ClientSecret:            dcrResp.ClientSecret,
-		ClientSecretExpiresAt:   clientSecretExpiresAt,
-		TokenEndpointAuthMethod: dcrResp.TokenEndpointAuthMethod,
+		ClientID:                     dcrResp.ClientID,
+		ClientSecret:                 dcrResp.ClientSecret,
+		ClientIDIssuedAt:             clientIDIssuedAt,
+		ClientSecretExpiresAt:        clientSecretExpiresAt,
+		TokenEndpointAuthMethod:      dcrResp.TokenEndpointAuthMethod,
+		ClientIDIssuedAtRFC3339:      clientIDIssuedAtRFC3339,
+		ClientSecretExpiresAtRFC3339: clientSecretExpiresAtRFC3339,
 	}, nil
 }
 

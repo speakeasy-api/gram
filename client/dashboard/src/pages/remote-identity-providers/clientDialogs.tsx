@@ -4,6 +4,8 @@ import { invalidateAllOrganizationRemoteSessionClientSessions } from "@gram/clie
 import { invalidateAllOrganizationRemoteSessionClients } from "@gram/client/react-query/organizationRemoteSessionClients.js";
 import { invalidateAllOrganizationRemoteSessionIssuers } from "@gram/client/react-query/organizationRemoteSessionIssuers.js";
 import { useRevokeAllOrganizationRemoteSessionClientSessionsMutation } from "@gram/client/react-query/revokeAllOrganizationRemoteSessionClientSessions.js";
+import { useRotateOrganizationRemoteSessionClientMutation } from "@gram/client/react-query/rotateOrganizationRemoteSessionClient.js";
+import { invalidateAllOrganizationRemoteSessionClient } from "@gram/client/react-query/organizationRemoteSessionClient.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ConfirmDialog } from "./ConfirmDialog";
@@ -120,6 +122,73 @@ export function RevokeAllSessionsDialog({
       onConfirm={() =>
         revokeAll.mutate({
           request: { clientId },
+        })
+      }
+    />
+  );
+}
+
+// RotateClientDialog confirms re-registering a client with its issuer in
+// place: the client_id and secret are replaced, the row and its attachments
+// stay, and every session minted against the old client_id is revoked.
+export function RotateClientDialog({
+  clientId,
+  clientLabel,
+  onClose,
+}: {
+  clientId: string;
+  clientLabel: string;
+  onClose: () => void;
+}): JSX.Element {
+  const queryClient = useQueryClient();
+  // isFetching, not isLoading: a reopened dialog has cached preflight data
+  // while it refetches, and a second rotation must not be confirmed against
+  // the count from before the first one.
+  const { data: preflight, isFetching } =
+    useOrganizationRemoteSessionClientDeletePreflight({ id: clientId });
+  const sessionCount = preflight?.sessionCount ?? 0;
+
+  const rotate = useRotateOrganizationRemoteSessionClientMutation({
+    onSuccess: async () => {
+      await Promise.all([
+        invalidateAllOrganizationRemoteSessionClient(queryClient, {
+          refetchType: "all",
+        }),
+        invalidateAllOrganizationRemoteSessionClients(queryClient, {
+          refetchType: "all",
+        }),
+        invalidateAllOrganizationRemoteSessionClientSessions(queryClient, {
+          refetchType: "all",
+        }),
+      ]);
+      toast.success("Client re-registered with the identity provider");
+      onClose();
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to rotate client",
+      );
+    },
+  });
+
+  return (
+    <ConfirmDialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+      title={`Rotate client "${clientLabel}"?`}
+      description="Gram registers a new client with the identity provider and replaces this client's ID and secret in place. Its attachments are kept, but every session minted against the old client is revoked, so users reconnect once."
+      confirmLabel="Rotate client"
+      isPending={rotate.isPending}
+      impact={{
+        summary: `${sessionCount} ${sessionCount === 1 ? "session" : "sessions"} will be revoked.`,
+        mcpServerNames: preflight?.mcpServerNames,
+        isLoading: isFetching,
+      }}
+      onConfirm={() =>
+        rotate.mutate({
+          request: { riskIDRequestBody: { id: clientId } },
         })
       }
     />

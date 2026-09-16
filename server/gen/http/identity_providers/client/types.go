@@ -63,8 +63,13 @@ type CreateResponseBody struct {
 	// Whether an administrator confirmed the Okta groups claim filter is
 	// configured.
 	GroupsClaimConfirmed *bool   `form:"groups_claim_confirmed,omitempty" json:"groups_claim_confirmed,omitempty" xml:"groups_claim_confirmed,omitempty"`
-	CreatedAt            *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt            *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	DirectoryState       *string `form:"directory_state,omitempty" json:"directory_state,omitempty" xml:"directory_state,omitempty"`
+	// Number of groups observed in the linked WorkOS directory.
+	DirectoryGroupCount *int `form:"directory_group_count,omitempty" json:"directory_group_count,omitempty" xml:"directory_group_count,omitempty"`
+	// Number of users observed in the linked WorkOS directory.
+	DirectoryUserCount *int    `form:"directory_user_count,omitempty" json:"directory_user_count,omitempty" xml:"directory_user_count,omitempty"`
+	CreatedAt          *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt          *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // GetResponseBody is the type of the "identityProviders" service "get"
@@ -1454,8 +1459,13 @@ type IdentityProviderConnectionResponseBody struct {
 	// Whether an administrator confirmed the Okta groups claim filter is
 	// configured.
 	GroupsClaimConfirmed *bool   `form:"groups_claim_confirmed,omitempty" json:"groups_claim_confirmed,omitempty" xml:"groups_claim_confirmed,omitempty"`
-	CreatedAt            *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt            *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	DirectoryState       *string `form:"directory_state,omitempty" json:"directory_state,omitempty" xml:"directory_state,omitempty"`
+	// Number of groups observed in the linked WorkOS directory.
+	DirectoryGroupCount *int `form:"directory_group_count,omitempty" json:"directory_group_count,omitempty" xml:"directory_group_count,omitempty"`
+	// Number of users observed in the linked WorkOS directory.
+	DirectoryUserCount *int    `form:"directory_user_count,omitempty" json:"directory_user_count,omitempty" xml:"directory_user_count,omitempty"`
+	CreatedAt          *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt          *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // IdentityProviderApplicationResponseBody is used to define fields on response
@@ -1544,6 +1554,9 @@ type IdentityProviderPrintedValueResponseBody struct {
 	Label    *string `form:"label,omitempty" json:"label,omitempty" xml:"label,omitempty"`
 	Value    *string `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
 	Copyable *bool   `form:"copyable,omitempty" json:"copyable,omitempty" xml:"copyable,omitempty"`
+	// Whether the dashboard must conceal this value behind an explicit reveal
+	// control.
+	Secret *bool `form:"secret,omitempty" json:"secret,omitempty" xml:"secret,omitempty"`
 }
 
 // IdentityProviderExpectedValueResponseBody is used to define fields on
@@ -1658,6 +1671,9 @@ func NewCreateIdentityProviderConnectionOK(body *CreateResponseBody) *identitypr
 		SignInConnectionID:   body.SignInConnectionID,
 		GroupsSource:         body.GroupsSource,
 		GroupsClaimConfirmed: body.GroupsClaimConfirmed,
+		DirectoryState:       body.DirectoryState,
+		DirectoryGroupCount:  body.DirectoryGroupCount,
+		DirectoryUserCount:   body.DirectoryUserCount,
 		CreatedAt:            *body.CreatedAt,
 		UpdatedAt:            *body.UpdatedAt,
 	}
@@ -2880,6 +2896,11 @@ func ValidateCreateResponseBody(body *CreateResponseBody) (err error) {
 	if body.GroupsSource != nil {
 		if !(*body.GroupsSource == "token" || *body.GroupsSource == "directory") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.groups_source", *body.GroupsSource, []any{"token", "directory"}))
+		}
+	}
+	if body.DirectoryState != nil {
+		if !(*body.DirectoryState == "configured" || *body.DirectoryState == "pending_validation" || *body.DirectoryState == "passed" || *body.DirectoryState == "failed") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.directory_state", *body.DirectoryState, []any{"configured", "pending_validation", "passed", "failed"}))
 		}
 	}
 	if body.CreatedAt != nil {
@@ -4724,8 +4745,8 @@ func ValidateIdentityProviderCapabilityReadResponseBody(body *IdentityProviderCa
 		err = goa.MergeErrors(err, goa.MissingFieldError("ok", "body"))
 	}
 	if body.Resource != nil {
-		if !(*body.Resource == "groups" || *body.Resource == "users" || *body.Resource == "apps" || *body.Resource == "authorization_servers" || *body.Resource == "sign_in_application" || *body.Resource == "sign_in_connection") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource", *body.Resource, []any{"groups", "users", "apps", "authorization_servers", "sign_in_application", "sign_in_connection"}))
+		if !(*body.Resource == "groups" || *body.Resource == "users" || *body.Resource == "apps" || *body.Resource == "authorization_servers" || *body.Resource == "sign_in_application" || *body.Resource == "sign_in_connection" || *body.Resource == "directory_application" || *body.Resource == "directory_connection" || *body.Resource == "directory_groups" || *body.Resource == "directory_users") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource", *body.Resource, []any{"groups", "users", "apps", "authorization_servers", "sign_in_application", "sign_in_connection", "directory_application", "directory_connection", "directory_groups", "directory_users"}))
 		}
 	}
 	return
@@ -4796,6 +4817,11 @@ func ValidateIdentityProviderConnectionResponseBody(body *IdentityProviderConnec
 	if body.GroupsSource != nil {
 		if !(*body.GroupsSource == "token" || *body.GroupsSource == "directory") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.groups_source", *body.GroupsSource, []any{"token", "directory"}))
+		}
+	}
+	if body.DirectoryState != nil {
+		if !(*body.DirectoryState == "configured" || *body.DirectoryState == "pending_validation" || *body.DirectoryState == "passed" || *body.DirectoryState == "failed") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.directory_state", *body.DirectoryState, []any{"configured", "pending_validation", "passed", "failed"}))
 		}
 	}
 	if body.CreatedAt != nil {
@@ -4953,8 +4979,8 @@ func ValidateIdentityProviderSetupStepResponseBody(body *IdentityProviderSetupSt
 		}
 	}
 	if body.PortalIntent != nil {
-		if !(*body.PortalIntent == "sso") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.portal_intent", *body.PortalIntent, []any{"sso"}))
+		if !(*body.PortalIntent == "sso" || *body.PortalIntent == "dsync") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.portal_intent", *body.PortalIntent, []any{"sso", "dsync"}))
 		}
 	}
 	if body.State != nil {
@@ -4981,6 +5007,9 @@ func ValidateIdentityProviderPrintedValueResponseBody(body *IdentityProviderPrin
 	}
 	if body.Copyable == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("copyable", "body"))
+	}
+	if body.Secret == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("secret", "body"))
 	}
 	return
 }

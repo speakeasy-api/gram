@@ -64,13 +64,23 @@ SELECT
   o.groups_source,
   o.groups_claim_confirmed,
   o.sign_in_evidence,
+  o.directory_application_id,
+  o.directory_state,
+  o.directory_group_count,
+  o.directory_user_count,
+  o.directory_evidence,
   m.workos_id,
+  onboarding.directory_scim_base_url,
+  onboarding.directory_scim_token_encrypted,
+  onboarding.directory_workos_id,
   k.kid AS signing_key_kid
 FROM identity_provider_connections AS c
 JOIN okta_identity_provider_connections AS o
   ON o.identity_provider_connection_id = c.id
 JOIN organization_metadata AS m
   ON m.id = c.organization_id
+LEFT JOIN organization_onboarding AS onboarding
+  ON onboarding.organization_id = c.organization_id
 JOIN identity_provider_signing_keys AS k
   ON k.id = o.signing_key_id
   AND k.organization_id = c.organization_id
@@ -78,6 +88,57 @@ JOIN identity_provider_signing_keys AS k
   AND k.deleted IS FALSE
 WHERE c.organization_id = @organization_id
   AND c.deleted IS FALSE;
+
+-- name: LockOktaIdentityProviderDirectory :one
+SELECT c.id
+FROM identity_provider_connections AS c
+JOIN okta_identity_provider_connections AS o
+  ON o.identity_provider_connection_id = c.id
+WHERE c.organization_id = @organization_id
+  AND c.id = @identity_provider_connection_id
+  AND c.deleted IS FALSE
+FOR UPDATE OF o;
+
+-- name: UpdateOktaIdentityProviderDirectoryApplication :exec
+UPDATE okta_identity_provider_connections AS o
+SET
+  directory_application_id = @directory_application_id,
+  directory_state = CASE WHEN o.directory_state = 'passed' THEN o.directory_state ELSE 'configured' END,
+  directory_group_count = CASE WHEN o.directory_state = 'passed' THEN o.directory_group_count END,
+  directory_user_count = CASE WHEN o.directory_state = 'passed' THEN o.directory_user_count END,
+  directory_evidence = CASE WHEN o.directory_state = 'passed' THEN o.directory_evidence END,
+  updated_at = clock_timestamp()
+FROM identity_provider_connections AS c
+WHERE o.identity_provider_connection_id = c.id
+  AND c.organization_id = @organization_id
+  AND c.id = @identity_provider_connection_id
+  AND c.deleted IS FALSE;
+
+-- name: UpdateOktaIdentityProviderDirectoryVerification :execrows
+UPDATE okta_identity_provider_connections AS o
+SET
+  directory_state = @directory_state,
+  directory_group_count = @directory_group_count,
+  directory_user_count = @directory_user_count,
+  directory_evidence = @directory_evidence,
+  updated_at = clock_timestamp()
+FROM identity_provider_connections AS c
+WHERE o.identity_provider_connection_id = c.id
+  AND c.organization_id = @organization_id
+  AND c.id = @identity_provider_connection_id
+  AND c.deleted IS FALSE
+  AND o.directory_application_id = @directory_application_id
+  AND o.directory_evidence IS NOT DISTINCT FROM @previous_directory_evidence;
+
+-- name: CacheOrganizationDirectoryWorkOSID :exec
+UPDATE organization_onboarding
+SET
+  directory_workos_id = @directory_workos_id,
+  updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND directory_scim_base_url IS NOT NULL
+  AND directory_scim_token_encrypted IS NOT NULL
+  AND directory_workos_id IS NULL;
 
 -- name: UpdateOktaIdentityProviderSignInApplication :exec
 UPDATE okta_identity_provider_connections AS o

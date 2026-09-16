@@ -58,6 +58,11 @@ type OktaIdentityProviderConnection struct {
 	GroupsSource                    pgtype.Text
 	GroupsClaimConfirmed            bool
 	SignInEvidence                  []byte
+	DirectoryApplicationID          pgtype.Text
+	DirectoryState                  pgtype.Text
+	DirectoryGroupCount             pgtype.Int4
+	DirectoryUserCount              pgtype.Int4
+	DirectoryEvidence               []byte
 	CreatedAt                       pgtype.Timestamptz
 	UpdatedAt                       pgtype.Timestamptz
 }

@@ -289,6 +289,7 @@ var UpdateMetaMcpServerForm = Type("UpdateMetaMcpServerForm", func() {
 	})
 	Attribute("visibility", MetaMcpServerVisibility, "The visibility of the gateway. Omit to leave it unchanged.")
 	Attribute("network_access_mode", shared.NetworkAccessMode, "The allowed network surfaces. Omit to preserve the stored mode.")
+	Attribute("instructions", String, "Custom server instructions replace Gram's built-in gateway instructions in MCP initialize and server/discover responses. Omit to leave them unchanged; send an empty string to restore Gram's built-in gateway instructions. Limited to 10000 Unicode characters after removing NUL characters and trimming whitespace.")
 
 	Required("id", "name")
 })
@@ -311,6 +312,7 @@ var MetaMcpServer = Type("MetaMcpServer", func() {
 	})
 	Attribute("visibility", MetaMcpServerVisibility, "The visibility of the gateway.")
 	Attribute("network_access_mode", shared.NetworkAccessMode, "The effective allowed network surfaces. Existing NULL rows are public_only.")
+	Attribute("instructions", String, "Operator-authored server instructions returned in the gateway's MCP initialize response. Null when the gateway serves Gram's built-in instructions.")
 	Attribute("created_at", String, func() {
 		Description("When the meta MCP server was created")
 		Format(FormatDateTime)

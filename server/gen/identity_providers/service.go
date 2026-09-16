@@ -197,8 +197,13 @@ type IdentityProviderConnection struct {
 	// Whether an administrator confirmed the Okta groups claim filter is
 	// configured.
 	GroupsClaimConfirmed *bool
-	CreatedAt            string
-	UpdatedAt            string
+	DirectoryState       *string
+	// Number of groups observed in the linked WorkOS directory.
+	DirectoryGroupCount *int
+	// Number of users observed in the linked WorkOS directory.
+	DirectoryUserCount *int
+	CreatedAt          string
+	UpdatedAt          string
 }
 
 type IdentityProviderExpectedValue struct {
@@ -219,6 +224,9 @@ type IdentityProviderPrintedValue struct {
 	Label    string
 	Value    string
 	Copyable bool
+	// Whether the dashboard must conceal this value behind an explicit reveal
+	// control.
+	Secret bool
 }
 
 type IdentityProviderRepair struct {

@@ -29,6 +29,9 @@ type IdentityProviderConnectionSnapshot struct {
 	SignInState          string   `json:"sign_in_state,omitempty"`
 	GroupsSource         string   `json:"groups_source,omitempty"`
 	GroupsClaimConfirmed bool     `json:"groups_claim_confirmed"`
+	DirectoryState       string   `json:"directory_state,omitempty"`
+	DirectoryGroupCount  *int     `json:"directory_group_count,omitempty"`
+	DirectoryUserCount   *int     `json:"directory_user_count,omitempty"`
 }
 
 type LogIdentityProviderConnectionCreatedEvent struct {

@@ -461,17 +461,18 @@ func (s *Service) CommitServerIdentityConfiguration(ctx context.Context, payload
 				secretExpiresAt = registered.ClientSecretExpiresAt
 			}
 			client, createErr = txRepo.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
-				ProjectID:               conv.ToNullUUID(*authCtx.ProjectID),
-				OrganizationID:          conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
-				RemoteSessionIssuerID:   provider.ID,
-				ClientID:                clientID,
-				ClientSecretEncrypted:   secretCiphertext,
-				ClientIDIssuedAt:        now,
-				ClientSecretExpiresAt:   secretExpiresAt,
-				TokenEndpointAuthMethod: conv.PtrToPGText(authMethod),
-				Scope:                   plan.clientConfiguration.Scope,
-				Audience:                conv.PtrToPGText(plan.clientConfiguration.Audience),
-				LegacyCallbackUrl:       false,
+				ProjectID:                       conv.ToNullUUID(*authCtx.ProjectID),
+				OrganizationID:                  conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
+				RemoteSessionIssuerID:           provider.ID,
+				ClientID:                        clientID,
+				ClientSecretEncrypted:           secretCiphertext,
+				ClientIDIssuedAt:                now,
+				ClientSecretExpiresAt:           secretExpiresAt,
+				TokenEndpointAuthMethod:         conv.PtrToPGText(authMethod),
+				TokenEndpointAuthAudienceFormat: pgtype.Text{String: "", Valid: false},
+				Scope:                           plan.clientConfiguration.Scope,
+				Audience:                        conv.PtrToPGText(plan.clientConfiguration.Audience),
+				LegacyCallbackUrl:               false,
 			})
 		}
 		if createErr != nil {

@@ -1,3 +1,4 @@
+import type { RegistrationProvenance } from "@/lib/proxyRegisterUpstreamClient";
 import type { RemoteSessionIssuerDraft } from "@gram/client/models/components/remotesessionissuerdraft.js";
 
 export type DiscoveredOAuth = {
@@ -41,6 +42,10 @@ export type Context = {
     clientId: string;
     clientSecret: string;
     prefilled: boolean;
+    // Set when the credentials came from auto-registration; carried to the
+    // create call so the server knows when the issuer expires the client and
+    // can re-register it in place.
+    registration?: RegistrationProvenance;
   };
   envSlug: string | null;
   error: string | null;

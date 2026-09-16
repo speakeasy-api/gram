@@ -17,12 +17,12 @@ func TestDescribeSetupReturnsConnectStep(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 	connection := createConnection(t, ctx, ti, "https://acme.okta.com")
-	ctx = withExactScope(t, ctx, ti, authz.ScopeOrgRead)
+	ctx = withExactScope(t, ctx, ti, authz.ScopeOrgAdmin)
 
 	setup, err := ti.service.DescribeSetup(ctx, &gen.DescribeSetupPayload{SessionToken: nil, ApikeyToken: nil})
 	require.NoError(t, err)
 	require.Equal(t, connection.ID, setup.ConnectionID)
-	require.Len(t, setup.Steps, 2)
+	require.Len(t, setup.Steps, 3)
 	require.Equal(t, &gen.IdentityProviderSetupStep{
 		Key:   "connect",
 		Title: "Connect Okta",
@@ -35,9 +35,9 @@ func TestDescribeSetupReturnsConnectStep(t *testing.T) {
 		},
 		DeepLink: new("https://acme-admin.okta.com/admin/apps/active"),
 		PrintedValues: []*gen.IdentityProviderPrintedValue{
-			{Label: "JWKS URL", Value: connection.JwksURL, Copyable: true},
-			{Label: "API scopes", Value: "okta.apps.read okta.groups.read okta.users.read okta.apps.manage okta.authorizationServers.read okta.authorizationServers.manage", Copyable: true},
-			{Label: "Administrator roles", Value: "Read-only Administrator, Application Administrator", Copyable: false},
+			{Label: "JWKS URL", Value: connection.JwksURL, Copyable: true, Secret: false},
+			{Label: "API scopes", Value: "okta.apps.read okta.groups.read okta.groups.manage okta.users.read okta.apps.manage okta.authorizationServers.read okta.authorizationServers.manage", Copyable: true, Secret: false},
+			{Label: "Administrator roles", Value: "Read-only Administrator, Application Administrator", Copyable: false, Secret: false},
 		},
 		ExpectedValues: []*gen.IdentityProviderExpectedValue{{Key: "client_id", Label: "Client ID", Secret: false, CurrentValue: nil}},
 		Claims:         nil,
@@ -65,6 +65,19 @@ func TestDescribeSetupReturnsConnectStep(t *testing.T) {
 		State:        "not_started",
 		LastOutcome:  nil,
 	}, setup.Steps[1])
+	require.Equal(t, "directory", setup.Steps[2].Key)
+	require.Equal(t, new("dsync"), setup.Steps[2].PortalIntent)
+}
+
+func TestDescribeSetupRequiresOrganizationAdmin(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	createConnection(t, ctx, ti, "https://example.okta.com")
+	ctx = withExactScope(t, ctx, ti, authz.ScopeOrgRead)
+
+	_, err := ti.service.DescribeSetup(ctx, &gen.DescribeSetupPayload{SessionToken: nil, ApikeyToken: nil})
+	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
 func TestDescribeSetupBuildsDeepLinksOnlyForSupportedOktaTenants(t *testing.T) {
@@ -89,7 +102,7 @@ func TestDescribeSetupBuildsDeepLinksOnlyForSupportedOktaTenants(t *testing.T) {
 		createConnection(t, ctx, ti, testCase.tenantURL)
 		setup, err := ti.service.DescribeSetup(ctx, &gen.DescribeSetupPayload{SessionToken: nil, ApikeyToken: nil})
 		require.NoError(t, err)
-		require.Len(t, setup.Steps, 2)
+		require.Len(t, setup.Steps, 3)
 		require.Equal(t, testCase.deepLink, setup.Steps[0].DeepLink, testCase.tenantURL)
 		require.Nil(t, setup.Steps[1].DeepLink, testCase.tenantURL)
 	}
@@ -120,7 +133,7 @@ func TestDescribeSetupOmitsLastOutcomeWhenStoredEvidenceHasNoOutcome(t *testing.
 
 	setup, err := ti.service.DescribeSetup(ctx, &gen.DescribeSetupPayload{SessionToken: nil, ApikeyToken: nil})
 	require.NoError(t, err)
-	require.Len(t, setup.Steps, 2)
+	require.Len(t, setup.Steps, 3)
 	require.Nil(t, setup.Steps[0].LastOutcome)
 }
 

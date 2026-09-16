@@ -107,11 +107,15 @@ function PrintedValue({
   label,
   value,
   copyable,
+  secret,
 }: {
   label: string;
   value: string;
   copyable: boolean;
+  secret: boolean;
 }): JSX.Element {
+  const [revealed, setRevealed] = useState(!secret);
+
   return (
     <div className="space-y-1">
       <Text variant="small" muted>
@@ -119,8 +123,17 @@ function PrintedValue({
       </Text>
       <div className="border-border bg-background flex items-start gap-2 border p-2">
         <code className="text-foreground min-w-0 flex-1 font-mono text-xs break-all">
-          {value}
+          {revealed ? value : "************"}
         </code>
+        {secret ? (
+          <Button
+            variant="tertiary"
+            size="sm"
+            onClick={() => setRevealed((current) => !current)}
+          >
+            {revealed ? "Hide" : "Reveal"}
+          </Button>
+        ) : null}
         {copyable ? <CopyButton text={value} size="sm" /> : null}
       </div>
     </div>
@@ -266,8 +279,10 @@ function RepairBlock({
 
 function VerifyResultBlock({
   result,
+  pendingValidationTitle,
 }: {
   result: IdentityProviderVerifyResult;
+  pendingValidationTitle?: string;
 }): JSX.Element {
   const checkedAt = result.evidence.checkedAt.toLocaleTimeString([], {
     hour: "2-digit",
@@ -291,7 +306,10 @@ function VerifyResultBlock({
     );
   }
 
-  const copy = VERIFY_COPY[result.outcome];
+  let copy = VERIFY_COPY[result.outcome];
+  if (result.outcome === "pending_validation" && pendingValidationTitle) {
+    copy = { title: pendingValidationTitle, tone: "info" };
+  }
   // With nothing of our own to add, the server's sentence is the body rather
   // than a footnote under a sentence that says less.
   const body =
@@ -339,11 +357,29 @@ interface IdentityProviderSetupStepPanelProps {
   submitLabel?: string;
   /** Overrides the check's label, e.g. "Check the connection". */
   verifyLabel?: string;
+  /** Overrides the external-link action, e.g. "Open the Provisioning tab in Okta". */
+  deepLinkLabel?: string;
+  /** Gives pending validation context specific to this setup step. */
+  pendingValidationTitle?: string;
   /**
    * A step whose primary action carries no values still needs one — creating
    * the sign-in application is a submit with nothing in it.
    */
   allowSubmitWithoutValues?: boolean;
+  /**
+   * An action the step keeps offering after its sequence is done, for work the
+   * server redoes safely and that the administrator has reason to repeat —
+   * assigning groups added in Okta since the last submit. It sits below the
+   * numbered work rather than in it: it is not a step on the way anywhere, and
+   * numbering it would say the step is unfinished every time it is offered.
+   */
+  secondaryAction?: {
+    label: string;
+    /** When to reach for it, in the caller's own words. */
+    note?: string;
+    onClick: () => void;
+    isPending: boolean;
+  };
   /**
    * The round trip through the setup portal, for the part of this step our own
    * API cannot do. `note` says what the administrator carries there.
@@ -381,7 +417,10 @@ export function IdentityProviderSetupStepPanel({
   verifyUnavailable,
   submitLabel,
   verifyLabel,
+  deepLinkLabel,
+  pendingValidationTitle,
   allowSubmitWithoutValues = false,
+  secondaryAction,
   portal,
   repair,
 }: IdentityProviderSetupStepPanelProps): JSX.Element {
@@ -438,6 +477,7 @@ export function IdentityProviderSetupStepPanel({
             label={printed.label}
             value={printed.value}
             copyable={printed.copyable}
+            secret={printed.secret}
           />
         ))}
         {step.deepLink ? (
@@ -449,7 +489,8 @@ export function IdentityProviderSetupStepPanel({
               openSafeExternalUrl(step.deepLink!);
             }}
           >
-            {portal ? "Open the app in Okta" : "Connect in Okta"}
+            {deepLinkLabel ??
+              (portal ? "Open the app in Okta" : "Connect in Okta")}
             <ExternalLink className="h-3.5 w-3.5" />
           </Button>
         ) : null}
@@ -552,6 +593,24 @@ export function IdentityProviderSetupStepPanel({
 
       <ol className="space-y-5">{parts}</ol>
 
+      {secondaryAction ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={secondaryAction.isPending}
+            onClick={secondaryAction.onClick}
+          >
+            {secondaryAction.label}
+          </Button>
+          {secondaryAction.note ? (
+            <Text variant="small" muted>
+              {secondaryAction.note}
+            </Text>
+          ) : null}
+        </div>
+      ) : null}
+
       {verifyUnavailable ? (
         <Alert variant="info" alignTop>
           <div>
@@ -562,7 +621,10 @@ export function IdentityProviderSetupStepPanel({
       ) : null}
 
       {!verifyUnavailable && verifyResult ? (
-        <VerifyResultBlock result={verifyResult} />
+        <VerifyResultBlock
+          result={verifyResult}
+          pendingValidationTitle={pendingValidationTitle}
+        />
       ) : null}
 
       {step.repair && repair ? (

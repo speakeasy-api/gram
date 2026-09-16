@@ -414,6 +414,33 @@ func TestClient_ListDirectories_DecodesResponse(t *testing.T) {
 	require.Equal(t, "unlinked", dirs[1].State)
 }
 
+func TestClientListDirectoryGroupsReadsEveryPage(t *testing.T) {
+	t.Parallel()
+
+	var calls atomic.Int64
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path != "/directory_groups" || r.URL.Query().Get("directory") != "dir_1" || r.URL.Query().Get("limit") != "100" {
+			http.Error(w, "unexpected request", http.StatusBadRequest)
+			return
+		}
+		if calls.Add(1) == 1 {
+			_, _ = w.Write([]byte(`{"data":[{"id":"group_a","directory_id":"dir_1","organization_id":"org_1","name":"Engineering"}],"list_metadata":{"before":"","after":"next"}}`))
+			return
+		}
+		if r.URL.Query().Get("after") != "next" {
+			http.Error(w, "unexpected cursor", http.StatusBadRequest)
+			return
+		}
+		_, _ = w.Write([]byte(`{"data":[{"id":"group_b","directory_id":"dir_1","organization_id":"org_1","name":"Support"}],"list_metadata":{"before":"","after":""}}`))
+	})
+
+	groups, err := newClientWithHandler(t, handler).ListDirectoryGroups(t.Context(), "dir_1")
+	require.NoError(t, err)
+	require.Equal(t, []string{"group_a", "group_b"}, []string{groups[0].ID, groups[1].ID})
+	require.Equal(t, int64(2), calls.Load())
+}
+
 func TestClient_ListConnections_NotFoundError(t *testing.T) {
 	t.Parallel()
 	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

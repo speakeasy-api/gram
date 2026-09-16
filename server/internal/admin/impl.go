@@ -58,23 +58,26 @@ import (
 )
 
 type Service struct {
-	remoteSessions       *remotesessions.Service
-	assets               *assets.Service
-	tracer               trace.Tracer
-	logger               *slog.Logger
-	db                   *pgxpool.Pool
-	verifier             *Verifier
-	loginStates          cache.TypedCacheObject[LoginState]
-	oidc                 *OIDCClient
-	sessions             *SessionStore
-	allowedOrigins       []string
-	dashboardURL         *url.URL
-	supportHandoffIssuer supportHandoffIssuer
+	remoteSessions        *remotesessions.Service
+	assets                *assets.Service
+	tracer                trace.Tracer
+	logger                *slog.Logger
+	db                    *pgxpool.Pool
+	verifier              *Verifier
+	loginStates           cache.TypedCacheObject[LoginState]
+	oidc                  *OIDCClient
+	sessions              *SessionStore
+	allowedOrigins        []string
+	dashboardURL          *url.URL
+	supportHandoffIssuer  supportHandoffIssuer
+	applicationEncryption *encryption.Client
 
 	// workos creates organizations in the identity provider. Deployments with
 	// no WorkOS configuration get orgprovision.Unavailable, whose failure
 	// CreateOrganization reports rather than working around.
-	workos orgprovision.WorkOSOrganizationCreator
+	workos            orgprovision.WorkOSOrganizationCreator
+	directoryWorkOS   WorkOSDirectoryReader
+	workosEnvironment string
 
 	openRouter           TrialKeyReviver
 	openRouterSpendCap   OpenRouterSpendCapScheduler
@@ -178,9 +181,11 @@ func NewService(
 	db *pgxpool.Pool,
 	redisClient *redis.Client,
 	oidcClient *OIDCClient,
-	encryptionClient *encryption.Client,
+	adminEncryptionClient *encryption.Client,
+	applicationEncryptionClient *encryption.Client,
 	allowedOrigins []string,
-	workosClient orgprovision.WorkOSOrganizationCreator,
+	workosClient AdminWorkOS,
+	workosEnvironment string,
 	openRouter AdminOpenRouter,
 	trialNotifier trialemails.Notifier,
 	productFeatures *productfeatures.Client,
@@ -202,7 +207,7 @@ func NewService(
 			adminCache,
 			cache.SuffixNone,
 		),
-		encryptionClient,
+		adminEncryptionClient,
 	)
 
 	return &Service{remoteSessions: nil, assets: nil,
@@ -217,13 +222,16 @@ func NewService(
 		supportHandoffIssuer: supporthandoff.NewIssuer(
 			supporthandoff.NewStore(adminCache),
 		),
-		workos:               workosClient,
-		openRouter:           openRouter,
-		openRouterSpendCap:   openRouterSpendCap,
-		openRouterUsage:      openRouter,
-		productFeatures:      productFeatures,
-		chatAnalysisSignaler: chatAnalysisSignaler,
-		audit:                audit.NewLogger(),
+		applicationEncryption: applicationEncryptionClient,
+		workos:                workosClient,
+		directoryWorkOS:       workosClient,
+		workosEnvironment:     workosEnvironment,
+		openRouter:            openRouter,
+		openRouterSpendCap:    openRouterSpendCap,
+		openRouterUsage:       openRouter,
+		productFeatures:       productFeatures,
+		chatAnalysisSignaler:  chatAnalysisSignaler,
+		audit:                 audit.NewLogger(),
 		loginStates: cache.NewTypedObjectCache[LoginState](
 			logger.With(attr.SlogCacheNamespace("admin_login_state")),
 			adminCache,

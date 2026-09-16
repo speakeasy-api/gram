@@ -5,6 +5,7 @@ import {
   fireEvent,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -29,6 +30,7 @@ const mocks = vi.hoisted(() => ({
   listOrganizations: vi.fn<() => Promise<ListOrganizationsResult>>(),
   getOrganization: vi.fn<(idOrSlug: string) => Promise<AdminOrganization>>(),
   getOrganizationStats: vi.fn(),
+  directoryHandoffFetch: vi.fn(),
 }));
 
 // The write and the reads it stales. errorMessage stays real, because what the
@@ -108,6 +110,23 @@ function type(value: string): void {
   fireEvent.change(nameField(), { target: { value } });
 }
 
+// The dialog's second step. A create is the moment the operator has the WorkOS
+// tab open, so the dialog stays up on the directory handoff rather than closing
+// on the create.
+function handoffStep(): Promise<HTMLElement> {
+  return screen.findByRole("heading", { name: "Directory handoff" });
+}
+
+// The confirmation is written in two places at once, and they are not the same
+// statement: the dialog says what just happened to the operator reading it, and
+// the toolbar keeps the account of the write after the dialog is gone. Only the
+// toolbar one carries the title attribute, because only it is truncated.
+function outsideTheDialog(matches: HTMLElement[]): HTMLElement {
+  const found = matches.find((node) => !node.closest('[role="dialog"]'));
+  if (!found) throw new Error("every match is inside the dialog");
+  return found;
+}
+
 // A refusal that carries a readable body, which is what a deployment with no
 // WorkOS configuration answers with.
 function refusal(message: string): GramAdminError {
@@ -135,6 +154,26 @@ beforeEach(() => {
   mocks.createOrganization.mockResolvedValue(CREATED);
   mocks.listOrganizations.mockReset();
   mocks.listOrganizations.mockResolvedValue({ total: 0, organizations: [] });
+  // The step after the create reads the stored handoff on mount, through the
+  // generated client, so the stub is at the fetch layer. Unmocked it reaches
+  // the real fetch and the suite waits on a socket.
+  mocks.directoryHandoffFetch.mockReset();
+  mocks.directoryHandoffFetch.mockImplementation(
+    async (input: RequestInfo | URL) => {
+      const { pathname } = new URL((input as Request).url);
+      if (pathname !== "/admin/organization.directoryHandoff") {
+        throw new Error(`unexpected request to ${pathname}`);
+      }
+      return new Response(
+        JSON.stringify({ workos_environment: "production" }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    },
+  );
+  vi.stubGlobal("fetch", mocks.directoryHandoffFetch);
   mocks.getOrganization.mockReset();
   mocks.getOrganization.mockResolvedValue(CREATED);
   announce.mockReset();
@@ -151,10 +190,13 @@ beforeEach(() => {
   });
 });
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 describe("creating an organization", () => {
-  it("sends the name and closes", async () => {
+  it("sends the name and offers the directory handoff", async () => {
     await open();
     type("Placeholder New");
     // The button itself, once. Everything else here drives the form, so an
@@ -166,9 +208,10 @@ describe("creating an organization", () => {
         name: "Placeholder New",
       });
     });
-    await waitFor(() => {
-      expect(screen.queryByRole("dialog")).toBeNull();
-    });
+    // The dialog stays up on its second step, and the form it replaces is gone:
+    // a name field still on screen would invite a second organization.
+    await handoffStep();
+    expect(screen.queryByLabelText("Organization name")).toBeNull();
   });
 
   it("names the organization it created, on screen and out loud", async () => {
@@ -183,7 +226,13 @@ describe("creating an organization", () => {
     type("placeholder    new");
     submitForm();
 
-    await screen.findByText(/Created Placeholder New\./);
+    // Both copies: the one in the dialog the operator is looking at, and the
+    // one the toolbar keeps for after it closes.
+    const named = await screen.findAllByText(/Created Placeholder New\./);
+    expect(named).toHaveLength(2);
+    expect(
+      within(screen.getByRole("dialog")).getByText(/Created Placeholder New\./),
+    ).toBeTruthy();
     expect(screen.queryByText(/placeholder    new/)).toBeNull();
     await waitFor(() => {
       expect(announce).toHaveBeenCalledWith(
@@ -211,8 +260,8 @@ describe("creating an organization", () => {
 
     // The record is free tier with no trial, so a filtered list can be right
     // to leave it out and the confirmation cannot be "look at the table".
-    const line = await screen.findByText(
-      /may not show it under the current filters/,
+    const line = outsideTheDialog(
+      await screen.findAllByText(/may not show it under the current filters/),
     );
     // The line is truncated in a row that also holds a search box and the
     // filter chips, and the caveat is the half that gets clipped. This is an
@@ -445,16 +494,19 @@ describe("a refusal", () => {
         name: "Placeholder Newer",
       });
     });
-    await waitFor(() => {
-      expect(screen.queryByRole("dialog")).toBeNull();
-    });
+    await handoffStep();
   });
 
   it("does not sit beside the previous create's confirmation", async () => {
     await open();
     type("Placeholder New");
     submitForm();
-    await screen.findByText(/Created Placeholder New\./);
+    await handoffStep();
+
+    // Done is how the handoff step ends, and the trigger is unreachable until
+    // it does: the dialog holds the accessibility tree while it is open.
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
 
     mocks.createOrganization.mockRejectedValue(refusal(REASON));
     fireEvent.click(

@@ -45,6 +45,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
@@ -111,15 +112,19 @@ type RemoteLoginState struct {
 	// OrganizationID scopes the callback's client lookup so an organization-level
 	// client (project_id NULL) bound to this project's user_session_issuer
 	// resolves on the way back. Empty for in-flight states minted before it.
-	OrganizationID        string              `json:"organization_id,omitempty"`
-	UserSessionIssuerID   uuid.UUID           `json:"user_session_issuer_id"`
-	RemoteSessionClientID uuid.UUID           `json:"remote_session_client_id"`
-	TokenEndpoint         string              `json:"token_endpoint"`
-	RedirectURI           string              `json:"redirect_uri"`
-	CodeVerifier          string              `json:"code_verifier"`
-	Resource              string              `json:"resource,omitempty"`
-	Subject               *urn.SessionSubject `json:"subject,omitempty"`
-	McpSlug               string              `json:"mcp_slug"`
+	OrganizationID        string    `json:"organization_id,omitempty"`
+	UserSessionIssuerID   uuid.UUID `json:"user_session_issuer_id"`
+	RemoteSessionClientID uuid.UUID `json:"remote_session_client_id"`
+	TokenEndpoint         string    `json:"token_endpoint"`
+	// AssertionIssuer is the RFC 8414 issuer identifier captured with the
+	// authorization request. It is the default private_key_jwt audience. Empty
+	// for an in-flight state minted by a server from before AIM-156.
+	AssertionIssuer string              `json:"assertion_issuer,omitempty"`
+	RedirectURI     string              `json:"redirect_uri"`
+	CodeVerifier    string              `json:"code_verifier"`
+	Resource        string              `json:"resource,omitempty"`
+	Subject         *urn.SessionSubject `json:"subject,omitempty"`
+	McpSlug         string              `json:"mcp_slug"`
 	// RouteBase is "mcp" or "x/mcp" — drives the post-callback redirect
 	// to /<RouteBase>/{slug}/connect. Empty values fall back to "mcp"
 	// for in-flight states minted before this field landed.
@@ -209,10 +214,21 @@ type ChallengeManager struct {
 	// idTokens verifies the ID token a code exchange or refresh returns.
 	idTokens IDTokenVerifier
 
+	// assertions signs outbound private_key_jwt client authentication.
+	assertions TokenEndpointAssertionSigner
+
 	// issuerMetadata refreshes an issuer's stored metadata when a flow uses it; nil leaves the stored row as is.
 	issuerMetadata *IssuerMetadataRefresher
 	// enricher asks the issuer's userinfo and introspection endpoints about a grant.
 	enricher *SessionEnricher
+
+	// auditLogger records automatic registration rotations in the affected
+	// organization's audit feed, credited to the system principal.
+	auditLogger *audit.Logger
+
+	// rotator replaces a client registration the issuer no longer recognizes
+	// before the authorize redirect is minted.
+	rotator *ClientRotator
 }
 
 // RemoteGrant is a grant the remote login callback committed, keyed to the
@@ -250,6 +266,12 @@ func WithPrivateAuthorityValidator(validator PrivateAuthorityValidator) Challeng
 	}
 }
 
+// WithRegistrationAuditLogger records automatic client registration rotations
+// in the organization's audit feed, credited to the system principal.
+func WithRegistrationAuditLogger(auditLogger *audit.Logger) ChallengeManagerOption {
+	return func(m *ChallengeManager) { m.auditLogger = auditLogger }
+}
+
 // WithIDTokenVerifier enables identity capture from ID tokens on the exchange and the manager's refreshes.
 func WithIDTokenVerifier(verifier IDTokenVerifier) ChallengeManagerOption {
 	return func(m *ChallengeManager) { m.idTokens = verifier }
@@ -264,6 +286,10 @@ func WithIssuerMetadataRefresher(refresher *IssuerMetadataRefresher) ChallengeMa
 // cannot verify signed introspection responses.
 func WithSessionEnricher(enricher *SessionEnricher) ChallengeManagerOption {
 	return func(m *ChallengeManager) { m.enricher = enricher }
+}
+
+func WithTokenEndpointAssertionSigner(signer TokenEndpointAssertionSigner) ChallengeManagerOption {
+	return func(m *ChallengeManager) { m.assertions = signer }
 }
 
 func NewChallengeManager(
@@ -301,15 +327,20 @@ func NewChallengeManager(
 		privateAuthorityValidator: nil,
 		idTokens:                  NoIDTokenVerifier(),
 		enricher:                  nil,
+		auditLogger:               audit.NewLogger(),
+		rotator:                   nil,
+		assertions:                unavailableTokenEndpointAssertionSigner{},
 	}
 	for _, option := range options {
 		option(manager)
 	}
+	manager.revoker.assertions = manager.assertions
 	if manager.enricher == nil {
-		manager.enricher = NewSessionEnricher(logger, enc, policy, nil, nil)
+		manager.enricher = NewSessionEnricher(logger, enc, policy, nil, nil, manager.issuerMetadata)
 	}
 	// The manager's own refreshes restate identity with the same verifier.
-	manager.refresher = NewRefreshService(logger, meterProvider, db, enc, policy, cacheImpl, WithRefreshIDTokenVerifier(manager.idTokens), WithRefreshIssuerMetadataRefresher(manager.issuerMetadata), WithRefreshSessionEnricher(manager.enricher))
+	manager.refresher = NewRefreshService(logger, meterProvider, db, enc, policy, cacheImpl, WithRefreshIDTokenVerifier(manager.idTokens), WithRefreshIssuerMetadataRefresher(manager.issuerMetadata), WithRefreshSessionEnricher(manager.enricher), WithRefreshTokenEndpointAssertionSigner(manager.assertions))
+	manager.rotator = NewClientRotator(logger, db, enc, policy, cacheImpl, serverURL, manager.revoker, manager.auditLogger)
 	return manager
 }
 
@@ -357,6 +388,9 @@ type Client struct {
 
 	// IssuerIdentifier is the discovery document's issuer, else IssuerURL; what iss must equal.
 	IssuerIdentifier string
+	// ClientAssertionIssuer preserves the exact RFC 8414 issuer identifier for
+	// private_key_jwt aud claims, including a significant trailing slash.
+	ClientAssertionIssuer string
 
 	AuthorizationEndpoint string
 	TokenEndpoint         string
@@ -390,6 +424,40 @@ type Client struct {
 	// remote_sessions=true) so a client registered against the old
 	// oauth_proxy_servers URL keeps working without re-registration.
 	LegacyCallbackUrl bool
+
+	// IssuerRegistrationEndpoint is the RFC 7591 registration endpoint the
+	// client's issuer publishes, as discovery last refreshed it; empty when
+	// the issuer publishes none. A client whose issuer publishes no endpoint
+	// is never re-registered automatically, since Gram has nowhere to do it.
+	IssuerRegistrationEndpoint string
+
+	// ClientSecretExpiresAt is when the issuer said the client secret expires,
+	// nil when it reported no expiry or the value was never recorded.
+	ClientSecretExpiresAt *time.Time
+
+	// UpstreamRejectedAt is when the issuer's token endpoint last answered
+	// invalid_client for this client_id, nil while the registration is in good
+	// standing.
+	UpstreamRejectedAt *time.Time
+}
+
+// needsRegistrationRotation reports whether the client's upstream registration
+// should be replaced before sending a user to the authorize endpoint: the
+// issuer has rejected the client_id, or the secret it issued has expired. A
+// client whose issuer publishes no registration endpoint is never rotated
+// here, since Gram has nowhere to re-register it.
+func (c Client) needsRegistrationRotation(now time.Time) (RotationTrigger, bool) {
+	if c.IssuerRegistrationEndpoint == "" {
+		return "", false
+	}
+	switch {
+	case c.UpstreamRejectedAt != nil:
+		return RotationTriggerUpstreamRejected, true
+	case c.ClientSecretExpiresAt != nil && !c.ClientSecretExpiresAt.After(now):
+		return RotationTriggerSecretExpired, true
+	default:
+		return "", false
+	}
 }
 
 // standardScopes are appended when advertised: openid, email, profile for
@@ -430,6 +498,17 @@ func issuerIdentifier(metadata []byte, issuerURL string) string {
 	return strings.TrimRight(issuerURL, "/")
 }
 
+// clientAssertionIssuer is the RFC 8414 issuer identifier used as the default
+// private_key_jwt audience. Preserve the configured URL verbatim when no
+// discovery document is stored: a trailing slash is significant to audience
+// comparison (notably for Auth0 issuers).
+func clientAssertionIssuer(metadata []byte, issuerURL string) string {
+	if doc := rawDocumentIssuer(metadata); doc != "" && issuerURLsCanonicallyEqual(doc, issuerURL) {
+		return doc
+	}
+	return strings.TrimSpace(issuerURL)
+}
+
 // ListClients returns the joined client + issuer rows linked to a user
 // session issuer. Used by the consent renderer to materialise the
 // per-remote cards.
@@ -468,6 +547,7 @@ func (m *ChallengeManager) ListClients(
 			ResourceTosURL:                   conv.FromPGTextOrEmpty[string](r.ResourceTosUri),
 			IssuerURL:                        r.IssuerUrl,
 			IssuerIdentifier:                 issuerIdentifier(r.IssuerMetadata, r.IssuerUrl),
+			ClientAssertionIssuer:            clientAssertionIssuer(r.IssuerMetadata, r.IssuerUrl),
 			AuthorizationEndpoint:            conv.PtrValOr(conv.FromPGText[string](r.AuthorizationEndpoint), ""),
 			TokenEndpoint:                    conv.PtrValOr(conv.FromPGText[string](r.TokenEndpoint), ""),
 			ClientScope:                      r.ClientScope,
@@ -479,6 +559,9 @@ func (m *ChallengeManager) ListClients(
 			Audience:                                         conv.FromPGTextOrEmpty[string](r.ClientAudience),
 			Passthrough:                                      r.Passthrough,
 			LegacyCallbackUrl:                                r.LegacyCallbackUrl,
+			IssuerRegistrationEndpoint:                       conv.FromPGTextOrEmpty[string](r.IssuerRegistrationEndpoint),
+			ClientSecretExpiresAt:                            timestampPtr(r.ClientSecretExpiresAt),
+			UpstreamRejectedAt:                               timestampPtr(r.UpstreamRejectedAt),
 		})
 	}
 	return out, nil
@@ -768,6 +851,11 @@ func (m *ChallengeManager) mintAuthorization(
 		return "", fmt.Errorf("remote_session_issuer %s missing token_endpoint", client.IssuerSlug)
 	}
 
+	// A registration the issuer has stopped recognizing would send the user to
+	// an authorize page that errors without ever redirecting back. Replace it
+	// first, so the login proceeds under a client_id the issuer knows.
+	client = m.rotateRejectedRegistration(ctx, parent.OrganizationID, client)
+
 	stateID, err := randomToken(32)
 	if err != nil {
 		return "", fmt.Errorf("generate state: %w", err)
@@ -829,6 +917,7 @@ func (m *ChallengeManager) mintAuthorization(
 		UserSessionIssuerID:   parent.UserSessionIssuerID,
 		RemoteSessionClientID: client.ID,
 		TokenEndpoint:         client.TokenEndpoint,
+		AssertionIssuer:       client.ClientAssertionIssuer,
 		RedirectURI:           redirectURI,
 		CodeVerifier:          verifier,
 		Resource:              parent.Resource,
@@ -1005,7 +1094,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	client := clientRow.RemoteSessionClient
 
 	var clientSecret string
-	if client.ClientSecretEncrypted.Valid {
+	if client.ClientSecretEncrypted.Valid && client.TokenEndpointAuthMethod.String != string(TokenEndpointAuthMethodPrivateKeyJWT) {
 		decoded, derr := m.enc.Decrypt(client.ClientSecretEncrypted.String)
 		if derr != nil {
 			return none, oops.E(oops.CodeUnexpected, derr, "decrypt client secret").LogError(ctx, logger)
@@ -1018,7 +1107,31 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		return none, oops.E(oops.CodeUnauthorized, err, "the remote session client is misconfigured").LogError(ctx, logger)
 	}
 	audience := conv.FromPGTextOrEmpty[string](client.Audience)
-	tok, err := m.exchangeCode(ctx, state, client.ClientID, clientSecret, authMethod, audience, code)
+	assertionIssuer := state.AssertionIssuer
+	if authMethod == TokenEndpointAuthMethodPrivateKeyJWT && assertionIssuer == "" {
+		// Rolling-deploy compatibility: the prior binary could mint a login state
+		// without AssertionIssuer. The scoped client read above established
+		// authority; this id-only joined read only recovers its issuer metadata.
+		joined, jerr := queries.GetRemoteSessionClientWithIssuerByID(ctx, client.ID)
+		if jerr != nil {
+			return none, oops.E(oops.CodeUnexpected, jerr, "load the remote session client's assertion issuer").LogError(ctx, logger)
+		}
+		assertionIssuer = clientAssertionIssuer(joined.IssuerMetadata, joined.IssuerUrl)
+	}
+	assertionAudience, err := ResolveTokenEndpointAuthAudience(client.TokenEndpointAuthAudienceFormat.String, assertionIssuer, state.TokenEndpoint)
+	if err != nil && authMethod == TokenEndpointAuthMethodPrivateKeyJWT {
+		return none, oops.E(oops.CodeUnauthorized, err, "the remote session client's assertion audience is misconfigured").LogError(ctx, logger)
+	}
+	tok, err := m.exchangeCode(ctx, state, tokenEndpointClientAuth{
+		Method:                authMethod,
+		RemoteSessionClientID: client.ID,
+		OrganizationID:        client.OrganizationID.String,
+		JSONWebKeySetID:       client.JsonWebKeySetID.UUID,
+		ClientID:              client.ClientID,
+		ClientSecret:          clientSecret,
+		AssertionAudience:     assertionAudience,
+		AssertionSigner:       m.assertions,
+	}, audience, code)
 	if err != nil {
 		var oauthErr oautherr.RFC6749Error
 		if errors.As(err, &oauthErr) && oauthErr.Code == oautherr.CodeInvalidTarget {
@@ -1330,9 +1443,7 @@ func (m *ChallengeManager) HandleLegacyProxyCallback(w http.ResponseWriter, r *h
 func (m *ChallengeManager) exchangeCode(
 	ctx context.Context,
 	state RemoteLoginState,
-	externalClientID string,
-	clientSecret string,
-	authMethod TokenEndpointAuthMethod,
+	clientAuth tokenEndpointClientAuth,
 	audience string,
 	code string,
 ) (tokenResponse, error) {
@@ -1348,7 +1459,7 @@ func (m *ChallengeManager) exchangeCode(
 		form.Set("resource", state.Resource)
 	}
 
-	req, err := newTokenEndpointRequest(ctx, state.TokenEndpoint, form, authMethod, externalClientID, clientSecret)
+	req, err := newTokenEndpointRequest(ctx, state.TokenEndpoint, form, clientAuth)
 	if err != nil {
 		return tokenResponse{}, fmt.Errorf("new token request: %w", err)
 	}
@@ -1404,7 +1515,7 @@ const exchangeIssuerReadBudget = 2 * time.Second
 func (m *ChallengeManager) noteExchangeTokenEndpointMissing(ctx context.Context, logger *slog.Logger, clientRowID uuid.UUID, err error) {
 	var endpointErr *tokenEndpointError
 	var oauthErr oautherr.RFC6749Error
-	if m.issuerMetadata == nil || !errors.As(err, &endpointErr) || !tokenEndpointMissing(endpointErr.statusCode, errors.As(err, &oauthErr)) {
+	if m.issuerMetadata == nil || !errors.As(err, &endpointErr) || !upstreamEndpointMissing(endpointErr.statusCode, errors.As(err, &oauthErr)) {
 		return
 	}
 	statusCode := endpointErr.statusCode

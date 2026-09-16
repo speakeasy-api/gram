@@ -152,7 +152,12 @@ describe("OktaSignOnSection", () => {
         portalIntent: "sso",
         deepLink: "https://example-admin.okta.com/admin/app/oidc_client/abc",
         printedValues: [
-          { label: "Client ID", value: "0oaexampleclientid", copyable: true },
+          {
+            label: "Client ID",
+            value: "0oaexampleclientid",
+            copyable: true,
+            secret: false,
+          },
         ],
       }),
     );
