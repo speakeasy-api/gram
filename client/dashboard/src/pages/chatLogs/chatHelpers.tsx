@@ -117,6 +117,24 @@ export function matchShownInDescription(result: RiskResult): boolean {
   return Boolean(MATCH_DISPLAY_OVERRIDES[result.source]?.shownInDescription);
 }
 
+/** Whether a row has a sensitive span that reveal/hide actually toggles. A
+ * finding whose `match` the server withheld is still "sensitive", but nothing
+ * on screen is masked, so offering a reveal toggle for it is a dead control. */
+export function resultsAreMaskable(results: RiskResult[] | undefined): boolean {
+  return resultsAreSensitive(results) && getMatchStrings(results).length > 0;
+}
+
+/** Whether any finding matched message content the server withheld: without
+ * chat:read for this chat, risk.results.list returns the `<redacted len=N
+ * sha=…>` fingerprint in place of `match`, so there is no span to mark in the
+ * transcript. Callers announce that instead of rendering unmarked text, which
+ * otherwise reads as "nothing was flagged here". */
+export function hasHiddenMatch(results: RiskResult[] | undefined): boolean {
+  return (results ?? []).some(
+    (r) => matchIsMessageContent(r) && !r.match && Boolean(r.matchRedacted),
+  );
+}
+
 /** Distinct, non-empty match strings to highlight, longest first so a longer
  * secret wins over a substring of it. */
 export function getMatchStrings(results: RiskResult[] | undefined): string[] {

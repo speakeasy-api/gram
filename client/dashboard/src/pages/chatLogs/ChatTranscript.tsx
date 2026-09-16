@@ -80,6 +80,7 @@ import {
 import {
   getMatchStrings,
   distinctRiskCount,
+  resultsAreMaskable,
   resultsAreSensitive,
   useRowReveal,
 } from "./chatHelpers";
@@ -444,7 +445,7 @@ function UserMessageRow({
     (!!results && results.length > 0) ||
     row.attachments.some((attachment) => attachment.isRisk);
   const messageSensitive =
-    !!messageResults && resultsAreSensitive(messageResults);
+    !!messageResults && resultsAreMaskable(messageResults);
   const { revealed, setRevealed } = useRowReveal(messageSensitive);
   const decoration = ctx.rowDecoration?.([message.id]) ?? null;
   let attachmentOccurrenceOffset = 0;
@@ -559,7 +560,7 @@ function PromptAttachmentChip({
   const text = messageText(attachment.content);
   const hasDetailedResults = !!results && results.length > 0;
   const flagged = hasDetailedResults || attachment.isRisk;
-  const sensitive = hasDetailedResults && resultsAreSensitive(results);
+  const sensitive = hasDetailedResults && resultsAreMaskable(results);
   const { revealed, setRevealed } = useRowReveal(sensitive);
   const [expanded, setExpanded] = useState(flagged || activeOccurrence != null);
 
@@ -649,7 +650,7 @@ function AssistantMessageRow({
   const results = ctx.riskResultsByMessage.get(message.id);
   const text = messageText(message.content);
   const flagged = !!results && results.length > 0;
-  const sensitive = flagged && resultsAreSensitive(results);
+  const sensitive = flagged && resultsAreMaskable(results);
   const { revealed, setRevealed } = useRowReveal(sensitive);
   const decoration = ctx.rowDecoration?.([message.id]) ?? null;
 
