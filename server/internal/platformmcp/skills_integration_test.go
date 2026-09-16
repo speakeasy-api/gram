@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	skillsservice "github.com/speakeasy-api/gram/server/internal/skills"
 	skillsrepo "github.com/speakeasy-api/gram/server/internal/skills/repo"
+	"github.com/speakeasy-api/gram/server/internal/skills/skilldiff"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -252,24 +253,79 @@ func TestPlatformMCPSkillReadsAllowSkillReaderButWritesRequireSkillWrite(t *test
 	require.Equal(t, skill.ID.String(), read.Skill.ID)
 	require.Equal(t, manifest, read.LatestVersion.Content)
 
+	feedbackRow, err := queries.CreateSkillFeedback(ctx, skillsrepo.CreateSkillFeedbackParams{
+		ID: uuid.NullUUID{}, ProjectID: fixture.project.ID,
+		SkillID: uuid.NullUUID{UUID: skill.ID, Valid: true}, SkillVersionID: uuid.NullUUID{UUID: version.ID, Valid: true},
+		SkillName: skill.Name, Source: string(skillsservice.FeedbackSourceDev), Outcome: string(skillsservice.FeedbackOutcomeDidNotHelp),
+		Note: pgtype.Text{String: "Add an escalation step.", Valid: true}, SessionID: pgtype.Text{String: "private-session", Valid: true},
+		UserID: pgtype.Text{String: "private-user", Valid: true}, UserEmail: pgtype.Text{String: "private@example.test", Valid: true},
+	})
+	require.NoError(t, err)
+	proposedContent := skillsFixtureManifest("reader-visible", "Visible to a permitted reader.", "Read-only body with an escalation step.")
+	proposedDiff, err := skilldiff.Unified(manifest, proposedContent)
+	require.NoError(t, err)
+	suggestion, err := queries.CreateSkillEditSuggestion(ctx, skillsrepo.CreateSkillEditSuggestionParams{
+		Rationale: "Agents need an escalation step.", ScoredSessionCount: 1,
+		BaseVersionID: version.ID, ProjectID: fixture.project.ID, SkillID: skill.ID,
+	})
+	require.NoError(t, err)
+	change, err := queries.CreateSkillEditSuggestionChange(ctx, skillsrepo.CreateSkillEditSuggestionChangeParams{
+		ProposedDiff: proposedDiff, Rationale: suggestion.Rationale, Position: 0,
+		ProjectID: fixture.project.ID, SuggestionID: suggestion.ID,
+	})
+	require.NoError(t, err)
+	linked, err := queries.LinkSkillEditSuggestionFeedback(ctx, skillsrepo.LinkSkillEditSuggestionFeedbackParams{
+		ChangeID: change.ID, ProjectID: fixture.project.ID, FeedbackIds: []uuid.UUID{feedbackRow.ID},
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, linked)
+
 	feedback := callSkillsTool[ListSkillFeedbackOutput](t, ctx, fixture.session, "list_skill_feedback", map[string]any{
 		"project_slug": fixture.project.Slug,
 		"skill_id":     skill.ID.String(),
+		"limit":        1,
 	})
 	require.Equal(t, skill.ID.String(), feedback.SkillID)
-	require.Empty(t, feedback.Feedback)
+	require.EqualValues(t, 1, feedback.Counts.Total)
+	require.Len(t, feedback.Feedback, 1)
+	require.Equal(t, "Add an escalation step.", feedback.Feedback[0].Note)
+	feedbackJSON, err := json.Marshal(feedback)
+	require.NoError(t, err)
+	require.NotContains(t, string(feedbackJSON), "private-session")
+	require.NotContains(t, string(feedbackJSON), "private-user")
+	require.NotContains(t, string(feedbackJSON), "private@example.test")
 
 	suggestions := callSkillsTool[ListSkillSuggestionsOutput](t, ctx, fixture.session, "list_skill_suggestions", map[string]any{
 		"project_slug": fixture.project.Slug,
 		"skill_id":     skill.ID.String(),
 	})
-	require.Empty(t, suggestions.Suggestions)
+	require.EqualValues(t, 1, suggestions.TotalOpenCount)
+	require.Len(t, suggestions.Suggestions, 1)
+	require.Empty(t, suggestions.Suggestions[0].ProposedContent)
+	require.EqualValues(t, 1, suggestions.Suggestions[0].FeedbackCount)
+	require.Len(t, suggestions.Suggestions[0].Changes, 1)
+	require.Equal(t, change.ID.String(), suggestions.Suggestions[0].Changes[0].ID)
 
-	missingSuggestionFeedback := callSkillsRefusal(t, ctx, fixture.session, "list_skill_suggestion_feedback", map[string]any{
-		"project_slug": fixture.project.Slug,
-		"change_id":    uuid.NewString(),
+	withProposedContent := callSkillsTool[ListSkillSuggestionsOutput](t, ctx, fixture.session, "list_skill_suggestions", map[string]any{
+		"project_slug":             fixture.project.Slug,
+		"skill_id":                 skill.ID.String(),
+		"include_proposed_content": true,
 	})
-	require.Equal(t, "not_found", missingSuggestionFeedback.Code)
+	require.Len(t, withProposedContent.Suggestions, 1)
+	require.Equal(t, proposedContent, withProposedContent.Suggestions[0].ProposedContent)
+
+	suggestionFeedback := callSkillsTool[ListSkillSuggestionFeedbackOutput](t, ctx, fixture.session, "list_skill_suggestion_feedback", map[string]any{
+		"project_slug": fixture.project.Slug,
+		"change_id":    change.ID.String(),
+		"limit":        1,
+	})
+	require.Equal(t, change.ID.String(), suggestionFeedback.ChangeID)
+	require.Len(t, suggestionFeedback.Feedback, 1)
+	suggestionFeedbackJSON, err := json.Marshal(suggestionFeedback)
+	require.NoError(t, err)
+	require.NotContains(t, string(suggestionFeedbackJSON), "private-session")
+	require.NotContains(t, string(suggestionFeedbackJSON), "private-user")
+	require.NotContains(t, string(suggestionFeedbackJSON), "private@example.test")
 
 	refusal := callSkillsRefusal(t, ctx, fixture.session, "create_skill", map[string]any{
 		"project_slug": fixture.project.Slug,
