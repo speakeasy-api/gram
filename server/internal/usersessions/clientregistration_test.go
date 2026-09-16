@@ -227,6 +227,18 @@ func TestRegistrationRequest_Validate(t *testing.T) {
 		}
 		require.NoError(t, validateAfterDefaults(req))
 	})
+
+	t.Run("accepts JWT bearer without redirects or response types", func(t *testing.T) {
+		t.Parallel()
+		req := &RegistrationRequest{
+			ClientName:              "enterprise managed client",
+			GrantTypes:              []string{oauthwire.GrantTypeJWTBearer},
+			TokenEndpointAuthMethod: "client_secret_basic",
+		}
+		require.NoError(t, validateAfterDefaults(req))
+		require.Empty(t, req.RedirectURIs)
+		require.Empty(t, req.ResponseTypes)
+	})
 }
 
 func TestRegistrationRequest_SetDefaults(t *testing.T) {

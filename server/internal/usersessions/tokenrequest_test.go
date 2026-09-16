@@ -85,3 +85,26 @@ func TestRefreshTokenRequest_Validate(t *testing.T) {
 		assertOAuthError(t, req.Validate(), "invalid_request", "refresh_token")
 	})
 }
+
+func TestJWTBearerTokenRequestFromForm(t *testing.T) {
+	t.Parallel()
+	form := url.Values{}
+	form.Set("assertion", "signed-id-jag")
+
+	req := JWTBearerTokenRequestFromForm(form)
+	require.Equal(t, "signed-id-jag", req.Assertion)
+}
+
+func TestJWTBearerTokenRequest_Validate(t *testing.T) {
+	t.Parallel()
+
+	t.Run("accepts a populated assertion", func(t *testing.T) {
+		t.Parallel()
+		require.NoError(t, (&JWTBearerTokenRequest{Assertion: "signed-id-jag"}).Validate())
+	})
+
+	t.Run("rejects missing assertion", func(t *testing.T) {
+		t.Parallel()
+		assertOAuthError(t, (&JWTBearerTokenRequest{}).Validate(), "invalid_request", "assertion")
+	})
+}

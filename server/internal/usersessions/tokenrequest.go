@@ -101,3 +101,27 @@ func (r *RefreshTokenRequest) Validate() error {
 	}
 	return nil
 }
+
+// JWTBearerTokenRequest is the RFC 7523 JWT authorization grant request used
+// by enterprise-managed authorization clients to present an ID-JAG.
+type JWTBearerTokenRequest struct {
+	Assertion string
+}
+
+// JWTBearerTokenRequestFromForm decodes from url.Values (typically
+// r.PostForm).
+func JWTBearerTokenRequestFromForm(form url.Values) *JWTBearerTokenRequest {
+	return &JWTBearerTokenRequest{Assertion: form.Get("assertion")}
+}
+
+// SetDefaults is a no-op because assertion is required.
+func (r *JWTBearerTokenRequest) SetDefaults() {}
+
+// Validate checks the request shape. Assertion contents are authenticated by
+// the ID-JAG validator in the token handler.
+func (r *JWTBearerTokenRequest) Validate() error {
+	if r.Assertion == "" {
+		return &oauthwire.Error{Code: "invalid_request", Description: "assertion is required"}
+	}
+	return nil
+}

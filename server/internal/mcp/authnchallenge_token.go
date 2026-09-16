@@ -25,6 +25,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
@@ -34,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/idjag"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -89,6 +91,7 @@ type userSessionRefreshReplayPayload struct {
 }
 
 type mintSessionParams struct {
+	Audience               string
 	AuthorizationExpiresAt *time.Time
 	AuthorizerUserID       pgtype.Text
 	BaseURL                string
@@ -96,6 +99,7 @@ type mintSessionParams struct {
 	DelegatedGrantsVersion pgtype.Int4
 	DesiredSessionDuration *time.Duration
 	Replayable             bool
+	Policy                 sessionIssuancePolicy
 	Subject                urn.SessionSubject
 	ToolSelection          []byte
 }
@@ -109,6 +113,15 @@ type mintedSession struct {
 	Response               tokenResponse
 	Subject                urn.SessionSubject
 }
+
+type sessionIssuancePolicy uint8
+
+const (
+	sessionIssuancePolicyLegacy sessionIssuancePolicy = iota
+	sessionIssuancePolicyEMA
+)
+
+const idJAGRefreshTokenHashPrefix = "id-jag:"
 
 type mintUserSessionAccessTokenParams struct {
 	AccessExpiresAt time.Time
@@ -243,7 +256,7 @@ func (s *Service) ServeToken(w http.ResponseWriter, r *http.Request, endpoint *R
 			// handler that records token-stage failures is reached, so the
 			// failure is recorded here. Refresh grants stay excluded, as they
 			// are from the handler's own failure accounting.
-			if grantType == "authorization_code" {
+			if grantType == oauthwire.GrantTypeAuthorizationCode {
 				s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageToken)
 			}
 			return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", blockedErr.Description())
@@ -255,14 +268,102 @@ func (s *Service) ServeToken(w http.ResponseWriter, r *http.Request, endpoint *R
 	}
 
 	switch grantType {
-	case "authorization_code":
+	case oauthwire.GrantTypeAuthorizationCode:
 		return s.handleTokenAuthorizationCodeGrant(ctx, w, r, endpoint, clientRow, baseURL, presentedAuthMethod, logger)
-	case "refresh_token":
+	case oauthwire.GrantTypeRefreshToken:
 		return s.handleTokenRefreshTokenGrant(ctx, w, r, endpoint, clientRow, baseURL, presentedAuthMethod, logger)
+	case oauthwire.GrantTypeJWTBearer:
+		return s.handleTokenJWTBearerGrant(ctx, w, r, endpoint, clientRow, baseURL, presentedAuthMethod, logger)
 	default:
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth token request rejected", clientID, presentedAuthMethod, grantType, "unsupported_grant_type")
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "unsupported_grant_type", "unsupported grant_type")
 	}
+}
+
+// handleTokenJWTBearerGrant exchanges an authenticated ID-JAG for a
+// resource-bound, access-only user session. The assertion is the entire grant:
+// validation, subject resolution, replay reservation, and RBAC authorization
+// all complete before a session is persisted.
+func (s *Service) handleTokenJWTBearerGrant(
+	ctx context.Context,
+	w http.ResponseWriter,
+	r *http.Request,
+	endpoint *ResolvedMcpEndpoint,
+	clientRow *usersessions_repo.UserSessionClient,
+	baseURL string,
+	presentedAuthMethod string,
+	logger *slog.Logger,
+) error {
+	req := usersessions.JWTBearerTokenRequestFromForm(r.PostForm)
+	req.SetDefaults()
+	if err := req.Validate(); err != nil {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "invalid_request")
+		return writeTokenOAuthError(ctx, w, logger, http.StatusBadRequest, err)
+	}
+
+	canonicalResource, err := endpoint.RootURL(baseURL)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "build ID-JAG resource identifier").LogError(ctx, logger)
+	}
+	result, err := s.idJAGValidator.Validate(ctx, req.Assertion, idjag.Request{
+		OrganizationID:      endpoint.OrganizationID,
+		UserSessionIssuerID: endpoint.UserSessionIssuerID,
+		Audience:            canonicalResource,
+		Resource:            canonicalResource,
+		ClientID:            clientRow.ClientID,
+	})
+	if err != nil {
+		logger.InfoContext(ctx, "oauth ID-JAG token request rejected", attr.SlogError(err))
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "invalid_grant")
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "assertion is invalid")
+	}
+
+	// The session does not exist yet, but authz treats an AuthContext without a
+	// session as an internal call. A namespaced assertion JTI makes this context
+	// session-like solely while loading and checking the resolved user's grants.
+	authorizationCtx, err := s.contextForSessionSubject(ctx, endpoint, result.Subject, "id-jag:"+result.Claims.JTI, clientRow.ClientID)
+	if err == nil {
+		authorizationCtx, err = s.authz.PrepareContext(authorizationCtx)
+	}
+	if err == nil {
+		err = s.authz.Require(authorizationCtx, authz.MCPCheck(authz.ScopeMCPConnect, endpoint.connectResourceID().String(), endpoint.ProjectID.String()))
+	}
+	if err != nil {
+		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && (shareable.Code == oops.CodeForbidden || shareable.Code == oops.CodeUnauthorized) {
+			logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "subject_not_authorized")
+			return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "assertion is invalid")
+		}
+		return oops.E(oops.CodeUnexpected, err, "authorize ID-JAG subject").LogError(ctx, logger)
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "begin ID-JAG session transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	minted, err := s.mintSession(authorizationCtx, endpoint, clientRow, usersessions_repo.New(dbtx), mintSessionParams{
+		Audience:               canonicalResource,
+		AuthorizationExpiresAt: nil,
+		AuthorizerUserID:       pgtype.Text{String: "", Valid: false},
+		BaseURL:                baseURL,
+		DelegatedGrants:        nil,
+		DelegatedGrantsVersion: pgtype.Int4{Int32: 0, Valid: false},
+		DesiredSessionDuration: nil,
+		Replayable:             false,
+		Policy:                 sessionIssuancePolicyEMA,
+		Subject:                result.Subject,
+		ToolSelection:          nil,
+	}, logger)
+	if err != nil {
+		return err
+	}
+	if err := dbtx.Commit(ctx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "commit ID-JAG session exchange").LogError(ctx, logger)
+	}
+
+	logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request completed", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "")
+	return writeTokenSuccess(ctx, w, logger, minted.Body)
 }
 
 // handleTokenAuthorizationCodeGrant implements RFC 6749 §4.1.3. Reads the
@@ -449,6 +550,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 	}
 
 	minted, err := s.mintSession(ctx, endpoint, clientRow, usersessions_repo.New(s.db), mintSessionParams{
+		Audience:               "",
 		AuthorizationExpiresAt: nil,
 		AuthorizerUserID:       authorizerUserID,
 		BaseURL:                baseURL,
@@ -456,6 +558,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		DelegatedGrantsVersion: delegatedGrantsVersion,
 		DesiredSessionDuration: desiredSessionDuration,
 		Replayable:             false,
+		Policy:                 sessionIssuancePolicyLegacy,
 		Subject:                subject,
 		ToolSelection:          toolSelection,
 	}, logger)
@@ -801,6 +904,7 @@ func (s *Service) rotateRefreshToken(
 	}
 
 	minted, err := s.mintSession(ctx, endpoint, clientRow, txRepo, mintSessionParams{
+		Audience:               "",
 		AuthorizationExpiresAt: &authorizationExpiresAt,
 		AuthorizerUserID:       oldSession.AuthorizerUserID,
 		BaseURL:                baseURL,
@@ -808,6 +912,7 @@ func (s *Service) rotateRefreshToken(
 		DelegatedGrantsVersion: oldSession.DelegatedGrantsVersion,
 		DesiredSessionDuration: nil,
 		Replayable:             true,
+		Policy:                 sessionIssuancePolicyLegacy,
 		Subject:                oldSession.SubjectUrn,
 		ToolSelection:          oldSession.ToolSelection,
 	}, logger)
@@ -1079,10 +1184,11 @@ func (s *Service) mintUserSessionAccessToken(params mintUserSessionAccessTokenPa
 // authorization lifetime.
 const accessTokenLifetime = 1 * time.Hour
 
-// mintSession mints a new access-token JWT (HS256) and an opaque refresh token,
-// then persists a fresh user_sessions row through queries. Refresh rotation
-// supplies a transaction-backed repository so consuming the old refresh token
-// and creating its successor commit atomically.
+// mintSession applies a typed issuance policy, mints a new access-token JWT
+// (HS256), and persists a fresh user_sessions row through queries. Legacy OAuth
+// sessions also receive an opaque refresh token. Refresh rotation supplies a
+// transaction-backed repository so consuming the old refresh token and
+// creating its successor commit atomically.
 //
 // Lifetimes:
 //   - authorization: the subject's consent choice, capped by the issuer's
@@ -1093,9 +1199,9 @@ const accessTokenLifetime = 1 * time.Hour
 //
 // `iss` / audience: the JWT issuer claim is built from baseURL (which the
 // caller computes from custom-domain context so it matches what the AS
-// metadata document advertises). The audience is the toolset URN
-// `toolset:<UUID>`, globally unique even when slugs collide across
-// projects — prevents cross-project replay.
+// metadata document advertises). Legacy sessions retain their issuer-scoped
+// endpoint audience. EMA sessions use the exact MCP resource URL and are not
+// refreshable.
 // Params.DesiredSessionDuration is used only for an initial authorization: nil
 // means "no explicit choice", falling back to the issuer's session_duration.
 // Params.AuthorizationExpiresAt is used only for rotation and is carried from
@@ -1111,6 +1217,25 @@ func (s *Service) mintSession(
 	params mintSessionParams,
 	logger *slog.Logger,
 ) (*mintedSession, error) {
+	audience := endpoint.AudienceURN
+	refreshable := true
+	switch params.Policy {
+	case sessionIssuancePolicyLegacy:
+		if params.Audience != "" {
+			return nil, oops.E(oops.CodeUnexpected, nil, "legacy session must not override its audience").LogError(ctx, logger)
+		}
+	case sessionIssuancePolicyEMA:
+		if params.Audience == "" || params.AuthorizationExpiresAt != nil || params.DesiredSessionDuration != nil || params.Replayable || params.AuthorizerUserID.Valid || params.DelegatedGrants != nil || params.DelegatedGrantsVersion.Valid || params.ToolSelection != nil {
+			return nil, oops.E(oops.CodeUnexpected, nil, "invalid EMA session issuance parameters").LogError(ctx, logger)
+		}
+		audience = params.Audience
+		refreshable = false
+		emaLifetime := accessTokenLifetime
+		params.DesiredSessionDuration = &emaLifetime
+	default:
+		return nil, oops.E(oops.CodeUnexpected, nil, "unknown session issuance policy").LogError(ctx, logger)
+	}
+
 	if params.Subject.Kind == urn.SessionSubjectKindAgent {
 		if _, err := loadAgentSessionCredential(
 			endpoint, params.Subject, params.Subject, pgtype.Text{String: endpoint.OrganizationID, Valid: true},
@@ -1180,7 +1305,7 @@ func (s *Service) mintSession(
 	}
 	access, jti, err := s.mintUserSessionAccessToken(mintUserSessionAccessTokenParams{
 		AccessExpiresAt: accessExpiresAt,
-		AudienceURN:     endpoint.AudienceURN,
+		AudienceURN:     audience,
 		ClientID:        clientRow.ClientID,
 		Issuer:          issuerURL,
 		JTI:             jti,
@@ -1190,12 +1315,17 @@ func (s *Service) mintSession(
 		return nil, oops.E(oops.CodeUnexpected, err, "mint session access token").LogError(ctx, logger)
 	}
 
-	refreshTokenRaw, err := generateOpaqueToken()
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "generate refresh token").LogError(ctx, logger)
+	refreshTokenRaw := ""
+	refreshTokenHash := idJAGRefreshTokenHashPrefix + sha256Hex(jti+":"+uuid.NewString())
+	if refreshable {
+		refreshTokenRaw, err = generateOpaqueToken()
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "generate refresh token").LogError(ctx, logger)
+		}
+		refreshTokenHash = sha256Hex(refreshTokenRaw)
 	}
 
-	if _, err := queries.CreateUserSession(ctx, usersessions_repo.CreateUserSessionParams{
+	_, err = queries.CreateUserSession(ctx, usersessions_repo.CreateUserSessionParams{
 		UserSessionIssuerID:    endpoint.UserSessionIssuerID,
 		UserSessionClientID:    uuid.NullUUID{UUID: clientRow.ID, Valid: true},
 		SubjectUrn:             params.Subject,
@@ -1203,11 +1333,12 @@ func (s *Service) mintSession(
 		DelegatedGrants:        params.DelegatedGrants,
 		DelegatedGrantsVersion: params.DelegatedGrantsVersion,
 		Jti:                    jti,
-		RefreshTokenHash:       sha256Hex(refreshTokenRaw),
+		RefreshTokenHash:       refreshTokenHash,
 		ExpiresAt:              pgtype.Timestamptz{Time: accessExpiresAt, InfinityModifier: 0, Valid: true},
 		RefreshExpiresAt:       pgtype.Timestamptz{Time: *params.AuthorizationExpiresAt, InfinityModifier: 0, Valid: true},
 		ToolSelection:          params.ToolSelection,
-	}); err != nil {
+	})
+	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "persist user session").LogError(ctx, logger)
 	}
 

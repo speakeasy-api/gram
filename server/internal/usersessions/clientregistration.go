@@ -27,8 +27,12 @@ import (
 // mcp.HandleGetAuthorizationServer; enforced on the /register and
 // /authorize handlers by the typed request Validate methods.
 var (
-	SupportedGrantTypes    = []string{"authorization_code", "refresh_token"}
-	SupportedResponseTypes = []string{"code"}
+	SupportedGrantTypes = []string{
+		oauthwire.GrantTypeAuthorizationCode,
+		oauthwire.GrantTypeRefreshToken,
+		oauthwire.GrantTypeJWTBearer,
+	}
+	SupportedResponseTypes = []string{oauthwire.ResponseTypeCode}
 
 	// SupportedAuthMethods is the user-session AS's own accepted
 	// token_endpoint_auth_method set, and is not shared policy: the other
@@ -47,7 +51,7 @@ var (
 	// assertion from then on.
 	SupportedAuthMethods = []string{oauthwire.AuthMethodClientSecretBasic, oauthwire.AuthMethodClientSecretPost, oauthwire.AuthMethodNone, oauthwire.AuthMethodPrivateKeyJWT}
 
-	SupportedCodeChallengeMethods = []string{"S256"}
+	SupportedCodeChallengeMethods = []string{oauthwire.CodeChallengeMethodS256}
 )
 
 // RegistrationRequest is the RFC 7591 §3.1 client metadata document. Only
@@ -79,10 +83,10 @@ type RegistrationRequest struct {
 // correlation check sees materialized values.
 func (r *RegistrationRequest) SetDefaults() {
 	if len(r.GrantTypes) == 0 {
-		r.GrantTypes = []string{"authorization_code"}
+		r.GrantTypes = []string{oauthwire.GrantTypeAuthorizationCode}
 	}
-	if len(r.ResponseTypes) == 0 {
-		r.ResponseTypes = []string{"code"}
+	if len(r.ResponseTypes) == 0 && slices.Contains(r.GrantTypes, oauthwire.GrantTypeAuthorizationCode) {
+		r.ResponseTypes = []string{oauthwire.ResponseTypeCode}
 	}
 	if r.TokenEndpointAuthMethod == "" {
 		r.TokenEndpointAuthMethod = oauthwire.AuthMethodClientSecretBasic
@@ -105,7 +109,8 @@ func (r *RegistrationRequest) Validate(supportedAuthMethods []string) error {
 	if r.ClientName == "" {
 		return &oauthwire.Error{Code: "invalid_client_metadata", Description: "client_name is required"}
 	}
-	if len(r.RedirectURIs) == 0 {
+	hasAuthCodeGrant := slices.Contains(r.GrantTypes, oauthwire.GrantTypeAuthorizationCode)
+	if hasAuthCodeGrant && len(r.RedirectURIs) == 0 {
 		return &oauthwire.Error{Code: "invalid_redirect_uri", Description: "redirect_uris is required"}
 	}
 	for _, u := range r.RedirectURIs {
@@ -140,8 +145,7 @@ func (r *RegistrationRequest) Validate(supportedAuthMethods []string) error {
 
 	// RFC 7591 §2.1 correlation: response_type "code" requires grant_type
 	// "authorization_code" and vice versa.
-	hasCodeResponse := slices.Contains(r.ResponseTypes, "code")
-	hasAuthCodeGrant := slices.Contains(r.GrantTypes, "authorization_code")
+	hasCodeResponse := slices.Contains(r.ResponseTypes, oauthwire.ResponseTypeCode)
 	if hasCodeResponse && !hasAuthCodeGrant {
 		return &oauthwire.Error{Code: "invalid_client_metadata", Description: `response_type "code" requires grant_type "authorization_code"`}
 	}
@@ -151,7 +155,7 @@ func (r *RegistrationRequest) Validate(supportedAuthMethods []string) error {
 	// refresh_token can only follow an initial authorization_code in our
 	// supported set; a client registering refresh_token alone has no way
 	// to ever obtain one.
-	if slices.Contains(r.GrantTypes, "refresh_token") && !hasAuthCodeGrant {
+	if slices.Contains(r.GrantTypes, oauthwire.GrantTypeRefreshToken) && !hasAuthCodeGrant {
 		return &oauthwire.Error{Code: "invalid_client_metadata", Description: `grant_type "refresh_token" requires grant_type "authorization_code"`}
 	}
 	return nil
