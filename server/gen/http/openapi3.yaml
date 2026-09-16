@@ -2369,6 +2369,117 @@ paths:
                                 $ref: '#/components/schemas/Error'
             security:
                 - admin_auth_header_Authorization: []
+    /admin/organizations.getMeterUsage:
+        get:
+            tags:
+                - admin
+            summary: getMeterUsage admin
+            description: Returns totals-only ordinary meter usage for an organization over a bounded UTC-day window.
+            operationId: adminGetMeterUsage
+            parameters:
+                - name: organization_id
+                  in: query
+                  description: Organization ID or canonical slug.
+                  allowEmptyValue: true
+                  required: true
+                  schema:
+                    type: string
+                    description: Organization ID or canonical slug.
+                - name: family
+                  in: query
+                  allowEmptyValue: true
+                  required: true
+                  schema:
+                    type: string
+                    enum:
+                        - agent_session_storage
+                        - mcp_bandwidth
+                        - risk_content_scans
+                - name: from
+                  in: query
+                  description: Inclusive UTC midnight reporting boundary. Must be paired with to.
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Inclusive UTC midnight reporting boundary. Must be paired with to.
+                    format: date-time
+                - name: to
+                  in: query
+                  description: Exclusive UTC midnight reporting boundary. Must be paired with from and no later than three calendar months after from.
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Exclusive UTC midnight reporting boundary. Must be paired with from and no later than three calendar months after from.
+                    format: date-time
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminMeterUsageResponse'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "503":
+                    description: 'unavailable: service temporarily unavailable'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
     /admin/organizations.list:
         get:
             description: Lists organizations for platform admin operations with optional search and filters. Defaults to created_at descending, with id ascending to break ties.
@@ -72129,6 +72240,68 @@ components:
             required:
                 - organizations
                 - total
+        AdminMeterUsageBucket:
+            type: object
+            properties:
+                from:
+                    type: string
+                    description: Inclusive UTC day boundary
+                    format: date-time
+                to:
+                    type: string
+                    description: Exclusive UTC day boundary
+                    format: date-time
+                total:
+                    type: string
+                    description: Exact integer ordinary usage quantity as a decimal string
+            required:
+                - from
+                - to
+                - total
+        AdminMeterUsageResponse:
+            type: object
+            properties:
+                billing_cycles:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/MeterUsageWindow'
+                    description: Trailing twelve billing-cycle date windows
+                buckets:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminMeterUsageBucket'
+                    description: Dense UTC daily ordinary usage buckets
+                family:
+                    type: string
+                    enum:
+                        - agent_session_storage
+                        - mcp_bandwidth
+                        - risk_content_scans
+                measurement_method:
+                    type: string
+                queried_at:
+                    type: string
+                    description: Retrieval timestamp, not an ingestion watermark
+                    format: date-time
+                total:
+                    type: string
+                    description: Exact integer ordinary usage period total as a decimal string
+                unit:
+                    type: string
+                    enum:
+                        - stokens
+                        - bytes
+                window:
+                    $ref: '#/components/schemas/MeterUsageWindow'
+            required:
+                - family
+                - window
+                - billing_cycles
+                - unit
+                - total
+                - buckets
+                - queried_at
+                - measurement_method
         AdminOpenRouterKey:
             type: object
             properties:
@@ -100207,8 +100380,6 @@ tags:
       description: Manage remote_session_issuer records — upstream Authorization Server identity records that Gram talks to as an OAuth client.
     - name: adminRemoteSessions
       description: Platform-admin management of global remote_session_issuer / remote_session_client records — shared across every organization (project_id NULL, organization_id NULL). Speakeasy-staff only; every method requires the platform-admin flag.
-    - name: admin
-      description: Operations supporting admin tasks, protected by Google workspace auth.
     - name: organizationRemoteSessions
       description: Organization-administrator visibility into remote_sessions Gram is holding on a principal's behalf, across every project in the caller's organization. access_token_encrypted and refresh_token_encrypted are never returned.
     - name: remoteSessions
@@ -100241,6 +100412,8 @@ tags:
       description: Managing unproxied MCP servers. These are vendor MCP servers that Speakeasy lists and can attach to a plugin but never proxies, so there is no OAuth callback or upstream allowlisting involved.
     - name: usage
       description: Read usage for gram.
+    - name: admin
+      description: Operations supporting admin tasks, protected by Google workspace auth.
     - name: userSessionClients
       description: Operator visibility into MCP clients registered against a user-session issuer (user_session_clients). Read + revoke. Registrations are written by /mcp/{slug}/register (RFC 7591 DCR) or resolved from a Client ID Metadata Document on /mcp/{slug}/authorize (CIMD); client_id_metadata_uri distinguishes the two.
     - name: userSessionConsents

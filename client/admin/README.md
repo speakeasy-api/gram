@@ -5,6 +5,29 @@ The Admin application uses the private, same-origin clients in
 imports and request options inside that boundary rather than exposing them to
 page components.
 
+## Organization meter usage
+
+`/organizations/:org-slug/billing` reports organization totals for storage
+(tokens under management), MCP bandwidth (bytes), and risk scans (tokens).
+It uses the same ordinary meter readings and billing-cycle boundaries as the
+customer dashboard, without facet queries or breakdown controls.
+
+The admin process requires both the primary ClickHouse connection settings
+(`CLICKHOUSE_*`) and the read-replica settings (`CLICKHOUSE_READ_*`), just like
+the main app. PAYG billing operations use the primary connection; meter usage
+reports use the read replica. Startup fails if either connection cannot be
+established. Local development can point both connections at the same instance.
+
+Product, interval, cumulative mode, and custom dates are URL search parameters.
+Daily, Monday-start weekly, and calendar-month totals use UTC. Date ranges
+include both displayed dates and cannot exceed three calendar months.
+Cumulative charts stop at retrieval time rather than projecting future usage.
+Period totals and rollups retain exact integer precision; only chart coordinates
+are converted to JavaScript numbers. These usage reports are not invoice estimates.
+
+The existing demo seed supplies ordinary readings for all three products.
+No additional seed or schema migration is required.
+
 ## Image upload mutation variables
 
 The generated `useAdminUploadPlatformImageMutation` hook takes a variables

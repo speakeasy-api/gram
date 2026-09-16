@@ -8,6 +8,7 @@ import (
 	"github.com/speakeasy-api/gram/server/design/auditlogs"
 	"github.com/speakeasy-api/gram/server/design/security"
 	"github.com/speakeasy-api/gram/server/design/shared"
+	"github.com/speakeasy-api/gram/server/design/usage"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -242,6 +243,26 @@ var AdminPaygBillingSummary = Type("AdminPaygBillingSummary", func() {
 	Attribute("recorded_through", String, func() { Format(FormatDate) })
 	Attribute("estimated_total_usd", String)
 	Required("period_start", "period_end", "tum_tokens", "tum_unit_price_usd", "tum_cost_usd", "other_inference_spend_usd", "estimated_total_usd")
+})
+var AdminMeterUsageBucket = Type("AdminMeterUsageBucket", func() {
+	Attribute("from", String, "Inclusive UTC day boundary", func() { Format(FormatDateTime) })
+	Attribute("to", String, "Exclusive UTC day boundary", func() { Format(FormatDateTime) })
+	Attribute("total", String, "Exact integer ordinary usage quantity as a decimal string")
+	Required("from", "to", "total")
+})
+
+var AdminMeterUsageResponse = Type("AdminMeterUsageResponse", func() {
+	Attribute("family", String, func() {
+		Enum("agent_session_storage", "mcp_bandwidth", "risk_content_scans")
+	})
+	Attribute("window", usage.MeterUsageWindow)
+	Attribute("billing_cycles", ArrayOf(usage.MeterUsageWindow), "Trailing twelve billing-cycle date windows")
+	Attribute("unit", String, func() { Enum("stokens", "bytes") })
+	Attribute("total", String, "Exact integer ordinary usage period total as a decimal string")
+	Attribute("buckets", ArrayOf(AdminMeterUsageBucket), "Dense UTC daily ordinary usage buckets")
+	Attribute("queried_at", String, "Retrieval timestamp, not an ingestion watermark", func() { Format(FormatDateTime) })
+	Attribute("measurement_method", String)
+	Required("family", "window", "billing_cycles", "unit", "total", "buckets", "queried_at", "measurement_method")
 })
 
 var AdminSession = Type("AdminSession", func() {
@@ -1047,6 +1068,36 @@ var _ = Service("admin", func() {
 			Response(StatusOK)
 		})
 		Meta("openapi:operationId", "adminChangeTrialEndDate")
+	})
+
+	Method("getMeterUsage", func() {
+		Description("Returns totals-only ordinary meter usage for an organization over a bounded UTC-day window.")
+		Payload(func() {
+			security.AdminAuthPayload()
+			Attribute("organization_id", String, "Organization ID or canonical slug.")
+			Attribute("family", String, func() {
+				Enum("agent_session_storage", "mcp_bandwidth", "risk_content_scans")
+			})
+			Attribute("from", String, "Inclusive UTC midnight reporting boundary. Must be paired with to.", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("to", String, "Exclusive UTC midnight reporting boundary. Must be paired with from and no later than three calendar months after from.", func() {
+				Format(FormatDateTime)
+			})
+			Required("organization_id", "family")
+		})
+		Result(AdminMeterUsageResponse)
+		declareUnavailable()
+		HTTP(func() {
+			GET("/admin/organizations.getMeterUsage")
+			Param("organization_id")
+			Param("family")
+			Param("from")
+			Param("to")
+			Response(StatusOK)
+			declareUnavailableResponse()
+		})
+		Meta("openapi:operationId", "adminGetMeterUsage")
 	})
 
 })

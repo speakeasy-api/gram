@@ -194,6 +194,9 @@ type Service interface {
 	// Sets a running trial's end date to a future instant, shortening or extending
 	// it without restarting the trial.
 	ChangeTrialEndDate(context.Context, *ChangeTrialEndDatePayload) (res *AdminOrganization, err error)
+	// Returns totals-only ordinary meter usage for an organization over a bounded
+	// UTC-day window.
+	GetMeterUsage(context.Context, *GetMeterUsagePayload) (res *AdminMeterUsageResponse, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -216,7 +219,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [49]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizationActivity", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate"}
+var MethodNames = [50]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizationActivity", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage"}
 
 // AdminBulkUpdateAccountTypeResult is the result type of the admin service
 // bulkUpdateAccountType method.
@@ -314,6 +317,32 @@ type AdminListOrganizationsResult struct {
 	NextCursor *string
 	// Number of organizations matching the filters, before paging.
 	Total int64
+}
+
+type AdminMeterUsageBucket struct {
+	// Inclusive UTC day boundary
+	From string
+	// Exclusive UTC day boundary
+	To string
+	// Exact integer ordinary usage quantity as a decimal string
+	Total string
+}
+
+// AdminMeterUsageResponse is the result type of the admin service
+// getMeterUsage method.
+type AdminMeterUsageResponse struct {
+	Family string
+	Window *MeterUsageWindow
+	// Trailing twelve billing-cycle date windows
+	BillingCycles []*MeterUsageWindow
+	Unit          string
+	// Exact integer ordinary usage period total as a decimal string
+	Total string
+	// Dense UTC daily ordinary usage buckets
+	Buckets []*AdminMeterUsageBucket
+	// Retrieval timestamp, not an ingestion watermark
+	QueriedAt         string
+	MeasurementMethod string
 }
 
 // AdminOrganization is the result type of the admin service updateOrganization
@@ -762,6 +791,20 @@ type GetInferenceSpendHistoryPayload struct {
 	OrganizationID    string
 }
 
+// GetMeterUsagePayload is the payload type of the admin service getMeterUsage
+// method.
+type GetMeterUsagePayload struct {
+	AdminSessionToken *string
+	// Organization ID or canonical slug.
+	OrganizationID string
+	Family         string
+	// Inclusive UTC midnight reporting boundary. Must be paired with to.
+	From *string
+	// Exclusive UTC midnight reporting boundary. Must be paired with from and no
+	// later than three calendar months after from.
+	To *string
+}
+
 // GetOrganizationChatAnalysisSettingsPayload is the payload type of the admin
 // service getOrganizationChatAnalysisSettings method.
 type GetOrganizationChatAnalysisSettingsPayload struct {
@@ -1057,6 +1100,13 @@ type MarkEnterpriseTrialConvertedResult struct {
 	OrganizationID string
 	// The time at which the enterprise trial was recorded as converted.
 	ConvertedAt string
+}
+
+type MeterUsageWindow struct {
+	// Inclusive UTC midnight window boundary
+	From string
+	// Exclusive UTC midnight window boundary
+	To string
 }
 
 // MigrateRemoteSessionIssuerResult is the result type of the admin service

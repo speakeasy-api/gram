@@ -31,6 +31,10 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
   return { ...actual, ...mocks };
 });
 
+// These tests exercise subscription and inference controls independently of
+// the meter explorer's network requests and browser chart renderer.
+vi.mock("./MeterUsage", () => ({ MeterUsage: () => null }));
+
 const ORG = anOrganization({ account_type: "payg" });
 const HISTORY = [
   {

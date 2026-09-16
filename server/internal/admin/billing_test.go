@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
+	usagegen "github.com/speakeasy-api/gram/server/gen/usage"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -76,6 +77,28 @@ type fakeBillingOperations struct {
 func (f *fakeBillingOperations) GetPaygBillingSummaryForOrganization(_ context.Context, organizationID string) (*usage.PaygBillingSummary, error) {
 	f.organizationID = organizationID
 	return &usage.PaygBillingSummary{PeriodStart: "2026-08-01T00:00:00Z", PeriodEnd: "2026-09-01T00:00:00Z", TumTokens: 42, TumUnitPriceUsd: "0.1", TumCostUsd: "4.2", OtherInferenceSpendUsd: "1.0", EstimatedTotalUsd: "5.2"}, nil
+}
+func (f *fakeBillingOperations) GetMeterUsageForOrganization(_ context.Context, organizationID string, payload *usagegen.GetMeterUsagePayload) (*usagegen.MeterUsageResponse, error) {
+	f.organizationID = organizationID
+	return &usagegen.MeterUsageResponse{
+		Family: payload.Family,
+		Window: &usagegen.MeterUsageWindow{
+			From: "2026-08-01T00:00:00Z",
+			To:   "2026-08-03T00:00:00Z",
+		},
+		BillingCycles: []*usagegen.MeterUsageWindow{
+			{From: "2026-08-01T00:00:00Z", To: "2026-09-01T00:00:00Z"},
+		},
+		Unit:              "stokens",
+		MeasurementMethod: "tiktoken_o200k_base",
+		Total:             "42",
+		Buckets: []*usagegen.MeterUsageBucket{
+			{From: "2026-08-01T00:00:00Z", To: "2026-08-02T00:00:00Z", Total: "40"},
+			{From: "2026-08-02T00:00:00Z", To: "2026-08-03T00:00:00Z", Total: "2"},
+		},
+		Breakdown: &usagegen.MeterUsageBreakdown{Dimension: "total", Series: []*usagegen.MeterUsageSeries{}},
+		QueriedAt: "2026-08-03T01:00:00Z",
+	}, nil
 }
 
 func (f *fakeBillingOperations) GetStripeCustomer(_ context.Context, customerID string) (*stripeclient.CustomerDetails, error) {
