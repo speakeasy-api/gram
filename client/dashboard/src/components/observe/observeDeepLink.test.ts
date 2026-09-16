@@ -6,7 +6,6 @@ import {
 } from "./observeDeepLink";
 
 const LOGS = "/org/project/logs";
-const INSIGHTS = "/org/project/insights";
 
 describe("carryObserveParams", () => {
   it("carries every shared filter param", () => {
@@ -134,16 +133,6 @@ describe("buildObserveHref", () => {
     const href = buildObserveHref(LOGS, current, { statuses: ["error"] });
 
     expect(new URLSearchParams(href.split("?")[1]).get("status")).toBe("error");
-  });
-
-  it("drops a status the summary endpoints cannot apply", () => {
-    const current = new URLSearchParams({ status: "error", range: "1d" });
-
-    const href = buildObserveHref(INSIGHTS, current, {}, { summaryOnly: true });
-    const params = new URLSearchParams(href.split("?")[1]);
-
-    expect(params.get("status")).toBeNull();
-    expect(params.get("range")).toBe("1d");
   });
 
   it("carries a client key so client panels can drill in", () => {

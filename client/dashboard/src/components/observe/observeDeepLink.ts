@@ -77,21 +77,10 @@ function encodeTarget(target: ParsedTargetFilter): string | undefined {
   }
 }
 
-/**
- * Params the tool-usage summary endpoints have no field for. Insights is
- * entirely summary-driven, so carrying one of these across would leave the
- * cards showing unfiltered aggregates under a chip that claims otherwise.
- */
-const SUMMARY_UNSUPPORTED_PARAMS = new Set(["status"]);
-
 /** Copies the shared filter state forward, dropping everything page-local. */
-export function carryObserveParams(
-  current: URLSearchParams,
-  options: { summaryOnly?: boolean } = {},
-): URLSearchParams {
+export function carryObserveParams(current: URLSearchParams): URLSearchParams {
   const next = new URLSearchParams();
   for (const key of OBSERVE_FILTER_PARAMS) {
-    if (options.summaryOnly && SUMMARY_UNSUPPORTED_PARAMS.has(key)) continue;
     const value = current.get(key);
     if (value !== null) next.set(key, value);
   }
@@ -113,9 +102,8 @@ export function buildObserveHref(
   base: string,
   current: URLSearchParams,
   scope: ObserveDeepLinkScope = {},
-  options: { summaryOnly?: boolean } = {},
 ): string {
-  const params = carryObserveParams(current, options);
+  const params = carryObserveParams(current);
 
   if (scope.target) appendCsv(params, "server", encodeTarget(scope.target));
   for (const type of scope.targetTypes ?? []) {

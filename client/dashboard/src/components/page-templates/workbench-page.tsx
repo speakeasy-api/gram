@@ -12,7 +12,7 @@ import { TemplateFrame, type TemplateFrameProps } from "./scaffold";
  * body itself (next to its filter bar), so this template gives the frame and
  * an optional tab strip and gets out of the way.
  *
- *   <WorkbenchPage scope="observe:read" tabs={<ObserveViewTabs active="logs" />}>
+ *   <WorkbenchPage scope="observe:read">
  *     <ToolLogsWorkbench />
  *   </WorkbenchPage>
  */
