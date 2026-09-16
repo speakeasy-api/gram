@@ -224,9 +224,7 @@ func (s *Service) CommitServerIdentityConfiguration(ctx context.Context, payload
 	}()
 
 	if plan.clientMode == serverIdentityClientModeAuto {
-		if supportsServerIdentityCIMD(providerCapabilities) {
-			registrationMethod = string(registration.MethodCIMD)
-		} else if providerCapabilities.registrationEndpoint.Valid && strings.TrimSpace(providerCapabilities.registrationEndpoint.String) != "" {
+		if providerCapabilities.registrationEndpoint.Valid && strings.TrimSpace(providerCapabilities.registrationEndpoint.String) != "" {
 			if !urls.IsAbsoluteHTTPSOrLoopback(providerCapabilities.registrationEndpoint.String) {
 				return nil, oops.E(oops.CodeBadRequest, nil, "registration endpoint must be an absolute https URL, or http on loopback").LogError(ctx, logger)
 			}
@@ -251,6 +249,8 @@ func (s *Service) CommitServerIdentityConfiguration(ctx context.Context, payload
 			} else {
 				registered.TokenEndpointAuthMethod = method
 			}
+		} else if supportsServerIdentityCIMD(providerCapabilities) {
+			registrationMethod = string(registration.MethodCIMD)
 		} else {
 			return serverIdentityManualSetupResult(provider), nil
 		}

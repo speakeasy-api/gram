@@ -92,12 +92,12 @@ func TestCommitServerIdentityConfigurationManualCreatesConfigurationAtomically(t
 	require.Equal(t, clientAuditBefore+1, clientAuditAfter)
 }
 
-func TestCommitServerIdentityConfigurationAutoPrefersCIMD(t *testing.T) {
+func TestCommitServerIdentityConfigurationAutoFallsBackToCIMDWithoutRegistrationEndpoint(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 	targetID, userIssuerID := createServerIdentityTarget(t, ctx, ti, "cimd-target")
-	providerID := createServerIdentityProvider(t, ctx, ti, "cimd-provider", "https://registration.invalid", true, []string{"none", "client_secret_basic"})
+	providerID := createServerIdentityProvider(t, ctx, ti, "cimd-provider", "", true, []string{"none", "client_secret_basic"})
 
 	result, err := ti.service.CommitServerIdentityConfiguration(ctx, autoServerIdentityPayload(targetID, providerID))
 	require.NoError(t, err)
@@ -109,7 +109,7 @@ func TestCommitServerIdentityConfigurationAutoPrefersCIMD(t *testing.T) {
 	require.Equal(t, *result.Client.ClientIDMetadataURI, result.Client.ClientID)
 }
 
-func TestCommitServerIdentityConfigurationAutoRegistersOnceWithDCR(t *testing.T) {
+func TestCommitServerIdentityConfigurationAutoPrefersDCRWhenCIMDAlsoAvailable(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -139,7 +139,7 @@ func TestCommitServerIdentityConfigurationAutoRegistersOnceWithDCR(t *testing.T)
 	}))
 	t.Cleanup(registrationServer.Close)
 
-	providerID := createServerIdentityProvider(t, ctx, ti, "dcr-provider", registrationServer.URL, false, []string{"client_secret_post"})
+	providerID := createServerIdentityProvider(t, ctx, ti, "dcr-provider", registrationServer.URL, true, []string{"client_secret_post", "none"})
 	payload := autoServerIdentityPayload(targetID, providerID)
 	payload.ClientConfiguration.Scope = []string{"openid", "profile"}
 	payload.ClientConfiguration.TokenEndpointAuthMethod = conv.PtrEmpty("client_secret_post")
