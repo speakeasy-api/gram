@@ -274,7 +274,11 @@ run_with_budget() {
   local budget="$1"
   shift
 
-  "$@" &
+  # Stderr of the job itself, not of the agent -- that is already captured in
+  # the turn log. What this drops is the shell's own notice when the watchdog
+  # kills the turn, which prints the terminated command line, and for Claude
+  # Code that line carries the run's API key in its environment prefix.
+  "$@" 2>/dev/null &
   local turn_pid=$!
 
   ( sleep "$budget"
