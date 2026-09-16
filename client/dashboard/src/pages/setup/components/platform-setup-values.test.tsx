@@ -236,13 +236,19 @@ describe("usePlatformApiKeys", () => {
       callbacks(0).onSuccess({ key: "EXAMPLE_SHARED_KEY" });
       callbacks(1).onSuccess({ key: "EXAMPLE_CURSOR_KEY" });
       callbacks(2).onSuccess({ key: "EXAMPLE_STANDALONE_KEY" });
+      callbacks(3).onSuccess({ key: "EXAMPLE_STANDALONE_COWORK_KEY" });
     });
     expect(result.current.shared.keys.cursor).toBe("EXAMPLE_CURSOR_KEY");
     expect(result.current.shared.keys.claude).toBe("EXAMPLE_SHARED_KEY");
+    expect(result.current.shared.keys["claude-cowork"]).toBe(
+      "EXAMPLE_SHARED_KEY",
+    );
     expect(result.current.standalone.keys.claude).toBe(
       "EXAMPLE_STANDALONE_KEY",
     );
-    expect(result.current.standalone.keys["claude-cowork"]).toBeUndefined();
+    expect(result.current.standalone.keys["claude-cowork"]).toBe(
+      "EXAMPLE_STANDALONE_COWORK_KEY",
+    );
   });
 
   it("does not mint for steps without an API key", () => {
