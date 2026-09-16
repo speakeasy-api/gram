@@ -88,6 +88,7 @@ func (s *Service) Process(ctx context.Context, config Config, frame Frame) (Verd
 			Text:        input.text,
 			MessageType: input.kind,
 			ToolName:    input.tool,
+			ToolCallID:  input.toolCallID,
 		})
 		if err != nil {
 			return Verdict{}, fmt.Errorf("evaluate inference policy: %w", err)

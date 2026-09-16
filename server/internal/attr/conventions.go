@@ -565,6 +565,7 @@ const (
 	RiskStartPosKey                = attribute.Key("gram.risk.start_pos")
 	RiskEndPosKey                  = attribute.Key("gram.risk.end_pos")
 	RiskEnforcementTruncatedKey    = attribute.Key("gram.risk.enforcement_truncated")
+	RiskEnforcementFailModeKey     = attribute.Key("gram.risk.enforcement.fail_mode")
 	RiskScanModeKey                = attribute.Key("gram.risk.scan_mode")
 	RiskLLMTokenKindKey            = attribute.Key("gram.risk.llm.token_kind")
 	RiskLLMModelKey                = attribute.Key("gram.risk.llm.model")
@@ -2265,6 +2266,15 @@ func SlogRiskScanTextSize(v int) slog.Attr      { return slog.Int(string(RiskSca
 
 func RiskEnforcementTruncated(v bool) attribute.KeyValue {
 	return RiskEnforcementTruncatedKey.Bool(v)
+}
+
+// RiskEnforcementFailMode is what a realtime scan does after a Pub/Sub
+// enforcement lane degrades: "open" allows the event, "closed" denies it.
+func RiskEnforcementFailMode(v string) attribute.KeyValue {
+	return RiskEnforcementFailModeKey.String(v)
+}
+func SlogRiskEnforcementFailMode(v string) slog.Attr {
+	return slog.String(string(RiskEnforcementFailModeKey), v)
 }
 
 func RiskScanRequestID(v string) attribute.KeyValue { return RiskScanRequestIDKey.String(v) }
