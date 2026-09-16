@@ -2225,6 +2225,9 @@ CREATE TABLE IF NOT EXISTS remote_session_issuers (
 
   scopes_supported TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   grant_types_supported TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  -- Advertised authorization grant profiles. Empty means none recorded, not
+  -- proof that the issuer cannot support a profile or that a client is trusted.
+  authorization_grant_profiles_supported TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   response_types_supported TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   token_endpoint_auth_methods_supported TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   -- Deliberately nullable with no default, unlike the capability arrays
@@ -2358,6 +2361,12 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
   token_endpoint_auth_method TEXT,
   json_web_key_set_id uuid,
   scope TEXT[],
+  -- Recorded registration grant types, not authoritative provider policy.
+  -- NULL means unknown; an empty array means explicitly recorded empty.
+  grant_types TEXT[],
+  -- Provider-specific OAuth audience request parameter on authorize/token
+  -- requests, not the ID-JAG resource-AS issuer audience or RFC 8707 resource.
+  -- The signed assertion uses token_endpoint_auth_audience_format instead.
   audience TEXT,
 
   -- Which of the issuer's identifiers Gram places in the `aud` claim of an
@@ -8674,3 +8683,42 @@ CREATE TABLE IF NOT EXISTS killswitch_operations (
   CONSTRAINT killswitch_operations_completed_response_check CHECK ((status = 'pending' AND response IS NULL) OR (status = 'completed' AND response IS NOT NULL))
 );
 CREATE INDEX IF NOT EXISTS killswitch_operations_expires_at_idx ON killswitch_operations (expires_at);
+
+-- Purpose-specific downstream registrations; interactive attachments remain separate.
+-- Application transactions retain tombstone generations and reject stale completion.
+CREATE UNIQUE INDEX IF NOT EXISTS remote_session_clients_id_issuer_key ON remote_session_clients (id, remote_session_issuer_id);
+
+CREATE TABLE IF NOT EXISTS remote_session_ema_bindings (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+  user_session_issuer_id uuid NOT NULL,
+  remote_session_issuer_id uuid NOT NULL,
+  resource TEXT NOT NULL,
+  remote_session_client_id uuid,
+  -- Binding incarnation, not a counter for every status/provenance update.
+  -- Writers CAS against the expected generation; unlink/rebind advances it.
+  -- DCR completion checks claim_id and in_progress state within the same
+  -- generation, then records status/provenance and clears the completed claim.
+  generation bigint NOT NULL DEFAULT 1,
+  state TEXT,
+  grant_source TEXT,
+  requested_scopes TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  claim_id uuid,
+  claimed_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  PRIMARY KEY (id),
+  -- Application transactions must unlink and clean up parent references.
+  -- Required provenance stays NOT NULL: deletion fails if references remain.
+  FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON UPDATE CASCADE ON DELETE SET NULL,
+  FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE SET NULL,
+  FOREIGN KEY (remote_session_issuer_id) REFERENCES remote_session_issuers (id) ON DELETE SET NULL,
+  FOREIGN KEY (remote_session_client_id, remote_session_issuer_id) REFERENCES remote_session_clients (id, remote_session_issuer_id) ON DELETE SET NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS remote_session_ema_bindings_resource_key ON remote_session_ema_bindings
+  (project_id, user_session_issuer_id, remote_session_issuer_id, resource);
+CREATE UNIQUE INDEX IF NOT EXISTS remote_session_ema_bindings_claim_key ON remote_session_ema_bindings (claim_id) WHERE claim_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS remote_session_ema_bindings_client_idx ON remote_session_ema_bindings (remote_session_client_id);
+CREATE INDEX IF NOT EXISTS remote_session_ema_bindings_issuer_idx ON remote_session_ema_bindings (remote_session_issuer_id);
+CREATE INDEX IF NOT EXISTS remote_session_ema_bindings_user_issuer_idx ON remote_session_ema_bindings (user_session_issuer_id);
