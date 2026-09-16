@@ -14,17 +14,28 @@ export function useGatewayMemberRows(metaMcpServerId: string): {
   rows: MemberRow[];
   isLoading: boolean;
   servers: McpServer[];
+  isError: boolean;
+  membersUpdatedAt: number;
+  refetch: () => Promise<unknown>;
 } {
-  const { data: membersResult, isLoading: isLoadingMembers } =
-    useMetaMcpMembers({ metaMcpServerId }, undefined, {
-      enabled: metaMcpServerId !== "",
-    });
+  const {
+    data: membersResult,
+    isLoading: isLoadingMembers,
+    isError: membersFailed,
+    dataUpdatedAt: membersUpdatedAt,
+    isFetching: fetchingMembers,
+    refetch: refetchMembers,
+  } = useMetaMcpMembers({ metaMcpServerId }, undefined, {
+    enabled: metaMcpServerId !== "",
+    throwOnError: false,
+  });
   const gramProject = useProjectSlugForRequests();
-  const { data: serversResult, isLoading: isLoadingServers } = useMcpServers(
-    { gramProject },
-    undefined,
-    { throwOnError: false },
-  );
+  const {
+    data: serversResult,
+    isLoading: isLoadingServers,
+    isError: serversFailed,
+    refetch: refetchServers,
+  } = useMcpServers({ gramProject }, undefined, { throwOnError: false });
   const servers = useMemo(
     () => serversResult?.mcpServers ?? [],
     [serversResult],
@@ -33,5 +44,13 @@ export function useGatewayMemberRows(metaMcpServerId: string): {
     () => buildMemberRows(membersResult?.members ?? [], servers),
     [membersResult, servers],
   );
-  return { rows, isLoading: isLoadingMembers || isLoadingServers, servers };
+  return {
+    rows,
+    // Cached data on a failed/in-flight refresh is not authoritative.
+    membersUpdatedAt: membersFailed || fetchingMembers ? 0 : membersUpdatedAt,
+    isLoading: isLoadingMembers || isLoadingServers,
+    servers,
+    isError: membersFailed || serversFailed,
+    refetch: () => Promise.all([refetchMembers(), refetchServers()]),
+  };
 }
