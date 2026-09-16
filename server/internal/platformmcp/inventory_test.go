@@ -145,7 +145,6 @@ func TestInventoryDoesNotExposeUpstreamURLForNonRemoteBackends(t *testing.T) {
 	backendID := uuid.NullUUID{UUID: uuid.New(), Valid: true}
 	for _, backend := range []struct {
 		kind      MCPBackendKind
-		remote    uuid.NullUUID
 		tunneled  uuid.NullUUID
 		toolset   uuid.NullUUID
 		unproxied uuid.NullUUID
@@ -159,7 +158,6 @@ func TestInventoryDoesNotExposeUpstreamURLForNonRemoteBackends(t *testing.T) {
 			McpServerID:          uuid.New(),
 			ProjectID:            uuid.New(),
 			Visibility:           "private",
-			RemoteMcpServerID:    backend.remote,
 			TunneledMcpServerID:  backend.tunneled,
 			ToolsetID:            backend.toolset,
 			UnproxiedMcpServerID: backend.unproxied,
