@@ -120,6 +120,7 @@ PRESIDIO_ANALYZER_URL = "http://127.0.0.1:{{env.PRESIDIO_PORT}}"
 
 ## Fine-tuned risk LLM analyzer (OpenAI-compatible chat endpoint, URL includes
 ## /v1). An empty URL disables it; real values belong in mise.local.toml.
+## Runbook: server/internal/scanners/llmanalyzer/README.md (Local development).
 GRAM_RISK_LLM_URL = ""
 GRAM_RISK_LLM_MODEL = "risk-judge-4b"
 GRAM_RISK_LLM_API_KEY = ""
