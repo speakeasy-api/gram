@@ -9,6 +9,8 @@ import {
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router";
+
+import { TooltipProvider } from "@/components/ui/Tooltip";
 import type { MouseEvent, ReactElement, ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
@@ -383,13 +385,17 @@ function renderInventoryTable(
   return render(
     <MemoryRouter>
       <QueryClientProvider client={queryClient}>
-        <ShadowMCPInventoryTable
-          members={members}
-          onOpenServer={onOpenServer}
-          projectID={projectID}
-          roles={roles}
-          shadowMCPPolicies={shadowMCPPolicies}
-        />
+        {/* The status cell explains itself through a tooltip, the way App
+            mounts one around the whole tree. */}
+        <TooltipProvider>
+          <ShadowMCPInventoryTable
+            members={members}
+            onOpenServer={onOpenServer}
+            projectID={projectID}
+            roles={roles}
+            shadowMCPPolicies={shadowMCPPolicies}
+          />
+        </TooltipProvider>
       </QueryClientProvider>
     </MemoryRouter>,
   );
@@ -470,9 +476,7 @@ describe("ShadowMCPInventoryTable", () => {
     });
     expect(screen.getByText("https://github.example.com/mcp")).toBeTruthy();
     expect(screen.getByText("Allowed")).toBeTruthy();
-    expect(screen.getByText("Allowed by URL rule")).toBeTruthy();
     expect(screen.getByText("Blocked")).toBeTruthy();
-    expect(screen.getByText("Blocked by policy")).toBeTruthy();
     expect(screen.getByText("42 calls")).toBeTruthy();
     expect(screen.getByText("3 users")).toBeTruthy();
     expect(screen.getByText("Never")).toBeTruthy();
@@ -597,15 +601,17 @@ describe("ShadowMCPInventoryTable", () => {
     render(
       <MemoryRouter>
         <QueryClientProvider client={queryClient}>
-          <ShadowMCPInventoryTable
-            members={[]}
-            onOpenServer={(server) => {
-              onOpenServer(server);
-            }}
-            projectID="project-id-1"
-            roles={[]}
-            shadowMCPPolicies={[blockingPolicy()]}
-          />
+          <TooltipProvider>
+            <ShadowMCPInventoryTable
+              members={[]}
+              onOpenServer={(server) => {
+                onOpenServer(server);
+              }}
+              projectID="project-id-1"
+              roles={[]}
+              shadowMCPPolicies={[blockingPolicy()]}
+            />
+          </TooltipProvider>
         </QueryClientProvider>
       </MemoryRouter>,
     );
@@ -1063,12 +1069,14 @@ describe("ShadowMCPInventoryTable", () => {
     const { rerender } = render(
       <MemoryRouter>
         <QueryClientProvider client={queryClient}>
-          <ShadowMCPInventoryTable
-            members={[]}
-            projectID="project-id-1"
-            roles={[]}
-            shadowMCPPolicies={[blockingPolicy()]}
-          />
+          <TooltipProvider>
+            <ShadowMCPInventoryTable
+              members={[]}
+              projectID="project-id-1"
+              roles={[]}
+              shadowMCPPolicies={[blockingPolicy()]}
+            />
+          </TooltipProvider>
         </QueryClientProvider>
       </MemoryRouter>,
     );
@@ -1080,12 +1088,14 @@ describe("ShadowMCPInventoryTable", () => {
     rerender(
       <MemoryRouter>
         <QueryClientProvider client={queryClient}>
-          <ShadowMCPInventoryTable
-            members={[]}
-            projectID="project-id-2"
-            roles={[]}
-            shadowMCPPolicies={[blockingPolicy()]}
-          />
+          <TooltipProvider>
+            <ShadowMCPInventoryTable
+              members={[]}
+              projectID="project-id-2"
+              roles={[]}
+              shadowMCPPolicies={[blockingPolicy()]}
+            />
+          </TooltipProvider>
         </QueryClientProvider>
       </MemoryRouter>,
     );
@@ -1110,13 +1120,15 @@ describe("ShadowMCPInventoryTable", () => {
     const { rerender } = render(
       <MemoryRouter>
         <QueryClientProvider client={queryClient}>
-          <ShadowMCPInventoryTable
-            enabled
-            members={[]}
-            projectID="project-id-1"
-            roles={[]}
-            shadowMCPPolicies={[blockingPolicy()]}
-          />
+          <TooltipProvider>
+            <ShadowMCPInventoryTable
+              enabled
+              members={[]}
+              projectID="project-id-1"
+              roles={[]}
+              shadowMCPPolicies={[blockingPolicy()]}
+            />
+          </TooltipProvider>
         </QueryClientProvider>
       </MemoryRouter>,
     );
@@ -1128,13 +1140,15 @@ describe("ShadowMCPInventoryTable", () => {
     rerender(
       <MemoryRouter>
         <QueryClientProvider client={queryClient}>
-          <ShadowMCPInventoryTable
-            enabled={false}
-            members={[]}
-            projectID="project-id-1"
-            roles={[]}
-            shadowMCPPolicies={[blockingPolicy()]}
-          />
+          <TooltipProvider>
+            <ShadowMCPInventoryTable
+              enabled={false}
+              members={[]}
+              projectID="project-id-1"
+              roles={[]}
+              shadowMCPPolicies={[blockingPolicy()]}
+            />
+          </TooltipProvider>
         </QueryClientProvider>
       </MemoryRouter>,
     );
@@ -1213,9 +1227,24 @@ describe("ShadowMCPInventoryTable", () => {
     await waitFor(() => {
       expect(screen.getByText("Scoped MCP")).toBeTruthy();
     });
+    // The badge is the verdict. "Restricted" covers several different
+    // postures, so the mechanism behind it has to stay reachable from the
+    // row — and by keyboard, not hover alone, which is why the assertion
+    // opens the tooltip by focusing its trigger.
     expect(screen.getByText("Restricted")).toBeTruthy();
-    expect(screen.getByText("Allowed for selected users")).toBeTruthy();
-    expect(screen.queryByText("Allowed by URL rule")).toBeNull();
+    expect(screen.queryByText(/Allowed for selected users/)).toBeNull();
+
+    const trigger = screen
+      .getByText("Restricted")
+      .closest('[data-slot="tooltip-trigger"]');
+    expect(trigger).toBeTruthy();
+    fireEvent.focus(trigger as Element);
+
+    await waitFor(() => {
+      expect(
+        screen.getAllByText(/Allowed for selected users/).length,
+      ).toBeGreaterThan(0);
+    });
   });
 
   it("renders observed status when blocking is inactive", async () => {
@@ -1235,7 +1264,6 @@ describe("ShadowMCPInventoryTable", () => {
       expect(screen.getByText("Observed MCP")).toBeTruthy();
     });
     expect(screen.getByText("Observed")).toBeTruthy();
-    expect(screen.getByText("Not blocking")).toBeTruthy();
   });
 });
 

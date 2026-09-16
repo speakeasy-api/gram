@@ -64,6 +64,9 @@ const (
 
 	// IssuerMetadataRefreshReasonUnknownSigningKey: an ID token named a kid the issuer's key set lacks even after a forced key refresh.
 	IssuerMetadataRefreshReasonUnknownSigningKey IssuerMetadataRefreshReason = "unknown_signing_key"
+
+	// IssuerMetadataRefreshReasonEnrichmentEndpointMissing: the stored userinfo or introspection endpoint answered 404 or 410 without an OAuth error body.
+	IssuerMetadataRefreshReasonEnrichmentEndpointMissing IssuerMetadataRefreshReason = "enrichment_endpoint_missing"
 )
 
 // IssuerMetadataRefresh holds the on-use issuer metadata refresh instrument.

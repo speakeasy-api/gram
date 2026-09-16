@@ -172,7 +172,7 @@ var _ = Service("agent", func() {
 	})
 
 	Method("listAiScanTargets", func() {
-		Description("List the Shadow AI scan targets this organization's device agents probe for: the Speakeasy defaults overlaid with the organization's own additions and customizations, with the list version agents echo on scan receipts. Requires a session with the org:admin scope.")
+		Description("List the Shadow AI scan targets this organization's device agents probe for: the Speakeasy built-ins plus the organization's own additions, with the catalog version agents echo on scan receipts. Everything listed is probed for; a built-in leaves the list by leaving Speakeasy's catalog, an organization target by being deleted. Requires a session with the org:admin scope.")
 
 		Security(security.Session)
 
@@ -188,13 +188,13 @@ var _ = Service("agent", func() {
 			Response(StatusOK)
 		})
 
-		Meta("openapi:operationId", "listDeviceAgentAiScanTargets")
+		Meta("openapi:operationId", "listAiScanTargets")
 		Meta("openapi:extension:x-speakeasy-name-override", "listAiScanTargets")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeviceAgentAiScanTargets"}`)
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AiScanTargets"}`)
 	})
 
 	Method("upsertAiScanTarget", func() {
-		Description("Add a scan target for this organization, replace one it added earlier, or customize a Speakeasy default under the same id, which is how a default is disabled for the organization. Agents pick the change up on their next policy poll. Requires a session with the org:admin scope.")
+		Description("Add a scan target for this organization or replace one it added earlier. Built-in targets are system-supplied and read-only: a write under a built-in's id is accepted only when it carries that built-in's definition unchanged. Every field is a full replacement except gateway_client, which an existing target keeps when the field is omitted, so a write need not restate the target's matchers; sending gateway_client with empty lists still clears them. Clearing a target's last verifiable matcher also clears any access decision recorded about it, since nothing could enforce it any more; the organization decides again once the target can be recognized at the gateway. Agents pick the change up on their next policy poll. Requires a session with the org:admin scope.")
 
 		Security(security.Session)
 
@@ -207,15 +207,13 @@ var _ = Service("agent", func() {
 				MinLength(1)
 				MaxLength(128)
 			})
-			Attribute("category", String, "Target category: harness (an AI coding tool) or local_model (a local model runtime).", func() {
-				Enum("harness", "local_model")
+			Attribute("category", String, "Target category: harness (an AI coding tool), assistant (a general-purpose AI assistant or agent), or local_model (an open model run locally).", func() {
+				Enum("harness", "assistant", "local_model")
 			})
 			Attribute("signatures", AiScanTargetSignaturesModel)
+			Attribute("gateway_client", AiScanTargetGatewayClientModel)
 			Attribute("version_plist_key", String, "Info.plist key to read the installed version from on a bundle match; defaults to CFBundleShortVersionString when omitted.", func() {
 				Pattern(aiScanPlistKeyPattern)
-			})
-			Attribute("enabled", Boolean, "Whether the organization's agents probe for the target. Defaults to true.", func() {
-				Default(true)
 			})
 			Required("id", "display_name", "category", "signatures")
 		})
@@ -228,13 +226,13 @@ var _ = Service("agent", func() {
 			Response(StatusOK)
 		})
 
-		Meta("openapi:operationId", "upsertDeviceAgentAiScanTarget")
+		Meta("openapi:operationId", "upsertAiScanTarget")
 		Meta("openapi:extension:x-speakeasy-name-override", "upsertAiScanTarget")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpsertDeviceAgentAiScanTarget"}`)
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpsertAiScanTarget"}`)
 	})
 
 	Method("deleteAiScanTarget", func() {
-		Description("Remove a target the organization added, or drop the organization's customization of a Speakeasy default so the default is served again. Requires a session with the org:admin scope.")
+		Description("Remove a target the organization added, or clear the row a built-in carries so it returns to having no recorded decision. A built-in itself cannot be removed here; it leaves the list only by leaving Speakeasy's catalog. Requires a session with the org:admin scope.")
 
 		Security(security.Session)
 
@@ -254,9 +252,9 @@ var _ = Service("agent", func() {
 			Response(StatusOK)
 		})
 
-		Meta("openapi:operationId", "deleteDeviceAgentAiScanTarget")
+		Meta("openapi:operationId", "deleteAiScanTarget")
 		Meta("openapi:extension:x-speakeasy-name-override", "deleteAiScanTarget")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteDeviceAgentAiScanTarget"}`)
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteAiScanTarget"}`)
 	})
 
 	Method("getSessionMeta", func() {
@@ -509,8 +507,8 @@ var AIScanMatchModel = Type("AIScanMatch", func() {
 		MinLength(1)
 		MaxLength(64)
 	})
-	Attribute("category", String, "Target category the agent scanned under: harness or local_model. The server catalog's category wins for targets it knows; this is what gets stored for the rest.", func() {
-		Enum("harness", "local_model")
+	Attribute("category", String, "Target category the agent scanned under: harness, assistant, or local_model. The server catalog's category wins for targets it knows; this is what gets stored for the rest.", func() {
+		Enum("harness", "assistant", "local_model")
 		MaxLength(32)
 	})
 	Attribute("signal", String, "What the scan observed: installed or running.", func() {
@@ -525,11 +523,14 @@ var AIScanMatchModel = Type("AIScanMatch", func() {
 // Mirrors aitargets.Validate and the device agent's validator.
 const (
 	aiScanMaxSignatureEntries = 16
-	aiScanTargetIDPattern     = `^[a-z0-9][a-z0-9-]{0,63}$`
-	aiScanBundleIDPattern     = `^[A-Za-z0-9._-]{1,128}$`
-	aiScanBinaryPattern       = `^[A-Za-z0-9._-]{1,64}$`
-	aiScanProcessNamePattern  = `^[A-Za-z0-9 ._-]{1,64}$`
-	aiScanPlistKeyPattern     = `^[A-Za-z0-9]{1,64}$`
+	// Mirrors aitargets.MaxGatewayClientEntries.
+	aiScanMaxGatewayClientEntries = 16
+	aiScanTargetIDPattern         = `^[a-z0-9][a-z0-9-]{0,63}$`
+	aiScanBundleIDPattern         = `^[A-Za-z0-9._-]{1,128}$`
+	aiScanBinaryPattern           = `^[A-Za-z0-9._-]{1,64}$`
+	aiScanProcessNamePattern      = `^[A-Za-z0-9 ._-]{1,64}$`
+	aiScanPlistKeyPattern         = `^[A-Za-z0-9]{1,64}$`
+	aiScanVendorKeyPattern        = `^[a-z0-9][a-z0-9-]{0,63}$`
 )
 
 var AiScanTargetSignaturesModel = Type("AiScanTargetSignatures", func() {
@@ -540,7 +541,7 @@ var AiScanTargetSignaturesModel = Type("AiScanTargetSignatures", func() {
 	Attribute("binaries", ArrayOf(String, func() { Pattern(aiScanBinaryPattern) }), "Bare command names resolved on the device PATH; never a path.", func() {
 		MaxLength(aiScanMaxSignatureEntries)
 	})
-	Attribute("config_dirs", ArrayOf(String), "Directories whose existence marks the tool as installed, taken as home-relative unless they start with /.", func() {
+	Attribute("config_dirs", ArrayOf(String), "Directories whose existence marks the tool as installed, taken as home-relative unless they start with /. A `*` is a wildcard matching any run of characters within ONE path segment, never crossing a `/`, for tools installed under a version-stamped directory name such as an editor extension.", func() {
 		MaxLength(aiScanMaxSignatureEntries)
 	})
 	Attribute("process_names", ArrayOf(String, func() { Pattern(aiScanProcessNamePattern) }), "Exact process names checked for the running signal.", func() {
@@ -549,35 +550,49 @@ var AiScanTargetSignaturesModel = Type("AiScanTargetSignatures", func() {
 	Required("bundle_ids", "binaries", "config_dirs", "process_names")
 })
 
+var AiScanTargetGatewayClientModel = Type("AiScanTargetGatewayClient", func() {
+	Description("How a target detected on a device is recognized again when the same tool calls Gram's MCP gateway. A device signature and a registered OAuth client share no natural join key, so the link is declared here. The three lists are not interchangeable: the first two name credentials Gram verified and can be enforced on, the third names what a client said about itself and is used only to attribute traffic.")
+	Attribute("cimd_vendor_keys", ArrayOf(String, func() { Pattern(aiScanVendorKeyPattern) }), "Vendor keys from Gram's CIMD client catalog. Vendor-grained: no two targets may claim the same key, or a block on either would silently cover the other.", func() {
+		MaxLength(aiScanMaxGatewayClientEntries)
+	})
+	Attribute("oauth_client_ids", ArrayOf(String, func() { MaxLength(512) }), "Client ids matched literally against the caller's verified client_id, or CIMD catalog URLs — including the wildcard patterns — matched against the catalog entry that admitted it. Naming the catalog URL is how a vendor that mints one document per MCP server is still named exactly. No two targets may claim the same entry.", func() {
+		MaxLength(aiScanMaxGatewayClientEntries)
+	})
+	Attribute("client_info_names", ArrayOf(String, func() { MaxLength(128) }), "Names an MCP client reports at initialize. Detection only, never authorization: the value is self-reported and any client can claim any name.", func() {
+		MaxLength(aiScanMaxGatewayClientEntries)
+	})
+	Required("cimd_vendor_keys", "oauth_client_ids", "client_info_names")
+})
+
 var AiScanTargetModel = Type("AiScanTarget", func() {
-	Description("One Shadow AI scan target in an organization's list: a Speakeasy default, or a target the organization added or customized.")
+	Description("One Shadow AI scan target in an organization's list: a Speakeasy built-in, or a target the organization added.")
 	Attribute("id", String, "Stable id agents report and detections key on.", func() {
 		Pattern(aiScanTargetIDPattern)
 	})
 	Attribute("display_name", String, "Name shown in the dashboard.", func() {
 		MaxLength(128)
 	})
-	Attribute("category", String, "Target category: harness (an AI coding tool) or local_model (a local model runtime).", func() {
-		Enum("harness", "local_model")
+	Attribute("category", String, "Target category: harness (an AI coding tool), assistant (a general-purpose AI assistant or agent), or local_model (an open model run locally).", func() {
+		Enum("harness", "assistant", "local_model")
 	})
 	Attribute("signatures", AiScanTargetSignaturesModel)
 	Attribute("version_plist_key", String, "Info.plist key the installed version is read from on a bundle match; defaults to CFBundleShortVersionString when omitted.", func() {
 		Pattern(aiScanPlistKeyPattern)
 	})
-	Attribute("enabled", Boolean, "Whether the organization's agents probe for this target.")
-	Attribute("origin", String, "Where the target comes from: default (compiled into Gram) or organization (added by the organization).", func() {
+	Attribute("gateway_client", AiScanTargetGatewayClientModel)
+	Attribute("origin", String, "Where the target comes from: default (a Speakeasy built-in, whose definition is read-only) or organization (added by the organization, fully editable). Every target listed here is probed for; a built-in leaves the list by being removed from Speakeasy's catalog, an organization target by being deleted.", func() {
 		Enum("default", "organization")
 	})
-	Attribute("customized", Boolean, "For a default, whether the organization has replaced it with its own row, for example to disable it. Always false for organization targets.")
+	Attribute("customized", Boolean, "For a built-in, whether the organization has recorded an access decision about it. Always false for organization targets.")
 	Attribute("created_at", String, "When the organization's row was created; absent for an untouched default.", func() { Format(FormatDateTime) })
 	Attribute("updated_at", String, "When the organization's row last changed; absent for an untouched default.", func() { Format(FormatDateTime) })
-	Required("id", "display_name", "category", "signatures", "enabled", "origin", "customized")
+	Required("id", "display_name", "category", "signatures", "gateway_client", "origin", "customized")
 })
 
 var ListAiScanTargetsResult = Type("ListAiScanTargetsResult", func() {
-	Attribute("list_version", Int, "Version of the served list; the value agents echo as target_list_version once they receive it.")
-	Attribute("etag", String, "Fingerprint of the served list; changes whenever the enabled set changes.")
-	Attribute("targets", ArrayOf(AiScanTargetModel), "Every target in the organization's list, enabled or not, ordered by id.")
+	Attribute("list_version", Int, "Version of the served catalog; the value agents echo as target_list_version once they receive it.")
+	Attribute("etag", String, "Fingerprint of the served list; changes whenever the targets or their definitions change.")
+	Attribute("targets", ArrayOf(AiScanTargetModel), "Every target in the organization's list, ordered by id.")
 	Required("list_version", "etag", "targets")
 })
 

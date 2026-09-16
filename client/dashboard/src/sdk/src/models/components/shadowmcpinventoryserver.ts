@@ -78,8 +78,14 @@ export type ShadowMCPInventoryServer = {
    * What the row identifies: a server URL observed or requested, or a local stdio command known only through its review. Absent means server_url.
    */
   targetKind?: TargetKind | undefined;
+  /**
+   * The users who reached this server most.
+   */
   topUsers: Array<string>;
   urlHost: string;
+  /**
+   * Distinct users who reached this server.
+   */
   userCount: number;
 };
 

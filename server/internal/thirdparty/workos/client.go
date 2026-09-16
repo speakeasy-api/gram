@@ -93,9 +93,10 @@ func NewClient(guardianPolicy *guardian.Policy, apiKey string, opts ...ClientOpt
 	retryCfg := guardian.DefaultRetryConfig()
 	retryCfg.WaitMax = 10 * time.Second
 	resilience := guardian.WithResilience("workos", guardian.ResilienceConfig{
-		Partition: partitionByHostAndAPIKey(apiKey),
-		Limit:     guardian.PerMinute(6000),
-		Breaker:   guardian.NoBreaker(),
+		Partition:       partitionByHostAndAPIKey(apiKey),
+		Limit:           guardian.PerMinute(6000),
+		WaitForCapacity: false,
+		Breaker:         guardian.NoBreaker(),
 	})
 	httpClient := guardianPolicy.PooledClient(guardian.WithRetryConfig(retryCfg), resilience)
 	nonRetryingHTTPClient := guardianPolicy.PooledClient(resilience)

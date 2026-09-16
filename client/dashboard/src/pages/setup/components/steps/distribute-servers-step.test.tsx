@@ -59,7 +59,7 @@ vi.mock("../step-container", () => ({
 }));
 vi.mock("@/contexts/Sdk", () => ({ useSdkClient: () => serverState.client }));
 vi.mock("@/routes", () => ({
-  useRoutes: () => ({ mcp: { add: { catalog: { Link: () => null } } } }),
+  useRoutes: () => ({ mcp: { catalog: { Link: () => null } } }),
 }));
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({ invalidateQueries: vi.fn() }),

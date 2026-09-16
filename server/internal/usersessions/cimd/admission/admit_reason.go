@@ -15,6 +15,11 @@ package admission
 // telemetry that can show whether a wildcard entry is load-bearing: the
 // matched URL cannot go in a metric dimension (unbounded), and admissions
 // are too high-volume to log individually.
+//
+// Gram's own assistants are a third path: their documents are admitted
+// ahead of the catalog and custom URLs on every issuer that accepts CIMD,
+// and recorded as AdmitPlatformAssistant so first-party traffic never
+// reads as a catalog gap.
 type AdmitReason string
 
 const (
@@ -33,6 +38,14 @@ const (
 	// client_id namespace cannot be enumerated. Watch this to confirm that
 	// pattern-only vendors are reaching the authorization server at all.
 	AdmitCatalogPattern AdmitReason = "admitted_catalog_pattern"
+
+	// AdmitPlatformAssistant: a Client ID Metadata Document Gram itself
+	// publishes for one of its assistants. Assistants only ever authenticate
+	// to Gram-hosted MCP servers, so their document is admitted on every
+	// issuer that accepts CIMD at all, regardless of the catalog or the
+	// issuer's custom URLs: a presets denial here would be a dead end with
+	// no client-side recovery and nothing for the operator to add.
+	AdmitPlatformAssistant AdmitReason = "admitted_platform_assistant"
 
 	// AdmitCustom: one of the issuer's own user_session_issuer_cimd_clients
 	// rows. Unlike the others this cannot come from Evaluate — the custom

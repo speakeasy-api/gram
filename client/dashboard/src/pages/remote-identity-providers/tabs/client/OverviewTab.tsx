@@ -33,6 +33,13 @@ export function OverviewTab({
             {client.tokenEndpointAuthMethod ?? "client_secret_basic"}
           </InfoText>
         </InfoField>
+        {client.tokenEndpointAuthMethod === "private_key_jwt" && (
+          <InfoField label="Client Assertion Audience">
+            <InfoText mono>
+              {client.tokenEndpointAuthAudienceFormat ?? "issuer"}
+            </InfoText>
+          </InfoField>
+        )}
       </InfoSection>
     </div>
   );

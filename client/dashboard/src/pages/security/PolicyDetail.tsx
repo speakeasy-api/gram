@@ -25,6 +25,7 @@ import { Switch } from "@/components/ui/Switch";
 import { TextArea } from "@/components/ui/Textarea";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Text } from "@/components/ui/Text";
+import { useRecentLabelOverride } from "@/components/command-palette/recentlyVisited";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { useProject } from "@/contexts/Auth";
@@ -72,7 +73,8 @@ import {
   useRef,
   useState,
 } from "react";
-import { useParams } from "react-router";
+import { useLocation, useParams } from "react-router";
+import { toast } from "sonner";
 import { useQueryState } from "nuqs";
 import {
   isBlockingShadowMCPPolicy,
@@ -280,7 +282,12 @@ export default function PolicyDetail(): JSX.Element {
 }
 
 function PolicyDetailContent({ policyId }: { policyId: string }): JSX.Element {
+  const location = useLocation();
   const { data: policy, isLoading } = useRiskPoliciesGet({ id: policyId });
+  useRecentLabelOverride(
+    location.pathname,
+    policy ? `Guardrail · ${policy.name}` : undefined,
+  );
 
   return (
     <Page>
@@ -789,6 +796,7 @@ function PromptPolicyEditor({
     onSuccess: () => {
       void invalidateAllRiskPoliciesGet(queryClient);
       void invalidateAllRiskListPolicies(queryClient);
+      toast.success("Policy updated");
     },
   });
   const createMutation = useRiskCreatePolicyMutation({
@@ -3622,6 +3630,7 @@ export function StandardPolicyEditor({
       void invalidateAllRiskListPolicies(queryClient);
       void invalidateAllShadowMCPInventory(queryClient);
       void invalidateShadowMCPPolicyInventory(queryClient, project.id);
+      toast.success("Policy updated");
     },
   });
   const createMutation = useRiskCreatePolicyMutation({
@@ -3869,8 +3878,8 @@ export function StandardPolicyEditor({
                         Attach your organization's custom rules as{" "}
                         <span className="text-foreground font-medium">
                           detectors
-                        </span>{" "}
-                        — a match records a finding.
+                        </span>
+                        . A match records a finding.
                       </>
                     }
                     idPrefix="detector"

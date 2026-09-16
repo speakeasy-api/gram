@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/Badge";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { type Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
+import { categoryLabel } from "@/pages/device-agent/ai-scan-target-draft";
 import type { AIDetection } from "@gram/client/models/components/aidetection.js";
 import { useEmployeeAIDetections } from "@gram/client/react-query/employeeAIDetections.js";
 
@@ -45,10 +46,11 @@ const COLUMNS: Column<AIDetection>[] = [
     key: "category",
     header: "Category",
     width: "0.75fr",
+    // categoryLabel is the scan-target editor's own label table, so a
+    // category added there is rendered here without a second edit. The
+    // ternary this replaced showed every assistant detection as "Harness".
     render: (detection) => (
-      <Text small>
-        {detection.category === "local_model" ? "Local model" : "Harness"}
-      </Text>
+      <Text small>{categoryLabel(detection.category)}</Text>
     ),
   },
   {
@@ -144,7 +146,7 @@ export function EmployeeShadowAISection({
       <InlineEmptyState
         icon="radar"
         heading="No detected AI tools"
-        description="No AI harnesses or local model runtimes have been detected for this identity."
+        description="No AI harnesses or open models have been detected for this identity."
         orientation="horizontal"
       />
     );

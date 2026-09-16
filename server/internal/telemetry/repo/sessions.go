@@ -62,7 +62,7 @@ const (
 	// the summaries cover agent surfaces only, and claude-code:usage
 	// duplicates the OTEL api_request stream.
 	sessionAgentUsageRowPredicate = "(startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage'))"
-	// sessionHookTurnUsageRowPredicate matches opencode's and openclaw's
+	// sessionHookTurnUsageRowPredicate matches opencode's, openclaw's and Pi's
 	// per-turn usage rows. Both report tokens and cost on their unified-ingest
 	// assistant.responded rows, under the canonical gen_ai.usage.* keys the
 	// generic fallback branches already read. Neither has an OTEL stream and the
@@ -72,7 +72,7 @@ const (
 	// as usage turns; cost is part of the guard so a cost-only turn still counts.
 	// Mirrors is_hook_turn_usage_row in the MVs (server/clickhouse/schema.sql).
 	sessionHookTurnUsageRowPredicate = "(" +
-		"hook_source IN ('opencode', 'openclaw') AND " +
+		"hook_source IN ('opencode', 'openclaw', 'pi') AND " +
 		"toString(attributes.gram.hook.event) = 'AfterAgentResponse' AND " +
 		"(toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')" +
 		")"
@@ -83,12 +83,12 @@ const (
 		"gram_urn = 'litellm:otel:traces' AND " +
 		"event_urn IN ('urn:telemetry:provider_otel:span:chat', 'urn:telemetry:provider_otel:span:embeddings', 'urn:telemetry:provider_otel:span:text_completion')" +
 		")"
-	// sessionAgentToolCallPredicate matches Codex/Cursor/opencode/openclaw
+	// sessionAgentToolCallPredicate matches Codex/Cursor/opencode/openclaw/Pi
 	// completed tool-call hook rows (they have no OTEL stream). The hook.event
 	// guard excludes the PreToolUse companion row; provider names are not tool
 	// calls.
 	sessionAgentToolCallPredicate = "(" +
-		"hook_source IN ('codex', 'cursor', 'opencode', 'openclaw') AND " +
+		"hook_source IN ('codex', 'cursor', 'opencode', 'openclaw', 'pi') AND " +
 		"toString(attributes.gram.tool.name) != '' AND " +
 		"toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor') AND " +
 		"toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')" +

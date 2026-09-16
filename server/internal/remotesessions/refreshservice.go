@@ -94,6 +94,8 @@ type RefreshService struct {
 	// issuerMetadata refreshes the issuer's stored metadata when a session is refreshed; nil leaves the row as is.
 	issuerMetadata *IssuerMetadataRefresher
 
+	assertions TokenEndpointAssertionSigner
+
 	// restatements tracks identity restatements detached from request-path refreshes.
 	restatements sync.WaitGroup
 }
@@ -129,6 +131,12 @@ func WithRefreshSessionEnricher(enricher *SessionEnricher) RefreshOption {
 	}
 }
 
+// WithRefreshTokenEndpointAssertionSigner signs private_key_jwt assertions for
+// refresh grants.
+func WithRefreshTokenEndpointAssertionSigner(signer TokenEndpointAssertionSigner) RefreshOption {
+	return func(s *RefreshService) { s.assertions = signer }
+}
+
 // NewRefreshService builds the service; without a guardian policy no enricher
 // is wired and a refresh restates nothing from the access token.
 func NewRefreshService(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, enc *encryption.Client, policy *guardian.Policy, locks cache.Cache, opts ...RefreshOption) *RefreshService {
@@ -142,13 +150,14 @@ func NewRefreshService(logger *slog.Logger, meterProvider metric.MeterProvider, 
 		idTokens:       NoIDTokenVerifier(),
 		issuerMetadata: nil,
 		enricher:       nil,
+		assertions:     unavailableTokenEndpointAssertionSigner{},
 		restatements:   sync.WaitGroup{},
-	}
-	if policy != nil {
-		s.enricher = NewSessionEnricher(logger, enc, policy, nil, nil)
 	}
 	for _, opt := range opts {
 		opt(s)
+	}
+	if s.enricher == nil && policy != nil {
+		s.enricher = NewSessionEnricher(logger, enc, policy, nil, nil, s.issuerMetadata)
 	}
 	return s
 }
@@ -265,10 +274,10 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 // itself has expired; otherwise it was the POST's internal timeout, which is
 // the upstream not answering.
 //
-// invalid_grant is checked before the status-based buckets because refresh
-// clears the grant on a definitive invalid_grant regardless of status, and
-// the metric describes what Gram did: a 429 or 5xx that also carried
-// invalid_grant left the session without a refresh grant.
+// invalid_grant and invalid_client are checked before the status-based
+// buckets because refresh clears the grant on either regardless of status,
+// and the metric describes what Gram did: a 429 or 5xx that also carried one
+// of them left the session without a refresh grant.
 func refreshOutcomeForError(ctx context.Context, err error) remotesessionmetrics.RefreshOutcome {
 	var tokenErr *TokenRefreshError
 	switch {
@@ -285,6 +294,8 @@ func refreshOutcomeForError(ctx context.Context, err error) remotesessionmetrics
 		return remotesessionmetrics.RefreshOutcomeInternalError
 	case tokenErr.invalidGrant():
 		return remotesessionmetrics.RefreshOutcomeInvalidGrant
+	case tokenErr.invalidClient():
+		return remotesessionmetrics.RefreshOutcomeInvalidClient
 	case tokenErr.statusCode == http.StatusTooManyRequests:
 		return remotesessionmetrics.RefreshOutcomeRateLimited
 	case tokenErr.statusCode >= http.StatusInternalServerError:
@@ -422,6 +433,21 @@ func (s *RefreshService) refresh(
 	updated, tok, refreshErr := s.refreshSessionTokens(ctx, q, client, sess, resource)
 	if refreshErr == nil {
 		accessToken := tok.AccessToken
+		// The issuer authenticated the client, so an earlier rejection was not
+		// the registration being lost (an operator has since fixed the secret,
+		// or the issuer had a bad minute). Clear the marker so the client is
+		// not flagged for re-registration; best-effort, the refresh stands.
+		if client.UpstreamRejectedAt.Valid {
+			if _, err := q.ClearRemoteSessionClientUpstreamRejected(ctx, remotesessions_repo.ClearRemoteSessionClientUpstreamRejectedParams{
+				ID:       sess.RemoteSessionClientID,
+				ClientID: client.ExternalClientID,
+			}); err != nil {
+				s.logger.WarnContext(ctx, "failed to clear the upstream rejection marker after a successful refresh",
+					attr.SlogRemoteSessionClientID(sess.RemoteSessionClientID.String()),
+					attr.SlogError(err),
+				)
+			}
+		}
 		// The stamp is permanent, so record which rows the backfill wrote and
 		// what it wrote — the only way to find them again if a value is wrong.
 		if !sess.Resource.Valid && updated.Resource.Valid {
@@ -435,7 +461,28 @@ func (s *RefreshService) refresh(
 	}
 
 	var tokenRefreshErr *TokenRefreshError
-	if errors.As(refreshErr, &tokenRefreshErr) && tokenRefreshErr.invalidGrant() {
+	clearGrant := errors.As(refreshErr, &tokenRefreshErr) && tokenRefreshErr.invalidGrant()
+	if errors.As(refreshErr, &tokenRefreshErr) && tokenRefreshErr.invalidClient() {
+		// The issuer has forgotten the client, not just this grant. Record it on
+		// the client row so the next remote login confirms and re-registers,
+		// instead of sending the same dead client_id back to the authorize
+		// endpoint. The grant is cleared only once that record is on file: a
+		// cleared grant with no marker would leave the next login nothing to act
+		// on, whereas a kept grant simply lands here again on the next refresh.
+		if _, err := q.MarkRemoteSessionClientUpstreamRejected(ctx, remotesessions_repo.MarkRemoteSessionClientUpstreamRejectedParams{
+			ID:       sess.RemoteSessionClientID,
+			ClientID: client.ExternalClientID,
+		}); err != nil {
+			s.logger.WarnContext(ctx, "failed to mark remote session client as rejected by its issuer; keeping the grant so the next refresh retries",
+				attr.SlogRemoteSessionClientID(sess.RemoteSessionClientID.String()),
+				attr.SlogOAuthIssuer(client.IssuerUrl),
+				attr.SlogError(err),
+			)
+		} else {
+			clearGrant = true
+		}
+	}
+	if clearGrant {
 		_, err := q.ClearRemoteSessionRefreshTokenAfterInvalidGrant(ctx, remotesessions_repo.ClearRemoteSessionRefreshTokenAfterInvalidGrantParams{
 			ID:                    sess.ID,
 			SubjectUrn:            sess.SubjectUrn,
@@ -446,7 +493,7 @@ func (s *RefreshService) refresh(
 		case err == nil:
 			return zero, &client, nil, refreshErr
 		case !errors.Is(err, pgx.ErrNoRows):
-			return zero, &client, nil, fmt.Errorf("clear remote session refresh token after invalid_grant: %w", err)
+			return zero, &client, nil, fmt.Errorf("clear remote session refresh token after %s: %w", tokenRefreshErr.UpstreamCode(), err)
 		}
 		// A row that moved after our refresh attempt belongs to a concurrent
 		// winner. Re-read it below and adopt that token instead of clearing it.

@@ -226,8 +226,6 @@ type syntheticLoginOptions struct {
 	onAuthorizationURL func(*url.URL)
 	// enrichment, when set, advertises its userinfo and introspection endpoints on the issuer and trusts its TLS cert.
 	enrichment *enrichmentAS
-	// metadataRefresh, when set, receives the issuer id an enrichment 404 asks to refresh.
-	metadataRefresh func(context.Context, uuid.UUID)
 	// enrichmentRate, when set, paces the enricher through a Redis-backed limiter.
 	enrichmentRate *ratelimit.Rate
 	// issuerMetadataRefresh wires an IssuerMetadataRefresher into the manager and the refresher.
@@ -304,10 +302,6 @@ func withAuthorizationURLObserver(fn func(*url.URL)) syntheticLoginOption {
 
 func withEnrichmentAS(as *enrichmentAS) syntheticLoginOption {
 	return func(o *syntheticLoginOptions) { o.enrichment = as }
-}
-
-func withIssuerMetadataRefreshSeam(fn func(context.Context, uuid.UUID)) syntheticLoginOption {
-	return func(o *syntheticLoginOptions) { o.metadataRefresh = fn }
 }
 
 func withEnrichmentRate(rate ratelimit.Rate) syntheticLoginOption {
@@ -390,6 +384,15 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 
 	var managerOptions []remotesessions.ChallengeManagerOption
 	var refreshOptions []remotesessions.RefreshOption
+	var issuerMetadata *remotesessions.IssuerMetadataRefresher
+	var issuerMetadataReader *sdkmetric.ManualReader
+	if options.issuerMetadataRefresh {
+		issuerMetadataReader = sdkmetric.NewManualReader()
+		issuerMetadata = remotesessions.NewIssuerMetadataRefresher(logger, sdkmetric.NewMeterProvider(sdkmetric.WithReader(issuerMetadataReader)), ti.conn, policy, audit.NewLogger())
+		t.Cleanup(issuerMetadata.Shutdown)
+		managerOptions = append(managerOptions, remotesessions.WithIssuerMetadataRefresher(issuerMetadata))
+		refreshOptions = append(refreshOptions, remotesessions.WithRefreshIssuerMetadataRefresher(issuerMetadata))
+	}
 	if options.idTokenIssuer != nil {
 		store := ratelimit.NewRedisStore(redisClient)
 		keys, err := remotesessions.NewIDTokenKeyResolver(logger, policy, testenv.NewMeterProvider(t), store)
@@ -409,21 +412,9 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		if options.enrichmentRate != nil {
 			enrichmentLimiter = ratelimit.New(store, "test_enrichment_"+slugSuffix, *options.enrichmentRate)
 		}
-		enricher := remotesessions.NewSessionEnricher(logger, enc, policy, keys, enrichmentLimiter)
-		if options.metadataRefresh != nil {
-			enricher.SetIssuerMetadataRefreshSeam(options.metadataRefresh)
-		}
+		enricher := remotesessions.NewSessionEnricher(logger, enc, policy, keys, enrichmentLimiter, issuerMetadata)
 		managerOptions = append(managerOptions, remotesessions.WithSessionEnricher(enricher))
 		refreshOptions = append(refreshOptions, remotesessions.WithRefreshSessionEnricher(enricher))
-	}
-	var issuerMetadata *remotesessions.IssuerMetadataRefresher
-	var issuerMetadataReader *sdkmetric.ManualReader
-	if options.issuerMetadataRefresh {
-		issuerMetadataReader = sdkmetric.NewManualReader()
-		issuerMetadata = remotesessions.NewIssuerMetadataRefresher(logger, sdkmetric.NewMeterProvider(sdkmetric.WithReader(issuerMetadataReader)), ti.conn, policy, audit.NewLogger())
-		t.Cleanup(issuerMetadata.Shutdown)
-		managerOptions = append(managerOptions, remotesessions.WithIssuerMetadataRefresher(issuerMetadata))
-		refreshOptions = append(refreshOptions, remotesessions.WithRefreshIssuerMetadataRefresher(issuerMetadata))
 	}
 	mgr := remotesessions.NewChallengeManager(
 		logger,
