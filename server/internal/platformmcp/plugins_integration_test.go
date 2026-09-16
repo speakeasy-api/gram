@@ -19,6 +19,7 @@ import (
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/directory"
 	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
@@ -27,7 +28,9 @@ import (
 	pluginassignments "github.com/speakeasy-api/gram/server/internal/plugins/assignments"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -111,6 +114,7 @@ func TestListPluginsPagesAProjectsPluginsWithMembershipCounts(t *testing.T) {
 	}
 	require.True(t, byID[defaultPlugin.ID.String()].IsDefault)
 	require.False(t, byID[marketing.ID.String()].IsDefault)
+	require.NotNil(t, byID[marketing.ID.String()].Assignments)
 	require.True(t, byID[marketing.ID.String()].Assignments.AllMembers)
 	require.Zero(t, byID[marketing.ID.String()].Assignments.Users)
 	// The project has no package repository connected, so nothing in it can be
@@ -133,6 +137,101 @@ func TestListPluginsPagesAProjectsPluginsWithMembershipCounts(t *testing.T) {
 		}
 	}
 	require.Len(t, seen, 2)
+}
+
+func TestMemberPluginInventoryUsesDeliveryPrincipalsAndPublishedPackages(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_member_plugin_inventory")
+	require.NoError(t, err)
+
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	require.NoError(t, authz.SeedSystemRoleGrants(ctx, conn, principal.OrganizationID))
+	seedPlatformMCPAuthorizationMember(t, ctx, conn, principal.OrganizationID, principal.UserID, authz.SystemRoleMember)
+	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient())
+	prepared, err := NewLiveOrgAdminAuthorizer(conn, engine).PrepareExternalContext(ctx, principal)
+	require.NoError(t, err)
+	service := testPluginTargets(conn).WithAuthorization(engine)
+
+	resolved, err := authz.ResolveUserPrincipals(prepared, conn, principal.OrganizationID, principal.UserID)
+	require.NoError(t, err)
+	var roleURN string
+	for _, candidate := range resolved {
+		if strings.HasPrefix(candidate.String(), "role:") {
+			roleURN = candidate.String()
+			break
+		}
+	}
+	require.NotEmpty(t, roleURN)
+
+	now := time.Now().UTC()
+	_, err = directoryrepo.New(conn).UpsertDirectoryUser(prepared, directoryrepo.UpsertDirectoryUserParams{
+		OrganizationID: principal.OrganizationID, UserID: conv.ToPGText(principal.UserID),
+		WorkosDirectoryUserID: "directory-user-" + uuid.NewString(), Email: conv.ToPGText(principal.UserID + "@example.test"),
+		Attributes: []byte(`{"department":"Engineering"}`), WorkosCreatedAt: conv.ToPGTimestamptz(now),
+		WorkosUpdatedAt: conv.ToPGTimestamptz(now), WorkosLastEventID: pgtype.Text{}, RestoreDeleted: true,
+	})
+	require.NoError(t, err)
+
+	assignments := []struct {
+		slug      string
+		principal string
+	}{
+		{slug: "direct-user", principal: urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID).String()},
+		{slug: "member-role", principal: roleURN},
+		{slug: "directory-attribute", principal: directory.AttributePrincipal("department", "Engineering")},
+		{slug: "everyone", principal: urn.PrincipalWildcard},
+		{slug: "email", principal: "email:" + principal.UserID + "@example.test"},
+	}
+	published := map[string]string{}
+	for _, assignment := range assignments {
+		plugin := seedPlugin(t, prepared, conn, principal.OrganizationID, project.ID, assignment.slug, assignment.slug)
+		_, err = pluginsrepo.New(conn).AddPluginAssignment(prepared, pluginsrepo.AddPluginAssignmentParams{
+			PluginID: plugin.ID, OrganizationID: principal.OrganizationID, PrincipalUrn: assignment.principal,
+		})
+		require.NoError(t, err)
+		published[assignment.slug] = "fingerprint"
+	}
+	unassigned := seedPlugin(t, prepared, conn, principal.OrganizationID, project.ID, "unassigned", "unassigned")
+	published[unassigned.Slug] = "fingerprint"
+	unpublished := seedPlugin(t, prepared, conn, principal.OrganizationID, project.ID, "unpublished", "unpublished")
+	_, err = pluginsrepo.New(conn).AddPluginAssignment(prepared, pluginsrepo.AddPluginAssignmentParams{
+		PluginID: unpublished.ID, OrganizationID: principal.OrganizationID, PrincipalUrn: urn.PrincipalWildcard,
+	})
+	require.NoError(t, err)
+	fingerprints, err := json.Marshal(published)
+	require.NoError(t, err)
+	_, err = pluginsrepo.New(conn).UpsertGitHubConnection(prepared, pluginsrepo.UpsertGitHubConnectionParams{
+		ProjectID: project.ID, InstallationID: 1, RepoOwner: "private-owner", RepoName: "private-repository",
+		MarketplaceToken: conv.ToPGText("secret-marketplace-token"), PublishedMcpFingerprints: fingerprints,
+		PublishedHooksVersion: pgtype.Text{}, PublishedHooksConfig: nil,
+	})
+	require.NoError(t, err)
+
+	result, err := service.ListAssignedPlugins(prepared, principal, ListPluginsInput{ProjectID: project.ID.String()})
+	require.NoError(t, err)
+	slugs := make([]string, 0, len(result.Plugins))
+	for _, plugin := range result.Plugins {
+		slugs = append(slugs, plugin.Slug)
+		require.Nil(t, plugin.Assignments)
+		require.Equal(t, PluginPublicationPublished, plugin.Publication)
+	}
+	require.ElementsMatch(t, []string{"direct-user", "member-role", "directory-attribute", "everyone", "email"}, slugs)
+
+	detail, err := service.GetAssignedPlugin(prepared, principal, GetPluginInput{ProjectID: project.ID.String(), Plugin: "direct-user"})
+	require.NoError(t, err)
+	encoded, err := json.Marshal(detail)
+	require.NoError(t, err)
+	for _, forbidden := range []string{"secret-marketplace-token", "private-owner", "private-repository", `"assignments"`, "assignment_version", "principal_urn"} {
+		require.NotContains(t, string(encoded), forbidden)
+	}
+	_, err = service.GetAssignedPlugin(prepared, principal, GetPluginInput{ProjectID: project.ID.String(), Plugin: unpublished.ID.String()})
+	require.ErrorIs(t, err, ErrPluginNotFound)
+
+	_, foreignProject := seedRegistrationLifecycle(t, prepared, conn)
+	_, err = service.ListAssignedPlugins(prepared, principal, ListPluginsInput{ProjectID: foreignProject.ID.String()})
+	require.ErrorIs(t, err, ErrPluginProjectNotFound)
 }
 
 func TestListPluginAssignmentsReturnsOpaqueProjectBoundReferences(t *testing.T) {
@@ -178,6 +277,7 @@ func TestPluginReadsIgnoreCrossTenantAssignmentRows(t *testing.T) {
 
 	before, err := service.GetPlugin(ctx, principal, GetPluginInput{ProjectID: project.ID.String(), Plugin: plugin.ID.String()})
 	require.NoError(t, err)
+	require.NotNil(t, before.Plugin.Assignments)
 	require.Zero(t, before.Plugin.Assignments.Roles)
 
 	foreignPrincipal, _ := seedRegistrationLifecycle(t, ctx, conn)
@@ -190,9 +290,11 @@ func TestPluginReadsIgnoreCrossTenantAssignmentRows(t *testing.T) {
 	after, err := service.GetPlugin(ctx, principal, GetPluginInput{ProjectID: project.ID.String(), Plugin: plugin.ID.String()})
 	require.NoError(t, err)
 	require.Equal(t, before.AssignmentVersion, after.AssignmentVersion)
+	require.NotNil(t, after.Plugin.Assignments)
 	require.Zero(t, after.Plugin.Assignments.Roles)
 	require.Empty(t, after.Assignments)
-	require.True(t, after.AssignmentDetailsComplete)
+	require.NotNil(t, after.AssignmentDetailsComplete)
+	require.True(t, *after.AssignmentDetailsComplete)
 }
 
 func TestListPluginAssignmentsBoundsResolverWorkInSQL(t *testing.T) {
@@ -233,8 +335,10 @@ func TestListPluginAssignmentsBoundsResolverWorkInSQL(t *testing.T) {
 	require.NoError(t, err)
 	detail, err := service.GetPlugin(ctx, principal, GetPluginInput{ProjectID: project.ID.String(), Plugin: plugin.ID.String()})
 	require.NoError(t, err)
-	require.True(t, detail.AssignmentDetailsComplete)
-	require.False(t, detail.AssignmentsTruncated)
+	require.NotNil(t, detail.AssignmentDetailsComplete)
+	require.True(t, *detail.AssignmentDetailsComplete)
+	require.NotNil(t, detail.AssignmentsTruncated)
+	require.False(t, *detail.AssignmentsTruncated)
 	require.Len(t, detail.Assignments, 1)
 	require.Equal(t, "Role 100", detail.Assignments[0].DisplayName)
 }
@@ -286,7 +390,8 @@ func TestPluginAssignmentOptionsUseCanonicalRoleAndLongAttributePrincipals(t *te
 	require.NoError(t, err)
 	detail, err := service.GetPlugin(ctx, principal, GetPluginInput{ProjectID: project.ID.String(), Plugin: plugin.ID.String()})
 	require.NoError(t, err)
-	require.False(t, detail.AssignmentDetailsComplete)
+	require.NotNil(t, detail.AssignmentDetailsComplete)
+	require.False(t, *detail.AssignmentDetailsComplete)
 	require.Empty(t, detail.Assignments)
 }
 
@@ -305,7 +410,8 @@ func TestGetPluginAssignmentVersionChangesAfterDashboardStyleEdit(t *testing.T) 
 	require.NoError(t, err)
 	require.NotEmpty(t, before.AssignmentVersion)
 	require.Empty(t, before.Assignments)
-	require.True(t, before.AssignmentDetailsComplete)
+	require.NotNil(t, before.AssignmentDetailsComplete)
+	require.True(t, *before.AssignmentDetailsComplete)
 
 	_, err = pluginsrepo.New(conn).AddPluginAssignment(ctx, pluginsrepo.AddPluginAssignmentParams{
 		PluginID:       plugin.ID,
@@ -319,7 +425,8 @@ func TestGetPluginAssignmentVersionChangesAfterDashboardStyleEdit(t *testing.T) 
 	require.NotEqual(t, before.AssignmentVersion, after.AssignmentVersion)
 	require.Len(t, after.Assignments, 1)
 	require.Equal(t, "everyone", after.Assignments[0].Kind)
-	require.True(t, after.AssignmentDetailsComplete)
+	require.NotNil(t, after.AssignmentDetailsComplete)
+	require.True(t, *after.AssignmentDetailsComplete)
 }
 
 func TestGetPluginResolvesAnExactTargetAndReportsMembership(t *testing.T) {
@@ -618,7 +725,8 @@ func TestSetPluginAssignmentsRefusesHiddenCurrentAssignments(t *testing.T) {
 	require.NoError(t, err)
 	before, err := service.GetPlugin(ctx, principal, GetPluginInput{ProjectID: project.ID.String(), Plugin: plugin.ID.String()})
 	require.NoError(t, err)
-	require.False(t, before.AssignmentDetailsComplete)
+	require.NotNil(t, before.AssignmentDetailsComplete)
+	require.False(t, *before.AssignmentDetailsComplete)
 
 	_, err = service.SetPluginAssignments(ctx, principal, SetPluginAssignmentsInput{
 		ProjectID: project.ID.String(), Plugin: plugin.ID.String(), AssignmentReferences: nil,

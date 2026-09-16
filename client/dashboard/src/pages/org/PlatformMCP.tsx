@@ -17,6 +17,7 @@ import {
 import { invalidatePlatformMCPOnboarding } from "@gram/client/react-query/platformMCPOnboarding.js";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useIsCurrentOrganization } from "@/hooks/useIsCurrentOrganization";
+import { useRBAC } from "@/hooks/useRBAC";
 
 import { AgentPlatformPickerItem } from "@/pages/setup/components/agent-platform-picker-item";
 import { Badge } from "@/components/ui/Badge";
@@ -167,6 +168,8 @@ function PlatformMCPOnboardingContentInner({
   autoOpen?: boolean;
 }): JSX.Element {
   const queryClient = useQueryClient();
+  const { hasScope } = useRBAC();
+  const canAdminister = hasScope("org:admin", organizationId);
   const { fetch: authedFetch } = useFetcher();
   const [setupError, setSetupError] = useState<string | null>(null);
   const [accessError, setAccessError] = useState<string | null>(null);
@@ -282,7 +285,9 @@ function PlatformMCPOnboardingContentInner({
       },
     });
   };
-  const setupComplete = onboarding.data?.distributionAttached ?? false;
+  const setupComplete = canAdminister
+    ? (onboarding.data?.distributionAttached ?? false)
+    : (onboarding.data?.connectionAuthorized ?? false);
   const workflowActive = onboarding.data?.workflowActive ?? false;
 
   const selectAgentForSetup = useCallback(
@@ -445,6 +450,7 @@ function PlatformMCPOnboardingContentInner({
     const unavailable = (
       <PlatformMCPUnavailable
         state={state}
+        canAdminister={canAdminister}
         isMutating={setOrganizationAccess.isPending}
         accessError={accessError}
         onEnable={() => setPlatformMCPAccess(true)}
@@ -479,7 +485,8 @@ function PlatformMCPOnboardingContentInner({
   // The project wizard remains an onboarding surface even if this organization
   // already completed Platform MCP setup elsewhere. Management belongs only on
   // the standalone organization route.
-  const showManagement = !embeddedInProjectSetup && setupComplete;
+  const showManagement =
+    canAdminister && !embeddedInProjectSetup && setupComplete;
   const isMutating =
     start.isPending ||
     selectClient.isPending ||
@@ -587,6 +594,7 @@ function PlatformMCPOnboardingContentInner({
           if (!open) closeSetupFlow();
         }}
         state={state}
+        canAdminister={canAdminister}
         currentProjectSlug={currentProjectSlug}
         activeClient={activeClient}
         installMethod={selectedInstallMethod}
@@ -662,12 +670,14 @@ function PlatformMCPOnboardingContentInner({
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <Text variant="subheading" id="platform-mcp-setup">
-              {showManagement ? "Set up another agent" : "Set up Platform MCP"}
+              {setupComplete ? "Set up another agent" : "Set up Platform MCP"}
             </Text>
             <Text muted small className="mt-2 max-w-2xl">
-              {showManagement
+              {setupComplete
                 ? "Start a separate resumable checklist for another agent in this organization."
-                : "Connect an agent, choose a reviewed MCP server, complete any required setup, and add it to the selected project's existing Default plugin."}
+                : canAdminister
+                  ? "Connect an agent, choose a reviewed MCP server, complete any required setup, and add it to the selected project's existing Default plugin."
+                  : "Connect and authorize your agent. Your existing role will decide which projects, MCP servers, plugins, skills and operational data it can use."}
             </Text>
           </div>
           {!agentPickerOpen ? (
@@ -681,7 +691,7 @@ function PlatformMCPOnboardingContentInner({
       {setupSheets}
 
       <Dialog
-        open={disableConfirmationOpen}
+        open={canAdminister && disableConfirmationOpen}
         onOpenChange={(open) => {
           if (!setOrganizationAccess.isPending) {
             setDisableConfirmationOpen(open);
@@ -781,11 +791,13 @@ function PlatformMCPStateSheet({
 
 function PlatformMCPUnavailable({
   state,
+  canAdminister,
   isMutating,
   accessError,
   onEnable,
 }: {
   state: PlatformMCPOnboardingState;
+  canAdminister: boolean;
   isMutating: boolean;
   accessError: string | null;
   onEnable: () => void;
@@ -795,19 +807,21 @@ function PlatformMCPUnavailable({
       {state.repairAction === "enable_platform_mcp" && (
         <div className="border-border bg-card flex flex-col gap-3 border p-4">
           <Text muted small>
-            Enabling lets organization administrators connect agents and use the
-            Platform MCP workflow again. No connection is created or restored
-            automatically.
+            {canAdminister
+              ? "Enable Platform MCP for this organization before connecting an agent. No connection is created or restored automatically."
+              : "Platform MCP is not enabled for this organization. Ask an organization administrator to enable it before connecting your agent."}
           </Text>
-          <Button
-            className="self-start"
-            disabled={isMutating}
-            onClick={onEnable}
-          >
-            <Button.Text>
-              {isMutating ? "Enabling…" : "Enable Platform MCP"}
-            </Button.Text>
-          </Button>
+          {canAdminister && (
+            <Button
+              className="self-start"
+              disabled={isMutating}
+              onClick={onEnable}
+            >
+              <Button.Text>
+                {isMutating ? "Enabling…" : "Enable Platform MCP"}
+              </Button.Text>
+            </Button>
+          )}
         </div>
       )}
       {accessError && (
@@ -1250,6 +1264,7 @@ function PlatformMCPSetupSheet({
   open,
   onOpenChange,
   state,
+  canAdminister,
   currentProjectSlug,
   activeClient,
   installMethod,
@@ -1264,6 +1279,7 @@ function PlatformMCPSetupSheet({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   state: PlatformMCPOnboardingState;
+  canAdminister: boolean;
   currentProjectSlug?: string;
   activeClient: PlatformMCPClient;
   installMethod: PlatformMCPInstallMethod;
@@ -1275,19 +1291,32 @@ function PlatformMCPSetupSheet({
   onDismiss: () => void;
   onDone: () => void;
 }): JSX.Element {
-  const steps: PlatformMCPStep[] = [
-    { title: "Install and authenticate", complete: state.connectionAuthorized },
-    { title: "Explore the MCP Catalogue", complete: state.catalogExplored },
-    {
-      title: "Register the selected MCP",
-      complete: state.registrationComplete,
-    },
-    { title: "Finish setting up the MCP", complete: state.readinessVerified },
-    {
-      title: "Add it to the Default plugin",
-      complete: state.distributionAttached,
-    },
-  ];
+  const steps: PlatformMCPStep[] = canAdminister
+    ? [
+        {
+          title: "Install and authenticate",
+          complete: state.connectionAuthorized,
+        },
+        { title: "Explore the MCP Catalogue", complete: state.catalogExplored },
+        {
+          title: "Register the selected MCP",
+          complete: state.registrationComplete,
+        },
+        {
+          title: "Finish setting up the MCP",
+          complete: state.readinessVerified,
+        },
+        {
+          title: "Add it to the Default plugin",
+          complete: state.distributionAttached,
+        },
+      ]
+    : [
+        {
+          title: "Install and authenticate",
+          complete: state.connectionAuthorized,
+        },
+      ];
   const firstIncompleteStepIndex = steps.findIndex((step) => !step.complete);
   const evidenceStepIndex =
     firstIncompleteStepIndex === -1
@@ -1349,7 +1378,9 @@ function PlatformMCPSetupSheet({
     return () => window.clearTimeout(timer);
   }, [completionAcknowledgementStep, evidenceStepIndex]);
 
-  const secureSetupRequired = state.repairAction === "continue_dashboard_setup";
+  const totalStepCount = SETUP_PRIMER_STEP_COUNT + steps.length;
+  const secureSetupRequired =
+    canAdminister && state.repairAction === "continue_dashboard_setup";
 
   useEffect(() => {
     const waitingForReadiness =
@@ -1551,7 +1582,7 @@ function PlatformMCPSetupSheet({
           </SheetDescription>
         </SheetHeader>
         <div className="flex items-center gap-1.5 px-6 pt-6 pr-14">
-          {Array.from({ length: SETUP_TOTAL_STEP_COUNT }, (_, index) => {
+          {Array.from({ length: totalStepCount }, (_, index) => {
             const lifecycleIndex = index - SETUP_PRIMER_STEP_COUNT;
             const isCurrent = lifecycleIndex === currentStepIndex;
             const isComplete =
@@ -1581,8 +1612,7 @@ function PlatformMCPSetupSheet({
             );
           })}
           <span className="text-muted-foreground ml-auto text-[11px] tabular-nums">
-            {currentStepIndex + SETUP_PRIMER_STEP_COUNT + 1}/
-            {SETUP_TOTAL_STEP_COUNT}
+            {currentStepIndex + SETUP_PRIMER_STEP_COUNT + 1}/{totalStepCount}
           </span>
         </div>
         <div className="flex-1 overflow-y-auto">
@@ -1626,8 +1656,7 @@ function PlatformMCPSetupSheet({
             >
               <Button.Text>Dismiss</Button.Text>
             </Button>
-            {state.distributionAttached &&
-            currentStepIndex === steps.length - 1 ? (
+            {currentStep.complete && currentStepIndex === steps.length - 1 ? (
               <Button
                 disabled={isMutating || isAcknowledgingCompletion}
                 onClick={onDone}

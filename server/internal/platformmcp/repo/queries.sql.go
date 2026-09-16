@@ -4347,6 +4347,97 @@ func (q *Queries) ListOwnedChatTranscriptMessagesForRecall(ctx context.Context, 
 	return items, nil
 }
 
+const listPlatformMCPAssignedPluginInventory = `-- name: ListPlatformMCPAssignedPluginInventory :many
+SELECT
+    p.id,
+    p.name,
+    p.slug,
+    p.description,
+    COALESCE(p.is_default, FALSE) AS is_default,
+    (gc.id IS NOT NULL)::boolean AS repository_connected,
+    TRUE::boolean AS published
+FROM plugins p
+JOIN projects
+  ON projects.id = p.project_id
+  AND projects.organization_id = p.organization_id
+  AND projects.deleted IS FALSE
+JOIN plugin_github_connections gc
+  ON gc.project_id = p.project_id
+  AND gc.marketplace_token IS NOT NULL
+WHERE p.project_id = $1
+  AND p.organization_id = $2
+  AND p.deleted IS FALSE
+  AND COALESCE(gc.published_mcp_fingerprints ->> p.slug, '') <> ''
+  AND EXISTS (
+    SELECT 1
+    FROM plugin_assignments pa
+    WHERE pa.plugin_id = p.id
+      AND pa.organization_id = $2
+      AND pa.principal_urn = ANY($3::text[])
+  )
+  AND (NOT $4::boolean OR p.id > $5)
+ORDER BY p.id ASC
+LIMIT $6
+`
+
+type ListPlatformMCPAssignedPluginInventoryParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+	PrincipalUrns  []string
+	UseAfter       bool
+	AfterID        uuid.UUID
+	ResultLimit    int32
+}
+
+type ListPlatformMCPAssignedPluginInventoryRow struct {
+	ID                  uuid.UUID
+	Name                string
+	Slug                string
+	Description         pgtype.Text
+	IsDefault           bool
+	RepositoryConnected bool
+	Published           bool
+}
+
+// Member-facing plugin inventory. A row is visible only when the package is
+// published and at least one current assignment matches the authenticated
+// caller's server-resolved principals. Assignment identities and counts never
+// cross this query boundary.
+func (q *Queries) ListPlatformMCPAssignedPluginInventory(ctx context.Context, arg ListPlatformMCPAssignedPluginInventoryParams) ([]ListPlatformMCPAssignedPluginInventoryRow, error) {
+	rows, err := q.db.Query(ctx, listPlatformMCPAssignedPluginInventory,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.PrincipalUrns,
+		arg.UseAfter,
+		arg.AfterID,
+		arg.ResultLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlatformMCPAssignedPluginInventoryRow
+	for rows.Next() {
+		var i ListPlatformMCPAssignedPluginInventoryRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.Description,
+			&i.IsDefault,
+			&i.RepositoryConnected,
+			&i.Published,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPlatformMCPCatalogRegistrationsByRemoteMcpServer = `-- name: ListPlatformMCPCatalogRegistrationsByRemoteMcpServer :many
 SELECT id, user_session_issuer_id
 FROM platform_mcp_catalog_registrations
@@ -6400,6 +6491,87 @@ func (q *Queries) RecordPlatformMCPSetupMilestone(ctx context.Context, arg Recor
 		arg.AttemptID,
 	)
 	return err
+}
+
+const resolvePlatformMCPAssignedPluginTarget = `-- name: ResolvePlatformMCPAssignedPluginTarget :many
+SELECT
+    p.id,
+    p.name,
+    p.slug,
+    COALESCE(p.is_default, FALSE) AS is_default
+FROM plugins p
+JOIN projects
+  ON projects.id = p.project_id
+  AND projects.organization_id = p.organization_id
+  AND projects.deleted IS FALSE
+JOIN plugin_github_connections gc
+  ON gc.project_id = p.project_id
+  AND gc.marketplace_token IS NOT NULL
+WHERE p.project_id = $1
+  AND p.organization_id = $2
+  AND p.deleted IS FALSE
+  AND COALESCE(gc.published_mcp_fingerprints ->> p.slug, '') <> ''
+  AND EXISTS (
+    SELECT 1
+    FROM plugin_assignments pa
+    WHERE pa.plugin_id = p.id
+      AND pa.organization_id = $2
+      AND pa.principal_urn = ANY($3::text[])
+  )
+  AND (
+    p.id::text = $4::text
+    OR lower(p.slug) = lower($4::text)
+    OR lower(p.name) = lower($4::text)
+  )
+ORDER BY p.id
+LIMIT 2
+`
+
+type ResolvePlatformMCPAssignedPluginTargetParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+	PrincipalUrns  []string
+	Target         string
+}
+
+type ResolvePlatformMCPAssignedPluginTargetRow struct {
+	ID        uuid.UUID
+	Name      string
+	Slug      string
+	IsDefault bool
+}
+
+// Exact member target resolution over the same assigned, published set as the
+// member list. Missing, unpublished, unassigned, and cross-tenant targets all
+// collapse to the same not-found result.
+func (q *Queries) ResolvePlatformMCPAssignedPluginTarget(ctx context.Context, arg ResolvePlatformMCPAssignedPluginTargetParams) ([]ResolvePlatformMCPAssignedPluginTargetRow, error) {
+	rows, err := q.db.Query(ctx, resolvePlatformMCPAssignedPluginTarget,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.PrincipalUrns,
+		arg.Target,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ResolvePlatformMCPAssignedPluginTargetRow
+	for rows.Next() {
+		var i ResolvePlatformMCPAssignedPluginTargetRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.IsDefault,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const resolvePlatformMCPPluginTarget = `-- name: ResolvePlatformMCPPluginTarget :many

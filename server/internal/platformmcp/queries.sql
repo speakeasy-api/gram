@@ -2775,6 +2775,78 @@ WHERE p.project_id = @project_id
 ORDER BY p.id ASC
 LIMIT @result_limit;
 
+-- name: ListPlatformMCPAssignedPluginInventory :many
+-- Member-facing plugin inventory. A row is visible only when the package is
+-- published and at least one current assignment matches the authenticated
+-- caller's server-resolved principals. Assignment identities and counts never
+-- cross this query boundary.
+SELECT
+    p.id,
+    p.name,
+    p.slug,
+    p.description,
+    COALESCE(p.is_default, FALSE) AS is_default,
+    (gc.id IS NOT NULL)::boolean AS repository_connected,
+    TRUE::boolean AS published
+FROM plugins p
+JOIN projects
+  ON projects.id = p.project_id
+  AND projects.organization_id = p.organization_id
+  AND projects.deleted IS FALSE
+JOIN plugin_github_connections gc
+  ON gc.project_id = p.project_id
+  AND gc.marketplace_token IS NOT NULL
+WHERE p.project_id = @project_id
+  AND p.organization_id = @organization_id
+  AND p.deleted IS FALSE
+  AND COALESCE(gc.published_mcp_fingerprints ->> p.slug, '') <> ''
+  AND EXISTS (
+    SELECT 1
+    FROM plugin_assignments pa
+    WHERE pa.plugin_id = p.id
+      AND pa.organization_id = @organization_id
+      AND pa.principal_urn = ANY(@principal_urns::text[])
+  )
+  AND (NOT @use_after::boolean OR p.id > @after_id)
+ORDER BY p.id ASC
+LIMIT @result_limit;
+
+-- name: ResolvePlatformMCPAssignedPluginTarget :many
+-- Exact member target resolution over the same assigned, published set as the
+-- member list. Missing, unpublished, unassigned, and cross-tenant targets all
+-- collapse to the same not-found result.
+SELECT
+    p.id,
+    p.name,
+    p.slug,
+    COALESCE(p.is_default, FALSE) AS is_default
+FROM plugins p
+JOIN projects
+  ON projects.id = p.project_id
+  AND projects.organization_id = p.organization_id
+  AND projects.deleted IS FALSE
+JOIN plugin_github_connections gc
+  ON gc.project_id = p.project_id
+  AND gc.marketplace_token IS NOT NULL
+WHERE p.project_id = @project_id
+  AND p.organization_id = @organization_id
+  AND p.deleted IS FALSE
+  AND COALESCE(gc.published_mcp_fingerprints ->> p.slug, '') <> ''
+  AND EXISTS (
+    SELECT 1
+    FROM plugin_assignments pa
+    WHERE pa.plugin_id = p.id
+      AND pa.organization_id = @organization_id
+      AND pa.principal_urn = ANY(@principal_urns::text[])
+  )
+  AND (
+    p.id::text = @target::text
+    OR lower(p.slug) = lower(@target::text)
+    OR lower(p.name) = lower(@target::text)
+  )
+ORDER BY p.id
+LIMIT 2;
+
 -- name: GetPlatformMCPPluginInventoryItem :one
 SELECT
     p.id,

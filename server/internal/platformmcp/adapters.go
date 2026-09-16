@@ -169,6 +169,33 @@ func (a *LiveOrgAdminAuthorizer) RequireLiveMembership(ctx context.Context, prin
 	return nil
 }
 
+// HasLiveOrgAdmin checks current membership and grants without recording a
+// denied access challenge. Use it only for capability-shaped presentation; an
+// attempted admin operation must still call RequireLiveOrgAdmin.
+func (a *LiveOrgAdminAuthorizer) HasLiveOrgAdmin(ctx context.Context, principal Principal) (bool, error) {
+	if a == nil || a.db == nil || a.engine == nil || principal.UserID == "" || principal.OrganizationID == "" {
+		return false, ErrUnavailable
+	}
+	if err := a.RequireLiveMembership(ctx, principal); err != nil {
+		return false, err
+	}
+	principals, err := authz.ResolveUserPrincipals(ctx, a.db, principal.OrganizationID, principal.UserID)
+	if err != nil {
+		return false, fmt.Errorf("resolve live admin principals: %w", err)
+	}
+	grants, err := authz.LoadGrants(ctx, a.db, principal.OrganizationID, principals)
+	if err != nil {
+		return false, fmt.Errorf("load live admin grants: %w", err)
+	}
+	allowed, err := authz.GrantsAuthorize(grants, authz.Check{
+		Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: principal.OrganizationID, Dimensions: nil,
+	})
+	if err != nil {
+		return false, fmt.Errorf("authorize live admin grants: %w", err)
+	}
+	return allowed, nil
+}
+
 func (a *LiveOrgAdminAuthorizer) RequireLiveOrgAdmin(ctx context.Context, principal Principal) error {
 	if a == nil || a.db == nil || a.engine == nil || principal.UserID == "" || principal.OrganizationID == "" {
 		return ErrUnavailable
