@@ -85,9 +85,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/privatekeyjwt"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/clientauth"
 	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
@@ -134,7 +134,7 @@ type Service struct {
 	// clientAssertionVerifier verifies private_key_jwt client assertions at
 	// the token and revocation endpoints. Nil without Redis, in which case
 	// assertion clients are refused rather than admitted unverified.
-	clientAssertionVerifier *clientauth.Verifier
+	clientAssertionVerifier *privatekeyjwt.Verifier
 	// aiToolBlockReads are the database reads behind the Shadow AI gateway
 	// block check, held as values so a test can make one of them fail.
 	aiToolBlockReads       aiToolBlockReads

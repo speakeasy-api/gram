@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -16,7 +17,7 @@ import (
 )
 
 func zeroCacheState() CacheState {
-	return CacheState{Document: nil, ETag: "", ExpiresAt: time.Time{}, RefreshedAt: time.Time{}}
+	return CacheState{Document: nil, ETag: "", ExpiresAt: time.Time{}, RefreshedAt: time.Time{}, LastErrorAt: time.Time{}, LastError: "", Revision: ""}
 }
 
 func TestResolverResolve_FetchesAndParses(t *testing.T) {
@@ -62,6 +63,9 @@ func TestResolverResolve_ServesFreshCache(t *testing.T) {
 		ETag:        `"v1"`,
 		ExpiresAt:   time.Now().Add(time.Hour),
 		RefreshedAt: time.Now(),
+		LastErrorAt: time.Time{},
+		LastError:   "",
+		Revision:    "",
 	}
 	result, err := resolver.Resolve(t.Context(), remoteSourceFor(t, server), cache)
 	require.NoError(t, err)
@@ -83,6 +87,9 @@ func TestResolverResolve_ConditionalNotModified(t *testing.T) {
 		ETag:        `"v1"`,
 		ExpiresAt:   time.Now().Add(-time.Minute),
 		RefreshedAt: time.Now().Add(-time.Hour),
+		LastErrorAt: time.Time{},
+		LastError:   "",
+		Revision:    "",
 	}
 	result, err := resolver.Resolve(t.Context(), remoteSourceFor(t, server), cache)
 	require.NoError(t, err)
@@ -109,6 +116,9 @@ func TestResolverResolve_StoredDocumentRescreened(t *testing.T) {
 		ETag:        `"v1"`,
 		ExpiresAt:   time.Now().Add(time.Hour),
 		RefreshedAt: time.Now(),
+		LastErrorAt: time.Time{},
+		LastError:   "",
+		Revision:    "",
 	}
 	result, err := resolver.Resolve(t.Context(), remoteSourceFor(t, server), cache)
 	require.NoError(t, err)
@@ -168,6 +178,41 @@ func TestResolverResolve_Non200IsFetchFailure(t *testing.T) {
 
 	_, err = resolver.Resolve(t.Context(), source, zeroCacheState())
 	require.ErrorContains(t, err, "status 503")
+	require.ErrorIs(t, err, ErrKeySetUnavailable)
+}
+
+func TestResolverResolve_NotImplementedDoesNotPermitStaleKeys(t *testing.T) {
+	t.Parallel()
+	server := newKeySetServer(t, keySetJSON(t, testKey(t, "a")))
+	server.SetStatus(http.StatusNotImplemented)
+	_, err := resolverFor(t, server).Resolve(t.Context(), remoteSourceFor(t, server), zeroCacheState())
+	require.ErrorContains(t, err, "status 501")
+	require.NotErrorIs(t, err, ErrKeySetUnavailable)
+}
+
+func TestTransientFetchError_InterruptedSuccessBodyPermitsStaleKeys(t *testing.T) {
+	t.Parallel()
+	require.True(t, transientFetchError(t.Context(), http.StatusOK, io.ErrUnexpectedEOF))
+}
+
+func TestResolverResolve_TLSFailureDoesNotPermitStaleKeys(t *testing.T) {
+	t.Parallel()
+	server := newKeySetServer(t, keySetJSON(t, testKey(t, "a")))
+	resolver := newResolver(newFetchClientFrom(&http.Client{}), testenv.NewMeterProvider(t), testenv.NewLogger(t))
+	_, err := resolver.Resolve(t.Context(), remoteSourceFor(t, server), zeroCacheState())
+	require.Error(t, err)
+	require.NotErrorIs(t, err, ErrKeySetUnavailable)
+}
+
+func TestResolverResolve_BlockedIPDoesNotPermitStaleKeys(t *testing.T) {
+	t.Parallel()
+	server := newKeySetServer(t, keySetJSON(t, testKey(t, "a")))
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{"127.0.0.0/8", "::1/128"})
+	require.NoError(t, err)
+	resolver := NewResolver(policy, testenv.NewMeterProvider(t), testenv.NewLogger(t))
+	_, err = resolver.Resolve(t.Context(), remoteSourceFor(t, server), zeroCacheState())
+	require.ErrorIs(t, err, guardian.ErrBlockedIP)
+	require.NotErrorIs(t, err, ErrKeySetUnavailable)
 }
 
 func TestResolverResolve_FetchedPrivateMaterialRejected(t *testing.T) {
@@ -220,7 +265,7 @@ func TestResolverResolve_ZeroSourceRejected(t *testing.T) {
 
 	resolver := newResolver(nil, testenv.NewMeterProvider(t), testenv.NewLogger(t))
 
-	_, err := resolver.Resolve(t.Context(), Source{kind: "", inline: nil, uri: "", origin: ""}, zeroCacheState())
+	_, err := resolver.Resolve(t.Context(), Source{kind: "", inline: nil, uri: "", origin: "", cacheKey: "", refreshNamespace: "", fetchScope: "", doer: nil}, zeroCacheState())
 	require.ErrorContains(t, err, "zero Source")
 }
 

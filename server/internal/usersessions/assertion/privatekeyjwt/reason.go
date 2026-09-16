@@ -1,4 +1,4 @@
-package clientauth
+package privatekeyjwt
 
 import "errors"
 
@@ -39,11 +39,8 @@ const (
 	// the value required of it.
 	//
 	// UnverifiedClientID requires only that the two be present and equal,
-	// having no expectation to compare them against yet. Verify checks each
-	// against the expectation: for a client assertion both must be the
-	// client_id being authenticated, as RFC 7523 §3 requires; for a workload
-	// assertion iss must be the trusted issuer and sub the admitted external
-	// subject.
+	// having no expectation to compare them against yet. Verify checks both
+	// against the authenticated client_id, as RFC 7523 §3 requires.
 	ReasonSubjectMismatch Reason = "assertion_subject_mismatch"
 
 	// ReasonAudienceMismatch reports an aud naming neither this endpoint's issuer
@@ -66,19 +63,14 @@ const (
 	// tolerated skew.
 	ReasonNotYetValid Reason = "assertion_not_yet_valid"
 
-	// ReasonIDMissing reports an assertion with no jti on a profile that
-	// requires one.
-	//
-	// Client assertions only. A profile whose replay identifier is derived
-	// always has one to reserve, so this cannot fire there — see ReplayID.
+	// ReasonIDMissing reports a client assertion with no jti.
 	ReasonIDMissing Reason = "assertion_id_missing"
 
 	// ReasonReplayed reports an identifier this party already spent inside
 	// its validity window.
 	//
-	// Raised only for an identifier that distinguishes one token from
-	// another — a jti or Entra's uti. A repeated digest means the same
-	// bytes arrived twice, which is reported on Result rather than refused.
+	// A second presentation of the same jti is refused, even if its JWT bytes
+	// are identical to the first presentation.
 	ReasonReplayed Reason = "assertion_replayed"
 
 	// ReasonReplayStoreUnavailable reports a replay guard that could not be

@@ -28,7 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/clientauth"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/privatekeyjwt"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -158,7 +158,7 @@ func codeGrantForm(client usersessions_repo.UserSessionClient, code, verifier st
 
 // withAssertion adds RFC 7523 §2.2 client authentication to a form.
 func withAssertion(form url.Values, assertion string) url.Values {
-	form.Set("client_assertion_type", clientauth.AssertionType)
+	form.Set("client_assertion_type", privatekeyjwt.AssertionType)
 	form.Set("client_assertion", assertion)
 	return form
 }

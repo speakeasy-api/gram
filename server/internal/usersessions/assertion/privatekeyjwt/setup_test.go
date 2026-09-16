@@ -1,4 +1,4 @@
-package clientauth_test
+package privatekeyjwt_test
 
 import (
 	"context"
@@ -21,7 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/clientauth"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/privatekeyjwt"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/replay"
 )
@@ -31,9 +31,6 @@ const (
 	testIssuer   = "https://gram.example.com/mcp/demo"
 	testTokenURL = "https://gram.example.com/mcp/demo/token"
 	testKeyID    = "test-key-1"
-	// testWorkloadIssuer stands in for a platform that vouches for machines,
-	// which is never the same value as the workload it vouches for.
-	testWorkloadIssuer = "https://token.actions.githubusercontent.com"
 )
 
 var infra *testenv.Environment
@@ -170,29 +167,29 @@ func newKeyResolver(t *testing.T, client *redis.Client) *jwks.KeyResolver {
 
 // newVerifier builds a Verifier over a real Redis-backed replay guard sized
 // to the verifier's own hold requirement.
-func newVerifier(t *testing.T) *clientauth.Verifier {
+func newVerifier(t *testing.T) *privatekeyjwt.Verifier {
 	t.Helper()
 
 	client, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 
-	guard, err := replay.NewRedisGuard(client, string(testenv.NewCacheSuffix(t, "clientauth-replay")), clientauth.DefaultMaxReplayHold)
+	guard, err := replay.NewRedisGuard(client, string(testenv.NewCacheSuffix(t, "clientauth-replay")), privatekeyjwt.DefaultMaxReplayHold)
 	require.NoError(t, err)
 
-	verifier, err := clientauth.NewVerifier(newKeyResolver(t, client), guard)
+	verifier, err := privatekeyjwt.NewVerifier(newKeyResolver(t, client), guard)
 	require.NoError(t, err)
 	return verifier
 }
 
 // expectationFor is the standard Expectation naming this signer's key source.
-func expectationFor(t *testing.T, s *signer) clientauth.Expectation {
+func expectationFor(t *testing.T, s *signer) privatekeyjwt.Expectation {
 	t.Helper()
 
-	return clientauth.ClientExpectation(
+	return privatekeyjwt.ClientExpectation(
 		testClientID,
 		s.source(t),
 		t.Name(),
-		clientauth.Audiences{
+		privatekeyjwt.Audiences{
 			Issuer:   testIssuer,
 			Endpoint: testTokenURL,
 		},
@@ -200,18 +197,18 @@ func expectationFor(t *testing.T, s *signer) clientauth.Expectation {
 }
 
 // assertionFor wraps a raw assertion in a well-formed Assertion.
-func assertionFor(assertion string) clientauth.Assertion {
-	return clientauth.Assertion{Value: assertion, Type: clientauth.AssertionType}
+func assertionFor(assertion string) privatekeyjwt.Assertion {
+	return privatekeyjwt.Assertion{Value: assertion, Type: privatekeyjwt.AssertionType}
 }
 
 // requireRejected asserts that verification failed for exactly the expected
 // reason, so a test cannot pass because the assertion was refused for an
 // unrelated one.
-func requireRejected(t *testing.T, err error, want clientauth.Reason) {
+func requireRejected(t *testing.T, err error, want privatekeyjwt.Reason) {
 	t.Helper()
 
 	require.Error(t, err)
-	require.Equal(t, want, clientauth.ReasonOf(err), "rejected for the wrong reason: %v", err)
+	require.Equal(t, want, privatekeyjwt.ReasonOf(err), "rejected for the wrong reason: %v", err)
 }
 
 // signWith serializes claims alongside an extra claim set, for the payload
@@ -222,39 +219,4 @@ func (s *signer) signWith(t *testing.T, claims jwt.Claims, extra any) string {
 	raw, err := jwt.Signed(s.inner).Claims(claims).Claims(extra).Serialize()
 	require.NoError(t, err)
 	return raw
-}
-
-// workloadExpectationFor is the standard workload Expectation: iss and sub
-// are genuinely different values, and the replay identifier is derived.
-func workloadExpectationFor(t *testing.T, s *signer, subject string) clientauth.Expectation {
-	t.Helper()
-
-	return clientauth.WorkloadExpectation(
-		testWorkloadIssuer,
-		subject,
-		s.source(t),
-		t.Name(),
-		testWorkloadIssuer,
-		subject,
-		clientauth.Audiences{
-			Issuer:   testIssuer,
-			Endpoint: testTokenURL,
-		},
-		clientauth.DefaultMaxLifetime,
-	)
-}
-
-// workloadClaims is a platform-shaped assertion body: iss names the platform,
-// sub names the machine, and there is deliberately no jti.
-func workloadClaims(subject string) jwt.Claims {
-	now := time.Now()
-	return jwt.Claims{
-		Issuer:    testWorkloadIssuer,
-		Subject:   subject,
-		Audience:  jwt.Audience{testIssuer},
-		Expiry:    jwt.NewNumericDate(now.Add(2 * time.Minute)),
-		NotBefore: jwt.NewNumericDate(now),
-		IssuedAt:  jwt.NewNumericDate(now),
-		ID:        "",
-	}
 }

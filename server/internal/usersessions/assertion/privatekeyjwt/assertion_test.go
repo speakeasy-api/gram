@@ -1,4 +1,4 @@
-package clientauth_test
+package privatekeyjwt_test
 
 import (
 	"testing"
@@ -7,7 +7,7 @@ import (
 	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/usersessions/clientauth"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/privatekeyjwt"
 )
 
 func TestUnverifiedClientID(t *testing.T) {
@@ -15,7 +15,7 @@ func TestUnverifiedClientID(t *testing.T) {
 
 	s := newSigner(t, testKeyID)
 
-	got, err := clientauth.UnverifiedClientID(s.sign(t, validClaims()))
+	got, err := privatekeyjwt.UnverifiedClientID(s.sign(t, validClaims()))
 	require.NoError(t, err)
 	require.Equal(t, testClientID, got)
 }
@@ -33,8 +33,8 @@ func TestUnverifiedClientID_RejectsDisallowedAlgorithm(t *testing.T) {
 	forged, err := jwt.Signed(hmacSigner).Claims(validClaims()).Serialize()
 	require.NoError(t, err)
 
-	_, err = clientauth.UnverifiedClientID(forged)
-	requireRejected(t, err, clientauth.ReasonMalformed)
+	_, err = privatekeyjwt.UnverifiedClientID(forged)
+	requireRejected(t, err, privatekeyjwt.ReasonMalformed)
 }
 
 func TestUnverifiedClientID_RequiresMatchingIssuerAndSubject(t *testing.T) {
@@ -44,6 +44,6 @@ func TestUnverifiedClientID_RequiresMatchingIssuerAndSubject(t *testing.T) {
 	claims := validClaims()
 	claims.Subject = "https://client.example.com/oauth/other.json"
 
-	_, err := clientauth.UnverifiedClientID(s.sign(t, claims))
-	requireRejected(t, err, clientauth.ReasonSubjectMismatch)
+	_, err := privatekeyjwt.UnverifiedClientID(s.sign(t, claims))
+	requireRejected(t, err, privatekeyjwt.ReasonSubjectMismatch)
 }
