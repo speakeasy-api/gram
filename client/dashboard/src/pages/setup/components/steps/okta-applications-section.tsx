@@ -319,20 +319,34 @@ function DraftOutcomeLine({
       ? outcome.identity.providerId
       : undefined;
 
+  const endpointFailed =
+    outcome.status === "created" && outcome.endpointFailed === true;
+
   return (
-    <Text variant="small">
-      {outcomeSentence(outcome)}
-      <routes.mcp.x.Link params={[outcome.mcpServerParam]}>
-        its page
-      </routes.mcp.x.Link>
-      {providerId ? (
-        <>
-          {" or "}
-          <ProviderLink providerId={providerId} />
-        </>
+    <div className="space-y-1">
+      <Text variant="small">
+        {outcomeSentence(outcome)}
+        <routes.mcp.x.Link params={[outcome.mcpServerParam]}>
+          its page
+        </routes.mcp.x.Link>
+        {providerId ? (
+          <>
+            {" or "}
+            <ProviderLink providerId={providerId} />
+          </>
+        ) : null}
+        .
+      </Text>
+      {/* The server stands either way, but without an endpoint it answers
+          nothing, and that is worth saying where the draft is rather than in a
+          toast that has already gone. */}
+      {endpointFailed ? (
+        <Text variant="small" muted>
+          No endpoint was created, so it cannot serve yet. Add one from its
+          page.
+        </Text>
       ) : null}
-      .
-    </Text>
+    </div>
   );
 }
 

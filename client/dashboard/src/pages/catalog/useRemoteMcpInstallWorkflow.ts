@@ -4,6 +4,7 @@ import {
   createDefaultMcpEndpoint,
   DEFAULT_ENDPOINT_FAILED_MESSAGE,
 } from "@/lib/mcpEndpoints";
+import { persistServerIconBestEffort } from "@/lib/mcpServerIcon";
 import { createRemoteMcpServerPair } from "@/lib/remoteMcpServers";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { getServerURL } from "@/lib/utils";
@@ -196,47 +197,6 @@ function buildInstallTargets(config: ServerConfig): InstallTarget[] {
 }
 
 /**
- * Best-effort: a logo failure never fails the install, and the returned
- * promise never rejects. Resolves true only when the logo actually landed on
- * mcp_metadata, so callers know whether a metadata refetch is warranted.
- */
-async function persistServerIconBestEffort(
-  client: Gram,
-  target: InstallTarget,
-  mcpServerId: string,
-  reqOpts: RequestOptions | undefined,
-): Promise<boolean> {
-  const iconUrl = target.server.iconUrl;
-  if (!iconUrl) return false;
-
-  try {
-    const uploaded = await client.assets.fetchImageFromURL(
-      { fetchImageFromURLForm2: { url: iconUrl } },
-      undefined,
-      reqOpts,
-    );
-    await client.mcpMetadata.set(
-      {
-        setMcpMetadataRequestBody: {
-          mcpServerId,
-          logoAssetId: uploaded.asset.id,
-        },
-      },
-      undefined,
-      reqOpts,
-    );
-    return true;
-  } catch (iconError) {
-    console.warn("Failed to persist server icon during install.", {
-      mcpServerId,
-      iconUrl,
-      iconError,
-    });
-    return false;
-  }
-}
-
-/**
  * Installs one target as an unproxied MCP server instead of a Gram-proxied
  * remote one: creates the unproxied_mcp_servers row, links an mcp_servers
  * wrapper (rolling back the former on failure, mirroring installTarget's own
@@ -306,7 +266,7 @@ async function installUnproxiedTarget(
   // caller chains a metadata refetch onto the returned promise instead.
   const iconPersistence = persistServerIconBestEffort(
     client,
-    target,
+    target.server.iconUrl,
     mcpServer.id,
     reqOpts,
   );
@@ -605,7 +565,7 @@ export function useRemoteMcpInstallWorkflow({
       // startInstall chains a metadata refetch onto the returned promise.
       const iconPersistence = persistServerIconBestEffort(
         client,
-        target,
+        target.server.iconUrl,
         mcpServer.id,
         reqOpts,
       );

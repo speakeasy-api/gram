@@ -12,7 +12,17 @@ import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remo
 import { invalidateAllRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
 import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSessionIssuers.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
+import { toast } from "sonner";
+import {
+  useProjectSlugForRequests,
+  useSdkClient,
+  useSlugs,
+} from "@/contexts/Sdk";
+import {
+  DEFAULT_ENDPOINT_FAILED_MESSAGE,
+  createDefaultMcpEndpoint,
+} from "@/lib/mcpEndpoints";
+import { persistServerIconBestEffort } from "@/lib/mcpServerIcon";
 import { createRemoteMcpServerPair } from "@/lib/remoteMcpServers";
 import { mcpServerRouteParam, validateMcpServerUrl } from "@/lib/sources";
 import {
@@ -34,6 +44,12 @@ export type DraftOutcome =
       mcpServerParam: string;
       pair: DraftPair;
       identity: DraftIdentityOutcome;
+      /**
+       * The default endpoint could not be staged, so the server exists but
+       * serves nothing until someone adds one. Never a failure of the draft:
+       * the endpoint is a convenience and the server stands without it.
+       */
+      endpointFailed?: boolean;
     }
   | { status: "exists"; mcpServerParam: string }
   | { status: "failed"; message: string };
@@ -80,6 +96,8 @@ export function useApplicationDrafts(): ApplicationDrafts {
   // this is the project the SDK is already sending every request to, which is
   // the one the drafts land in and the one their links have to point at.
   const projectSlug = useProjectSlugForRequests();
+  // The endpoint slug carries the organization, the same as every other path.
+  const { orgSlug } = useSlugs();
   const existing = useMcpServers({ gramProject: projectSlug }, undefined, {
     throwOnError: false,
   });
@@ -108,13 +126,14 @@ export function useApplicationDrafts(): ApplicationDrafts {
   // run after the server exists and can never take it back: whatever they
   // report, the draft stands.
   const runIdentity = useCallback(
-    async (id: string, pair: DraftPair) => {
+    async (id: string, pair: DraftPair, endpointFailed = false) => {
       const mcpServerParam = mcpServerRouteParam(pair.mcpServer);
       const created = (identity: DraftIdentityOutcome): DraftOutcome => ({
         status: "created",
         mcpServerParam,
         pair,
         identity,
+        endpointFailed,
       });
 
       record(id, created({ status: "configuring" }));
@@ -190,6 +209,30 @@ export function useApplicationDrafts(): ApplicationDrafts {
             continue;
           }
 
+          // Okta already knows what each application looks like, so a draft
+          // arrives with the logo its people recognize rather than initials.
+          // Best-effort by design: a logo is not worth failing a server over.
+          await persistServerIconBestEffort(
+            client,
+            application.logoUrl,
+            pair.mcpServer.id,
+          );
+
+          // Without an endpoint the server exists but serves nothing, which is
+          // the state a reader reads as broken. Best-effort like every other
+          // create path: the server stands whether or not this lands.
+          let endpointFailed = false;
+          if (orgSlug) {
+            endpointFailed = !(await createDefaultMcpEndpoint(
+              client,
+              pair.mcpServer,
+              orgSlug,
+            ));
+          } else {
+            endpointFailed = true;
+            toast.warning(DEFAULT_ENDPOINT_FAILED_MESSAGE);
+          }
+
           // refetchType "all" forces the refetch even with no active observer:
           // none of these lists is mounted behind the setup flow, and they must
           // carry the draft by the time the reader reaches them.
@@ -199,14 +242,14 @@ export function useApplicationDrafts(): ApplicationDrafts {
             invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
           ]);
 
-          await runIdentity(id, pair);
+          await runIdentity(id, pair, endpointFailed);
         }
       } finally {
         setCreating(false);
         setProgress(undefined);
       }
     },
-    [client, existingByName, queryClient, record, runIdentity],
+    [client, existingByName, orgSlug, queryClient, record, runIdentity],
   );
 
   const configureIdentity = useCallback(

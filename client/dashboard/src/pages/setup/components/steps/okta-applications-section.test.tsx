@@ -66,10 +66,17 @@ const sdk = vi.hoisted(() => ({
   commit: vi.fn(),
   existingMcpServers: [] as Array<{ id: string; name?: string; slug?: string }>,
   invalidated: [] as string[],
+  fetchImage: vi.fn(),
+  setMetadata: vi.fn(),
+  createEndpoint: vi.fn(),
+  /** Every create-side call in the order the loop made it. */
+  order: [] as string[],
 }));
 
 vi.mock("@/contexts/Sdk", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/contexts/Sdk")>()),
+  // The draft loop names an endpoint after the organization.
+  useSlugs: () => ({ orgSlug: "example-org", projectSlug: "default" }),
   // Called through, not captured: a test that swaps one of these between
   // renders (a retry after a failure) must reach the new one.
   useSdkClient: () => ({
@@ -93,6 +100,15 @@ vi.mock("@/contexts/Sdk", async (importOriginal) => ({
     },
     identityProviders: {
       listApplications: (...args: unknown[]) => sdk.listApplications(...args),
+    },
+    assets: {
+      fetchImageFromURL: (...args: unknown[]) => sdk.fetchImage(...args),
+    },
+    mcpMetadata: {
+      set: (...args: unknown[]) => sdk.setMetadata(...args),
+    },
+    mcpEndpoints: {
+      create: (...args: unknown[]) => sdk.createEndpoint(...args),
     },
   }),
   useProjectSlugForRequests: () => "default",
@@ -255,14 +271,27 @@ beforeEach(() => {
     error: null,
     refetch: vi.fn(),
   };
-  sdk.createRemoteServer = vi.fn(async () => ({
-    id: "remote-1",
-    url: "https://mcp.examplechat.test/mcp",
-  }));
-  sdk.createMcpServer = vi.fn(async () => ({
-    id: "mcp-1",
-    slug: "example-chat",
-  }));
+  sdk.order = [];
+  sdk.createRemoteServer = vi.fn(async () => {
+    sdk.order.push("remoteServer");
+    return { id: "remote-1", url: "https://mcp.examplechat.test/mcp" };
+  });
+  sdk.createMcpServer = vi.fn(async () => {
+    sdk.order.push("mcpServer");
+    return { id: "mcp-1", slug: "example-chat" };
+  });
+  sdk.fetchImage = vi.fn(async () => {
+    sdk.order.push("icon");
+    return { asset: { id: "asset-1" } };
+  });
+  sdk.setMetadata = vi.fn(async () => {
+    sdk.order.push("metadata");
+    return undefined;
+  });
+  sdk.createEndpoint = vi.fn(async () => {
+    sdk.order.push("endpoint");
+    return { id: "endpoint-1", slug: "example-org-abcd" };
+  });
   sdk.deleteRemoteServer = vi.fn(async () => undefined);
   // Most upstreams in these tests ask for no sign-in; the ones that do say so
   // per test. Placeholder hosts only.
@@ -580,6 +609,59 @@ describe("OktaApplicationsSection", () => {
     );
     expect(names[0]).toContain("Example Ledger");
     expect(names[1]).toContain("Zeta");
+  });
+
+  // A server with no endpoint exists but answers nothing, which is the state
+  // that reads as broken. Every other create path in the dashboard stages one.
+  it("stages a default endpoint for each server it creates", async () => {
+    withApplications([
+      application(),
+      application({
+        sourceApplicationId: "0oaexampleapp2",
+        label: "Example Docs",
+        match: { ...match(), remoteUrl: "https://mcp.exampledocs.test/mcp" },
+      }),
+    ]);
+    render(<OktaApplicationsSection index={4} connection={connection()} />);
+
+    pressCreate();
+    await waitFor(() => expect(sdk.createEndpoint).toHaveBeenCalledTimes(2));
+
+    expect(sdk.createEndpoint.mock.calls[0]![0]).toEqual({
+      createMcpEndpointForm: {
+        mcpServerId: "mcp-1",
+        slug: expect.stringMatching(/^example-org-/),
+      },
+    });
+
+    // The catalog install orders these the same way: the pair first, then the
+    // logo, then the endpoint. Identity runs after, and cannot take the
+    // server back whatever it reports.
+    expect(sdk.order.slice(0, 5)).toEqual([
+      "remoteServer",
+      "mcpServer",
+      "icon",
+      "metadata",
+      "endpoint",
+    ]);
+  });
+
+  it("says a draft cannot serve when its endpoint fails, and keeps it", async () => {
+    withApplications([application()]);
+    sdk.createEndpoint = vi.fn(async () => {
+      throw new Error("endpoint slug already taken");
+    });
+    render(<OktaApplicationsSection index={4} connection={connection()} />);
+
+    pressCreate();
+
+    // The draft still stands: the endpoint is a convenience, and rolling a
+    // working server back over it would be worse than saying so.
+    await screen.findByText(/Draft created/);
+    expect(sdk.deleteRemoteServer).not.toHaveBeenCalled();
+    expect(
+      await screen.findByText(/No endpoint was created, so it cannot serve/),
+    ).toBeTruthy();
   });
 
   it("creates one MCP server per picked application, in two calls", async () => {
