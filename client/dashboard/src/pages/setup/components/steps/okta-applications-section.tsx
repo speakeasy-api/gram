@@ -1,9 +1,14 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Check } from "lucide-react";
 import { Link } from "react-router";
+import { toast } from "sonner";
 import type { IdentityProviderApplication } from "@gram/client/models/components/identityproviderapplication.js";
 import type { IdentityProviderConnection } from "@gram/client/models/components/identityproviderconnection.js";
-import { useListIdentityProviderApplications } from "@gram/client/react-query/listIdentityProviderApplications.js";
+import {
+  queryKeyListIdentityProviderApplications,
+  useListIdentityProviderApplications,
+} from "@gram/client/react-query/listIdentityProviderApplications.js";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   defineFilters,
   useFilterState,
@@ -17,6 +22,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
+import { useSdkClient } from "@/contexts/Sdk";
 import { cn } from "@/lib/utils";
 import { useOrgRoutes, useRoutes } from "@/routes";
 import { StepSection } from "../step-section";
@@ -641,6 +647,50 @@ function ApplicationsInventory({
   );
 }
 
+/**
+ * Refresh is the one read that goes past the server's inventory cache, so it
+ * is made by hand with force rather than through the step's own query: force
+ * is part of React Query's key, and letting it into the key would leave every
+ * later refetch — on focus, on remount — hitting Okta again.
+ *
+ * What comes back is written into the query the step already reads, so there
+ * is one inventory on screen and one entry in the cache. A failed re-read says
+ * so and leaves the one in hand alone; blanking a tenant's applications over a
+ * rate limit would be the worse answer.
+ */
+function useForcedApplicationsRead(): {
+  refresh: () => Promise<void>;
+  refreshing: boolean;
+} {
+  const client = useSdkClient();
+  const queryClient = useQueryClient();
+  const [refreshing, setRefreshing] = useState(false);
+
+  const refresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const result = await client.identityProviders.listApplications({
+        force: true,
+      });
+      queryClient.setQueryData(
+        queryKeyListIdentityProviderApplications({}),
+        result,
+      );
+    } catch (error) {
+      toast.error(
+        errorMessage(
+          error,
+          "Speakeasy could not re-read applications from Okta.",
+        ),
+      );
+    } finally {
+      setRefreshing(false);
+    }
+  }, [client, queryClient]);
+
+  return { refresh, refreshing };
+}
+
 // Step four: what Okta has, read live, as a grid of applications to pick from.
 // A card is pickable where Speakeasy knows an MCP server for it, and every one
 // of those starts picked; the bar at the foot of the grid acts on what is left.
@@ -652,11 +702,15 @@ export function OktaApplicationsSection({
   connection: IdentityProviderConnection | undefined;
 }): JSX.Element {
   const active = connection?.status === "active";
+  // No force: the read the step opens with, and every refetch React Query makes
+  // of it, takes the server's five-minute inventory cache. Only the reader
+  // pressing Refresh goes past it.
   const applications = useListIdentityProviderApplications(
     undefined,
     undefined,
     { enabled: active, throwOnError: false },
   );
+  const { refresh, refreshing } = useForcedApplicationsRead();
 
   let body: JSX.Element | null = null;
   if (applications.isPending) {
@@ -686,8 +740,8 @@ export function OktaApplicationsSection({
       <ApplicationsInventory
         result={applications.data}
         tenantHost={tenantHostOf(connection?.tenantIdentifier ?? "")}
-        onRefresh={() => void applications.refetch()}
-        refreshing={applications.isFetching}
+        onRefresh={() => void refresh()}
+        refreshing={refreshing || applications.isFetching}
       />
     );
   }
