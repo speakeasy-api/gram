@@ -220,10 +220,14 @@ func TestApplyIssuerGate_WorkloadSessionRefusedWhenItsAgentIsSuspended(t *testin
 	endpoint := workloadSessionEndpoint(fx)
 	token := mintWorkloadBearer(t, ti, fx, session)
 
-	_, err := agentsrepo.New(ti.conn).SuspendAgent(ctx, agentsrepo.SuspendAgentParams{OrganizationID: fx.orgID, ID: agent.ID})
+	w := httptest.NewRecorder()
+	_, _, _, err := ti.service.ApplyIssuerGate(t.Context(), w, token, ti.serverURL.String(), endpoint)
+	require.NoError(t, err, "the workload must be admitted before the suspension, or the refusal below proves nothing")
+
+	_, err = agentsrepo.New(ti.conn).SuspendAgent(ctx, agentsrepo.SuspendAgentParams{OrganizationID: fx.orgID, ID: agent.ID})
 	require.NoError(t, err)
 
-	w := httptest.NewRecorder()
+	w = httptest.NewRecorder()
 	_, _, _, err = ti.service.ApplyIssuerGate(t.Context(), w, token, ti.serverURL.String(), endpoint)
 	require.Error(t, err)
 	var oopsErr *oops.ShareableError
@@ -244,16 +248,24 @@ func TestApplyIssuerGate_WorkloadSessionDoesNotInheritAnUnassignedAgentsPolicy(t
 	seedPrincipalMCPConnectGrant(t, ctx, ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeAgent, unrelated.ID.String()), fx.target.MCPResourceID)
 
 	issuerID := seedWorkloadIssuer(t, ctx, ti, fx.orgID)
-	assignAgentToWorkload(t, ctx, ti, fx.orgID, issuerID, workloadSessionSubject, assigned.ID)
+	assignment := assignAgentToWorkload(t, ctx, ti, fx.orgID, issuerID, workloadSessionSubject, assigned.ID)
 
 	subject := urn.NewWorkloadSubject(issuerID, workloadSessionSubject)
 	session := seedWorkloadSession(t, ctx, ti, fx, subject)
 	endpoint := workloadSessionEndpoint(fx)
+	token := mintWorkloadBearer(t, ti, fx, session)
 
 	w := httptest.NewRecorder()
-	_, _, _, err := ti.service.ApplyIssuerGate(t.Context(), w, mintWorkloadBearer(t, ti, fx, session), ti.serverURL.String(), endpoint)
+	_, _, _, err := ti.service.ApplyIssuerGate(t.Context(), w, token, ti.serverURL.String(), endpoint)
 	require.Error(t, err)
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
+
+	unassignWorkloadAgent(t, ctx, ti, assignment)
+	assignAgentToWorkload(t, ctx, ti, fx.orgID, issuerID, workloadSessionSubject, unrelated.ID)
+
+	w = httptest.NewRecorder()
+	_, _, _, err = ti.service.ApplyIssuerGate(t.Context(), w, token, ti.serverURL.String(), endpoint)
+	require.NoError(t, err, "the same workload must be admitted through an agent that holds the grant, or the refusal above proves nothing")
 }
