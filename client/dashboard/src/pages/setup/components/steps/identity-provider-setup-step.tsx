@@ -277,12 +277,50 @@ function RepairBlock({
   );
 }
 
-function VerifyResultBlock({
+/** Short words for an outcome, where the detail sentence carries the why. */
+const OUTCOME_BADGE: Record<
+  string,
+  { label: string; variant: "success" | "warning" | "neutral" }
+> = {
+  passed: { label: "Passed", variant: "success" },
+  pending_validation: { label: "Waiting", variant: "neutral" },
+};
+
+/**
+ * The outcome as one line: a badge and the server's own sentence. For a step
+ * whose evidence rows say nothing the reader can act on, the table under the
+ * result is noise between them and the next thing to do.
+ */
+function VerifyResultLine({
   result,
-  pendingValidationTitle,
 }: {
   result: IdentityProviderVerifyResult;
-  pendingValidationTitle?: string;
+}): JSX.Element {
+  const badge = OUTCOME_BADGE[result.outcome] ?? {
+    label: "Did not pass",
+    variant: "warning" as const,
+  };
+  const detail =
+    result.detail ||
+    VERIFY_COPY[result.outcome]?.title ||
+    "Speakeasy could not confirm the connection.";
+
+  return (
+    <div className="flex flex-wrap items-baseline gap-2">
+      <Badge variant={badge.variant} background size="sm">
+        <Badge.Text>{badge.label}</Badge.Text>
+      </Badge>
+      <Text variant="small" muted>
+        {detail}
+      </Text>
+    </div>
+  );
+}
+
+function VerifyResultBlock({
+  result,
+}: {
+  result: IdentityProviderVerifyResult;
 }): JSX.Element {
   const checkedAt = result.evidence.checkedAt.toLocaleTimeString([], {
     hour: "2-digit",
@@ -306,10 +344,7 @@ function VerifyResultBlock({
     );
   }
 
-  let copy = VERIFY_COPY[result.outcome];
-  if (result.outcome === "pending_validation" && pendingValidationTitle) {
-    copy = { title: pendingValidationTitle, tone: "info" };
-  }
+  const copy = VERIFY_COPY[result.outcome];
   // With nothing of our own to add, the server's sentence is the body rather
   // than a footnote under a sentence that says less.
   const body =
@@ -351,6 +386,11 @@ interface IdentityProviderSetupStepPanelProps {
   isVerifying: boolean;
   /** The last check, whether from this session or a previous one. */
   verifyResult?: IdentityProviderVerifyResult;
+  /**
+   * Report the outcome as a single line instead of an alert and the evidence
+   * table. For a step where the rows repeat what the sentence already said.
+   */
+  compactVerifyResult?: boolean;
   /** Shown in place of a result when verification cannot run at all. */
   verifyUnavailable?: string;
   /** Overrides the primary action's label, e.g. "Create the sign-in application". */
@@ -359,8 +399,6 @@ interface IdentityProviderSetupStepPanelProps {
   verifyLabel?: string;
   /** Overrides the external-link action, e.g. "Open the Provisioning tab in Okta". */
   deepLinkLabel?: string;
-  /** Gives pending validation context specific to this setup step. */
-  pendingValidationTitle?: string;
   /**
    * A step whose primary action carries no values still needs one — creating
    * the sign-in application is a submit with nothing in it.
@@ -414,11 +452,11 @@ export function IdentityProviderSetupStepPanel({
   onVerify,
   isVerifying,
   verifyResult,
+  compactVerifyResult = false,
   verifyUnavailable,
   submitLabel,
   verifyLabel,
   deepLinkLabel,
-  pendingValidationTitle,
   allowSubmitWithoutValues = false,
   secondaryAction,
   portal,
@@ -621,10 +659,11 @@ export function IdentityProviderSetupStepPanel({
       ) : null}
 
       {!verifyUnavailable && verifyResult ? (
-        <VerifyResultBlock
-          result={verifyResult}
-          pendingValidationTitle={pendingValidationTitle}
-        />
+        compactVerifyResult ? (
+          <VerifyResultLine result={verifyResult} />
+        ) : (
+          <VerifyResultBlock result={verifyResult} />
+        )
       ) : null}
 
       {step.repair && repair ? (

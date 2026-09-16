@@ -158,7 +158,7 @@ describe("OktaDirectorySection", () => {
     });
   });
 
-  it("explains that validation is waiting for the first group push", () => {
+  it("says the check is waiting, in the server's words", () => {
     withStep(
       directoryStep({
         state: "awaiting_verification",
@@ -181,9 +181,8 @@ describe("OktaDirectorySection", () => {
       />,
     );
 
-    expect(
-      screen.getByText("Directory sync is waiting for its first group push"),
-    ).toBeTruthy();
+    // One line: what happened, and the server's own sentence for why.
+    expect(screen.getByText("Waiting")).toBeTruthy();
     expect(
       screen.getByText("No groups have reached Speakeasy yet."),
     ).toBeTruthy();
@@ -225,7 +224,7 @@ describe("OktaDirectorySection", () => {
     ).toBeNull();
   });
 
-  it("names every evidence row the check reports", () => {
+  it("reports the outcome as one line, with no evidence table", () => {
     withStep(
       directoryStep({
         state: "passed",
@@ -271,18 +270,17 @@ describe("OktaDirectorySection", () => {
       />,
     );
 
-    // Four reads across two capabilities, so the resource is the only thing
-    // telling them apart. Without copy for each, two rows read as the literal
-    // string group_assignment and two more are identical to each other.
-    expect(screen.getByText("Directory application in Okta")).toBeTruthy();
-    expect(screen.getByText("Provisioning connection in Okta")).toBeTruthy();
-    expect(screen.getByText("Groups arrived from Okta")).toBeTruthy();
-    expect(screen.getByText("People arrived from Okta")).toBeTruthy();
-    expect(screen.queryByText("group_assignment")).toBeNull();
+    expect(screen.getByText("Passed")).toBeTruthy();
+    expect(screen.getByText("Directory sync is running.")).toBeTruthy();
 
-    // And the counts read as nouns rather than as the resource key.
-    expect(screen.getByText("4 groups")).toBeTruthy();
-    expect(screen.getByText("12 people")).toBeTruthy();
+    // The rows are the same four reads whatever the outcome, so they tell the
+    // reader nothing the sentence has not already said and nothing they can
+    // act on. The connect and sign-on steps keep theirs.
+    expect(screen.queryByText("Directory application in Okta")).toBeNull();
+    expect(screen.queryByText("Provisioning connection in Okta")).toBeNull();
+    expect(screen.queryByText("Groups arrived from Okta")).toBeNull();
+    expect(screen.queryByText("4 groups")).toBeNull();
+    expect(screen.queryByRole("table")).toBeNull();
   });
 
   it("submits the directory step even when sign-on has failed", () => {
