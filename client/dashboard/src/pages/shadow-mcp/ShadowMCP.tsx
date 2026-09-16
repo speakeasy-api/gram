@@ -1,12 +1,9 @@
 import { Page } from "@/components/page-layout";
 import { ShadowAISection } from "@/pages/shadow-ai/ShadowAI";
 import { ShadowMCPInventoryTable } from "@/components/shadow-mcp/ShadowMCPInventoryTable";
-import { ShadowMCPPolicyStatus } from "@/components/shadow-mcp/ShadowMCPPolicyStatus";
 import {
   eligibleShadowMCPAllowRulePolicies,
-  shadowMCPBlockingPolicyDisposition,
   type ShadowMCPPolicy,
-  shadowMCPPolicyState,
 } from "@/components/shadow-mcp/shadowMCPInventoryStatus";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { useProject } from "@/contexts/Auth";
@@ -52,12 +49,8 @@ function ShadowMCPInventory({ pageTitle }: { pageTitle: string }): JSX.Element {
     (policiesQuery.isError || !!policiesQuery.data) &&
     (membersQuery.isError || !!membersQuery.data) &&
     (rolesQuery.isError || !!rolesQuery.data);
-  const policyState = policiesQuery.isError
-    ? "unavailable"
-    : shadowMCPPolicyState(policiesQuery.data?.policies);
   const shadowMCPPolicies: ShadowMCPPolicy[] =
     eligibleShadowMCPAllowRulePolicies(policiesQuery.data?.policies);
-  const disposition = shadowMCPBlockingPolicyDisposition(shadowMCPPolicies);
 
   return (
     <Page.Section>
@@ -67,14 +60,6 @@ function ShadowMCPInventory({ pageTitle }: { pageTitle: string }): JSX.Element {
         raised in an access request — with its review state. Click a server for
         its evidence, requesters, and decision history.
       </Page.Section.Description>
-      {policyDataReady ? (
-        <Page.Section.CTA>
-          <ShadowMCPPolicyStatus
-            disposition={disposition}
-            policyState={policyState}
-          />
-        </Page.Section.CTA>
-      ) : null}
       <Page.Section.Body>
         {policyDataReady ? (
           <div className="flex flex-col pb-8">

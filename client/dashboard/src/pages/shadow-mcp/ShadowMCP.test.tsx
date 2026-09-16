@@ -1,4 +1,4 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import type { ReactElement, ReactNode } from "react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -196,12 +196,6 @@ describe("ShadowMCP", () => {
     expect(
       screen.getByText(/Every MCP server this project knows about/),
     ).toBeTruthy();
-    expect(screen.getByText("No Policy")).toBeTruthy();
-    expect(
-      screen.getByText(
-        "No policy is enabled. All Shadow MCP servers are allowed.",
-      ),
-    ).toBeTruthy();
     expect(screen.getByText("Shadow MCP inventory for project-1")).toBeTruthy();
   });
 
@@ -222,14 +216,10 @@ describe("ShadowMCP", () => {
       "Loading Shadow MCP policies",
     );
     expect(screen.getByText("Loading table")).toBeTruthy();
-    expect(screen.queryByText("No Policy")).toBeNull();
     expect(screen.queryByText(/Shadow MCP inventory for/)).toBeNull();
-    expect(
-      within(screen.getByTestId("section-cta")).queryByText(/./),
-    ).toBeNull();
   });
 
-  it("renders blocking policy status in the section header", () => {
+  it("renders with different policy configurations", () => {
     mocks.useRiskListPolicies.mockReturnValue({
       data: {
         policies: [
@@ -248,85 +238,11 @@ describe("ShadowMCP", () => {
       </MemoryRouter>,
     );
 
-    const sectionCTA = within(screen.getByTestId("section-cta"));
-    expect(sectionCTA.getByText("Blocking")).toBeTruthy();
-    expect(
-      sectionCTA.getByText(
-        "Block policy is enabled. Servers without allow rules are not allowed.",
-      ),
-    ).toBeTruthy();
     expect(screen.getByText("Shadow MCP inventory for project-1")).toBeTruthy();
     expect(
       screen.getByText("Shadow MCP policies: block-policy-1"),
     ).toBeTruthy();
     expect(screen.getByText("Roles: Admin")).toBeTruthy();
     expect(screen.getByText("Members: Admin User")).toBeTruthy();
-  });
-
-  it("renders warning policy status when no blocking policy is enabled", () => {
-    mocks.useRiskListPolicies.mockReturnValue({
-      data: { policies: [riskPolicy({ action: "warn" })] },
-      isError: false,
-      isLoading: false,
-    });
-
-    render(
-      <MemoryRouter>
-        <ShadowMCP />
-      </MemoryRouter>,
-    );
-
-    expect(screen.getByText("Warning")).toBeTruthy();
-    expect(
-      screen.getByText(
-        "Warn policy is enabled. Users must acknowledge warnings before continuing.",
-      ),
-    ).toBeTruthy();
-    expect(screen.getByText("Shadow MCP inventory for project-1")).toBeTruthy();
-  });
-
-  it("renders flagging policy status when no blocking policy is enabled", () => {
-    mocks.useRiskListPolicies.mockReturnValue({
-      data: { policies: [riskPolicy({ action: "flag" })] },
-      isError: false,
-      isLoading: false,
-    });
-
-    render(
-      <MemoryRouter>
-        <ShadowMCP />
-      </MemoryRouter>,
-    );
-
-    expect(screen.getByText("Flagging")).toBeTruthy();
-    expect(
-      screen.getByText(
-        "Flagging policy is enabled. Servers without allow rules are only flagged.",
-      ),
-    ).toBeTruthy();
-    expect(screen.getByText("Shadow MCP inventory for project-1")).toBeTruthy();
-  });
-
-  it("renders no policy when no enabled Shadow MCP policy exists", () => {
-    mocks.useRiskListPolicies.mockReturnValue({
-      data: {
-        policies: [
-          riskPolicy({ action: "block", enabled: false }),
-          riskPolicy({ action: "block", sources: ["prompt_injection"] }),
-        ],
-      },
-      isError: false,
-      isLoading: false,
-    });
-
-    render(
-      <MemoryRouter>
-        <ShadowMCP />
-      </MemoryRouter>,
-    );
-
-    expect(screen.getByText("No Policy")).toBeTruthy();
-    expect(screen.getByText("Shadow MCP inventory for project-1")).toBeTruthy();
-    expect(screen.getByText("Shadow MCP policies: none")).toBeTruthy();
   });
 });
