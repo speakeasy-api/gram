@@ -17,6 +17,11 @@ func GetIdentityProvidersPath() string {
 	return "/rpc/identityProviders.get"
 }
 
+// GetGuidedReadinessIdentityProvidersPath returns the URL path to the identityProviders service getGuidedReadiness HTTP endpoint.
+func GetGuidedReadinessIdentityProvidersPath() string {
+	return "/rpc/identityProviders.getGuidedReadiness"
+}
+
 // ListApplicationsIdentityProvidersPath returns the URL path to the identityProviders service listApplications HTTP endpoint.
 func ListApplicationsIdentityProvidersPath() string {
 	return "/rpc/identityProviders.listApplications"

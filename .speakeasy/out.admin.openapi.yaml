@@ -1316,6 +1316,84 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       x-speakeasy-name-override: getOrganization
+  /admin/organization.guidedReadiness:
+    get:
+      description: Get an organization's readiness for guided identity provider setup.
+      operationId: adminGetOrganizationGuidedReadiness
+      parameters:
+        - allowEmptyValue: true
+          in: query
+          name: organization_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdentityProviderReadiness'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: getOrganizationGuidedReadiness admin
+      tags:
+        - admin
+      x-speakeasy-name-override: getOrganizationGuidedReadiness
+      x-speakeasy-react-hook:
+        name: AdminOrganizationGuidedReadiness
   /admin/organization.inferenceKeys:
     get:
       tags:
@@ -4837,6 +4915,70 @@ components:
         - global_client_count
         - tenant_client_count
         - trusted_user_session_issuer_count
+    IdentityProviderReadiness:
+      type: object
+      properties:
+        checked_at:
+          type: string
+          format: date-time
+        checks:
+          type: array
+          items:
+            $ref: '#/components/schemas/IdentityProviderReadinessCheck'
+          description: Independent readiness checks in evaluation order.
+        eligible:
+          type: boolean
+          description: Whether guided setup is available.
+        provider:
+          type: string
+          description: Identity provider supported by the guided setup.
+          enum:
+            - okta
+      required:
+        - provider
+        - eligible
+        - checks
+        - checked_at
+    IdentityProviderReadinessCheck:
+      type: object
+      properties:
+        checked_at:
+          type: string
+          format: date-time
+        detail:
+          type: string
+          description: Customer-safe explanation of the result.
+        key:
+          type: string
+          description: Stable readiness check key.
+          enum:
+            - workos_organization_linked
+            - workos_domain_verified
+            - directory_handoff_stored
+            - workos_directory_created
+            - connections_api_available
+            - sso_feature_enabled
+            - scim_feature_enabled
+        ok:
+          type: boolean
+          description: Whether the readiness check passed.
+        owner:
+          type: string
+          description: Team responsible for the check.
+          enum:
+            - platform_admin
+            - customer
+            - speakeasy
+        remedy:
+          type: string
+          description: Staff action needed to make the check pass.
+      required:
+        - key
+        - ok
+        - detail
+        - remedy
+        - owner
+        - checked_at
     IssuerConvergenceCandidate:
       type: object
       properties:

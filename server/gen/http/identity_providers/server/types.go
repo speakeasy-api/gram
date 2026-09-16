@@ -9,6 +9,7 @@ package server
 
 import (
 	identityproviders "github.com/speakeasy-api/gram/server/gen/identity_providers"
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
 )
 
@@ -71,6 +72,18 @@ type CreateResponseBody struct {
 // endpoint HTTP response body.
 type GetResponseBody struct {
 	Connection *IdentityProviderConnectionResponseBody `form:"connection,omitempty" json:"connection,omitempty" xml:"connection,omitempty"`
+}
+
+// GetGuidedReadinessResponseBody is the type of the "identityProviders"
+// service "getGuidedReadiness" endpoint HTTP response body.
+type GetGuidedReadinessResponseBody struct {
+	// Identity provider supported by the guided setup.
+	Provider string `form:"provider" json:"provider" xml:"provider"`
+	// Whether guided setup is available.
+	Eligible bool `form:"eligible" json:"eligible" xml:"eligible"`
+	// Independent readiness checks in evaluation order.
+	Checks    []*IdentityProviderReadinessCheckResponseBody `form:"checks" json:"checks" xml:"checks"`
+	CheckedAt string                                        `form:"checked_at" json:"checked_at" xml:"checked_at"`
 }
 
 // ListApplicationsResponseBody is the type of the "identityProviders" service
@@ -456,6 +469,196 @@ type GetUnexpectedResponseBody struct {
 // GetGatewayErrorResponseBody is the type of the "identityProviders" service
 // "get" endpoint HTTP response body for the "gateway_error" error.
 type GetGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetGuidedReadinessUnauthorizedResponseBody is the type of the
+// "identityProviders" service "getGuidedReadiness" endpoint HTTP response body
+// for the "unauthorized" error.
+type GetGuidedReadinessUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetGuidedReadinessForbiddenResponseBody is the type of the
+// "identityProviders" service "getGuidedReadiness" endpoint HTTP response body
+// for the "forbidden" error.
+type GetGuidedReadinessForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetGuidedReadinessBadRequestResponseBody is the type of the
+// "identityProviders" service "getGuidedReadiness" endpoint HTTP response body
+// for the "bad_request" error.
+type GetGuidedReadinessBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetGuidedReadinessNotFoundResponseBody is the type of the
+// "identityProviders" service "getGuidedReadiness" endpoint HTTP response body
+// for the "not_found" error.
+type GetGuidedReadinessNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetGuidedReadinessConflictResponseBody is the type of the
+// "identityProviders" service "getGuidedReadiness" endpoint HTTP response body
+// for the "conflict" error.
+type GetGuidedReadinessConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetGuidedReadinessUnsupportedMediaResponseBody is the type of the
+// "identityProviders" service "getGuidedReadiness" endpoint HTTP response body
+// for the "unsupported_media" error.
+type GetGuidedReadinessUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetGuidedReadinessInvalidResponseBody is the type of the "identityProviders"
+// service "getGuidedReadiness" endpoint HTTP response body for the "invalid"
+// error.
+type GetGuidedReadinessInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetGuidedReadinessInvariantViolationResponseBody is the type of the
+// "identityProviders" service "getGuidedReadiness" endpoint HTTP response body
+// for the "invariant_violation" error.
+type GetGuidedReadinessInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetGuidedReadinessUnexpectedResponseBody is the type of the
+// "identityProviders" service "getGuidedReadiness" endpoint HTTP response body
+// for the "unexpected" error.
+type GetGuidedReadinessUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetGuidedReadinessGatewayErrorResponseBody is the type of the
+// "identityProviders" service "getGuidedReadiness" endpoint HTTP response body
+// for the "gateway_error" error.
+type GetGuidedReadinessGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1458,6 +1661,22 @@ type IdentityProviderConnectionResponseBody struct {
 	UpdatedAt            string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
+// IdentityProviderReadinessCheckResponseBody is used to define fields on
+// response body types.
+type IdentityProviderReadinessCheckResponseBody struct {
+	// Stable readiness check key.
+	Key string `form:"key" json:"key" xml:"key"`
+	// Whether the readiness check passed.
+	OK bool `form:"ok" json:"ok" xml:"ok"`
+	// Customer-safe explanation of the result.
+	Detail string `form:"detail" json:"detail" xml:"detail"`
+	// Staff action needed to make the check pass.
+	Remedy string `form:"remedy" json:"remedy" xml:"remedy"`
+	// Team responsible for the check.
+	Owner     string `form:"owner" json:"owner" xml:"owner"`
+	CheckedAt string `form:"checked_at" json:"checked_at" xml:"checked_at"`
+}
+
 // IdentityProviderApplicationResponseBody is used to define fields on response
 // body types.
 type IdentityProviderApplicationResponseBody struct {
@@ -1609,6 +1828,30 @@ func NewGetResponseBody(res *identityproviders.GetIdentityProviderResult) *GetRe
 	body := &GetResponseBody{}
 	if res.Connection != nil {
 		body.Connection = marshalIdentityprovidersIdentityProviderConnectionToIdentityProviderConnectionResponseBody(res.Connection)
+	}
+	return body
+}
+
+// NewGetGuidedReadinessResponseBody builds the HTTP response body from the
+// result of the "getGuidedReadiness" endpoint of the "identityProviders"
+// service.
+func NewGetGuidedReadinessResponseBody(res *types.IdentityProviderReadiness) *GetGuidedReadinessResponseBody {
+	body := &GetGuidedReadinessResponseBody{
+		Provider:  res.Provider,
+		Eligible:  res.Eligible,
+		CheckedAt: res.CheckedAt,
+	}
+	if res.Checks != nil {
+		body.Checks = make([]*IdentityProviderReadinessCheckResponseBody, len(res.Checks))
+		for i, val := range res.Checks {
+			if val == nil {
+				body.Checks[i] = nil
+				continue
+			}
+			body.Checks[i] = marshalTypesIdentityProviderReadinessCheckToIdentityProviderReadinessCheckResponseBody(val)
+		}
+	} else {
+		body.Checks = []*IdentityProviderReadinessCheckResponseBody{}
 	}
 	return body
 }
@@ -1981,6 +2224,156 @@ func NewGetUnexpectedResponseBody(res *goa.ServiceError) *GetUnexpectedResponseB
 // of the "get" endpoint of the "identityProviders" service.
 func NewGetGatewayErrorResponseBody(res *goa.ServiceError) *GetGatewayErrorResponseBody {
 	body := &GetGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetGuidedReadinessUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "getGuidedReadiness" endpoint of the
+// "identityProviders" service.
+func NewGetGuidedReadinessUnauthorizedResponseBody(res *goa.ServiceError) *GetGuidedReadinessUnauthorizedResponseBody {
+	body := &GetGuidedReadinessUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetGuidedReadinessForbiddenResponseBody builds the HTTP response body
+// from the result of the "getGuidedReadiness" endpoint of the
+// "identityProviders" service.
+func NewGetGuidedReadinessForbiddenResponseBody(res *goa.ServiceError) *GetGuidedReadinessForbiddenResponseBody {
+	body := &GetGuidedReadinessForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetGuidedReadinessBadRequestResponseBody builds the HTTP response body
+// from the result of the "getGuidedReadiness" endpoint of the
+// "identityProviders" service.
+func NewGetGuidedReadinessBadRequestResponseBody(res *goa.ServiceError) *GetGuidedReadinessBadRequestResponseBody {
+	body := &GetGuidedReadinessBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetGuidedReadinessNotFoundResponseBody builds the HTTP response body from
+// the result of the "getGuidedReadiness" endpoint of the "identityProviders"
+// service.
+func NewGetGuidedReadinessNotFoundResponseBody(res *goa.ServiceError) *GetGuidedReadinessNotFoundResponseBody {
+	body := &GetGuidedReadinessNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetGuidedReadinessConflictResponseBody builds the HTTP response body from
+// the result of the "getGuidedReadiness" endpoint of the "identityProviders"
+// service.
+func NewGetGuidedReadinessConflictResponseBody(res *goa.ServiceError) *GetGuidedReadinessConflictResponseBody {
+	body := &GetGuidedReadinessConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetGuidedReadinessUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "getGuidedReadiness" endpoint of the
+// "identityProviders" service.
+func NewGetGuidedReadinessUnsupportedMediaResponseBody(res *goa.ServiceError) *GetGuidedReadinessUnsupportedMediaResponseBody {
+	body := &GetGuidedReadinessUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetGuidedReadinessInvalidResponseBody builds the HTTP response body from
+// the result of the "getGuidedReadiness" endpoint of the "identityProviders"
+// service.
+func NewGetGuidedReadinessInvalidResponseBody(res *goa.ServiceError) *GetGuidedReadinessInvalidResponseBody {
+	body := &GetGuidedReadinessInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetGuidedReadinessInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "getGuidedReadiness" endpoint of the
+// "identityProviders" service.
+func NewGetGuidedReadinessInvariantViolationResponseBody(res *goa.ServiceError) *GetGuidedReadinessInvariantViolationResponseBody {
+	body := &GetGuidedReadinessInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetGuidedReadinessUnexpectedResponseBody builds the HTTP response body
+// from the result of the "getGuidedReadiness" endpoint of the
+// "identityProviders" service.
+func NewGetGuidedReadinessUnexpectedResponseBody(res *goa.ServiceError) *GetGuidedReadinessUnexpectedResponseBody {
+	body := &GetGuidedReadinessUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetGuidedReadinessGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "getGuidedReadiness" endpoint of the
+// "identityProviders" service.
+func NewGetGuidedReadinessGatewayErrorResponseBody(res *goa.ServiceError) *GetGuidedReadinessGatewayErrorResponseBody {
+	body := &GetGuidedReadinessGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2740,6 +3133,16 @@ func NewCreatePayload(body *CreateRequestBody, sessionToken *string, apikeyToken
 // NewGetPayload builds a identityProviders service get endpoint payload.
 func NewGetPayload(sessionToken *string, apikeyToken *string) *identityproviders.GetPayload {
 	v := &identityproviders.GetPayload{}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v
+}
+
+// NewGetGuidedReadinessPayload builds a identityProviders service
+// getGuidedReadiness endpoint payload.
+func NewGetGuidedReadinessPayload(sessionToken *string, apikeyToken *string) *identityproviders.GetGuidedReadinessPayload {
+	v := &identityproviders.GetGuidedReadinessPayload{}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 

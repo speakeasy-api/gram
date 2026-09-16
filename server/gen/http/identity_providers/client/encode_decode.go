@@ -15,6 +15,7 @@ import (
 	"net/url"
 
 	identityproviders "github.com/speakeasy-api/gram/server/gen/identity_providers"
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	goahttp "goa.design/goa/v3/http"
 )
 
@@ -486,6 +487,241 @@ func DecodeGetResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("identityProviders", "get", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildGetGuidedReadinessRequest instantiates a HTTP request object with
+// method and path set to call the "identityProviders" service
+// "getGuidedReadiness" endpoint
+func (c *Client) BuildGetGuidedReadinessRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetGuidedReadinessIdentityProvidersPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("identityProviders", "getGuidedReadiness", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetGuidedReadinessRequest returns an encoder for requests sent to the
+// identityProviders getGuidedReadiness server.
+func EncodeGetGuidedReadinessRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*identityproviders.GetGuidedReadinessPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("identityProviders", "getGuidedReadiness", "*identityproviders.GetGuidedReadinessPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		return nil
+	}
+}
+
+// DecodeGetGuidedReadinessResponse returns a decoder for responses returned by
+// the identityProviders getGuidedReadiness endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeGetGuidedReadinessResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetGuidedReadinessResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetGuidedReadinessResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviders", "getGuidedReadiness", err)
+			}
+			err = ValidateGetGuidedReadinessResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviders", "getGuidedReadiness", err)
+			}
+			res := NewGetGuidedReadinessIdentityProviderReadinessOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetGuidedReadinessUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviders", "getGuidedReadiness", err)
+			}
+			err = ValidateGetGuidedReadinessUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviders", "getGuidedReadiness", err)
+			}
+			return nil, NewGetGuidedReadinessUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetGuidedReadinessForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviders", "getGuidedReadiness", err)
+			}
+			err = ValidateGetGuidedReadinessForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviders", "getGuidedReadiness", err)
+			}
+			return nil, NewGetGuidedReadinessForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetGuidedReadinessBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviders", "getGuidedReadiness", err)
+			}
+			err = ValidateGetGuidedReadinessBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviders", "getGuidedReadiness", err)
+			}
+			return nil, NewGetGuidedReadinessBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetGuidedReadinessNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviders", "getGuidedReadiness", err)
+			}
+			err = ValidateGetGuidedReadinessNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviders", "getGuidedReadiness", err)
+			}
+			return nil, NewGetGuidedReadinessNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetGuidedReadinessConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviders", "getGuidedReadiness", err)
+			}
+			err = ValidateGetGuidedReadinessConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviders", "getGuidedReadiness", err)
+			}
+			return nil, NewGetGuidedReadinessConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetGuidedReadinessUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviders", "getGuidedReadiness", err)
+			}
+			err = ValidateGetGuidedReadinessUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviders", "getGuidedReadiness", err)
+			}
+			return nil, NewGetGuidedReadinessUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetGuidedReadinessInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviders", "getGuidedReadiness", err)
+			}
+			err = ValidateGetGuidedReadinessInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviders", "getGuidedReadiness", err)
+			}
+			return nil, NewGetGuidedReadinessInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetGuidedReadinessInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("identityProviders", "getGuidedReadiness", err)
+				}
+				err = ValidateGetGuidedReadinessInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("identityProviders", "getGuidedReadiness", err)
+				}
+				return nil, NewGetGuidedReadinessInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetGuidedReadinessUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("identityProviders", "getGuidedReadiness", err)
+				}
+				err = ValidateGetGuidedReadinessUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("identityProviders", "getGuidedReadiness", err)
+				}
+				return nil, NewGetGuidedReadinessUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("identityProviders", "getGuidedReadiness", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetGuidedReadinessGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviders", "getGuidedReadiness", err)
+			}
+			err = ValidateGetGuidedReadinessGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviders", "getGuidedReadiness", err)
+			}
+			return nil, NewGetGuidedReadinessGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("identityProviders", "getGuidedReadiness", resp.StatusCode, string(body))
 		}
 	}
 }
@@ -1733,6 +1969,22 @@ func unmarshalIdentityProviderConnectionResponseBodyToIdentityprovidersIdentityP
 	}
 	if v.VerifyEvidence != nil {
 		res.VerifyEvidence = unmarshalIdentityProviderVerifyEvidenceResponseBodyToIdentityprovidersIdentityProviderVerifyEvidence(v.VerifyEvidence)
+	}
+
+	return res
+}
+
+// unmarshalIdentityProviderReadinessCheckResponseBodyToTypesIdentityProviderReadinessCheck
+// builds a value of type *types.IdentityProviderReadinessCheck from a value of
+// type *IdentityProviderReadinessCheckResponseBody.
+func unmarshalIdentityProviderReadinessCheckResponseBodyToTypesIdentityProviderReadinessCheck(v *IdentityProviderReadinessCheckResponseBody) *types.IdentityProviderReadinessCheck {
+	res := &types.IdentityProviderReadinessCheck{
+		Key:       *v.Key,
+		OK:        *v.OK,
+		Detail:    *v.Detail,
+		Remedy:    *v.Remedy,
+		Owner:     *v.Owner,
+		CheckedAt: *v.CheckedAt,
 	}
 
 	return res

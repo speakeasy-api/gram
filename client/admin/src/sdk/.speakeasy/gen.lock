@@ -47,6 +47,7 @@ trackedFiles:
   src/funcs/adminGetOrganization.ts: {}
   src/funcs/adminGetOrganizationChatAnalysisSettings.ts: {}
   src/funcs/adminGetOrganizationFeatures.ts: {}
+  src/funcs/adminGetOrganizationGuidedReadiness.ts: {}
   src/funcs/adminGetOrganizationStats.ts: {}
   src/funcs/adminGetPaygBillingSummary.ts: {}
   src/funcs/adminGetProject.ts: {}
@@ -122,6 +123,8 @@ trackedFiles:
   src/models/components/extendtrialrequestbody.ts: {}
   src/models/components/fetchissuermetadatarequestbody.ts: {}
   src/models/components/globalremotesessionissuer.ts: {}
+  src/models/components/identityproviderreadiness.ts: {}
+  src/models/components/identityproviderreadinesscheck.ts: {}
   src/models/components/issuerconvergencecandidate.ts: {}
   src/models/components/issuerfieldmismatch.ts: {}
   src/models/components/issuermigratepreflight.ts: {}
@@ -164,6 +167,7 @@ trackedFiles:
   src/models/operations/admingetorganization.ts: {}
   src/models/operations/admingetorganizationchatanalysissettings.ts: {}
   src/models/operations/admingetorganizationfeatures.ts: {}
+  src/models/operations/admingetorganizationguidedreadiness.ts: {}
   src/models/operations/admingetpaygbillingsummary.ts: {}
   src/models/operations/admingetproject.ts: {}
   src/models/operations/admingetstripecustomer.ts: {}
@@ -229,6 +233,8 @@ trackedFiles:
   src/react-query/adminMigrateToGlobalIssuer.ts: {}
   src/react-query/adminOrganizationFeatures.core.ts: {}
   src/react-query/adminOrganizationFeatures.ts: {}
+  src/react-query/adminOrganizationGuidedReadiness.core.ts: {}
+  src/react-query/adminOrganizationGuidedReadiness.ts: {}
   src/react-query/adminRearmTrial.ts: {}
   src/react-query/adminRefreshGlobalIssuerMetadata.ts: {}
   src/react-query/adminResumeStripeSubscription.ts: {}
@@ -514,6 +520,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  adminGetOrganizationGuidedReadiness:
+    speakeasy-default-admin-get-organization-guided-readiness:
+      parameters:
+        query:
+          organization_id: "<id>"
+      responses:
+        "200":
+          application/json: {"checked_at": "2024-08-16T22:29:51.922Z", "checks": [{"checked_at": "2025-05-05T23:41:50.113Z", "detail": "<value>", "key": "workos_domain_verified", "ok": true, "owner": "speakeasy", "remedy": "<value>"}], "eligible": false, "provider": "okta"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   adminGetOrganizationStats:
     speakeasy-default-admin-get-organization-stats:
       responses:

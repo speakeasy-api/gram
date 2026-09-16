@@ -22,6 +22,7 @@ type Client struct {
 	LogoutEndpoint                                goa.Endpoint
 	GetSessionEndpoint                            goa.Endpoint
 	GetOrganizationFeaturesEndpoint               goa.Endpoint
+	GetOrganizationGuidedReadinessEndpoint        goa.Endpoint
 	SetOrganizationFeatureEndpoint                goa.Endpoint
 	GetOrganizationChatAnalysisSettingsEndpoint   goa.Endpoint
 	SetOrganizationChatAnalysisSettingsEndpoint   goa.Endpoint
@@ -68,13 +69,14 @@ type Client struct {
 }
 
 // NewClient initializes a "admin" service client given the endpoints.
-func NewClient(login, callback, logout, getSession, getOrganizationFeatures, setOrganizationFeature, getOrganizationChatAnalysisSettings, setOrganizationChatAnalysisSettings, triggerOrganizationChatAnalysis, openOrganizationInDashboard, getProject, updateOrganization, bulkUpdateAccountType, disableOrganization, enableOrganization, getOrganization, listOrganizationMembers, listOrganizationProjects, listOrganizationActivity, listOrganizations, extendTrial, createOrganization, rearmTrial, getOrganizationStats, getInferenceKeys, setInferenceKeyMonthlyLimit, getInferenceSpendHistory, getPaygBillingSummary, getStripeCustomer, setStripeCustomer, getStripeSubscription, cancelStripeSubscription, resumeStripeSubscription, markEnterpriseTrialConverted, createGlobalIssuer, getGlobalIssuerDuplicatePreflight, listGlobalIssuers, getGlobalIssuer, updateGlobalIssuer, deleteGlobalIssuer, fetchGlobalIssuerMetadata, refreshGlobalIssuerMetadata, listGlobalIssuerConvergenceCandidates, getGlobalIssuerMigratePreflight, migrateToGlobalIssuer, uploadPlatformImage, serveImage, startTrial goa.Endpoint) *Client {
+func NewClient(login, callback, logout, getSession, getOrganizationFeatures, getOrganizationGuidedReadiness, setOrganizationFeature, getOrganizationChatAnalysisSettings, setOrganizationChatAnalysisSettings, triggerOrganizationChatAnalysis, openOrganizationInDashboard, getProject, updateOrganization, bulkUpdateAccountType, disableOrganization, enableOrganization, getOrganization, listOrganizationMembers, listOrganizationProjects, listOrganizationActivity, listOrganizations, extendTrial, createOrganization, rearmTrial, getOrganizationStats, getInferenceKeys, setInferenceKeyMonthlyLimit, getInferenceSpendHistory, getPaygBillingSummary, getStripeCustomer, setStripeCustomer, getStripeSubscription, cancelStripeSubscription, resumeStripeSubscription, markEnterpriseTrialConverted, createGlobalIssuer, getGlobalIssuerDuplicatePreflight, listGlobalIssuers, getGlobalIssuer, updateGlobalIssuer, deleteGlobalIssuer, fetchGlobalIssuerMetadata, refreshGlobalIssuerMetadata, listGlobalIssuerConvergenceCandidates, getGlobalIssuerMigratePreflight, migrateToGlobalIssuer, uploadPlatformImage, serveImage, startTrial goa.Endpoint) *Client {
 	return &Client{
 		LoginEndpoint:                                 login,
 		CallbackEndpoint:                              callback,
 		LogoutEndpoint:                                logout,
 		GetSessionEndpoint:                            getSession,
 		GetOrganizationFeaturesEndpoint:               getOrganizationFeatures,
+		GetOrganizationGuidedReadinessEndpoint:        getOrganizationGuidedReadiness,
 		SetOrganizationFeatureEndpoint:                setOrganizationFeature,
 		GetOrganizationChatAnalysisSettingsEndpoint:   getOrganizationChatAnalysisSettings,
 		SetOrganizationChatAnalysisSettingsEndpoint:   setOrganizationChatAnalysisSettings,
@@ -226,6 +228,29 @@ func (c *Client) GetOrganizationFeatures(ctx context.Context, p *GetOrganization
 		return
 	}
 	return ires.(*ProductFeatures), nil
+}
+
+// GetOrganizationGuidedReadiness calls the "getOrganizationGuidedReadiness"
+// endpoint of the "admin" service.
+// GetOrganizationGuidedReadiness may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetOrganizationGuidedReadiness(ctx context.Context, p *GetOrganizationGuidedReadinessPayload) (res *types.IdentityProviderReadiness, err error) {
+	var ires any
+	ires, err = c.GetOrganizationGuidedReadinessEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.IdentityProviderReadiness), nil
 }
 
 // SetOrganizationFeature calls the "setOrganizationFeature" endpoint of the

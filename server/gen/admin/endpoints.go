@@ -22,6 +22,7 @@ type Endpoints struct {
 	Logout                                goa.Endpoint
 	GetSession                            goa.Endpoint
 	GetOrganizationFeatures               goa.Endpoint
+	GetOrganizationGuidedReadiness        goa.Endpoint
 	SetOrganizationFeature                goa.Endpoint
 	GetOrganizationChatAnalysisSettings   goa.Endpoint
 	SetOrganizationChatAnalysisSettings   goa.Endpoint
@@ -95,6 +96,7 @@ func NewEndpoints(s Service) *Endpoints {
 		Logout:                                NewLogoutEndpoint(s),
 		GetSession:                            NewGetSessionEndpoint(s, a.APIKeyAuth),
 		GetOrganizationFeatures:               NewGetOrganizationFeaturesEndpoint(s, a.APIKeyAuth),
+		GetOrganizationGuidedReadiness:        NewGetOrganizationGuidedReadinessEndpoint(s, a.APIKeyAuth),
 		SetOrganizationFeature:                NewSetOrganizationFeatureEndpoint(s, a.APIKeyAuth),
 		GetOrganizationChatAnalysisSettings:   NewGetOrganizationChatAnalysisSettingsEndpoint(s, a.APIKeyAuth),
 		SetOrganizationChatAnalysisSettings:   NewSetOrganizationChatAnalysisSettingsEndpoint(s, a.APIKeyAuth),
@@ -148,6 +150,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.Logout = m(e.Logout)
 	e.GetSession = m(e.GetSession)
 	e.GetOrganizationFeatures = m(e.GetOrganizationFeatures)
+	e.GetOrganizationGuidedReadiness = m(e.GetOrganizationGuidedReadiness)
 	e.SetOrganizationFeature = m(e.SetOrganizationFeature)
 	e.GetOrganizationChatAnalysisSettings = m(e.GetOrganizationChatAnalysisSettings)
 	e.SetOrganizationChatAnalysisSettings = m(e.SetOrganizationChatAnalysisSettings)
@@ -268,6 +271,29 @@ func NewGetOrganizationFeaturesEndpoint(s Service, authAPIKeyFn security.AuthAPI
 		}
 		vres := NewViewedProductFeatures(res, "default")
 		return vres, nil
+	}
+}
+
+// NewGetOrganizationGuidedReadinessEndpoint returns an endpoint function that
+// calls the method "getOrganizationGuidedReadiness" of service "admin".
+func NewGetOrganizationGuidedReadinessEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetOrganizationGuidedReadinessPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetOrganizationGuidedReadiness(ctx, p)
 	}
 }
 

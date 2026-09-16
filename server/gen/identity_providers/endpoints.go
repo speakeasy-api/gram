@@ -16,13 +16,14 @@ import (
 
 // Endpoints wraps the "identityProviders" service endpoints.
 type Endpoints struct {
-	Create           goa.Endpoint
-	Get              goa.Endpoint
-	ListApplications goa.Endpoint
-	DescribeSetup    goa.Endpoint
-	SubmitSetupStep  goa.Endpoint
-	VerifySetupStep  goa.Endpoint
-	Delete           goa.Endpoint
+	Create             goa.Endpoint
+	Get                goa.Endpoint
+	GetGuidedReadiness goa.Endpoint
+	ListApplications   goa.Endpoint
+	DescribeSetup      goa.Endpoint
+	SubmitSetupStep    goa.Endpoint
+	VerifySetupStep    goa.Endpoint
+	Delete             goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "identityProviders" service with
@@ -31,13 +32,14 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		Create:           NewCreateEndpoint(s, a.APIKeyAuth),
-		Get:              NewGetEndpoint(s, a.APIKeyAuth),
-		ListApplications: NewListApplicationsEndpoint(s, a.APIKeyAuth),
-		DescribeSetup:    NewDescribeSetupEndpoint(s, a.APIKeyAuth),
-		SubmitSetupStep:  NewSubmitSetupStepEndpoint(s, a.APIKeyAuth),
-		VerifySetupStep:  NewVerifySetupStepEndpoint(s, a.APIKeyAuth),
-		Delete:           NewDeleteEndpoint(s, a.APIKeyAuth),
+		Create:             NewCreateEndpoint(s, a.APIKeyAuth),
+		Get:                NewGetEndpoint(s, a.APIKeyAuth),
+		GetGuidedReadiness: NewGetGuidedReadinessEndpoint(s, a.APIKeyAuth),
+		ListApplications:   NewListApplicationsEndpoint(s, a.APIKeyAuth),
+		DescribeSetup:      NewDescribeSetupEndpoint(s, a.APIKeyAuth),
+		SubmitSetupStep:    NewSubmitSetupStepEndpoint(s, a.APIKeyAuth),
+		VerifySetupStep:    NewVerifySetupStepEndpoint(s, a.APIKeyAuth),
+		Delete:             NewDeleteEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -46,6 +48,7 @@ func NewEndpoints(s Service) *Endpoints {
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.Create = m(e.Create)
 	e.Get = m(e.Get)
+	e.GetGuidedReadiness = m(e.GetGuidedReadiness)
 	e.ListApplications = m(e.ListApplications)
 	e.DescribeSetup = m(e.DescribeSetup)
 	e.SubmitSetupStep = m(e.SubmitSetupStep)
@@ -120,6 +123,41 @@ func NewGetEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoin
 			return nil, err
 		}
 		return s.Get(ctx, p)
+	}
+}
+
+// NewGetGuidedReadinessEndpoint returns an endpoint function that calls the
+// method "getGuidedReadiness" of service "identityProviders".
+func NewGetGuidedReadinessEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetGuidedReadinessPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetGuidedReadiness(ctx, p)
 	}
 }
 

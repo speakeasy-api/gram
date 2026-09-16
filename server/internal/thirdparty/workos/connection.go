@@ -8,12 +8,15 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/workos/workos-go/v6/pkg/directorysync"
 	"github.com/workos/workos-go/v6/pkg/sso"
 )
 
 const connectionsWriteUnavailableMessage = "This endpoint is part of the Connections API migration capabilities, which are not enabled for your environment. Contact support@workos.com to enable them."
+
+const connectionsCapabilityCacheTTL = time.Hour
 
 // Connection represents a WorkOS SSO connection.
 type Connection struct {
@@ -211,6 +214,46 @@ func IsConnectionsWriteUnavailable(err error) bool {
 		Message string `json:"message"`
 	}
 	return json.Unmarshal([]byte(apiErr.Body), &response) == nil && response.Message == connectionsWriteUnavailableMessage
+}
+
+// ConnectionsAPIAvailable probes whether this WorkOS environment permits
+// connection creation. Successful capability determinations are cached because
+// the capability is environment-wide rather than organization-specific.
+func (wc *Client) ConnectionsAPIAvailable(ctx context.Context) (bool, error) {
+	wc.connectionsCapability.Lock()
+	defer wc.connectionsCapability.Unlock()
+
+	now := time.Now()
+	if wc.connectionsCapability.set && now.Before(wc.connectionsCapability.expiresAt) {
+		return wc.connectionsCapability.available, nil
+	}
+
+	err := wc.doWithoutRetry(ctx, http.MethodPost, "/connections", []byte(`{}`), nil)
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) {
+		if err == nil {
+			return false, errors.New("probe WorkOS Connections API: empty request unexpectedly succeeded")
+		}
+		return false, fmt.Errorf("probe WorkOS Connections API: %w", err)
+	}
+
+	available := false
+	var response struct {
+		Code string `json:"code"`
+	}
+	switch {
+	case apiErr.StatusCode == http.StatusBadRequest && json.Unmarshal([]byte(apiErr.Body), &response) == nil && response.Code == "connection_type_or_options_required":
+		available = true
+	case IsConnectionsWriteUnavailable(apiErr):
+		available = false
+	default:
+		return false, fmt.Errorf("probe WorkOS Connections API: %w", apiErr)
+	}
+
+	wc.connectionsCapability.available = available
+	wc.connectionsCapability.expiresAt = now.Add(connectionsCapabilityCacheTTL)
+	wc.connectionsCapability.set = true
+	return available, nil
 }
 
 func connectionFromResponse(response connectionResponse) Connection {

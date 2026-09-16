@@ -26,6 +26,7 @@ type Server struct {
 	Logout                                http.Handler
 	GetSession                            http.Handler
 	GetOrganizationFeatures               http.Handler
+	GetOrganizationGuidedReadiness        http.Handler
 	SetOrganizationFeature                http.Handler
 	GetOrganizationChatAnalysisSettings   http.Handler
 	SetOrganizationChatAnalysisSettings   http.Handler
@@ -103,6 +104,7 @@ func New(
 			{"Logout", "POST", "/admin/auth.logout"},
 			{"GetSession", "GET", "/admin/session.get"},
 			{"GetOrganizationFeatures", "GET", "/admin/organization.features"},
+			{"GetOrganizationGuidedReadiness", "GET", "/admin/organization.guidedReadiness"},
 			{"SetOrganizationFeature", "POST", "/admin/organization.features"},
 			{"GetOrganizationChatAnalysisSettings", "GET", "/admin/organization.chatAnalysisSettings"},
 			{"SetOrganizationChatAnalysisSettings", "POST", "/admin/organization.chatAnalysisSettings"},
@@ -152,6 +154,7 @@ func New(
 		Logout:                                NewLogoutHandler(e.Logout, mux, decoder, encoder, errhandler, formatter),
 		GetSession:                            NewGetSessionHandler(e.GetSession, mux, decoder, encoder, errhandler, formatter),
 		GetOrganizationFeatures:               NewGetOrganizationFeaturesHandler(e.GetOrganizationFeatures, mux, decoder, encoder, errhandler, formatter),
+		GetOrganizationGuidedReadiness:        NewGetOrganizationGuidedReadinessHandler(e.GetOrganizationGuidedReadiness, mux, decoder, encoder, errhandler, formatter),
 		SetOrganizationFeature:                NewSetOrganizationFeatureHandler(e.SetOrganizationFeature, mux, decoder, encoder, errhandler, formatter),
 		GetOrganizationChatAnalysisSettings:   NewGetOrganizationChatAnalysisSettingsHandler(e.GetOrganizationChatAnalysisSettings, mux, decoder, encoder, errhandler, formatter),
 		SetOrganizationChatAnalysisSettings:   NewSetOrganizationChatAnalysisSettingsHandler(e.SetOrganizationChatAnalysisSettings, mux, decoder, encoder, errhandler, formatter),
@@ -208,6 +211,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.Logout = m(s.Logout)
 	s.GetSession = m(s.GetSession)
 	s.GetOrganizationFeatures = m(s.GetOrganizationFeatures)
+	s.GetOrganizationGuidedReadiness = m(s.GetOrganizationGuidedReadiness)
 	s.SetOrganizationFeature = m(s.SetOrganizationFeature)
 	s.GetOrganizationChatAnalysisSettings = m(s.GetOrganizationChatAnalysisSettings)
 	s.SetOrganizationChatAnalysisSettings = m(s.SetOrganizationChatAnalysisSettings)
@@ -263,6 +267,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountLogoutHandler(mux, h.Logout)
 	MountGetSessionHandler(mux, h.GetSession)
 	MountGetOrganizationFeaturesHandler(mux, h.GetOrganizationFeatures)
+	MountGetOrganizationGuidedReadinessHandler(mux, h.GetOrganizationGuidedReadiness)
 	MountSetOrganizationFeatureHandler(mux, h.SetOrganizationFeature)
 	MountGetOrganizationChatAnalysisSettingsHandler(mux, h.GetOrganizationChatAnalysisSettings)
 	MountSetOrganizationChatAnalysisSettingsHandler(mux, h.SetOrganizationChatAnalysisSettings)
@@ -556,6 +561,60 @@ func NewGetOrganizationFeaturesHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getOrganizationFeatures")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetOrganizationGuidedReadinessHandler configures the mux to serve the
+// "admin" service "getOrganizationGuidedReadiness" endpoint.
+func MountGetOrganizationGuidedReadinessHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/organization.guidedReadiness", f)
+}
+
+// NewGetOrganizationGuidedReadinessHandler creates a HTTP handler which loads
+// the HTTP request and calls the "admin" service
+// "getOrganizationGuidedReadiness" endpoint.
+func NewGetOrganizationGuidedReadinessHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetOrganizationGuidedReadinessRequest(mux, decoder)
+		encodeResponse = EncodeGetOrganizationGuidedReadinessResponse(encoder)
+		encodeError    = EncodeGetOrganizationGuidedReadinessError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getOrganizationGuidedReadiness")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {

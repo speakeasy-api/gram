@@ -408,6 +408,18 @@ type GetOrganizationFeaturesResponseBody struct {
 	DeviceAgent bool `form:"device_agent" json:"device_agent" xml:"device_agent"`
 }
 
+// GetOrganizationGuidedReadinessResponseBody is the type of the "admin"
+// service "getOrganizationGuidedReadiness" endpoint HTTP response body.
+type GetOrganizationGuidedReadinessResponseBody struct {
+	// Identity provider supported by the guided setup.
+	Provider string `form:"provider" json:"provider" xml:"provider"`
+	// Whether guided setup is available.
+	Eligible bool `form:"eligible" json:"eligible" xml:"eligible"`
+	// Independent readiness checks in evaluation order.
+	Checks    []*IdentityProviderReadinessCheckResponseBody `form:"checks" json:"checks" xml:"checks"`
+	CheckedAt string                                        `form:"checked_at" json:"checked_at" xml:"checked_at"`
+}
+
 // SetOrganizationFeatureResponseBody is the type of the "admin" service
 // "setOrganizationFeature" endpoint HTTP response body.
 type SetOrganizationFeatureResponseBody struct {
@@ -2302,6 +2314,196 @@ type GetOrganizationFeaturesUnexpectedResponseBody struct {
 // service "getOrganizationFeatures" endpoint HTTP response body for the
 // "gateway_error" error.
 type GetOrganizationFeaturesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationGuidedReadinessUnauthorizedResponseBody is the type of the
+// "admin" service "getOrganizationGuidedReadiness" endpoint HTTP response body
+// for the "unauthorized" error.
+type GetOrganizationGuidedReadinessUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationGuidedReadinessForbiddenResponseBody is the type of the
+// "admin" service "getOrganizationGuidedReadiness" endpoint HTTP response body
+// for the "forbidden" error.
+type GetOrganizationGuidedReadinessForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationGuidedReadinessBadRequestResponseBody is the type of the
+// "admin" service "getOrganizationGuidedReadiness" endpoint HTTP response body
+// for the "bad_request" error.
+type GetOrganizationGuidedReadinessBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationGuidedReadinessNotFoundResponseBody is the type of the
+// "admin" service "getOrganizationGuidedReadiness" endpoint HTTP response body
+// for the "not_found" error.
+type GetOrganizationGuidedReadinessNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationGuidedReadinessConflictResponseBody is the type of the
+// "admin" service "getOrganizationGuidedReadiness" endpoint HTTP response body
+// for the "conflict" error.
+type GetOrganizationGuidedReadinessConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationGuidedReadinessUnsupportedMediaResponseBody is the type of
+// the "admin" service "getOrganizationGuidedReadiness" endpoint HTTP response
+// body for the "unsupported_media" error.
+type GetOrganizationGuidedReadinessUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationGuidedReadinessInvalidResponseBody is the type of the "admin"
+// service "getOrganizationGuidedReadiness" endpoint HTTP response body for the
+// "invalid" error.
+type GetOrganizationGuidedReadinessInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationGuidedReadinessInvariantViolationResponseBody is the type of
+// the "admin" service "getOrganizationGuidedReadiness" endpoint HTTP response
+// body for the "invariant_violation" error.
+type GetOrganizationGuidedReadinessInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationGuidedReadinessUnexpectedResponseBody is the type of the
+// "admin" service "getOrganizationGuidedReadiness" endpoint HTTP response body
+// for the "unexpected" error.
+type GetOrganizationGuidedReadinessUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationGuidedReadinessGatewayErrorResponseBody is the type of the
+// "admin" service "getOrganizationGuidedReadiness" endpoint HTTP response body
+// for the "gateway_error" error.
+type GetOrganizationGuidedReadinessGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -10680,6 +10882,22 @@ type StartTrialGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// IdentityProviderReadinessCheckResponseBody is used to define fields on
+// response body types.
+type IdentityProviderReadinessCheckResponseBody struct {
+	// Stable readiness check key.
+	Key string `form:"key" json:"key" xml:"key"`
+	// Whether the readiness check passed.
+	OK bool `form:"ok" json:"ok" xml:"ok"`
+	// Customer-safe explanation of the result.
+	Detail string `form:"detail" json:"detail" xml:"detail"`
+	// Staff action needed to make the check pass.
+	Remedy string `form:"remedy" json:"remedy" xml:"remedy"`
+	// Team responsible for the check.
+	Owner     string `form:"owner" json:"owner" xml:"owner"`
+	CheckedAt string `form:"checked_at" json:"checked_at" xml:"checked_at"`
+}
+
 // AdminOrganizationMemberResponseBody is used to define fields on response
 // body types.
 type AdminOrganizationMemberResponseBody struct {
@@ -11034,6 +11252,30 @@ func NewGetOrganizationFeaturesResponseBody(res *adminviews.ProductFeaturesView)
 		SessionPortabilityEnabled:               *res.SessionPortabilityEnabled,
 		NetworkIngressEnabled:                   *res.NetworkIngressEnabled,
 		DeviceAgent:                             *res.DeviceAgent,
+	}
+	return body
+}
+
+// NewGetOrganizationGuidedReadinessResponseBody builds the HTTP response body
+// from the result of the "getOrganizationGuidedReadiness" endpoint of the
+// "admin" service.
+func NewGetOrganizationGuidedReadinessResponseBody(res *types.IdentityProviderReadiness) *GetOrganizationGuidedReadinessResponseBody {
+	body := &GetOrganizationGuidedReadinessResponseBody{
+		Provider:  res.Provider,
+		Eligible:  res.Eligible,
+		CheckedAt: res.CheckedAt,
+	}
+	if res.Checks != nil {
+		body.Checks = make([]*IdentityProviderReadinessCheckResponseBody, len(res.Checks))
+		for i, val := range res.Checks {
+			if val == nil {
+				body.Checks[i] = nil
+				continue
+			}
+			body.Checks[i] = marshalTypesIdentityProviderReadinessCheckToIdentityProviderReadinessCheckResponseBody(val)
+		}
+	} else {
+		body.Checks = []*IdentityProviderReadinessCheckResponseBody{}
 	}
 	return body
 }
@@ -12742,6 +12984,156 @@ func NewGetOrganizationFeaturesUnexpectedResponseBody(res *goa.ServiceError) *Ge
 // "admin" service.
 func NewGetOrganizationFeaturesGatewayErrorResponseBody(res *goa.ServiceError) *GetOrganizationFeaturesGatewayErrorResponseBody {
 	body := &GetOrganizationFeaturesGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationGuidedReadinessUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "getOrganizationGuidedReadiness"
+// endpoint of the "admin" service.
+func NewGetOrganizationGuidedReadinessUnauthorizedResponseBody(res *goa.ServiceError) *GetOrganizationGuidedReadinessUnauthorizedResponseBody {
+	body := &GetOrganizationGuidedReadinessUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationGuidedReadinessForbiddenResponseBody builds the HTTP
+// response body from the result of the "getOrganizationGuidedReadiness"
+// endpoint of the "admin" service.
+func NewGetOrganizationGuidedReadinessForbiddenResponseBody(res *goa.ServiceError) *GetOrganizationGuidedReadinessForbiddenResponseBody {
+	body := &GetOrganizationGuidedReadinessForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationGuidedReadinessBadRequestResponseBody builds the HTTP
+// response body from the result of the "getOrganizationGuidedReadiness"
+// endpoint of the "admin" service.
+func NewGetOrganizationGuidedReadinessBadRequestResponseBody(res *goa.ServiceError) *GetOrganizationGuidedReadinessBadRequestResponseBody {
+	body := &GetOrganizationGuidedReadinessBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationGuidedReadinessNotFoundResponseBody builds the HTTP
+// response body from the result of the "getOrganizationGuidedReadiness"
+// endpoint of the "admin" service.
+func NewGetOrganizationGuidedReadinessNotFoundResponseBody(res *goa.ServiceError) *GetOrganizationGuidedReadinessNotFoundResponseBody {
+	body := &GetOrganizationGuidedReadinessNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationGuidedReadinessConflictResponseBody builds the HTTP
+// response body from the result of the "getOrganizationGuidedReadiness"
+// endpoint of the "admin" service.
+func NewGetOrganizationGuidedReadinessConflictResponseBody(res *goa.ServiceError) *GetOrganizationGuidedReadinessConflictResponseBody {
+	body := &GetOrganizationGuidedReadinessConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationGuidedReadinessUnsupportedMediaResponseBody builds the
+// HTTP response body from the result of the "getOrganizationGuidedReadiness"
+// endpoint of the "admin" service.
+func NewGetOrganizationGuidedReadinessUnsupportedMediaResponseBody(res *goa.ServiceError) *GetOrganizationGuidedReadinessUnsupportedMediaResponseBody {
+	body := &GetOrganizationGuidedReadinessUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationGuidedReadinessInvalidResponseBody builds the HTTP
+// response body from the result of the "getOrganizationGuidedReadiness"
+// endpoint of the "admin" service.
+func NewGetOrganizationGuidedReadinessInvalidResponseBody(res *goa.ServiceError) *GetOrganizationGuidedReadinessInvalidResponseBody {
+	body := &GetOrganizationGuidedReadinessInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationGuidedReadinessInvariantViolationResponseBody builds the
+// HTTP response body from the result of the "getOrganizationGuidedReadiness"
+// endpoint of the "admin" service.
+func NewGetOrganizationGuidedReadinessInvariantViolationResponseBody(res *goa.ServiceError) *GetOrganizationGuidedReadinessInvariantViolationResponseBody {
+	body := &GetOrganizationGuidedReadinessInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationGuidedReadinessUnexpectedResponseBody builds the HTTP
+// response body from the result of the "getOrganizationGuidedReadiness"
+// endpoint of the "admin" service.
+func NewGetOrganizationGuidedReadinessUnexpectedResponseBody(res *goa.ServiceError) *GetOrganizationGuidedReadinessUnexpectedResponseBody {
+	body := &GetOrganizationGuidedReadinessUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationGuidedReadinessGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "getOrganizationGuidedReadiness"
+// endpoint of the "admin" service.
+func NewGetOrganizationGuidedReadinessGatewayErrorResponseBody(res *goa.ServiceError) *GetOrganizationGuidedReadinessGatewayErrorResponseBody {
+	body := &GetOrganizationGuidedReadinessGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -19347,6 +19739,16 @@ func NewGetSessionPayload(adminSessionToken *string) *admin.GetSessionPayload {
 // getOrganizationFeatures endpoint payload.
 func NewGetOrganizationFeaturesPayload(organizationID string, adminSessionToken *string) *admin.GetOrganizationFeaturesPayload {
 	v := &admin.GetOrganizationFeaturesPayload{}
+	v.OrganizationID = organizationID
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewGetOrganizationGuidedReadinessPayload builds a admin service
+// getOrganizationGuidedReadiness endpoint payload.
+func NewGetOrganizationGuidedReadinessPayload(organizationID string, adminSessionToken *string) *admin.GetOrganizationGuidedReadinessPayload {
+	v := &admin.GetOrganizationGuidedReadinessPayload{}
 	v.OrganizationID = organizationID
 	v.AdminSessionToken = adminSessionToken
 

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/workos/workos-go/v6/pkg/directorysync"
@@ -68,6 +69,12 @@ type Client struct {
 	events                *events.Client
 	sso                   *sso.Client
 	dsync                 *directorysync.Client
+	connectionsCapability struct {
+		sync.Mutex
+		available bool
+		expiresAt time.Time
+		set       bool
+	}
 }
 
 // ClientOpts configures optional overrides for New.
@@ -118,6 +125,12 @@ func NewClient(guardianPolicy *guardian.Policy, apiKey string, opts ...ClientOpt
 		events:                &events.Client{APIKey: apiKey, HTTPClient: httpClient, Endpoint: opt.Endpoint},
 		sso:                   &sso.Client{APIKey: apiKey, HTTPClient: httpClient, Endpoint: opt.Endpoint, JSONEncode: nil, ClientID: opt.ClientID},
 		dsync:                 &directorysync.Client{APIKey: apiKey, HTTPClient: httpClient, Endpoint: opt.Endpoint},
+		connectionsCapability: struct {
+			sync.Mutex
+			available bool
+			expiresAt time.Time
+			set       bool
+		}{Mutex: sync.Mutex{}, available: false, expiresAt: time.Time{}, set: false},
 	}
 }
 

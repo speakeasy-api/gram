@@ -10,6 +10,7 @@ package identityproviders
 import (
 	"context"
 
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
 )
@@ -22,6 +23,8 @@ type Service interface {
 	Create(context.Context, *CreatePayload) (res *IdentityProviderConnection, err error)
 	// Get the organization's live identity provider connection, when configured.
 	Get(context.Context, *GetPayload) (res *GetIdentityProviderResult, err error)
+	// Get the organization's readiness for guided identity provider setup.
+	GetGuidedReadiness(context.Context, *GetGuidedReadinessPayload) (res *types.IdentityProviderReadiness, err error)
 	// List applications directly from the organization's identity provider.
 	ListApplications(context.Context, *ListApplicationsPayload) (res *ListIdentityProviderApplicationsResult, err error)
 	// Describe the guided setup steps for the organization's identity provider
@@ -55,7 +58,7 @@ const ServiceName = "identityProviders"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [7]string{"create", "get", "listApplications", "describeSetup", "submitSetupStep", "verifySetupStep", "delete"}
+var MethodNames = [8]string{"create", "get", "getGuidedReadiness", "listApplications", "describeSetup", "submitSetupStep", "verifySetupStep", "delete"}
 
 // CreatePayload is the payload type of the identityProviders service create
 // method.
@@ -80,6 +83,13 @@ type DeletePayload struct {
 // DescribeSetupPayload is the payload type of the identityProviders service
 // describeSetup method.
 type DescribeSetupPayload struct {
+	SessionToken *string
+	ApikeyToken  *string
+}
+
+// GetGuidedReadinessPayload is the payload type of the identityProviders
+// service getGuidedReadiness method.
+type GetGuidedReadinessPayload struct {
 	SessionToken *string
 	ApikeyToken  *string
 }

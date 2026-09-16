@@ -23,6 +23,10 @@ type Client struct {
 	// Get Doer is the HTTP client used to make requests to the get endpoint.
 	GetDoer goahttp.Doer
 
+	// GetGuidedReadiness Doer is the HTTP client used to make requests to the
+	// getGuidedReadiness endpoint.
+	GetGuidedReadinessDoer goahttp.Doer
+
 	// ListApplications Doer is the HTTP client used to make requests to the
 	// listApplications endpoint.
 	ListApplicationsDoer goahttp.Doer
@@ -63,18 +67,19 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		CreateDoer:           doer,
-		GetDoer:              doer,
-		ListApplicationsDoer: doer,
-		DescribeSetupDoer:    doer,
-		SubmitSetupStepDoer:  doer,
-		VerifySetupStepDoer:  doer,
-		DeleteDoer:           doer,
-		RestoreResponseBody:  restoreBody,
-		scheme:               scheme,
-		host:                 host,
-		decoder:              dec,
-		encoder:              enc,
+		CreateDoer:             doer,
+		GetDoer:                doer,
+		GetGuidedReadinessDoer: doer,
+		ListApplicationsDoer:   doer,
+		DescribeSetupDoer:      doer,
+		SubmitSetupStepDoer:    doer,
+		VerifySetupStepDoer:    doer,
+		DeleteDoer:             doer,
+		RestoreResponseBody:    restoreBody,
+		scheme:                 scheme,
+		host:                   host,
+		decoder:                dec,
+		encoder:                enc,
 	}
 }
 
@@ -121,6 +126,30 @@ func (c *Client) Get() goa.Endpoint {
 		resp, err := c.GetDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("identityProviders", "get", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetGuidedReadiness returns an endpoint that makes HTTP requests to the
+// identityProviders service getGuidedReadiness server.
+func (c *Client) GetGuidedReadiness() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetGuidedReadinessRequest(c.encoder)
+		decodeResponse = DecodeGetGuidedReadinessResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetGuidedReadinessRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetGuidedReadinessDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("identityProviders", "getGuidedReadiness", err)
 		}
 		return decodeResponse(resp)
 	}

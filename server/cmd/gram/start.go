@@ -70,6 +70,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/hooks"
 	"github.com/speakeasy-api/gram/server/internal/identityapi"
+	"github.com/speakeasy-api/gram/server/internal/identityproviderreadiness"
 	"github.com/speakeasy-api/gram/server/internal/identityproviders"
 	"github.com/speakeasy-api/gram/server/internal/instances"
 	"github.com/speakeasy-api/gram/server/internal/integrations"
@@ -1422,7 +1423,8 @@ func newStartCommand() *cli.Command {
 			modelkeys.Attach(mux, modelkeys.NewService(logger, tracerProvider, db, sessionManager, authzEngine, encryptionClient, openRouter, productFeatures, auditLogger))
 			auditapi.Attach(mux, auditapi.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 			identityapi.Attach(mux, identityapi.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
-			identityproviders.Attach(mux, identityproviders.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient, okta.NewClient(logger, guardianPolicy), workosClient, &identityProviderPublicURL))
+			guidedReadiness := identityproviderreadiness.New(workosClient, productFeatures, identityproviderreadiness.NewDatabaseDirectoryHandoffChecker(db))
+			identityproviders.Attach(mux, identityproviders.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient, okta.NewClient(logger, guardianPolicy), workosClient, guidedReadiness, &identityProviderPublicURL))
 			auth.Attach(mux, auth.NewService(
 				logger,
 				tracerProvider,

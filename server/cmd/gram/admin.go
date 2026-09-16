@@ -33,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/identityproviderreadiness"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -446,11 +447,16 @@ func newAdminCommand() *cli.Command {
 			adminWorkOSClient := newAdminWorkOSOrganizationCreator(ctx, logger, guardianPolicy, c)
 			adminOpenRouter := newAdminOpenRouter(ctx, logger, tracerProvider, guardianPolicy, db, redisClient, c)
 			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
+			readinessWorkOS, ok := adminWorkOSClient.(identityproviderreadiness.WorkOSClient)
+			if !ok {
+				readinessWorkOS = identityproviderreadiness.UnavailableWorkOSClient{}
+			}
+			guidedReadiness := identityproviderreadiness.New(readinessWorkOS, productFeatures, identityproviderreadiness.NewDatabaseDirectoryHandoffChecker(db))
 			loopsWorkflowClient := loops.NewWorkflowClient(ctx, logger, guardianPolicy, c.String("loops-api-key"))
 			trialNotifier := trialemails.NewService(db, loopsWorkflowClient, logger, c.String("site-url"))
 
 			billingOperations := usage.NewBillingOperations(logger, db, stripeClient, billingTelemetry, audit.NewLogger())
-			adminService := admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminOpenRouter, trialNotifier, productFeatures, chatAnalysisSignaler, openRouterSpendCap, billingOperations, siteURL)
+			adminService := admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminOpenRouter, trialNotifier, productFeatures, guidedReadiness, chatAnalysisSignaler, openRouterSpendCap, billingOperations, siteURL)
 			applicationEncryption, err := newAdminIssuerEncryption(c.String("encryption-key"))
 			if err != nil {
 				return err

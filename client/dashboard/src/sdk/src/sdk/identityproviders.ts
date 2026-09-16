@@ -6,12 +6,14 @@ import { identityProvidersCreate } from "../funcs/identityProvidersCreate.js";
 import { identityProvidersDelete } from "../funcs/identityProvidersDelete.js";
 import { identityProvidersDescribeSetup } from "../funcs/identityProvidersDescribeSetup.js";
 import { identityProvidersGet } from "../funcs/identityProvidersGet.js";
+import { identityProvidersGetGuidedReadiness } from "../funcs/identityProvidersGetGuidedReadiness.js";
 import { identityProvidersListApplications } from "../funcs/identityProvidersListApplications.js";
 import { identityProvidersSubmitSetupStep } from "../funcs/identityProvidersSubmitSetupStep.js";
 import { identityProvidersVerifySetupStep } from "../funcs/identityProvidersVerifySetupStep.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { GetIdentityProviderResult } from "../models/components/getidentityproviderresult.js";
 import { IdentityProviderConnection } from "../models/components/identityproviderconnection.js";
+import { IdentityProviderReadiness } from "../models/components/identityproviderreadiness.js";
 import { IdentityProviderSetup } from "../models/components/identityprovidersetup.js";
 import { IdentityProviderVerifyResult } from "../models/components/identityproviderverifyresult.js";
 import { ListIdentityProviderApplicationsResult } from "../models/components/listidentityproviderapplicationsresult.js";
@@ -32,6 +34,10 @@ import {
   GetIdentityProviderRequest,
   GetIdentityProviderSecurity,
 } from "../models/operations/getidentityprovider.js";
+import {
+  GetIdentityProviderGuidedReadinessRequest,
+  GetIdentityProviderGuidedReadinessSecurity,
+} from "../models/operations/getidentityproviderguidedreadiness.js";
 import {
   ListIdentityProviderApplicationsRequest,
   ListIdentityProviderApplicationsSecurity,
@@ -116,6 +122,25 @@ export class IdentityProviders extends ClientSDK {
     options?: RequestOptions,
   ): Promise<GetIdentityProviderResult> {
     return unwrapAsync(identityProvidersGet(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getGuidedReadiness identityProviders
+   *
+   * @remarks
+   * Get the organization's readiness for guided identity provider setup.
+   */
+  async getGuidedReadiness(
+    request?: GetIdentityProviderGuidedReadinessRequest | undefined,
+    security?: GetIdentityProviderGuidedReadinessSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<IdentityProviderReadiness> {
+    return unwrapAsync(identityProvidersGetGuidedReadiness(
       this,
       request,
       security,

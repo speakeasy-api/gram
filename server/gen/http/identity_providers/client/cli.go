@@ -76,6 +76,28 @@ func BuildGetPayload(identityProvidersGetSessionToken string, identityProvidersG
 	return v, nil
 }
 
+// BuildGetGuidedReadinessPayload builds the payload for the identityProviders
+// getGuidedReadiness endpoint from CLI flags.
+func BuildGetGuidedReadinessPayload(identityProvidersGetGuidedReadinessSessionToken string, identityProvidersGetGuidedReadinessApikeyToken string) (*identityproviders.GetGuidedReadinessPayload, error) {
+	var sessionToken *string
+	{
+		if identityProvidersGetGuidedReadinessSessionToken != "" {
+			sessionToken = &identityProvidersGetGuidedReadinessSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if identityProvidersGetGuidedReadinessApikeyToken != "" {
+			apikeyToken = &identityProvidersGetGuidedReadinessApikeyToken
+		}
+	}
+	v := &identityproviders.GetGuidedReadinessPayload{}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}
+
 // BuildListApplicationsPayload builds the payload for the identityProviders
 // listApplications endpoint from CLI flags.
 func BuildListApplicationsPayload(identityProvidersListApplicationsSessionToken string, identityProvidersListApplicationsApikeyToken string) (*identityproviders.ListApplicationsPayload, error) {
