@@ -11,6 +11,17 @@ const onboardingStatus = vi.hoisted(() => ({
   },
 }));
 const portal = vi.hoisted(() => ({ mutate: vi.fn(), isPending: false }));
+const submitStep = vi.hoisted(() => ({
+  mutate: vi.fn(),
+  isPending: false,
+  error: null,
+}));
+const verifyStep = vi.hoisted(() => ({
+  mutate: vi.fn(),
+  isPending: false,
+  error: null as unknown,
+  data: undefined,
+}));
 const applications = vi.hoisted(() => ({
   current: {
     data: undefined,
@@ -36,7 +47,11 @@ const identityProvider = vi.hoisted(() => ({
   current: { data: { connection: undefined }, isPending: false } as {
     data: {
       connection:
-        | { status: string; directoryState?: string | undefined }
+        | {
+            status: string;
+            signInState?: string | undefined;
+            directoryState?: string | undefined;
+          }
         | undefined;
     };
     isPending: boolean;
@@ -97,16 +112,10 @@ vi.mock("@gram/client/react-query/createIdentityProvider.js", () => ({
   }),
 }));
 vi.mock("@gram/client/react-query/submitIdentityProviderSetupStep.js", () => ({
-  useSubmitIdentityProviderSetupStepMutation: () => ({
-    mutate: vi.fn(),
-    isPending: false,
-  }),
+  useSubmitIdentityProviderSetupStepMutation: () => submitStep,
 }));
 vi.mock("@gram/client/react-query/verifyIdentityProviderSetupStep.js", () => ({
-  useVerifyIdentityProviderSetupStepMutation: () => ({
-    mutate: vi.fn(),
-    isPending: false,
-  }),
+  useVerifyIdentityProviderSetupStepMutation: () => verifyStep,
 }));
 vi.mock("@gram/client/react-query/deleteIdentityProvider.js", () => ({
   useDeleteIdentityProviderMutation: () => ({
@@ -130,6 +139,8 @@ beforeEach(() => {
     refetch: vi.fn(),
   };
   portal.mutate.mockReset();
+  submitStep.mutate.mockReset();
+  verifyStep.mutate.mockReset();
   identityProvider.current = {
     data: { connection: undefined },
     isPending: false,
@@ -313,6 +324,47 @@ describe("IdentityProviderStep", () => {
       expect(portal.mutate).toHaveBeenCalledOnce();
     });
 
+    // A live connection is proof the pre-work was done. The checks going
+    // sour afterwards must not demote the organization to the portal path and
+    // strand the steps it is already part-way through.
+    it("keeps the guided flow for a live connection whatever the checks say", () => {
+      readiness.current = { data: { eligible: false }, isPending: false };
+      identityProvider.current = {
+        data: {
+          connection: {
+            status: "active",
+            signInState: "failed",
+            directoryState: "not_started",
+          },
+        },
+        isPending: false,
+      };
+      identityProviderSetup.current = {
+        data: {
+          connectionId: "conn-1",
+          steps: [
+            {
+              key: "directory",
+              title: "Set up directory sync",
+              where: "our_page",
+              instructions: ["Speakeasy creates the directory application."],
+              printedValues: [],
+              expectedValues: [],
+              state: "not_started",
+            } as IdentityProviderSetupStep,
+          ],
+        },
+        isPending: false,
+      };
+      render(<IdentityProviderStep onComplete={() => {}} />);
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Set up directory sync" }),
+      );
+
+      expect(submitStep.mutate).toHaveBeenCalledOnce();
+    });
+
     it("tells the customer nothing about why", () => {
       readiness.current = { data: { eligible: false }, isPending: false };
       render(<IdentityProviderStep onComplete={() => {}} />);
@@ -356,9 +408,9 @@ describe("IdentityProviderStep", () => {
       // that says otherwise now does not strand the organization mid-setup.
       expect(guidedOkta()).toBeTruthy();
       expect(screen.queryByText(NOT_AVAILABLE)).toBeNull();
-      expect(
-        screen.getByText("This is the one step that leaves Speakeasy"),
-      ).toBeTruthy();
+      // The guided directory step, not the portal detour the grid offers an
+      // organization that never connected.
+      expect(screen.getByText("Directory sync")).toBeTruthy();
     });
   });
 

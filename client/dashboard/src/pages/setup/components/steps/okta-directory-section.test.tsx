@@ -285,6 +285,26 @@ describe("OktaDirectorySection", () => {
     expect(screen.getByText("12 people")).toBeTruthy();
   });
 
+  it("submits the directory step even when sign-on has failed", () => {
+    withStep(directoryStep());
+    render(
+      <OktaDirectorySection
+        index={3}
+        connection={connection({ signInState: "failed" })}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Set up directory sync" }),
+    );
+
+    expect(submit.mutate.mock.calls[0]![0]).toEqual({
+      request: {
+        submitSetupStepRequestBody: { stepKey: "directory", values: [] },
+      },
+    });
+  });
+
   it("uses the WorkOS portal when the server returns a dsync handoff", () => {
     withStep(directoryStep({ portalIntent: "dsync" }));
     render(<OktaDirectorySection index={3} connection={connection()} />);
