@@ -40,6 +40,11 @@ const CAPABILITY_COPY: Record<string, CapabilityCopy> = {
     access: "Assign",
     usedBy: "Directory sync",
   },
+  claims_provisioning: {
+    label: "Sign-in claims",
+    access: "Manage",
+    usedBy: "Single sign-on",
+  },
 };
 
 /**
