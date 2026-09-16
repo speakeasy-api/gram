@@ -1,6 +1,7 @@
 import { Check } from "lucide-react";
 import type { IdentityProviderConnection } from "@gram/client/models/components/identityproviderconnection.js";
 import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { Text } from "@/components/ui/Text";
 import { IdentityProviderCapabilities } from "@/components/identity-provider-capabilities";
 
@@ -19,8 +20,17 @@ function formatTimestamp(value: Date): string {
  */
 export function OktaConnectionSummary({
   connection,
+  onRecheck,
+  isChecking = false,
 }: {
   connection: IdentityProviderConnection;
+  /**
+   * Re-runs the connect check. Granting a scope in Okta changes what the
+   * connection can do without anything here changing, so the reader needs a
+   * way to ask again rather than removing a working connection to rebuild it.
+   */
+  onRecheck?: () => void;
+  isChecking?: boolean;
 }): JSX.Element {
   const reads = connection.verifyEvidence?.reads ?? [];
 
@@ -38,6 +48,16 @@ export function OktaConnectionSummary({
           <Text variant="small" muted>
             Last checked {formatTimestamp(connection.lastVerifiedAt)}
           </Text>
+        ) : null}
+        {onRecheck ? (
+          <Button
+            variant="tertiary"
+            size="sm"
+            onClick={onRecheck}
+            disabled={isChecking}
+          >
+            {isChecking ? "Checking..." : "Check again"}
+          </Button>
         ) : null}
       </div>
 

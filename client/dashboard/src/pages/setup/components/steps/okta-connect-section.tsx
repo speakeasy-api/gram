@@ -200,7 +200,25 @@ export function OktaConnectSection({
         />
       ) : null}
 
-      {active ? <OktaConnectionSummary connection={connection} /> : null}
+      {active ? (
+        <OktaConnectionSummary
+          connection={connection}
+          isChecking={verify.isPending}
+          onRecheck={() => {
+            verify.mutate(
+              {
+                request: {
+                  verifySetupStepRequestBody: { stepKey: CONNECT_STEP_KEY },
+                },
+              },
+              // The capabilities table and the checked-at line are both read
+              // back from the connection, so the result has to land before
+              // either can change.
+              { onSuccess: () => void refresh() },
+            );
+          }}
+        />
+      ) : null}
 
       {connection && !active && step ? (
         <IdentityProviderSetupStepPanel

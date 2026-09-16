@@ -257,7 +257,7 @@ describe("OktaConnectSection", () => {
     ).toBeTruthy();
   });
 
-  it("shows the connection and its key once it has proved out", () => {
+  it("shows the connection once it has proved out", () => {
     renderSection(
       connection({
         status: "active",
@@ -285,5 +285,24 @@ describe("OktaConnectSection", () => {
     expect(screen.getByText("18 groups")).toBeTruthy();
     // The exchange gives way to the connection once it has worked.
     expect(screen.queryByLabelText("Client ID")).toBeNull();
+  });
+
+  // Granting a scope in Okta changes what the connection can do without
+  // anything here changing, and removing a working connection to rebuild it
+  // is not a reasonable way to ask again.
+  it("re-runs the connect check on a live connection", () => {
+    renderSection(
+      connection({
+        status: "active",
+        capabilities: ["directory_read"],
+        lastVerifiedAt: new Date("2026-09-14T12:30:00Z"),
+      }),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Check again" }));
+
+    expect(verify.mutate.mock.calls[0]![0]).toEqual({
+      request: { verifySetupStepRequestBody: { stepKey: "connect" } },
+    });
   });
 });
