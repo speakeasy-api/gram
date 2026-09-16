@@ -51,13 +51,18 @@ export function LogsTimelineStrip({
   loading?: boolean;
   degraded?: boolean;
 }): JSX.Element {
-  // The series carries a count and a failure count per bucket, so a filter on
-  // errors or successes can be honoured here by dropping the other half. The
-  // server has no per-status time series, so blocked and pending cannot be
-  // separated this way — those still widen the strip past the table, which the
-  // caller flags.
-  const showOk = statuses.length === 0 || statuses.includes("success");
-  const showFailed = statuses.length === 0 || statuses.includes("error");
+  // Each bucket carries a total and a failure count, and nothing else. That
+  // expresses exactly one filter — errors — by dropping the successful half.
+  // Everything else (success, blocked, pending) would need per-status counts
+  // the server does not return: a "success" series here is really
+  // total-minus-failures, which still includes the blocked and pending calls
+  // the table is excluding. Rather than draw a shape that contradicts the rows
+  // beneath it, the strip widens back to the whole window and the caller's
+  // badge says so.
+  const errorsOnly =
+    statuses.length > 0 && statuses.every((s) => s === "error");
+  const showOk = !errorsOnly;
+  const showFailed = true;
   const chart = useMemo(() => {
     const fromMs = from.getTime();
     const rangeMs = Math.max(to.getTime() - fromMs, HOUR_MS);
@@ -74,8 +79,12 @@ export function LogsTimelineStrip({
     for (const point of timeSeries) {
       const ms = bucketStartNsToMs(point.bucketStartNs);
       if (ms === null) continue;
-      const index = Math.floor((ms - fromMs) / bucketMs);
-      if (index < 0 || index >= bucketCount) continue;
+      // The bucket containing `from` starts before it. Clamp rather than drop
+      // it, or the first bar of every window silently loses its events.
+      const index = Math.min(
+        Math.max(Math.floor((ms - fromMs) / bucketMs), 0),
+        bucketCount - 1,
+      );
       const failures = Number(point.failureCount);
       ok[index] =
         (ok[index] ?? 0) + Math.max(Number(point.eventCount) - failures, 0);

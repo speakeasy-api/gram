@@ -37,7 +37,16 @@ export function ObserveViewTabs({
         return (
           <Link
             key={tab.view}
-            to={buildObserveHref(base, searchParams)}
+            to={buildObserveHref(
+              base,
+              searchParams,
+              {},
+              {
+                // Insights answers from the summary endpoints, which have no
+                // status field.
+                summaryOnly: tab.view === "insights",
+              },
+            )}
             aria-current={isActive ? "page" : undefined}
             className={cn(
               "relative flex-none px-4 py-3 text-sm font-medium no-underline transition-colors",

@@ -17,9 +17,12 @@ export function InsightsRoot(): JSX.Element {
 function ObservePageShell({
   children,
   substitutions,
+  viewTabs = true,
 }: {
   children: ReactNode;
   substitutions?: Record<string, string | undefined>;
+  /** Off for shells reached from outside observe, such as legacy Costs. */
+  viewTabs?: boolean;
 }) {
   return (
     <div className="flex h-full flex-col">
@@ -28,7 +31,7 @@ function ObservePageShell({
         <Page.Header>
           <Page.Header.Breadcrumbs fullWidth substitutions={substitutions} />
         </Page.Header>
-        <ObserveViewTabs active="insights" />
+        {viewTabs && <ObserveViewTabs active="insights" />}
         <Page.Body fullWidth overflowHidden noPadding>
           {children}
         </Page.Body>
@@ -47,7 +50,7 @@ export function InsightsHooksPage(): JSX.Element {
 
 export function InsightsAgentsPage(): JSX.Element {
   return (
-    <ObservePageShell>
+    <ObservePageShell viewTabs={false}>
       <RequireScope scope="org:admin" level="page">
         <InsightsAgentsContent />
       </RequireScope>

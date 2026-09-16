@@ -21,7 +21,7 @@ import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { useServerNameMappings } from "@/hooks/useServerNameMappings";
 import { useOrgRoutes } from "@/routes";
-import { getPresetRange, type DateRangePreset } from "@/elements";
+import { type DateRangePreset } from "@/elements";
 import { telemetryGetToolUsageClients } from "@gram/client/funcs/telemetryGetToolUsageClients";
 import { telemetryGetToolUsageFilterOptions } from "@gram/client/funcs/telemetryGetToolUsageFilterOptions";
 import { telemetryGetToolUsageTargets } from "@gram/client/funcs/telemetryGetToolUsageTargets";
@@ -33,7 +33,6 @@ import type { GetToolUsageSummaryResult } from "@gram/client/models/components/g
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { Icon } from "@/components/ui/Icon";
-import { formatChartZoomRangeLabel } from "@/components/chart/chartUtils";
 import { useQuery } from "@tanstack/react-query";
 import {
   BarElement,
@@ -112,6 +111,7 @@ export function InsightsToolsContent(): JSX.Element {
     customRangeLabel,
     setDateRangeParam,
     setCustomRangeParam,
+    setRangeFromBrush,
     clearCustomRange,
     selectedRoleIds,
     roleOptions,
@@ -405,6 +405,9 @@ export function InsightsToolsContent(): JSX.Element {
           customRangeLabel={customRangeLabel}
           onDateRangeChange={setDateRangeParam}
           onCustomRangeChange={setCustomRangeParam}
+          onRangeSelect={setRangeFromBrush}
+          from={from}
+          to={to}
           onClearCustomRange={clearCustomRange}
           projectSlug={projectSlug}
           serverNameMappings={serverNameMappings}
@@ -444,6 +447,9 @@ function HooksInnerContent({
   customRangeLabel,
   onDateRangeChange,
   onCustomRangeChange,
+  onRangeSelect,
+  from,
+  to,
   onClearCustomRange,
   projectSlug,
   serverNameMappings,
@@ -478,6 +484,9 @@ function HooksInnerContent({
   customRangeLabel: string | null;
   onDateRangeChange: (preset: DateRangePreset) => void;
   onCustomRangeChange: (from: Date, to: Date, label?: string) => void;
+  onRangeSelect: (from: Date, to: Date) => void;
+  from: Date;
+  to: Date;
   onClearCustomRange: () => void;
   projectSlug?: string;
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
@@ -491,16 +500,6 @@ function HooksInnerContent({
   isRefreshing: boolean;
 }) {
   const orgRoutes = useOrgRoutes();
-  const { from, to } = useMemo(
-    () => customRange ?? getPresetRange(dateRange),
-    [customRange, dateRange],
-  );
-  const handleChartRangeSelect = useCallback(
-    (from: Date, to: Date) => {
-      onCustomRangeChange(from, to, formatChartZoomRangeLabel(from, to));
-    },
-    [onCustomRangeChange],
-  );
   const hasSummaryData = (summaryData?.totals.eventCount ?? 0) > 0;
 
   return (
@@ -602,7 +601,7 @@ function HooksInnerContent({
                 summaryPending={summaryPending}
                 summaryIsError={summaryIsError}
                 sectionStatus={sectionStatus}
-                onRangeSelect={handleChartRangeSelect}
+                onRangeSelect={onRangeSelect}
               />
             )}
           </div>

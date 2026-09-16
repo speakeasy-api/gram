@@ -331,12 +331,17 @@ export function LogsTools(): JSX.Element {
       {
         id: "user",
         label: "User",
-        values: (filterOptionsData?.users ?? []).map((user) => ({
-          value: user.userKey,
-          label: user.userLabel,
-          count: Number(user.eventCount),
-          selected: selectedEmails.includes(user.userKey),
-        })),
+        // The URL and the payload carry emails; an agent or an external id
+        // sent as an email filter matches nothing, so those identities are not
+        // offered here rather than offered and broken.
+        values: (filterOptionsData?.users ?? [])
+          .filter((user) => user.userKind === "email")
+          .map((user) => ({
+            value: user.userKey,
+            label: user.userLabel,
+            count: Number(user.eventCount),
+            selected: selectedEmails.includes(user.userKey),
+          })),
       },
     ];
   }, [
@@ -942,16 +947,13 @@ function LogsToolsContent({
                 onResetRange={onResetRange}
                 isZoomed={isZoomed}
                 degraded={
-                  // Error and success are honoured by the strip itself; what it
-                  // still cannot express is a blocked/pending filter or a
-                  // free-text search, since neither has a time series.
+                  // The strip can express an errors-only filter and nothing
+                  // else: the summary series has no per-status counts, and a
+                  // free-text search has no time series at all.
                   isCustomSearchActive(
                     attributeSearchQuery,
                     attributeFilters,
-                  ) ||
-                  selectedStatuses.some(
-                    (status) => status === "blocked" || status === "pending",
-                  )
+                  ) || selectedStatuses.some((status) => status !== "error")
                 }
               />
             </div>

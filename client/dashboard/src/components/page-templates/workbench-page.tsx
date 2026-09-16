@@ -39,6 +39,9 @@ export function WorkbenchPage({
       noPadding
       overflowHidden
       fullWidthBreadcrumbs
+      // The strip is flush with the breadcrumbs above it; the body's default
+      // gap would open a blank band between the tabs and the content.
+      bodyClassName={tabs ? "gap-0" : undefined}
     >
       {tabs}
       {children}

@@ -314,7 +314,7 @@ export function InsightsGrid({
           <MetricSpark
             value={(Number(totals?.uniqueTools) || 0).toLocaleString()}
             series={[]}
-            caption={`across ${Number(totals?.uniqueTargets) || 0} servers`}
+            caption={`across ${Number(totals?.uniqueTargets) || 0} sources`}
           />
         </InsightCard>
 

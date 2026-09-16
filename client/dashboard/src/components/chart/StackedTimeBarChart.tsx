@@ -1,6 +1,6 @@
 import { ChartNoData } from "@/components/chart/ChartNoData";
 import {
-  CHART_COLORS,
+  chartColors,
   EXPANDED_LEGEND,
   SHARED_LEGEND,
   SHARED_RESIZE_TRANSITION,
@@ -9,6 +9,7 @@ import {
 import { useChartZoom } from "@/components/chart/useChartZoom";
 import type { TimeSeriesDataset } from "@/components/observe/toolUsageTimeSeriesChartData";
 import type { ChartOptions } from "chart.js";
+import { useIsDarkTheme } from "@/lib/theme";
 import { useEffect, useMemo } from "react";
 import { Bar } from "react-chartjs-2";
 
@@ -36,6 +37,7 @@ export function StackedTimeBarChart({
   /** Strip variant: no legend, no axis furniture — just the silhouette. */
   compact?: boolean;
 }): JSX.Element {
+  const colors = chartColors(useIsDarkTheme());
   const { chartRef, zoomPluginOptions, resetZoom } = useChartZoom<"bar">({
     onRangeSelect,
     resolveRange: (min, max) => {
@@ -63,6 +65,20 @@ export function StackedTimeBarChart({
   useEffect(() => {
     resetZoom();
   }, [dataSignature, resetZoom]);
+
+  // Chart.js resolves bar sizing from the dataset, not from the scale, so the
+  // strip's near-continuous bars have to be set here.
+  const sizedDatasets = useMemo(
+    () =>
+      compact
+        ? datasets.map((dataset) => ({
+            ...dataset,
+            barPercentage: 0.92,
+            categoryPercentage: 0.98,
+          }))
+        : datasets,
+    [datasets, compact],
+  );
 
   if (labels.length === 0) {
     return <ChartNoData />;
@@ -129,20 +145,19 @@ export function StackedTimeBarChart({
               maxRotation: 0,
               padding: 2,
               font: { size: 10 },
-              color: CHART_COLORS.labelFaded,
+              color: colors.labelFaded,
             }
-          : { maxTicksLimit: 8, color: CHART_COLORS.labelFaded },
+          : { maxTicksLimit: 8, color: colors.labelFaded },
         // The strip keeps its baseline: without one the bars float and the
         // short buckets read as gaps rather than as small values.
-        border: { display: true, color: CHART_COLORS.gridLine },
-        ...(compact ? { barPercentage: 0.92, categoryPercentage: 0.98 } : {}),
+        border: { display: true, color: colors.gridLine },
       },
       y: {
         stacked: true,
         beginAtZero: true,
         display: !compact,
-        grid: { color: "rgba(128, 128, 128, 0.2)" },
-        ticks: { precision: 0, color: CHART_COLORS.labelFaded },
+        grid: { color: colors.gridLine },
+        ticks: { precision: 0, color: colors.labelFaded },
       },
     },
     transitions: SHARED_RESIZE_TRANSITION,
@@ -153,7 +168,11 @@ export function StackedTimeBarChart({
       className="relative transition-all duration-200 ease-in-out"
       style={{ height }}
     >
-      <Bar ref={chartRef} data={{ labels, datasets }} options={options} />
+      <Bar
+        ref={chartRef}
+        data={{ labels, datasets: sizedDatasets }}
+        options={options}
+      />
     </div>
   );
 }

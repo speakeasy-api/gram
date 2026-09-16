@@ -1,11 +1,22 @@
-import { TOOLTIP } from "@/components/chart/palette";
+import { AXIS, TOOLTIP } from "@/components/chart/palette";
 import { Chart as ChartJS, type ChartOptions } from "chart.js";
 
-export const CHART_COLORS = {
-  label: "#737373",
-  labelFaded: "#A3A3A3",
-  gridLine: "#e5e5e5",
-} as const;
+/**
+ * Axis furniture for the resolved theme. A Chart.js canvas paints pixels, not
+ * CSS, so it cannot inherit the theme the way the rest of the page does — the
+ * caller reads `useIsDarkTheme()` and passes the answer in.
+ */
+export function chartColors(isDark: boolean): {
+  label: string;
+  labelFaded: string;
+  gridLine: string;
+} {
+  return {
+    label: AXIS.label,
+    labelFaded: AXIS.faded,
+    gridLine: isDark ? AXIS.gridDark : AXIS.grid,
+  };
+}
 
 type _BarLegend = Exclude<
   NonNullable<ChartOptions<"bar">["plugins"]>["legend"],
@@ -32,7 +43,7 @@ export const EXPANDED_LEGEND = {
     boxHeight: 8,
     usePointStyle: false,
     padding: 16,
-    color: CHART_COLORS.label,
+    color: AXIS.label,
     font: { family: "monospace", size: 11 },
     generateLabels: (chart: ChartJS) =>
       ChartJS.defaults.plugins.legend.labels

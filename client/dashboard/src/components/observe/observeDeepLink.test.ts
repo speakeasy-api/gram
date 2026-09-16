@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   OBSERVE_FILTER_PARAMS,
-  TOOL_NAME_ATTRIBUTE_PATH,
   buildObserveHref,
   carryObserveParams,
 } from "./observeDeepLink";
 
 const LOGS = "/org/project/logs";
+const INSIGHTS = "/org/project/insights";
 
 describe("carryObserveParams", () => {
   it("carries every shared filter param", () => {
@@ -100,8 +100,11 @@ describe("buildObserveHref", () => {
       toolName: "charge",
     });
 
+    // Spelled out rather than built from TOOL_NAME_ATTRIBUTE_PATH: this is
+    // the wire format a bookmarked link depends on, so renaming the constant
+    // must fail here rather than quietly agree with itself.
     expect(new URLSearchParams(href.split("?")[1]).get("af")).toBe(
-      `${TOOL_NAME_ATTRIBUTE_PATH}:eq:charge`,
+      "gram.tool.name:eq:charge",
     );
   });
 
@@ -112,7 +115,35 @@ describe("buildObserveHref", () => {
     const af = new URLSearchParams(href.split("?")[1]).get("af") ?? "";
 
     expect(af).toContain("user.region:eq:us-east-1");
-    expect(af).toContain(`${TOOL_NAME_ATTRIBUTE_PATH}:eq:charge`);
+    expect(af).toContain("gram.tool.name:eq:charge");
+  });
+
+  it("replaces a tool chip when the reader drills into a second tool", () => {
+    const current = new URLSearchParams({ af: "gram.tool.name:eq:refund" });
+
+    const href = buildObserveHref(LOGS, current, { toolName: "charge" });
+    const af = new URLSearchParams(href.split("?")[1]).get("af") ?? "";
+
+    // Two eq chips on one path would AND to nothing, so the new tool wins.
+    expect(af).toBe("gram.tool.name:eq:charge");
+  });
+
+  it("replaces the reader's status rather than adding to it", () => {
+    const current = new URLSearchParams({ status: "success" });
+
+    const href = buildObserveHref(LOGS, current, { statuses: ["error"] });
+
+    expect(new URLSearchParams(href.split("?")[1]).get("status")).toBe("error");
+  });
+
+  it("drops a status the summary endpoints cannot apply", () => {
+    const current = new URLSearchParams({ status: "error", range: "1d" });
+
+    const href = buildObserveHref(INSIGHTS, current, {}, { summaryOnly: true });
+    const params = new URLSearchParams(href.split("?")[1]);
+
+    expect(params.get("status")).toBeNull();
+    expect(params.get("range")).toBe("1d");
   });
 
   it("carries a client key so client panels can drill in", () => {

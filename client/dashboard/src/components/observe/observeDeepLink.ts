@@ -35,13 +35,16 @@ export const OBSERVE_FILTER_PARAMS = [
 ] as const;
 
 /** The attribute a tool-scoped drill-down filters on. */
-export const TOOL_NAME_ATTRIBUTE_PATH = "gram.tool.name";
+const TOOL_NAME_ATTRIBUTE_PATH = "gram.tool.name";
 
 export type ObserveDeepLinkScope = {
   /** A row on a server, gateway, or shadow-server panel. */
   target?: ParsedTargetFilter;
   /** Skill and local-tool rows have no server identity; they narrow by type. */
   targetTypes?: string[];
+  // Only email identities can be linked: the `user` param and the payload's
+  // user filters are both email-keyed, so an agent or external id has nothing
+  // to encode and would open unfiltered logs.
   toolName?: string;
   statuses?: string[];
   userEmail?: string;
@@ -74,10 +77,21 @@ function encodeTarget(target: ParsedTargetFilter): string | undefined {
   }
 }
 
+/**
+ * Params the tool-usage summary endpoints have no field for. Insights is
+ * entirely summary-driven, so carrying one of these across would leave the
+ * cards showing unfiltered aggregates under a chip that claims otherwise.
+ */
+const SUMMARY_UNSUPPORTED_PARAMS = new Set(["status"]);
+
 /** Copies the shared filter state forward, dropping everything page-local. */
-export function carryObserveParams(current: URLSearchParams): URLSearchParams {
+export function carryObserveParams(
+  current: URLSearchParams,
+  options: { summaryOnly?: boolean } = {},
+): URLSearchParams {
   const next = new URLSearchParams();
   for (const key of OBSERVE_FILTER_PARAMS) {
+    if (options.summaryOnly && SUMMARY_UNSUPPORTED_PARAMS.has(key)) continue;
     const value = current.get(key);
     if (value !== null) next.set(key, value);
   }
@@ -99,23 +113,27 @@ export function buildObserveHref(
   base: string,
   current: URLSearchParams,
   scope: ObserveDeepLinkScope = {},
+  options: { summaryOnly?: boolean } = {},
 ): string {
-  const params = carryObserveParams(current);
+  const params = carryObserveParams(current, options);
 
   if (scope.target) appendCsv(params, "server", encodeTarget(scope.target));
   for (const type of scope.targetTypes ?? []) {
     appendCsv(params, "hookTypes", type);
   }
-  for (const status of scope.statuses ?? []) {
-    appendCsv(params, "status", status);
+  // A "Failures" link means only failures. Appending would carry the
+  // successes the reader already had selected into a link that says errors.
+  if (scope.statuses && scope.statuses.length > 0) {
+    params.set("status", scope.statuses.join(","));
   }
   appendCsv(params, "user", scope.userEmail);
   appendCsv(params, "source", scope.hookSource);
   appendCsv(params, "client", scope.clientKey);
 
   if (scope.toolName) {
-    // Merge rather than overwrite: a reader who already narrowed by one tool
-    // and then drills into another expects both chips, not a silent swap.
+    // Merged into the chips already applied, so an unrelated chip the reader
+    // set survives the drill-down. An existing chip on this same path is
+    // replaced rather than added to: two eq chips on one path AND to nothing.
     const merged = applyFilterAdd(parseFilters(current.get("af")), {
       path: TOOL_NAME_ATTRIBUTE_PATH,
       op: Operator.Eq,
