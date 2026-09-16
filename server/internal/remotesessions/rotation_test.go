@@ -402,6 +402,8 @@ func TestBuildAuthorizationUrl_WaitsForConcurrentRotation(t *testing.T) {
 			ExpectedClientID:        before.ClientID,
 			ExpectedUpdatedAt:       before.UpdatedAt,
 			ExpectedIssuerID:        before.RemoteSessionIssuerID,
+			ExpectedProjectID:       before.ProjectID,
+			ExpectedOrganizationID:  before.OrganizationID,
 		})
 	}()
 
@@ -425,6 +427,8 @@ func replaceAsWinner(ctx context.Context, env syntheticExpiryEnv, before repo.Re
 		ExpectedClientID:        before.ClientID,
 		ExpectedUpdatedAt:       before.UpdatedAt,
 		ExpectedIssuerID:        before.RemoteSessionIssuerID,
+		ExpectedProjectID:       before.ProjectID,
+		ExpectedOrganizationID:  before.OrganizationID,
 	})
 	if err != nil {
 		return fmt.Errorf("replace registration as winner: %w", err)

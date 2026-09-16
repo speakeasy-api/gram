@@ -344,6 +344,9 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 	// recording another resource retries.
 	claimed, err := s.claimProtectedResource(ctx, dbtx, authCtx, updatedServer.ID, existingServer.Url, updatedServer.Url)
 	if err != nil {
+		if shared, ok := errors.AsType[*oops.ShareableError](err); ok && shared.Code == oops.CodeConflict {
+			return nil, shared
+		}
 		return nil, oops.E(oops.CodeUnexpected, err, "claim protected resource for remote session clients").LogError(ctx, logger)
 	}
 

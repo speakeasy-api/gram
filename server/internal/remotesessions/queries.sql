@@ -678,10 +678,13 @@ WHERE id = @id
 -- concurrent rotation is detected rather than blocked.
 SELECT
     sqlc.embed(c),
-    i.issuer                   AS issuer_url,
-    i.token_endpoint           AS issuer_token_endpoint,
-    i.registration_endpoint    AS issuer_registration_endpoint,
-    i.tunneled_mcp_server_id   AS issuer_tunneled_mcp_server_id
+    i.issuer                 AS issuer_url,
+    i.token_endpoint         AS issuer_token_endpoint,
+    i.registration_endpoint  AS issuer_registration_endpoint,
+    i.updated_at             AS issuer_updated_at,
+    i.project_id             AS issuer_project_id,
+    i.organization_id        AS issuer_organization_id,
+    i.tunneled_mcp_server_id AS issuer_tunneled_mcp_server_id
 FROM remote_session_clients AS c
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
 WHERE c.id = @id
@@ -736,6 +739,8 @@ WHERE id = @id
   AND client_id = @expected_client_id
   AND updated_at = @expected_updated_at
   AND remote_session_issuer_id = @expected_issuer_id
+  AND project_id IS NOT DISTINCT FROM sqlc.narg('expected_project_id')::uuid
+  AND organization_id IS NOT DISTINCT FROM sqlc.narg('expected_organization_id')::text
   AND deleted IS FALSE
   AND client_id_metadata_uri IS NULL
 RETURNING *;
@@ -3992,3 +3997,11 @@ JOIN pg_catalog.pg_proc p ON p.oid = t.tgfoid
 JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
 WHERE n.nspname = current_schema()
 AND p.proname IN ('validate_remote_session_ema_binding_scope', 'guard_remote_session_ema_lifecycle');
+
+-- name: LockRotationIssuerSnapshot :one
+-- Lock only the exact pre-HTTP issuer identity and tenant. The client is locked
+-- next; publication rechecks both versions while these locks are held.
+SELECT id FROM remote_session_issuers
+WHERE id = @id AND project_id IS NOT DISTINCT FROM sqlc.narg('project_id')::uuid
+AND organization_id IS NOT DISTINCT FROM sqlc.narg('organization_id')::text
+AND deleted IS FALSE FOR UPDATE;

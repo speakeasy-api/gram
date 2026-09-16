@@ -57,6 +57,7 @@ import (
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 	unproxiedmcprepo "github.com/speakeasy-api/gram/server/internal/unproxiedmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/lifecycle"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 	variationsrepo "github.com/speakeasy-api/gram/server/internal/variations/repo"
 )
@@ -1142,6 +1143,9 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 		}
 
 		if lockErr == nil && !hasActiveOwner {
+			if err := lifecycle.GuardEMABindings(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, deleted.UserSessionIssuerID.UUID); err != nil {
+				return fmt.Errorf("guard orphan issuer identity-chaining bindings: %w", err)
+			}
 			deletedIssuer, err := userSessionsRepo.DeleteUserSessionIssuer(ctx, usersessionsrepo.DeleteUserSessionIssuerParams{
 				ID:        deleted.UserSessionIssuerID.UUID,
 				ProjectID: *authCtx.ProjectID,

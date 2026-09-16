@@ -977,6 +977,7 @@ BEGIN
   -- separate evidence. No binding or session is created: neither proves
   -- that a provisioned human can use this resource. Reserved example URLs
   -- and a public client keep this fixture free of operational credentials.
+  -- This projection is administrator-declared, not a completed discovery visit.
   INSERT INTO remote_session_issuers
     (id, project_id, organization_id, slug, issuer, token_endpoint, name,
      grant_types_supported, authorization_grant_profiles_supported,
@@ -986,7 +987,7 @@ BEGIN
      'https://authorization.example.com', 'https://authorization.example.com/token',
      'Identity chaining example',
      ARRAY['urn:ietf:params:oauth:grant-type:jwt-bearer'],
-     ARRAY['urn:ietf:params:oauth:grant-profile:id-jag'], ARRAY['none'], now());
+     ARRAY['urn:ietf:params:oauth:grant-profile:id-jag'], ARRAY['none'], NULL);
 
   INSERT INTO remote_session_clients
     (id, project_id, organization_id, remote_session_issuer_id, client_id,
@@ -2771,6 +2772,13 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   WHERE project_id = proj_a AND deleted IS FALSE;
   IF stray <> 1 THEN
     RAISE EXCEPTION 'demo seed postflight: expected 1 external OAuth metadata row, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM remote_session_issuers
+  WHERE project_id = proj_a AND organization_id = demo_org AND id = chaining_issuer
+    AND metadata IS NULL AND metadata_fetched_at IS NULL AND deleted IS FALSE;
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: declared chaining metadata must not claim discovery';
   END IF;
 
   SELECT count(*) INTO stray FROM remote_session_clients
