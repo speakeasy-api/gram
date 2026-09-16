@@ -32,19 +32,19 @@ import {
   TupleToPrefixes,
 } from "./_types.js";
 import {
-  AdminAdminGetMeterUsageQueryData,
-  buildAdminAdminGetMeterUsageQuery,
-  prefetchAdminAdminGetMeterUsage,
-  queryKeyAdminAdminGetMeterUsage,
-} from "./adminAdminGetMeterUsage.core.js";
+  AdminGetMeterUsageQueryData,
+  buildAdminGetMeterUsageQuery,
+  prefetchAdminGetMeterUsage,
+  queryKeyAdminGetMeterUsage,
+} from "./adminGetMeterUsage.core.js";
 export {
-  type AdminAdminGetMeterUsageQueryData,
-  buildAdminAdminGetMeterUsageQuery,
-  prefetchAdminAdminGetMeterUsage,
-  queryKeyAdminAdminGetMeterUsage,
+  type AdminGetMeterUsageQueryData,
+  buildAdminGetMeterUsageQuery,
+  prefetchAdminGetMeterUsage,
+  queryKeyAdminGetMeterUsage,
 };
 
-export type AdminAdminGetMeterUsageQueryError =
+export type AdminGetMeterUsageQueryError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -61,19 +61,16 @@ export type AdminAdminGetMeterUsageQueryError =
  * @remarks
  * Returns totals-only ordinary meter usage for an organization over a bounded UTC-day window.
  */
-export function useAdminAdminGetMeterUsage(
+export function useAdminGetMeterUsage(
   request: AdminGetMeterUsageRequest,
   options?: QueryHookOptions<
-    AdminAdminGetMeterUsageQueryData,
-    AdminAdminGetMeterUsageQueryError
+    AdminGetMeterUsageQueryData,
+    AdminGetMeterUsageQueryError
   >,
-): UseQueryResult<
-  AdminAdminGetMeterUsageQueryData,
-  AdminAdminGetMeterUsageQueryError
-> {
+): UseQueryResult<AdminGetMeterUsageQueryData, AdminGetMeterUsageQueryError> {
   const client = useGramContext();
   return useQuery({
-    ...buildAdminAdminGetMeterUsageQuery(
+    ...buildAdminGetMeterUsageQuery(
       client,
       request,
       options,
@@ -88,19 +85,19 @@ export function useAdminAdminGetMeterUsage(
  * @remarks
  * Returns totals-only ordinary meter usage for an organization over a bounded UTC-day window.
  */
-export function useAdminAdminGetMeterUsageSuspense(
+export function useAdminGetMeterUsageSuspense(
   request: AdminGetMeterUsageRequest,
   options?: SuspenseQueryHookOptions<
-    AdminAdminGetMeterUsageQueryData,
-    AdminAdminGetMeterUsageQueryError
+    AdminGetMeterUsageQueryData,
+    AdminGetMeterUsageQueryError
   >,
 ): UseSuspenseQueryResult<
-  AdminAdminGetMeterUsageQueryData,
-  AdminAdminGetMeterUsageQueryError
+  AdminGetMeterUsageQueryData,
+  AdminGetMeterUsageQueryError
 > {
   const client = useGramContext();
   return useSuspenseQuery({
-    ...buildAdminAdminGetMeterUsageQuery(
+    ...buildAdminGetMeterUsageQuery(
       client,
       request,
       options,
@@ -109,7 +106,7 @@ export function useAdminAdminGetMeterUsageSuspense(
   });
 }
 
-export function setAdminAdminGetMeterUsageData(
+export function setAdminGetMeterUsageData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
@@ -119,14 +116,14 @@ export function setAdminAdminGetMeterUsageData(
       to?: Date | undefined;
     },
   ],
-  data: AdminAdminGetMeterUsageQueryData,
-): AdminAdminGetMeterUsageQueryData | undefined {
-  const key = queryKeyAdminAdminGetMeterUsage(...queryKeyBase);
+  data: AdminGetMeterUsageQueryData,
+): AdminGetMeterUsageQueryData | undefined {
+  const key = queryKeyAdminGetMeterUsage(...queryKeyBase);
 
-  return client.setQueryData<AdminAdminGetMeterUsageQueryData>(key, data);
+  return client.setQueryData<AdminGetMeterUsageQueryData>(key, data);
 }
 
-export function invalidateAdminAdminGetMeterUsage(
+export function invalidateAdminGetMeterUsage(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
@@ -140,21 +137,16 @@ export function invalidateAdminAdminGetMeterUsage(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: [
-      "@gram/admin-client",
-      "admin",
-      "adminGetMeterUsage",
-      ...queryKeyBase,
-    ],
+    queryKey: ["@gram/admin-client", "admin", "getMeterUsage", ...queryKeyBase],
   });
 }
 
-export function invalidateAllAdminAdminGetMeterUsage(
+export function invalidateAllAdminGetMeterUsage(
   client: QueryClient,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/admin-client", "admin", "adminGetMeterUsage"],
+    queryKey: ["@gram/admin-client", "admin", "getMeterUsage"],
   });
 }

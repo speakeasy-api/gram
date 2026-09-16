@@ -8,7 +8,7 @@ import {
   QueryKey,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { adminAdminGetMeterUsage } from "../funcs/adminAdminGetMeterUsage.js";
+import { adminGetMeterUsage } from "../funcs/adminGetMeterUsage.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { AdminMeterUsageResponse } from "../models/components/adminmeterusageresponse.js";
@@ -17,16 +17,16 @@ import {
   Family,
 } from "../models/operations/admingetmeterusage.js";
 import { unwrapAsync } from "../types/fp.js";
-export type AdminAdminGetMeterUsageQueryData = AdminMeterUsageResponse;
+export type AdminGetMeterUsageQueryData = AdminMeterUsageResponse;
 
-export function prefetchAdminAdminGetMeterUsage(
+export function prefetchAdminGetMeterUsage(
   queryClient: QueryClient,
   client$: GramCore,
   request: AdminGetMeterUsageRequest,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
-    ...buildAdminAdminGetMeterUsageQuery(
+    ...buildAdminGetMeterUsageQuery(
       client$,
       request,
       options,
@@ -34,7 +34,7 @@ export function prefetchAdminAdminGetMeterUsage(
   });
 }
 
-export function buildAdminAdminGetMeterUsageQuery(
+export function buildAdminGetMeterUsageQuery(
   client$: GramCore,
   request: AdminGetMeterUsageRequest,
   options?: RequestOptions,
@@ -42,18 +42,18 @@ export function buildAdminAdminGetMeterUsageQuery(
   queryKey: QueryKey;
   queryFn: (
     context: QueryFunctionContext,
-  ) => Promise<AdminAdminGetMeterUsageQueryData>;
+  ) => Promise<AdminGetMeterUsageQueryData>;
 } {
   return {
-    queryKey: queryKeyAdminAdminGetMeterUsage({
+    queryKey: queryKeyAdminGetMeterUsage({
       organizationId: request.organizationId,
       family: request.family,
       from: request.from,
       to: request.to,
     }),
-    queryFn: async function adminAdminGetMeterUsageQueryFn(
+    queryFn: async function adminGetMeterUsageQueryFn(
       ctx,
-    ): Promise<AdminAdminGetMeterUsageQueryData> {
+    ): Promise<AdminGetMeterUsageQueryData> {
       const sig = combineSignals(
         ctx.signal,
         options?.signal,
@@ -65,7 +65,7 @@ export function buildAdminAdminGetMeterUsageQuery(
         signal: sig,
       };
 
-      return unwrapAsync(adminAdminGetMeterUsage(
+      return unwrapAsync(adminGetMeterUsage(
         client$,
         request,
         mergedOptions,
@@ -74,7 +74,7 @@ export function buildAdminAdminGetMeterUsageQuery(
   };
 }
 
-export function queryKeyAdminAdminGetMeterUsage(
+export function queryKeyAdminGetMeterUsage(
   parameters: {
     organizationId: string;
     family: Family;
@@ -82,5 +82,5 @@ export function queryKeyAdminAdminGetMeterUsage(
     to?: Date | undefined;
   },
 ): QueryKey {
-  return ["@gram/admin-client", "admin", "adminGetMeterUsage", parameters];
+  return ["@gram/admin-client", "admin", "getMeterUsage", parameters];
 }

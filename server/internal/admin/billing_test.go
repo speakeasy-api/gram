@@ -2,18 +2,25 @@ package admin
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http/httptest"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
+	goahttp "goa.design/goa/v3/http"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
+	adminserver "github.com/speakeasy-api/gram/server/gen/http/admin/server"
 	usagegen "github.com/speakeasy-api/gram/server/gen/usage"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/metering"
+	"github.com/speakeasy-api/gram/server/internal/metering/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -133,6 +140,94 @@ func (f *fakeBillingOperations) SetStripeSubscriptionCancelAtPeriodEndForOrganiz
 	f.cancel = &cancel
 	f.actor = actor
 	return &usage.StripeSubscription{Status: "active", CurrentPeriodStart: "2026-08-01T00:00:00Z", CurrentPeriodEnd: "2026-09-01T00:00:00Z", CancelAtPeriodEnd: cancel}, nil
+}
+func TestGetMeterUsageSelectsCanonicalOrganizationAndBoundedFamily(t *testing.T) {
+	t.Parallel()
+	ctx, svc, db, meterConn := newTestAdminMeterService(t)
+	organizationID := "org_meter_usage"
+	organizationSlug := "meter-usage"
+	otherOrganizationID := "org_other_meter_usage"
+	seedOrg(t, ctx, db, orgFixture{id: organizationID, name: "Meter Usage", slug: organizationSlug})
+	seedOrg(t, ctx, db, orgFixture{id: otherOrganizationID, name: "Other Meter Usage", slug: "other-meter-usage"})
+
+	from := time.Date(2026, time.April, 1, 0, 0, 0, 0, time.UTC)
+	to := from.AddDate(0, 0, 2)
+	require.NoError(t, chrepo.New(meterConn).InsertReadings(ctx, []chrepo.ReadingRow{
+		adminMeterUsageReading(organizationID, metering.MeterAgentSessionStorage, 11, from.Add(time.Hour), map[string]string{metering.AttributeModel: "first-model"}),
+		adminMeterUsageReading(organizationID, metering.MeterAgentSessionStorage, 13, from.AddDate(0, 0, 1).Add(time.Hour), map[string]string{metering.AttributeModel: "second-model"}),
+		adminMeterUsageReading(organizationID, metering.MeterAgentSessionStorage, 100, from.Add(-time.Hour), nil),
+		adminMeterUsageReading(organizationID, metering.MeterAgentSessionStorage, 200, to, nil),
+		adminMeterUsageReading(organizationID, metering.MeterMCPBandwidthIngress, 500, from.Add(time.Hour), nil),
+		adminMeterUsageReading(otherOrganizationID, metering.MeterAgentSessionStorage, 1_000, from.Add(time.Hour), nil),
+	}))
+
+	fromText, toText := from.Format(time.RFC3339), to.Format(time.RFC3339)
+	getUsage := func(organization string, family metering.UsageFamily) *gen.AdminMeterUsageResponse {
+		t.Helper()
+		result, err := svc.GetMeterUsage(ctx, &gen.GetMeterUsagePayload{
+			OrganizationID: organization,
+			Family:         string(family),
+			From:           &fromText,
+			To:             &toText,
+		})
+		require.NoError(t, err)
+		return result
+	}
+
+	byID := getUsage(organizationID, metering.UsageFamilyAgentSessionStorage)
+	bySlug := getUsage(organizationSlug, metering.UsageFamilyAgentSessionStorage)
+	require.Equal(t, string(metering.UsageFamilyAgentSessionStorage), byID.Family)
+	require.Equal(t, "24", byID.Total)
+	require.Equal(t, string(metering.UnitSTokens), byID.Unit)
+	require.Equal(t, string(metering.MeasurementTiktokenO200kBase), byID.MeasurementMethod)
+	require.Equal(t, &gen.MeterUsageWindow{From: fromText, To: toText}, byID.Window)
+	require.Equal(t, []*gen.AdminMeterUsageBucket{
+		{From: fromText, To: from.AddDate(0, 0, 1).Format(time.RFC3339), Total: "11"},
+		{From: from.AddDate(0, 0, 1).Format(time.RFC3339), To: toText, Total: "13"},
+	}, byID.Buckets)
+	require.Equal(t, byID.Family, bySlug.Family)
+	require.Equal(t, byID.Window, bySlug.Window)
+	require.Equal(t, byID.Unit, bySlug.Unit)
+	require.Equal(t, byID.MeasurementMethod, bySlug.MeasurementMethod)
+	require.Equal(t, byID.Total, bySlug.Total)
+	require.Equal(t, byID.Buckets, bySlug.Buckets)
+
+	bandwidth := getUsage(organizationSlug, metering.UsageFamilyMCPBandwidth)
+	require.Equal(t, "500", bandwidth.Total)
+	require.Equal(t, string(metering.UnitBytes), bandwidth.Unit)
+
+	recorder := httptest.NewRecorder()
+	require.NoError(t, adminserver.EncodeGetMeterUsageResponse(goahttp.ResponseEncoder)(ctx, recorder, byID))
+	var wireResponse map[string]any
+	require.NoError(t, json.NewDecoder(recorder.Body).Decode(&wireResponse))
+	require.NotContains(t, wireResponse, "breakdown")
+}
+
+func adminMeterUsageReading(organizationID string, meterID metering.MeterID, value int64, occurredAt time.Time, attributes map[string]string) chrepo.ReadingRow {
+	unit := metering.UnitSTokens
+	measurementMethod := metering.MeasurementTiktokenO200kBase
+	if meterID == metering.MeterMCPBandwidthIngress || meterID == metering.MeterMCPBandwidthEgress {
+		unit = metering.UnitBytes
+		measurementMethod = metering.MeasurementHTTPBodyBytes
+	}
+	if attributes == nil {
+		attributes = map[string]string{}
+	}
+	return chrepo.ReadingRow{
+		ID:                uuid.New(),
+		OrganizationID:    organizationID,
+		ProjectID:         uuid.New(),
+		MeterID:           string(meterID),
+		OperationID:       "admin-meter-usage:" + uuid.NewString(),
+		Unit:              string(unit),
+		MeasurementMethod: string(measurementMethod),
+		Value:             value,
+		OccurredAt:        occurredAt,
+		ProducedAt:        occurredAt,
+		InsertedAt:        occurredAt,
+		CorrectsReadingID: nil,
+		Attributes:        attributes,
+	}
 }
 
 func TestGetInferenceKeysUsesCanonicalOrganizationIDAndReturnsConfiguredState(t *testing.T) {

@@ -1,8 +1,9 @@
 import { type JSX } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { getRouteApi } from "@tanstack/react-router";
 import { RefreshCw, RotateCcw } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
@@ -44,14 +45,15 @@ export function MeterUsage({
   const family = search.product ?? "agent_session_storage";
   const granularity = search.interval ?? "daily";
   const cumulative = search.cumulative ?? false;
-  const query = useQuery(
-    organizationMeterUsageQuery({
+  const query = useQuery({
+    ...organizationMeterUsageQuery({
       organizationId: organizationID,
       family,
       from: search.from ? new Date(`${search.from}T00:00:00Z`) : undefined,
       to: search.to ? new Date(exclusiveEnd(search.to)) : undefined,
     }),
-  );
+    placeholderData: keepPreviousData,
+  });
   const data = query.data;
   const update = (patch: BillingUsageSearch): void => {
     void navigate({
@@ -84,6 +86,12 @@ export function MeterUsage({
             ))}
           </TabsList>
           <div className="flex flex-wrap items-center gap-2">
+            {query.isPlaceholderData && (
+              <Badge variant="outline" role="status">
+                <RefreshCw className="animate-spin motion-reduce:animate-none" />
+                Updating…
+              </Badge>
+            )}
             <Button
               variant="ghost"
               size="sm"
@@ -149,7 +157,7 @@ export function MeterUsage({
                 <UsageStat
                   label="Total usage"
                   value={formatMeterQuantity(data.total, data.unit)}
-                  description={products[family].description}
+                  description={products[data.family].description}
                   exact={`${BigInt(data.total).toLocaleString("en-US")} ${data.unit === "bytes" ? "bytes" : "tokens"}`}
                 />
                 <UsageStat
@@ -161,7 +169,7 @@ export function MeterUsage({
               <div className="bg-card min-w-0 rounded-md border p-4">
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                   <h4 className="text-sm font-medium">
-                    {products[family].description} over time
+                    {products[data.family].description} over time
                   </h4>
                   <div className="flex flex-wrap items-center gap-4">
                     <div

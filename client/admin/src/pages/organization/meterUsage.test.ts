@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   formatDailyMeterRate,
   formatMeterQuantity,
+  meterAxisTicks,
   meterDateLabel,
   meterPoints,
   type AdminMeterUsage,
@@ -230,6 +231,22 @@ describe("meter quantity summaries", () => {
         }),
       ),
     ).toBe("6,004,799.5 BTok/day");
+  });
+});
+
+describe("meterAxisTicks", () => {
+  it("keeps tiny and huge integer ranges truthfully distinct", () => {
+    expect(meterAxisTicks(0)).toEqual([0, 1]);
+    expect(meterAxisTicks(1)).toEqual([0, 1]);
+
+    const ticks = meterAxisTicks(Number("9007199254740993"));
+    const labels = ticks.map((tick) =>
+      formatMeterQuantity(BigInt(tick).toString(), "stokens"),
+    );
+
+    expect(ticks.length).toBeGreaterThan(1);
+    expect(ticks.every(Number.isInteger)).toBe(true);
+    expect(new Set(labels).size).toBe(labels.length);
   });
 });
 

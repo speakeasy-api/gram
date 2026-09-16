@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * @remarks
  * Returns totals-only ordinary meter usage for an organization over a bounded UTC-day window.
  */
-export function adminAdminGetMeterUsage(
+export function adminGetMeterUsage(
   client: GramCore,
   request: AdminGetMeterUsageRequest,
   options?: RequestOptions,

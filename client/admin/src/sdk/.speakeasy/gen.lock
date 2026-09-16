@@ -30,7 +30,6 @@ trackedFiles:
   FUNCTIONS.md: {}
   REACT_QUERY.md: {}
   src/core.ts: {}
-  src/funcs/adminAdminGetMeterUsage.ts: {}
   src/funcs/adminBulkUpdateAccountType.ts: {}
   src/funcs/adminCancelStripeSubscription.ts: {}
   src/funcs/adminChangeTrialEndDate.ts: {}
@@ -46,6 +45,7 @@ trackedFiles:
   src/funcs/adminGetGlobalIssuerMigratePreflight.ts: {}
   src/funcs/adminGetInferenceKeys.ts: {}
   src/funcs/adminGetInferenceSpendHistory.ts: {}
+  src/funcs/adminGetMeterUsage.ts: {}
   src/funcs/adminGetOrganization.ts: {}
   src/funcs/adminGetOrganizationChatAnalysisSettings.ts: {}
   src/funcs/adminGetOrganizationFeatures.ts: {}
@@ -184,8 +184,6 @@ trackedFiles:
   src/models/operations/adminserveimage.ts: {}
   src/react-query/_context.tsx: {}
   src/react-query/_types.ts: {}
-  src/react-query/adminAdminGetMeterUsage.core.ts: {}
-  src/react-query/adminAdminGetMeterUsage.ts: {}
   src/react-query/adminBulkUpdateAccountType.ts: {}
   src/react-query/adminCancelStripeSubscription.ts: {}
   src/react-query/adminChangeTrialEndDate.ts: {}
@@ -206,6 +204,8 @@ trackedFiles:
   src/react-query/adminGetInferenceKeys.ts: {}
   src/react-query/adminGetInferenceSpendHistory.core.ts: {}
   src/react-query/adminGetInferenceSpendHistory.ts: {}
+  src/react-query/adminGetMeterUsage.core.ts: {}
+  src/react-query/adminGetMeterUsage.ts: {}
   src/react-query/adminGetOrganization.core.ts: {}
   src/react-query/adminGetOrganization.ts: {}
   src/react-query/adminGetOrganizationChatAnalysisSettings.core.ts: {}

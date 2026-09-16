@@ -72,6 +72,9 @@ actions:
   - target: $.paths.*[?@.operationId=='adminGetInferenceSpendHistory']
     update:
       x-speakeasy-name-override: getInferenceSpendHistory
+  - target: $.paths.*[?@.operationId=='adminGetMeterUsage']
+    update:
+      x-speakeasy-name-override: getMeterUsage
   - target: $.paths.*[?@.operationId=='adminGetOrganization']
     update:
       x-speakeasy-name-override: getOrganization

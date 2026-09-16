@@ -1,6 +1,6 @@
 import type { UseQueryOptions } from "@tanstack/react-query";
 import type { AdminMeterUsageResponse } from "@gram/admin-client/models/components/adminmeterusageresponse";
-import { buildAdminAdminGetMeterUsageQuery } from "@gram/admin-client/react-query/adminAdminGetMeterUsage.core";
+import { buildAdminGetMeterUsageQuery } from "@gram/admin-client/react-query/adminGetMeterUsage.core";
 import type { AdminGetMeterUsageRequest } from "@gram/admin-client/models/operations/admingetmeterusage";
 import { buildAdminChangeTrialEndDateMutation } from "@gram/admin-client/react-query/adminChangeTrialEndDate";
 import type { ChangeTrialEndDateRequestBody } from "@gram/admin-client/models/components/changetrialenddaterequestbody";
@@ -145,10 +145,7 @@ export function adminSessionQuery(): ReturnType<
 export function organizationMeterUsageQuery(
   request: AdminGetMeterUsageRequest,
 ): UseQueryOptions<AdminMeterUsageResponse> {
-  const generated = buildAdminAdminGetMeterUsageQuery(
-    redirectingClient,
-    request,
-  );
+  const generated = buildAdminGetMeterUsageQuery(redirectingClient, request);
   return queryOptions({
     ...generated,
     queryFn: (context) => redirecting(generated.queryFn(context)),

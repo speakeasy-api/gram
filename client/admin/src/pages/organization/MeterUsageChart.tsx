@@ -7,6 +7,7 @@ import { tooltip } from "@tanstack/charts/tooltip";
 
 import {
   formatMeterQuantity,
+  meterAxisTicks,
   meterDateLabel,
   meterPoints,
   type AdminMeterUsage,
@@ -25,6 +26,8 @@ export function MeterUsageChart({
 }): JSX.Element {
   const definition = useMemo(() => {
     const points = meterPoints(data, granularity, cumulative);
+    const maxValue = Math.max(1, ...points.map((point) => point.value));
+    const yTicks = meterAxisTicks(maxValue);
     const options = { x: "from", y: "value" } as const;
     const mark = cumulative
       ? lineY(points, {
@@ -49,17 +52,14 @@ export function MeterUsageChart({
           axis: { ticks: { format: (value) => meterDateLabel(String(value)) } },
         },
         y: {
-          scale: scaleLinear().domain([
-            0,
-            Math.max(1, ...points.map((point) => point.value)),
-          ]),
-          nice: true,
+          scale: scaleLinear().domain([0, yTicks.at(-1) ?? maxValue]),
           grid: true,
           axis: {
             ticks: {
+              values: yTicks,
               format: (value) =>
                 formatMeterQuantity(
-                  BigInt(Math.round(Number(value))).toString(),
+                  BigInt(Number(value)).toString(),
                   data.unit,
                 ),
             },

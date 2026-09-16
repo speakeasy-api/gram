@@ -1,4 +1,5 @@
 import type { AdminMeterUsageResponse } from "@gram/admin-client/models/components/adminmeterusageresponse";
+import { scaleLinear } from "@tanstack/charts/scales/linear";
 
 export type AdminMeterUsage = AdminMeterUsageResponse;
 export type MeterFamily = AdminMeterUsage["family"];
@@ -117,6 +118,14 @@ function formatMeterRatio(
 
 export function formatMeterQuantity(total: string, unit: string): string {
   return formatMeterRatio(BigInt(total), 1n, unit);
+}
+
+export function meterAxisTicks(maxValue: number): number[] {
+  return scaleLinear()
+    .domain([0, Math.max(1, maxValue)])
+    .nice(5)
+    .ticks(5)
+    .filter(Number.isInteger);
 }
 
 export function formatDailyMeterRate(data: AdminMeterUsage): string {

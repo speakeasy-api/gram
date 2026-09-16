@@ -7,7 +7,7 @@ page components.
 
 ## Organization meter usage
 
-`/organizations/:org-slug/billing` reports organization totals for storage
+`/organizations/:org-id-or-slug/billing` reports organization totals for storage
 (tokens under management), MCP bandwidth (bytes), and risk scans (tokens).
 It uses the same ordinary meter readings and billing-cycle boundaries as the
 customer dashboard, without facet queries or breakdown controls.
