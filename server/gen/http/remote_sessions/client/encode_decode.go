@@ -20,6 +20,251 @@ import (
 	goahttp "goa.design/goa/v3/http"
 )
 
+// BuildCommitServerIdentityConfigurationRequest instantiates a HTTP request
+// object with method and path set to call the "remoteSessions" service
+// "commitServerIdentityConfiguration" endpoint
+func (c *Client) BuildCommitServerIdentityConfigurationRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CommitServerIdentityConfigurationRemoteSessionsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("remoteSessions", "commitServerIdentityConfiguration", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCommitServerIdentityConfigurationRequest returns an encoder for
+// requests sent to the remoteSessions commitServerIdentityConfiguration server.
+func EncodeCommitServerIdentityConfigurationRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*remotesessions.CommitServerIdentityConfigurationPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("remoteSessions", "commitServerIdentityConfiguration", "*remotesessions.CommitServerIdentityConfigurationPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewCommitServerIdentityConfigurationRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("remoteSessions", "commitServerIdentityConfiguration", err)
+		}
+		return nil
+	}
+}
+
+// DecodeCommitServerIdentityConfigurationResponse returns a decoder for
+// responses returned by the remoteSessions commitServerIdentityConfiguration
+// endpoint. restoreBody controls whether the response body should be restored
+// after having been read.
+// DecodeCommitServerIdentityConfigurationResponse may return the following
+// errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeCommitServerIdentityConfigurationResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body CommitServerIdentityConfigurationResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "commitServerIdentityConfiguration", err)
+			}
+			err = ValidateCommitServerIdentityConfigurationResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "commitServerIdentityConfiguration", err)
+			}
+			res := NewCommitServerIdentityConfigurationResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CommitServerIdentityConfigurationUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "commitServerIdentityConfiguration", err)
+			}
+			err = ValidateCommitServerIdentityConfigurationUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "commitServerIdentityConfiguration", err)
+			}
+			return nil, NewCommitServerIdentityConfigurationUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CommitServerIdentityConfigurationForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "commitServerIdentityConfiguration", err)
+			}
+			err = ValidateCommitServerIdentityConfigurationForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "commitServerIdentityConfiguration", err)
+			}
+			return nil, NewCommitServerIdentityConfigurationForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CommitServerIdentityConfigurationBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "commitServerIdentityConfiguration", err)
+			}
+			err = ValidateCommitServerIdentityConfigurationBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "commitServerIdentityConfiguration", err)
+			}
+			return nil, NewCommitServerIdentityConfigurationBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CommitServerIdentityConfigurationNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "commitServerIdentityConfiguration", err)
+			}
+			err = ValidateCommitServerIdentityConfigurationNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "commitServerIdentityConfiguration", err)
+			}
+			return nil, NewCommitServerIdentityConfigurationNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CommitServerIdentityConfigurationConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "commitServerIdentityConfiguration", err)
+			}
+			err = ValidateCommitServerIdentityConfigurationConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "commitServerIdentityConfiguration", err)
+			}
+			return nil, NewCommitServerIdentityConfigurationConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CommitServerIdentityConfigurationUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "commitServerIdentityConfiguration", err)
+			}
+			err = ValidateCommitServerIdentityConfigurationUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "commitServerIdentityConfiguration", err)
+			}
+			return nil, NewCommitServerIdentityConfigurationUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CommitServerIdentityConfigurationInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "commitServerIdentityConfiguration", err)
+			}
+			err = ValidateCommitServerIdentityConfigurationInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "commitServerIdentityConfiguration", err)
+			}
+			return nil, NewCommitServerIdentityConfigurationInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CommitServerIdentityConfigurationInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteSessions", "commitServerIdentityConfiguration", err)
+				}
+				err = ValidateCommitServerIdentityConfigurationInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteSessions", "commitServerIdentityConfiguration", err)
+				}
+				return nil, NewCommitServerIdentityConfigurationInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CommitServerIdentityConfigurationUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteSessions", "commitServerIdentityConfiguration", err)
+				}
+				err = ValidateCommitServerIdentityConfigurationUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteSessions", "commitServerIdentityConfiguration", err)
+				}
+				return nil, NewCommitServerIdentityConfigurationUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("remoteSessions", "commitServerIdentityConfiguration", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body CommitServerIdentityConfigurationGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "commitServerIdentityConfiguration", err)
+			}
+			err = ValidateCommitServerIdentityConfigurationGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "commitServerIdentityConfiguration", err)
+			}
+			return nil, NewCommitServerIdentityConfigurationGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("remoteSessions", "commitServerIdentityConfiguration", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListRemoteSessionsRequest instantiates a HTTP request object with
 // method and path set to call the "remoteSessions" service
 // "listRemoteSessions" endpoint
@@ -500,6 +745,382 @@ func DecodeRevokeRemoteSessionResponse(decoder func(*http.Response) goahttp.Deco
 			return nil, goahttp.ErrInvalidResponse("remoteSessions", "revokeRemoteSession", resp.StatusCode, string(body))
 		}
 	}
+}
+
+// marshalRemotesessionsCreateRemoteSessionIssuerFormToCreateRemoteSessionIssuerFormRequestBody
+// builds a value of type *CreateRemoteSessionIssuerFormRequestBody from a
+// value of type *remotesessions.CreateRemoteSessionIssuerForm.
+func marshalRemotesessionsCreateRemoteSessionIssuerFormToCreateRemoteSessionIssuerFormRequestBody(v *remotesessions.CreateRemoteSessionIssuerForm) *CreateRemoteSessionIssuerFormRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &CreateRemoteSessionIssuerFormRequestBody{
+		Slug:                              v.Slug,
+		Issuer:                            v.Issuer,
+		Name:                              v.Name,
+		LogoAssetID:                       v.LogoAssetID,
+		ClientSetupDocumentationURL:       v.ClientSetupDocumentationURL,
+		AuthorizationEndpoint:             v.AuthorizationEndpoint,
+		TokenEndpoint:                     v.TokenEndpoint,
+		RevocationEndpoint:                v.RevocationEndpoint,
+		RegistrationEndpoint:              v.RegistrationEndpoint,
+		JwksURI:                           v.JwksURI,
+		ServiceDocumentation:              v.ServiceDocumentation,
+		OpPolicyURI:                       v.OpPolicyURI,
+		OpTosURI:                          v.OpTosURI,
+		Oidc:                              v.Oidc,
+		Passthrough:                       v.Passthrough,
+		ClientIDMetadataDocumentSupported: v.ClientIDMetadataDocumentSupported,
+		TunneledMcpServerID:               v.TunneledMcpServerID,
+		UserinfoEndpoint:                  v.UserinfoEndpoint,
+		IntrospectionEndpoint:             v.IntrospectionEndpoint,
+		BackchannelLogoutSupported:        v.BackchannelLogoutSupported,
+		AuthorizationResponseIssParameterSupported: v.AuthorizationResponseIssParameterSupported,
+		ResourceIndicatorSupported:                 v.ResourceIndicatorSupported,
+	}
+	if v.ScopesSupported != nil {
+		res.ScopesSupported = make([]string, len(v.ScopesSupported))
+		for i, val := range v.ScopesSupported {
+			res.ScopesSupported[i] = val
+		}
+	}
+	if v.GrantTypesSupported != nil {
+		res.GrantTypesSupported = make([]string, len(v.GrantTypesSupported))
+		for i, val := range v.GrantTypesSupported {
+			res.GrantTypesSupported[i] = val
+		}
+	}
+	if v.ResponseTypesSupported != nil {
+		res.ResponseTypesSupported = make([]string, len(v.ResponseTypesSupported))
+		for i, val := range v.ResponseTypesSupported {
+			res.ResponseTypesSupported[i] = val
+		}
+	}
+	if v.TokenEndpointAuthMethodsSupported != nil {
+		res.TokenEndpointAuthMethodsSupported = make([]string, len(v.TokenEndpointAuthMethodsSupported))
+		for i, val := range v.TokenEndpointAuthMethodsSupported {
+			res.TokenEndpointAuthMethodsSupported[i] = val
+		}
+	}
+	if v.CodeChallengeMethodsSupported != nil {
+		res.CodeChallengeMethodsSupported = make([]string, len(v.CodeChallengeMethodsSupported))
+		for i, val := range v.CodeChallengeMethodsSupported {
+			res.CodeChallengeMethodsSupported[i] = val
+		}
+	}
+	if v.IntrospectionEndpointAuthMethodsSupported != nil {
+		res.IntrospectionEndpointAuthMethodsSupported = make([]string, len(v.IntrospectionEndpointAuthMethodsSupported))
+		for i, val := range v.IntrospectionEndpointAuthMethodsSupported {
+			res.IntrospectionEndpointAuthMethodsSupported[i] = val
+		}
+	}
+	if v.IDTokenSigningAlgValuesSupported != nil {
+		res.IDTokenSigningAlgValuesSupported = make([]string, len(v.IDTokenSigningAlgValuesSupported))
+		for i, val := range v.IDTokenSigningAlgValuesSupported {
+			res.IDTokenSigningAlgValuesSupported[i] = val
+		}
+	}
+	if v.ClaimsSupported != nil {
+		res.ClaimsSupported = make([]string, len(v.ClaimsSupported))
+		for i, val := range v.ClaimsSupported {
+			res.ClaimsSupported[i] = val
+		}
+	}
+	if v.ScopeOverride != nil {
+		res.ScopeOverride = make([]string, len(v.ScopeOverride))
+		for i, val := range v.ScopeOverride {
+			res.ScopeOverride[i] = val
+		}
+	}
+
+	return res
+}
+
+// marshalRemotesessionsServerIdentityClientConfigurationToServerIdentityClientConfigurationRequestBody
+// builds a value of type *ServerIdentityClientConfigurationRequestBody from a
+// value of type *remotesessions.ServerIdentityClientConfiguration.
+func marshalRemotesessionsServerIdentityClientConfigurationToServerIdentityClientConfigurationRequestBody(v *remotesessions.ServerIdentityClientConfiguration) *ServerIdentityClientConfigurationRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &ServerIdentityClientConfigurationRequestBody{
+		ClientID:                v.ClientID,
+		ClientSecret:            v.ClientSecret,
+		TokenEndpointAuthMethod: v.TokenEndpointAuthMethod,
+		Audience:                v.Audience,
+	}
+	if v.Scope != nil {
+		res.Scope = make([]string, len(v.Scope))
+		for i, val := range v.Scope {
+			res.Scope[i] = val
+		}
+	}
+
+	return res
+}
+
+// marshalCreateRemoteSessionIssuerFormRequestBodyToRemotesessionsCreateRemoteSessionIssuerForm
+// builds a value of type *remotesessions.CreateRemoteSessionIssuerForm from a
+// value of type *CreateRemoteSessionIssuerFormRequestBody.
+func marshalCreateRemoteSessionIssuerFormRequestBodyToRemotesessionsCreateRemoteSessionIssuerForm(v *CreateRemoteSessionIssuerFormRequestBody) *remotesessions.CreateRemoteSessionIssuerForm {
+	if v == nil {
+		return nil
+	}
+	res := &remotesessions.CreateRemoteSessionIssuerForm{
+		Slug:                              v.Slug,
+		Issuer:                            v.Issuer,
+		Name:                              v.Name,
+		LogoAssetID:                       v.LogoAssetID,
+		ClientSetupDocumentationURL:       v.ClientSetupDocumentationURL,
+		AuthorizationEndpoint:             v.AuthorizationEndpoint,
+		TokenEndpoint:                     v.TokenEndpoint,
+		RevocationEndpoint:                v.RevocationEndpoint,
+		RegistrationEndpoint:              v.RegistrationEndpoint,
+		JwksURI:                           v.JwksURI,
+		ServiceDocumentation:              v.ServiceDocumentation,
+		OpPolicyURI:                       v.OpPolicyURI,
+		OpTosURI:                          v.OpTosURI,
+		Oidc:                              v.Oidc,
+		Passthrough:                       v.Passthrough,
+		ClientIDMetadataDocumentSupported: v.ClientIDMetadataDocumentSupported,
+		TunneledMcpServerID:               v.TunneledMcpServerID,
+		UserinfoEndpoint:                  v.UserinfoEndpoint,
+		IntrospectionEndpoint:             v.IntrospectionEndpoint,
+		BackchannelLogoutSupported:        v.BackchannelLogoutSupported,
+		AuthorizationResponseIssParameterSupported: v.AuthorizationResponseIssParameterSupported,
+		ResourceIndicatorSupported:                 v.ResourceIndicatorSupported,
+	}
+	if v.ScopesSupported != nil {
+		res.ScopesSupported = make([]string, len(v.ScopesSupported))
+		for i, val := range v.ScopesSupported {
+			res.ScopesSupported[i] = val
+		}
+	}
+	if v.GrantTypesSupported != nil {
+		res.GrantTypesSupported = make([]string, len(v.GrantTypesSupported))
+		for i, val := range v.GrantTypesSupported {
+			res.GrantTypesSupported[i] = val
+		}
+	}
+	if v.ResponseTypesSupported != nil {
+		res.ResponseTypesSupported = make([]string, len(v.ResponseTypesSupported))
+		for i, val := range v.ResponseTypesSupported {
+			res.ResponseTypesSupported[i] = val
+		}
+	}
+	if v.TokenEndpointAuthMethodsSupported != nil {
+		res.TokenEndpointAuthMethodsSupported = make([]string, len(v.TokenEndpointAuthMethodsSupported))
+		for i, val := range v.TokenEndpointAuthMethodsSupported {
+			res.TokenEndpointAuthMethodsSupported[i] = val
+		}
+	}
+	if v.CodeChallengeMethodsSupported != nil {
+		res.CodeChallengeMethodsSupported = make([]string, len(v.CodeChallengeMethodsSupported))
+		for i, val := range v.CodeChallengeMethodsSupported {
+			res.CodeChallengeMethodsSupported[i] = val
+		}
+	}
+	if v.IntrospectionEndpointAuthMethodsSupported != nil {
+		res.IntrospectionEndpointAuthMethodsSupported = make([]string, len(v.IntrospectionEndpointAuthMethodsSupported))
+		for i, val := range v.IntrospectionEndpointAuthMethodsSupported {
+			res.IntrospectionEndpointAuthMethodsSupported[i] = val
+		}
+	}
+	if v.IDTokenSigningAlgValuesSupported != nil {
+		res.IDTokenSigningAlgValuesSupported = make([]string, len(v.IDTokenSigningAlgValuesSupported))
+		for i, val := range v.IDTokenSigningAlgValuesSupported {
+			res.IDTokenSigningAlgValuesSupported[i] = val
+		}
+	}
+	if v.ClaimsSupported != nil {
+		res.ClaimsSupported = make([]string, len(v.ClaimsSupported))
+		for i, val := range v.ClaimsSupported {
+			res.ClaimsSupported[i] = val
+		}
+	}
+	if v.ScopeOverride != nil {
+		res.ScopeOverride = make([]string, len(v.ScopeOverride))
+		for i, val := range v.ScopeOverride {
+			res.ScopeOverride[i] = val
+		}
+	}
+
+	return res
+}
+
+// marshalServerIdentityClientConfigurationRequestBodyToRemotesessionsServerIdentityClientConfiguration
+// builds a value of type *remotesessions.ServerIdentityClientConfiguration
+// from a value of type *ServerIdentityClientConfigurationRequestBody.
+func marshalServerIdentityClientConfigurationRequestBodyToRemotesessionsServerIdentityClientConfiguration(v *ServerIdentityClientConfigurationRequestBody) *remotesessions.ServerIdentityClientConfiguration {
+	if v == nil {
+		return nil
+	}
+	res := &remotesessions.ServerIdentityClientConfiguration{
+		ClientID:                v.ClientID,
+		ClientSecret:            v.ClientSecret,
+		TokenEndpointAuthMethod: v.TokenEndpointAuthMethod,
+		Audience:                v.Audience,
+	}
+	if v.Scope != nil {
+		res.Scope = make([]string, len(v.Scope))
+		for i, val := range v.Scope {
+			res.Scope[i] = val
+		}
+	}
+
+	return res
+}
+
+// unmarshalRemoteSessionIssuerResponseBodyToTypesRemoteSessionIssuer builds a
+// value of type *types.RemoteSessionIssuer from a value of type
+// *RemoteSessionIssuerResponseBody.
+func unmarshalRemoteSessionIssuerResponseBodyToTypesRemoteSessionIssuer(v *RemoteSessionIssuerResponseBody) *types.RemoteSessionIssuer {
+	if v == nil {
+		return nil
+	}
+	res := &types.RemoteSessionIssuer{
+		ID:                                *v.ID,
+		ProjectID:                         *v.ProjectID,
+		OrganizationID:                    *v.OrganizationID,
+		Slug:                              *v.Slug,
+		Issuer:                            *v.Issuer,
+		Name:                              v.Name,
+		LogoAssetID:                       v.LogoAssetID,
+		ClientSetupDocumentationURL:       v.ClientSetupDocumentationURL,
+		AuthorizationEndpoint:             v.AuthorizationEndpoint,
+		TokenEndpoint:                     v.TokenEndpoint,
+		RevocationEndpoint:                v.RevocationEndpoint,
+		RegistrationEndpoint:              v.RegistrationEndpoint,
+		JwksURI:                           v.JwksURI,
+		JwksFetchedAt:                     v.JwksFetchedAt,
+		JwksCacheExpiresAt:                v.JwksCacheExpiresAt,
+		ServiceDocumentation:              v.ServiceDocumentation,
+		OpPolicyURI:                       v.OpPolicyURI,
+		OpTosURI:                          v.OpTosURI,
+		Oidc:                              *v.Oidc,
+		Passthrough:                       *v.Passthrough,
+		ClientIDMetadataDocumentSupported: *v.ClientIDMetadataDocumentSupported,
+		TunneledMcpServerID:               v.TunneledMcpServerID,
+		UserinfoEndpoint:                  v.UserinfoEndpoint,
+		IntrospectionEndpoint:             v.IntrospectionEndpoint,
+		BackchannelLogoutSupported:        v.BackchannelLogoutSupported,
+		AuthorizationResponseIssParameterSupported: v.AuthorizationResponseIssParameterSupported,
+		ResourceIndicatorSupported:                 v.ResourceIndicatorSupported,
+		CreatedAt:                                  *v.CreatedAt,
+		UpdatedAt:                                  *v.UpdatedAt,
+	}
+	if v.ScopesSupported != nil {
+		res.ScopesSupported = make([]string, len(v.ScopesSupported))
+		for i, val := range v.ScopesSupported {
+			res.ScopesSupported[i] = val
+		}
+	}
+	if v.GrantTypesSupported != nil {
+		res.GrantTypesSupported = make([]string, len(v.GrantTypesSupported))
+		for i, val := range v.GrantTypesSupported {
+			res.GrantTypesSupported[i] = val
+		}
+	}
+	if v.ResponseTypesSupported != nil {
+		res.ResponseTypesSupported = make([]string, len(v.ResponseTypesSupported))
+		for i, val := range v.ResponseTypesSupported {
+			res.ResponseTypesSupported[i] = val
+		}
+	}
+	if v.TokenEndpointAuthMethodsSupported != nil {
+		res.TokenEndpointAuthMethodsSupported = make([]string, len(v.TokenEndpointAuthMethodsSupported))
+		for i, val := range v.TokenEndpointAuthMethodsSupported {
+			res.TokenEndpointAuthMethodsSupported[i] = val
+		}
+	}
+	if v.CodeChallengeMethodsSupported != nil {
+		res.CodeChallengeMethodsSupported = make([]string, len(v.CodeChallengeMethodsSupported))
+		for i, val := range v.CodeChallengeMethodsSupported {
+			res.CodeChallengeMethodsSupported[i] = val
+		}
+	}
+	if v.IntrospectionEndpointAuthMethodsSupported != nil {
+		res.IntrospectionEndpointAuthMethodsSupported = make([]string, len(v.IntrospectionEndpointAuthMethodsSupported))
+		for i, val := range v.IntrospectionEndpointAuthMethodsSupported {
+			res.IntrospectionEndpointAuthMethodsSupported[i] = val
+		}
+	}
+	if v.IDTokenSigningAlgValuesSupported != nil {
+		res.IDTokenSigningAlgValuesSupported = make([]string, len(v.IDTokenSigningAlgValuesSupported))
+		for i, val := range v.IDTokenSigningAlgValuesSupported {
+			res.IDTokenSigningAlgValuesSupported[i] = val
+		}
+	}
+	if v.ClaimsSupported != nil {
+		res.ClaimsSupported = make([]string, len(v.ClaimsSupported))
+		for i, val := range v.ClaimsSupported {
+			res.ClaimsSupported[i] = val
+		}
+	}
+	if v.ScopeOverride != nil {
+		res.ScopeOverride = make([]string, len(v.ScopeOverride))
+		for i, val := range v.ScopeOverride {
+			res.ScopeOverride[i] = val
+		}
+	}
+
+	return res
+}
+
+// unmarshalRemoteSessionClientResponseBodyToTypesRemoteSessionClient builds a
+// value of type *types.RemoteSessionClient from a value of type
+// *RemoteSessionClientResponseBody.
+func unmarshalRemoteSessionClientResponseBodyToTypesRemoteSessionClient(v *RemoteSessionClientResponseBody) *types.RemoteSessionClient {
+	if v == nil {
+		return nil
+	}
+	res := &types.RemoteSessionClient{
+		ID:                              *v.ID,
+		ProjectID:                       *v.ProjectID,
+		OrganizationID:                  *v.OrganizationID,
+		RemoteSessionIssuerID:           *v.RemoteSessionIssuerID,
+		ClientID:                        *v.ClientID,
+		ClientIDMetadataURI:             v.ClientIDMetadataURI,
+		ClientIDIssuedAt:                *v.ClientIDIssuedAt,
+		ClientSecretExpiresAt:           v.ClientSecretExpiresAt,
+		UpstreamRejectedAt:              v.UpstreamRejectedAt,
+		TokenEndpointAuthMethod:         v.TokenEndpointAuthMethod,
+		TokenEndpointAuthAudienceFormat: v.TokenEndpointAuthAudienceFormat,
+		JSONWebKeySetID:                 v.JSONWebKeySetID,
+		Audience:                        v.Audience,
+		CreatedAt:                       *v.CreatedAt,
+		UpdatedAt:                       *v.UpdatedAt,
+	}
+	res.UserSessionIssuerIds = make([]string, len(v.UserSessionIssuerIds))
+	for i, val := range v.UserSessionIssuerIds {
+		res.UserSessionIssuerIds[i] = val
+	}
+	if v.Scope != nil {
+		res.Scope = make([]string, len(v.Scope))
+		for i, val := range v.Scope {
+			res.Scope[i] = val
+		}
+	}
+
+	return res
+}
+
+// unmarshalServerIdentityRegistrationFailureResponseBodyToRemotesessionsServerIdentityRegistrationFailure
+// builds a value of type *remotesessions.ServerIdentityRegistrationFailure
+// from a value of type *ServerIdentityRegistrationFailureResponseBody.
+func unmarshalServerIdentityRegistrationFailureResponseBodyToRemotesessionsServerIdentityRegistrationFailure(v *ServerIdentityRegistrationFailureResponseBody) *remotesessions.ServerIdentityRegistrationFailure {
+	if v == nil {
+		return nil
+	}
+	res := &remotesessions.ServerIdentityRegistrationFailure{
+		Outcome:         *v.Outcome,
+		Reason:          *v.Reason,
+		Retryable:       *v.Retryable,
+		ProviderMessage: v.ProviderMessage,
+		HTTPStatus:      v.HTTPStatus,
+	}
+
+	return res
 }
 
 // unmarshalRemoteSessionResponseBodyToTypesRemoteSession builds a value of
