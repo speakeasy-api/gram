@@ -430,6 +430,12 @@ func (r *PostgresReader) FindMCP(ctx context.Context, principal Principal, input
 		if err != nil {
 			return FindMCPOutput{}, err
 		}
+		if err := r.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: cursorProject.ID.String(), Dimensions: nil}); err != nil {
+			if isAuthorizationDenied(err) {
+				return FindMCPOutput{}, ErrForbidden
+			}
+			return FindMCPOutput{}, err
+		}
 		projectID = uuid.NullUUID{UUID: cursorProject.ID, Valid: true}
 	}
 

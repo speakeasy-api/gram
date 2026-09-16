@@ -414,7 +414,7 @@ func TestServePlatformToolset_PlatformMCPReadNonManagedAssistantRejected(t *test
 }
 
 // tools/call must round-trip through the re-served reader against the seeded
-// org: list_projects returns the project the auth context lives in.
+// org: list_projects returns only projects the caller has permission to read.
 func TestServePlatformToolset_PlatformMCPReadListProjectsCall(t *testing.T) {
 	t.Parallel()
 
@@ -453,7 +453,20 @@ func TestServePlatformToolset_PlatformMCPReadListProjectsCall(t *testing.T) {
 	w, err := servePlatformHTTP(t, ti, platformtools.PlatformMCPReadToolsetSlug, body, token)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code, "list_projects call must succeed: %s", w.Body.String())
-	require.Contains(t, w.Body.String(), authCtx.ProjectID.String(), "the caller's project must appear in the listing")
+	require.NotContains(t, w.Body.String(), `"error"`)
+	require.Contains(t, w.Body.String(), `"projects":[]`)
+	require.NotContains(t, w.Body.String(), authCtx.ProjectID.String(), "org:admin alone does not grant project:read")
+
+	require.NoError(t, authz.PatchPrincipalGrants(
+		t.Context(), ti.conn, authCtx.ActiveOrganizationID,
+		urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		[]*authz.RoleGrant{{Scope: string(authz.ScopeProjectRead), Selectors: []authz.Selector{authz.NewSelector(authz.ScopeProjectRead, authCtx.ProjectID.String())}}},
+		nil,
+	))
+	w, err = servePlatformHTTP(t, ti, platformtools.PlatformMCPReadToolsetSlug, body, token)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, "list_projects call must succeed: %s", w.Body.String())
+	require.Contains(t, w.Body.String(), authCtx.ProjectID.String(), "the caller's readable project must appear in the listing")
 }
 
 // grantLiveOrgAdmin persists an org:admin grant for the auth context's user.

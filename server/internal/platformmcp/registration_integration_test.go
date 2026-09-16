@@ -185,6 +185,28 @@ func TestMemberResourceDiscoveryUsesLiveRBAC(t *testing.T) {
 	require.Len(t, inventory.MCPs, 1)
 	require.Equal(t, allowedMCPID.String(), inventory.MCPs[0].ID)
 
+	for _, query := range []string{"", "cohort"} {
+		for _, selector := range []FindMCPInput{
+			{ProjectID: allowedProject.ID.String(), Query: query},
+			{ProjectSlug: allowedProject.Slug, Query: query},
+		} {
+			visible, err := reader.FindMCP(prepared, principal, selector)
+			require.NoError(t, err)
+			require.Len(t, visible.MCPs, 1)
+			require.Equal(t, allowedMCPID.String(), visible.MCPs[0].ID)
+		}
+		for _, selector := range []FindMCPInput{
+			{ProjectID: deniedProject.ID.String(), Query: query},
+			{ProjectSlug: deniedProject.Slug, Query: query},
+			{ProjectID: uuid.NewString(), Query: query},
+			{ProjectSlug: "missing-project", Query: query},
+		} {
+			hidden, err := reader.FindMCP(prepared, principal, selector)
+			require.ErrorIs(t, err, ErrForbidden, "hidden and missing projects must return the same error")
+			require.Equal(t, FindMCPOutput{}, hidden)
+		}
+	}
+
 	_, err = reader.GetMCP(prepared, principal, GetMCPInput{ProjectID: deniedProject.ID.String(), MCPID: deniedMCPID.String()})
 	require.Error(t, err)
 	var denied *oops.ShareableError
