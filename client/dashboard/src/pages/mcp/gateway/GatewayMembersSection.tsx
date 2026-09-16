@@ -75,7 +75,10 @@ import {
   nextSortOrder,
   planReorder,
 } from "./memberRows";
-import { useGatewayMemberRows } from "./useGatewayMemberRows";
+import {
+  useGatewayMemberRows,
+  useReconcileWrappers,
+} from "./useGatewayMemberRows";
 import { useToolsets } from "../../toolsets/useToolsets";
 
 const CLASSIFICATION_LABEL: Record<MemberClassification, string> = {
@@ -222,8 +225,15 @@ export function GatewayMembersSection({
 }): JSX.Element {
   const client = useSdkClient();
   const queryClient = useQueryClient();
-  const { rows, isLoading, servers, isError, refetch, membersUpdatedAt } =
-    useGatewayMemberRows(metaMcpServer.id);
+  const {
+    rows,
+    isLoading,
+    servers,
+    isError,
+    refetch,
+    membersUpdatedAt,
+    serversUpdatedAt,
+  } = useGatewayMemberRows(metaMcpServer.id);
   const toolsets = useToolsets();
 
   const [addOpen, setAddOpen] = useState(false);
@@ -236,6 +246,12 @@ export function GatewayMembersSection({
   const latestMembersUpdatedAt = useRef(membersUpdatedAt);
   const [removeTarget, setRemoveTarget] = useState<MemberRow | null>(null);
   const [mutating, setMutating] = useState(false);
+  const markWrapperWritesSettled = useReconcileWrappers(
+    batchState,
+    servers,
+    serversUpdatedAt,
+    mutating,
+  );
 
   useEffect(() => {
     if (membersUpdatedAt) latestMembersUpdatedAt.current = membersUpdatedAt;
@@ -346,6 +362,7 @@ export function GatewayMembersSection({
       // Ignore responses received during the writes. Only a subsequent
       // successful refresh can retire optimistic duplicate protection.
       reconciledAt.current = latestMembersUpdatedAt.current;
+      markWrapperWritesSettled();
       try {
         await invalidateMembers();
       } catch {
