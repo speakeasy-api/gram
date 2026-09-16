@@ -77575,6 +77575,10 @@ components:
             - authorization_servers
             - sign_in_application
             - sign_in_connection
+            - directory_application
+            - directory_connection
+            - directory_groups
+            - directory_users
       required:
         - capability
         - resource
@@ -77609,6 +77613,21 @@ components:
         created_at:
           type: string
           format: date-time
+        directory_group_count:
+          type: integer
+          description: Number of groups observed in the linked WorkOS directory.
+          format: int64
+        directory_state:
+          type: string
+          enum:
+            - configured
+            - pending_validation
+            - passed
+            - failed
+        directory_user_count:
+          type: integer
+          description: Number of users observed in the linked WorkOS directory.
+          format: int64
         display_name:
           type: string
         granted_scopes:
@@ -77717,12 +77736,16 @@ components:
           type: boolean
         label:
           type: string
+        secret:
+          type: boolean
+          description: Whether the dashboard must conceal this value behind an explicit reveal control.
         value:
           type: string
       required:
         - label
         - value
         - copyable
+        - secret
     IdentityProviderRepair:
       type: object
       properties:
@@ -77782,6 +77805,7 @@ components:
           description: WorkOS Admin Portal intent the dashboard should open for this step.
           enum:
             - sso
+            - dsync
         printed_values:
           type: array
           items:

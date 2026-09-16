@@ -971,16 +971,16 @@ func buildSignInSetupStep(row repo.GetIdentityProviderConnectionByOrganizationRo
 func signInPrintedValues(tenantIdentifier, clientID string, customAuthorizationServer bool) []*gen.IdentityProviderPrintedValue {
 	values := make([]*gen.IdentityProviderPrintedValue, 0, 4)
 	if clientID != "" {
-		values = append(values, &gen.IdentityProviderPrintedValue{Label: "Client ID", Value: clientID, Copyable: true})
+		values = append(values, &gen.IdentityProviderPrintedValue{Label: "Client ID", Value: clientID, Copyable: true, Secret: false})
 	}
 	issuer := "https://" + tenantIdentifier
 	if customAuthorizationServer {
 		issuer += "/oauth2/default"
 	}
 	values = append(values,
-		&gen.IdentityProviderPrintedValue{Label: "Issuer", Value: issuer, Copyable: true},
-		&gen.IdentityProviderPrintedValue{Label: "Discovery URL", Value: issuer + "/.well-known/openid-configuration", Copyable: true},
-		&gen.IdentityProviderPrintedValue{Label: "Sign-in redirect URI", Value: workOSOIDCCallbackURL, Copyable: true},
+		&gen.IdentityProviderPrintedValue{Label: "Issuer", Value: issuer, Copyable: true, Secret: false},
+		&gen.IdentityProviderPrintedValue{Label: "Discovery URL", Value: issuer + "/.well-known/openid-configuration", Copyable: true, Secret: false},
+		&gen.IdentityProviderPrintedValue{Label: "Sign-in redirect URI", Value: workOSOIDCCallbackURL, Copyable: true, Secret: false},
 	)
 	return values
 }

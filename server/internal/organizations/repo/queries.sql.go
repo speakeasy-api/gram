@@ -691,7 +691,8 @@ SELECT
         WHERE identity_provider_connections.organization_id = $1
           AND identity_provider_connections.deleted IS FALSE
           AND okta_identity_provider_connections.sign_in_state = 'passed'
-    ) AS okta_sign_in_passed,
+          AND okta_identity_provider_connections.directory_state = 'passed'
+    ) AS okta_identity_provider_passed,
     EXISTS (
         SELECT 1
         FROM plugin_github_connections
@@ -709,11 +710,11 @@ WHERE organization_metadata.id = $1
 `
 
 type GetSetupTaskCompletionFactsRow struct {
-	SsoConfigured        bool
-	DsyncConfigured      bool
-	OktaSignInPassed     bool
-	MarketplacePublished bool
-	LoggingEnabled       bool
+	SsoConfigured              bool
+	DsyncConfigured            bool
+	OktaIdentityProviderPassed bool
+	MarketplacePublished       bool
+	LoggingEnabled             bool
 }
 
 func (q *Queries) GetSetupTaskCompletionFacts(ctx context.Context, organizationID string) (GetSetupTaskCompletionFactsRow, error) {
@@ -722,7 +723,7 @@ func (q *Queries) GetSetupTaskCompletionFacts(ctx context.Context, organizationI
 	err := row.Scan(
 		&i.SsoConfigured,
 		&i.DsyncConfigured,
-		&i.OktaSignInPassed,
+		&i.OktaIdentityProviderPassed,
 		&i.MarketplacePublished,
 		&i.LoggingEnabled,
 	)
@@ -1663,25 +1664,32 @@ func (q *Queries) SetAccountTypeIfUnchanged(ctx context.Context, arg SetAccountT
 	return i, err
 }
 
-const setOktaIdentityProviderSignInStateForTest = `-- name: SetOktaIdentityProviderSignInStateForTest :exec
+const setOktaIdentityProviderSetupStateForTest = `-- name: SetOktaIdentityProviderSetupStateForTest :exec
 UPDATE okta_identity_provider_connections
 SET sign_in_state = $1,
+    directory_state = $2,
     updated_at = clock_timestamp()
 FROM identity_provider_connections
 WHERE okta_identity_provider_connections.identity_provider_connection_id = identity_provider_connections.id
-  AND identity_provider_connections.organization_id = $2
-  AND identity_provider_connections.id = $3
+  AND identity_provider_connections.organization_id = $3
+  AND identity_provider_connections.id = $4
   AND identity_provider_connections.deleted IS FALSE
 `
 
-type SetOktaIdentityProviderSignInStateForTestParams struct {
+type SetOktaIdentityProviderSetupStateForTestParams struct {
 	SignInState                  pgtype.Text
+	DirectoryState               pgtype.Text
 	OrganizationID               string
 	IdentityProviderConnectionID uuid.UUID
 }
 
-func (q *Queries) SetOktaIdentityProviderSignInStateForTest(ctx context.Context, arg SetOktaIdentityProviderSignInStateForTestParams) error {
-	_, err := q.db.Exec(ctx, setOktaIdentityProviderSignInStateForTest, arg.SignInState, arg.OrganizationID, arg.IdentityProviderConnectionID)
+func (q *Queries) SetOktaIdentityProviderSetupStateForTest(ctx context.Context, arg SetOktaIdentityProviderSetupStateForTestParams) error {
+	_, err := q.db.Exec(ctx, setOktaIdentityProviderSetupStateForTest,
+		arg.SignInState,
+		arg.DirectoryState,
+		arg.OrganizationID,
+		arg.IdentityProviderConnectionID,
+	)
 	return err
 }
 

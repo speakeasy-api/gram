@@ -34,6 +34,7 @@ import {
  */
 export const PortalIntent = {
   Sso: "sso",
+  Dsync: "dsync",
 } as const;
 /**
  * WorkOS Admin Portal intent the dashboard should open for this step.

@@ -341,6 +341,55 @@ type DirectoryUser struct {
 	UpdatedAt        string
 }
 
+// DirectoryGroup represents a WorkOS Directory Sync group.
+type DirectoryGroup struct {
+	ID             string
+	DirectoryID    string
+	OrganizationID string
+	Name           string
+	CreatedAt      string
+	UpdatedAt      string
+}
+
+// ListDirectoryGroups fetches all provisioned groups for a directory from WorkOS.
+// https://workos.com/docs/reference/directory-sync/directory-group/list
+func (wc *Client) ListDirectoryGroups(ctx context.Context, directoryID string) ([]DirectoryGroup, error) {
+	var all []DirectoryGroup
+	after := ""
+
+	for {
+		resp, err := wc.dsync.ListGroups(ctx, directorysync.ListGroupsOpts{
+			Directory: directoryID,
+			User:      "",
+			Limit:     100,
+			Order:     "",
+			Before:    "",
+			After:     after,
+		})
+		if err != nil {
+			return nil, wrapSDKError(err, "list directory groups")
+		}
+
+		for _, group := range resp.Data {
+			all = append(all, DirectoryGroup{
+				ID:             group.ID,
+				DirectoryID:    group.DirectoryID,
+				OrganizationID: group.OrganizationID,
+				Name:           group.Name,
+				CreatedAt:      group.CreatedAt,
+				UpdatedAt:      group.UpdatedAt,
+			})
+		}
+
+		if resp.ListMetadata.After == "" {
+			break
+		}
+		after = resp.ListMetadata.After
+	}
+
+	return all, nil
+}
+
 // ListDirectoryUsers fetches all provisioned users for a directory from WorkOS.
 // https://workos.com/docs/reference/directory-sync/directory-user/list
 func (wc *Client) ListDirectoryUsers(ctx context.Context, directoryID string) ([]DirectoryUser, error) {

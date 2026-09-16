@@ -62,9 +62,14 @@ type CreateResponseBody struct {
 	GroupsSource       *string `form:"groups_source,omitempty" json:"groups_source,omitempty" xml:"groups_source,omitempty"`
 	// Whether an administrator confirmed the Okta groups claim filter is
 	// configured.
-	GroupsClaimConfirmed *bool  `form:"groups_claim_confirmed,omitempty" json:"groups_claim_confirmed,omitempty" xml:"groups_claim_confirmed,omitempty"`
-	CreatedAt            string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt            string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	GroupsClaimConfirmed *bool   `form:"groups_claim_confirmed,omitempty" json:"groups_claim_confirmed,omitempty" xml:"groups_claim_confirmed,omitempty"`
+	DirectoryState       *string `form:"directory_state,omitempty" json:"directory_state,omitempty" xml:"directory_state,omitempty"`
+	// Number of groups observed in the linked WorkOS directory.
+	DirectoryGroupCount *int `form:"directory_group_count,omitempty" json:"directory_group_count,omitempty" xml:"directory_group_count,omitempty"`
+	// Number of users observed in the linked WorkOS directory.
+	DirectoryUserCount *int   `form:"directory_user_count,omitempty" json:"directory_user_count,omitempty" xml:"directory_user_count,omitempty"`
+	CreatedAt          string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt          string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // GetResponseBody is the type of the "identityProviders" service "get"
@@ -1453,9 +1458,14 @@ type IdentityProviderConnectionResponseBody struct {
 	GroupsSource       *string `form:"groups_source,omitempty" json:"groups_source,omitempty" xml:"groups_source,omitempty"`
 	// Whether an administrator confirmed the Okta groups claim filter is
 	// configured.
-	GroupsClaimConfirmed *bool  `form:"groups_claim_confirmed,omitempty" json:"groups_claim_confirmed,omitempty" xml:"groups_claim_confirmed,omitempty"`
-	CreatedAt            string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt            string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	GroupsClaimConfirmed *bool   `form:"groups_claim_confirmed,omitempty" json:"groups_claim_confirmed,omitempty" xml:"groups_claim_confirmed,omitempty"`
+	DirectoryState       *string `form:"directory_state,omitempty" json:"directory_state,omitempty" xml:"directory_state,omitempty"`
+	// Number of groups observed in the linked WorkOS directory.
+	DirectoryGroupCount *int `form:"directory_group_count,omitempty" json:"directory_group_count,omitempty" xml:"directory_group_count,omitempty"`
+	// Number of users observed in the linked WorkOS directory.
+	DirectoryUserCount *int   `form:"directory_user_count,omitempty" json:"directory_user_count,omitempty" xml:"directory_user_count,omitempty"`
+	CreatedAt          string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt          string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // IdentityProviderApplicationResponseBody is used to define fields on response
@@ -1504,6 +1514,9 @@ type IdentityProviderPrintedValueResponseBody struct {
 	Label    string `form:"label" json:"label" xml:"label"`
 	Value    string `form:"value" json:"value" xml:"value"`
 	Copyable bool   `form:"copyable" json:"copyable" xml:"copyable"`
+	// Whether the dashboard must conceal this value behind an explicit reveal
+	// control.
+	Secret bool `form:"secret" json:"secret" xml:"secret"`
 }
 
 // IdentityProviderExpectedValueResponseBody is used to define fields on
@@ -1578,6 +1591,9 @@ func NewCreateResponseBody(res *identityproviders.IdentityProviderConnection) *C
 		SignInConnectionID:   res.SignInConnectionID,
 		GroupsSource:         res.GroupsSource,
 		GroupsClaimConfirmed: res.GroupsClaimConfirmed,
+		DirectoryState:       res.DirectoryState,
+		DirectoryGroupCount:  res.DirectoryGroupCount,
+		DirectoryUserCount:   res.DirectoryUserCount,
 		CreatedAt:            res.CreatedAt,
 		UpdatedAt:            res.UpdatedAt,
 	}

@@ -10,6 +10,10 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 export type IdentityProviderPrintedValue = {
   copyable: boolean;
   label: string;
+  /**
+   * Whether the dashboard must conceal this value behind an explicit reveal control.
+   */
+  secret: boolean;
   value: string;
 };
 
@@ -20,6 +24,7 @@ export const IdentityProviderPrintedValue$inboundSchema: z.ZodMiniType<
 > = z.object({
   copyable: z.boolean(),
   label: z.string(),
+  secret: z.boolean(),
   value: z.string(),
 });
 

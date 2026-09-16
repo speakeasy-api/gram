@@ -558,10 +558,10 @@ func configuredSignInStep(clientID string, portalFallback, claimsProvisioned boo
 		Instructions: instructions,
 		DeepLink:     deepLink,
 		PrintedValues: []*gen.IdentityProviderPrintedValue{
-			{Label: "Client ID", Value: clientID, Copyable: true},
-			{Label: "Issuer", Value: issuer, Copyable: true},
-			{Label: "Discovery URL", Value: issuer + "/.well-known/openid-configuration", Copyable: true},
-			{Label: "Sign-in redirect URI", Value: "https://api.workos.com/sso/callback", Copyable: true},
+			{Label: "Client ID", Value: clientID, Copyable: true, Secret: false},
+			{Label: "Issuer", Value: issuer, Copyable: true, Secret: false},
+			{Label: "Discovery URL", Value: issuer + "/.well-known/openid-configuration", Copyable: true, Secret: false},
+			{Label: "Sign-in redirect URI", Value: "https://api.workos.com/sso/callback", Copyable: true, Secret: false},
 		},
 		ExpectedValues: expectedValues,
 		Claims: []*gen.IdentityProviderClaim{

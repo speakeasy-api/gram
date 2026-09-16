@@ -1142,7 +1142,7 @@ func TestFindEveryoneGroupAndAssignItToApplication(t *testing.T) {
 
 	group, err := client.FindEveryoneGroup(t.Context(), "example.okta.com", "test-access-token")
 	require.NoError(t, err)
-	require.Equal(t, okta.Group{ID: "everyone-group", Name: "Everyone"}, group)
+	require.Equal(t, okta.Group{ID: "everyone-group", Name: "Everyone", Type: "BUILT_IN"}, group)
 	require.NoError(t, client.AssignGroupToApplication(t.Context(), "example.okta.com", "test-access-token", "app-123", group.ID))
 	require.JSONEq(t, `{}`, string(<-assignmentBodies))
 }

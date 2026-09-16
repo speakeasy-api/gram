@@ -22,6 +22,7 @@ type StubClient struct {
 	userExternalIDUpdates []UserExternalIDUpdate
 	orgExternalIDUpdates  []OrgExternalIDUpdate
 	directories           map[string][]Directory
+	directoryGroups       map[string][]DirectoryGroup
 	directoryUsers        map[string][]DirectoryUser
 	connections           map[string]Connection
 	next                  int
@@ -60,6 +61,7 @@ func NewStubClient() *StubClient {
 		userExternalIDUpdates: make([]UserExternalIDUpdate, 0),
 		orgExternalIDUpdates:  make([]OrgExternalIDUpdate, 0),
 		directories:           make(map[string][]Directory),
+		directoryGroups:       make(map[string][]DirectoryGroup),
 		directoryUsers:        make(map[string][]DirectoryUser),
 		connections:           make(map[string]Connection),
 		next:                  1,
@@ -414,6 +416,20 @@ func (s *StubClient) SetDirectories(organizationID string, directories ...Direct
 	defer s.mut.Unlock()
 
 	s.directories[organizationID] = append([]Directory(nil), directories...)
+}
+
+func (s *StubClient) ListDirectoryGroups(_ context.Context, directoryID string) ([]DirectoryGroup, error) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	return append([]DirectoryGroup(nil), s.directoryGroups[directoryID]...), nil
+}
+
+func (s *StubClient) SetDirectoryGroups(directoryID string, groups ...DirectoryGroup) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	s.directoryGroups[directoryID] = append([]DirectoryGroup(nil), groups...)
 }
 
 func (s *StubClient) ListDirectoryUsers(_ context.Context, directoryID string) ([]DirectoryUser, error) {

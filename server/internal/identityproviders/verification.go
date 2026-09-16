@@ -31,6 +31,7 @@ import (
 const (
 	capabilityDirectoryRead             = "directory_read"
 	capabilityApplicationAssignmentRead = "application_assignment_read"
+	capabilityGroupAssignment           = "group_assignment"
 	capabilitySignInProvisioning        = "sign_in_provisioning"
 	capabilityClaimsProvisioning        = "claims_provisioning"
 )
@@ -38,6 +39,7 @@ const (
 var requestedOktaScopes = []string{
 	"okta.apps.read",
 	"okta.groups.read",
+	"okta.groups.manage",
 	"okta.users.read",
 	"okta.apps.manage",
 	"okta.authorizationServers.read",
@@ -53,6 +55,14 @@ var requiredOktaReadScopes = []string{
 var oktaApplicationProvisioningScopes = []string{
 	"okta.apps.read",
 	"okta.groups.read",
+	"okta.users.read",
+	"okta.apps.manage",
+}
+
+var oktaDirectoryProvisioningScopes = []string{
+	"okta.apps.read",
+	"okta.groups.read",
+	"okta.groups.manage",
 	"okta.users.read",
 	"okta.apps.manage",
 }
@@ -82,9 +92,11 @@ type OktaClient interface {
 	ListApplicationUsers(context.Context, string, string, string, okta.PageRequest) (okta.Page, error)
 	ListAuthorizationServers(context.Context, string, string) ([]okta.AuthorizationServer, error)
 	CreateOIDCApplication(context.Context, string, string, okta.CreateOIDCApplicationInput) (okta.Application, error)
+	CreateDirectoryApplication(context.Context, string, string) (okta.Application, error)
 	CreateGroupsClaim(context.Context, string, string, string) error
 	FindActiveApplicationByLabel(context.Context, string, string, string) (okta.Application, string, bool, error)
 	GetApplication(context.Context, string, string, string) (okta.Application, error)
+	GetProvisioningConnection(context.Context, string, string, string) (okta.ProvisioningConnection, error)
 	ResolveApplicationByClientID(context.Context, string, string, string) (okta.Application, error)
 	FindEveryoneGroup(context.Context, string, string) (okta.Group, error)
 	AssignGroupToApplication(context.Context, string, string, string, string) error
@@ -95,6 +107,9 @@ type WorkOSClient interface {
 	ListConnections(context.Context, string) ([]workos.Connection, error)
 	CreateOIDCConnection(context.Context, workos.CreateOIDCConnectionInput) (workos.Connection, error)
 	GetConnection(context.Context, string) (workos.Connection, error)
+	ListDirectories(context.Context, string) ([]workos.Directory, error)
+	ListDirectoryGroups(context.Context, string) ([]workos.DirectoryGroup, error)
+	ListDirectoryUsers(context.Context, string) ([]workos.DirectoryUser, error)
 }
 
 type storedVerification struct {
@@ -121,6 +136,9 @@ func (s *Service) VerifySetupStep(ctx context.Context, payload *gen.VerifySetupS
 	}
 	if payload.StepKey == setupStepSignIn {
 		return s.verifySignInSetupStep(ctx, authCtx, logger)
+	}
+	if payload.StepKey == setupStepDirectory {
+		return s.verifyDirectorySetupStep(ctx, authCtx, logger)
 	}
 	if payload.StepKey != setupStepConnect {
 		return nil, oops.E(oops.CodeBadRequest, nil, "unknown identity provider setup step").LogError(ctx, logger)
@@ -166,7 +184,7 @@ func (s *Service) VerifySetupStep(ctx context.Context, payload *gen.VerifySetupS
 	checkedAt := time.Now().UTC()
 	var token okta.Token
 	var tokenErr error
-	for _, scopes := range [][]string{requestedOktaScopes, oktaClaimsVerificationScopes, oktaApplicationProvisioningScopes, requiredOktaReadScopes} {
+	for _, scopes := range [][]string{requestedOktaScopes, oktaClaimsVerificationScopes, oktaDirectoryProvisioningScopes, oktaApplicationProvisioningScopes, requiredOktaReadScopes} {
 		token, tokenErr = s.okta.AcquireFreshToken(ctx, okta.TokenRequest{
 			ConnectionID: before.ID,
 			TenantDomain: tenantDomain,
@@ -316,7 +334,7 @@ func (s *Service) probeCapabilities(ctx context.Context, checkedAt time.Time, te
 		}
 	}
 
-	capabilities := make([]string, 0, 4)
+	capabilities := make([]string, 0, 5)
 	missing := make([]string, 0, 3)
 	if groups.OK && users.OK {
 		capabilities = append(capabilities, capabilityDirectoryRead)
@@ -330,6 +348,9 @@ func (s *Service) probeCapabilities(ctx context.Context, checkedAt time.Time, te
 	}
 	if granted["okta.apps.manage"] {
 		capabilities = append(capabilities, capabilitySignInProvisioning)
+	}
+	if apps.OK && groups.OK && granted["okta.apps.manage"] && granted["okta.groups.manage"] {
+		capabilities = append(capabilities, capabilityGroupAssignment)
 	}
 	if authorizationServers.OK {
 		capabilities = append(capabilities, capabilityClaimsProvisioning)
