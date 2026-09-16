@@ -64,6 +64,7 @@ type RemoteSessionClient struct {
 	ResourcePolicyUri               pgtype.Text
 	ResourceTosUri                  pgtype.Text
 	UpstreamRejectedAt              pgtype.Timestamptz
+	IdentityProviderConnectionID    uuid.NullUUID
 	CreatedAt                       pgtype.Timestamptz
 	UpdatedAt                       pgtype.Timestamptz
 	DeletedAt                       pgtype.Timestamptz
@@ -74,6 +75,7 @@ type RemoteSessionIssuer struct {
 	ID                                         uuid.UUID
 	ProjectID                                  uuid.NullUUID
 	OrganizationID                             pgtype.Text
+	AttachmentScope                            pgtype.Text
 	Slug                                       string
 	Issuer                                     string
 	AuthorizationEndpoint                      pgtype.Text

@@ -854,18 +854,19 @@ type ExternalCredential struct {
 }
 
 type ExternalKey struct {
-	ID                     uuid.UUID
-	OrganizationID         pgtype.Text
-	ProjectID              uuid.NullUUID
-	ExternalCredentialID   uuid.UUID
-	Provider               string
-	Algorithm              string
-	Name                   string
-	CustomerGrantReference pgtype.Text
-	CreatedAt              pgtype.Timestamptz
-	UpdatedAt              pgtype.Timestamptz
-	DeletedAt              pgtype.Timestamptz
-	Deleted                bool
+	ID                           uuid.UUID
+	OrganizationID               pgtype.Text
+	ProjectID                    uuid.NullUUID
+	ExternalCredentialID         uuid.UUID
+	Provider                     string
+	Algorithm                    string
+	Name                         string
+	CustomerGrantReference       pgtype.Text
+	IdentityProviderConnectionID uuid.NullUUID
+	CreatedAt                    pgtype.Timestamptz
+	UpdatedAt                    pgtype.Timestamptz
+	DeletedAt                    pgtype.Timestamptz
+	Deleted                      bool
 }
 
 type ExternalMcpAttachment struct {
@@ -1122,6 +1123,19 @@ type HttpToolDefinition struct {
 	Deleted             bool
 }
 
+type IdentityProviderConnection struct {
+	ID             uuid.UUID
+	OrganizationID string
+	Provider       string
+	Status         string
+	LastVerifiedAt pgtype.Timestamptz
+	LastError      pgtype.Text
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
 type JsonWebKey struct {
 	ID                 uuid.UUID
 	OrganizationID     string
@@ -1142,15 +1156,16 @@ type JsonWebKey struct {
 }
 
 type JsonWebKeySet struct {
-	ID             uuid.UUID
-	OrganizationID string
-	ProjectID      uuid.NullUUID
-	ExternalKeyID  uuid.UUID
-	Name           string
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
+	ID                           uuid.UUID
+	OrganizationID               string
+	ProjectID                    uuid.NullUUID
+	ExternalKeyID                uuid.UUID
+	Name                         string
+	IdentityProviderConnectionID uuid.NullUUID
+	CreatedAt                    pgtype.Timestamptz
+	UpdatedAt                    pgtype.Timestamptz
+	DeletedAt                    pgtype.Timestamptz
+	Deleted                      bool
 }
 
 type KillswitchExpiryEvent struct {
@@ -1539,6 +1554,28 @@ type OauthProxyServer struct {
 	UpdatedAt pgtype.Timestamptz
 	DeletedAt pgtype.Timestamptz
 	Deleted   bool
+}
+
+type OktaIdentityProviderConnection struct {
+	IdentityProviderConnectionID        uuid.UUID
+	IdentityProviderConnectionsProvider string
+	OrganizationID                      string
+	AttachmentScope                     pgtype.Text
+	OrgUrl                              string
+	IssuerUrl                           string
+	IssuerUrlOverrideReason             pgtype.Text
+	RemoteSessionIssuerID               uuid.UUID
+	RemoteSessionClientID               uuid.UUID
+	DpopRequired                        bool
+	GrantedScopes                       []string
+	ObservedAdminRoles                  []string
+	ListingMode                         string
+	AgentID                             pgtype.Text
+	AgentAppID                          pgtype.Text
+	CreatedAt                           pgtype.Timestamptz
+	UpdatedAt                           pgtype.Timestamptz
+	DeletedAt                           pgtype.Timestamptz
+	Deleted                             bool
 }
 
 type OpenrouterApiKey struct {
@@ -2317,6 +2354,7 @@ type RemoteSessionClient struct {
 	ResourcePolicyUri               pgtype.Text
 	ResourceTosUri                  pgtype.Text
 	UpstreamRejectedAt              pgtype.Timestamptz
+	IdentityProviderConnectionID    uuid.NullUUID
 	CreatedAt                       pgtype.Timestamptz
 	UpdatedAt                       pgtype.Timestamptz
 	DeletedAt                       pgtype.Timestamptz
@@ -2351,6 +2389,7 @@ type RemoteSessionIssuer struct {
 	ID                                         uuid.UUID
 	ProjectID                                  uuid.NullUUID
 	OrganizationID                             pgtype.Text
+	AttachmentScope                            pgtype.Text
 	Slug                                       string
 	Issuer                                     string
 	AuthorizationEndpoint                      pgtype.Text
