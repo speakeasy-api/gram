@@ -318,7 +318,30 @@ describe("OktaApplicationsSection", () => {
     expect(screen.getByText("docs.example.test")).toBeTruthy();
   });
 
-  it("picks cards, and counts the picks on the one button", () => {
+  it("starts with every pickable application picked", () => {
+    withApplications([
+      application(),
+      application({
+        sourceApplicationId: "0oaexampleapp2",
+        label: "Example Docs",
+      }),
+      unpickable("no_match", {
+        sourceApplicationId: "0oaexampleapp3",
+        label: "Example Ledger",
+      }),
+    ]);
+    render(<OktaApplicationsSection index={4} connection={connection()} />);
+
+    // Nothing was pressed: the step opens ready to create, and the one card
+    // Speakeasy has no server for is not counted in that.
+    expect(cardFor("Example Chat").getAttribute("aria-checked")).toBe("true");
+    expect(cardFor("Example Docs").getAttribute("aria-checked")).toBe("true");
+    const create = screen.getByRole("button", { name: /^Create/ });
+    expect(create.textContent).toBe("Create 2 MCP Servers");
+    expect(create.hasAttribute("disabled")).toBe(false);
+  });
+
+  it("takes a card back out of the count when it is unpicked", () => {
     withApplications([
       application(),
       application({
@@ -329,22 +352,41 @@ describe("OktaApplicationsSection", () => {
     render(<OktaApplicationsSection index={4} connection={connection()} />);
 
     const create = () => screen.getByRole("button", { name: /^Create/ });
-    expect(create().hasAttribute("disabled")).toBe(true);
-    expect(create().textContent).toBe("Create MCP Servers");
 
     fireEvent.click(cardFor("Example Chat"));
-    expect(cardFor("Example Chat").getAttribute("aria-checked")).toBe("true");
+    expect(cardFor("Example Chat").getAttribute("aria-checked")).toBe("false");
     // One reads as one server, not "1 MCP Servers".
     expect(create().textContent).toBe("Create 1 MCP Server");
-    expect(create().hasAttribute("disabled")).toBe(false);
 
     fireEvent.click(cardFor("Example Docs"));
-    expect(create().textContent).toBe("Create 2 MCP Servers");
+    expect(create().textContent).toBe("Create MCP Servers");
+    expect(create().hasAttribute("disabled")).toBe(true);
 
     // The card is a toggle: pressing it again gives the pick back.
     fireEvent.click(cardFor("Example Chat"));
-    expect(cardFor("Example Chat").getAttribute("aria-checked")).toBe("false");
+    expect(cardFor("Example Chat").getAttribute("aria-checked")).toBe("true");
     expect(create().textContent).toBe("Create 1 MCP Server");
+  });
+
+  it("keeps the create bar on the grid's own frame, which scrolls", () => {
+    withApplications([application()]);
+    const { container } = render(
+      <OktaApplicationsSection index={4} connection={connection()} />,
+    );
+
+    // The applications scroll inside the frame rather than down the page, and
+    // the bar is the frame's last child, so it never scrolls away from them.
+    const frame = container.querySelector(".max-h-\\[32rem\\]");
+    expect(frame).toBeTruthy();
+    const scroller = frame!.querySelector(".overflow-y-auto");
+    expect(scroller).toBeTruthy();
+    expect(scroller!.querySelector(".grid")).toBeTruthy();
+    const bar = frame!.lastElementChild;
+    expect(bar!.contains(screen.getByRole("button", { name: /^Create/ }))).toBe(
+      true,
+    );
+    // Not floating over the page any more.
+    expect(container.querySelector(".fixed")).toBeNull();
   });
 
   it("says why a card cannot be picked, in the server's two reasons", () => {
@@ -394,7 +436,7 @@ describe("OktaApplicationsSection", () => {
     withApplications([application()]);
     render(<OktaApplicationsSection index={4} connection={connection()} />);
 
-    fireEvent.click(cardFor("Example Chat"));
+    // Picked already: the step opens with every pickable card selected.
     pressCreate();
 
     await screen.findByText(/Draft created/);
@@ -445,7 +487,7 @@ describe("OktaApplicationsSection", () => {
     withApplications([application()]);
     render(<OktaApplicationsSection index={4} connection={connection()} />);
 
-    fireEvent.click(cardFor("Example Chat"));
+    // Picked already: the step opens with every pickable card selected.
     pressCreate();
 
     await screen.findByText("mcp server name already taken");
@@ -474,7 +516,7 @@ describe("OktaApplicationsSection", () => {
     withApplications([application()]);
     render(<OktaApplicationsSection index={4} connection={connection()} />);
 
-    fireEvent.click(cardFor("Example Chat"));
+    // Picked already: the step opens with every pickable card selected.
     pressCreate();
 
     const message = await screen.findByText(/Delete it manually/);
@@ -489,7 +531,7 @@ describe("OktaApplicationsSection", () => {
     ]);
     render(<OktaApplicationsSection index={4} connection={connection()} />);
 
-    fireEvent.click(cardFor("Example Chat"));
+    // Picked already: the step opens with every pickable card selected.
     pressCreate();
 
     await screen.findByText(/no usable endpoint for this application/);
@@ -503,7 +545,7 @@ describe("OktaApplicationsSection", () => {
     withApplications([application()]);
     render(<OktaApplicationsSection index={4} connection={connection()} />);
 
-    fireEvent.click(cardFor("Example Chat"));
+    // Picked already: the step opens with every pickable card selected.
     pressCreate();
 
     await screen.findByText(/Already an MCP server in this project/);

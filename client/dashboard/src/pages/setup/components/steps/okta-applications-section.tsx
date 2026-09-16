@@ -360,8 +360,8 @@ function ApplicationCard({
 }
 
 /**
- * The only thing selection adds to the page. It sits over the grid rather than
- * after it, so the count stays readable from wherever you stopped picking.
+ * The foot of the grid's own frame: it stays put while the applications scroll
+ * past it, so the count is readable from wherever you stopped picking.
  */
 function CreateBar({
   count,
@@ -373,17 +373,15 @@ function CreateBar({
   onCreate: () => void;
 }): JSX.Element {
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-20 flex justify-center p-4 pb-[calc(1rem_+_env(safe-area-inset-bottom,0px))]">
-      <div className="border-input bg-card pointer-events-auto border p-2">
-        <Button
-          variant="primary"
-          size="md"
-          disabled={count === 0 || creating}
-          onClick={onCreate}
-        >
-          {creating ? "Creating…" : createLabel(count)}
-        </Button>
-      </div>
+    <div className="border-border bg-card flex flex-shrink-0 justify-center border-t p-3">
+      <Button
+        variant="primary"
+        size="md"
+        disabled={count === 0 || creating}
+        onClick={onCreate}
+      >
+        {creating ? "Creating…" : createLabel(count)}
+      </Button>
     </div>
   );
 }
@@ -397,10 +395,11 @@ type ApplicationsResult = NonNullable<
 >;
 
 /**
- * The inventory once it is in hand: the applications to pick from, what
- * narrows them, and the bar that creates a draft for each pick. It mounts only
- * with a read behind it, so nothing here asks the project for anything until
- * there is something to act on.
+ * The inventory once it is in hand: the applications to pick from in a frame
+ * that scrolls on its own, what narrows them, and the bar on that frame's
+ * bottom edge that creates a draft for each pick. It mounts only with a read
+ * behind it, so nothing here asks the project for anything until there is
+ * something to act on.
  */
 function ApplicationsInventory({
   result,
@@ -418,11 +417,14 @@ function ApplicationsInventory({
   const status = values.status;
   const drafts = useApplicationDrafts();
 
-  // Selection is this reading of the step and nothing more: it is not stored,
-  // and an application that leaves the tenant leaves the selection with it.
-  const [selection, setSelection] = useState<ReadonlySet<string>>(new Set());
+  // Everything Speakeasy can draft starts picked, and the reader takes away
+  // what they do not want — so what is held is what was taken away, not what
+  // is left. An application that arrives on a refresh is then picked like the
+  // rest, and one that leaves the tenant takes nothing with it. Nothing here
+  // is stored: it is this reading of the step and nothing more.
+  const [deselected, setDeselected] = useState<ReadonlySet<string>>(new Set());
   const toggle = (sourceApplicationId: string) => {
-    setSelection((previous) => {
+    setDeselected((previous) => {
       const next = new Set(previous);
       if (!next.delete(sourceApplicationId)) next.add(sourceApplicationId);
       return next;
@@ -452,15 +454,14 @@ function ApplicationsInventory({
     const outcome = drafts.outcomes[application.sourceApplicationId];
     return (
       pickState(application).pickable &&
-      selection.has(application.sourceApplicationId) &&
+      !deselected.has(application.sourceApplicationId) &&
       outcome?.status !== "created" &&
       outcome?.status !== "exists"
     );
   });
 
   return (
-    // Padded past the create bar so it never covers the last row.
-    <div className="space-y-4 pb-24">
+    <div className="space-y-4">
       <div>
         <Text variant="small" muted>
           {result.applicationCount}{" "}
@@ -493,41 +494,49 @@ function ApplicationsInventory({
         <Page.Toolbar.Refresh onRefresh={onRefresh} isRefreshing={refreshing} />
       </Page.Toolbar>
 
-      {rows.length === 0 ? (
-        <InlineEmptyState
-          icon="search-x"
-          heading="No applications match that filter"
-          description="Clear the status filter to see the rest of the tenant."
-        />
-      ) : (
-        <div className="grid gap-3 sm:grid-cols-2">
-          {rows.map((application) => (
-            <ApplicationCard
-              key={application.sourceApplicationId}
-              application={application}
-              tenantHost={tenantHost}
-              selected={selection.has(application.sourceApplicationId)}
-              onToggle={() => toggle(application.sourceApplicationId)}
-              outcome={drafts.outcomes[application.sourceApplicationId]}
-              projectSlug={drafts.projectSlug}
-              onRetry={() => void drafts.create([application])}
+      {/* One frame around the grid: a tenant's worth of applications scrolls
+          inside it rather than pushing the step's own footing off the page,
+          and the bar sits on its bottom edge where the count stays readable
+          from wherever you stopped picking. */}
+      <div className="border-border flex max-h-[32rem] flex-col border">
+        <div className="min-h-0 flex-1 overflow-y-auto p-3">
+          {rows.length === 0 ? (
+            <InlineEmptyState
+              icon="search-x"
+              heading="No applications match that filter"
+              description="Clear the status filter to see the rest of the tenant."
             />
-          ))}
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {rows.map((application) => (
+                <ApplicationCard
+                  key={application.sourceApplicationId}
+                  application={application}
+                  tenantHost={tenantHost}
+                  selected={!deselected.has(application.sourceApplicationId)}
+                  onToggle={() => toggle(application.sourceApplicationId)}
+                  outcome={drafts.outcomes[application.sourceApplicationId]}
+                  projectSlug={drafts.projectSlug}
+                  onRetry={() => void drafts.create([application])}
+                />
+              ))}
+            </div>
+          )}
         </div>
-      )}
 
-      <CreateBar
-        count={pending.length}
-        creating={drafts.creating}
-        onCreate={() => void drafts.create(pending)}
-      />
+        <CreateBar
+          count={pending.length}
+          creating={drafts.creating}
+          onCreate={() => void drafts.create(pending)}
+        />
+      </div>
     </div>
   );
 }
 
 // Step four: what Okta has, read live, as a grid of applications to pick from.
-// A card is pickable where Speakeasy knows an MCP server for it; picking is
-// what the create bar at the foot of the page acts on.
+// A card is pickable where Speakeasy knows an MCP server for it, and every one
+// of those starts picked; the bar at the foot of the grid acts on what is left.
 export function OktaApplicationsSection({
   index,
   connection,
