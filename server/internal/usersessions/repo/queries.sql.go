@@ -2347,6 +2347,98 @@ func (q *Queries) ListUserSessionsByProjectID(ctx context.Context, arg ListUserS
 	return items, nil
 }
 
+const listWorkloadSessionLabels = `-- name: ListWorkloadSessionLabels :many
+SELECT w.workload_issuer_id::uuid AS workload_issuer_id,
+       w.subject::text AS subject,
+       wi.name AS workload_issuer_name,
+       wi.issuer AS workload_issuer_url,
+       a.id AS agent_id,
+       a.name AS agent_name,
+       a.suspended_at AS agent_suspended_at,
+       a.revoked_at AS agent_revoked_at
+FROM (
+       SELECT unnest($1::uuid[]) AS workload_issuer_id,
+              unnest($2::text[]) AS subject
+     ) AS w
+LEFT JOIN workload_issuers AS wi
+  ON wi.id = w.workload_issuer_id
+  AND wi.organization_id = $3::text
+  AND (wi.project_id = $4::uuid OR wi.project_id IS NULL)
+  AND wi.deleted IS FALSE
+LEFT JOIN workload_agent_assignments AS wa
+  ON wa.organization_id = $3::text
+  AND wa.workload_issuer_id = w.workload_issuer_id
+  AND wa.subject = w.subject
+  AND wa.deleted IS FALSE
+LEFT JOIN agents AS a
+  ON a.organization_id = wa.organization_id
+  AND a.id = wa.agent_id
+  AND a.deleted IS FALSE
+`
+
+type ListWorkloadSessionLabelsParams struct {
+	WorkloadIssuerIds []uuid.UUID
+	Subjects          []string
+	OrganizationID    string
+	ProjectID         uuid.UUID
+}
+
+type ListWorkloadSessionLabelsRow struct {
+	WorkloadIssuerID   uuid.UUID
+	Subject            string
+	WorkloadIssuerName pgtype.Text
+	WorkloadIssuerUrl  pgtype.Text
+	AgentID            uuid.NullUUID
+	AgentName          pgtype.Text
+	AgentSuspendedAt   pgtype.Timestamptz
+	AgentRevokedAt     pgtype.Timestamptz
+}
+
+// Resolves the workloads behind one page of workload sessions into something
+// an operator can read: the issuer's name and URL, and the agent the workload
+// inherits its authority from.
+//
+// Takes the page's workloads as parallel arrays so each issuer stays paired
+// with its own subject. A workload is the pair (issuer, subject); matching the
+// two independently would attribute one issuer's subject to another.
+//
+// The issuer is read at the caller's own tiers only, so a project-tier issuer
+// belonging to a sibling project stays unnamed. The assignment and agent are
+// organization-scoped, like the workload principal they describe.
+func (q *Queries) ListWorkloadSessionLabels(ctx context.Context, arg ListWorkloadSessionLabelsParams) ([]ListWorkloadSessionLabelsRow, error) {
+	rows, err := q.db.Query(ctx, listWorkloadSessionLabels,
+		arg.WorkloadIssuerIds,
+		arg.Subjects,
+		arg.OrganizationID,
+		arg.ProjectID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListWorkloadSessionLabelsRow
+	for rows.Next() {
+		var i ListWorkloadSessionLabelsRow
+		if err := rows.Scan(
+			&i.WorkloadIssuerID,
+			&i.Subject,
+			&i.WorkloadIssuerName,
+			&i.WorkloadIssuerUrl,
+			&i.AgentID,
+			&i.AgentName,
+			&i.AgentSuspendedAt,
+			&i.AgentRevokedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockOrganizationUserSessionIssuer = `-- name: LockOrganizationUserSessionIssuer :one
 SELECT id
 FROM user_session_issuers

@@ -996,6 +996,9 @@ func marshalTypesUserSessionToUserSessionResponseBody(v *types.UserSession) *Use
 	} else {
 		res.Upstreams = []*UserSessionUpstreamResponseBody{}
 	}
+	if v.Workload != nil {
+		res.Workload = marshalTypesUserSessionWorkloadToUserSessionWorkloadResponseBody(v.Workload)
+	}
 
 	return res
 }
@@ -1023,6 +1026,26 @@ func marshalTypesUserSessionUpstreamToUserSessionUpstreamResponseBody(v *types.U
 		}
 	} else {
 		res.Scopes = []string{}
+	}
+
+	return res
+}
+
+// marshalTypesUserSessionWorkloadToUserSessionWorkloadResponseBody builds a
+// value of type *UserSessionWorkloadResponseBody from a value of type
+// *types.UserSessionWorkload.
+func marshalTypesUserSessionWorkloadToUserSessionWorkloadResponseBody(v *types.UserSessionWorkload) *UserSessionWorkloadResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &UserSessionWorkloadResponseBody{
+		WorkloadIssuerID:   v.WorkloadIssuerID,
+		ExternalSubject:    v.ExternalSubject,
+		WorkloadIssuerName: v.WorkloadIssuerName,
+		WorkloadIssuerURL:  v.WorkloadIssuerURL,
+		AgentID:            v.AgentID,
+		AgentName:          v.AgentName,
+		AgentStatus:        v.AgentStatus,
 	}
 
 	return res

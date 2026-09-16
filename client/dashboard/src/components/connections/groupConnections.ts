@@ -11,6 +11,7 @@ import { subjectLabel } from "@/lib/user-session-status";
 import type { UserSession } from "@gram/client/models/components/usersession.js";
 import type { UserSessionClient } from "@gram/client/models/components/usersessionclient.js";
 import type { UserSessionUpstream } from "@gram/client/models/components/usersessionupstream.js";
+import type { UserSessionWorkload } from "@gram/client/models/components/usersessionworkload.js";
 
 /**
  * What a row is filed under. "Person" is the default because the question an
@@ -60,6 +61,11 @@ export type ConnectionGroup = {
   // `urn` is the subject URN the sessions were filed under, which is also the
   // identity URN the person's page resolves from.
   identity?: { photoUrl?: string; urn?: string };
+  /**
+   * Set when the group heading names a workload rather than a person. Every
+   * session filed under one workload subject describes the same workload.
+   */
+  workload?: UserSessionWorkload;
   /**
    * The registration this group stands for, under client grouping. Carrying the
    * whole record (rather than an id) lets the header offer "revoke
@@ -166,6 +172,7 @@ export function groupConnections(
         lastUsedAt: null,
         inactive: true,
         identity: undefined,
+        workload: undefined,
         client,
         clientId: client.id,
         credentialKind: client.credentialKind,
@@ -197,6 +204,10 @@ export function groupConnections(
                   photoUrl: session.subjectPhotoUrl ?? undefined,
                   urn: session.subjectUrn,
                 }
+              : undefined,
+          workload:
+            grouping === "subject"
+              ? (session.workload ?? undefined)
               : undefined,
           client: undefined,
           // Both read off the session rather than a registration record, which

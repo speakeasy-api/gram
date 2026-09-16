@@ -99572,6 +99572,8 @@ components:
                     type: string
                     description: The issuing user_session_issuer id.
                     format: uuid
+                workload:
+                    $ref: '#/components/schemas/UserSessionWorkload'
             description: An issued user_session record. refresh_token_hash is never returned.
             required:
                 - id
@@ -99854,6 +99856,40 @@ components:
                 - has_refresh_token
                 - auto_refresh
                 - scopes
+        UserSessionWorkload:
+            type: object
+            properties:
+                agent_id:
+                    type: string
+                    description: The agent this workload is assigned to, whose policy it inherits. Null when the workload has no live assignment.
+                    format: uuid
+                agent_name:
+                    type: string
+                    description: Name of the assigned agent.
+                agent_status:
+                    type: string
+                    description: Lifecycle state of the assigned agent.
+                    enum:
+                        - active
+                        - suspended
+                        - revoked
+                external_subject:
+                    type: string
+                    description: The sub claim the workload issuer asserted, exactly as minted. Together with workload_issuer_id this is the workload's identity.
+                workload_issuer_id:
+                    type: string
+                    description: The workload_issuers row that vouched for the workload.
+                    format: uuid
+                workload_issuer_name:
+                    type: string
+                    description: The operator-chosen name of the workload issuer. Null when the issuer has been deleted or belongs to another project.
+                workload_issuer_url:
+                    type: string
+                    description: The workload issuer's issuer identifier (its iss). Null under the same conditions as workload_issuer_name.
+            description: The workload behind a workload session.
+            required:
+                - workload_issuer_id
+                - external_subject
         UserSummary:
             type: object
             properties:

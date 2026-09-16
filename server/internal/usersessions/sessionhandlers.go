@@ -66,6 +66,42 @@ func (s *Service) loadUpstreamsForSessions(ctx context.Context, projectID uuid.U
 	return mv.BuildUserSessionUpstreamIndex(upstreamRows), nil
 }
 
+// loadWorkloadLabelsForSessions resolves the workloads behind a page of
+// sessions in one query. Workloads are keyed on (workload issuer, subject)
+// parsed through the session subject, never on the subject alone.
+func (s *Service) loadWorkloadLabelsForSessions(ctx context.Context, projectID uuid.UUID, organizationID string, rows []repo.ListUserSessionsByProjectIDRow) (map[mv.WorkloadKey]*types.UserSessionWorkload, error) {
+	seen := make(map[mv.WorkloadKey]struct{})
+	issuerIDs := make([]uuid.UUID, 0)
+	subjects := make([]string, 0)
+	for _, row := range rows {
+		key, ok := mv.WorkloadKeyForSession(row.SubjectUrn)
+		if !ok {
+			continue
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		issuerIDs = append(issuerIDs, key.WorkloadIssuerID)
+		subjects = append(subjects, key.ExternalSubject)
+	}
+	if len(issuerIDs) == 0 {
+		return map[mv.WorkloadKey]*types.UserSessionWorkload{}, nil
+	}
+
+	labelRows, err := repo.New(s.db).ListWorkloadSessionLabels(ctx, repo.ListWorkloadSessionLabelsParams{
+		WorkloadIssuerIds: issuerIDs,
+		Subjects:          subjects,
+		OrganizationID:    organizationID,
+		ProjectID:         projectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list workload session labels").LogError(ctx, s.logger)
+	}
+
+	return mv.BuildUserSessionWorkloadIndex(labelRows), nil
+}
+
 // Lists issued sessions; keyset paginated by id (descending).
 // refresh_token_hash is excluded from the projection.
 func (s *Service) ListUserSessions(ctx context.Context, payload *gen.ListUserSessionsPayload) (*gen.ListUserSessionsResult, error) {
@@ -114,7 +150,12 @@ func (s *Service) ListUserSessions(ctx context.Context, payload *gen.ListUserSes
 		return nil, err
 	}
 
-	items := mv.BuildUserSessionListView(rows, upstreams)
+	workloads, err := s.loadWorkloadLabelsForSessions(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, rows)
+	if err != nil {
+		return nil, err
+	}
+
+	items := mv.BuildUserSessionListView(rows, upstreams, workloads)
 
 	var nextCursor *string
 	if len(rows) >= int(limit) {

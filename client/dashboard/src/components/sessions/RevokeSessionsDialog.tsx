@@ -4,7 +4,9 @@ import { useMutation } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
+import { WorkloadRevocationLadder } from "@/components/sessions/WorkloadSession";
 import { useRevokeUserSessionMutation } from "@gram/client/react-query/revokeUserSession.js";
+import type { UserSessionWorkload } from "@gram/client/models/components/usersessionworkload.js";
 
 export function RevokeSessionsDialog({
   sessionIds,
@@ -12,12 +14,15 @@ export function RevokeSessionsDialog({
   onOpenChange,
   onRevoked,
   newKillswitchHref,
+  workload,
 }: {
   sessionIds: string[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Only supplied when the group identifies one exact canonical user. */
   newKillswitchHref?: string;
+  /** Set when every session belongs to one workload, which can reconnect on its own. */
+  workload?: UserSessionWorkload;
   /** Reports the ids that were successfully revoked so the caller can clear them. */
   onRevoked: (succeededIds: string[]) => void;
 }): JSX.Element {
@@ -76,6 +81,7 @@ export function RevokeSessionsDialog({
             creates or lifts a killswitch.
           </Dialog.Description>
         </Dialog.Header>
+        {workload ? <WorkloadRevocationLadder workload={workload} /> : null}
         {newKillswitchHref && (
           <div className="space-y-1">
             <Button variant="secondary" size="sm" asChild>

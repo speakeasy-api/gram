@@ -873,6 +873,10 @@ type UserSessionResponseBody struct {
 	// tools. A session can have several: an issuer may have more than one
 	// remote_session_client attached.
 	Upstreams []*UserSessionUpstreamResponseBody `form:"upstreams" json:"upstreams" xml:"upstreams"`
+	// Set only when subject_type is 'workload': the external issuer that vouched
+	// for the machine, the subject it asserted, and the agent the workload
+	// inherits its authority from.
+	Workload *UserSessionWorkloadResponseBody `form:"workload,omitempty" json:"workload,omitempty" xml:"workload,omitempty"`
 }
 
 // UserSessionUpstreamResponseBody is used to define fields on response body
@@ -905,6 +909,29 @@ type UserSessionUpstreamResponseBody struct {
 	LastUsedAt *string `form:"last_used_at,omitempty" json:"last_used_at,omitempty" xml:"last_used_at,omitempty"`
 	// Scopes held by this upstream session.
 	Scopes []string `form:"scopes" json:"scopes" xml:"scopes"`
+}
+
+// UserSessionWorkloadResponseBody is used to define fields on response body
+// types.
+type UserSessionWorkloadResponseBody struct {
+	// The workload_issuers row that vouched for the workload.
+	WorkloadIssuerID string `form:"workload_issuer_id" json:"workload_issuer_id" xml:"workload_issuer_id"`
+	// The sub claim the workload issuer asserted, exactly as minted. Together with
+	// workload_issuer_id this is the workload's identity.
+	ExternalSubject string `form:"external_subject" json:"external_subject" xml:"external_subject"`
+	// The operator-chosen name of the workload issuer. Null when the issuer has
+	// been deleted or belongs to another project.
+	WorkloadIssuerName *string `form:"workload_issuer_name,omitempty" json:"workload_issuer_name,omitempty" xml:"workload_issuer_name,omitempty"`
+	// The workload issuer's issuer identifier (its iss). Null under the same
+	// conditions as workload_issuer_name.
+	WorkloadIssuerURL *string `form:"workload_issuer_url,omitempty" json:"workload_issuer_url,omitempty" xml:"workload_issuer_url,omitempty"`
+	// The agent this workload is assigned to, whose policy it inherits. Null when
+	// the workload has no live assignment.
+	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
+	// Name of the assigned agent.
+	AgentName *string `form:"agent_name,omitempty" json:"agent_name,omitempty" xml:"agent_name,omitempty"`
+	// Lifecycle state of the assigned agent.
+	AgentStatus *string `form:"agent_status,omitempty" json:"agent_status,omitempty" xml:"agent_status,omitempty"`
 }
 
 // UserSessionFacetOptionResponseBody is used to define fields on response body

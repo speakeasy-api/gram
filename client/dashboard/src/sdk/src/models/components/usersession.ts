@@ -12,6 +12,10 @@ import {
   UserSessionUpstream,
   UserSessionUpstream$inboundSchema,
 } from "./usersessionupstream.js";
+import {
+  UserSessionWorkload,
+  UserSessionWorkload$inboundSchema,
+} from "./usersessionworkload.js";
 
 /**
  * What the client that established this session must present to authenticate: 'public' (nothing), 'secret' (a client secret), 'key' (an assertion signed by its published key), or 'misconfigured'. Derived by the same rule the token endpoint enforces. Null only when the session has no bound client, which is the case for API key and anonymous subjects; a bound client always resolves to one of the four.
@@ -105,6 +109,10 @@ export type UserSession = {
    * The issuing user_session_issuer id.
    */
   userSessionIssuerId: string;
+  /**
+   * The workload behind a workload session.
+   */
+  workload?: UserSessionWorkload | undefined;
 };
 
 /** @internal */
@@ -152,6 +160,7 @@ export const UserSession$inboundSchema: z.ZodMiniType<UserSession, unknown> = z
       upstreams: z.array(UserSessionUpstream$inboundSchema),
       user_session_client_id: z.optional(z.string()),
       user_session_issuer_id: z.string(),
+      workload: z.optional(UserSessionWorkload$inboundSchema),
     }),
     z.transform((v) => {
       return remap$(v, {
