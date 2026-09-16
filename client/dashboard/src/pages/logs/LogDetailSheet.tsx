@@ -14,11 +14,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
-import { Icon } from "@/components/ui/Icon";
-import { ChevronDown, Copy } from "lucide-react";
-import { useId, useState } from "react";
+import { Check, ChevronDown, ChevronRight, Copy } from "lucide-react";
+import { useEffect, useId, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
-import { formatNanoTimestamp, getSeverityColorClass } from "./utils";
+import { formatNanoTimestamp } from "./utils";
 
 interface LogDetailSheetProps {
   log: TelemetryLogRecord | null;
@@ -60,15 +59,6 @@ const TOOL_IO_ATTR_KEYS = {
 } as const;
 
 const HOOK_BLOCK_REASON_KEY = "gram.hook.block_reason";
-
-/** Attributes surfaced as a prominent labeled row above Tool Input. Kept
- *  separate from the generic Attributes section to avoid duplication. */
-const HIGHLIGHT_ATTR_KEYS = [
-  { path: "gram.tool_call.source", label: "Server" },
-  { path: "gram.tool.name", label: "Tool" },
-  { path: "gram.hook.source", label: "LLM Client" },
-  { path: "gram.mcp.server_url", label: "MCP Server URL" },
-] as const;
 
 const HOOK_ERROR_KEY = "gram.hook.error";
 
@@ -158,7 +148,6 @@ function LogDetailContent({
   hostedToolsetSlug?: string;
   onAddFilter?: (path: string, op: Operator, value: string) => void;
 }) {
-  const severityClass = getSeverityColorClass(log.severityText);
   const resourceAttrs = log.resourceAttributes as
     | { gram?: { tool?: { urn?: string } } }
     | undefined;
@@ -186,14 +175,6 @@ function LogDetailContent({
   const showToolIOHiddenMessage = Boolean(
     (toolCallID || toolName) && !toolInput,
   );
-  const highlights = attrs
-    ? HIGHLIGHT_ATTR_KEYS.map(({ path, label }) => ({
-        path,
-        label,
-        value: getNestedValue(attrs, path),
-      })).filter((h): h is typeof h & { value: string } => Boolean(h.value))
-    : [];
-
   // Remove surfaced keys from attributes to avoid duplication in the generic section
   let filteredAttrs = attrs;
   if (filteredAttrs && toolInput) {
@@ -208,31 +189,42 @@ function LogDetailContent({
   if (filteredAttrs && toolError) {
     filteredAttrs = removeNestedKey(filteredAttrs, HOOK_ERROR_KEY);
   }
-  for (const h of highlights) {
-    if (filteredAttrs) {
-      filteredAttrs = removeNestedKey(filteredAttrs, h.path);
-    }
-  }
 
   return (
     <div className="flex flex-col gap-6 px-5 pt-6 pb-6">
       {/* Header — severity word + headline, then a hairline-ruled meta list */}
       <div className="flex flex-col gap-4">
-        <div className="flex flex-col gap-1.5">
-          {blockReason ? (
-            <div className="inline-flex items-center gap-1.5 font-mono text-xs tracking-wide uppercase text-[var(--color-feedback-orange-600)] dark:text-[var(--color-feedback-orange-400)]">
-              <Icon name="shield-alert" className="size-3" />
-              Blocked
-            </div>
-          ) : (
-            <div
-              className={`font-mono text-xs tracking-wide uppercase ${severityClass}`}
+        <div className="flex flex-col gap-2">
+          {/* Same primitives as the table row this was opened from: a dot for
+              the outcome, the tool in mono. Landing on a different visual
+              language than the row you clicked makes them feel unrelated. */}
+          <div className="flex items-center gap-2">
+            <span
+              aria-hidden
+              className={cn(
+                "size-1.5 shrink-0 rounded-full",
+                blockReason || toolError ? "bg-rose-500" : "bg-emerald-500",
+              )}
+            />
+            <span
+              className={cn(
+                "font-mono text-xs tracking-wide uppercase",
+                blockReason || toolError
+                  ? "text-destructive"
+                  : "text-muted-foreground",
+              )}
             >
-              {log.severityText || "INFO"}
-            </div>
-          )}
-          <SheetTitle className="font-display text-xl font-light tracking-tight">
-            {log.body?.slice(0, 80) || "(no message)"}
+              {blockReason ? "Blocked" : toolError ? "Error" : "Success"}
+            </span>
+            <span className="text-muted-foreground font-mono text-xs">
+              {formatNanoTimestamp(log.timeUnixNano)}
+            </span>
+          </div>
+          <SheetTitle className="flex items-baseline gap-1.5 font-mono text-base font-medium">
+            {toolsetSlug && (
+              <span className="text-muted-foreground">{toolsetSlug} /</span>
+            )}
+            <span>{toolName || log.body?.slice(0, 60) || "(no message)"}</span>
           </SheetTitle>
         </div>
 
@@ -248,36 +240,6 @@ function LogDetailContent({
             </div>
           </div>
         )}
-
-        {/* Meta — definition-list rows with eyebrow keys and mono values */}
-        <div className="border-border divide-border flex flex-col divide-y border-y">
-          <MetadataRow label="Service" value={log.service?.name || "Unknown"} />
-          {gramUrn && (
-            <MetadataRow
-              label="Platform URN"
-              value={gramUrn}
-              copyValue={gramUrn}
-            />
-          )}
-          {log.traceId && (
-            <MetadataRow
-              label="Trace ID"
-              value={log.traceId}
-              copyValue={log.traceId}
-            />
-          )}
-          {log.spanId && (
-            <MetadataRow
-              label="Span ID"
-              value={log.spanId}
-              copyValue={log.spanId}
-            />
-          )}
-          <MetadataRow
-            label="Time"
-            value={formatNanoTimestamp(log.timeUnixNano)}
-          />
-        </div>
       </div>
 
       {toolsetSlug && <HostedServerCard toolsetSlug={toolsetSlug} />}
@@ -294,12 +256,15 @@ function LogDetailContent({
         </TabsList>
 
         <TabsContent value="details" className="mt-5 flex flex-col gap-5">
-          {/* Tool Error — red left edge so failures pop without a tint wash */}
+          {/* What happened, then what went in, then what came back. Everything
+              else — the identity, hook and project attributes that were filling
+              the sheet before you could reach the payload — sits behind one
+              disclosure below. */}
           {toolError && (
             <div className="border-l-destructive flex items-start gap-3 border-l-2 py-1 pl-3">
               <div className="flex min-w-0 flex-1 flex-col gap-1">
                 <div className="text-destructive-default font-mono text-xs tracking-wide uppercase">
-                  Tool Error
+                  Error
                 </div>
                 <div className="text-foreground text-sm break-words">
                   {toolError}
@@ -308,26 +273,8 @@ function LogDetailContent({
             </div>
           )}
 
-          {/* Highlights — prominent labeled rows pulled out of attributes */}
-          {highlights.length > 0 && (
-            <div className="border-border divide-border flex flex-col divide-y border-y">
-              {highlights.map((h) => (
-                <div
-                  key={h.path}
-                  className="flex items-baseline justify-between gap-4 py-2"
-                >
-                  <div className="text-eyebrow shrink-0">{h.label}</div>
-                  <div className="text-foreground min-w-0 font-mono text-xs break-all">
-                    {h.value}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Tool Input */}
           {toolInput && (
-            <CollapsibleBodySection title="Tool Input" content={toolInput} />
+            <CollapsibleBodySection title="Arguments" content={toolInput} />
           )}
           {showToolIOHiddenMessage && (
             <div className="text-muted-foreground border-border border px-3 py-2 text-sm">
@@ -335,56 +282,78 @@ function LogDetailContent({
             </div>
           )}
 
-          {/* Tool Output */}
           {toolOutput && (
-            <CollapsibleBodySection title="Tool Output" content={toolOutput} />
+            <CollapsibleBodySection title="Result" content={toolOutput} />
           )}
 
-          {/* Attributes (with tool I/O + highlighted keys removed) */}
-          {filteredAttrs && Object.keys(filteredAttrs).length > 0 && (
-            <AttributesSection
-              title="Attributes"
-              data={filteredAttrs}
-              onAddFilter={onAddFilter}
-            />
-          )}
+          <CollapsibleSection title="Context" defaultOpen={false}>
+            <div className="border-border divide-border flex flex-col divide-y border-y">
+              <MetadataRow
+                label="Service"
+                value={log.service?.name || "Unknown"}
+              />
+              {gramUrn && (
+                <MetadataRow
+                  label="Platform URN"
+                  value={gramUrn}
+                  copyValue={gramUrn}
+                />
+              )}
+              {log.traceId && (
+                <MetadataRow
+                  label="Trace ID"
+                  value={log.traceId}
+                  copyValue={log.traceId}
+                />
+              )}
+              {log.spanId && (
+                <MetadataRow
+                  label="Span ID"
+                  value={log.spanId}
+                  copyValue={log.spanId}
+                />
+              )}
+            </div>
 
-          {/* Resource — no onAddFilter: the backend's attribute filter
-              resolves paths against `attributes.*`, not `resource_attributes.*`,
-              so resource-derived filters would silently return no results. */}
-          {log.resourceAttributes &&
-            Object.keys(log.resourceAttributes as object).length > 0 && (
+            {filteredAttrs && Object.keys(filteredAttrs).length > 0 && (
               <AttributesSection
-                title="Resource"
-                data={log.resourceAttributes as Record<string, unknown>}
+                title="Attributes"
+                data={filteredAttrs}
+                onAddFilter={onAddFilter}
               />
             )}
 
-          {/* Message — demoted to a collapsed section below attributes. The
-              body is the OTEL log body, which for tool-call events is just a
-              "Tool: X, Hook: Y" stub that duplicates info now shown above. */}
-          {log.body && (
-            <CollapsibleBodySection
-              title="Message"
-              content={log.body}
-              defaultOpen={false}
-            />
-          )}
+            {/* Resource — no onAddFilter: the backend's attribute filter
+                resolves paths against `attributes.*`, not
+                `resource_attributes.*`, so resource-derived filters would
+                silently return no results. */}
+            {log.resourceAttributes &&
+              Object.keys(log.resourceAttributes as object).length > 0 && (
+                <AttributesSection
+                  title="Resource"
+                  data={log.resourceAttributes as Record<string, unknown>}
+                />
+              )}
+
+            {/* The OTEL log body, which for tool-call events is a
+                "Tool: X, Hook: Y" stub duplicating what is shown above. */}
+            {log.body && (
+              <CollapsibleBodySection
+                title="Message"
+                content={log.body}
+                defaultOpen={false}
+              />
+            )}
+          </CollapsibleSection>
         </TabsContent>
 
         <TabsContent value="raw" className="mt-5 flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <div className="text-eyebrow">Full Log Record</div>
-            <button
-              className="hover:bg-muted p-1.5"
-              onClick={() => {
-                void navigator.clipboard.writeText(
-                  JSON.stringify(log, null, 2),
-                );
-              }}
-            >
-              <Copy className="size-4" />
-            </button>
+            <CopyIconButton
+              value={JSON.stringify(log, null, 2)}
+              label="log record"
+            />
           </div>
           <div className="border-border flex-1 overflow-y-auto border p-4">
             <pre className="font-mono text-sm break-all whitespace-pre-wrap">
@@ -393,6 +362,87 @@ function LogDetailContent({
           </div>
         </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+/**
+ * Copy affordance for the sheet's section headers. The icon swaps to a check
+ * for a beat: a clipboard write is otherwise completely silent, so without it
+ * there is no way to tell a click registered.
+ */
+function CopyIconButton({
+  value,
+  label,
+  className,
+}: {
+  value: string;
+  label: string;
+  className?: string;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 1200);
+    return () => clearTimeout(timer);
+  }, [copied]);
+
+  return (
+    <button
+      type="button"
+      aria-label={copied ? `${label} copied` : `Copy ${label}`}
+      className={cn("hover:bg-muted p-1.5", className)}
+      onClick={(event) => {
+        event.stopPropagation();
+        void navigator.clipboard.writeText(value);
+        setCopied(true);
+      }}
+    >
+      {copied ? (
+        <Check aria-hidden="true" className="text-default-success size-4" />
+      ) : (
+        <Copy aria-hidden="true" className="size-4" />
+      )}
+    </button>
+  );
+}
+
+/** A disclosure for whole sections, as opposed to one body of text. */
+function CollapsibleSection({
+  title,
+  defaultOpen = true,
+  children,
+}: {
+  title: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+  const contentId = useId();
+
+  return (
+    <div className="flex flex-col gap-3">
+      <button
+        type="button"
+        aria-controls={contentId}
+        aria-expanded={isOpen}
+        onClick={() => setIsOpen((open) => !open)}
+        className="group flex min-h-7 items-center gap-2"
+      >
+        <ChevronRight
+          className={cn(
+            "text-muted-foreground size-3.5 transition-transform",
+            isOpen && "rotate-90",
+          )}
+        />
+        <span className="text-eyebrow">{title}</span>
+      </button>
+      {isOpen && (
+        <div id={contentId} className="flex flex-col gap-5">
+          {children}
+        </div>
+      )}
     </div>
   );
 }
@@ -436,14 +486,11 @@ function CollapsibleBodySection({
           )}
         />
       </button>
-      <button
-        type="button"
-        aria-label={`Copy ${title}`}
-        className="hover:bg-muted absolute top-0 right-5 z-10 p-1.5"
-        onClick={() => void navigator.clipboard.writeText(content)}
-      >
-        <Copy aria-hidden="true" className="size-4" />
-      </button>
+      <CopyIconButton
+        value={content}
+        label={title}
+        className="absolute top-0 right-5 z-10"
+      />
       {isOpen && (
         <div
           id={contentId}
@@ -467,19 +514,38 @@ function MetadataRow({
   value: string;
   copyValue?: string;
 }) {
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 1200);
+    return () => clearTimeout(timer);
+  }, [copied]);
+
   return (
     <button
       className="hover:bg-muted/50 flex items-center justify-between gap-4 py-2 text-left transition-colors"
       onClick={() => {
         if (copyValue) {
           void navigator.clipboard.writeText(copyValue);
+          setCopied(true);
         }
       }}
       disabled={!copyValue}
       title={copyValue ? `Copy ${label}` : undefined}
     >
       <span className="text-eyebrow shrink-0">{label}</span>
-      <span className="min-w-0 truncate font-mono text-xs">{value}</span>
+      <span className="flex min-w-0 items-center gap-2">
+        {/* The whole row is the button, so the check is the only sign the
+            click landed on anything. */}
+        {copied && (
+          <Check
+            aria-hidden="true"
+            className="text-default-success size-3.5 shrink-0"
+          />
+        )}
+        <span className="min-w-0 truncate font-mono text-xs">{value}</span>
+      </span>
     </button>
   );
 }
@@ -577,14 +643,7 @@ function AttributesSection({
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
         <div className="text-eyebrow">{title}</div>
-        <button
-          className="hover:bg-muted p-1.5"
-          onClick={() => {
-            void navigator.clipboard.writeText(JSON.stringify(data, null, 2));
-          }}
-        >
-          <Copy className="size-4" />
-        </button>
+        <CopyIconButton value={JSON.stringify(data, null, 2)} label={title} />
       </div>
       <div className="border-border divide-border divide-y border-y">
         {flatEntries.map((entry) => {
@@ -592,8 +651,13 @@ function AttributesSection({
 
           const rowContent = (
             <>
-              <span className="text-muted-foreground text-xs">{entry.key}</span>
-              <span className="font-mono text-sm break-all">
+              <span className="text-muted-foreground shrink-0 text-xs">
+                {entry.key}
+              </span>
+              <span
+                className="min-w-0 truncate font-mono text-xs"
+                title={entry.displayValue}
+              >
                 {entry.displayValue}
               </span>
             </>
@@ -603,7 +667,7 @@ function AttributesSection({
             return (
               <div
                 key={entry.key}
-                className="hover:bg-muted/50 flex flex-col gap-1 px-2 py-2.5 transition-colors"
+                className="hover:bg-muted/50 flex items-center justify-between gap-4 py-2 transition-colors"
               >
                 {rowContent}
               </div>
@@ -618,7 +682,7 @@ function AttributesSection({
             >
               <DropdownMenuTrigger asChild>
                 <button
-                  className="hover:bg-muted/50 flex w-full cursor-pointer flex-col gap-1 px-2 py-2.5 text-left transition-colors"
+                  className="hover:bg-muted/50 flex w-full cursor-pointer items-center justify-between gap-4 py-2 text-left transition-colors"
                   aria-label={`Attribute actions for ${entry.key}`}
                 >
                   {rowContent}

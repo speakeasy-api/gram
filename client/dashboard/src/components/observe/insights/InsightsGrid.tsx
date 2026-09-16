@@ -1,5 +1,9 @@
 import { StackedTimeBarChart } from "@/components/chart/StackedTimeBarChart";
-import { useSeriesColors } from "@/components/chart/useSeriesColors";
+import {
+  CARD_COLORS,
+  INSIGHT_OTHER_COLOR,
+  INSIGHT_SERIES_COLORS,
+} from "@/components/observe/insights/insightsPalette";
 import {
   InsightCard,
   MetricSpark,
@@ -20,22 +24,9 @@ import type { ToolUsageTargetTimeSeriesPoint } from "@gram/client/models/compone
 import type { ToolUsageTargetToolBreakdownRow } from "@gram/client/models/components/toolusagetargettoolbreakdownrow.js";
 import type { ToolUsageTotals } from "@gram/client/models/components/toolusagetotals.js";
 import type { ToolUsageUserSummary } from "@gram/client/models/components/toolusageusersummary.js";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 type SectionState = { pending: boolean; error: boolean };
-
-// One hue per card, so the six answers stay distinguishable at a glance and a
-// reader can say "the blue one" about servers. Kept to a low fill opacity in
-// RankedList, so the colour identifies the card without competing with the
-// labels sitting on top of it.
-const CARD_COLORS = {
-  servers: "#2563eb",
-  tools: "#7c3aed",
-  clients: "#0891b2",
-  errors: "#f43f5e",
-  skills: "#0d9488",
-  people: "#d97706",
-} as const;
 
 const SERVER_TARGET_TYPES = new Set([
   "hosted_mcp_server",
@@ -105,13 +96,37 @@ export function InsightsGrid({
   onRangeSelect?: (from: Date, to: Date) => void;
 }): JSX.Element {
   const logsLink = useObserveLogsLink();
-  const seriesColors = useSeriesColors();
+  const [highlightedServer, setHighlightedServer] = useState<string | null>(
+    null,
+  );
 
   const displayLabel = (target: ToolUsageTargetSummary) =>
     target.targetType === "shadow_mcp_server"
       ? (serverNameMappings.rawToDisplay.get(target.targetLabel) ??
         target.targetLabel)
       : target.targetLabel;
+
+  // A server keeps one colour everywhere it appears: its stack segment, its
+  // row in "most used", its row in "most errors". Without that the same name
+  // is blue in one place and amber in another, and the chart stops being
+  // readable against the lists beneath it.
+  const serverColors = useMemo(() => {
+    const byUsage = [...targets]
+      .filter((target) => SERVER_TARGET_TYPES.has(target.targetType))
+      .sort((a, b) => Number(b.eventCount) - Number(a.eventCount));
+    const colors = new Map<string, string>();
+    byUsage.forEach((target, index) => {
+      colors.set(
+        displayLabel(target),
+        INSIGHT_SERIES_COLORS[index % INSIGHT_SERIES_COLORS.length] ??
+          INSIGHT_OTHER_COLOR,
+      );
+    });
+    return colors;
+  }, [targets, serverNameMappings]);
+
+  const colorForServerRow = (row: RankedRow) =>
+    serverColors.get(row.label) ?? INSIGHT_OTHER_COLOR;
 
   const chartData = useMemo(
     () =>
@@ -125,9 +140,29 @@ export function InsightsGrid({
         from,
         to,
         undefined,
-        seriesColors,
+        INSIGHT_SERIES_COLORS,
+        INSIGHT_OTHER_COLOR,
       ),
-    [timeSeries, from, to, serverNameMappings, seriesColors],
+    [timeSeries, from, to, serverNameMappings],
+  );
+
+  // Hovering a server row isolates it: the others fade rather than disappear,
+  // so the bar heights stay put and the eye can still see the share it takes
+  // out of each day.
+  const datasets = useMemo(
+    () =>
+      chartData.datasets.map((dataset) => {
+        const color =
+          serverColors.get(dataset.label ?? "") ?? INSIGHT_OTHER_COLOR;
+        const dimmed =
+          highlightedServer !== null && dataset.label !== highlightedServer;
+        return {
+          ...dataset,
+          backgroundColor: dimmed ? `${color}1f` : color,
+          hoverBackgroundColor: color,
+        };
+      }),
+    [chartData.datasets, serverColors, highlightedServer],
   );
 
   // The headline trend: total calls per bucket, for the sparkline silhouettes.
@@ -292,7 +327,7 @@ export function InsightsGrid({
           timestamps={chartData.timestamps}
           bucketMs={chartData.bucketMs}
           tooltipLabels={chartData.tooltipLabels}
-          datasets={chartData.datasets}
+          datasets={datasets}
           onRangeSelect={onRangeSelect}
         />
       </InsightCard>
@@ -304,7 +339,11 @@ export function InsightsGrid({
           loading={status.targets.pending}
           error={status.targets.error}
         >
-          <RankedList color={CARD_COLORS.servers} rows={serverRows} />
+          <RankedList
+            color={colorForServerRow}
+            onRowHover={(row) => setHighlightedServer(row?.label ?? null)}
+            rows={serverRows}
+          />
         </InsightCard>
 
         <InsightCard
@@ -336,7 +375,8 @@ export function InsightsGrid({
           error={status.targets.error}
         >
           <RankedList
-            color={CARD_COLORS.errors}
+            color={colorForServerRow}
+            onRowHover={(row) => setHighlightedServer(row?.label ?? null)}
             rows={erroringRows}
             emptyMessage="Nothing failed"
           />

@@ -29,19 +29,24 @@ export function LogsFacetRail({
   groups,
   onToggle,
   onClearGroup,
-  search,
+  header,
   className,
 }: {
   groups: FacetGroup[];
   onToggle: (groupId: string, value: string, nextSelected: boolean) => void;
   onClearGroup: (groupId: string) => void;
-  /** Free-text and attribute-chip search, at the head of the rail. */
-  search?: ReactNode;
+  /** Rendered above the groups — the window the facets narrow within. */
+  header?: ReactNode;
   className?: string;
 }): JSX.Element {
   return (
     <div className={cn("flex flex-col gap-0.5 overflow-y-auto", className)}>
-      {search && <div className="pb-3">{search}</div>}
+      {header && (
+        <div className="border-border/60 flex flex-col gap-2 border-b pb-3">
+          <span className="text-eyebrow">Time range</span>
+          {header}
+        </div>
+      )}
       {groups.map((group) => (
         <FacetSection
           key={group.id}

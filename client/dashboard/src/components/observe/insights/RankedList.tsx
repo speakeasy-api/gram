@@ -23,15 +23,22 @@ export type RankedRow = {
 export function RankedList({
   rows,
   color,
+  onRowHover,
   loading = false,
   emptyMessage = "No data in this period",
   maxRows = 5,
   className,
 }: {
   rows: RankedRow[];
-  /** The card's hue, as a CSS color. Each card owns one so the board reads as
-   *  six answers rather than one long grey list. */
-  color: string;
+  /**
+   * The card's hue, as a CSS color — each card owns one so the board reads as
+   * six answers rather than one long grey list. A function instead gives each
+   * row its own, for the cards whose subject is also plotted on the chart and
+   * should carry the same colour there.
+   */
+  color: string | ((row: RankedRow) => string);
+  /** Hovering a row, for cards that highlight their subject elsewhere. */
+  onRowHover?: (row: RankedRow | null) => void;
   loading?: boolean;
   emptyMessage?: string;
   maxRows?: number;
@@ -68,7 +75,11 @@ export function RankedList({
         // in length to look alike. Hover then lands a step stronger than any
         // resting shade, which one flat fill could not do.
         const depth = visible.length > 1 ? index / (visible.length - 1) : 0;
-        const opacity = 0.22 - depth * 0.14;
+        // A row carrying its own colour is already distinct, so it does not
+        // need the rank ramp to tell it apart from its neighbours.
+        const perRow = typeof color === "function";
+        const rowColor = perRow ? color(row) : color;
+        const opacity = perRow ? 0.3 : 0.22 - depth * 0.14;
         const width = `${Math.max((row.value / max) * 100, 2)}%`;
 
         const content = (
@@ -76,12 +87,12 @@ export function RankedList({
             <span
               aria-hidden
               className="absolute inset-y-0 left-0 z-0"
-              style={{ width, backgroundColor: color, opacity }}
+              style={{ width, backgroundColor: rowColor, opacity }}
             />
             <span
               aria-hidden
               className="absolute inset-y-0 left-0 z-0 opacity-0 transition-opacity duration-150 group-hover/row:opacity-[0.18]"
-              style={{ width, backgroundColor: color }}
+              style={{ width, backgroundColor: rowColor }}
             />
             <span className="relative z-10 min-w-0 flex-1 truncate">
               {row.label}
@@ -92,7 +103,7 @@ export function RankedList({
             {row.secondary && (
               <span
                 className="relative z-10 w-12 shrink-0 text-right font-mono text-xs tabular-nums"
-                style={{ color }}
+                style={{ color: rowColor }}
               >
                 {row.secondary}
               </span>
@@ -104,7 +115,11 @@ export function RankedList({
           "group/row relative flex items-center gap-3 overflow-hidden px-2 py-1.5 text-sm";
 
         return (
-          <li key={row.id}>
+          <li
+            key={row.id}
+            onMouseEnter={() => onRowHover?.(row)}
+            onMouseLeave={() => onRowHover?.(null)}
+          >
             {row.href ? (
               <Link
                 to={row.href}

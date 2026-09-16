@@ -57,7 +57,6 @@ import { useObserveFilters } from "@/components/observe/useObserveFilters";
 import { useToolUsagePayload } from "@/components/observe/toolUsagePayload";
 import { InsightsGrid } from "@/components/observe/insights/InsightsGrid";
 import { HooksEmptyState } from "@/pages/hooks/HooksEmptyState";
-import { HooksSetupButton } from "@/pages/hooks/HooksSetupDialog";
 import type { MultiSelectGroup } from "@/components/ui/MultiSelect";
 
 ChartJS.register(
@@ -557,7 +556,6 @@ function HooksInnerContent({
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <HooksSetupButton />
             <Button variant="secondary" size="sm" asChild>
               <Link to={orgRoutes.logs.href()}>
                 <Settings className="h-4 w-4" />

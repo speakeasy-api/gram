@@ -12,12 +12,10 @@ import { Button } from "@/components/ui/Button";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import {
   FilterChip,
-  ObserveFilterBar,
   type ObserveStatusFilterValue,
   type ObserveTypeFilterValue,
 } from "@/components/observe/ObserveFilterBar";
 import {
-  buildServerOptionGroups,
   encodeGatewayServerFilter,
   encodeHostedServerFilter,
   encodeShadowServerFilter,
@@ -33,6 +31,7 @@ import {
 } from "@/components/observe/observeTargetFilters";
 import { perPage } from "@/components/observe/observeFilterUtils";
 import { formatToolName } from "@/components/observe/toolNameDisplay";
+import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { useObserveFilters } from "@/components/observe/useObserveFilters";
 import { useAttributeSearchParams } from "@/pages/logs/useAttributeSearchParams";
 import {
@@ -48,7 +47,6 @@ import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { useServerNameMappings } from "@/hooks/useServerNameMappings";
 import { HooksEmptyState } from "@/pages/hooks/HooksEmptyState";
 import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
-import { HooksSetupButton } from "@/pages/hooks/HooksSetupDialog";
 import { EditServerNameDialog } from "@/pages/hooks/EditServerNameDialog";
 import { LogDetailSheet } from "@/pages/logs/LogDetailSheet";
 import { LogFilterBar } from "@/pages/logs/LogFilterBar";
@@ -75,7 +73,6 @@ import type { ListToolUsageTracesPayloadTargetTypes } from "@gram/client/models/
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useListAttributeKeys } from "@gram/client/react-query/listAttributeKeys.js";
 import { unwrapAsync } from "@gram/client/types/fp";
-import { Badge } from "@/components/ui/Badge";
 import { Icon } from "@/components/ui/Icon";
 import { Skeleton } from "@/components/ui/Skeleton";
 import {
@@ -86,16 +83,10 @@ import {
 import { format } from "date-fns";
 import { Settings } from "lucide-react";
 import { DateGroupHeader } from "@/components/auditlogs/feed";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 
 type ToolUsageType = (typeof TOOL_USAGE_VALID_TYPES)[number];
-
-function isToolUsageType(
-  value: ObserveTypeFilterValue,
-): value is ToolUsageType {
-  return TOOL_USAGE_VALID_TYPES.includes(value);
-}
 
 function toSdkFilters(filters: ActiveLogFilter[]): LogFilter[] {
   return filters.map((filter) => {
@@ -117,28 +108,11 @@ function toSdkFilters(filters: ActiveLogFilter[]): LogFilter[] {
   });
 }
 
-// Free-text search and arbitrary attribute filters can't be served by the
-// pre-aggregated trace_summaries view, so they fall back to scanning raw logs.
-// Surface that to the user when either is active; the structured filters
-// (server, user, agent, type, date) stay on the fast summary path.
 function isCustomSearchActive(
   attributeSearchQuery: string | null,
   attributeFilters: ActiveLogFilter[],
 ): boolean {
   return (attributeSearchQuery?.length ?? 0) > 0 || attributeFilters.length > 0;
-}
-
-function SlowSearchNotice() {
-  return (
-    <SimpleTooltip tooltip="Free-text search and custom attribute filters scan raw logs instead of the pre-aggregated summaries, so results may take longer to load. Server, user, agent, type, and date filters stay fast.">
-      <Badge variant="warning">
-        <Badge.LeftIcon>
-          <Icon name="info" size="small" />
-        </Badge.LeftIcon>
-        <Badge.Text>Custom search — may be slower</Badge.Text>
-      </Badge>
-    </SimpleTooltip>
-  );
 }
 
 export function LogsTools(): JSX.Element {
@@ -173,12 +147,9 @@ export function LogsTools(): JSX.Element {
     setRangeFromBrush,
     clearCustomRange,
     selectedRoleIds,
-    roleOptions,
     roleEmails,
-    handleRoleSelectionChange,
     roleFilterPending,
     accountType,
-    handleAccountTypeChange,
   } = useObserveFilters<ToolUsageType>({
     defaultTypes: TOOL_USAGE_DEFAULT_TYPES,
     validTypes: TOOL_USAGE_VALID_TYPES,
@@ -464,33 +435,6 @@ export function LogsTools(): JSX.Element {
       { throwOnError: false },
     );
 
-  const serverOptionGroups = useMemo(
-    () =>
-      buildServerOptionGroups({
-        hostedServers: filterOptionsData?.hostedServers ?? [],
-        shadowServers: filterOptionsData?.shadowServers ?? [],
-        gateways: filterOptionsData?.gateways ?? [],
-        activeFilters,
-        serverNameMappings,
-      }),
-    [
-      activeFilters,
-      filterOptionsData?.hostedServers,
-      filterOptionsData?.shadowServers,
-      filterOptionsData?.gateways,
-      serverNameMappings,
-    ],
-  );
-
-  const toolUsageUserEmailOptions = useMemo(() => {
-    const selected = selectedUserEmails(activeFilters);
-    const known = (filterOptionsData?.users ?? [])
-      .filter((user) => user.userKind === "email")
-      .map((user) => user.userKey || user.userLabel)
-      .filter(Boolean);
-    return [...new Set([...known, ...selected])];
-  }, [activeFilters, filterOptionsData?.users]);
-
   const [expandedTraceId, setExpandedTraceId] = useState<string | null>(null);
   const [selectedLog, setSelectedLog] = useState<TelemetryLogRecord | null>(
     null,
@@ -569,8 +513,39 @@ export function LogsTools(): JSX.Element {
     [tracesData],
   );
 
+  // The day the pinned header shows: the last group whose header has scrolled
+  // up past the top of the list.
+  const [stickyDayTs, setStickyDayTs] = useState<number | null>(null);
+
+  const syncStickyDay = useCallback((container: HTMLElement) => {
+    const groups = container.querySelectorAll<HTMLElement>("[data-day-ts]");
+    let current: number | null = null;
+    for (const group of groups) {
+      const ts = Number(group.dataset.dayTs);
+      if (!Number.isFinite(ts)) continue;
+      if (current === null || group.offsetTop <= container.scrollTop + 1) {
+        current = ts;
+      } else {
+        break;
+      }
+    }
+    setStickyDayTs(current);
+  }, []);
+
+  // A fresh filter or a first page arrives without a scroll event, so the
+  // pinned header has to be seeded from the list as it renders.
+  useEffect(() => {
+    if (containerRef.current) syncStickyDay(containerRef.current);
+  }, [traces, syncStickyDay]);
+
+  const stickyDayDate = useMemo(
+    () => (stickyDayTs === null ? null : new Date(stickyDayTs)),
+    [stickyDayTs],
+  );
+
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const container = e.currentTarget;
+    syncStickyDay(container);
     const distanceFromBottom =
       container.scrollHeight - (container.scrollTop + container.clientHeight);
 
@@ -690,22 +665,10 @@ export function LogsTools(): JSX.Element {
             onRangeSelect={setRangeFromBrush}
             onResetRange={clearCustomRange}
             isZoomed={customRange !== null}
-            serverOptionGroups={serverOptionGroups}
-            onServerSelectionChange={handleServerSelectionChange}
-            userEmailOptions={toolUsageUserEmailOptions}
-            onUserEmailSelectionChange={handleUserEmailSelectionChange}
-            sourceOptions={hookSourceOptions}
-            onSourceSelectionChange={handleHookSourceSelectionChange}
             activeFilters={activeFilters}
             selectedTypes={selectedHookTypes}
-            onTypesChange={(types) =>
-              handleHookTypesChange(types.filter(isToolUsageType))
-            }
             selectedStatuses={selectedStatuses}
-            onStatusesChange={handleStatusesChange}
-            roleOptions={roleOptions}
             selectedRoleIds={selectedRoleIds}
-            onRoleSelectionChange={handleRoleSelectionChange}
             expandedTraceId={expandedTraceId}
             openingTraceId={openingTraceId}
             toggleExpand={toggleExpand}
@@ -714,6 +677,7 @@ export function LogsTools(): JSX.Element {
             handleLogClick={handleLogClick}
             setSelectedLog={setSelectedLog}
             containerRef={containerRef}
+            stickyDayDate={stickyDayDate}
             handleScroll={handleScroll}
             hasNextPage={hasNextPage}
             isFetchingNextPage={isFetchingNextPage}
@@ -735,7 +699,6 @@ export function LogsTools(): JSX.Element {
             onAttributeFiltersChange={updateAttributeFilters}
             onAddFilterFromLog={handleAddFilterFromLog}
             accountType={accountType}
-            onAccountTypeChange={handleAccountTypeChange}
             from={from}
             to={to}
           />
@@ -776,20 +739,10 @@ function LogsToolsContent({
   onRefresh,
   error,
   traces,
-  serverOptionGroups,
-  onServerSelectionChange,
-  userEmailOptions,
-  onUserEmailSelectionChange,
-  sourceOptions,
-  onSourceSelectionChange,
   activeFilters,
   selectedTypes,
-  onTypesChange,
   selectedStatuses,
-  onStatusesChange,
-  roleOptions,
   selectedRoleIds,
-  onRoleSelectionChange,
   expandedTraceId,
   openingTraceId,
   toggleExpand,
@@ -798,6 +751,7 @@ function LogsToolsContent({
   handleLogClick,
   setSelectedLog,
   containerRef,
+  stickyDayDate,
   handleScroll,
   hasNextPage,
   isFetchingNextPage,
@@ -819,7 +773,6 @@ function LogsToolsContent({
   onAttributeFiltersChange,
   onAddFilterFromLog,
   accountType,
-  onAccountTypeChange,
   from,
   to,
   totals,
@@ -837,22 +790,10 @@ function LogsToolsContent({
   onRefresh: () => void;
   error: Error | null;
   traces: ToolUsageTraceSummary[];
-  serverOptionGroups: Parameters<
-    typeof ObserveFilterBar
-  >[0]["serverOptionGroups"];
-  onServerSelectionChange: (values: string[]) => void;
-  userEmailOptions: string[];
-  onUserEmailSelectionChange: (values: string[]) => void;
-  sourceOptions: string[];
-  onSourceSelectionChange: (values: string[]) => void;
   activeFilters: FilterChip[];
   selectedTypes: ToolUsageType[];
-  onTypesChange: (types: ObserveTypeFilterValue[]) => void;
   selectedStatuses: ObserveStatusFilterValue[];
-  onStatusesChange: (statuses: ObserveStatusFilterValue[]) => void;
-  roleOptions: Array<{ id: string; name: string }>;
   selectedRoleIds: string[];
-  onRoleSelectionChange: (values: string[]) => void;
   expandedTraceId: string | null;
   openingTraceId: string | null;
   toggleExpand: (trace: ToolUsageTraceSummary) => Promise<void>;
@@ -864,6 +805,7 @@ function LogsToolsContent({
   ) => void;
   setSelectedLog: (log: TelemetryLogRecord | null) => void;
   containerRef: React.RefObject<HTMLDivElement | null>;
+  stickyDayDate: Date | null;
   handleScroll: (e: React.UIEvent<HTMLDivElement>) => void;
   hasNextPage: boolean;
   isFetchingNextPage: boolean;
@@ -885,7 +827,6 @@ function LogsToolsContent({
   onAttributeFiltersChange: (filters: ActiveLogFilter[]) => void;
   onAddFilterFromLog: (path: string, op: Operator, value: string) => void;
   accountType: string;
-  onAccountTypeChange: (value: string) => void;
   from: Date;
   to: Date;
   totals: ToolUsageTotals | undefined;
@@ -910,7 +851,18 @@ function LogsToolsContent({
               description="Dive into tool traces across all tools, skills, and MCP servers used by organization members in this project"
             />
             <div className="flex items-center gap-2">
-              <HooksSetupButton />
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={onRefresh}
+                disabled={isFetching}
+              >
+                <Icon
+                  name="refresh-cw"
+                  className={cn("size-4", isFetching && "animate-spin")}
+                />
+                Refresh
+              </Button>
               <Button variant="secondary" size="sm" asChild>
                 <Link to={orgRoutes.logs.href()}>
                   <Settings className="h-4 w-4" />
@@ -919,45 +871,6 @@ function LogsToolsContent({
               </Button>
             </div>
           </div>
-
-          <ObserveFilterBar
-            dimensionsOwnedElsewhere
-            serverOptions={[]}
-            serverOptionGroups={serverOptionGroups}
-            onServerSelectionChange={onServerSelectionChange}
-            userEmailOptions={userEmailOptions}
-            onUserEmailSelectionChange={onUserEmailSelectionChange}
-            sourceOptions={sourceOptions}
-            onSourceSelectionChange={onSourceSelectionChange}
-            activeFilters={activeFilters}
-            selectedTypes={selectedTypes}
-            onTypesChange={onTypesChange}
-            typeOptions={TOOL_USAGE_TYPE_OPTIONS}
-            selectedStatuses={selectedStatuses}
-            onStatusesChange={onStatusesChange}
-            statusOptions={TOOL_USAGE_STATUS_OPTIONS}
-            roleOptions={roleOptions}
-            selectedRoleIds={selectedRoleIds}
-            onRoleSelectionChange={onRoleSelectionChange}
-            dateRange={dateRange}
-            customRange={customRange}
-            customRangeLabel={customRangeLabel}
-            onDateRangeChange={onDateRangeChange}
-            onCustomRangeChange={onCustomRangeChange}
-            onClearCustomRange={onClearCustomRange}
-            projectSlug={projectSlug}
-            serverNameMappings={serverNameMappings}
-            accountType={accountType}
-            onAccountTypeChange={onAccountTypeChange}
-            onRefresh={onRefresh}
-            isRefreshing={isFetching}
-          />
-
-          {isCustomSearchActive(attributeSearchQuery, attributeFilters) && (
-            <div className="flex shrink-0">
-              <SlowSearchNotice />
-            </div>
-          )}
 
           {/* Summary and the window's shape are one statement about the range,
               so they share a panel: four numbers, then the silhouette they
@@ -1024,77 +937,115 @@ function LogsToolsContent({
             </div>
           </div>
 
-          <div className="border-border bg-card flex min-h-0 flex-1 overflow-hidden border">
-            <LogsFacetRail
-              search={
-                <LogFilterBar
-                  filters={attributeFilters}
-                  onChange={onAttributeFiltersChange}
-                  attributeKeys={attributeKeys}
-                  isLoadingKeys={isLoadingAttributeKeys}
-                  searchInput={attributeSearchInput}
-                  onSearchInputChange={onAttributeSearchInputChange}
-                  onSearchSubmit={onAttributeSearchSubmit}
-                />
-              }
-              groups={facetGroups}
-              onToggle={onFacetToggle}
-              onClearGroup={onFacetClearGroup}
-              className="border-border hidden w-[236px] shrink-0 flex-col border-r p-3 xl:flex"
-            />
-            <div className="bg-card min-h-0 flex-1 overflow-hidden">
-              <div className="bg-background relative flex h-full min-h-0 flex-col">
-                {isFetching && traces.length > 0 && (
-                  <div className="bg-primary/20 absolute top-0 right-0 left-0 z-20 h-1">
-                    <div className="bg-primary h-full animate-pulse" />
-                  </div>
-                )}
+          <div className="border-border bg-card flex min-h-0 flex-1 flex-col overflow-hidden border">
+            {/* Search reads across both columns — it narrows the rows, not the
+                facet list — so it spans them rather than sitting in one. */}
+            <div className="border-border shrink-0 border-b p-3">
+              <LogFilterBar
+                filters={attributeFilters}
+                onChange={onAttributeFiltersChange}
+                attributeKeys={attributeKeys}
+                isLoadingKeys={isLoadingAttributeKeys}
+                searchInput={attributeSearchInput}
+                onSearchInputChange={onAttributeSearchInputChange}
+                onSearchSubmit={onAttributeSearchSubmit}
+              />
+            </div>
 
-                <div className="text-eyebrow bg-card sticky top-0 z-10 flex h-9 shrink-0 items-center gap-3 border-b px-4">
-                  <div className="w-2 shrink-0" />
-                  <div className="w-[76px] shrink-0">Time</div>
-                  <div className="min-w-0 flex-2">Server / Tool</div>
-                  <div className="min-w-[180px] flex-1 text-left">User</div>
-                  <div className="w-32 shrink-0">Client</div>
-                </div>
-
-                <div
-                  ref={containerRef}
-                  className="flex-1 overflow-y-auto"
-                  onScroll={handleScroll}
-                >
-                  <LogsToolsTableContent
-                    error={error}
-                    isLoading={isLoading}
-                    traces={traces}
-                    hasActiveFilters={
-                      activeFilters.length > 0 ||
-                      !isDefaultToolUsageTypeSelection(selectedTypes) ||
-                      selectedStatuses.length > 0 ||
-                      selectedRoleIds.length > 0 ||
-                      attributeFilters.length > 0 ||
-                      accountType !== "" ||
-                      Boolean(attributeSearchQuery)
-                    }
-                    expandedTraceId={expandedTraceId}
-                    openingTraceId={openingTraceId}
-                    isFetchingNextPage={isFetchingNextPage}
-                    onToggleExpand={toggleExpand}
-                    onLogClick={handleLogClick}
-                    serverNameMappings={serverNameMappings}
-                    from={from}
-                    to={to}
+            <div className="flex min-h-0 flex-1 overflow-hidden">
+              <LogsFacetRail
+                header={
+                  <TimeRangePicker
+                    preset={customRange ? null : dateRange}
+                    customRange={customRange}
+                    customRangeLabel={customRangeLabel}
+                    onPresetChange={(preset) => onDateRangeChange(preset)}
+                    onCustomRangeChange={onCustomRangeChange}
+                    onClearCustomRange={onClearCustomRange}
+                    projectSlug={projectSlug}
+                    // The rail is narrower than the picker's intrinsic width,
+                    // so without letting the free-text input shrink the trigger
+                    // overflows and the chevron sits outside its own border.
+                    className="w-full [&_input]:min-w-0"
                   />
-                </div>
+                }
+                groups={facetGroups}
+                onToggle={onFacetToggle}
+                onClearGroup={onFacetClearGroup}
+                className="border-border hidden w-[236px] shrink-0 flex-col border-r p-3 xl:flex"
+              />
+              <div className="bg-card min-h-0 flex-1 overflow-hidden">
+                <div className="bg-background relative flex h-full min-h-0 flex-col">
+                  {/* Refetches of the whole list only. Paging in the next
+                      page keeps every loaded row on screen, so flashing a bar
+                      across the header for it reads as a page reload. */}
+                  {isFetching && !isFetchingNextPage && traces.length > 0 && (
+                    <div className="bg-border absolute top-0 right-0 left-0 z-20 h-0.5">
+                      <div className="bg-muted-foreground/60 h-full animate-pulse" />
+                    </div>
+                  )}
 
-                {traces.length > 0 && (
-                  <div className="flex shrink-0 items-center gap-4 border-t px-5 py-3">
-                    <span className="text-eyebrow">
-                      {traces.length} {traces.length === 1 ? "trace" : "traces"}
-                      {hasNextPage && " · Scroll to load more"}
-                    </span>
+                  <div className="text-eyebrow bg-card sticky top-0 z-10 flex h-9 shrink-0 items-center gap-3 border-b px-4">
+                    <div className="w-2 shrink-0" />
+                    <div className="w-[76px] shrink-0">Time</div>
+                    <div className="min-w-0 flex-1">Server</div>
+                    <div className="min-w-0 flex-1">Tool</div>
+                    <div className="w-20 shrink-0">Type</div>
+                    <div className="min-w-[180px] flex-1 text-left">User</div>
+                    <div className="w-32 shrink-0">Client</div>
                   </div>
-                )}
+
+                  {/* One header for the whole list instead of a sticky header
+                      per day group. Sticky groups hand off by pushing each
+                      other out of the viewport, which reads as a jump when
+                      scrolling fast. This one never moves: only its date
+                      changes, as the day under the top of the list changes. */}
+                  {stickyDayDate && traces.length > 0 && (
+                    <div className="bg-card shrink-0 border-b">
+                      <DateGroupHeader date={stickyDayDate} mode="local" />
+                    </div>
+                  )}
+
+                  <div
+                    ref={containerRef}
+                    className="relative flex-1 overflow-y-auto"
+                    onScroll={handleScroll}
+                  >
+                    <LogsToolsTableContent
+                      error={error}
+                      isLoading={isLoading}
+                      traces={traces}
+                      hasActiveFilters={
+                        activeFilters.length > 0 ||
+                        !isDefaultToolUsageTypeSelection(selectedTypes) ||
+                        selectedStatuses.length > 0 ||
+                        selectedRoleIds.length > 0 ||
+                        attributeFilters.length > 0 ||
+                        accountType !== "" ||
+                        Boolean(attributeSearchQuery)
+                      }
+                      expandedTraceId={expandedTraceId}
+                      openingTraceId={openingTraceId}
+                      isFetchingNextPage={isFetchingNextPage}
+                      hasNextPage={hasNextPage}
+                      onToggleExpand={toggleExpand}
+                      onLogClick={handleLogClick}
+                      serverNameMappings={serverNameMappings}
+                      from={from}
+                      to={to}
+                    />
+                  </div>
+
+                  {traces.length > 0 && (
+                    <div className="flex shrink-0 items-center gap-4 border-t px-5 py-3">
+                      <span className="text-eyebrow">
+                        {traces.length}{" "}
+                        {traces.length === 1 ? "trace" : "traces"}
+                        {hasNextPage && " · Scroll to load more"}
+                      </span>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -1122,6 +1073,7 @@ function LogsToolsTableContent({
   expandedTraceId,
   openingTraceId,
   isFetchingNextPage,
+  hasNextPage,
   onToggleExpand,
   onLogClick,
   serverNameMappings,
@@ -1135,6 +1087,7 @@ function LogsToolsTableContent({
   expandedTraceId: string | null;
   openingTraceId: string | null;
   isFetchingNextPage: boolean;
+  hasNextPage: boolean;
   onToggleExpand: (trace: ToolUsageTraceSummary) => Promise<void>;
   onLogClick: (log: TelemetryLogRecord, trace?: ToolUsageTraceSummary) => void;
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
@@ -1159,22 +1112,24 @@ function LogsToolsTableContent({
             key={i}
             className="flex items-center gap-3 border-b px-5 py-2.5 last:border-b-0"
           >
-            <div className="min-w-[150px] shrink-0">
+            <div className="w-2 shrink-0" />
+            <div className="w-[76px] shrink-0">
+              <Skeleton className="h-3 w-14" />
+            </div>
+            <div className="min-w-0 flex-1">
               <Skeleton className="h-3 w-28" />
             </div>
-            <div className="w-5 shrink-0" />
-            <div className="flex min-w-0 flex-2 items-center gap-2">
-              <Skeleton className="h-5 w-20 shrink-0" />
-              <Skeleton className="h-3 w-40" />
-            </div>
-            <div className="min-w-[200px] flex-1">
+            <div className="min-w-0 flex-1">
               <Skeleton className="h-3 w-36" />
             </div>
-            <div className="min-w-28 shrink-0">
-              <Skeleton className="h-3 w-16" />
-            </div>
-            <div className="flex min-w-20 shrink-0 justify-center">
+            <div className="w-20 shrink-0">
               <Skeleton className="h-3 w-12" />
+            </div>
+            <div className="min-w-[180px] flex-1">
+              <Skeleton className="h-3 w-32" />
+            </div>
+            <div className="w-32 shrink-0">
+              <Skeleton className="h-3 w-16" />
             </div>
           </div>
         ))}
@@ -1205,10 +1160,9 @@ function LogsToolsTableContent({
   }
 
   // The date is the same for long runs of rows, so it is stated once per day
-  // rather than on every line. Grouping the rows under it (instead of emitting
-  // a header between flat siblings) is what lets each header stick: a sticky
-  // element is bounded by its parent, so scrolling into the next day pushes
-  // the previous day's header out and takes its place.
+  // rather than on every line. Each group carries the timestamp of its first
+  // row so the pinned header above the list can read the current day straight
+  // off the DOM while scrolling.
   const dayGroups: Array<{ key: string; date: Date; traces: typeof traces }> =
     [];
   for (const trace of traces) {
@@ -1227,10 +1181,11 @@ function LogsToolsTableContent({
   return (
     <>
       {dayGroups.map((group) => (
-        <div key={group.key}>
-          <div className="bg-card sticky top-0 z-[5]">
-            <DateGroupHeader date={group.date} mode="local" />
-          </div>
+        <div
+          key={group.key}
+          data-day-ts={group.date.getTime()}
+          className="border-border/60 border-t first:border-t-0"
+        >
           {group.traces.map((trace) => (
             <LogsToolsTraceRow
               key={trace.id}
@@ -1247,10 +1202,17 @@ function LogsToolsTableContent({
         </div>
       ))}
 
-      {isFetchingNextPage && (
-        <div className="text-muted-foreground flex items-center justify-center gap-2 border-t py-4">
-          <Icon name="loader-circle" className="size-4 animate-spin" />
-          <span className="text-sm">Loading more logs...</span>
+      {/* Rendered for the whole time there is a next page, not just while one
+          is in flight: a row that appears and disappears changes the scroll
+          height mid-scroll, which is what makes paging feel like it jumps. */}
+      {hasNextPage && (
+        <div className="text-muted-foreground flex h-12 items-center justify-center gap-2 border-t">
+          {isFetchingNextPage && (
+            <>
+              <Icon name="loader-circle" className="size-3.5 animate-spin" />
+              <span className="text-eyebrow">Loading more</span>
+            </>
+          )}
         </div>
       )}
     </>
@@ -1371,30 +1333,47 @@ function LogsToolsTraceRow({
           {format(timestamp, "HH:mm:ss")}
         </div>
 
-        <div className="flex min-w-0 flex-2 items-center gap-2">
-          {targetConfig.shortLabel !== "Hosted" && (
-            // Hosted is the ordinary case and labelling every row with it just
-            // repeats the column header. The surfaces worth noticing — a
-            // shadow server, a skill, a gateway — still say so.
-            <span className="text-muted-foreground shrink-0 font-mono text-[10px] tracking-wide uppercase">
-              {targetConfig.shortLabel}
+        <div className="group/server flex min-w-0 flex-1 items-center gap-1.5">
+          {showTargetLabel ? (
+            <span className="text-muted-foreground min-w-0 truncate font-mono text-xs">
+              {trace.targetType === "hosted_mcp_server" && trace.targetId ? (
+                <Link
+                  to={routes.mcp.details.overview.href(trace.targetId)}
+                  onClick={(event) => event.stopPropagation()}
+                  className="hover:text-foreground hover:underline"
+                >
+                  {targetLabel}
+                </Link>
+              ) : trace.targetType === "meta_mcp_server" && trace.targetId ? (
+                <Link
+                  to={routes.mcp.gateway.overview.href(trace.targetId)}
+                  onClick={(event) => event.stopPropagation()}
+                  className="hover:text-foreground hover:underline"
+                >
+                  {targetLabel}
+                </Link>
+              ) : (
+                targetLabel
+              )}
+            </span>
+          ) : (
+            <span className="text-muted-foreground/50 font-mono text-xs">
+              —
             </span>
           )}
-          <div className="group/server relative flex shrink-0 items-center">
-            {editDialogProps && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setEditDialogOpen(true);
-                }}
-                className="text-muted-foreground hover:text-foreground bg-card border-border invisible absolute -right-6 size-6 border p-1 transition-colors group-hover/server:visible"
-                aria-label="Edit display name"
-              >
-                <Icon name="pencil" className="size-3" />
-              </button>
-            )}
-          </div>
+          {editDialogProps && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setEditDialogOpen(true);
+              }}
+              className="text-muted-foreground hover:text-foreground invisible shrink-0 transition-colors group-hover/server:visible"
+              aria-label="Edit display name"
+            >
+              <Icon name="pencil" className="size-3" />
+            </button>
+          )}
           {trace.viaMetaMcpServerId && (
             // The gateway that dispatched this member call.
             <SimpleTooltip
@@ -1410,35 +1389,16 @@ function LogsToolsTraceRow({
               </Link>
             </SimpleTooltip>
           )}
-          <div className="flex min-w-0 items-center gap-2">
-            {showTargetLabel && (
-              <span className="text-muted-foreground min-w-0 truncate font-mono text-xs">
-                {trace.targetType === "hosted_mcp_server" && trace.targetId ? (
-                  <Link
-                    to={routes.mcp.details.overview.href(trace.targetId)}
-                    onClick={(event) => event.stopPropagation()}
-                    className="hover:text-foreground hover:underline"
-                  >
-                    {targetLabel}
-                  </Link>
-                ) : trace.targetType === "meta_mcp_server" && trace.targetId ? (
-                  <Link
-                    to={routes.mcp.gateway.overview.href(trace.targetId)}
-                    onClick={(event) => event.stopPropagation()}
-                    className="hover:text-foreground hover:underline"
-                  >
-                    {targetLabel}
-                  </Link>
-                ) : (
-                  targetLabel
-                )}
-                {" /"}
-              </span>
-            )}
-            <span className="text-foreground truncate font-mono text-xs font-medium">
-              {formatToolName(trace.toolName)}
-            </span>
-          </div>
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <span className="text-foreground block truncate font-mono text-xs font-medium">
+            {formatToolName(trace.toolName)}
+          </span>
+        </div>
+
+        <div className="text-muted-foreground w-20 shrink-0 truncate font-mono text-[10px] tracking-wide uppercase">
+          {targetConfig.shortLabel}
         </div>
 
         <div className="flex min-w-[180px] flex-1 items-center gap-2 text-xs">
