@@ -42,15 +42,14 @@ import { useRBAC } from "@/hooks/useRBAC";
 import { useSidebar } from "@/components/ui/Sidebar/sidebar-context";
 import { useSlugs } from "@/contexts/Sdk";
 
-/** Scopes that make an org-level nav item visible. */
-
+/** A top-level navigation item gated by its required scopes. */
 function ScopeGatedTopLevelItem({
   item,
-  scope,
+  scope = ["project:read"],
   resourceId,
 }: {
   item: AppRoute;
-  scope: Scope | Scope[];
+  scope?: Scope | Scope[];
   resourceId?: string;
 }) {
   return (
@@ -104,10 +103,13 @@ export function AppSidebar({
   const activeRoute = allNavRoutes.find((entry) => entry.route.active)?.route;
   const accessFor = (
     route: AppRoute,
-  ): Pick<ProjectNavRoute, "scope" | "resourceId"> => {
+  ): { scope?: Scope[]; resourceId?: string } => {
     const entry = navAccess.get(route.url);
     return entry
-      ? { scope: entry.scope, resourceId: entry.resourceId }
+      ? {
+          scope: entry.scope.length > 0 ? entry.scope : undefined,
+          resourceId: entry.resourceId,
+        }
       : { scope: ["project:read"] };
   };
   // In collapsed mode, sub-items are hidden — fall back to group highlight.
@@ -202,6 +204,30 @@ export function AppSidebar({
             <div className="border-border border-t" />
           </li>
 
+          {/* Identity group */}
+          <ScopeGatedNavGroup
+            label="Identity"
+            Icon={(p) => <Icon {...p} name="fingerprint" />}
+            items={[
+              { item: routes.identities, ...accessFor(routes.identities) },
+              ...(isAgentManagementEnabled
+                ? [{ item: routes.agents, ...accessFor(routes.agents) }]
+                : []),
+              ...(isUserSessionsEnabled
+                ? [
+                    {
+                      item: routes.mcpSessions,
+                      ...accessFor(routes.mcpSessions),
+                    },
+                  ]
+                : []),
+              {
+                item: routes.remoteIdentityProviders,
+                ...accessFor(routes.remoteIdentityProviders),
+              },
+            ]}
+          />
+
           {/* MCP Gateway group */}
           <ScopeGatedNavGroup
             label="MCP Gateway"
@@ -237,30 +263,6 @@ export function AppSidebar({
               { item: routes.riskEvents, ...accessFor(routes.riskEvents) },
               { item: routes.policyCenter, ...accessFor(routes.policyCenter) },
               { item: routes.shadowAI, ...accessFor(routes.shadowAI) },
-            ]}
-          />
-
-          {/* Identity group */}
-          <ScopeGatedNavGroup
-            label="Identity"
-            Icon={(p) => <Icon {...p} name="fingerprint" />}
-            items={[
-              { item: routes.identities, ...accessFor(routes.identities) },
-              ...(isAgentManagementEnabled
-                ? [{ item: routes.agents, ...accessFor(routes.agents) }]
-                : []),
-              ...(isUserSessionsEnabled
-                ? [
-                    {
-                      item: routes.mcpSessions,
-                      ...accessFor(routes.mcpSessions),
-                    },
-                  ]
-                : []),
-              {
-                item: routes.remoteIdentityProviders,
-                ...accessFor(routes.remoteIdentityProviders),
-              },
             ]}
           />
 

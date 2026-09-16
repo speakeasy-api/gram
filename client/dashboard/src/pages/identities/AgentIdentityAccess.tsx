@@ -1,3 +1,4 @@
+import { registeredAgentHref } from "./identityRoster";
 import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useOrgMcpServers } from "@/pages/access/useOrgMcpServers";
@@ -66,27 +67,23 @@ export function AgentIdentityPermissions({
       resourceNames.set(server.id, `${server.name} (${group.projectName})`);
   }
   const rows = canRead ? (grants.data ?? []) : [];
-  return (
-    <IdentityPanel
-      title="Agent permissions"
-      handoffLabel="Agent Identity"
-      handoffHref={`${routes.agents.href()}?id=${encodeURIComponent(agent.id)}`}
-      loading={canRead && grants.isLoading}
-      error={canRead && grants.isError && rows.length === 0}
-      refreshFailed={canRead && grants.isError && rows.length > 0}
-      onRetry={() => void grants.refetch()}
-      footer="These configured permissions limit what credentials may delegate. Actual access also depends on the credential's grants, the owner's current permissions, and the agent's status."
-    >
-      {!canRead ? (
-        <IdentityPanelEmpty>
-          You need permission to manage this agent to view its policy.
-        </IdentityPanelEmpty>
-      ) : rows.length === 0 ? (
-        <IdentityPanelEmpty>
-          No permissions configured for this agent.
-        </IdentityPanelEmpty>
-      ) : (
-        rows.map((grant) => (
+  let content: JSX.Element;
+  if (!canRead) {
+    content = (
+      <IdentityPanelEmpty>
+        You need permission to manage this agent to view its policy.
+      </IdentityPanelEmpty>
+    );
+  } else if (rows.length === 0) {
+    content = (
+      <IdentityPanelEmpty>
+        No permissions configured for this agent.
+      </IdentityPanelEmpty>
+    );
+  } else {
+    content = (
+      <>
+        {rows.map((grant) => (
           <div
             key={grant.id}
             className="border-border space-y-1 border-b px-4 py-3 last:border-b-0"
@@ -105,8 +102,22 @@ export function AgentIdentityPermissions({
               )}
             </Text>
           </div>
-        ))
-      )}
+        ))}
+      </>
+    );
+  }
+  return (
+    <IdentityPanel
+      title="Agent permissions"
+      handoffLabel="Agent Identity"
+      handoffHref={registeredAgentHref(routes.agents.href(), "", agent.id)}
+      loading={canRead && grants.isLoading}
+      error={canRead && grants.isError && rows.length === 0}
+      refreshFailed={canRead && grants.isError && rows.length > 0}
+      onRetry={() => void grants.refetch()}
+      footer="These configured permissions limit what credentials may delegate. Actual access also depends on the credential's grants, the owner's current permissions, and the agent's status."
+    >
+      {content}
     </IdentityPanel>
   );
 }

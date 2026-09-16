@@ -31,6 +31,7 @@ import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
+import { useRBAC } from "@/hooks/useRBAC";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { Badge } from "@/components/ui/Badge";
@@ -380,8 +381,11 @@ function IdentitiesIndexContent(): JSX.Element {
   const session = useSession();
   const isPlatformAdmin = useIsPlatformAdmin();
   const agentManagementFlag = useFeatureFlag(FEATURE_FLAGS.agentManagement);
+  const { hasScope } = useRBAC();
+  const canReadOrganization = hasScope("org:read", organization.id);
   // Match the existing agent screen's supported sessions, without changing scope.
   const agentsEnabled =
+    agentManagementFlag.status === "enabled" &&
     organization.slug !== DEMO_ORG_SLUG &&
     !session.organizationOverride &&
     !session.impersonatorEmail &&
@@ -436,9 +440,12 @@ function IdentitiesIndexContent(): JSX.Element {
   const deviceCoverageQuery = useQuery({
     queryKey: deviceCoverageQueryKey(organization.id),
     queryFn: () => fetchDeviceCoverage(client),
+    enabled: canReadOrganization,
     throwOnError: false,
   });
-  const deviceCoverage = deviceCoverageQuery.data;
+  const deviceCoverage = canReadOrganization
+    ? deviceCoverageQuery.data
+    : undefined;
 
   // The list is the join of the roster reads, so until they land there is no
   // roster to report on — and "0 identities" or "No identities match these
@@ -498,6 +505,14 @@ function IdentitiesIndexContent(): JSX.Element {
     return tally;
   }, [identities]);
 
+  const kindKey = (values.kind ?? []).join(",");
+  const hasLegacyKindFilter =
+    !!kindKey && !KIND_OPTIONS.some((option) => option.value === kindKey);
+
+  const kindOptions = [...KIND_OPTIONS];
+  if (hasLegacyKindFilter)
+    kindOptions.push({ value: kindKey, label: "Custom" });
+
   // Option lists the data decides: a role the org never assigned, a department
   // nobody is in, or a device bucket no machine falls into is a filter that can
   // only empty the table, so each dimension offers what the roster actually
@@ -545,7 +560,7 @@ function IdentitiesIndexContent(): JSX.Element {
   const filterSchema = useMemo(
     () =>
       IDENTITY_FILTERS.filter((dimension) => {
-        if (dimension.id === "kind") return false;
+        if (dimension.id === "kind") return hasLegacyKindFilter;
         const selected = (values[dimension.id as keyof typeof values] ??
           []) as string[];
         if (selected.length > 0) return true;
@@ -559,6 +574,7 @@ function IdentitiesIndexContent(): JSX.Element {
       }),
     [
       values,
+      hasLegacyKindFilter,
       roleOptions.length,
       departmentOptions.length,
       teamOptions.length,
@@ -566,10 +582,6 @@ function IdentitiesIndexContent(): JSX.Element {
     ],
   );
 
-  // Keep the existing kind URL parameter while presenting a single choice.
-  const selectedKind = values.kind?.length === 1 ? values.kind[0] : "";
-  const kindKey =
-    selectedKind === "person" || selectedKind === "agent" ? selectedKind : "";
   const accountType = (values.account_type as string | undefined) ?? "";
   const personalAccount = (values.personal_account as string | undefined) ?? "";
   const enrollment = (values.enrollment as string | undefined) ?? "";
@@ -691,7 +703,7 @@ function IdentitiesIndexContent(): JSX.Element {
           : `${rows.length} of ${identities.length} — every person and agent the platform knows about, account here or not.`}
       </Page.Section.Description>
       <Page.Section.CTA>
-        {agentsEnabled && agentManagementFlag.status === "enabled" && (
+        {agentsEnabled && (
           <Button asChild variant="primary">
             <Link to={`${routes.agents.href()}?create=true`}>
               <Plus className="size-4" aria-hidden="true" />
@@ -761,8 +773,10 @@ function IdentitiesIndexContent(): JSX.Element {
             <Page.Toolbar.Leading>
               <SegmentedControl
                 value={kindKey}
-                onChange={(kind) => setValue("kind", kind ? [kind] : [])}
-                options={KIND_OPTIONS}
+                onChange={(kind) =>
+                  setValue("kind", kind ? kind.split(",") : [])
+                }
+                options={kindOptions}
               />
             </Page.Toolbar.Leading>
             <Page.Toolbar.Search
@@ -776,6 +790,9 @@ function IdentitiesIndexContent(): JSX.Element {
                 schema={filterSchema}
                 values={values}
                 optionsById={{
+                  kind: Object.entries(IDENTITY_KIND_LABELS).map(
+                    ([value, label]) => ({ value, label }),
+                  ),
                   enrollment: ENROLLMENT_OPTIONS,
                   activity: ACTIVITY_OPTIONS,
                   device_status: deviceStatusOptions,

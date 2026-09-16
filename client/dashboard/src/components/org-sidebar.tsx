@@ -197,7 +197,11 @@ export function OrgSidebar({
                 label="Team"
                 Icon={(p) => <Icon {...p} name="users" />}
                 items={[
-                  { item: orgRoutes.team, scope: orgReadOrAdmin },
+                  {
+                    item: orgRoutes.team,
+                    scope: orgReadOrAdmin,
+                    label: "Members",
+                  },
                   { item: orgRoutes.access, scope: orgReadOrAdmin },
                   { item: orgRoutes.identity, scope: orgReadOrAdmin },
                 ]}

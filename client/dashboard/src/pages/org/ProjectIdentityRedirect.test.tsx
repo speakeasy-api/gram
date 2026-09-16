@@ -3,7 +3,12 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, expect, it, vi } from "vitest";
 import ProjectIdentityRedirect from "./ProjectIdentityRedirect";
 
-vi.mock("@/contexts/Auth", () => ({ useProject: () => ({ slug: "working" }) }));
+vi.mock("@/contexts/Auth", () => ({
+  useProject: () => ({ slug: "working" }),
+  useOrganization: () => ({
+    projects: [{ slug: "working" }, { slug: "selected" }],
+  }),
+}));
 afterEach(cleanup);
 function Destination() {
   const location = useLocation();
@@ -16,6 +21,18 @@ function Destination() {
   );
 }
 it.each([
+  [
+    "/org/mcp-sessions?projectSlug=selected",
+    "/org/projects/selected/mcp-sessions",
+  ],
+  [
+    "/org/mcp-sessions?project=deleted&subjectUrn=user%3A1#details",
+    "/org/projects/working/mcp-sessions?subjectUrn=user%3A1#details",
+  ],
+  [
+    "/org/mcp-sessions?projectSlug=deleted",
+    "/org/projects/working/mcp-sessions",
+  ],
   [
     "/org/agent-management?id=agent-1",
     "/org/projects/working/agent-management?id=agent-1",

@@ -62,6 +62,7 @@ const GROUPING_OPTIONS: { value: ConnectionGrouping; label: string }[] = [
 ];
 
 export default function UserSessions(): JSX.Element {
+  const project = useProject();
   const telemetry = useTelemetry();
   const routes = useRoutes();
 
@@ -72,7 +73,7 @@ export default function UserSessions(): JSX.Element {
     return <Navigate to={routes.home.href()} replace />;
   }
 
-  return <UserSessionsInner />;
+  return <UserSessionsInner key={project.id} />;
 }
 
 function UserSessionsInner(): JSX.Element {
@@ -197,7 +198,8 @@ function UserSessionsInner(): JSX.Element {
 
   return (
     <ResourceListPage
-      scope="org:read"
+      scope="project:read"
+      resourceId={project.id}
       title="MCP Sessions"
       description="Connections Gram brokers for this project. Revoking ends current sessions immediately, but clients can authenticate and reconnect. A killswitch is a separate action that blocks matching MCP tool calls without ending sessions; revocation never creates or lifts one."
     >

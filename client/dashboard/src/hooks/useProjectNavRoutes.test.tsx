@@ -115,13 +115,41 @@ describe("useProjectNavRoutes", () => {
     );
   });
 
-  it("includes Agent Identity for owners without requiring org-wide read", () => {
+  it("includes Agent Identity for owners without requiring role grants", () => {
     const { result } = renderHook(() => useProjectNavRoutes());
     const agents = result.current.find(
       (entry) => entry.route === routes.agents,
     );
 
-    expect(agents?.scope).toEqual(["project:read"]);
+    expect(agents?.scope).toEqual([]);
+  });
+
+  it("uses the selected project's read grant for MCP Sessions", () => {
+    const { result, rerender } = renderHook(() => useProjectNavRoutes());
+    const sessions = () =>
+      result.current.find((entry) => entry.route === routes.mcpSessions);
+    expect(sessions()?.scope).toEqual(["project:read"]);
+    expect(sessions()?.resourceId).toBe("project_a");
+    testState.projectId = "project_b";
+    rerender();
+    expect(sessions()?.resourceId).toBe("project_b");
+  });
+
+  it("lists Identity before MCP Gateway, Security and Policy, and Observability", () => {
+    const { result } = renderHook(() => useProjectNavRoutes());
+    const navRoutes = result.current.map((entry) => entry.route);
+    expect(navRoutes.slice(2, 6)).toEqual([
+      routes.identities,
+      routes.agents,
+      routes.mcpSessions,
+      routes.remoteIdentityProviders,
+    ]);
+    expect(navRoutes.indexOf(routes.playground)).toBeLessThan(
+      navRoutes.indexOf(routes.riskOverview),
+    );
+    expect(navRoutes.indexOf(routes.shadowAI)).toBeLessThan(
+      navRoutes.indexOf(routes.costs),
+    );
   });
 
   it("uses Shadow AI as the nav destination, with Shadow MCP folded into it", () => {

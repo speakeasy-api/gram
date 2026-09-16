@@ -13,7 +13,8 @@ export interface ProjectNavRoute {
    * Scopes that grant access — the user needs ANY one of them. Mirrors the
    * per-item `scope` props on `app-sidebar.tsx`'s `ScopeGatedNavItem`s so the
    * command palette gates the same pages the sidebar does. Keep these in sync
-   * with the sidebar when scopes change there.
+   * with the sidebar when scopes change there. An empty array means the page
+   * uses server-side ownership authorization and needs no navigation scope.
    */
   scope: Scope[];
   /** Resource selected for this route's scope check, when applicable. */
@@ -61,6 +62,23 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
     return [
       { route: routes.home, scope: read },
       { route: routes.chat, scope: read },
+      { route: routes.identities, scope: observe },
+      ...(agentManagementFlag.status === "enabled"
+        ? [{ route: routes.agents, scope: [] }]
+        : []),
+      ...(userSessionsFlag.status === "enabled"
+        ? [
+            {
+              route: routes.mcpSessions,
+              scope: read,
+              resourceId: projectId,
+            },
+          ]
+        : []),
+      {
+        route: routes.remoteIdentityProviders,
+        scope: ["org:read", "org:admin"],
+      },
       {
         route: routes.playground,
         scope: ["mcp:read", "mcp:write", "mcp:connect"],
@@ -89,22 +107,6 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       { route: routes.riskEvents, scope: ["org:admin"] as Scope[] },
       { route: routes.policyCenter, scope: readWrite },
       { route: routes.shadowAI, scope: readWrite },
-      { route: routes.identities, scope: observe },
-      ...(agentManagementFlag.status === "enabled"
-        ? [{ route: routes.agents, scope: read }]
-        : []),
-      ...(userSessionsFlag.status === "enabled"
-        ? [
-            {
-              route: routes.mcpSessions,
-              scope: ["org:read", "org:admin"] as Scope[],
-            },
-          ]
-        : []),
-      {
-        route: routes.remoteIdentityProviders,
-        scope: ["org:read", "org:admin"],
-      },
       { route: routes.costs, scope: observe },
       { route: routes.insights, scope: observe },
       { route: routes.agentSessions, scope: observe },

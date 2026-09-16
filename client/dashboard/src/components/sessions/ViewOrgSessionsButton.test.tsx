@@ -4,9 +4,13 @@ import type { FeatureFlagResult } from "@/hooks/useFeatureFlag";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import { ViewOrgSessionsButton } from "./ViewOrgSessionsButton";
 
-const { flagResult, hasAnyScope } = vi.hoisted(() => ({
+const { flagResult, hasScope } = vi.hoisted(() => ({
   flagResult: vi.fn(),
-  hasAnyScope: vi.fn(),
+  hasScope: vi.fn(),
+}));
+
+vi.mock("@/contexts/Auth", () => ({
+  useProject: () => ({ id: "project_example" }),
 }));
 
 vi.mock("@/hooks/useFeatureFlag", () => ({
@@ -14,7 +18,9 @@ vi.mock("@/hooks/useFeatureFlag", () => ({
 }));
 
 vi.mock("@/hooks/useRBAC", () => ({
-  useRBAC: () => ({ hasAnyScope: (scopes: Scope[]) => hasAnyScope(scopes) }),
+  useRBAC: () => ({
+    hasScope: (scope: Scope, resourceId: string) => hasScope(scope, resourceId),
+  }),
 }));
 
 // The route helper resolves :orgSlug from the URL and renders a react-router
@@ -38,7 +44,7 @@ function link() {
 describe("ViewOrgSessionsButton", () => {
   beforeEach(() => {
     flagResult.mockReturnValue({ status: "enabled" });
-    hasAnyScope.mockReturnValue(true);
+    hasScope.mockReturnValue(true);
   });
 
   afterEach(() => {
@@ -52,7 +58,7 @@ describe("ViewOrgSessionsButton", () => {
     expect(link()?.getAttribute("href")).toBe(
       "/org-slug/projects/project-slug/mcp-sessions",
     );
-    expect(hasAnyScope).toHaveBeenCalledWith(["org:read", "org:admin"]);
+    expect(hasScope).toHaveBeenCalledWith("project:read", "project_example");
   });
 
   // The destination redirects to project home when the flag is off, so the link
@@ -70,8 +76,8 @@ describe("ViewOrgSessionsButton", () => {
     expect(link()).toBeNull();
   });
 
-  it("renders nothing without an org-level scope", () => {
-    hasAnyScope.mockReturnValue(false);
+  it("renders nothing without read access to the active project", () => {
+    hasScope.mockReturnValue(false);
 
     render(<ViewOrgSessionsButton />);
 

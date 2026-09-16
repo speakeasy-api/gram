@@ -10,7 +10,7 @@ import { useRefreshOrganizationRemoteSessionIssuerMetadataMutation } from "@gram
 import { useUpdateOrganizationRemoteSessionIssuerMutation } from "@gram/client/react-query/updateOrganizationRemoteSessionIssuer.js";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
-import { Link } from "react-router";
+import { ExistingIssuerLink } from "../../ExistingIssuerLink";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -247,17 +247,7 @@ export function SettingsTab({
             <IssuerDuplicateWarning
               viewerScope="organization"
               matches={duplicateMatches}
-              renderLink={(match) => (
-                <Button asChild variant="secondary">
-                  <Link
-                    to={routes.remoteIdentityProviders.issuerDetail.href(
-                      match.id,
-                    )}
-                  >
-                    View existing provider
-                  </Link>
-                </Button>
-              )}
+              renderLink={(match) => <ExistingIssuerLink match={match} />}
             />
           }
           onIssuerUrlChange={(value) => {

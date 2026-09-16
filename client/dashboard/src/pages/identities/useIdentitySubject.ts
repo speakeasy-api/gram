@@ -8,7 +8,7 @@ import { hashKey, useQuery, type UseQueryResult } from "@tanstack/react-query";
 export type IdentitySubject = IdentityModel & { agent?: ManagedAgent };
 
 /** Agent ownership does not attribute the owner's human activity to the agent. */
-export function agentIdentitySubject(agent: ManagedAgent): IdentitySubject {
+function agentIdentitySubject(agent: ManagedAgent): IdentitySubject {
   return {
     agent,
     canonicalUrn: `agent:${agent.id}`,

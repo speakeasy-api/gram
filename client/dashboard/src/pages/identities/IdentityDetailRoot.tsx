@@ -1,3 +1,5 @@
+import { useOrganization } from "@/contexts/Auth";
+import { useRBAC } from "@/hooks/useRBAC";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { useDateRangeFilter } from "@/components/observe/useDateRangeFilter";
 import { Page } from "@/components/page-layout";
@@ -60,6 +62,27 @@ function hasNoLinkedAccount(identity: IdentityModel): boolean {
 }
 
 export default function IdentityDetailRoot(): JSX.Element {
+  const { identityUrn: urn = "" } = useParams<{ identityUrn: string }>();
+  const organization = useOrganization();
+  const { hasScope, isLoading } = useRBAC();
+  const routes = useRoutes();
+  // Agent ownership grants management access independently of org:read.
+  if (
+    !isLoading &&
+    urn.startsWith("agent:") &&
+    !hasScope("org:read", organization.id)
+  ) {
+    return (
+      <Navigate
+        to={registeredAgentHref(
+          routes.agents.href(),
+          "",
+          urn.slice("agent:".length),
+        )}
+        replace
+      />
+    );
+  }
   return (
     // org:read, matching the server gate on identity.resolve — which is what
     // this page opens with, so a project:read-only reader would otherwise get
