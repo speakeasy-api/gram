@@ -233,8 +233,10 @@ type syntheticLoginOptions struct {
 	issuerMetadataRefresh bool
 	// issuerMetadataFetchedAt stamps the issuer row as fetched then, so the on-use cadence stays silent.
 	issuerMetadataFetchedAt time.Time
-	// tunnels, when set, is the back-channel transport the manager and the
-	// refresher carry, so a test can exercise an issuer bound to a tunnel.
+	// tunnels, when set, is the back-channel transport every component this
+	// fixture builds carries — the manager, both refreshers, the enricher, and
+	// the metadata refresher — so a tunnel-bound issuer cannot be reported
+	// working by a component that quietly stayed on direct egress.
 	tunnels *tunnelrouting.HTTPClient
 }
 
@@ -396,7 +398,7 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 	var issuerMetadataReader *sdkmetric.ManualReader
 	if options.issuerMetadataRefresh {
 		issuerMetadataReader = sdkmetric.NewManualReader()
-		issuerMetadata = remotesessions.NewIssuerMetadataRefresher(logger, sdkmetric.NewMeterProvider(sdkmetric.WithReader(issuerMetadataReader)), ti.conn, policy, nil, audit.NewLogger())
+		issuerMetadata = remotesessions.NewIssuerMetadataRefresher(logger, sdkmetric.NewMeterProvider(sdkmetric.WithReader(issuerMetadataReader)), ti.conn, policy, options.tunnels, audit.NewLogger())
 		t.Cleanup(issuerMetadata.Shutdown)
 		managerOptions = append(managerOptions, remotesessions.WithIssuerMetadataRefresher(issuerMetadata))
 		refreshOptions = append(refreshOptions, remotesessions.WithRefreshIssuerMetadataRefresher(issuerMetadata))
@@ -420,7 +422,7 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		if options.enrichmentRate != nil {
 			enrichmentLimiter = ratelimit.New(store, "test_enrichment_"+slugSuffix, *options.enrichmentRate)
 		}
-		enricher := remotesessions.NewSessionEnricher(logger, enc, policy, keys, enrichmentLimiter, nil, issuerMetadata)
+		enricher := remotesessions.NewSessionEnricher(logger, enc, policy, keys, enrichmentLimiter, options.tunnels, issuerMetadata)
 		managerOptions = append(managerOptions, remotesessions.WithSessionEnricher(enricher))
 		refreshOptions = append(refreshOptions, remotesessions.WithRefreshSessionEnricher(enricher))
 	}
@@ -548,7 +550,7 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		mgr:       mgr,
 		refresher: refresher,
 		newRefresher: func(meterProvider metric.MeterProvider, locks cache.Cache) *remotesessions.RefreshService {
-			r := remotesessions.NewRefreshService(logger, meterProvider, ti.conn, enc, policy, nil, locks, refreshOptions...)
+			r := remotesessions.NewRefreshService(logger, meterProvider, ti.conn, enc, policy, options.tunnels, locks, refreshOptions...)
 			t.Cleanup(r.WaitIdentityRestatements)
 			return r
 		},
