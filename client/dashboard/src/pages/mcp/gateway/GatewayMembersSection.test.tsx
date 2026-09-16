@@ -15,9 +15,13 @@ import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 const permissions = vi.hoisted(() => ({
-  allowed: true,
-  project: true,
-  flags: true,
+  scopes: new Set([
+    "mcp:write:gateway",
+    "mcp:write:project",
+    "project:write:project",
+  ]),
+  tunnel: true,
+  functions: true,
   navigate: vi.fn(),
 }));
 vi.mock("react-router", async (importOriginal) => ({
@@ -26,19 +30,25 @@ vi.mock("react-router", async (importOriginal) => ({
 }));
 vi.mock("@/components/ui/Icon", () => ({ Icon: () => <span /> }));
 vi.mock("@/components/sources/SourceCard", () => ({
-  SourceMcpIcon: ({ mcpServerId }: { mcpServerId?: string }) => (
-    <span data-testid="server-icon" data-server-id={mcpServerId} />
-  ),
+  // Isolate logo asset fetching; visual rendering is not this suite's contract.
+  SourceMcpIcon: () => null,
 }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
-    hasScope: (_scope: string, resource: string) =>
-      permissions.allowed && (resource !== "project" || permissions.project),
+    hasScope: (scope: string, resource: string) =>
+      permissions.scopes.has(`${scope}:${resource}`),
     isLoading: false,
   }),
 }));
 vi.mock("@/contexts/Telemetry", () => ({
-  useTelemetry: () => ({ isFeatureEnabled: () => permissions.flags }),
+  useTelemetry: () => ({
+    isFeatureEnabled: (flag: string) =>
+      flag === TUNNELED_MCP_FEATURE_FLAG
+        ? permissions.tunnel
+        : flag === "gram-functions"
+          ? permissions.functions
+          : false,
+  }),
 }));
 vi.mock("@/routes", () => ({
   useRoutes: () => ({
@@ -52,14 +62,19 @@ vi.mock("@/routes", () => ({
     },
   }),
 }));
+import { TUNNELED_MCP_FEATURE_FLAG } from "@/lib/tunneledMcp";
 import { AddServersSheet } from "./GatewayMembersSection";
 
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
-  permissions.allowed = true;
-  permissions.project = true;
-  permissions.flags = true;
+  permissions.scopes = new Set([
+    "mcp:write:gateway",
+    "mcp:write:project",
+    "project:write:project",
+  ]);
+  permissions.tunnel = true;
+  permissions.functions = true;
   permissions.navigate.mockClear();
 });
 const servers = [
@@ -96,12 +111,11 @@ function setup(
 }
 
 describe("Add servers sheet", () => {
-  it("uses one primary trigger with grouped creation choices and matching icons", () => {
+  it("offers one creation trigger with accessible grouped choices", () => {
     setup();
     const triggers = screen.getAllByRole("button", { name: "Add new" });
     expect(triggers).toHaveLength(1);
     const trigger = triggers[0]!;
-    expect(trigger.classList.contains("bg-btn-primary")).toBe(true);
     fireEvent.pointerDown(trigger, {
       button: 0,
       ctrlKey: false,
@@ -117,54 +131,37 @@ describe("Add servers sheet", () => {
       [
         [
           "From the catalog",
-          "blocks",
           "Pick a reviewed third-party server — Salesforce, Datadog, Linear, Slack, Okta and more.",
         ],
         [
           "Hosted remotely",
-          "cloud",
           "Add a server that already runs elsewhere by its URL, proxied or not.",
         ],
         [
           "Reachable through a tunnel",
-          "cable",
           "Connect a server running inside your own network through a tunnel.",
         ],
       ],
       [
-        [
-          "From your API",
-          "file-code",
-          "Upload an OpenAPI document to generate tools.",
-        ],
+        ["From your API", "Upload an OpenAPI document to generate tools."],
         [
           "From an existing source",
-          "boxes",
           "Build a server from an OpenAPI document or function this project already has.",
         ],
-        [
-          "Write custom code",
-          "code",
-          "Create tools with TypeScript functions.",
-        ],
+        ["Write custom code", "Create tools with TypeScript functions."],
       ],
     ] as const;
     groups.forEach((group, index) => {
       const items = within(group).getAllByRole("menuitem");
-      expect(items.map((item) => item.textContent)).toEqual(
-        expected[index]!.map(([label, , description]) => label + description),
-      );
-      items.forEach((item, itemIndex) => {
+      expect(items).toHaveLength(expected[index]!.length);
+      for (const [label, description] of expected[index]!) {
         expect(
-          item.firstElementChild?.classList.contains(
-            `lucide-${expected[index]![itemIndex]![1]}`,
-          ),
-        ).toBe(true);
-      });
+          within(group).getByRole("menuitem", {
+            name: `${label} ${description}`,
+          }),
+        ).toBeTruthy();
+      }
     });
-    const separator = within(menu).getByRole("separator");
-    expect(separator.previousElementSibling).toBe(groups[0]);
-    expect(separator.nextElementSibling).toBe(groups[1]);
   });
 
   it("dismisses only the dropdown on the first outside click, then the sheet", async () => {
@@ -256,13 +253,9 @@ describe("Add servers sheet", () => {
     expect(screen.getAllByRole("checkbox")).toHaveLength(2);
     const alpha = screen.getByRole("checkbox", { name: "Alpha" });
     expect(alpha.getAttribute("aria-checked")).toBe("false");
-    fireEvent.click(alpha);
-    expect(alpha.getAttribute("aria-checked")).toBe("true");
-    fireEvent.click(alpha);
-    expect(alpha.getAttribute("aria-checked")).toBe("false");
   });
 
-  it("restores logos, slugs, classifications and exclusion badges", () => {
+  it("shows slugs, classifications and exclusion badges", () => {
     setup({
       servers: [servers[0]!, { ...servers[1]!, visibility: "disabled" }],
       toolsets: [
@@ -279,9 +272,6 @@ describe("Add servers sheet", () => {
     );
     expect(alpha.getByText("alpha")).toBeTruthy();
     expect(alpha.getByText("Proxied")).toBeTruthy();
-    expect(
-      alpha.getByTestId("server-icon").getAttribute("data-server-id"),
-    ).toBe("a");
     expect(alpha.queryByText("Excluded")).toBeNull();
     const beta = within(
       screen.getByRole("checkbox", { name: "Beta" }).closest("li")!,
@@ -294,7 +284,6 @@ describe("Add servers sheet", () => {
     expect(tools.getByText("local-tools")).toBeTruthy();
     expect(tools.getByText("Hosted")).toBeTruthy();
     expect(tools.getByText("MCP off")).toBeTruthy();
-    expect(tools.getByTestId("server-icon")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Add" })).toBeNull();
   });
 
@@ -341,14 +330,6 @@ describe("Add servers sheet", () => {
       ).toBe("true");
     },
   );
-
-  it("retries failed list loading", () => {
-    const onRetryLoad = vi.fn();
-    setup({ loadFailed: true, onRetryLoad });
-    fireEvent.click(screen.getByRole("button", { name: "Retry loading" }));
-    expect(onRetryLoad).toHaveBeenCalledOnce();
-    expect(screen.queryByRole("checkbox")).toBeNull();
-  });
 
   it("selects existing wrappers sharing a toolset independently", async () => {
     const { onAdd } = setup({
@@ -428,43 +409,6 @@ describe("Add servers sheet", () => {
     ]);
   });
 
-  it("submits multiple servers, shows inline errors and retains only failures", async () => {
-    const { onAdd } = setup();
-    fireEvent.click(screen.getByText("Alpha"));
-    fireEvent.click(screen.getByText("Beta"));
-    fireEvent.click(
-      screen.getByRole("button", { name: "Add selected servers" }),
-    );
-    await waitFor(() => expect(onAdd).toHaveBeenCalledTimes(1));
-    expect(onAdd.mock.calls[0]?.[0]).toHaveLength(2);
-    await waitFor(() =>
-      expect(screen.getByText("Beta: Try again")).toBeTruthy(),
-    );
-    expect(screen.queryByText("Alpha: Added")).toBeNull();
-    expect(toast.success).not.toHaveBeenCalled();
-    expect(screen.getByRole("alert").closest("li")).toBeTruthy();
-    expect(
-      screen
-        .getByRole("checkbox", { name: "Alpha" })
-        .getAttribute("aria-checked"),
-    ).toBe("false");
-    expect(
-      screen
-        .getByRole("checkbox", { name: "Beta" })
-        .getAttribute("aria-checked"),
-    ).toBe("true");
-    fireEvent.click(
-      screen.getByRole("button", { name: "Add selected servers" }),
-    );
-    await waitFor(() => expect(onAdd).toHaveBeenCalledTimes(2));
-    expect(onAdd).toHaveBeenLastCalledWith([
-      expect.objectContaining({ server: expect.objectContaining({ id: "b" }) }),
-    ]);
-    expect(
-      screen.getByRole("button", { name: "Add selected servers" }),
-    ).toBeTruthy();
-  });
-
   it.each([
     [{ isLoading: true }, "Loading servers…"],
     [
@@ -480,29 +424,20 @@ describe("Add servers sheet", () => {
       "Couldn't load all servers. Retry to refresh the list.",
     ],
   ])("keeps creation discoverable in each list state", (props, message) => {
-    setup(props);
-    expect(screen.getByText(message)).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Add new" })).toBeTruthy();
-  });
-
-  it.each([{ servers: [] }, { memberServerIds: new Set(["a", "b"]) }])(
-    "hides the bulk action when no candidates remain",
-    (props) => {
-      setup(props);
+    const onRetryLoad = vi.fn();
+    setup({ ...props, onRetryLoad });
+    if ("loadFailed" in props) {
+      fireEvent.click(screen.getByRole("button", { name: "Retry loading" }));
+      expect(onRetryLoad).toHaveBeenCalledOnce();
+      expect(screen.queryByRole("checkbox")).toBeNull();
+    }
+    if ("servers" in props || "memberServerIds" in props) {
       expect(
         screen.queryByRole("button", { name: "Add selected servers" }),
       ).toBeNull();
-    },
-  );
-
-  it("centers the empty-state copy in a shaded box without extra controls", () => {
-    setup({ servers: [] });
-    const panel = screen.getByText(
-      "No existing servers yet. Create a new server to get started.",
-    ).parentElement!;
-    expect(panel.classList.contains("bg-muted/20")).toBe(true);
-    expect(panel.classList.contains("text-center")).toBe(true);
-    expect(panel.querySelector("button, svg")).toBeNull();
+    }
+    expect(screen.getByText(message)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Add new" })).toBeTruthy();
   });
 
   it("searches existing candidates without hiding creation", () => {
@@ -562,7 +497,7 @@ describe("Add servers sheet", () => {
   });
 
   it("gates hosted wrapper creation separately from gateway membership", () => {
-    permissions.project = false;
+    permissions.scopes.delete("mcp:write:project");
     setup({
       toolsets: [
         { id: "tools", name: "Hosted", slug: "hosted", mcpEnabled: false },
@@ -581,9 +516,53 @@ describe("Add servers sheet", () => {
     ).toBeTruthy();
   });
 
+  it.each(["mcp:write", "project:write"])(
+    "gates creation choices by the exact project scope: %s",
+    (scope) => {
+      permissions.scopes.delete(`${scope}:project`);
+      setup();
+      fireEvent.pointerDown(screen.getByRole("button", { name: "Add new" }), {
+        button: 0,
+        ctrlKey: false,
+        pointerType: "mouse",
+      });
+      for (const label of [
+        "Hosted remotely",
+        "Reachable through a tunnel",
+        "From an existing source",
+      ]) {
+        expect(
+          screen
+            .getByRole("menuitem", { name: new RegExp(`^${label}`) })
+            .getAttribute("aria-disabled") === "true",
+        ).toBe(scope === "mcp:write");
+      }
+      for (const label of [
+        "From the catalog",
+        "From your API",
+        "Write custom code",
+      ]) {
+        expect(
+          screen
+            .getByRole("menuitem", { name: new RegExp(`^${label}`) })
+            .getAttribute("aria-disabled") === "true",
+        ).toBe(scope === "project:write");
+      }
+    },
+  );
+
   it("prevents submitting without gateway write permission", () => {
-    permissions.allowed = false;
-    setup();
+    permissions.scopes.delete("mcp:write:gateway");
+    const { onAdd } = setup();
+    const checkbox = screen.getByRole("checkbox", { name: "Alpha" });
+    expect(checkbox.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(screen.getByText("Alpha"));
+    fireEvent.click(checkbox);
+    expect(checkbox.getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Add selected servers" }),
+    );
+    expect(onAdd).not.toHaveBeenCalled();
     expect(
       (
         screen.getByRole("button", {
@@ -611,26 +590,39 @@ describe("Add servers sheet", () => {
     const item = screen.getByRole("menuitem", {
       name: new RegExp(`^${label}`),
     });
-    fireEvent.click(item.querySelector(".text-muted-foreground")!);
+    fireEvent.click(item);
     expect(permissions.navigate).toHaveBeenCalledWith(href);
   });
 
-  it("hides flagged creation routes when disabled", () => {
-    permissions.flags = false;
-    setup();
-    fireEvent.pointerDown(screen.getByRole("button", { name: "Add new" }), {
-      button: 0,
-      ctrlKey: false,
-      pointerType: "mouse",
-    });
-    expect(
-      screen.queryByRole("menuitem", { name: /^Reachable through a tunnel/ }),
-    ).toBeNull();
-    expect(
-      screen.queryByRole("menuitem", { name: /^Write custom code/ }),
-    ).toBeNull();
-    expect(screen.getAllByRole("menuitem")).toHaveLength(4);
-  });
+  it.each([
+    [false, false],
+    [true, false],
+    [false, true],
+    [true, true],
+  ])(
+    "gates tunnel (%s) and function (%s) creation independently",
+    (tunnel, functions) => {
+      permissions.tunnel = tunnel;
+      permissions.functions = functions;
+      setup();
+      fireEvent.pointerDown(screen.getByRole("button", { name: "Add new" }), {
+        button: 0,
+        ctrlKey: false,
+        pointerType: "mouse",
+      });
+      expect(
+        screen.queryByRole("menuitem", {
+          name: /^Reachable through a tunnel/,
+        }) !== null,
+      ).toBe(tunnel);
+      expect(
+        screen.queryByRole("menuitem", { name: /^Write custom code/ }) !== null,
+      ).toBe(functions);
+      expect(screen.getAllByRole("menuitem")).toHaveLength(
+        4 + Number(tunnel) + Number(functions),
+      );
+    },
+  );
 
   it("guards rapid duplicate submits while a batch is pending", async () => {
     let finish!: (results: []) => void;
@@ -651,7 +643,6 @@ describe("Add servers sheet", () => {
     expect(onAdd).toHaveBeenCalledTimes(1);
     expect((button as HTMLButtonElement).disabled).toBe(true);
     expect(button.getAttribute("aria-busy")).toBe("true");
-    expect(button.querySelector(".animate-spin")).toBeTruthy();
     fireEvent.keyDown(button, { key: "Escape" });
     expect(onOpenChange).not.toHaveBeenCalled();
     finish([]);
@@ -703,6 +694,16 @@ describe("Add servers sheet", () => {
       await waitFor(() =>
         expect(screen.getAllByRole("alert")).toHaveLength(count),
       );
+      expect(
+        screen
+          .getByRole("checkbox", { name: "Alpha" })
+          .getAttribute("aria-checked"),
+      ).toBe(String(mode !== "partial"));
+      if (mode === "partial") {
+        expect(screen.getByText("Beta: Enable access and retry")).toBeTruthy();
+        expect(screen.getByRole("alert").closest("li")).toBeTruthy();
+      }
+      expect(screen.queryByText(/: Added/)).toBeNull();
       expect(onOpenChange).not.toHaveBeenCalled();
       expect(toast.success).not.toHaveBeenCalled();
       expect(

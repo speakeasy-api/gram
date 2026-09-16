@@ -1,5 +1,5 @@
 import { cleanup, renderHook } from "@testing-library/react";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 const queries = vi.hoisted(() => ({
   members: {
@@ -36,6 +36,17 @@ import {
   useGatewayMemberRows,
 } from "./useGatewayMemberRows";
 
+beforeEach(() => {
+  queries.members.data = { members: [] };
+  queries.servers.data = { mcpServers: [] };
+  for (const query of [queries.members, queries.servers]) {
+    query.isFetching = false;
+    query.isLoading = false;
+    query.isError = false;
+    query.dataUpdatedAt = 1;
+    query.refetch.mockReset();
+  }
+});
 afterEach(cleanup);
 
 it("exposes only successful settled membership freshness, even with unchanged rows", () => {

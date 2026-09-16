@@ -266,10 +266,14 @@ describe("buildAddCandidates", () => {
     ).toEqual(["server:s-2", "toolset:ts-1", "toolset:ts-2", "server:s-1"]);
   });
 });
+import {
+  addCandidateBatch,
+  candidateKey,
+  reconcileCompletedMembers,
+} from "./memberRows";
 
 describe("addCandidateBatch", () => {
   it("attaches distinct existing wrappers sharing a toolset", async () => {
-    const { addCandidateBatch, candidateKey } = await import("./memberRows");
     const candidates = ["first", "second"].map((id) => ({
       kind: "server" as const,
       server: server({ id, toolsetId: "tools" }),
@@ -302,8 +306,6 @@ describe("addCandidateBatch", () => {
   });
 
   it("continues after failures and retries without reminting wrappers or readding successes", async () => {
-    const { addCandidateBatch, candidateKey, reconcileCompletedMembers } =
-      await import("./memberRows");
     const hosted = {
       kind: "toolset" as const,
       toolset: { id: "tools", name: "Hosted" } as ToolsetEntry,
@@ -355,7 +357,6 @@ describe("addCandidateBatch", () => {
   });
 
   it("retries wrapper creation only when creation failed", async () => {
-    const { addCandidateBatch } = await import("./memberRows");
     const candidate = {
       kind: "toolset" as const,
       toolset: { id: "tools", name: "Hosted" } as ToolsetEntry,
@@ -387,8 +388,6 @@ describe("completed membership reconciliation", () => {
   it.each([false, true])(
     "reattaches an externally removed member (hosted: %s)",
     async (hosted) => {
-      const { addCandidateBatch, reconcileCompletedMembers } =
-        await import("./memberRows");
       const candidate = hosted
         ? {
             kind: "toolset" as const,
