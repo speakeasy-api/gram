@@ -40,6 +40,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
+	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
@@ -314,10 +315,17 @@ func issuerGateFailureReason(err error) string {
 		return "agent_session_load_failed"
 	case errors.Is(err, errWorkloadSessionCredentialLoad):
 		return "workload_session_load_failed"
+	case errors.Is(err, errWorkloadSessionAdmissionLoad):
+		return "workload_admission_load_failed"
 	default:
-		return "invalid_bearer_token"
+		return issuerGateReasonInvalidBearerToken
 	}
 }
+
+// issuerGateReasonInvalidBearerToken: the presented bearer token was judged
+// unusable — bad signature, expired, revoked, wrong audience, or its principal
+// is no longer admitted.
+const issuerGateReasonInvalidBearerToken = "invalid_bearer_token"
 
 // userSessionLastUsedCutoff coalesces the last_used_at stamp: a session records
 // at most one write per window regardless of request volume. Every other
@@ -579,7 +587,19 @@ func AuthenticateChallengeHeader(protectedResourceURL string) string {
 // exactly what a spec-compliant client constructs from a resource URL of
 // `<base>/<routeBase>/<slug>`.
 func WriteAuthenticateChallenge(w http.ResponseWriter, protectedResourceURL, message string) error {
-	w.Header().Set("WWW-Authenticate", AuthenticateChallengeHeader(protectedResourceURL))
+	return writeChallenge(w, AuthenticateChallengeHeader(protectedResourceURL), message)
+}
+
+// writeInvalidTokenChallenge is WriteAuthenticateChallenge with the RFC 6750
+// §3.1 invalid_token error code, telling the client to drop the token it holds
+// and obtain a new one rather than retry with it.
+func writeInvalidTokenChallenge(w http.ResponseWriter, protectedResourceURL, message string) error {
+	header := fmt.Sprintf(`%s, error="%s"`, AuthenticateChallengeHeader(protectedResourceURL), oautherr.CodeInvalidToken)
+	return writeChallenge(w, header, message)
+}
+
+func writeChallenge(w http.ResponseWriter, header, message string) error {
+	w.Header().Set("WWW-Authenticate", header)
 	if message == "" {
 		return oops.C(oops.CodeUnauthorized)
 	}
@@ -683,7 +703,11 @@ func (s *Service) authenticateIssuerGate(
 			)
 		}
 		s.metrics.RecordMCPRequestRejected(ctx, reason, mcpURL, surface)
-		return ctx, nil, nil, WriteAuthenticateChallenge(w, protectedResourceURL, "expired or invalid access token")
+		const message = "expired or invalid access token"
+		if reason == issuerGateReasonInvalidBearerToken && s.isWorkloadSessionBearer(authToken) {
+			return ctx, nil, nil, writeInvalidTokenChallenge(w, protectedResourceURL, message)
+		}
+		return ctx, nil, nil, WriteAuthenticateChallenge(w, protectedResourceURL, message)
 	}
 
 	return newCtx, &issuerGateAuthentication{
@@ -693,6 +717,15 @@ func (s *Service) authenticateIssuerGate(
 		surface:              surface,
 		subject:              *subject,
 	}, toolSelection, nil
+}
+
+// isWorkloadSessionBearer reports whether a rejected bearer was minted by Gram
+// for a workload principal. A workload holds no refresh token, so its only way
+// back is a fresh grant, and some clients keep replaying a token until the
+// challenge names it invalid_token.
+func (s *Service) isWorkloadSessionBearer(token string) bool {
+	subject, err := s.userSessionSigner.VerifiedSubject(token)
+	return err == nil && subject.Kind == urn.SessionSubjectKindWorkload
 }
 
 func (s *Service) resolveIssuerGateAccessTokens(ctx context.Context, w http.ResponseWriter, authentication *issuerGateAuthentication) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
