@@ -60,18 +60,19 @@ const (
 )
 
 type Service struct {
-	tracer     trace.Tracer
-	logger     *slog.Logger
-	db         *pgxpool.Pool
-	auth       *auth.Auth
-	authz      *authz.Engine
-	audit      *audit.Logger
-	encryption *encryption.Client
-	okta       OktaClient
-	workos     WorkOSClient
-	catalog    ApplicationCatalog
-	appMatches *applicationMatchCache
-	publicURL  *url.URL
+	tracer               trace.Tracer
+	logger               *slog.Logger
+	db                   *pgxpool.Pool
+	auth                 *auth.Auth
+	authz                *authz.Engine
+	audit                *audit.Logger
+	encryption           *encryption.Client
+	okta                 OktaClient
+	workos               WorkOSClient
+	catalog              ApplicationCatalog
+	appMatches           *applicationMatchCache
+	applicationInventory *applicationInventoryCache
+	publicURL            *url.URL
 }
 
 var (
@@ -94,18 +95,19 @@ func NewService(
 ) *Service {
 	logger = logger.With(attr.SlogComponent("identity_providers"))
 	return &Service{
-		tracer:     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/identityproviders"),
-		logger:     logger,
-		db:         db,
-		auth:       auth.New(logger, db, sessionManager, authzEngine),
-		authz:      authzEngine,
-		audit:      auditLogger,
-		encryption: encryptionClient,
-		okta:       oktaClient,
-		workos:     workosClient,
-		catalog:    applicationCatalog,
-		appMatches: newApplicationMatchCache(),
-		publicURL:  publicURL,
+		tracer:               tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/identityproviders"),
+		logger:               logger,
+		db:                   db,
+		auth:                 auth.New(logger, db, sessionManager, authzEngine),
+		authz:                authzEngine,
+		audit:                auditLogger,
+		encryption:           encryptionClient,
+		okta:                 oktaClient,
+		workos:               workosClient,
+		catalog:              applicationCatalog,
+		appMatches:           newApplicationMatchCache(),
+		applicationInventory: newApplicationInventoryCache(),
+		publicURL:            publicURL,
 	}
 }
 

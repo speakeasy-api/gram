@@ -172,17 +172,24 @@ func TestSubmitSignInStepProvisionsExactOktaApplicationAndAssignsEveryone(t *tes
 				"application_type": "web",
 				"grant_types":      []any{"authorization_code", "refresh_token"},
 				"response_types":   []any{"code"},
-				"redirect_uris":    []any{"https://api.workos.com/sso/callback"},
+				"redirect_uris":    []any{},
 				"consent_method":   "TRUSTED",
 			},
 		},
 	}, createdApplication)
+	updatedApplication, updateCount := fake.UpdatedApplication()
+	require.Equal(t, 1, updateCount)
+	settings, ok := updatedApplication["settings"].(map[string]any)
+	require.True(t, ok)
+	updatedOAuthClient, ok := settings["oauthClient"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, []any{testWorkOSRedirectURI}, updatedOAuthClient["redirect_uris"])
 	assignedAppID, assignedGroupID := fake.Assignment()
 	require.Equal(t, testSignInAppID, assignedAppID)
 	require.Equal(t, testEveryoneGroupID, assignedGroupID)
-	claim, claimCount := fake.CreatedClaim()
-	require.Equal(t, 1, claimCount)
-	require.Equal(t, map[string]any{
+	claims, claimCount := fake.CreatedClaims()
+	require.Equal(t, 3, claimCount)
+	require.Equal(t, []map[string]any{{
 		"alwaysIncludeInToken": true,
 		"claimType":            "IDENTITY",
 		"conditions":           map[string]any{"scopes": []any{}},
@@ -191,7 +198,23 @@ func TestSubmitSignInStepProvisionsExactOktaApplicationAndAssignsEveryone(t *tes
 		"status":               "ACTIVE",
 		"value":                ".*",
 		"valueType":            "GROUPS",
-	}, claim)
+	}, {
+		"alwaysIncludeInToken": true,
+		"claimType":            "IDENTITY",
+		"conditions":           map[string]any{"scopes": []any{}},
+		"name":                 "given_name",
+		"status":               "ACTIVE",
+		"value":                "user.firstName",
+		"valueType":            "EXPRESSION",
+	}, {
+		"alwaysIncludeInToken": true,
+		"claimType":            "IDENTITY",
+		"conditions":           map[string]any{"scopes": []any{}},
+		"name":                 "family_name",
+		"status":               "ACTIVE",
+		"value":                "user.lastName",
+		"valueType":            "EXPRESSION",
+	}}, claims)
 	require.NoError(t, fake.ValidationError())
 
 	stored, err := repo.New(ti.conn).GetIdentityProviderConnectionByOrganization(ctx, ti.orgID)
@@ -204,13 +227,13 @@ func TestSubmitSignInStepProvisionsExactOktaApplicationAndAssignsEveryone(t *tes
 	require.Equal(t, "token", stored.GroupsSource.String)
 	var evidence map[string]any
 	require.NoError(t, json.Unmarshal(stored.SignInEvidence, &evidence))
-	require.Equal(t, map[string]any{"client_id": testSignInClientID, "groups_claim_provisioned": true}, evidence)
+	require.Equal(t, map[string]any{"client_id": testSignInClientID, "groups_claim_provisioned": true, "redirect_uri": testWorkOSRedirectURI}, evidence)
 	require.NotContains(t, string(stored.SignInEvidence), testFakeClientSecret)
 
 	_, err = ti.service.SubmitSetupStep(ctx, &gen.SubmitSetupStepPayload{StepKey: "sign_in", Values: []*gen.IdentityProviderSetupValue{}, SessionToken: nil, ApikeyToken: nil})
 	require.NoError(t, err)
-	_, claimCount = fake.CreatedClaim()
-	require.Equal(t, 1, claimCount)
+	_, claimCount = fake.CreatedClaims()
+	require.Equal(t, 3, claimCount)
 
 	afterAudits, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionIdentityProviderConnectionUpdated)
 	require.NoError(t, err)
@@ -290,7 +313,7 @@ func TestSubmitSignInStepFallsBackToPublicClientIDResolution(t *testing.T) {
 	require.Equal(t, "application_created", stored.SignInState.String)
 	var evidence map[string]any
 	require.NoError(t, json.Unmarshal(stored.SignInEvidence, &evidence))
-	require.Equal(t, map[string]any{"client_id": manualClientID}, evidence)
+	require.Equal(t, map[string]any{"client_id": manualClientID, "redirect_uri": testWorkOSRedirectURI}, evidence)
 	require.NotContains(t, string(stored.SignInEvidence), testFakeClientSecret)
 
 	retry, err := ti.service.SubmitSetupStep(ctx, &gen.SubmitSetupStepPayload{
@@ -445,6 +468,8 @@ func TestSubmitSignInStepAdoptsExistingActiveApplication(t *testing.T) {
 	require.Nil(t, fake.CreatedApplication())
 	created, _ := fake.ApplicationCounts()
 	require.Zero(t, created)
+	_, updateCount := fake.UpdatedApplication()
+	require.Equal(t, 1, updateCount)
 }
 
 func TestSubmitSignInStepRejectsConflictingGroupAcknowledgements(t *testing.T) {
@@ -524,7 +549,7 @@ func configuredSignInStep(clientID string, portalFallback, claimsProvisioned boo
 	}
 	var repair *gen.IdentityProviderRepair
 	if claimsProvisioned {
-		instructions = []string{"Speakeasy created the Okta sign-in application, groups claim, and WorkOS OIDC connection."}
+		instructions = []string{"Speakeasy created the Okta sign-in application, identity claims, and WorkOS OIDC connection."}
 		deepLink = nil
 		where = "our_page"
 		issuer += "/oauth2/default"
@@ -551,23 +576,26 @@ func configuredSignInStep(clientID string, portalFallback, claimsProvisioned boo
 		portalIntent = new("sso")
 		where = "their_console"
 	}
+	printedValues := []*gen.IdentityProviderPrintedValue{
+		{Label: "Client ID", Value: clientID, Copyable: true, Secret: false},
+		{Label: "Issuer", Value: issuer, Copyable: true, Secret: false},
+		{Label: "Discovery URL", Value: issuer + "/.well-known/openid-configuration", Copyable: true, Secret: false},
+	}
+	if !portalFallback {
+		printedValues = append(printedValues, &gen.IdentityProviderPrintedValue{Label: "Sign-in redirect URI", Value: testWorkOSRedirectURI, Copyable: true, Secret: false})
+	}
 	return &gen.IdentityProviderSetupStep{
-		Key:          "sign_in",
-		Title:        "Configure Okta sign-in",
-		Where:        where,
-		Instructions: instructions,
-		DeepLink:     deepLink,
-		PrintedValues: []*gen.IdentityProviderPrintedValue{
-			{Label: "Client ID", Value: clientID, Copyable: true, Secret: false},
-			{Label: "Issuer", Value: issuer, Copyable: true, Secret: false},
-			{Label: "Discovery URL", Value: issuer + "/.well-known/openid-configuration", Copyable: true, Secret: false},
-			{Label: "Sign-in redirect URI", Value: "https://api.workos.com/sso/callback", Copyable: true, Secret: false},
-		},
+		Key:            "sign_in",
+		Title:          "Configure Okta sign-in",
+		Where:          where,
+		Instructions:   instructions,
+		DeepLink:       deepLink,
+		PrintedValues:  printedValues,
 		ExpectedValues: expectedValues,
 		Claims: []*gen.IdentityProviderClaim{
 			{Name: "email", Purpose: "identity", CarriesAccess: false, Provisioned: false},
-			{Name: "first_name", Purpose: "display", CarriesAccess: false, Provisioned: false},
-			{Name: "last_name", Purpose: "display", CarriesAccess: false, Provisioned: false},
+			{Name: "first_name", Purpose: "display", CarriesAccess: false, Provisioned: claimsProvisioned},
+			{Name: "last_name", Purpose: "display", CarriesAccess: false, Provisioned: claimsProvisioned},
 			{Name: "groups", Purpose: "used by access rules", CarriesAccess: true, Provisioned: claimsProvisioned},
 		},
 		Repair:       repair,

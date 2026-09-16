@@ -10,6 +10,7 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	identityproviders "github.com/speakeasy-api/gram/server/gen/identity_providers"
 	goa "goa.design/goa/v3/pkg"
@@ -78,7 +79,19 @@ func BuildGetPayload(identityProvidersGetSessionToken string, identityProvidersG
 
 // BuildListApplicationsPayload builds the payload for the identityProviders
 // listApplications endpoint from CLI flags.
-func BuildListApplicationsPayload(identityProvidersListApplicationsSessionToken string, identityProvidersListApplicationsApikeyToken string) (*identityproviders.ListApplicationsPayload, error) {
+func BuildListApplicationsPayload(identityProvidersListApplicationsForce string, identityProvidersListApplicationsSessionToken string, identityProvidersListApplicationsApikeyToken string) (*identityproviders.ListApplicationsPayload, error) {
+	var err error
+	var force *bool
+	{
+		if identityProvidersListApplicationsForce != "" {
+			var val bool
+			val, err = strconv.ParseBool(identityProvidersListApplicationsForce)
+			force = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for force, must be BOOL")
+			}
+		}
+	}
 	var sessionToken *string
 	{
 		if identityProvidersListApplicationsSessionToken != "" {
@@ -92,6 +105,7 @@ func BuildListApplicationsPayload(identityProvidersListApplicationsSessionToken 
 		}
 	}
 	v := &identityproviders.ListApplicationsPayload{}
+	v.Force = force
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 

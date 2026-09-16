@@ -22,7 +22,8 @@ type Service interface {
 	Create(context.Context, *CreatePayload) (res *IdentityProviderConnection, err error)
 	// Get the organization's live identity provider connection, when configured.
 	Get(context.Context, *GetPayload) (res *GetIdentityProviderResult, err error)
-	// List applications directly from the organization's identity provider.
+	// List applications from the organization's identity provider, using a
+	// five-minute in-memory cache unless force is true.
 	ListApplications(context.Context, *ListApplicationsPayload) (res *ListIdentityProviderApplicationsResult, err error)
 	// Describe the guided setup steps for the organization's identity provider
 	// connection.
@@ -283,6 +284,9 @@ type IdentityProviderVerifyResult struct {
 // ListApplicationsPayload is the payload type of the identityProviders service
 // listApplications method.
 type ListApplicationsPayload struct {
+	// Bypass the cached application inventory and read it again from the identity
+	// provider.
+	Force        *bool
 	SessionToken *string
 	ApikeyToken  *string
 }

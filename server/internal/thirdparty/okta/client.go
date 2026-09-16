@@ -702,6 +702,11 @@ func (c *Client) ListApplications(ctx context.Context, tenantDomain, accessToken
 	return c.list(ctx, tenantDomain, accessToken, "/api/v1/apps", page)
 }
 
+// ListApplicationsOnce reads one page without transport retries so callers can honor Okta's rate-limit reset.
+func (c *Client) ListApplicationsOnce(ctx context.Context, tenantDomain, accessToken string, page PageRequest) (Page, error) {
+	return c.listOnce(ctx, tenantDomain, accessToken, "/api/v1/apps", page)
+}
+
 // ListApplicationGroups reads one page of groups assigned to an Okta application.
 func (c *Client) ListApplicationGroups(ctx context.Context, tenantDomain, accessToken, applicationID string, page PageRequest) (Page, error) {
 	if strings.TrimSpace(applicationID) == "" {
@@ -710,30 +715,50 @@ func (c *Client) ListApplicationGroups(ctx context.Context, tenantDomain, access
 	return c.listWithQuery(ctx, tenantDomain, accessToken, "/api/v1/apps/"+url.PathEscape(applicationID)+"/groups", page, url.Values{"expand": {"group"}})
 }
 
+// ListApplicationGroupsOnce reads one page without transport retries so callers can honor Okta's rate-limit reset.
+func (c *Client) ListApplicationGroupsOnce(ctx context.Context, tenantDomain, accessToken, applicationID string, page PageRequest) (Page, error) {
+	if strings.TrimSpace(applicationID) == "" {
+		return Page{}, errors.New("list Okta application groups: application ID is required")
+	}
+	return c.listWithQueryOnce(ctx, tenantDomain, accessToken, "/api/v1/apps/"+url.PathEscape(applicationID)+"/groups", page, url.Values{"expand": {"group"}})
+}
+
 // GetGroup reads one Okta group by its provider identifier.
 func (c *Client) GetGroup(ctx context.Context, tenantDomain, accessToken, groupID string) (Group, error) {
+	group, _, err := c.getGroup(ctx, c.httpClient, tenantDomain, accessToken, groupID)
+	return group, err
+}
+
+// GetGroupOnce reads one Okta group without transport retries so callers can honor Okta's rate-limit reset.
+func (c *Client) GetGroupOnce(ctx context.Context, tenantDomain, accessToken, groupID string) (Group, RateLimit, error) {
+	return c.getGroup(ctx, c.nonRetryingHTTPClient, tenantDomain, accessToken, groupID)
+}
+
+func (c *Client) getGroup(ctx context.Context, httpClient *guardian.HTTPClient, tenantDomain, accessToken, groupID string) (Group, RateLimit, error) {
 	if strings.TrimSpace(groupID) == "" {
-		return Group{ID: "", Name: "", Type: ""}, errors.New("get Okta group: group ID is required")
+		return Group{ID: "", Name: "", Type: ""}, RateLimit{Limit: nil, Remaining: nil, Reset: nil}, errors.New("get Okta group: group ID is required")
 	}
 	requestURL, err := c.urlFor(tenantDomain, "/api/v1/groups/"+url.PathEscape(groupID))
 	if err != nil {
-		return Group{ID: "", Name: "", Type: ""}, fmt.Errorf("get Okta group: %w", err)
+		return Group{ID: "", Name: "", Type: ""}, RateLimit{Limit: nil, Remaining: nil, Reset: nil}, fmt.Errorf("get Okta group: %w", err)
 	}
 	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
-		return Group{ID: "", Name: "", Type: ""}, fmt.Errorf("create Okta group request: %w", err)
+		return Group{ID: "", Name: "", Type: ""}, RateLimit{Limit: nil, Remaining: nil, Reset: nil}, fmt.Errorf("create Okta group request: %w", err)
 	}
 	httpRequest.Header.Set("Accept", "application/json")
 	httpRequest.Header.Set("Authorization", "Bearer "+accessToken)
 
 	var response groupResponse
-	if _, err := c.doAuthorized(c.httpClient, httpRequest, accessToken, &response); err != nil {
-		return Group{ID: "", Name: "", Type: ""}, err
+	headers, err := c.doAuthorized(httpClient, httpRequest, accessToken, &response)
+	rateLimit := parseRateLimit(headers)
+	if err != nil {
+		return Group{ID: "", Name: "", Type: ""}, rateLimit, err
 	}
 	if response.ID == "" || response.Profile.Name == "" {
-		return Group{ID: "", Name: "", Type: ""}, errors.New("decode Okta group: id and profile name are required")
+		return Group{ID: "", Name: "", Type: ""}, rateLimit, errors.New("decode Okta group: id and profile name are required")
 	}
-	return Group{ID: response.ID, Name: response.Profile.Name, Type: response.Type}, nil
+	return Group{ID: response.ID, Name: response.Profile.Name, Type: response.Type}, rateLimit, nil
 }
 
 // ListApplicationUsers reads one page of users assigned to an Okta application.
@@ -742,6 +767,14 @@ func (c *Client) ListApplicationUsers(ctx context.Context, tenantDomain, accessT
 		return Page{}, errors.New("list Okta application users: application ID is required")
 	}
 	return c.list(ctx, tenantDomain, accessToken, "/api/v1/apps/"+url.PathEscape(applicationID)+"/users", page)
+}
+
+// ListApplicationUsersOnce reads one page without transport retries so callers can honor Okta's rate-limit reset.
+func (c *Client) ListApplicationUsersOnce(ctx context.Context, tenantDomain, accessToken, applicationID string, page PageRequest) (Page, error) {
+	if strings.TrimSpace(applicationID) == "" {
+		return Page{}, errors.New("list Okta application users: application ID is required")
+	}
+	return c.listOnce(ctx, tenantDomain, accessToken, "/api/v1/apps/"+url.PathEscape(applicationID)+"/users", page)
 }
 
 // DecodeApplication converts an Okta application response into its non-secret inventory fields.
@@ -946,7 +979,7 @@ func (c *Client) EnsureAuthorizationServerPolicyClient(ctx context.Context, tena
 
 // EnsureSignInClaims creates or repairs the identity claims required by Gram sign-in.
 func (c *Client) EnsureSignInClaims(ctx context.Context, tenantDomain, accessToken, authorizationServerID string) ([]string, error) {
-	claimNames := []string{"groups", "given_name", "family_name", "email"}
+	claimNames := []string{"groups", "given_name", "family_name"}
 	if strings.TrimSpace(tenantDomain) == "" || strings.TrimSpace(accessToken) == "" || strings.TrimSpace(authorizationServerID) == "" {
 		return nil, errors.New("ensure Okta sign-in claims: tenant domain, access token, and authorization server ID are required")
 	}
@@ -954,7 +987,6 @@ func (c *Client) EnsureSignInClaims(ctx context.Context, tenantDomain, accessTok
 		{ID: "", AlwaysIncludeInToken: true, ClaimType: "IDENTITY", Conditions: authorizationClaimConditions{Scopes: []string{}}, GroupFilterType: "REGEX", Name: "groups", Status: "ACTIVE", Value: ".*", ValueType: "GROUPS"},
 		{ID: "", AlwaysIncludeInToken: true, ClaimType: "IDENTITY", Conditions: authorizationClaimConditions{Scopes: []string{}}, GroupFilterType: "", Name: "given_name", Status: "ACTIVE", Value: "user.firstName", ValueType: "EXPRESSION"},
 		{ID: "", AlwaysIncludeInToken: true, ClaimType: "IDENTITY", Conditions: authorizationClaimConditions{Scopes: []string{}}, GroupFilterType: "", Name: "family_name", Status: "ACTIVE", Value: "user.lastName", ValueType: "EXPRESSION"},
-		{ID: "", AlwaysIncludeInToken: true, ClaimType: "IDENTITY", Conditions: authorizationClaimConditions{Scopes: []string{}}, GroupFilterType: "", Name: "email", Status: "ACTIVE", Value: "user.email", ValueType: "EXPRESSION"},
 	}
 
 	claimsPath := "/api/v1/authorizationServers/" + url.PathEscape(authorizationServerID) + "/claims"
@@ -1122,7 +1154,7 @@ func (c *Client) CreateOIDCApplication(ctx context.Context, tenantDomain, access
 				ApplicationType: "web",
 				GrantTypes:      []string{"authorization_code", "refresh_token"},
 				ResponseTypes:   []string{"code"},
-				RedirectURIs:    append([]string(nil), input.RedirectURIs...),
+				RedirectURIs:    append([]string{}, input.RedirectURIs...),
 				ConsentMethod:   "TRUSTED",
 			},
 		},
@@ -1503,7 +1535,19 @@ func (c *Client) list(ctx context.Context, tenantDomain, accessToken, path strin
 	return c.listWithQuery(ctx, tenantDomain, accessToken, path, page, nil)
 }
 
+func (c *Client) listOnce(ctx context.Context, tenantDomain, accessToken, path string, page PageRequest) (Page, error) {
+	return c.listWithQueryOnce(ctx, tenantDomain, accessToken, path, page, nil)
+}
+
 func (c *Client) listWithQuery(ctx context.Context, tenantDomain, accessToken, path string, page PageRequest, extraQuery url.Values) (Page, error) {
+	return c.listWithQueryHTTPClient(ctx, c.httpClient, tenantDomain, accessToken, path, page, extraQuery)
+}
+
+func (c *Client) listWithQueryOnce(ctx context.Context, tenantDomain, accessToken, path string, page PageRequest, extraQuery url.Values) (Page, error) {
+	return c.listWithQueryHTTPClient(ctx, c.nonRetryingHTTPClient, tenantDomain, accessToken, path, page, extraQuery)
+}
+
+func (c *Client) listWithQueryHTTPClient(ctx context.Context, httpClient *guardian.HTTPClient, tenantDomain, accessToken, path string, page PageRequest, extraQuery url.Values) (Page, error) {
 	if page.Limit <= 0 {
 		return Page{}, errors.New("list Okta resources: limit must be positive")
 	}
@@ -1535,7 +1579,7 @@ func (c *Client) listWithQuery(ctx context.Context, tenantDomain, accessToken, p
 	httpRequest.Header.Set("Authorization", "Bearer "+accessToken)
 
 	var items []json.RawMessage
-	headers, err := c.doAuthorized(c.httpClient, httpRequest, accessToken, &items)
+	headers, err := c.doAuthorized(httpClient, httpRequest, accessToken, &items)
 	if err != nil {
 		return Page{}, err
 	}

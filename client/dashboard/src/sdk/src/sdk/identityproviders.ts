@@ -127,7 +127,7 @@ export class IdentityProviders extends ClientSDK {
    * listApplications identityProviders
    *
    * @remarks
-   * List applications directly from the organization's identity provider.
+   * List applications from the organization's identity provider, using a five-minute in-memory cache unless force is true.
    */
   async listApplications(
     request?: ListIdentityProviderApplicationsRequest | undefined,

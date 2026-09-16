@@ -171,15 +171,20 @@ const (
 	// from user.email — the authenticated actor — so adopting cached
 	// attribution never rewrites the canonical user identity; it has no
 	// materialized column yet.
-	ProviderKey          = attribute.Key("gram.provider")
-	ExternalOrgIDKey     = attribute.Key("gram.external_org_id")
-	AccountTypeKey       = attribute.Key("gram.account_type")
-	BillingModeKey       = attribute.Key("gram.billing_mode")
-	DeviceIDKey          = attribute.Key("gram.device_id")
-	AccountEmailKey      = attribute.Key("gram.account_email")
-	ChatIDKey            = attribute.Key("gram.chat.id")
-	ChatContentPartIDKey = attribute.Key("gram.chat.content_part_id")
-	MessageIDKey         = attribute.Key("gram.message.id")
+	ProviderKey               = attribute.Key("gram.provider")
+	OktaInventoryOperationKey = attribute.Key("gram.okta.inventory.operation")
+	OktaApplicationIDKey      = attribute.Key("gram.okta.application_id")
+	OktaErrorCodeKey          = attribute.Key("gram.okta.error_code")
+	OktaRateLimitRemainingKey = attribute.Key("gram.okta.rate_limit.remaining")
+	OktaRateLimitResetKey     = attribute.Key("gram.okta.rate_limit.reset")
+	ExternalOrgIDKey          = attribute.Key("gram.external_org_id")
+	AccountTypeKey            = attribute.Key("gram.account_type")
+	BillingModeKey            = attribute.Key("gram.billing_mode")
+	DeviceIDKey               = attribute.Key("gram.device_id")
+	AccountEmailKey           = attribute.Key("gram.account_email")
+	ChatIDKey                 = attribute.Key("gram.chat.id")
+	ChatContentPartIDKey      = attribute.Key("gram.chat.content_part_id")
+	MessageIDKey              = attribute.Key("gram.message.id")
 	// Chat-analysis score event attributes: stamped on the synthetic
 	// chat_analysis:work_units:score telemetry rows the chat analysis
 	// publisher emits once per scored session, and read back by
@@ -1811,6 +1816,26 @@ func SlogOAuthAssertionExpiresAt(v time.Time) slog.Attr {
 
 func Provider(v string) attribute.KeyValue { return ProviderKey.String(v) }
 func SlogProvider(v string) slog.Attr      { return slog.String(string(ProviderKey), v) }
+
+func SlogOktaInventoryOperation(v string) slog.Attr {
+	return slog.String(string(OktaInventoryOperationKey), v)
+}
+
+func SlogOktaApplicationID(v string) slog.Attr {
+	return slog.String(string(OktaApplicationIDKey), v)
+}
+
+func SlogOktaErrorCode(v string) slog.Attr {
+	return slog.String(string(OktaErrorCodeKey), v)
+}
+
+func SlogOktaRateLimitRemaining(v string) slog.Attr {
+	return slog.String(string(OktaRateLimitRemainingKey), v)
+}
+
+func SlogOktaRateLimitReset(v string) slog.Attr {
+	return slog.String(string(OktaRateLimitResetKey), v)
+}
 
 func OAuthProvider(v string) attribute.KeyValue { return OAuthProviderKey.String(v) }
 func SlogOAuthProvider(v string) slog.Attr      { return slog.String(string(OAuthProviderKey), v) }

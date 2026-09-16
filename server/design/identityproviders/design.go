@@ -55,14 +55,16 @@ var _ = Service("identityProviders", func() {
 	})
 
 	Method("listApplications", func() {
-		Description("List applications directly from the organization's identity provider.")
+		Description("List applications from the organization's identity provider, using a five-minute in-memory cache unless force is true.")
 		Payload(func() {
+			Attribute("force", Boolean, "Bypass the cached application inventory and read it again from the identity provider.")
 			security.SessionPayload()
 			security.ByKeyPayload()
 		})
 		Result(ListIdentityProviderApplicationsResult)
 		HTTP(func() {
 			GET("/rpc/identityProviders.listApplications")
+			Param("force")
 			security.SessionHeader()
 			security.ByKeyHeader()
 			Response(StatusOK)

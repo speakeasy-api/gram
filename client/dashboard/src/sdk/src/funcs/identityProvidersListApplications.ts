@@ -4,7 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeSimple } from "../lib/encodings.js";
+import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
 import { matchStatusCode } from "../lib/http.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * listApplications identityProviders
  *
  * @remarks
- * List applications directly from the organization's identity provider.
+ * List applications from the organization's identity provider, using a five-minute in-memory cache unless force is true.
  */
 export function identityProvidersListApplications(
   client: GramCore,
@@ -110,6 +110,10 @@ async function $do(
 
   const path = pathToFunc("/rpc/identityProviders.listApplications")();
 
+  const query = encodeFormQuery({
+    "force": payload?.force,
+  });
+
   const headers = new Headers(compactMap({
     Accept: "application/json",
     "Gram-Key": encodeSimple("Gram-Key", payload?.["Gram-Key"], {
@@ -160,6 +164,7 @@ async function $do(
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
+    query: query,
     body: body,
     userAgent: client._options.userAgent,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,

@@ -4,7 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
+	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -16,6 +19,7 @@ import (
 	"golang.org/x/sync/singleflight"
 
 	gen "github.com/speakeasy-api/gram/server/gen/identity_providers"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/identityproviders/repo"
@@ -26,19 +30,21 @@ import (
 const (
 	applicationInventoryLimit            = 500
 	applicationAssignmentCountLimit      = 50
-	applicationAssignmentConcurrency     = 6
-	applicationAssignmentTimeout         = 20 * time.Second
+	applicationAssignmentConcurrency     = 3
+	applicationAssignmentTimeout         = 35 * time.Second
 	applicationAssignedGroupLimit        = 10
 	applicationAssignedGroupPageLimit    = 20
 	applicationCatalogMatchLimit         = 50
 	applicationCatalogMatchConcurrency   = 4
 	applicationCatalogMatchCacheTTL      = 10 * time.Minute
+	applicationInventoryCacheTTL         = 5 * time.Minute
 	applicationInventoryTimeout          = 120 * time.Second
 	oktaCollectionPageLimit              = 200
-	oktaRateLimitRemainingSleepThreshold = 10
+	oktaRateLimitRemainingSleepThreshold = 5
+	oktaRateLimitRetryMaxWait            = 30 * time.Second
 )
 
-func (s *Service) ListApplications(ctx context.Context, _ *gen.ListApplicationsPayload) (*gen.ListIdentityProviderApplicationsResult, error) {
+func (s *Service) ListApplications(ctx context.Context, payload *gen.ListApplicationsPayload) (*gen.ListIdentityProviderApplicationsResult, error) {
 	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeOrgRead)
 	if err != nil {
 		return nil, err
@@ -47,14 +53,21 @@ func (s *Service) ListApplications(ctx context.Context, _ *gen.ListApplicationsP
 	requestCtx, cancel := context.WithTimeout(ctx, applicationInventoryTimeout)
 	defer cancel()
 
-	connection, err := repo.New(s.db).GetIdentityProviderConnectionByOrganization(requestCtx, authCtx.ActiveOrganizationID)
+	force := payload.Force != nil && *payload.Force
+	return s.applicationInventory.load(authCtx.ActiveOrganizationID, force, func() (*gen.ListIdentityProviderApplicationsResult, error) {
+		return s.listApplications(requestCtx, authCtx.ActiveOrganizationID, logger)
+	})
+}
+
+func (s *Service) listApplications(ctx context.Context, organizationID string, logger *slog.Logger) (*gen.ListIdentityProviderApplicationsResult, error) {
+	connection, err := repo.New(s.db).GetIdentityProviderConnectionByOrganization(ctx, organizationID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.E(oops.CodeNotFound, nil, "identity provider connection not found")
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "error loading identity provider connection").LogError(ctx, logger)
 	}
-	token, err := s.acquireOktaManagementToken(requestCtx, authCtx.ActiveOrganizationID, connection, []string{"okta.apps.read", "okta.groups.read"})
+	token, err := s.acquireOktaManagementToken(ctx, organizationID, connection, []string{"okta.apps.read", "okta.groups.read"})
 	if err != nil {
 		return nil, oops.E(oops.CodeGatewayError, err, "error authorizing the Okta application inventory").LogError(ctx, logger)
 	}
@@ -72,14 +85,17 @@ func (s *Service) ListApplications(ctx context.Context, _ *gen.ListApplicationsP
 			}
 			seenCursors[after] = struct{}{}
 		}
-		if err := rateLimits.Wait(requestCtx); err != nil {
-			return nil, oops.E(oops.CodeGatewayError, err, "timeout reading Okta applications").LogError(ctx, logger)
-		}
-		page, err := s.okta.ListApplications(requestCtx, tenantDomain, token.AccessToken, okta.PageRequest{Limit: oktaCollectionPageLimit, After: after})
+		page, err := readOktaInventoryWithRetry(ctx, logger, rateLimits, "applications", "", func() (okta.Page, okta.RateLimit, error) {
+			page, err := s.okta.ListApplicationsOnce(ctx, tenantDomain, token.AccessToken, okta.PageRequest{Limit: oktaCollectionPageLimit, After: after})
+			if err != nil {
+				return page, page.RateLimit, fmt.Errorf("list Okta applications once: %w", err)
+			}
+			return page, page.RateLimit, nil
+		})
 		if err != nil {
+			warnOktaInventoryReadFailure(ctx, logger, "applications", "", err)
 			return nil, oops.E(oops.CodeGatewayError, err, "error reading Okta applications").LogError(ctx, logger)
 		}
-		rateLimits.Observe(page.RateLimit)
 		for i, raw := range page.Items {
 			if len(applications) == applicationInventoryLimit {
 				truncated = true
@@ -126,7 +142,7 @@ func (s *Service) ListApplications(ctx context.Context, _ *gen.ListApplicationsP
 	var matchFailed bool
 	matchDone := make(chan struct{})
 	go func() {
-		matchResults, matchFailed = s.appMatches.match(requestCtx, authCtx.ActiveOrganizationID, applications, s.catalog)
+		matchResults, matchFailed = s.appMatches.match(ctx, organizationID, applications, s.catalog)
 		close(matchDone)
 	}()
 	if len(applications) > applicationAssignmentCountLimit {
@@ -134,21 +150,23 @@ func (s *Service) ListApplications(ctx context.Context, _ *gen.ListApplicationsP
 	} else if len(applications) > 0 {
 		partial := &atomic.Bool{}
 		groupLookupSlots := make(chan struct{}, applicationAssignmentConcurrency)
-		group, groupCtx := errgroup.WithContext(requestCtx)
+		group, groupCtx := errgroup.WithContext(ctx)
 		group.SetLimit(applicationAssignmentConcurrency)
 		for _, application := range applications {
 			group.Go(func() error {
 				assignmentCtx, cancel := context.WithTimeout(groupCtx, applicationAssignmentTimeout)
 				defer cancel()
 
-				groupCount, assignedGroups, err := s.readOktaApplicationGroups(assignmentCtx, rateLimits, tenantDomain, token.AccessToken, application.SourceApplicationID)
+				groupCount, assignedGroups, err := s.readOktaApplicationGroups(assignmentCtx, logger, rateLimits, tenantDomain, token.AccessToken, application.SourceApplicationID)
 				if err != nil {
+					warnOktaInventoryReadFailure(assignmentCtx, logger, "application_groups", application.SourceApplicationID, err)
 					partial.Store(true)
 				} else {
 					application.GroupAssignmentCount = &groupCount
 					application.AssignedGroupOverflow = new(max(0, groupCount-len(assignedGroups)))
-					assignedGroups, err = s.resolveOktaApplicationGroupNames(assignmentCtx, rateLimits, groupLookupSlots, tenantDomain, token.AccessToken, assignedGroups)
+					assignedGroups, err = s.resolveOktaApplicationGroupNames(assignmentCtx, logger, rateLimits, groupLookupSlots, tenantDomain, token.AccessToken, application.SourceApplicationID, assignedGroups)
 					if err != nil {
+						warnOktaInventoryReadFailure(assignmentCtx, logger, "groups", application.SourceApplicationID, err)
 						partial.Store(true)
 					} else {
 						application.AssignedGroups = make([]*gen.IdentityProviderAssignedGroup, len(assignedGroups))
@@ -161,10 +179,15 @@ func (s *Service) ListApplications(ctx context.Context, _ *gen.ListApplicationsP
 					}
 				}
 
-				userCount, directUserCount, err := countOktaApplicationUsers(assignmentCtx, rateLimits, func(ctx context.Context, page okta.PageRequest) (okta.Page, error) {
-					return s.okta.ListApplicationUsers(ctx, tenantDomain, token.AccessToken, application.SourceApplicationID, page)
+				userCount, directUserCount, err := countOktaApplicationUsers(assignmentCtx, logger, rateLimits, application.SourceApplicationID, func(ctx context.Context, page okta.PageRequest) (okta.Page, error) {
+					result, err := s.okta.ListApplicationUsersOnce(ctx, tenantDomain, token.AccessToken, application.SourceApplicationID, page)
+					if err != nil {
+						return okta.Page{}, fmt.Errorf("list Okta application users once: %w", err)
+					}
+					return result, nil
 				})
 				if err != nil {
+					warnOktaInventoryReadFailure(assignmentCtx, logger, "application_users", application.SourceApplicationID, err)
 					partial.Store(true)
 				} else {
 					application.UserAssignmentCount = &userCount
@@ -231,6 +254,73 @@ type applicationCatalogMatch struct {
 	name        string
 	remoteURL   string
 	confidence  string
+}
+
+type applicationInventoryCacheEntry struct {
+	expiresAt time.Time
+	result    *gen.ListIdentityProviderApplicationsResult
+}
+
+type applicationInventoryCache struct {
+	mu      sync.Mutex
+	entries map[string]applicationInventoryCacheEntry
+	group   singleflight.Group
+}
+
+func newApplicationInventoryCache() *applicationInventoryCache {
+	return &applicationInventoryCache{
+		mu:      sync.Mutex{},
+		entries: make(map[string]applicationInventoryCacheEntry),
+		group:   singleflight.Group{},
+	}
+}
+
+func (c *applicationInventoryCache) load(organizationID string, force bool, read func() (*gen.ListIdentityProviderApplicationsResult, error)) (*gen.ListIdentityProviderApplicationsResult, error) {
+	if !force {
+		c.mu.Lock()
+		entry, found := c.entries[organizationID]
+		c.mu.Unlock()
+		if found && time.Now().Before(entry.expiresAt) {
+			return entry.result, nil
+		}
+	}
+
+	value, err, _ := c.group.Do(organizationID, func() (any, error) {
+		if !force {
+			c.mu.Lock()
+			entry, found := c.entries[organizationID]
+			c.mu.Unlock()
+			if found && time.Now().Before(entry.expiresAt) {
+				return entry.result, nil
+			}
+		}
+
+		result, err := read()
+		if err != nil {
+			return nil, err
+		}
+		now := time.Now()
+		c.mu.Lock()
+		for key, cached := range c.entries {
+			if now.After(cached.expiresAt) {
+				delete(c.entries, key)
+			}
+		}
+		c.entries[organizationID] = applicationInventoryCacheEntry{
+			expiresAt: now.Add(applicationInventoryCacheTTL),
+			result:    result,
+		}
+		c.mu.Unlock()
+		return result, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	result, ok := value.(*gen.ListIdentityProviderApplicationsResult)
+	if !ok {
+		return nil, oops.E(oops.CodeUnexpected, nil, "error reading the cached application inventory")
+	}
+	return result, nil
 }
 
 type applicationMatchResult struct {
@@ -428,6 +518,7 @@ func normalizeApplicationCatalogName(name string, trimTrailingGeneric bool) stri
 
 func (s *Service) readOktaApplicationGroups(
 	ctx context.Context,
+	logger *slog.Logger,
 	rateLimits *oktaRateLimitGate,
 	tenantDomain string,
 	accessToken string,
@@ -445,14 +536,16 @@ func (s *Service) readOktaApplicationGroups(
 			}
 			seenCursors[after] = struct{}{}
 		}
-		if err := rateLimits.Wait(ctx); err != nil {
-			return 0, nil, fmt.Errorf("wait to list Okta application groups: %w", err)
-		}
-		page, err := s.okta.ListApplicationGroups(ctx, tenantDomain, accessToken, applicationID, okta.PageRequest{Limit: pageLimit, After: after})
+		page, err := readOktaInventoryWithRetry(ctx, logger, rateLimits, "application_groups", applicationID, func() (okta.Page, okta.RateLimit, error) {
+			page, err := s.okta.ListApplicationGroupsOnce(ctx, tenantDomain, accessToken, applicationID, okta.PageRequest{Limit: pageLimit, After: after})
+			if err != nil {
+				return page, page.RateLimit, fmt.Errorf("list Okta application groups once: %w", err)
+			}
+			return page, page.RateLimit, nil
+		})
 		if err != nil {
 			return 0, nil, fmt.Errorf("list Okta application groups: %w", err)
 		}
-		rateLimits.Observe(page.RateLimit)
 		count += len(page.Items)
 		for _, raw := range page.Items {
 			if len(assignedGroups) == applicationAssignedGroupLimit {
@@ -476,10 +569,12 @@ func (s *Service) readOktaApplicationGroups(
 
 func (s *Service) resolveOktaApplicationGroupNames(
 	ctx context.Context,
+	logger *slog.Logger,
 	rateLimits *oktaRateLimitGate,
 	groupLookupSlots chan struct{},
 	tenantDomain string,
 	accessToken string,
+	applicationID string,
 	assignedGroups []okta.Group,
 ) ([]okta.Group, error) {
 	lookupGroup, lookupCtx := errgroup.WithContext(ctx)
@@ -494,10 +589,13 @@ func (s *Service) resolveOktaApplicationGroupNames(
 			case <-lookupCtx.Done():
 				return fmt.Errorf("wait to read Okta group: %w", lookupCtx.Err())
 			}
-			if err := rateLimits.Wait(lookupCtx); err != nil {
-				return fmt.Errorf("wait to read Okta group: %w", err)
-			}
-			group, err := s.okta.GetGroup(lookupCtx, tenantDomain, accessToken, assignedGroups[i].ID)
+			group, err := readOktaInventoryWithRetry(lookupCtx, logger, rateLimits, "groups", applicationID, func() (okta.Group, okta.RateLimit, error) {
+				group, rateLimit, err := s.okta.GetGroupOnce(lookupCtx, tenantDomain, accessToken, assignedGroups[i].ID)
+				if err != nil {
+					return okta.Group{}, rateLimit, fmt.Errorf("get Okta group once: %w", err)
+				}
+				return group, rateLimit, nil
+			})
 			if err != nil {
 				return fmt.Errorf("read Okta group: %w", err)
 			}
@@ -513,7 +611,9 @@ func (s *Service) resolveOktaApplicationGroupNames(
 
 func countOktaApplicationUsers(
 	ctx context.Context,
+	logger *slog.Logger,
 	rateLimits *oktaRateLimitGate,
+	applicationID string,
 	list func(context.Context, okta.PageRequest) (okta.Page, error),
 ) (int, int, error) {
 	users := make(map[string]struct{})
@@ -527,14 +627,13 @@ func countOktaApplicationUsers(
 			}
 			seenCursors[after] = struct{}{}
 		}
-		if err := rateLimits.Wait(ctx); err != nil {
-			return 0, 0, err
-		}
-		page, err := list(ctx, okta.PageRequest{Limit: oktaCollectionPageLimit, After: after})
+		page, err := readOktaInventoryWithRetry(ctx, logger, rateLimits, "application_users", applicationID, func() (okta.Page, okta.RateLimit, error) {
+			page, err := list(ctx, okta.PageRequest{Limit: oktaCollectionPageLimit, After: after})
+			return page, page.RateLimit, err
+		})
 		if err != nil {
 			return 0, 0, err
 		}
-		rateLimits.Observe(page.RateLimit)
 		for _, raw := range page.Items {
 			user, err := okta.DecodeApplicationUser(raw)
 			if err != nil {
@@ -558,7 +657,7 @@ type oktaRateLimitGate struct {
 }
 
 func (g *oktaRateLimitGate) Observe(rateLimit okta.RateLimit) {
-	if rateLimit.Remaining == nil || rateLimit.Reset == nil || *rateLimit.Remaining > oktaRateLimitRemainingSleepThreshold {
+	if rateLimit.Remaining == nil || rateLimit.Reset == nil || *rateLimit.Remaining >= oktaRateLimitRemainingSleepThreshold {
 		return
 	}
 	g.mu.Lock()
@@ -568,13 +667,16 @@ func (g *oktaRateLimitGate) Observe(rateLimit okta.RateLimit) {
 	}
 }
 
-func (g *oktaRateLimitGate) Wait(ctx context.Context) error {
+func (g *oktaRateLimitGate) Wait(ctx context.Context, maxWait time.Duration) error {
 	g.mu.Lock()
 	reset := g.reset
 	g.mu.Unlock()
 	delay := time.Until(reset)
 	if delay <= 0 {
 		return nil
+	}
+	if maxWait > 0 {
+		delay = min(delay, maxWait)
 	}
 	timer := time.NewTimer(delay)
 	defer timer.Stop()
@@ -584,4 +686,70 @@ func (g *oktaRateLimitGate) Wait(ctx context.Context) error {
 	case <-timer.C:
 		return nil
 	}
+}
+
+func readOktaInventoryWithRetry[T any](
+	ctx context.Context,
+	logger *slog.Logger,
+	rateLimits *oktaRateLimitGate,
+	operation string,
+	applicationID string,
+	read func() (T, okta.RateLimit, error),
+) (T, error) {
+	var zero T
+	for attempt := range 2 {
+		maxWait := time.Duration(0)
+		if attempt > 0 {
+			maxWait = oktaRateLimitRetryMaxWait
+		}
+		if err := rateLimits.Wait(ctx, maxWait); err != nil {
+			return zero, err
+		}
+
+		value, rateLimit, err := read()
+		rateLimits.Observe(rateLimit)
+		if err == nil {
+			return value, nil
+		}
+
+		var apiErr *okta.APIError
+		if attempt == 0 && errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusTooManyRequests {
+			rateLimits.Observe(apiErr.RateLimit)
+			warnOktaInventoryReadFailure(ctx, logger, operation, applicationID, err)
+			continue
+		}
+		return zero, err
+	}
+	return zero, errors.New("okta inventory read retry exhausted")
+}
+
+func warnOktaInventoryReadFailure(ctx context.Context, logger *slog.Logger, operation, applicationID string, err error) {
+	statusCode := 0
+	errorCode := ""
+	rateLimit := okta.RateLimit{Limit: nil, Remaining: nil, Reset: nil}
+	var apiErr *okta.APIError
+	if errors.As(err, &apiErr) {
+		statusCode = apiErr.StatusCode
+		errorCode = apiErr.Code
+		rateLimit = apiErr.RateLimit
+	}
+
+	remaining := ""
+	if rateLimit.Remaining != nil {
+		remaining = strconv.FormatInt(*rateLimit.Remaining, 10)
+	}
+	reset := ""
+	if rateLimit.Reset != nil {
+		reset = strconv.FormatInt(rateLimit.Reset.Unix(), 10)
+	}
+	logger.WarnContext(ctx, "Okta inventory read failed",
+		attr.SlogProvider("okta"),
+		attr.SlogOktaInventoryOperation(operation),
+		attr.SlogOktaApplicationID(applicationID),
+		attr.SlogHTTPResponseStatusCode(statusCode),
+		attr.SlogOktaErrorCode(errorCode),
+		attr.SlogOktaRateLimitRemaining(remaining),
+		attr.SlogOktaRateLimitReset(reset),
+		attr.SlogError(err),
+	)
 }

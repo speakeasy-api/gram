@@ -23328,9 +23328,16 @@ paths:
         name: IdentityProvider
   /rpc/identityProviders.listApplications:
     get:
-      description: List applications directly from the organization's identity provider.
+      description: List applications from the organization's identity provider, using a five-minute in-memory cache unless force is true.
       operationId: listIdentityProviderApplications
       parameters:
+        - allowEmptyValue: true
+          description: Bypass the cached application inventory and read it again from the identity provider.
+          in: query
+          name: force
+          schema:
+            description: Bypass the cached application inventory and read it again from the identity provider.
+            type: boolean
         - allowEmptyValue: true
           description: Session header
           in: header

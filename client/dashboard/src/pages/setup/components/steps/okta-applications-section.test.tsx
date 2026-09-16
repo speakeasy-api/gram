@@ -12,6 +12,7 @@ import type { IdentityProviderConnection } from "@gram/client/models/components/
 import { OktaApplicationsSection } from "./okta-applications-section";
 
 const applications = vi.hoisted(() => ({
+  calls: [] as unknown[][],
   current: {} as {
     data?: {
       applications: IdentityProviderApplication[];
@@ -29,7 +30,9 @@ const applications = vi.hoisted(() => ({
 
 vi.mock("@tanstack/react-query", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-query")>()),
-  useQueryClient: () => ({}),
+  useQueryClient: () => ({
+    setQueryData: (...args: unknown[]) => sdk.setQueryData(...args),
+  }),
 }));
 vi.mock("react-router", () => ({
   useSearchParams: () => [new URLSearchParams(), vi.fn()],
@@ -38,7 +41,14 @@ vi.mock("react-router", () => ({
   ),
 }));
 vi.mock("@gram/client/react-query/listIdentityProviderApplications.js", () => ({
-  useListIdentityProviderApplications: () => applications.current,
+  useListIdentityProviderApplications: (...args: unknown[]) => {
+    applications.calls.push(args);
+    return applications.current;
+  },
+  queryKeyListIdentityProviderApplications: (parameters: unknown) => [
+    "listApplications",
+    parameters,
+  ],
 }));
 
 // The two management calls a draft is made of, plus the rollback delete: mocked
@@ -48,6 +58,8 @@ const sdk = vi.hoisted(() => ({
   createMcpServer: vi.fn(),
   deleteRemoteServer: vi.fn(),
   probeURL: vi.fn(),
+  listApplications: vi.fn(),
+  setQueryData: vi.fn(),
   discover: vi.fn(),
   fetchIssuer: vi.fn(),
   getIssuer: vi.fn(),
@@ -78,6 +90,9 @@ vi.mock("@/contexts/Sdk", async (importOriginal) => ({
     remoteSessions: {
       commitServerIdentityConfiguration: (...args: unknown[]) =>
         sdk.commit(...args),
+    },
+    identityProviders: {
+      listApplications: (...args: unknown[]) => sdk.listApplications(...args),
     },
   }),
   useProjectSlugForRequests: () => "default",
@@ -275,8 +290,11 @@ beforeEach(() => {
     manualSetupRequired: false,
     provider: { id: "provider-1" },
   }));
+  sdk.listApplications = vi.fn(async () => ({ applications: [] }));
+  sdk.setQueryData = vi.fn();
   sdk.existingMcpServers = [];
   sdk.invalidated = [];
+  applications.calls = [];
 });
 
 /** An upstream that answers the probe with an OAuth challenge. */
@@ -850,14 +868,48 @@ describe("OktaApplicationsSection", () => {
     ).toBe("/mcp/example-chat");
   });
 
-  it("offers a refresh that re-reads Okta", () => {
-    const refetch = vi.fn();
+  it("reads the cached inventory on open, and goes past it only on refresh", async () => {
     withApplications([application()]);
-    applications.current.refetch = refetch;
+    render(<OktaApplicationsSection index={4} connection={connection()} />);
+
+    // The step opens on the server's five-minute cache: nothing it asks for
+    // carries force, so opening the card does not hit Okta.
+    expect(applications.calls.length).toBeGreaterThan(0);
+    for (const call of applications.calls) {
+      expect(call[0]).toBeUndefined();
+    }
+    expect(sdk.listApplications).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: /refresh/i }));
+
+    // Refresh is the one read that bypasses it, and what comes back replaces
+    // the inventory the step is already showing.
+    await waitFor(() =>
+      expect(sdk.listApplications).toHaveBeenCalledWith({ force: true }),
+    );
+    expect(sdk.setQueryData).toHaveBeenCalledWith(["listApplications", {}], {
+      applications: [],
+    });
+    // Still one query, still unforced: force never enters the key.
+    for (const call of applications.calls) {
+      expect(call[0]).toBeUndefined();
+    }
+  });
+
+  it("keeps the applications it has when a refresh fails", async () => {
+    sdk.listApplications = vi.fn(async () => {
+      throw new Error("Okta is rate limiting the inventory read");
+    });
+    withApplications([application()]);
     render(<OktaApplicationsSection index={4} connection={connection()} />);
 
     fireEvent.click(screen.getByRole("button", { name: /refresh/i }));
-    expect(refetch).toHaveBeenCalledOnce();
+
+    await waitFor(() => expect(sdk.listApplications).toHaveBeenCalled());
+    // Nothing was written over the inventory in hand, and the card is still
+    // there to work with.
+    expect(sdk.setQueryData).not.toHaveBeenCalled();
+    expect(screen.getByText("Example Chat")).toBeTruthy();
   });
 
   it("asks Okta for nothing the reader types: the step has no search box", () => {
