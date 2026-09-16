@@ -83,7 +83,7 @@ func registerPluginTools(reg *Registrar, plugins *PluginsService) {
 		Description: "Get non-secret, client-specific installation guidance for one assigned published plugin or one configured MCP server the caller may connect to. Name exactly one target in an explicit project. Plugin guidance rechecks the caller's current recipient assignments; standalone MCP guidance rechecks mcp:connect. No marketplace token, repository credential, package bytes, API key, or OAuth credential is returned.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMyInstallInstructionsInput) (*mcp.CallToolResult, GetMyInstallInstructionsOutput, error) {
-		return principalToolCall(ctx, pluginToolResult, func(principal Principal) (GetMyInstallInstructionsOutput, error) {
+		return principalToolCall(ctx, installInstructionToolResult, func(principal Principal) (GetMyInstallInstructionsOutput, error) {
 			return plugins.GetMyInstallInstructions(ctx, principal, input)
 		})
 	})
@@ -112,6 +112,19 @@ func registerUnavailablePluginTools(reg *Registrar) {
 		}
 		addTool(reg, manifest, ToolMeta{Authorization: authority, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, unavailableTool("plugins"))
 	}
+}
+
+func installInstructionToolResult(err error) (*mcp.CallToolResult, bool) {
+	if errors.Is(err, ErrInstallTargetNotFound) {
+		content, marshalErr := json.Marshal(pluginRefusalResult{
+			Code: "not_found", Message: "No installable target matching that exact identifier is available in this project. List the resources you can access and choose one of those targets.",
+		})
+		if marshalErr != nil {
+			return nil, false
+		}
+		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(content)}}, IsError: true}, true
+	}
+	return pluginToolResult(err)
 }
 
 func pluginToolResult(err error) (*mcp.CallToolResult, bool) {

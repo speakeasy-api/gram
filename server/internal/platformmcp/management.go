@@ -363,12 +363,19 @@ func (s *ManagementService) memberContext(ctx context.Context) (*contextvalues.A
 }
 
 func (s *ManagementService) authorizedContext(ctx context.Context) (*contextvalues.AuthContext, error) {
-	authCtx, admin, err := s.memberContext(ctx)
-	if err != nil {
-		return nil, err
+	if s == nil || s.authorizer == nil || s.gate == nil || s.onboarding == nil {
+		return nil, oops.C(oops.CodeUnexpected)
 	}
-	if !admin {
-		return nil, oops.C(oops.CodeForbidden)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.UserID == "" || authCtx.ActiveOrganizationID == "" {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	principal := Principal{UserID: authCtx.UserID, OrganizationID: authCtx.ActiveOrganizationID}
+	if err := s.authorizer.RequireLiveOrgAdmin(ctx, principal); err != nil {
+		if isAuthorizationDenied(err) {
+			return nil, oops.C(oops.CodeForbidden)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "authorize platform mcp management access")
 	}
 	return authCtx, nil
 }

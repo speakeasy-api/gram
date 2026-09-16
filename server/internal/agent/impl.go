@@ -332,15 +332,10 @@ func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload
 		}
 	}
 
-	// Resolve the reported email to an org member so user:<id>, user:all, and
-	// role:<kind>:<uuid> assignments deliver too. A non-member (or unknown email)
-	// has no trusted user id, so it receives only email, wildcard, and directory
-	// audiences. Platform MCP uses this same resolver with its authenticated user.
-	userID := ""
-	if authCtx.Email != nil && conv.NormalizeEmail(*authCtx.Email) == email {
-		userID = authCtx.UserID
-	}
-	principals, err := plugins.ResolveDeliveryPrincipals(ctx, s.db, authCtx.ActiveOrganizationID, email, userID)
+	// Resolve the reported email through current organization membership before
+	// adding user:<id>, user:all, or role principals. Agent keys can outlive their
+	// owner's membership, so the authenticated user id is not trusted directly.
+	principals, err := plugins.ResolveDeliveryPrincipals(ctx, s.db, authCtx.ActiveOrganizationID, email, "")
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error resolving agent plugin delivery principals").LogError(ctx, s.logger)
 	}

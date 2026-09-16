@@ -451,7 +451,7 @@ func (s *PluginsService) ListAssignedPlugins(ctx context.Context, principal Prin
 	rows, more := boundedRows(rows, limit)
 	output := ListPluginsOutput{ProjectID: project.ID.String(), Plugins: make([]Plugin, 0, len(rows))}
 	for _, row := range rows {
-		output.Plugins = append(output.Plugins, assignedPlugin(row.ID, row.Name, row.Slug, row.Description.String, row.IsDefault))
+		output.Plugins = append(output.Plugins, assignedPlugin(row.ID, row.Name, row.Slug, row.Description.String, row.IsDefault, row.ServerCount, row.SkillCount))
 	}
 	if more && len(rows) > 0 {
 		output.NextCursor, err = s.cursors.Encode(pluginCursor{
@@ -517,7 +517,7 @@ func (s *PluginsService) GetAssignedPlugin(ctx context.Context, principal Princi
 	skills, skillsTruncated := boundedRows(skills, maxPluginMembers)
 	output := GetPluginOutput{
 		ProjectID: project.ID.String(),
-		Plugin:    assignedPlugin(target.ID, target.Name, target.Slug, "", target.IsDefault),
+		Plugin:    assignedPlugin(target.ID, target.Name, target.Slug, target.Description.String, target.IsDefault, target.ServerCount, target.SkillCount),
 		Servers:   make([]PluginServer, 0, len(servers)), Skills: make([]PluginSkill, 0, len(skills)),
 		Truncated: serversTruncated || skillsTruncated,
 	}
@@ -874,8 +874,11 @@ func canonicalPluginAssignmentURN(value string) string {
 	return value
 }
 
-func assignedPlugin(id uuid.UUID, name, slug, description string, isDefault bool) Plugin {
-	return Plugin{ID: id.String(), Name: name, Slug: slug, Description: description, IsDefault: isDefault, Publication: PluginPublicationPublished}
+func assignedPlugin(id uuid.UUID, name, slug, description string, isDefault bool, serverCount, skillCount int64) Plugin {
+	return Plugin{
+		ID: id.String(), Name: name, Slug: slug, Description: description, IsDefault: isDefault,
+		ServerCount: serverCount, SkillCount: skillCount, Publication: PluginPublicationPublished,
+	}
 }
 
 func pluginFromInventoryRow(row platformrepo.ListPlatformMCPPluginInventoryRow) Plugin {

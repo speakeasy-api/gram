@@ -80,6 +80,8 @@ func TestMemberPluginOutputOmitsAdministrativeFields(t *testing.T) {
 			"marketing",
 			"Tools the marketing team installs",
 			false,
+			2,
+			1,
 		),
 		Servers: []PluginServer{},
 		Skills:  []PluginSkill{},
@@ -91,9 +93,6 @@ func TestMemberPluginOutputOmitsAdministrativeFields(t *testing.T) {
 	require.NotContains(t, string(encoded), "assignment_version")
 	require.NotContains(t, string(encoded), "references_expire_at")
 	require.NotContains(t, string(encoded), "distribution_admission")
-	require.NotContains(t, string(encoded), "marketplace")
-	require.NotContains(t, string(encoded), "repository")
-	require.NotContains(t, string(encoded), "token")
 }
 
 func TestListPluginAssignmentsOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {

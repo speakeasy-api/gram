@@ -185,8 +185,10 @@ func TestMemberPluginInventoryUsesDeliveryPrincipalsAndPublishedPackages(t *test
 		{slug: "email", principal: "email:" + principal.UserID + "@example.test"},
 	}
 	published := map[string]string{}
+	pluginsBySlug := map[string]pluginsrepo.Plugin{}
 	for _, assignment := range assignments {
 		plugin := seedPlugin(t, prepared, conn, principal.OrganizationID, project.ID, assignment.slug, assignment.slug)
+		pluginsBySlug[assignment.slug] = plugin
 		_, err = pluginsrepo.New(conn).AddPluginAssignment(prepared, pluginsrepo.AddPluginAssignmentParams{
 			PluginID: plugin.ID, OrganizationID: principal.OrganizationID, PrincipalUrn: assignment.principal,
 		})
@@ -200,6 +202,17 @@ func TestMemberPluginInventoryUsesDeliveryPrincipalsAndPublishedPackages(t *test
 		PluginID: unpublished.ID, OrganizationID: principal.OrganizationID, PrincipalUrn: urn.PrincipalWildcard,
 	})
 	require.NoError(t, err)
+	servers, err := platformrepo.New(conn).ListPlatformMCPServers(prepared, platformrepo.ListPlatformMCPServersParams{
+		ProjectID: project.ID, OrganizationID: principal.OrganizationID, LimitValue: 10,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, servers)
+	_, err = pluginsrepo.New(conn).AddPluginServer(prepared, pluginsrepo.AddPluginServerParams{
+		PluginID: pluginsBySlug["direct-user"].ID, ToolsetID: uuid.NullUUID{},
+		McpServerID: uuid.NullUUID{UUID: servers[0].ID, Valid: true}, DisplayName: "Assigned MCP", Policy: "required", SortOrder: 0,
+	})
+	require.NoError(t, err)
+
 	fingerprints, err := json.Marshal(published)
 	require.NoError(t, err)
 	_, err = pluginsrepo.New(conn).UpsertGitHubConnection(prepared, pluginsrepo.UpsertGitHubConnectionParams{
@@ -216,11 +229,16 @@ func TestMemberPluginInventoryUsesDeliveryPrincipalsAndPublishedPackages(t *test
 		slugs = append(slugs, plugin.Slug)
 		require.Nil(t, plugin.Assignments)
 		require.Equal(t, PluginPublicationPublished, plugin.Publication)
+		if plugin.Slug == "direct-user" {
+			require.EqualValues(t, 1, plugin.ServerCount)
+		}
 	}
 	require.ElementsMatch(t, []string{"direct-user", "member-role", "directory-attribute", "everyone", "email"}, slugs)
 
 	detail, err := service.GetAssignedPlugin(prepared, principal, GetPluginInput{ProjectID: project.ID.String(), Plugin: "direct-user"})
 	require.NoError(t, err)
+	require.EqualValues(t, 1, detail.Plugin.ServerCount)
+	require.Len(t, detail.Servers, 1)
 	encoded, err := json.Marshal(detail)
 	require.NoError(t, err)
 	for _, forbidden := range []string{"secret-marketplace-token", "private-owner", "private-repository", `"assignments"`, "assignment_version", "principal_urn"} {
@@ -232,6 +250,33 @@ func TestMemberPluginInventoryUsesDeliveryPrincipalsAndPublishedPackages(t *test
 	_, foreignProject := seedRegistrationLifecycle(t, prepared, conn)
 	_, err = service.ListAssignedPlugins(prepared, principal, ListPluginsInput{ProjectID: foreignProject.ID.String()})
 	require.ErrorIs(t, err, ErrPluginProjectNotFound)
+}
+
+func TestPlatformMCPInstallTargetUsesCanonicalEndpoint(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_install_target_endpoint")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+
+	servers, err := platformrepo.New(conn).ListPlatformMCPServers(ctx, platformrepo.ListPlatformMCPServersParams{
+		ProjectID: project.ID, OrganizationID: principal.OrganizationID, LimitValue: 10,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, servers)
+	target, err := platformrepo.New(conn).GetPlatformMCPInstallTarget(ctx, platformrepo.GetPlatformMCPInstallTargetParams{
+		OrganizationID: principal.OrganizationID, McpServerID: servers[0].ID, ProjectID: project.ID,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, target.EndpointSlug)
+	require.NotEqual(t, servers[0].Slug.String, target.EndpointSlug)
+
+	_, foreignProject := seedRegistrationLifecycle(t, ctx, conn)
+	_, err = platformrepo.New(conn).GetPlatformMCPInstallTarget(ctx, platformrepo.GetPlatformMCPInstallTargetParams{
+		OrganizationID: principal.OrganizationID, McpServerID: servers[0].ID, ProjectID: foreignProject.ID,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
 func TestListPluginAssignmentsReturnsOpaqueProjectBoundReferences(t *testing.T) {

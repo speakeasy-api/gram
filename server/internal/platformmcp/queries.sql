@@ -2786,6 +2786,20 @@ SELECT
     p.slug,
     p.description,
     COALESCE(p.is_default, FALSE) AS is_default,
+    (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
+    (
+      SELECT count(*)
+      FROM skill_distributions sd
+      JOIN skills sk
+        ON sk.id = sd.skill_id
+        AND sk.project_id = sd.project_id
+        AND sk.archived_at IS NULL
+      WHERE sd.plugin_id = p.id
+        AND sd.project_id = p.project_id
+        AND sd.channel = 'plugin'
+        AND sd.assistant_id IS NULL
+        AND sd.revoked_at IS NULL
+    ) AS skill_count,
     (gc.id IS NOT NULL)::boolean AS repository_connected,
     TRUE::boolean AS published
 FROM plugins p
@@ -2819,7 +2833,22 @@ SELECT
     p.id,
     p.name,
     p.slug,
-    COALESCE(p.is_default, FALSE) AS is_default
+    p.description,
+    COALESCE(p.is_default, FALSE) AS is_default,
+    (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
+    (
+      SELECT count(*)
+      FROM skill_distributions sd
+      JOIN skills sk
+        ON sk.id = sd.skill_id
+        AND sk.project_id = sd.project_id
+        AND sk.archived_at IS NULL
+      WHERE sd.plugin_id = p.id
+        AND sd.project_id = p.project_id
+        AND sd.channel = 'plugin'
+        AND sd.assistant_id IS NULL
+        AND sd.revoked_at IS NULL
+    ) AS skill_count
 FROM plugins p
 JOIN projects
   ON projects.id = p.project_id
@@ -2846,6 +2875,38 @@ WHERE p.project_id = @project_id
   )
 ORDER BY p.id
 LIMIT 2;
+
+-- name: GetPlatformMCPInstallTarget :one
+-- Tenant-scoped exact MCP target plus its canonical public endpoint. Disabled
+-- and unproxied servers deliberately expose no endpoint even if an endpoint row
+-- remains, because neither can be dispatched through Gram's public MCP route.
+SELECT
+    m.name,
+    m.slug,
+    CASE
+      WHEN m.visibility <> 'disabled'
+        AND m.unproxied_mcp_server_id IS NULL
+      THEN COALESCE(endpoint.slug, '')
+      ELSE ''
+    END::text AS endpoint_slug
+FROM mcp_servers m
+JOIN projects project
+  ON project.id = m.project_id
+  AND project.organization_id = @organization_id
+  AND project.deleted IS FALSE
+LEFT JOIN LATERAL (
+  SELECT e.slug
+  FROM mcp_endpoints e
+  WHERE e.mcp_server_id = m.id
+    AND e.project_id = m.project_id
+    AND e.custom_domain_id IS NULL
+    AND e.deleted IS FALSE
+  ORDER BY e.created_at ASC, e.id ASC
+  LIMIT 1
+) endpoint ON TRUE
+WHERE m.id = @mcp_server_id
+  AND m.project_id = @project_id
+  AND m.deleted IS FALSE;
 
 -- name: GetPlatformMCPPluginInventoryItem :one
 SELECT

@@ -8,7 +8,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -37,6 +36,8 @@ type GetMyInstallInstructionsOutput struct {
 	Fallback     string                 `json:"fallback,omitempty"`
 }
 
+var ErrInstallTargetNotFound = errors.New("install target not found")
+
 func (s *PluginsService) GetMyInstallInstructions(ctx context.Context, principal Principal, input GetMyInstallInstructionsInput) (GetMyInstallInstructionsOutput, error) {
 	if !s.valid() || s.authorization == nil || !validOnboardingClient(input.ClientFamily) {
 		return GetMyInstallInstructionsOutput{}, ErrUnavailable
@@ -55,31 +56,33 @@ func (s *PluginsService) GetMyInstallInstructions(ctx context.Context, principal
 
 	mcpID, err := uuid.Parse(strings.TrimSpace(input.MCPID))
 	if err != nil {
-		return GetMyInstallInstructionsOutput{}, ErrPluginNotFound
+		return GetMyInstallInstructionsOutput{}, ErrInstallTargetNotFound
 	}
-	if err := s.authorization.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, mcpID.String(), projectID.String())); err != nil {
+	if err := s.budget.Allow(ctx, principal); err != nil {
 		return GetMyInstallInstructionsOutput{}, err
 	}
-	row, err := platformrepo.New(s.db).GetPlatformMCPInventoryItem(ctx, platformrepo.GetPlatformMCPInventoryItemParams{
-		OrganizationID:       principal.OrganizationID,
-		ConnectionID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		ConnectionGeneration: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		UserID:               pgtype.Text{String: "", Valid: false},
-		ActingSurface:        pgtype.Text{String: "", Valid: false},
-		McpServerID:          mcpID,
-		ProjectID:            projectID,
+	row, err := platformrepo.New(s.db).GetPlatformMCPInstallTarget(ctx, platformrepo.GetPlatformMCPInstallTargetParams{
+		OrganizationID: principal.OrganizationID,
+		McpServerID:    mcpID,
+		ProjectID:      projectID,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return GetMyInstallInstructionsOutput{}, ErrPluginNotFound
+		return GetMyInstallInstructionsOutput{}, ErrInstallTargetNotFound
 	}
 	if err != nil {
 		return GetMyInstallInstructionsOutput{}, fmt.Errorf("get installable platform mcp server: %w", err)
 	}
-	name := row.McpName.String
-	if name == "" {
-		name = row.McpSlug.String
+	if err := s.authorization.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, mcpID.String(), projectID.String())); err != nil {
+		if isAuthorizationDenied(err) {
+			return GetMyInstallInstructionsOutput{}, ErrInstallTargetNotFound
+		}
+		return GetMyInstallInstructionsOutput{}, err
 	}
-	return s.standaloneMCPInstallInstructions(input.ClientFamily, name, row.McpSlug.String), nil
+	name := row.Name.String
+	if name == "" {
+		name = row.Slug.String
+	}
+	return s.standaloneMCPInstallInstructions(input.ClientFamily, name, row.EndpointSlug), nil
 }
 
 func (s *PluginsService) pluginInstallInstructions(ctx context.Context, client OnboardingClientFamily, name string) GetMyInstallInstructionsOutput {
