@@ -65,8 +65,6 @@ DELETE FROM metrics_summaries WHERE gram_project_id IN
   (toUUID('dec0de00-0000-4000-a000-000000000001'));
 DELETE FROM attribute_metrics_summaries WHERE gram_project_id IN
   (toUUID('dec0de00-0000-4000-a000-000000000001'));
-DELETE FROM chat_token_summaries WHERE gram_project_id IN
-  (toUUID('dec0de00-0000-4000-a000-000000000001'));
 DELETE FROM chat_session_summaries WHERE gram_project_id IN
   (toUUID('dec0de00-0000-4000-a000-000000000001'));
 DELETE FROM spend_rule_usage_summaries WHERE gram_project_id IN

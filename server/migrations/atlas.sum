@@ -1,4 +1,4 @@
-h1:vv30+Jr5f4z77LlO9TUEnaTuB+gG9w+IVHrJvKrRg1A=
+h1:mtwlyP+a35LZJzIUoKQQAIlRtlGtufnn7AR+zEzpQfY=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -410,3 +410,5 @@ h1:vv30+Jr5f4z77LlO9TUEnaTuB+gG9w+IVHrJvKrRg1A=
 20260915173458_assistant-mcp-oauth-cimd.sql h1:ETXL1hgvmHMAJ15AwFrdlzbrBiepuvhFnO2Y9HFwr3s=
 20260915180558_add-jwks-last-error-details.sql h1:1R0MZU850hV1xdvudr0t6L/Ujt2Ii43xW300Sgm0z+4=
 20260915182327_drop-legacy-device-agent-ai-tables.sql h1:y4UrHVDiPjhJy2ZiIo5qxwWC7gIkMQudGjMMZxszols=
+20260916101106_remove_legacy_tum_reporting_storage.sql h1:6IqH9gWXFtJFaK39FwOjQkFzqo1wZUQciMpfEo3djx8=
+20260916101216_remove_legacy_tum_cycle_index.sql h1:Is6GuuAhSjc371bvhp9EoI17l0RkS3WKDg8jy1eQxus=

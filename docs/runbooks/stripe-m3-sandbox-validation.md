@@ -281,12 +281,12 @@ SELECT source_kind, source_key, seq, source_snapshot_usd, amount_usd,
        delivery_state, stripe_invoice_item_id, stripe_credit_note_id
 FROM stripe_invoice_allocations
 WHERE organization_id = :'org_id'
-ORDER BY source_period_start, source_key, seq;
+ORDER BY source_day, source_key, seq;
 SQL
 ```
 
-TUM exports use Pub/Sub meter readings, not `stripe_meter_reports` or frozen
-billing-cycle baselines. Invoice allocation settlement handles OpenRouter spend.
+TUM exports use Pub/Sub meter readings. Invoice allocation settlement handles
+OpenRouter spend.
 Initial OpenRouter allocation cents plus signed carry cents must
 equal the exact final cumulative Other inference spend cents. Every confirmed
 allocation external ID must resolve to the same customer, invoice period,
