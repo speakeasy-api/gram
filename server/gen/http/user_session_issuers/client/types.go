@@ -71,6 +71,9 @@ type CreateUserSessionIssuerResponseBody struct {
 	// The organization-level or global remote_session_issuer whose assertions this
 	// issuer trusts. Absent when enterprise-managed authorization is disabled.
 	TrustedRemoteSessionIssuerID *string `form:"trusted_remote_session_issuer_id,omitempty" json:"trusted_remote_session_issuer_id,omitempty" xml:"trusted_remote_session_issuer_id,omitempty"`
+	// The organization-level remote_session_client Gram uses with the trusted
+	// issuer. Absent when enterprise-managed authorization is disabled.
+	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
 	CreatedAt                    *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	UpdatedAt                    *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
@@ -103,6 +106,9 @@ type UpdateUserSessionIssuerResponseBody struct {
 	// The organization-level or global remote_session_issuer whose assertions this
 	// issuer trusts. Absent when enterprise-managed authorization is disabled.
 	TrustedRemoteSessionIssuerID *string `form:"trusted_remote_session_issuer_id,omitempty" json:"trusted_remote_session_issuer_id,omitempty" xml:"trusted_remote_session_issuer_id,omitempty"`
+	// The organization-level remote_session_client Gram uses with the trusted
+	// issuer. Absent when enterprise-managed authorization is disabled.
+	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
 	CreatedAt                    *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	UpdatedAt                    *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
@@ -143,6 +149,9 @@ type GetUserSessionIssuerResponseBody struct {
 	// The organization-level or global remote_session_issuer whose assertions this
 	// issuer trusts. Absent when enterprise-managed authorization is disabled.
 	TrustedRemoteSessionIssuerID *string `form:"trusted_remote_session_issuer_id,omitempty" json:"trusted_remote_session_issuer_id,omitempty" xml:"trusted_remote_session_issuer_id,omitempty"`
+	// The organization-level remote_session_client Gram uses with the trusted
+	// issuer. Absent when enterprise-managed authorization is disabled.
+	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
 	CreatedAt                    *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	UpdatedAt                    *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
@@ -1125,6 +1134,9 @@ type UserSessionIssuerResponseBody struct {
 	// The organization-level or global remote_session_issuer whose assertions this
 	// issuer trusts. Absent when enterprise-managed authorization is disabled.
 	TrustedRemoteSessionIssuerID *string `form:"trusted_remote_session_issuer_id,omitempty" json:"trusted_remote_session_issuer_id,omitempty" xml:"trusted_remote_session_issuer_id,omitempty"`
+	// The organization-level remote_session_client Gram uses with the trusted
+	// issuer. Absent when enterprise-managed authorization is disabled.
+	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
 	CreatedAt                    *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	UpdatedAt                    *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
@@ -1167,6 +1179,7 @@ func NewCreateUserSessionIssuerUserSessionIssuerOK(body *CreateUserSessionIssuer
 		SessionDurationHours:          *body.SessionDurationHours,
 		ClientIDMetadataAdmissionMode: *body.ClientIDMetadataAdmissionMode,
 		TrustedRemoteSessionIssuerID:  body.TrustedRemoteSessionIssuerID,
+		TrustedRemoteSessionClientID:  body.TrustedRemoteSessionClientID,
 		CreatedAt:                     *body.CreatedAt,
 		UpdatedAt:                     *body.UpdatedAt,
 	}
@@ -1336,6 +1349,7 @@ func NewUpdateUserSessionIssuerUserSessionIssuerOK(body *UpdateUserSessionIssuer
 		SessionDurationHours:          *body.SessionDurationHours,
 		ClientIDMetadataAdmissionMode: *body.ClientIDMetadataAdmissionMode,
 		TrustedRemoteSessionIssuerID:  body.TrustedRemoteSessionIssuerID,
+		TrustedRemoteSessionClientID:  body.TrustedRemoteSessionClientID,
 		CreatedAt:                     *body.CreatedAt,
 		UpdatedAt:                     *body.UpdatedAt,
 	}
@@ -1673,6 +1687,7 @@ func NewGetUserSessionIssuerUserSessionIssuerOK(body *GetUserSessionIssuerRespon
 		SessionDurationHours:          *body.SessionDurationHours,
 		ClientIDMetadataAdmissionMode: *body.ClientIDMetadataAdmissionMode,
 		TrustedRemoteSessionIssuerID:  body.TrustedRemoteSessionIssuerID,
+		TrustedRemoteSessionClientID:  body.TrustedRemoteSessionClientID,
 		CreatedAt:                     *body.CreatedAt,
 		UpdatedAt:                     *body.UpdatedAt,
 	}
@@ -2021,6 +2036,9 @@ func ValidateCreateUserSessionIssuerResponseBody(body *CreateUserSessionIssuerRe
 	if body.TrustedRemoteSessionIssuerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.trusted_remote_session_issuer_id", *body.TrustedRemoteSessionIssuerID, goa.FormatUUID))
 	}
+	if body.TrustedRemoteSessionClientID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trusted_remote_session_client_id", *body.TrustedRemoteSessionClientID, goa.FormatUUID))
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
@@ -2070,6 +2088,9 @@ func ValidateUpdateUserSessionIssuerResponseBody(body *UpdateUserSessionIssuerRe
 	}
 	if body.TrustedRemoteSessionIssuerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.trusted_remote_session_issuer_id", *body.TrustedRemoteSessionIssuerID, goa.FormatUUID))
+	}
+	if body.TrustedRemoteSessionClientID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trusted_remote_session_client_id", *body.TrustedRemoteSessionClientID, goa.FormatUUID))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -2136,6 +2157,9 @@ func ValidateGetUserSessionIssuerResponseBody(body *GetUserSessionIssuerResponse
 	}
 	if body.TrustedRemoteSessionIssuerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.trusted_remote_session_issuer_id", *body.TrustedRemoteSessionIssuerID, goa.FormatUUID))
+	}
+	if body.TrustedRemoteSessionClientID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trusted_remote_session_client_id", *body.TrustedRemoteSessionClientID, goa.FormatUUID))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -3393,6 +3417,9 @@ func ValidateUserSessionIssuerResponseBody(body *UserSessionIssuerResponseBody) 
 	}
 	if body.TrustedRemoteSessionIssuerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.trusted_remote_session_issuer_id", *body.TrustedRemoteSessionIssuerID, goa.FormatUUID))
+	}
+	if body.TrustedRemoteSessionClientID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trusted_remote_session_client_id", *body.TrustedRemoteSessionClientID, goa.FormatUUID))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))

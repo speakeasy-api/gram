@@ -529,6 +529,23 @@ func (q *Queries) CountTenantRemoteSessionClientsByIssuerID(ctx context.Context,
 	return count, err
 }
 
+const countTrustedUserSessionIssuersByRemoteSessionClientID = `-- name: CountTrustedUserSessionIssuersByRemoteSessionClientID :one
+SELECT COUNT(*)
+FROM user_session_issuers
+WHERE trusted_remote_session_client_id = $1::uuid
+  AND deleted IS FALSE
+`
+
+// Every active user-session issuer that uses this client for identity-provider
+// login. Delete enforcement is intentionally unscoped so corrupt legacy data
+// cannot be stranded by deleting a client through a tenant-scoped surface.
+func (q *Queries) CountTrustedUserSessionIssuersByRemoteSessionClientID(ctx context.Context, remoteSessionClientID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countTrustedUserSessionIssuersByRemoteSessionClientID, remoteSessionClientID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countTrustedUserSessionIssuersByRemoteSessionIssuerID = `-- name: CountTrustedUserSessionIssuersByRemoteSessionIssuerID :one
 SELECT COUNT(*)
 FROM user_session_issuers
@@ -1302,6 +1319,12 @@ WHERE c.id = $1
   AND (i.organization_id = $2 OR c.organization_id = $2)
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE
+  AND NOT EXISTS (
+    SELECT 1
+    FROM user_session_issuers AS usi
+    WHERE usi.trusted_remote_session_client_id = c.id
+      AND usi.deleted IS FALSE
+  )
 RETURNING c.id, c.project_id, c.organization_id, c.attachment_scope, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.grant_types, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.resource_identifier, c.resource_name, c.resource_documentation, c.resource_policy_uri, c.resource_tos_uri, c.upstream_rejected_at, c.created_at, c.updated_at, c.deleted_at, c.deleted
 `
 
@@ -3989,6 +4012,121 @@ func (q *Queries) GetTrustedIssuerJWKSCache(ctx context.Context, arg GetTrustedI
 	return i, err
 }
 
+const getTrustedRemoteSessionClientForOrganization = `-- name: GetTrustedRemoteSessionClientForOrganization :one
+SELECT c.id, c.project_id, c.organization_id, c.attachment_scope, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.grant_types, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.resource_identifier, c.resource_name, c.resource_documentation, c.resource_policy_uri, c.resource_tos_uri, c.upstream_rejected_at, c.created_at, c.updated_at, c.deleted_at, c.deleted, i.id, i.project_id, i.organization_id, i.slug, i.issuer, i.authorization_endpoint, i.token_endpoint, i.revocation_endpoint, i.registration_endpoint, i.jwks_uri, i.jwks, i.jwks_fetched_at, i.jwks_last_error, i.jwks_last_error_at, i.jwks_cache_expires_at, i.jwks_etag, i.service_documentation, i.op_policy_uri, i.op_tos_uri, i.scopes_supported, i.grant_types_supported, i.authorization_grant_profiles_supported, i.response_types_supported, i.token_endpoint_auth_methods_supported, i.code_challenge_methods_supported, i.client_id_metadata_document_supported, i.userinfo_endpoint, i.introspection_endpoint, i.introspection_endpoint_auth_methods_supported, i.id_token_signing_alg_values_supported, i.claims_supported, i.backchannel_logout_supported, i.authorization_response_iss_parameter_supported, i.scope_override, i.resource_indicator_supported, i.oidc, i.passthrough, i.tunneled_mcp_server_id, i.name, i.logo_asset_id, i.client_setup_documentation_url, i.metadata, i.metadata_fetched_at, i.metadata_last_error, i.metadata_last_error_at, i.metadata_last_error_url, i.created_at, i.updated_at, i.deleted_at, i.deleted
+FROM remote_session_clients AS c
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+WHERE c.id = $1::uuid
+  AND c.remote_session_issuer_id = $2::uuid
+  AND c.project_id IS NULL
+  AND c.organization_id = $3::text
+  AND c.deleted IS FALSE
+  AND i.id = $2::uuid
+  AND i.project_id IS NULL
+  AND (i.organization_id = $3::text OR i.organization_id IS NULL)
+  AND i.deleted IS FALSE
+`
+
+type GetTrustedRemoteSessionClientForOrganizationParams struct {
+	ClientID       uuid.UUID
+	IssuerID       uuid.UUID
+	OrganizationID string
+}
+
+type GetTrustedRemoteSessionClientForOrganizationRow struct {
+	RemoteSessionClient RemoteSessionClient
+	RemoteSessionIssuer RemoteSessionIssuer
+}
+
+// The exact live issuer/client pair eligible for organization identity-provider
+// login. Clients must be organization-owned by the caller; project and global
+// clients are deliberately excluded. The issuer may be organization-owned or
+// global, but the client must belong to that exact issuer.
+func (q *Queries) GetTrustedRemoteSessionClientForOrganization(ctx context.Context, arg GetTrustedRemoteSessionClientForOrganizationParams) (GetTrustedRemoteSessionClientForOrganizationRow, error) {
+	row := q.db.QueryRow(ctx, getTrustedRemoteSessionClientForOrganization, arg.ClientID, arg.IssuerID, arg.OrganizationID)
+	var i GetTrustedRemoteSessionClientForOrganizationRow
+	err := row.Scan(
+		&i.RemoteSessionClient.ID,
+		&i.RemoteSessionClient.ProjectID,
+		&i.RemoteSessionClient.OrganizationID,
+		&i.RemoteSessionClient.AttachmentScope,
+		&i.RemoteSessionClient.RemoteSessionIssuerID,
+		&i.RemoteSessionClient.ClientID,
+		&i.RemoteSessionClient.ClientSecretEncrypted,
+		&i.RemoteSessionClient.ClientIDIssuedAt,
+		&i.RemoteSessionClient.ClientSecretExpiresAt,
+		&i.RemoteSessionClient.TokenEndpointAuthMethod,
+		&i.RemoteSessionClient.JsonWebKeySetID,
+		&i.RemoteSessionClient.Scope,
+		&i.RemoteSessionClient.GrantTypes,
+		&i.RemoteSessionClient.Audience,
+		&i.RemoteSessionClient.TokenEndpointAuthAudienceFormat,
+		&i.RemoteSessionClient.ClientIDMetadataUri,
+		&i.RemoteSessionClient.LegacyCallbackUrl,
+		&i.RemoteSessionClient.ResourceIdentifier,
+		&i.RemoteSessionClient.ResourceName,
+		&i.RemoteSessionClient.ResourceDocumentation,
+		&i.RemoteSessionClient.ResourcePolicyUri,
+		&i.RemoteSessionClient.ResourceTosUri,
+		&i.RemoteSessionClient.UpstreamRejectedAt,
+		&i.RemoteSessionClient.CreatedAt,
+		&i.RemoteSessionClient.UpdatedAt,
+		&i.RemoteSessionClient.DeletedAt,
+		&i.RemoteSessionClient.Deleted,
+		&i.RemoteSessionIssuer.ID,
+		&i.RemoteSessionIssuer.ProjectID,
+		&i.RemoteSessionIssuer.OrganizationID,
+		&i.RemoteSessionIssuer.Slug,
+		&i.RemoteSessionIssuer.Issuer,
+		&i.RemoteSessionIssuer.AuthorizationEndpoint,
+		&i.RemoteSessionIssuer.TokenEndpoint,
+		&i.RemoteSessionIssuer.RevocationEndpoint,
+		&i.RemoteSessionIssuer.RegistrationEndpoint,
+		&i.RemoteSessionIssuer.JwksUri,
+		&i.RemoteSessionIssuer.Jwks,
+		&i.RemoteSessionIssuer.JwksFetchedAt,
+		&i.RemoteSessionIssuer.JwksLastError,
+		&i.RemoteSessionIssuer.JwksLastErrorAt,
+		&i.RemoteSessionIssuer.JwksCacheExpiresAt,
+		&i.RemoteSessionIssuer.JwksEtag,
+		&i.RemoteSessionIssuer.ServiceDocumentation,
+		&i.RemoteSessionIssuer.OpPolicyUri,
+		&i.RemoteSessionIssuer.OpTosUri,
+		&i.RemoteSessionIssuer.ScopesSupported,
+		&i.RemoteSessionIssuer.GrantTypesSupported,
+		&i.RemoteSessionIssuer.AuthorizationGrantProfilesSupported,
+		&i.RemoteSessionIssuer.ResponseTypesSupported,
+		&i.RemoteSessionIssuer.TokenEndpointAuthMethodsSupported,
+		&i.RemoteSessionIssuer.CodeChallengeMethodsSupported,
+		&i.RemoteSessionIssuer.ClientIDMetadataDocumentSupported,
+		&i.RemoteSessionIssuer.UserinfoEndpoint,
+		&i.RemoteSessionIssuer.IntrospectionEndpoint,
+		&i.RemoteSessionIssuer.IntrospectionEndpointAuthMethodsSupported,
+		&i.RemoteSessionIssuer.IDTokenSigningAlgValuesSupported,
+		&i.RemoteSessionIssuer.ClaimsSupported,
+		&i.RemoteSessionIssuer.BackchannelLogoutSupported,
+		&i.RemoteSessionIssuer.AuthorizationResponseIssParameterSupported,
+		&i.RemoteSessionIssuer.ScopeOverride,
+		&i.RemoteSessionIssuer.ResourceIndicatorSupported,
+		&i.RemoteSessionIssuer.Oidc,
+		&i.RemoteSessionIssuer.Passthrough,
+		&i.RemoteSessionIssuer.TunneledMcpServerID,
+		&i.RemoteSessionIssuer.Name,
+		&i.RemoteSessionIssuer.LogoAssetID,
+		&i.RemoteSessionIssuer.ClientSetupDocumentationUrl,
+		&i.RemoteSessionIssuer.Metadata,
+		&i.RemoteSessionIssuer.MetadataFetchedAt,
+		&i.RemoteSessionIssuer.MetadataLastError,
+		&i.RemoteSessionIssuer.MetadataLastErrorAt,
+		&i.RemoteSessionIssuer.MetadataLastErrorUrl,
+		&i.RemoteSessionIssuer.CreatedAt,
+		&i.RemoteSessionIssuer.UpdatedAt,
+		&i.RemoteSessionIssuer.DeletedAt,
+		&i.RemoteSessionIssuer.Deleted,
+	)
+	return i, err
+}
+
 const getTrustedRemoteSessionIssuerForOrganization = `-- name: GetTrustedRemoteSessionIssuerForOrganization :one
 SELECT id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, jwks, jwks_fetched_at, jwks_last_error, jwks_last_error_at, jwks_cache_expires_at, jwks_etag, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, authorization_grant_profiles_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, userinfo_endpoint, introspection_endpoint, introspection_endpoint_auth_methods_supported, id_token_signing_alg_values_supported, claims_supported, backchannel_logout_supported, authorization_response_iss_parameter_supported, scope_override, resource_indicator_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, metadata_last_error_url, created_at, updated_at, deleted_at, deleted
 FROM remote_session_issuers
@@ -5094,6 +5232,48 @@ func (q *Queries) ListOrganizationRemoteSessionsByClientID(ctx context.Context, 
 			&i.SubjectDisplayName,
 			&i.SubjectEmail,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrganizationTrustedUserSessionIssuersByRemoteSessionClientID = `-- name: ListOrganizationTrustedUserSessionIssuersByRemoteSessionClientID :many
+SELECT id, slug
+FROM user_session_issuers
+WHERE trusted_remote_session_client_id = $1::uuid
+  AND project_id IS NULL
+  AND organization_id = $2::text
+  AND deleted IS FALSE
+ORDER BY id
+`
+
+type ListOrganizationTrustedUserSessionIssuersByRemoteSessionClientIDParams struct {
+	RemoteSessionClientID uuid.UUID
+	OrganizationID        string
+}
+
+type ListOrganizationTrustedUserSessionIssuersByRemoteSessionClientIDRow struct {
+	ID   uuid.UUID
+	Slug string
+}
+
+// Tenant-scoped details for the client delete preflight. Mutation enforcement
+// uses the unscoped count above.
+func (q *Queries) ListOrganizationTrustedUserSessionIssuersByRemoteSessionClientID(ctx context.Context, arg ListOrganizationTrustedUserSessionIssuersByRemoteSessionClientIDParams) ([]ListOrganizationTrustedUserSessionIssuersByRemoteSessionClientIDRow, error) {
+	rows, err := q.db.Query(ctx, listOrganizationTrustedUserSessionIssuersByRemoteSessionClientID, arg.RemoteSessionClientID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOrganizationTrustedUserSessionIssuersByRemoteSessionClientIDRow
+	for rows.Next() {
+		var i ListOrganizationTrustedUserSessionIssuersByRemoteSessionClientIDRow
+		if err := rows.Scan(&i.ID, &i.Slug); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -6615,6 +6795,121 @@ func (q *Queries) LockRemoteSessionIssuerForMetadataRefresh(ctx context.Context,
 	return i, err
 }
 
+const lockTrustedRemoteSessionClientForOrganization = `-- name: LockTrustedRemoteSessionClientForOrganization :one
+SELECT c.id, c.project_id, c.organization_id, c.attachment_scope, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.grant_types, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.resource_identifier, c.resource_name, c.resource_documentation, c.resource_policy_uri, c.resource_tos_uri, c.upstream_rejected_at, c.created_at, c.updated_at, c.deleted_at, c.deleted, i.id, i.project_id, i.organization_id, i.slug, i.issuer, i.authorization_endpoint, i.token_endpoint, i.revocation_endpoint, i.registration_endpoint, i.jwks_uri, i.jwks, i.jwks_fetched_at, i.jwks_last_error, i.jwks_last_error_at, i.jwks_cache_expires_at, i.jwks_etag, i.service_documentation, i.op_policy_uri, i.op_tos_uri, i.scopes_supported, i.grant_types_supported, i.authorization_grant_profiles_supported, i.response_types_supported, i.token_endpoint_auth_methods_supported, i.code_challenge_methods_supported, i.client_id_metadata_document_supported, i.userinfo_endpoint, i.introspection_endpoint, i.introspection_endpoint_auth_methods_supported, i.id_token_signing_alg_values_supported, i.claims_supported, i.backchannel_logout_supported, i.authorization_response_iss_parameter_supported, i.scope_override, i.resource_indicator_supported, i.oidc, i.passthrough, i.tunneled_mcp_server_id, i.name, i.logo_asset_id, i.client_setup_documentation_url, i.metadata, i.metadata_fetched_at, i.metadata_last_error, i.metadata_last_error_at, i.metadata_last_error_url, i.created_at, i.updated_at, i.deleted_at, i.deleted
+FROM remote_session_clients AS c
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+WHERE c.id = $1::uuid
+  AND c.remote_session_issuer_id = $2::uuid
+  AND c.project_id IS NULL
+  AND c.organization_id = $3::text
+  AND c.deleted IS FALSE
+  AND i.id = $2::uuid
+  AND i.project_id IS NULL
+  AND (i.organization_id = $3::text OR i.organization_id IS NULL)
+  AND i.deleted IS FALSE
+FOR SHARE OF c
+`
+
+type LockTrustedRemoteSessionClientForOrganizationParams struct {
+	ClientID       uuid.UUID
+	IssuerID       uuid.UUID
+	OrganizationID string
+}
+
+type LockTrustedRemoteSessionClientForOrganizationRow struct {
+	RemoteSessionClient RemoteSessionClient
+	RemoteSessionIssuer RemoteSessionIssuer
+}
+
+// Callers first run the unlocked query above, then take the issuer advisory
+// lock, then run this query. Repeating the exact eligibility predicate closes
+// delete and re-scope races without allowing cross-tenant row locks.
+func (q *Queries) LockTrustedRemoteSessionClientForOrganization(ctx context.Context, arg LockTrustedRemoteSessionClientForOrganizationParams) (LockTrustedRemoteSessionClientForOrganizationRow, error) {
+	row := q.db.QueryRow(ctx, lockTrustedRemoteSessionClientForOrganization, arg.ClientID, arg.IssuerID, arg.OrganizationID)
+	var i LockTrustedRemoteSessionClientForOrganizationRow
+	err := row.Scan(
+		&i.RemoteSessionClient.ID,
+		&i.RemoteSessionClient.ProjectID,
+		&i.RemoteSessionClient.OrganizationID,
+		&i.RemoteSessionClient.AttachmentScope,
+		&i.RemoteSessionClient.RemoteSessionIssuerID,
+		&i.RemoteSessionClient.ClientID,
+		&i.RemoteSessionClient.ClientSecretEncrypted,
+		&i.RemoteSessionClient.ClientIDIssuedAt,
+		&i.RemoteSessionClient.ClientSecretExpiresAt,
+		&i.RemoteSessionClient.TokenEndpointAuthMethod,
+		&i.RemoteSessionClient.JsonWebKeySetID,
+		&i.RemoteSessionClient.Scope,
+		&i.RemoteSessionClient.GrantTypes,
+		&i.RemoteSessionClient.Audience,
+		&i.RemoteSessionClient.TokenEndpointAuthAudienceFormat,
+		&i.RemoteSessionClient.ClientIDMetadataUri,
+		&i.RemoteSessionClient.LegacyCallbackUrl,
+		&i.RemoteSessionClient.ResourceIdentifier,
+		&i.RemoteSessionClient.ResourceName,
+		&i.RemoteSessionClient.ResourceDocumentation,
+		&i.RemoteSessionClient.ResourcePolicyUri,
+		&i.RemoteSessionClient.ResourceTosUri,
+		&i.RemoteSessionClient.UpstreamRejectedAt,
+		&i.RemoteSessionClient.CreatedAt,
+		&i.RemoteSessionClient.UpdatedAt,
+		&i.RemoteSessionClient.DeletedAt,
+		&i.RemoteSessionClient.Deleted,
+		&i.RemoteSessionIssuer.ID,
+		&i.RemoteSessionIssuer.ProjectID,
+		&i.RemoteSessionIssuer.OrganizationID,
+		&i.RemoteSessionIssuer.Slug,
+		&i.RemoteSessionIssuer.Issuer,
+		&i.RemoteSessionIssuer.AuthorizationEndpoint,
+		&i.RemoteSessionIssuer.TokenEndpoint,
+		&i.RemoteSessionIssuer.RevocationEndpoint,
+		&i.RemoteSessionIssuer.RegistrationEndpoint,
+		&i.RemoteSessionIssuer.JwksUri,
+		&i.RemoteSessionIssuer.Jwks,
+		&i.RemoteSessionIssuer.JwksFetchedAt,
+		&i.RemoteSessionIssuer.JwksLastError,
+		&i.RemoteSessionIssuer.JwksLastErrorAt,
+		&i.RemoteSessionIssuer.JwksCacheExpiresAt,
+		&i.RemoteSessionIssuer.JwksEtag,
+		&i.RemoteSessionIssuer.ServiceDocumentation,
+		&i.RemoteSessionIssuer.OpPolicyUri,
+		&i.RemoteSessionIssuer.OpTosUri,
+		&i.RemoteSessionIssuer.ScopesSupported,
+		&i.RemoteSessionIssuer.GrantTypesSupported,
+		&i.RemoteSessionIssuer.AuthorizationGrantProfilesSupported,
+		&i.RemoteSessionIssuer.ResponseTypesSupported,
+		&i.RemoteSessionIssuer.TokenEndpointAuthMethodsSupported,
+		&i.RemoteSessionIssuer.CodeChallengeMethodsSupported,
+		&i.RemoteSessionIssuer.ClientIDMetadataDocumentSupported,
+		&i.RemoteSessionIssuer.UserinfoEndpoint,
+		&i.RemoteSessionIssuer.IntrospectionEndpoint,
+		&i.RemoteSessionIssuer.IntrospectionEndpointAuthMethodsSupported,
+		&i.RemoteSessionIssuer.IDTokenSigningAlgValuesSupported,
+		&i.RemoteSessionIssuer.ClaimsSupported,
+		&i.RemoteSessionIssuer.BackchannelLogoutSupported,
+		&i.RemoteSessionIssuer.AuthorizationResponseIssParameterSupported,
+		&i.RemoteSessionIssuer.ScopeOverride,
+		&i.RemoteSessionIssuer.ResourceIndicatorSupported,
+		&i.RemoteSessionIssuer.Oidc,
+		&i.RemoteSessionIssuer.Passthrough,
+		&i.RemoteSessionIssuer.TunneledMcpServerID,
+		&i.RemoteSessionIssuer.Name,
+		&i.RemoteSessionIssuer.LogoAssetID,
+		&i.RemoteSessionIssuer.ClientSetupDocumentationUrl,
+		&i.RemoteSessionIssuer.Metadata,
+		&i.RemoteSessionIssuer.MetadataFetchedAt,
+		&i.RemoteSessionIssuer.MetadataLastError,
+		&i.RemoteSessionIssuer.MetadataLastErrorAt,
+		&i.RemoteSessionIssuer.MetadataLastErrorUrl,
+		&i.RemoteSessionIssuer.CreatedAt,
+		&i.RemoteSessionIssuer.UpdatedAt,
+		&i.RemoteSessionIssuer.DeletedAt,
+		&i.RemoteSessionIssuer.Deleted,
+	)
+	return i, err
+}
+
 const markRemoteSessionClientUpstreamRejected = `-- name: MarkRemoteSessionClientUpstreamRejected :execrows
 UPDATE remote_session_clients
 SET upstream_rejected_at = clock_timestamp(),
@@ -6801,6 +7096,7 @@ SET client_id = $1,
 WHERE id = $6
   AND client_id = $7
   AND updated_at = $8
+  AND remote_session_issuer_id = $9
   AND deleted IS FALSE
   AND client_id_metadata_uri IS NULL
 RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, created_at, updated_at, deleted_at, deleted
@@ -6815,6 +7111,7 @@ type ReplaceRemoteSessionClientRegistrationParams struct {
 	ID                      uuid.UUID
 	ExpectedClientID        string
 	ExpectedUpdatedAt       pgtype.Timestamptz
+	ExpectedIssuerID        uuid.UUID
 }
 
 // Swaps the row onto a freshly registered upstream client in place, so the
@@ -6824,7 +7121,8 @@ type ReplaceRemoteSessionClientRegistrationParams struct {
 // rejection marker is cleared because the replacement is known to the issuer.
 // Compare-and-swap on the client_id and updated_at the caller read: a row
 // another rotation or an administrator's edit already moved is left alone and
-// reported as no rows. CIMD-mode rows are
+// reported as no rows. The expected issuer also proves the advisory lock the
+// caller holds still covers this client. CIMD-mode rows are
 // excluded: their client_id is the metadata document URL and is never
 // registered upstream.
 func (q *Queries) ReplaceRemoteSessionClientRegistration(ctx context.Context, arg ReplaceRemoteSessionClientRegistrationParams) (RemoteSessionClient, error) {
@@ -6837,6 +7135,7 @@ func (q *Queries) ReplaceRemoteSessionClientRegistration(ctx context.Context, ar
 		arg.ID,
 		arg.ExpectedClientID,
 		arg.ExpectedUpdatedAt,
+		arg.ExpectedIssuerID,
 	)
 	var i RemoteSessionClient
 	err := row.Scan(

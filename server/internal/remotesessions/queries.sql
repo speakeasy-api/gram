@@ -546,6 +546,26 @@ WHERE trusted_remote_session_issuer_id = @remote_session_issuer_id::uuid
   AND deleted IS FALSE
 ORDER BY id;
 
+-- name: CountTrustedUserSessionIssuersByRemoteSessionClientID :one
+-- Every active user-session issuer that uses this client for identity-provider
+-- login. Delete enforcement is intentionally unscoped so corrupt legacy data
+-- cannot be stranded by deleting a client through a tenant-scoped surface.
+SELECT COUNT(*)
+FROM user_session_issuers
+WHERE trusted_remote_session_client_id = @remote_session_client_id::uuid
+  AND deleted IS FALSE;
+
+-- name: ListOrganizationTrustedUserSessionIssuersByRemoteSessionClientID :many
+-- Tenant-scoped details for the client delete preflight. Mutation enforcement
+-- uses the unscoped count above.
+SELECT id, slug
+FROM user_session_issuers
+WHERE trusted_remote_session_client_id = @remote_session_client_id::uuid
+  AND project_id IS NULL
+  AND organization_id = @organization_id::text
+  AND deleted IS FALSE
+ORDER BY id;
+
 -- name: CountTenantRemoteSessionClientsByIssuerID :one
 -- Non-deleted clients on an issuer that belong to a tenant (a project or an
 -- organization) rather than to the global partition. Subtracting this from
@@ -676,7 +696,8 @@ ORDER BY link.user_session_issuer_id;
 -- rejection marker is cleared because the replacement is known to the issuer.
 -- Compare-and-swap on the client_id and updated_at the caller read: a row
 -- another rotation or an administrator's edit already moved is left alone and
--- reported as no rows. CIMD-mode rows are
+-- reported as no rows. The expected issuer also proves the advisory lock the
+-- caller holds still covers this client. CIMD-mode rows are
 -- excluded: their client_id is the metadata document URL and is never
 -- registered upstream.
 UPDATE remote_session_clients
@@ -691,6 +712,7 @@ SET client_id = @client_id,
 WHERE id = @id
   AND client_id = @expected_client_id
   AND updated_at = @expected_updated_at
+  AND remote_session_issuer_id = @expected_issuer_id
   AND deleted IS FALSE
   AND client_id_metadata_uri IS NULL
 RETURNING *;
@@ -2705,6 +2727,12 @@ WHERE c.id = @id
   AND (i.organization_id = @organization_id OR c.organization_id = @organization_id)
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE
+  AND NOT EXISTS (
+    SELECT 1
+    FROM user_session_issuers AS usi
+    WHERE usi.trusted_remote_session_client_id = c.id
+      AND usi.deleted IS FALSE
+  )
 RETURNING c.*;
 
 -- name: ListOrganizationMcpServersForClient :many
@@ -2791,6 +2819,42 @@ WHERE id = @id
   AND project_id IS NULL
   AND (organization_id = @organization_id::text OR organization_id IS NULL)
   AND deleted IS FALSE;
+
+-- name: GetTrustedRemoteSessionClientForOrganization :one
+-- The exact live issuer/client pair eligible for organization identity-provider
+-- login. Clients must be organization-owned by the caller; project and global
+-- clients are deliberately excluded. The issuer may be organization-owned or
+-- global, but the client must belong to that exact issuer.
+SELECT sqlc.embed(c), sqlc.embed(i)
+FROM remote_session_clients AS c
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+WHERE c.id = @client_id::uuid
+  AND c.remote_session_issuer_id = @issuer_id::uuid
+  AND c.project_id IS NULL
+  AND c.organization_id = @organization_id::text
+  AND c.deleted IS FALSE
+  AND i.id = @issuer_id::uuid
+  AND i.project_id IS NULL
+  AND (i.organization_id = @organization_id::text OR i.organization_id IS NULL)
+  AND i.deleted IS FALSE;
+
+-- name: LockTrustedRemoteSessionClientForOrganization :one
+-- Callers first run the unlocked query above, then take the issuer advisory
+-- lock, then run this query. Repeating the exact eligibility predicate closes
+-- delete and re-scope races without allowing cross-tenant row locks.
+SELECT sqlc.embed(c), sqlc.embed(i)
+FROM remote_session_clients AS c
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+WHERE c.id = @client_id::uuid
+  AND c.remote_session_issuer_id = @issuer_id::uuid
+  AND c.project_id IS NULL
+  AND c.organization_id = @organization_id::text
+  AND c.deleted IS FALSE
+  AND i.id = @issuer_id::uuid
+  AND i.project_id IS NULL
+  AND (i.organization_id = @organization_id::text OR i.organization_id IS NULL)
+  AND i.deleted IS FALSE
+FOR SHARE OF c;
 
 -- name: CreateTestTrustedIssuerJWKSCache :one
 -- Test fixture for conditional issuer-key cache writes.

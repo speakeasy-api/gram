@@ -35,13 +35,34 @@ func seedTrustedRemoteSessionIssuerTarget(t *testing.T, ctx context.Context, ti 
 		Issuer:                            "https://" + slug + ".example.com",
 		AuthorizationEndpoint:             pgtype.Text{String: "https://" + slug + ".example.com/authorize", Valid: true},
 		TokenEndpoint:                     pgtype.Text{String: "https://" + slug + ".example.com/token", Valid: true},
-		ScopesSupported:                   []string{"openid"},
+		ScopesSupported:                   []string{"openid", "email"},
 		GrantTypesSupported:               []string{"authorization_code"},
 		ResponseTypesSupported:            []string{"code"},
 		TokenEndpointAuthMethodsSupported: []string{"client_secret_basic"},
 	})
 	require.NoError(t, err)
 	return issuer.ID
+}
+
+func seedTrustedRemoteSessionClientTarget(t *testing.T, ctx context.Context, ti *testInstance, issuerID uuid.UUID, clientID string, projectID uuid.NullUUID, organizationID pgtype.Text, scope []string) uuid.UUID {
+	t.Helper()
+
+	client, err := remotesessionsrepo.New(ti.conn).CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+		ProjectID:                       projectID,
+		OrganizationID:                  organizationID,
+		RemoteSessionIssuerID:           issuerID,
+		ClientID:                        clientID,
+		ClientSecretEncrypted:           pgtype.Text{String: "encrypted-test-secret", Valid: true},
+		ClientIDIssuedAt:                pgtype.Timestamptz{},
+		ClientSecretExpiresAt:           pgtype.Timestamptz{},
+		TokenEndpointAuthMethod:         pgtype.Text{String: "client_secret_basic", Valid: true},
+		TokenEndpointAuthAudienceFormat: pgtype.Text{},
+		Scope:                           scope,
+		Audience:                        pgtype.Text{},
+		LegacyCallbackUrl:               false,
+	})
+	require.NoError(t, err)
+	return client.ID
 }
 
 func TestOrganizationUserSessionIssuerTrustedRemoteSessionIssuer(t *testing.T) {
@@ -55,15 +76,25 @@ func TestOrganizationUserSessionIssuerTrustedRemoteSessionIssuer(t *testing.T) {
 	organizationID := pgtype.Text{String: authCtx.ActiveOrganizationID, Valid: true}
 	organizationTarget := seedTrustedRemoteSessionIssuerTarget(t, ctx, ti, "trusted-org-target", uuid.NullUUID{}, organizationID)
 	organizationTargetID := organizationTarget.String()
+	organizationClient := seedTrustedRemoteSessionClientTarget(t, ctx, ti, organizationTarget, "trusted-org-client", uuid.NullUUID{}, organizationID, []string{"openid", "email", "profile", "offline_access"})
+	organizationClientID := organizationClient.String()
 	created, err := ti.service.CreateIssuer(ctx, &orggen.CreateIssuerPayload{
 		SessionToken:                 nil,
 		Slug:                         "trusted-org-user-issuer",
 		AuthnChallengeMode:           "chain",
 		SessionDurationHours:         24,
 		TrustedRemoteSessionIssuerID: &organizationTargetID,
+		TrustedRemoteSessionClientID: &organizationClientID,
 	})
 	require.NoError(t, err)
 	require.Equal(t, organizationTargetID, *created.TrustedRemoteSessionIssuerID)
+	require.Equal(t, organizationClientID, *created.TrustedRemoteSessionClientID)
+	createAudit, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionUserSessionIssuerCreate)
+	require.NoError(t, err)
+	createSnapshot, err := audittest.DecodeAuditData(createAudit.AfterSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, organizationTargetID, createSnapshot["TrustedRemoteSessionIssuerID"])
+	require.Equal(t, organizationClientID, createSnapshot["TrustedRemoteSessionClientID"])
 
 	mode := "interactive"
 	unchanged, err := ti.service.UpdateIssuer(ctx, &orggen.UpdateIssuerPayload{
@@ -72,6 +103,7 @@ func TestOrganizationUserSessionIssuerTrustedRemoteSessionIssuer(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, organizationTargetID, *unchanged.TrustedRemoteSessionIssuerID, "omitting the trust field must retain the link")
+	require.Equal(t, organizationClientID, *unchanged.TrustedRemoteSessionClientID, "omitting the trust field must retain the link")
 
 	organizationTargetURN := "urn:uuid:" + organizationTargetID
 	normalized, err := ti.service.UpdateIssuer(ctx, &orggen.UpdateIssuerPayload{
@@ -83,28 +115,36 @@ func TestOrganizationUserSessionIssuerTrustedRemoteSessionIssuer(t *testing.T) {
 
 	globalTarget := seedTrustedRemoteSessionIssuerTarget(t, ctx, ti, "trusted-global-target", uuid.NullUUID{}, pgtype.Text{})
 	globalTargetID := globalTarget.String()
+	globalClient := seedTrustedRemoteSessionClientTarget(t, ctx, ti, globalTarget, "trusted-global-client", uuid.NullUUID{}, organizationID, []string{"openid", "email", "profile", "offline_access"})
+	globalClientID := globalClient.String()
 	updated, err := ti.service.UpdateIssuer(ctx, &orggen.UpdateIssuerPayload{
 		ID:                           created.ID,
 		TrustedRemoteSessionIssuerID: &globalTargetID,
+		TrustedRemoteSessionClientID: &globalClientID,
 	})
 	require.NoError(t, err)
 	require.Equal(t, globalTargetID, *updated.TrustedRemoteSessionIssuerID)
+	require.Equal(t, globalClientID, *updated.TrustedRemoteSessionClientID)
 
 	loaded, err := ti.service.GetIssuer(ctx, &orggen.GetIssuerPayload{ID: created.ID})
 	require.NoError(t, err)
 	require.Equal(t, globalTargetID, *loaded.TrustedRemoteSessionIssuerID)
+	require.Equal(t, globalClientID, *loaded.TrustedRemoteSessionClientID)
 
 	whitespaceClearValue := "\t\n "
 	clearedWithWhitespace, err := ti.service.UpdateIssuer(ctx, &orggen.UpdateIssuerPayload{
 		ID:                           created.ID,
 		TrustedRemoteSessionIssuerID: &whitespaceClearValue,
+		TrustedRemoteSessionClientID: &whitespaceClearValue,
 	})
 	require.NoError(t, err)
 	require.Nil(t, clearedWithWhitespace.TrustedRemoteSessionIssuerID)
+	require.Nil(t, clearedWithWhitespace.TrustedRemoteSessionClientID)
 
 	_, err = ti.service.UpdateIssuer(ctx, &orggen.UpdateIssuerPayload{
 		ID:                           created.ID,
 		TrustedRemoteSessionIssuerID: &globalTargetID,
+		TrustedRemoteSessionClientID: &globalClientID,
 	})
 	require.NoError(t, err)
 
@@ -112,15 +152,20 @@ func TestOrganizationUserSessionIssuerTrustedRemoteSessionIssuer(t *testing.T) {
 	cleared, err := ti.service.UpdateIssuer(ctx, &orggen.UpdateIssuerPayload{
 		ID:                           created.ID,
 		TrustedRemoteSessionIssuerID: &clearValue,
+		TrustedRemoteSessionClientID: &clearValue,
 	})
 	require.NoError(t, err)
 	require.Nil(t, cleared.TrustedRemoteSessionIssuerID)
+	require.Nil(t, cleared.TrustedRemoteSessionClientID)
 
 	projectTarget := seedTrustedRemoteSessionIssuerTarget(t, ctx, ti, "trusted-project-target", uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true}, organizationID)
 	projectTargetID := projectTarget.String()
+	projectClient := seedTrustedRemoteSessionClientTarget(t, ctx, ti, projectTarget, "trusted-project-client", uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true}, organizationID, []string{"openid", "email"})
+	projectClientID := projectClient.String()
 	_, err = ti.service.UpdateIssuer(ctx, &orggen.UpdateIssuerPayload{
 		ID:                           created.ID,
 		TrustedRemoteSessionIssuerID: &projectTargetID,
+		TrustedRemoteSessionClientID: &projectClientID,
 	})
 	requireOopsCode(t, err, oops.CodeNotFound)
 
@@ -135,9 +180,12 @@ func TestOrganizationUserSessionIssuerTrustedRemoteSessionIssuer(t *testing.T) {
 	require.NoError(t, err)
 	foreignTarget := seedTrustedRemoteSessionIssuerTarget(t, ctx, ti, "trusted-foreign-target", uuid.NullUUID{}, pgtype.Text{String: otherOrganizationID, Valid: true})
 	foreignTargetID := foreignTarget.String()
+	foreignClient := seedTrustedRemoteSessionClientTarget(t, ctx, ti, foreignTarget, "trusted-foreign-client", uuid.NullUUID{}, pgtype.Text{String: otherOrganizationID, Valid: true}, []string{"openid", "email"})
+	foreignClientID := foreignClient.String()
 	_, err = ti.service.UpdateIssuer(ctx, &orggen.UpdateIssuerPayload{
 		ID:                           created.ID,
 		TrustedRemoteSessionIssuerID: &foreignTargetID,
+		TrustedRemoteSessionClientID: &foreignClientID,
 	})
 	requireOopsCode(t, err, oops.CodeNotFound)
 
@@ -145,6 +193,38 @@ func TestOrganizationUserSessionIssuerTrustedRemoteSessionIssuer(t *testing.T) {
 	_, err = ti.service.UpdateIssuer(ctx, &orggen.UpdateIssuerPayload{
 		ID:                           created.ID,
 		TrustedRemoteSessionIssuerID: &badID,
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+func TestOrganizationUserSessionIssuerTrustedPairValidation(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	organizationID := pgtype.Text{String: authCtx.ActiveOrganizationID, Valid: true}
+	remoteIssuerID := seedTrustedRemoteSessionIssuerTarget(t, ctx, ti, "trusted-validation-target", uuid.NullUUID{}, organizationID)
+	remoteIssuerIDString := remoteIssuerID.String()
+
+	_, err := ti.service.CreateIssuer(ctx, &orggen.CreateIssuerPayload{
+		SessionToken:                 nil,
+		Slug:                         "trusted-validation-one-sided",
+		AuthnChallengeMode:           "chain",
+		SessionDurationHours:         24,
+		TrustedRemoteSessionIssuerID: &remoteIssuerIDString,
+		TrustedRemoteSessionClientID: nil,
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+
+	missingEmailClientID := seedTrustedRemoteSessionClientTarget(t, ctx, ti, remoteIssuerID, "trusted-validation-missing-email", uuid.NullUUID{}, organizationID, []string{"openid"}).String()
+	_, err = ti.service.CreateIssuer(ctx, &orggen.CreateIssuerPayload{
+		SessionToken:                 nil,
+		Slug:                         "trusted-validation-missing-email",
+		AuthnChallengeMode:           "chain",
+		SessionDurationHours:         24,
+		TrustedRemoteSessionIssuerID: &remoteIssuerIDString,
+		TrustedRemoteSessionClientID: &missingEmailClientID,
 	})
 	requireOopsCode(t, err, oops.CodeBadRequest)
 }

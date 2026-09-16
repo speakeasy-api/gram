@@ -24,6 +24,11 @@ import (
 // out one replacement client and counts how often it was asked.
 func newRegistrationServer(t *testing.T) (*httptest.Server, *atomic.Int32) {
 	t.Helper()
+	return newRegistrationServerWithResponse(t, `{"client_id":"rotated-cid","client_secret":"rotated-secret","token_endpoint_auth_method":"client_secret_basic","client_id_issued_at":1700000000,"client_secret_expires_at":1707776000}`)
+}
+
+func newRegistrationServerWithResponse(t *testing.T, response string) (*httptest.Server, *atomic.Int32) {
+	t.Helper()
 	var registrations atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/register" || r.Method != http.MethodPost {
@@ -33,10 +38,38 @@ func newRegistrationServer(t *testing.T) (*httptest.Server, *atomic.Int32) {
 		registrations.Add(1)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		_, _ = w.Write([]byte(`{"client_id":"rotated-cid","client_secret":"rotated-secret","token_endpoint_auth_method":"client_secret_basic","client_id_issued_at":1700000000,"client_secret_expires_at":1707776000}`))
+		_, _ = w.Write([]byte(response))
 	}))
 	t.Cleanup(server.Close)
 	return server, &registrations
+}
+
+func TestRotateClientRejectsIneligibleIdentityProviderLoginReplacement(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	registration, registrations := newRegistrationServerWithResponse(t, `{"client_id":"rotated-cid","token_endpoint_auth_method":"client_secret_basic","client_id_issued_at":1700000000}`)
+	issuerID, clientID := seedTrustedIdentityProviderClient(t, ctx, ti.conn, "rotate-trusted-client")
+	createTrustedClientOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "rotate-trusted-usi", issuerID, clientID)
+
+	n, err := repo.New(ti.conn).ForceRemoteSessionIssuerRegistrationEndpointFixture(ctx, repo.ForceRemoteSessionIssuerRegistrationEndpointFixtureParams{
+		RegistrationEndpoint: conv.ToPGText(registration.URL + "/register"),
+		ClientID:             clientID,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, n)
+
+	_, err = ti.service.RotateClient(ctx, &orgclientsgen.RotateClientPayload{
+		ID:           clientID.String(),
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	require.EqualValues(t, 1, registrations.Load())
+
+	stored, err := repo.New(ti.conn).GetRemoteSessionClientForRotation(ctx, clientID)
+	require.NoError(t, err)
+	require.Equal(t, "rotate-trusted-client-client", stored.RemoteSessionClient.ClientID, "the invalid replacement must roll back")
 }
 
 // An administrator's rotation needs no upstream confirmation: the client is

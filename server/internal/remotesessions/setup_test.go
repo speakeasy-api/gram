@@ -325,6 +325,29 @@ func createTrustedOrganizationTierUserSessionIssuerForOrganization(t *testing.T,
 		AuthnChallengeMode:           "interactive",
 		SessionDuration:              pgtype.Interval{Microseconds: int64(time.Hour / time.Microsecond), Valid: true},
 		TrustedRemoteSessionIssuerID: conv.ToNullUUID(remoteIssuerID),
+		TrustedRemoteSessionClientID: uuid.NullUUID{},
+	})
+	require.NoError(t, err)
+	return issuer.ID
+}
+
+func createTrustedClientOrganizationTierUserSessionIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, slug string, remoteIssuerID, remoteClientID uuid.UUID) uuid.UUID {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	return createTrustedClientOrganizationTierUserSessionIssuerForOrganization(t, ctx, conn, slug, authCtx.ActiveOrganizationID, remoteIssuerID, remoteClientID)
+}
+
+func createTrustedClientOrganizationTierUserSessionIssuerForOrganization(t *testing.T, ctx context.Context, conn *pgxpool.Pool, slug, organizationID string, remoteIssuerID, remoteClientID uuid.UUID) uuid.UUID {
+	t.Helper()
+
+	issuer, err := usersessionsrepo.New(conn).CreateOrganizationUserSessionIssuer(ctx, usersessionsrepo.CreateOrganizationUserSessionIssuerParams{
+		OrganizationID:               conv.ToPGText(organizationID),
+		Slug:                         slug,
+		AuthnChallengeMode:           "interactive",
+		SessionDuration:              pgtype.Interval{Microseconds: int64(time.Hour / time.Microsecond), Valid: true},
+		TrustedRemoteSessionIssuerID: conv.ToNullUUID(remoteIssuerID),
+		TrustedRemoteSessionClientID: conv.ToNullUUID(remoteClientID),
 	})
 	require.NoError(t, err)
 	return issuer.ID
@@ -336,9 +359,14 @@ func clearTrustedRemoteSessionIssuer(t *testing.T, ctx context.Context, conn *pg
 	require.True(t, ok)
 	empty := ""
 	_, err := usersessionsrepo.New(conn).UpdateOrganizationUserSessionIssuer(ctx, usersessionsrepo.UpdateOrganizationUserSessionIssuerParams{
-		TrustedRemoteSessionIssuerID: conv.PtrToPGText(&empty),
-		ID:                           issuerID,
-		OrganizationID:               authCtx.ActiveOrganizationID,
+		Slug:                          pgtype.Text{},
+		AuthnChallengeMode:            pgtype.Text{},
+		SessionDuration:               pgtype.Interval{},
+		ClientIDMetadataAdmissionMode: pgtype.Text{},
+		TrustedRemoteSessionIssuerID:  conv.PtrToPGText(&empty),
+		TrustedRemoteSessionClientID:  pgtype.Text{},
+		ID:                            issuerID,
+		OrganizationID:                authCtx.ActiveOrganizationID,
 	})
 	require.NoError(t, err)
 }
@@ -535,6 +563,43 @@ func seedOrgLevelRemoteClient(t *testing.T, ctx context.Context, conn *pgxpool.P
 		}))
 	}
 	return created.ID
+}
+
+func seedTrustedIdentityProviderClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool, slug string) (uuid.UUID, uuid.UUID) {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	organizationID := conv.ToPGText(authCtx.ActiveOrganizationID)
+
+	issuer, err := repo.New(conn).CreateRemoteSessionIssuer(ctx, repo.CreateRemoteSessionIssuerParams{
+		ProjectID:                         uuid.NullUUID{},
+		OrganizationID:                    organizationID,
+		Slug:                              slug,
+		Issuer:                            "https://" + slug + ".example.com",
+		AuthorizationEndpoint:             conv.ToPGText("https://" + slug + ".example.com/authorize"),
+		TokenEndpoint:                     conv.ToPGText("https://" + slug + ".example.com/token"),
+		ScopesSupported:                   []string{"openid", "email"},
+		GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
+		ResponseTypesSupported:            []string{"code"},
+		TokenEndpointAuthMethodsSupported: []string{"client_secret_basic"},
+	})
+	require.NoError(t, err)
+	client, err := repo.New(conn).CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+		ProjectID:                       uuid.NullUUID{},
+		OrganizationID:                  organizationID,
+		RemoteSessionIssuerID:           issuer.ID,
+		ClientID:                        slug + "-client",
+		ClientSecretEncrypted:           conv.ToPGText("encrypted-test-secret"),
+		ClientIDIssuedAt:                conv.ToPGTimestamptz(time.Now().UTC()),
+		ClientSecretExpiresAt:           pgtype.Timestamptz{},
+		TokenEndpointAuthMethod:         conv.ToPGText("client_secret_basic"),
+		TokenEndpointAuthAudienceFormat: pgtype.Text{},
+		Scope:                           []string{"openid", "email", "offline_access"},
+		Audience:                        pgtype.Text{},
+		LegacyCallbackUrl:               false,
+	})
+	require.NoError(t, err)
+	return issuer.ID, client.ID
 }
 
 // seedRemoteClientAtTier creates a remote client with explicit tenancy and

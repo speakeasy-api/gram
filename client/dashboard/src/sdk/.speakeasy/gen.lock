@@ -1600,6 +1600,7 @@ trackedFiles:
   src/models/components/triggerinstance.ts: {}
   src/models/components/triggerriskanalysisrequestbody.ts: {}
   src/models/components/triggerskillsuggestionrequestbody.ts: {}
+  src/models/components/trustedclientusersessionissuerreference.ts: {}
   src/models/components/trustedusersessionissuerreference.ts: {}
   src/models/components/tumdetailsbreakdown.ts: {}
   src/models/components/tumdetailsbreakdownrow.ts: {}
@@ -6266,7 +6267,7 @@ examples:
           id: "e1f42171-6f72-4604-8a8f-46ad41ca8150"
       responses:
         "200":
-          application/json: {"mcp_server_names": ["<value 1>"], "session_count": 940270}
+          application/json: {"can_delete": false, "mcp_server_names": ["<value 1>"], "session_count": 940270, "trusted_user_session_issuers": []}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":

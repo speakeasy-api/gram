@@ -78,6 +78,12 @@ var (
 	// authenticates the stored client, so the rejection that prompted the
 	// rotation did not mean the registration was lost.
 	ErrClientStillRecognized = errors.New("remotesessions: issuer still recognizes the client")
+
+	// ErrClientRegistrationIneligibleForIdentityProviderLogin reports that a
+	// replacement registration would invalidate an existing trusted-login
+	// reference. The transaction is rolled back, leaving the prior client in
+	// place.
+	ErrClientRegistrationIneligibleForIdentityProviderLogin = errors.New("remotesessions: replacement client is ineligible for identity-provider login")
 )
 
 // clientRotationLeaseTTL bounds the single-flight lease around one
@@ -318,6 +324,14 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 	txRepo := repo.New(dbtx)
 
+	// Trusted-login links take this issuer advisory lock before sharing the
+	// client row. Rotation follows the same order before its compare-and-swap,
+	// so a link either validates the replacement or is visible to the
+	// resulting-state validation below.
+	if err := txRepo.LockRemoteSessionIssuerForClientBinding(ctx, current.RemoteSessionIssuerID); err != nil {
+		return zero, fmt.Errorf("lock remote session issuer for client rotation: %w", err)
+	}
+
 	issuerIDs, err := txRepo.ListUserSessionIssuerIDsForRemoteSessionClient(ctx, current.ID)
 	if err != nil {
 		return zero, fmt.Errorf("list client issuer bindings for rotation audit: %w", err)
@@ -336,6 +350,7 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 		ID:                      current.ID,
 		ExpectedClientID:        current.ClientID,
 		ExpectedUpdatedAt:       current.UpdatedAt,
+		ExpectedIssuerID:        current.RemoteSessionIssuerID,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		// The row moved under us: another rotation, an administrator's update,
@@ -350,6 +365,27 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 	}
 	if err != nil {
 		return zero, fmt.Errorf("persist re-registered client: %w", err)
+	}
+
+	trustedReferenceCount, err := txRepo.CountTrustedUserSessionIssuersByRemoteSessionClientID(ctx, updated.ID)
+	if err != nil {
+		return zero, fmt.Errorf("count identity-provider login references after client rotation: %w", err)
+	}
+	if trustedReferenceCount > 0 {
+		pair, pairErr := txRepo.GetTrustedRemoteSessionClientForOrganization(ctx, repo.GetTrustedRemoteSessionClientForOrganizationParams{
+			ClientID:       updated.ID,
+			IssuerID:       updated.RemoteSessionIssuerID,
+			OrganizationID: updated.OrganizationID.String,
+		})
+		if errors.Is(pairErr, pgx.ErrNoRows) {
+			return zero, fmt.Errorf("%w: linked client no longer forms an eligible organization issuer/client pair", ErrClientRegistrationIneligibleForIdentityProviderLogin)
+		}
+		if pairErr != nil {
+			return zero, fmt.Errorf("load identity-provider login pair after client rotation: %w", pairErr)
+		}
+		if validationErr := ValidateTrustedIdentityProviderClient(pair.RemoteSessionClient, pair.RemoteSessionIssuer); validationErr != nil {
+			return zero, fmt.Errorf("%w: %w", ErrClientRegistrationIneligibleForIdentityProviderLogin, validationErr)
+		}
 	}
 
 	cascaded, err := txRepo.SoftDeleteRemoteSessionsByClientID(ctx, updated.ID)

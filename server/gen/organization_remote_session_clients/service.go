@@ -251,6 +251,13 @@ type OrganizationClientDeletePreflight struct {
 	SessionCount int
 	// Display names of MCP servers this client is attached to.
 	McpServerNames []string
+	// Organization-owned user-session issuers that use this client for
+	// identity-provider login and block deletion.
+	TrustedUserSessionIssuers []*TrustedClientUserSessionIssuerReference
+	// Whether the client can be deleted now.
+	CanDelete bool
+	// Stable reason deletion is blocked. Present when can_delete is false.
+	BlockingReason *string
 }
 
 // An MCP server attached to a remote_session_client, with the fields the
@@ -301,6 +308,15 @@ type RotateClientPayload struct {
 	ID           string
 	SessionToken *string
 	ApikeyToken  *string
+}
+
+// An organization-owned user-session issuer that uses this client for
+// identity-provider login.
+type TrustedClientUserSessionIssuerReference struct {
+	// The user_session_issuer id.
+	ID string
+	// The user_session_issuer slug.
+	Slug string
 }
 
 // UpdateClientPayload is the payload type of the
