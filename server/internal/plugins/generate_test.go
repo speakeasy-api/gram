@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -25,6 +26,7 @@ import (
 	"unicode/utf16"
 
 	"github.com/BurntSushi/toml"
+	"github.com/speakeasy-api/gram/hooks/relay"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
 	"github.com/stretchr/testify/require"
@@ -1751,10 +1753,90 @@ func TestCarryHooksSubtreeTreatsLaterPlatformsAsOptional(t *testing.T) {
 
 	// Once published, the platform's subtree is carried verbatim.
 	published[optional[0]+"index.js"] = []byte("v15 openclaw")
+	published[optional[1]+relay.PiExtensionFile] = []byte("v15 pi")
 	dst = map[string][]byte{}
 	_, carried = carryHooksSubtree(dst, published, []byte(`{"org_name":"Acme"}`), "Acme")
 	require.True(t, carried)
 	require.Equal(t, []byte("v15 openclaw"), dst[optional[0]+"index.js"])
+	require.Equal(t, []byte("v15 pi"), dst[optional[1]+relay.PiExtensionFile])
+}
+
+// Pi has no hook configuration at all — the extension module under
+// extensions/ is the whole registration — so a regression there is silent.
+// Pin that the package ships the extension wired to the relay's serve mode,
+// the deployment identity it reads, and both bootstrappers, since the
+// extension picks the Windows one itself.
+func TestGeneratePiObservabilityPluginPackage(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+	}
+	files, err := GenerateObservabilityPluginPackage(cfg, "pi")
+	require.NoError(t, err)
+
+	extension, ok := files[relay.PiExtensionFile]
+	require.True(t, ok, "pi package must ship "+relay.PiExtensionFile)
+	for _, want := range []string{
+		// the relay subcommand that speaks the extension's frame protocol
+		`"pi","serve"`,
+		"speakeasy.json",
+		"bootstrap.sh",
+		"bootstrap.ps1",
+		// every Pi lifecycle event the capture path depends on
+		`pi.on("session_start"`,
+		`pi.on("input"`,
+		`pi.on("tool_call"`,
+		`pi.on("tool_result"`,
+		`pi.on("message_end"`,
+		`pi.on("session_shutdown"`,
+	} {
+		require.Contains(t, string(extension), want)
+	}
+
+	_, ok = files["speakeasy.json"]
+	require.True(t, ok, "pi package must ship speakeasy.json alongside the extension")
+	_, ok = files["hooks/bootstrap.sh"]
+	require.True(t, ok, "pi package must ship the hooks bootstrapper the extension spawns")
+	_, ok = files["hooks/bootstrap.ps1"]
+	require.True(t, ok, "pi package must ship the Windows bootstrapper the extension spawns")
+}
+
+// The dogfood trees are what `hooks:test` renders for local development, so a
+// platform missing here cannot be exercised against a dev server at all.
+func TestDogfoodPluginFilesIncludesPi(t *testing.T) {
+	t.Parallel()
+	files, err := DogfoodPluginFiles()
+	require.NoError(t, err)
+
+	extension, ok := files["plugin-pi/"+relay.PiExtensionFile]
+	require.True(t, ok, "dogfood tree must ship the pi extension")
+	require.Contains(t, string(extension), `"pi","serve"`)
+	require.NotEmpty(t, files["plugin-pi/speakeasy.json"])
+	require.NotEmpty(t, files["plugin-pi/hooks/bootstrap.sh"])
+}
+
+// The published hooks subtree carries one directory per platform and the
+// rollout carries it forward by prefix, so a platform missing from either the
+// generator or the prefix lists silently stops publishing.
+func TestGenerateHooksFilesCoversEveryPlatformSubtree(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+	}
+	files, err := generateHooksFiles(cfg)
+	require.NoError(t, err)
+
+	names := slices.Collect(maps.Keys(files))
+	for _, prefix := range slices.Concat(hooksSubtreePrefixes(cfg.OrgName), hooksOptionalSubtreePrefixes(cfg.OrgName)) {
+		require.True(t, slices.ContainsFunc(names, func(name string) bool {
+			return strings.HasPrefix(name, prefix)
+		}), "hooks subtree prefix %q has no generated files", prefix)
+	}
+	require.Contains(t, files, PiObservabilitySlug(cfg)+"/"+relay.PiExtensionFile)
 }
 
 func TestHooksBootstrapConcurrentColdInvocationsDownloadOnce(t *testing.T) {

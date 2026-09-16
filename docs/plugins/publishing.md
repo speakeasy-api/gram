@@ -119,8 +119,9 @@ Every publish includes one observability plugin per supported platform, forwardi
 | Codex    | `<org-slug>-observability-codex`    |
 | OpenCode | `<org-slug>-observability-opencode` |
 | OpenClaw | `<org-slug>-observability-openclaw` |
+| Pi       | `<org-slug>-observability-pi`       |
 | Copilot  | `<org-slug>-observability-copilot`  |
 
-OpenCode and OpenClaw have no marketplace track, so their packages are installed directly rather than listed. Users are shown a notice in the README that the observability plugin is required alongside any MCP server plugins.
+OpenCode, OpenClaw and Pi have no marketplace track, so their packages are installed directly rather than listed. Users are shown a notice in the README that the observability plugin is required alongside any MCP server plugins.
 
 See [Package Format — observability plugin](./package-format.md#observability-plugin) for the hook events registered and the hook script contents.

@@ -4,6 +4,7 @@ export type AgentProviderIconKind =
   | "codex"
   | "opencode"
   | "openclaw"
+  | "pi"
   | "litellm"
   | "cline"
   | "warp"
@@ -45,6 +46,9 @@ export function agentProviderIconKind(source?: string): AgentProviderIconKind {
   }
   if (normalizedSource?.includes("opencode")) return "opencode";
   if (normalizedSource?.includes("openclaw")) return "openclaw";
+  // Matched exactly, not by substring: "pi" is a substring of other agent
+  // names ("copilot"), and Pi's hook source is always the bare slug.
+  if (normalizedSource === "pi") return "pi";
   if (normalizedSource?.includes("litellm")) return "litellm";
   if (normalizedSource?.includes("cline")) return "cline";
   if (normalizedSource?.includes("warp")) return "warp";
