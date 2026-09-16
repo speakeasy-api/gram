@@ -27,7 +27,7 @@ const mocks = vi.hoisted(() => ({
   getOrganizationStats: vi.fn(),
   updateOrganization: vi.fn(),
   markEnterpriseTrialConverted: vi.fn(),
-  getOrganizationDirectoryHandoff: vi.fn(),
+  directoryHandoffFetch: vi.fn(),
   toastSuccess: vi.fn(),
 }));
 
@@ -46,7 +46,6 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
     getOrganizationStats: mocks.getOrganizationStats,
     updateOrganization: mocks.updateOrganization,
     markEnterpriseTrialConverted: mocks.markEnterpriseTrialConverted,
-    getOrganizationDirectoryHandoff: mocks.getOrganizationDirectoryHandoff,
   };
 });
 
@@ -148,14 +147,29 @@ beforeEach(() => {
   mocks.getOrganizationStats.mockReset();
   mocks.updateOrganization.mockReset();
   mocks.markEnterpriseTrialConverted.mockReset();
-  // The directory handoff panel reads this on every render of the record.
-  // Unmocked it reaches the real fetch, the way the project list above does,
-  // and the panel then draws a read failure over a view about something else.
-  mocks.getOrganizationDirectoryHandoff.mockReset();
-  mocks.getOrganizationDirectoryHandoff.mockResolvedValue({
-    handoff: null,
-    workos_environment: "production",
-  });
+  // The directory handoff panel reads this on every render of the record, and
+  // it goes through the generated client, so the stub is at the fetch layer
+  // rather than the module. Unmocked it reaches the real fetch, the way the
+  // project list above would, and the panel draws a read failure over a view
+  // about something else. Anything else asking for a socket is a test that has
+  // lost track of what it renders, so it fails here rather than hanging.
+  mocks.directoryHandoffFetch.mockReset();
+  mocks.directoryHandoffFetch.mockImplementation(
+    async (input: RequestInfo | URL) => {
+      const { pathname } = new URL((input as Request).url);
+      if (pathname !== "/admin/organization.directoryHandoff") {
+        throw new Error(`unexpected request to ${pathname}`);
+      }
+      return new Response(
+        JSON.stringify({ workos_environment: "production" }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    },
+  );
+  vi.stubGlobal("fetch", mocks.directoryHandoffFetch);
   mocks.toastSuccess.mockReset();
   mocks.markEnterpriseTrialConverted.mockResolvedValue({
     organization_id: ORG.id,
@@ -166,6 +180,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
 });
 
 describe("Overview", () => {

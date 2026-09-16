@@ -6,18 +6,15 @@ import { CopyValue } from "@/components/CopyValue";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useOnUnmount } from "@/hooks/useOnUnmount";
-import {
-  invalidateOrganizationDirectoryHandoff,
-  organizationDirectoryHandoffQuery,
-} from "@/lib/adminQueries";
+import { invalidateOrganizationDirectoryHandoff } from "@/lib/adminQueries";
 import {
   clearOrganizationDirectoryHandoff,
-  errorMessage,
+  organizationDirectoryHandoffQuery,
   setOrganizationDirectoryHandoff,
-  type AdminOrganization,
-  type DirectoryHandoff,
-  type WorkosEnvironment,
-} from "@/lib/gramAdminApi";
+} from "@/lib/gramAdminClient";
+import { errorMessage, type AdminOrganization } from "@/lib/gramAdminApi";
+import type { DirectoryHandoff } from "@gram/admin-client/models/components/directoryhandoff";
+import type { WorkosEnvironment } from "@gram/admin-client/models/components/directoryhandoffresult";
 import { fmtDateShort } from "@/lib/utils";
 import { useWriteReport } from "@/pages/organizations/writeReport";
 import type { WriteReporter } from "@/pages/organizations/OrganizationActions";
@@ -109,24 +106,24 @@ function StoredHandoff({
       <Detail label="Directory endpoint">
         <CopyValue
           label="Directory endpoint"
-          value={handoff.scim_base_url}
+          value={handoff.scimBaseUrl}
           className="text-sm"
         />
       </Detail>
       <Detail label="Token fingerprint">
-        <code className="font-mono text-xs">{handoff.token_fingerprint}</code>
+        <code className="font-mono text-xs">{handoff.tokenFingerprint}</code>
       </Detail>
       <Detail label="Stored by">
-        {handoff.set_by} on {fmtDateShort(handoff.updated_at)}
+        {handoff.setBy} on {fmtDateShort(handoff.updatedAt.toISOString())}
       </Detail>
       <Detail label="WorkOS directory">
-        {handoff.workos_directory_state ? (
+        {handoff.workosDirectoryState ? (
           <span className="flex flex-wrap items-center gap-2">
-            <span>{readable(handoff.workos_directory_state)}</span>
-            {handoff.workos_directory_id && (
+            <span>{readable(handoff.workosDirectoryState)}</span>
+            {handoff.workosDirectoryId && (
               <CopyValue
                 label="WorkOS directory ID"
-                value={handoff.workos_directory_id}
+                value={handoff.workosDirectoryId}
                 className="text-sm"
               />
             )}
@@ -189,13 +186,14 @@ export function DirectoryHandoffSection({
 
   const handoffQuery = useQuery(organizationDirectoryHandoffQuery(org.id));
   const handoff = handoffQuery.data?.handoff ?? null;
-  const environment = handoffQuery.data?.workos_environment ?? "unknown";
+  const environment = handoffQuery.data?.workosEnvironment ?? "unknown";
 
   const save = useMutation({
     mutationFn: setOrganizationDirectoryHandoff,
   });
   const clear = useMutation({
-    mutationFn: () => clearOrganizationDirectoryHandoff(org.id),
+    mutationFn: () =>
+      clearOrganizationDirectoryHandoff({ organizationId: org.id }),
   });
   const busy = save.isPending || clear.isPending;
 
@@ -258,9 +256,9 @@ export function DirectoryHandoffSection({
     showFailure(null);
     try {
       await save.mutateAsync({
-        organization_id: org.id,
-        scim_base_url: endpoint.trim(),
-        scim_token: token.trim(),
+        organizationId: org.id,
+        scimBaseUrl: endpoint.trim(),
+        scimToken: token.trim(),
       });
       if (!mounted.current) return;
       // Both fields, and the token first in intent: it has been sent, so the

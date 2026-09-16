@@ -30,7 +30,7 @@ const mocks = vi.hoisted(() => ({
   listOrganizations: vi.fn<() => Promise<ListOrganizationsResult>>(),
   getOrganization: vi.fn<(idOrSlug: string) => Promise<AdminOrganization>>(),
   getOrganizationStats: vi.fn(),
-  getOrganizationDirectoryHandoff: vi.fn(),
+  directoryHandoffFetch: vi.fn(),
 }));
 
 // The write and the reads it stales. errorMessage stays real, because what the
@@ -43,9 +43,6 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
     listOrganizations: mocks.listOrganizations,
     getOrganization: mocks.getOrganization,
     getOrganizationStats: mocks.getOrganizationStats,
-    // The step after the create reads it on mount. Unmocked it reaches the real
-    // fetch and the suite waits on a socket.
-    getOrganizationDirectoryHandoff: mocks.getOrganizationDirectoryHandoff,
   };
 });
 
@@ -157,11 +154,26 @@ beforeEach(() => {
   mocks.createOrganization.mockResolvedValue(CREATED);
   mocks.listOrganizations.mockReset();
   mocks.listOrganizations.mockResolvedValue({ total: 0, organizations: [] });
-  mocks.getOrganizationDirectoryHandoff.mockReset();
-  mocks.getOrganizationDirectoryHandoff.mockResolvedValue({
-    handoff: null,
-    workos_environment: "production",
-  });
+  // The step after the create reads the stored handoff on mount, through the
+  // generated client, so the stub is at the fetch layer. Unmocked it reaches
+  // the real fetch and the suite waits on a socket.
+  mocks.directoryHandoffFetch.mockReset();
+  mocks.directoryHandoffFetch.mockImplementation(
+    async (input: RequestInfo | URL) => {
+      const { pathname } = new URL((input as Request).url);
+      if (pathname !== "/admin/organization.directoryHandoff") {
+        throw new Error(`unexpected request to ${pathname}`);
+      }
+      return new Response(
+        JSON.stringify({ workos_environment: "production" }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    },
+  );
+  vi.stubGlobal("fetch", mocks.directoryHandoffFetch);
   mocks.getOrganization.mockReset();
   mocks.getOrganization.mockResolvedValue(CREATED);
   announce.mockReset();
@@ -178,7 +190,10 @@ beforeEach(() => {
   });
 });
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 describe("creating an organization", () => {
   it("sends the name and offers the directory handoff", async () => {
