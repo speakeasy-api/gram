@@ -85,6 +85,7 @@ var Definitions = []Definition{
 		Description: "MCP tool calls whose Gram tool definition is annotated as destructive. Requires Speakeasy hooks and Gram-issued MCP tool metadata.",
 		Icon:        "shield-alert",
 		Source:      "destructive_tool",
+		RuleIDs:     []string{"destructive_tool.llm"},
 	},
 	{
 		Category:    CategoryCLIDestructive,
@@ -113,6 +114,7 @@ var Definitions = []Definition{
 		Description: "Indirect injection via tool outputs, hidden instructions",
 		Icon:        "syringe",
 		Source:      "prompt_injection",
+		RuleIDs:     []string{"prompt_injection.llm"},
 	},
 	{
 		Category:    CategorySecrets,

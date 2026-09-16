@@ -565,6 +565,9 @@ const (
 	RiskStartPosKey                = attribute.Key("gram.risk.start_pos")
 	RiskEndPosKey                  = attribute.Key("gram.risk.end_pos")
 	RiskEnforcementTruncatedKey    = attribute.Key("gram.risk.enforcement_truncated")
+	RiskLaneKey                    = attribute.Key("gram.risk.lane")
+	RiskLLMTokenKindKey            = attribute.Key("gram.risk.llm.token_kind")
+	RiskLLMModelKey                = attribute.Key("gram.risk.llm.model")
 	SecretNameKey                  = attribute.Key("gram.secret.name")
 	SecurityPlacementKey           = attribute.Key("gram.security.placement")
 	SecuritySchemeKey              = attribute.Key("gram.security.scheme")
@@ -2309,6 +2312,20 @@ func SlogRiskStartPos(v int64) slog.Attr      { return slog.Int64(string(RiskSta
 
 func RiskEndPos(v int64) attribute.KeyValue { return RiskEndPosKey.Int64(v) }
 func SlogRiskEndPos(v int64) slog.Attr      { return slog.Int64(string(RiskEndPosKey), v) }
+
+// RiskLane is the risk scan lane: "sync" for realtime enforcement, "async"
+// for the batch flag lane.
+func RiskLane(v string) attribute.KeyValue { return RiskLaneKey.String(v) }
+func SlogRiskLane(v string) slog.Attr      { return slog.String(string(RiskLaneKey), v) }
+
+// RiskLLMTokenKind distinguishes "input" from "output" tokens on risk model
+// token counters.
+func RiskLLMTokenKind(v string) attribute.KeyValue { return RiskLLMTokenKindKey.String(v) }
+func SlogRiskLLMTokenKind(v string) slog.Attr      { return slog.String(string(RiskLLMTokenKindKey), v) }
+
+// RiskLLMModel is the served model name the risk analyzer called.
+func RiskLLMModel(v string) attribute.KeyValue { return RiskLLMModelKey.String(v) }
+func SlogRiskLLMModel(v string) slog.Attr      { return slog.String(string(RiskLLMModelKey), v) }
 
 func SecretName(v string) attribute.KeyValue { return SecretNameKey.String(v) }
 func SlogSecretName(v string) slog.Attr      { return slog.String(string(SecretNameKey), v) }

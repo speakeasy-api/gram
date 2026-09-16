@@ -113,7 +113,7 @@ func PrepareRiskReading(definition Definition, provenance RiskProvenance, stoken
 		return nil, nil
 	}
 	switch definition {
-	case RiskGitleaks(), RiskPresidio(), RiskPromptInjection(), RiskPromptPolicy(), RiskCustomRules(), RiskCLIDestructive():
+	case RiskGitleaks(), RiskPresidio(), RiskPromptInjection(), RiskPromptPolicy(), RiskCustomRules(), RiskCLIDestructive(), RiskLLMAnalyzer():
 	default:
 		return nil, fmt.Errorf("meter is not a registered risk scanner")
 	}

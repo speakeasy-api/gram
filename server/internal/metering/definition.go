@@ -48,6 +48,9 @@ const (
 	// MeterRiskCLIDestructive measures destructive-command scanner input.
 	MeterRiskCLIDestructive MeterID = "gram.risk.scan.cli_destructive"
 
+	// MeterRiskLLMAnalyzer measures fine-tuned risk model analyzer input.
+	MeterRiskLLMAnalyzer MeterID = "gram.risk.scan.llm_analyzer"
+
 	// UnitSTokens is the Gram-owned Speakeasy token workload unit.
 	UnitSTokens Unit = "stokens"
 
@@ -124,6 +127,11 @@ func RiskCLIDestructive() Definition {
 	return riskDefinition(MeterRiskCLIDestructive)
 }
 
+// RiskLLMAnalyzer returns the fine-tuned risk model scanning meter.
+func RiskLLMAnalyzer() Definition {
+	return riskDefinition(MeterRiskLLMAnalyzer)
+}
+
 func riskDefinition(id MeterID) Definition {
 	return Definition{
 		id:                id,
@@ -146,6 +154,7 @@ func LookupDefinition(id MeterID, version uint32) (Definition, bool) {
 		RiskPromptPolicy(),
 		RiskCustomRules(),
 		RiskCLIDestructive(),
+		RiskLLMAnalyzer(),
 	} {
 		if id == definition.id && version == definition.version {
 			return definition, true

@@ -1,6 +1,7 @@
 package risk_analysis
 
 import (
+	"slices"
 	"testing"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/accountidentity"
 	"github.com/speakeasy-api/gram/server/internal/scanners/destructivetool"
+	"github.com/speakeasy-api/gram/server/internal/scanners/llmanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
@@ -248,29 +250,37 @@ func TestSubsetWithoutCategoryMasksScansEverything(t *testing.T) {
 func TestSourceCategoriesConsistentWithClassify(t *testing.T) {
 	t.Parallel()
 
-	representative := map[categories.Category]scanners.Finding{
-		categories.CategoryAccountIdentity: finding(accountidentity.Source, "identity.unapproved_domain"),
-		categories.CategorySecrets:         finding(SourceGitleaks, "secret.generic-api-key"),
-		categories.CategoryFinancial:       finding(SourcePresidio, "pii.credit_card"),
-		categories.CategoryGovernmentIDs:   finding(SourcePresidio, "pii.us_ssn"),
-		categories.CategoryHealthcare:      finding(SourcePresidio, "pii.us_mbi"),
-		categories.CategoryOffPolicy:       finding(SourcePresidio, "pii.policy_violation"),
-		categories.CategoryPII:             finding(SourcePresidio, "pii.email_address"),
-		categories.CategoryPromptInjection: finding(SourcePromptInjection, promptinjection.Rule),
-		categories.CategoryShadowMCP:       finding(shadowmcp.SourceShadowMCP, "shadow_mcp"),
-		categories.CategoryDestructiveTool: finding(shadowmcp.SourceDestructiveTool, destructivetool.Rule),
-		categories.CategoryCLIDestructive:  finding(SourceCLIDestructive, "cli_destructive.rm_rf"),
-		categories.CategoryPromptPolicy:    finding(promptpolicy.Source, promptpolicy.Rule),
-		categories.CategoryCustom:          finding(SourceCustom, "custom.test"),
+	// One representative finding per (category, emitting source). The LLM
+	// analyzer stands in for several legacy sources, so the categories it
+	// covers list a second representative carrying its source and rule id.
+	// A cli_destructive policy fans out to the same destructive_tool.llm
+	// rule; the finding classifies as destructive_tool, which the source map
+	// also admits.
+	representative := map[categories.Category][]scanners.Finding{
+		categories.CategoryAccountIdentity: {finding(accountidentity.Source, "identity.unapproved_domain")},
+		categories.CategorySecrets:         {finding(SourceGitleaks, "secret.generic-api-key"), finding(llmanalyzer.Source, llmanalyzer.RuleSecret)},
+		categories.CategoryFinancial:       {finding(SourcePresidio, "pii.credit_card")},
+		categories.CategoryGovernmentIDs:   {finding(SourcePresidio, "pii.us_ssn")},
+		categories.CategoryHealthcare:      {finding(SourcePresidio, "pii.us_mbi")},
+		categories.CategoryOffPolicy:       {finding(SourcePresidio, "pii.policy_violation")},
+		categories.CategoryPII:             {finding(SourcePresidio, "pii.email_address"), finding(llmanalyzer.Source, llmanalyzer.RulePII)},
+		categories.CategoryPromptInjection: {finding(SourcePromptInjection, promptinjection.Rule), finding(llmanalyzer.Source, llmanalyzer.RulePromptInjection)},
+		categories.CategoryShadowMCP:       {finding(shadowmcp.SourceShadowMCP, "shadow_mcp")},
+		categories.CategoryDestructiveTool: {finding(shadowmcp.SourceDestructiveTool, destructivetool.Rule), finding(llmanalyzer.Source, llmanalyzer.RuleDestructiveTool)},
+		categories.CategoryCLIDestructive:  {finding(SourceCLIDestructive, "cli_destructive.rm_rf"), finding(llmanalyzer.Source, llmanalyzer.RuleDestructiveTool)},
+		categories.CategoryPromptPolicy:    {finding(promptpolicy.Source, promptpolicy.Rule)},
+		categories.CategoryCustom:          {finding(SourceCustom, "custom.test")},
 	}
 
 	reachable := map[categories.Category]bool{}
 	for source, cats := range sourceCategories {
 		require.NotEmpty(t, cats)
 		for _, cat := range cats {
-			rep, ok := representative[cat]
+			reps, ok := representative[cat]
 			require.Truef(t, ok, "missing representative for %s", cat)
-			require.Equalf(t, source, rep.Source, "representative source for %s", cat)
+			idx := slices.IndexFunc(reps, func(f scanners.Finding) bool { return f.Source == source })
+			require.NotEqualf(t, -1, idx, "missing representative for %s from source %s", cat, source)
+			rep := reps[idx]
 			got := categories.Classify(rep.Source, rep.RuleID)
 			require.Truef(t, sourceCanEmit(source, got), "%s classified as %s, outside source map", source, got)
 			reachable[got] = true

@@ -22,6 +22,14 @@ func TestClassify_PinsPriorCASEBehavior(t *testing.T) {
 		{name: "prompt_injection source", source: "prompt_injection", ruleID: "", want: CategoryPromptInjection},
 		{name: "llm_judge source", source: "llm_judge", ruleID: "llm_judge", want: CategoryPromptPolicy},
 
+		// LLM analyzer rule ids classify by rule_id alone: the analyzer's
+		// source name owns no category and must never leak into labels.
+		{name: "llm analyzer secret", source: "llm_analyzer", ruleID: "secret.llm", want: CategorySecrets},
+		{name: "llm analyzer pii", source: "llm_analyzer", ruleID: "pii.llm", want: CategoryPII},
+		{name: "llm analyzer prompt injection", source: "llm_analyzer", ruleID: "prompt_injection.llm", want: CategoryPromptInjection},
+		{name: "llm analyzer destructive tool", source: "llm_analyzer", ruleID: "destructive_tool.llm", want: CategoryDestructiveTool},
+		{name: "llm analyzer dead letter", source: "llm_analyzer", ruleID: "llm_analyzer.dead_letter", want: CategoryCustom},
+
 		// Secrets prefix.
 		{name: "secret aws", source: "gitleaks", ruleID: "secret.aws_access_key", want: CategorySecrets},
 		{name: "secret jwt", source: "gitleaks", ruleID: "secret.jwt", want: CategorySecrets},
