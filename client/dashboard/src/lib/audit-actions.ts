@@ -29,6 +29,7 @@ export const AUDIT_ACTIONS = [
   "ai_integration:retry_schedule",
   "ai_integration:update_schedule",
   "ai_integration:upsert",
+  "ai_tool_decision:set",
   "api_key:create",
   "api_key:revoke",
   "asset:create",
@@ -123,6 +124,7 @@ export const AUDIT_ACTIONS = [
   "organization:enterprise_trial_converted",
   "organization:enterprise_trial_demoted",
   "organization:enterprise_trial_extended",
+  "organization:enterprise_trial_end_changed",
   "organization:enterprise_trial_rearmed",
   "organization:enterprise_trial_started",
   "organization:hooks_fail_open_disabled",
@@ -315,6 +317,9 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated AI integration schedule";
     case "ai_integration:retry_schedule":
       return "retried AI integration sync";
+
+    case "ai_tool_decision:set":
+      return "decided AI tool access for";
 
     case "api_key:create":
       return "created API key";
@@ -527,6 +532,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "started enterprise trial";
     case "organization:enterprise_trial_demoted":
       return "ended enterprise trial";
+    case "organization:enterprise_trial_end_changed":
+      return "changed enterprise trial end date";
     case "organization:enterprise_trial_extended":
       return "extended enterprise trial";
     case "organization:enterprise_trial_rearmed":

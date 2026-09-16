@@ -13,6 +13,14 @@ export function getInitials(identifier: string): string {
   return name.slice(0, 2).toUpperCase();
 }
 
+export function canAssignChallengeRole(
+  challenge: Pick<ChallengeBucket, "principalType" | "principalUrn">,
+): boolean {
+  return (
+    challenge.principalType === "user" && challenge.principalUrn !== "user:all"
+  );
+}
+
 export function principalDisplayName(
   userEmail: string | undefined,
   principalUrn: string,

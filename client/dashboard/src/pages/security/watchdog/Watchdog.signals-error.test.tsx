@@ -42,8 +42,9 @@ vi.mock("./SuppressedFindings", () => ({
   SuppressedFindings: () => <div>Suppressed section</div>,
 }));
 
-// Both reach the SDK provider, which this test has no use for.
+// All three reach the SDK provider, which this test has no use for.
 vi.mock("./SignalDrawer", () => ({ SignalDrawer: () => null }));
+vi.mock("./AnalysisStatusBadge", () => ({ AnalysisStatusBadge: () => null }));
 
 vi.mock("../useDismissFinding", () => ({
   useDismissFinding: () => ({

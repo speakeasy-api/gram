@@ -69,6 +69,7 @@ func TestBuildAuthorizationUrl_AudienceResolution(t *testing.T) {
 				ti.conn,
 				enc,
 				policy,
+				nil,
 				cache.NoopCache,
 				mustURL(t, "http://localhost"),
 			)

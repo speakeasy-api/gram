@@ -349,7 +349,13 @@ func (r *Resolver) fetchKeySet(ctx context.Context, source Source, etag string) 
 		req.Header.Set("If-None-Match", etag)
 	}
 
-	resp, err := r.client.Do(req)
+	// A source may carry its own transport (a tunnel into a customer network,
+	// say); the resolver's direct-egress client is the default.
+	var doer Doer = r.client
+	if source.doer != nil {
+		doer = source.doer
+	}
+	resp, err := doer.Do(req)
 	if err != nil {
 		return fetchedKeySet{body: nil, status: 0, notModified: false, header: nil}, fmt.Errorf("request key set: %w", err)
 	}

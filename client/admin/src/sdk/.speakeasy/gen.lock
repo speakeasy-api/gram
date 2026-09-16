@@ -32,6 +32,7 @@ trackedFiles:
   src/core.ts: {}
   src/funcs/adminBulkUpdateAccountType.ts: {}
   src/funcs/adminCancelStripeSubscription.ts: {}
+  src/funcs/adminChangeTrialEndDate.ts: {}
   src/funcs/adminCreateGlobalIssuer.ts: {}
   src/funcs/adminCreateOrganization.ts: {}
   src/funcs/adminDeleteGlobalIssuer.ts: {}
@@ -115,6 +116,7 @@ trackedFiles:
   src/models/components/auditlog.ts: {}
   src/models/components/bulkupdateaccounttyperequestbody.ts: {}
   src/models/components/cancelstripesubscriptionrequestbody.ts: {}
+  src/models/components/changetrialenddaterequestbody.ts: {}
   src/models/components/createorganizationrequestbody.ts: {}
   src/models/components/createremotesessionissuerform.ts: {}
   src/models/components/disableorganizationrequestbody.ts: {}
@@ -179,6 +181,7 @@ trackedFiles:
   src/react-query/_types.ts: {}
   src/react-query/adminBulkUpdateAccountType.ts: {}
   src/react-query/adminCancelStripeSubscription.ts: {}
+  src/react-query/adminChangeTrialEndDate.ts: {}
   src/react-query/adminCreateGlobalIssuer.ts: {}
   src/react-query/adminCreateOrganization.ts: {}
   src/react-query/adminDeleteGlobalIssuer.ts: {}
@@ -278,6 +281,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  adminChangeTrialEndDate:
+    speakeasy-default-admin-change-trial-end-date:
+      requestBody:
+        application/json: {"ends_at": "2024-09-15T14:40:01.475Z", "id": "<id>"}
+      responses:
+        "200":
+          application/json: {"account_type": "<value>", "created_at": "2025-10-24T16:41:22.781Z", "id": "<id>", "member_count": 148417, "name": "<value>", "slug": "<value>", "updated_at": "2024-01-25T13:15:50.191Z", "whitelisted": false}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   adminCreateGlobalIssuer:
     speakeasy-default-admin-create-global-issuer:
       requestBody:

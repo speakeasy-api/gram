@@ -3,6 +3,7 @@ package jwks
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -220,4 +222,59 @@ func TestResolverResolve_ZeroSourceRejected(t *testing.T) {
 
 	_, err := resolver.Resolve(t.Context(), Source{kind: "", inline: nil, uri: "", origin: ""}, zeroCacheState())
 	require.ErrorContains(t, err, "zero Source")
+}
+
+// recordingDoer stands in for a transport that reaches a key set the
+// resolver's own client cannot — a tunnel into a customer network.
+type recordingDoer struct {
+	inner *http.Client
+	calls int
+}
+
+func (d *recordingDoer) Do(req *http.Request) (*http.Response, error) {
+	d.calls++
+	resp, err := d.inner.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("recording doer: %w", err)
+	}
+	return resp, nil
+}
+
+func TestResolverResolve_UsesSourceTransport(t *testing.T) {
+	t.Parallel()
+
+	server := newKeySetServer(t, keySetJSON(t, testKey(t, "a")))
+	doer := &recordingDoer{inner: server.server.Client(), calls: 0}
+
+	// The default egress policy blocks the loopback address this server listens
+	// on and distrusts its certificate, so a fetch that does not take the
+	// source's transport fails outright.
+	resolver := NewResolver(guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)), testenv.NewMeterProvider(t), testenv.NewLogger(t))
+
+	result, err := resolver.Resolve(t.Context(), remoteSourceFor(t, server).WithTransport(doer), zeroCacheState())
+	require.NoError(t, err)
+	require.Equal(t, CacheOutcomeRefreshed, result.Outcome)
+	require.Len(t, result.KeySet.Keys, 1)
+	require.Equal(t, 1, doer.calls, "the fetch must go through the source's transport")
+	require.Equal(t, 1, server.Fetches())
+}
+
+func TestResolverResolve_CacheHitSkipsSourceTransport(t *testing.T) {
+	t.Parallel()
+
+	server := newKeySetServer(t, keySetJSON(t, testKey(t, "a")))
+	doer := &recordingDoer{inner: server.server.Client(), calls: 0}
+	resolver := resolverFor(t, server)
+
+	cache := CacheState{
+		Document:    keySetJSON(t, testKey(t, "stored")),
+		ETag:        `"v1"`,
+		ExpiresAt:   time.Now().Add(time.Hour),
+		RefreshedAt: time.Now(),
+	}
+	result, err := resolver.Resolve(t.Context(), remoteSourceFor(t, server).WithTransport(doer), cache)
+	require.NoError(t, err)
+	require.Equal(t, CacheOutcomeCached, result.Outcome)
+	require.Zero(t, doer.calls)
+	require.Zero(t, server.Fetches())
 }

@@ -50,6 +50,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/risk/analysisstatus"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
@@ -76,9 +77,11 @@ var _ gen.Auther = (*Service)(nil)
 
 const sessionQuarantineCircuitDeleteAttempts = 3
 
-// RiskAnalysisSignaler signals the per-project risk analysis coordinator workflow.
+// RiskAnalysisSignaler signals the per-project risk analysis coordinator
+// workflow and reports its run state for the Watchdog "last analysed" badge.
 type RiskAnalysisSignaler interface {
 	Signal(ctx context.Context, projectID uuid.UUID) error
+	analysisstatus.Describer
 }
 
 // RiskExclusionReconciler triggers the retroactive reconcile sweep for an

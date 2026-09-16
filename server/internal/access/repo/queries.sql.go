@@ -2128,6 +2128,20 @@ func (q *Queries) LockAgentRoleAssignments(ctx context.Context, arg LockAgentRol
 	return err
 }
 
+const lockChallengeResolutions = `-- name: LockChallengeResolutions :exec
+SELECT pg_advisory_xact_lock(hashtextextended(
+  jsonb_build_array('access.challenge-resolution', $1::text)::text, 0
+))
+`
+
+// One organization-scoped lock serializes challenge resolution without consuming
+// one shared lock entry per challenge in large buckets. Resolution traffic is rare,
+// and this keeps concurrent batches bounded and deterministic.
+func (q *Queries) LockChallengeResolutions(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, lockChallengeResolutions, organizationID)
+	return err
+}
+
 const lockMemberRoleSync = `-- name: LockMemberRoleSync :exec
 SELECT pg_advisory_xact_lock(hashtextextended(
   jsonb_build_array('access.member-role-sync', $1::text, $2::text)::text, 0
@@ -2206,12 +2220,14 @@ func (q *Queries) LockOrganizationRoleByID(ctx context.Context, arg LockOrganiza
 }
 
 const lockOrganizationUserRelationship = `-- name: LockOrganizationUserRelationship :one
-SELECT id
-FROM organization_user_relationships
-WHERE organization_id = $1
-  AND user_id = $2::text
-  AND deleted IS FALSE
-FOR UPDATE
+SELECT our.id
+FROM organization_user_relationships AS our
+JOIN users ON users.id = our.user_id
+WHERE our.organization_id = $1
+  AND our.user_id = $2::text
+  AND our.deleted IS FALSE
+  AND users.deleted_at IS NULL
+FOR UPDATE OF users, our
 `
 
 type LockOrganizationUserRelationshipParams struct {
@@ -2220,7 +2236,9 @@ type LockOrganizationUserRelationshipParams struct {
 }
 
 // Serializes AddMemberRoleTx, UpdateMemberRoles, and connected-member sends.
-// Bulk role assignment and deletion lock the same rows by WorkOS user ID.
+// Lock both rows so membership deletion and user soft-deletion cannot race the
+// active-state check. User deletion and membership deletion each need one of
+// these rows and therefore wait until this role mutation commits.
 // Provider event ingestion does not participate; not a lock for all writers.
 func (q *Queries) LockOrganizationUserRelationship(ctx context.Context, arg LockOrganizationUserRelationshipParams) (int64, error) {
 	row := q.db.QueryRow(ctx, lockOrganizationUserRelationship, arg.OrganizationID, arg.UserID)

@@ -312,12 +312,14 @@ type PostgresReader struct {
 	inventoryCursor     *inventoryCursorCodec
 	metadataVersionKey  []byte
 	riskReads           *RiskReadService
+	riskAnalysisStatus  *RiskAnalysisStatusService
 	dataExports         *DataExportReadService
 	dataExportMutations *dataExportMutationService
 	recentToolCalls     *RecentToolCallReadService
 	eventFeed           *EventFeedReadService
 	shadowInventory     *ShadowInventoryService
 	shadowDecisions     *ShadowDecisionService
+	shadowAI            *ShadowAIService
 }
 
 func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
@@ -329,12 +331,14 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		inventoryCursor:     nil,
 		metadataVersionKey:  nil,
 		riskReads:           nil,
+		riskAnalysisStatus:  nil,
 		dataExports:         nil,
 		dataExportMutations: nil,
 		recentToolCalls:     nil,
 		eventFeed:           nil,
 		shadowInventory:     nil,
 		shadowDecisions:     nil,
+		shadowAI:            nil,
 	}
 }
 
@@ -348,6 +352,22 @@ func (r *PostgresReader) WithShadowDecisions(service *ShadowDecisionService) *Po
 func (r *PostgresReader) WithShadowInventory(service *ShadowInventoryService) *PostgresReader {
 	if r != nil && service != nil && service.valid() {
 		r.shadowInventory = service
+	}
+	return r
+}
+
+// WithRiskAnalysisStatus attaches the Watchdog analysis run-state reads. A nil
+// or incomplete service leaves the tool served as a stub.
+func (r *PostgresReader) WithRiskAnalysisStatus(service *RiskAnalysisStatusService) *PostgresReader {
+	if r != nil && service.valid() {
+		r.riskAnalysisStatus = service
+	}
+	return r
+}
+
+func (r *PostgresReader) WithShadowAI(service *ShadowAIService) *PostgresReader {
+	if r != nil && service.valid() {
+		r.shadowAI = service
 	}
 	return r
 }

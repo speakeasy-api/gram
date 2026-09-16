@@ -18,7 +18,11 @@ import (
 // registerRiskToolsWithMutations is the single handler-selection seam used by
 // the external endpoint and assistant catalogue. Policy callbacks may be live
 // while exclusion callbacks remain stable unavailable stubs during rollout.
-func registerRiskToolsWithMutations(reg *Registrar, risk *RiskReadService, mutations *RiskMutationHandlers) {
+func registerRiskToolsWithMutations(reg *Registrar, risk *RiskReadService, status *RiskAnalysisStatusService, mutations *RiskMutationHandlers) {
+	// The analysis status read does not depend on the policy reader, so it is
+	// registered on its own: a deployment whose policy reads are unavailable
+	// still answers "when did the Watchdog last run" when it can.
+	registerRiskAnalysisStatusTool(reg, status)
 	if risk == nil || !risk.valid() {
 		registerUnavailableRiskToolsWithMutations(reg, mutations)
 		return
@@ -59,7 +63,37 @@ func registerRiskToolsWithMutations(reg *Registrar, risk *RiskReadService, mutat
 	registerRiskMutationHandlers(reg, risk.catalog, true, mutations)
 }
 
+const (
+	riskAnalysisStatusToolName  = "get_risk_analysis_status"
+	riskAnalysisStatusToolTitle = "Get Watchdog Analysis Status"
+	// riskAnalysisStatusToolStub is the description served when the analysis
+	// run state cannot be described in this deployment.
+	riskAnalysisStatusToolStub = "Report when the Watchdog analysis last ran for a project. Analysis status is unavailable in this deployment."
+)
+
+// registerRiskAnalysisStatusTool serves get_risk_analysis_status live when the
+// analysis run state can be described, and as a stub otherwise, so the tool
+// always exists in the manifest.
+func registerRiskAnalysisStatusTool(reg *Registrar, status *RiskAnalysisStatusService) {
+	if !status.valid() {
+		addTool(reg, &mcp.Tool{Name: riskAnalysisStatusToolName, Title: riskAnalysisStatusToolTitle, Description: riskAnalysisStatusToolStub, Annotations: readOnlyAnnotations(), InputSchema: riskAnalysisStatusSchema()}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, unavailableRiskReadTool(reg, riskAnalysisStatusToolName))
+		return
+	}
+	addTool(reg, &mcp.Tool{
+		Name:        riskAnalysisStatusToolName,
+		Title:       riskAnalysisStatusToolTitle,
+		Description: "Report whether the Watchdog analysis is running for an exact project or the organization's literal default project, and when it last ran. The analysis is event-driven: it starts shortly after new chat traffic is captured rather than on a schedule, so a project with no recent traffic has no recent run. A run that hit a failure waits about five minutes before retrying and still reports as running during that wait. Use this when an administrator asks whether risk findings are up to date or why none have appeared.",
+		Annotations: readOnlyAnnotations(),
+		InputSchema: riskAnalysisStatusSchema(),
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetRiskAnalysisStatusInput) (*mcp.CallToolResult, GetRiskAnalysisStatusOutput, error) {
+		return riskReadToolCall(ctx, reg.riskTelemetry, riskAnalysisStatusToolName, func(principal Principal) (GetRiskAnalysisStatusOutput, error) {
+			return status.Get(ctx, principal, input)
+		})
+	})
+}
+
 func registerUnavailableRiskTools(reg *Registrar) {
+	registerRiskAnalysisStatusTool(reg, nil)
 	registerUnavailableRiskToolsWithMutations(reg, nil)
 }
 
@@ -270,6 +304,8 @@ func riskReadToolCall[Out any](ctx context.Context, telemetry RiskTelemetry, too
 		refusal = featureUnavailableResult{Code: "invalid_request", Feature: "risk_reads", Message: "The risk read input or cursor is invalid. Re-read the tool schema and restart pagination."}
 	case errors.Is(err, ErrRiskReadNotFound):
 		refusal = featureUnavailableResult{Code: "not_found", Feature: "risk_reads", Message: "The requested project or risk resource is not available to this organization."}
+	case errors.Is(err, ErrRiskFeatureNotEnabled):
+		refusal = featureUnavailableResult{Code: unavailableCode, Feature: "risk_analysis_status", Message: "This is not switched on for your organization yet."}
 	case errors.Is(err, ErrUnavailable):
 		refusal = featureUnavailableResult{Code: unavailableCode, Feature: "risk_reads", Message: "Risk reads are temporarily unavailable."}
 	default:
@@ -296,6 +332,10 @@ func riskListSchema(withPolicy bool) *jsonschema.Schema {
 		properties["policy_id"] = uuidSchema("Optional exact policy ID filter.")
 	}
 	return projectSelectorSchema(properties, nil)
+}
+
+func riskAnalysisStatusSchema() *jsonschema.Schema {
+	return projectSelectorSchema(map[string]*jsonschema.Schema{}, nil)
 }
 
 func riskGetPolicySchema() *jsonschema.Schema {

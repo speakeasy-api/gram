@@ -22,7 +22,7 @@ export default function RequestAccess(): React.JSX.Element {
   const resourceName = searchParams.get("resource_name") || undefined;
 
   const [requestState, setRequestState] = useState<
-    "idle" | "sending" | "sent" | "error"
+    "idle" | "sending" | "sent" | "no-admin" | "error"
   >("idle");
 
   const requestAccessMutation = useRequestAccessMutation();
@@ -37,7 +37,7 @@ export default function RequestAccess(): React.JSX.Element {
 
     setRequestState("sending");
     try {
-      await requestAccessMutation.mutateAsync({
+      const result = await requestAccessMutation.mutateAsync({
         request: {
           requestAccessForm: {
             scope: scope as RequestAccessFormScope,
@@ -46,7 +46,7 @@ export default function RequestAccess(): React.JSX.Element {
           },
         },
       });
-      setRequestState("sent");
+      setRequestState(result.sentToCount > 0 ? "sent" : "no-admin");
     } catch {
       setRequestState("error");
     }
@@ -129,6 +129,18 @@ export default function RequestAccess(): React.JSX.Element {
                   </p>
                 </div>
                 <Button variant="secondary" size="sm" onClick={handleGoBack}>
+                  Go Back
+                </Button>
+              </div>
+            )}
+
+            {requestState === "no-admin" && (
+              <div className="flex flex-col items-center gap-3">
+                <p className="text-destructive text-sm">
+                  No organization administrator could be notified. Contact an
+                  administrator directly to request access.
+                </p>
+                <Button variant="tertiary" size="sm" onClick={handleGoBack}>
                   Go Back
                 </Button>
               </div>

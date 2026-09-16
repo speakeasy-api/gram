@@ -111,3 +111,31 @@ logs, feature-flag data, or rollout notes.
 Issuer changes create a new identity; case and trailing slashes are significant.
 Clear client discovery and authentication data or reconnect. Then authenticate
 again.
+
+## Repair an older local signing key set
+
+This applies only to local development with a key set whose JWK was published
+before the local KMS stand-in persisted its private key. The old signer kept its
+private key only in memory, so after a restart the saved public JWK cannot be
+paired with that private key. A `private_key_jwt` token request may fail with
+`invalid_client` even though the key set still has an active key. The old
+private key cannot be migrated from the database. Production KMS-backed keys
+are not affected.
+
+Repair the affected local key set once, using an organization admin account:
+
+1. In **Encryption Keys**, open the affected signing key set and select
+   **Publish new key**. The new local signer publishes a different public key.
+   If the set already has an active key, the new key starts as pending.
+2. Make the new public key available to the local dev-idp (or other test
+   verifier). A verifier using Gram's JWKS URI can fetch the updated set; if
+   the app was registered with an inline JWKS, update that registration with
+   the new public key. Allow any JWKS cache to refresh before switching keys.
+3. **Activate** the new key. This retires the old active key and makes new
+   assertions use the new private key. Retry the token exchange.
+
+Do not revoke the old key merely to repair signing: revocation immediately
+withdraws its public key and may invalidate assertions that are still in use.
+Fresh local key sets do not need this repair. Do not automate it at startup:
+switching signing keys before verifiers know the new public key can cause an
+authentication outage.

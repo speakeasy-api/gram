@@ -792,6 +792,31 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskSignals"}`)
 	})
 
+	Method("getRiskAnalysisStatus", func() {
+		Description("Get the run state of the project's risk analysis coordinator, which produces the findings behind the Watchdog page. Analysis is signal-driven, not scheduled: the coordinator wakes within about 30 seconds of new chat traffic and never runs on a timer, so a quiet project can legitimately go a long time between runs. The state is never when no run is visible (the project has never been analyzed, or its last run is older than Temporal's retention window), idle when the latest run has closed and the coordinator is waiting for the next chat write, and running when a run is in flight.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(RiskAnalysisStatusResult)
+
+		HTTP(func() {
+			GET("/rpc/risk.getAnalysisStatus")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getRiskAnalysisStatus")
+		Meta("openapi:extension:x-speakeasy-group", "risk.signals")
+		Meta("openapi:extension:x-speakeasy-name-override", "analysisStatus")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskAnalysisStatus"}`)
+	})
+
 	Method("getRiskPolicyStatus", func() {
 		Description("Get the analysis status of a risk policy including progress and workflow state.")
 
@@ -2121,6 +2146,24 @@ var RiskExposureSlice = Type("RiskExposureSlice", func() {
 	Attribute("share", Float64, "Fraction of the window's findings in this category (0-1).")
 
 	Required("category", "findings", "share")
+})
+
+var RiskAnalysisStatusResult = Type("RiskAnalysisStatusResult", func() {
+	Attribute("state", String, "Coarse run state of the project's risk analysis coordinator. never: no run is visible, either because the project has never been analyzed or because its last run is older than Temporal's retention window. idle: the latest run has closed and the coordinator is waiting for the next chat write to wake it. running: a run is in flight right now.", func() {
+		Enum("never", "idle", "running")
+	})
+	Attribute("running_since", String, "When the in-flight run started. Set only when state is running.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("last_run_started_at", String, "When the most recent closed run started. Set only when state is idle.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("last_run_at", String, "When the most recent closed run finished; the moment the Watchdog findings were last brought up to date. Set only when state is idle.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("last_run_outcome", String, "How the most recent closed run ended: completed, failed, canceled, terminated, continued_as_new, timed_out, or unknown. continued_as_new is the normal outcome for a long-lived coordinator that rolled its history over, so treat it like completed. Set only when state is idle.")
+
+	Required("state")
 })
 
 var RiskSignalsResult = Type("RiskSignalsResult", func() {

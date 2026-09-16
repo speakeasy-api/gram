@@ -409,5 +409,8 @@ var knownPlatformMCPToolNames = map[string]struct{}{
 	"get_plugin":                            {},
 	"get_mcp_client_admission":              {},
 	"set_mcp_client_admission":              {},
+	"get_risk_analysis_status":              {},
+	operationListShadowAIInventory:          {},
+	operationListAIScanLibrary:              {},
 	"send_platform_mcp_feedback":            {},
 }

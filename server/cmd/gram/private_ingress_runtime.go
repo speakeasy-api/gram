@@ -36,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -218,7 +219,17 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	triggerApp.RegisterDispatcher(assistants.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: r.Temporal}, ratelimit.NewRedisStore(redisClient)))
 	platformExtras := append([]platformtools.ExternalTool{}, platformruntime.MemoryExternalTools(memoryService)...)
 	platformExtras = append(platformExtras, platformruntime.AssistantSkillTools(logger, db, platformskills.WithEfficacySignaler(efficacySignaler))...)
-	remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, enc, guardianPolicy, redisClient, serverURL, auditLogger)
+	gcpIdentity := newGCPIdentity(ctx, logger, c)
+	kmsSigningClients, err := newKMSSigningClients(ctx, logger, c)
+	if err != nil {
+		return nil, fmt.Errorf("build kms signing client factory: %w", err)
+	}
+	clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
+	tunnelHTTPClient, err := newTunnelHTTPClient(c, guardianPolicy, redisClient)
+	if err != nil {
+		return nil, fmt.Errorf("build tunnel http client: %w", err)
+	}
+	remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, enc, guardianPolicy, tunnelHTTPClient, redisClient, serverURL, auditLogger, clientAssertionSigner)
 	if err != nil {
 		return nil, err
 	}

@@ -108,7 +108,7 @@ func UsageCommands() []string {
 		"external receive-work-os-webhook",
 		"killswitches (list-capabilities|list-mcp-servers|list|get|create|edit|lift|preview-overlaps|batch-user-badges)",
 		"about openapi",
-		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|list-shadow-mcp-inventory-servers-for-user|resolve-shadow-mcp-inventory-request|list-ai-detections|list-employee-ai-detections|list-resource-audience|set-resource-audience|list-audience-options|request-access|list-challenges|list-challenge-buckets|resolve-challenge|list-identity-access)",
+		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|list-shadow-mcp-inventory-servers-for-user|resolve-shadow-mcp-inventory-request|list-ai-detections|list-employee-ai-detections|set-ai-tool-decision|list-resource-audience|set-resource-audience|list-audience-options|request-access|list-challenges|list-challenge-buckets|resolve-challenge|list-identity-access)",
 		"agent (get-plugins|list-synced-users|get-configuration|update-configuration|list-ai-scan-targets|upsert-ai-scan-target|delete-ai-scan-target|get-session-meta|report-session-moved|report-ai-scan|create-session-handoff)",
 		"agents (list-sessions|revoke-session|list|create|get|rename|list-delegable-grants|list-policy-grants|create-policy-grant|update-policy-grant|delete-policy-grant|transfer|reassign|suspend|resume|revoke|delete)",
 		"ai-integrations (get-anthropic-inference-config|upsert-anthropic-inference-config|delete-anthropic-inference-config|get-config|upsert-config|delete-config|list-schedules|set-schedule-enabled|retry-schedule)",
@@ -164,11 +164,11 @@ func UsageCommands() []string {
 		"organization-remote-session-issuers (create-issuer|list-issuers|get-issuer|get-issuer-delete-preflight|get-issuer-duplicate-preflight|update-issuer|delete-issuer|move-issuer|get-issuer-migrate-preflight|migrate-issuer|fetch-issuer-metadata|refresh-issuer-metadata)",
 		"remote-session-issuers (fetch-remote-session-issuer-metadata|refresh-remote-session-issuer-metadata|create-remote-session-issuer|update-remote-session-issuer|list-remote-session-issuers|get-remote-session-issuer|get-remote-session-issuer-duplicate-preflight|delete-remote-session-issuer)",
 		"admin-remote-sessions (create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|create-global-client|list-global-clients|get-global-client|update-global-client|delete-global-client|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer)",
-		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-organization-activity|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial)",
+		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-organization-activity|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date)",
 		"organization-remote-sessions (list-client-sessions|revoke-session|refresh-session|revoke-all-client-sessions)",
 		"remote-sessions (list-remote-sessions|revoke-remote-session)",
 		"resources list-resources",
-		"risk (create-risk-policy|list-risk-policies|list-builtin-exclusions|get-risk-policy|update-risk-policy|delete-risk-policy|list-session-quarantines|release-session-quarantine|list-risk-results|list-risk-results-for-agent|unmask-risk-result|list-risk-results-by-chat|mark-risk-results-false-positive|unmark-risk-results-false-positive|list-dismissed-risk-results|get-risk-overview|list-risk-categories|compile-expr|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-signals|get-risk-policy-status|create-risk-policy-bypass-request|acknowledge-risk-policy-challenge|get-risk-policy-challenge|decline-risk-policy-challenge|get-risk-block|submit-risk-block-feedback|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|suggest-exclusion|test-detection-rule|evaluate-prompt-guardrail|save-risk-eval-review|list-risk-eval-reviews|delete-risk-eval-review)",
+		"risk (create-risk-policy|list-risk-policies|list-builtin-exclusions|get-risk-policy|update-risk-policy|delete-risk-policy|list-session-quarantines|release-session-quarantine|list-risk-results|list-risk-results-for-agent|unmask-risk-result|list-risk-results-by-chat|mark-risk-results-false-positive|unmark-risk-results-false-positive|list-dismissed-risk-results|get-risk-overview|list-risk-categories|compile-expr|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-signals|get-risk-analysis-status|get-risk-policy-status|create-risk-policy-bypass-request|acknowledge-risk-policy-challenge|get-risk-policy-challenge|decline-risk-policy-challenge|get-risk-block|submit-risk-block-feedback|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|suggest-exclusion|test-detection-rule|evaluate-prompt-guardrail|save-risk-eval-review|list-risk-eval-reviews|delete-risk-eval-review)",
 		"skill-efficacy (get-settings|upsert-settings|query-insights)",
 		"skills (create|add-version|restore-version|update|list|list-tags|list-suggestions|list-feedback|trigger-suggestion|approve-suggestion|dismiss-suggestion|list-suggestion-feedback|approve-all-suggestions|get|list-unknown-activations|list-versions|archive|distribute|undistribute|share|unshare|get-shared|list-distributions)",
 		"spend-rules (create-spend-rule|list-spend-rules|get-spend-rule|update-spend-rule|archive-spend-rule|preview-spend-rule|list-spend-rule-events|get-spend-rules-overview|list-actor-attributes)",
@@ -347,6 +347,10 @@ func ParseEndpoint(
 		accessListEmployeeAIDetectionsUserEmailFlag        = accessListEmployeeAIDetectionsFlags.String("user-email", "REQUIRED", "")
 		accessListEmployeeAIDetectionsSessionTokenFlag     = accessListEmployeeAIDetectionsFlags.String("session-token", "", "")
 		accessListEmployeeAIDetectionsProjectSlugInputFlag = accessListEmployeeAIDetectionsFlags.String("project-slug-input", "", "")
+
+		accessSetAIToolDecisionFlags            = flag.NewFlagSet("set-ai-tool-decision", flag.ExitOnError)
+		accessSetAIToolDecisionBodyFlag         = accessSetAIToolDecisionFlags.String("body", "REQUIRED", "")
+		accessSetAIToolDecisionSessionTokenFlag = accessSetAIToolDecisionFlags.String("session-token", "", "")
 
 		accessListResourceAudienceFlags            = flag.NewFlagSet("list-resource-audience", flag.ExitOnError)
 		accessListResourceAudienceResourceKindFlag = accessListResourceAudienceFlags.String("resource-kind", "REQUIRED", "")
@@ -2821,6 +2825,10 @@ func ParseEndpoint(
 		adminStartTrialBodyFlag              = adminStartTrialFlags.String("body", "REQUIRED", "")
 		adminStartTrialAdminSessionTokenFlag = adminStartTrialFlags.String("admin-session-token", "", "")
 
+		adminChangeTrialEndDateFlags                 = flag.NewFlagSet("change-trial-end-date", flag.ExitOnError)
+		adminChangeTrialEndDateBodyFlag              = adminChangeTrialEndDateFlags.String("body", "REQUIRED", "")
+		adminChangeTrialEndDateAdminSessionTokenFlag = adminChangeTrialEndDateFlags.String("admin-session-token", "", "")
+
 		organizationRemoteSessionsFlags = flag.NewFlagSet("organization-remote-sessions", flag.ContinueOnError)
 
 		organizationRemoteSessionsListClientSessionsFlags            = flag.NewFlagSet("list-client-sessions", flag.ExitOnError)
@@ -3026,6 +3034,11 @@ func ParseEndpoint(
 		riskGetRiskSignalsApikeyTokenFlag      = riskGetRiskSignalsFlags.String("apikey-token", "", "")
 		riskGetRiskSignalsSessionTokenFlag     = riskGetRiskSignalsFlags.String("session-token", "", "")
 		riskGetRiskSignalsProjectSlugInputFlag = riskGetRiskSignalsFlags.String("project-slug-input", "", "")
+
+		riskGetRiskAnalysisStatusFlags                = flag.NewFlagSet("get-risk-analysis-status", flag.ExitOnError)
+		riskGetRiskAnalysisStatusApikeyTokenFlag      = riskGetRiskAnalysisStatusFlags.String("apikey-token", "", "")
+		riskGetRiskAnalysisStatusSessionTokenFlag     = riskGetRiskAnalysisStatusFlags.String("session-token", "", "")
+		riskGetRiskAnalysisStatusProjectSlugInputFlag = riskGetRiskAnalysisStatusFlags.String("project-slug-input", "", "")
 
 		riskGetRiskPolicyStatusFlags                = flag.NewFlagSet("get-risk-policy-status", flag.ExitOnError)
 		riskGetRiskPolicyStatusIDFlag               = riskGetRiskPolicyStatusFlags.String("id", "REQUIRED", "")
@@ -4211,6 +4224,7 @@ func ParseEndpoint(
 	accessResolveShadowMCPInventoryRequestFlags.Usage = accessResolveShadowMCPInventoryRequestUsage
 	accessListAIDetectionsFlags.Usage = accessListAIDetectionsUsage
 	accessListEmployeeAIDetectionsFlags.Usage = accessListEmployeeAIDetectionsUsage
+	accessSetAIToolDecisionFlags.Usage = accessSetAIToolDecisionUsage
 	accessListResourceAudienceFlags.Usage = accessListResourceAudienceUsage
 	accessSetResourceAudienceFlags.Usage = accessSetResourceAudienceUsage
 	accessListAudienceOptionsFlags.Usage = accessListAudienceOptionsUsage
@@ -4794,6 +4808,7 @@ func ParseEndpoint(
 	adminUploadPlatformImageFlags.Usage = adminUploadPlatformImageUsage
 	adminServeImageFlags.Usage = adminServeImageUsage
 	adminStartTrialFlags.Usage = adminStartTrialUsage
+	adminChangeTrialEndDateFlags.Usage = adminChangeTrialEndDateUsage
 
 	organizationRemoteSessionsFlags.Usage = organizationRemoteSessionsUsage
 	organizationRemoteSessionsListClientSessionsFlags.Usage = organizationRemoteSessionsListClientSessionsUsage
@@ -4830,6 +4845,7 @@ func ParseEndpoint(
 	riskGetRiskUserBreakdownFlags.Usage = riskGetRiskUserBreakdownUsage
 	riskGetRiskRuleBreakdownFlags.Usage = riskGetRiskRuleBreakdownUsage
 	riskGetRiskSignalsFlags.Usage = riskGetRiskSignalsUsage
+	riskGetRiskAnalysisStatusFlags.Usage = riskGetRiskAnalysisStatusUsage
 	riskGetRiskPolicyStatusFlags.Usage = riskGetRiskPolicyStatusUsage
 	riskCreateRiskPolicyBypassRequestFlags.Usage = riskCreateRiskPolicyBypassRequestUsage
 	riskAcknowledgeRiskPolicyChallengeFlags.Usage = riskAcknowledgeRiskPolicyChallengeUsage
@@ -5357,6 +5373,9 @@ func ParseEndpoint(
 
 			case "list-employee-ai-detections":
 				epf = accessListEmployeeAIDetectionsFlags
+
+			case "set-ai-tool-decision":
+				epf = accessSetAIToolDecisionFlags
 
 			case "list-resource-audience":
 				epf = accessListResourceAudienceFlags
@@ -6995,6 +7014,9 @@ func ParseEndpoint(
 			case "start-trial":
 				epf = adminStartTrialFlags
 
+			case "change-trial-end-date":
+				epf = adminChangeTrialEndDateFlags
+
 			}
 
 		case "organization-remote-sessions":
@@ -7094,6 +7116,9 @@ func ParseEndpoint(
 
 			case "get-risk-signals":
 				epf = riskGetRiskSignalsFlags
+
+			case "get-risk-analysis-status":
+				epf = riskGetRiskAnalysisStatusFlags
 
 			case "get-risk-policy-status":
 				epf = riskGetRiskPolicyStatusFlags
@@ -7879,6 +7904,9 @@ func ParseEndpoint(
 			case "list-employee-ai-detections":
 				endpoint = c.ListEmployeeAIDetections()
 				data, err = accessc.BuildListEmployeeAIDetectionsPayload(*accessListEmployeeAIDetectionsUserEmailFlag, *accessListEmployeeAIDetectionsSessionTokenFlag, *accessListEmployeeAIDetectionsProjectSlugInputFlag)
+			case "set-ai-tool-decision":
+				endpoint = c.SetAIToolDecision()
+				data, err = accessc.BuildSetAIToolDecisionPayload(*accessSetAIToolDecisionBodyFlag, *accessSetAIToolDecisionSessionTokenFlag)
 			case "list-resource-audience":
 				endpoint = c.ListResourceAudience()
 				data, err = accessc.BuildListResourceAudiencePayload(*accessListResourceAudienceResourceKindFlag, *accessListResourceAudienceResourceIDFlag, *accessListResourceAudienceApikeyTokenFlag, *accessListResourceAudienceSessionTokenFlag)
@@ -9546,6 +9574,9 @@ func ParseEndpoint(
 			case "start-trial":
 				endpoint = c.StartTrial()
 				data, err = adminc.BuildStartTrialPayload(*adminStartTrialBodyFlag, *adminStartTrialAdminSessionTokenFlag)
+			case "change-trial-end-date":
+				endpoint = c.ChangeTrialEndDate()
+				data, err = adminc.BuildChangeTrialEndDatePayload(*adminChangeTrialEndDateBodyFlag, *adminChangeTrialEndDateAdminSessionTokenFlag)
 			}
 		case "organization-remote-sessions":
 			c := organizationremotesessionsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -9646,6 +9677,9 @@ func ParseEndpoint(
 			case "get-risk-signals":
 				endpoint = c.GetRiskSignals()
 				data, err = riskc.BuildGetRiskSignalsPayload(*riskGetRiskSignalsFromFlag, *riskGetRiskSignalsToFlag, *riskGetRiskSignalsApikeyTokenFlag, *riskGetRiskSignalsSessionTokenFlag, *riskGetRiskSignalsProjectSlugInputFlag)
+			case "get-risk-analysis-status":
+				endpoint = c.GetRiskAnalysisStatus()
+				data, err = riskc.BuildGetRiskAnalysisStatusPayload(*riskGetRiskAnalysisStatusApikeyTokenFlag, *riskGetRiskAnalysisStatusSessionTokenFlag, *riskGetRiskAnalysisStatusProjectSlugInputFlag)
 			case "get-risk-policy-status":
 				endpoint = c.GetRiskPolicyStatus()
 				data, err = riskc.BuildGetRiskPolicyStatusPayload(*riskGetRiskPolicyStatusIDFlag, *riskGetRiskPolicyStatusApikeyTokenFlag, *riskGetRiskPolicyStatusSessionTokenFlag, *riskGetRiskPolicyStatusProjectSlugInputFlag)
@@ -10589,21 +10623,22 @@ func accessUsage() {
 	fmt.Fprintln(os.Stderr, `    list-members: List all team members with their role assignments.`)
 	fmt.Fprintln(os.Stderr, `    list-grants: List the current user's effective grants, including inherited role grants.`)
 	fmt.Fprintln(os.Stderr, `    update-member-roles: Update a team member's role assignments.`)
-	fmt.Fprintln(os.Stderr, `    list-shadow-mcp-inventory: List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and policy-bypass state.`)
-	fmt.Fprintln(os.Stderr, `    get-shadow-mcp-inventory-server: Get one project-scoped Shadow MCP server inventory URL with usage and policy-bypass state.`)
+	fmt.Fprintln(os.Stderr, `    list-shadow-mcp-inventory: List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and policy-bypass state. Requires an authenticated session authorized for org:admin on the active organization.`)
+	fmt.Fprintln(os.Stderr, `    get-shadow-mcp-inventory-server: Get one project-scoped Shadow MCP server inventory URL with usage and policy-bypass state. Requires an authenticated session authorized for org:admin on the active organization.`)
 	fmt.Fprintln(os.Stderr, `    update-shadow-mcp-inventory-server-name: Update or clear the administrator-defined display name for one project-scoped Shadow MCP inventory server URL.`)
 	fmt.Fprintln(os.Stderr, `    list-shadow-mcp-inventory-users: List users with observed telemetry usage for one project-scoped Shadow MCP server URL.`)
 	fmt.Fprintln(os.Stderr, `    list-shadow-mcp-inventory-servers-for-user: List the Shadow MCP servers one person reached, with each server's access state. The inverse of listShadowMCPInventoryUsers, which expands a single server into its users.`)
 	fmt.Fprintln(os.Stderr, `    resolve-shadow-mcp-inventory-request: Review the latest pending Shadow MCP URL request and resolve all pending requests for that URL.`)
-	fmt.Fprintln(os.Stderr, `    list-ai-detections: List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. Org-scoped — detections attach to devices and enrolled users, not projects. Requires an authenticated session authorized for org:admin on the active organization. Display names and categories are decorated from the server's detection target catalog at read time; targets the catalog does not know are listed under their raw reported id.`)
-	fmt.Fprintln(os.Stderr, `    list-employee-ai-detections: List AI tools detected for one enrolled employee in the active organization. The employee email is required so project viewers cannot broaden the request into an organization-wide inventory. Linked alias emails are folded to the canonical identity. Requires project:read on the active project.`)
+	fmt.Fprintln(os.Stderr, `    list-ai-detections: List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. Org-scoped — detections attach to devices and enrolled users, not projects. Requires an authenticated session authorized for org:admin on the active organization. Each row carries the organization's gateway access decision for that tool. Display names and categories are decorated from the server's detection target catalog at read time; targets the catalog does not know are listed under their raw reported id.`)
+	fmt.Fprintln(os.Stderr, `    list-employee-ai-detections: List AI tools detected for one enrolled employee in the active organization. The employee email is required so project viewers cannot broaden the request into an organization-wide inventory. Linked alias emails are folded to the canonical identity. Requires project:read on the active project; the access decision on each row carries its state but not who recorded it, when, or why.`)
+	fmt.Fprintln(os.Stderr, `    set-ai-tool-decision: Record whether a detected AI tool may reach this organization's MCP gateway. The decision is organization-level and applies to every server: a blocked tool is refused when it authenticates, so its users see an error their client cannot recover from. Enforcement needs a credential Gram can verify, so a tool that carries no verifiable gateway matcher — one linked only by a self-reported client name, or by nothing at all — cannot be decided on: the request is rejected with bad_request, nothing is recorded, and no summary is returned. An id the organization's scan target catalog does not know is rejected with not_found. Requires an authenticated session authorized for org:admin on the active organization.`)
 	fmt.Fprintln(os.Stderr, `    list-resource-audience: List who can reach one resource: the principals granted or blocked on it, and the organization-wide rules they inherit.`)
 	fmt.Fprintln(os.Stderr, `    set-resource-audience: Replace the rules that name one resource. Organization-wide rules are left untouched.`)
 	fmt.Fprintln(os.Stderr, `    list-audience-options: List the principals that can be given access: everyone, roles, people, and agents.`)
 	fmt.Fprintln(os.Stderr, `    request-access: Request access to a scope by sending an email notification to organization administrators.`)
 	fmt.Fprintln(os.Stderr, `    list-challenges: List authz challenge events from ClickHouse, enriched with resolution state from PostgreSQL.`)
 	fmt.Fprintln(os.Stderr, `    list-challenge-buckets: List authz challenges grouped into time-based burst buckets. Consecutive challenges with the same dimensions within a 10-minute window are collapsed into a single bucket.`)
-	fmt.Fprintln(os.Stderr, `    resolve-challenge: Record resolutions for one or more denied authz challenges. The caller is responsible for assigning the role first.`)
+	fmt.Fprintln(os.Stderr, `    resolve-challenge: Dismiss one or more denied authz challenges, or atomically add one custom role to the denied user before recording the challenges as resolved.`)
 	fmt.Fprintln(os.Stderr, `    list-identity-access: List the MCP servers and skills an identity is authorized to reach, through grants on the user or on any role they hold, less any blocking grant that withdraws the same scope. Authorization only: plugin membership decides what a resource is distributed through, not who may use it, so it does not widen this list.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -10810,7 +10845,7 @@ func accessListShadowMCPInventoryUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and policy-bypass state.`)
+	fmt.Fprintln(os.Stderr, `List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and policy-bypass state. Requires an authenticated session authorized for org:admin on the active organization.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -project-id STRING: `)
@@ -10833,7 +10868,7 @@ func accessGetShadowMCPInventoryServerUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Get one project-scoped Shadow MCP server inventory URL with usage and policy-bypass state.`)
+	fmt.Fprintln(os.Stderr, `Get one project-scoped Shadow MCP server inventory URL with usage and policy-bypass state. Requires an authenticated session authorized for org:admin on the active organization.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -project-id STRING: `)
@@ -10949,7 +10984,7 @@ func accessListAIDetectionsUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. Org-scoped — detections attach to devices and enrolled users, not projects. Requires an authenticated session authorized for org:admin on the active organization. Display names and categories are decorated from the server's detection target catalog at read time; targets the catalog does not know are listed under their raw reported id.`)
+	fmt.Fprintln(os.Stderr, `List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. Org-scoped — detections attach to devices and enrolled users, not projects. Requires an authenticated session authorized for org:admin on the active organization. Each row carries the organization's gateway access decision for that tool. Display names and categories are decorated from the server's detection target catalog at read time; targets the catalog does not know are listed under their raw reported id.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -category STRING: `)
@@ -10958,7 +10993,7 @@ func accessListAIDetectionsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-ai-detections --category \"local_model\" --directory-group-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-ai-detections --category \"assistant\" --directory-group-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
 }
 
 func accessListEmployeeAIDetectionsUsage() {
@@ -10971,7 +11006,7 @@ func accessListEmployeeAIDetectionsUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List AI tools detected for one enrolled employee in the active organization. The employee email is required so project viewers cannot broaden the request into an organization-wide inventory. Linked alias emails are folded to the canonical identity. Requires project:read on the active project.`)
+	fmt.Fprintln(os.Stderr, `List AI tools detected for one enrolled employee in the active organization. The employee email is required so project viewers cannot broaden the request into an organization-wide inventory. Linked alias emails are folded to the canonical identity. Requires project:read on the active project; the access decision on each row carries its state but not who recorded it, when, or why.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -user-email STRING: `)
@@ -10981,6 +11016,26 @@ func accessListEmployeeAIDetectionsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-employee-ai-detections --user-email \"aaa\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func accessSetAIToolDecisionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access set-ai-tool-decision", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Record whether a detected AI tool may reach this organization's MCP gateway. The decision is organization-level and applies to every server: a blocked tool is refused when it authenticates, so its users see an error their client cannot recover from. Enforcement needs a credential Gram can verify, so a tool that carries no verifiable gateway matcher — one linked only by a self-reported client name, or by nothing at all — cannot be decided on: the request is rejected with bad_request, nothing is recorded, and no summary is returned. An id the organization's scan target catalog does not know is rejected with not_found. Requires an authenticated session authorized for org:admin on the active organization.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access set-ai-tool-decision --body '{\n      \"decision\": \"approved\",\n      \"rationale\": \"aaa\",\n      \"target_id\": \"1\"\n   }' --session-token \"abc123\"")
 }
 
 func accessListResourceAudienceUsage() {
@@ -11155,7 +11210,7 @@ func accessResolveChallengeUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Record resolutions for one or more denied authz challenges. The caller is responsible for assigning the role first.`)
+	fmt.Fprintln(os.Stderr, `Dismiss one or more denied authz challenges, or atomically add one custom role to the denied user before recording the challenges as resolved.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -11164,7 +11219,7 @@ func accessResolveChallengeUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access resolve-challenge --body '{\n      \"challenge_ids\": [\n         \"abc123\"\n      ],\n      \"principal_urn\": \"abc123\",\n      \"resolution_type\": \"dismissed\",\n      \"resource_id\": \"abc123\",\n      \"resource_kind\": \"abc123\",\n      \"role_slug\": \"abc123\",\n      \"scope\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access resolve-challenge --body '{\n      \"challenge_ids\": [\n         \"abc123\",\n         \"abc123\"\n      ],\n      \"principal_urn\": \"abc123\",\n      \"resolution_type\": \"dismissed\",\n      \"resource_id\": \"abc123\",\n      \"resource_kind\": \"abc123\",\n      \"role_assignment_confirmed\": false,\n      \"role_slug\": \"abc123\",\n      \"scope\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
 func accessListIdentityAccessUsage() {
@@ -11196,9 +11251,9 @@ func agentUsage() {
 	fmt.Fprintln(os.Stderr, `    list-synced-users: List users in the current organization who are actively running the Speakeasy device agent, attributed by the email each agent reports on sync. Dashboard-only; requires an org admin session.`)
 	fmt.Fprintln(os.Stderr, `    get-configuration: Get the organization-wide device-agent configuration for the dashboard. Requires a session with the org:admin scope. An unconfigured organization returns an empty document with is_configured=false; enrolled agents do not receive a remote layer until an administrator saves one.`)
 	fmt.Fprintln(os.Stderr, `    update-configuration: Create or replace the organization-wide, non-secret device-agent configuration. Requires a session with the org:admin scope. Known settings are replaced wholesale — omitting one removes it — while stored keys this server does not recognize are preserved for forward compatibility; identity and credential keys are rejected.`)
-	fmt.Fprintln(os.Stderr, `    list-ai-scan-targets: List the Shadow AI scan targets this organization's device agents probe for: the Speakeasy defaults overlaid with the organization's own additions and customizations, with the list version agents echo on scan receipts. Requires a session with the org:admin scope.`)
-	fmt.Fprintln(os.Stderr, `    upsert-ai-scan-target: Add a scan target for this organization, replace one it added earlier, or customize a Speakeasy default under the same id, which is how a default is disabled for the organization. Agents pick the change up on their next policy poll. Requires a session with the org:admin scope.`)
-	fmt.Fprintln(os.Stderr, `    delete-ai-scan-target: Remove a target the organization added, or drop the organization's customization of a Speakeasy default so the default is served again. Requires a session with the org:admin scope.`)
+	fmt.Fprintln(os.Stderr, `    list-ai-scan-targets: List the Shadow AI scan targets this organization's device agents probe for: the Speakeasy built-ins plus the organization's own additions, with the catalog version agents echo on scan receipts. Everything listed is probed for; a built-in leaves the list by leaving Speakeasy's catalog, an organization target by being deleted. Requires a session with the org:admin scope.`)
+	fmt.Fprintln(os.Stderr, `    upsert-ai-scan-target: Add a scan target for this organization or replace one it added earlier. Built-in targets are system-supplied and read-only: a write under a built-in's id is accepted only when it carries that built-in's definition unchanged. Every field is a full replacement except gateway_client, which an existing target keeps when the field is omitted, so a write need not restate the target's matchers; sending gateway_client with empty lists still clears them. Clearing a target's last verifiable matcher also clears any access decision recorded about it, since nothing could enforce it any more; the organization decides again once the target can be recognized at the gateway. Agents pick the change up on their next policy poll. Requires a session with the org:admin scope.`)
+	fmt.Fprintln(os.Stderr, `    delete-ai-scan-target: Remove a target the organization added, or clear the row a built-in carries so it returns to having no recorded decision. A built-in itself cannot be removed here; it leaves the list only by leaving Speakeasy's catalog. Requires a session with the org:admin scope.`)
 	fmt.Fprintln(os.Stderr, `    get-session-meta: Resolve display metadata (Gram chat id, generated title, last activity) for captured agent sessions the calling user owns. Used by the device agent's session picker to overlay server-generated titles on locally discovered transcripts; unknown or non-owned session ids are silently omitted, so the picker degrades gracefully. Requires a per-user key: the fleet-shared org install key is refused because session metadata is per-user data.`)
 	fmt.Fprintln(os.Stderr, `    report-session-moved: Record that a captured agent session was moved to another harness on a device (session portability). Carries no session content — only the session identity, the target harness, and device attribution — and lands as a chat_session:move audit event so organizations retain governance visibility over local-first moves. Accepts both the per-user key and the org install key (with a vouched email), mirroring getPlugins, because fleet devices must be able to report moves. Fire-and-forget from the agent's perspective: the daemon must never fail a move because this call failed.`)
 	fmt.Fprintln(os.Stderr, `    report-ai-scan: Report the result of a device-agent AI scan: which AI tools from the served scan target catalog (or the list embedded in the agent as a fallback) were found installed or running on the device. A scan with zero matches still reports, so organizations can prove a device was scanned and came back clean. Accepts both the per-user key and the org install key (with a vouched email), mirroring getPlugins, because fleet devices must be able to report scans. Fire-and-forget from the agent's perspective: the daemon must never block on this call.`)
@@ -11299,7 +11354,7 @@ func agentListAiScanTargetsUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List the Shadow AI scan targets this organization's device agents probe for: the Speakeasy defaults overlaid with the organization's own additions and customizations, with the list version agents echo on scan receipts. Requires a session with the org:admin scope.`)
+	fmt.Fprintln(os.Stderr, `List the Shadow AI scan targets this organization's device agents probe for: the Speakeasy built-ins plus the organization's own additions, with the catalog version agents echo on scan receipts. Everything listed is probed for; a built-in leaves the list by leaving Speakeasy's catalog, an organization target by being deleted. Requires a session with the org:admin scope.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
@@ -11318,7 +11373,7 @@ func agentUpsertAiScanTargetUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Add a scan target for this organization, replace one it added earlier, or customize a Speakeasy default under the same id, which is how a default is disabled for the organization. Agents pick the change up on their next policy poll. Requires a session with the org:admin scope.`)
+	fmt.Fprintln(os.Stderr, `Add a scan target for this organization or replace one it added earlier. Built-in targets are system-supplied and read-only: a write under a built-in's id is accepted only when it carries that built-in's definition unchanged. Every field is a full replacement except gateway_client, which an existing target keeps when the field is omitted, so a write need not restate the target's matchers; sending gateway_client with empty lists still clears them. Clearing a target's last verifiable matcher also clears any access decision recorded about it, since nothing could enforce it any more; the organization decides again once the target can be recognized at the gateway. Agents pick the change up on their next policy poll. Requires a session with the org:admin scope.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -11326,7 +11381,7 @@ func agentUpsertAiScanTargetUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agent upsert-ai-scan-target --body '{\n      \"category\": \"local_model\",\n      \"display_name\": \"aa\",\n      \"enabled\": false,\n      \"id\": \"1\",\n      \"signatures\": {\n         \"binaries\": [\n            \".\",\n            \".\",\n            \".\"\n         ],\n         \"bundle_ids\": [\n            \".\",\n            \".\",\n            \".\"\n         ],\n         \"config_dirs\": [\n            \"abc123\",\n            \"abc123\",\n            \"abc123\"\n         ],\n         \"process_names\": [\n            \"-\",\n            \"-\",\n            \"-\"\n         ]\n      },\n      \"version_plist_key\": \"1\"\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agent upsert-ai-scan-target --body '{\n      \"category\": \"assistant\",\n      \"display_name\": \"aa\",\n      \"gateway_client\": {\n         \"cimd_vendor_keys\": [\n            \"1\",\n            \"1\",\n            \"1\"\n         ],\n         \"client_info_names\": [\n            \"aaa\",\n            \"aaa\",\n            \"aaa\"\n         ],\n         \"oauth_client_ids\": [\n            \"aaa\",\n            \"aaa\",\n            \"aaa\"\n         ]\n      },\n      \"id\": \"1\",\n      \"signatures\": {\n         \"binaries\": [\n            \".\",\n            \".\",\n            \".\"\n         ],\n         \"bundle_ids\": [\n            \".\",\n            \".\",\n            \".\"\n         ],\n         \"config_dirs\": [\n            \"abc123\",\n            \"abc123\",\n            \"abc123\"\n         ],\n         \"process_names\": [\n            \"-\",\n            \"-\",\n            \"-\"\n         ]\n      },\n      \"version_plist_key\": \"1\"\n   }' --session-token \"abc123\"")
 }
 
 func agentDeleteAiScanTargetUsage() {
@@ -11338,7 +11393,7 @@ func agentDeleteAiScanTargetUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Remove a target the organization added, or drop the organization's customization of a Speakeasy default so the default is served again. Requires a session with the org:admin scope.`)
+	fmt.Fprintln(os.Stderr, `Remove a target the organization added, or clear the row a built-in carries so it returns to having no recorded decision. A built-in itself cannot be removed here; it leaves the list only by leaving Speakeasy's catalog. Requires a session with the org:admin scope.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -20024,7 +20079,7 @@ func organizationRemoteSessionClientsCreateClientUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-clients create-client --body '{\n      \"audience\": \"aaa\",\n      \"client_id\": \"abc123\",\n      \"client_id_issued_at\": \"1970-01-01T00:00:01Z\",\n      \"client_secret\": \"abc123\",\n      \"client_secret_expires_at\": \"1970-01-01T00:00:01Z\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_method\": \"client_secret_post\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-clients create-client --body '{\n      \"audience\": \"aaa\",\n      \"client_id\": \"abc123\",\n      \"client_id_issued_at\": \"1970-01-01T00:00:01Z\",\n      \"client_secret\": \"abc123\",\n      \"client_secret_expires_at\": \"1970-01-01T00:00:01Z\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_audience_format\": \"token_endpoint\",\n      \"token_endpoint_auth_method\": \"client_secret_post\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func organizationRemoteSessionClientsCreateCimdClientUsage() {
@@ -20068,7 +20123,7 @@ func organizationRemoteSessionClientsUpdateClientUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-clients update-client --body '{\n      \"audience\": \"aaa\",\n      \"client_secret\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_method\": \"client_secret_post\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-clients update-client --body '{\n      \"audience\": \"aaa\",\n      \"client_secret\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_audience_format\": \"token_endpoint\",\n      \"token_endpoint_auth_method\": \"client_secret_post\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func organizationRemoteSessionClientsAttachClientKeySetUsage() {
@@ -20222,7 +20277,7 @@ func remoteSessionClientsCreateRemoteSessionClientUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-clients create-remote-session-client --body '{\n      \"audience\": \"aaa\",\n      \"client_id\": \"abc123\",\n      \"client_id_issued_at\": \"1970-01-01T00:00:01Z\",\n      \"client_secret\": \"abc123\",\n      \"client_secret_expires_at\": \"1970-01-01T00:00:01Z\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_method\": \"client_secret_post\",\n      \"user_session_issuer_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-clients create-remote-session-client --body '{\n      \"audience\": \"aaa\",\n      \"client_id\": \"abc123\",\n      \"client_id_issued_at\": \"1970-01-01T00:00:01Z\",\n      \"client_secret\": \"abc123\",\n      \"client_secret_expires_at\": \"1970-01-01T00:00:01Z\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_audience_format\": \"token_endpoint\",\n      \"token_endpoint_auth_method\": \"client_secret_post\",\n      \"user_session_issuer_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func remoteSessionClientsCreateCimdUsage() {
@@ -20270,7 +20325,7 @@ func remoteSessionClientsUpdateRemoteSessionClientUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-clients update-remote-session-client --body '{\n      \"audience\": \"aaa\",\n      \"client_secret\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_method\": \"client_secret_post\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-clients update-remote-session-client --body '{\n      \"audience\": \"aaa\",\n      \"client_secret\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_audience_format\": \"token_endpoint\",\n      \"token_endpoint_auth_method\": \"client_secret_post\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func remoteSessionClientsAttachUserSessionIssuerUsage() {
@@ -20492,7 +20547,7 @@ func organizationRemoteSessionIssuersCreateIssuerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers create-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"authorization_response_iss_parameter_supported\": false,\n      \"backchannel_logout_supported\": false,\n      \"claims_supported\": [\n         \"abc123\"\n      ],\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"code_challenge_methods_supported\": [\n         \"abc123\"\n      ],\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id_token_signing_alg_values_supported\": [\n         \"abc123\"\n      ],\n      \"introspection_endpoint\": \"abc123\",\n      \"introspection_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"registration_endpoint\": \"abc123\",\n      \"resource_indicator_supported\": false,\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scope_override\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ],\n      \"userinfo_endpoint\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers create-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"authorization_response_iss_parameter_supported\": false,\n      \"backchannel_logout_supported\": false,\n      \"claims_supported\": [\n         \"abc123\"\n      ],\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"code_challenge_methods_supported\": [\n         \"abc123\"\n      ],\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id_token_signing_alg_values_supported\": [\n         \"abc123\"\n      ],\n      \"introspection_endpoint\": \"abc123\",\n      \"introspection_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"registration_endpoint\": \"abc123\",\n      \"resource_indicator_supported\": false,\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scope_override\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ],\n      \"tunneled_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"userinfo_endpoint\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func organizationRemoteSessionIssuersListIssuersUsage() {
@@ -20608,7 +20663,7 @@ func organizationRemoteSessionIssuersUpdateIssuerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers update-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"authorization_response_iss_parameter_supported\": false,\n      \"backchannel_logout_supported\": false,\n      \"claims_supported\": [\n         \"abc123\"\n      ],\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"code_challenge_methods_supported\": [\n         \"abc123\"\n      ],\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id_token_signing_alg_values_supported\": [\n         \"abc123\"\n      ],\n      \"introspection_endpoint\": \"abc123\",\n      \"introspection_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"abc123\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"resource_indicator_supported\": false,\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scope_override\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ],\n      \"userinfo_endpoint\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers update-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"authorization_response_iss_parameter_supported\": false,\n      \"backchannel_logout_supported\": false,\n      \"claims_supported\": [\n         \"abc123\"\n      ],\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"code_challenge_methods_supported\": [\n         \"abc123\"\n      ],\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id_token_signing_alg_values_supported\": [\n         \"abc123\"\n      ],\n      \"introspection_endpoint\": \"abc123\",\n      \"introspection_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"abc123\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"resource_indicator_supported\": false,\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scope_override\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ],\n      \"tunneled_mcp_server_id\": \"abc123\",\n      \"userinfo_endpoint\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func organizationRemoteSessionIssuersDeleteIssuerUsage() {
@@ -20840,7 +20895,7 @@ func remoteSessionIssuersCreateRemoteSessionIssuerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-issuers create-remote-session-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"authorization_response_iss_parameter_supported\": false,\n      \"backchannel_logout_supported\": false,\n      \"claims_supported\": [\n         \"abc123\"\n      ],\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"code_challenge_methods_supported\": [\n         \"abc123\"\n      ],\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id_token_signing_alg_values_supported\": [\n         \"abc123\"\n      ],\n      \"introspection_endpoint\": \"abc123\",\n      \"introspection_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"resource_indicator_supported\": false,\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scope_override\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ],\n      \"userinfo_endpoint\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-issuers create-remote-session-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"authorization_response_iss_parameter_supported\": false,\n      \"backchannel_logout_supported\": false,\n      \"claims_supported\": [\n         \"abc123\"\n      ],\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"code_challenge_methods_supported\": [\n         \"abc123\"\n      ],\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id_token_signing_alg_values_supported\": [\n         \"abc123\"\n      ],\n      \"introspection_endpoint\": \"abc123\",\n      \"introspection_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"resource_indicator_supported\": false,\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scope_override\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ],\n      \"tunneled_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"userinfo_endpoint\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func remoteSessionIssuersUpdateRemoteSessionIssuerUsage() {
@@ -20864,7 +20919,7 @@ func remoteSessionIssuersUpdateRemoteSessionIssuerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-issuers update-remote-session-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"authorization_response_iss_parameter_supported\": false,\n      \"backchannel_logout_supported\": false,\n      \"claims_supported\": [\n         \"abc123\"\n      ],\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"code_challenge_methods_supported\": [\n         \"abc123\"\n      ],\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id_token_signing_alg_values_supported\": [\n         \"abc123\"\n      ],\n      \"introspection_endpoint\": \"abc123\",\n      \"introspection_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"abc123\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"resource_indicator_supported\": false,\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scope_override\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ],\n      \"userinfo_endpoint\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-issuers update-remote-session-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"authorization_response_iss_parameter_supported\": false,\n      \"backchannel_logout_supported\": false,\n      \"claims_supported\": [\n         \"abc123\"\n      ],\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"code_challenge_methods_supported\": [\n         \"abc123\"\n      ],\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id_token_signing_alg_values_supported\": [\n         \"abc123\"\n      ],\n      \"introspection_endpoint\": \"abc123\",\n      \"introspection_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"abc123\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"resource_indicator_supported\": false,\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scope_override\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ],\n      \"tunneled_mcp_server_id\": \"abc123\",\n      \"userinfo_endpoint\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func remoteSessionIssuersListRemoteSessionIssuersUsage() {
@@ -21024,7 +21079,7 @@ func adminRemoteSessionsCreateGlobalIssuerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-remote-sessions create-global-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"authorization_response_iss_parameter_supported\": false,\n      \"backchannel_logout_supported\": false,\n      \"claims_supported\": [\n         \"abc123\"\n      ],\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"code_challenge_methods_supported\": [\n         \"abc123\"\n      ],\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id_token_signing_alg_values_supported\": [\n         \"abc123\"\n      ],\n      \"introspection_endpoint\": \"abc123\",\n      \"introspection_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"resource_indicator_supported\": false,\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scope_override\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ],\n      \"userinfo_endpoint\": \"abc123\"\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-remote-sessions create-global-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"authorization_response_iss_parameter_supported\": false,\n      \"backchannel_logout_supported\": false,\n      \"claims_supported\": [\n         \"abc123\"\n      ],\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"code_challenge_methods_supported\": [\n         \"abc123\"\n      ],\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id_token_signing_alg_values_supported\": [\n         \"abc123\"\n      ],\n      \"introspection_endpoint\": \"abc123\",\n      \"introspection_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"resource_indicator_supported\": false,\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scope_override\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ],\n      \"tunneled_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"userinfo_endpoint\": \"abc123\"\n   }' --session-token \"abc123\"")
 }
 
 func adminRemoteSessionsGetGlobalIssuerDuplicatePreflightUsage() {
@@ -21110,7 +21165,7 @@ func adminRemoteSessionsUpdateGlobalIssuerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-remote-sessions update-global-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"authorization_response_iss_parameter_supported\": false,\n      \"backchannel_logout_supported\": false,\n      \"claims_supported\": [\n         \"abc123\"\n      ],\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"code_challenge_methods_supported\": [\n         \"abc123\"\n      ],\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id_token_signing_alg_values_supported\": [\n         \"abc123\"\n      ],\n      \"introspection_endpoint\": \"abc123\",\n      \"introspection_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"abc123\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"resource_indicator_supported\": false,\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scope_override\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ],\n      \"userinfo_endpoint\": \"abc123\"\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-remote-sessions update-global-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"authorization_response_iss_parameter_supported\": false,\n      \"backchannel_logout_supported\": false,\n      \"claims_supported\": [\n         \"abc123\"\n      ],\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"code_challenge_methods_supported\": [\n         \"abc123\"\n      ],\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id_token_signing_alg_values_supported\": [\n         \"abc123\"\n      ],\n      \"introspection_endpoint\": \"abc123\",\n      \"introspection_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"abc123\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"resource_indicator_supported\": false,\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scope_override\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ],\n      \"tunneled_mcp_server_id\": \"abc123\",\n      \"userinfo_endpoint\": \"abc123\"\n   }' --session-token \"abc123\"")
 }
 
 func adminRemoteSessionsDeleteGlobalIssuerUsage() {
@@ -21400,6 +21455,7 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    upload-platform-image: Upload a global issuer logo, limited to 4 MiB and PNG, JPEG, GIF or WebP.`)
 	fmt.Fprintln(os.Stderr, `    serve-image: Serve a public image, preserving the existing image serving contract.`)
 	fmt.Fprintln(os.Stderr, `    start-trial: Starts a new enterprise trial for an organization that has never trialled, or restarts one that has expired without converting or being demoted. Sets the account type, whitelist flag, trial entitlements and a fresh runway counted from now. A running, demoted or converted trial is rejected: those are extend, re-arm and a contract.`)
+	fmt.Fprintln(os.Stderr, `    change-trial-end-date: Sets a running trial's end date to a future instant, shortening or extending it without restarting the trial.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s admin COMMAND --help\n", os.Args[0])
@@ -22127,7 +22183,7 @@ func adminCreateGlobalIssuerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin create-global-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"authorization_response_iss_parameter_supported\": false,\n      \"backchannel_logout_supported\": false,\n      \"claims_supported\": [\n         \"abc123\"\n      ],\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"code_challenge_methods_supported\": [\n         \"abc123\"\n      ],\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id_token_signing_alg_values_supported\": [\n         \"abc123\"\n      ],\n      \"introspection_endpoint\": \"abc123\",\n      \"introspection_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"resource_indicator_supported\": false,\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scope_override\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ],\n      \"userinfo_endpoint\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin create-global-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"authorization_response_iss_parameter_supported\": false,\n      \"backchannel_logout_supported\": false,\n      \"claims_supported\": [\n         \"abc123\"\n      ],\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"code_challenge_methods_supported\": [\n         \"abc123\"\n      ],\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id_token_signing_alg_values_supported\": [\n         \"abc123\"\n      ],\n      \"introspection_endpoint\": \"abc123\",\n      \"introspection_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"resource_indicator_supported\": false,\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scope_override\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ],\n      \"tunneled_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"userinfo_endpoint\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
 }
 
 func adminGetGlobalIssuerDuplicatePreflightUsage() {
@@ -22213,7 +22269,7 @@ func adminUpdateGlobalIssuerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin update-global-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"authorization_response_iss_parameter_supported\": false,\n      \"backchannel_logout_supported\": false,\n      \"claims_supported\": [\n         \"abc123\"\n      ],\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"code_challenge_methods_supported\": [\n         \"abc123\"\n      ],\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id_token_signing_alg_values_supported\": [\n         \"abc123\"\n      ],\n      \"introspection_endpoint\": \"abc123\",\n      \"introspection_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"abc123\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"resource_indicator_supported\": false,\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scope_override\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ],\n      \"userinfo_endpoint\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin update-global-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"authorization_response_iss_parameter_supported\": false,\n      \"backchannel_logout_supported\": false,\n      \"claims_supported\": [\n         \"abc123\"\n      ],\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"code_challenge_methods_supported\": [\n         \"abc123\"\n      ],\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id_token_signing_alg_values_supported\": [\n         \"abc123\"\n      ],\n      \"introspection_endpoint\": \"abc123\",\n      \"introspection_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"abc123\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"resource_indicator_supported\": false,\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scope_override\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ],\n      \"tunneled_mcp_server_id\": \"abc123\",\n      \"userinfo_endpoint\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
 }
 
 func adminDeleteGlobalIssuerUsage() {
@@ -22400,6 +22456,26 @@ func adminStartTrialUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin start-trial --body '{\n      \"days\": 2,\n      \"id\": \"aa\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminChangeTrialEndDateUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin change-trial-end-date", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Sets a running trial's end date to a future instant, shortening or extending it without restarting the trial.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin change-trial-end-date --body '{\n      \"ends_at\": \"1970-01-01T00:00:01Z\",\n      \"id\": \"aa\"\n   }' --admin-session-token \"abc123\"")
 }
 
 // organizationRemoteSessionsUsage displays the usage of the
@@ -22637,6 +22713,7 @@ func riskUsage() {
 	fmt.Fprintln(os.Stderr, `    get-risk-user-breakdown: Per-user breakdowns of findings by category and by rule_id within a time window. Powers the user drill-down on /risk-overview.`)
 	fmt.Fprintln(os.Stderr, `    get-risk-rule-breakdown: Get per-rule_id finding counts for a category within a time window. Powers the per-category drill-down chart on /risk-overview.`)
 	fmt.Fprintln(os.Stderr, `    get-risk-signals: Get clustered risk signals — findings grouped by rule and ranked by severity score — plus window-level KPI stats and the exposure breakdown by category. Powers the Watchdog page. Served from the ClickHouse findings store.`)
+	fmt.Fprintln(os.Stderr, `    get-risk-analysis-status: Get the run state of the project's risk analysis coordinator, which produces the findings behind the Watchdog page. Analysis is signal-driven, not scheduled: the coordinator wakes within about 30 seconds of new chat traffic and never runs on a timer, so a quiet project can legitimately go a long time between runs. The state is never when no run is visible (the project has never been analyzed, or its last run is older than Temporal's retention window), idle when the latest run has closed and the coordinator is waiting for the next chat write, and running when a run is in flight.`)
 	fmt.Fprintln(os.Stderr, `    get-risk-policy-status: Get the analysis status of a risk policy including progress and workflow state.`)
 	fmt.Fprintln(os.Stderr, `    create-risk-policy-bypass-request: Create or refresh a risk policy bypass request from a signed request URL token.`)
 	fmt.Fprintln(os.Stderr, `    acknowledge-risk-policy-challenge: Acknowledge a risk policy warn/challenge from a warning-link token. Records the acknowledgement so the user's retried action proceeds; self-service (no admin approval).`)
@@ -23227,6 +23304,28 @@ func riskGetRiskSignalsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk get-risk-signals --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func riskGetRiskAnalysisStatusUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk get-risk-analysis-status", os.Args[0])
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get the run state of the project's risk analysis coordinator, which produces the findings behind the Watchdog page. Analysis is signal-driven, not scheduled: the coordinator wakes within about 30 seconds of new chat traffic and never runs on a timer, so a quiet project can legitimately go a long time between runs. The state is never when no run is visible (the project has never been analyzed, or its last run is older than Temporal's retention window), idle when the latest run has closed and the coordinator is waiting for the next chat write, and running when a run is in flight.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk get-risk-analysis-status --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskGetRiskPolicyStatusUsage() {

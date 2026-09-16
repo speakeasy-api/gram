@@ -241,3 +241,25 @@ SET gram_account_type = 'free',
 FROM previous
 WHERE organization_metadata.id = previous.id
 RETURNING organization_metadata.name, organization_metadata.slug, previous.gram_account_type AS previous_account_type;
+
+-- name: ChangeTrialEndDate :one
+-- Lock before checking lifecycle state, just as ExtendTrial does. Validate the
+-- requested and locked previous ends again after acquiring the lock. A blocker
+-- may roll back without changing the row after its old deadline has passed.
+WITH previous AS (
+    SELECT trials.organization_id, trials.ends_at
+    FROM trials
+    WHERE trials.organization_id = @organization_id
+      AND trials.converted_at IS NULL
+      AND trials.demoted_at IS NULL
+      AND trials.ends_at > clock_timestamp()
+    FOR UPDATE
+)
+UPDATE trials
+SET ends_at = @ends_at::timestamptz,
+    updated_at = clock_timestamp()
+FROM previous
+WHERE trials.organization_id = previous.organization_id
+  AND previous.ends_at > clock_timestamp()
+  AND @ends_at::timestamptz > clock_timestamp()
+RETURNING previous.ends_at AS previous_ends_at, trials.ends_at;

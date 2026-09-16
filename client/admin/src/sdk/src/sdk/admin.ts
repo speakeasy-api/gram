@@ -4,6 +4,7 @@
 
 import { adminBulkUpdateAccountType } from "../funcs/adminBulkUpdateAccountType.js";
 import { adminCancelStripeSubscription } from "../funcs/adminCancelStripeSubscription.js";
+import { adminChangeTrialEndDate } from "../funcs/adminChangeTrialEndDate.js";
 import { adminCreateGlobalIssuer } from "../funcs/adminCreateGlobalIssuer.js";
 import { adminCreateOrganization } from "../funcs/adminCreateOrganization.js";
 import { adminDeleteGlobalIssuer } from "../funcs/adminDeleteGlobalIssuer.js";
@@ -65,6 +66,7 @@ import { AdminStripeCustomer } from "../models/components/adminstripecustomer.js
 import { AdminStripeSubscription } from "../models/components/adminstripesubscription.js";
 import { BulkUpdateAccountTypeRequestBody } from "../models/components/bulkupdateaccounttyperequestbody.js";
 import { CancelStripeSubscriptionRequestBody } from "../models/components/cancelstripesubscriptionrequestbody.js";
+import { ChangeTrialEndDateRequestBody } from "../models/components/changetrialenddaterequestbody.js";
 import { CreateOrganizationRequestBody } from "../models/components/createorganizationrequestbody.js";
 import { CreateRemoteSessionIssuerForm } from "../models/components/createremotesessionissuerform.js";
 import { DisableOrganizationRequestBody } from "../models/components/disableorganizationrequestbody.js";
@@ -810,6 +812,23 @@ export class Admin extends ClientSDK {
   ): Promise<AdminSession> {
     return unwrapAsync(adminGetSession(
       this,
+      options,
+    ));
+  }
+
+  /**
+   * changeTrialEndDate admin
+   *
+   * @remarks
+   * Sets a running trial's end date to a future instant, shortening or extending it without restarting the trial.
+   */
+  async changeTrialEndDate(
+    request: ChangeTrialEndDateRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminOrganization> {
+    return unwrapAsync(adminChangeTrialEndDate(
+      this,
+      request,
       options,
     ));
   }

@@ -9,40 +9,45 @@ import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
+  AiScanTargetGatewayClient,
+  AiScanTargetGatewayClient$inboundSchema,
+} from "./aiscantargetgatewayclient.js";
+import {
   AiScanTargetSignatures,
   AiScanTargetSignatures$inboundSchema,
 } from "./aiscantargetsignatures.js";
 
 /**
- * Target category: harness (an AI coding tool) or local_model (a local model runtime).
+ * Target category: harness (an AI coding tool), assistant (a general-purpose AI assistant or agent), or local_model (an open model run locally).
  */
 export const AiScanTargetCategory = {
   Harness: "harness",
+  Assistant: "assistant",
   LocalModel: "local_model",
 } as const;
 /**
- * Target category: harness (an AI coding tool) or local_model (a local model runtime).
+ * Target category: harness (an AI coding tool), assistant (a general-purpose AI assistant or agent), or local_model (an open model run locally).
  */
 export type AiScanTargetCategory = ClosedEnum<typeof AiScanTargetCategory>;
 
 /**
- * Where the target comes from: default (compiled into Gram) or organization (added by the organization).
+ * Where the target comes from: default (a Speakeasy built-in, whose definition is read-only) or organization (added by the organization, fully editable). Every target listed here is probed for; a built-in leaves the list by being removed from Speakeasy's catalog, an organization target by being deleted.
  */
 export const Origin = {
   Default: "default",
   Organization: "organization",
 } as const;
 /**
- * Where the target comes from: default (compiled into Gram) or organization (added by the organization).
+ * Where the target comes from: default (a Speakeasy built-in, whose definition is read-only) or organization (added by the organization, fully editable). Every target listed here is probed for; a built-in leaves the list by being removed from Speakeasy's catalog, an organization target by being deleted.
  */
 export type Origin = ClosedEnum<typeof Origin>;
 
 /**
- * One Shadow AI scan target in an organization's list: a Speakeasy default, or a target the organization added or customized.
+ * One Shadow AI scan target in an organization's list: a Speakeasy built-in, or a target the organization added.
  */
 export type AiScanTarget = {
   /**
-   * Target category: harness (an AI coding tool) or local_model (a local model runtime).
+   * Target category: harness (an AI coding tool), assistant (a general-purpose AI assistant or agent), or local_model (an open model run locally).
    */
   category: AiScanTargetCategory;
   /**
@@ -50,7 +55,7 @@ export type AiScanTarget = {
    */
   createdAt?: Date | undefined;
   /**
-   * For a default, whether the organization has replaced it with its own row, for example to disable it. Always false for organization targets.
+   * For a built-in, whether the organization has recorded an access decision about it. Always false for organization targets.
    */
   customized: boolean;
   /**
@@ -58,15 +63,15 @@ export type AiScanTarget = {
    */
   displayName: string;
   /**
-   * Whether the organization's agents probe for this target.
+   * How a target detected on a device is recognized again when the same tool calls Gram's MCP gateway. A device signature and a registered OAuth client share no natural join key, so the link is declared here. The three lists are not interchangeable: the first two name credentials Gram verified and can be enforced on, the third names what a client said about itself and is used only to attribute traffic.
    */
-  enabled: boolean;
+  gatewayClient: AiScanTargetGatewayClient;
   /**
    * Stable id agents report and detections key on.
    */
   id: string;
   /**
-   * Where the target comes from: default (compiled into Gram) or organization (added by the organization).
+   * Where the target comes from: default (a Speakeasy built-in, whose definition is read-only) or organization (added by the organization, fully editable). Every target listed here is probed for; a built-in leaves the list by being removed from Speakeasy's catalog, an organization target by being deleted.
    */
   origin: Origin;
   /**
@@ -103,7 +108,7 @@ export const AiScanTarget$inboundSchema: z.ZodMiniType<AiScanTarget, unknown> =
       ),
       customized: z.boolean(),
       display_name: z.string(),
-      enabled: z.boolean(),
+      gateway_client: AiScanTargetGatewayClient$inboundSchema,
       id: z.string(),
       origin: Origin$inboundSchema,
       signatures: AiScanTargetSignatures$inboundSchema,
@@ -116,6 +121,7 @@ export const AiScanTarget$inboundSchema: z.ZodMiniType<AiScanTarget, unknown> =
       return remap$(v, {
         "created_at": "createdAt",
         "display_name": "displayName",
+        "gateway_client": "gatewayClient",
         "updated_at": "updatedAt",
         "version_plist_key": "versionPlistKey",
       });

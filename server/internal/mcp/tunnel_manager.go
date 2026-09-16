@@ -4,7 +4,6 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
-	"time"
 
 	"github.com/google/uuid"
 
@@ -18,8 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/tunnel/route"
 )
-
-const tunnelGatewayDialTimeout = 3 * time.Second
 
 type tunnelManager struct {
 	routes       route.Store
@@ -124,7 +121,7 @@ func (m *tunnelManager) buildProxy(
 // guardianClientOptions builds the shared client options for dialing tunnel
 // gateways.
 func (m *tunnelManager) guardianClientOptions() []guardian.ClientOption {
-	opts := []guardian.ClientOption{guardian.WithDialTimeout(tunnelGatewayDialTimeout)}
+	opts := []guardian.ClientOption{guardian.WithDialTimeout(tunnelrouting.GatewayDialTimeout)}
 	if len(m.gatewayCIDRs) > 0 {
 		opts = append(opts, guardian.WithAllowedCIDRBlocks(m.gatewayCIDRs...))
 	}
