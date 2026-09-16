@@ -54,6 +54,25 @@ export function OktaDirectorySection({
     ]);
   };
 
+  const submitValues = (values: { key: string; value: string }[]) => {
+    submit.mutate(
+      {
+        request: {
+          submitSetupStepRequestBody: { stepKey: DIRECTORY_STEP_KEY, values },
+        },
+      },
+      {
+        onSuccess: (result) => {
+          setFieldOutcomes(result.fieldOutcomes);
+          // The printed values and the evidence rows are both read back from
+          // the step, so re-assigning groups repaints them rather than leaving
+          // the counts from before on screen.
+          void refresh();
+        },
+      },
+    );
+  };
+
   const directoryState = connection?.directoryState ?? "not_started";
   const applicationExists = directoryState !== "not_started";
   const guided = step && !step.portalIntent;
@@ -76,25 +95,22 @@ export function OktaDirectorySection({
             ? errorMessage(submit.error, "Could not set up directory sync")
             : undefined
         }
-        onSubmit={(values) => {
-          submit.mutate(
-            {
-              request: {
-                submitSetupStepRequestBody: {
-                  stepKey: DIRECTORY_STEP_KEY,
-                  values,
-                },
-              },
-            },
-            {
-              onSuccess: (result) => {
-                setFieldOutcomes(result.fieldOutcomes);
-                void refresh();
-              },
-            },
-          );
-        }}
+        onSubmit={submitValues}
         submitLabel="Set up directory sync"
+        secondaryAction={
+          // The server checks each piece and creates only what is missing, so
+          // re-sending is how a group added in Okta after setup gets assigned.
+          // Offered only once the application exists: before that the primary
+          // action is the same request.
+          guided && applicationExists
+            ? {
+                label: submit.isPending ? "Assigning..." : "Assign new groups",
+                note: "Run this after adding a group in Okta.",
+                isPending: submit.isPending,
+                onClick: () => submitValues([]),
+              }
+            : undefined
+        }
         allowSubmitWithoutValues={Boolean(guided && !applicationExists)}
         verifyLabel="Check the directory"
         deepLinkLabel="Open the Provisioning tab in Okta"
