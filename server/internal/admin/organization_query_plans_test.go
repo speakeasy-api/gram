@@ -22,13 +22,18 @@ type organizationPlanCapture struct {
 
 func (c *organizationPlanCapture) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
 	c.sql, c.args = sql, args
-	return c.DBTX.Query(ctx, sql, args...)
+	rows, err := c.DBTX.Query(ctx, sql, args...)
+	if err != nil {
+		return nil, fmt.Errorf("execute captured organization query: %w", err)
+	}
+	return rows, nil
 }
 func (c *organizationPlanCapture) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
 	c.sql, c.args = sql, args
 	return c.DBTX.QueryRow(ctx, sql, args...)
 }
 
+//nolint:paralleltest,tparallel // Subtests share a connection, session planner mode, and mutable SQL capture; they must run sequentially.
 func TestOrganizationQueryPlans(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
@@ -45,15 +50,18 @@ func TestOrganizationQueryPlans(t *testing.T) {
 	conn, err := pool.Acquire(ctx)
 	require.NoError(t, err)
 	defer conn.Release()
+	//nolint:glint // Planner regression requires fresh PostgreSQL statistics, not a fixture query.
 	_, err = conn.Exec(ctx, "ANALYZE organization_metadata; ANALYZE organization_user_relationships")
 	require.NoError(t, err)
 	var version string
+	//nolint:glint // Report the PostgreSQL version that produced these plans.
 	require.NoError(t, conn.QueryRow(ctx, "SHOW server_version").Scan(&version))
 	t.Logf("PostgreSQL %s", version)
 	capture := &organizationPlanCapture{DBTX: conn}
 	queries := repo.New(capture)
 	for _, mode := range []string{"force_custom_plan", "force_generic_plan"} {
 		t.Run(mode, func(t *testing.T) {
+			//nolint:glint // Session-level planner control must apply to the same connection as EXPLAIN.
 			_, err := conn.Exec(ctx, "SET plan_cache_mode = "+mode)
 			require.NoError(t, err)
 			for _, tc := range []struct {
@@ -182,9 +190,12 @@ func organizationMembershipPlanLoops(t *testing.T, conn *pgx.Conn, sql string, a
 		}
 	}
 	var raw []byte
+	//nolint:glint // Explain the actual SQLc prepared statement; a generated fixture cannot express EXPLAIN EXECUTE.
 	err = conn.QueryRow(ctx, "EXPLAIN (ANALYZE, FORMAT JSON) EXECUTE organization_plan("+strings.Join(literals, ",")+")").Scan(&raw)
 	require.NoError(t, err)
-	var plan []struct{ Plan organizationExplainNode }
+	var plan []struct {
+		Plan organizationExplainNode `json:"Plan"`
+	}
 	require.NoError(t, json.Unmarshal(raw, &plan))
 	require.Len(t, plan, 1)
 	return plan[0].Plan.membershipLoops()

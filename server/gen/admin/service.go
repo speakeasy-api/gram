@@ -1036,12 +1036,14 @@ type ListOrganizationsPayload struct {
 	// disabled (disabled_at IS NOT NULL). Applies even to exact ID matches.
 	DisabledStatus *string
 	// Inclusive minimum active member count, from 0 through 9223372036854775807.
-	// JavaScript clients must use a decimal string or bigint above
+	// The generated TypeScript SDK accepts bigint. The handwritten admin client
+	// accepts safe integers or decimal strings; use decimal strings above
 	// Number.MAX_SAFE_INTEGER.
 	MinMembers *int64
 	// Inclusive maximum active member count, from 0 through 9223372036854775807.
-	// Must be at least min_members. JavaScript clients must use a decimal string
-	// or bigint above Number.MAX_SAFE_INTEGER.
+	// Must be at least min_members. The generated TypeScript SDK accepts bigint.
+	// The handwritten admin client accepts safe integers or decimal strings; use
+	// decimal strings above Number.MAX_SAFE_INTEGER.
 	MaxMembers *int64
 	// Inclusive creation date in strict YYYY-MM-DD UTC calendar format. Each date
 	// bound is optional; must not be after created_to.

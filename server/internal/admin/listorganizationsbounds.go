@@ -52,7 +52,7 @@ func listOrganizationsBounds(p *gen.ListOrganizationsPayload) (organizationListB
 		if err != nil || parsed.Format(time.DateOnly) != *date.value {
 			return bounds, oops.E(oops.CodeInvalid, nil, "%s must be a valid YYYY-MM-DD UTC calendar date", date.name)
 		}
-		*date.dest = pgtype.Timestamptz{Time: parsed, Valid: true}
+		*date.dest = pgtype.Timestamptz{Time: parsed, InfinityModifier: pgtype.Finite, Valid: true}
 	}
 	if bounds.createdAtGte.Valid && bounds.createdAtLt.Valid && bounds.createdAtGte.Time.After(bounds.createdAtLt.Time) {
 		return bounds, oops.E(oops.CodeInvalid, nil, "created_from must not be after created_to")

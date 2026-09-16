@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/stretchr/testify/require"
 )
 
@@ -44,7 +45,11 @@ func TestOrganizationQueryFilters(t *testing.T) {
 			seedMembership(t, ctx, conn, f.id, fmt.Sprintf("user_%d", i))
 		}
 		// Deleted relationships must neither display nor satisfy a member bound.
-		_, err := conn.Exec(ctx, `INSERT INTO organization_user_relationships (organization_id, user_id, deleted_at) VALUES ($1, 'deleted_user', now())`, f.id)
+		seedMembership(t, ctx, conn, f.id, "deleted_user")
+		err := testrepo.New(conn).ForceSoftDeleteOrganizationUserRelationship(ctx, testrepo.ForceSoftDeleteOrganizationUserRelationshipParams{
+			OrganizationID: f.id,
+			UserID:         conv.ToPGText("deleted_user"),
+		})
 		require.NoError(t, err)
 	}
 	seedTrial(t, ctx, conn, trialFixture{orgID: "org_filter_c", endsAt: time.Now().Add(30 * 24 * time.Hour)})
@@ -83,6 +88,7 @@ func TestOrganizationQueryFilters(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			p := tc.params
 			if p.DisabledStatus == "" {
 				p.DisabledStatus = "all"
@@ -163,8 +169,8 @@ func TestOrganizationQueryFilters_LegacyCursor(t *testing.T) {
 			seedMembership(t, ctx, conn, id, "user_example")
 		}
 	}
-	min := pgtype.Int8{Int64: 1, Valid: true}
-	p := repo.AdminListOrganizationsParams{DisabledStatus: "active", MinMembers: min, PageLimit: 1}
+	minMembers := pgtype.Int8{Int64: 1, Valid: true}
+	p := repo.AdminListOrganizationsParams{DisabledStatus: "active", MinMembers: minMembers, PageLimit: 1}
 	for _, id := range []string{"org_b", "org_d", ""} {
 		rows, err := queries.AdminListOrganizations(ctx, p)
 		require.NoError(t, err)
@@ -175,7 +181,7 @@ func TestOrganizationQueryFilters_LegacyCursor(t *testing.T) {
 			require.Equal(t, id, rows[0].ID)
 			p.AfterID = conv.ToPGText(id)
 		}
-		count, err := queries.AdminCountOrganizations(ctx, repo.AdminCountOrganizationsParams{DisabledStatus: p.DisabledStatus, MinMembers: min})
+		count, err := queries.AdminCountOrganizations(ctx, repo.AdminCountOrganizationsParams{DisabledStatus: p.DisabledStatus, MinMembers: minMembers})
 		require.NoError(t, err)
 		require.Equal(t, int64(2), count)
 	}

@@ -27,6 +27,9 @@ func adminSeedAction(seed func(context.Context, string, string) error) cli.Actio
 		_, err := fmt.Fprintf(c.App.Writer, "Seeded %d fictional organizations (%d active, %d disabled). Search: %s\n",
 			demoseed.AdminSeedOrganizationCount, demoseed.AdminSeedOrganizationsPerStatus,
 			demoseed.AdminSeedOrganizationsPerStatus, demoseed.AdminSeedSearchName)
-		return err
+		if err != nil {
+			return fmt.Errorf("report admin seed result: %w", err)
+		}
+		return nil
 	}
 }

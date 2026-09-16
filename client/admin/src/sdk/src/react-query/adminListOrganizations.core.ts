@@ -195,8 +195,8 @@ export function queryKeyAdminListOrganizations(
     "listOrganizations",
     {
       ...parameters,
-      minMembers: parameters.minMembers?.toString(),
-      maxMembers: parameters.maxMembers?.toString(),
+      ...(parameters.minMembers === undefined ? {} : { minMembers: parameters.minMembers.toString() }),
+      ...(parameters.maxMembers === undefined ? {} : { maxMembers: parameters.maxMembers.toString() }),
     },
   ];
 }
@@ -226,8 +226,8 @@ export function queryKeyAdminListOrganizationsInfinite(
     "infinite",
     {
       ...parameters,
-      minMembers: parameters.minMembers?.toString(),
-      maxMembers: parameters.maxMembers?.toString(),
+      ...(parameters.minMembers === undefined ? {} : { minMembers: parameters.minMembers.toString() }),
+      ...(parameters.maxMembers === undefined ? {} : { maxMembers: parameters.maxMembers.toString() }),
     },
   ];
 }

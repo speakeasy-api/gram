@@ -32,7 +32,7 @@ it("opens directly on Max and calls focus restoration on cancel", async () => {
 });
 
 it("opens directly on a custom endpoint and clearing an invalid bound recovers", async () => {
-  const onApply = vi.fn();
+  const onApply = vi.fn<() => void>();
   render(
     <FilterSheet
       value={{
@@ -42,8 +42,8 @@ it("opens directly on a custom endpoint and clearing an invalid bound recovers",
       }}
       openGroup="createdTo"
       onApply={onApply}
-      onOpenChange={vi.fn()}
-      onReturnFocus={vi.fn()}
+      onOpenChange={vi.fn<() => void>()}
+      onReturnFocus={vi.fn<() => void>()}
     />,
   );
   const to = screen.getByRole("textbox", { name: "To (UTC)" });

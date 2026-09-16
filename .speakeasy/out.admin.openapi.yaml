@@ -2506,19 +2506,19 @@ paths:
               - disabled
             type: string
         - allowEmptyValue: true
-          description: Inclusive minimum active member count, from 0 through 9223372036854775807. JavaScript clients must use a decimal string or bigint above Number.MAX_SAFE_INTEGER.
+          description: Inclusive minimum active member count, from 0 through 9223372036854775807. The generated TypeScript SDK accepts bigint. The handwritten admin client accepts safe integers or decimal strings; use decimal strings above Number.MAX_SAFE_INTEGER.
           in: query
           name: min_members
           schema:
-            description: Inclusive minimum active member count, from 0 through 9223372036854775807. JavaScript clients must use a decimal string or bigint above Number.MAX_SAFE_INTEGER.
+            description: Inclusive minimum active member count, from 0 through 9223372036854775807. The generated TypeScript SDK accepts bigint. The handwritten admin client accepts safe integers or decimal strings; use decimal strings above Number.MAX_SAFE_INTEGER.
             format: bigint
             type: string
         - allowEmptyValue: true
-          description: Inclusive maximum active member count, from 0 through 9223372036854775807. Must be at least min_members. JavaScript clients must use a decimal string or bigint above Number.MAX_SAFE_INTEGER.
+          description: Inclusive maximum active member count, from 0 through 9223372036854775807. Must be at least min_members. The generated TypeScript SDK accepts bigint. The handwritten admin client accepts safe integers or decimal strings; use decimal strings above Number.MAX_SAFE_INTEGER.
           in: query
           name: max_members
           schema:
-            description: Inclusive maximum active member count, from 0 through 9223372036854775807. Must be at least min_members. JavaScript clients must use a decimal string or bigint above Number.MAX_SAFE_INTEGER.
+            description: Inclusive maximum active member count, from 0 through 9223372036854775807. Must be at least min_members. The generated TypeScript SDK accepts bigint. The handwritten admin client accepts safe integers or decimal strings; use decimal strings above Number.MAX_SAFE_INTEGER.
             format: bigint
             type: string
         - allowEmptyValue: true

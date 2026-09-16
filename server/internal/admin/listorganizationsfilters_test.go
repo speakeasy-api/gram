@@ -252,7 +252,6 @@ func TestListOrganizations_SetFilters(t *testing.T) {
 		{
 			name:    "an unknown disabled status is rejected",
 			payload: &gen.ListOrganizationsPayload{DisabledStatus: new("archived")},
-			want:    nil,
 		},
 	}
 

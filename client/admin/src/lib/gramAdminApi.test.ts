@@ -1,3 +1,7 @@
+import {
+  invalidateAdminListOrganizations,
+  invalidateAllAdminListOrganizations,
+} from "@gram/admin-client/react-query/adminListOrganizations";
 import { QueryClient } from "@tanstack/react-query";
 import {
   queryKeyAdminListOrganizations,
@@ -687,7 +691,9 @@ describe("generated organization list query keys", () => {
         const keys = bounds.map((bound) =>
           factory({ minMembers: bound, maxMembers: bound }),
         );
-        keys.forEach((key, i) => client.setQueryData(key, { value: i }));
+        keys.forEach((key, i) => {
+          client.setQueryData(key, { value: i });
+        });
         expect(client.getQueryCache().getAll()).toHaveLength(bounds.length);
         for (const [i, bound] of bounds.entries()) {
           const key = factory({ minMembers: bound, maxMembers: bound });
@@ -705,6 +711,71 @@ describe("generated organization list query keys", () => {
           minMembers: 0n,
         });
         expect(JSON.stringify(normal)).not.toBe(JSON.stringify(infinite));
+      } finally {
+        client.clear();
+      }
+    },
+  );
+});
+
+describe("generated organization invalidation helpers", () => {
+  it.each([0n, 9223372036854775807n])(
+    "invalidates matching normal and infinite bounds %s",
+    async (bound) => {
+      const client = new QueryClient();
+      try {
+        const factories = [
+          queryKeyAdminListOrganizations,
+          queryKeyAdminListOrganizationsInfinite,
+        ];
+        const matching = factories.map((factory) =>
+          factory({
+            minMembers: bound,
+            maxMembers: bound,
+            q: "match",
+            page: 2,
+          }),
+        );
+        const otherBound = bound === 0n ? 9223372036854775807n : 0n;
+        const unrelated = factories.flatMap((factory) => [
+          factory({ minMembers: bound, maxMembers: bound, q: "other" }),
+          factory({
+            minMembers: otherBound,
+            maxMembers: otherBound,
+            q: "match",
+          }),
+        ]);
+        for (const key of [...matching, ...unrelated])
+          client.setQueryData(key, {});
+        // Query filters must still be honored: these caches have no observers.
+        await invalidateAdminListOrganizations(
+          client,
+          [{ minMembers: bound, maxMembers: bound, q: "match" }],
+          { type: "active", refetchType: "none" },
+        );
+        for (const key of matching)
+          expect(client.getQueryState(key)?.isInvalidated).toBe(false);
+        await invalidateAdminListOrganizations(
+          client,
+          [{ minMembers: bound, maxMembers: bound, q: "match" }],
+          { refetchType: "none" },
+        );
+        for (const key of matching)
+          expect(client.getQueryState(key)?.isInvalidated).toBe(true);
+        for (const key of unrelated)
+          expect(client.getQueryState(key)?.isInvalidated).toBe(false);
+        await invalidateAdminListOrganizations(client, [{}], {
+          refetchType: "none",
+        });
+        for (const key of unrelated)
+          expect(client.getQueryState(key)?.isInvalidated).toBe(true);
+        for (const key of [...matching, ...unrelated])
+          client.setQueryData(key, {});
+        await invalidateAllAdminListOrganizations(client, {
+          refetchType: "none",
+        });
+        for (const key of [...matching, ...unrelated])
+          expect(client.getQueryState(key)?.isInvalidated).toBe(true);
       } finally {
         client.clear();
       }

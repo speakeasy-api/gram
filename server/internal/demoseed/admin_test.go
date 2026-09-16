@@ -8,6 +8,7 @@ import (
 )
 
 func TestAdminSeedGuard(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name, env, url string
 		valid          bool
@@ -25,6 +26,7 @@ func TestAdminSeedGuard(t *testing.T) {
 		{"remote fallback", "local", "host=127.0.0.1,db.example.com user=gram dbname=gram", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			config, err := pgxpool.ParseConfig(tc.url)
 			require.NoError(t, err)
 			err = validateAdminSeedTarget(tc.env, config.ConnConfig)
@@ -38,6 +40,7 @@ func TestAdminSeedGuard(t *testing.T) {
 }
 
 func TestAdminSeedFixtures(t *testing.T) {
+	t.Parallel()
 	now := time.Date(2026, 7, 15, 13, 20, 0, 0, time.FixedZone("offset", 3600))
 	fixtures := adminSeedFixtures(now)
 	require.Len(t, fixtures, 120)
@@ -70,6 +73,7 @@ func TestAdminSeedFixtures(t *testing.T) {
 // Expectations deliberately name UTC dates rather than reuse the generator's
 // offset arithmetic. Inclusive N-day presets begin N-1 calendar days ago.
 func TestAdminSeedCalendarBoundaries(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name, invocation                          string
 		today, seven, fourteen, thirty, customEnd string
@@ -79,6 +83,7 @@ func TestAdminSeedCalendarBoundaries(t *testing.T) {
 		{"timezone crosses UTC date", "2026-07-15T00:30:00+02:00", "2026-07-14", "2026-07-08", "2026-07-01", "2026-06-15", "2026-07-12"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			now, err := time.Parse(time.RFC3339, tc.invocation)
 			require.NoError(t, err)
 			dates := [2]map[string]bool{{}, {}}

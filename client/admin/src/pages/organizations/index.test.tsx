@@ -256,8 +256,7 @@ function currentSearch(router: AnyRouter): string {
   return decodeURIComponent(router.state.location.searchStr);
 }
 
-// The three triggers above the table. Found by the state a screen reader is
-// told, because the visible label is the group's name and a bare count.
+// The single Filters trigger above the table opens every filter group.
 function filterTrigger(_group?: string): HTMLElement {
   return screen.getByRole("button", { name: "Filters" });
 }
@@ -4965,12 +4964,10 @@ describe("created date filters", () => {
       fireEvent.click(screen.getByRole("button", { name: "Next" }));
       await waitFor(() => expect(lastListParams().page).toBe(2));
       const calls = mocks.listOrganizations.mock.calls.length;
-      await act(async () => {
-        await router.navigate({
-          to: "/organizations",
-          search: (prev) => ({ ...prev, createdPreset: undefined }),
-        });
-      });
+      await openFilters("Created date");
+      await chooseCreated("Custom");
+      fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
       expect(screen.queryByText("Created: Today")).toBeNull();
       expect(screen.getByText("Created: From ≥ 2025-01-02 UTC")).toBeTruthy();
       expect(lastListParams().page).toBe(2);

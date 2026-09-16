@@ -1,7 +1,7 @@
 diff --git a/src/react-query/adminListOrganizations.core.ts b/src/react-query/adminListOrganizations.core.ts
 --- a/src/react-query/adminListOrganizations.core.ts
 +++ b/src/react-query/adminListOrganizations.core.ts
-@@ -194,7 +194,16 @@
+@@ -189,7 +189,16 @@
      page?: number | undefined;
    },
  ): QueryKey {
@@ -12,22 +12,22 @@ diff --git a/src/react-query/adminListOrganizations.core.ts b/src/react-query/ad
 +    "listOrganizations",
 +    {
 +      ...parameters,
-+      minMembers: parameters.minMembers?.toString(),
-+      maxMembers: parameters.maxMembers?.toString(),
++      ...(parameters.minMembers === undefined ? {} : { minMembers: parameters.minMembers.toString() }),
++      ...(parameters.maxMembers === undefined ? {} : { maxMembers: parameters.maxMembers.toString() }),
 +    },
 +  ];
  }
  
  export function queryKeyAdminListOrganizationsInfinite(
-@@ -222,6 +231,10 @@
+@@ -215,6 +224,10 @@
      "admin",
      "listOrganizations",
      "infinite",
 -    parameters,
 +    {
 +      ...parameters,
-+      minMembers: parameters.minMembers?.toString(),
-+      maxMembers: parameters.maxMembers?.toString(),
++      ...(parameters.minMembers === undefined ? {} : { minMembers: parameters.minMembers.toString() }),
++      ...(parameters.maxMembers === undefined ? {} : { maxMembers: parameters.maxMembers.toString() }),
 +    },
    ];
  }

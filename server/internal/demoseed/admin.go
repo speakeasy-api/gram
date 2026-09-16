@@ -107,9 +107,46 @@ func runAdminSeed(ctx context.Context, db *pgxpool.Pool, now time.Time) error {
 	defer func() { _ = tx.Rollback(ctx) }()
 	// Serialize concurrent invocations; all fixture writes commit atomically.
 	if _, err = tx.Exec(ctx, "SELECT pg_advisory_xact_lock(890001)"); err != nil {
-		return err
+		return fmt.Errorf("serialize admin seed: %w", err)
 	}
-	for i, fixture := range adminSeedFixtures(now) {
+	// The advisory lock only serializes seeders. Lock the local-only fixture
+	// tables against other writers too, including inserts into currently absent
+	// reserved IDs, so ownership cannot change between validation and upsert.
+	if _, err := tx.Exec(ctx, `LOCK TABLE public.organization_metadata, public.users,
+ public.organization_user_relationships IN SHARE ROW EXCLUSIVE MODE`); err != nil {
+		return fmt.Errorf("lock admin seed identities: %w", err)
+	}
+	fixtures := adminSeedFixtures(now)
+	// Validate every existing identity before the first write. Names, dates,
+	// disabled/deleted states are refreshed deliberately; stable fictional slugs
+	// and emails, no external identity, and no unrelated memberships mark ownership.
+	for i, fixture := range fixtures {
+		var collision bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS (
+ SELECT 1 FROM public.organization_metadata WHERE id=$1
+ AND (slug<>$2 OR workos_id IS NOT NULL))`, fixture.ID, fixture.Slug).Scan(&collision); err != nil {
+			return fmt.Errorf("validate fictional organization identity: %w", err)
+		}
+		if collision {
+			return errors.New("admin seed organization identity collision")
+		}
+		userIDs := make([]string, fixture.Members)
+		for member := range userIDs {
+			userIDs[member] = fmt.Sprintf("user_local_admin_fixture_%02d_%03d", i+1, member+1)
+		}
+		if err := tx.QueryRow(ctx, `SELECT EXISTS (
+ SELECT 1 FROM public.users WHERE id=ANY($1::text[])
+ AND (email<>id||'@admin-seed.invalid' OR workos_id IS NOT NULL)
+ UNION ALL
+ SELECT 1 FROM public.organization_user_relationships
+ WHERE user_id=ANY($1::text[]) AND organization_id<>$2)`, userIDs, fixture.ID).Scan(&collision); err != nil {
+			return fmt.Errorf("validate fictional member identity: %w", err)
+		}
+		if collision {
+			return errors.New("admin seed member identity collision")
+		}
+	}
+	for i, fixture := range fixtures {
 		var disabledAt *time.Time
 		if fixture.Disabled {
 			disabledAt = &now

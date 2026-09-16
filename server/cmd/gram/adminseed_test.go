@@ -11,12 +11,14 @@ import (
 )
 
 func TestAdminSeedCommandOutput(t *testing.T) {
+	t.Parallel()
 	for _, fails := range []bool{false, true} {
 		name := "success"
 		if fails {
 			name = "failure"
 		}
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			var output bytes.Buffer
 			seedError := errors.New("seed failed")
 			command := newAdminSeedCommand()
@@ -40,4 +42,20 @@ func TestAdminSeedCommandOutput(t *testing.T) {
 			}
 		})
 	}
+}
+
+// adminSeedFailingWriter exercises the CLI's output error path after seeding.
+type adminSeedFailingWriter struct{ err error }
+
+func (w adminSeedFailingWriter) Write([]byte) (int, error) { return 0, w.err }
+
+func TestAdminSeedCommandOutputError(t *testing.T) {
+	t.Parallel()
+	outputError := errors.New("output unavailable")
+	command := newAdminSeedCommand()
+	command.Action = adminSeedAction(func(context.Context, string, string) error { return nil })
+	app := &cli.App{Writer: adminSeedFailingWriter{err: outputError}, Commands: []*cli.Command{command}}
+	err := app.Run([]string{"gram", "admin-seed", "--environment=local", "--database-url=postgres://gram@127.0.0.1/gram"})
+	require.ErrorIs(t, err, outputError)
+	require.ErrorContains(t, err, "report admin seed result")
 }

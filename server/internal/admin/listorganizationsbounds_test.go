@@ -27,6 +27,7 @@ func TestListOrganizationsBoundsHTTPDecoder(t *testing.T) {
 		"disabled_status=invalid",
 	} {
 		t.Run(query, func(t *testing.T) {
+			t.Parallel()
 			req := httptest.NewRequest("GET", "/admin/organizations.list?"+query, nil)
 			_, err := srv.DecodeListOrganizationsRequest(goahttp.NewMuxer(), goahttp.RequestDecoder)(req)
 			require.Error(t, err)
@@ -79,6 +80,7 @@ func TestListOrganizationsBoundsDirectValidation(t *testing.T) {
 		{gen.ListOrganizationsPayload{CreatedFrom: new("2025-01-02"), CreatedTo: new("2025-01-01")}, "created_from"},
 	} {
 		t.Run(tc.field, func(t *testing.T) {
+			t.Parallel()
 			result, err := (&Service{}).ListOrganizations(context.Background(), &tc.payload)
 			require.Nil(t, result)
 			require.ErrorContains(t, err, tc.field)
@@ -96,6 +98,7 @@ func TestListOrganizationsBoundsCalendar(t *testing.T) {
 		{"9999-12-31", "10000-01-01T00:00:00Z"},
 	} {
 		t.Run(tc.day, func(t *testing.T) {
+			t.Parallel()
 			bounds, err := listOrganizationsBounds(&gen.ListOrganizationsPayload{CreatedFrom: &tc.day, CreatedTo: &tc.day})
 			require.NoError(t, err)
 			require.True(t, bounds.createdAtGte.Valid)
@@ -159,6 +162,7 @@ func TestListOrganizationsBoundsService(t *testing.T) {
 		{"empty", gen.ListOrganizationsPayload{MinMembers: new(int64(4))}, []string{}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			p := tc.p
 			if p.Q == nil {
 				p.Q = new("org_api_bounds")
@@ -215,12 +219,16 @@ func TestListOrganizationsBoundsHTTPStatus(t *testing.T) {
 		{"unrelated optional query still accepts empty", "?q=", 2},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			req := httptest.NewRequest("GET", "/admin/organizations.list"+tc.query, nil)
 			req.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: sessionID})
 			rec := httptest.NewRecorder()
 			handler.ServeHTTP(rec, req)
 			require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
-			var body gen.AdminListOrganizationsResult
+			var body struct {
+				Total         int64             `json:"total"`
+				Organizations []json.RawMessage `json:"organizations"`
+			}
 			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
 			require.Equal(t, tc.total, body.Total)
 			require.Len(t, body.Organizations, int(tc.total))
@@ -228,6 +236,7 @@ func TestListOrganizationsBoundsHTTPStatus(t *testing.T) {
 	}
 	for _, q := range []string{"min_members=-1", "max_members=0.5", "min_members=9223372036854775808", "min_members=2&max_members=1", "created_from=2025-02-29", "created_to=2025-1-01", "created_from=2025-01-02&created_to=2025-01-01", "disabled_status=invalid", "disabled_status=", "disabled_status"} {
 		t.Run(q, func(t *testing.T) {
+			t.Parallel()
 			req := httptest.NewRequest("GET", "/admin/organizations.list?"+q, nil)
 			req.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: sessionID})
 			rec := httptest.NewRecorder()

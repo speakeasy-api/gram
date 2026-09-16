@@ -48,11 +48,11 @@ export type AdminListOrganizationsRequest = {
    */
   disabledStatus?: DisabledStatus | undefined;
   /**
-   * Inclusive minimum active member count, from 0 through 9223372036854775807. JavaScript clients must use a decimal string or bigint above Number.MAX_SAFE_INTEGER.
+   * Inclusive minimum active member count, from 0 through 9223372036854775807. The generated TypeScript SDK accepts bigint. The handwritten admin client accepts safe integers or decimal strings; use decimal strings above Number.MAX_SAFE_INTEGER.
    */
   minMembers?: bigint | undefined;
   /**
-   * Inclusive maximum active member count, from 0 through 9223372036854775807. Must be at least min_members. JavaScript clients must use a decimal string or bigint above Number.MAX_SAFE_INTEGER.
+   * Inclusive maximum active member count, from 0 through 9223372036854775807. Must be at least min_members. The generated TypeScript SDK accepts bigint. The handwritten admin client accepts safe integers or decimal strings; use decimal strings above Number.MAX_SAFE_INTEGER.
    */
   maxMembers?: bigint | undefined;
   /**

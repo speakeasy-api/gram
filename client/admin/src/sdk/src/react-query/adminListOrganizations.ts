@@ -258,15 +258,17 @@ export function invalidateAdminListOrganizations(
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
-  return client.invalidateQueries({
+  const parameters = queryKeyBase[0];
+  const queryKeys = parameters === undefined
+    ? [["@gram/admin-client", "admin", "listOrganizations"]]
+    : [
+      queryKeyAdminListOrganizations(parameters),
+      queryKeyAdminListOrganizationsInfinite(parameters),
+    ];
+  return Promise.all(queryKeys.map((queryKey) => client.invalidateQueries({
     ...filters,
-    queryKey: [
-      "@gram/admin-client",
-      "admin",
-      "listOrganizations",
-      ...queryKeyBase,
-    ],
-  });
+    queryKey,
+  }))).then(() => {});
 }
 
 export function invalidateAllAdminListOrganizations(
