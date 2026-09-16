@@ -13,8 +13,8 @@ logs. Use only synthetic values and placeholders such as `<ORG_ID>`.
 Stripe test clocks advance Stripe objects only. They do not advance Gram's
 Postgres clock, Temporal clock, worker schedules, or activity `Now` inputs.
 The sandbox portion below validates real Stripe subscription and invoice state.
-The deterministic Gram tests use explicit timestamps to validate the +48-hour
-and +72-hour state transitions without waiting three days.
+The deterministic Gram tests use explicit timestamps to validate billing-period
+and invoice-allocation transitions without waiting for wall-clock time.
 
 Stripe advances a clock asynchronously. After every advance, poll until its
 status is `ready` before inspecting invoices or subscriptions. Test-clock
@@ -244,35 +244,35 @@ invoke the real activities and webhook handler with explicit timestamps, and
 use fake remote boundaries so CI never needs Stripe credentials.
 
 ```sh
-mise exec -- go test ./server/internal/usage \
+mise run test:server ./internal/usage \
   -run 'TestM3SubscriptionLossRecheckoutAndStaleReplayLifecycle|TestStripeCheckout' -count=1
 
-mise exec -- go test ./server/internal/background/activities \
-  -run 'TestM3FreezeObservationAndCarrySettlementLifecycle|TestReportTUMUsageToStripe' -count=1
+mise run test:server ./internal/background/activities \
+  -run 'TestSettleStripeInvoiceAllocations' -count=1
+
+mise run test:server ./internal/metering \
+  -run 'TestMeterReadingStripeExporter' -count=1
 ```
 
 Confirm the test output covers all of these checkpoints:
 
 - paid periods start at midnight UTC and exclude the free stub;
-- durable TUM intents use signed database-derived deltas and stable IDs;
-- the +48-hour TUM baseline freezes once, the closed-period event timestamp is
-  `cycle_end - 1 second`, and a post-freeze difference becomes one signed
-  carry-forward allocation after +72 hours;
+- streaming TUM readings retain their reading ID, value, and occurrence time
+  when exported to the configured Stripe meter;
 - only in-period Other inference spend is allocated; Security inference and
   pre-period spend are excluded;
 - exact decimal sums are converted to minor units once per cumulative period;
 - positive corrections become a later invoice item and negative corrections
   become a credit note, without duplicate delivery after replay;
-- ambiguous meter and allocation writes stay on the same idempotency identity
-  inside 24 hours and reconcile before a replacement identity is used.
+- ambiguous allocation writes stay on the same idempotency identity inside
+  24 hours and reconcile before a replacement identity is used.
 
 For the sandbox run, compare the same durable records to Stripe by exact object
 ID. Do not use unscoped list endpoints.
 
 ```sh
 psql "$GRAM_DATABASE_URL" -v org_id="$M3_ORG_ID" <<'SQL'
-SELECT cycle_start, cycle_end, tum_tokens, billed_tum_tokens,
-       billed_frozen_at, finalized_at
+SELECT cycle_start, cycle_end, tum_tokens, finalized_at
 FROM billing_cycle_usage
 WHERE organization_id = :'org_id'
 ORDER BY cycle_start;
@@ -282,21 +282,20 @@ SELECT source_kind, source_key, seq, source_snapshot_usd, amount_usd,
 FROM stripe_invoice_allocations
 WHERE organization_id = :'org_id'
 ORDER BY source_period_start, source_key, seq;
-
-SELECT stripe_identifier, delta_tokens, event_timestamp,
-       delivery_state, confirmed_at
-FROM stripe_meter_reports
-WHERE organization_id = :'org_id'
-ORDER BY event_timestamp, seq;
 SQL
 ```
 
-The sum of confirmed TUM deltas must equal the frozen billed baseline for the
-closed period. Initial OpenRouter allocation cents plus signed carry cents must
+TUM exports use Pub/Sub meter readings, not `stripe_meter_reports` or frozen
+billing-cycle baselines. Existing TUM carry allocations remain eligible for
+settlement. Initial OpenRouter allocation cents plus signed carry cents must
 equal the exact final cumulative Other inference spend cents. Every confirmed
-external ID
-must resolve to the same customer, subscription, invoice period, currency, and
-amount in Stripe.
+allocation external ID must resolve to the same customer, invoice period,
+currency, and amount in Stripe.
+
+Enable Stripe exports in `gram streams` with
+`GRAM_STRIPE_METER_EVENT_EXPORT_ENABLED=true` and configure
+`STRIPE_METER_EVENT_NAME` for TUM. This export switch controls all streaming
+meters; TUM has no separate streaming toggle.
 
 ## Validate subscription loss and recovery
 
