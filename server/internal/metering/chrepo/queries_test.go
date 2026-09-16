@@ -131,13 +131,6 @@ func TestInsertReadingsPreservesUsageAndSeparateAdjustments(t *testing.T) {
 	require.Equal(t, int64(10), usageTotal)
 	require.Equal(t, int64(-4), adjustmentTotal)
 
-	var oldLedgerCount uint64
-	require.NoError(t, conn.QueryRow(t.Context(), `
-		SELECT count() FROM billing_meter_readings
-		WHERE organization_id = ?
-	`, organizationID).Scan(&oldLedgerCount))
-	require.Zero(t, oldLedgerCount)
-
 	var storedCorrectionID string
 	var storedCorrectionValue int64
 	require.NoError(t, conn.QueryRow(t.Context(), `

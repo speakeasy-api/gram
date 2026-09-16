@@ -353,16 +353,14 @@ type AwsKmsKey struct {
 }
 
 type BillingCycleUsage struct {
-	ID              uuid.UUID
-	OrganizationID  pgtype.Text
-	CycleStart      pgtype.Timestamptz
-	CycleEnd        pgtype.Timestamptz
-	TumTokens       int64
-	BilledTumTokens pgtype.Int8
-	BilledFrozenAt  pgtype.Timestamptz
-	FinalizedAt     pgtype.Timestamptz
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
+	ID             uuid.UUID
+	OrganizationID pgtype.Text
+	CycleStart     pgtype.Timestamptz
+	CycleEnd       pgtype.Timestamptz
+	TumTokens      int64
+	FinalizedAt    pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
 }
 
 type BillingMetadatum struct {
@@ -2856,45 +2854,19 @@ type StripeInvoice struct {
 }
 
 type StripeInvoiceAllocation struct {
-	ID                      uuid.UUID
-	OrganizationID          pgtype.Text
-	SourceKind              string
-	SourceKey               string
-	Seq                     int32
-	SourceDay               pgtype.Date
-	SourcePeriodStart       pgtype.Timestamptz
-	SourcePeriodEnd         pgtype.Timestamptz
-	SourceSnapshotUsd       pgtype.Numeric
-	DeltaTokens             pgtype.Int8
-	OriginalTumUnitPriceUsd pgtype.Numeric
-	AmountUsd               pgtype.Numeric
-	OriginalInvoiceID       pgtype.Text
-	DestinationInvoiceID    pgtype.Text
-	StripeInvoiceItemID     pgtype.Text
-	StripeCreditNoteID      pgtype.Text
-	IdempotencyKey          string
-	DeliveryState           string
-	FirstAttemptedAt        pgtype.Timestamptz
-	LastAttemptedAt         pgtype.Timestamptz
-	ConfirmedAt             pgtype.Timestamptz
-	AmbiguousAt             pgtype.Timestamptz
-	ReconciledAt            pgtype.Timestamptz
-	CreatedAt               pgtype.Timestamptz
-	UpdatedAt               pgtype.Timestamptz
-}
-
-type StripeMeterReport struct {
 	ID                   uuid.UUID
 	OrganizationID       pgtype.Text
-	BillingCycleUsageID  uuid.NullUUID
-	CycleStart           pgtype.Timestamptz
-	CycleEnd             pgtype.Timestamptz
+	SourceKind           string
+	SourceKey            string
 	Seq                  int32
-	StripeCustomerID     pgtype.Text
-	StripeMeterEventName pgtype.Text
-	StripeIdentifier     pgtype.Text
-	DeltaTokens          int64
-	EventTimestamp       pgtype.Timestamptz
+	SourceDay            pgtype.Date
+	SourceSnapshotUsd    pgtype.Numeric
+	AmountUsd            pgtype.Numeric
+	OriginalInvoiceID    pgtype.Text
+	DestinationInvoiceID pgtype.Text
+	StripeInvoiceItemID  pgtype.Text
+	StripeCreditNoteID   pgtype.Text
+	IdempotencyKey       string
 	DeliveryState        string
 	FirstAttemptedAt     pgtype.Timestamptz
 	LastAttemptedAt      pgtype.Timestamptz
