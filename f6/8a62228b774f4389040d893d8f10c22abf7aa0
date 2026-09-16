@@ -1,0 +1,28 @@
+server/internal/platformmcp/skills.go
+  h_9630b74bdac540 67-69,562-714,883-943
+  h_9630b74bdac540 944-945
+server/internal/platformmcp/tool_skills.go
+  h_9630b74bdac540 33-53,122-151,159,169,179,210-215
+  h_9630b74bdac540 152-154
+server/internal/platformmcp/descriptor_test.go
+  h_9630b74bdac540 225-226,231
+server/internal/platformmcp/skills_test.go
+  h_9630b74bdac540 43-45,102-120,383-419
+  h_9630b74bdac540 32-42,46,121-122
+server/internal/platformmcp/feedback.go
+  h_9630b74bdac540 415-424
+server/internal/platformmcp/skills_integration_test.go
+  h_9630b74bdac540 212,257,259-276,321,376-384,389,436
+  h_9630b74bdac540 258,319-320
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f68a62228b774f4389040d893d8f10c22abf7aa0",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
