@@ -23,6 +23,11 @@ type Record struct {
 	UserID            string
 	Email             string
 	OriginatingClient string
+	// ProvenanceToolCallIDs are the MCP tool-call ids already recorded as
+	// shadow-MCP provenance for this call. LiteLLM runs the response guardrail
+	// repeatedly for a streamed call and again on retries, so the response
+	// path consults this list before writing another row for the same call.
+	ProvenanceToolCallIDs []string
 }
 
 type Cache struct {
@@ -44,13 +49,14 @@ func (c *Cache) Get(ctx context.Context, projectID uuid.UUID, callID string) (Re
 	var record Record
 	if err := c.cache.Get(ctx, key(projectID, callID), &record); err != nil {
 		return Record{
-			ProjectID:         uuid.Nil,
-			CallID:            "",
-			TraceID:           "",
-			SessionID:         "",
-			UserID:            "",
-			Email:             "",
-			OriginatingClient: "",
+			ProjectID:             uuid.Nil,
+			CallID:                "",
+			TraceID:               "",
+			SessionID:             "",
+			UserID:                "",
+			Email:                 "",
+			OriginatingClient:     "",
+			ProvenanceToolCallIDs: nil,
 		}, fmt.Errorf("get LiteLLM call: %w", err)
 	}
 	return record, nil

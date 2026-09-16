@@ -23,6 +23,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/hooks"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -1155,6 +1156,21 @@ func (s *Service) traceLogParams(ctx context.Context, request *otlpExportRequest
 					invalidIDs++
 				}
 				s.traces.recordInvalidIdentifiers(ctx, invalidIDs)
+				// The inventory reads one server per trace out of trace_summaries,
+				// the way device hooks record one trace per tool call. An agent
+				// that propagates traceparent puts every gateway call of a
+				// session in one OTLP trace, which would collapse calls to
+				// different servers onto whichever one the summary kept. Re-key
+				// MCP gateway spans onto a per-call trace derived from the span,
+				// keeping the OTLP trace id on the row for correlation.
+				if len(mcpAttributes) > 0 {
+					otlpTraceID, _ := spanAttributes[attr.TraceIDKey].(string)
+					otlpSpanID, _ := spanAttributes[attr.SpanIDKey].(string)
+					if otlpTraceID != "" && otlpSpanID != "" {
+						spanAttributes[attr.OTELTraceIDKey] = otlpTraceID
+						spanAttributes[attr.TraceIDKey] = hooks.HashToolCallIDToTraceID(otlpTraceID + ":" + otlpSpanID)
+					}
+				}
 
 				spanName, spanNameChanged, keepSpanName := boundOTLPAttributeValue(span.Name)
 				if spanNameChanged {

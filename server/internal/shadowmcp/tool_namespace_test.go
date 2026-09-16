@@ -41,6 +41,16 @@ func TestIsToolNamespaceURL(t *testing.T) {
 	require.False(t, shadowmcp.IsToolNamespaceURL("https://mcp.example.com/mcp"))
 	require.False(t, shadowmcp.IsToolNamespaceURL("npx mcp-remote https://app.getgram.ai/mcp/x"))
 	require.False(t, shadowmcp.IsToolNamespaceURL(""))
+
+	// Only what ToolNamespaceURL could have minted counts: the prefix alone
+	// must not admit a malformed value into the observe-only inventory path.
+	require.False(t, shadowmcp.IsToolNamespaceURL("mcp-tool://"))
+	require.False(t, shadowmcp.IsToolNamespaceURL("mcp-tool://github/path"))
+	require.False(t, shadowmcp.IsToolNamespaceURL("mcp-tool://github?x=1"))
+	require.False(t, shadowmcp.IsToolNamespaceURL("mcp-tool://github#frag"))
+	require.False(t, shadowmcp.IsToolNamespaceURL("mcp-tool://github:8080"))
+	require.False(t, shadowmcp.IsToolNamespaceURL("mcp-tool://user@github"))
+	require.False(t, shadowmcp.IsToolNamespaceURL("mcp-toolkit://github"))
 }
 
 func TestToolNamespaceServer(t *testing.T) {
@@ -50,6 +60,7 @@ func TestToolNamespaceServer(t *testing.T) {
 	require.Equal(t, "github", shadowmcp.ToolNamespaceServer("mcp-tool://GitHub"))
 	require.Empty(t, shadowmcp.ToolNamespaceServer("https://github.com"))
 	require.Empty(t, shadowmcp.ToolNamespaceServer(""))
+	require.Empty(t, shadowmcp.ToolNamespaceServer("mcp-tool://github/path"))
 }
 
 // The identity must survive every URL-keyed inventory layer unchanged and must

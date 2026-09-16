@@ -85,8 +85,11 @@ func mcpToolCallProvenanceFrom(toolCalls []any) []mcpToolCallProvenance {
 		if !ok {
 			continue
 		}
-		id := strings.TrimSpace(anyString(call["id"]))
-		if id == "" {
+		// The id is kept byte-for-byte: the hooks path persists the sender's
+		// tool-call id verbatim and the provenance join hashes that exact
+		// value, so trimming here would split a call across two trace ids.
+		id := anyString(call["id"])
+		if strings.TrimSpace(id) == "" {
 			continue
 		}
 		fn, _ := call["function"].(map[string]any)
@@ -108,6 +111,52 @@ func mcpToolCallProvenanceFrom(toolCalls []any) []mcpToolCallProvenance {
 	}
 	if len(out) == 0 {
 		return nil
+	}
+	return out
+}
+
+// withoutRecordedProvenance drops the tool calls whose ids this call has
+// already recorded, so a streamed or retried response guardrail does not write
+// a second row for the same call. Order is preserved.
+func withoutRecordedProvenance(calls []mcpToolCallProvenance, recorded []string) []mcpToolCallProvenance {
+	if len(recorded) == 0 {
+		return calls
+	}
+	seen := make(map[string]struct{}, len(recorded))
+	for _, id := range recorded {
+		seen[id] = struct{}{}
+	}
+	out := make([]mcpToolCallProvenance, 0, len(calls))
+	for _, call := range calls {
+		if _, dup := seen[call.ToolCallID]; dup {
+			continue
+		}
+		out = append(out, call)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// appendRecordedProvenance returns recorded plus the ids of calls, without
+// duplicates, for storing back on the call-cache record.
+func appendRecordedProvenance(recorded []string, calls []mcpToolCallProvenance) []string {
+	seen := make(map[string]struct{}, len(recorded)+len(calls))
+	out := make([]string, 0, len(recorded)+len(calls))
+	for _, id := range recorded {
+		if _, dup := seen[id]; dup {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	for _, call := range calls {
+		if _, dup := seen[call.ToolCallID]; dup {
+			continue
+		}
+		seen[call.ToolCallID] = struct{}{}
+		out = append(out, call.ToolCallID)
 	}
 	return out
 }

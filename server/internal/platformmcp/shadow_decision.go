@@ -138,7 +138,7 @@ func (s *ShadowDecisionService) Decide(ctx context.Context, principal Principal,
 		if targetKind == shadowTargetKindStdioCommand {
 			return ShadowDecisionReceiptResult{}, shadowDecisionInvalid("Shadow MCP local-command targets cannot be enforced by this tool.")
 		}
-		requestID, err := s.core.ResolveDecisionTarget(ctx, principal.OrganizationID, project.ID, targetKind, targetKey)
+		requestID, err := s.core.ResolveDecisionTarget(ctx, principal.OrganizationID, project.ID, reviewTargetKind(targetKind), targetKey)
 		if err != nil {
 			return ShadowDecisionReceiptResult{}, mapShadowDecisionCoreError(err)
 		}

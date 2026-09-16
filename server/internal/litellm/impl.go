@@ -215,11 +215,16 @@ func (s *Service) ingestRequest(ctx context.Context, payload *gen.IngestPayload,
 			OccurredAt: nil,
 		},
 		Data: &hooksgen.HookIngestData{
-			Prompt:                promptData,
-			ToolCall:              nil,
-			Mcp:                   nil,
-			McpInventory:          mcpInventory,
-			McpInventoryCollected: conv.PtrEmpty(len(mcpInventory) > 0),
+			Prompt:       promptData,
+			ToolCall:     nil,
+			Mcp:          nil,
+			McpInventory: mcpInventory,
+			// Never claim an authoritative inventory read. The proxy sees the
+			// tools of one request, not the session's configured servers, and
+			// the claim is what licenses the hooks path to cache the list as
+			// the session's enforcement state under a session id the caller
+			// chose. The inventory upsert does not depend on the claim.
+			McpInventoryCollected: nil,
 			Usage:                 nil,
 			Message:               nil,
 			Skill:                 nil,
@@ -259,9 +264,10 @@ func (s *Service) ingestRequest(ctx context.Context, payload *gen.IngestPayload,
 		CallID:            callID,
 		TraceID:           traceID,
 		SessionID:         sessionID,
-		UserID:            outcome.Actor.UserID,
-		Email:             outcome.Actor.Email,
-		OriginatingClient: attribution.OriginatingClient,
+		UserID:                outcome.Actor.UserID,
+		Email:                 outcome.Actor.Email,
+		OriginatingClient:     attribution.OriginatingClient,
+		ProvenanceToolCallIDs: nil,
 	})
 	cancel()
 	if err != nil {
@@ -294,6 +300,7 @@ func (s *Service) ingestResponse(ctx context.Context, payload *gen.IngestPayload
 	cacheCtx, cancel := context.WithTimeout(ctx, callCacheTimeout)
 	cached, err := s.calls.Get(cacheCtx, *authCtx.ProjectID, callID)
 	cancel()
+	cacheHit := err == nil
 	if err == nil {
 		sessionID = cached.SessionID
 		authCopy.UserID = cached.UserID
@@ -373,21 +380,40 @@ func (s *Service) ingestResponse(ctx context.Context, payload *gen.IngestPayload
 	// Record one telemetry row per LiteLLM-observed MCP tool call so the
 	// synthetic server identities surface in the shadow MCP inventory with
 	// usage and per-user attribution. IngestAuthenticatedDetailed reports no
-	// "persisted" signal, so this runs unconditionally; a natively captured
+	// "persisted" signal, so this does not gate on it; a natively captured
 	// session's own hook stream carries no per-call output tool-call id, so the
-	// two channels do not double-count the same call.
+	// two channels do not double-count the same call. LiteLLM does re-run the
+	// response guardrail for a streamed call and on retries, so the call cache
+	// remembers which tool-call ids this call has already recorded.
 	if prov := mcpToolCallProvenanceFrom(payload.ToolCalls); len(prov) > 0 {
-		s.recordMCPToolCallProvenance(ctx, mcpProvenanceInput{
-			ProjectID:      authCtx.ProjectID.String(),
-			OrganizationID: authCtx.ActiveOrganizationID,
-			UserID:         outcome.Actor.UserID,
-			UserEmail:      conv.Default(outcome.Actor.Email, email),
-			SessionID:      sessionID,
-			CallID:         callID,
-			TraceID:        traceID,
-			Model:          model,
-			ToolCalls:      prov,
-		})
+		if cacheHit {
+			prov = withoutRecordedProvenance(prov, cached.ProvenanceToolCallIDs)
+		}
+		if len(prov) > 0 {
+			s.recordMCPToolCallProvenance(ctx, mcpProvenanceInput{
+				ProjectID:      authCtx.ProjectID.String(),
+				OrganizationID: authCtx.ActiveOrganizationID,
+				UserID:         outcome.Actor.UserID,
+				UserEmail:      conv.Default(outcome.Actor.Email, email),
+				SessionID:      sessionID,
+				CallID:         callID,
+				TraceID:        traceID,
+				Model:          model,
+				ToolCalls:      prov,
+			})
+			if cacheHit {
+				cached.ProvenanceToolCallIDs = appendRecordedProvenance(cached.ProvenanceToolCallIDs, prov)
+				storeCtx, cancelStore := context.WithTimeout(ctx, callCacheTimeout)
+				if err := s.calls.Store(storeCtx, cached); err != nil {
+					s.logger.WarnContext(ctx, "failed to remember recorded LiteLLM MCP provenance",
+						attr.SlogError(err),
+						attr.SlogProjectID(authCtx.ProjectID.String()),
+						attr.SlogLiteLLMCallID(callID),
+					)
+				}
+				cancelStore()
+			}
+		}
 	}
 	return noneResult(), nil
 }

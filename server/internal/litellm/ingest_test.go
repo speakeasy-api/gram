@@ -304,8 +304,11 @@ func TestIngestRequestAttachesMCPInventoryFromTools(t *testing.T) {
 	require.Len(t, ingester.calls, 1)
 	data := ingester.calls[0].payload.Data
 	require.Equal(t, "prompt.submitted", ingester.calls[0].payload.Event.Type)
-	require.NotNil(t, data.McpInventoryCollected)
-	require.True(t, *data.McpInventoryCollected)
+	// The proxy never claims an authoritative inventory read: that claim is
+	// what licenses the hooks path to cache the list as the session's
+	// enforcement state under a caller-chosen session id, and the inventory
+	// upsert does not depend on it.
+	require.Nil(t, data.McpInventoryCollected)
 	require.Len(t, data.McpInventory, 2)
 	require.Equal(t, "https://mcp.linear.app/mcp", *data.McpInventory[0].URL)
 	require.Equal(t, "linear", *data.McpInventory[0].ServerName)

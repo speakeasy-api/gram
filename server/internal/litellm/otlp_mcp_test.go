@@ -15,6 +15,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/hooks"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -150,7 +151,13 @@ func TestTraceLogParamsStampsMCPGatewayAttributes(t *testing.T) {
 		require.Equal(t, "https://api.githubcopilot.com", row.Attributes[attr.MCPMatchKey])
 		require.Equal(t, "github", row.Attributes[attr.ToolCallSourceKey])
 		require.Equal(t, "litellm", row.Attributes[attr.HookSourceKey])
-		require.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", row.Attributes[attr.TraceIDKey])
+		// The row is re-keyed onto a per-call trace so calls to different
+		// servers inside one OTLP trace each reach the inventory; the OTLP
+		// trace id stays on the row for correlation.
+		spanID, _ := row.Attributes[attr.SpanIDKey].(string)
+		require.NotEmpty(t, spanID)
+		require.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", row.Attributes[attr.OTELTraceIDKey])
+		require.Equal(t, hooks.HashToolCallIDToTraceID("4bf92f3577b34da6a3ce929d0e0e4736:"+spanID), row.Attributes[attr.TraceIDKey])
 		require.Equal(t, "dev@example.com", row.UserInfo.Email())
 		require.Empty(t, row.UserInfo.UserID())
 		// The span is not model usage, so the model attribute is stripped like
@@ -214,6 +221,9 @@ func TestTracePersistenceStampsMCPGatewayAttributes(t *testing.T) {
 	mux := mountedTraceMux(instance.service)
 	projectID := authCtx.ProjectID.String()
 	traceID := "4bf92f3577b34da6a3ce929d0e0e4736"
+	// MCP gateway spans are re-keyed onto a per-call trace derived from the
+	// OTLP trace and span ids, so every read below uses that id.
+	callTraceID := hooks.HashToolCallIDToTraceID(traceID + ":00f067aa0ba902b7")
 
 	body := fmt.Sprintf(`{"resourceSpans":[{"scopeSpans":[{"spans":[{"traceId":%q,"spanId":"00f067aa0ba902b7","name":"litellm_request","kind":3,"startTimeUnixNano":"1785542401000000000","endTimeUnixNano":"1785542401250000000","attributes":[{"key":"gen_ai.request.model","value":{"stringValue":"MCP: create_issue"}},{"key":"metadata.user_api_key_user_email","value":{"stringValue":"dev@example.com"}},{"key":"metadata.mcp_tool_call_metadata","value":{"stringValue":%q}}]}]}]}]}`, traceID, mcpGatewayToolCallMetadata)
 	require.Equal(t, http.StatusAccepted, serveTraceRequest(t, mux, []byte(body), "application/json", "", "fixture-key", "fixture-project").Code)
@@ -239,7 +249,8 @@ func TestTracePersistenceStampsMCPGatewayAttributes(t *testing.T) {
 
 	row := logs[0]
 	require.NotNil(t, row.TraceID)
-	require.Equal(t, traceID, *row.TraceID)
+	require.Equal(t, callTraceID, *row.TraceID)
+	require.Equal(t, traceID, gjson.Get(row.Attributes, "gram.otel.trace_id").String())
 	require.Equal(t, "https://api.githubcopilot.com", gjson.Get(row.Attributes, "gram.mcp.server_url").String())
 	require.Equal(t, "https://api.githubcopilot.com", gjson.Get(row.Attributes, "gram.mcp.match").String())
 	require.Equal(t, "github", gjson.Get(row.Attributes, "gram.tool_call.source").String())
@@ -251,7 +262,7 @@ func TestTracePersistenceStampsMCPGatewayAttributes(t *testing.T) {
 	var toolSource, hookSource, userEmail string
 	require.NoError(t, instance.chConn.QueryRow(ctx,
 		`SELECT tool_source, hook_source, user_email FROM telemetry_logs WHERE gram_project_id = ? AND trace_id = ?`,
-		projectID, traceID,
+		projectID, callTraceID,
 	).Scan(&toolSource, &hookSource, &userEmail))
 	require.Equal(t, "github", toolSource)
 	require.Equal(t, "litellm", hookSource)
@@ -261,7 +272,7 @@ func TestTracePersistenceStampsMCPGatewayAttributes(t *testing.T) {
 	require.EventuallyWithT(t, func(collect *assert.CollectT) {
 		err := instance.chConn.QueryRow(ctx,
 			`SELECT max(mcp_server_url), max(mcp_match), max(tool_source), max(hook_source), max(user_email) FROM trace_summaries WHERE gram_project_id = ? AND trace_id = ?`,
-			projectID, traceID,
+			projectID, callTraceID,
 		).Scan(&summaryServerURL, &summaryMatch, &summaryToolSource, &summaryHookSource, &summaryUserEmail)
 		assert.NoError(collect, err)
 		assert.Equal(collect, "https://api.githubcopilot.com", summaryServerURL)

@@ -441,3 +441,27 @@ func TestRecordDecision_UnknownRolePrincipalRejected(t *testing.T) {
 	require.Empty(t, decisionsFor(t, ctx, ti, ti.projectID, requestID))
 	require.Equal(t, "requested", requestStatus(t, ctx, ti, ti.projectID, requestID))
 }
+
+// A tool-namespace identity (mcp-tool://<server>) is a server_url target that
+// names no reachable server: the decision records, and drains pending legacy
+// requests, without writing a grant nothing could ever match.
+func TestRecordDecision_ToolNamespaceTargetRecordsWithoutGrants(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	policyID := seedShadowMCPPolicy(t, ctx, ti, "block_all")
+	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "mcp-tool://github", status: "requested", evidence: "", version: 0})
+
+	decision, err := ti.service.RecordDecision(ctx, decisionPayload(requestID.String(), "approved"))
+	require.NoError(t, err)
+	require.Equal(t, "approved", decision.Decision)
+
+	require.Empty(t, grantPrincipals(t, ctx, ti, authz.ScopeRiskPolicyBypass, policyID, "mcp-tool://github"))
+	require.Empty(t, grantPrincipals(t, ctx, ti, authz.ScopeRiskPolicyBlock, policyID, "mcp-tool://github"))
+
+	// A denial under the same policy writes nothing either.
+	_, err = ti.service.RecordDecision(ctx, decisionPayload(requestID.String(), "denied"))
+	require.NoError(t, err)
+	require.Empty(t, grantPrincipals(t, ctx, ti, authz.ScopeRiskPolicyBlock, policyID, "mcp-tool://github"))
+}

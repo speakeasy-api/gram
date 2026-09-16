@@ -814,7 +814,7 @@ func (s *Service) ResolveShadowMCPInventoryRequest(ctx context.Context, payload 
 		}
 	}
 
-	if err := s.resolveShadowMCPInventoryURLRequests(ctx, dbtx, projectID, inventoryURL.CanonicalURL, decision, ac.UserID, policyIDs, policyAudiences); err != nil {
+	if err := s.resolveShadowMCPInventoryURLRequests(ctx, dbtx, projectID, inventoryURL.CanonicalURL, decision, ac.UserID, policyIDs, policyAudiences, observeOnly); err != nil {
 		return nil, err
 	}
 
@@ -1051,6 +1051,7 @@ func (s *Service) resolveShadowMCPInventoryURLRequests(
 	decidedBy string,
 	selectedPolicyIDs []string,
 	policyAudiences map[string][]urn.Principal,
+	observeOnly bool,
 ) error {
 	blockingPolicies, err := s.shadowMCPInventoryBlockingPolicies(ctx, db, projectID)
 	if err != nil {
@@ -1089,7 +1090,10 @@ func (s *Service) resolveShadowMCPInventoryURLRequests(
 		status := shadowMCPInventoryBypassStatusDenied
 		grantedPrincipalURNs := []string{}
 		if decision == shadowMCPInventoryDecisionAllow {
-			if _, ok := selected[policyID]; ok {
+			// An observe-only target selects no policies and mints no grants,
+			// so its Allow is the decision of record for every pending
+			// request rather than a denial by omission.
+			if _, ok := selected[policyID]; ok || observeOnly {
 				status = shadowMCPInventoryBypassStatusApproved
 				grantedPrincipalURNs = shadowMCPInventoryPrincipalStrings(policyAudiences[policyID])
 			}
@@ -1121,7 +1125,14 @@ func (s *Service) shadowMCPInventoryURLState(ctx context.Context, organizationID
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load shadow mcp inventory url state").LogError(ctx, s.logger)
 	}
-	return buildShadowMCPInventoryURLState(state.forURL(canonicalURL)), nil
+	rowState := state.forURL(canonicalURL)
+	// The resolve response is read the same way as a row: an observe-only
+	// tool-namespace key carries no enforcement, so its coverage must say so
+	// here too rather than letting the grant-free decision read as delivered.
+	if shadowmcp.IsToolNamespaceURL(canonicalURL) && rowState.Summary != nil {
+		rowState.Summary.DecisionCoverage = shadowMCPAccessCoverageNone
+	}
+	return buildShadowMCPInventoryURLState(rowState), nil
 }
 
 func buildShadowMCPInventoryURLState(rowState shadowMCPInventoryRowState) *gen.ShadowMCPInventoryURLState {

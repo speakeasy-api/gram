@@ -283,7 +283,7 @@ func (s *ShadowInventoryService) GetReview(ctx context.Context, principal Princi
 		return output, nil
 	}
 	review, err := s.reviews.ReadPlatformReview(ctx, mcpapproval.PlatformReviewReadInput{
-		OrganizationID: principal.OrganizationID, ProjectID: project.ID, TargetKind: targetKind, TargetKey: targetKey,
+		OrganizationID: principal.OrganizationID, ProjectID: project.ID, TargetKind: reviewTargetKind(targetKind), TargetKey: targetKey,
 	})
 	if err != nil {
 		return GetShadowMCPReviewOutput{}, mapShadowReadError(err)
@@ -345,7 +345,10 @@ func (s *ShadowInventoryService) projectTarget(principal Principal, project Reso
 		display = "Requested local MCP command"
 	}
 	if kind == shadowTargetKindToolNamespace {
-		display = "Observed MCP tool namespace (server identity unresolved)"
+		display = "Requested MCP tool namespace (server identity unresolved)"
+		if observed {
+			display = "Observed MCP tool namespace (server identity unresolved)"
+		}
 	}
 	result := ShadowMCPTargetSummary{
 		Display: display, TargetKind: kind, ObservationState: observationState,
@@ -426,6 +429,17 @@ func validShadowEvidence(review mcpapproval.PlatformReviewSummary) bool {
 		}
 	}
 	return true
+}
+
+// reviewTargetKind maps an inventory target kind onto the approval service's
+// reference namespace. A tool namespace is a URL-keyed row wearing a synthetic
+// scheme, so its reviews are stored and read as server_url targets; the
+// inventory recomputes the kind from the key on the way out.
+func reviewTargetKind(kind string) string {
+	if kind == shadowTargetKindToolNamespace {
+		return shadowTargetKindServerURL
+	}
+	return kind
 }
 
 func validShadowTargetKind(kind string) bool {

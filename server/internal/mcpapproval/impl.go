@@ -774,7 +774,7 @@ func admittableServerURL(raw string) (key string, display string, err error) {
 	}
 	scheme := strings.ToLower(parsed.Scheme)
 	if scheme != "http" && scheme != "https" && scheme != shadowmcp.ToolNamespaceScheme {
-		return "", "", oops.E(oops.CodeBadRequest, nil, "target must be an http or https URL")
+		return "", "", oops.E(oops.CodeBadRequest, nil, "target must be an http or https URL, or a %s:// tool-namespace identity", shadowmcp.ToolNamespaceScheme)
 	}
 
 	inventoryURL, ok := shadowmcp.CanonicalizeInventoryURL(raw)

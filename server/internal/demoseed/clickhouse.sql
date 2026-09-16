@@ -844,7 +844,10 @@ SELECT
   nano,
   'INFO',
   concat('MCP tool call: ', tool_name),
-  lower(hex(MD5(concat('gram-demo-litellmnstrace-', toString(number))))),
+  -- The ingest keys each guardrail-observed call on sha256(tool_call_id)[:16],
+  -- so the seeded trace id is derived from the seeded call id the same way
+  -- and the provenance join finds these rows.
+  lower(hex(substring(SHA256(concat('call_demo_litellm_ns_', toString(number))), 1, 16))),
   concat(
     '{"gram.event.source":"hook"',
     ',"gram.hook.source":"litellm"',
@@ -1755,7 +1758,7 @@ SELECT throwIf(
 -- litellm-sourced traces behind it, or the Shadow MCP page shows neither the
 -- "identity unresolved" row nor a "seen via LiteLLM" source.
 SELECT throwIf(
-  (SELECT count() FROM shadow_mcp_inventory_urls
+  (SELECT uniqExact(canonical_server_url) FROM shadow_mcp_inventory_urls
    WHERE gram_project_id IN (toUUID('dec0de00-0000-4000-a000-000000000001'))
      AND canonical_server_url IN ('mcp-tool://github', 'https://mcp.grafana.example.com/mcp')) < 2,
   'demo seed postflight: LiteLLM-observed shadow MCP inventory rows missing');

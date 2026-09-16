@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -192,7 +193,11 @@ func (s *Service) DecideInTransaction(ctx context.Context, tx pgx.Tx, input Deci
 	if err := s.drainLegacyBypassRequests(ctx, tx, request, input.ProjectID, input.Decision, granted, authCtx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error resolving promoted bypass request").LogError(ctx, s.logger)
 	}
-	if request.TargetKind == targetKindServerURL {
+	// A tool-namespace identity (mcp-tool://<server>) names no reachable
+	// server, so no grant keyed on it could ever match traffic: the decision
+	// is recorded and drained like a stdio command's, and no enforcement is
+	// written that the row could later claim.
+	if request.TargetKind == targetKindServerURL && !shadowmcp.IsToolNamespaceURL(request.TargetKey) {
 		if err := reconcileDecisionGrants(ctx, tx, request.OrganizationID, input.ProjectID, request.TargetKey, input.Decision == decisionApproved, grantedPrincipals); err != nil {
 			if _, ok := errors.AsType[*oops.ShareableError](err); ok {
 				return nil, err

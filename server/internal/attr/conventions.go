@@ -628,6 +628,9 @@ const (
 	LiteLLMInstanceIDKey                 = attribute.Key("gram.litellm.instance_id")
 	LiteLLMCallIDKey                     = attribute.Key("gram.litellm.call_id")
 	LiteLLMTraceIDKey                    = attribute.Key("gram.litellm.trace_id")
+	// OTELTraceIDKey preserves the OTLP trace id a span arrived with when the
+	// row is re-keyed onto a per-call trace id (see LiteLLM MCP gateway spans).
+	OTELTraceIDKey = attribute.Key("gram.otel.trace_id")
 	LiteLLMUserIDKey                     = attribute.Key("gram.litellm.user_id")
 	LiteLLMUserEmailKey                  = attribute.Key("gram.litellm.user_email")
 	LiteLLMTeamIDKey                     = attribute.Key("gram.litellm.team_id")

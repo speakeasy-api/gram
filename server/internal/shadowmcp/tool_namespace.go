@@ -43,21 +43,32 @@ func ToolNamespaceURL(serverName string) string {
 }
 
 // IsToolNamespaceURL reports whether value is a synthetic tool-namespace
-// identity produced by ToolNamespaceURL (or its canonicalized form).
+// identity that ToolNamespaceURL could have produced: the mcp-tool scheme, a
+// bare host, and nothing else. A value that merely starts with the scheme but
+// carries a path, port, query, fragment or userinfo is not one, so it cannot
+// slip into the observe-only inventory path by wearing the prefix.
 func IsToolNamespaceURL(value string) bool {
-	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(value)), toolNamespacePrefix)
+	return ToolNamespaceServer(value) != ""
 }
 
-// ToolNamespaceServer returns the server name carried by a tool-namespace
-// identity URI, or "" when value is not one.
+// ToolNamespaceServer returns the server name carried by a well-formed
+// tool-namespace identity URI, or "" when value is not one.
 func ToolNamespaceServer(value string) string {
 	trimmed := strings.TrimSpace(value)
-	if !IsToolNamespaceURL(trimmed) {
+	if !strings.HasPrefix(strings.ToLower(trimmed), toolNamespacePrefix) {
 		return ""
 	}
 	parsed, err := url.Parse(trimmed)
-	if err != nil {
+	if err != nil || !strings.EqualFold(parsed.Scheme, ToolNamespaceScheme) {
 		return ""
 	}
-	return strings.ToLower(parsed.Host)
+	if parsed.Host == "" || parsed.Port() != "" || parsed.User != nil ||
+		parsed.Path != "" || parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" {
+		return ""
+	}
+	name := strings.ToLower(parsed.Hostname())
+	if ToolNamespaceURL(name) == "" {
+		return ""
+	}
+	return name
 }

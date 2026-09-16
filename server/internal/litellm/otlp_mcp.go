@@ -93,8 +93,12 @@ func mcpSpanAttributes(md mcpToolCallMetadata) map[attribute.Key]string {
 	}
 }
 
-// mcpServerOrigin returns the trimmed upstream origin and its host when the
-// value parses as an absolute URL with a host, and empty strings otherwise.
+// mcpServerOrigin returns the upstream origin (scheme and host, with any
+// port) and its host when the value parses as an absolute URL with a host, and
+// empty strings otherwise. LiteLLM already strips userinfo, path and query
+// before exporting the resource, but the exporter is not trusted to: hosted
+// MCP servers routinely carry credentials in the path or query, and this value
+// is persisted on the telemetry row and shown in the inventory.
 func mcpServerOrigin(resource string) (string, string) {
 	trimmed := strings.TrimSpace(resource)
 	if trimmed == "" {
@@ -104,7 +108,8 @@ func mcpServerOrigin(resource string) (string, string) {
 	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
 		return "", ""
 	}
-	return trimmed, parsed.Host
+	origin := &url.URL{Scheme: strings.ToLower(parsed.Scheme), Host: strings.ToLower(parsed.Host)}
+	return origin.String(), origin.Host
 }
 
 // otlpMCPSpanAttributes reads the MCP tool-call metadata a LiteLLM gateway

@@ -122,3 +122,32 @@ func TestIngestResponseRecordsMCPToolCallProvenance(t *testing.T) {
 	require.Equal(t, mcpProvenanceHookSource, summaryHookSource)
 	require.Equal(t, conv.NormalizeEmail(storedEmail), summaryUserEmail)
 }
+
+func TestWithoutRecordedProvenance(t *testing.T) {
+	t.Parallel()
+
+	calls := []mcpToolCallProvenance{
+		{ToolCallID: "call_1", ToolName: "mcp__github__a", Server: "github", Identity: "mcp-tool://github"},
+		{ToolCallID: "call_2", ToolName: "mcp__github__b", Server: "github", Identity: "mcp-tool://github"},
+	}
+
+	t.Run("it keeps every call when nothing was recorded", func(t *testing.T) {
+		t.Parallel()
+		require.Equal(t, calls, withoutRecordedProvenance(calls, nil))
+	})
+
+	t.Run("it drops calls already recorded and keeps order", func(t *testing.T) {
+		t.Parallel()
+		require.Equal(t, calls[1:], withoutRecordedProvenance(calls, []string{"call_1"}))
+	})
+
+	t.Run("it returns nil when every call was recorded", func(t *testing.T) {
+		t.Parallel()
+		require.Nil(t, withoutRecordedProvenance(calls, []string{"call_2", "call_1"}))
+	})
+
+	t.Run("it appends new ids without duplicating recorded ones", func(t *testing.T) {
+		t.Parallel()
+		require.Equal(t, []string{"call_1", "call_2"}, appendRecordedProvenance([]string{"call_1"}, calls))
+	})
+}
