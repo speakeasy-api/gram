@@ -1,6 +1,6 @@
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import type { Column, RowData } from "@tanstack/react-table";
-import { SearchIcon } from "lucide-react";
+import { FilterIcon, SearchIcon, XIcon } from "lucide-react";
 import { useRef, useState, type JSX, type ReactNode } from "react";
 
 import type {
@@ -20,12 +20,10 @@ import { useOnUnmount } from "@/hooks/useOnUnmount";
 import {
   FILTER_GROUPS,
   statusSelection,
-  filterSummary,
   optionsFor,
   type FilterControlKey,
   type FilterSelection,
 } from "@/lib/organizationFilters";
-import { createdRangeSummary } from "@/lib/createdRange";
 import { cn } from "@/lib/utils";
 import type { OrganizationsSearch } from "@/routes/organizations.index";
 
@@ -117,15 +115,8 @@ export function Toolbar({
     }, SEARCH_DEBOUNCE_MS);
   };
 
-  // Which group the sheet is showing, and null when it is closed.
   const [openGroup, setOpenGroup] = useState<FilterControlKey | null>(null);
-  const triggers = useRef<Partial<Record<FilterControlKey, HTMLButtonElement>>>(
-    {},
-  );
-  // The trigger the sheet has to give the keyboard back to. A ref rather than
-  // `openGroup`, because the sheet asks for it as it unmounts: by then the
-  // state that opened it has already been cleared.
-  const openedFrom = useRef<FilterControlKey | null>(null);
+  const filterTrigger = useRef<HTMLButtonElement>(null);
 
   const filters: FilterSelection = {
     type: search.type ?? [],
@@ -139,9 +130,10 @@ export function Toolbar({
 
   const applyFilters = useApplyFilters();
 
-  const openFilters = (group: FilterControlKey): void => {
-    openedFrom.current = group;
-    setOpenGroup(group);
+  const clearFilter = (next: FilterSelection): void => {
+    applyFilters(next);
+    // The chip disappears; return the keyboard to the stable panel trigger.
+    filterTrigger.current?.focus();
   };
 
   return (
@@ -157,114 +149,64 @@ export function Toolbar({
         />
       </div>
 
-      {/* One trigger per group, all opening the same sheet. The group is the
-          unit an operator thinks in, and a single Filters button would make
-          them find the group again inside the sheet. */}
-      {FILTER_GROUPS.map((group) => {
-        const chosen = filters[group.key];
-        return (
-          <Button
-            key={group.key}
-            ref={(node) => {
-              if (node) triggers.current[group.key] = node;
-            }}
-            variant={chosen.length > 0 ? "secondary" : "ghost"}
-            size="xs"
-            // The count is the whole visible signal, and a count does not say
-            // what it counts. The name a screen reader announces says it.
-            aria-label={`${group.label} filter: ${filterSummary(
-              group,
-              chosen,
-              optionsFor(group, chosen),
-            )}`}
-            onClick={() => openFilters(group.key)}
-          >
-            {group.label}
-            {chosen.length > 0 && <Badge>{chosen.length}</Badge>}
-          </Button>
-        );
-      })}
-
       <Button
-        ref={(node) => {
-          if (node) triggers.current.minMembers = node;
-        }}
-        variant={
-          filters.minMembers !== undefined || filters.maxMembers !== undefined
-            ? "secondary"
-            : "ghost"
-        }
-        size="xs"
-        aria-label={`Members filter: ${filters.minMembers ?? "Any"} to ${filters.maxMembers ?? "Any"}`}
-        onClick={() => openFilters("minMembers")}
+        ref={filterTrigger}
+        variant="outline"
+        size="default"
+        aria-haspopup="dialog"
+        aria-expanded={openGroup !== null}
+        onClick={() => setOpenGroup("type")}
       >
-        Members
-        {(filters.minMembers !== undefined ||
-          filters.maxMembers !== undefined) && <Badge>1</Badge>}
+        <FilterIcon aria-hidden="true" />
+        Filters
       </Button>
+      {FILTER_GROUPS.flatMap((group) =>
+        filters[group.key].map((value) => {
+          const label =
+            optionsFor(group, filters[group.key]).find(
+              (option) => option.value === value,
+            )?.label ?? value;
+          return (
+            <AppliedFilterChip
+              key={`${group.key}:${value}`}
+              clearLabel={`Clear ${group.label} ${label}`}
+              onClear={() =>
+                clearFilter({
+                  ...filters,
+                  [group.key]: filters[group.key].filter(
+                    (selected) => selected !== value,
+                  ),
+                })
+              }
+            >
+              {group.key === "disabled" ? label : `${group.label}: ${label}`}
+            </AppliedFilterChip>
+          );
+        }),
+      )}
       {(["minMembers", "maxMembers"] as const).map(
         (key) =>
           filters[key] !== undefined && (
-            <Button
+            <AppliedFilterChip
               key={key}
-              variant="ghost"
-              size="xs"
-              aria-label={`Clear ${key === "minMembers" ? "minimum" : "maximum"} members`}
-              onClick={() => {
-                applyFilters({ ...filters, [key]: undefined });
-                triggers.current.minMembers?.focus();
-              }}
+              clearLabel={`Clear ${key === "minMembers" ? "minimum" : "maximum"} members`}
+              onClear={() => clearFilter({ ...filters, [key]: undefined })}
             >
-              Members {key === "minMembers" ? "≥" : "≤"} {filters[key]} ×
-            </Button>
+              Members {key === "minMembers" ? "≥" : "≤"} {filters[key]}
+            </AppliedFilterChip>
           ),
       )}
-
-      <Button
-        ref={(node) => {
-          if (node) triggers.current.created = node;
-        }}
-        variant={
-          filters.createdFrom || filters.createdTo ? "secondary" : "ghost"
-        }
-        size="xs"
-        aria-label={`Created date filter: ${createdRangeSummary(filters)}`}
-        onClick={() => openFilters("created")}
-      >
-        Created date
-        {(filters.createdFrom || filters.createdTo) && <Badge>1</Badge>}
-      </Button>
       {(["createdFrom", "createdTo"] as const).map(
         (key) =>
           filters[key] && (
-            <Button
+            <AppliedFilterChip
               key={key}
-              variant="ghost"
-              size="xs"
-              aria-label={`Clear created ${key === "createdFrom" ? "from" : "to"}`}
-              onClick={() => {
-                applyFilters({ ...filters, [key]: undefined });
-                triggers.current.created?.focus();
-              }}
+              clearLabel={`Clear created ${key === "createdFrom" ? "from" : "to"}`}
+              onClear={() => clearFilter({ ...filters, [key]: undefined })}
             >
-              Created {key === "createdFrom" ? "≥" : "≤"} {filters[key]} UTC ×
-            </Button>
+              Created {key === "createdFrom" ? "≥" : "≤"} {filters[key]} UTC
+            </AppliedFilterChip>
           ),
-      )}
-
-      {filters.disabled.length > 0 && (
-        <Button
-          variant="ghost"
-          size="xs"
-          aria-label={`Clear ${filters.disabled[0] === "active" ? "Active" : "Disabled"}`}
-          onClick={() => {
-            applyFilters({ ...filters, disabled: [] });
-            // This chip disappears; leave the keyboard on its stable trigger.
-            triggers.current.disabled?.focus();
-          }}
-        >
-          {filters.disabled[0] === "active" ? "Active" : "Disabled"} ×
-        </Button>
       )}
 
       <FilterSheet
@@ -274,10 +216,7 @@ export function Toolbar({
           if (!open) setOpenGroup(null);
         }}
         onApply={applyFilters}
-        onReturnFocus={() => {
-          const group = openedFrom.current;
-          if (group) triggers.current[group]?.focus();
-        }}
+        onReturnFocus={() => filterTrigger.current?.focus()}
       />
 
       {/* Last in the row and the only filled control in it, so it reads as the
@@ -285,6 +224,30 @@ export function Toolbar({
       <span className="min-w-0 flex-1" />
       <CreateOrganization reporter={reporter} />
     </div>
+  );
+}
+
+function AppliedFilterChip({
+  children,
+  clearLabel,
+  onClear,
+}: {
+  children: ReactNode;
+  clearLabel: string;
+  onClear: () => void;
+}): JSX.Element {
+  return (
+    <Badge variant="secondary" className="gap-1 pr-0">
+      <span>{children}</span>
+      <Button
+        variant="ghost"
+        size="icon-xs"
+        aria-label={clearLabel}
+        onClick={onClear}
+      >
+        <XIcon aria-hidden="true" />
+      </Button>
+    </Badge>
   );
 }
 

@@ -258,8 +258,8 @@ function currentSearch(router: AnyRouter): string {
 
 // The three triggers above the table. Found by the state a screen reader is
 // told, because the visible label is the group's name and a bare count.
-function filterTrigger(group: string): HTMLElement {
-  return screen.getByRole("button", { name: new RegExp(`^${group} filter:`) });
+function filterTrigger(_group?: string): HTMLElement {
+  return screen.getByRole("button", { name: "Filters" });
 }
 
 // Focused before the click, because a click does not focus a button in every
@@ -381,11 +381,16 @@ function tabStopBefore(target: HTMLElement): HTMLElement | null {
 }
 
 function urlFor(search: Record<string, unknown>): string {
-  // The router JSON-encodes a non-string value, so a bookmarked URL is built
-  // the same way here rather than hand-written.
+  // Match router encoding, including numeric strings: unquoted member bounds
+  // would be JSON-parsed into numbers and could lose integer precision.
   const qs = new URLSearchParams();
   for (const [key, value] of Object.entries(search)) {
-    qs.set(key, typeof value === "string" ? value : JSON.stringify(value));
+    qs.set(
+      key,
+      typeof value === "string" && !/^\d+$/.test(value)
+        ? value
+        : JSON.stringify(value),
+    );
   }
   return `/organizations?${qs.toString()}`;
 }
@@ -456,6 +461,90 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("organizations list", () => {
+  it("shows only Filters when idle and focuses the first field", async () => {
+    await renderRouteTree(routeTree);
+    const trigger = filterTrigger();
+    expect(trigger.textContent).toBe("Filters");
+    expect(trigger.parentElement?.textContent).toBe(
+      "FiltersCreate organization",
+    );
+    for (const name of [
+      "Type",
+      "Trial",
+      "Organization Status",
+      "Members",
+      "Created date",
+    ]) {
+      expect(
+        screen.queryByRole("button", { name: new RegExp(`^${name} filter:`) }),
+      ).toBeNull();
+    }
+    expect(
+      screen.queryByRole("button", {
+        name: /^Clear (Type|Trial|Organization Status|created|minimum|maximum)/,
+      }),
+    ).toBeNull();
+    await openFilters("Type");
+    await waitFor(() => expect(document.activeElement).toBe(picker("Type")));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+    for (const action of ["Apply", "Clear all"]) {
+      await openFilters("Type");
+      fireEvent.click(screen.getByRole("button", { name: action }));
+      await waitFor(() => expect(document.activeElement).toBe(trigger));
+    }
+  });
+
+  it.each([
+    ["Clear Type pro", "type", ["enterprise"]],
+    [`Clear Trial ${TRIAL_LABELS.running}`, "trial", ["expired"]],
+    ["Clear Organization Status Disabled", "disabledStatus", undefined],
+    ["Clear minimum members", "minMembers", undefined],
+    ["Clear maximum members", "maxMembers", undefined],
+    ["Clear created from", "createdFrom", undefined],
+    ["Clear created to", "createdTo", undefined],
+  ])(
+    "removes only %s using its distinct X target",
+    async (name, key, value) => {
+      const selected = {
+        type: ["pro", "enterprise"],
+        trial: ["running", "expired"],
+        disabledStatus: "disabled",
+        minMembers: "0",
+        maxMembers: "9223372036854775807",
+        createdFrom: "2024-02-01",
+        createdTo: "2024-02-29",
+        q: "needle",
+        sort: "name",
+        dir: "asc",
+      };
+      mocks.listOrganizations.mockResolvedValue({
+        organizations: ORGS,
+        total: 101,
+      });
+      const { router } = await renderRouteTree(routeTree, {
+        initialPath: urlFor(selected),
+      });
+      await waitFor(() => expect(lastListParams().page).toBe(1));
+      fireEvent.click(screen.getByRole("button", { name: "Next" }));
+      await waitFor(() => expect(lastListParams().page).toBe(2));
+      const clear = screen.getByRole("button", { name: name as string });
+      const label = clear.parentElement!.querySelector("span")!;
+      const before = currentSearch(router);
+      fireEvent.click(label);
+      expect(currentSearch(router)).toBe(before);
+      fireEvent.click(clear);
+      await waitFor(() =>
+        expect(organizationsSearchSchema(router.state.location.search)).toEqual(
+          organizationsSearchSchema({ ...selected, [key as string]: value }),
+        ),
+      );
+      await waitFor(() => expect(lastListParams().page).toBe(1));
+      expect(document.activeElement).toBe(filterTrigger());
+      expect(screen.queryByRole("button", { name: name as string })).toBeNull();
+    },
+  );
+
   it("sorts only Created, resets paging, and restores direction on reload", async () => {
     mocks.listOrganizations.mockResolvedValue({
       organizations: ORGS,
@@ -663,12 +752,14 @@ describe("organizations list", () => {
       }),
     });
 
-    // The one chosen value is named; more than one is counted, because the
-    // trigger has a row of controls to share.
-    expect(filterTrigger("Type").getAttribute("aria-label")).toContain("pro");
-    expect(filterTrigger("Trial").getAttribute("aria-label")).toContain(
-      "2 selected",
-    );
+    expect(screen.getByRole("button", { name: "Clear Type pro" })).toBeTruthy();
+    for (const state of ["running", "expired"] as const) {
+      expect(
+        screen.getByRole("button", {
+          name: `Clear Trial ${TRIAL_LABELS[state]}`,
+        }),
+      ).toBeTruthy();
+    }
 
     await waitFor(() => {
       expect(mocks.listOrganizations).toHaveBeenCalled();
@@ -852,10 +943,12 @@ describe("organizations list", () => {
       expect(lastListParams().account_types).toEqual([...ACCOUNT_TYPE_OPTIONS]);
     });
     // An organization can carry a type the picker does not offer, so every
-    // option at once is still a narrowing and must not read as "All types".
-    expect(filterTrigger("Type").getAttribute("aria-label")).toBe(
-      `Type filter: ${ACCOUNT_TYPE_OPTIONS.length} selected`,
-    );
+    // option at once is still a narrowing: show each applied value.
+    for (const type of ACCOUNT_TYPE_OPTIONS) {
+      expect(
+        screen.getByRole("button", { name: `Clear Type ${type}` }),
+      ).toBeTruthy();
+    }
   });
 
   it("keeps an account type the picker does not offer", async () => {
@@ -869,9 +962,9 @@ describe("organizations list", () => {
     await waitFor(() => {
       expect(lastListParams().account_types).toEqual(["startup"]);
     });
-    expect(filterTrigger("Type").getAttribute("aria-label")).toContain(
-      "startup",
-    );
+    expect(
+      screen.getByRole("button", { name: "Clear Type startup" }),
+    ).toBeTruthy();
 
     await openFilters("Type");
     fireEvent.click(picker("Type"));
@@ -903,9 +996,7 @@ describe("organizations list", () => {
     const params = lastListParams();
     expect(params.account_types).toBeUndefined();
     expect(params.trial_states).toBeUndefined();
-    expect(filterTrigger("Type").getAttribute("aria-label")).toContain(
-      "All types",
-    );
+    expect(screen.queryByRole("button", { name: /^Clear Type / })).toBeNull();
   });
 
   it("sends no filter for a group a link filled with whitespace", async () => {
@@ -921,7 +1012,7 @@ describe("organizations list", () => {
     expect(params.trial_states).toBeUndefined();
   });
 
-  it("opens on the group the operator asked for", async () => {
+  it("opens on the first field from Filters", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
 
     await openFilters("Trial");
@@ -929,7 +1020,7 @@ describe("organizations list", () => {
     // The sheet holds three pickers. Landing on the first would make the
     // operator walk to the one they pressed.
     await waitFor(() => {
-      expect(document.activeElement).toBe(picker("Trial"));
+      expect(document.activeElement).toBe(picker("Type"));
     });
   });
 
@@ -955,11 +1046,14 @@ describe("organizations list", () => {
     await waitFor(() => {
       expect(lastListParams().trial_states).toEqual([...TRIAL_STATES]);
     });
-    // Every organization holds exactly one of these, so all of them is the
-    // whole platform. "6 selected" reads as a narrowing that is not there.
-    expect(filterTrigger("Trial").getAttribute("aria-label")).toBe(
-      "Trial filter: All trial states",
-    );
+    // Every explicit selection remains readable, including the whole set.
+    for (const state of TRIAL_STATES) {
+      expect(
+        screen.getByRole("button", {
+          name: `Clear Trial ${TRIAL_LABELS[state]}`,
+        }),
+      ).toBeTruthy();
+    }
   });
 
   it("preserves a legacy active-only bookmark until its restriction is cleared", async () => {
@@ -970,8 +1064,8 @@ describe("organizations list", () => {
       expect(lastListParams().disabled_status).toEqual("active"),
     );
     expect(
-      filterTrigger("Organization Status").getAttribute("aria-label"),
-    ).toContain("Active");
+      screen.getByRole("button", { name: "Clear Organization Status Active" }),
+    ).toBeTruthy();
     await openFilters("Organization Status");
     expect(picker("Organization Status").textContent).toBe("Active");
     await chooseFilter("Organization Status", "All");
@@ -1006,9 +1100,15 @@ describe("organizations list", () => {
       );
       expect(currentSearch(router)).toContain(`disabledStatus=${status}`);
       expect(
-        filterTrigger("Organization Status").getAttribute("aria-label"),
-      ).toContain(label);
-      fireEvent.click(screen.getByRole("button", { name: `Clear ${label}` }));
+        screen.getByRole("button", {
+          name: `Clear Organization Status ${label}`,
+        }),
+      ).toBeTruthy();
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: `Clear Organization Status ${label}`,
+        }),
+      );
       await waitFor(() => expect(lastListParams().disabled_status).toBe("all"));
       expect(lastListParams()).toMatchObject({
         q: "org_exact_id",
@@ -4502,7 +4602,7 @@ describe("member range filters", () => {
     const trigger = await openFilters("Members");
     const min = screen.getByRole("textbox", { name: "Min" });
     const max = screen.getByRole("textbox", { name: "Max" });
-    await waitFor(() => expect(document.activeElement).toBe(min));
+    await waitFor(() => expect(document.activeElement).toBe(picker("Type")));
     for (const value of ["-1", "1.2", "1e3", "9223372036854775808", "bad"]) {
       fireEvent.change(min, { target: { value } });
       expect(min.getAttribute("aria-invalid")).toBe("true");
@@ -4736,9 +4836,7 @@ describe("created date filters", () => {
       initialPath: "/organizations",
     });
     await openFilters("Created date");
-    await waitFor(() =>
-      expect(document.activeElement).toBe(picker("Created date")),
-    );
+    await waitFor(() => expect(document.activeElement).toBe(picker("Type")));
     await chooseCreated("Custom");
     await waitFor(() => expect(document.activeElement).toBe(dateInput("From")));
     for (const bad of ["2023-02-29", "2024-02-", "2024-04-31"]) {
@@ -4832,7 +4930,10 @@ describe("created date filters", () => {
         created_to: "2024-02-29",
       }),
     );
-    expect(filterTrigger("Created date").textContent).toBe("Created date1");
+    expect(filterTrigger().textContent).toBe("Filters");
+    expect(
+      screen.getByRole("button", { name: "Clear created from" }),
+    ).toBeTruthy();
     for (const bound of ["from", "to"]) {
       fireEvent.click(screen.getByRole("button", { name: "Next" }));
       await waitFor(() => expect(lastListParams().page).toBe(2));

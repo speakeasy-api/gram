@@ -308,14 +308,11 @@ describe("organizations stat strip navigation", () => {
 
     fireEvent.click(cell("Customers"));
 
-    // Type has no "all" label, so two chosen values are counted. What matters
-    // is that the control does not read "All types" over a filtered list.
+    // Both applied types have readable, individually clearable chips.
     await waitFor(() => {
       expect(
-        screen
-          .getByRole("button", { name: /^Type filter:/ })
-          .getAttribute("aria-label"),
-      ).toBe("Type filter: 2 selected");
+        screen.getAllByRole("button", { name: /^Clear Type / }),
+      ).toHaveLength(2);
     });
   });
 
@@ -479,30 +476,24 @@ describe("organizations stat strip navigation", () => {
     // "2 selected" reads as a narrowing, and "Active only" would be false.
     await waitFor(() => {
       expect(
-        screen
-          .getByRole("button", { name: /^Organization Status filter:/ })
-          .getAttribute("aria-label"),
-      ).toBe("Organization Status filter: All");
+        screen.queryByRole("button", { name: /^Clear Organization Status / }),
+      ).toBeNull();
     });
   });
 
-  it("shows the applied filter on the control that opens the sheet", async () => {
+  it("shows the applied status chip and removes the previous trial chip", async () => {
     await renderList(urlFor({ trial: ["running"] }));
 
     fireEvent.click(cell("Disabled"));
 
     await waitFor(() => {
       expect(
-        screen
-          .getByRole("button", { name: /^Organization Status filter:/ })
-          .getAttribute("aria-label"),
-      ).toContain("Disabled");
+        screen.getByRole("button", {
+          name: "Clear Organization Status Disabled",
+        }),
+      ).toBeTruthy();
     });
-    expect(
-      screen
-        .getByRole("button", { name: /^Trial filter:/ })
-        .getAttribute("aria-label"),
-    ).toContain("All trial states");
+    expect(screen.queryByRole("button", { name: /^Clear Trial / })).toBeNull();
   });
 
   it("shows the strip's own filter inside the sheet it opens", async () => {
@@ -513,7 +504,7 @@ describe("organizations stat strip navigation", () => {
       expect(lastListParams().trial_states).toEqual(["ending_soon"]);
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /^Trial filter:/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Filters" }));
     const sheet = await screen.findByRole("dialog");
 
     expect(

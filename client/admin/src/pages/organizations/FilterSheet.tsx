@@ -140,14 +140,14 @@ export function FilterSheet({
           onReturnFocus();
         }}
       >
-        <SheetHeader>
+        <SheetHeader className="shrink-0">
           <SheetTitle>Filters</SheetTitle>
           <SheetDescription>
             Nothing in the table changes until you apply.
           </SheetDescription>
         </SheetHeader>
 
-        <div className="grid gap-4 p-4">
+        <div className="grid min-h-0 flex-1 content-start gap-4 overflow-y-auto p-4">
           {FILTER_GROUPS.map((group) =>
             group.key === "disabled" ? (
               <div key={group.key} className="space-y-2">
@@ -345,7 +345,7 @@ export function FilterSheet({
           </fieldset>
         </div>
 
-        <SheetFooter className="flex-row justify-end">
+        <SheetFooter className="shrink-0 flex-row justify-end">
           {/* Clears the filters and nothing else. The search term is not a
               filter this sheet holds, and an operator who reset the filters has
               not asked to type their term again. */}
