@@ -641,8 +641,6 @@ func newStripeClient(
 
 	catalog := stripeclient.Catalog{
 		PriceIDTUM:            c.String("stripe-price-id-tum"),
-		MeterIDTUM:            c.String("stripe-meter-id-tum"),
-		MeterEventName:        c.String("stripe-meter-event-name"),
 		PortalConfigurationID: c.String("stripe-portal-configuration-id"),
 	}
 	if err := catalog.Validate(); err != nil {
@@ -662,7 +660,7 @@ func newStripeMeterEventClient(
 	guardianPolicy *guardian.Policy,
 	c *cli.Context,
 ) (stripeclient.V2MeterEventClient, error) {
-	if !c.Bool(stripeTUMMeterStreamingFlagName) && !c.Bool(stripeMeterEventExportFlagName) {
+	if !c.Bool(stripeMeterEventExportFlagName) {
 		return stripeclient.NewNoopV2MeterEventClient(), nil
 	}
 
@@ -679,12 +677,11 @@ func newStripeMeterEventClient(
 
 func newStripeCatalog(c *cli.Context) metering.StripeCatalog {
 	tumMeterEventName := c.String("stripe-meter-event-name")
-	tumMeterStreamingEnabled := c.Bool(stripeTUMMeterStreamingFlagName)
 	meterExportEnabled := c.Bool(stripeMeterEventExportFlagName)
 	return metering.StripeCatalogFunc(func(definition metering.Definition) (string, error) {
 		switch definition {
 		case metering.AgentSessionStorage():
-			if !tumMeterStreamingEnabled {
+			if !meterExportEnabled {
 				return "", nil
 			}
 			if !stripeclient.IsConfigured(tumMeterEventName) {

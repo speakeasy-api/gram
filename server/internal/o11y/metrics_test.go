@@ -7,6 +7,8 @@ import (
 	"net"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
@@ -21,31 +23,13 @@ var _ net.Error = timeoutError{}
 func TestOutcomeFromErrorWithTimeout(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name string
-		err  error
-		want o11y.Outcome
-	}{
-		{name: "nil is success", err: nil, want: o11y.OutcomeSuccess},
-		{name: "deadline exceeded is timeout", err: context.DeadlineExceeded, want: o11y.OutcomeTimeout},
-		{
-			name: "wrapped deadline exceeded is timeout",
-			err:  fmt.Errorf("openrouter object completion: %w", context.DeadlineExceeded),
-			want: o11y.OutcomeTimeout,
-		},
-		{name: "net timeout is timeout", err: fmt.Errorf("dial: %w", timeoutError{}), want: o11y.OutcomeTimeout},
-		{name: "canceled is failure not timeout", err: context.Canceled, want: o11y.OutcomeFailure},
-		{name: "generic error is failure", err: errors.New("socket hang up"), want: o11y.OutcomeFailure},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			if got := o11y.OutcomeFromErrorWithTimeout(tt.err); got != tt.want {
-				t.Errorf("OutcomeFromErrorWithTimeout(%v) = %q, want %q", tt.err, got, tt.want)
-			}
-		})
-	}
+	require.Equal(t, o11y.OutcomeSuccess, o11y.OutcomeFromErrorWithTimeout(nil))
+	require.Equal(t, o11y.OutcomeCanceled, o11y.OutcomeFromErrorWithTimeout(context.Canceled))
+	require.Equal(t, o11y.OutcomeCanceled, o11y.OutcomeFromErrorWithTimeout(fmt.Errorf("request: %w", context.Canceled)))
+	require.Equal(t, o11y.OutcomeTimeout, o11y.OutcomeFromErrorWithTimeout(context.DeadlineExceeded))
+	require.Equal(t, o11y.OutcomeTimeout, o11y.OutcomeFromErrorWithTimeout(fmt.Errorf("request: %w", context.DeadlineExceeded)))
+	require.Equal(t, o11y.OutcomeTimeout, o11y.OutcomeFromErrorWithTimeout(fmt.Errorf("dial: %w", timeoutError{})))
+	require.Equal(t, o11y.OutcomeFailure, o11y.OutcomeFromErrorWithTimeout(errors.New("socket hang up")))
 }
 
 func TestOutcomeFromErrorCollapsesTimeout(t *testing.T) {

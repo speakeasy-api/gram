@@ -2306,6 +2306,7 @@ type RemoteSessionClient struct {
 	TokenEndpointAuthMethod         pgtype.Text
 	JsonWebKeySetID                 uuid.NullUUID
 	Scope                           []string
+	GrantTypes                      []string
 	Audience                        pgtype.Text
 	TokenEndpointAuthAudienceFormat pgtype.Text
 	ClientIDMetadataUri             pgtype.Text
@@ -2326,6 +2327,24 @@ type RemoteSessionClientUserSessionIssuer struct {
 	RemoteSessionClientID uuid.UUID
 	UserSessionIssuerID   uuid.UUID
 	CreatedAt             pgtype.Timestamptz
+}
+
+type RemoteSessionEmaBinding struct {
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	UserSessionIssuerID   uuid.UUID
+	RemoteSessionIssuerID uuid.UUID
+	Resource              string
+	RemoteSessionClientID uuid.NullUUID
+	Generation            int64
+	State                 pgtype.Text
+	GrantSource           pgtype.Text
+	RequestedScopes       []string
+	ClaimID               uuid.NullUUID
+	ClaimedAt             pgtype.Timestamptz
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
 }
 
 type RemoteSessionIssuer struct {
@@ -2350,6 +2369,7 @@ type RemoteSessionIssuer struct {
 	OpTosUri                                   pgtype.Text
 	ScopesSupported                            []string
 	GrantTypesSupported                        []string
+	AuthorizationGrantProfilesSupported        []string
 	ResponseTypesSupported                     []string
 	TokenEndpointAuthMethodsSupported          []string
 	CodeChallengeMethodsSupported              []string
@@ -2426,9 +2446,6 @@ type RiskPolicy struct {
 	PromptInjectionRules []string
 	DisabledRules        []string
 	CustomRuleIds        []string
-	MessageTypes         []string
-	ScopeInclude         pgtype.Text
-	ScopeExempt          pgtype.Text
 	Action               string
 	AudienceType         string
 	ShadowMcpDisposition pgtype.Text
@@ -3080,6 +3097,25 @@ type TriggerInstance struct {
 	Deleted        bool
 }
 
+type TrustedIssuerSession struct {
+	ID                             uuid.UUID
+	RemoteSessionClientID          uuid.NullUUID
+	OrganizationID                 pgtype.Text
+	ProjectID                      uuid.NullUUID
+	SubjectUrn                     string
+	IdentityAssertionEncrypted     pgtype.Text
+	IdentityAssertionExpiresAt     pgtype.Timestamptz
+	RefreshTokenEncrypted          pgtype.Text
+	RefreshExpiresAt               pgtype.Timestamptz
+	LastRefreshAttemptAt           pgtype.Timestamptz
+	OfflineAccessRefusedAt         pgtype.Timestamptz
+	OfflineAccessRequestConfigHash pgtype.Text
+	CreatedAt                      pgtype.Timestamptz
+	UpdatedAt                      pgtype.Timestamptz
+	DeletedAt                      pgtype.Timestamptz
+	Deleted                        bool
+}
+
 // Customer-hosted MCP server sources that connect to Gram through outbound tunnels.
 type TunneledMcpServer struct {
 	// Stable UUID for the tunneled MCP source. Used by management APIs, dashboard routes, and Redis connection cache keys.
@@ -3270,6 +3306,7 @@ type UserSessionIssuer struct {
 	Classification                string
 	ClientIDMetadataAdmissionMode pgtype.Text
 	TrustedRemoteSessionIssuerID  uuid.NullUUID
+	TrustedRemoteSessionClientID  uuid.NullUUID
 	CreatedAt                     pgtype.Timestamptz
 	UpdatedAt                     pgtype.Timestamptz
 	DeletedAt                     pgtype.Timestamptz

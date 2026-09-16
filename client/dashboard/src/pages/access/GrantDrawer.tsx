@@ -10,18 +10,31 @@ import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import type { Role } from "@gram/client/models/components/role.js";
 import { ResolveChallengeFormResolutionType } from "@gram/client/models/components/resolvechallengeform.js";
-import { invalidateAllChallenges } from "@gram/client/react-query/challenges.js";
+import {
+  invalidateAllChallenges,
+  useChallenges,
+} from "@gram/client/react-query/challenges.js";
 import { useResolveChallengeMutation } from "@gram/client/react-query/resolveChallenge.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
-import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { Checkbox } from "@/components/ui/Checkbox";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Check, ChevronRight, Plus, Users } from "lucide-react";
+import {
+  ArrowLeft,
+  Check,
+  ChevronRight,
+  Loader2,
+  Plus,
+  Users,
+} from "lucide-react";
 import { useState } from "react";
 import type { ChallengeBucket } from "@gram/client/models/components/challengebucket.js";
 import { invalidateAllChallengeBuckets } from "@gram/client/react-query/challengeBuckets.js";
-import { principalDisplayName } from "./challengeHelpers";
-import { toRoleSlug } from "./types";
+import {
+  canAssignChallengeRole,
+  principalDisplayName,
+} from "./challengeHelpers";
+import { rolesCoveringChallengeScopes } from "./roleSuggestions";
 import { visiblePermissionCount } from "./roleDialogState";
 
 type Step = "choose" | "select-role" | "confirm";
@@ -45,12 +58,36 @@ export function GrantDrawer({
 }: GrantDrawerProps): JSX.Element | null {
   const [step, setStep] = useState<Step>("choose");
   const [selectedRole, setSelectedRole] = useState<Role | null>(null);
+  const [roleAssignmentConfirmed, setRoleAssignmentConfirmed] = useState(false);
   const queryClient = useQueryClient();
   const { data: rolesData } = useRoles();
   const allRoles = rolesData?.roles ?? [];
-  const roles = challenge
-    ? allRoles.filter((r) => r.grants.some((g) => g.scope === challenge.scope))
-    : [];
+  const canAssignRole = challenge ? canAssignChallengeRole(challenge) : false;
+  const challengeIds = challengeIdsProp ?? (challenge ? [challenge.id] : []);
+  const {
+    data: challengeData,
+    isPending: areChallengesPending,
+    isError: challengesFailed,
+  } = useChallenges(
+    open && canAssignRole && challengeIds.length > 0
+      ? { ids: challengeIds }
+      : undefined,
+    undefined,
+    { enabled: open && canAssignRole && challengeIds.length > 0 },
+  );
+  // Challenge resolution adds one role without replacing the member's current
+  // roles. System-role assignment stays on the full member-management flow;
+  // this focused shortcut only offers custom roles whose grants cover every
+  // complete selector captured by the bucket's challenges.
+  const hasAllChallengeDetails =
+    challengeData?.challenges.length === challengeIds.length;
+  const roles =
+    challenge && canAssignRole && hasAllChallengeDetails
+      ? rolesCoveringChallengeScopes(
+          allRoles.filter((role) => !role.isSystem),
+          challengeData.challenges,
+        )
+      : [];
 
   const hasMatchingRoles = roles.length > 0;
 
@@ -68,6 +105,7 @@ export function GrantDrawer({
     setTimeout(() => {
       setStep("choose");
       setSelectedRole(null);
+      setRoleAssignmentConfirmed(false);
     }, 300);
   };
 
@@ -78,12 +116,13 @@ export function GrantDrawer({
 
   const handlePickRole = (role: Role) => {
     setSelectedRole(role);
+    setRoleAssignmentConfirmed(false);
     setStep("confirm");
   };
 
   const handleSave = () => {
     if (!challenge || !selectedRole) return;
-    const ids = challengeIdsProp ?? [challenge.id];
+    const ids = challengeIds;
     resolveChallenge.mutate(
       {
         request: {
@@ -92,9 +131,33 @@ export function GrantDrawer({
             principalUrn: challenge.principalUrn,
             scope: challenge.scope,
             resolutionType: ResolveChallengeFormResolutionType.RoleAssigned,
-            roleSlug: selectedRole.isSystem
-              ? selectedRole.name.toLowerCase()
-              : toRoleSlug(selectedRole.name),
+            roleSlug: selectedRole.slug,
+            roleAssignmentConfirmed,
+            resourceKind: challenge.resourceKind,
+            resourceId: challenge.resourceId,
+          },
+        },
+      },
+      {
+        onSuccess: () => {
+          onResolved?.();
+          handleClose();
+        },
+      },
+    );
+  };
+
+  const handleDismiss = () => {
+    if (!challenge) return;
+    const ids = challengeIds;
+    resolveChallenge.mutate(
+      {
+        request: {
+          resolveChallengeForm: {
+            challengeIds: ids,
+            principalUrn: challenge.principalUrn,
+            scope: challenge.scope,
+            resolutionType: ResolveChallengeFormResolutionType.Dismissed,
             resourceKind: challenge.resourceKind,
             resourceId: challenge.resourceId,
           },
@@ -165,7 +228,61 @@ export function GrantDrawer({
           >
             {/* Step 1: Choose action */}
             <div className="w-full shrink-0 space-y-3 overflow-y-auto px-4">
-              {hasMatchingRoles ? (
+              {!canAssignRole ? (
+                <div className="space-y-4">
+                  <Text
+                    variant="body"
+                    className="text-muted-foreground text-sm"
+                  >
+                    Roles can only be assigned to one active organization user.
+                    This challenge can be dismissed, but access for this
+                    identity must be managed through its own settings.
+                  </Text>
+                  <Button
+                    variant="secondary"
+                    className="w-full"
+                    onClick={handleDismiss}
+                    disabled={resolveChallenge.isPending}
+                  >
+                    <Button.Text>
+                      {resolveChallenge.isPending
+                        ? "Dismissing…"
+                        : "Dismiss challenge"}
+                    </Button.Text>
+                  </Button>
+                </div>
+              ) : areChallengesPending ? (
+                <div className="border-border flex w-full items-center gap-3 border p-4 text-left">
+                  <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
+                  <Text
+                    variant="body"
+                    className="text-muted-foreground text-sm"
+                  >
+                    Checking roles against the denied access…
+                  </Text>
+                </div>
+              ) : challengesFailed || !hasAllChallengeDetails ? (
+                <div className="border-border space-y-2 border p-4 text-left">
+                  <Text variant="body" className="font-medium">
+                    Challenge details are unavailable
+                  </Text>
+                  <Text
+                    variant="body"
+                    className="text-muted-foreground text-sm"
+                  >
+                    Refresh before assigning a role. The challenge can still be
+                    dismissed.
+                  </Text>
+                  <Button
+                    variant="secondary"
+                    className="w-full"
+                    onClick={handleDismiss}
+                    disabled={resolveChallenge.isPending}
+                  >
+                    <Button.Text>Dismiss challenge</Button.Text>
+                  </Button>
+                </div>
+              ) : hasMatchingRoles ? (
                 <button
                   type="button"
                   onClick={() => setStep("select-role")}
@@ -211,27 +328,29 @@ export function GrantDrawer({
                 </SimpleTooltip>
               )}
 
-              <button
-                type="button"
-                onClick={handleCreateNew}
-                className="border-border hover:bg-muted/50 flex w-full items-center gap-3 border p-4 text-left transition-colors"
-              >
-                <div className="bg-muted flex h-10 w-10 items-center justify-center">
-                  <Plus className="h-5 w-5" />
-                </div>
-                <div className="flex-1">
-                  <Text variant="body" className="font-medium">
-                    Create new role
-                  </Text>
-                  <Text
-                    variant="body"
-                    className="text-muted-foreground text-sm"
-                  >
-                    Define a new role with the exact permissions needed.
-                  </Text>
-                </div>
-                <ChevronRight className="text-muted-foreground h-5 w-5 shrink-0" />
-              </button>
+              {canAssignRole && (
+                <button
+                  type="button"
+                  onClick={handleCreateNew}
+                  className="border-border hover:bg-muted/50 flex w-full items-center gap-3 border p-4 text-left transition-colors"
+                >
+                  <div className="bg-muted flex h-10 w-10 items-center justify-center">
+                    <Plus className="h-5 w-5" />
+                  </div>
+                  <div className="flex-1">
+                    <Text variant="body" className="font-medium">
+                      Create new role
+                    </Text>
+                    <Text
+                      variant="body"
+                      className="text-muted-foreground text-sm"
+                    >
+                      Define a new role with the exact permissions needed.
+                    </Text>
+                  </div>
+                  <ChevronRight className="text-muted-foreground h-5 w-5 shrink-0" />
+                </button>
+              )}
             </div>
 
             {/* Step 2: Role list */}
@@ -258,11 +377,6 @@ export function GrantDrawer({
                         <Text variant="body" className="font-medium">
                           {role.name}
                         </Text>
-                        {role.isSystem && (
-                          <Badge variant="neutral">
-                            <Badge.Text>System</Badge.Text>
-                          </Badge>
-                        )}
                       </div>
                       <Text
                         variant="body"
@@ -311,16 +425,9 @@ export function GrantDrawer({
                         >
                           Role
                         </Text>
-                        <div className="flex items-center gap-2">
-                          <Text variant="body" className="text-sm font-medium">
-                            {selectedRole.name}
-                          </Text>
-                          {selectedRole.isSystem && (
-                            <Badge variant="neutral">
-                              <Badge.Text>System</Badge.Text>
-                            </Badge>
-                          )}
-                        </div>
+                        <Text variant="body" className="text-sm font-medium">
+                          {selectedRole.name}
+                        </Text>
                       </div>
                       <div className="flex items-center justify-between">
                         <Text
@@ -333,24 +440,73 @@ export function GrantDrawer({
                           {challenge.scope}
                         </code>
                       </div>
-                      <div className="flex items-center justify-between">
+                      <div className="space-y-2">
                         <Text
                           variant="body"
                           className="text-muted-foreground text-sm"
                         >
-                          Permissions
+                          All role permissions
                         </Text>
-                        <Text variant="body" className="text-sm">
-                          {visiblePermissionCount(selectedRole.grants)}
-                        </Text>
+                        <ul className="border-border divide-border max-h-40 divide-y overflow-y-auto border">
+                          {[...selectedRole.grants]
+                            .sort((a, b) => a.scope.localeCompare(b.scope))
+                            .map((grant, index) => (
+                              <li
+                                key={`${grant.scope}-${index}`}
+                                className="space-y-1 px-3 py-2"
+                              >
+                                <code className="font-mono text-xs">
+                                  {grant.scope}
+                                </code>
+                                <Text
+                                  variant="body"
+                                  className="text-muted-foreground break-all text-xs"
+                                >
+                                  {grant.selectors && grant.selectors.length > 0
+                                    ? grant.selectors
+                                        .map((selector) =>
+                                          Object.entries(selector)
+                                            .filter(
+                                              ([, value]) =>
+                                                value !== undefined,
+                                            )
+                                            .map(
+                                              ([key, value]) =>
+                                                `${key}=${value}`,
+                                            )
+                                            .join(", "),
+                                        )
+                                        .join("; ")
+                                    : "All matching resources"}
+                                </Text>
+                              </li>
+                            ))}
+                        </ul>
                       </div>
                     </div>
                   </div>
 
+                  <label className="border-border flex cursor-pointer items-start gap-3 border p-3">
+                    <Checkbox
+                      checked={roleAssignmentConfirmed}
+                      onCheckedChange={(checked) =>
+                        setRoleAssignmentConfirmed(checked === true)
+                      }
+                      aria-label="Confirm all role permissions"
+                      className="mt-0.5"
+                    />
+                    <Text variant="body" className="text-sm">
+                      I reviewed the complete role. Assigning it grants all
+                      permissions above, not only {challenge.scope}.
+                    </Text>
+                  </label>
+
                   <Button
                     className="w-full"
                     onClick={handleSave}
-                    disabled={resolveChallenge.isPending}
+                    disabled={
+                      resolveChallenge.isPending || !roleAssignmentConfirmed
+                    }
                   >
                     <Button.LeftIcon>
                       <Check className="h-4 w-4" />

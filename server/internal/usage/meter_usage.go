@@ -32,6 +32,16 @@ func (s *Service) GetMeterUsage(ctx context.Context, payload *gen.GetMeterUsageP
 		return nil, err
 	}
 
+	return s.GetMeterUsageForOrganization(ctx, authCtx.ActiveOrganizationID, payload)
+}
+
+// GetMeterUsageForOrganization performs the meter read for an already
+// authorized, canonical organization ID. API handlers must authorize callers.
+func (s *Service) GetMeterUsageForOrganization(ctx context.Context, organizationID string, payload *gen.GetMeterUsagePayload) (*gen.MeterUsageResponse, error) {
+	if organizationID == "" {
+		return nil, oops.C(oops.CodeNotFound)
+	}
+
 	family := metering.UsageFamily(payload.Family)
 	breakdown := ""
 	if payload.Breakdown != nil {
@@ -43,7 +53,7 @@ func (s *Service) GetMeterUsage(ctx context.Context, payload *gen.GetMeterUsageP
 	}
 
 	queriedAt := s.now().UTC()
-	meta, err := s.repo.GetBillingMetadata(ctx, authCtx.ActiveOrganizationID)
+	meta, err := s.repo.GetBillingMetadata(ctx, organizationID)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return nil, oops.E(oops.CodeUnexpected, err, "get billing metadata for meter usage").LogError(ctx, s.logger)
 	}
@@ -58,7 +68,7 @@ func (s *Service) GetMeterUsage(ctx context.Context, payload *gen.GetMeterUsageP
 	}
 
 	result, err := chrepo.New(s.meterReadConn).GetUsage(ctx, chrepo.UsageParams{
-		OrganizationID: authCtx.ActiveOrganizationID,
+		OrganizationID: organizationID,
 		Selection:      selection,
 		From:           from,
 		To:             to,

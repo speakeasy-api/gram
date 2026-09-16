@@ -65,6 +65,8 @@ type Endpoints struct {
 	UploadPlatformImage                   goa.Endpoint
 	ServeImage                            goa.Endpoint
 	StartTrial                            goa.Endpoint
+	ChangeTrialEndDate                    goa.Endpoint
+	GetMeterUsage                         goa.Endpoint
 }
 
 // UploadPlatformImageRequestData holds both the payload and the HTTP request
@@ -138,6 +140,8 @@ func NewEndpoints(s Service) *Endpoints {
 		UploadPlatformImage:                   NewUploadPlatformImageEndpoint(s, a.APIKeyAuth),
 		ServeImage:                            NewServeImageEndpoint(s),
 		StartTrial:                            NewStartTrialEndpoint(s, a.APIKeyAuth),
+		ChangeTrialEndDate:                    NewChangeTrialEndDateEndpoint(s, a.APIKeyAuth),
+		GetMeterUsage:                         NewGetMeterUsageEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -191,6 +195,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.UploadPlatformImage = m(e.UploadPlatformImage)
 	e.ServeImage = m(e.ServeImage)
 	e.StartTrial = m(e.StartTrial)
+	e.ChangeTrialEndDate = m(e.ChangeTrialEndDate)
+	e.GetMeterUsage = m(e.GetMeterUsage)
 }
 
 // NewLoginEndpoint returns an endpoint function that calls the method "login"
@@ -1255,5 +1261,51 @@ func NewStartTrialEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 			return nil, err
 		}
 		return s.StartTrial(ctx, p)
+	}
+}
+
+// NewChangeTrialEndDateEndpoint returns an endpoint function that calls the
+// method "changeTrialEndDate" of service "admin".
+func NewChangeTrialEndDateEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ChangeTrialEndDatePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ChangeTrialEndDate(ctx, p)
+	}
+}
+
+// NewGetMeterUsageEndpoint returns an endpoint function that calls the method
+// "getMeterUsage" of service "admin".
+func NewGetMeterUsageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetMeterUsagePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetMeterUsage(ctx, p)
 	}
 }

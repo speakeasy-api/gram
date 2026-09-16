@@ -85,9 +85,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/privatekeyjwt"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/clientauth"
 	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
@@ -96,8 +96,8 @@ import (
 type IdentityResolver interface {
 	BuildAuthorizationURL(ctx context.Context, params identity.AuthorizationURLParams) (*url.URL, error)
 	ExchangeCodeForTokens(ctx context.Context, code string) (*identity.IDPUserInfo, error)
-	UpsertUserFromIDP(ctx context.Context, idpUser *identity.IDPUserInfo) (string, error)
-	HasAccessToOrganization(ctx context.Context, organizationID, userID string) (*sessions.Organization, string, bool)
+	CompleteIDPLogin(ctx context.Context, idpUser *identity.IDPUserInfo, opts identity.IDPLoginOptions) (identity.IDPLoginResult, error)
+	IsOrganizationMember(ctx context.Context, organizationID, userID string) (bool, error)
 }
 
 type Service struct {
@@ -134,7 +134,7 @@ type Service struct {
 	// clientAssertionVerifier verifies private_key_jwt client assertions at
 	// the token and revocation endpoints. Nil without Redis, in which case
 	// assertion clients are refused rather than admitted unverified.
-	clientAssertionVerifier *clientauth.Verifier
+	clientAssertionVerifier *privatekeyjwt.Verifier
 	// aiToolBlockReads are the database reads behind the Shadow AI gateway
 	// block check, held as values so a test can make one of them fail.
 	aiToolBlockReads       aiToolBlockReads

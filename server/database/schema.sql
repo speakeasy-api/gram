@@ -2225,6 +2225,9 @@ CREATE TABLE IF NOT EXISTS remote_session_issuers (
 
   scopes_supported TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   grant_types_supported TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  -- Advertised authorization grant profiles. Empty means none recorded, not
+  -- proof that the issuer cannot support a profile or that a client is trusted.
+  authorization_grant_profiles_supported TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   response_types_supported TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   token_endpoint_auth_methods_supported TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   -- Deliberately nullable with no default, unlike the capability arrays
@@ -2337,6 +2340,145 @@ CREATE INDEX IF NOT EXISTS remote_session_issuers_jwks_cache_expires_at_idx
 ON remote_session_issuers (jwks_cache_expires_at)
 WHERE jwks_uri IS NOT NULL AND deleted IS FALSE;
 
+-- Remote Session Clients are records of Gram's client registrations with
+-- upstream authorization servers
+CREATE TABLE IF NOT EXISTS remote_session_clients (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid,
+  organization_id TEXT,
+  -- Stable FK target for project, organization, and platform-global scope.
+  attachment_scope TEXT GENERATED ALWAYS AS (
+    CASE WHEN project_id IS NOT NULL THEN 'project:' || project_id::text
+         WHEN organization_id IS NOT NULL THEN 'organization:' || organization_id
+         ELSE 'global' END
+  ) STORED,
+  remote_session_issuer_id uuid NOT NULL,
+
+  client_id TEXT NOT NULL,
+  client_secret_encrypted TEXT,
+  client_id_issued_at timestamptz,
+  client_secret_expires_at timestamptz,
+  token_endpoint_auth_method TEXT,
+  json_web_key_set_id uuid,
+  scope TEXT[],
+  -- Recorded registration grant types, not authoritative provider policy.
+  -- NULL means unknown; an empty array means explicitly recorded empty.
+  grant_types TEXT[],
+  -- Provider-specific OAuth audience request parameter on authorize/token
+  -- requests, not the ID-JAG resource-AS issuer audience or RFC 8707 resource.
+  -- The signed assertion uses token_endpoint_auth_audience_format instead.
+  audience TEXT,
+
+  -- Which of the issuer's identifiers Gram places in the `aud` claim of an
+  -- outbound JWT client assertion (RFC 7523 private_key_jwt). Distinct from the
+  -- `audience` column above, which carries the audience parameter Gram sends on
+  -- the authorize and token requests; this one only selects the form of a claim
+  -- inside the signed assertion.
+  --
+  --   issuer          remote_session_issuers.issuer, always present
+  --   token_endpoint  remote_session_issuers.token_endpoint, which is nullable,
+  --                   so a consumer has to handle the row where it is unset
+  --   NULL            not configured, read as the standards-forward issuer form
+  --
+  -- The required form is not discoverable. RFC 7523 and OpenID Connect Core
+  -- permit the token endpoint URL, while draft-ietf-oauth-rfc7523bis requires
+  -- the RFC 8414 issuer identifier as the sole audience and prohibits the token
+  -- endpoint URL. Providers have split accordingly: Okta documents the token
+  -- endpoint, Auth0 expects its issuer. The choice therefore has to be recorded
+  -- per registration and survive code exchanges, refreshes, workers, deploys,
+  -- and restarts.
+  --
+  -- Only the selector is stored, never an arbitrary audience URI, and the
+  -- allowed values are validated in application code rather than by a CHECK so
+  -- the enumeration can evolve without a migration. It sits on the client
+  -- alongside token_endpoint_auth_method and json_web_key_set_id so two
+  -- registrations against one authorization server can hold different
+  -- compatibility settings, and so the setting travels with the client when an
+  -- issuer is consolidated.
+  token_endpoint_auth_audience_format TEXT,
+
+  -- CIMD: when non-null, Gram publishes its OAuth Client ID Metadata
+  -- Document at this HTTPS URL and uses the URL as the client_id on every
+  -- outbound /authorize, /token, and refresh call. Per
+  -- draft-ietf-oauth-client-id-metadata-document the client_id MUST equal
+  -- this URL, so client_id and client_id_metadata_uri must stay in sync;
+  -- the CHECK constraint below enforces that.
+  client_id_metadata_uri TEXT,
+
+  -- TRUE when this client was registered upstream with the legacy
+  -- /oauth/callback redirect_uri (e.g. cloned from oauth_proxy_providers).
+  -- The authorize leg sends the legacy URL + a JSON state carrying
+  -- remote_sessions=true so /oauth/callback can forward the response to
+  -- /mcp/remote_login_callback. Once oauth_proxy_servers are dropped, the
+  -- /oauth/callback handler degrades to only the forwarding dance; this
+  -- column then exists only to keep legacy-registered clients alive until
+  -- traffic on /oauth/callback drops to zero and they can be re-issued.
+  legacy_callback_url boolean NOT NULL DEFAULT FALSE,
+
+  -- RFC 9728 display members of the one protected resource this client was
+  -- registered for, read from that resource's metadata document. The issuer
+  -- row keeps only authorization-server (RFC 8414) data; a shared issuer must
+  -- not carry one resource's name or legal links. resource_identifier is the
+  -- document's resource value the other four were read for, so a later probe
+  -- of another resource never overwrites them. All NULL until captured.
+  resource_identifier TEXT,
+  resource_name TEXT,
+  resource_documentation TEXT,
+  resource_policy_uri TEXT,
+  resource_tos_uri TEXT,
+
+  -- When the issuer's token endpoint last answered invalid_client for this
+  -- client_id. Set by the refresh path and cleared by a successful
+  -- re-registration, a successful refresh, or a manually replaced secret. The
+  -- next remote login confirms the rejection against the token endpoint and
+  -- re-registers the client at the registration_endpoint of its
+  -- remote_session_issuer, which discovery keeps current.
+  upstream_rejected_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT remote_session_clients_pkey PRIMARY KEY (id),
+  CONSTRAINT remote_session_clients_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT remote_session_clients_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT remote_session_clients_remote_session_issuer_id_fkey FOREIGN KEY (remote_session_issuer_id) REFERENCES remote_session_issuers (id) ON DELETE CASCADE,
+  CONSTRAINT remote_session_clients_json_web_key_set_tenant_fkey FOREIGN KEY (organization_id, json_web_key_set_id) REFERENCES json_web_key_sets (organization_id, id),
+  -- organization_id is nullable on this table, and the composite foreign key
+  -- above is MATCH SIMPLE, so a row with a NULL organization_id would skip the
+  -- key check entirely and could point at any organization's set. Require the
+  -- organization to be known whenever a client opts into a JWKS so the tenant
+  -- pinning cannot be bypassed.
+  CONSTRAINT remote_session_clients_json_web_key_set_id_check CHECK (
+    json_web_key_set_id IS NULL
+    OR organization_id IS NOT NULL
+  ),
+  -- CIMD spec forbids symmetric secrets, so a row that publishes a CIMD
+  -- document must not have an encrypted secret on file. The spec also
+  -- requires the client_id value in the metadata document to equal the
+  -- document URL. We persist them as separate columns so the two roles are
+  -- explicit, and this CHECK keeps them in sync (and rejects an empty URL).
+  CONSTRAINT remote_session_clients_client_id_metadata_uri_check CHECK (
+    client_id_metadata_uri IS NULL
+    OR (
+      client_id_metadata_uri <> ''
+      AND client_secret_encrypted IS NULL
+      AND client_id = client_id_metadata_uri
+    )
+  )
+);
+
+
+CREATE UNIQUE INDEX IF NOT EXISTS remote_session_clients_attachment_scope_key
+ON remote_session_clients (id, attachment_scope);
+CREATE INDEX IF NOT EXISTS remote_session_clients_organization_id_idx
+ON remote_session_clients (organization_id)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS remote_session_clients_json_web_key_set_idx
+ON remote_session_clients (organization_id, json_web_key_set_id);
+
 -- User Session Issuers house configuration for when Gram acts as an Authorization Server for MCP Clients
 -- See: https://datatracker.ietf.org/doc/html/rfc8414
 CREATE TABLE IF NOT EXISTS user_session_issuers (
@@ -2360,6 +2502,9 @@ CREATE TABLE IF NOT EXISTS user_session_issuers (
   -- External authorization server whose assertions this issuer trusts.
   -- NULL preserves the standard interactive or chained authentication flow.
   trusted_remote_session_issuer_id uuid,
+  -- Gram's upstream IdP registration, not a downstream-client attachment.
+  -- Must be a live, same-organization client of the trusted issuer.
+  trusted_remote_session_client_id uuid,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -2370,7 +2515,9 @@ CREATE TABLE IF NOT EXISTS user_session_issuers (
   CONSTRAINT user_session_issuers_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
   CONSTRAINT user_session_issuers_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
   CONSTRAINT user_session_issuers_trusted_remote_session_issuer_id_fkey
-    FOREIGN KEY (trusted_remote_session_issuer_id) REFERENCES remote_session_issuers (id) ON DELETE SET NULL
+    FOREIGN KEY (trusted_remote_session_issuer_id) REFERENCES remote_session_issuers (id) ON DELETE SET NULL,
+  CONSTRAINT user_session_issuers_trusted_remote_session_client_id_fkey
+    FOREIGN KEY (trusted_remote_session_client_id) REFERENCES remote_session_clients (id) ON DELETE SET NULL
 );
 
 
@@ -2381,6 +2528,9 @@ ON user_session_issuers (organization_id);
 
 CREATE INDEX IF NOT EXISTS user_session_issuers_trusted_remote_session_issuer_id_idx
 ON user_session_issuers (trusted_remote_session_issuer_id);
+
+CREATE INDEX IF NOT EXISTS user_session_issuers_trusted_remote_session_client_id_idx
+ON user_session_issuers (trusted_remote_session_client_id);
 
 CREATE UNIQUE INDEX IF NOT EXISTS user_session_issuers_organization_id_id_key
 ON user_session_issuers (organization_id, id);
@@ -2811,139 +2961,6 @@ CREATE INDEX IF NOT EXISTS workload_identity_admissions_workload_issuer_id_idx
 ON workload_identity_admissions (workload_issuer_id)
 WHERE deleted IS FALSE;
 
--- Remote Session Clients are records of Gram's client registrations with
--- upstream authorization servers
-CREATE TABLE IF NOT EXISTS remote_session_clients (
-  id uuid NOT NULL DEFAULT generate_uuidv7(),
-  project_id uuid,
-  organization_id TEXT,
-  -- Stable FK target for project, organization, and platform-global scope.
-  attachment_scope TEXT GENERATED ALWAYS AS (
-    CASE WHEN project_id IS NOT NULL THEN 'project:' || project_id::text
-         WHEN organization_id IS NOT NULL THEN 'organization:' || organization_id
-         ELSE 'global' END
-  ) STORED,
-  remote_session_issuer_id uuid NOT NULL,
-
-  client_id TEXT NOT NULL,
-  client_secret_encrypted TEXT,
-  client_id_issued_at timestamptz,
-  client_secret_expires_at timestamptz,
-  token_endpoint_auth_method TEXT,
-  json_web_key_set_id uuid,
-  scope TEXT[],
-  audience TEXT,
-
-  -- Which of the issuer's identifiers Gram places in the `aud` claim of an
-  -- outbound JWT client assertion (RFC 7523 private_key_jwt). Distinct from the
-  -- `audience` column above, which carries the audience parameter Gram sends on
-  -- the authorize and token requests; this one only selects the form of a claim
-  -- inside the signed assertion.
-  --
-  --   issuer          remote_session_issuers.issuer, always present
-  --   token_endpoint  remote_session_issuers.token_endpoint, which is nullable,
-  --                   so a consumer has to handle the row where it is unset
-  --   NULL            not configured, read as the standards-forward issuer form
-  --
-  -- The required form is not discoverable. RFC 7523 and OpenID Connect Core
-  -- permit the token endpoint URL, while draft-ietf-oauth-rfc7523bis requires
-  -- the RFC 8414 issuer identifier as the sole audience and prohibits the token
-  -- endpoint URL. Providers have split accordingly: Okta documents the token
-  -- endpoint, Auth0 expects its issuer. The choice therefore has to be recorded
-  -- per registration and survive code exchanges, refreshes, workers, deploys,
-  -- and restarts.
-  --
-  -- Only the selector is stored, never an arbitrary audience URI, and the
-  -- allowed values are validated in application code rather than by a CHECK so
-  -- the enumeration can evolve without a migration. It sits on the client
-  -- alongside token_endpoint_auth_method and json_web_key_set_id so two
-  -- registrations against one authorization server can hold different
-  -- compatibility settings, and so the setting travels with the client when an
-  -- issuer is consolidated.
-  token_endpoint_auth_audience_format TEXT,
-
-  -- CIMD: when non-null, Gram publishes its OAuth Client ID Metadata
-  -- Document at this HTTPS URL and uses the URL as the client_id on every
-  -- outbound /authorize, /token, and refresh call. Per
-  -- draft-ietf-oauth-client-id-metadata-document the client_id MUST equal
-  -- this URL, so client_id and client_id_metadata_uri must stay in sync;
-  -- the CHECK constraint below enforces that.
-  client_id_metadata_uri TEXT,
-
-  -- TRUE when this client was registered upstream with the legacy
-  -- /oauth/callback redirect_uri (e.g. cloned from oauth_proxy_providers).
-  -- The authorize leg sends the legacy URL + a JSON state carrying
-  -- remote_sessions=true so /oauth/callback can forward the response to
-  -- /mcp/remote_login_callback. Once oauth_proxy_servers are dropped, the
-  -- /oauth/callback handler degrades to only the forwarding dance; this
-  -- column then exists only to keep legacy-registered clients alive until
-  -- traffic on /oauth/callback drops to zero and they can be re-issued.
-  legacy_callback_url boolean NOT NULL DEFAULT FALSE,
-
-  -- RFC 9728 display members of the one protected resource this client was
-  -- registered for, read from that resource's metadata document. The issuer
-  -- row keeps only authorization-server (RFC 8414) data; a shared issuer must
-  -- not carry one resource's name or legal links. resource_identifier is the
-  -- document's resource value the other four were read for, so a later probe
-  -- of another resource never overwrites them. All NULL until captured.
-  resource_identifier TEXT,
-  resource_name TEXT,
-  resource_documentation TEXT,
-  resource_policy_uri TEXT,
-  resource_tos_uri TEXT,
-
-  -- When the issuer's token endpoint last answered invalid_client for this
-  -- client_id. Set by the refresh path and cleared by a successful
-  -- re-registration, a successful refresh, or a manually replaced secret. The
-  -- next remote login confirms the rejection against the token endpoint and
-  -- re-registers the client at the registration_endpoint of its
-  -- remote_session_issuer, which discovery keeps current.
-  upstream_rejected_at timestamptz,
-
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  deleted_at timestamptz,
-  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
-
-  CONSTRAINT remote_session_clients_pkey PRIMARY KEY (id),
-  CONSTRAINT remote_session_clients_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
-  CONSTRAINT remote_session_clients_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT remote_session_clients_remote_session_issuer_id_fkey FOREIGN KEY (remote_session_issuer_id) REFERENCES remote_session_issuers (id) ON DELETE CASCADE,
-  CONSTRAINT remote_session_clients_json_web_key_set_tenant_fkey FOREIGN KEY (organization_id, json_web_key_set_id) REFERENCES json_web_key_sets (organization_id, id),
-  -- organization_id is nullable on this table, and the composite foreign key
-  -- above is MATCH SIMPLE, so a row with a NULL organization_id would skip the
-  -- key check entirely and could point at any organization's set. Require the
-  -- organization to be known whenever a client opts into a JWKS so the tenant
-  -- pinning cannot be bypassed.
-  CONSTRAINT remote_session_clients_json_web_key_set_id_check CHECK (
-    json_web_key_set_id IS NULL
-    OR organization_id IS NOT NULL
-  ),
-  -- CIMD spec forbids symmetric secrets, so a row that publishes a CIMD
-  -- document must not have an encrypted secret on file. The spec also
-  -- requires the client_id value in the metadata document to equal the
-  -- document URL. We persist them as separate columns so the two roles are
-  -- explicit, and this CHECK keeps them in sync (and rejects an empty URL).
-  CONSTRAINT remote_session_clients_client_id_metadata_uri_check CHECK (
-    client_id_metadata_uri IS NULL
-    OR (
-      client_id_metadata_uri <> ''
-      AND client_secret_encrypted IS NULL
-      AND client_id = client_id_metadata_uri
-    )
-  )
-);
-
-
-CREATE UNIQUE INDEX IF NOT EXISTS remote_session_clients_attachment_scope_key
-ON remote_session_clients (id, attachment_scope);
-CREATE INDEX IF NOT EXISTS remote_session_clients_organization_id_idx
-ON remote_session_clients (organization_id)
-WHERE deleted IS FALSE;
-
-CREATE INDEX IF NOT EXISTS remote_session_clients_json_web_key_set_idx
-ON remote_session_clients (organization_id, json_web_key_set_id);
-
 CREATE TABLE IF NOT EXISTS remote_session_client_user_session_issuers (
   remote_session_client_id uuid NOT NULL,
   user_session_issuer_id uuid NOT NULL,
@@ -2956,6 +2973,55 @@ CREATE TABLE IF NOT EXISTS remote_session_client_user_session_issuers (
 
 CREATE INDEX IF NOT EXISTS remote_session_client_user_session_issuers_issuer_idx
 ON remote_session_client_user_session_issuers (user_session_issuer_id, remote_session_client_id);
+
+-- Human delegation credentials, independent of downstream service sessions.
+-- Consumers require a live session, client and tenant with matching scope.
+-- Writes require an organization and client; project_id remains NULL.
+-- Orphaned or soft-deleted references are unusable; deletion does not erase secrets.
+CREATE TABLE IF NOT EXISTS trusted_issuer_sessions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  remote_session_client_id uuid,
+  organization_id TEXT,
+  project_id uuid,
+
+  -- Provisioned Gram human subject, not an external identifier.
+  subject_urn TEXT NOT NULL,
+  -- Validated OIDC ID token and verified expiry.
+  identity_assertion_encrypted TEXT,
+  identity_assertion_expires_at timestamptz,
+  -- Independent optional upstream refresh credential and best-effort expiry.
+  refresh_token_encrypted TEXT,
+  refresh_expires_at timestamptz,
+  -- Actual refresh attempt, never an offline-consent/request marker.
+  last_refresh_attempt_at timestamptz,
+  -- Completed offline request returned no refresh token, versus never requested.
+  offline_access_refused_at timestamptz,
+  -- Non-secret configuration fingerprint used to invalidate refusal suppression.
+  offline_access_request_config_hash TEXT,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT trusted_issuer_sessions_pkey PRIMARY KEY (id),
+  CONSTRAINT trusted_issuer_sessions_remote_session_client_id_fkey FOREIGN KEY (remote_session_client_id) REFERENCES remote_session_clients (id) ON DELETE SET NULL,
+  CONSTRAINT trusted_issuer_sessions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE SET NULL,
+  CONSTRAINT trusted_issuer_sessions_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL
+);
+
+-- Non-partial indexes support FK actions on live and soft-deleted rows alike.
+CREATE INDEX IF NOT EXISTS trusted_issuer_sessions_remote_session_client_id_idx
+ON trusted_issuer_sessions (remote_session_client_id);
+CREATE INDEX IF NOT EXISTS trusted_issuer_sessions_organization_id_idx
+ON trusted_issuer_sessions (organization_id);
+CREATE INDEX IF NOT EXISTS trusted_issuer_sessions_project_id_idx
+ON trusted_issuer_sessions (project_id);
+
+-- One live credential per client and human, independent of downstream resources.
+CREATE UNIQUE INDEX IF NOT EXISTS trusted_issuer_sessions_client_subject_key
+ON trusted_issuer_sessions (remote_session_client_id, subject_urn)
+WHERE deleted IS FALSE;
 
 -- Remote sessions represent credentials for an external resource that have
 -- been granted to a single Gram subject
@@ -6202,13 +6268,6 @@ CREATE TABLE IF NOT EXISTS risk_policies (
   -- drops any finding whose canonical rule_id appears here.
   disabled_rules TEXT[],
   custom_rule_ids TEXT[] NOT NULL DEFAULT '{}',
-  message_types TEXT[],
-  -- Fine-grained applicability as CEL boolean expressions over message fields
-  -- (see internal/risk/celenv). A policy applies when scope_include is true (or
-  -- NULL = all) AND scope_exempt is not true. scope_include generalizes
-  -- message_types; NULL falls back to those cards.
-  scope_include TEXT,
-  scope_exempt TEXT,
   action TEXT NOT NULL DEFAULT 'flag',
   audience_type TEXT NOT NULL DEFAULT 'everyone',
   -- Default disposition for shadow MCP blocking policies (action = 'block'
@@ -8668,3 +8727,42 @@ CREATE TABLE IF NOT EXISTS killswitch_operations (
   CONSTRAINT killswitch_operations_completed_response_check CHECK ((status = 'pending' AND response IS NULL) OR (status = 'completed' AND response IS NOT NULL))
 );
 CREATE INDEX IF NOT EXISTS killswitch_operations_expires_at_idx ON killswitch_operations (expires_at);
+
+-- Purpose-specific downstream registrations; interactive attachments remain separate.
+-- Application transactions retain tombstone generations and reject stale completion.
+CREATE UNIQUE INDEX IF NOT EXISTS remote_session_clients_id_issuer_key ON remote_session_clients (id, remote_session_issuer_id);
+
+CREATE TABLE IF NOT EXISTS remote_session_ema_bindings (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+  user_session_issuer_id uuid NOT NULL,
+  remote_session_issuer_id uuid NOT NULL,
+  resource TEXT NOT NULL,
+  remote_session_client_id uuid,
+  -- Binding incarnation, not a counter for every status/provenance update.
+  -- Writers CAS against the expected generation; unlink/rebind advances it.
+  -- DCR completion checks claim_id and in_progress state within the same
+  -- generation, then records status/provenance and clears the completed claim.
+  generation bigint NOT NULL DEFAULT 1,
+  state TEXT,
+  grant_source TEXT,
+  requested_scopes TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  claim_id uuid,
+  claimed_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  PRIMARY KEY (id),
+  -- Application transactions must unlink and clean up parent references.
+  -- Required provenance stays NOT NULL: deletion fails if references remain.
+  FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON UPDATE CASCADE ON DELETE SET NULL,
+  FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE SET NULL,
+  FOREIGN KEY (remote_session_issuer_id) REFERENCES remote_session_issuers (id) ON DELETE SET NULL,
+  FOREIGN KEY (remote_session_client_id, remote_session_issuer_id) REFERENCES remote_session_clients (id, remote_session_issuer_id) ON DELETE SET NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS remote_session_ema_bindings_resource_key ON remote_session_ema_bindings
+  (project_id, user_session_issuer_id, remote_session_issuer_id, resource);
+CREATE UNIQUE INDEX IF NOT EXISTS remote_session_ema_bindings_claim_key ON remote_session_ema_bindings (claim_id) WHERE claim_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS remote_session_ema_bindings_client_idx ON remote_session_ema_bindings (remote_session_client_id);
+CREATE INDEX IF NOT EXISTS remote_session_ema_bindings_issuer_idx ON remote_session_ema_bindings (remote_session_issuer_id);
+CREATE INDEX IF NOT EXISTS remote_session_ema_bindings_user_issuer_idx ON remote_session_ema_bindings (user_session_issuer_id);

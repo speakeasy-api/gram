@@ -163,7 +163,7 @@ func registerOrganizationEventTools(reg *Registrar, reader *PostgresReader) {
 		Title:       "List Organization Events",
 		Description: "List the newest Event Feed entries for the current organization, defaulting to 20 events from the last day. Each event is reduced to when it happened, whether it is a log or a span, its source and name, a short body preview for logs, and the project it belongs to. Constraints: this uses the bounded Event Feed list path and never returns attributes, resource attributes, trace IDs, span IDs, or user identities. The returned dashboard link opens the full Event Feed page.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListOrganizationEventsInput) (*mcp.CallToolResult, ListOrganizationEventsOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListOrganizationEventsInput) (*mcp.CallToolResult, ListOrganizationEventsOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
 			return nil, ListOrganizationEventsOutput{}, err
@@ -201,5 +201,5 @@ func registerUnavailableOrganizationEventTools(reg *Registrar) {
 		Title:       "List Organization Events",
 		Description: "List recent Event Feed entries for the current organization. This is not switched on for your organization yet.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, unavailableTool("organization_events"))
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, unavailableTool("organization_events"))
 }

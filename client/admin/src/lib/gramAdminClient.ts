@@ -1,3 +1,9 @@
+import type { UseQueryOptions } from "@tanstack/react-query";
+import type { AdminMeterUsageResponse } from "@gram/admin-client/models/components/adminmeterusageresponse";
+import { buildAdminGetMeterUsageQuery } from "@gram/admin-client/react-query/adminGetMeterUsage.core";
+import type { AdminGetMeterUsageRequest } from "@gram/admin-client/models/operations/admingetmeterusage";
+import { buildAdminChangeTrialEndDateMutation } from "@gram/admin-client/react-query/adminChangeTrialEndDate";
+import type { ChangeTrialEndDateRequestBody } from "@gram/admin-client/models/components/changetrialenddaterequestbody";
 import {
   buildAdminUploadPlatformImageMutation,
   type AdminUploadPlatformImageMutationVariables,
@@ -136,6 +142,17 @@ export function adminSessionQuery(): ReturnType<
   return createAdminSessionQuery();
 }
 
+export function organizationMeterUsageQuery(
+  request: AdminGetMeterUsageRequest,
+): UseQueryOptions<AdminMeterUsageResponse> {
+  const generated = buildAdminGetMeterUsageQuery(redirectingClient, request);
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+    staleTime: 30_000,
+  });
+}
+
 function createOrganizationFeaturesQuery(organizationId: string) {
   const request: AdminGetOrganizationFeaturesRequest = { organizationId };
   const generated = buildAdminOrganizationFeaturesQuery(
@@ -240,6 +257,16 @@ const disableOrganizationMutation =
   buildAdminDisableOrganizationMutation(redirectingClient);
 const enableOrganizationMutation =
   buildAdminEnableOrganizationMutation(redirectingClient);
+const changeTrialEndDateMutation =
+  buildAdminChangeTrialEndDateMutation(redirectingClient);
+export async function changeTrialEndDate(
+  request: ChangeTrialEndDateRequestBody,
+): Promise<AdminOrganization> {
+  return organizationFromSdk(
+    await redirecting(changeTrialEndDateMutation.mutationFn({ request })),
+  );
+}
+
 const extendTrialMutation = buildAdminExtendTrialMutation(redirectingClient);
 const rearmTrialMutation = buildAdminRearmTrialMutation(redirectingClient);
 

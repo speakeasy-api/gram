@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"strings"
 	"time"
 
@@ -86,8 +87,9 @@ func (a *JWTAuthenticator) Authenticate(ctx context.Context, token string) (Prin
 }
 
 type LiveOrgAdminAuthorizer struct {
-	db     *pgxpool.Pool
-	engine *authz.Engine
+	db           *pgxpool.Pool
+	engine       *authz.Engine
+	dashboardURL *url.URL
 }
 
 func jwtAuthenticationStoreError(err error) error {
@@ -98,11 +100,19 @@ func jwtAuthenticationStoreError(err error) error {
 }
 
 func NewLiveOrgAdminAuthorizer(db *pgxpool.Pool, engine *authz.Engine) *LiveOrgAdminAuthorizer {
-	return &LiveOrgAdminAuthorizer{db: db, engine: engine}
+	return &LiveOrgAdminAuthorizer{db: db, engine: engine, dashboardURL: nil}
 }
 
-// LiveOrganizationSelector returns only organizations where the current user
-// holds the same live org:admin grant required to authorize Platform MCP.
+func (a *LiveOrgAdminAuthorizer) WithDashboardURL(dashboardURL *url.URL) *LiveOrgAdminAuthorizer {
+	if a != nil && validDashboardURL(dashboardURL) {
+		copyURL := *dashboardURL
+		a.dashboardURL = &copyURL
+	}
+	return a
+}
+
+// LiveOrganizationSelector returns active organization memberships. Per-call
+// RBAC determines what the user may do after connecting.
 type LiveOrganizationSelector struct {
 	db         *pgxpool.Pool
 	authorizer Authorizer
@@ -122,11 +132,12 @@ func (s *LiveOrganizationSelector) EligibleOrganizations(ctx context.Context, us
 	}
 	options := make([]OrganizationOption, 0, len(organizations))
 	for _, organization := range organizations {
-		if err := s.authorizer.RequireLiveOrgAdmin(ctx, Principal{UserID: userID, OrganizationID: organization.ID, ConnectionID: "", Generation: "", ClientID: "", Surface: SurfacePlatformMCP}); err != nil {
+		principal := Principal{UserID: userID, OrganizationID: organization.ID, ConnectionID: "", Generation: "", ClientID: "", Surface: SurfacePlatformMCP}
+		if err := s.authorizer.RequireLiveMembership(ctx, principal); err != nil {
 			if isAuthorizationDenied(err) {
 				continue
 			}
-			return nil, fmt.Errorf("check organization admin eligibility: %w", err)
+			return nil, fmt.Errorf("check organization membership eligibility: %w", err)
 		}
 		options = append(options, OrganizationOption{ID: organization.ID, Name: organization.Name})
 	}
@@ -141,11 +152,10 @@ func isAuthorizationDenied(err error) bool {
 	return errors.As(err, &shareable) && shareable.Code == oops.CodeForbidden
 }
 
-func (a *LiveOrgAdminAuthorizer) RequireLiveOrgAdmin(ctx context.Context, principal Principal) error {
-	if a.db == nil || a.engine == nil || principal.UserID == "" || principal.OrganizationID == "" {
+func (a *LiveOrgAdminAuthorizer) RequireLiveMembership(ctx context.Context, principal Principal) error {
+	if a == nil || a.db == nil || principal.UserID == "" || principal.OrganizationID == "" {
 		return ErrUnavailable
 	}
-
 	member, err := organizationsrepo.New(a.db).HasActiveOrganizationUser(ctx, organizationsrepo.HasActiveOrganizationUserParams{
 		UserID:         principal.UserID,
 		OrganizationID: principal.OrganizationID,
@@ -155,6 +165,16 @@ func (a *LiveOrgAdminAuthorizer) RequireLiveOrgAdmin(ctx context.Context, princi
 	}
 	if !member {
 		return ErrForbidden
+	}
+	return nil
+}
+
+func (a *LiveOrgAdminAuthorizer) RequireLiveOrgAdmin(ctx context.Context, principal Principal) error {
+	if a == nil || a.db == nil || a.engine == nil || principal.UserID == "" || principal.OrganizationID == "" {
+		return ErrUnavailable
+	}
+	if err := a.RequireLiveMembership(ctx, principal); err != nil {
+		return err
 	}
 
 	principals, err := authz.ResolveUserPrincipals(ctx, a.db, principal.OrganizationID, principal.UserID)
@@ -292,6 +312,7 @@ type PostgresReader struct {
 	inventoryCursor     *inventoryCursorCodec
 	metadataVersionKey  []byte
 	riskReads           *RiskReadService
+	riskAnalysisStatus  *RiskAnalysisStatusService
 	dataExports         *DataExportReadService
 	dataExportMutations *dataExportMutationService
 	recentToolCalls     *RecentToolCallReadService
@@ -310,6 +331,7 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		inventoryCursor:     nil,
 		metadataVersionKey:  nil,
 		riskReads:           nil,
+		riskAnalysisStatus:  nil,
 		dataExports:         nil,
 		dataExportMutations: nil,
 		recentToolCalls:     nil,
@@ -330,6 +352,15 @@ func (r *PostgresReader) WithShadowDecisions(service *ShadowDecisionService) *Po
 func (r *PostgresReader) WithShadowInventory(service *ShadowInventoryService) *PostgresReader {
 	if r != nil && service != nil && service.valid() {
 		r.shadowInventory = service
+	}
+	return r
+}
+
+// WithRiskAnalysisStatus attaches the Watchdog analysis run-state reads. A nil
+// or incomplete service leaves the tool served as a stub.
+func (r *PostgresReader) WithRiskAnalysisStatus(service *RiskAnalysisStatusService) *PostgresReader {
+	if r != nil && service.valid() {
+		r.riskAnalysisStatus = service
 	}
 	return r
 }

@@ -40,6 +40,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -57,6 +58,7 @@ type Service struct {
 	enc          *encryption.Client
 	environments *environments.EnvironmentEntries
 	policy       *guardian.Policy
+	tunnels      *tunnelrouting.HTTPClient
 	auditLogger  *audit.Logger
 	serverURL    *url.URL
 	refresher    *RefreshService
@@ -89,9 +91,9 @@ var (
 	_ adminrsgen.Auther      = (*Service)(nil)
 )
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, authzEngine *authz.Engine, enc *encryption.Client, env *environments.EnvironmentEntries, policy *guardian.Policy, auditLogger *audit.Logger, serverURL *url.URL, refresher *RefreshService, productFeatures *productfeatures.Client) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, authzEngine *authz.Engine, enc *encryption.Client, env *environments.EnvironmentEntries, policy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, auditLogger *audit.Logger, serverURL *url.URL, refresher *RefreshService, productFeatures *productfeatures.Client) *Service {
 	logger = logger.With(attr.SlogComponent("remotesessions"))
-	revoker := NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, policy, refresher.assertions)
+	revoker := NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, policy, tunnels, refresher.assertions)
 
 	return &Service{
 		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/remotesessions"),
@@ -103,6 +105,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 		enc:          enc,
 		environments: env,
 		policy:       policy,
+		tunnels:      tunnels,
 		auditLogger:  auditLogger,
 		serverURL:    serverURL,
 		refresher:    refresher,
@@ -110,7 +113,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 		revoker:      revoker,
 		// The refresher's lease cache single-flights rotations the same way it
 		// single-flights refreshes, so the two never race on one client.
-		rotator: NewClientRotator(logger, db, enc, policy, refresher.locks, serverURL, revoker, auditLogger),
+		rotator: NewClientRotator(logger, db, enc, policy, tunnels, refresher.locks, serverURL, revoker, auditLogger),
 
 		productFeatures: productFeatures,
 	}

@@ -246,3 +246,13 @@ func ServeImageAdminPath() string {
 func StartTrialAdminPath() string {
 	return "/admin/trial.start"
 }
+
+// ChangeTrialEndDateAdminPath returns the URL path to the admin service changeTrialEndDate HTTP endpoint.
+func ChangeTrialEndDateAdminPath() string {
+	return "/admin/trial.changeEndDate"
+}
+
+// GetMeterUsageAdminPath returns the URL path to the admin service getMeterUsage HTTP endpoint.
+func GetMeterUsageAdminPath() string {
+	return "/admin/organizations.getMeterUsage"
+}

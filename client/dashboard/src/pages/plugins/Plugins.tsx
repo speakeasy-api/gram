@@ -40,7 +40,7 @@ import { Switch } from "@/components/ui/Switch";
 import { useRBAC } from "@/hooks/useRBAC";
 import { Activity, Network } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { Outlet, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { PlatformInstrumentationSheet } from "../setup/components/platform-instrumentation-sheet";
@@ -88,11 +88,11 @@ export default function Plugins(): JSX.Element {
   const [isObservabilityDownloadMenuOpen, setIsObservabilityDownloadMenuOpen] =
     useState(false);
   const [isDownloadingObservability, setIsDownloadingObservability] = useState<
-    "claude" | "cursor" | "codex" | "opencode" | "openclaw" | null
+    "claude" | "cursor" | "codex" | "opencode" | "openclaw" | "pi" | null
   >(null);
 
   const handleObservabilityDownload = async (
-    platform: "claude" | "cursor" | "codex" | "opencode" | "openclaw",
+    platform: "claude" | "cursor" | "codex" | "opencode" | "openclaw" | "pi",
   ) => {
     setIsObservabilityDownloadMenuOpen(false);
     setIsDownloadingObservability(platform);
@@ -114,23 +114,36 @@ export default function Plugins(): JSX.Element {
     }
   };
 
+  // Ref, not state: onSuccess/onError read the mode from a detached mutation
+  // callback, where a state capture would be stale; it also avoids re-rendering
+  // the memoized dialogs on mode switch.
+  const publishModeRef = useRef<"publish" | "manage">("publish");
+
   const publishMutation = usePublishPluginsMutation({
     onSuccess: (data) => {
+      const managing = publishModeRef.current === "manage";
       setIsPublishDialogOpen(false);
       setIsManageCollaboratorsOpen(false);
       void invalidateAllPublishStatus(queryClient);
-      toast.success("Plugins published to GitHub", {
-        description: data.repoUrl,
-        action: {
-          label: "Open",
-          onClick: () => {
-            openSafeExternalUrl(data.repoUrl);
+      toast.success(
+        managing ? "Collaborators added" : "Plugins published to GitHub",
+        {
+          description: data.repoUrl,
+          action: {
+            label: "Open",
+            onClick: () => {
+              openSafeExternalUrl(data.repoUrl);
+            },
           },
         },
-      });
+      );
     },
     onError: () => {
-      toast.error("Failed to publish plugins to GitHub");
+      toast.error(
+        publishModeRef.current === "manage"
+          ? "Failed to add collaborators"
+          : "Failed to publish plugins to GitHub",
+      );
     },
   });
 
@@ -186,6 +199,19 @@ export default function Plugins(): JSX.Element {
   const { mutate: publishMutate } = publishMutation;
   const handlePublish = useCallback(
     (githubUsernames: string[]) => {
+      publishModeRef.current = "publish";
+      publishMutate({
+        security: { sessionHeaderGramSession: "" },
+        request: {
+          publishPluginsRequestBody: { githubUsernames },
+        },
+      });
+    },
+    [publishMutate],
+  );
+  const handleAddCollaborators = useCallback(
+    (githubUsernames: string[]) => {
+      publishModeRef.current = "manage";
       publishMutate({
         security: { sessionHeaderGramSession: "" },
         request: {
@@ -479,7 +505,7 @@ export default function Plugins(): JSX.Element {
         mode="manage"
         open={isManageCollaboratorsOpen}
         onOpenChange={setIsManageCollaboratorsOpen}
-        onPublish={handlePublish}
+        onPublish={handleAddCollaborators}
         isPending={publishMutation.isPending}
       />
 
@@ -586,7 +612,7 @@ function ObservabilityPluginCard({
   onDownloadMenuOpenChange: (open: boolean) => void;
   isDownloading: boolean;
   onDownload: (
-    platform: "claude" | "cursor" | "codex" | "opencode" | "openclaw",
+    platform: "claude" | "cursor" | "codex" | "opencode" | "openclaw" | "pi",
   ) => void;
 }) {
   const [isInstallSheetOpen, setIsInstallSheetOpen] = useState(false);
@@ -708,6 +734,14 @@ function ObservabilityPluginCard({
                 }}
               >
                 Download as zip — OpenClaw
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={isDownloading}
+                onClick={() => {
+                  onDownload("pi");
+                }}
+              >
+                Download as zip — Pi
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

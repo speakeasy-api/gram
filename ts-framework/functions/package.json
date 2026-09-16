@@ -56,8 +56,8 @@
   },
   "dependencies": {
     "@clack/prompts": "^1.7.0",
-    "@logtape/logtape": "^2.3.2",
-    "@logtape/pretty": "^2.3.2",
+    "@logtape/logtape": "^2.3.3",
+    "@logtape/pretty": "^2.3.3",
     "@stricli/core": "^1.3.0",
     "archiver": "^8.0.0",
     "esbuild": "^0.28.1",
@@ -67,6 +67,7 @@
   "devDependencies": {
     "@modelcontextprotocol/sdk": "catalog:",
     "@types/archiver": "^8.0.0",
+    "typescript": "catalog:",
     "vitest": "^4.1.10"
   }
 }
