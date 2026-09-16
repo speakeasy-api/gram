@@ -80,7 +80,6 @@ describe("IdentityProviderConnectionSection", () => {
 
     expect(screen.getByText(TENANT)).toBeTruthy();
     expect(screen.getByText("Connected")).toBeTruthy();
-    expect(screen.getByText("kid-abc123")).toBeTruthy();
     expect(screen.getByText("People and group membership")).toBeTruthy();
     expect(screen.getByText("18 groups")).toBeTruthy();
     // Sign-on has not been checked, so there is still setup to go back to.

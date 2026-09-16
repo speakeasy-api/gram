@@ -117,11 +117,6 @@ export function IdentityProviderConnectionSection(): JSX.Element | null {
           </div>
 
           <div className="border-border grid gap-4 border-t p-4 sm:grid-cols-2">
-            <Fact label="Speakeasy's key">
-              <code className="text-foreground font-mono text-xs break-all">
-                {connection.signingKeyKid}
-              </code>
-            </Fact>
             <Fact label="Last checked">
               <Text>
                 {connection.lastVerifiedAt
