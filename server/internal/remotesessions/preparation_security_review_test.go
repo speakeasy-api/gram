@@ -149,17 +149,44 @@ func TestPreparationSerializesWithInteractiveRotation(t *testing.T) {
 	_, err := repo.New(tx).LockRemoteSessionClientForSessionWrite(bounded, in.ClientID)
 	require.NoError(t, err)
 	require.NoError(t, tx.Rollback(ctx))
-	waiting, stop := context.WithTimeout(ctx, 200*time.Millisecond)
+	waiting, stop := context.WithCancel(ctx)
 	defer stop()
-	_, err = restartPreparationService(t, ti).PrepareIdentityChaining(waiting, in)
-	require.Error(t, err, "preparation cannot install a binding while rotation is in flight")
+	type preparationOutcome struct {
+		result *remotesessions.PreparationResult
+		err    error
+	}
+	preparationDone := make(chan preparationOutcome, 1)
+	preparationService := restartPreparationService(t, ti)
+	go func() {
+		result, err := preparationService.PrepareIdentityChaining(waiting, in)
+		preparationDone <- preparationOutcome{result: result, err: err}
+	}()
+	// Observe the actual advisory-lock wait in this fixture's database, not
+	// an arbitrary error from a short deadline. The binding lock is new and
+	// uncontended; rotation holds the shared issuer-registration lock.
+	require.Eventually(t, func() bool {
+		blocked, err := testrepo.New(ti.conn).IsQueryBlockedOnLockFixture(ctx, "%LockPreparationSubmission :exec%")
+		return err == nil && blocked
+	}, 5*time.Second, 10*time.Millisecond, "preparation must wait on the registration advisory lock")
+	select {
+	case outcome := <-preparationDone:
+		t.Fatalf("preparation completed before rotation released the lock: %v", outcome.err)
+	default:
+	}
 	once.Do(func() { close(release) })
 	require.NoError(t, <-rotated)
 	current, err := q.GetRemoteSessionClientForRotation(ctx, in.ClientID)
 	require.NoError(t, err)
 	require.Equal(t, "rotated-serialized", current.RemoteSessionClient.ClientID, "provider result is persisted, not orphaned")
-	prepared, err := ti.service.PrepareIdentityChaining(ctx, in)
-	require.NoError(t, err)
+	var prepared *remotesessions.PreparationResult
+	select {
+	case outcome := <-preparationDone:
+		require.NoError(t, outcome.err, "the same blocked preparation must succeed after rotation releases the lock")
+		prepared = outcome.result
+	case <-time.After(5 * time.Second):
+		t.Fatal("preparation did not finish after rotation released the lock")
+	}
+	require.NotNil(t, prepared)
 	require.Equal(t, "unknown_grants", prepared.State, "new registration must not inherit the old registration's grant evidence")
 	require.NotEqual(t, uuid.Nil, prepared.BindingID)
 	_, err = ti.service.RotateClient(ctx, &orgclientsgen.RotateClientPayload{ID: in.ClientID.String()})
