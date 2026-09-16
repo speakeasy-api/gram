@@ -24,8 +24,9 @@ const PreparationIDJAGProfile = "urn:ietf:params:oauth:grant-profile:id-jag"
 // #nosec G101 -- Public OAuth grant identifier, not a credential.
 const PreparationJWTBearerGrant = "urn:ietf:params:oauth:grant-type:jwt-bearer"
 
-// PreparationResourceMetadata is previously discovered RFC 9728 association evidence.
-// It establishes association, not human consent, trust, or usable access.
+// PreparationResourceMetadata contains optional caller-declared consistency hints
+// for project-write-authorized configuration, not provider-verified RFC 9728 evidence.
+// Preparation does not exchange tokens or establish trust, consent, or user access.
 type PreparationResourceMetadata struct {
 	Resource             string
 	AuthorizationServers []string

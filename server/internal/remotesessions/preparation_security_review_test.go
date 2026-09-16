@@ -37,6 +37,7 @@ func TestPreparationResourceMetadataDoesNotFetchAuthorizationServers(t *testing.
 	result, err := ti.service.PrepareIdentityChaining(ctx, in)
 	require.NoError(t, err)
 	require.Equal(t, "ready", result.State)
+	require.Equal(t, "administrator_declared", result.GrantSource, "caller-declared metadata must not elevate registration provenance")
 	require.Zero(t, probes.Load(), "resource metadata is compared with the known issuer, never fetched")
 	in.ResourceMetadata.AuthorizationServers = []string{server.URL}
 	_, err = ti.service.PrepareIdentityChaining(ctx, in)

@@ -55,7 +55,7 @@ export type RemoteSessionClientsPrepareEMAMutationError =
  * prepareEMA remoteSessionClients
  *
  * @remarks
- * Explicit, tenant-scoped identity-chaining configuration. Does not exchange tokens or establish user access.
+ * Explicit, tenant-scoped identity-chaining configuration. Mutations require project-write authorization; reads require project-read authorization. Does not exchange tokens or establish provider verification, trust, consent, or user access.
  */
 export function useRemoteSessionClientsPrepareEMAMutation(
   options?: MutationHookOptions<

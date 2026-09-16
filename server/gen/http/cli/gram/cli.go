@@ -20324,9 +20324,9 @@ func remoteSessionClientsUsage() {
 	fmt.Fprintln(os.Stderr, `Manage remote_session_client records — credentials Gram uses when acting as an OAuth client of a remote_session_issuer. client_secret_encrypted is never returned.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] remote-session-clients COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
-	fmt.Fprintln(os.Stderr, `    prepare-ema: Explicit, tenant-scoped identity-chaining configuration. Does not exchange tokens or establish user access.`)
-	fmt.Fprintln(os.Stderr, `    read-ema: Explicit, tenant-scoped identity-chaining configuration. Does not exchange tokens or establish user access.`)
-	fmt.Fprintln(os.Stderr, `    unlink-ema: Explicit, tenant-scoped identity-chaining configuration. Does not exchange tokens or establish user access.`)
+	fmt.Fprintln(os.Stderr, `    prepare-ema: Explicit, tenant-scoped identity-chaining configuration. Mutations require project-write authorization; reads require project-read authorization. Does not exchange tokens or establish provider verification, trust, consent, or user access.`)
+	fmt.Fprintln(os.Stderr, `    read-ema: Explicit, tenant-scoped identity-chaining configuration. Mutations require project-write authorization; reads require project-read authorization. Does not exchange tokens or establish provider verification, trust, consent, or user access.`)
+	fmt.Fprintln(os.Stderr, `    unlink-ema: Explicit, tenant-scoped identity-chaining configuration. Mutations require project-write authorization; reads require project-read authorization. Does not exchange tokens or establish provider verification, trust, consent, or user access.`)
 	fmt.Fprintln(os.Stderr, `    create-remote-session-client: Register a remote_session_client by supplying a client_id and optional client_secret obtained out-of-band from the upstream issuer.`)
 	fmt.Fprintln(os.Stderr, `    create-cimd: Register a remote_session_client in Client ID Metadata Document (CIMD) mode. Gram generates the client_id (the URL of a hosted client metadata document) and serves the document publicly; the client carries no secret and authenticates with token_endpoint_auth_method=none. The owning issuer must advertise client_id_metadata_document_supported.`)
 	fmt.Fprintln(os.Stderr, `    update-remote-session-client: Rotate the client_secret or change the non-issuer settings on an existing remote_session_client. Issuer attachments are managed via attachUserSessionIssuer / detachUserSessionIssuer.`)
@@ -20352,7 +20352,7 @@ func remoteSessionClientsPrepareEMAUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Explicit, tenant-scoped identity-chaining configuration. Does not exchange tokens or establish user access.`)
+	fmt.Fprintln(os.Stderr, `Explicit, tenant-scoped identity-chaining configuration. Mutations require project-write authorization; reads require project-read authorization. Does not exchange tokens or establish provider verification, trust, consent, or user access.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -20376,7 +20376,7 @@ func remoteSessionClientsReadEMAUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Explicit, tenant-scoped identity-chaining configuration. Does not exchange tokens or establish user access.`)
+	fmt.Fprintln(os.Stderr, `Explicit, tenant-scoped identity-chaining configuration. Mutations require project-write authorization; reads require project-read authorization. Does not exchange tokens or establish provider verification, trust, consent, or user access.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -20400,7 +20400,7 @@ func remoteSessionClientsUnlinkEMAUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Explicit, tenant-scoped identity-chaining configuration. Does not exchange tokens or establish user access.`)
+	fmt.Fprintln(os.Stderr, `Explicit, tenant-scoped identity-chaining configuration. Mutations require project-write authorization; reads require project-read authorization. Does not exchange tokens or establish provider verification, trust, consent, or user access.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)

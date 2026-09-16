@@ -30,7 +30,7 @@ var IdentityChainingPreparation = Type("IdentityChainingPreparation", func() {
 func identityChainingMethods() {
 	for _, name := range []string{"prepareEMA", "readEMA", "unlinkEMA"} {
 		Method(name, func() {
-			Description("Explicit, tenant-scoped identity-chaining configuration. Does not exchange tokens or establish user access.")
+			Description("Explicit, tenant-scoped identity-chaining configuration. Mutations require project-write authorization; reads require project-read authorization. Does not exchange tokens or establish provider verification, trust, consent, or user access.")
 			Payload(func() {
 				security.SessionPayload()
 				security.ByKeyPayload()
@@ -44,6 +44,7 @@ func identityChainingMethods() {
 					Attribute("mechanism", String, func() { Enum("manual", "cimd", "dcr"); Default("manual") })
 					Attribute("token_endpoint_auth_method", String, "Explicit DCR authentication method.", func() { Enum("client_secret_basic", "client_secret_post") })
 					Attribute("resource_metadata", func() {
+						Description("Optional caller-declared resource/authorization-server consistency hints, not provider-verified RFC 9728 discovery evidence. May be omitted for explicit manual configuration. Matching values do not establish trust, consent, or user access.")
 						Attribute("resource", String)
 						Attribute("authorization_servers", ArrayOf(String))
 						Required("resource", "authorization_servers")

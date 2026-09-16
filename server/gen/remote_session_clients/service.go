@@ -19,14 +19,20 @@ import (
 // an OAuth client of a remote_session_issuer. client_secret_encrypted is never
 // returned.
 type Service interface {
-	// Explicit, tenant-scoped identity-chaining configuration. Does not exchange
-	// tokens or establish user access.
+	// Explicit, tenant-scoped identity-chaining configuration. Mutations require
+	// project-write authorization; reads require project-read authorization. Does
+	// not exchange tokens or establish provider verification, trust, consent, or
+	// user access.
 	PrepareEMA(context.Context, *PrepareEMAPayload) (res *IdentityChainingPreparation, err error)
-	// Explicit, tenant-scoped identity-chaining configuration. Does not exchange
-	// tokens or establish user access.
+	// Explicit, tenant-scoped identity-chaining configuration. Mutations require
+	// project-write authorization; reads require project-read authorization. Does
+	// not exchange tokens or establish provider verification, trust, consent, or
+	// user access.
 	ReadEMA(context.Context, *ReadEMAPayload) (res *IdentityChainingPreparation, err error)
-	// Explicit, tenant-scoped identity-chaining configuration. Does not exchange
-	// tokens or establish user access.
+	// Explicit, tenant-scoped identity-chaining configuration. Mutations require
+	// project-write authorization; reads require project-read authorization. Does
+	// not exchange tokens or establish provider verification, trust, consent, or
+	// user access.
 	UnlinkEMA(context.Context, *UnlinkEMAPayload) (res *IdentityChainingPreparation, err error)
 	// Register a remote_session_client by supplying a client_id and optional
 	// client_secret obtained out-of-band from the upstream issuer.
@@ -276,7 +282,11 @@ type PrepareEMAPayload struct {
 	Mechanism string
 	// Explicit DCR authentication method.
 	TokenEndpointAuthMethod *string
-	ResourceMetadata        *struct {
+	// Optional caller-declared resource/authorization-server consistency hints,
+	// not provider-verified RFC 9728 discovery evidence. May be omitted for
+	// explicit manual configuration. Matching values do not establish trust,
+	// consent, or user access.
+	ResourceMetadata *struct {
 		Resource             string
 		AuthorizationServers []string
 	}

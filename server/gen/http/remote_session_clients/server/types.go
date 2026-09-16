@@ -29,7 +29,11 @@ type PrepareEMARequestBody struct {
 	Mechanism *string  `form:"mechanism,omitempty" json:"mechanism,omitempty" xml:"mechanism,omitempty"`
 	// Explicit DCR authentication method.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
-	ResourceMetadata        *struct {
+	// Optional caller-declared resource/authorization-server consistency hints,
+	// not provider-verified RFC 9728 discovery evidence. May be omitted for
+	// explicit manual configuration. Matching values do not establish trust,
+	// consent, or user access.
+	ResourceMetadata *struct {
 		Resource             *string  `form:"resource" json:"resource" xml:"resource"`
 		AuthorizationServers []string `form:"authorization_servers" json:"authorization_servers" xml:"authorization_servers"`
 	} `form:"resource_metadata,omitempty" json:"resource_metadata,omitempty" xml:"resource_metadata,omitempty"`

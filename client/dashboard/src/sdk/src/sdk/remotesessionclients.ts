@@ -252,7 +252,7 @@ export class RemoteSessionClients extends ClientSDK {
    * prepareEMA remoteSessionClients
    *
    * @remarks
-   * Explicit, tenant-scoped identity-chaining configuration. Does not exchange tokens or establish user access.
+   * Explicit, tenant-scoped identity-chaining configuration. Mutations require project-write authorization; reads require project-read authorization. Does not exchange tokens or establish provider verification, trust, consent, or user access.
    */
   async prepareEMA(
     request: PrepareEMARequest,
@@ -271,7 +271,7 @@ export class RemoteSessionClients extends ClientSDK {
    * readEMA remoteSessionClients
    *
    * @remarks
-   * Explicit, tenant-scoped identity-chaining configuration. Does not exchange tokens or establish user access.
+   * Explicit, tenant-scoped identity-chaining configuration. Mutations require project-write authorization; reads require project-read authorization. Does not exchange tokens or establish provider verification, trust, consent, or user access.
    */
   async readEMA(
     request: ReadEMARequest,
@@ -290,7 +290,7 @@ export class RemoteSessionClients extends ClientSDK {
    * unlinkEMA remoteSessionClients
    *
    * @remarks
-   * Explicit, tenant-scoped identity-chaining configuration. Does not exchange tokens or establish user access.
+   * Explicit, tenant-scoped identity-chaining configuration. Mutations require project-write authorization; reads require project-read authorization. Does not exchange tokens or establish provider verification, trust, consent, or user access.
    */
   async unlinkEMA(
     request: UnlinkEMARequest,

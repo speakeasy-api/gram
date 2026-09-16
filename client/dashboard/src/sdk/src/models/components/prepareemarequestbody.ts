@@ -13,6 +13,9 @@ export const Mechanism = {
 } as const;
 export type Mechanism = ClosedEnum<typeof Mechanism>;
 
+/**
+ * Optional caller-declared resource/authorization-server consistency hints, not provider-verified RFC 9728 discovery evidence. May be omitted for explicit manual configuration. Matching values do not establish trust, consent, or user access.
+ */
 export type ResourceMetadata = {
   authorizationServers: Array<string>;
   resource: string;
@@ -51,6 +54,9 @@ export type PrepareEMARequestBody = {
    * Canonical intended resource URI.
    */
   resource: string;
+  /**
+   * Optional caller-declared resource/authorization-server consistency hints, not provider-verified RFC 9728 discovery evidence. May be omitted for explicit manual configuration. Matching values do not establish trust, consent, or user access.
+   */
   resourceMetadata?: ResourceMetadata | undefined;
   /**
    * Requested scope tokens.
