@@ -135,9 +135,11 @@ func splitWorkloadID(id string) (uuid.UUID, string, error) {
 	}
 	issuerPart, externalSubject := parts[0], parts[1]
 
+	// Canonical form only: uuid.Parse also accepts uppercase and braced forms,
+	// which would give one workload several strings that compare unequal.
 	issuerID, err := uuid.Parse(issuerPart)
-	if err != nil {
-		return uuid.Nil, "", fmt.Errorf("%w: workload issuer reference must be a uuid", ErrInvalid)
+	if err != nil || issuerID.String() != issuerPart {
+		return uuid.Nil, "", fmt.Errorf("%w: workload issuer reference must be a canonical uuid", ErrInvalid)
 	}
 	if issuerID == uuid.Nil {
 		// The nil uuid parses but names no workload_issuers row.

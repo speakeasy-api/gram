@@ -271,16 +271,8 @@ func (u *Principal) validate() error {
 	}
 
 	if u.Type == PrincipalTypeWorkload {
-		issuerID, _, err := splitWorkloadID(u.ID)
-		if err != nil {
+		if _, _, err := splitWorkloadID(u.ID); err != nil {
 			u.err = err
-			return u.err
-		}
-		// Canonical form only, as for agents: uuid.Parse also accepts uppercase
-		// and braced forms, which would give one workload several principal
-		// strings that compare unequal.
-		if !strings.HasPrefix(u.ID, issuerID.String()+delimiter) {
-			u.err = fmt.Errorf("%w: workload principal issuer reference must be a canonical UUID", ErrInvalid)
 			return u.err
 		}
 	}
