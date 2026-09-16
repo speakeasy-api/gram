@@ -98,14 +98,12 @@ func (r *RegistrationRequest) SetDefaults() {
 // must invoke SetDefaults first so grant_types / response_types / auth
 // method are populated.
 //
-// supportedAuthMethods is the caller's accepted token_endpoint_auth_method
-// set rather than a package-level list, because several authorization servers
-// share this request type while accepting different methods: a shared list
-// would let a method added for one server start being accepted by the others
-// without anyone deciding that. Pass the same slice the server advertises as
-// token_endpoint_auth_methods_supported, so what it accepts and what it
-// advertises cannot drift apart.
-func (r *RegistrationRequest) Validate(supportedAuthMethods []string) error {
+// supportedGrantTypes and supportedAuthMethods are the caller's accepted sets
+// rather than package-level policy, because several authorization servers
+// share this request type while supporting different token endpoints. Pass
+// the same slices the server advertises so acceptance and discovery cannot
+// drift apart.
+func (r *RegistrationRequest) Validate(supportedGrantTypes, supportedAuthMethods []string) error {
 	if r.ClientName == "" {
 		return &oauthwire.Error{Code: "invalid_client_metadata", Description: "client_name is required"}
 	}
@@ -122,7 +120,7 @@ func (r *RegistrationRequest) Validate(supportedAuthMethods []string) error {
 		}
 	}
 	for _, gt := range r.GrantTypes {
-		if !slices.Contains(SupportedGrantTypes, gt) {
+		if !slices.Contains(supportedGrantTypes, gt) {
 			return &oauthwire.Error{Code: "invalid_client_metadata", Description: fmt.Sprintf("unsupported grant_type %q", gt)}
 		}
 	}

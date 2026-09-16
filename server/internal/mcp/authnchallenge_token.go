@@ -322,11 +322,17 @@ func (s *Service) handleTokenJWTBearerGrant(
 	// session as an internal call. A namespaced assertion JTI makes this context
 	// session-like solely while loading and checking the resolved user's grants.
 	authorizationCtx, err := s.contextForSessionSubject(ctx, endpoint, result.Subject, "id-jag:"+result.Claims.JTI, clientRow.ClientID)
-	if err == nil {
+	if err == nil && endpoint.MetaMcpServerID.Valid {
+		var members []metaMember
+		authorizationCtx, members, err = s.resolveMetaMemberSnapshot(authorizationCtx, logger, endpoint.MetaMcpServerID.UUID, endpoint.ProjectID)
+		if err == nil && len(members) == 0 {
+			err = oops.E(oops.CodeForbidden, authz.ErrDenied, "subject cannot access any meta MCP members")
+		}
+	} else if err == nil {
 		authorizationCtx, err = s.authz.PrepareContext(authorizationCtx)
-	}
-	if err == nil {
-		err = s.authz.Require(authorizationCtx, authz.MCPCheck(authz.ScopeMCPConnect, endpoint.connectResourceID().String(), endpoint.ProjectID.String()))
+		if err == nil {
+			err = s.authz.Require(authorizationCtx, authz.MCPCheck(authz.ScopeMCPConnect, endpoint.connectResourceID().String(), endpoint.ProjectID.String()))
+		}
 	}
 	if err != nil {
 		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && (shareable.Code == oops.CodeForbidden || shareable.Code == oops.CodeUnauthorized) {
@@ -362,8 +368,11 @@ func (s *Service) handleTokenJWTBearerGrant(
 		return oops.E(oops.CodeUnexpected, err, "commit ID-JAG session exchange").LogError(ctx, logger)
 	}
 
+	if err := writeTokenSuccess(ctx, w, logger, minted.Body); err != nil {
+		return err
+	}
 	logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request completed", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "")
-	return writeTokenSuccess(ctx, w, logger, minted.Body)
+	return nil
 }
 
 // handleTokenAuthorizationCodeGrant implements RFC 6749 §4.1.3. Reads the

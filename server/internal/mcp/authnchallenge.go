@@ -474,7 +474,7 @@ func validateUserSessionBearerAudiences(
 
 	session, legacyErr := signer.ValidateBearer(ctx, token, audiences.Legacy, revocation)
 	if legacyErr != nil {
-		return sessiontokens.ValidatedSession{}, userSessionAudienceLegacy, fmt.Errorf("validate current audience: %w", currentErr)
+		return sessiontokens.ValidatedSession{}, userSessionAudienceLegacy, fmt.Errorf("validate legacy audience: %w", legacyErr)
 	}
 	return session, userSessionAudienceLegacy, nil
 }

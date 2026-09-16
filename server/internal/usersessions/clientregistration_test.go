@@ -19,7 +19,7 @@ import (
 // method set, and returns the validation error.
 func validateAfterDefaults(req *RegistrationRequest) error {
 	req.SetDefaults()
-	return req.Validate(SupportedAuthMethods)
+	return req.Validate(SupportedGrantTypes, SupportedAuthMethods)
 }
 
 func TestRegistrationRequest_Validate(t *testing.T) {
@@ -397,10 +397,24 @@ func TestRegistrationRequest_ValidateHonoursCallerAuthMethods(t *testing.T) {
 	}
 	req.SetDefaults()
 
-	require.NoError(t, req.Validate([]string{"client_secret_basic"}))
+	require.NoError(t, req.Validate(SupportedGrantTypes, []string{"client_secret_basic"}))
 	require.Contains(t, SupportedAuthMethods, "client_secret_basic",
 		"the method under test must be one this server does support, or the rejection below proves nothing")
-	assertOAuthError(t, req.Validate([]string{"none"}), "invalid_client_metadata", `unsupported token_endpoint_auth_method "client_secret_basic"`)
+	assertOAuthError(t, req.Validate(SupportedGrantTypes, []string{"none"}), "invalid_client_metadata", `unsupported token_endpoint_auth_method "client_secret_basic"`)
+}
+
+func TestRegistrationRequest_ValidateHonoursCallerGrantTypes(t *testing.T) {
+	t.Parallel()
+
+	req := &RegistrationRequest{
+		ClientName:              "shared-request-type",
+		GrantTypes:              []string{oauthwire.GrantTypeJWTBearer},
+		TokenEndpointAuthMethod: oauthwire.AuthMethodClientSecretBasic,
+	}
+	req.SetDefaults()
+
+	require.NoError(t, req.Validate(SupportedGrantTypes, SupportedAuthMethods))
+	assertOAuthError(t, req.Validate([]string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken}, SupportedAuthMethods), "invalid_client_metadata", `unsupported grant_type "urn:ietf:params:oauth:grant-type:jwt-bearer"`)
 }
 
 // assertOAuthError fails the test unless err unwraps to a

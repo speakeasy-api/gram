@@ -26,6 +26,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	orgsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -91,9 +93,8 @@ func postIDJAGToken(t *testing.T, ctx context.Context, ti *testInstance, slug, c
 	return w
 }
 
-func TestTokenIDJAGExchangeMintsResourceBoundAccessOnlySession(t *testing.T) {
-	t.Parallel()
-
+func newIDJAGTestService(t *testing.T) (context.Context, *testInstance, idJAGTestAssertion, string) {
+	t.Helper()
 	assertionSigner := newIDJAGTestAssertion(t)
 	jwksServer := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -104,20 +105,18 @@ func TestTokenIDJAGExchangeMintsResourceBoundAccessOnlySession(t *testing.T) {
 	t.Cleanup(jwksServer.Close)
 	rootCAs := x509.NewCertPool()
 	rootCAs.AddCert(jwksServer.Certificate())
-
 	ctx, ti := newTestMCPServiceWithMeterProviderAndGuardianOptions(t, testenv.NewMeterProvider(t), guardian.WithTLSRootCAs(rootCAs))
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
+	return ctx, ti, assertionSigner, jwksServer.URL
+}
 
-	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
-	upstreamIssuer := "https://identity.example.test"
+func createTrustedIDJAGIssuer(t *testing.T, ctx context.Context, ti *testInstance, organizationID, upstreamIssuer, jwksURL string) usersessionsrepo.UserSessionIssuer {
+	t.Helper()
 	remoteIssuer, err := remotesessionsrepo.New(ti.conn).CreateRemoteSessionIssuer(ctx, remotesessionsrepo.CreateRemoteSessionIssuerParams{
 		ProjectID:                         uuid.NullUUID{},
-		OrganizationID:                    conv.ToPGText(authCtx.ActiveOrganizationID),
+		OrganizationID:                    conv.ToPGText(organizationID),
 		Slug:                              "id-jag-" + uuid.NewString(),
 		Issuer:                            upstreamIssuer,
-		JwksUri:                           conv.ToPGText(jwksServer.URL),
+		JwksUri:                           conv.ToPGText(jwksURL),
 		ScopesSupported:                   []string{},
 		GrantTypesSupported:               []string{},
 		ResponseTypesSupported:            []string{},
@@ -125,31 +124,34 @@ func TestTokenIDJAGExchangeMintsResourceBoundAccessOnlySession(t *testing.T) {
 	})
 	require.NoError(t, err)
 	issuer, err := usersessionsrepo.New(ti.conn).CreateOrganizationUserSessionIssuer(ctx, usersessionsrepo.CreateOrganizationUserSessionIssuerParams{
-		OrganizationID:               conv.ToPGText(authCtx.ActiveOrganizationID),
+		OrganizationID:               conv.ToPGText(organizationID),
 		Slug:                         "id-jag-" + uuid.NewString(),
 		AuthnChallengeMode:           "chain",
 		SessionDuration:              pgtype.Interval{Microseconds: int64((8 * time.Hour) / time.Microsecond), Valid: true},
 		TrustedRemoteSessionIssuerID: uuid.NullUUID{UUID: remoteIssuer.ID, Valid: true},
 	})
 	require.NoError(t, err)
-	toolset, err = toolsetsrepo.New(ti.conn).UpdateToolsetUserSessionIssuer(ctx, toolsetsrepo.UpdateToolsetUserSessionIssuerParams{
-		UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
-		Slug:                toolset.Slug,
-		ProjectID:           *authCtx.ProjectID,
-	})
-	require.NoError(t, err)
+	return issuer
+}
+
+func createIDJAGClient(t *testing.T, ctx context.Context, ti *testInstance, issuerID uuid.UUID) usersessionsrepo.UserSessionClient {
+	t.Helper()
 	client, err := usersessionsrepo.New(ti.conn).CreateUserSessionClient(ctx, usersessionsrepo.CreateUserSessionClientParams{
-		UserSessionIssuerID:     issuer.ID,
+		UserSessionIssuerID:     issuerID,
 		ClientID:                "id-jag-client-" + uuid.NewString(),
 		ClientName:              "ID-JAG test client",
 		RedirectUris:            []string{"http://127.0.0.1/callback"},
-		TokenEndpointAuthMethod: "none",
+		TokenEndpointAuthMethod: oauthwire.AuthMethodNone,
 	})
 	require.NoError(t, err)
+	return client
+}
 
+func seedIDJAGDirectoryUser(t *testing.T, ctx context.Context, ti *testInstance, organizationID string) {
+	t.Helper()
 	now := time.Now().UTC()
-	_, err = directoryrepo.New(ti.conn).UpsertDirectoryUser(ctx, directoryrepo.UpsertDirectoryUserParams{
-		OrganizationID:        authCtx.ActiveOrganizationID,
+	_, err := directoryrepo.New(ti.conn).UpsertDirectoryUser(ctx, directoryrepo.UpsertDirectoryUserParams{
+		OrganizationID:        organizationID,
 		UserID:                conv.ToPGText(mockidp.MockUserID),
 		WorkosDirectoryUserID: "id-jag-directory-" + uuid.NewString(),
 		Email:                 conv.ToPGText(mockidp.MockUserEmail),
@@ -160,6 +162,28 @@ func TestTokenIDJAGExchangeMintsResourceBoundAccessOnlySession(t *testing.T) {
 		RestoreDeleted:        false,
 	})
 	require.NoError(t, err)
+}
+
+func TestTokenIDJAGExchangeMintsResourceBoundAccessOnlySession(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti, assertionSigner, jwksURL := newIDJAGTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	upstreamIssuer := "https://identity.example.test"
+	issuer := createTrustedIDJAGIssuer(t, ctx, ti, authCtx.ActiveOrganizationID, upstreamIssuer, jwksURL)
+	var err error
+	toolset, err = toolsetsrepo.New(ti.conn).UpdateToolsetUserSessionIssuer(ctx, toolsetsrepo.UpdateToolsetUserSessionIssuerParams{
+		UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
+		Slug:                toolset.Slug,
+		ProjectID:           *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	client := createIDJAGClient(t, ctx, ti, issuer.ID)
+	seedIDJAGDirectoryUser(t, ctx, ti, authCtx.ActiveOrganizationID)
 	seedPrincipalMCPConnectGrant(t, ctx, ti, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, mockidp.MockUserID), toolset.ID)
 
 	resource, _ := fetchAdvertisedIssuer(t, ctx, ti, toolset.McpSlug.String)
@@ -199,4 +223,85 @@ func TestTokenIDJAGExchangeMintsResourceBoundAccessOnlySession(t *testing.T) {
 	replay := postIDJAGToken(t, ctx, ti, toolset.McpSlug.String, client.ClientID, assertion)
 	require.Equal(t, http.StatusBadRequest, replay.Code, replay.Body.String())
 	require.JSONEq(t, `{"error":"invalid_grant","error_description":"assertion is invalid"}`, replay.Body.String())
+}
+
+func TestTokenIDJAGExchangeAuthorizesMetaMCPMembers(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti, assertionSigner, jwksURL := newIDJAGTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	const upstreamIssuer = "https://identity.example.test"
+	issuer := createTrustedIDJAGIssuer(t, ctx, ti, authCtx.ActiveOrganizationID, upstreamIssuer, jwksURL)
+	slug := "id-jag-meta-" + uuid.NewString()
+	projectIssuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, projectIssuerID)
+	member := seedHostedMetaMember(t, ctx, ti, meta.ID, "private ID-JAG member", 1, mcpservers.VisibilityPrivate, "member_tool")
+	client := createIDJAGClient(t, ctx, ti, issuer.ID)
+	seedIDJAGDirectoryUser(t, ctx, ti, authCtx.ActiveOrganizationID)
+	seedPrincipalMCPConnectGrant(t, ctx, ti, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, mockidp.MockUserID), member.toolsetID)
+
+	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, slug, "mcp")
+	require.NoError(t, err)
+	// Exercise the shared post-resolution token path with organization-tier
+	// trust while keeping this test focused on member authorization policy.
+	endpoint.UserSessionIssuerID = issuer.ID
+	resource, err := endpoint.RootURL(ti.serverURL.String())
+	require.NoError(t, err)
+	assertion := assertionSigner.sign(t, upstreamIssuer, resource, client.ClientID, mockidp.MockUserEmail, uuid.NewString())
+	form := url.Values{
+		"grant_type": {oauthwire.GrantTypeJWTBearer},
+		"client_id":  {client.ClientID},
+		"assertion":  {assertion},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/mcp/"+slug+"/token", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req = req.WithContext(ctx)
+	w := httptest.NewRecorder()
+	require.NoError(t, ti.service.ServeToken(w, req, endpoint))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+}
+
+func TestTokenIDJAGExchangeRejectsTrustedIssuerFromAnotherOrganization(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti, assertionSigner, jwksURL := newIDJAGTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, toolset.McpSlug.String, "mcp")
+	require.NoError(t, err)
+
+	otherOrganizationID := "org_" + uuid.NewString()
+	require.NoError(t, orgsrepo.New(ti.conn).CreateOrganizationMetadata(ctx, orgsrepo.CreateOrganizationMetadataParams{
+		ID: otherOrganizationID, Name: "Other organization", Slug: "other-" + uuid.NewString(),
+	}))
+	const upstreamIssuer = "https://other-identity.example.test"
+	otherIssuer := createTrustedIDJAGIssuer(t, ctx, ti, otherOrganizationID, upstreamIssuer, jwksURL)
+	client := createIDJAGClient(t, ctx, ti, otherIssuer.ID)
+	seedIDJAGDirectoryUser(t, ctx, ti, otherOrganizationID)
+
+	// Preserve the addressed endpoint's organization while simulating a stale
+	// or corrupt cross-tenant issuer reference. The ID-JAG store must scope the
+	// trust lookup to the endpoint organization and reject the assertion.
+	endpoint.UserSessionIssuerID = otherIssuer.ID
+	resource, err := endpoint.RootURL(ti.serverURL.String())
+	require.NoError(t, err)
+	assertion := assertionSigner.sign(t, upstreamIssuer, resource, client.ClientID, mockidp.MockUserEmail, uuid.NewString())
+	form := url.Values{
+		"grant_type": {oauthwire.GrantTypeJWTBearer},
+		"client_id":  {client.ClientID},
+		"assertion":  {assertion},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/mcp/"+toolset.McpSlug.String+"/token", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req = req.WithContext(ctx)
+	w := httptest.NewRecorder()
+	require.NoError(t, ti.service.ServeToken(w, req, endpoint))
+	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+	require.JSONEq(t, `{"error":"invalid_grant","error_description":"assertion is invalid"}`, w.Body.String())
 }

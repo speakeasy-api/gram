@@ -18,7 +18,7 @@ func (audienceNeverRevoked) IsTokenRevoked(context.Context, string) (bool, error
 	return false, nil
 }
 
-func TestValidateUserSessionBearerAudiencesResourceBindingAndLegacyPortability(t *testing.T) {
+func TestValidateUserSessionBearerAudiencesResourceBindingAndIssuerPortability(t *testing.T) {
 	t.Parallel()
 
 	const (
@@ -50,6 +50,35 @@ func TestValidateUserSessionBearerAudiencesResourceBindingAndLegacyPortability(t
 		require.NoError(t, err)
 		require.Equal(t, userSessionAudienceCurrent, accepted)
 	}
+}
+
+func TestValidateUserSessionBearerAudiencesLegacyFallback(t *testing.T) {
+	t.Parallel()
+
+	const (
+		resource        = "https://gram.example.test/mcp/a"
+		currentAudience = "user_session_issuer:11111111-1111-1111-1111-111111111111"
+		legacyAudience  = "toolset:22222222-2222-2222-2222-222222222222"
+	)
+	signer := sessiontokens.NewSigner("audience-policy-test-secret")
+	subject := urn.NewUserSubject("user-1")
+	audiences := userSessionBearerAudiences{Resource: resource, Current: currentAudience, Legacy: legacyAudience}
+
+	legacyToken, _, err := signer.Mint(sessiontokens.MintParams{
+		Subject: subject, Audience: legacyAudience, Issuer: resource, Lifetime: time.Hour,
+	})
+	require.NoError(t, err)
+	_, accepted, err := validateUserSessionBearerAudiences(t.Context(), signer, audienceNeverRevoked{}, legacyToken, audiences)
+	require.NoError(t, err)
+	require.Equal(t, userSessionAudienceLegacy, accepted)
+
+	unrelatedToken, _, err := signer.Mint(sessiontokens.MintParams{
+		Subject: subject, Audience: "unrelated", Issuer: resource, Lifetime: time.Hour,
+	})
+	require.NoError(t, err)
+	_, _, err = validateUserSessionBearerAudiences(t.Context(), signer, audienceNeverRevoked{}, unrelatedToken, audiences)
+	require.ErrorIs(t, err, jwt.ErrTokenInvalidAudience)
+	require.ErrorContains(t, err, "validate legacy audience")
 }
 
 func TestValidateUserSessionBearerAudiencesRejectsBroadenedResourceToken(t *testing.T) {
