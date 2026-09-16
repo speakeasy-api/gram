@@ -1,10 +1,4 @@
-import {
-  cleanup,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { IdentityProviderApplication } from "@gram/client/models/components/identityproviderapplication.js";
 import type { IdentityProviderConnection } from "@gram/client/models/components/identityproviderconnection.js";
@@ -57,6 +51,10 @@ function connection(
   };
 }
 
+function group(name: string) {
+  return { sourceGroupId: `00g-${name.toLowerCase()}`, name };
+}
+
 function application(
   overrides: Partial<IdentityProviderApplication> = {},
 ): IdentityProviderApplication {
@@ -66,7 +64,9 @@ function application(
     providerStatus: "ACTIVE",
     signOnUrl: "https://chat.example.test/sso",
     logoUrl: "https://cdn.example.test/example-chat.png",
-    groupAssignmentCount: 3,
+    groupAssignmentCount: 2,
+    assignedGroups: [group("Engineering"), group("Support")],
+    assignedGroupOverflow: 0,
     userAssignmentCount: 12,
     ...overrides,
   };
@@ -86,6 +86,10 @@ function withApplications(rows: IdentityProviderApplication[], detail = "") {
     error: null,
     refetch: vi.fn(),
   };
+}
+
+function cardFor(label: string): HTMLElement {
+  return screen.getByRole("checkbox", { name: label });
 }
 
 afterEach(cleanup);
@@ -113,16 +117,16 @@ describe("OktaApplicationsSection", () => {
     expect(section.querySelectorAll("table")).toHaveLength(0);
   });
 
-  it("lists what Okta has, with the counts it could read", () => {
+  it("lists what Okta has: the groups by name, and the people as a count", () => {
     withApplications([
       application(),
       application({
         sourceApplicationId: "0oaexampleapp2",
         label: "Example Docs",
-        providerStatus: "INACTIVE",
         signOnUrl: "https://docs.example.test/acs",
         logoUrl: undefined,
         groupAssignmentCount: 1,
+        assignedGroups: [group("Sales")],
         userAssignmentCount: 1,
       }),
     ]);
@@ -133,9 +137,11 @@ describe("OktaApplicationsSection", () => {
     expect(screen.getByText("Example Chat")).toBeTruthy();
     // The host is what tells two similarly named applications apart.
     expect(screen.getByText("chat.example.test")).toBeTruthy();
-    expect(screen.getByText("3 groups, 12 people")).toBeTruthy();
-    // One of each reads as one of each, not "1 groups, 1 people".
-    expect(screen.getByText("1 group, 1 person")).toBeTruthy();
+    expect(screen.getByText("Engineering")).toBeTruthy();
+    expect(screen.getByText("Support")).toBeTruthy();
+    expect(screen.getByText("12 people")).toBeTruthy();
+    // One person reads as one person, not "1 people".
+    expect(screen.getByText("1 person")).toBeTruthy();
     expect(screen.getByText(/2 applications read from Okta at/)).toBeTruthy();
     const logo = container.querySelector(
       'img[src="https://cdn.example.test/example-chat.png"]',
@@ -145,11 +151,36 @@ describe("OktaApplicationsSection", () => {
     expect(screen.getByText("EC")).toBeTruthy();
   });
 
+  it("collapses the groups past the cap, counting the ones Okta had beyond the read", () => {
+    withApplications([
+      application({
+        groupAssignmentCount: 9,
+        assignedGroups: [
+          group("Engineering"),
+          group("Support"),
+          group("Security"),
+          group("Sales"),
+          group("Finance"),
+        ],
+        assignedGroupOverflow: 4,
+      }),
+    ]);
+    render(<OktaApplicationsSection index={4} connection={connection()} />);
+
+    expect(screen.getByText("Engineering")).toBeTruthy();
+    expect(screen.getByText("Sales")).toBeTruthy();
+    // The fifth name plus the four Okta had beyond the ones read.
+    expect(screen.queryByText("Finance")).toBeNull();
+    expect(screen.getByText("+5 more")).toBeTruthy();
+  });
+
   it("says a dash where Okta did not give a count, and why", () => {
     withApplications(
       [
         application({
           groupAssignmentCount: undefined,
+          assignedGroups: undefined,
+          assignedGroupOverflow: undefined,
           userAssignmentCount: undefined,
         }),
       ],
@@ -157,7 +188,7 @@ describe("OktaApplicationsSection", () => {
     );
     render(<OktaApplicationsSection index={4} connection={connection()} />);
 
-    // A dash on its own would read as "none"; the server's sentence is what
+    // A dash on its own would read as "nobody"; the server's sentence is what
     // makes it mean "not known".
     expect(screen.getByText("—")).toBeTruthy();
     expect(
@@ -184,8 +215,7 @@ describe("OktaApplicationsSection", () => {
     expect(screen.getByText("docs.example.test")).toBeTruthy();
   });
 
-  it("narrows the list by name without asking Okta again", async () => {
-    const refetch = vi.fn();
+  it("picks cards, and counts the picks on the one button", () => {
     withApplications([
       application(),
       application({
@@ -193,18 +223,51 @@ describe("OktaApplicationsSection", () => {
         label: "Example Docs",
       }),
     ]);
-    applications.current.refetch = refetch;
     render(<OktaApplicationsSection index={4} connection={connection()} />);
 
-    fireEvent.change(screen.getByPlaceholderText("Search applications"), {
-      target: { value: "docs" },
-    });
+    const create = () => screen.getByRole("button", { name: /^Create/ });
+    expect(create().hasAttribute("disabled")).toBe(true);
+    expect(create().textContent).toBe("Create MCP Servers");
 
-    // The box debounces, so the list narrows a moment after typing.
-    await waitFor(() => expect(screen.queryByText("Example Chat")).toBeNull());
-    expect(screen.getByText("Example Docs")).toBeTruthy();
-    // The whole tenant is already in hand, so filtering is local.
-    expect(refetch).not.toHaveBeenCalled();
+    fireEvent.click(cardFor("Example Chat"));
+    expect(cardFor("Example Chat").getAttribute("aria-checked")).toBe("true");
+    // One reads as one server, not "1 MCP Servers".
+    expect(create().textContent).toBe("Create 1 MCP Server");
+    expect(create().hasAttribute("disabled")).toBe(false);
+
+    fireEvent.click(cardFor("Example Docs"));
+    expect(create().textContent).toBe("Create 2 MCP Servers");
+
+    // The card is a toggle: pressing it again gives the pick back.
+    fireEvent.click(cardFor("Example Chat"));
+    expect(cardFor("Example Chat").getAttribute("aria-checked")).toBe("false");
+    expect(create().textContent).toBe("Create 1 MCP Server");
+  });
+
+  it("says why a card cannot be picked, and sorts it to the end", () => {
+    withApplications([
+      application({
+        sourceApplicationId: "0oaexampleapp2",
+        label: "Example Docs",
+        providerStatus: "INACTIVE",
+      }),
+      application(),
+    ]);
+    const { container } = render(
+      <OktaApplicationsSection index={4} connection={connection()} />,
+    );
+
+    expect(screen.getByText("Inactive in Okta")).toBeTruthy();
+    // Nothing to pick is nothing to press: the card is not a control at all.
+    expect(screen.getAllByRole("checkbox")).toHaveLength(1);
+    expect(cardFor("Example Chat")).toBeTruthy();
+
+    const names = Array.from(
+      container.querySelectorAll(".grid > *"),
+      (card) => card.textContent,
+    );
+    expect(names[0]).toContain("Example Chat");
+    expect(names[1]).toContain("Example Docs");
   });
 
   it("offers a refresh that re-reads Okta", () => {
@@ -217,14 +280,10 @@ describe("OktaApplicationsSection", () => {
     expect(refetch).toHaveBeenCalledOnce();
   });
 
-  it("changes nothing: no selection, no proposal, no matching", () => {
+  it("asks Okta for nothing the reader types: the step has no search box", () => {
     withApplications([application()]);
-    const { container } = render(
-      <OktaApplicationsSection index={4} connection={connection()} />,
-    );
+    render(<OktaApplicationsSection index={4} connection={connection()} />);
 
-    expect(container.querySelectorAll("input[type=checkbox]")).toHaveLength(0);
-    expect(screen.queryByText(/MCP server/i)).toBeNull();
-    expect(screen.queryByRole("button", { name: /apply/i })).toBeNull();
+    expect(screen.queryByPlaceholderText(/search/i)).toBeNull();
   });
 });
