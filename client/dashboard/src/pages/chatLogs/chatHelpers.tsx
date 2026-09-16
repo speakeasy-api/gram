@@ -1,12 +1,17 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { cn } from "@/lib/utils";
-import { ruleIdCategoryLabel } from "@/pages/security/rule-ids";
+import {
+  isLlmAnalyzerRuleId,
+  ruleIdCategoryLabel,
+} from "@/pages/security/rule-ids";
 import {
   getCategoryCodeForFinding,
   getRuleTitleFallback,
   isJudgeSource,
+  isLlmAnalyzerSource,
   JUDGE_SOURCES,
+  LLM_ANALYZER_SOURCE,
 } from "@/pages/security/risk-utils";
 import { useRevealAll } from "@/pages/security/reveal-all-context";
 
@@ -32,13 +37,41 @@ export function getRiskBadgeLabel(result: RiskResult): string {
 }
 
 /** Judge findings carry one rule per category, so their rule id only restates
- * the badge beside it ("prompt_injection" under PROMPT_INJECTION). */
+ * the badge beside it ("prompt_injection" under PROMPT_INJECTION). The LLM
+ * analyzer's do the same ("secret.llm" under SECRET) and would name the engine
+ * on top, so they stay hidden too. */
 export function shouldShowRiskRuleId(result: RiskResult): boolean {
-  return Boolean(result.ruleId) && !isJudgeSource(result.source);
+  return (
+    Boolean(result.ruleId) &&
+    !isJudgeSource(result.source) &&
+    !isLlmAnalyzerSource(result.source)
+  );
+}
+
+/** The short label a tool section shows beside a highlighted match: the rule
+ * id for scanner findings (it is what an exclusion expression names), the
+ * source for a judge verdict whose constant rule id adds nothing, and the
+ * rule's label for the LLM analyzer, whose ids name the engine. */
+export function sectionRiskLabel(result: RiskResult): string {
+  if (!result.ruleId || result.ruleId === "llm_judge") return result.source;
+  if (isLlmAnalyzerRuleId(result.ruleId)) {
+    return getRuleTitleFallback(result.ruleId);
+  }
+  return result.ruleId;
 }
 
 export function riskResultAnchorId(result: RiskResult): string | undefined {
   return result.chatContentPartId ?? result.chatMessageId;
+}
+
+/** Whether one finding flags a literal secret or personal datum: the scanner
+ * sources by construction, and the LLM analyzer when its rule id lands in the
+ * secret or PII category (its other rules describe behavior, not values). */
+export function resultIsSensitive(result: RiskResult): boolean {
+  if (result.source === "gitleaks" || result.source === "presidio") return true;
+  if (!isLlmAnalyzerSource(result.source)) return false;
+  const ruleId = result.ruleId ?? "";
+  return ruleId.startsWith("secret.") || ruleId.startsWith("pii.");
 }
 
 /** A finding from gitleaks/presidio carries a literal secret; its match is
@@ -46,10 +79,7 @@ export function riskResultAnchorId(result: RiskResult): string | undefined {
 export function resultsAreSensitive(
   results: RiskResult[] | undefined,
 ): boolean {
-  return (
-    results?.some((r) => r.source === "gitleaks" || r.source === "presidio") ??
-    false
-  );
+  return results?.some(resultIsSensitive) ?? false;
 }
 
 /** Count of distinct findings (by source/rule/match), matching the RiskBadge's
@@ -102,6 +132,10 @@ const MATCH_DISPLAY_OVERRIDES: Record<
   // description and shown on the message author chip, never message content.
   account_identity: { notMessageContent: true, shownInDescription: true },
   ...Object.fromEntries(JUDGE_SOURCES.map((s) => [s, JUDGE_MATCH_DISPLAY])),
+  // The LLM analyzer reports no spans: its match is empty and its description
+  // is the model's reasoning, which may quote the content it flagged. Same
+  // rendering as a judge verdict, so nothing tries to locate it in the text.
+  [LLM_ANALYZER_SOURCE]: JUDGE_MATCH_DISPLAY,
 };
 
 /** Whether a finding's match is a span of the message text — highlighted inline

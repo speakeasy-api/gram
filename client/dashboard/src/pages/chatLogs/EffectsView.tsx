@@ -31,6 +31,7 @@ import {
   getMatchStrings,
   highlightMatches,
   resultsAreSensitive,
+  sectionRiskLabel,
   useRowReveal,
 } from "./chatHelpers";
 import { toolSectionRiskMatches, type ToolRiskField } from "./toolRisk";
@@ -102,10 +103,7 @@ function toSectionRisk(
     matchingResults.set(result.id, result);
     return {
       value,
-      label:
-        result.ruleId && result.ruleId !== "llm_judge"
-          ? result.ruleId
-          : result.source,
+      label: sectionRiskLabel(result),
       onExclude:
         openExclusion && result.ruleId !== "llm_judge"
           ? () => openExclusion(result)

@@ -32,6 +32,7 @@ import {
   getRuleTitleFallback,
   hasJudgeSource,
   isJudgeSource,
+  isRationaleSource,
   scoreToRating,
 } from "../risk-utils";
 import { useDismissFinding } from "../useDismissFinding";
@@ -127,7 +128,13 @@ function EvidenceRow({
   // the whole detector), so the row offers only suppression. Every other
   // detector gets the shared Suppress menu: a one-off manual suppression or
   // exclusion rule creation, same affordance as the drawer and list actions.
+  //
+  // LLM analyzer findings sit in between: their evidence is the model's
+  // rationale (no match to redact), and their single rule per category
+  // restates the category code, so the footer names the category alone — but
+  // a rule exclusion silences just that category, so they keep the menu.
   const judge = isJudgeSource(result.source);
+  const rationale = isRationaleSource(result.source);
   return (
     <div className="border-border overflow-hidden rounded-md border">
       <div className="flex items-center justify-between gap-2 px-3 py-2">
@@ -138,7 +145,7 @@ function EvidenceRow({
           {formatDistanceToNow(result.createdAt, { addSuffix: true })}
         </span>
       </div>
-      {judge ? (
+      {rationale ? (
         <div className="px-3 py-3">
           <EventMatchDialog
             resultId={result.id}
@@ -161,9 +168,10 @@ function EvidenceRow({
       <div className="flex items-center justify-between gap-2 px-3 py-2">
         <Text small muted className="truncate font-mono">
           {/* Category code, never the raw scanner source — and no rule title
-              for judge findings, whose single rule restates the category. */}
+              for judge or LLM analyzer findings, whose single rule restates
+              the category. */}
           Triggered: {getCategoryCodeForFinding(result.source, result.ruleId)}
-          {!judge && ` · ${getRuleTitleFallback(result.ruleId)}`} (conf{" "}
+          {!rationale && ` · ${getRuleTitleFallback(result.ruleId)}`} (conf{" "}
           {(result.confidence ?? 0).toFixed(2)})
         </Text>
         <span className="flex shrink-0 gap-1">

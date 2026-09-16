@@ -1,5 +1,5 @@
 import { DETECTION_RULES, type RuleCategory } from "./policy-data";
-import { humanizeRuleId } from "./rule-ids";
+import { humanizeRuleId, LLM_ANALYZER_DEAD_LETTER_RULE_ID } from "./rule-ids";
 
 const SOURCE_TO_CATEGORY: ReadonlyMap<string, RuleCategory> = new Map<
   string,
@@ -32,6 +32,42 @@ const JUDGE_SOURCE_SET: ReadonlySet<string> = new Set(JUDGE_SOURCES);
 export function isJudgeSource(source: string | undefined): boolean {
   return source !== undefined && JUDGE_SOURCE_SET.has(source);
 }
+
+// The fine-tuned LLM risk analyzer. One model call evaluates every risk the
+// scanner-backed detectors cover, and each finding it writes carries a
+// `<category>.llm` rule id, the model's reasoning as `description`, and no
+// `match` (it reports no spans). It is deliberately NOT a judge source: its
+// rule ids classify to the same categories the scanners feed, and a rule
+// exclusion on one silences a single category rather than the whole engine,
+// so the rule label and the exclusion affordances stay on.
+export const LLM_ANALYZER_SOURCE = "llm_analyzer";
+
+export function isLlmAnalyzerSource(source: string | undefined): boolean {
+  return source === LLM_ANALYZER_SOURCE;
+}
+
+// Findings whose evidence is a per-finding rationale in `description` rather
+// than a span of the message: the judge detectors and the LLM analyzer. The
+// evidence surfaces render these through the rationale path (EventMatchDialog)
+// instead of the masked-match chip, which would show a placeholder over a
+// match that does not exist.
+export function isRationaleSource(source: string | undefined): boolean {
+  return isJudgeSource(source) || isLlmAnalyzerSource(source);
+}
+
+// LLM analyzer rule id → category. Keep in sync with the RuleIDs the Go
+// classifier lists in server/internal/risk/categories: the dead-letter
+// sentinel has no category of its own there and falls through to `custom`.
+const LLM_ANALYZER_RULE_CATEGORY: ReadonlyMap<string, RuleCategory> = new Map<
+  string,
+  RuleCategory
+>([
+  ["secret.llm", "secrets"],
+  ["pii.llm", "pii"],
+  ["prompt_injection.llm", "prompt_injection"],
+  ["destructive_tool.llm", "destructive_tool"],
+  [LLM_ANALYZER_DEAD_LETTER_RULE_ID, "custom"],
+]);
 
 // Shadow MCP is the documented carve-out to redaction: its "match" is a server
 // URL or command identifier, not captured user content, so the server passes
@@ -103,7 +139,8 @@ export function getCategoryForFinding(
   ruleId?: string,
 ): RuleCategory | null {
   if (ruleId) {
-    const byRule = RULE_ID_TO_CATEGORY.get(ruleId);
+    const byRule =
+      RULE_ID_TO_CATEGORY.get(ruleId) ?? LLM_ANALYZER_RULE_CATEGORY.get(ruleId);
     if (byRule) return byRule;
   }
   if (source) {

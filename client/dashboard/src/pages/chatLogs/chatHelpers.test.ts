@@ -3,9 +3,13 @@ import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import {
   collapseToMatchWindows,
   getMatchStrings,
+  getRiskBadgeLabel,
   matchRanges,
   matchShownInDescription,
+  resultsAreSensitive,
   riskResultAnchorId,
+  sectionRiskLabel,
+  shouldShowRiskRuleId,
 } from "./chatHelpers";
 
 // Minimal RiskResult factory — only the fields the match-display helpers read
@@ -116,6 +120,66 @@ describe("matchShownInDescription", () => {
       false,
     );
     expect(matchShownInDescription(result("presidio", "x"))).toBe(false);
+  });
+
+  it("is true for the LLM analyzer, whose reasoning is the whole finding", () => {
+    expect(
+      matchShownInDescription(
+        result("llm_analyzer", "", { ruleId: "secret.llm" }),
+      ),
+    ).toBe(true);
+  });
+});
+
+describe("LLM analyzer findings in the transcript", () => {
+  const llm = (ruleId: string) =>
+    result("llm_analyzer", "", {
+      ruleId,
+      description: "The message pastes a live database password.",
+    });
+
+  it("masks secret and PII findings like the scanners, but not behavioral ones", () => {
+    expect(resultsAreSensitive([llm("secret.llm")])).toBe(true);
+    expect(resultsAreSensitive([llm("pii.llm")])).toBe(true);
+    expect(resultsAreSensitive([llm("prompt_injection.llm")])).toBe(false);
+    expect(resultsAreSensitive([llm("destructive_tool.llm")])).toBe(false);
+    expect(resultsAreSensitive([llm("llm_analyzer.dead_letter")])).toBe(false);
+    // Existing scanner behavior is untouched.
+    expect(resultsAreSensitive([result("gitleaks", "AKIAEXAMPLE")])).toBe(true);
+    expect(resultsAreSensitive([result("prompt_injection", "{}")])).toBe(false);
+  });
+
+  it.each([
+    ["secret.llm", "SECRET"],
+    ["pii.llm", "PII"],
+    ["prompt_injection.llm", "PROMPT_INJECTION"],
+    ["destructive_tool.llm", "DESTRUCTIVE_TOOL"],
+    ["llm_analyzer.dead_letter", "ANALYSIS_UNAVAILABLE"],
+  ])("badges %s as %s", (ruleId, badge) => {
+    expect(getRiskBadgeLabel(llm(ruleId))).toBe(badge);
+  });
+
+  it("hides the rule id, which would only restate the badge and name the engine", () => {
+    expect(shouldShowRiskRuleId(llm("secret.llm"))).toBe(false);
+    expect(
+      shouldShowRiskRuleId(
+        result("prompt_injection", "{}", { ruleId: "prompt_injection" }),
+      ),
+    ).toBe(false);
+    expect(
+      shouldShowRiskRuleId(result("presidio", "x", { ruleId: "pii.us_ssn" })),
+    ).toBe(true);
+  });
+
+  it("labels a tool-section match by the rule's name rather than its id", () => {
+    expect(sectionRiskLabel(llm("secret.llm"))).toBe("Secret");
+    expect(
+      sectionRiskLabel(result("presidio", "x", { ruleId: "pii.us_ssn" })),
+    ).toBe("pii.us_ssn");
+    expect(
+      sectionRiskLabel(result("llm_judge", "", { ruleId: "llm_judge" })),
+    ).toBe("llm_judge");
+    expect(sectionRiskLabel(result("gitleaks", "x"))).toBe("gitleaks");
   });
 });
 
