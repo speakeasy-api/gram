@@ -13,7 +13,7 @@ import (
 type organizationListBounds struct {
 	minMembers, maxMembers    pgtype.Int8
 	createdAtGte, createdAtLt pgtype.Timestamptz
-	disabledOnly              pgtype.Bool
+	disabledStatus            string
 }
 
 func listOrganizationsBounds(p *gen.ListOrganizationsPayload) (organizationListBounds, error) {
@@ -62,8 +62,14 @@ func listOrganizationsBounds(p *gen.ListOrganizationsPayload) (organizationListB
 		// precision, including month/year/leap-day rollover.
 		bounds.createdAtLt.Time = bounds.createdAtLt.Time.AddDate(0, 0, 1)
 	}
-	if p.DisabledOnly != nil {
-		bounds.disabledOnly = pgtype.Bool{Bool: *p.DisabledOnly, Valid: true}
+	bounds.disabledStatus = "all"
+	if p.DisabledStatus != nil {
+		bounds.disabledStatus = *p.DisabledStatus
+	}
+	switch bounds.disabledStatus {
+	case "all", "active", "disabled":
+	default:
+		return bounds, oops.E(oops.CodeInvalid, nil, "disabled_status must be all, active, or disabled")
 	}
 	return bounds, nil
 }

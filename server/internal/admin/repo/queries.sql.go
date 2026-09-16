@@ -93,12 +93,11 @@ filtered AS (
         AND ($4::bigint IS NULL OR members.member_count <= $4::bigint)
         AND ($6::timestamptz IS NULL OR om.created_at >= $6::timestamptz)
         AND ($7::timestamptz IS NULL OR om.created_at < $7::timestamptz)
-        -- Unlike disabled_states, this restriction is never bypassed by an ID match.
-        AND ($8::boolean IS NOT TRUE OR om.disabled_at IS NOT NULL)
+        -- Status is strict, including exact organization and WorkOS ID searches.
         AND (
-            (CASE WHEN om.disabled_at IS NULL THEN 'active' ELSE 'disabled' END) = ANY($9::text[])
-            OR lower(om.id) = lower(search.term)
-            OR lower(om.workos_id) = lower(search.term)
+            $8::text = 'all'
+            OR ($8::text = 'active' AND om.disabled_at IS NULL)
+            OR ($8::text = 'disabled' AND om.disabled_at IS NOT NULL)
         )
 )
 SELECT count(*)::bigint FROM filtered
@@ -113,8 +112,7 @@ type AdminCountOrganizationsParams struct {
 	AccountTypes   []string
 	CreatedAtGte   pgtype.Timestamptz
 	CreatedAtLt    pgtype.Timestamptz
-	DisabledOnly   pgtype.Bool
-	DisabledStates []string
+	DisabledStatus string
 }
 
 // The count cannot ride on the page query. That query carries the cursor
@@ -137,8 +135,7 @@ func (q *Queries) AdminCountOrganizations(ctx context.Context, arg AdminCountOrg
 		arg.AccountTypes,
 		arg.CreatedAtGte,
 		arg.CreatedAtLt,
-		arg.DisabledOnly,
-		arg.DisabledStates,
+		arg.DisabledStatus,
 	)
 	var column_1 int64
 	err := row.Scan(&column_1)
@@ -589,25 +586,21 @@ filtered AS (
         AND ($5::bigint IS NULL OR members.member_count <= $5::bigint)
         AND ($7::timestamptz IS NULL OR om.created_at >= $7::timestamptz)
         AND ($8::timestamptz IS NULL OR om.created_at < $8::timestamptz)
-        -- Unlike disabled_states, this restriction is never bypassed by an ID match.
-        AND ($9::boolean IS NOT TRUE OR om.disabled_at IS NOT NULL)
-        -- No empty arm: the handler resolves an absent filter to {active}.
-        -- The id arms repeat here, and only here, so a pasted id reaches a disabled organization: investigating one is a leading reason to paste an id at all.
-        -- Deliberately not repeated on the account type arm or the cursor, which keep applying to an id match.
+        -- Status is strict, including exact organization and WorkOS ID searches.
         AND (
-            (CASE WHEN om.disabled_at IS NULL THEN 'active' ELSE 'disabled' END) = ANY($10::text[])
-            OR lower(om.id) = lower(search.term)
-            OR lower(om.workos_id) = lower(search.term)
+            $9::text = 'all'
+            OR ($9::text = 'active' AND om.disabled_at IS NULL)
+            OR ($9::text = 'disabled' AND om.disabled_at IS NOT NULL)
         )
         -- Keep ID-shaped cursors compatible, but seek in the default creation
         -- order, not ID order. Resolve the anchor outside the filters so changes
         -- to its account/disabled state do not break an existing cursor. A
         -- deleted or unknown anchor exhausts the walk rather than restarting it.
         AND (
-            $11::text IS NULL
+            $10::text IS NULL
             OR EXISTS (
                 SELECT 1 FROM organization_metadata anchor
-                WHERE anchor.id = $11::text
+                WHERE anchor.id = $10::text
                   AND (om.created_at < anchor.created_at
                        OR (om.created_at = anchor.created_at AND om.id > anchor.id))
             )
@@ -615,7 +608,7 @@ filtered AS (
 ),
 paged AS MATERIALIZED (
 SELECT id, name, slug, account_type, workos_id, stripe_customer_id, stripe_subscription_id, whitelisted, disabled_at, trial_state, trial_ends_at, created_at, updated_at, member_count FROM filtered
-WHERE coalesce(cardinality($12::text[]), 0) = 0 OR trial_state = ANY($12::text[])
+WHERE coalesce(cardinality($11::text[]), 0) = 0 OR trial_state = ANY($11::text[])
 ORDER BY
     CASE WHEN $1::text = 'name' AND $2::text = 'asc' THEN name END ASC NULLS LAST,
     CASE WHEN $1::text = 'name' AND $2::text = 'desc' THEN name END DESC NULLS LAST,
@@ -633,8 +626,8 @@ ORDER BY
     CASE WHEN $1::text = 'trial_ends_at' AND $2::text = 'desc' THEN trial_ends_at END DESC NULLS LAST,
     -- Without this tiebreaker rows that tie on the sort key can swap between calls, which drops or repeats rows across a page boundary.
     id ASC
-LIMIT $14::int
-OFFSET $13::bigint
+LIMIT $13::int
+OFFSET $12::bigint
 )
 SELECT
     id, name, slug, account_type, workos_id, stripe_customer_id,
@@ -675,8 +668,7 @@ type AdminListOrganizationsParams struct {
 	AccountTypes   []string
 	CreatedAtGte   pgtype.Timestamptz
 	CreatedAtLt    pgtype.Timestamptz
-	DisabledOnly   pgtype.Bool
-	DisabledStates []string
+	DisabledStatus string
 	AfterID        pgtype.Text
 	TrialStates    []string
 	PageOffset     int64
@@ -721,8 +713,7 @@ func (q *Queries) AdminListOrganizations(ctx context.Context, arg AdminListOrgan
 		arg.AccountTypes,
 		arg.CreatedAtGte,
 		arg.CreatedAtLt,
-		arg.DisabledOnly,
-		arg.DisabledStates,
+		arg.DisabledStatus,
 		arg.AfterID,
 		arg.TrialStates,
 		arg.PageOffset,

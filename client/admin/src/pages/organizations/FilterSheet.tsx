@@ -3,6 +3,13 @@ import { useId, useRef, useState, type JSX, type Ref } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Command,
   CommandEmpty,
   CommandGroup,
@@ -63,6 +70,7 @@ export function FilterSheet({
   // every browser, so that is not reliably the trigger.
   onReturnFocus: () => void;
 }): JSX.Element {
+  const disabledId = useId();
   const open = openGroup !== null;
   const [draft, setDraft] = useState(value);
   const [lastOpened, setLastOpened] = useState(openGroup);
@@ -109,23 +117,60 @@ export function FilterSheet({
         </SheetHeader>
 
         <div className="grid gap-4 p-4">
-          {FILTER_GROUPS.map((group) => (
-            <FilterPicker
-              key={group.key}
-              group={group}
-              chosen={draft[group.key]}
-              // Taken from the value the sheet opened on, not from the draft:
-              // an unrecognised type unchecked mid-edit has to stay on screen,
-              // or the operator cannot change their mind.
-              options={optionsFor(group, value[group.key])}
-              onChange={(next) =>
-                setDraft((previous) => ({ ...previous, [group.key]: next }))
-              }
-              ref={(node) => {
-                if (node) pickers.current[group.key] = node;
-              }}
-            />
-          ))}
+          {FILTER_GROUPS.map((group) =>
+            group.key === "disabled" ? (
+              <div key={group.key} className="space-y-2">
+                <label htmlFor={disabledId} className="text-sm font-medium">
+                  Organization Status
+                </label>
+                <Select
+                  value={
+                    draft.disabled.length === 1 ? draft.disabled[0] : "all"
+                  }
+                  onValueChange={(status) =>
+                    setDraft((previous) => ({
+                      ...previous,
+                      disabled:
+                        status === "active" || status === "disabled"
+                          ? [status]
+                          : [],
+                    }))
+                  }
+                >
+                  <SelectTrigger
+                    id={disabledId}
+                    className="w-full"
+                    ref={(node) => {
+                      if (node) pickers.current.disabled = node;
+                    }}
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="disabled">Disabled</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : (
+              <FilterPicker
+                key={group.key}
+                group={group}
+                chosen={draft[group.key]}
+                // Taken from the value the sheet opened on, not from the draft:
+                // an unrecognised type unchecked mid-edit has to stay on screen,
+                // or the operator cannot change their mind.
+                options={optionsFor(group, value[group.key])}
+                onChange={(next) =>
+                  setDraft((previous) => ({ ...previous, [group.key]: next }))
+                }
+                ref={(node) => {
+                  if (node) pickers.current[group.key] = node;
+                }}
+              />
+            ),
+          )}
         </div>
 
         <SheetFooter className="flex-row justify-end">

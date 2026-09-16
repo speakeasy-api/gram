@@ -282,6 +282,11 @@ function picker(group: string): HTMLElement {
 // choice does not close it, because the group takes more than one, so a second
 // call must not toggle the open list shut.
 async function chooseFilter(group: string, option: string): Promise<void> {
+  if (group === "Organization Status") {
+    openOn(picker(group));
+    fireEvent.click(await screen.findByRole("option", { name: option }));
+    return;
+  }
   const trigger = picker(group);
   if (trigger.getAttribute("aria-expanded") !== "true") {
     fireEvent.click(trigger);
@@ -671,7 +676,7 @@ describe("organizations list", () => {
     expect(lastListParams()).toMatchObject({
       account_types: ["pro"],
       trial_states: ["running", "expired"],
-      disabled_states: ["active", "disabled"],
+      disabled_status: "all",
     });
 
     await openFilters("Type");
@@ -821,13 +826,14 @@ describe("organizations list", () => {
       expect(lastListParams().account_types).toEqual(["pro"]);
     });
 
-    await openFilters("Status");
+    await openFilters("Organization Status");
     fireEvent.click(screen.getByRole("button", { name: "Clear all" }));
 
     await waitFor(() => {
       expect(lastListParams().account_types).toBeUndefined();
     });
-    expect(lastListParams().disabled_states).toBeUndefined();
+    expect(lastListParams().disabled_status).toBe("all");
+    expect(currentSearch(router)).not.toContain("disabled");
     // The term is not a filter this sheet holds. An operator who cleared the
     // filters has not asked to type it again.
     expect(lastListParams().q).toBe("acme");
@@ -897,7 +903,6 @@ describe("organizations list", () => {
     const params = lastListParams();
     expect(params.account_types).toBeUndefined();
     expect(params.trial_states).toBeUndefined();
-    expect(params.disabled_states).toBeUndefined();
     expect(filterTrigger("Type").getAttribute("aria-label")).toContain(
       "All types",
     );
@@ -914,7 +919,6 @@ describe("organizations list", () => {
     const params = lastListParams();
     expect(params.account_types).toBeUndefined();
     expect(params.trial_states).toBeUndefined();
-    expect(params.disabled_states).toBeUndefined();
   });
 
   it("opens on the group the operator asked for", async () => {
@@ -958,17 +962,77 @@ describe("organizations list", () => {
     );
   });
 
+  it("preserves a legacy active-only bookmark until its restriction is cleared", async () => {
+    await renderRouteTree(routeTree, {
+      initialPath: urlFor({ disabled: ["active"], type: ["pro"] }),
+    });
+    await waitFor(() =>
+      expect(lastListParams().disabled_status).toEqual("active"),
+    );
+    expect(
+      filterTrigger("Organization Status").getAttribute("aria-label"),
+    ).toContain("Active");
+    await openFilters("Organization Status");
+    expect(picker("Organization Status").textContent).toBe("Active");
+    await chooseFilter("Organization Status", "All");
+    applyFilters();
+    await waitFor(() => expect(lastListParams().disabled_status).toBe("all"));
+    expect(lastListParams().account_types).toEqual(["pro"]);
+  });
+
+  it.each(["Active", "Disabled"])(
+    "keeps %s a draft until Apply and clears it independently",
+    async (label) => {
+      const status = label.toLowerCase();
+      const { router } = await renderRouteTree(routeTree, {
+        initialPath: urlFor({
+          q: "org_exact_id",
+          type: ["pro"],
+          trial: ["running"],
+          dir: "asc",
+        }),
+      });
+      await waitFor(() => expect(lastListParams().disabled_status).toBe("all"));
+      await openFilters("Organization Status");
+      await chooseFilter("Organization Status", label);
+      expect(lastListParams().disabled_status).toBe("all");
+      fireEvent.click(screen.getByRole("button", { name: "Close" }));
+      await openFilters("Organization Status");
+      expect(picker("Organization Status").textContent).toBe("All");
+      await chooseFilter("Organization Status", label);
+      applyFilters();
+      await waitFor(() =>
+        expect(lastListParams().disabled_status).toBe(status),
+      );
+      expect(currentSearch(router)).toContain(`disabledStatus=${status}`);
+      expect(
+        filterTrigger("Organization Status").getAttribute("aria-label"),
+      ).toContain(label);
+      fireEvent.click(screen.getByRole("button", { name: `Clear ${label}` }));
+      await waitFor(() => expect(lastListParams().disabled_status).toBe("all"));
+      expect(lastListParams()).toMatchObject({
+        q: "org_exact_id",
+        account_types: ["pro"],
+        trial_states: ["running"],
+        direction: "asc",
+        page: 1,
+      });
+      expect(currentSearch(router)).not.toContain("disabledOnly");
+      expect(document.activeElement).toBe(filterTrigger("Organization Status"));
+    },
+  );
+
   it("keeps the sort when a filter is applied", async () => {
     const { router } = await renderRouteTree(routeTree, {
       initialPath: urlFor({ sort: "created_at", dir: "asc" }),
     });
 
-    await openFilters("Status");
-    await chooseFilter("Status", "Disabled");
+    await openFilters("Organization Status");
+    await chooseFilter("Organization Status", "Disabled");
     applyFilters();
 
     await waitFor(() => {
-      expect(lastListParams().disabled_states).toEqual(["disabled"]);
+      expect(lastListParams().disabled_status).toBe("disabled");
     });
     const url = currentSearch(router);
     expect(url).toContain("sort=created_at");
@@ -999,7 +1063,7 @@ describe("organizations list", () => {
 
     // Nothing in the URL moves, so the pager cannot notice on its own. Page
     // three of a filter set is not the first page an operator asked for.
-    await openFilters("Status");
+    await openFilters("Organization Status");
     applyFilters();
 
     await waitFor(() => {
@@ -1045,33 +1109,65 @@ describe("organizations list", () => {
     expect(lastListParams().q).toBe("acme");
   });
 
-  it("resets the page when a filter changes", async () => {
-    mocks.listOrganizations.mockResolvedValue({
-      organizations: ORGS,
-      total: 101,
-    });
-    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+  it.each(["Active", "Disabled"])(
+    "resets the page in both directions for %s with other filters",
+    async (label) => {
+      mocks.listOrganizations.mockResolvedValue({
+        organizations: ORGS,
+        total: 101,
+      });
+      await renderRouteTree(routeTree, {
+        initialPath: urlFor({
+          q: "org_exact_id",
+          type: ["pro"],
+          trial: ["running"],
+          dir: "asc",
+        }),
+      });
 
-    const next = await screen.findByRole("button", { name: "Next" });
-    await waitFor(() => {
-      expect(next.hasAttribute("disabled")).toBe(false);
-    });
-    fireEvent.click(next);
-    await waitFor(() => {
-      expect(lastListParams().page).toBe(2);
-    });
+      const next = await screen.findByRole("button", { name: "Next" });
+      await waitFor(() => {
+        expect(next.hasAttribute("disabled")).toBe(false);
+      });
+      fireEvent.click(next);
+      await waitFor(() => {
+        expect(lastListParams().page).toBe(2);
+      });
 
-    await openFilters("Status");
-    await chooseFilter("Status", "Disabled");
-    applyFilters();
+      await openFilters("Organization Status");
+      await chooseFilter("Organization Status", label);
+      applyFilters();
 
-    await waitFor(() => {
-      expect(lastListParams().disabled_states).toEqual(["disabled"]);
-    });
-    // The page was fetched under the previous filter set and belongs to a
-    // different result set.
-    expect(lastListParams().page).toBe(1);
-  });
+      await waitFor(() => {
+        expect(lastListParams().disabled_status).toBe(label.toLowerCase());
+      });
+      // The page was fetched under the previous filter set and belongs to a
+      // different result set.
+      expect(lastListParams()).toMatchObject({
+        page: 1,
+        q: "org_exact_id",
+        account_types: ["pro"],
+        trial_states: ["running"],
+        direction: "asc",
+      });
+      await waitFor(() =>
+        expect(
+          screen.getByRole("button", { name: "Next" }).hasAttribute("disabled"),
+        ).toBe(false),
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Next" }));
+      await waitFor(() => expect(lastListParams().page).toBe(2));
+      await openFilters("Organization Status");
+      await chooseFilter("Organization Status", "All");
+      applyFilters();
+      await waitFor(() =>
+        expect(lastListParams()).toMatchObject({
+          page: 1,
+          disabled_status: "all",
+        }),
+      );
+    },
+  );
 
   it("resets the page when the search box changes the term", async () => {
     mocks.listOrganizations.mockResolvedValue({
@@ -3346,12 +3442,12 @@ describe("organizations list bulk account type", () => {
 
     await tick(FIRST_ORG.name);
 
-    await openFilters("Status");
-    await chooseFilter("Status", "Disabled");
+    await openFilters("Organization Status");
+    await chooseFilter("Organization Status", "Disabled");
     applyFilters();
 
     await waitFor(() => {
-      expect(lastListParams().disabled_states).toEqual(["disabled"]);
+      expect(lastListParams().disabled_status).toBe("disabled");
     });
     expect(screen.getByText("Nothing selected")).toBeTruthy();
   });
@@ -4121,6 +4217,64 @@ describe("TableActionBar", () => {
 // value below is the whole object the route sees.
 describe("organizationsSearchSchema", () => {
   const cases: [string, Record<string, unknown>, OrganizationsSearch][] = [
+    ["defaults to unrestricted", {}, {}],
+    [
+      "reads canonical active",
+      { disabledStatus: "active" },
+      { disabledStatus: "active" },
+    ],
+    [
+      "reads canonical disabled",
+      { disabledStatus: "disabled" },
+      { disabledStatus: "disabled" },
+    ],
+    [
+      "canonical all overrides old restrictions",
+      { disabledStatus: "all", disabledOnly: true, disabled: "active" },
+      {},
+    ],
+    [
+      "canonical active overrides binary",
+      { disabledStatus: "active", disabledOnly: true },
+      { disabledStatus: "active" },
+    ],
+    ["invalid canonical falls back to all", { disabledStatus: "invalid" }, {}],
+    ["array canonical falls back to all", { disabledStatus: ["active"] }, {}],
+    [
+      "invalid canonical permits legacy translation",
+      { disabledStatus: "invalid", disabledOnly: true },
+      { disabledStatus: "disabled" },
+    ],
+    [
+      "reads disabled only",
+      { disabledOnly: true },
+      { disabledStatus: "disabled" },
+    ],
+    [
+      "reads a handwritten boolean",
+      { disabledOnly: "true" },
+      { disabledStatus: "disabled" },
+    ],
+    ["canonicalizes false", { disabledOnly: false }, {}],
+    ["canonicalizes handwritten false", { disabledOnly: "false" }, {}],
+    ["rejects invalid boolean", { disabledOnly: "yes" }, {}],
+    ["rejects numeric boolean", { disabledOnly: 1 }, {}],
+    ["rejects array boolean", { disabledOnly: [true] }, {}],
+    [
+      "new false overrides legacy active",
+      { disabledOnly: false, disabled: "active" },
+      {},
+    ],
+    [
+      "new true overrides legacy active",
+      { disabledOnly: true, disabled: "active" },
+      { disabledStatus: "disabled" },
+    ],
+    [
+      "preserves legacy active bookmark",
+      { disabled: "active" },
+      { disabledStatus: "active" },
+    ],
     ["reads a hand-written type", { type: "free" }, { type: ["free"] }],
     [
       "keeps a type the picker does not offer",
@@ -4157,12 +4311,12 @@ describe("organizationsSearchSchema", () => {
     [
       "reads a status the picker offers",
       { disabled: ["disabled"] },
-      { disabled: ["disabled"] },
+      { disabledStatus: "disabled" },
     ],
     [
       "reads the flag this list used to carry as both statuses",
       { disabled: true },
-      { disabled: ["active", "disabled"] },
+      {},
     ],
     ["drops a status outside the two", { disabled: ["retired"] }, {}],
     ["reads an all-digit term the router coerced", { q: 123 }, { q: "123" }],

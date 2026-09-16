@@ -537,7 +537,7 @@ func BuildListOrganizationActivityPayload(adminListOrganizationActivityOrganizat
 
 // BuildListOrganizationsPayload builds the payload for the admin
 // listOrganizations endpoint from CLI flags.
-func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrganizationsAccountType string, adminListOrganizationsAccountTypes string, adminListOrganizationsTrialStates string, adminListOrganizationsDisabledStates string, adminListOrganizationsMinMembers string, adminListOrganizationsMaxMembers string, adminListOrganizationsDisabledOnly string, adminListOrganizationsCreatedFrom string, adminListOrganizationsCreatedTo string, adminListOrganizationsIncludeDisabled string, adminListOrganizationsCursor string, adminListOrganizationsLimit string, adminListOrganizationsSort string, adminListOrganizationsDirection string, adminListOrganizationsPage string, adminListOrganizationsAdminSessionToken string) (*admin.ListOrganizationsPayload, error) {
+func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrganizationsAccountType string, adminListOrganizationsAccountTypes string, adminListOrganizationsTrialStates string, adminListOrganizationsDisabledStatus string, adminListOrganizationsMinMembers string, adminListOrganizationsMaxMembers string, adminListOrganizationsCreatedFrom string, adminListOrganizationsCreatedTo string, adminListOrganizationsCursor string, adminListOrganizationsLimit string, adminListOrganizationsSort string, adminListOrganizationsDirection string, adminListOrganizationsPage string, adminListOrganizationsAdminSessionToken string) (*admin.ListOrganizationsPayload, error) {
 	var err error
 	var q *string
 	{
@@ -569,12 +569,15 @@ func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrga
 			}
 		}
 	}
-	var disabledStates []string
+	var disabledStatus *string
 	{
-		if adminListOrganizationsDisabledStates != "" {
-			err = json.Unmarshal([]byte(adminListOrganizationsDisabledStates), &disabledStates)
+		if adminListOrganizationsDisabledStatus != "" {
+			disabledStatus = &adminListOrganizationsDisabledStatus
+			if !(*disabledStatus == "all" || *disabledStatus == "active" || *disabledStatus == "disabled") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("disabled_status", *disabledStatus, []any{"all", "active", "disabled"}))
+			}
 			if err != nil {
-				return nil, fmt.Errorf("invalid JSON for disabledStates, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"abc123\"\n   ]'")
+				return nil, err
 			}
 		}
 	}
@@ -610,17 +613,6 @@ func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrga
 			}
 		}
 	}
-	var disabledOnly *bool
-	{
-		if adminListOrganizationsDisabledOnly != "" {
-			var val bool
-			val, err = strconv.ParseBool(adminListOrganizationsDisabledOnly)
-			disabledOnly = &val
-			if err != nil {
-				return nil, fmt.Errorf("invalid value for disabledOnly, must be BOOL")
-			}
-		}
-	}
 	var createdFrom *string
 	{
 		if adminListOrganizationsCreatedFrom != "" {
@@ -631,17 +623,6 @@ func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrga
 	{
 		if adminListOrganizationsCreatedTo != "" {
 			createdTo = &adminListOrganizationsCreatedTo
-		}
-	}
-	var includeDisabled *bool
-	{
-		if adminListOrganizationsIncludeDisabled != "" {
-			var val bool
-			val, err = strconv.ParseBool(adminListOrganizationsIncludeDisabled)
-			includeDisabled = &val
-			if err != nil {
-				return nil, fmt.Errorf("invalid value for includeDisabled, must be BOOL")
-			}
 		}
 	}
 	var cursor *string
@@ -697,13 +678,11 @@ func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrga
 	v.AccountType = accountType
 	v.AccountTypes = accountTypes
 	v.TrialStates = trialStates
-	v.DisabledStates = disabledStates
+	v.DisabledStatus = disabledStatus
 	v.MinMembers = minMembers
 	v.MaxMembers = maxMembers
-	v.DisabledOnly = disabledOnly
 	v.CreatedFrom = createdFrom
 	v.CreatedTo = createdTo
-	v.IncludeDisabled = includeDisabled
 	v.Cursor = cursor
 	v.Limit = limit
 	v.Sort = sort

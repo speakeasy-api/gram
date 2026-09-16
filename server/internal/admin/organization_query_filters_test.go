@@ -49,7 +49,6 @@ func TestOrganizationQueryFilters(t *testing.T) {
 	}
 	seedTrial(t, ctx, conn, trialFixture{orgID: "org_filter_c", endsAt: time.Now().Add(30 * 24 * time.Hour)})
 	n := func(v int64) pgtype.Int8 { return pgtype.Int8{Int64: v, Valid: true} }
-	b := func(v bool) pgtype.Bool { return pgtype.Bool{Bool: v, Valid: true} }
 	stamp := conv.ToPGTimestamptz
 	type testCase struct {
 		name   string
@@ -71,26 +70,26 @@ func TestOrganizationQueryFilters(t *testing.T) {
 		{name: "day window", params: repo.AdminListOrganizationsParams{CreatedAtGte: stamp(start), CreatedAtLt: stamp(end)}, want: []string{"b", "c", "d"}},
 		{name: "equal timestamps", params: repo.AdminListOrganizationsParams{CreatedAtGte: stamp(start), CreatedAtLt: stamp(start)}},
 		{name: "timezone equivalent", params: repo.AdminListOrganizationsParams{CreatedAtGte: stamp(start.In(time.FixedZone("west", -7*3600))), CreatedAtLt: stamp(end.In(time.FixedZone("east", 5*3600)))}, want: []string{"b", "c", "d"}},
-		{name: "disabled false", params: repo.AdminListOrganizationsParams{DisabledOnly: b(false)}, want: []string{"a", "b", "c", "d", "e", "f"}},
-		{name: "disabled true", params: repo.AdminListOrganizationsParams{DisabledOnly: b(true)}, want: []string{"d", "e"}},
-		{name: "legacy active", params: repo.AdminListOrganizationsParams{DisabledStates: []string{"active"}}, want: []string{"a", "b", "c", "f"}},
-		{name: "legacy id bypass", params: repo.AdminListOrganizationsParams{Q: conv.ToPGText("org_filter_d"), DisabledStates: []string{"active"}}, want: []string{"d"}},
-		{name: "false id bypass", params: repo.AdminListOrganizationsParams{Q: conv.ToPGText("org_filter_d"), DisabledStates: []string{"active"}, DisabledOnly: b(false)}, want: []string{"d"}},
-		{name: "true disabled id bypass", params: repo.AdminListOrganizationsParams{Q: conv.ToPGText("org_filter_d"), DisabledStates: []string{"active"}, DisabledOnly: b(true)}, want: []string{"d"}},
-		{name: "strict active id", params: repo.AdminListOrganizationsParams{Q: conv.ToPGText("org_filter_b"), DisabledStates: []string{"disabled"}, DisabledOnly: b(true)}},
-		{name: "strict active workos id", params: repo.AdminListOrganizationsParams{Q: conv.ToPGText("workos_org_filter_b"), DisabledOnly: b(true)}},
+		{name: "all", params: repo.AdminListOrganizationsParams{DisabledStatus: "all"}, want: []string{"a", "b", "c", "d", "e", "f"}},
+		{name: "disabled", params: repo.AdminListOrganizationsParams{DisabledStatus: "disabled"}, want: []string{"d", "e"}},
+		{name: "active", params: repo.AdminListOrganizationsParams{DisabledStatus: "active"}, want: []string{"a", "b", "c", "f"}},
+		{name: "strict disabled id", params: repo.AdminListOrganizationsParams{Q: conv.ToPGText("org_filter_d"), DisabledStatus: "active"}, want: nil},
+		{name: "all disabled id", params: repo.AdminListOrganizationsParams{Q: conv.ToPGText("org_filter_d"), DisabledStatus: "all"}, want: []string{"d"}},
+		{name: "disabled id", params: repo.AdminListOrganizationsParams{Q: conv.ToPGText("org_filter_d"), DisabledStatus: "disabled"}, want: []string{"d"}},
+		{name: "strict active id", params: repo.AdminListOrganizationsParams{Q: conv.ToPGText("org_filter_b"), DisabledStatus: "disabled"}},
+		{name: "strict active workos id", params: repo.AdminListOrganizationsParams{Q: conv.ToPGText("workos_org_filter_b"), DisabledStatus: "disabled"}},
 		{name: "combined", params: repo.AdminListOrganizationsParams{Q: conv.ToPGText("filter"), AccountTypes: []string{"payg"}, TrialStates: []string{"running"}, MinMembers: n(2), MaxMembers: n(2), CreatedAtGte: stamp(start), CreatedAtLt: stamp(end)}, want: []string{"c"}},
-		{name: "combined disabled", params: repo.AdminListOrganizationsParams{Q: conv.ToPGText("filter"), AccountTypes: []string{"free"}, TrialStates: []string{"none"}, MaxMembers: n(0), CreatedAtGte: stamp(start), CreatedAtLt: stamp(end), DisabledOnly: b(true)}, want: []string{"d"}},
+		{name: "combined disabled", params: repo.AdminListOrganizationsParams{Q: conv.ToPGText("filter"), AccountTypes: []string{"free"}, TrialStates: []string{"none"}, MaxMembers: n(0), CreatedAtGte: stamp(start), CreatedAtLt: stamp(end), DisabledStatus: "disabled"}, want: []string{"d"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			p := tc.params
-			if p.DisabledStates == nil {
-				p.DisabledStates = []string{"active", "disabled"}
+			if p.DisabledStatus == "" {
+				p.DisabledStatus = "all"
 			}
 			p.PageLimit = 100
 			checkCount := func() {
-				count, err := queries.AdminCountOrganizations(ctx, repo.AdminCountOrganizationsParams{Q: p.Q, AccountTypes: p.AccountTypes, TrialStates: p.TrialStates, DisabledStates: p.DisabledStates, MinMembers: p.MinMembers, MaxMembers: p.MaxMembers, CreatedAtGte: p.CreatedAtGte, CreatedAtLt: p.CreatedAtLt, DisabledOnly: p.DisabledOnly})
+				count, err := queries.AdminCountOrganizations(ctx, repo.AdminCountOrganizationsParams{Q: p.Q, AccountTypes: p.AccountTypes, TrialStates: p.TrialStates, DisabledStatus: p.DisabledStatus, MinMembers: p.MinMembers, MaxMembers: p.MaxMembers, CreatedAtGte: p.CreatedAtGte, CreatedAtLt: p.CreatedAtLt})
 				require.NoError(t, err)
 				require.Equal(t, int64(len(tc.want)), count)
 			}
@@ -165,7 +164,7 @@ func TestOrganizationQueryFilters_LegacyCursor(t *testing.T) {
 		}
 	}
 	min := pgtype.Int8{Int64: 1, Valid: true}
-	p := repo.AdminListOrganizationsParams{DisabledStates: []string{"active"}, MinMembers: min, PageLimit: 1}
+	p := repo.AdminListOrganizationsParams{DisabledStatus: "active", MinMembers: min, PageLimit: 1}
 	for _, id := range []string{"org_b", "org_d", ""} {
 		rows, err := queries.AdminListOrganizations(ctx, p)
 		require.NoError(t, err)
@@ -176,7 +175,7 @@ func TestOrganizationQueryFilters_LegacyCursor(t *testing.T) {
 			require.Equal(t, id, rows[0].ID)
 			p.AfterID = conv.ToPGText(id)
 		}
-		count, err := queries.AdminCountOrganizations(ctx, repo.AdminCountOrganizationsParams{DisabledStates: p.DisabledStates, MinMembers: min})
+		count, err := queries.AdminCountOrganizations(ctx, repo.AdminCountOrganizationsParams{DisabledStatus: p.DisabledStatus, MinMembers: min})
 		require.NoError(t, err)
 		require.Equal(t, int64(2), count)
 	}

@@ -14,6 +14,7 @@ import { RequestOptions } from "../lib/sdks.js";
 import {
   AdminListOrganizationsRequest,
   AdminListOrganizationsResponse,
+  DisabledStatus,
 } from "../models/operations/adminlistorganizations.js";
 import { unwrapAsync } from "../types/fp.js";
 import { PageIterator, unwrapResultIterator } from "../types/operations.js";
@@ -79,13 +80,11 @@ export function buildAdminListOrganizationsQuery(
       accountType: request?.accountType,
       accountTypes: request?.accountTypes,
       trialStates: request?.trialStates,
-      disabledStates: request?.disabledStates,
+      disabledStatus: request?.disabledStatus,
       minMembers: request?.minMembers,
       maxMembers: request?.maxMembers,
-      disabledOnly: request?.disabledOnly,
       createdFrom: request?.createdFrom,
       createdTo: request?.createdTo,
-      includeDisabled: request?.includeDisabled,
       cursor: request?.cursor,
       limit: request?.limit,
       sort: request?.sort,
@@ -131,13 +130,11 @@ export function buildAdminListOrganizationsInfiniteQuery(
       accountType: request?.accountType,
       accountTypes: request?.accountTypes,
       trialStates: request?.trialStates,
-      disabledStates: request?.disabledStates,
+      disabledStatus: request?.disabledStatus,
       minMembers: request?.minMembers,
       maxMembers: request?.maxMembers,
-      disabledOnly: request?.disabledOnly,
       createdFrom: request?.createdFrom,
       createdTo: request?.createdTo,
-      includeDisabled: request?.includeDisabled,
       cursor: request?.cursor,
       limit: request?.limit,
       sort: request?.sort,
@@ -180,13 +177,11 @@ export function queryKeyAdminListOrganizations(
     accountType?: string | undefined;
     accountTypes?: Array<string> | undefined;
     trialStates?: Array<string> | undefined;
-    disabledStates?: Array<string> | undefined;
+    disabledStatus?: DisabledStatus | undefined;
     minMembers?: bigint | undefined;
     maxMembers?: bigint | undefined;
-    disabledOnly?: boolean | undefined;
     createdFrom?: string | undefined;
     createdTo?: string | undefined;
-    includeDisabled?: boolean | undefined;
     cursor?: string | undefined;
     limit?: number | undefined;
     sort?: string | undefined;
@@ -212,13 +207,11 @@ export function queryKeyAdminListOrganizationsInfinite(
     accountType?: string | undefined;
     accountTypes?: Array<string> | undefined;
     trialStates?: Array<string> | undefined;
-    disabledStates?: Array<string> | undefined;
+    disabledStatus?: DisabledStatus | undefined;
     minMembers?: bigint | undefined;
     maxMembers?: bigint | undefined;
-    disabledOnly?: boolean | undefined;
     createdFrom?: string | undefined;
     createdTo?: string | undefined;
-    includeDisabled?: boolean | undefined;
     cursor?: string | undefined;
     limit?: number | undefined;
     sort?: string | undefined;

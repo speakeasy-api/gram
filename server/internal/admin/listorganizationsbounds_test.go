@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"encoding/json"
 
 	"fmt"
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
@@ -23,7 +24,7 @@ func TestListOrganizationsBoundsHTTPDecoder(t *testing.T) {
 	for _, query := range []string{
 		"min_members=-1", "max_members=-1", "min_members=1.5", "max_members=0.5",
 		"min_members=9223372036854775808", "max_members=9223372036854775808",
-		"disabled_only=invalid",
+		"disabled_status=invalid",
 	} {
 		t.Run(query, func(t *testing.T) {
 			req := httptest.NewRequest("GET", "/admin/organizations.list?"+query, nil)
@@ -35,13 +36,13 @@ func TestListOrganizationsBoundsHTTPDecoder(t *testing.T) {
 
 func TestListOrganizationsBoundsHTTPValid(t *testing.T) {
 	t.Parallel()
-	req := httptest.NewRequest("GET", "/admin/organizations.list?min_members=0&max_members=9223372036854775807&disabled_only=false&created_from=2024-02-29&created_to=2024-02-29", nil)
+	req := httptest.NewRequest("GET", "/admin/organizations.list?min_members=0&max_members=9223372036854775807&disabled_status=all&created_from=2024-02-29&created_to=2024-02-29", nil)
 	decoded, err := srv.DecodeListOrganizationsRequest(goahttp.NewMuxer(), goahttp.RequestDecoder)(req)
 	require.NoError(t, err)
 	p := decoded
 	require.Equal(t, new(int64(0)), p.MinMembers)
 	require.Equal(t, new(int64(math.MaxInt64)), p.MaxMembers)
-	require.Equal(t, new(false), p.DisabledOnly)
+	require.Equal(t, new("all"), p.DisabledStatus)
 	require.Equal(t, new("2024-02-29"), p.CreatedFrom)
 	require.Equal(t, new("2024-02-29"), p.CreatedTo)
 	req = httptest.NewRequest("GET", "/admin/organizations.list", nil)
@@ -50,7 +51,10 @@ func TestListOrganizationsBoundsHTTPValid(t *testing.T) {
 	p = decoded
 	require.Nil(t, p.MinMembers)
 	require.Nil(t, p.MaxMembers)
-	require.Nil(t, p.DisabledOnly)
+	require.Nil(t, p.DisabledStatus)
+	bounds, err := listOrganizationsBounds(p)
+	require.NoError(t, err)
+	require.Equal(t, "all", bounds.disabledStatus)
 	require.Nil(t, p.CreatedFrom)
 	require.Nil(t, p.CreatedTo)
 }
@@ -61,6 +65,8 @@ func TestListOrganizationsBoundsDirectValidation(t *testing.T) {
 		payload gen.ListOrganizationsPayload
 		field   string
 	}{
+		{gen.ListOrganizationsPayload{DisabledStatus: new("archived")}, "disabled_status"},
+		{gen.ListOrganizationsPayload{DisabledStatus: new("")}, "disabled_status"},
 		{gen.ListOrganizationsPayload{MinMembers: new(int64(-1))}, "min_members"},
 		{gen.ListOrganizationsPayload{MaxMembers: new(int64(-1))}, "max_members"},
 		{gen.ListOrganizationsPayload{MinMembers: new(int64(2)), MaxMembers: new(int64(1))}, "min_members"},
@@ -133,22 +139,21 @@ func TestListOrganizationsBoundsService(t *testing.T) {
 		p    gen.ListOrganizationsPayload
 		ids  []string
 	}{
-		{"omitted", gen.ListOrganizationsPayload{}, []string{"a", "b", "c", "f"}},
-		{"false overrides disabled", gen.ListOrganizationsPayload{DisabledOnly: new(false), DisabledStates: []string{"disabled"}}, []string{"a", "b", "c", "d", "e", "f"}},
-		{"true overrides active", gen.ListOrganizationsPayload{DisabledOnly: new(true), DisabledStates: []string{"active"}, IncludeDisabled: new(false)}, []string{"d", "e"}},
-		{"true overrides include", gen.ListOrganizationsPayload{DisabledOnly: new(true), IncludeDisabled: new(true)}, []string{"d", "e"}},
-		{"false overrides include", gen.ListOrganizationsPayload{DisabledOnly: new(false), IncludeDisabled: new(false)}, []string{"a", "b", "c", "d", "e", "f"}},
-		{"legacy ID", gen.ListOrganizationsPayload{Q: new("org_api_bounds_d")}, []string{"d"}},
-		{"strict ID", gen.ListOrganizationsPayload{Q: new("org_api_bounds_a"), DisabledOnly: new(true)}, []string{}},
-		{"strict workos ID", gen.ListOrganizationsPayload{Q: new("workos_org_api_bounds_a"), DisabledOnly: new(true)}, []string{}},
-		{"zero equality", gen.ListOrganizationsPayload{MinMembers: new(int64(0)), MaxMembers: new(int64(0)), DisabledOnly: new(false)}, []string{"a", "d"}},
-		{"min", gen.ListOrganizationsPayload{MinMembers: new(int64(2)), DisabledOnly: new(false)}, []string{"c", "e", "f"}},
-		{"max", gen.ListOrganizationsPayload{MaxMembers: new(int64(1)), DisabledOnly: new(false)}, []string{"a", "b", "d"}},
-		{"max int64", gen.ListOrganizationsPayload{MaxMembers: new(int64(math.MaxInt64)), DisabledOnly: new(false)}, []string{"a", "b", "c", "d", "e", "f"}},
-		{"day inclusive", gen.ListOrganizationsPayload{CreatedFrom: new("2024-02-29"), CreatedTo: new("2024-02-29"), DisabledOnly: new(false)}, []string{"b", "c", "d"}},
-		{"from", gen.ListOrganizationsPayload{CreatedFrom: new("2024-02-29"), DisabledOnly: new(false)}, []string{"b", "c", "d", "e", "f"}},
-		{"to", gen.ListOrganizationsPayload{CreatedTo: new("2024-02-29"), DisabledOnly: new(false)}, []string{"a", "b", "c", "d"}},
-		{"all combined", gen.ListOrganizationsPayload{Q: new("org_api_bounds"), AccountTypes: []string{"free"}, TrialStates: []string{"none"}, MinMembers: new(int64(0)), MaxMembers: new(int64(0)), CreatedFrom: new("2024-02-29"), CreatedTo: new("2024-02-29"), DisabledOnly: new(true)}, []string{"d"}},
+		{"omitted", gen.ListOrganizationsPayload{}, []string{"a", "b", "c", "d", "e", "f"}},
+		{"explicit all", gen.ListOrganizationsPayload{DisabledStatus: new("all")}, []string{"a", "b", "c", "d", "e", "f"}},
+		{"disabled", gen.ListOrganizationsPayload{DisabledStatus: new("disabled")}, []string{"d", "e"}},
+		{"active", gen.ListOrganizationsPayload{DisabledStatus: new("active")}, []string{"a", "b", "c", "f"}},
+		{"unrestricted ID", gen.ListOrganizationsPayload{Q: new("org_api_bounds_d")}, []string{"d"}},
+		{"strict ID", gen.ListOrganizationsPayload{Q: new("org_api_bounds_a"), DisabledStatus: new("disabled")}, []string{}},
+		{"strict workos ID", gen.ListOrganizationsPayload{Q: new("workos_org_api_bounds_a"), DisabledStatus: new("disabled")}, []string{}},
+		{"zero equality", gen.ListOrganizationsPayload{MinMembers: new(int64(0)), MaxMembers: new(int64(0)), DisabledStatus: new("all")}, []string{"a", "d"}},
+		{"min", gen.ListOrganizationsPayload{MinMembers: new(int64(2)), DisabledStatus: new("all")}, []string{"c", "e", "f"}},
+		{"max", gen.ListOrganizationsPayload{MaxMembers: new(int64(1)), DisabledStatus: new("all")}, []string{"a", "b", "d"}},
+		{"max int64", gen.ListOrganizationsPayload{MaxMembers: new(int64(math.MaxInt64)), DisabledStatus: new("all")}, []string{"a", "b", "c", "d", "e", "f"}},
+		{"day inclusive", gen.ListOrganizationsPayload{CreatedFrom: new("2024-02-29"), CreatedTo: new("2024-02-29"), DisabledStatus: new("all")}, []string{"b", "c", "d"}},
+		{"from", gen.ListOrganizationsPayload{CreatedFrom: new("2024-02-29"), DisabledStatus: new("all")}, []string{"b", "c", "d", "e", "f"}},
+		{"to", gen.ListOrganizationsPayload{CreatedTo: new("2024-02-29"), DisabledStatus: new("all")}, []string{"a", "b", "c", "d"}},
+		{"all combined", gen.ListOrganizationsPayload{Q: new("org_api_bounds"), AccountTypes: []string{"free"}, TrialStates: []string{"none"}, MinMembers: new(int64(0)), MaxMembers: new(int64(0)), CreatedFrom: new("2024-02-29"), CreatedTo: new("2024-02-29"), DisabledStatus: new("disabled")}, []string{"d"}},
 		{"ID still AND members", gen.ListOrganizationsPayload{Q: new("org_api_bounds_d"), MinMembers: new(int64(1))}, []string{}},
 		{"ID still AND dates", gen.ListOrganizationsPayload{Q: new("org_api_bounds_d"), CreatedTo: new("2024-02-28")}, []string{}},
 		{"empty", gen.ListOrganizationsPayload{MinMembers: new(int64(4))}, []string{}},
@@ -190,20 +195,45 @@ func TestListOrganizationsBoundsService(t *testing.T) {
 
 func TestListOrganizationsBoundsHTTPStatus(t *testing.T) {
 	t.Parallel()
-	_, svc, _ := newTestAdminService(t)
+	ctx, svc, conn := newTestAdminService(t)
+	seedOrg(t, ctx, conn, orgFixture{id: "org_http_status_active", name: "Active", slug: "http-status-active"})
+	now := time.Now().UTC()
+	seedOrg(t, ctx, conn, orgFixture{id: "org_http_status_disabled", name: "Disabled", slug: "http-status-disabled", disabledAt: &now})
 	sessionID, err := svc.sessions.Store(t.Context(), StoreParams{Email: "operator@example.com", Name: "Test Operator", OIDCSubject: "sub-admin", HD: testAdminHD, AccessToken: "access", RefreshToken: "refresh", ExpiresAt: time.Now().Add(time.Hour)})
 	require.NoError(t, err)
 	mux := goahttp.NewMuxer()
 	Attach(mux, svc)
 	handler := SessionMiddleware(mux)
-	for _, q := range []string{"min_members=-1", "max_members=0.5", "min_members=9223372036854775808", "min_members=2&max_members=1", "created_from=2025-02-29", "created_to=2025-1-01", "created_from=2025-01-02&created_to=2025-01-01", "disabled_only=invalid"} {
+	for _, tc := range []struct {
+		name, query string
+		total       int64
+	}{
+		{"omitted is all", "", 2},
+		{"explicit all", "?disabled_status=all", 2},
+		{"active", "?disabled_status=active", 1},
+		{"disabled", "?disabled_status=disabled", 1},
+		{"unrelated optional query still accepts empty", "?q=", 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest("GET", "/admin/organizations.list"+tc.query, nil)
+			req.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: sessionID})
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+			var body gen.AdminListOrganizationsResult
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+			require.Equal(t, tc.total, body.Total)
+			require.Len(t, body.Organizations, int(tc.total))
+		})
+	}
+	for _, q := range []string{"min_members=-1", "max_members=0.5", "min_members=9223372036854775808", "min_members=2&max_members=1", "created_from=2025-02-29", "created_to=2025-1-01", "created_from=2025-01-02&created_to=2025-01-01", "disabled_status=invalid", "disabled_status=", "disabled_status"} {
 		t.Run(q, func(t *testing.T) {
 			req := httptest.NewRequest("GET", "/admin/organizations.list?"+q, nil)
 			req.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: sessionID})
 			rec := httptest.NewRecorder()
 			handler.ServeHTTP(rec, req)
 			require.Contains(t, []int{400, 422}, rec.Code, rec.Body.String())
-			require.Contains(t, rec.Body.String(), q[:strings.Index(q, "=")])
+			require.Contains(t, rec.Body.String(), strings.SplitN(q, "=", 2)[0])
 		})
 	}
 }

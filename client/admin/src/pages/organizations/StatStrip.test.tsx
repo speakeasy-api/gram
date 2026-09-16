@@ -266,7 +266,7 @@ describe("organizations stat strip figures", () => {
     fireEvent.click(cell("Disabled"));
 
     await waitFor(() => {
-      expect(currentSearch(router)).toContain('disabled=["disabled"]');
+      expect(currentSearch(router)).toContain("disabledStatus=disabled");
     });
   });
 
@@ -294,14 +294,12 @@ describe("organizations stat strip navigation", () => {
     // spelled out, because an absent status filter is not "no filter": the
     // server reads it as active only.
     await waitFor(() => {
-      expect(currentSearch(router)).toBe(
-        '?type=["payg","enterprise"]&disabled=["active","disabled"]',
-      );
+      expect(currentSearch(router)).toBe('?type=["payg","enterprise"]');
     });
     await waitFor(() => {
       expect(lastListParams().account_types).toEqual(["payg", "enterprise"]);
     });
-    expect(lastListParams().disabled_states).toEqual(["active", "disabled"]);
+    expect(lastListParams().disabled_status).toEqual("all");
     expect(lastListParams().trial_states).toBeUndefined();
   });
 
@@ -329,14 +327,12 @@ describe("organizations stat strip navigation", () => {
     // The figure counts `ending_soon` over every organization, so the list it
     // opens has to ask for both statuses to reach the same rows.
     await waitFor(() => {
-      expect(currentSearch(router)).toBe(
-        '?trial=["ending_soon"]&disabled=["active","disabled"]',
-      );
+      expect(currentSearch(router)).toBe('?trial=["ending_soon"]');
     });
     await waitFor(() => {
       expect(lastListParams().trial_states).toEqual(["ending_soon"]);
     });
-    expect(lastListParams().disabled_states).toEqual(["active", "disabled"]);
+    expect(lastListParams().disabled_status).toEqual("all");
   });
 
   it("filters to disabled organizations from the last cell", async () => {
@@ -345,10 +341,10 @@ describe("organizations stat strip navigation", () => {
     fireEvent.click(cell("Disabled"));
 
     await waitFor(() => {
-      expect(currentSearch(router)).toBe('?disabled=["disabled"]');
+      expect(currentSearch(router)).toBe("?disabledStatus=disabled");
     });
     await waitFor(() => {
-      expect(lastListParams().disabled_states).toEqual(["disabled"]);
+      expect(lastListParams().disabled_status).toEqual("disabled");
     });
   });
 
@@ -360,10 +356,10 @@ describe("organizations stat strip navigation", () => {
     fireEvent.click(cell("Disabled"));
 
     await waitFor(() => {
-      expect(currentSearch(router)).toBe('?disabled=["disabled"]');
+      expect(currentSearch(router)).toBe("?disabledStatus=disabled");
     });
     await waitFor(() => {
-      expect(lastListParams().disabled_states).toEqual(["disabled"]);
+      expect(lastListParams().disabled_status).toEqual("disabled");
     });
     expect(lastListParams().account_types).toBeUndefined();
     expect(lastListParams().trial_states).toBeUndefined();
@@ -412,7 +408,7 @@ describe("organizations stat strip navigation", () => {
 
     expect(currentSearch(router)).not.toContain("q=");
     await waitFor(() => {
-      expect(lastListParams().disabled_states).toEqual(["disabled"]);
+      expect(lastListParams().disabled_status).toEqual("disabled");
     });
     expect(lastListParams().q).toBeUndefined();
     expect((input as HTMLInputElement).value).toBe("");
@@ -484,9 +480,9 @@ describe("organizations stat strip navigation", () => {
     await waitFor(() => {
       expect(
         screen
-          .getByRole("button", { name: /^Status filter:/ })
+          .getByRole("button", { name: /^Organization Status filter:/ })
           .getAttribute("aria-label"),
-      ).toBe("Status filter: Active and disabled");
+      ).toBe("Organization Status filter: All");
     });
   });
 
@@ -498,7 +494,7 @@ describe("organizations stat strip navigation", () => {
     await waitFor(() => {
       expect(
         screen
-          .getByRole("button", { name: /^Status filter:/ })
+          .getByRole("button", { name: /^Organization Status filter:/ })
           .getAttribute("aria-label"),
       ).toContain("Disabled");
     });
@@ -559,10 +555,10 @@ describe("organizations stat strip and the table's filters", () => {
 
     await router.navigate({
       to: "/organizations",
-      search: { disabled: ["disabled"] },
+      search: { disabledStatus: "disabled" },
     });
     await waitFor(() => {
-      expect(lastListParams().disabled_states).toEqual(["disabled"]);
+      expect(lastListParams().disabled_status).toEqual("disabled");
     });
 
     expect(cell("Customers").textContent).toContain(figure(STATS.customers));
@@ -574,10 +570,10 @@ describe("organizations stat strip and the table's filters", () => {
 
     fireEvent.click(cell("Disabled"));
     await waitFor(() => {
-      expect(lastListParams().disabled_states).toEqual(["disabled"]);
+      expect(lastListParams().disabled_status).toEqual("disabled");
     });
 
-    expect(currentSearch(router)).toBe('?disabled=["disabled"]');
+    expect(currentSearch(router)).toBe("?disabledStatus=disabled");
     expect(cell("Customers").textContent).toContain(figure(STATS.customers));
     expect(cell("Trials ending in 7 days").textContent).toContain(
       figure(STATS.trials_ending_soon),

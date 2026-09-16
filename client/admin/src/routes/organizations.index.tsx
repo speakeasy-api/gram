@@ -5,6 +5,7 @@ import {
   disabledStates,
   DISABLED_STATES,
   trialStates,
+  statusSelection,
   type DisabledState,
 } from "@/lib/organizationFilters";
 import { type TrialState } from "@/lib/gramAdminApi";
@@ -21,14 +22,17 @@ import { OrganizationsList } from "@/pages/organizations/index";
  *
  * A param is absent from the URL whenever it holds its default. That keeps a
  * shared link down to what the operator actually changed, and it is why every
- * field is optional. An empty list is a default, so it is absent too: the three
- * filters below are either a non-empty set or nothing at all.
+ * field is optional. Empty sets and disabledStatus=all are absent; the API
+ * mapping sends disabled_status=all for unrestricted views.
  */
 export type OrganizationsSearch = {
   q?: string;
   type?: string[];
   trial?: TrialState[];
-  disabled?: DisabledState[];
+  disabledStatus?: DisabledState;
+  /** Read-only aliases are cleared after validation and never written. */
+  disabled?: never;
+  disabledOnly?: never;
   sort?: string;
   dir?: "asc" | "desc";
 };
@@ -79,11 +83,28 @@ function direction(value: unknown): "asc" | "desc" | undefined {
 export function organizationsSearchSchema(
   search: Record<string, unknown>,
 ): OrganizationsSearch {
+  const only = search["disabledOnly"];
+  // A valid binary value wins over the older disabled field, including false.
+  const explicit =
+    only === true || only === false || only === "true" || only === "false";
+  const canonical = search["disabledStatus"];
+  const disabledStatus = statusSelection({
+    disabledStatus:
+      canonical === "all" || canonical === "active" || canonical === "disabled"
+        ? canonical
+        : undefined,
+    disabledOnly: explicit ? only === true || only === "true" : undefined,
+    disabled: statuses(search["disabled"]),
+  })[0] as DisabledState | undefined;
   return {
+    disabledStatus,
+    // Router search merges validated fields with raw fields. Clear read aliases
+    // explicitly so invalid/raw values cannot reappear or survive new writes.
+    disabled: undefined,
+    disabledOnly: undefined,
     q: text(search["q"]),
     type: accountTypes(values(search["type"])),
     trial: trialStates(values(search["trial"])),
-    disabled: statuses(search["disabled"]),
     sort: text(search["sort"]),
     dir: direction(search["dir"]),
   };

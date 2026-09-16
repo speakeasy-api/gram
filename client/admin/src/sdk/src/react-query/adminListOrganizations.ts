@@ -27,7 +27,10 @@ import {
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
-import { AdminListOrganizationsRequest } from "../models/operations/adminlistorganizations.js";
+import {
+  AdminListOrganizationsRequest,
+  DisabledStatus,
+} from "../models/operations/adminlistorganizations.js";
 import { useGramContext } from "./_context.js";
 import {
   InfiniteQueryHookOptions,
@@ -214,13 +217,11 @@ export function setAdminListOrganizationsData(
       accountType?: string | undefined;
       accountTypes?: Array<string> | undefined;
       trialStates?: Array<string> | undefined;
-      disabledStates?: Array<string> | undefined;
+      disabledStatus?: DisabledStatus | undefined;
       minMembers?: bigint | undefined;
       maxMembers?: bigint | undefined;
-      disabledOnly?: boolean | undefined;
       createdFrom?: string | undefined;
       createdTo?: string | undefined;
-      includeDisabled?: boolean | undefined;
       cursor?: string | undefined;
       limit?: number | undefined;
       sort?: string | undefined;
@@ -243,13 +244,11 @@ export function invalidateAdminListOrganizations(
       accountType?: string | undefined;
       accountTypes?: Array<string> | undefined;
       trialStates?: Array<string> | undefined;
-      disabledStates?: Array<string> | undefined;
+      disabledStatus?: DisabledStatus | undefined;
       minMembers?: bigint | undefined;
       maxMembers?: bigint | undefined;
-      disabledOnly?: boolean | undefined;
       createdFrom?: string | undefined;
       createdTo?: string | undefined;
-      includeDisabled?: boolean | undefined;
       cursor?: string | undefined;
       limit?: number | undefined;
       sort?: string | undefined;

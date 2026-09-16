@@ -34,6 +34,39 @@ function org(id: string): AdminOrganization {
 }
 
 describe("organizationsListQuery", () => {
+  it("separates disabled-only, unrestricted and legacy in-flight keys", () => {
+    const params = {
+      q: "org_exact_id",
+      account_types: ["pro"],
+      trial_states: ["running"],
+      direction: "asc" as const,
+      page: 2,
+    };
+    const unrestricted = organizationsListQuery({
+      ...params,
+      disabled_status: "all",
+    }).queryKey;
+    const disabled = organizationsListQuery({
+      ...params,
+      disabled_status: "disabled",
+    }).queryKey;
+    const active = organizationsListQuery({
+      ...params,
+      disabled_status: "active",
+    }).queryKey;
+    expect(active).not.toEqual(unrestricted);
+    expect(active).not.toEqual(disabled);
+    expect(unrestricted).not.toEqual(disabled);
+    expect(unrestricted).not.toEqual(organizationsListQuery(params).queryKey);
+    expect(disabled).not.toEqual(
+      organizationsListQuery({
+        ...params,
+        disabled_status: "disabled",
+        page: 1,
+      }).queryKey,
+    );
+  });
+
   it("invalidates every filtered page from the unfiltered key", () => {
     const qc = new QueryClient();
     const filtered = organizationsListQuery({ q: "x", cursor: "page-2" });

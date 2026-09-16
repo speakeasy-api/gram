@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { useOnUnmount } from "@/hooks/useOnUnmount";
 import {
   FILTER_GROUPS,
+  statusSelection,
   filterSummary,
   optionsFor,
   type FilterGroupKey,
@@ -128,7 +129,7 @@ export function Toolbar({
   const filters: FilterSelection = {
     type: search.type ?? [],
     trial: search.trial ?? [],
-    disabled: search.disabled ?? [],
+    disabled: statusSelection(search),
   };
 
   const applyFilters = useApplyFilters();
@@ -178,6 +179,21 @@ export function Toolbar({
           </Button>
         );
       })}
+
+      {filters.disabled.length > 0 && (
+        <Button
+          variant="ghost"
+          size="xs"
+          aria-label={`Clear ${filters.disabled[0] === "active" ? "Active" : "Disabled"}`}
+          onClick={() => {
+            applyFilters({ ...filters, disabled: [] });
+            // This chip disappears; leave the keyboard on its stable trigger.
+            triggers.current.disabled?.focus();
+          }}
+        >
+          {filters.disabled[0] === "active" ? "Active" : "Disabled"} ×
+        </Button>
+      )}
 
       <FilterSheet
         value={filters}

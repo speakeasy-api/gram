@@ -56,7 +56,7 @@ describe("toSearchParams", () => {
       q: undefined,
       cursor: "",
       type: [],
-      include_disabled: false,
+      flag: false,
     });
     expect(qs.toString()).toBe("");
   });
@@ -72,7 +72,7 @@ describe("toSearchParams", () => {
 // parses on the server as a single account type named "free,pro", which matches
 // no organization: the browser would show an empty list and no error.
 describe("generated organization filter serialization", () => {
-  it("sends native bigint bounds without precision loss and retains false", async () => {
+  it("sends native bigint bounds without precision loss alongside status", async () => {
     const fetcher = vi.fn().mockResolvedValue(
       new Response('{"organizations":[]}', {
         headers: { "Content-Type": "application/json" },
@@ -85,7 +85,7 @@ describe("generated organization filter serialization", () => {
     await adminListOrganizations(client, {
       minMembers: 9007199254740993n,
       maxMembers: 9223372036854775807n,
-      disabledOnly: false,
+      disabledStatus: "all",
       createdFrom: "2024-02-29",
       createdTo: "2024-03-01",
     });
@@ -94,7 +94,7 @@ describe("generated organization filter serialization", () => {
     expect(Object.fromEntries(url.searchParams)).toEqual({
       min_members: "9007199254740993",
       max_members: "9223372036854775807",
-      disabled_only: "false",
+      disabled_status: "all",
       created_from: "2024-02-29",
       created_to: "2024-03-01",
     });
@@ -106,29 +106,28 @@ describe("listOrganizations", () => {
     vi.unstubAllGlobals();
   });
 
-  it("preserves explicit false in both request parameters and cache keys", () => {
-    expect(omitUnset({ disabled_only: false })).toEqual({
-      disabled_only: false,
+  it("preserves explicit all in both request parameters and cache keys", () => {
+    expect(omitUnset({ disabled_status: "all" })).toEqual({
+      disabled_status: "all",
     });
-    expect(toSearchParams({ disabled_only: false }).toString()).toBe(
-      "disabled_only=false",
+    expect(toSearchParams({ disabled_status: "all" }).toString()).toBe(
+      "disabled_status=all",
     );
-    expect(toSearchParams({ disabled_only: undefined }).toString()).toBe("");
+    expect(toSearchParams({ disabled_status: undefined }).toString()).toBe("");
   });
 
-  it.each([true, false])(
-    "sends disabled_only=%s alongside legacy statuses",
-    async (disabled_only) => {
+  it.each(["all", "active", "disabled"] as const)(
+    "sends disabled_status=%s",
+    async (disabled_status) => {
       const fetch = vi
         .fn()
         .mockResolvedValue(new Response('{"organizations":[]}'));
       vi.stubGlobal("fetch", fetch);
       await listOrganizations({
-        disabled_only,
-        disabled_states: ["active", "disabled"],
+        disabled_status,
       });
       expect(fetch.mock.calls[0]?.[0]).toBe(
-        `/admin/organizations.list?disabled_only=${disabled_only}&disabled_states=active&disabled_states=disabled`,
+        `/admin/organizations.list?disabled_status=${disabled_status}`,
       );
     },
   );
@@ -221,14 +220,14 @@ describe("listOrganizations", () => {
       q: "acme",
       account_types: ["free", "pro"],
       trial_states: ["running", "ending_soon"],
-      disabled_states: ["active", "disabled"],
+      disabled_status: "all",
     });
 
     expect(fetch.mock.calls.at(-1)?.[0]).toBe(
       "/admin/organizations.list?q=acme" +
         "&account_types=free&account_types=pro" +
         "&trial_states=running&trial_states=ending_soon" +
-        "&disabled_states=active&disabled_states=disabled",
+        "&disabled_status=all",
     );
   });
 

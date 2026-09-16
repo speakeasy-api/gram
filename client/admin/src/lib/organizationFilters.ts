@@ -10,10 +10,8 @@ import { ACCOUNT_TYPE_OPTIONS, isAccountType } from "@/lib/accountTypes";
 import { TRIAL_STATES, type TrialState } from "@/lib/gramAdminApi";
 import { TRIAL_LABELS } from "@/lib/trialLabels";
 
-// Whether an organization is switched off. Declared here rather than in the
-// API module because the server has no enum for it: it derives the state from
-// `disabled_at`, and these two words are the whole of what `disabled_states`
-// accepts.
+// The two restricted states derived from `disabled_at`.
+// The API also accepts "all"; statusParams translates these selections.
 export const DISABLED_STATES = ["active", "disabled"] as const;
 
 export type DisabledState = (typeof DISABLED_STATES)[number];
@@ -22,7 +20,7 @@ export const FILTER_GROUP_KEYS = ["type", "trial", "disabled"] as const;
 
 export type FilterGroupKey = (typeof FILTER_GROUP_KEYS)[number];
 
-/** One list of chosen values per group, in the order the pickers offer them. */
+/** Chosen values per group; status is empty (All) or a single state. */
 export type FilterSelection = Record<FilterGroupKey, string[]>;
 
 export const NO_FILTERS: FilterSelection = {
@@ -47,8 +45,7 @@ export type FilterGroup = {
   options: FilterOption[];
 };
 
-// "Status", rather than the "disabled" the parameter is named for: a group
-// headed Disabled whose first option is Active reads as a contradiction.
+// Shared labels for the dropdown and applied-filter summaries.
 const DISABLED_LABELS: Record<DisabledState, string> = {
   active: "Active",
   disabled: "Disabled",
@@ -78,10 +75,9 @@ export const FILTER_GROUPS: FilterGroup[] = [
   },
   {
     key: "disabled",
-    label: "Status",
-    emptyLabel: "Active only",
-    // Not the empty label: this group's default is a filter, not everything.
-    allLabel: "Active and disabled",
+    label: "Organization Status",
+    emptyLabel: "All",
+    allLabel: "All",
     options: DISABLED_STATES.map((value) => ({
       value,
       label: DISABLED_LABELS[value],
@@ -184,24 +180,50 @@ export function disabledStates(chosen: string[]): DisabledState[] | undefined {
   return kept.length > 0 ? kept : undefined;
 }
 
-/** The three params a chosen set puts in the URL. */
+/** Canonical status; old fields are read only for bookmark compatibility. */
 export type FilterSearch = {
   type?: string[];
   trial?: TrialState[];
+  disabledStatus?: "all" | DisabledState;
   disabled?: DisabledState[];
+  disabledOnly?: boolean;
 };
 
-/**
- * A chosen set as the URL states it.
- *
- * Written through the same three readers a pasted link goes through, so a
- * control cannot put a value in the URL that a reload would refuse: the view
- * an operator sends is the view they are looking at.
- */
-export function filtersToSearch(filters: FilterSelection): FilterSearch {
+/** New navigations only write the canonical status, omitting All. */
+export function filtersToSearch(filters: FilterSelection): {
+  type?: string[];
+  trial?: TrialState[];
+  disabledStatus?: DisabledState;
+} {
+  const status = disabledStates(filters.disabled);
   return {
     type: accountTypes(filters.type),
     trial: trialStates(filters.trial),
-    disabled: disabledStates(filters.disabled),
+    disabledStatus: status?.length === 1 ? status[0] : undefined,
+  };
+}
+
+/** A valid canonical status wins, including explicit All. */
+export function statusSelection(search: FilterSearch): string[] {
+  if (search.disabledStatus === "all") return [];
+  if (
+    search.disabledStatus === "active" ||
+    search.disabledStatus === "disabled"
+  ) {
+    return [search.disabledStatus];
+  }
+  if (search.disabledOnly === true) return ["disabled"];
+  if (search.disabledOnly === false) return [];
+  return search.disabled?.length === 1 ? search.disabled : [];
+}
+
+/** Translate status at the API boundary. */
+export function statusParams(search: FilterSearch): {
+  disabled_status: "all" | "active" | "disabled";
+} {
+  const status = statusSelection(search)[0];
+  return {
+    disabled_status:
+      status === "active" || status === "disabled" ? status : "all",
   };
 }

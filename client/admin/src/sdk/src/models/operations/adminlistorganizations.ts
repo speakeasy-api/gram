@@ -5,6 +5,7 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import {
   AdminListOrganizationsResult,
@@ -12,9 +13,22 @@ import {
 } from "../components/adminlistorganizationsresult.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
+/**
+ * Organization status: all (default), active (disabled_at IS NULL), or disabled (disabled_at IS NOT NULL). Applies even to exact ID matches.
+ */
+export const DisabledStatus = {
+  All: "all",
+  Active: "active",
+  Disabled: "disabled",
+} as const;
+/**
+ * Organization status: all (default), active (disabled_at IS NULL), or disabled (disabled_at IS NOT NULL). Applies even to exact ID matches.
+ */
+export type DisabledStatus = ClosedEnum<typeof DisabledStatus>;
+
 export type AdminListOrganizationsRequest = {
   /**
-   * Search term, trimmed of surrounding whitespace. Matches name and slug as a case-insensitive substring, with % and _ taken literally, and matches organization id and WorkOS id exactly, ignoring case. An id match also returns an organization that disabled_states or include_disabled would otherwise hide; it still respects account_type, account_types, trial_states and cursor.
+   * Search term, trimmed of surrounding whitespace. Matches name and slug as a case-insensitive substring, with % and _ taken literally, and matches organization id and WorkOS id exactly, ignoring case. All filters apply even to exact ID matches.
    */
   q?: string | undefined;
   /**
@@ -30,9 +44,9 @@ export type AdminListOrganizationsRequest = {
    */
   trialStates?: Array<string> | undefined;
   /**
-   * Match any of active or disabled. Empty falls back to include_disabled. An unrecognised value matches nothing rather than failing the request.
+   * Organization status: all (default), active (disabled_at IS NULL), or disabled (disabled_at IS NOT NULL). Applies even to exact ID matches.
    */
-  disabledStates?: Array<string> | undefined;
+  disabledStatus?: DisabledStatus | undefined;
   /**
    * Inclusive minimum active member count, from 0 through 9223372036854775807. JavaScript clients must use a decimal string or bigint above Number.MAX_SAFE_INTEGER.
    */
@@ -42,10 +56,6 @@ export type AdminListOrganizationsRequest = {
    */
   maxMembers?: bigint | undefined;
   /**
-   * When supplied, overrides both include_disabled and disabled_states: true selects only disabled organizations (even for exact ID searches); false does not restrict status. Omitted preserves legacy behavior, including the exact ID exception.
-   */
-  disabledOnly?: boolean | undefined;
-  /**
    * Inclusive creation date in strict YYYY-MM-DD UTC calendar format. Each date bound is optional; must not be after created_to.
    */
   createdFrom?: string | undefined;
@@ -53,10 +63,6 @@ export type AdminListOrganizationsRequest = {
    * Inclusive creation date in strict YYYY-MM-DD UTC calendar format. Includes the entire UTC day, implemented as an exclusive bound at the following midnight.
    */
   createdTo?: string | undefined;
-  /**
-   * Include organizations with disabled_at set. Defaults to false. Superseded by disabled_states, which overrides it outright when supplied.
-   */
-  includeDisabled?: boolean | undefined;
   /**
    * Pagination cursor: id of the last item from the previous page in created_at descending, id ascending order. The anchor is resolved regardless of filters; a deleted or unknown id returns an empty page. Ignored when sort or page is supplied.
    */
@@ -84,18 +90,21 @@ export type AdminListOrganizationsResponse = {
 };
 
 /** @internal */
+export const DisabledStatus$outboundSchema: z.ZodMiniEnum<
+  typeof DisabledStatus
+> = z.enum(DisabledStatus);
+
+/** @internal */
 export type AdminListOrganizationsRequest$Outbound = {
   q?: string | undefined;
   account_type?: string | undefined;
   account_types?: Array<string> | undefined;
   trial_states?: Array<string> | undefined;
-  disabled_states?: Array<string> | undefined;
+  disabled_status?: string | undefined;
   min_members?: string | undefined;
   max_members?: string | undefined;
-  disabled_only?: boolean | undefined;
   created_from?: string | undefined;
   created_to?: string | undefined;
-  include_disabled?: boolean | undefined;
   cursor?: string | undefined;
   limit?: number | undefined;
   sort?: string | undefined;
@@ -113,13 +122,11 @@ export const AdminListOrganizationsRequest$outboundSchema: z.ZodMiniType<
     accountType: z.optional(z.string()),
     accountTypes: z.optional(z.array(z.string())),
     trialStates: z.optional(z.array(z.string())),
-    disabledStates: z.optional(z.array(z.string())),
+    disabledStatus: z.optional(DisabledStatus$outboundSchema),
     minMembers: z.optional(z.pipe(z.bigint(), z.transform(v => `${v}`))),
     maxMembers: z.optional(z.pipe(z.bigint(), z.transform(v => `${v}`))),
-    disabledOnly: z.optional(z.boolean()),
     createdFrom: z.optional(z.string()),
     createdTo: z.optional(z.string()),
-    includeDisabled: z.optional(z.boolean()),
     cursor: z.optional(z.string()),
     limit: z.optional(z.int()),
     sort: z.optional(z.string()),
@@ -131,13 +138,11 @@ export const AdminListOrganizationsRequest$outboundSchema: z.ZodMiniType<
       accountType: "account_type",
       accountTypes: "account_types",
       trialStates: "trial_states",
-      disabledStates: "disabled_states",
+      disabledStatus: "disabled_status",
       minMembers: "min_members",
       maxMembers: "max_members",
-      disabledOnly: "disabled_only",
       createdFrom: "created_from",
       createdTo: "created_to",
-      includeDisabled: "include_disabled",
     });
   }),
 );

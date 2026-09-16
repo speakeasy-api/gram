@@ -48,21 +48,16 @@ export type QueryParams = Record<
   string | number | boolean | string[] | undefined
 >;
 
-// Values the admin API reads as unset. Legacy booleans are opt-in flags,
-// but disabled_only=false explicitly removes the status restriction.
+// Values the admin API reads as unset. Boolean flags are opt-in.
 //
 // A cache key runs through this too, so the key and the request agree on what
 // "unset" means. Without that, `{type: []}` and `{}` send one request and cache
 // two entries.
 export function omitUnset(params: QueryParams): QueryParams {
   return Object.fromEntries(
-    Object.entries(params).filter(([key, value]) => {
+    Object.entries(params).filter(([, value]) => {
       if (Array.isArray(value)) return value.length > 0;
-      return (
-        value !== undefined &&
-        value !== "" &&
-        (value !== false || key === "disabled_only")
-      );
+      return value !== undefined && value !== "" && value !== false;
     }),
   );
 }
@@ -318,14 +313,8 @@ export type ListOrganizationsResult = {
   next_cursor?: string;
 };
 
-// Each filter is a repeated parameter the server reads as a set, and an absent
-// one means no filter of that kind: no account_types is every type, no
-// trial_states is every state, no disabled_states is active organizations only.
-//
-// The scalar `account_type` and the `include_disabled` flag these replaced are
-// still accepted by the server, so its half of this change can merge first.
-// Nothing here sends them, and nothing should: two ways to say the same filter
-// is how the browser and the server end up disagreeing about what is on.
+// Set filters match any supplied value; omitted filters are unrestricted.
+// Status is strict even for exact ID searches.
 export type ListOrganizationsParams = {
   sort?: string;
   direction?: "asc" | "desc";
@@ -333,9 +322,7 @@ export type ListOrganizationsParams = {
   q?: string;
   account_types?: string[];
   trial_states?: string[];
-  disabled_states?: string[];
-  /** Overrides legacy disabled_states/include_disabled when supplied, even false. */
-  disabled_only?: boolean;
+  disabled_status?: "all" | "active" | "disabled";
   /** Nonnegative int64. Use decimal strings above Number.MAX_SAFE_INTEGER. */
   min_members?: number | string;
   /** Nonnegative int64. Unsafe numeric values are rejected before sending. */

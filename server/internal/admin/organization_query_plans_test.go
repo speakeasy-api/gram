@@ -58,12 +58,14 @@ func TestOrganizationQueryPlans(t *testing.T) {
 			require.NoError(t, err)
 			for _, tc := range []struct {
 				name, sort string
+				status     string
 				desc       bool
 				bound      bool
 				offset     int64
 				cursor     pgtype.Text
 				scans      int
 			}{
+				{name: "active created", status: "active", sort: "created_at", desc: true, scans: 2},
 				{name: "created default", sort: "created_at", desc: true, scans: 2},
 				{name: "name", sort: "name", scans: 2},
 				{name: "offset", sort: "name", offset: 5, scans: 2},
@@ -75,7 +77,11 @@ func TestOrganizationQueryPlans(t *testing.T) {
 				{name: "name bounded", sort: "name", bound: true, scans: 24},
 			} {
 				t.Run(tc.name, func(t *testing.T) {
-					p := repo.AdminListOrganizationsParams{DisabledStates: []string{"active"}, PageLimit: 2, PageOffset: tc.offset, AfterID: tc.cursor, SortBy: tc.sort, SortDir: "asc"}
+					status := tc.status
+					if status == "" {
+						status = "all"
+					}
+					p := repo.AdminListOrganizationsParams{DisabledStatus: status, PageLimit: 2, PageOffset: tc.offset, AfterID: tc.cursor, SortBy: tc.sort, SortDir: "asc"}
 					if tc.desc {
 						p.SortDir = "desc"
 					}
@@ -105,7 +111,7 @@ func TestOrganizationQueryPlans(t *testing.T) {
 			}
 			for _, bounded := range []bool{false, true} {
 				t.Run(fmt.Sprintf("count bounded=%t", bounded), func(t *testing.T) {
-					p := repo.AdminCountOrganizationsParams{DisabledStates: []string{"active"}}
+					p := repo.AdminCountOrganizationsParams{DisabledStatus: "all"}
 					expected := int64(24)
 					scans := 0
 					if bounded {

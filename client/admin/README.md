@@ -85,16 +85,25 @@ full filtered set independently of cursor, page, offset or limit.
   UTC midnight and the end to an exclusive bound at the next day's UTC midnight,
   including the entire end day at database precision. Invalid calendar dates or
   a reversed range are rejected.
-- `disabled_only`: omission preserves `include_disabled` / `disabled_states`
-  behavior, including the legacy exact organization/WorkOS-ID exception.
-  Explicit `true` restricts results to disabled organizations even on an exact
-  ID search; explicit `false` does not restrict status. Either explicit value
-  overrides **both** legacy status parameters when they conflict. Other filters
-  continue to apply to exact-ID searches.
+- `disabled_status`: `all`, `active`, or `disabled`; omission is unrestricted
+  (`all`). Active means `disabled_at IS NULL`, disabled means `IS NOT NULL`.
+  Every filter applies strictly to exact organization and WorkOS ID searches.
+  Unknown status values are rejected by HTTP and direct service validation.
+  The former `include_disabled`, `disabled_states`, and `disabled_only` API
+  parameters are removed. Existing dashboard URL parameters are translated at
+  the request boundary, including legacy active-only links; they are not API
+  compatibility aliases.
 
 Invalid bounds, fractional or overflowing member counts, and invalid dates
-return a 4xx response. These are API parameters only; no UI filter controls or
+return a 4xx response. Member and date bounds are API-only; no member/date UI controls or
 preset-to-date mappings are introduced here.
+
+The Organization Status dropdown offers All, Active, and Disabled. New URLs use
+`disabledStatus=active|disabled`, omitting All. Valid canonical values (including
+explicit `all`) win over old URL fields. Otherwise `disabledOnly=true|false`
+wins over legacy `disabled` selections; explicit false means All. Invalid
+canonical values fall back through valid legacy fields, then All. Old fields
+are read for bookmarks but removed on new navigations.
 
 ### Bigint React Query keys
 

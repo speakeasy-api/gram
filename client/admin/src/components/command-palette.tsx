@@ -41,7 +41,6 @@ import {
   type AdminOrganization,
 } from "@/lib/gramAdminApi";
 import { LEAVES_THE_APP } from "@/lib/impersonation";
-import { DISABLED_STATES } from "@/lib/organizationFilters";
 import { useOpenOrganization } from "@/pages/organizations/rowActions";
 
 const SEARCH_DEBOUNCE_MS = 200;
@@ -180,7 +179,7 @@ export function CommandPalette(): JSX.Element {
       // Both states, where the table defaults to active only. The palette is
       // how an operator reaches a record they already have in mind, and a
       // disabled organization is a leading reason to go looking for one.
-      disabled_states: [...DISABLED_STATES],
+      disabled_status: "all",
       limit: RESULT_LIMIT,
     }),
     // Nothing to ask until something has been typed, and nothing to ask for a

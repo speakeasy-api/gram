@@ -124,7 +124,7 @@ func TestListOrganizations_SetFilters(t *testing.T) {
 	t.Run("the corpus reports the trial states it claims", func(t *testing.T) {
 		t.Parallel()
 
-		res, err := svc.ListOrganizations(ctx, &gen.ListOrganizationsPayload{IncludeDisabled: ptrTo(true)})
+		res, err := svc.ListOrganizations(ctx, &gen.ListOrganizationsPayload{DisabledStatus: new("all")})
 		require.NoError(t, err)
 		require.Len(t, res.Organizations, len(corpus))
 
@@ -146,88 +146,88 @@ func TestListOrganizations_SetFilters(t *testing.T) {
 		want    []string
 	}{
 		{
-			name:    "no filters keeps every active organization",
+			name:    "no filters keeps every organization",
 			payload: &gen.ListOrganizationsPayload{},
-			want:    active,
+			want:    all,
 		},
 		{
 			name:    "account_types matches every listed type",
-			payload: &gen.ListOrganizationsPayload{AccountTypes: []string{"enterprise", "pro"}},
+			payload: &gen.ListOrganizationsPayload{DisabledStatus: new("active"), AccountTypes: []string{"enterprise", "pro"}},
 			want:    []string{fltEntDemoted, fltEntConverted, fltProEnding, fltProExpired},
 		},
 		{
 			name:    "account_types ignores the order of the list",
-			payload: &gen.ListOrganizationsPayload{AccountTypes: []string{"pro", "enterprise"}},
+			payload: &gen.ListOrganizationsPayload{DisabledStatus: new("active"), AccountTypes: []string{"pro", "enterprise"}},
 			want:    []string{fltEntDemoted, fltEntConverted, fltProEnding, fltProExpired},
 		},
 		{
 			name:    "an unknown account type alongside a known one keeps the known one",
-			payload: &gen.ListOrganizationsPayload{AccountTypes: []string{"platinum", "pro"}},
+			payload: &gen.ListOrganizationsPayload{DisabledStatus: new("active"), AccountTypes: []string{"platinum", "pro"}},
 			want:    []string{fltProEnding, fltProExpired},
 		},
 		{
 			name:    "the account_type scalar still filters on its own",
-			payload: &gen.ListOrganizationsPayload{AccountType: ptrTo("pro")},
+			payload: &gen.ListOrganizationsPayload{DisabledStatus: new("active"), AccountType: ptrTo("pro")},
 			want:    []string{fltProEnding, fltProExpired},
 		},
 		{
 			name:    "the account_type scalar joins the set rather than replacing it",
-			payload: &gen.ListOrganizationsPayload{AccountType: ptrTo("free"), AccountTypes: []string{"enterprise"}},
+			payload: &gen.ListOrganizationsPayload{DisabledStatus: new("active"), AccountType: ptrTo("free"), AccountTypes: []string{"enterprise"}},
 			want:    []string{fltFreeNone, fltFreeRunning, fltFreeConverted, fltFreeWindowIn, fltFreeWindowOut, fltEntDemoted, fltEntConverted},
 		},
 		{
 			name:    "trial_states running spans the far side of the ending_soon boundary",
-			payload: &gen.ListOrganizationsPayload{TrialStates: []string{"running"}},
+			payload: &gen.ListOrganizationsPayload{DisabledStatus: new("active"), TrialStates: []string{"running"}},
 			want:    []string{fltFreeRunning, fltFreeWindowOut},
 		},
 		{
 			name:    "trial_states ending_soon spans the near side of the boundary",
-			payload: &gen.ListOrganizationsPayload{TrialStates: []string{"ending_soon"}},
+			payload: &gen.ListOrganizationsPayload{DisabledStatus: new("active"), TrialStates: []string{"ending_soon"}},
 			want:    []string{fltProEnding, fltFreeWindowIn},
 		},
 		{
 			name:    "trial_states matches every listed state",
-			payload: &gen.ListOrganizationsPayload{TrialStates: []string{"running", "ending_soon"}},
+			payload: &gen.ListOrganizationsPayload{DisabledStatus: new("active"), TrialStates: []string{"running", "ending_soon"}},
 			want:    []string{fltFreeRunning, fltFreeWindowOut, fltProEnding, fltFreeWindowIn},
 		},
 		{
 			name:    "trial_states none matches the organizations that never trialled",
-			payload: &gen.ListOrganizationsPayload{TrialStates: []string{"none"}},
+			payload: &gen.ListOrganizationsPayload{DisabledStatus: new("active"), TrialStates: []string{"none"}},
 			want:    []string{fltFreeNone},
 		},
 		{
 			name:    "trial_states converted takes precedence over the trial end date",
-			payload: &gen.ListOrganizationsPayload{TrialStates: []string{"converted"}},
+			payload: &gen.ListOrganizationsPayload{DisabledStatus: new("active"), TrialStates: []string{"converted"}},
 			want:    []string{fltFreeConverted, fltEntConverted},
 		},
 		{
 			name:    "trial_states demoted takes precedence over the trial end date",
-			payload: &gen.ListOrganizationsPayload{TrialStates: []string{"demoted"}},
+			payload: &gen.ListOrganizationsPayload{DisabledStatus: new("active"), TrialStates: []string{"demoted"}},
 			want:    []string{fltEntDemoted},
 		},
 		{
 			name:    "trial_states expired excludes trials that ended after converting or demoting",
-			payload: &gen.ListOrganizationsPayload{TrialStates: []string{"expired"}},
+			payload: &gen.ListOrganizationsPayload{DisabledStatus: new("active"), TrialStates: []string{"expired"}},
 			want:    []string{fltProExpired},
 		},
 		{
-			name:    "disabled_states disabled drops the active organizations",
-			payload: &gen.ListOrganizationsPayload{DisabledStates: []string{"disabled"}},
+			name:    "disabled status drops active organizations",
+			payload: &gen.ListOrganizationsPayload{DisabledStatus: new("disabled")},
 			want:    []string{fltFreeOff, fltProOffRunning},
 		},
 		{
-			name:    "disabled_states with both members keeps everything",
-			payload: &gen.ListOrganizationsPayload{DisabledStates: []string{"active", "disabled"}},
+			name:    "all status keeps everything",
+			payload: &gen.ListOrganizationsPayload{DisabledStatus: new("all")},
 			want:    all,
 		},
 		{
-			name:    "include_disabled still widens on its own",
-			payload: &gen.ListOrganizationsPayload{IncludeDisabled: ptrTo(true)},
+			name:    "omitted status is unrestricted",
+			payload: &gen.ListOrganizationsPayload{},
 			want:    all,
 		},
 		{
-			name:    "disabled_states overrides include_disabled",
-			payload: &gen.ListOrganizationsPayload{IncludeDisabled: ptrTo(true), DisabledStates: []string{"active"}},
+			name:    "active status restricts",
+			payload: &gen.ListOrganizationsPayload{DisabledStatus: new("active")},
 			want:    active,
 		},
 		{
@@ -235,23 +235,23 @@ func TestListOrganizations_SetFilters(t *testing.T) {
 			payload: &gen.ListOrganizationsPayload{
 				AccountTypes:   []string{"pro"},
 				TrialStates:    []string{"running"},
-				DisabledStates: []string{"disabled"},
+				DisabledStatus: new("disabled"),
 			},
 			want: []string{fltProOffRunning},
 		},
 		{
 			name:    "an unknown account type matches nothing without failing",
-			payload: &gen.ListOrganizationsPayload{AccountTypes: []string{"platinum"}},
+			payload: &gen.ListOrganizationsPayload{DisabledStatus: new("active"), AccountTypes: []string{"platinum"}},
 			want:    nil,
 		},
 		{
 			name:    "an unknown trial state matches nothing without failing",
-			payload: &gen.ListOrganizationsPayload{TrialStates: []string{"paused"}},
+			payload: &gen.ListOrganizationsPayload{DisabledStatus: new("active"), TrialStates: []string{"paused"}},
 			want:    nil,
 		},
 		{
-			name:    "an unknown disabled state matches nothing without failing",
-			payload: &gen.ListOrganizationsPayload{DisabledStates: []string{"archived"}},
+			name:    "an unknown disabled status is rejected",
+			payload: &gen.ListOrganizationsPayload{DisabledStatus: new("archived")},
 			want:    nil,
 		},
 	}
@@ -260,6 +260,11 @@ func TestListOrganizations_SetFilters(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
 
+			if c.payload.DisabledStatus != nil && *c.payload.DisabledStatus == "archived" {
+				_, err := svc.ListOrganizations(ctx, c.payload)
+				require.ErrorContains(t, err, "disabled_status")
+				return
+			}
 			requireFilterMatches(t, ctx, svc, c.payload, c.want, c.name)
 		})
 	}
@@ -278,9 +283,10 @@ func TestListOrganizations_SetFiltersSurvivePaging(t *testing.T) {
 	seedFilterCorpus(t, ctx, conn, corpus, now.Add(-24*time.Hour))
 
 	filtered := &gen.ListOrganizationsPayload{
-		AccountTypes: []string{"free"},
-		TrialStates:  []string{"running", "ending_soon", "none"},
-		Limit:        ptrTo(2),
+		DisabledStatus: new("active"),
+		AccountTypes:   []string{"free"},
+		TrialStates:    []string{"running", "ending_soon", "none"},
+		Limit:          ptrTo(2),
 	}
 
 	// Cursor mode. Walk the whole filtered set two rows at a time.

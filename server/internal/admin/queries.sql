@@ -196,15 +196,11 @@ filtered AS (
         AND (sqlc.narg('max_members')::bigint IS NULL OR members.member_count <= sqlc.narg('max_members')::bigint)
         AND (sqlc.narg('created_at_gte')::timestamptz IS NULL OR om.created_at >= sqlc.narg('created_at_gte')::timestamptz)
         AND (sqlc.narg('created_at_lt')::timestamptz IS NULL OR om.created_at < sqlc.narg('created_at_lt')::timestamptz)
-        -- Unlike disabled_states, this restriction is never bypassed by an ID match.
-        AND (sqlc.narg('disabled_only')::boolean IS NOT TRUE OR om.disabled_at IS NOT NULL)
-        -- No empty arm: the handler resolves an absent filter to {active}.
-        -- The id arms repeat here, and only here, so a pasted id reaches a disabled organization: investigating one is a leading reason to paste an id at all.
-        -- Deliberately not repeated on the account type arm or the cursor, which keep applying to an id match.
+        -- Status is strict, including exact organization and WorkOS ID searches.
         AND (
-            (CASE WHEN om.disabled_at IS NULL THEN 'active' ELSE 'disabled' END) = ANY(sqlc.arg('disabled_states')::text[])
-            OR lower(om.id) = lower(search.term)
-            OR lower(om.workos_id) = lower(search.term)
+            sqlc.arg('disabled_status')::text = 'all'
+            OR (sqlc.arg('disabled_status')::text = 'active' AND om.disabled_at IS NULL)
+            OR (sqlc.arg('disabled_status')::text = 'disabled' AND om.disabled_at IS NOT NULL)
         )
         -- Keep ID-shaped cursors compatible, but seek in the default creation
         -- order, not ID order. Resolve the anchor outside the filters so changes
@@ -336,12 +332,11 @@ filtered AS (
         AND (sqlc.narg('max_members')::bigint IS NULL OR members.member_count <= sqlc.narg('max_members')::bigint)
         AND (sqlc.narg('created_at_gte')::timestamptz IS NULL OR om.created_at >= sqlc.narg('created_at_gte')::timestamptz)
         AND (sqlc.narg('created_at_lt')::timestamptz IS NULL OR om.created_at < sqlc.narg('created_at_lt')::timestamptz)
-        -- Unlike disabled_states, this restriction is never bypassed by an ID match.
-        AND (sqlc.narg('disabled_only')::boolean IS NOT TRUE OR om.disabled_at IS NOT NULL)
+        -- Status is strict, including exact organization and WorkOS ID searches.
         AND (
-            (CASE WHEN om.disabled_at IS NULL THEN 'active' ELSE 'disabled' END) = ANY(sqlc.arg('disabled_states')::text[])
-            OR lower(om.id) = lower(search.term)
-            OR lower(om.workos_id) = lower(search.term)
+            sqlc.arg('disabled_status')::text = 'all'
+            OR (sqlc.arg('disabled_status')::text = 'active' AND om.disabled_at IS NULL)
+            OR (sqlc.arg('disabled_status')::text = 'disabled' AND om.disabled_at IS NOT NULL)
         )
 )
 SELECT count(*)::bigint FROM filtered
