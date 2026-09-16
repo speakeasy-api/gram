@@ -192,3 +192,9 @@ it("removes platform issuer management while preserving tenant and other admin r
   expect(orgRoutePaths).toContain("platform-admin");
   expect(orgRoutePaths).toContain("platform-admin/openrouter-keys");
 });
+
+it("lists nested org subpages so project slugs cannot capture them", () => {
+  expect(orgRoutePaths).toContain("device-agent");
+  expect(orgRoutePaths).toContain("device-agent/agent-identity");
+  expect(orgRoutePaths).toContain("device-agent/mdm-integrations/:provider");
+});
