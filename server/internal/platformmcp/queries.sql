@@ -814,6 +814,7 @@ SELECT
     m.tunneled_mcp_server_id,
     m.toolset_id,
     m.unproxied_mcp_server_id,
+    COALESCE(remote.url, '') AS upstream_url,
     COALESCE(registration.id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_id,
     COALESCE(registration.source_kind, '') AS source_kind,
     COALESCE(registration.catalog_provider, '') AS catalog_provider,
@@ -831,6 +832,10 @@ JOIN projects AS project
   ON project.id = m.project_id
  AND project.organization_id = @organization_id
  AND project.deleted IS FALSE
+LEFT JOIN remote_mcp_servers AS remote
+  ON remote.id = m.remote_mcp_server_id
+ AND remote.project_id = m.project_id
+ AND remote.deleted IS FALSE
 LEFT JOIN LATERAL (
     SELECT registration.*
     FROM platform_mcp_catalog_registrations AS registration
@@ -904,6 +909,7 @@ FROM (
         m.tunneled_mcp_server_id,
         m.toolset_id,
         m.unproxied_mcp_server_id,
+        COALESCE(remote.url, '') AS upstream_url,
         COALESCE(registration.id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_id,
         COALESCE(registration.source_kind, '') AS source_kind,
         COALESCE(registration.catalog_provider, '') AS catalog_provider,
@@ -921,6 +927,10 @@ FROM (
       ON project.id = m.project_id
      AND project.organization_id = @organization_id
      AND project.deleted IS FALSE
+    LEFT JOIN remote_mcp_servers AS remote
+      ON remote.id = m.remote_mcp_server_id
+     AND remote.project_id = m.project_id
+     AND remote.deleted IS FALSE
     LEFT JOIN LATERAL (
         SELECT registration.*
         FROM platform_mcp_catalog_registrations AS registration

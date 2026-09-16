@@ -11920,6 +11920,261 @@ func DecodeChangeTrialEndDateResponse(decoder func(*http.Response) goahttp.Decod
 	}
 }
 
+// BuildGetMeterUsageRequest instantiates a HTTP request object with method and
+// path set to call the "admin" service "getMeterUsage" endpoint
+func (c *Client) BuildGetMeterUsageRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetMeterUsageAdminPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "getMeterUsage", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetMeterUsageRequest returns an encoder for requests sent to the admin
+// getMeterUsage server.
+func EncodeGetMeterUsageRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.GetMeterUsagePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "getMeterUsage", "*admin.GetMeterUsagePayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		values := req.URL.Query()
+		values.Add("organization_id", p.OrganizationID)
+		values.Add("family", p.Family)
+		if p.From != nil {
+			values.Add("from", *p.From)
+		}
+		if p.To != nil {
+			values.Add("to", *p.To)
+		}
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetMeterUsageResponse returns a decoder for responses returned by the
+// admin getMeterUsage endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeGetMeterUsageResponse may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetMeterUsageResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetMeterUsageResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMeterUsage", err)
+			}
+			err = ValidateGetMeterUsageResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMeterUsage", err)
+			}
+			res := NewGetMeterUsageAdminMeterUsageResponseOK(&body)
+			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body GetMeterUsageUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMeterUsage", err)
+			}
+			err = ValidateGetMeterUsageUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMeterUsage", err)
+			}
+			return nil, NewGetMeterUsageUnavailable(&body)
+		case http.StatusUnauthorized:
+			var (
+				body GetMeterUsageUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMeterUsage", err)
+			}
+			err = ValidateGetMeterUsageUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMeterUsage", err)
+			}
+			return nil, NewGetMeterUsageUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetMeterUsageForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMeterUsage", err)
+			}
+			err = ValidateGetMeterUsageForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMeterUsage", err)
+			}
+			return nil, NewGetMeterUsageForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetMeterUsageBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMeterUsage", err)
+			}
+			err = ValidateGetMeterUsageBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMeterUsage", err)
+			}
+			return nil, NewGetMeterUsageBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetMeterUsageNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMeterUsage", err)
+			}
+			err = ValidateGetMeterUsageNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMeterUsage", err)
+			}
+			return nil, NewGetMeterUsageNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetMeterUsageConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMeterUsage", err)
+			}
+			err = ValidateGetMeterUsageConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMeterUsage", err)
+			}
+			return nil, NewGetMeterUsageConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetMeterUsageUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMeterUsage", err)
+			}
+			err = ValidateGetMeterUsageUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMeterUsage", err)
+			}
+			return nil, NewGetMeterUsageUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetMeterUsageInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMeterUsage", err)
+			}
+			err = ValidateGetMeterUsageInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMeterUsage", err)
+			}
+			return nil, NewGetMeterUsageInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetMeterUsageInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getMeterUsage", err)
+				}
+				err = ValidateGetMeterUsageInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getMeterUsage", err)
+				}
+				return nil, NewGetMeterUsageInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetMeterUsageUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getMeterUsage", err)
+				}
+				err = ValidateGetMeterUsageUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getMeterUsage", err)
+				}
+				return nil, NewGetMeterUsageUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "getMeterUsage", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetMeterUsageGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMeterUsage", err)
+			}
+			err = ValidateGetMeterUsageGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMeterUsage", err)
+			}
+			return nil, NewGetMeterUsageGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "getMeterUsage", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalAdminOrganizationMemberResponseBodyToAdminAdminOrganizationMember
 // builds a value of type *admin.AdminOrganizationMember from a value of type
 // *AdminOrganizationMemberResponseBody.
@@ -12102,6 +12357,7 @@ func unmarshalRemoteSessionIssuerResponseBodyToTypesRemoteSessionIssuer(v *Remot
 		Oidc:                              *v.Oidc,
 		Passthrough:                       *v.Passthrough,
 		ClientIDMetadataDocumentSupported: *v.ClientIDMetadataDocumentSupported,
+		TunneledMcpServerID:               v.TunneledMcpServerID,
 		UserinfoEndpoint:                  v.UserinfoEndpoint,
 		IntrospectionEndpoint:             v.IntrospectionEndpoint,
 		BackchannelLogoutSupported:        v.BackchannelLogoutSupported,
@@ -12234,6 +12490,31 @@ func unmarshalAssetResponseBodyToAdminAsset(v *AssetResponseBody) *admin.Asset {
 		ContentLength: *v.ContentLength,
 		CreatedAt:     *v.CreatedAt,
 		UpdatedAt:     *v.UpdatedAt,
+	}
+
+	return res
+}
+
+// unmarshalMeterUsageWindowResponseBodyToAdminMeterUsageWindow builds a value
+// of type *admin.MeterUsageWindow from a value of type
+// *MeterUsageWindowResponseBody.
+func unmarshalMeterUsageWindowResponseBodyToAdminMeterUsageWindow(v *MeterUsageWindowResponseBody) *admin.MeterUsageWindow {
+	res := &admin.MeterUsageWindow{
+		From: *v.From,
+		To:   *v.To,
+	}
+
+	return res
+}
+
+// unmarshalAdminMeterUsageBucketResponseBodyToAdminAdminMeterUsageBucket
+// builds a value of type *admin.AdminMeterUsageBucket from a value of type
+// *AdminMeterUsageBucketResponseBody.
+func unmarshalAdminMeterUsageBucketResponseBodyToAdminAdminMeterUsageBucket(v *AdminMeterUsageBucketResponseBody) *admin.AdminMeterUsageBucket {
+	res := &admin.AdminMeterUsageBucket{
+		From:  *v.From,
+		To:    *v.To,
+		Total: *v.Total,
 	}
 
 	return res

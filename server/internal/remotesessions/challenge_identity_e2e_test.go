@@ -629,6 +629,9 @@ func TestRemoteLoginRefetchesKeySetForUnknownKid(t *testing.T) {
 		ETag:        "",
 		ExpiresAt:   time.Now().Add(time.Hour),
 		RefreshedAt: time.Now().Add(-time.Minute),
+		LastErrorAt: time.Time{},
+		LastError:   "",
+		Revision:    "",
 	}))
 	_, env := newSyntheticExpiryEnv(t, "idtoken-unknown-kid", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

@@ -33,7 +33,7 @@ func registerRiskToolsWithMutations(reg *Registrar, risk *RiskReadService, statu
 		Description: "List bounded, privacy-safe risk policy summaries in an exact project or the organization's literal default project. Blocking Shadow MCP policies include their configured default posture and distinct explicit target counts, not effective access.",
 		Annotations: readOnlyAnnotations(),
 		InputSchema: riskListSchema(false),
-	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListRiskPoliciesInput) (*mcp.CallToolResult, ListRiskPoliciesOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListRiskPoliciesInput) (*mcp.CallToolResult, ListRiskPoliciesOutput, error) {
 		return riskReadToolCall(ctx, reg.riskTelemetry, "list_risk_policies", func(principal Principal) (ListRiskPoliciesOutput, error) {
 			return risk.ListPolicies(ctx, principal, input)
 		})
@@ -44,7 +44,7 @@ func registerRiskToolsWithMutations(reg *Registrar, risk *RiskReadService, statu
 		Description: "Read one risk policy from an exact project or the organization's literal default project, with closed compatibility metadata. Shadow target counts describe stored policy configuration, not effective access.",
 		Annotations: readOnlyAnnotations(),
 		InputSchema: riskGetPolicySchema(),
-	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetRiskPolicyInput) (*mcp.CallToolResult, GetRiskPolicyOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetRiskPolicyInput) (*mcp.CallToolResult, GetRiskPolicyOutput, error) {
 		return riskReadToolCall(ctx, reg.riskTelemetry, "get_risk_policy", func(principal Principal) (GetRiskPolicyOutput, error) {
 			return risk.GetPolicy(ctx, principal, input)
 		})
@@ -55,7 +55,7 @@ func registerRiskToolsWithMutations(reg *Registrar, risk *RiskReadService, statu
 		Description: "List bounded, privacy-safe risk exclusions in an exact project or the organization's literal default project. Exact and legacy regex values are never returned.",
 		Annotations: readOnlyAnnotations(),
 		InputSchema: riskListSchema(true),
-	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListRiskExclusionsInput) (*mcp.CallToolResult, ListRiskExclusionsOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListRiskExclusionsInput) (*mcp.CallToolResult, ListRiskExclusionsOutput, error) {
 		return riskReadToolCall(ctx, reg.riskTelemetry, "list_risk_exclusions", func(principal Principal) (ListRiskExclusionsOutput, error) {
 			return risk.ListExclusions(ctx, principal, input)
 		})
@@ -76,7 +76,7 @@ const (
 // always exists in the manifest.
 func registerRiskAnalysisStatusTool(reg *Registrar, status *RiskAnalysisStatusService) {
 	if !status.valid() {
-		addTool(reg, &mcp.Tool{Name: riskAnalysisStatusToolName, Title: riskAnalysisStatusToolTitle, Description: riskAnalysisStatusToolStub, Annotations: readOnlyAnnotations(), InputSchema: riskAnalysisStatusSchema()}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, unavailableRiskReadTool(reg, riskAnalysisStatusToolName))
+		addTool(reg, &mcp.Tool{Name: riskAnalysisStatusToolName, Title: riskAnalysisStatusToolTitle, Description: riskAnalysisStatusToolStub, Annotations: readOnlyAnnotations(), InputSchema: riskAnalysisStatusSchema()}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, unavailableRiskReadTool(reg, riskAnalysisStatusToolName))
 		return
 	}
 	addTool(reg, &mcp.Tool{
@@ -85,7 +85,7 @@ func registerRiskAnalysisStatusTool(reg *Registrar, status *RiskAnalysisStatusSe
 		Description: "Report whether the Watchdog analysis is running for an exact project or the organization's literal default project, and when it last ran. The analysis is event-driven: it starts shortly after new chat traffic is captured rather than on a schedule, so a project with no recent traffic has no recent run. A run that hit a failure waits about five minutes before retrying and still reports as running during that wait. Use this when an administrator asks whether risk findings are up to date or why none have appeared.",
 		Annotations: readOnlyAnnotations(),
 		InputSchema: riskAnalysisStatusSchema(),
-	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetRiskAnalysisStatusInput) (*mcp.CallToolResult, GetRiskAnalysisStatusOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetRiskAnalysisStatusInput) (*mcp.CallToolResult, GetRiskAnalysisStatusOutput, error) {
 		return riskReadToolCall(ctx, reg.riskTelemetry, riskAnalysisStatusToolName, func(principal Principal) (GetRiskAnalysisStatusOutput, error) {
 			return status.Get(ctx, principal, input)
 		})
@@ -114,7 +114,7 @@ func registerUnavailableRiskToolsWithCatalogAndMutations(reg *Registrar, buildCa
 		{"get_risk_policy", "Get Risk Policy", "Read one risk policy. Risk reads are unavailable in this deployment.", riskGetPolicySchema()},
 		{"list_risk_exclusions", "List Risk Exclusions", "List risk exclusions. Risk reads are unavailable in this deployment.", riskListSchema(true)},
 	} {
-		addTool(reg, &mcp.Tool{Name: tool.name, Title: tool.title, Description: tool.description, Annotations: readOnlyAnnotations(), InputSchema: tool.schema}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, unavailableRiskReadTool(reg, tool.name))
+		addTool(reg, &mcp.Tool{Name: tool.name, Title: tool.title, Description: tool.description, Annotations: readOnlyAnnotations(), InputSchema: tool.schema}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, unavailableRiskReadTool(reg, tool.name))
 	}
 	catalog, err := buildCatalog()
 	registerRiskMutationHandlers(reg, catalog, err == nil, mutations)
@@ -191,7 +191,7 @@ func registerRiskMutationHandlers(reg *Registrar, catalog policycatalog.Catalog,
 			updateExclusionDescription = "Enable or disable one risk exclusion without changing its definition using an opaque expected version."
 		}
 	}
-	meta := ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}
+	meta := ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}
 	addTool(reg, &mcp.Tool{Name: "create_risk_policy", Title: "Create Risk Policy", Description: createPolicyDescription, InputSchema: createPolicySchema}, meta, instrumentRiskMutation(reg, "create_risk_policy", createPolicy))
 	addTool(reg, &mcp.Tool{Name: "update_risk_policy", Title: "Update Risk Policy", Description: updatePolicyDescription, InputSchema: updatePolicySchema}, meta, instrumentRiskMutation(reg, "update_risk_policy", updatePolicy))
 	addTool(reg, &mcp.Tool{Name: "create_risk_exclusion", Title: "Create Risk Exclusion", Description: createExclusionDescription, InputSchema: createExclusionSchema}, meta, instrumentRiskMutation(reg, "create_risk_exclusion", createExclusion))

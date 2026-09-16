@@ -437,7 +437,9 @@ func TestRiskMutationHandlerSelectionDefaultsEveryWriteToStableRefusal(t *testin
 	require.NoError(t, err)
 
 	server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil)
+	bindExternalTestPrincipal(server)
 	registrar := newRegistrar(server)
+	registrar.withExternalAuthorizer(allowExternalCallAuthorizer{})
 	registerRiskMutationHandlers(registrar, catalog, true, &RiskMutationHandlers{})
 	for _, name := range []string{operationCreateRiskPolicy, operationUpdateRiskPolicy, operationCreateRiskExclusion, operationUpdateRiskExclusion} {
 		require.Contains(t, descriptorByName(t, registrar, name).Description, "not enabled")

@@ -757,7 +757,7 @@ var _ = Service("access", func() {
 	})
 
 	Method("resolveChallenge", func() {
-		Description("Record resolutions for one or more denied authz challenges. The caller is responsible for assigning the role first.")
+		Description("Dismiss one or more denied authz challenges, or atomically add one custom role to the denied user before recording the challenges as resolved.")
 		Security(security.ByKey, func() {
 			Scope("producer")
 		})
@@ -1359,6 +1359,7 @@ var AuthzChallengeModel = Type("AuthzChallenge", func() {
 	Attribute("scope", String, "Scope that was checked.")
 	Attribute("resource_kind", String, "Resource kind of the check.")
 	Attribute("resource_id", String, "Resource ID of the check.")
+	Attribute("selector", MapOf(String, String), "Complete selector captured for the check. Omitted for legacy or malformed challenge data.")
 	Attribute("role_slugs", ArrayOf(String), "Roles the principal had loaded.")
 	Attribute("evaluated_grant_count", Int, "Total grants evaluated.")
 	Attribute("matched_grant_count", Int, "Number of grants that matched.")
@@ -1447,7 +1448,9 @@ var ListChallengeBucketsResult = Type("ListChallengeBucketsResult", func() {
 var ResolveChallengeForm = Type("ResolveChallengeForm", func() {
 	Required("challenge_ids", "principal_urn", "scope", "resolution_type")
 
-	Attribute("challenge_ids", ArrayOf(String), "IDs of the challenges in ClickHouse to resolve.")
+	Attribute("challenge_ids", ArrayOf(String), "IDs of the challenges in ClickHouse to resolve.", func() {
+		MinLength(1)
+	})
 	Attribute("principal_urn", String, "Principal that was denied.")
 	Attribute("scope", String, "Scope that was denied.")
 	Attribute("resource_kind", String, "Resource kind from the challenge.")
@@ -1456,7 +1459,8 @@ var ResolveChallengeForm = Type("ResolveChallengeForm", func() {
 		Description("How the challenge is being resolved.")
 		Enum("role_assigned", "dismissed")
 	})
-	Attribute("role_slug", String, "Role slug to assign (required when resolution_type=role_assigned).")
+	Attribute("role_slug", String, "Custom role slug to add to the denied user before resolving (required when resolution_type=role_assigned).")
+	Attribute("role_assignment_confirmed", Boolean, "Confirms the administrator reviewed and accepts every permission granted by the complete role. Must be true when resolution_type=role_assigned.")
 })
 
 var ChallengeResolutionModel = Type("ChallengeResolution", func() {

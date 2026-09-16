@@ -197,7 +197,7 @@ func registerDataExportMutationTool(reg *Registrar, reader *PostgresReader) {
 		Name:        "create_data_export",
 		Title:       "Create a Data Export",
 		Description: "Create one OTEL destination and connect one project's product telemetry or risk findings to it. Before calling, show the user the exact project, endpoint, data source, enabled state, and whether sensitive fields are included, then obtain explicit confirmation. Constraints: header secrets are never accepted in chat; the destination is created without headers and the returned management URL is where the user securely adds any required authentication. One route per project and data source is allowed.",
-	}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input CreateDataExportInput) (*mcp.CallToolResult, CreateDataExportOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input CreateDataExportInput) (*mcp.CallToolResult, CreateDataExportOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
 			return nil, CreateDataExportOutput{}, err
@@ -218,7 +218,7 @@ func registerUnavailableDataExportMutationTool(reg *Registrar) {
 		Name:        "create_data_export",
 		Title:       "Create a Data Export",
 		Description: "Create an OTEL data export after explicit confirmation. This is not switched on for your organization yet.",
-	}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, unavailableTool("data_export_mutations"))
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, unavailableTool("data_export_mutations"))
 }
 
 func dataExportMutationToolResult(err error) (*mcp.CallToolResult, bool) {

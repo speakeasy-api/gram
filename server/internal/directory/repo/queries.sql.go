@@ -742,6 +742,55 @@ func (q *Queries) OpenDirectoryUserGroupMembership(ctx context.Context, arg Open
 	return id, err
 }
 
+const resolveIDJAGUsersByEmail = `-- name: ResolveIDJAGUsersByEmail :many
+SELECT DISTINCT candidate.id AS user_id
+FROM directory_users AS du
+JOIN users AS candidate
+  ON (du.user_id IS NOT NULL AND candidate.id = du.user_id)
+  OR (du.user_id IS NULL AND LOWER(candidate.email) = LOWER(du.email))
+JOIN organization_user_relationships AS membership
+  ON membership.user_id = candidate.id
+  AND membership.organization_id = du.organization_id
+  AND membership.deleted_at IS NULL
+WHERE du.organization_id = $1
+  AND LOWER(du.email) = LOWER($2)
+  AND du.deleted IS FALSE
+  AND du.workos_deleted IS FALSE
+  AND candidate.deleted_at IS NULL
+  AND candidate.workos_deleted_at IS NULL
+ORDER BY candidate.id
+LIMIT 2
+`
+
+type ResolveIDJAGUsersByEmailParams struct {
+	OrganizationID string
+	Email          string
+}
+
+// The directory row is the provisioning gate. A stored user_id wins; only a
+// NULL link falls back to live email matching. Both paths require an active
+// Gram user and active membership in the same organization. Two distinct
+// matches are returned so the caller can fail closed on ambiguity.
+func (q *Queries) ResolveIDJAGUsersByEmail(ctx context.Context, arg ResolveIDJAGUsersByEmailParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, resolveIDJAGUsersByEmail, arg.OrganizationID, arg.Email)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var user_id string
+		if err := rows.Scan(&user_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const upsertDirectoryGroup = `-- name: UpsertDirectoryGroup :one
 INSERT INTO directory_groups (
   organization_id,

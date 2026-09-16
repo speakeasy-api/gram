@@ -170,6 +170,9 @@ type IDTokenExpectation struct {
 	// fetchScope is the issuer row id, so tenants sharing an issuer URL cannot spend each other's budget.
 	fetchScope string
 
+	// transport reads the key set over the issuer's tunnel binding; nil is direct egress.
+	transport httpDoer
+
 	// signingAlgs is the issuer's id_token_signing_alg_values_supported; empty means unadvertised.
 	signingAlgs []string
 
@@ -209,7 +212,7 @@ func (v *jwksIDTokenVerifier) Verify(ctx context.Context, rawIDToken string, exp
 	}
 	var claims jwt.Claims
 	var all map[string]json.RawMessage
-	if _, err := verifyIssuerSignedJWT(ctx, v.keys, expect.jwksURI, conv.Default(expect.fetchScope, expect.issuer), rawIDToken, algorithms, &claims, &all); err != nil {
+	if _, err := verifyIssuerSignedJWT(ctx, v.keys, expect.jwksURI, conv.Default(expect.fetchScope, expect.issuer), expect.transport, rawIDToken, algorithms, &claims, &all); err != nil {
 		return UpstreamIdentity{}, err
 	}
 	if claims.Expiry == nil {
@@ -258,16 +261,21 @@ func (v *jwksIDTokenVerifier) Verify(ctx context.Context, rawIDToken string, exp
 // verifyIssuerSignedJWT checks one signature on raw against the issuer's
 // published key set, charging key fetches to fetchScope, and decodes the
 // claims into dest. The header comes back for checks the caller owns.
-func verifyIssuerSignedJWT(ctx context.Context, keys *jwks.KeyResolver, jwksURI, fetchScope, raw string, algorithms []jose.SignatureAlgorithm, dest ...any) (jose.Header, error) {
-	return verifyIssuerSignedJWTWithKeyPolicy(ctx, keys, jwksURI, fetchScope, raw, algorithms, nil, dest...)
+func verifyIssuerSignedJWT(ctx context.Context, keys *jwks.KeyResolver, jwksURI, fetchScope string, transport httpDoer, raw string, algorithms []jose.SignatureAlgorithm, dest ...any) (jose.Header, error) {
+	return verifyIssuerSignedJWTWithKeyPolicy(ctx, keys, jwksURI, fetchScope, transport, raw, algorithms, nil, dest...)
 }
 
 // verifyIssuerSignedJWTWithKeyPolicy is verifyIssuerSignedJWT with a per-interface check on the resolved key.
-func verifyIssuerSignedJWTWithKeyPolicy(ctx context.Context, keys *jwks.KeyResolver, jwksURI, fetchScope, raw string, algorithms []jose.SignatureAlgorithm, keyPolicy func(*jose.JSONWebKey) error, dest ...any) (jose.Header, error) {
+func verifyIssuerSignedJWTWithKeyPolicy(ctx context.Context, keys *jwks.KeyResolver, jwksURI, fetchScope string, transport httpDoer, raw string, algorithms []jose.SignatureAlgorithm, keyPolicy func(*jose.JSONWebKey) error, dest ...any) (jose.Header, error) {
 	var none jose.Header
 	source, err := jwks.NewRemoteSource(jwksURI)
 	if err != nil {
 		return none, fmt.Errorf("issuer jwks_uri: %w: %w", errJWTKeySetUnavailable, err)
+	}
+	// A tunnel-bound issuer publishes its key set inside the customer network,
+	// so the key that verifies its tokens is only readable over the tunnel.
+	if transport != nil {
+		source = source.WithTransport(transport)
 	}
 	token, err := jwt.ParseSigned(raw, algorithms)
 	if err != nil {

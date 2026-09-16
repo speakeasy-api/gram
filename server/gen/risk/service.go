@@ -167,8 +167,9 @@ type Service interface {
 	// workbench can evaluate an unsaved draft before a policy exists. This path is
 	// read-only: it never writes risk_results, publishes to the outbox, or
 	// enforces. It exists purely to tune a guardrail against real transcripts.
-	// Judges only the chat's latest generation; message-type scoping and CEL scope
-	// predicates are both applied.
+	// Judges only the chat's latest generation and at most the first 200 in-scope
+	// messages in transcript order; message-type scoping and CEL scope predicates
+	// are both applied.
 	EvaluatePromptGuardrail(context.Context, *EvaluatePromptGuardrailPayload) (res *PromptGuardrailEvalResult, err error)
 	// Record (or replace) the current reviewer's ground-truth verdict for one chat
 	// session under a prompt-based policy. This is the durable regression set the
@@ -916,6 +917,11 @@ type PromptGuardrailEvalResult struct {
 	Flagged bool
 	// Number of in-scope messages the judge evaluated.
 	JudgedCount int
+	// Total number of messages matching the guardrail scope before the replay
+	// limit.
+	InScopeMessageCount int
+	// True when the replay judged only the first 200 in-scope messages.
+	MessageLimitHit bool
 	// Total OpenRouter cost across in-scope judge calls, in USD.
 	TotalCostUsd float64
 	// Aggregate judge latency overhead across in-scope messages, computed as the

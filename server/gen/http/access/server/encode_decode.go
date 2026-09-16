@@ -6304,6 +6304,14 @@ func marshalAccessAuthzChallengeToAuthzChallengeResponseBody(v *access.AuthzChal
 		ResolvedBy:          v.ResolvedBy,
 		ResolutionRoleSlug:  v.ResolutionRoleSlug,
 	}
+	if v.Selector != nil {
+		res.Selector = make(map[string]string, len(v.Selector))
+		for key, val := range v.Selector {
+			tk := key
+			tv := val
+			res.Selector[tk] = tv
+		}
+	}
 	if v.RoleSlugs != nil {
 		res.RoleSlugs = make([]string, len(v.RoleSlugs))
 		for i, val := range v.RoleSlugs {

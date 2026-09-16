@@ -94,6 +94,12 @@ func TestDemoSeedSafety(t *testing.T) {
 	require.NoError(t, demoseedtest.PlantPrivateNetworkState(
 		ctx, db, otherTenantSpec.OrgID,
 	))
+	organizationMismatches, err := demoseedtest.ProjectOrganizationMismatchCounts(
+		ctx, db, []string{otherTenantSpec.ProjectID()},
+	)
+	require.NoError(t, err)
+	require.Empty(t, organizationMismatches,
+		"seeded project rows must carry the organization_id of their owning project")
 	milestoneCount, err := demoseedtest.CountReseedSafetyProjectMilestones(
 		ctx, db, otherTenantSpec.OrgID, otherTenantSpec.ProjectID(),
 	)

@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
@@ -164,10 +165,24 @@ func discoveryFailureMessage(err error) (msg string, transient bool) {
 // Gram's own behavior and display fields cannot be expressed through them —
 // see UpdateRemoteSessionIssuerDiscoveredMetadata, which has no parameter for
 // slug, issuer, name, logo, client setup documentation, oidc, or passthrough.
-func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, resolver *jwks.Resolver, issuer repo.RemoteSessionIssuer) (repo.UpdateRemoteSessionIssuerDiscoveredMetadataParams, []string, error) {
+func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, resolver *jwks.Resolver, tunnels *tunnelrouting.HTTPClient, issuer repo.RemoteSessionIssuer) (repo.UpdateRemoteSessionIssuerDiscoveredMetadataParams, []string, error) {
 	var zero repo.UpdateRemoteSessionIssuerDiscoveredMetadataParams
 
-	discovered, err := discoverIssuerMetadata(ctx, policy, issuer.Issuer)
+	tunnel, err := issuerTunnelTransport(tunnels, issuer.TunneledMcpServerID)
+	if err != nil {
+		return zero, nil, &discoveryError{
+			WellKnownURL: issuer.Issuer,
+			Status:       0,
+			cause:        fmt.Errorf("select issuer discovery transport: %w", err),
+			definitive:   false,
+		}
+	}
+	var doer httpDoer = issuerDiscoveryHTTPClient(policy)
+	if tunnel != nil {
+		doer = tunnel
+	}
+
+	discovered, err := discoverIssuerMetadataWithDoer(ctx, doer, issuer.Issuer)
 	if err != nil {
 		return zero, nil, err
 	}
@@ -201,7 +216,11 @@ func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, resolve
 		}
 	}
 
-	keySet, err := refreshIssuerKeySet(ctx, resolver, doc.JwksURI, issuer)
+	// The key set rides the issuer's binding like the discovery document that
+	// advertised it. An issuer inside a customer network publishes its
+	// jwks_uri there too, and a direct fetch of it would fail every refresh
+	// and stamp a last-error on a provider that is working.
+	keySet, err := refreshIssuerKeySet(ctx, resolver, tunnel, doc.JwksURI, issuer)
 	if err != nil {
 		return zero, nil, err
 	}
@@ -216,7 +235,7 @@ type refreshedIssuerKeySet struct {
 	etag      string
 }
 
-func refreshIssuerKeySet(ctx context.Context, resolver *jwks.Resolver, jwksURI string, issuer repo.RemoteSessionIssuer) (refreshedIssuerKeySet, error) {
+func refreshIssuerKeySet(ctx context.Context, resolver *jwks.Resolver, tunnel httpDoer, jwksURI string, issuer repo.RemoteSessionIssuer) (refreshedIssuerKeySet, error) {
 	var zero refreshedIssuerKeySet
 	if jwksURI == "" {
 		return zero, nil
@@ -226,8 +245,11 @@ func refreshIssuerKeySet(ctx context.Context, resolver *jwks.Resolver, jwksURI s
 	if err != nil {
 		return zero, &untrustedDocumentError{reason: fmt.Sprintf("metadata document advertises an invalid jwks_uri: %v", err)}
 	}
+	if tunnel != nil {
+		source = source.WithTransport(tunnel)
+	}
 
-	cache := jwks.CacheState{Document: nil, ETag: "", ExpiresAt: time.Time{}, RefreshedAt: time.Time{}}
+	cache := jwks.CacheState{Document: nil, ETag: "", ExpiresAt: time.Time{}, RefreshedAt: time.Time{}, LastErrorAt: time.Time{}, LastError: "", Revision: ""}
 	if issuer.JwksUri.Valid && issuer.JwksUri.String == jwksURI {
 		cache.Document = json.RawMessage(issuer.Jwks)
 		cache.ETag = conv.FromPGTextOrEmpty[string](issuer.JwksEtag)

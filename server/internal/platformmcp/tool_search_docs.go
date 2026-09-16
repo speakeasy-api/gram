@@ -35,6 +35,7 @@ func registerSearchDocsTool(reg *Registrar, index DocsIndex, budget OperationBud
 		Description: searchGramDocsDescription,
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{
+		Authorization: ExternalAuthorizationOrgAdmin,
 		// Both audiences, no project scope: the corpus is reviewed content for
 		// the whole organization, and reading it touches no project state.
 		Audiences: bothAudiences, ProjectScope: ProjectScopeNone,
@@ -125,5 +126,5 @@ func registerUnavailableSearchDocsTool(reg *Registrar) {
 		Title:       "Search Setup Guides",
 		Description: "Search the reviewed Speakeasy setup guides. This is not switched on for your organization yet.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, unavailableTool("docs_search"))
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, unavailableTool("docs_search"))
 }

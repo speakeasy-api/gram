@@ -35,7 +35,7 @@ func registerUnavailableIdentityProviderTool(reg *Registrar) {
 		Name:        "attach_platform_mcp_identity_provider",
 		Title:       "Connect an MCP Server's OAuth Provider",
 		Description: "Connect one MCP server to the OAuth provider it advertises. This is not switched on for your organization yet.",
-	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("identity_provider_attachment"))
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("identity_provider_attachment"))
 }
 
 func registerIdentityProviderTool(reg *Registrar, registrations *RegistrationService) {
@@ -44,6 +44,7 @@ func registerIdentityProviderTool(reg *Registrar, registrations *RegistrationSer
 		Title:       "Connect an MCP Server's OAuth Provider",
 		Description: "Connect one MCP server to the OAuth provider it advertises, so people can sign in to it. Ask for explicit user confirmation before calling this tool. It works out the provider's metadata and performs dynamic client registration from the stored MCP source. Constraints: non-secret provider URLs may be returned, but it never accepts or returns credentials, OAuth codes, tokens, client secrets, passwords, or API keys. After success, immediately present authorization_url as a clickable link and tell the user to open it and use Connect or Authorize.",
 	}, ToolMeta{
+		Authorization: ExternalAuthorizationOrgAdmin,
 		// Connection-less: the registration is resolved by user and project,
 		// the operation is serialised per user, and the authorization step the
 		// result hands back is a dashboard URL the user opens under their own

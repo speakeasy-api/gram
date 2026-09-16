@@ -2369,6 +2369,117 @@ paths:
                                 $ref: '#/components/schemas/Error'
             security:
                 - admin_auth_header_Authorization: []
+    /admin/organizations.getMeterUsage:
+        get:
+            tags:
+                - admin
+            summary: getMeterUsage admin
+            description: Returns totals-only ordinary meter usage for an organization over a bounded UTC-day window.
+            operationId: adminGetMeterUsage
+            parameters:
+                - name: organization_id
+                  in: query
+                  description: Organization ID or canonical slug.
+                  allowEmptyValue: true
+                  required: true
+                  schema:
+                    type: string
+                    description: Organization ID or canonical slug.
+                - name: family
+                  in: query
+                  allowEmptyValue: true
+                  required: true
+                  schema:
+                    type: string
+                    enum:
+                        - agent_session_storage
+                        - mcp_bandwidth
+                        - risk_content_scans
+                - name: from
+                  in: query
+                  description: Inclusive UTC midnight reporting boundary. Must be paired with to.
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Inclusive UTC midnight reporting boundary. Must be paired with to.
+                    format: date-time
+                - name: to
+                  in: query
+                  description: Exclusive UTC midnight reporting boundary. Must be paired with from and no later than three calendar months after from.
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Exclusive UTC midnight reporting boundary. Must be paired with from and no later than three calendar months after from.
+                    format: date-time
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminMeterUsageResponse'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "503":
+                    description: 'unavailable: service temporarily unavailable'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
     /admin/organizations.list:
         get:
             description: Lists organizations for platform admin operations with optional search and filters. Defaults to created_at descending, with id ascending to break ties.
@@ -6378,7 +6489,7 @@ paths:
                 type: mutation
     /rpc/access.resolveChallenge:
         post:
-            description: Record resolutions for one or more denied authz challenges. The caller is responsible for assigning the role first.
+            description: Dismiss one or more denied authz challenges, or atomically add one custom role to the denied user before recording the challenges as resolved.
             operationId: resolveChallenge
             parameters:
                 - allowEmptyValue: true
@@ -43372,6 +43483,7 @@ paths:
                         - opencode
                         - copilot
                         - openclaw
+                        - pi
                     type: string
                 - allowEmptyValue: true
                   description: Session header
@@ -54600,7 +54712,7 @@ paths:
                 type: mutation
     /rpc/riskEvals.evaluate:
         post:
-            description: 'Replay a prompt_based guardrail against a single chat session and return the LLM judge''s per-message verdict. The guardrail (prompt + judge config + message-type scope + CEL scope) is passed inline so the policy-eval workbench can evaluate an unsaved draft before a policy exists. This path is read-only: it never writes risk_results, publishes to the outbox, or enforces. It exists purely to tune a guardrail against real transcripts. Judges only the chat''s latest generation; message-type scoping and CEL scope predicates are both applied.'
+            description: 'Replay a prompt_based guardrail against a single chat session and return the LLM judge''s per-message verdict. The guardrail (prompt + judge config + message-type scope + CEL scope) is passed inline so the policy-eval workbench can evaluate an unsaved draft before a policy exists. This path is read-only: it never writes risk_results, publishes to the outbox, or enforces. It exists purely to tune a guardrail against real transcripts. Judges only the chat''s latest generation and at most the first 200 in-scope messages in transcript order; message-type scoping and CEL scope predicates are both applied.'
             operationId: evaluatePromptGuardrail
             parameters:
                 - allowEmptyValue: true
@@ -72129,6 +72241,68 @@ components:
             required:
                 - organizations
                 - total
+        AdminMeterUsageBucket:
+            type: object
+            properties:
+                from:
+                    type: string
+                    description: Inclusive UTC day boundary
+                    format: date-time
+                to:
+                    type: string
+                    description: Exclusive UTC day boundary
+                    format: date-time
+                total:
+                    type: string
+                    description: Exact integer ordinary usage quantity as a decimal string
+            required:
+                - from
+                - to
+                - total
+        AdminMeterUsageResponse:
+            type: object
+            properties:
+                billing_cycles:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/MeterUsageWindow'
+                    description: Trailing twelve billing-cycle date windows
+                buckets:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminMeterUsageBucket'
+                    description: Dense UTC daily ordinary usage buckets
+                family:
+                    type: string
+                    enum:
+                        - agent_session_storage
+                        - mcp_bandwidth
+                        - risk_content_scans
+                measurement_method:
+                    type: string
+                queried_at:
+                    type: string
+                    description: Retrieval timestamp, not an ingestion watermark
+                    format: date-time
+                total:
+                    type: string
+                    description: Exact integer ordinary usage period total as a decimal string
+                unit:
+                    type: string
+                    enum:
+                        - stokens
+                        - bytes
+                window:
+                    $ref: '#/components/schemas/MeterUsageWindow'
+            required:
+                - family
+                - window
+                - billing_cycles
+                - unit
+                - total
+                - buckets
+                - queried_at
+                - measurement_method
         AdminOpenRouterKey:
             type: object
             properties:
@@ -73669,6 +73843,11 @@ components:
                 scope:
                     type: string
                     description: Scope that was checked.
+                selector:
+                    type: object
+                    description: Complete selector captured for the check. Omitted for legacy or malformed challenge data.
+                    additionalProperties:
+                        type: string
                 timestamp:
                     type: string
                     description: When the authz decision was made.
@@ -75803,6 +75982,10 @@ components:
                     items:
                         type: string
                     description: Token endpoint auth methods advertised by the issuer.
+                tunneled_mcp_server_id:
+                    type: string
+                    description: Route this issuer's OAuth endpoint calls through an MCP tunnel in the same project. Platform admins only.
+                    format: uuid
                 userinfo_endpoint:
                     type: string
                     description: OpenID Connect userinfo endpoint. Discovered from the issuer metadata document; rejected unless an absolute https URL, or http on loopback.
@@ -76424,6 +76607,10 @@ components:
                     items:
                         type: string
                     description: Token endpoint auth methods advertised by the issuer.
+                tunneled_mcp_server_id:
+                    type: string
+                    description: Route this issuer's OAuth endpoint calls through an MCP tunnel in the same project. Platform admins only.
+                    format: uuid
                 userinfo_endpoint:
                     type: string
                     description: OpenID Connect userinfo endpoint. Discovered from the issuer metadata document; rejected unless an absolute https URL, or http on loopback.
@@ -87719,10 +87906,17 @@ components:
                 flagged:
                     type: boolean
                     description: True when the guardrail flagged at least one in-scope message.
+                in_scope_message_count:
+                    type: integer
+                    description: Total number of messages matching the guardrail scope before the replay limit.
+                    format: int64
                 judged_count:
                     type: integer
                     description: Number of in-scope messages the judge evaluated.
                     format: int64
+                message_limit_hit:
+                    type: boolean
+                    description: True when the replay judged only the first 200 in-scope messages.
                 total_cost_usd:
                     type: number
                     description: Total OpenRouter cost across in-scope judge calls, in USD.
@@ -87741,6 +87935,8 @@ components:
                 - chat_id
                 - flagged
                 - judged_count
+                - in_scope_message_count
+                - message_limit_hit
                 - total_cost_usd
                 - total_latency_ms
                 - verdicts
@@ -88822,6 +89018,10 @@ components:
                     type: array
                     items:
                         type: string
+                tunneled_mcp_server_id:
+                    type: string
+                    description: When set, calls to this issuer's OAuth endpoints ride this MCP tunnel instead of dialing directly.
+                    format: uuid
                 updated_at:
                     type: string
                     format: date-time
@@ -89315,6 +89515,7 @@ components:
                     items:
                         type: string
                     description: IDs of the challenges in ClickHouse to resolve.
+                    minItems: 1
                 principal_urn:
                     type: string
                     description: Principal that was denied.
@@ -89330,9 +89531,12 @@ components:
                 resource_kind:
                     type: string
                     description: Resource kind from the challenge.
+                role_assignment_confirmed:
+                    type: boolean
+                    description: Confirms the administrator reviewed and accepts every permission granted by the complete role. Must be true when resolution_type=role_assigned.
                 role_slug:
                     type: string
-                    description: Role slug to assign (required when resolution_type=role_assigned).
+                    description: Custom role slug to add to the denied user before resolving (required when resolution_type=role_assigned).
                 scope:
                     type: string
                     description: Scope that was denied.
@@ -98224,6 +98428,9 @@ components:
                     type: array
                     items:
                         type: string
+                tunneled_mcp_server_id:
+                    type: string
+                    description: Set or clear this issuer's MCP tunnel binding. Omission keeps the binding; an empty string clears it; any other value must be a tunneled MCP server in the same project. Platform admins only.
                 userinfo_endpoint:
                     type: string
                     description: Set or clear the OpenID Connect userinfo endpoint. An empty string clears it to NULL; any other value must be an absolute https URL, or http on loopback.
@@ -100183,8 +100390,6 @@ tags:
       description: Manage remote_session_issuer records — upstream Authorization Server identity records that Gram talks to as an OAuth client.
     - name: adminRemoteSessions
       description: Platform-admin management of global remote_session_issuer / remote_session_client records — shared across every organization (project_id NULL, organization_id NULL). Speakeasy-staff only; every method requires the platform-admin flag.
-    - name: admin
-      description: Operations supporting admin tasks, protected by Google workspace auth.
     - name: organizationRemoteSessions
       description: Organization-administrator visibility into remote_sessions Gram is holding on a principal's behalf, across every project in the caller's organization. access_token_encrypted and refresh_token_encrypted are never returned.
     - name: remoteSessions
@@ -100217,6 +100422,8 @@ tags:
       description: Managing unproxied MCP servers. These are vendor MCP servers that Speakeasy lists and can attach to a plugin but never proxies, so there is no OAuth callback or upstream allowlisting involved.
     - name: usage
       description: Read usage for gram.
+    - name: admin
+      description: Operations supporting admin tasks, protected by Google workspace auth.
     - name: userSessionClients
       description: Operator visibility into MCP clients registered against a user-session issuer (user_session_clients). Read + revoke. Registrations are written by /mcp/{slug}/register (RFC 7591 DCR) or resolved from a Client ID Metadata Document on /mcp/{slug}/authorize (CIMD); client_id_metadata_uri distinguishes the two.
     - name: userSessionConsents

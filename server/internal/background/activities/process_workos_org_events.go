@@ -170,8 +170,8 @@ type postCommitEffects struct {
 	// organization's external_id.
 	updateWorkOSExternalID *workosOrgExternalIDUpdate
 	// invalidateUserInfoCacheUserID is the Gram user ID whose cached user
-	// info to drop after deprovisioning, so org-access checks observe the
-	// change without waiting out the cache TTL.
+	// info to drop after a membership was added or removed, so org-access
+	// checks observe the change without waiting out the cache TTL.
 	invalidateUserInfoCacheUserID string
 	// refreshIdentityMap requests an immediate ClickHouse identity map sync
 	// because the directory changed (membership added, removed, or
@@ -203,7 +203,7 @@ func (p *ProcessWorkOSOrganizationEvents) runPostCommitEffects(ctx context.Conte
 			UserPylonSignature: nil,
 			Organizations:      nil,
 		}); err != nil {
-			logger.WarnContext(ctx, "failed to invalidate user info cache after deprovisioning",
+			logger.WarnContext(ctx, "failed to invalidate user info cache after membership change",
 				attr.SlogError(err),
 				attr.SlogUserID(userID),
 			)

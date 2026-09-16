@@ -90,7 +90,12 @@ type Gate interface {
 	Enabled(ctx context.Context, organizationID string) (bool, error)
 }
 
+// Authorizer admits an authenticated organization member and enforces the
+// explicit policy declared by each external tool or resource.
 type Authorizer interface {
+	PrepareExternalContext(ctx context.Context, principal Principal) (context.Context, error)
+	AuthorizeExternalCall(ctx context.Context, principal Principal, policy ExternalAuthorization) error
+	RequireLiveMembership(ctx context.Context, principal Principal) error
 	RequireLiveOrgAdmin(ctx context.Context, principal Principal) error
 }
 
@@ -135,6 +140,7 @@ func NewRuntimeWithRiskMutations(logger *slog.Logger, authenticator Authenticato
 		postgresReader.setInventoryCursorKey(cursorKeyMaterial)
 	}
 	server, registrar := newServerWithRiskMutations(reader, catalog, registrations, cursorKeyMaterial, setupResources, feedback, onboarding, distributions, skills, diagnostics, plugins, sessionRecall, riskMutations, candidate, accessReads, accessRoleMutations)
+	registrar.withExternalAuthorizer(authorizer)
 	runtime := &Runtime{
 		authenticator:        authenticator,
 		gate:                 gate,
@@ -226,19 +232,20 @@ func (r *Runtime) Handler() http.Handler {
 			http.Error(w, "Platform MCP is not enabled for this organization", http.StatusForbidden)
 			return
 		}
-		if err := r.authorizer.RequireLiveOrgAdmin(req.Context(), principal); err != nil {
+		ctx, err := r.authorizer.PrepareExternalContext(req.Context(), principal)
+		if err != nil {
 			if isAuthorizationDenied(err) {
-				r.recordAuthOutcome(req.Context(), "access_denied", "authorization_denied")
+				r.recordAuthOutcome(req.Context(), "access_denied", "membership_denied")
 				http.Error(w, "forbidden", http.StatusForbidden)
 			} else {
-				r.recordAuthOutcome(req.Context(), "temporarily_unavailable", "")
+				r.recordAuthOutcome(req.Context(), "temporarily_unavailable", "authorization_unavailable")
 				http.Error(w, "unavailable", http.StatusServiceUnavailable)
 			}
 			return
 		}
 
 		r.recordAuthOutcome(req.Context(), "succeeded", "")
-		req = req.WithContext(contextWithPrincipal(req.Context(), principal))
+		req = req.WithContext(ctx)
 		req.Body = http.MaxBytesReader(w, req.Body, MaxBodyBytes)
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Pragma", "no-cache")
