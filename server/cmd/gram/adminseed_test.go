@@ -22,6 +22,7 @@ func TestAdminSeedCommandOutput(t *testing.T) {
 			var output bytes.Buffer
 			seedError := errors.New("seed failed")
 			command := newAdminSeedCommand()
+			command.HideHelp = true // Avoid urfave's shared global help flag in parallel tests.
 			command.Action = adminSeedAction(func(_ context.Context, environment, databaseURL string) error {
 				require.Equal(t, "local", environment)
 				require.Equal(t, "postgres://gram@127.0.0.1/gram", databaseURL)
@@ -31,7 +32,7 @@ func TestAdminSeedCommandOutput(t *testing.T) {
 				}
 				return nil
 			})
-			app := &cli.App{Writer: &output, Commands: []*cli.Command{command}}
+			app := &cli.App{Writer: &output, Commands: []*cli.Command{command}, HideHelp: true, HideVersion: true}
 			err := app.Run([]string{"gram", "admin-seed", "--environment=local", "--database-url=postgres://gram@127.0.0.1/gram"})
 			if fails {
 				require.ErrorIs(t, err, seedError)
@@ -53,8 +54,9 @@ func TestAdminSeedCommandOutputError(t *testing.T) {
 	t.Parallel()
 	outputError := errors.New("output unavailable")
 	command := newAdminSeedCommand()
+	command.HideHelp = true // Avoid urfave's shared global help flag in parallel tests.
 	command.Action = adminSeedAction(func(context.Context, string, string) error { return nil })
-	app := &cli.App{Writer: adminSeedFailingWriter{err: outputError}, Commands: []*cli.Command{command}}
+	app := &cli.App{Writer: adminSeedFailingWriter{err: outputError}, Commands: []*cli.Command{command}, HideHelp: true, HideVersion: true}
 	err := app.Run([]string{"gram", "admin-seed", "--environment=local", "--database-url=postgres://gram@127.0.0.1/gram"})
 	require.ErrorIs(t, err, outputError)
 	require.ErrorContains(t, err, "report admin seed result")
