@@ -59,6 +59,7 @@ type AnalyzeBatch struct {
 	promptInjectionPub     gcp.Publisher[*riskv1.PromptInjectionAnalysis]
 	promptPolicyPub        gcp.Publisher[*riskv1.PromptPolicyAnalysis]
 	customRulesPub         gcp.Publisher[*riskv1.CustomRulesAnalysis]
+	llmPub                 gcp.Publisher[*riskv1.LLMAnalysis]
 	findingsPub            gcp.Publisher[*riskv1.Finding]
 	riskRecorder           *metering.RiskRecorder
 	customRuleScanner      *customruleanalyzer.Scanner
@@ -88,6 +89,7 @@ func NewAnalyzeBatch(
 	promptInjectionPub gcp.Publisher[*riskv1.PromptInjectionAnalysis],
 	promptPolicyPub gcp.Publisher[*riskv1.PromptPolicyAnalysis],
 	customRulesPub gcp.Publisher[*riskv1.CustomRulesAnalysis],
+	llmPub gcp.Publisher[*riskv1.LLMAnalysis],
 	findingsPub gcp.Publisher[*riskv1.Finding],
 	customRuleScanner *customruleanalyzer.Scanner,
 	celEng *celenv.Engine,
@@ -138,6 +140,7 @@ func NewAnalyzeBatch(
 		promptInjectionPub:     promptInjectionPub,
 		promptPolicyPub:        promptPolicyPub,
 		customRulesPub:         customRulesPub,
+		llmPub:                 llmPub,
 		findingsPub:            findingsPub,
 		riskRecorder:           riskRecorder,
 		customRuleScanner:      customRuleScanner,
