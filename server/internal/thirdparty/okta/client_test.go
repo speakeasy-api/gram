@@ -346,13 +346,13 @@ func TestClient_RateLimited429BacksOffUntilReset(t *testing.T) {
 
 	apps := listApps(t, tc)
 	require.Len(t, apps, 1)
-	require.Equal(t, []time.Duration{7 * time.Second}, tc.sleeper.Waits())
+	require.Equal(t, []time.Duration{7*time.Second + maxRateLimitJitter/2}, tc.sleeper.Waits())
 	require.Equal(t, 2, tc.signer.Calls())
 
 	// The retry already reached reset, so the next call need not slow down.
 	tc.stub.setRateLimit(100, 90, now.Add(7*time.Second).Unix())
 	listApps(t, tc)
-	require.Equal(t, []time.Duration{7 * time.Second}, tc.sleeper.Waits())
+	require.Equal(t, []time.Duration{7*time.Second + maxRateLimitJitter/2}, tc.sleeper.Waits())
 	listApps(t, tc)
 	require.Len(t, tc.sleeper.Waits(), 1)
 }
@@ -718,7 +718,7 @@ func TestClient_TokenEndpoint429BacksOffWithFreshAssertion(t *testing.T) {
 
 	apps := listApps(t, tc)
 	require.Len(t, apps, 1)
-	require.Equal(t, []time.Duration{5 * time.Second, time.Second}, tc.sleeper.Waits())
+	require.Equal(t, []time.Duration{5*time.Second + maxRateLimitJitter/2, time.Second + maxRateLimitJitter/2}, tc.sleeper.Waits())
 
 	// Two throttled attempts, one nonce challenge, one success: four assertions, all distinct.
 	require.Equal(t, 4, tc.signer.Calls())
@@ -1067,7 +1067,7 @@ func TestClient_MintAdmissionCancellation(t *testing.T) {
 					close(entered)
 					select {
 					case <-ctx.Done():
-						return ctx.Err()
+						return fmt.Errorf("test sleep: %w", ctx.Err())
 					case <-release:
 						return sleep(ctx, d)
 					}
@@ -1161,4 +1161,78 @@ func TestClient_WaitForSlowdownCancellation(t *testing.T) {
 	require.ErrorIs(t, tc.client.waitForSlowdown(ctx), context.Canceled)
 	require.Equal(t, first, tc.clock.Now())
 	require.Equal(t, second, tc.client.slowUntil)
+}
+
+func TestRateLimitJitterBounds(t *testing.T) {
+	t.Parallel()
+	for range 100 {
+		jitter := rateLimitJitter()
+		require.Positive(t, jitter)
+		require.LessOrEqual(t, jitter, maxRateLimitJitter)
+	}
+}
+
+func TestClient_RateLimitWaitJitterBounds(t *testing.T) {
+	t.Parallel()
+	now := time.Unix(1700000000, 0)
+	for _, tt := range []struct {
+		name  string
+		reset string
+		base  time.Duration
+	}{
+		{name: "future", reset: fmt.Sprint(now.Add(7 * time.Second).Unix()), base: 7 * time.Second},
+		{name: "past", reset: fmt.Sprint(now.Add(-time.Second).Unix()), base: time.Second},
+		{name: "now", reset: fmt.Sprint(now.Unix()), base: time.Second},
+		{name: "missing", reset: "", base: time.Second},
+		{name: "invalid", reset: "invalid", base: time.Second},
+		{name: "near cap", reset: fmt.Sprint(now.Add(maxRateLimitWait).Unix()), base: maxRateLimitWait - time.Millisecond},
+		{name: "beyond cap", reset: fmt.Sprint(now.Add(time.Hour).Unix()), base: maxRateLimitWait},
+		{name: "saturated", reset: "253402300799", base: maxRateLimitWait},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			for _, jitter := range []time.Duration{time.Nanosecond, maxRateLimitJitter} {
+				clock := now
+				if tt.name == "near cap" {
+					clock = clock.Add(time.Millisecond)
+				}
+				client := &httpClient{
+					now:    func() time.Time { return clock },
+					jitter: func() time.Duration { return jitter },
+				}
+				header := http.Header{"X-Rate-Limit-Reset": []string{tt.reset}}
+				wait := client.rateLimitWait(header)
+				require.Equal(t, min(tt.base+jitter, maxRateLimitWait), wait)
+				require.LessOrEqual(t, wait, maxRateLimitWait)
+			}
+		})
+	}
+}
+
+func TestClient_RateLimitJitterWaitCancellation(t *testing.T) {
+	t.Parallel()
+	for _, token := range []bool{false, true} {
+		t.Run(fmt.Sprintf("token=%t", token), func(t *testing.T) {
+			t.Parallel()
+			tc := newDefaultTestClient(t)
+			tc.stub.setApps(stubApps(1))
+			tc.stub.setRateLimit(100, 90, tc.clock.Now().Add(7*time.Second).Unix())
+			if token {
+				tc.stub.setTokenPending429(1)
+			} else {
+				tc.stub.setPending429(1)
+			}
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			var waits []time.Duration
+			tc.client.sleep = func(ctx context.Context, d time.Duration) error {
+				waits = append(waits, d)
+				cancel()
+				return sleepContext(ctx, d)
+			}
+			_, err := tc.client.ListApps(ctx, ListAppsRequest{Query: "", Status: "", Limit: 0})
+			require.ErrorIs(t, err, context.Canceled)
+			require.Equal(t, []time.Duration{7*time.Second + maxRateLimitJitter/2}, waits)
+		})
+	}
 }

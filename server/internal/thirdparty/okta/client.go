@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math/rand/v2"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -24,6 +25,7 @@ import (
 )
 
 const (
+	codeConsentRequired = "consent_required" // Okta reports this when none of the requested scopes are granted.
 	clientAssertionType = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
 	tokenEndpointPath   = "/oauth2/v1/token" //nolint:gosec // G101 false positive: a URL path, not a credential.
 
@@ -31,6 +33,7 @@ const (
 	tokenExpirySafetyMargin = 60 * time.Second
 	maxRateLimitRetries     = 3
 	maxRateLimitWait        = 2 * time.Minute
+	maxRateLimitJitter      = 250 * time.Millisecond
 	rateLimitSlowdownRatio  = 0.2
 
 	defaultMaxPages          = 50
@@ -88,6 +91,7 @@ type httpClient struct {
 	maxPages   int
 	now        func() time.Time
 	sleep      func(ctx context.Context, d time.Duration) error
+	jitter     func() time.Duration
 
 	// mintAdmission serializes handshakes while allowing waiters to cancel.
 	mintAdmission chan struct{}
@@ -148,6 +152,7 @@ func NewClient(logger *slog.Logger, client *guardian.HTTPClient, signer remotese
 		maxPages:      maxPages,
 		now:           time.Now,
 		sleep:         sleepContext,
+		jitter:        rateLimitJitter,
 		mintAdmission: make(chan struct{}, 1),
 		mu:            sync.Mutex{},
 		cached:        noToken,
@@ -309,7 +314,7 @@ func (c *httpClient) VerifyScopes(ctx context.Context, required []string) (*Scop
 
 	tok, err := c.mint(ctx, required)
 	var apiErr *APIError
-	if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusBadRequest && apiErr.ErrorCode == oautherr.CodeInvalidScope {
+	if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusBadRequest && (apiErr.ErrorCode == oautherr.CodeInvalidScope || apiErr.ErrorCode == codeConsentRequired) {
 		return &ScopeVerification{
 			Granted:   make([]string, 0),
 			Missing:   append([]string(nil), required...),
@@ -471,7 +476,7 @@ func (c *httpClient) do(ctx context.Context, method string, target *url.URL) ([]
 				return nil, nil, newAPIError(method, target.Path, status, body)
 			}
 			tokenRetried = true
-			c.evictToken()
+			c.evictRejectedToken(tok.accessToken)
 			continue
 
 		default:
@@ -511,6 +516,15 @@ func (c *httpClient) evictToken() {
 	c.mu.Lock()
 	c.cached = noToken
 	c.mu.Unlock()
+}
+
+// evictRejectedToken leaves a newer token installed by another request intact.
+func (c *httpClient) evictRejectedToken(accessToken string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.cached.accessToken == accessToken {
+		c.cached = noToken
+	}
 }
 
 // acquireMint admits one handshake, unless the caller has been canceled.
@@ -578,6 +592,9 @@ func (c *httpClient) mint(ctx context.Context, scopes []string) (cachedToken, er
 		if err != nil {
 			return cachedToken{}, err
 		}
+		if nextNonce := header.Get("DPoP-Nonce"); nextNonce != "" {
+			nonce = nextNonce
+		}
 
 		switch {
 		case status == http.StatusOK:
@@ -600,7 +617,6 @@ func (c *httpClient) mint(ctx context.Context, scopes []string) (cachedToken, er
 				return cachedToken{}, errors.New("okta token endpoint rejected dpop nonce twice")
 			}
 			nonceRetried = true
-			nonce = header.Get("DPoP-Nonce")
 			continue
 
 		default:
@@ -750,7 +766,14 @@ func (c *httpClient) rateLimitWait(header http.Header) time.Duration {
 	if wait <= 0 {
 		wait = time.Second
 	}
-	return min(wait, maxRateLimitWait)
+	// Add positive post-reset jitter to spread retries across clients, while
+	// keeping the total sleep capped (including for saturated durations).
+	return min(min(wait, maxRateLimitWait)+c.jitter(), maxRateLimitWait)
+}
+
+func rateLimitJitter() time.Duration {
+	// The global generator is safe for concurrent callers; this is not security-sensitive.
+	return time.Duration(rand.Int64N(int64(maxRateLimitJitter))) + 1 //nolint:gosec // G404: retry jitter does not require cryptographic randomness.
 }
 
 func (c *httpClient) resetTime(header http.Header) time.Time {
@@ -814,5 +837,5 @@ func newAPIError(method, path string, status int, body []byte) *APIError {
 	if summary == "" {
 		summary = parsed.ErrorDescription
 	}
-	return &APIError{Method: method, Path: path, StatusCode: status, ErrorCode: code, Summary: summary}
+	return &APIError{Method: method, Path: "/" + strings.TrimLeft(path, "/"), StatusCode: status, ErrorCode: code, Summary: summary}
 }

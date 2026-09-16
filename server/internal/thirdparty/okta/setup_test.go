@@ -505,7 +505,7 @@ func (s *stubOkta) handleToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Like Okta, ungranted scopes are trimmed; all-ungranted is invalid_scope.
+	// Ungranted scopes are trimmed; this stub models the invalid_scope variant.
 	scope := granted
 	if requested := strings.Fields(r.Form.Get("scope")); len(requested) > 0 {
 		scope = make([]string, 0, len(requested))
@@ -772,6 +772,7 @@ func newTestClient(t *testing.T, tracerProvider trace.TracerProvider, logger *sl
 		return sleeper.sleep(ctx, d)
 	}
 	impl.now = clock.Now
+	impl.jitter = func() time.Duration { return maxRateLimitJitter / 2 }
 
 	return testClient{client: impl, stub: stub, signer: signer, sleeper: sleeper, clock: clock}
 }
