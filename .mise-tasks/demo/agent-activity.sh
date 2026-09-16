@@ -25,6 +25,10 @@ set -euo pipefail
 # so each run is marked there and the shared collector rewrites that onto the
 # attribute Gram reads. See local/otel/gram-demo-forward.yaml for the pipeline
 # that does it.
+#
+# Every prompt below is read-only work, and both harnesses are held to that:
+# an injected instruction picked up from a file, a plugin or an MCP response
+# cannot write to the checkout this runs in.
 
 project_slug="${usage_project}"
 prompts_per_user="${usage_prompts}"
@@ -34,6 +38,23 @@ codex_model="${usage_codex_model}"
 
 collector_logs_endpoint="http://localhost:${OTLP_HTTP_PORT}/v1/logs"
 
+# One turn's share of the budget is capped here as well as by the deadline, so
+# a single session that wedges cannot swallow the whole run before the loop
+# gets to look at the clock again.
+max_turn_seconds=240
+
+# Codex takes its OTel settings from a config file rather than the
+# environment, and that file carries the run's API key. It is written into
+# CODEX_HOME because that is where Codex looks for a named profile, mode 600,
+# and removed again on the way out.
+codex_profile_name="gram-demo-activity"
+codex_profile_file="${CODEX_HOME:-$HOME/.codex}/${codex_profile_name}.config.toml"
+codex_profile_marker="# Written by mise run demo:agent-activity; removed when it exits."
+
+plugin_out=""
+turn_log=""
+org_id=""
+
 db_query() {
   docker exec -i "${COMPOSE_PROJECT_NAME:-gram}-gram-db-1" psql -U gram -d gram -tA -v ON_ERROR_STOP=1 "$@"
 }
@@ -42,6 +63,28 @@ fail() {
   echo "demo:agent-activity: $1" >&2
   exit 1
 }
+
+# The key is minted for this run and must not outlive it. Revoking at the top
+# of the next run is no help on a machine where this run was the last one, and
+# no help at all if the developer interrupts this one.
+cleanup() {
+  local rc=$?
+  # Spelled out rather than `[ ... ] && ...`: a false test there returns
+  # non-zero, and under `set -e` that would leave the trap before it got to
+  # the revocation, which is the one step that matters.
+  if [ -n "$plugin_out" ]; then
+    rm -rf "$plugin_out"
+  fi
+  if [ -n "$turn_log" ]; then
+    rm -f "$turn_log"
+  fi
+  rm -f "$codex_profile_file"
+  if [ -n "$org_id" ]; then
+    db_query -v org_id="$org_id" >/dev/null 2>&1 <<<"UPDATE api_keys SET deleted_at = NOW() WHERE organization_id = :'org_id' AND name = 'dev-demo-activity' AND deleted IS FALSE" || true
+  fi
+  exit "$rc"
+}
+trap cleanup EXIT INT TERM
 
 # region: harnesses
 #
@@ -96,7 +139,8 @@ harness_missing_reason() {
 # different shape in agent_events — bare turns with no tool at all, the
 # built-in tools, an MCP call, a skill, a subagent, and a failure so `status`
 # has something other than ok in it. The two lists cover the same ground in
-# each harness's own vocabulary; neither is a translation of the other.
+# each harness's own vocabulary; neither is a translation of the other. All of
+# it is reading, which is what lets both harnesses run without write access.
 claude_prompts=(
   "In one sentence, what is a columnar database good at?"
   "Use the Bash tool to print the current date, then tell me what day it is."
@@ -136,8 +180,38 @@ demo_resource_attrs() {
   printf '%s' "${OTEL_RESOURCE_ATTRIBUTES:+${OTEL_RESOURCE_ATTRIBUTES},}gram.demo.user_email=$1"
 }
 
-# Logs only, in both harnesses. Metrics would land in agent_metrics carrying
-# the real account's identity, since only the log pipeline does the rewrite.
+# Codex is configured through config.toml rather than the environment. A named
+# profile is layered over the developer's own config, which keeps their
+# provider, auth and model working while replacing the whole `[otel]` block
+# rather than merging into it — their block routinely points at a real Gram
+# project with a live key, and none of it survives this. The credential lives
+# here rather than in a -c override so it stays out of the process arguments,
+# where any local user could read it off `ps` for the length of the run.
+write_codex_profile() {
+  if [ -e "$codex_profile_file" ] && ! head -1 "$codex_profile_file" | grep -qF "$codex_profile_marker"; then
+    fail "${codex_profile_file} already exists and was not written by this task — move it aside first"
+  fi
+  ( umask 077
+    cat > "$codex_profile_file" <<TOML
+${codex_profile_marker}
+[otel]
+environment = "dev"
+log_user_prompt = true
+# Logs only. Metrics and traces would carry the real account's identity, since
+# only the log pipeline does the rewrite.
+trace_exporter = "none"
+metrics_exporter = "none"
+
+[otel.exporter.otlp-http]
+# Used verbatim as the logs URL: Codex does not append /v1/logs to it.
+endpoint = "${collector_logs_endpoint}"
+protocol = "json"
+headers = { "Gram-Key" = "${api_key}", "Gram-Project" = "${project_slug}" }
+TOML
+  )
+}
+
+# Logs only, in both harnesses, for the same reason.
 run_claude() {
   CLAUDE_CODE_ENABLE_TELEMETRY=1 \
   OTEL_LOGS_EXPORTER=otlp \
@@ -158,17 +232,14 @@ run_claude() {
       --setting-sources project,local \
       --plugin-dir "${plugin_out}/plugin-claude" \
       --permission-mode bypassPermissions \
-      -p "$2" >/dev/null 2>&1
+      --disallowed-tools "Write,Edit,NotebookEdit,WebFetch,WebSearch" \
+      -p "$2" > "$turn_log" 2>&1
 }
 
-# Codex is configured through config.toml rather than the environment, so the
-# settings arrive as -c overrides. Each one replaces the whole subtree it names
-# rather than merging into it, which is what makes this safe to run against a
-# developer's own config: their otel block routinely points at a real Gram
-# project with a live key, and their MCP servers at production. Both are
-# replaced outright here so a generated prompt can only reach the local stack.
-# Everything we do not name — provider, auth, sandbox policy — stays theirs,
-# the same way the Claude Code path uses whatever account is signed in.
+# The MCP servers are replaced for the same reason the otel block is: a
+# developer's own point at production, and a generated prompt asking for a tool
+# call has no business reaching one. Everything not named here — provider,
+# auth, model — stays theirs.
 run_codex() {
   local model_args=()
   if [ -n "$codex_model" ]; then
@@ -177,36 +248,61 @@ run_codex() {
 
   OTEL_RESOURCE_ATTRIBUTES="$(demo_resource_attrs "$1")" \
     "$codex_bin" exec \
+      --profile "$codex_profile_name" \
       --cd "$PWD" \
       --skip-git-repo-check \
       --dangerously-bypass-hook-trust \
-      --dangerously-bypass-approvals-and-sandbox \
+      --sandbox read-only \
       ${model_args[@]+"${model_args[@]}"} \
-      -c otel.environment=dev \
-      -c otel.log_user_prompt=true \
-      -c otel.trace_exporter=none \
-      -c otel.metrics_exporter=none \
-      -c "otel.exporter={ \"otlp-http\" = { endpoint = \"${collector_logs_endpoint}\", protocol = \"json\", headers = { \"Gram-Key\" = \"${api_key}\", \"Gram-Project\" = \"${project_slug}\" } } }" \
+      -c 'approval_policy="never"' \
       -c 'mcp_servers={ "assistants-dev" = { command = "mise", args = ["x", "--", "go", "run", "./server/cmd/dev-mcp"] } }' \
       -c 'plugins={}' \
-      -- "$2" >/dev/null 2>&1
+      -- "$2" > "$turn_log" 2>&1
+}
+
+# The deadline is only read between turns, so without this a session that
+# wedges runs past the advertised limit indefinitely. The watchdog takes the
+# turn's children too: killing the subshell alone would leave the agent behind.
+run_with_budget() {
+  local budget="$1"
+  shift
+
+  "$@" &
+  local turn_pid=$!
+
+  ( sleep "$budget"
+    pkill -P "$turn_pid" 2>/dev/null
+    kill "$turn_pid" 2>/dev/null ) &
+  local watchdog_pid=$!
+
+  local rc=0
+  wait "$turn_pid" || rc=$?
+  kill "$watchdog_pid" 2>/dev/null || true
+  wait "$watchdog_pid" 2>/dev/null || true
+  return "$rc"
 }
 
 run_turn() {
-  case "$1" in
-    claude) run_claude "$2" "$3" ;;
+  local harness="$1" email="$2" prompt="$3" budget="$4"
+
+  : > "$turn_log"
+
+  case "$harness" in
+    claude) run_with_budget "$budget" run_claude "$email" "$prompt" ;;
     codex)
-      if run_codex "$2" "$3"; then
+      if run_with_budget "$budget" run_codex "$email" "$prompt"; then
         return 0
       fi
       # The cheap model is a guess about someone else's Codex setup: it is a
       # deployment name on whatever provider they configured, and on a custom
-      # one it simply will not resolve. Give up the guess on the first failure
-      # rather than every turn, and let their own default carry the run.
-      if [ -n "$codex_model" ]; then
+      # one it will not resolve. Give the guess up on that specific failure
+      # only — falling back on any failure would redo transient and auth
+      # errors as well, and quietly move later users onto another model.
+      if [ -n "$codex_model" ] && grep -qEi 'model_not_found|(model|deployment).{0,120}(not found|does not exist)' "$turn_log"; then
         echo "        (codex could not run ${codex_model}; falling back to the configured model)"
         codex_model=""
-        run_codex "$2" "$3"
+        : > "$turn_log"
+        run_with_budget "$budget" run_codex "$email" "$prompt"
         return $?
       fi
       return 1
@@ -220,6 +316,18 @@ curl -sf -o /dev/null -X POST "$collector_logs_endpoint" \
   -H 'Content-Type: application/json' -d '{"resourceLogs":[]}' 2>/dev/null ||
   fail "no OTLP collector on ${collector_logs_endpoint} — run \`mise run infra:start\` first"
 
+# That collector is one container shared by every worktree, and it keeps the
+# forwarding endpoint of whichever worktree started it. A run from a different
+# tree would be attributed correctly and then delivered to someone else's
+# server, so check rather than discover it in the wrong dashboard.
+lgtm_container=$(docker compose -f compose.shared.yml -p gram-shared ps -q lgtm 2>/dev/null || true)
+if [ -n "$lgtm_container" ]; then
+  forwarding_to=$(docker inspect "$lgtm_container" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null | sed -n 's/^GRAM_DEMO_OTLP_LOGS_ENDPOINT=//p' | head -1)
+  if [ -n "$forwarding_to" ] && [ "$forwarding_to" != "${GRAM_DEMO_OTLP_LOGS_ENDPOINT:-}" ]; then
+    fail "the shared collector forwards to ${forwarding_to}, which is not this worktree's ${GRAM_DEMO_OTLP_LOGS_ENDPOINT:-<unset>}. It keeps the endpoint of whichever worktree started it — restart it from here with \`mise run infra:start\`."
+  fi
+fi
+
 curl -skf -o /dev/null "${GRAM_SERVER_URL}/health" 2>/dev/null ||
   curl -sk -o /dev/null -w '%{http_code}' --max-time 5 "${GRAM_SERVER_URL}/rpc/hooks.otel/v1/logs" 2>/dev/null | grep -qE '^[0-9]' ||
   fail "the Gram server is not answering on ${GRAM_SERVER_URL} — run \`mise run start\` first"
@@ -229,6 +337,7 @@ curl -skf -o /dev/null "${GRAM_SERVER_URL}/health" 2>/dev/null ||
 # every user on the one harness.
 harnesses=()
 uses_claude=false
+uses_codex=false
 for requested in $(echo "${usage_harnesses}" | tr ',' ' '); do
   case "$requested" in
     claude | codex) ;;
@@ -237,6 +346,7 @@ for requested in $(echo "${usage_harnesses}" | tr ',' ' '); do
   if harness_available "$requested"; then
     harnesses+=("$requested")
     [ "$requested" = "claude" ] && uses_claude=true
+    [ "$requested" = "codex" ] && uses_codex=true
   else
     echo "Skipping ${requested}: $(harness_missing_reason "$requested")."
   fi
@@ -272,7 +382,7 @@ done
 
 # One key for the whole run, not one per session: minting per session would
 # revoke the previous one mid-flight. Named apart from hooks:test's fixture so
-# the two tasks do not revoke each other.
+# the two tasks do not revoke each other. Revoked again by the exit trap.
 db_query -v org_id="$org_id" >/dev/null <<<"UPDATE api_keys SET deleted_at = NOW() WHERE organization_id = :'org_id' AND name = 'dev-demo-activity' AND deleted IS FALSE"
 token_hex=$(openssl rand -hex 32)
 api_key="gram_local_${token_hex}"
@@ -280,16 +390,20 @@ key_hash=$(printf '%s' "$api_key" | shasum -a 256 | awk '{print $1}')
 creator=$(db_query -v org_id="$org_id" <<<"SELECT u.id FROM users u JOIN organization_user_relationships our ON our.user_id = u.id WHERE our.organization_id = :'org_id' AND our.deleted_at IS NULL ORDER BY u.created_at LIMIT 1")
 db_query -v org_id="$org_id" -v project_id="$project_id" -v user_id="$creator" -v key_prefix="gram_local_${token_hex:0:5}" -v key_hash="$key_hash" >/dev/null <<<"INSERT INTO api_keys (organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes) VALUES (:'org_id', :'project_id', :'user_id', 'dev-demo-activity', :'key_prefix', :'key_hash', '{hooks}')"
 
+turn_log="$(mktemp)"
+
 # Rendering the hook plugin makes the session emit hook_registered and the
 # hook execution pair, which is a whole class of event the run would miss.
 # Only Claude Code loads it — export-hook-plugin renders Claude and Cursor
-# trees, and Codex is neither.
-plugin_out=""
+# trees, and Codex is neither, so a Codex-only run skips this entirely.
 if $uses_claude; then
   plugin_out="$(mktemp -d)"
-  trap 'rm -rf "$plugin_out"' EXIT
   echo "Rendering the hook plugin…"
   (cd server && go run ./cmd/export-hook-plugin -out "$plugin_out" >/dev/null)
+fi
+
+if $uses_codex; then
+  write_codex_profile
 fi
 
 deadline=$(( $(date +%s) + minutes * 60 ))
@@ -331,7 +445,10 @@ for (( round = 0; round < prompts_per_user; round++ )); do
     turns_done=$(( turns_done + 1 ))
     printf '[%2d/%d] %-6s %-24s %s\n' "$turns_done" "$total" "$harness" "${email%@*}" "${prompt:0:52}…"
 
-    run_turn "$harness" "$email" "$prompt" || echo "        (that turn failed; carrying on)"
+    turn_budget=$(( deadline - now ))
+    [ "$turn_budget" -gt "$max_turn_seconds" ] && turn_budget=$max_turn_seconds
+
+    run_turn "$harness" "$email" "$prompt" "$turn_budget" || echo "        (that turn failed or ran out of time; carrying on)"
 
     sessions=$(( sessions + 1 ))
   done

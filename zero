@@ -248,7 +248,11 @@ if $started; then
         echo -n "[y/N] "
         read -r answer
         if [ "$(echo "$answer" | tr '[:upper:]' '[:lower:]')" = "y" ]; then
-            mise run demo:agent-activity
+            # Never fails the setup it runs at the end of. The stack is up and
+            # seeded by this point, so a machine with no agent CLI installed --
+            # or a run the developer interrupts -- should still reach the
+            # summary rather than exiting non-zero under `set -e`.
+            mise run demo:agent-activity || echo "Demo activity did not run; everything else is set up."
         fi
     fi
 else

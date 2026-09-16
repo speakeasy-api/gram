@@ -162,6 +162,11 @@ services:
       # the container still starts when nothing set it; a worktree whose
       # server port was remapped passes its own (mise.toml derives it).
       GRAM_DEMO_OTLP_LOGS_ENDPOINT: "${GRAM_DEMO_OTLP_LOGS_ENDPOINT:-https://host.docker.internal:8080/rpc/hooks.otel/v1/logs}"
+    # Docker Desktop resolves host.docker.internal on its own; Docker Engine on
+    # Linux does not, and without this the pipeline above accepts demo logs and
+    # then cannot deliver them.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       # Runs as root, so wipe this from inside the container rather than sudo:
       # docker compose -f compose.shared.yml -p gram-shared exec lgtm \
