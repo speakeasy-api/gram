@@ -1061,6 +1061,44 @@ func seedRegistrationLifecycle(t *testing.T, ctx context.Context, conn *pgxpool.
 	}
 }
 
+func TestPlatformMCPInventoryReturnsDashboardManagedRemoteUpstreamURL(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_inventory_remote_url")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+
+	inventory := platformrepo.New(conn)
+	rows, err := inventory.ListPlatformMCPInventory(ctx, platformrepo.ListPlatformMCPInventoryParams{
+		OrganizationID:       principal.OrganizationID,
+		ConnectionID:         uuid.NullUUID{UUID: connectionIDFromPrincipal(t, principal), Valid: true},
+		ConnectionGeneration: uuid.NullUUID{UUID: connectionIDFromPrincipalGeneration(t, principal), Valid: true},
+		UserID:               pgtype.Text{},
+		ActingSurface:        pgtype.Text{},
+		ProjectID:            uuid.NullUUID{UUID: project.ID, Valid: true},
+		AfterMcpID:           uuid.NullUUID{},
+		QueryText:            "Registration cohort server",
+		ReadinessState:       pgtype.Text{},
+		LimitValue:           10,
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, "https://cohort.example.test/mcp", rows[0].UpstreamUrl)
+
+	detail, err := inventory.GetPlatformMCPInventoryItem(ctx, platformrepo.GetPlatformMCPInventoryItemParams{
+		OrganizationID:       principal.OrganizationID,
+		ConnectionID:         uuid.NullUUID{UUID: connectionIDFromPrincipal(t, principal), Valid: true},
+		ConnectionGeneration: uuid.NullUUID{UUID: connectionIDFromPrincipalGeneration(t, principal), Valid: true},
+		UserID:               pgtype.Text{},
+		ActingSurface:        pgtype.Text{},
+		McpServerID:          rows[0].McpServerID,
+		ProjectID:            project.ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, rows[0].UpstreamUrl, detail.UpstreamUrl)
+}
+
 func seedRegistrationEligibleCohort(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID) {
 	t.Helper()
 
