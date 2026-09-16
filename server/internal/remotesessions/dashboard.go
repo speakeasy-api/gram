@@ -231,6 +231,13 @@ func (s *Service) CommitServerIdentityConfiguration(ctx context.Context, payload
 				return nil, oops.E(oops.CodeBadRequest, nil, "registration endpoint must be an absolute https URL, or http on loopback").LogError(ctx, logger)
 			}
 			registrationMethod = string(registration.MethodDCR)
+			// Registering through a tunnel reaches a private network the
+			// project cannot otherwise address, so it carries the same
+			// platform-admin gate the management path applies when the binding
+			// is created. mcp:write on one server is not enough to borrow it.
+			if provider.TunneledMcpServerID.Valid && !authCtx.IsAdmin {
+				return nil, oops.E(oops.CodeForbidden, nil, "registering through an MCP tunnel requires a platform admin").LogError(ctx, logger)
+			}
 			scope := strings.Join(plan.clientConfiguration.Scope, " ")
 			registered, err = RegisterDynamicClient(ctx, s.policy, s.tunnels, s.serverURL, ProxyRegisterRequest{
 				RegistrationEndpoint:    providerCapabilities.registrationEndpoint.String,
@@ -456,10 +463,18 @@ func (s *Service) CommitServerIdentityConfiguration(ctx context.Context, payload
 			clientID := strings.TrimSpace(conv.PtrValOr(plan.clientConfiguration.ClientID, ""))
 			authMethod := plan.clientConfiguration.TokenEndpointAuthMethod
 			secretExpiresAt := pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
+			clientIDIssuedAt := now
 			if registrationMethod == string(registration.MethodDCR) {
 				clientID = registered.ClientID
 				authMethod = conv.PtrEmpty(registered.TokenEndpointAuthMethod)
 				secretExpiresAt = registered.ClientSecretExpiresAt
+				// Keep what the provider said it issued. Rewriting it to our
+				// own clock loses the only record of when the credential
+				// actually began, which is what a rotation window is measured
+				// against. Providers may omit it, hence the fallback.
+				if registered.ClientIDIssuedAt.Valid {
+					clientIDIssuedAt = registered.ClientIDIssuedAt
+				}
 			}
 			client, createErr = txRepo.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
 				ProjectID:                       conv.ToNullUUID(*authCtx.ProjectID),
@@ -467,7 +482,7 @@ func (s *Service) CommitServerIdentityConfiguration(ctx context.Context, payload
 				RemoteSessionIssuerID:           provider.ID,
 				ClientID:                        clientID,
 				ClientSecretEncrypted:           secretCiphertext,
-				ClientIDIssuedAt:                now,
+				ClientIDIssuedAt:                clientIDIssuedAt,
 				ClientSecretExpiresAt:           secretExpiresAt,
 				TokenEndpointAuthAudienceFormat: pgtype.Text{String: "", Valid: false},
 				TokenEndpointAuthMethod:         conv.PtrToPGText(authMethod),
