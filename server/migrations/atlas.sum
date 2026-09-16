@@ -1,4 +1,4 @@
-h1:/PLDVzPChgZa4C+lwvfvCU2rBZVaz3TQpTZN7eXBeX0=
+h1:ueNLzrm6xKF7OK0PfXzhqWcfEdJA1VWXYkR52BX4aSY=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -411,3 +411,4 @@ h1:/PLDVzPChgZa4C+lwvfvCU2rBZVaz3TQpTZN7eXBeX0=
 20260915180558_add-jwks-last-error-details.sql h1:1R0MZU850hV1xdvudr0t6L/Ujt2Ii43xW300Sgm0z+4=
 20260915182327_drop-legacy-device-agent-ai-tables.sql h1:y4UrHVDiPjhJy2ZiIo5qxwWC7gIkMQudGjMMZxszols=
 20260916012658_identity-provider-connections.sql h1:r4WliDCFXxtpRoIN7zvo5g7p99W+3Jz2CORdWbYa/bg=
+20260916013319_directory-handoff.sql h1:qM7eCS5BG0PtHHxZDN20iLMN9l2veLEw6++u6fsMASQ=
