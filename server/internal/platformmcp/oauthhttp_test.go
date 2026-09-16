@@ -20,6 +20,7 @@ import (
 	platformoauth "github.com/speakeasy-api/gram/server/internal/platformmcp/oauth"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 )
 
 type memoryCache struct {
@@ -163,6 +164,7 @@ func TestOAuthHTTPMetadataAndClientRegistration(t *testing.T) {
 	service.AuthorizationServerHandler().ServeHTTP(metadata, httptest.NewRequest(http.MethodGet, "/.well-known/oauth-authorization-server/platform-mcp", nil))
 	require.Equal(t, http.StatusOK, metadata.Code)
 	require.Contains(t, metadata.Body.String(), `"registration_endpoint"`)
+	require.NotContains(t, metadata.Body.String(), oauthwire.GrantTypeJWTBearer)
 
 	request := httptest.NewRequest(http.MethodPost, "/platform-mcp/register", strings.NewReader(`{"client_name":"test client","redirect_uris":["http://127.0.0.1:3000/callback"],"token_endpoint_auth_method":"none"}`))
 	request.Header.Set("Content-Type", "application/json")
@@ -171,6 +173,20 @@ func TestOAuthHTTPMetadataAndClientRegistration(t *testing.T) {
 	require.Equal(t, http.StatusCreated, response.Code)
 	require.Contains(t, response.Body.String(), `"client_id"`)
 	require.NotContains(t, response.Body.String(), `"client_secret"`)
+}
+
+func TestOAuthHTTPClientRegistrationRejectsIDJAG(t *testing.T) {
+	t.Parallel()
+
+	service := newTestOAuthHTTP(t)
+	body := fmt.Sprintf(`{"client_name":"ID-JAG client","grant_types":[%q],"token_endpoint_auth_method":"client_secret_basic"}`, oauthwire.GrantTypeJWTBearer)
+	request := httptest.NewRequest(http.MethodPost, "/platform-mcp/register", strings.NewReader(body))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	service.RegisterHandler().ServeHTTP(response, request)
+
+	require.Equal(t, http.StatusBadRequest, response.Code)
+	require.Contains(t, response.Body.String(), `"invalid_client_metadata"`)
 }
 
 func TestOAuthHTTPRequireJSONAcceptsMediaTypeParameters(t *testing.T) {

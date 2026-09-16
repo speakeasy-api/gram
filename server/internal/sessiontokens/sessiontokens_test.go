@@ -179,6 +179,42 @@ func TestSigner_ValidateExactAudienceRejectsAdditionalAudience(t *testing.T) {
 	require.ErrorContains(t, err, "audience must exactly match")
 }
 
+func TestSigner_ValidateExactAudienceBearer(t *testing.T) {
+	t.Parallel()
+
+	signer := sessiontokens.NewSigner("test-jwt-secret")
+	subject := urn.NewUserSubject("user-1")
+	token, jti, err := signer.Mint(sessiontokens.MintParams{
+		Subject:  subject,
+		Audience: "https://example.test/mcp/target",
+		Issuer:   "https://example.test/mcp/target",
+		Lifetime: time.Hour,
+		ClientID: "client-abc",
+	})
+	require.NoError(t, err)
+
+	session, err := signer.ValidateExactAudienceBearer(t.Context(), token, "https://example.test/mcp/target", neverRevoked{})
+	require.NoError(t, err)
+	require.Equal(t, subject, session.Subject())
+	require.Equal(t, jti, session.JTI())
+	require.Equal(t, "client-abc", session.ClientID())
+
+	_, err = signer.ValidateExactAudienceBearer(t.Context(), token, "https://example.test/mcp/sibling", neverRevoked{})
+	require.ErrorIs(t, err, jwt.ErrTokenInvalidAudience)
+}
+
+func TestSigner_ValidateExactAudienceBearerRejectsAdditionalAudience(t *testing.T) {
+	t.Parallel()
+
+	signer := sessiontokens.NewSigner("test-jwt-secret")
+	claims := sessiontokens.SessionClaims{RegisteredClaims: jwt.RegisteredClaims{Subject: urn.NewUserSubject("user-1").String(), Audience: jwt.ClaimStrings{"https://example.test/mcp/target", "https://example.test/mcp/sibling"}, ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)), ID: "jti-multiple-audiences"}}
+	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte("test-jwt-secret"))
+	require.NoError(t, err)
+
+	_, err = signer.ValidateExactAudienceBearer(t.Context(), token, "https://example.test/mcp/target", neverRevoked{})
+	require.ErrorContains(t, err, "audience must exactly match")
+}
+
 func TestSigner_RejectsWrongAudience(t *testing.T) {
 	t.Parallel()
 

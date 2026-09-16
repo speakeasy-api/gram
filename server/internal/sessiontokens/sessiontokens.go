@@ -174,6 +174,22 @@ func (s *Signer) ValidateBearer(ctx context.Context, token, expectedAudience str
 	if err != nil {
 		return ValidatedSession{}, err
 	}
+	return validatedBearerFromClaims(ctx, claims, revocation)
+}
+
+// ValidateExactAudienceBearer verifies the same bearer properties as
+// ValidateBearer and additionally requires aud to be exactly one value. It is
+// used for resource-bound sessions that must not be broadened to other MCP
+// servers by an additional audience.
+func (s *Signer) ValidateExactAudienceBearer(ctx context.Context, token, expectedAudience string, revocation RevocationChecker) (ValidatedSession, error) {
+	claims, err := s.ValidateExactAudience(token, expectedAudience)
+	if err != nil {
+		return ValidatedSession{}, err
+	}
+	return validatedBearerFromClaims(ctx, claims, revocation)
+}
+
+func validatedBearerFromClaims(ctx context.Context, claims *SessionClaims, revocation RevocationChecker) (ValidatedSession, error) {
 	if claims.ID == "" {
 		return ValidatedSession{}, errors.New("validate token: missing jti claim")
 	}
