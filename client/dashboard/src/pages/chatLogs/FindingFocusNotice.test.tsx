@@ -26,7 +26,7 @@ describe("FindingFocusNotice", () => {
         finding={finding()}
         isLoading={false}
         located
-        onJump={vi.fn()}
+        onJump={vi.fn<() => void>()}
       />,
     );
 
@@ -48,7 +48,7 @@ describe("FindingFocusNotice", () => {
         })}
         isLoading={false}
         located
-        onJump={vi.fn()}
+        onJump={vi.fn<() => void>()}
       />,
     );
 
@@ -59,7 +59,7 @@ describe("FindingFocusNotice", () => {
   });
 
   it("offers a re-scroll once the message is loaded", () => {
-    const onJump = vi.fn();
+    const onJump = vi.fn<() => void>();
     render(
       <FindingFocusNotice
         finding={finding()}
@@ -79,7 +79,7 @@ describe("FindingFocusNotice", () => {
         finding={finding()}
         isLoading={false}
         located={false}
-        onJump={vi.fn()}
+        onJump={vi.fn<() => void>()}
       />,
     );
 
@@ -95,7 +95,7 @@ describe("FindingFocusNotice", () => {
         finding={undefined}
         isLoading={false}
         located={false}
-        onJump={vi.fn()}
+        onJump={vi.fn<() => void>()}
       />,
     );
 
@@ -108,7 +108,7 @@ describe("FindingFocusNotice", () => {
         finding={undefined}
         isLoading
         located={false}
-        onJump={vi.fn()}
+        onJump={vi.fn<() => void>()}
       />,
     );
 

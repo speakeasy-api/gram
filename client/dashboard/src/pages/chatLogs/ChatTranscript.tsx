@@ -1445,7 +1445,12 @@ export function ChatTranscript({
                 ref={virtualizer.measureElement}
                 className={cn(
                   "absolute top-0 left-0 w-full transition-colors",
-                  focused && "bg-warning/10 ring-warning/40 ring-1 ring-inset",
+                  // Browser-find idiom for the row someone was sent to (an
+                  // evidence row, a provenance citation): the soft warning wash
+                  // plus a hairline in the same family. `bg-warning` itself is
+                  // near-white in light mode, so it read as no highlight at all.
+                  focused &&
+                    "bg-warning-softest ring-1 ring-[var(--border-warning-softest)] ring-inset",
                 )}
                 style={{ transform: `translateY(${virtualRow.start}px)` }}
               >
