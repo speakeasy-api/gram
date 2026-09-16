@@ -14,15 +14,23 @@ import (
 	"go.temporal.io/sdk/activity"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/metering"
+	"github.com/speakeasy-api/gram/server/internal/risk/policyflags"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
+	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
+	"github.com/speakeasy-api/gram/server/internal/scanners/llmanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
 const (
 	inlineBatchExecutionPath  = "inline_batch"
 	shadowStreamExecutionPath = "shadow_stream"
+	// asyncStreamExecutionPath marks analysis requests whose streams consumer
+	// is the only engine evaluating the policy's sources, as opposed to the
+	// shadow stream that runs alongside an inline scan.
+	asyncStreamExecutionPath = "async_stream"
 )
 
 // batchOperationID identifies metering for one policy execution and scanned
@@ -158,15 +166,34 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 	promptInjectionFindings := make([][]scanners.Finding, n)
 	customFindings := make([][]scanners.Finding, n)
 
+	// Organizations on the LLM analyzer flag route every covered source
+	// (gitleaks, presidio, prompt_injection, destructive_tool,
+	// cli_destructive) to the fine-tuned model's async lane instead of the
+	// legacy engines: no inline scan, no legacy analysis request, and no
+	// Postgres rows for those sources, whose findings are ClickHouse-only.
+	// Custom rules, shadow_mcp and account_identity keep their engines.
+	llmMode := false
+	llmOrgSlug := ""
+	if llmanalyzer.CoversAnySource(args.Sources) {
+		llmMode, llmOrgSlug = policyflags.ProjectFlagState(ctx, a.logger, repo.New(a.db), a.flags, args.OrganizationID, args.ProjectID, feature.FlagRiskLLMAnalyzer)
+	}
+
 	var wg sync.WaitGroup
 	var gitleaksErr error
 	var presidioPublishErr error
 	var presidioErr error
+	var llmPublishErr error
 
 	var promptInjectionErr error
 	var customErr error
 
-	if sources.Has(SourceGitleaks) {
+	if llmMode {
+		wg.Go(func() {
+			llmPublishErr = a.publishLLMScanRequests(ctx, args, messages, llmOrgSlug, llmCoveredSources(sources))
+		})
+	}
+
+	if !llmMode && sources.Has(SourceGitleaks) {
 		wg.Go(func() {
 			findings, err := a.scanGitleaks(ctx, args, messages, contents)
 			if err != nil {
@@ -177,7 +204,7 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 		})
 	}
 
-	if sources.Has(SourcePresidio) {
+	if !llmMode && sources.Has(SourcePresidio) {
 		wg.Go(func() {
 			subMessages, subContents, indices := masks.Subset(messages, contents, sourceCategories[SourcePresidio])
 			a.metrics.RecordRecommendedScopePrefiltered(ctx, args.OrganizationID, SourcePresidio, masks.RecommendedPrefilteredCount(sourceCategories[SourcePresidio]))
@@ -199,7 +226,7 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 		})
 	}
 
-	if sources.Has(SourcePromptInjection) {
+	if !llmMode && sources.Has(SourcePromptInjection) {
 		wg.Go(func() {
 			subMessages, subContents, indices := masks.Subset(messages, contents, sourceCategories[SourcePromptInjection])
 			a.metrics.RecordRecommendedScopePrefiltered(ctx, args.OrganizationID, SourcePromptInjection, masks.RecommendedPrefilteredCount(sourceCategories[SourcePromptInjection]))
@@ -233,6 +260,10 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 		scanSpan.SetStatus(codes.Error, presidioPublishErr.Error())
 		return nil, fmt.Errorf("presidio scan dispatch: %w", presidioPublishErr)
 	}
+	if llmPublishErr != nil {
+		scanSpan.SetStatus(codes.Error, llmPublishErr.Error())
+		return nil, fmt.Errorf("llm analyzer scan dispatch: %w", llmPublishErr)
+	}
 	if promptInjectionErr != nil {
 		scanSpan.SetStatus(codes.Error, promptInjectionErr.Error())
 		return nil, fmt.Errorf("prompt injection scan dispatch: %w", promptInjectionErr)
@@ -254,11 +285,11 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 		shadowMCPFindings = a.scanShadowMCP(ctx, args.OrganizationID, args.ProjectID, args.RiskPolicyID, messages)
 		activity.RecordHeartbeat(ctx, shadowmcp.SourceShadowMCP)
 	}
-	if sources.Has(shadowmcp.SourceDestructiveTool) {
+	if !llmMode && sources.Has(shadowmcp.SourceDestructiveTool) {
 		destructiveToolFindings = a.scanDestructiveToolAnnotations(ctx, args.OrganizationID, messages)
 		activity.RecordHeartbeat(ctx, shadowmcp.SourceDestructiveTool)
 	}
-	if sources.Has(SourceCLIDestructive) {
+	if !llmMode && sources.Has(SourceCLIDestructive) {
 		findings, err := a.scanDestructiveCLICommands(ctx, args, messages)
 		if err != nil {
 			scanSpan.SetStatus(codes.Error, err.Error())

@@ -185,7 +185,7 @@ func capturingFindingsPub(t *testing.T) (*gcp.MockPublisher[*riskv1.Finding], *[
 
 func TestAnalyzeBatch_EmptyMessageIDs(t *testing.T) {
 	t.Parallel()
-	ab, err := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, nil, &risk_analysis.StubPIIScanner{}, nil, nil, nil, nil, nil, newPresidioPub(), newGitleaksPub(), newPromptInjectionPub(), newPromptPolicyPub(), newCustomRulesPub(), newFindingsPub(), mustCustomRuleScanner(t, nil), mustCELEngine(t), nil, nil, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+	ab, err := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, nil, &risk_analysis.StubPIIScanner{}, nil, nil, nil, nil, nil, newPresidioPub(), newGitleaksPub(), newPromptInjectionPub(), newPromptPolicyPub(), newCustomRulesPub(), newLLMPub(), newFindingsPub(), mustCustomRuleScanner(t, nil), mustCELEngine(t), nil, nil, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
 	require.NoError(t, err)
 	require.NotNil(t, ab)
 
@@ -223,7 +223,7 @@ func TestAnalyzeBatch_MeterPublishFailureDoesNotDiscardFindings(t *testing.T) {
 		logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t),
 		conn, nil, &risk_analysis.StubPIIScanner{}, nil, nil, nil, nil, nil,
 		newPresidioPub(), newGitleaksPub(), newPromptInjectionPub(),
-		newPromptPolicyPub(), newCustomRulesPub(), newFindingsPub(),
+		newPromptPolicyPub(), newCustomRulesPub(), newLLMPub(), newFindingsPub(),
 		mustCustomRuleScanner(t, conn), mustCELEngine(t), nil, nil,
 		metering.NewRiskRecorder(publisher),
 	)
@@ -309,7 +309,7 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 		newGitleaksPub(),
 		newPromptInjectionPub(),
 		newPromptPolicyPub(),
-		newCustomRulesPub(),
+		newCustomRulesPub(), newLLMPub(),
 		newFindingsPub(),
 		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
@@ -394,7 +394,7 @@ func TestAnalyzeBatch_ContentSourcesNotRepublishedToFindingsTopic(t *testing.T) 
 		newGitleaksPub(),
 		newPromptInjectionPub(),
 		newPromptPolicyPub(),
-		newCustomRulesPub(),
+		newCustomRulesPub(), newLLMPub(),
 		findingsPub,
 		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
@@ -610,7 +610,7 @@ func TestAnalyzeBatch_PromptInjectionPublishesAsyncRequestsForEveryMessage(t *te
 		newGitleaksPub(),
 		promptInjectionPub,
 		newPromptPolicyPub(),
-		newCustomRulesPub(),
+		newCustomRulesPub(), newLLMPub(),
 		newFindingsPub(),
 		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
@@ -713,7 +713,7 @@ func TestAnalyzeBatch_PromptInjectionPublishesStrictlyBoundedTrajectory(t *testi
 		newGitleaksPub(),
 		promptInjectionPub,
 		newPromptPolicyPub(),
-		newCustomRulesPub(),
+		newCustomRulesPub(), newLLMPub(),
 		newFindingsPub(),
 		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
@@ -787,7 +787,7 @@ func TestAnalyzeBatch_PromptPolicyPublishesAsyncRequestsForEveryEligibleMessage(
 		newGitleaksPub(),
 		newPromptInjectionPub(),
 		promptPolicyPub,
-		newCustomRulesPub(),
+		newCustomRulesPub(), newLLMPub(),
 		newFindingsPub(),
 		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
@@ -889,7 +889,7 @@ func TestAnalyzeBatch_PromptJudgeUsesToolCallPayload(t *testing.T) {
 		newGitleaksPub(),
 		newPromptInjectionPub(),
 		newPromptPolicyPub(),
-		newCustomRulesPub(),
+		newCustomRulesPub(), newLLMPub(),
 		newFindingsPub(),
 		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
@@ -995,7 +995,7 @@ func TestAnalyzeBatch_PromptJudgeMultiToolCallAttribution(t *testing.T) {
 		newGitleaksPub(),
 		newPromptInjectionPub(),
 		newPromptPolicyPub(),
-		newCustomRulesPub(),
+		newCustomRulesPub(), newLLMPub(),
 		newFindingsPub(),
 		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
@@ -1190,7 +1190,7 @@ func TestAnalyzeBatch_PolicyDeletedMidAnalysisPublishesNothing(t *testing.T) {
 		newGitleaksPub(),
 		newPromptInjectionPub(),
 		newPromptPolicyPub(),
-		newCustomRulesPub(),
+		newCustomRulesPub(), newLLMPub(),
 		pub,
 		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
@@ -1296,7 +1296,7 @@ func TestAnalyzeBatch_Presidio_PIIInToolCallArgsOnly(t *testing.T) {
 		newGitleaksPub(),
 		newPromptInjectionPub(),
 		newPromptPolicyPub(),
-		newCustomRulesPub(),
+		newCustomRulesPub(), newLLMPub(),
 		newFindingsPub(),
 		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
@@ -1825,7 +1825,7 @@ func executeAnalyzeBatchForIDs(t *testing.T, conn *pgxpool.Pool, assetStorage as
 		newGitleaksPub(),
 		newPromptInjectionPub(),
 		newPromptPolicyPub(),
-		newCustomRulesPub(),
+		newCustomRulesPub(), newLLMPub(),
 		findingsPub,
 		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),

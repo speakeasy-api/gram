@@ -139,7 +139,7 @@ func newAccountIdentityAnalyzeBatch(t *testing.T, conn *pgxpool.Pool, findingsPu
 		newGitleaksPub(),
 		newPromptInjectionPub(),
 		newPromptPolicyPub(),
-		newCustomRulesPub(),
+		newCustomRulesPub(), newLLMPub(),
 		findingsPub,
 		mustCustomRuleScanner(t, nil),
 		mustCELEngine(t),

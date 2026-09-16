@@ -94,6 +94,7 @@ type Publishers struct {
 	PromptInjectionAnalysis gcp.Publisher[*riskv1.PromptInjectionAnalysis]
 	PromptPolicyAnalysis    gcp.Publisher[*riskv1.PromptPolicyAnalysis]
 	CustomRulesAnalysis     gcp.Publisher[*riskv1.CustomRulesAnalysis]
+	LLMAnalysis             gcp.Publisher[*riskv1.LLMAnalysis]
 	RiskFindings            gcp.Publisher[*riskv1.Finding]
 	MeterReadings           gcp.Publisher[*meteringv1.MeterReading]
 	TelemetryLogs           gcp.Publisher[*telemetryv1.LogRecord]
@@ -282,6 +283,7 @@ func NewActivities(
 		publishers.PromptInjectionAnalysis,
 		publishers.PromptPolicyAnalysis,
 		publishers.CustomRulesAnalysis,
+		publishers.LLMAnalysis,
 		publishers.RiskFindings,
 		customRuleScanner,
 		celEng,

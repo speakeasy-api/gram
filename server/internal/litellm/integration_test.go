@@ -941,6 +941,7 @@ func TestRealHooksPureTextResponseProducesAssistantPolicyFinding(t *testing.T) {
 		gcp.NewNoopPublisher[*riskv1.PromptInjectionAnalysis](),
 		gcp.NewNoopPublisher[*riskv1.PromptPolicyAnalysis](),
 		gcp.NewNoopPublisher[*riskv1.CustomRulesAnalysis](),
+		gcp.NewNoopPublisher[*riskv1.LLMAnalysis](),
 		gcp.NewNoopPublisher[*riskv1.Finding](),
 		customRules,
 		celEngine,
