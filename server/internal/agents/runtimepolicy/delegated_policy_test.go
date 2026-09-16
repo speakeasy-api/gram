@@ -84,7 +84,7 @@ func TestDecodeDelegatedPolicyRejectsInvalidProfiles(t *testing.T) {
 		version DelegatedPolicyVersion
 		raw     []byte
 	}{
-		"unsupported version":         {version: 2, raw: mustPolicyJSON(t, DelegatedPolicy{Requested: []DelegatedPolicyGrant{}, Effective: []DelegatedPolicyGrant{}})},
+		"unsupported version":         {version: 3, raw: mustPolicyJSON(t, DelegatedPolicy{Requested: []DelegatedPolicyGrant{}, Effective: []DelegatedPolicyGrant{}})},
 		"unknown envelope field":      {version: 1, raw: []byte(`{"requested":[],"effective":[],"effect":"allow"}`)},
 		"trailing value":              {version: 1, raw: []byte(`{"requested":[],"effective":[]} {}`)},
 		"missing requested":           {version: 1, raw: []byte(`{"effective":[]}`)},
