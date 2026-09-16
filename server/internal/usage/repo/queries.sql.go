@@ -631,32 +631,33 @@ func (q *Queries) GetStripeWebhookReceipt(ctx context.Context, stripeEventID str
 }
 
 const listBillingCycleUsage = `-- name: ListBillingCycleUsage :many
-SELECT id, organization_id, cycle_start, cycle_end, tum_tokens, billed_tum_tokens, billed_frozen_at, finalized_at, created_at, updated_at
+SELECT cycle_start, cycle_end, tum_tokens, finalized_at
 FROM billing_cycle_usage
 WHERE organization_id = $1::text
 ORDER BY cycle_start
 `
 
-func (q *Queries) ListBillingCycleUsage(ctx context.Context, organizationID string) ([]BillingCycleUsage, error) {
+type ListBillingCycleUsageRow struct {
+	CycleStart  pgtype.Timestamptz
+	CycleEnd    pgtype.Timestamptz
+	TumTokens   int64
+	FinalizedAt pgtype.Timestamptz
+}
+
+func (q *Queries) ListBillingCycleUsage(ctx context.Context, organizationID string) ([]ListBillingCycleUsageRow, error) {
 	rows, err := q.db.Query(ctx, listBillingCycleUsage, organizationID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []BillingCycleUsage
+	var items []ListBillingCycleUsageRow
 	for rows.Next() {
-		var i BillingCycleUsage
+		var i ListBillingCycleUsageRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.OrganizationID,
 			&i.CycleStart,
 			&i.CycleEnd,
 			&i.TumTokens,
-			&i.BilledTumTokens,
-			&i.BilledFrozenAt,
 			&i.FinalizedAt,
-			&i.CreatedAt,
-			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}

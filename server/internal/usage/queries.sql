@@ -558,7 +558,7 @@ WHERE organization_id = @organization_id::text
   AND finalized_at IS NOT NULL;
 
 -- name: ListBillingCycleUsage :many
-SELECT *
+SELECT cycle_start, cycle_end, tum_tokens, finalized_at
 FROM billing_cycle_usage
 WHERE organization_id = @organization_id::text
 ORDER BY cycle_start;
