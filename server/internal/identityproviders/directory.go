@@ -175,7 +175,7 @@ func (s *Service) verifyDirectorySetupStep(
 		return nil, oops.E(oops.CodeBadRequest, nil, "set up the Okta directory application before verification").LogError(ctx, logger)
 	}
 	if !before.WorkosID.Valid || strings.TrimSpace(before.WorkosID.String) == "" {
-		return nil, oops.E(oops.CodeBadRequest, nil, "organization is not linked to WorkOS").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, nil, "organization is not linked to the sign-in provider").LogError(ctx, logger)
 	}
 
 	token, err := s.acquireOktaManagementToken(ctx, authCtx.ActiveOrganizationID, before, requiredOktaReadScopes)
@@ -217,37 +217,37 @@ func (s *Service) verifyDirectorySetupStep(
 	directory := selectWorkOSDirectory(directories, conv.FromPGTextOrEmpty[string](before.DirectoryWorkosID))
 	var groupCount, userCount *int
 	if directoriesErr != nil {
-		detail := conv.PtrValOr(connectionRead.Detail, "") + " Unable to read the WorkOS directory."
+		detail := conv.PtrValOr(connectionRead.Detail, "") + " Unable to read the sign-in provider directory."
 		connectionRead.OK = false
 		connectionRead.Detail = &detail
 	} else if directory == nil {
-		detail := conv.PtrValOr(connectionRead.Detail, "") + " WorkOS has not linked a directory yet."
+		detail := conv.PtrValOr(connectionRead.Detail, "") + " The sign-in provider has not linked a directory yet."
 		connectionRead.Detail = &detail
 	} else {
-		detail := conv.PtrValOr(connectionRead.Detail, "") + " WorkOS directory state: " + directory.State + "."
+		detail := conv.PtrValOr(connectionRead.Detail, "") + " The sign-in provider directory state: " + directory.State + "."
 		connectionRead.Detail = &detail
 		groups, groupsErr := s.workos.ListDirectoryGroups(ctx, directory.ID)
 		if groupsErr != nil {
-			detail := "Unable to read WorkOS directory groups."
+			detail := "Unable to read the sign-in provider directory groups."
 			groupsRead.Detail = &detail
 		} else {
 			count := len(groups)
 			groupCount = &count
 			groupsRead.OK = true
 			groupsRead.Count = &count
-			detail := fmt.Sprintf("WorkOS received %d directory group(s).", count)
+			detail := fmt.Sprintf("The sign-in provider received %d directory group(s).", count)
 			groupsRead.Detail = &detail
 		}
 		users, usersErr := s.workos.ListDirectoryUsers(ctx, directory.ID)
 		if usersErr != nil {
-			detail := "Unable to read WorkOS directory users."
+			detail := "Unable to read the sign-in provider directory users."
 			usersRead.Detail = &detail
 		} else {
 			count := len(users)
 			userCount = &count
 			usersRead.OK = true
 			usersRead.Count = &count
-			detail := fmt.Sprintf("WorkOS received %d directory user(s).", count)
+			detail := fmt.Sprintf("The sign-in provider received %d directory user(s).", count)
 			usersRead.Detail = &detail
 		}
 	}
@@ -265,7 +265,7 @@ func (s *Service) verifyDirectorySetupStep(
 		directoryState = "failed"
 	} else if directory != nil && directory.State == "linked" && groupCount != nil && *groupCount > 0 {
 		outcome = "passed"
-		detail = "Okta directory sync is linked and WorkOS has received directory groups."
+		detail = "Okta directory sync is linked and the sign-in provider has received directory groups."
 		directoryState = "passed"
 	}
 	result := &gen.IdentityProviderVerifyResult{
@@ -318,7 +318,7 @@ func (s *Service) verifyDirectorySetupStep(
 			DirectoryWorkosID: conv.ToPGText(directory.ID),
 			OrganizationID:    authCtx.ActiveOrganizationID,
 		}); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "error saving the WorkOS directory identifier").LogError(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "error saving the sign-in provider directory identifier").LogError(ctx, logger)
 		}
 	}
 	after, err := queries.GetIdentityProviderConnectionByOrganization(ctx, authCtx.ActiveOrganizationID)
@@ -359,7 +359,7 @@ func (s *Service) buildDirectorySetupStep(row repo.GetIdentityProviderConnection
 		LastOutcome:    decodeDirectoryLastOutcome(row.DirectoryEvidence),
 	}
 	if !row.DirectoryScimBaseUrl.Valid || !row.DirectoryScimTokenEncrypted.Valid {
-		step.Instructions = []string{"Open WorkOS Admin Portal and configure directory sync for this organization."}
+		step.Instructions = []string{"Open the setup portal and configure directory sync for this organization."}
 		step.PortalIntent = new("dsync")
 		return step, nil
 	}
