@@ -20,8 +20,6 @@ func TestNewStripeClientLocalWithoutAPIKeyUsesStubBeforeCatalogValidation(t *tes
 		"environment":                    "local",
 		"stripe-api-key":                 "unset",
 		"stripe-price-id-tum":            "partial-price",
-		"stripe-meter-id-tum":            "",
-		"stripe-meter-event-name":        "",
 		"stripe-portal-configuration-id": "",
 	})
 
@@ -43,8 +41,6 @@ func TestNewAdminStripeClientDegradesInvalidCatalog(t *testing.T) {
 		"environment":                    "prod",
 		"stripe-api-key":                 "sk_test_placeholder",
 		"stripe-price-id-tum":            "partial-price",
-		"stripe-meter-id-tum":            "",
-		"stripe-meter-event-name":        "",
 		"stripe-portal-configuration-id": "",
 	})
 
@@ -55,28 +51,6 @@ func TestNewAdminStripeClientDegradesInvalidCatalog(t *testing.T) {
 		ctx,
 	)
 	require.Nil(t, client)
-}
-
-func TestNewStripeClientRealClientValidatesCatalog(t *testing.T) {
-	t.Parallel()
-
-	ctx := newStripeCLIContext(t, map[string]string{
-		"environment":                    "local",
-		"stripe-api-key":                 "sk_test_placeholder",
-		"stripe-price-id-tum":            "partial-price",
-		"stripe-meter-id-tum":            "mtr_placeholder",
-		"stripe-meter-event-name":        "",
-		"stripe-portal-configuration-id": "bpc_placeholder",
-	})
-
-	client, err := newStripeClient(
-		t.Context(),
-		testenv.NewLogger(t),
-		guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)),
-		ctx,
-	)
-	require.Nil(t, client)
-	require.ErrorContains(t, err, "invalid Stripe catalog configuration: missing meter event name")
 }
 
 func TestNewStripeClientNonLocalWithoutAPIKeyIsOptional(t *testing.T) {
@@ -105,8 +79,6 @@ func TestNewStripeClientRealClientUsesCatalog(t *testing.T) {
 		"stripe-api-key":                 "sk_test_placeholder",
 		"stripe-webhook-secret":          "whsec_placeholder",
 		"stripe-price-id-tum":            "price_placeholder",
-		"stripe-meter-id-tum":            "mtr_placeholder",
-		"stripe-meter-event-name":        "tum",
 		"stripe-portal-configuration-id": "bpc_placeholder",
 	})
 
@@ -120,8 +92,6 @@ func TestNewStripeClientRealClientUsesCatalog(t *testing.T) {
 	require.NotNil(t, client)
 	require.Equal(t, stripeclient.Catalog{
 		PriceIDTUM:            "price_placeholder",
-		MeterIDTUM:            "mtr_placeholder",
-		MeterEventName:        "tum",
 		PortalConfigurationID: "bpc_placeholder",
 	}, client.Catalog())
 }
@@ -436,7 +406,6 @@ func newStripeCLIContext(t *testing.T, values map[string]string) *cli.Context {
 	set.String("stripe-api-key", "", "")
 	set.String("stripe-webhook-secret", "", "")
 	set.String("stripe-price-id-tum", "", "")
-	set.String("stripe-meter-id-tum", "", "")
 	set.String("stripe-meter-event-name", "", "")
 	set.String("stripe-meter-event-name-mcp-bandwidth-ingress", "", "")
 	set.String("stripe-meter-event-name-mcp-bandwidth-egress", "", "")

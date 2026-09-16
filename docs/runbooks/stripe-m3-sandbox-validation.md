@@ -286,8 +286,8 @@ SQL
 ```
 
 TUM exports use Pub/Sub meter readings, not `stripe_meter_reports` or frozen
-billing-cycle baselines. Existing TUM carry allocations remain eligible for
-settlement. Initial OpenRouter allocation cents plus signed carry cents must
+billing-cycle baselines. Invoice allocation settlement handles OpenRouter spend.
+Initial OpenRouter allocation cents plus signed carry cents must
 equal the exact final cumulative Other inference spend cents. Every confirmed
 allocation external ID must resolve to the same customer, invoice period,
 currency, and amount in Stripe.

@@ -48,6 +48,7 @@ WITH assignments AS (
       ) AS destination_invoice_id
   FROM stripe_invoice_allocations allocation
   WHERE allocation.organization_id = $1
+    AND allocation.source_kind = 'openrouter_daily_spend'
     AND allocation.amount_usd > 0
     AND allocation.destination_invoice_id IS NULL
     AND allocation.original_invoice_id IS NOT NULL
@@ -74,28 +75,6 @@ func (q *Queries) AssignPositiveCarryToStripeInvoice(ctx context.Context, organi
 	return result.RowsAffected(), nil
 }
 
-const attachTUMCarryToOriginalInvoice = `-- name: AttachTUMCarryToOriginalInvoice :execrows
-UPDATE stripe_invoice_allocations allocation
-SET original_invoice_id = invoice.stripe_invoice_id,
-    destination_invoice_id = CASE WHEN allocation.amount_usd < 0 THEN invoice.stripe_invoice_id END,
-    updated_at = clock_timestamp()
-FROM stripe_invoices invoice
-WHERE allocation.organization_id = $1
-  AND allocation.source_kind = 'tum_cycle'
-  AND allocation.original_invoice_id IS NULL
-  AND invoice.organization_id = allocation.organization_id
-  AND invoice.service_period_start = allocation.source_period_start
-  AND invoice.service_period_end = allocation.source_period_end
-`
-
-func (q *Queries) AttachTUMCarryToOriginalInvoice(ctx context.Context, organizationID pgtype.Text) (int64, error) {
-	result, err := q.db.Exec(ctx, attachTUMCarryToOriginalInvoice, organizationID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const claimNextStripeInvoiceAllocation = `-- name: ClaimNextStripeInvoiceAllocation :one
 WITH candidate AS (
   SELECT
@@ -107,6 +86,7 @@ WITH candidate AS (
     ON destination.stripe_invoice_id = allocation.destination_invoice_id
    AND destination.organization_id = allocation.organization_id
   WHERE allocation.organization_id = $1
+    AND allocation.source_kind = 'openrouter_daily_spend'
     AND allocation.delivery_state IN ('pending', 'ambiguous')
     AND allocation.amount_usd <> 0
     AND (
@@ -132,8 +112,6 @@ WITH candidate AS (
   , allocation.source_key
   , allocation.seq
   , allocation.source_day
-  , allocation.source_period_start
-  , allocation.source_period_end
   , allocation.amount_usd
   , allocation.original_invoice_id
   , allocation.destination_invoice_id
@@ -143,7 +121,7 @@ WITH candidate AS (
   , candidate.previous_delivery_state
 )
 SELECT
-    claimed.id, claimed.organization_id, claimed.source_kind, claimed.source_key, claimed.seq, claimed.source_day, claimed.source_period_start, claimed.source_period_end, claimed.amount_usd, claimed.original_invoice_id, claimed.destination_invoice_id, claimed.idempotency_key, claimed.delivery_state, claimed.previous_first_attempted_at, claimed.previous_delivery_state
+    claimed.id, claimed.organization_id, claimed.source_kind, claimed.source_key, claimed.seq, claimed.source_day, claimed.amount_usd, claimed.original_invoice_id, claimed.destination_invoice_id, claimed.idempotency_key, claimed.delivery_state, claimed.previous_first_attempted_at, claimed.previous_delivery_state
   , destination.stripe_customer_id
   , destination.stripe_subscription_id
   , destination.service_period_start AS destination_period_start
@@ -168,8 +146,6 @@ type ClaimNextStripeInvoiceAllocationRow struct {
 	SourceKey                string
 	Seq                      int32
 	SourceDay                pgtype.Date
-	SourcePeriodStart        pgtype.Timestamptz
-	SourcePeriodEnd          pgtype.Timestamptz
 	AmountUsd                pgtype.Numeric
 	OriginalInvoiceID        pgtype.Text
 	DestinationInvoiceID     pgtype.Text
@@ -194,8 +170,6 @@ func (q *Queries) ClaimNextStripeInvoiceAllocation(ctx context.Context, arg Clai
 		&i.SourceKey,
 		&i.Seq,
 		&i.SourceDay,
-		&i.SourcePeriodStart,
-		&i.SourcePeriodEnd,
 		&i.AmountUsd,
 		&i.OriginalInvoiceID,
 		&i.DestinationInvoiceID,
@@ -551,59 +525,6 @@ func (q *Queries) CreateStripeInvoiceFixture(ctx context.Context, arg CreateStri
 		arg.ServicePeriodEnd,
 		arg.InvoiceState,
 		arg.FinalizedAt,
-	)
-	return err
-}
-
-const createTUMInvoiceAllocationFixture = `-- name: CreateTUMInvoiceAllocationFixture :exec
-INSERT INTO stripe_invoice_allocations (
-    organization_id
-  , source_kind
-  , source_key
-  , seq
-  , source_period_start
-  , source_period_end
-  , source_snapshot_usd
-  , delta_tokens
-  , original_tum_unit_price_usd
-  , amount_usd
-  , idempotency_key
-  , delivery_state
-) VALUES (
-    $1
-  , 'tum_cycle'
-  , $2
-  , 1
-  , $3
-  , $4
-  , $5
-  , 1
-  , 0.000000350000
-  , $6
-  , $7
-  , 'pending'
-)
-`
-
-type CreateTUMInvoiceAllocationFixtureParams struct {
-	OrganizationID    pgtype.Text
-	SourceKey         string
-	SourcePeriodStart pgtype.Timestamptz
-	SourcePeriodEnd   pgtype.Timestamptz
-	SourceSnapshotUsd pgtype.Numeric
-	AmountUsd         pgtype.Numeric
-	IdempotencyKey    string
-}
-
-func (q *Queries) CreateTUMInvoiceAllocationFixture(ctx context.Context, arg CreateTUMInvoiceAllocationFixtureParams) error {
-	_, err := q.db.Exec(ctx, createTUMInvoiceAllocationFixture,
-		arg.OrganizationID,
-		arg.SourceKey,
-		arg.SourcePeriodStart,
-		arg.SourcePeriodEnd,
-		arg.SourceSnapshotUsd,
-		arg.AmountUsd,
-		arg.IdempotencyKey,
 	)
 	return err
 }
@@ -1686,16 +1607,13 @@ WHERE invoice.organization_id IS NOT NULL
       SELECT 1
       FROM stripe_invoice_allocations allocation
       WHERE allocation.organization_id = invoice.organization_id
+        AND allocation.source_kind = 'openrouter_daily_spend'
         AND (
           allocation.delivery_state IN ('pending', 'ambiguous')
           OR (
             allocation.amount_usd > 0
             AND allocation.destination_invoice_id IS NULL
             AND allocation.original_invoice_id IS NOT NULL
-          )
-          OR (
-            allocation.source_kind = 'tum_cycle'
-            AND allocation.original_invoice_id IS NULL
           )
         )
     )
@@ -1784,6 +1702,7 @@ WHERE invoice.organization_id = $1
       SELECT 1
       FROM stripe_invoice_allocations allocation
       WHERE allocation.organization_id = invoice.organization_id
+        AND allocation.source_kind = 'openrouter_daily_spend'
         AND (
           allocation.original_invoice_id = invoice.stripe_invoice_id
           OR allocation.destination_invoice_id = invoice.stripe_invoice_id
@@ -1792,12 +1711,6 @@ WHERE invoice.organization_id = $1
             AND allocation.amount_usd > 0
             AND allocation.destination_invoice_id IS NULL
             AND allocation.original_invoice_id IS NOT NULL
-          )
-          OR (
-            allocation.source_kind = 'tum_cycle'
-            AND allocation.original_invoice_id IS NULL
-            AND allocation.source_period_start = invoice.service_period_start
-            AND allocation.source_period_end = invoice.service_period_end
           )
         )
     )
