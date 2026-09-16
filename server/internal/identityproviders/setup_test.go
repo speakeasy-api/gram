@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/url"
 	"os"
+	"sync"
 	"testing"
 
 	"github.com/google/uuid"
@@ -51,12 +52,100 @@ type testInstance struct {
 	conn       *pgxpool.Pool
 	encryption *encryption.Client
 	workos     *mockWorkOSClient
+	catalog    *catalogDouble
 	serverURL  *url.URL
 	orgID      string
 }
 
 type mockWorkOSClient struct {
 	mock.Mock
+}
+
+type catalogDouble struct {
+	mu              sync.Mutex
+	searches        map[string][]identityproviders.ApplicationCatalogCandidate
+	details         map[string]identityproviders.ApplicationCatalogDetails
+	searchErrors    map[string]error
+	inspectErrors   map[string]error
+	searchCalls     int
+	inspectCalls    int
+	activeSearches  int
+	maxSearches     int
+	releaseSearches chan struct{}
+	releaseAt       int
+}
+
+func newCatalogDouble() *catalogDouble {
+	return &catalogDouble{
+		searches:        make(map[string][]identityproviders.ApplicationCatalogCandidate),
+		details:         make(map[string]identityproviders.ApplicationCatalogDetails),
+		searchErrors:    make(map[string]error),
+		inspectErrors:   make(map[string]error),
+		releaseSearches: nil,
+		releaseAt:       0,
+	}
+}
+
+func (c *catalogDouble) Search(_ context.Context, query string) ([]identityproviders.ApplicationCatalogCandidate, error) {
+	c.mu.Lock()
+	c.searchCalls++
+	c.activeSearches++
+	c.maxSearches = max(c.maxSearches, c.activeSearches)
+	candidates := append([]identityproviders.ApplicationCatalogCandidate(nil), c.searches[query]...)
+	err := c.searchErrors[query]
+	releaseSearches := c.releaseSearches
+	if releaseSearches != nil && c.activeSearches == c.releaseAt {
+		close(releaseSearches)
+		c.releaseSearches = nil
+	}
+	c.mu.Unlock()
+	if releaseSearches != nil {
+		<-releaseSearches
+	}
+	c.mu.Lock()
+	c.activeSearches--
+	c.mu.Unlock()
+	return candidates, err
+}
+
+func (c *catalogDouble) Inspect(_ context.Context, providerKey, catalogRef string) (identityproviders.ApplicationCatalogDetails, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.inspectCalls++
+	key := providerKey + "\x00" + catalogRef
+	return c.details[key], c.inspectErrors[key]
+}
+
+func (c *catalogDouble) SetMatch(label, providerKey, catalogRef, name, remoteURL string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.searches[label] = []identityproviders.ApplicationCatalogCandidate{{ProviderKey: providerKey, CatalogRef: catalogRef, Name: name}}
+	c.details[providerKey+"\x00"+catalogRef] = identityproviders.ApplicationCatalogDetails{ProviderKey: providerKey, CatalogRef: catalogRef, Name: name, RemoteURL: remoteURL}
+}
+
+func (c *catalogDouble) SetCandidates(label string, candidates []identityproviders.ApplicationCatalogCandidate) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.searches[label] = append([]identityproviders.ApplicationCatalogCandidate(nil), candidates...)
+}
+
+func (c *catalogDouble) SetSearchError(label string, err error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.searchErrors[label] = err
+}
+
+func (c *catalogDouble) BlockFirstSearchesUntil(count int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.releaseSearches = make(chan struct{})
+	c.releaseAt = count
+}
+
+func (c *catalogDouble) Stats() (searchCalls, inspectCalls, maxSearches int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.searchCalls, c.inspectCalls, c.maxSearches
 }
 
 func (m *mockWorkOSClient) ListConnections(ctx context.Context, organizationID string) ([]workos.Connection, error) {
@@ -171,6 +260,7 @@ func newTestServiceWithURLs(t *testing.T, oktaEndpoint, publicURL string) (conte
 	workOSClient := &mockWorkOSClient{}
 	workOSClient.Test(t)
 	t.Cleanup(func() { workOSClient.AssertExpectations(t) })
+	catalog := newCatalogDouble()
 	service := identityproviders.NewService(
 		logger,
 		tracerProvider,
@@ -181,6 +271,7 @@ func newTestServiceWithURLs(t *testing.T, oktaEndpoint, publicURL string) (conte
 		encryptionClient,
 		okta.NewClient(logger, guardianPolicy, okta.ClientOpts{Endpoint: oktaEndpoint, RetryConfig: retryConfig}),
 		workOSClient,
+		catalog,
 		serverURL,
 	)
 
@@ -189,6 +280,7 @@ func newTestServiceWithURLs(t *testing.T, oktaEndpoint, publicURL string) (conte
 		conn:       conn,
 		encryption: encryptionClient,
 		workos:     workOSClient,
+		catalog:    catalog,
 		serverURL:  serverURL,
 		orgID:      authCtx.ActiveOrganizationID,
 	}

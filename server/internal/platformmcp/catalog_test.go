@@ -48,6 +48,13 @@ func TestHasUnresolvedRemoteTemplate(t *testing.T) {
 	require.False(t, hasUnresolvedRemoteTemplate("https://example.test/mcp"))
 }
 
+func TestCatalogDetailsConcreteRemoteURL(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "https://example.test/mcp", (CatalogDetails{remoteURLTemplate: "https://example.test/mcp"}).ConcreteRemoteURL())
+	require.Empty(t, (CatalogDetails{remoteURLTemplate: "https://example.test/{region}/mcp"}).ConcreteRemoteURL())
+}
+
 func TestCatalogDetailsUseSnakeCaseJSONKeys(t *testing.T) {
 	t.Parallel()
 

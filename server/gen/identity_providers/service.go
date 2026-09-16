@@ -117,6 +117,30 @@ type IdentityProviderApplication struct {
 	AssignedGroupOverflow *int
 	// Number of directly assigned users, when read.
 	UserAssignmentCount *int
+	// Speakeasy catalogue match for this application, when one has a concrete MCP
+	// server endpoint.
+	Match *IdentityProviderApplicationMatch
+	// Whether Speakeasy can create an MCP server draft for this application.
+	Pickable bool
+	// Why this application cannot be selected.
+	UnpickableReason *string
+}
+
+// A name-based match between an identity provider application and the
+// Speakeasy MCP server catalogue.
+type IdentityProviderApplicationMatch struct {
+	// Opaque catalogue provider key.
+	ProviderKey string
+	// Catalogue entry reference.
+	CatalogRef string
+	// Catalogue entry name.
+	Name string
+	// Streamable HTTP endpoint from the inspected catalogue entry.
+	RemoteURL string
+	// Evidence used to produce the match.
+	Basis string
+	// Confidence in the catalogue match.
+	Confidence string
 }
 
 // An identity provider group assigned directly to an application.

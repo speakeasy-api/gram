@@ -1480,6 +1480,13 @@ type IdentityProviderApplicationResponseBody struct {
 	AssignedGroupOverflow *int `form:"assigned_group_overflow,omitempty" json:"assigned_group_overflow,omitempty" xml:"assigned_group_overflow,omitempty"`
 	// Number of directly assigned users, when read.
 	UserAssignmentCount *int `form:"user_assignment_count,omitempty" json:"user_assignment_count,omitempty" xml:"user_assignment_count,omitempty"`
+	// Speakeasy catalogue match for this application, when one has a concrete MCP
+	// server endpoint.
+	Match *IdentityProviderApplicationMatchResponseBody `form:"match,omitempty" json:"match,omitempty" xml:"match,omitempty"`
+	// Whether Speakeasy can create an MCP server draft for this application.
+	Pickable bool `form:"pickable" json:"pickable" xml:"pickable"`
+	// Why this application cannot be selected.
+	UnpickableReason *string `form:"unpickable_reason,omitempty" json:"unpickable_reason,omitempty" xml:"unpickable_reason,omitempty"`
 }
 
 // IdentityProviderAssignedGroupResponseBody is used to define fields on
@@ -1489,6 +1496,23 @@ type IdentityProviderAssignedGroupResponseBody struct {
 	SourceGroupID string `form:"source_group_id" json:"source_group_id" xml:"source_group_id"`
 	// Group display name.
 	Name string `form:"name" json:"name" xml:"name"`
+}
+
+// IdentityProviderApplicationMatchResponseBody is used to define fields on
+// response body types.
+type IdentityProviderApplicationMatchResponseBody struct {
+	// Opaque catalogue provider key.
+	ProviderKey string `form:"provider_key" json:"provider_key" xml:"provider_key"`
+	// Catalogue entry reference.
+	CatalogRef string `form:"catalog_ref" json:"catalog_ref" xml:"catalog_ref"`
+	// Catalogue entry name.
+	Name string `form:"name" json:"name" xml:"name"`
+	// Streamable HTTP endpoint from the inspected catalogue entry.
+	RemoteURL string `form:"remote_url" json:"remote_url" xml:"remote_url"`
+	// Evidence used to produce the match.
+	Basis string `form:"basis" json:"basis" xml:"basis"`
+	// Confidence in the catalogue match.
+	Confidence string `form:"confidence" json:"confidence" xml:"confidence"`
 }
 
 // IdentityProviderSetupStepResponseBody is used to define fields on response

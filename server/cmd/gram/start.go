@@ -1576,6 +1576,10 @@ func newServerCommand(name, commandUsage string, privateOnly bool) *cli.Command 
 			if err != nil {
 				return fmt.Errorf("create spend gate: %w", err)
 			}
+			mcpCatalog := externalmcp.NewCatalogService(db, mcpRegistryClient, nil)
+			identityProviderApplicationCatalog := identityproviders.NewApplicationCatalog(platformmcp.NewDynamicRegistryCatalogSources(func(ctx context.Context) ([]platformmcp.RegistryCatalogSource, error) {
+				return loadBrowserPlatformMCPCatalogDescriptors(ctx, mcpCatalog)
+			}))
 
 			about.Attach(mux, about.NewService(logger, tracerProvider, guardianPolicy))
 			platformslack.NewFileProxy(logger, encryptionClient, guardianPolicy.PooledClient()).Attach(mux)
@@ -1647,7 +1651,7 @@ func newServerCommand(name, commandUsage string, privateOnly bool) *cli.Command 
 			modelkeys.Attach(mux, modelkeys.NewService(logger, tracerProvider, db, sessionManager, authzEngine, encryptionClient, openRouter, productFeatures, auditLogger))
 			auditapi.Attach(mux, auditapi.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 			identityapi.Attach(mux, identityapi.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
-			identityproviders.Attach(mux, identityproviders.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient, okta.NewClient(logger, guardianPolicy), workosClient, &identityProviderPublicURL))
+			identityproviders.Attach(mux, identityproviders.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient, okta.NewClient(logger, guardianPolicy), workosClient, identityProviderApplicationCatalog, &identityProviderPublicURL))
 			auth.Attach(mux, auth.NewService(
 				logger,
 				tracerProvider,
@@ -1847,7 +1851,6 @@ func newServerCommand(name, commandUsage string, privateOnly bool) *cli.Command 
 			mcpapproval.Attach(mux, mcpApprovalService)
 			instances.Attach(mux, instances.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, platformSvc, billingTracker, telemLogger, productFeatures, serverURL, authzEngine))
 			mcpmetadata.Attach(mux, mcpMetadataService)
-			mcpCatalog := externalmcp.NewCatalogService(db, mcpRegistryClient, nil)
 			externalmcp.Attach(mux, externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient, mcpCatalog, authzEngine, serverURL))
 			riskSignaler := background.NewThrottledSignaler(
 				&background.TemporalRiskAnalysisSignaler{TemporalEnv: temporalEnv, Logger: logger},

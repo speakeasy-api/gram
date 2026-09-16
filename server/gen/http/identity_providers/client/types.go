@@ -1480,6 +1480,13 @@ type IdentityProviderApplicationResponseBody struct {
 	AssignedGroupOverflow *int `form:"assigned_group_overflow,omitempty" json:"assigned_group_overflow,omitempty" xml:"assigned_group_overflow,omitempty"`
 	// Number of directly assigned users, when read.
 	UserAssignmentCount *int `form:"user_assignment_count,omitempty" json:"user_assignment_count,omitempty" xml:"user_assignment_count,omitempty"`
+	// Speakeasy catalogue match for this application, when one has a concrete MCP
+	// server endpoint.
+	Match *IdentityProviderApplicationMatchResponseBody `form:"match,omitempty" json:"match,omitempty" xml:"match,omitempty"`
+	// Whether Speakeasy can create an MCP server draft for this application.
+	Pickable *bool `form:"pickable,omitempty" json:"pickable,omitempty" xml:"pickable,omitempty"`
+	// Why this application cannot be selected.
+	UnpickableReason *string `form:"unpickable_reason,omitempty" json:"unpickable_reason,omitempty" xml:"unpickable_reason,omitempty"`
 }
 
 // IdentityProviderAssignedGroupResponseBody is used to define fields on
@@ -1489,6 +1496,23 @@ type IdentityProviderAssignedGroupResponseBody struct {
 	SourceGroupID *string `form:"source_group_id,omitempty" json:"source_group_id,omitempty" xml:"source_group_id,omitempty"`
 	// Group display name.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+}
+
+// IdentityProviderApplicationMatchResponseBody is used to define fields on
+// response body types.
+type IdentityProviderApplicationMatchResponseBody struct {
+	// Opaque catalogue provider key.
+	ProviderKey *string `form:"provider_key,omitempty" json:"provider_key,omitempty" xml:"provider_key,omitempty"`
+	// Catalogue entry reference.
+	CatalogRef *string `form:"catalog_ref,omitempty" json:"catalog_ref,omitempty" xml:"catalog_ref,omitempty"`
+	// Catalogue entry name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Streamable HTTP endpoint from the inspected catalogue entry.
+	RemoteURL *string `form:"remote_url,omitempty" json:"remote_url,omitempty" xml:"remote_url,omitempty"`
+	// Evidence used to produce the match.
+	Basis *string `form:"basis,omitempty" json:"basis,omitempty" xml:"basis,omitempty"`
+	// Confidence in the catalogue match.
+	Confidence *string `form:"confidence,omitempty" json:"confidence,omitempty" xml:"confidence,omitempty"`
 }
 
 // IdentityProviderSetupStepResponseBody is used to define fields on response
@@ -4788,6 +4812,9 @@ func ValidateIdentityProviderApplicationResponseBody(body *IdentityProviderAppli
 	if body.Label == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("label", "body"))
 	}
+	if body.Pickable == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pickable", "body"))
+	}
 	if body.SignOnURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.sign_on_url", *body.SignOnURL, goa.FormatURI))
 	}
@@ -4801,6 +4828,16 @@ func ValidateIdentityProviderApplicationResponseBody(body *IdentityProviderAppli
 			}
 		}
 	}
+	if body.Match != nil {
+		if err2 := ValidateIdentityProviderApplicationMatchResponseBody(body.Match); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.UnpickableReason != nil {
+		if !(*body.UnpickableReason == "inactive" || *body.UnpickableReason == "no_match") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.unpickable_reason", *body.UnpickableReason, []any{"inactive", "no_match"}))
+		}
+	}
 	return
 }
 
@@ -4812,6 +4849,43 @@ func ValidateIdentityProviderAssignedGroupResponseBody(body *IdentityProviderAss
 	}
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	return
+}
+
+// ValidateIdentityProviderApplicationMatchResponseBody runs the validations
+// defined on IdentityProviderApplicationMatchResponseBody
+func ValidateIdentityProviderApplicationMatchResponseBody(body *IdentityProviderApplicationMatchResponseBody) (err error) {
+	if body.ProviderKey == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("provider_key", "body"))
+	}
+	if body.CatalogRef == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("catalog_ref", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.RemoteURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("remote_url", "body"))
+	}
+	if body.Basis == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("basis", "body"))
+	}
+	if body.Confidence == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("confidence", "body"))
+	}
+	if body.RemoteURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_url", *body.RemoteURL, goa.FormatURI))
+	}
+	if body.Basis != nil {
+		if !(*body.Basis == "name" || *body.Basis == "catalog_identifier" || *body.Basis == "sign_on_domain") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.basis", *body.Basis, []any{"name", "catalog_identifier", "sign_on_domain"}))
+		}
+	}
+	if body.Confidence != nil {
+		if !(*body.Confidence == "exact" || *body.Confidence == "likely" || *body.Confidence == "none") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.confidence", *body.Confidence, []any{"exact", "likely", "none"}))
+		}
 	}
 	return
 }

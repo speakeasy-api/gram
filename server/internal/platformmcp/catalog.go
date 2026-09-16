@@ -72,6 +72,19 @@ type CatalogDetails struct {
 	remoteURL string
 }
 
+// ConcreteRemoteURL returns the inspected streamable HTTP endpoint when it
+// requires no additional URL-template configuration.
+func (d CatalogDetails) ConcreteRemoteURL() string {
+	remoteURL := d.remoteURLTemplate
+	if remoteURL == "" {
+		remoteURL = d.remoteURL
+	}
+	if hasUnresolvedRemoteTemplate(remoteURL) {
+		return ""
+	}
+	return remoteURL
+}
+
 type Catalog interface {
 	Search(ctx context.Context, query string) ([]CatalogCandidate, error)
 	Inspect(ctx context.Context, providerKey, catalogRef string) (CatalogDetails, error)

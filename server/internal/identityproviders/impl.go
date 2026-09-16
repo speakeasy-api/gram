@@ -68,6 +68,8 @@ type Service struct {
 	encryption *encryption.Client
 	okta       OktaClient
 	workos     WorkOSClient
+	catalog    ApplicationCatalog
+	appMatches *applicationMatchCache
 	publicURL  *url.URL
 }
 
@@ -86,6 +88,7 @@ func NewService(
 	encryptionClient *encryption.Client,
 	oktaClient OktaClient,
 	workosClient WorkOSClient,
+	applicationCatalog ApplicationCatalog,
 	publicURL *url.URL,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("identity_providers"))
@@ -99,6 +102,8 @@ func NewService(
 		encryption: encryptionClient,
 		okta:       oktaClient,
 		workos:     workosClient,
+		catalog:    applicationCatalog,
+		appMatches: newApplicationMatchCache(),
 		publicURL:  publicURL,
 	}
 }

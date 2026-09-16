@@ -5,12 +5,29 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  IdentityProviderApplicationMatch,
+  IdentityProviderApplicationMatch$inboundSchema,
+} from "./identityproviderapplicationmatch.js";
 import {
   IdentityProviderAssignedGroup,
   IdentityProviderAssignedGroup$inboundSchema,
 } from "./identityproviderassignedgroup.js";
+
+/**
+ * Why this application cannot be selected.
+ */
+export const UnpickableReason = {
+  Inactive: "inactive",
+  NoMatch: "no_match",
+} as const;
+/**
+ * Why this application cannot be selected.
+ */
+export type UnpickableReason = ClosedEnum<typeof UnpickableReason>;
 
 /**
  * An application read directly from an identity provider.
@@ -37,6 +54,14 @@ export type IdentityProviderApplication = {
    */
   logoUrl?: string | undefined;
   /**
+   * A name-based match between an identity provider application and the Speakeasy MCP server catalogue.
+   */
+  match?: IdentityProviderApplicationMatch | undefined;
+  /**
+   * Whether Speakeasy can create an MCP server draft for this application.
+   */
+  pickable: boolean;
+  /**
    * Provider lifecycle status.
    */
   providerStatus?: string | undefined;
@@ -49,10 +74,19 @@ export type IdentityProviderApplication = {
    */
   sourceApplicationId: string;
   /**
+   * Why this application cannot be selected.
+   */
+  unpickableReason?: UnpickableReason | undefined;
+  /**
    * Number of directly assigned users, when read.
    */
   userAssignmentCount?: number | undefined;
 };
+
+/** @internal */
+export const UnpickableReason$inboundSchema: z.ZodMiniEnum<
+  typeof UnpickableReason
+> = z.enum(UnpickableReason);
 
 /** @internal */
 export const IdentityProviderApplication$inboundSchema: z.ZodMiniType<
@@ -67,9 +101,12 @@ export const IdentityProviderApplication$inboundSchema: z.ZodMiniType<
     group_assignment_count: z.optional(z.int()),
     label: z.string(),
     logo_url: z.optional(z.string()),
+    match: z.optional(IdentityProviderApplicationMatch$inboundSchema),
+    pickable: z.boolean(),
     provider_status: z.optional(z.string()),
     sign_on_url: z.optional(z.string()),
     source_application_id: z.string(),
+    unpickable_reason: z.optional(UnpickableReason$inboundSchema),
     user_assignment_count: z.optional(z.int()),
   }),
   z.transform((v) => {
@@ -81,6 +118,7 @@ export const IdentityProviderApplication$inboundSchema: z.ZodMiniType<
       "provider_status": "providerStatus",
       "sign_on_url": "signOnUrl",
       "source_application_id": "sourceApplicationId",
+      "unpickable_reason": "unpickableReason",
       "user_assignment_count": "userAssignmentCount",
     });
   }),

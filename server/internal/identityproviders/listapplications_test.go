@@ -1,6 +1,7 @@
 package identityproviders_test
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -9,6 +10,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/identity_providers"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/identityproviders"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -34,8 +36,8 @@ func TestListApplicationsReadsTwoPagesAndAssignmentCounts(t *testing.T) {
 	require.NotEmpty(t, result.ReadAt)
 	require.Contains(t, result.Detail, "Assignment counts were read for every application.")
 	require.Equal(t, []*gen.IdentityProviderApplication{
-		{SourceApplicationID: "app-one", Label: "First app", ProviderStatus: new("ACTIVE"), SignOnURL: new("https://apps.example.test/first"), LogoURL: new("https://apps.example.test/logos/app-one.png"), GroupAssignmentCount: new(2), AssignedGroups: []*gen.IdentityProviderAssignedGroup{{SourceGroupID: "app-one-groups-0", Name: "Group app-one-groups-0"}, {SourceGroupID: "app-one-groups-1", Name: "Group app-one-groups-1"}}, AssignedGroupOverflow: new(0), UserAssignmentCount: new(3)},
-		{SourceApplicationID: "app-two", Label: "Second app", ProviderStatus: new("INACTIVE"), SignOnURL: new("https://apps.example.test/second"), LogoURL: nil, GroupAssignmentCount: new(0), AssignedGroups: []*gen.IdentityProviderAssignedGroup{}, AssignedGroupOverflow: new(0), UserAssignmentCount: new(1)},
+		{SourceApplicationID: "app-one", Label: "First app", ProviderStatus: new("ACTIVE"), SignOnURL: new("https://apps.example.test/first"), LogoURL: new("https://apps.example.test/logos/app-one.png"), GroupAssignmentCount: new(2), AssignedGroups: []*gen.IdentityProviderAssignedGroup{{SourceGroupID: "app-one-groups-0", Name: "Group app-one-groups-0"}, {SourceGroupID: "app-one-groups-1", Name: "Group app-one-groups-1"}}, AssignedGroupOverflow: new(0), UserAssignmentCount: new(3), Match: nil, Pickable: false, UnpickableReason: new("no_match")},
+		{SourceApplicationID: "app-two", Label: "Second app", ProviderStatus: new("INACTIVE"), SignOnURL: new("https://apps.example.test/second"), LogoURL: nil, GroupAssignmentCount: new(0), AssignedGroups: []*gen.IdentityProviderAssignedGroup{}, AssignedGroupOverflow: new(0), UserAssignmentCount: new(1), Match: nil, Pickable: false, UnpickableReason: new("inactive")},
 	}, result.Applications)
 	require.Equal(t, 4, fake.AssignmentReads())
 	require.Zero(t, fake.InventoryGroupReads())
@@ -51,8 +53,11 @@ func TestListApplicationsOmitsAssignmentCountsAboveFifty(t *testing.T) {
 	applications := make([]map[string]any, 51)
 	for i := range applications {
 		id := fmt.Sprintf("app-%02d", i)
-		applications[i] = inventoryApplication(id, fmt.Sprintf("Application %02d", i), "ACTIVE", "SAML_2_0", "", false)
+		label := fmt.Sprintf("Application %02d", i)
+		applications[i] = inventoryApplication(id, label, "ACTIVE", "SAML_2_0", "", false)
+		ti.catalog.SetMatch(label, "provider", "catalog/"+id, label, "https://mcp.example.test/"+id)
 	}
+	ti.catalog.BlockFirstSearchesUntil(4)
 	fake.SetApplicationInventory(applications, nil)
 
 	result, err := ti.service.ListApplications(ctx, &gen.ListApplicationsPayload{SessionToken: nil, ApikeyToken: nil})
@@ -66,7 +71,88 @@ func TestListApplicationsOmitsAssignmentCountsAboveFifty(t *testing.T) {
 		require.Nil(t, application.UserAssignmentCount)
 	}
 	require.Zero(t, fake.AssignmentReads())
+	searchCalls, inspectCalls, maxSearches := ti.catalog.Stats()
+	require.Equal(t, 50, searchCalls)
+	require.Equal(t, 50, inspectCalls)
+	require.Equal(t, 4, maxSearches)
+	require.Contains(t, result.Detail, "Speakeasy MCP server matching was capped at 50 applications.")
+	for _, application := range result.Applications[:50] {
+		require.True(t, application.Pickable)
+		require.NotNil(t, application.Match)
+	}
+	require.False(t, result.Applications[50].Pickable)
+	require.Equal(t, "no_match", *result.Applications[50].UnpickableReason)
 	require.NoError(t, fake.ValidationError())
+}
+
+func TestListApplicationsMatchesCatalogueAndOrdersPickableFirst(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeOktaServer(t, fakeOktaPassed)
+	ctx, ti := newTestServiceWithOktaEndpoint(t, fake.server.URL)
+	prepareActiveConnection(t, ctx, ti, fake)
+	fake.SetApplicationInventory([]map[string]any{
+		inventoryApplication("unknown", "Zulu Unknown", "ACTIVE", "SAML_2_0", "", false),
+		inventoryApplication("slack", "Slack App", "ACTIVE", "SAML_2_0", "", false),
+		inventoryApplication("inactive", "Inactive Tool", "INACTIVE", "SAML_2_0", "", false),
+		inventoryApplication("workspace", "Acme Workspace", "ACTIVE", "SAML_2_0", "", false),
+	}, map[string][2]int{"unknown": {0, 0}, "slack": {0, 0}, "inactive": {0, 0}, "workspace": {0, 0}})
+	ti.catalog.SetMatch("Slack App", "provider-slack", "catalog/slack", "Slack, Inc.", "https://mcp.example.test/slack")
+	ti.catalog.SetMatch("Inactive Tool", "provider-inactive", "catalog/inactive", "Inactive Tool", "https://mcp.example.test/inactive")
+	ti.catalog.SetMatch("Acme Workspace", "provider-acme", "catalog/acme", "Acme", "https://mcp.example.test/acme")
+	ti.catalog.SetCandidates("Zulu Unknown", []identityproviders.ApplicationCatalogCandidate{
+		{ProviderKey: "provider-one", CatalogRef: "catalog/one", Name: "Zulu"},
+		{ProviderKey: "provider-two", CatalogRef: "catalog/two", Name: "Unknown"},
+	})
+
+	result, err := ti.service.ListApplications(ctx, &gen.ListApplicationsPayload{SessionToken: nil, ApikeyToken: nil})
+	require.NoError(t, err)
+	require.Equal(t, []string{"Acme Workspace", "Slack App", "Inactive Tool", "Zulu Unknown"}, []string{
+		result.Applications[0].Label,
+		result.Applications[1].Label,
+		result.Applications[2].Label,
+		result.Applications[3].Label,
+	})
+	require.True(t, result.Applications[0].Pickable)
+	require.Equal(t, "likely", result.Applications[0].Match.Confidence)
+	require.Equal(t, "name", result.Applications[0].Match.Basis)
+	require.Equal(t, "https://mcp.example.test/acme", result.Applications[0].Match.RemoteURL)
+	require.True(t, result.Applications[1].Pickable)
+	require.Equal(t, "exact", result.Applications[1].Match.Confidence)
+	require.Equal(t, "Slack, Inc.", result.Applications[1].Match.Name)
+	require.False(t, result.Applications[2].Pickable)
+	require.NotNil(t, result.Applications[2].Match)
+	require.Equal(t, "inactive", *result.Applications[2].UnpickableReason)
+	require.False(t, result.Applications[3].Pickable)
+	require.Nil(t, result.Applications[3].Match)
+	require.Equal(t, "no_match", *result.Applications[3].UnpickableReason)
+	searchCalls, inspectCalls, _ := ti.catalog.Stats()
+
+	_, err = ti.service.ListApplications(ctx, &gen.ListApplicationsPayload{SessionToken: nil, ApikeyToken: nil})
+	require.NoError(t, err)
+	cachedSearchCalls, cachedInspectCalls, _ := ti.catalog.Stats()
+	require.Equal(t, searchCalls, cachedSearchCalls)
+	require.Equal(t, inspectCalls, cachedInspectCalls)
+}
+
+func TestListApplicationsKeepsInventoryWhenCatalogueReadFails(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeOktaServer(t, fakeOktaPassed)
+	ctx, ti := newTestServiceWithOktaEndpoint(t, fake.server.URL)
+	prepareActiveConnection(t, ctx, ti, fake)
+	fake.SetApplicationInventory([]map[string]any{
+		inventoryApplication("broken", "Broken Catalogue", "ACTIVE", "SAML_2_0", "", false),
+	}, map[string][2]int{"broken": {0, 0}})
+	ti.catalog.SetSearchError("Broken Catalogue", errors.New("catalogue unavailable"))
+
+	result, err := ti.service.ListApplications(ctx, &gen.ListApplicationsPayload{SessionToken: nil, ApikeyToken: nil})
+	require.NoError(t, err)
+	require.Len(t, result.Applications, 1)
+	require.Nil(t, result.Applications[0].Match)
+	require.False(t, result.Applications[0].Pickable)
+	require.Equal(t, "no_match", *result.Applications[0].UnpickableReason)
+	require.Contains(t, result.Detail, "Speakeasy MCP server matching is partial because one or more catalogue reads failed.")
 }
 
 func TestListApplicationsKeepsInventoryWhenAnAssignmentReadFails(t *testing.T) {

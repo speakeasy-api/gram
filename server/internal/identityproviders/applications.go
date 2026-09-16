@@ -4,12 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode"
 
 	"github.com/jackc/pgx/v5"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/sync/singleflight"
 
 	gen "github.com/speakeasy-api/gram/server/gen/identity_providers"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -25,6 +29,9 @@ const (
 	applicationAssignmentConcurrency     = 4
 	applicationAssignedGroupLimit        = 10
 	applicationAssignedGroupPageLimit    = 20
+	applicationCatalogMatchLimit         = 50
+	applicationCatalogMatchConcurrency   = 4
+	applicationCatalogMatchCacheTTL      = 10 * time.Minute
 	applicationInventoryTimeout          = 120 * time.Second
 	oktaCollectionPageLimit              = 200
 	oktaRateLimitRemainingSleepThreshold = 10
@@ -94,6 +101,9 @@ func (s *Service) ListApplications(ctx context.Context, _ *gen.ListApplicationsP
 				AssignedGroups:        nil,
 				AssignedGroupOverflow: nil,
 				UserAssignmentCount:   nil,
+				Match:                 nil,
+				Pickable:              false,
+				UnpickableReason:      nil,
 			})
 			if len(applications) == applicationInventoryLimit && (i+1 < len(page.Items) || page.NextCursor != "") {
 				truncated = true
@@ -158,6 +168,41 @@ func (s *Service) ListApplications(ctx context.Context, _ *gen.ListApplicationsP
 		}
 	}
 
+	matchResults, matchFailed := s.appMatches.match(requestCtx, authCtx.ActiveOrganizationID, applications, s.catalog)
+	for i, application := range applications {
+		if i < len(matchResults) && matchResults[i].match != nil {
+			match := matchResults[i].match
+			application.Match = &gen.IdentityProviderApplicationMatch{
+				ProviderKey: match.providerKey,
+				CatalogRef:  match.catalogRef,
+				Name:        match.name,
+				RemoteURL:   match.remoteURL,
+				Basis:       "name",
+				Confidence:  match.confidence,
+			}
+		}
+		application.Pickable = strings.EqualFold(conv.PtrValOr(application.ProviderStatus, ""), "ACTIVE") && application.Match != nil && application.Match.RemoteURL != ""
+		if !application.Pickable {
+			if !strings.EqualFold(conv.PtrValOr(application.ProviderStatus, ""), "ACTIVE") {
+				application.UnpickableReason = new("inactive")
+			} else {
+				application.UnpickableReason = new("no_match")
+			}
+		}
+	}
+	if len(applications) > applicationCatalogMatchLimit {
+		detail += " Speakeasy MCP server matching was capped at 50 applications."
+	}
+	if matchFailed {
+		detail += " Speakeasy MCP server matching is partial because one or more catalogue reads failed."
+	}
+	sort.SliceStable(applications, func(i, j int) bool {
+		if applications[i].Pickable != applications[j].Pickable {
+			return applications[i].Pickable
+		}
+		return strings.ToLower(applications[i].Label) < strings.ToLower(applications[j].Label)
+	})
+
 	return &gen.ListIdentityProviderApplicationsResult{
 		Applications:     applications,
 		ReadAt:           time.Now().UTC().Format(time.RFC3339Nano),
@@ -165,6 +210,181 @@ func (s *Service) ListApplications(ctx context.Context, _ *gen.ListApplicationsP
 		Truncated:        truncated,
 		Detail:           detail,
 	}, nil
+}
+
+type applicationCatalogMatch struct {
+	providerKey string
+	catalogRef  string
+	name        string
+	remoteURL   string
+	confidence  string
+}
+
+type applicationMatchResult struct {
+	match  *applicationCatalogMatch
+	failed bool
+}
+
+type applicationMatchCacheEntry struct {
+	fingerprint string
+	expiresAt   time.Time
+	results     []applicationMatchResult
+	failed      bool
+}
+
+type applicationMatchCache struct {
+	mu      sync.Mutex
+	entries map[string]applicationMatchCacheEntry
+	group   singleflight.Group
+}
+
+func newApplicationMatchCache() *applicationMatchCache {
+	return &applicationMatchCache{
+		mu:      sync.Mutex{},
+		entries: make(map[string]applicationMatchCacheEntry),
+		group:   singleflight.Group{},
+	}
+}
+
+func (c *applicationMatchCache) match(ctx context.Context, organizationID string, applications []*gen.IdentityProviderApplication, catalog ApplicationCatalog) ([]applicationMatchResult, bool) {
+	matchCount := min(len(applications), applicationCatalogMatchLimit)
+	var fingerprintBuilder strings.Builder
+	for _, application := range applications[:matchCount] {
+		fingerprintBuilder.WriteString(application.SourceApplicationID)
+		fingerprintBuilder.WriteByte(0)
+		fingerprintBuilder.WriteString(application.Label)
+		fingerprintBuilder.WriteByte(0)
+	}
+	fingerprint := fingerprintBuilder.String()
+	now := time.Now()
+
+	c.mu.Lock()
+	entry, found := c.entries[organizationID]
+	c.mu.Unlock()
+	if found && entry.fingerprint == fingerprint && now.Before(entry.expiresAt) {
+		return entry.results, entry.failed
+	}
+
+	value, _, _ := c.group.Do(organizationID+"\x00"+fingerprint, func() (any, error) {
+		c.mu.Lock()
+		entry, found := c.entries[organizationID]
+		c.mu.Unlock()
+		if found && entry.fingerprint == fingerprint && time.Now().Before(entry.expiresAt) {
+			return entry, nil
+		}
+
+		results := make([]applicationMatchResult, matchCount)
+		group, groupCtx := errgroup.WithContext(ctx)
+		group.SetLimit(applicationCatalogMatchConcurrency)
+		for i, application := range applications[:matchCount] {
+			group.Go(func() error {
+				results[i] = matchApplicationToCatalog(groupCtx, application.Label, catalog)
+				return nil
+			})
+		}
+		_ = group.Wait()
+		failed := false
+		for _, result := range results {
+			failed = failed || result.failed
+		}
+		entry = applicationMatchCacheEntry{
+			fingerprint: fingerprint,
+			expiresAt:   time.Now().Add(applicationCatalogMatchCacheTTL),
+			results:     results,
+			failed:      failed,
+		}
+		c.mu.Lock()
+		for key, cached := range c.entries {
+			if time.Now().After(cached.expiresAt) {
+				delete(c.entries, key)
+			}
+		}
+		c.entries[organizationID] = entry
+		c.mu.Unlock()
+		return entry, nil
+	})
+
+	entry, ok := value.(applicationMatchCacheEntry)
+	if !ok {
+		return nil, true
+	}
+	return entry.results, entry.failed
+}
+
+func matchApplicationToCatalog(ctx context.Context, label string, catalog ApplicationCatalog) applicationMatchResult {
+	candidates, err := catalog.Search(ctx, label)
+	if err != nil {
+		return applicationMatchResult{match: nil, failed: true}
+	}
+	normalizedLabel := normalizeApplicationCatalogName(label)
+	if normalizedLabel == "" {
+		return applicationMatchResult{match: nil, failed: false}
+	}
+
+	var selected *ApplicationCatalogCandidate
+	confidence := ""
+	for i := range candidates {
+		if normalizeApplicationCatalogName(candidates[i].Name) == normalizedLabel {
+			selected = &candidates[i]
+			confidence = "exact"
+			break
+		}
+	}
+	if selected == nil && len(candidates) == 1 {
+		normalizedCandidate := normalizeApplicationCatalogName(candidates[0].Name)
+		if normalizedCandidate != "" && (strings.Contains(normalizedLabel, normalizedCandidate) || strings.Contains(normalizedCandidate, normalizedLabel)) {
+			selected = &candidates[0]
+			confidence = "likely"
+		}
+	}
+	if selected == nil {
+		return applicationMatchResult{match: nil, failed: false}
+	}
+
+	details, err := catalog.Inspect(ctx, selected.ProviderKey, selected.CatalogRef)
+	if err != nil {
+		return applicationMatchResult{match: nil, failed: true}
+	}
+	if details.RemoteURL == "" {
+		return applicationMatchResult{match: nil, failed: false}
+	}
+	return applicationMatchResult{
+		match: &applicationCatalogMatch{
+			providerKey: details.ProviderKey,
+			catalogRef:  details.CatalogRef,
+			name:        details.Name,
+			remoteURL:   details.RemoteURL,
+			confidence:  confidence,
+		},
+		failed: false,
+	}
+}
+
+func normalizeApplicationCatalogName(name string) string {
+	words := make([]string, 0, 4)
+	var word strings.Builder
+	flush := func() {
+		if word.Len() == 0 {
+			return
+		}
+		value := word.String()
+		word.Reset()
+		switch value {
+		case "app", "inc", "sso":
+			return
+		default:
+			words = append(words, value)
+		}
+	}
+	for _, char := range strings.ToLower(name) {
+		if unicode.IsLetter(char) || unicode.IsNumber(char) {
+			word.WriteRune(char)
+		} else {
+			flush()
+		}
+	}
+	flush()
+	return strings.Join(words, "")
 }
 
 func (s *Service) readOktaApplicationGroups(

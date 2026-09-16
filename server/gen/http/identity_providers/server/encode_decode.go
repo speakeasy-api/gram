@@ -1623,6 +1623,8 @@ func marshalIdentityprovidersIdentityProviderApplicationToIdentityProviderApplic
 		GroupAssignmentCount:  v.GroupAssignmentCount,
 		AssignedGroupOverflow: v.AssignedGroupOverflow,
 		UserAssignmentCount:   v.UserAssignmentCount,
+		Pickable:              v.Pickable,
+		UnpickableReason:      v.UnpickableReason,
 	}
 	if v.AssignedGroups != nil {
 		res.AssignedGroups = make([]*IdentityProviderAssignedGroupResponseBody, len(v.AssignedGroups))
@@ -1633,6 +1635,9 @@ func marshalIdentityprovidersIdentityProviderApplicationToIdentityProviderApplic
 			}
 			res.AssignedGroups[i] = marshalIdentityprovidersIdentityProviderAssignedGroupToIdentityProviderAssignedGroupResponseBody(val)
 		}
+	}
+	if v.Match != nil {
+		res.Match = marshalIdentityprovidersIdentityProviderApplicationMatchToIdentityProviderApplicationMatchResponseBody(v.Match)
 	}
 
 	return res
@@ -1648,6 +1653,25 @@ func marshalIdentityprovidersIdentityProviderAssignedGroupToIdentityProviderAssi
 	res := &IdentityProviderAssignedGroupResponseBody{
 		SourceGroupID: v.SourceGroupID,
 		Name:          v.Name,
+	}
+
+	return res
+}
+
+// marshalIdentityprovidersIdentityProviderApplicationMatchToIdentityProviderApplicationMatchResponseBody
+// builds a value of type *IdentityProviderApplicationMatchResponseBody from a
+// value of type *identityproviders.IdentityProviderApplicationMatch.
+func marshalIdentityprovidersIdentityProviderApplicationMatchToIdentityProviderApplicationMatchResponseBody(v *identityproviders.IdentityProviderApplicationMatch) *IdentityProviderApplicationMatchResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &IdentityProviderApplicationMatchResponseBody{
+		ProviderKey: v.ProviderKey,
+		CatalogRef:  v.CatalogRef,
+		Name:        v.Name,
+		RemoteURL:   v.RemoteURL,
+		Basis:       v.Basis,
+		Confidence:  v.Confidence,
 	}
 
 	return res

@@ -81641,6 +81641,11 @@ components:
                     type: string
                     description: Application logo URL.
                     format: uri
+                match:
+                    $ref: '#/components/schemas/IdentityProviderApplicationMatch'
+                pickable:
+                    type: boolean
+                    description: Whether Speakeasy can create an MCP server draft for this application.
                 provider_status:
                     type: string
                     description: Provider lifecycle status.
@@ -81651,6 +81656,12 @@ components:
                 source_application_id:
                     type: string
                     description: Provider-assigned application identifier.
+                unpickable_reason:
+                    type: string
+                    description: Why this application cannot be selected.
+                    enum:
+                        - inactive
+                        - no_match
                 user_assignment_count:
                     type: integer
                     description: Number of directly assigned users, when read.
@@ -81659,6 +81670,45 @@ components:
             required:
                 - source_application_id
                 - label
+                - pickable
+        IdentityProviderApplicationMatch:
+            type: object
+            properties:
+                basis:
+                    type: string
+                    description: Evidence used to produce the match.
+                    enum:
+                        - name
+                        - catalog_identifier
+                        - sign_on_domain
+                catalog_ref:
+                    type: string
+                    description: Catalogue entry reference.
+                confidence:
+                    type: string
+                    description: Confidence in the catalogue match.
+                    enum:
+                        - exact
+                        - likely
+                        - none
+                name:
+                    type: string
+                    description: Catalogue entry name.
+                provider_key:
+                    type: string
+                    description: Opaque catalogue provider key.
+                remote_url:
+                    type: string
+                    description: Streamable HTTP endpoint from the inspected catalogue entry.
+                    format: uri
+            description: A name-based match between an identity provider application and the Speakeasy MCP server catalogue.
+            required:
+                - provider_key
+                - catalog_ref
+                - name
+                - remote_url
+                - basis
+                - confidence
         IdentityProviderAssignedGroup:
             type: object
             properties:

@@ -192,7 +192,21 @@ var IdentityProviderApplication = Type("IdentityProviderApplication", func() {
 	Attribute("assigned_groups", ArrayOf(IdentityProviderAssignedGroup), "Up to 10 directly assigned groups, when read.")
 	Attribute("assigned_group_overflow", Int, "Number of additional directly assigned groups omitted from assigned_groups, when read.")
 	Attribute("user_assignment_count", Int, "Number of directly assigned users, when read.")
-	Required("source_application_id", "label")
+	Attribute("match", IdentityProviderApplicationMatch, "Speakeasy catalogue match for this application, when one has a concrete MCP server endpoint.")
+	Attribute("pickable", Boolean, "Whether Speakeasy can create an MCP server draft for this application.")
+	Attribute("unpickable_reason", String, "Why this application cannot be selected.", func() { Enum("inactive", "no_match") })
+	Required("source_application_id", "label", "pickable")
+})
+
+var IdentityProviderApplicationMatch = Type("IdentityProviderApplicationMatch", func() {
+	Description("A name-based match between an identity provider application and the Speakeasy MCP server catalogue.")
+	Attribute("provider_key", String, "Opaque catalogue provider key.")
+	Attribute("catalog_ref", String, "Catalogue entry reference.")
+	Attribute("name", String, "Catalogue entry name.")
+	Attribute("remote_url", String, "Streamable HTTP endpoint from the inspected catalogue entry.", func() { Format(FormatURI) })
+	Attribute("basis", String, "Evidence used to produce the match.", func() { Enum("name", "catalog_identifier", "sign_on_domain") })
+	Attribute("confidence", String, "Confidence in the catalogue match.", func() { Enum("exact", "likely", "none") })
+	Required("provider_key", "catalog_ref", "name", "remote_url", "basis", "confidence")
 })
 
 var IdentityProviderAssignedGroup = Type("IdentityProviderAssignedGroup", func() {
