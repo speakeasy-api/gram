@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { IdentityProviderSetupStep } from "@gram/client/models/components/identityprovidersetupstep.js";
 import { IdentityProviderStep } from "./identity-provider-step";
+import { JourneyStepsProvider } from "../journey-steps-provider";
 
 const onboardingStatus = vi.hoisted(() => ({
   current: {
@@ -11,6 +12,12 @@ const onboardingStatus = vi.hoisted(() => ({
   },
 }));
 const portal = vi.hoisted(() => ({ mutate: vi.fn(), isPending: false }));
+// The wizard reads and writes ?step=, so routing can only be exercised with a
+// real parameter behind it: the default mock hands back an empty one.
+const router = vi.hoisted(() => ({
+  params: new URLSearchParams(),
+  setParams: vi.fn(),
+}));
 const submitStep = vi.hoisted(() => ({
   mutate: vi.fn(),
   isPending: false,
@@ -84,7 +91,19 @@ vi.mock("@tanstack/react-query", async (importOriginal) => ({
   useQueryClient: () => ({}),
 }));
 vi.mock("react-router", () => ({
-  useSearchParams: () => [new URLSearchParams(), vi.fn()],
+  useSearchParams: () => [
+    router.params,
+    (updater: unknown, options?: unknown) => {
+      const next =
+        typeof updater === "function"
+          ? (updater as (prev: URLSearchParams) => URLSearchParams)(
+              router.params,
+            )
+          : (updater as URLSearchParams);
+      router.setParams(next.get("step"), options);
+      router.params = next;
+    },
+  ],
 }));
 vi.mock("@gram/client/react-query/listIdentityProviderApplications.js", () => ({
   useListIdentityProviderApplications: () => applications.current,
@@ -139,6 +158,8 @@ beforeEach(() => {
     refetch: vi.fn(),
   };
   portal.mutate.mockReset();
+  router.params = new URLSearchParams();
+  router.setParams.mockReset();
   submitStep.mutate.mockReset();
   verifyStep.mutate.mockReset();
   identityProvider.current = {
@@ -363,6 +384,56 @@ describe("IdentityProviderStep", () => {
       );
 
       expect(submitStep.mutate).toHaveBeenCalledOnce();
+    });
+
+    // The whole card is one journey and ?step= is a link into it. A live
+    // connection keeps the guided steps, so a link to one of them has to keep
+    // working even while the checks say the organization is not eligible.
+    it("stays on the directory step across a click when not eligible", () => {
+      readiness.current = { data: { eligible: false }, isPending: false };
+      identityProvider.current = {
+        data: {
+          connection: {
+            status: "active",
+            signInState: "failed",
+            directoryState: "not_started",
+          },
+        },
+        isPending: false,
+      };
+      identityProviderSetup.current = {
+        data: {
+          connectionId: "conn-1",
+          steps: [
+            {
+              key: "directory",
+              title: "Set up directory sync",
+              where: "our_page",
+              instructions: ["Speakeasy creates the directory application."],
+              printedValues: [],
+              expectedValues: [],
+              state: "not_started",
+            } as IdentityProviderSetupStep,
+          ],
+        },
+        isPending: false,
+      };
+      router.params = new URLSearchParams("step=directory-sync");
+      render(
+        <JourneyStepsProvider>
+          <IdentityProviderStep onComplete={() => {}} />
+        </JourneyStepsProvider>,
+      );
+
+      // Hidden sections leave the accessibility tree, so finding the button at
+      // all is the assertion that the link landed on the directory step.
+      const submit = screen.getByRole("button", {
+        name: "Set up directory sync",
+      });
+      fireEvent.click(submit);
+
+      expect(submitStep.mutate).toHaveBeenCalledOnce();
+      expect(router.params.get("step")).toBe("directory-sync");
     });
 
     it("tells the customer nothing about why", () => {
