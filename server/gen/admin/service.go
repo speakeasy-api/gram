@@ -193,6 +193,14 @@ type Service interface {
 	// counted from now. A running, demoted or converted trial is rejected: those
 	// are extend, re-arm and a contract.
 	StartTrial(context.Context, *StartTrialPayload) (res *AdminOrganization, err error)
+	// Returns non-secret directory handoff details and live WorkOS directory state
+	// for an organization.
+	GetOrganizationDirectoryHandoff(context.Context, *GetOrganizationDirectoryHandoffPayload) (res *DirectoryHandoffResult, err error)
+	// Stores the SCIM endpoint and encrypted bearer token used for an
+	// organization's guided directory setup.
+	SetOrganizationDirectoryHandoff(context.Context, *SetOrganizationDirectoryHandoffPayload) (res *DirectoryHandoff, err error)
+	// Clears an organization's stored directory handoff values.
+	ClearOrganizationDirectoryHandoff(context.Context, *ClearOrganizationDirectoryHandoffPayload) (err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -215,7 +223,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [49]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "getOrganizationGuidedReadiness", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizationActivity", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial"}
+var MethodNames = [52]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "getOrganizationGuidedReadiness", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizationActivity", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "getOrganizationDirectoryHandoff", "setOrganizationDirectoryHandoff", "clearOrganizationDirectoryHandoff"}
 
 // AdminBulkUpdateAccountTypeResult is the result type of the admin service
 // bulkUpdateAccountType method.
@@ -563,6 +571,13 @@ type CancelStripeSubscriptionPayload struct {
 	OrganizationID    string
 }
 
+// ClearOrganizationDirectoryHandoffPayload is the payload type of the admin
+// service clearOrganizationDirectoryHandoff method.
+type ClearOrganizationDirectoryHandoffPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+}
+
 // CreateGlobalIssuerPayload is the payload type of the admin service
 // createGlobalIssuer method.
 type CreateGlobalIssuerPayload struct {
@@ -672,6 +687,33 @@ type DeleteGlobalIssuerPayload struct {
 	AdminSessionToken *string
 }
 
+// DirectoryHandoff is the result type of the admin service
+// setOrganizationDirectoryHandoff method.
+type DirectoryHandoff struct {
+	// Organization receiving the directory handoff.
+	OrganizationID string
+	// SCIM base URL supplied to the customer administrator.
+	ScimBaseURL string
+	// First eight hexadecimal characters of the SCIM token SHA-256 digest.
+	TokenFingerprint string
+	// Live WorkOS directory ID, when discovered.
+	WorkosDirectoryID *string
+	// Live WorkOS directory state, when discovered.
+	WorkosDirectoryState *string
+	// Email of the Speakeasy operator who last stored the handoff.
+	SetBy     string
+	UpdatedAt string
+}
+
+// DirectoryHandoffResult is the result type of the admin service
+// getOrganizationDirectoryHandoff method.
+type DirectoryHandoffResult struct {
+	// Stored handoff, absent when none is configured.
+	Handoff *DirectoryHandoff
+	// WorkOS environment used by this server.
+	WorkosEnvironment string
+}
+
 // DisableOrganizationPayload is the payload type of the admin service
 // disableOrganization method.
 type DisableOrganizationPayload struct {
@@ -751,6 +793,13 @@ type GetInferenceSpendHistoryPayload struct {
 // GetOrganizationChatAnalysisSettingsPayload is the payload type of the admin
 // service getOrganizationChatAnalysisSettings method.
 type GetOrganizationChatAnalysisSettingsPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+}
+
+// GetOrganizationDirectoryHandoffPayload is the payload type of the admin
+// service getOrganizationDirectoryHandoff method.
+type GetOrganizationDirectoryHandoffPayload struct {
 	AdminSessionToken *string
 	OrganizationID    string
 }
@@ -1199,6 +1248,16 @@ type SetOrganizationChatAnalysisSettingsPayload struct {
 	Judge             string
 	Enabled           bool
 	DailyCap          int
+}
+
+// SetOrganizationDirectoryHandoffPayload is the payload type of the admin
+// service setOrganizationDirectoryHandoff method.
+type SetOrganizationDirectoryHandoffPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+	ScimBaseURL       string
+	// Write-only SCIM bearer token.
+	ScimToken string
 }
 
 // SetOrganizationFeaturePayload is the payload type of the admin service

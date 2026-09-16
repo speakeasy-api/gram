@@ -1956,6 +1956,9 @@ func unmarshalIdentityProviderConnectionResponseBodyToIdentityprovidersIdentityP
 		SignInConnectionID:   v.SignInConnectionID,
 		GroupsSource:         v.GroupsSource,
 		GroupsClaimConfirmed: v.GroupsClaimConfirmed,
+		DirectoryState:       v.DirectoryState,
+		DirectoryGroupCount:  v.DirectoryGroupCount,
+		DirectoryUserCount:   v.DirectoryUserCount,
 		CreatedAt:            *v.CreatedAt,
 		UpdatedAt:            *v.UpdatedAt,
 	}
@@ -2068,6 +2071,7 @@ func unmarshalIdentityProviderPrintedValueResponseBodyToIdentityprovidersIdentit
 		Label:    *v.Label,
 		Value:    *v.Value,
 		Copyable: *v.Copyable,
+		Secret:   *v.Secret,
 	}
 
 	return res

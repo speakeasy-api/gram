@@ -15,6 +15,10 @@ export const IdentityProviderCapabilityReadResource = {
   AuthorizationServers: "authorization_servers",
   SignInApplication: "sign_in_application",
   SignInConnection: "sign_in_connection",
+  DirectoryApplication: "directory_application",
+  DirectoryConnection: "directory_connection",
+  DirectoryGroups: "directory_groups",
+  DirectoryUsers: "directory_users",
 } as const;
 export type IdentityProviderCapabilityReadResource = ClosedEnum<
   typeof IdentityProviderCapabilityReadResource

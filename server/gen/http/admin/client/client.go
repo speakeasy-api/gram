@@ -212,6 +212,18 @@ type Client struct {
 	// endpoint.
 	StartTrialDoer goahttp.Doer
 
+	// GetOrganizationDirectoryHandoff Doer is the HTTP client used to make
+	// requests to the getOrganizationDirectoryHandoff endpoint.
+	GetOrganizationDirectoryHandoffDoer goahttp.Doer
+
+	// SetOrganizationDirectoryHandoff Doer is the HTTP client used to make
+	// requests to the setOrganizationDirectoryHandoff endpoint.
+	SetOrganizationDirectoryHandoffDoer goahttp.Doer
+
+	// ClearOrganizationDirectoryHandoff Doer is the HTTP client used to make
+	// requests to the clearOrganizationDirectoryHandoff endpoint.
+	ClearOrganizationDirectoryHandoffDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -281,6 +293,9 @@ func NewClient(
 		UploadPlatformImageDoer:                   doer,
 		ServeImageDoer:                            doer,
 		StartTrialDoer:                            doer,
+		GetOrganizationDirectoryHandoffDoer:       doer,
+		SetOrganizationDirectoryHandoffDoer:       doer,
+		ClearOrganizationDirectoryHandoffDoer:     doer,
 		RestoreResponseBody:                       restoreBody,
 		scheme:                                    scheme,
 		host:                                      host,
@@ -1465,6 +1480,78 @@ func (c *Client) StartTrial() goa.Endpoint {
 		resp, err := c.StartTrialDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "startTrial", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetOrganizationDirectoryHandoff returns an endpoint that makes HTTP requests
+// to the admin service getOrganizationDirectoryHandoff server.
+func (c *Client) GetOrganizationDirectoryHandoff() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetOrganizationDirectoryHandoffRequest(c.encoder)
+		decodeResponse = DecodeGetOrganizationDirectoryHandoffResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetOrganizationDirectoryHandoffRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetOrganizationDirectoryHandoffDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getOrganizationDirectoryHandoff", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetOrganizationDirectoryHandoff returns an endpoint that makes HTTP requests
+// to the admin service setOrganizationDirectoryHandoff server.
+func (c *Client) SetOrganizationDirectoryHandoff() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetOrganizationDirectoryHandoffRequest(c.encoder)
+		decodeResponse = DecodeSetOrganizationDirectoryHandoffResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetOrganizationDirectoryHandoffRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetOrganizationDirectoryHandoffDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "setOrganizationDirectoryHandoff", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ClearOrganizationDirectoryHandoff returns an endpoint that makes HTTP
+// requests to the admin service clearOrganizationDirectoryHandoff server.
+func (c *Client) ClearOrganizationDirectoryHandoff() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeClearOrganizationDirectoryHandoffRequest(c.encoder)
+		decodeResponse = DecodeClearOrganizationDirectoryHandoffResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildClearOrganizationDirectoryHandoffRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ClearOrganizationDirectoryHandoffDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "clearOrganizationDirectoryHandoff", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -189,6 +189,9 @@ var IdentityProviderConnection = Type("IdentityProviderConnection", func() {
 	Attribute("sign_in_connection_id", String, "Identifier of the WorkOS connection used for sign-in.")
 	Attribute("groups_source", String, func() { Enum("token", "directory") })
 	Attribute("groups_claim_confirmed", Boolean, "Whether an administrator confirmed the Okta groups claim filter is configured.")
+	Attribute("directory_state", String, func() { Enum("configured", "pending_validation", "passed", "failed") })
+	Attribute("directory_group_count", Int, "Number of groups observed in the linked WorkOS directory.")
+	Attribute("directory_user_count", Int, "Number of users observed in the linked WorkOS directory.")
 	Attribute("created_at", String, func() { Format(FormatDateTime) })
 	Attribute("updated_at", String, func() { Format(FormatDateTime) })
 	Required("id", "kind", "tenant_identifier", "status", "capabilities", "granted_scopes", "jwks_url", "signing_key_kid", "created_at", "updated_at")
@@ -238,7 +241,7 @@ var IdentityProviderSetupStep = Type("IdentityProviderSetupStep", func() {
 	Attribute("expected_values", ArrayOf(IdentityProviderExpectedValue))
 	Attribute("claims", ArrayOf(IdentityProviderClaim), "Claims Speakeasy intends sign-in to carry.")
 	Attribute("repair", IdentityProviderRepair)
-	Attribute("portal_intent", String, "WorkOS Admin Portal intent the dashboard should open for this step.", func() { Enum("sso") })
+	Attribute("portal_intent", String, "WorkOS Admin Portal intent the dashboard should open for this step.", func() { Enum("sso", "dsync") })
 	Attribute("state", String, func() { Enum("not_started", "awaiting_values", "awaiting_verification", "passed", "failed") })
 	Attribute("last_outcome", IdentityProviderVerifyResult)
 	Required("key", "title", "where", "instructions", "printed_values", "expected_values", "state")
@@ -264,7 +267,8 @@ var IdentityProviderPrintedValue = Type("IdentityProviderPrintedValue", func() {
 	Attribute("label", String)
 	Attribute("value", String)
 	Attribute("copyable", Boolean)
-	Required("label", "value", "copyable")
+	Attribute("secret", Boolean, "Whether the dashboard must conceal this value behind an explicit reveal control.")
+	Required("label", "value", "copyable", "secret")
 })
 
 var IdentityProviderExpectedValue = Type("IdentityProviderExpectedValue", func() {
@@ -315,7 +319,7 @@ var IdentityProviderVerifyEvidence = Type("IdentityProviderVerifyEvidence", func
 var IdentityProviderCapabilityRead = Type("IdentityProviderCapabilityRead", func() {
 	Attribute("capability", String)
 	Attribute("resource", String, func() {
-		Enum("groups", "users", "apps", "authorization_servers", "sign_in_application", "sign_in_connection")
+		Enum("groups", "users", "apps", "authorization_servers", "sign_in_application", "sign_in_connection", "directory_application", "directory_connection", "directory_groups", "directory_users")
 	})
 	Attribute("ok", Boolean)
 	Attribute("count", Int)

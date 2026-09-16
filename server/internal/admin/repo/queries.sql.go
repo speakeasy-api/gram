@@ -48,6 +48,45 @@ func (q *Queries) AdminBulkUpdateAccountType(ctx context.Context, arg AdminBulkU
 	return items, nil
 }
 
+const adminCacheOrganizationDirectoryWorkOSID = `-- name: AdminCacheOrganizationDirectoryWorkOSID :exec
+UPDATE organization_onboarding
+SET
+    directory_workos_id = $1,
+    updated_at = clock_timestamp()
+WHERE organization_id = $2
+  AND directory_workos_id IS NULL
+`
+
+type AdminCacheOrganizationDirectoryWorkOSIDParams struct {
+	DirectoryWorkosID pgtype.Text
+	OrganizationID    string
+}
+
+func (q *Queries) AdminCacheOrganizationDirectoryWorkOSID(ctx context.Context, arg AdminCacheOrganizationDirectoryWorkOSIDParams) error {
+	_, err := q.db.Exec(ctx, adminCacheOrganizationDirectoryWorkOSID, arg.DirectoryWorkosID, arg.OrganizationID)
+	return err
+}
+
+const adminClearOrganizationDirectoryHandoff = `-- name: AdminClearOrganizationDirectoryHandoff :exec
+UPDATE organization_onboarding
+SET
+    directory_scim_base_url = NULL,
+    directory_scim_token_encrypted = NULL,
+    directory_scim_token_key_id = NULL,
+    directory_scim_token_fingerprint = NULL,
+    directory_workos_id = NULL,
+    directory_handoff_set_by_user_id = NULL,
+    directory_handoff_updated_at = NULL,
+    updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND directory_scim_base_url IS NOT NULL
+`
+
+func (q *Queries) AdminClearOrganizationDirectoryHandoff(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, adminClearOrganizationDirectoryHandoff, organizationID)
+	return err
+}
+
 const adminCountOrganizations = `-- name: AdminCountOrganizations :one
 WITH search AS (
     -- Identical to AdminListOrganizations, escaping included: a pasted id that
@@ -312,6 +351,49 @@ func (q *Queries) AdminGetOrganization(ctx context.Context, arg AdminGetOrganiza
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.MemberCount,
+	)
+	return i, err
+}
+
+const adminGetOrganizationDirectoryHandoff = `-- name: AdminGetOrganizationDirectoryHandoff :one
+SELECT
+    organization_id,
+    directory_scim_base_url,
+    directory_scim_token_encrypted,
+    directory_scim_token_fingerprint,
+    directory_workos_id,
+    directory_handoff_set_by_user_id,
+    directory_handoff_updated_at
+FROM organization_onboarding
+WHERE organization_id = $1
+  AND directory_scim_base_url IS NOT NULL
+  AND directory_scim_token_encrypted IS NOT NULL
+  AND directory_scim_token_fingerprint IS NOT NULL
+  AND directory_handoff_set_by_user_id IS NOT NULL
+  AND directory_handoff_updated_at IS NOT NULL
+`
+
+type AdminGetOrganizationDirectoryHandoffRow struct {
+	OrganizationID                string
+	DirectoryScimBaseUrl          pgtype.Text
+	DirectoryScimTokenEncrypted   pgtype.Text
+	DirectoryScimTokenFingerprint pgtype.Text
+	DirectoryWorkosID             pgtype.Text
+	DirectoryHandoffSetByUserID   pgtype.Text
+	DirectoryHandoffUpdatedAt     pgtype.Timestamptz
+}
+
+func (q *Queries) AdminGetOrganizationDirectoryHandoff(ctx context.Context, organizationID string) (AdminGetOrganizationDirectoryHandoffRow, error) {
+	row := q.db.QueryRow(ctx, adminGetOrganizationDirectoryHandoff, organizationID)
+	var i AdminGetOrganizationDirectoryHandoffRow
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.DirectoryScimBaseUrl,
+		&i.DirectoryScimTokenEncrypted,
+		&i.DirectoryScimTokenFingerprint,
+		&i.DirectoryWorkosID,
+		&i.DirectoryHandoffSetByUserID,
+		&i.DirectoryHandoffUpdatedAt,
 	)
 	return i, err
 }
@@ -811,6 +893,79 @@ func (q *Queries) AdminResolveProjectIDBySlugInOrganization(ctx context.Context,
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const adminSetOrganizationDirectoryHandoff = `-- name: AdminSetOrganizationDirectoryHandoff :one
+INSERT INTO organization_onboarding (
+    organization_id,
+    directory_scim_base_url,
+    directory_scim_token_encrypted,
+    directory_scim_token_fingerprint,
+    directory_handoff_set_by_user_id,
+    directory_handoff_updated_at
+)
+VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    clock_timestamp()
+)
+ON CONFLICT (organization_id) DO UPDATE
+SET
+    directory_scim_base_url = EXCLUDED.directory_scim_base_url,
+    directory_scim_token_encrypted = EXCLUDED.directory_scim_token_encrypted,
+    directory_scim_token_key_id = NULL,
+    directory_scim_token_fingerprint = EXCLUDED.directory_scim_token_fingerprint,
+    directory_workos_id = NULL,
+    directory_handoff_set_by_user_id = EXCLUDED.directory_handoff_set_by_user_id,
+    directory_handoff_updated_at = EXCLUDED.directory_handoff_updated_at,
+    updated_at = clock_timestamp()
+RETURNING
+    organization_id,
+    directory_scim_base_url,
+    directory_scim_token_fingerprint,
+    directory_workos_id,
+    directory_handoff_set_by_user_id,
+    directory_handoff_updated_at
+`
+
+type AdminSetOrganizationDirectoryHandoffParams struct {
+	OrganizationID                string
+	DirectoryScimBaseUrl          pgtype.Text
+	DirectoryScimTokenEncrypted   pgtype.Text
+	DirectoryScimTokenFingerprint pgtype.Text
+	DirectoryHandoffSetByUserID   pgtype.Text
+}
+
+type AdminSetOrganizationDirectoryHandoffRow struct {
+	OrganizationID                string
+	DirectoryScimBaseUrl          pgtype.Text
+	DirectoryScimTokenFingerprint pgtype.Text
+	DirectoryWorkosID             pgtype.Text
+	DirectoryHandoffSetByUserID   pgtype.Text
+	DirectoryHandoffUpdatedAt     pgtype.Timestamptz
+}
+
+func (q *Queries) AdminSetOrganizationDirectoryHandoff(ctx context.Context, arg AdminSetOrganizationDirectoryHandoffParams) (AdminSetOrganizationDirectoryHandoffRow, error) {
+	row := q.db.QueryRow(ctx, adminSetOrganizationDirectoryHandoff,
+		arg.OrganizationID,
+		arg.DirectoryScimBaseUrl,
+		arg.DirectoryScimTokenEncrypted,
+		arg.DirectoryScimTokenFingerprint,
+		arg.DirectoryHandoffSetByUserID,
+	)
+	var i AdminSetOrganizationDirectoryHandoffRow
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.DirectoryScimBaseUrl,
+		&i.DirectoryScimTokenFingerprint,
+		&i.DirectoryWorkosID,
+		&i.DirectoryHandoffSetByUserID,
+		&i.DirectoryHandoffUpdatedAt,
+	)
+	return i, err
 }
 
 const adminSetStripeCustomer = `-- name: AdminSetStripeCustomer :one

@@ -57,6 +57,9 @@ func BuildIdentityProviderConnectionView(row repo.GetIdentityProviderConnectionB
 		SignInConnectionID:   conv.FromPGText[string](row.WorkosConnectionID),
 		GroupsSource:         conv.FromPGText[string](row.GroupsSource),
 		GroupsClaimConfirmed: &row.GroupsClaimConfirmed,
+		DirectoryState:       conv.FromPGText[string](row.DirectoryState),
+		DirectoryGroupCount:  conv.PtrInt32ToInt(conv.FromPGInt4(row.DirectoryGroupCount)),
+		DirectoryUserCount:   conv.PtrInt32ToInt(conv.FromPGInt4(row.DirectoryUserCount)),
 		CreatedAt:            conv.FromPGTimestamptz(row.CreatedAt),
 		UpdatedAt:            conv.FromPGTimestamptz(row.UpdatedAt),
 	}, nil
@@ -114,7 +117,7 @@ func validIdentityProviderVerifyOutcome(outcome string) bool {
 
 func validIdentityProviderCapabilityResource(resource string) bool {
 	switch resource {
-	case "groups", "users", "apps", "authorization_servers", "sign_in_application", "sign_in_connection":
+	case "groups", "users", "apps", "authorization_servers", "sign_in_application", "sign_in_connection", "directory_application", "directory_connection", "directory_groups", "directory_users":
 		return true
 	default:
 		return false

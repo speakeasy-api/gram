@@ -864,6 +864,78 @@ paths:
                                 $ref: '#/components/schemas/Error'
             security:
                 - admin_auth_header_Authorization: []
+    /admin/organization.clearDirectoryHandoff:
+        post:
+            tags:
+                - admin
+            summary: clearOrganizationDirectoryHandoff admin
+            description: Clears an organization's stored directory handoff values.
+            operationId: adminClearOrganizationDirectoryHandoff
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ClearOrganizationDirectoryHandoffRequestBody'
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
     /admin/organization.create:
         post:
             tags:
@@ -884,6 +956,83 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/AdminOrganization'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
+    /admin/organization.directoryHandoff:
+        get:
+            tags:
+                - admin
+            summary: getOrganizationDirectoryHandoff admin
+            description: Returns non-secret directory handoff details and live WorkOS directory state for an organization.
+            operationId: adminGetOrganizationDirectoryHandoff
+            parameters:
+                - name: organization_id
+                  in: query
+                  allowEmptyValue: true
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/DirectoryHandoffResult'
                 "400":
                     description: 'bad_request: request is invalid'
                     content:
@@ -1959,6 +2108,82 @@ paths:
                                 $ref: '#/components/schemas/Error'
                 "503":
                     description: 'unavailable: service temporarily unavailable'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
+    /admin/organization.setDirectoryHandoff:
+        post:
+            tags:
+                - admin
+            summary: setOrganizationDirectoryHandoff admin
+            description: Stores the SCIM endpoint and encrypted bearer token used for an organization's guided directory setup.
+            operationId: adminSetOrganizationDirectoryHandoff
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetOrganizationDirectoryHandoffRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/DirectoryHandoff'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
                     content:
                         application/json:
                             schema:
@@ -75707,6 +75932,13 @@ components:
                 - cost_micros
                 - models
                 - query_sources
+        ClearOrganizationDirectoryHandoffRequestBody:
+            type: object
+            properties:
+                organization_id:
+                    type: string
+            required:
+                - organization_id
         CloneEnvironmentForm:
             type: object
             properties:
@@ -78653,6 +78885,52 @@ components:
             description: Outcome of probing the provider with the stored credentials.
             required:
                 - ok
+        DirectoryHandoff:
+            type: object
+            properties:
+                organization_id:
+                    type: string
+                    description: Organization receiving the directory handoff.
+                scim_base_url:
+                    type: string
+                    description: SCIM base URL supplied to the customer administrator.
+                    format: uri
+                set_by:
+                    type: string
+                    description: Email of the Speakeasy operator who last stored the handoff.
+                token_fingerprint:
+                    type: string
+                    description: First eight hexadecimal characters of the SCIM token SHA-256 digest.
+                updated_at:
+                    type: string
+                    format: date-time
+                workos_directory_id:
+                    type: string
+                    description: Live WorkOS directory ID, when discovered.
+                workos_directory_state:
+                    type: string
+                    description: Live WorkOS directory state, when discovered.
+            description: Non-secret directory handoff details stored for an organization.
+            required:
+                - organization_id
+                - scim_base_url
+                - token_fingerprint
+                - set_by
+                - updated_at
+        DirectoryHandoffResult:
+            type: object
+            properties:
+                handoff:
+                    $ref: '#/components/schemas/DirectoryHandoff'
+                workos_environment:
+                    type: string
+                    description: WorkOS environment used by this server.
+                    enum:
+                        - development
+                        - production
+                        - unknown
+            required:
+                - workos_environment
         DisableOpenRouterKeyRequestBody:
             type: object
             properties:
@@ -82118,6 +82396,10 @@ components:
                         - authorization_servers
                         - sign_in_application
                         - sign_in_connection
+                        - directory_application
+                        - directory_connection
+                        - directory_groups
+                        - directory_users
             required:
                 - capability
                 - resource
@@ -82152,6 +82434,21 @@ components:
                 created_at:
                     type: string
                     format: date-time
+                directory_group_count:
+                    type: integer
+                    description: Number of groups observed in the linked WorkOS directory.
+                    format: int64
+                directory_state:
+                    type: string
+                    enum:
+                        - configured
+                        - pending_validation
+                        - passed
+                        - failed
+                directory_user_count:
+                    type: integer
+                    description: Number of users observed in the linked WorkOS directory.
+                    format: int64
                 display_name:
                     type: string
                 granted_scopes:
@@ -82260,12 +82557,16 @@ components:
                     type: boolean
                 label:
                     type: string
+                secret:
+                    type: boolean
+                    description: Whether the dashboard must conceal this value behind an explicit reveal control.
                 value:
                     type: string
             required:
                 - label
                 - value
                 - copyable
+                - secret
         IdentityProviderReadiness:
             type: object
             properties:
@@ -82389,6 +82690,7 @@ components:
                     description: WorkOS Admin Portal intent the dashboard should open for this step.
                     enum:
                         - sso
+                        - dsync
                 printed_values:
                     type: array
                     items:
@@ -93292,6 +93594,22 @@ components:
                 - judge
                 - enabled
                 - daily_cap
+        SetOrganizationDirectoryHandoffRequestBody:
+            type: object
+            properties:
+                organization_id:
+                    type: string
+                scim_base_url:
+                    type: string
+                    format: uri
+                scim_token:
+                    type: string
+                    description: Write-only SCIM bearer token.
+                    minLength: 1
+            required:
+                - organization_id
+                - scim_base_url
+                - scim_token
         SetOrganizationFeatureRequestBody:
             type: object
             properties:

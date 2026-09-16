@@ -9,28 +9,14 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DirectoryHandoffSection } from "@/pages/organization/DirectoryHandoff";
-import type {
-  DirectoryHandoff,
-  DirectoryHandoffResult,
-} from "@/lib/gramAdminApi";
 import { anOrganization } from "@/test/fixtures";
 import { renderWithApp } from "@/test/harness";
 
-const mocks = vi.hoisted(() => ({
-  getOrganizationDirectoryHandoff: vi.fn(),
-  setOrganizationDirectoryHandoff: vi.fn(),
-  clearOrganizationDirectoryHandoff: vi.fn(),
-}));
-
-vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/gramAdminApi")>();
-  return {
-    ...actual,
-    getOrganizationDirectoryHandoff: mocks.getOrganizationDirectoryHandoff,
-    setOrganizationDirectoryHandoff: mocks.setOrganizationDirectoryHandoff,
-    clearOrganizationDirectoryHandoff: mocks.clearOrganizationDirectoryHandoff,
-  };
-});
+// Stubbed at the fetch layer rather than the module, because these three
+// endpoints go through the generated client: a module mock would leave the
+// generated decode untested, and the decode is what catches the server and the
+// model disagreeing about a field name.
+const mocks = vi.hoisted(() => ({ fetch: vi.fn() }));
 
 // Invented throughout, like every other fixture in this app: the repository is
 // public and no test names a real organization, directory or operator.
@@ -39,7 +25,8 @@ const ORG = anOrganization({ workos_id: "org_workos_placeholder" });
 const ENDPOINT = "https://api.example.test/scim/v2/placeholder";
 const TOKEN = "placeholder-bearer-token";
 
-const STORED: DirectoryHandoff = {
+/** The wire shape, which is snake_case; the model the section reads is not. */
+const STORED = {
   organization_id: ORG.id,
   scim_base_url: ENDPOINT,
   token_fingerprint: "a1b2c3d4",
@@ -49,10 +36,39 @@ const STORED: DirectoryHandoff = {
   updated_at: "2026-02-01T00:00:00Z",
 };
 
-function result(
-  overrides: Partial<DirectoryHandoffResult> = {},
-): DirectoryHandoffResult {
-  return { handoff: null, workos_environment: "production", ...overrides };
+type StoredHandoff = Partial<typeof STORED>;
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+// One handler for all three endpoints, so a test says what is stored and the
+// routing stays in one place.
+function serve(options: {
+  handoff?: StoredHandoff | null;
+  environment?: string;
+}): void {
+  const { handoff = null, environment = "production" } = options;
+  mocks.fetch.mockImplementation(async (input: RequestInfo | URL) => {
+    const request = input as Request;
+    const { pathname } = new URL(request.url);
+    switch (pathname) {
+      case "/admin/organization.directoryHandoff":
+        return jsonResponse({
+          ...(handoff ? { handoff } : {}),
+          workos_environment: environment,
+        });
+      case "/admin/organization.setDirectoryHandoff":
+        return jsonResponse(STORED);
+      case "/admin/organization.clearDirectoryHandoff":
+        return new Response(null, { status: 204 });
+      default:
+        throw new Error(`unexpected request to ${pathname}`);
+    }
+  });
 }
 
 function freshClient(): QueryClient {
@@ -83,15 +99,21 @@ function endpointInput(): HTMLInputElement {
   return screen.getByLabelText("Directory endpoint") as HTMLInputElement;
 }
 
+function requestsTo(pathname: string): Request[] {
+  return mocks.fetch.mock.calls
+    .map((call) => call[0] as Request)
+    .filter((request) => new URL(request.url).pathname === pathname);
+}
+
 beforeEach(() => {
-  for (const mock of Object.values(mocks)) mock.mockReset();
-  mocks.getOrganizationDirectoryHandoff.mockResolvedValue(result());
-  mocks.setOrganizationDirectoryHandoff.mockResolvedValue(STORED);
-  mocks.clearOrganizationDirectoryHandoff.mockResolvedValue(undefined);
+  mocks.fetch.mockReset();
+  serve({});
+  vi.stubGlobal("fetch", mocks.fetch);
 });
 
 afterEach(() => {
   cleanup();
+  vi.unstubAllGlobals();
 });
 
 describe("DirectoryHandoffSection", () => {
@@ -112,9 +134,7 @@ describe("DirectoryHandoffSection", () => {
   });
 
   it("says so rather than guessing when the environment is unknown", async () => {
-    mocks.getOrganizationDirectoryHandoff.mockResolvedValue(
-      result({ workos_environment: "unknown" }),
-    );
+    serve({ environment: "unknown" });
     await mount();
 
     expect(
@@ -123,9 +143,7 @@ describe("DirectoryHandoffSection", () => {
   });
 
   it("keeps the token in a password field that is never prefilled", async () => {
-    mocks.getOrganizationDirectoryHandoff.mockResolvedValue(
-      result({ handoff: STORED }),
-    );
+    serve({ handoff: STORED });
     await mount();
 
     // Stored handoff on screen, and still nothing in the field: no read this
@@ -144,15 +162,18 @@ describe("DirectoryHandoffSection", () => {
     fireEvent.click(screen.getByRole("button", { name: "Store handoff" }));
     await confirmWith("Store handoff");
 
-    // The first argument alone: React Query hands a mutation function its
-    // variables and then its own context, and this test is about the request.
     await waitFor(() => {
-      expect(mocks.setOrganizationDirectoryHandoff.mock.calls[0]?.[0]).toEqual({
-        organization_id: ORG.id,
-        scim_base_url: ENDPOINT,
-        scim_token: TOKEN,
-      });
+      expect(
+        requestsTo("/admin/organization.setDirectoryHandoff"),
+      ).toHaveLength(1);
     });
+    const sent = requestsTo("/admin/organization.setDirectoryHandoff")[0];
+    expect(await sent?.clone().json()).toEqual({
+      organization_id: ORG.id,
+      scim_base_url: ENDPOINT,
+      scim_token: TOKEN,
+    });
+
     // The request was the last place the token existed in this tab.
     await waitFor(() => {
       expect(tokenInput().value).toBe("");
@@ -173,13 +194,13 @@ describe("DirectoryHandoffSection", () => {
 
     expect(await screen.findByRole("alert")).toBeTruthy();
     expect(screen.getByRole("alert").textContent).toContain("https");
-    expect(mocks.setOrganizationDirectoryHandoff).not.toHaveBeenCalled();
+    expect(requestsTo("/admin/organization.setDirectoryHandoff")).toHaveLength(
+      0,
+    );
   });
 
   it("clears the stored handoff once the operator confirms", async () => {
-    mocks.getOrganizationDirectoryHandoff.mockResolvedValue(
-      result({ handoff: STORED }),
-    );
+    serve({ handoff: STORED });
     await mount();
 
     fireEvent.click(
@@ -188,22 +209,19 @@ describe("DirectoryHandoffSection", () => {
     await confirmWith("Clear handoff");
 
     await waitFor(() => {
-      expect(mocks.clearOrganizationDirectoryHandoff).toHaveBeenCalledWith(
-        ORG.id,
-      );
+      expect(
+        requestsTo("/admin/organization.clearDirectoryHandoff"),
+      ).toHaveLength(1);
     });
+    const sent = requestsTo("/admin/organization.clearDirectoryHandoff")[0];
+    expect(await sent?.clone().json()).toEqual({ organization_id: ORG.id });
   });
 
   it("reports a directory WorkOS does not have rather than leaving it blank", async () => {
-    mocks.getOrganizationDirectoryHandoff.mockResolvedValue(
-      result({
-        handoff: {
-          ...STORED,
-          workos_directory_id: undefined,
-          workos_directory_state: undefined,
-        },
-      }),
-    );
+    const { workos_directory_id, workos_directory_state, ...rest } = STORED;
+    void workos_directory_id;
+    void workos_directory_state;
+    serve({ handoff: rest });
     await mount();
 
     expect(await screen.findByText(/Not found in WorkOS/)).toBeTruthy();

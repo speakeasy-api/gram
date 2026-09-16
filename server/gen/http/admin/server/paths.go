@@ -251,3 +251,18 @@ func ServeImageAdminPath() string {
 func StartTrialAdminPath() string {
 	return "/admin/trial.start"
 }
+
+// GetOrganizationDirectoryHandoffAdminPath returns the URL path to the admin service getOrganizationDirectoryHandoff HTTP endpoint.
+func GetOrganizationDirectoryHandoffAdminPath() string {
+	return "/admin/organization.directoryHandoff"
+}
+
+// SetOrganizationDirectoryHandoffAdminPath returns the URL path to the admin service setOrganizationDirectoryHandoff HTTP endpoint.
+func SetOrganizationDirectoryHandoffAdminPath() string {
+	return "/admin/organization.setDirectoryHandoff"
+}
+
+// ClearOrganizationDirectoryHandoffAdminPath returns the URL path to the admin service clearOrganizationDirectoryHandoff HTTP endpoint.
+func ClearOrganizationDirectoryHandoffAdminPath() string {
+	return "/admin/organization.clearDirectoryHandoff"
+}

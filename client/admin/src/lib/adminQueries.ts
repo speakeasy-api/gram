@@ -12,7 +12,6 @@ import {
 import {
   getOrganization,
   getOrganizationChatAnalysisSettings,
-  getOrganizationDirectoryHandoff,
   getOrganizationStats,
   getInferenceKeys,
   getInferenceSpendHistory,
@@ -29,7 +28,6 @@ import {
   type AdminOrganization,
   type AdminOrganizationChatAnalysisSettings,
   type AdminProjectDetail,
-  type DirectoryHandoffResult,
   type AdminPaygBillingSummary,
   type AdminStripeSubscription,
   type ListOrganizationMembersResult,
@@ -37,7 +35,10 @@ import {
   type ListOrganizationsParams,
   type ListOrganizationsResult,
 } from "@/lib/gramAdminApi";
-import { organizationActivityQuery } from "@/lib/gramAdminClient";
+import {
+  organizationActivityQuery,
+  organizationDirectoryHandoffQuery,
+} from "@/lib/gramAdminClient";
 
 // What queryOptions infers, named so the exports can carry the return type that
 // `typescript/explicit-module-boundary-types` demands. Writing the shape out by
@@ -120,32 +121,10 @@ export function organizationChatAnalysisSettingsQuery(
   });
 }
 
-// The handoff read also asks WorkOS for the live directory state, so it is not
-// cached beyond the page: a directory that linked a minute ago has to show as
-// linked the next time the record is opened.
-//
-// `retry: false`, like the other organization-scoped reads whose endpoint can
-// answer 404 or 503: an operator waiting through three retries to be told the
-// same thing learns nothing from the wait.
-export function organizationDirectoryHandoffQuery(
-  organizationID: string,
-): AdminQuery<
-  DirectoryHandoffResult,
-  readonly ["gram-admin-organization-directory-handoff", string]
-> {
-  return queryOptions({
-    queryKey: [
-      "gram-admin-organization-directory-handoff",
-      organizationID,
-    ] as const,
-    queryFn: () => getOrganizationDirectoryHandoff(organizationID),
-    retry: false,
-  });
-}
-
 // Both writes answer with the stored record or with nothing, and neither can
 // say what WorkOS will report about the directory, so the read is asked again
-// rather than written from a response.
+// rather than written from a response. The key comes from the generated query,
+// the way the activity one above does.
 export function invalidateOrganizationDirectoryHandoff(
   qc: QueryClient,
   organizationID: string,

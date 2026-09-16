@@ -1613,3 +1613,82 @@ func BuildStartTrialPayload(adminStartTrialBody string, adminStartTrialAdminSess
 
 	return v, nil
 }
+
+// BuildGetOrganizationDirectoryHandoffPayload builds the payload for the admin
+// getOrganizationDirectoryHandoff endpoint from CLI flags.
+func BuildGetOrganizationDirectoryHandoffPayload(adminGetOrganizationDirectoryHandoffOrganizationID string, adminGetOrganizationDirectoryHandoffAdminSessionToken string) (*admin.GetOrganizationDirectoryHandoffPayload, error) {
+	var organizationID string
+	{
+		organizationID = adminGetOrganizationDirectoryHandoffOrganizationID
+	}
+	var adminSessionToken *string
+	{
+		if adminGetOrganizationDirectoryHandoffAdminSessionToken != "" {
+			adminSessionToken = &adminGetOrganizationDirectoryHandoffAdminSessionToken
+		}
+	}
+	v := &admin.GetOrganizationDirectoryHandoffPayload{}
+	v.OrganizationID = organizationID
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildSetOrganizationDirectoryHandoffPayload builds the payload for the admin
+// setOrganizationDirectoryHandoff endpoint from CLI flags.
+func BuildSetOrganizationDirectoryHandoffPayload(adminSetOrganizationDirectoryHandoffBody string, adminSetOrganizationDirectoryHandoffAdminSessionToken string) (*admin.SetOrganizationDirectoryHandoffPayload, error) {
+	var err error
+	var body SetOrganizationDirectoryHandoffRequestBody
+	{
+		err = json.Unmarshal([]byte(adminSetOrganizationDirectoryHandoffBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"organization_id\": \"abc123\",\n      \"scim_base_url\": \"https://example.com/foo\",\n      \"scim_token\": \"aa\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.scim_base_url", body.ScimBaseURL, goa.FormatURI))
+		if utf8.RuneCountInString(body.ScimToken) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.scim_token", body.ScimToken, utf8.RuneCountInString(body.ScimToken), 1, true))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminSetOrganizationDirectoryHandoffAdminSessionToken != "" {
+			adminSessionToken = &adminSetOrganizationDirectoryHandoffAdminSessionToken
+		}
+	}
+	v := &admin.SetOrganizationDirectoryHandoffPayload{
+		OrganizationID: body.OrganizationID,
+		ScimBaseURL:    body.ScimBaseURL,
+		ScimToken:      body.ScimToken,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildClearOrganizationDirectoryHandoffPayload builds the payload for the
+// admin clearOrganizationDirectoryHandoff endpoint from CLI flags.
+func BuildClearOrganizationDirectoryHandoffPayload(adminClearOrganizationDirectoryHandoffBody string, adminClearOrganizationDirectoryHandoffAdminSessionToken string) (*admin.ClearOrganizationDirectoryHandoffPayload, error) {
+	var err error
+	var body ClearOrganizationDirectoryHandoffRequestBody
+	{
+		err = json.Unmarshal([]byte(adminClearOrganizationDirectoryHandoffBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"organization_id\": \"abc123\"\n   }'")
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminClearOrganizationDirectoryHandoffAdminSessionToken != "" {
+			adminSessionToken = &adminClearOrganizationDirectoryHandoffAdminSessionToken
+		}
+	}
+	v := &admin.ClearOrganizationDirectoryHandoffPayload{
+		OrganizationID: body.OrganizationID,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}

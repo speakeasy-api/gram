@@ -445,6 +445,7 @@ func newAdminCommand() *cli.Command {
 			mux.Use(admin.SessionMiddleware)
 
 			adminWorkOSClient := newAdminWorkOSOrganizationCreator(ctx, logger, guardianPolicy, c)
+			workosEnvironment := adminWorkOSEnvironment(c)
 			adminOpenRouter := newAdminOpenRouter(ctx, logger, tracerProvider, guardianPolicy, db, redisClient, c)
 			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
 			readinessWorkOS, ok := adminWorkOSClient.(identityproviderreadiness.WorkOSClient)
@@ -456,11 +457,11 @@ func newAdminCommand() *cli.Command {
 			trialNotifier := trialemails.NewService(db, loopsWorkflowClient, logger, c.String("site-url"))
 
 			billingOperations := usage.NewBillingOperations(logger, db, stripeClient, billingTelemetry, audit.NewLogger())
-			adminService := admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminOpenRouter, trialNotifier, productFeatures, guidedReadiness, chatAnalysisSignaler, openRouterSpendCap, billingOperations, siteURL)
 			applicationEncryption, err := newAdminIssuerEncryption(c.String("encryption-key"))
 			if err != nil {
 				return err
 			}
+			adminService := admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, applicationEncryption, adminAllowedOrigins, adminWorkOSClient, workosEnvironment, adminOpenRouter, trialNotifier, productFeatures, guidedReadiness, chatAnalysisSignaler, openRouterSpendCap, billingOperations, siteURL)
 			if applicationEncryption != nil {
 				adminService.SetRemoteSessionService(remotesessions.NewGlobalService(logger, tracerProvider, meterProvider, db, applicationEncryption, guardianPolicy))
 			} else {

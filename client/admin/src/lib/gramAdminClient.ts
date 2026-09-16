@@ -61,6 +61,12 @@ import {
 } from "@gram/admin-client/react-query/adminListOrganizationActivity.core";
 import { buildAdminOrganizationFeaturesQuery } from "@gram/admin-client/react-query/adminOrganizationFeatures.core";
 import { buildAdminOrganizationGuidedReadinessQuery } from "@gram/admin-client/react-query/adminOrganizationGuidedReadiness.core";
+import { buildAdminGetOrganizationDirectoryHandoffQuery } from "@gram/admin-client/react-query/adminGetOrganizationDirectoryHandoff.core";
+import { buildAdminSetOrganizationDirectoryHandoffMutation } from "@gram/admin-client/react-query/adminSetOrganizationDirectoryHandoff";
+import { buildAdminClearOrganizationDirectoryHandoffMutation } from "@gram/admin-client/react-query/adminClearOrganizationDirectoryHandoff";
+import type { DirectoryHandoff } from "@gram/admin-client/models/components/directoryhandoff";
+import type { SetOrganizationDirectoryHandoffRequestBody } from "@gram/admin-client/models/components/setorganizationdirectoryhandoffrequestbody";
+import type { ClearOrganizationDirectoryHandoffRequestBody } from "@gram/admin-client/models/components/clearorganizationdirectoryhandoffrequestbody";
 import { buildSetAdminOrganizationFeatureMutation } from "@gram/admin-client/react-query/setAdminOrganizationFeature";
 import type { ProductFeatures } from "@gram/admin-client/models/components/productfeatures";
 import type { SetOrganizationFeatureRequestBody } from "@gram/admin-client/models/components/setorganizationfeaturerequestbody";
@@ -195,6 +201,47 @@ export function organizationActivityQuery(
   organizationId: string,
 ): ReturnType<typeof createOrganizationActivityQuery> {
   return createOrganizationActivityQuery(organizationId);
+}
+
+function createOrganizationDirectoryHandoffQuery(organizationId: string) {
+  const generated = buildAdminGetOrganizationDirectoryHandoffQuery(
+    redirectingClient,
+    { organizationId },
+  );
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+    // Like the other organization-scoped reads whose endpoint can answer 404 or
+    // 503: an operator waiting through three retries to be told the same thing
+    // learns nothing from the wait.
+    retry: false,
+  });
+}
+
+export function organizationDirectoryHandoffQuery(
+  organizationId: string,
+): ReturnType<typeof createOrganizationDirectoryHandoffQuery> {
+  return createOrganizationDirectoryHandoffQuery(organizationId);
+}
+
+// The handoff writes report in place, the way the feature write does: a 401
+// taken as a redirect would sign the operator back in behind the token they
+// just pasted, and the token is not in the form any more to paste again.
+const setDirectoryHandoffMutation =
+  buildAdminSetOrganizationDirectoryHandoffMutation(mutationClient);
+const clearDirectoryHandoffMutation =
+  buildAdminClearOrganizationDirectoryHandoffMutation(mutationClient);
+
+export function setOrganizationDirectoryHandoff(
+  request: SetOrganizationDirectoryHandoffRequestBody,
+): Promise<DirectoryHandoff> {
+  return setDirectoryHandoffMutation.mutationFn({ request });
+}
+
+export function clearOrganizationDirectoryHandoff(
+  request: ClearOrganizationDirectoryHandoffRequestBody,
+): Promise<void> {
+  return clearDirectoryHandoffMutation.mutationFn({ request });
 }
 
 // Feature writes preserve their predecessor's in-place 401 behavior. No raw

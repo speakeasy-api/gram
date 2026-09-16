@@ -4,6 +4,7 @@
 
 import { adminBulkUpdateAccountType } from "../funcs/adminBulkUpdateAccountType.js";
 import { adminCancelStripeSubscription } from "../funcs/adminCancelStripeSubscription.js";
+import { adminClearOrganizationDirectoryHandoff } from "../funcs/adminClearOrganizationDirectoryHandoff.js";
 import { adminCreateGlobalIssuer } from "../funcs/adminCreateGlobalIssuer.js";
 import { adminCreateOrganization } from "../funcs/adminCreateOrganization.js";
 import { adminDeleteGlobalIssuer } from "../funcs/adminDeleteGlobalIssuer.js";
@@ -18,6 +19,7 @@ import { adminGetInferenceKeys } from "../funcs/adminGetInferenceKeys.js";
 import { adminGetInferenceSpendHistory } from "../funcs/adminGetInferenceSpendHistory.js";
 import { adminGetOrganization } from "../funcs/adminGetOrganization.js";
 import { adminGetOrganizationChatAnalysisSettings } from "../funcs/adminGetOrganizationChatAnalysisSettings.js";
+import { adminGetOrganizationDirectoryHandoff } from "../funcs/adminGetOrganizationDirectoryHandoff.js";
 import { adminGetOrganizationFeatures } from "../funcs/adminGetOrganizationFeatures.js";
 import { adminGetOrganizationGuidedReadiness } from "../funcs/adminGetOrganizationGuidedReadiness.js";
 import { adminGetOrganizationStats } from "../funcs/adminGetOrganizationStats.js";
@@ -41,6 +43,7 @@ import { adminResumeStripeSubscription } from "../funcs/adminResumeStripeSubscri
 import { adminServeImage } from "../funcs/adminServeImage.js";
 import { adminSetInferenceKeyMonthlyLimit } from "../funcs/adminSetInferenceKeyMonthlyLimit.js";
 import { adminSetOrganizationChatAnalysisSettings } from "../funcs/adminSetOrganizationChatAnalysisSettings.js";
+import { adminSetOrganizationDirectoryHandoff } from "../funcs/adminSetOrganizationDirectoryHandoff.js";
 import { adminSetOrganizationFeature } from "../funcs/adminSetOrganizationFeature.js";
 import { adminSetStripeCustomer } from "../funcs/adminSetStripeCustomer.js";
 import { adminStartTrial } from "../funcs/adminStartTrial.js";
@@ -66,8 +69,11 @@ import { AdminStripeCustomer } from "../models/components/adminstripecustomer.js
 import { AdminStripeSubscription } from "../models/components/adminstripesubscription.js";
 import { BulkUpdateAccountTypeRequestBody } from "../models/components/bulkupdateaccounttyperequestbody.js";
 import { CancelStripeSubscriptionRequestBody } from "../models/components/cancelstripesubscriptionrequestbody.js";
+import { ClearOrganizationDirectoryHandoffRequestBody } from "../models/components/clearorganizationdirectoryhandoffrequestbody.js";
 import { CreateOrganizationRequestBody } from "../models/components/createorganizationrequestbody.js";
 import { CreateRemoteSessionIssuerForm } from "../models/components/createremotesessionissuerform.js";
+import { DirectoryHandoff } from "../models/components/directoryhandoff.js";
+import { DirectoryHandoffResult } from "../models/components/directoryhandoffresult.js";
 import { DisableOrganizationRequestBody } from "../models/components/disableorganizationrequestbody.js";
 import { EnableOrganizationRequestBody } from "../models/components/enableorganizationrequestbody.js";
 import { ExtendTrialRequestBody } from "../models/components/extendtrialrequestbody.js";
@@ -89,6 +95,7 @@ import { ResumeStripeSubscriptionRequestBody } from "../models/components/resume
 import { RiskIDRequestBody } from "../models/components/riskidrequestbody.js";
 import { SetInferenceKeyMonthlyLimitRequestBody } from "../models/components/setinferencekeymonthlylimitrequestbody.js";
 import { SetOrganizationChatAnalysisSettingsRequestBody } from "../models/components/setorganizationchatanalysissettingsrequestbody.js";
+import { SetOrganizationDirectoryHandoffRequestBody } from "../models/components/setorganizationdirectoryhandoffrequestbody.js";
 import { SetOrganizationFeatureRequestBody } from "../models/components/setorganizationfeaturerequestbody.js";
 import { SetStripeCustomerRequestBody } from "../models/components/setstripecustomerrequestbody.js";
 import { StartTrialRequestBody } from "../models/components/starttrialrequestbody.js";
@@ -104,6 +111,7 @@ import { AdminGetInferenceKeysRequest } from "../models/operations/admingetinfer
 import { AdminGetInferenceSpendHistoryRequest } from "../models/operations/admingetinferencespendhistory.js";
 import { AdminGetOrganizationRequest } from "../models/operations/admingetorganization.js";
 import { AdminGetOrganizationChatAnalysisSettingsRequest } from "../models/operations/admingetorganizationchatanalysissettings.js";
+import { AdminGetOrganizationDirectoryHandoffRequest } from "../models/operations/admingetorganizationdirectoryhandoff.js";
 import { AdminGetOrganizationFeaturesRequest } from "../models/operations/admingetorganizationfeatures.js";
 import { AdminGetOrganizationGuidedReadinessRequest } from "../models/operations/admingetorganizationguidedreadiness.js";
 import { AdminGetPaygBillingSummaryRequest } from "../models/operations/admingetpaygbillingsummary.js";
@@ -261,6 +269,23 @@ export class Admin extends ClientSDK {
   }
 
   /**
+   * clearOrganizationDirectoryHandoff admin
+   *
+   * @remarks
+   * Clears an organization's stored directory handoff values.
+   */
+  async clearOrganizationDirectoryHandoff(
+    request: ClearOrganizationDirectoryHandoffRequestBody,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(adminClearOrganizationDirectoryHandoff(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
    * createOrganization admin
    *
    * @remarks
@@ -271,6 +296,23 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AdminOrganization> {
     return unwrapAsync(adminCreateOrganization(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * getOrganizationDirectoryHandoff admin
+   *
+   * @remarks
+   * Returns non-secret directory handoff details and live WorkOS directory state for an organization.
+   */
+  async getOrganizationDirectoryHandoff(
+    request: AdminGetOrganizationDirectoryHandoffRequest,
+    options?: RequestOptions,
+  ): Promise<DirectoryHandoffResult> {
+    return unwrapAsync(adminGetOrganizationDirectoryHandoff(
       this,
       request,
       options,
@@ -469,6 +511,23 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AdminStripeSubscription> {
     return unwrapAsync(adminResumeStripeSubscription(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * setOrganizationDirectoryHandoff admin
+   *
+   * @remarks
+   * Stores the SCIM endpoint and encrypted bearer token used for an organization's guided directory setup.
+   */
+  async setOrganizationDirectoryHandoff(
+    request: SetOrganizationDirectoryHandoffRequestBody,
+    options?: RequestOptions,
+  ): Promise<DirectoryHandoff> {
+    return unwrapAsync(adminSetOrganizationDirectoryHandoff(
       this,
       request,
       options,

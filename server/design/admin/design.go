@@ -271,6 +271,27 @@ var AdminDashboardRedirect = Type("AdminDashboardRedirect", func() {
 	Required("location", "cache_control")
 })
 
+var DirectoryHandoff = Type("DirectoryHandoff", func() {
+	Description("Non-secret directory handoff details stored for an organization.")
+	Required("organization_id", "scim_base_url", "token_fingerprint", "set_by", "updated_at")
+
+	Attribute("organization_id", String, "Organization receiving the directory handoff.")
+	Attribute("scim_base_url", String, "SCIM base URL supplied to the customer administrator.", func() { Format(FormatURI) })
+	Attribute("token_fingerprint", String, "First eight hexadecimal characters of the SCIM token SHA-256 digest.")
+	Attribute("workos_directory_id", String, "Live WorkOS directory ID, when discovered.")
+	Attribute("workos_directory_state", String, "Live WorkOS directory state, when discovered.")
+	Attribute("set_by", String, "Email of the Speakeasy operator who last stored the handoff.")
+	Attribute("updated_at", String, func() { Format(FormatDateTime) })
+})
+
+var DirectoryHandoffResult = Type("DirectoryHandoffResult", func() {
+	Required("workos_environment")
+	Attribute("handoff", DirectoryHandoff, "Stored handoff, absent when none is configured.")
+	Attribute("workos_environment", String, "WorkOS environment used by this server.", func() {
+		Enum("development", "production", "unknown")
+	})
+})
+
 // Shared so the two write paths, and the service's own copy of the check,
 // cannot drift into accepting different sets.
 var accountTypes = conv.AnySlice(constants.AccountTypes)
@@ -1049,5 +1070,54 @@ var _ = Service("admin", func() {
 		})
 
 		Meta("openapi:operationId", "adminStartTrial")
+	})
+
+	Method("getOrganizationDirectoryHandoff", func() {
+		Description("Returns non-secret directory handoff details and live WorkOS directory state for an organization.")
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("organization_id")
+			Attribute("organization_id", String)
+		})
+		Result(DirectoryHandoffResult)
+		HTTP(func() {
+			GET("/admin/organization.directoryHandoff")
+			Param("organization_id")
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "adminGetOrganizationDirectoryHandoff")
+	})
+
+	Method("setOrganizationDirectoryHandoff", func() {
+		Description("Stores the SCIM endpoint and encrypted bearer token used for an organization's guided directory setup.")
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("organization_id", "scim_base_url", "scim_token")
+			Meta("openapi:typename", "SetOrganizationDirectoryHandoffRequestBody")
+			Attribute("organization_id", String)
+			Attribute("scim_base_url", String, func() { Format(FormatURI) })
+			Attribute("scim_token", String, "Write-only SCIM bearer token.", func() { MinLength(1) })
+		})
+		Result(DirectoryHandoff)
+		HTTP(func() {
+			POST("/admin/organization.setDirectoryHandoff")
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "adminSetOrganizationDirectoryHandoff")
+	})
+
+	Method("clearOrganizationDirectoryHandoff", func() {
+		Description("Clears an organization's stored directory handoff values.")
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("organization_id")
+			Meta("openapi:typename", "ClearOrganizationDirectoryHandoffRequestBody")
+			Attribute("organization_id", String)
+		})
+		HTTP(func() {
+			POST("/admin/organization.clearDirectoryHandoff")
+			Response(StatusNoContent)
+		})
+		Meta("openapi:operationId", "adminClearOrganizationDirectoryHandoff")
 	})
 })

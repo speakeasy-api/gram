@@ -53,10 +53,11 @@ import (
 const (
 	setupStepConnect                       = "connect"
 	setupStepSignIn                        = "sign_in"
+	setupStepDirectory                     = "directory"
 	setupValueClientID                     = "client_id"
 	identityProviderJSONWebKeySetMaxAgeSec = 3600
 	identityProviderSigningKeyBits         = 2048
-	oktaAPIScopes                          = "okta.apps.read okta.groups.read okta.users.read okta.apps.manage okta.authorizationServers.read okta.authorizationServers.manage"
+	oktaAPIScopes                          = "okta.apps.read okta.groups.read okta.groups.manage okta.users.read okta.apps.manage okta.authorizationServers.read okta.authorizationServers.manage"
 	oktaAdministratorRoles                 = "Read-only Administrator, Application Administrator"
 	oktaClientAuthenticationInstruction    = "Client authentication must be Public key / Private key with Use a URL; entering the URL alone is not enough"
 )
@@ -253,7 +254,7 @@ func (s *Service) GetGuidedReadiness(ctx context.Context, _ *gen.GetGuidedReadin
 }
 
 func (s *Service) DescribeSetup(ctx context.Context, _ *gen.DescribeSetupPayload) (*gen.IdentityProviderSetup, error) {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeOrgRead)
+	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeOrgAdmin)
 	if err != nil {
 		return nil, err
 	}
@@ -273,11 +274,16 @@ func (s *Service) DescribeSetup(ctx context.Context, _ *gen.DescribeSetupPayload
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error building identity provider setup").LogError(ctx, logger)
 	}
+	directoryStep, err := s.buildDirectorySetupStep(row)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error building directory setup").LogError(ctx, logger)
+	}
 	return &gen.IdentityProviderSetup{
 		ConnectionID: row.ID.String(),
 		Steps: []*gen.IdentityProviderSetupStep{
 			buildConnectSetupStep(row.TenantIdentifier, IdentityProviderJSONWebKeySetURL(s.publicURL, row.ID), row.Status, conv.FromPGText[string](row.ClientID), lastOutcome),
 			signInStep,
+			directoryStep,
 		},
 	}, nil
 }
@@ -289,6 +295,9 @@ func (s *Service) SubmitSetupStep(ctx context.Context, payload *gen.SubmitSetupS
 	}
 	if payload.StepKey == setupStepSignIn {
 		return s.submitSignInSetupStep(ctx, authCtx, logger, payload)
+	}
+	if payload.StepKey == setupStepDirectory {
+		return s.submitDirectorySetupStep(ctx, authCtx, logger, payload)
 	}
 	if payload.StepKey != setupStepConnect {
 		return nil, oops.E(oops.CodeBadRequest, nil, "unknown identity provider setup step").LogError(ctx, logger)
@@ -559,9 +568,9 @@ func buildConnectSetupStep(tenantIdentifier, jwksURL, status string, clientID *s
 		},
 		DeepLink: oktaAdminAppsURL(tenantIdentifier),
 		PrintedValues: []*gen.IdentityProviderPrintedValue{
-			{Label: "JWKS URL", Value: jwksURL, Copyable: true},
-			{Label: "API scopes", Value: oktaAPIScopes, Copyable: true},
-			{Label: "Administrator roles", Value: oktaAdministratorRoles, Copyable: false},
+			{Label: "JWKS URL", Value: jwksURL, Copyable: true, Secret: false},
+			{Label: "API scopes", Value: oktaAPIScopes, Copyable: true, Secret: false},
+			{Label: "Administrator roles", Value: oktaAdministratorRoles, Copyable: false, Secret: false},
 		},
 		ExpectedValues: []*gen.IdentityProviderExpectedValue{buildExpectedSetupValue(setupValueClientID, "Client ID", false, clientID)},
 		Claims:         nil,
@@ -615,5 +624,8 @@ func identityProviderConnectionSnapshot(row repo.GetIdentityProviderConnectionBy
 		SignInState:          conv.FromPGTextOrEmpty[string](row.SignInState),
 		GroupsSource:         conv.FromPGTextOrEmpty[string](row.GroupsSource),
 		GroupsClaimConfirmed: row.GroupsClaimConfirmed,
+		DirectoryState:       conv.FromPGTextOrEmpty[string](row.DirectoryState),
+		DirectoryGroupCount:  conv.PtrInt32ToInt(conv.FromPGInt4(row.DirectoryGroupCount)),
+		DirectoryUserCount:   conv.PtrInt32ToInt(conv.FromPGInt4(row.DirectoryUserCount)),
 	}
 }

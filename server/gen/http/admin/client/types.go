@@ -342,6 +342,21 @@ type StartTrialRequestBody struct {
 	Days int `form:"days" json:"days" xml:"days"`
 }
 
+// SetOrganizationDirectoryHandoffRequestBody is the type of the "admin"
+// service "setOrganizationDirectoryHandoff" endpoint HTTP request body.
+type SetOrganizationDirectoryHandoffRequestBody struct {
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	ScimBaseURL    string `form:"scim_base_url" json:"scim_base_url" xml:"scim_base_url"`
+	// Write-only SCIM bearer token.
+	ScimToken string `form:"scim_token" json:"scim_token" xml:"scim_token"`
+}
+
+// ClearOrganizationDirectoryHandoffRequestBody is the type of the "admin"
+// service "clearOrganizationDirectoryHandoff" endpoint HTTP request body.
+type ClearOrganizationDirectoryHandoffRequestBody struct {
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+}
+
 // GetSessionResponseBody is the type of the "admin" service "getSession"
 // endpoint HTTP response body.
 type GetSessionResponseBody struct {
@@ -1407,6 +1422,33 @@ type StartTrialResponseBody struct {
 	// The creation date of the organization.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// The last update date of the organization.
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// GetOrganizationDirectoryHandoffResponseBody is the type of the "admin"
+// service "getOrganizationDirectoryHandoff" endpoint HTTP response body.
+type GetOrganizationDirectoryHandoffResponseBody struct {
+	// Stored handoff, absent when none is configured.
+	Handoff *DirectoryHandoffResponseBody `form:"handoff,omitempty" json:"handoff,omitempty" xml:"handoff,omitempty"`
+	// WorkOS environment used by this server.
+	WorkosEnvironment *string `form:"workos_environment,omitempty" json:"workos_environment,omitempty" xml:"workos_environment,omitempty"`
+}
+
+// SetOrganizationDirectoryHandoffResponseBody is the type of the "admin"
+// service "setOrganizationDirectoryHandoff" endpoint HTTP response body.
+type SetOrganizationDirectoryHandoffResponseBody struct {
+	// Organization receiving the directory handoff.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// SCIM base URL supplied to the customer administrator.
+	ScimBaseURL *string `form:"scim_base_url,omitempty" json:"scim_base_url,omitempty" xml:"scim_base_url,omitempty"`
+	// First eight hexadecimal characters of the SCIM token SHA-256 digest.
+	TokenFingerprint *string `form:"token_fingerprint,omitempty" json:"token_fingerprint,omitempty" xml:"token_fingerprint,omitempty"`
+	// Live WorkOS directory ID, when discovered.
+	WorkosDirectoryID *string `form:"workos_directory_id,omitempty" json:"workos_directory_id,omitempty" xml:"workos_directory_id,omitempty"`
+	// Live WorkOS directory state, when discovered.
+	WorkosDirectoryState *string `form:"workos_directory_state,omitempty" json:"workos_directory_state,omitempty" xml:"workos_directory_state,omitempty"`
+	// Email of the Speakeasy operator who last stored the handoff.
+	SetBy     *string `form:"set_by,omitempty" json:"set_by,omitempty" xml:"set_by,omitempty"`
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
@@ -10873,6 +10915,576 @@ type StartTrialGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GetOrganizationDirectoryHandoffUnauthorizedResponseBody is the type of the
+// "admin" service "getOrganizationDirectoryHandoff" endpoint HTTP response
+// body for the "unauthorized" error.
+type GetOrganizationDirectoryHandoffUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrganizationDirectoryHandoffForbiddenResponseBody is the type of the
+// "admin" service "getOrganizationDirectoryHandoff" endpoint HTTP response
+// body for the "forbidden" error.
+type GetOrganizationDirectoryHandoffForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrganizationDirectoryHandoffBadRequestResponseBody is the type of the
+// "admin" service "getOrganizationDirectoryHandoff" endpoint HTTP response
+// body for the "bad_request" error.
+type GetOrganizationDirectoryHandoffBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrganizationDirectoryHandoffNotFoundResponseBody is the type of the
+// "admin" service "getOrganizationDirectoryHandoff" endpoint HTTP response
+// body for the "not_found" error.
+type GetOrganizationDirectoryHandoffNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrganizationDirectoryHandoffConflictResponseBody is the type of the
+// "admin" service "getOrganizationDirectoryHandoff" endpoint HTTP response
+// body for the "conflict" error.
+type GetOrganizationDirectoryHandoffConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrganizationDirectoryHandoffUnsupportedMediaResponseBody is the type of
+// the "admin" service "getOrganizationDirectoryHandoff" endpoint HTTP response
+// body for the "unsupported_media" error.
+type GetOrganizationDirectoryHandoffUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrganizationDirectoryHandoffInvalidResponseBody is the type of the
+// "admin" service "getOrganizationDirectoryHandoff" endpoint HTTP response
+// body for the "invalid" error.
+type GetOrganizationDirectoryHandoffInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrganizationDirectoryHandoffInvariantViolationResponseBody is the type of
+// the "admin" service "getOrganizationDirectoryHandoff" endpoint HTTP response
+// body for the "invariant_violation" error.
+type GetOrganizationDirectoryHandoffInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrganizationDirectoryHandoffUnexpectedResponseBody is the type of the
+// "admin" service "getOrganizationDirectoryHandoff" endpoint HTTP response
+// body for the "unexpected" error.
+type GetOrganizationDirectoryHandoffUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrganizationDirectoryHandoffGatewayErrorResponseBody is the type of the
+// "admin" service "getOrganizationDirectoryHandoff" endpoint HTTP response
+// body for the "gateway_error" error.
+type GetOrganizationDirectoryHandoffGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetOrganizationDirectoryHandoffUnauthorizedResponseBody is the type of the
+// "admin" service "setOrganizationDirectoryHandoff" endpoint HTTP response
+// body for the "unauthorized" error.
+type SetOrganizationDirectoryHandoffUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetOrganizationDirectoryHandoffForbiddenResponseBody is the type of the
+// "admin" service "setOrganizationDirectoryHandoff" endpoint HTTP response
+// body for the "forbidden" error.
+type SetOrganizationDirectoryHandoffForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetOrganizationDirectoryHandoffBadRequestResponseBody is the type of the
+// "admin" service "setOrganizationDirectoryHandoff" endpoint HTTP response
+// body for the "bad_request" error.
+type SetOrganizationDirectoryHandoffBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetOrganizationDirectoryHandoffNotFoundResponseBody is the type of the
+// "admin" service "setOrganizationDirectoryHandoff" endpoint HTTP response
+// body for the "not_found" error.
+type SetOrganizationDirectoryHandoffNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetOrganizationDirectoryHandoffConflictResponseBody is the type of the
+// "admin" service "setOrganizationDirectoryHandoff" endpoint HTTP response
+// body for the "conflict" error.
+type SetOrganizationDirectoryHandoffConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetOrganizationDirectoryHandoffUnsupportedMediaResponseBody is the type of
+// the "admin" service "setOrganizationDirectoryHandoff" endpoint HTTP response
+// body for the "unsupported_media" error.
+type SetOrganizationDirectoryHandoffUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetOrganizationDirectoryHandoffInvalidResponseBody is the type of the
+// "admin" service "setOrganizationDirectoryHandoff" endpoint HTTP response
+// body for the "invalid" error.
+type SetOrganizationDirectoryHandoffInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetOrganizationDirectoryHandoffInvariantViolationResponseBody is the type of
+// the "admin" service "setOrganizationDirectoryHandoff" endpoint HTTP response
+// body for the "invariant_violation" error.
+type SetOrganizationDirectoryHandoffInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetOrganizationDirectoryHandoffUnexpectedResponseBody is the type of the
+// "admin" service "setOrganizationDirectoryHandoff" endpoint HTTP response
+// body for the "unexpected" error.
+type SetOrganizationDirectoryHandoffUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetOrganizationDirectoryHandoffGatewayErrorResponseBody is the type of the
+// "admin" service "setOrganizationDirectoryHandoff" endpoint HTTP response
+// body for the "gateway_error" error.
+type SetOrganizationDirectoryHandoffGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ClearOrganizationDirectoryHandoffUnauthorizedResponseBody is the type of the
+// "admin" service "clearOrganizationDirectoryHandoff" endpoint HTTP response
+// body for the "unauthorized" error.
+type ClearOrganizationDirectoryHandoffUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ClearOrganizationDirectoryHandoffForbiddenResponseBody is the type of the
+// "admin" service "clearOrganizationDirectoryHandoff" endpoint HTTP response
+// body for the "forbidden" error.
+type ClearOrganizationDirectoryHandoffForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ClearOrganizationDirectoryHandoffBadRequestResponseBody is the type of the
+// "admin" service "clearOrganizationDirectoryHandoff" endpoint HTTP response
+// body for the "bad_request" error.
+type ClearOrganizationDirectoryHandoffBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ClearOrganizationDirectoryHandoffNotFoundResponseBody is the type of the
+// "admin" service "clearOrganizationDirectoryHandoff" endpoint HTTP response
+// body for the "not_found" error.
+type ClearOrganizationDirectoryHandoffNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ClearOrganizationDirectoryHandoffConflictResponseBody is the type of the
+// "admin" service "clearOrganizationDirectoryHandoff" endpoint HTTP response
+// body for the "conflict" error.
+type ClearOrganizationDirectoryHandoffConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ClearOrganizationDirectoryHandoffUnsupportedMediaResponseBody is the type of
+// the "admin" service "clearOrganizationDirectoryHandoff" endpoint HTTP
+// response body for the "unsupported_media" error.
+type ClearOrganizationDirectoryHandoffUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ClearOrganizationDirectoryHandoffInvalidResponseBody is the type of the
+// "admin" service "clearOrganizationDirectoryHandoff" endpoint HTTP response
+// body for the "invalid" error.
+type ClearOrganizationDirectoryHandoffInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ClearOrganizationDirectoryHandoffInvariantViolationResponseBody is the type
+// of the "admin" service "clearOrganizationDirectoryHandoff" endpoint HTTP
+// response body for the "invariant_violation" error.
+type ClearOrganizationDirectoryHandoffInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ClearOrganizationDirectoryHandoffUnexpectedResponseBody is the type of the
+// "admin" service "clearOrganizationDirectoryHandoff" endpoint HTTP response
+// body for the "unexpected" error.
+type ClearOrganizationDirectoryHandoffUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ClearOrganizationDirectoryHandoffGatewayErrorResponseBody is the type of the
+// "admin" service "clearOrganizationDirectoryHandoff" endpoint HTTP response
+// body for the "gateway_error" error.
+type ClearOrganizationDirectoryHandoffGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // IdentityProviderReadinessCheckResponseBody is used to define fields on
 // response body types.
 type IdentityProviderReadinessCheckResponseBody struct {
@@ -11206,6 +11818,23 @@ type AssetResponseBody struct {
 	// The creation date of the asset.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// The last update date of the asset.
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// DirectoryHandoffResponseBody is used to define fields on response body types.
+type DirectoryHandoffResponseBody struct {
+	// Organization receiving the directory handoff.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// SCIM base URL supplied to the customer administrator.
+	ScimBaseURL *string `form:"scim_base_url,omitempty" json:"scim_base_url,omitempty" xml:"scim_base_url,omitempty"`
+	// First eight hexadecimal characters of the SCIM token SHA-256 digest.
+	TokenFingerprint *string `form:"token_fingerprint,omitempty" json:"token_fingerprint,omitempty" xml:"token_fingerprint,omitempty"`
+	// Live WorkOS directory ID, when discovered.
+	WorkosDirectoryID *string `form:"workos_directory_id,omitempty" json:"workos_directory_id,omitempty" xml:"workos_directory_id,omitempty"`
+	// Live WorkOS directory state, when discovered.
+	WorkosDirectoryState *string `form:"workos_directory_state,omitempty" json:"workos_directory_state,omitempty" xml:"workos_directory_state,omitempty"`
+	// Email of the Speakeasy operator who last stored the handoff.
+	SetBy     *string `form:"set_by,omitempty" json:"set_by,omitempty" xml:"set_by,omitempty"`
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
@@ -11571,6 +12200,28 @@ func NewStartTrialRequestBody(p *admin.StartTrialPayload) *StartTrialRequestBody
 	body := &StartTrialRequestBody{
 		ID:   p.ID,
 		Days: p.Days,
+	}
+	return body
+}
+
+// NewSetOrganizationDirectoryHandoffRequestBody builds the HTTP request body
+// from the payload of the "setOrganizationDirectoryHandoff" endpoint of the
+// "admin" service.
+func NewSetOrganizationDirectoryHandoffRequestBody(p *admin.SetOrganizationDirectoryHandoffPayload) *SetOrganizationDirectoryHandoffRequestBody {
+	body := &SetOrganizationDirectoryHandoffRequestBody{
+		OrganizationID: p.OrganizationID,
+		ScimBaseURL:    p.ScimBaseURL,
+		ScimToken:      p.ScimToken,
+	}
+	return body
+}
+
+// NewClearOrganizationDirectoryHandoffRequestBody builds the HTTP request body
+// from the payload of the "clearOrganizationDirectoryHandoff" endpoint of the
+// "admin" service.
+func NewClearOrganizationDirectoryHandoffRequestBody(p *admin.ClearOrganizationDirectoryHandoffPayload) *ClearOrganizationDirectoryHandoffRequestBody {
+	body := &ClearOrganizationDirectoryHandoffRequestBody{
+		OrganizationID: p.OrganizationID,
 	}
 	return body
 }
@@ -20282,6 +20933,487 @@ func NewStartTrialGatewayError(body *StartTrialGatewayErrorResponseBody) *goa.Se
 	return v
 }
 
+// NewGetOrganizationDirectoryHandoffDirectoryHandoffResultOK builds a "admin"
+// service "getOrganizationDirectoryHandoff" endpoint result from a HTTP "OK"
+// response.
+func NewGetOrganizationDirectoryHandoffDirectoryHandoffResultOK(body *GetOrganizationDirectoryHandoffResponseBody) *admin.DirectoryHandoffResult {
+	v := &admin.DirectoryHandoffResult{
+		WorkosEnvironment: *body.WorkosEnvironment,
+	}
+	if body.Handoff != nil {
+		v.Handoff = unmarshalDirectoryHandoffResponseBodyToAdminDirectoryHandoff(body.Handoff)
+	}
+
+	return v
+}
+
+// NewGetOrganizationDirectoryHandoffUnauthorized builds a admin service
+// getOrganizationDirectoryHandoff endpoint unauthorized error.
+func NewGetOrganizationDirectoryHandoffUnauthorized(body *GetOrganizationDirectoryHandoffUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrganizationDirectoryHandoffForbidden builds a admin service
+// getOrganizationDirectoryHandoff endpoint forbidden error.
+func NewGetOrganizationDirectoryHandoffForbidden(body *GetOrganizationDirectoryHandoffForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrganizationDirectoryHandoffBadRequest builds a admin service
+// getOrganizationDirectoryHandoff endpoint bad_request error.
+func NewGetOrganizationDirectoryHandoffBadRequest(body *GetOrganizationDirectoryHandoffBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrganizationDirectoryHandoffNotFound builds a admin service
+// getOrganizationDirectoryHandoff endpoint not_found error.
+func NewGetOrganizationDirectoryHandoffNotFound(body *GetOrganizationDirectoryHandoffNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrganizationDirectoryHandoffConflict builds a admin service
+// getOrganizationDirectoryHandoff endpoint conflict error.
+func NewGetOrganizationDirectoryHandoffConflict(body *GetOrganizationDirectoryHandoffConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrganizationDirectoryHandoffUnsupportedMedia builds a admin service
+// getOrganizationDirectoryHandoff endpoint unsupported_media error.
+func NewGetOrganizationDirectoryHandoffUnsupportedMedia(body *GetOrganizationDirectoryHandoffUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrganizationDirectoryHandoffInvalid builds a admin service
+// getOrganizationDirectoryHandoff endpoint invalid error.
+func NewGetOrganizationDirectoryHandoffInvalid(body *GetOrganizationDirectoryHandoffInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrganizationDirectoryHandoffInvariantViolation builds a admin service
+// getOrganizationDirectoryHandoff endpoint invariant_violation error.
+func NewGetOrganizationDirectoryHandoffInvariantViolation(body *GetOrganizationDirectoryHandoffInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrganizationDirectoryHandoffUnexpected builds a admin service
+// getOrganizationDirectoryHandoff endpoint unexpected error.
+func NewGetOrganizationDirectoryHandoffUnexpected(body *GetOrganizationDirectoryHandoffUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrganizationDirectoryHandoffGatewayError builds a admin service
+// getOrganizationDirectoryHandoff endpoint gateway_error error.
+func NewGetOrganizationDirectoryHandoffGatewayError(body *GetOrganizationDirectoryHandoffGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetOrganizationDirectoryHandoffDirectoryHandoffOK builds a "admin"
+// service "setOrganizationDirectoryHandoff" endpoint result from a HTTP "OK"
+// response.
+func NewSetOrganizationDirectoryHandoffDirectoryHandoffOK(body *SetOrganizationDirectoryHandoffResponseBody) *admin.DirectoryHandoff {
+	v := &admin.DirectoryHandoff{
+		OrganizationID:       *body.OrganizationID,
+		ScimBaseURL:          *body.ScimBaseURL,
+		TokenFingerprint:     *body.TokenFingerprint,
+		WorkosDirectoryID:    body.WorkosDirectoryID,
+		WorkosDirectoryState: body.WorkosDirectoryState,
+		SetBy:                *body.SetBy,
+		UpdatedAt:            *body.UpdatedAt,
+	}
+
+	return v
+}
+
+// NewSetOrganizationDirectoryHandoffUnauthorized builds a admin service
+// setOrganizationDirectoryHandoff endpoint unauthorized error.
+func NewSetOrganizationDirectoryHandoffUnauthorized(body *SetOrganizationDirectoryHandoffUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetOrganizationDirectoryHandoffForbidden builds a admin service
+// setOrganizationDirectoryHandoff endpoint forbidden error.
+func NewSetOrganizationDirectoryHandoffForbidden(body *SetOrganizationDirectoryHandoffForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetOrganizationDirectoryHandoffBadRequest builds a admin service
+// setOrganizationDirectoryHandoff endpoint bad_request error.
+func NewSetOrganizationDirectoryHandoffBadRequest(body *SetOrganizationDirectoryHandoffBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetOrganizationDirectoryHandoffNotFound builds a admin service
+// setOrganizationDirectoryHandoff endpoint not_found error.
+func NewSetOrganizationDirectoryHandoffNotFound(body *SetOrganizationDirectoryHandoffNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetOrganizationDirectoryHandoffConflict builds a admin service
+// setOrganizationDirectoryHandoff endpoint conflict error.
+func NewSetOrganizationDirectoryHandoffConflict(body *SetOrganizationDirectoryHandoffConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetOrganizationDirectoryHandoffUnsupportedMedia builds a admin service
+// setOrganizationDirectoryHandoff endpoint unsupported_media error.
+func NewSetOrganizationDirectoryHandoffUnsupportedMedia(body *SetOrganizationDirectoryHandoffUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetOrganizationDirectoryHandoffInvalid builds a admin service
+// setOrganizationDirectoryHandoff endpoint invalid error.
+func NewSetOrganizationDirectoryHandoffInvalid(body *SetOrganizationDirectoryHandoffInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetOrganizationDirectoryHandoffInvariantViolation builds a admin service
+// setOrganizationDirectoryHandoff endpoint invariant_violation error.
+func NewSetOrganizationDirectoryHandoffInvariantViolation(body *SetOrganizationDirectoryHandoffInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetOrganizationDirectoryHandoffUnexpected builds a admin service
+// setOrganizationDirectoryHandoff endpoint unexpected error.
+func NewSetOrganizationDirectoryHandoffUnexpected(body *SetOrganizationDirectoryHandoffUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetOrganizationDirectoryHandoffGatewayError builds a admin service
+// setOrganizationDirectoryHandoff endpoint gateway_error error.
+func NewSetOrganizationDirectoryHandoffGatewayError(body *SetOrganizationDirectoryHandoffGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewClearOrganizationDirectoryHandoffUnauthorized builds a admin service
+// clearOrganizationDirectoryHandoff endpoint unauthorized error.
+func NewClearOrganizationDirectoryHandoffUnauthorized(body *ClearOrganizationDirectoryHandoffUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewClearOrganizationDirectoryHandoffForbidden builds a admin service
+// clearOrganizationDirectoryHandoff endpoint forbidden error.
+func NewClearOrganizationDirectoryHandoffForbidden(body *ClearOrganizationDirectoryHandoffForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewClearOrganizationDirectoryHandoffBadRequest builds a admin service
+// clearOrganizationDirectoryHandoff endpoint bad_request error.
+func NewClearOrganizationDirectoryHandoffBadRequest(body *ClearOrganizationDirectoryHandoffBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewClearOrganizationDirectoryHandoffNotFound builds a admin service
+// clearOrganizationDirectoryHandoff endpoint not_found error.
+func NewClearOrganizationDirectoryHandoffNotFound(body *ClearOrganizationDirectoryHandoffNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewClearOrganizationDirectoryHandoffConflict builds a admin service
+// clearOrganizationDirectoryHandoff endpoint conflict error.
+func NewClearOrganizationDirectoryHandoffConflict(body *ClearOrganizationDirectoryHandoffConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewClearOrganizationDirectoryHandoffUnsupportedMedia builds a admin service
+// clearOrganizationDirectoryHandoff endpoint unsupported_media error.
+func NewClearOrganizationDirectoryHandoffUnsupportedMedia(body *ClearOrganizationDirectoryHandoffUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewClearOrganizationDirectoryHandoffInvalid builds a admin service
+// clearOrganizationDirectoryHandoff endpoint invalid error.
+func NewClearOrganizationDirectoryHandoffInvalid(body *ClearOrganizationDirectoryHandoffInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewClearOrganizationDirectoryHandoffInvariantViolation builds a admin
+// service clearOrganizationDirectoryHandoff endpoint invariant_violation error.
+func NewClearOrganizationDirectoryHandoffInvariantViolation(body *ClearOrganizationDirectoryHandoffInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewClearOrganizationDirectoryHandoffUnexpected builds a admin service
+// clearOrganizationDirectoryHandoff endpoint unexpected error.
+func NewClearOrganizationDirectoryHandoffUnexpected(body *ClearOrganizationDirectoryHandoffUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewClearOrganizationDirectoryHandoffGatewayError builds a admin service
+// clearOrganizationDirectoryHandoff endpoint gateway_error error.
+func NewClearOrganizationDirectoryHandoffGatewayError(body *ClearOrganizationDirectoryHandoffGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // ValidateGetSessionResponseBody runs the validations defined on
 // GetSessionResponseBody
 func ValidateGetSessionResponseBody(body *GetSessionResponseBody) (err error) {
@@ -21513,6 +22645,52 @@ func ValidateStartTrialResponseBody(body *StartTrialResponseBody) (err error) {
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateGetOrganizationDirectoryHandoffResponseBody runs the validations
+// defined on GetOrganizationDirectoryHandoffResponseBody
+func ValidateGetOrganizationDirectoryHandoffResponseBody(body *GetOrganizationDirectoryHandoffResponseBody) (err error) {
+	if body.WorkosEnvironment == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("workos_environment", "body"))
+	}
+	if body.Handoff != nil {
+		if err2 := ValidateDirectoryHandoffResponseBody(body.Handoff); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.WorkosEnvironment != nil {
+		if !(*body.WorkosEnvironment == "development" || *body.WorkosEnvironment == "production" || *body.WorkosEnvironment == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.workos_environment", *body.WorkosEnvironment, []any{"development", "production", "unknown"}))
+		}
+	}
+	return
+}
+
+// ValidateSetOrganizationDirectoryHandoffResponseBody runs the validations
+// defined on SetOrganizationDirectoryHandoffResponseBody
+func ValidateSetOrganizationDirectoryHandoffResponseBody(body *SetOrganizationDirectoryHandoffResponseBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.ScimBaseURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scim_base_url", "body"))
+	}
+	if body.TokenFingerprint == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("token_fingerprint", "body"))
+	}
+	if body.SetBy == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("set_by", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ScimBaseURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.scim_base_url", *body.ScimBaseURL, goa.FormatURI))
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
@@ -33835,6 +35013,752 @@ func ValidateStartTrialGatewayErrorResponseBody(body *StartTrialGatewayErrorResp
 	return
 }
 
+// ValidateGetOrganizationDirectoryHandoffUnauthorizedResponseBody runs the
+// validations defined on
+// getOrganizationDirectoryHandoff_unauthorized_response_body
+func ValidateGetOrganizationDirectoryHandoffUnauthorizedResponseBody(body *GetOrganizationDirectoryHandoffUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrganizationDirectoryHandoffForbiddenResponseBody runs the
+// validations defined on
+// getOrganizationDirectoryHandoff_forbidden_response_body
+func ValidateGetOrganizationDirectoryHandoffForbiddenResponseBody(body *GetOrganizationDirectoryHandoffForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrganizationDirectoryHandoffBadRequestResponseBody runs the
+// validations defined on
+// getOrganizationDirectoryHandoff_bad_request_response_body
+func ValidateGetOrganizationDirectoryHandoffBadRequestResponseBody(body *GetOrganizationDirectoryHandoffBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrganizationDirectoryHandoffNotFoundResponseBody runs the
+// validations defined on
+// getOrganizationDirectoryHandoff_not_found_response_body
+func ValidateGetOrganizationDirectoryHandoffNotFoundResponseBody(body *GetOrganizationDirectoryHandoffNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrganizationDirectoryHandoffConflictResponseBody runs the
+// validations defined on getOrganizationDirectoryHandoff_conflict_response_body
+func ValidateGetOrganizationDirectoryHandoffConflictResponseBody(body *GetOrganizationDirectoryHandoffConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrganizationDirectoryHandoffUnsupportedMediaResponseBody runs the
+// validations defined on
+// getOrganizationDirectoryHandoff_unsupported_media_response_body
+func ValidateGetOrganizationDirectoryHandoffUnsupportedMediaResponseBody(body *GetOrganizationDirectoryHandoffUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrganizationDirectoryHandoffInvalidResponseBody runs the
+// validations defined on getOrganizationDirectoryHandoff_invalid_response_body
+func ValidateGetOrganizationDirectoryHandoffInvalidResponseBody(body *GetOrganizationDirectoryHandoffInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrganizationDirectoryHandoffInvariantViolationResponseBody runs
+// the validations defined on
+// getOrganizationDirectoryHandoff_invariant_violation_response_body
+func ValidateGetOrganizationDirectoryHandoffInvariantViolationResponseBody(body *GetOrganizationDirectoryHandoffInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrganizationDirectoryHandoffUnexpectedResponseBody runs the
+// validations defined on
+// getOrganizationDirectoryHandoff_unexpected_response_body
+func ValidateGetOrganizationDirectoryHandoffUnexpectedResponseBody(body *GetOrganizationDirectoryHandoffUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrganizationDirectoryHandoffGatewayErrorResponseBody runs the
+// validations defined on
+// getOrganizationDirectoryHandoff_gateway_error_response_body
+func ValidateGetOrganizationDirectoryHandoffGatewayErrorResponseBody(body *GetOrganizationDirectoryHandoffGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetOrganizationDirectoryHandoffUnauthorizedResponseBody runs the
+// validations defined on
+// setOrganizationDirectoryHandoff_unauthorized_response_body
+func ValidateSetOrganizationDirectoryHandoffUnauthorizedResponseBody(body *SetOrganizationDirectoryHandoffUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetOrganizationDirectoryHandoffForbiddenResponseBody runs the
+// validations defined on
+// setOrganizationDirectoryHandoff_forbidden_response_body
+func ValidateSetOrganizationDirectoryHandoffForbiddenResponseBody(body *SetOrganizationDirectoryHandoffForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetOrganizationDirectoryHandoffBadRequestResponseBody runs the
+// validations defined on
+// setOrganizationDirectoryHandoff_bad_request_response_body
+func ValidateSetOrganizationDirectoryHandoffBadRequestResponseBody(body *SetOrganizationDirectoryHandoffBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetOrganizationDirectoryHandoffNotFoundResponseBody runs the
+// validations defined on
+// setOrganizationDirectoryHandoff_not_found_response_body
+func ValidateSetOrganizationDirectoryHandoffNotFoundResponseBody(body *SetOrganizationDirectoryHandoffNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetOrganizationDirectoryHandoffConflictResponseBody runs the
+// validations defined on setOrganizationDirectoryHandoff_conflict_response_body
+func ValidateSetOrganizationDirectoryHandoffConflictResponseBody(body *SetOrganizationDirectoryHandoffConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetOrganizationDirectoryHandoffUnsupportedMediaResponseBody runs the
+// validations defined on
+// setOrganizationDirectoryHandoff_unsupported_media_response_body
+func ValidateSetOrganizationDirectoryHandoffUnsupportedMediaResponseBody(body *SetOrganizationDirectoryHandoffUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetOrganizationDirectoryHandoffInvalidResponseBody runs the
+// validations defined on setOrganizationDirectoryHandoff_invalid_response_body
+func ValidateSetOrganizationDirectoryHandoffInvalidResponseBody(body *SetOrganizationDirectoryHandoffInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetOrganizationDirectoryHandoffInvariantViolationResponseBody runs
+// the validations defined on
+// setOrganizationDirectoryHandoff_invariant_violation_response_body
+func ValidateSetOrganizationDirectoryHandoffInvariantViolationResponseBody(body *SetOrganizationDirectoryHandoffInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetOrganizationDirectoryHandoffUnexpectedResponseBody runs the
+// validations defined on
+// setOrganizationDirectoryHandoff_unexpected_response_body
+func ValidateSetOrganizationDirectoryHandoffUnexpectedResponseBody(body *SetOrganizationDirectoryHandoffUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetOrganizationDirectoryHandoffGatewayErrorResponseBody runs the
+// validations defined on
+// setOrganizationDirectoryHandoff_gateway_error_response_body
+func ValidateSetOrganizationDirectoryHandoffGatewayErrorResponseBody(body *SetOrganizationDirectoryHandoffGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateClearOrganizationDirectoryHandoffUnauthorizedResponseBody runs the
+// validations defined on
+// clearOrganizationDirectoryHandoff_unauthorized_response_body
+func ValidateClearOrganizationDirectoryHandoffUnauthorizedResponseBody(body *ClearOrganizationDirectoryHandoffUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateClearOrganizationDirectoryHandoffForbiddenResponseBody runs the
+// validations defined on
+// clearOrganizationDirectoryHandoff_forbidden_response_body
+func ValidateClearOrganizationDirectoryHandoffForbiddenResponseBody(body *ClearOrganizationDirectoryHandoffForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateClearOrganizationDirectoryHandoffBadRequestResponseBody runs the
+// validations defined on
+// clearOrganizationDirectoryHandoff_bad_request_response_body
+func ValidateClearOrganizationDirectoryHandoffBadRequestResponseBody(body *ClearOrganizationDirectoryHandoffBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateClearOrganizationDirectoryHandoffNotFoundResponseBody runs the
+// validations defined on
+// clearOrganizationDirectoryHandoff_not_found_response_body
+func ValidateClearOrganizationDirectoryHandoffNotFoundResponseBody(body *ClearOrganizationDirectoryHandoffNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateClearOrganizationDirectoryHandoffConflictResponseBody runs the
+// validations defined on
+// clearOrganizationDirectoryHandoff_conflict_response_body
+func ValidateClearOrganizationDirectoryHandoffConflictResponseBody(body *ClearOrganizationDirectoryHandoffConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateClearOrganizationDirectoryHandoffUnsupportedMediaResponseBody runs
+// the validations defined on
+// clearOrganizationDirectoryHandoff_unsupported_media_response_body
+func ValidateClearOrganizationDirectoryHandoffUnsupportedMediaResponseBody(body *ClearOrganizationDirectoryHandoffUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateClearOrganizationDirectoryHandoffInvalidResponseBody runs the
+// validations defined on
+// clearOrganizationDirectoryHandoff_invalid_response_body
+func ValidateClearOrganizationDirectoryHandoffInvalidResponseBody(body *ClearOrganizationDirectoryHandoffInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateClearOrganizationDirectoryHandoffInvariantViolationResponseBody runs
+// the validations defined on
+// clearOrganizationDirectoryHandoff_invariant_violation_response_body
+func ValidateClearOrganizationDirectoryHandoffInvariantViolationResponseBody(body *ClearOrganizationDirectoryHandoffInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateClearOrganizationDirectoryHandoffUnexpectedResponseBody runs the
+// validations defined on
+// clearOrganizationDirectoryHandoff_unexpected_response_body
+func ValidateClearOrganizationDirectoryHandoffUnexpectedResponseBody(body *ClearOrganizationDirectoryHandoffUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateClearOrganizationDirectoryHandoffGatewayErrorResponseBody runs the
+// validations defined on
+// clearOrganizationDirectoryHandoff_gateway_error_response_body
+func ValidateClearOrganizationDirectoryHandoffGatewayErrorResponseBody(body *ClearOrganizationDirectoryHandoffGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateIdentityProviderReadinessCheckResponseBody runs the validations
 // defined on IdentityProviderReadinessCheckResponseBody
 func ValidateIdentityProviderReadinessCheckResponseBody(body *IdentityProviderReadinessCheckResponseBody) (err error) {
@@ -34251,6 +36175,33 @@ func ValidateAssetResponseBody(body *AssetResponseBody) (err error) {
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateDirectoryHandoffResponseBody runs the validations defined on
+// DirectoryHandoffResponseBody
+func ValidateDirectoryHandoffResponseBody(body *DirectoryHandoffResponseBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.ScimBaseURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scim_base_url", "body"))
+	}
+	if body.TokenFingerprint == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("token_fingerprint", "body"))
+	}
+	if body.SetBy == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("set_by", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ScimBaseURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.scim_base_url", *body.ScimBaseURL, goa.FormatURI))
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))

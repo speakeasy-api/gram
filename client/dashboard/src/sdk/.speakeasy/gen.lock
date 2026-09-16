@@ -10512,7 +10512,7 @@ examples:
         application/json: {"step_key": "<value>", "values": []}
       responses:
         "200":
-          application/json: {"field_outcomes": [], "step": {"expected_values": [{"key": "<key>", "label": "<value>", "secret": false}], "instructions": ["<value 1>", "<value 2>"], "key": "<key>", "printed_values": [{"copyable": false, "label": "<value>", "value": "<value>"}], "state": "awaiting_verification", "title": "<value>", "where": "their_console"}}
+          application/json: {"field_outcomes": [], "step": {"expected_values": [{"key": "<key>", "label": "<value>", "secret": false}], "instructions": ["<value 1>", "<value 2>"], "key": "<key>", "printed_values": [{"copyable": false, "label": "<value>", "secret": true, "value": "<value>"}], "state": "awaiting_verification", "title": "<value>", "where": "their_console"}}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":

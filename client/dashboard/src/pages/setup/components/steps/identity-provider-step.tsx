@@ -25,6 +25,7 @@ import { StepContainer } from "../step-container";
 import { StepSection } from "../step-section";
 import { OktaApplicationsSection } from "./okta-applications-section";
 import { OktaConnectSection } from "./okta-connect-section";
+import { OktaDirectorySection } from "./okta-directory-section";
 import { OktaSignOnSection } from "./okta-sign-on-section";
 import { IDP_PROVIDERS } from "../../providers";
 import type { IdpProvider } from "../../types";
@@ -145,13 +146,16 @@ export function IdentityProviderStep({
             locked={false}
           />
         )}
-        <DirectorySyncSection
-          index={3}
-          configured={!!onboardingStatus?.dsyncConfigured}
-          isLoading={isLoading}
-          locked={guided && connection?.status !== "active"}
-          guided={guided}
-        />
+        {guided ? (
+          <OktaDirectorySection index={3} connection={connection} />
+        ) : (
+          <DirectorySyncSection
+            index={3}
+            configured={!!onboardingStatus?.dsyncConfigured}
+            isLoading={isLoading}
+            locked={false}
+          />
+        )}
         {guided ? (
           <OktaApplicationsSection index={4} connection={connection} />
         ) : (
@@ -547,15 +551,7 @@ function DirectorySyncSection({
   configured,
   isLoading,
   locked,
-  guided,
-}: SectionProps & {
-  /**
-   * On the guided path this is the one step Speakeasy cannot do for you: the
-   * directory is created in the sign-in provider's portal, so the step says so
-   * rather than letting the round trip come as a surprise.
-   */
-  guided: boolean;
-}): JSX.Element {
+}: SectionProps): JSX.Element {
   const [portalOpened, setPortalOpened] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const { refetch: refetchOnboardingStatus } = useOnboardingStatus(
@@ -622,20 +618,6 @@ function DirectorySyncSection({
   } else {
     body = (
       <div className="space-y-4">
-        {guided ? (
-          <Alert variant="info" alignTop>
-            <div>
-              <AlertTitle>
-                This is the one step that leaves Speakeasy
-              </AlertTitle>
-              <AlertDescription>
-                Everything else about Okta is set up from here, but a directory
-                is created in Speakeasy&apos;s sign-in provider portal rather
-                than over its API. You go there once, and come back.
-              </AlertDescription>
-            </div>
-          </Alert>
-        ) : null}
         <PortalNote>
           {portalOpened
             ? "Finish configuring the directory connection in the sign-in provider tab, then verify it here."

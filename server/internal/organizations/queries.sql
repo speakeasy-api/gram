@@ -936,7 +936,8 @@ SELECT
         WHERE identity_provider_connections.organization_id = @organization_id
           AND identity_provider_connections.deleted IS FALSE
           AND okta_identity_provider_connections.sign_in_state = 'passed'
-    ) AS okta_sign_in_passed,
+          AND okta_identity_provider_connections.directory_state = 'passed'
+    ) AS okta_identity_provider_passed,
     EXISTS (
         SELECT 1
         FROM plugin_github_connections
@@ -952,9 +953,10 @@ SELECT
 FROM organization_metadata
 WHERE organization_metadata.id = @organization_id;
 
--- name: SetOktaIdentityProviderSignInStateForTest :exec
+-- name: SetOktaIdentityProviderSetupStateForTest :exec
 UPDATE okta_identity_provider_connections
 SET sign_in_state = @sign_in_state,
+    directory_state = @directory_state,
     updated_at = clock_timestamp()
 FROM identity_provider_connections
 WHERE okta_identity_provider_connections.identity_provider_connection_id = identity_provider_connections.id

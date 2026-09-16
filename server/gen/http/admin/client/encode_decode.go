@@ -11920,6 +11920,703 @@ func DecodeStartTrialResponse(decoder func(*http.Response) goahttp.Decoder, rest
 	}
 }
 
+// BuildGetOrganizationDirectoryHandoffRequest instantiates a HTTP request
+// object with method and path set to call the "admin" service
+// "getOrganizationDirectoryHandoff" endpoint
+func (c *Client) BuildGetOrganizationDirectoryHandoffRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetOrganizationDirectoryHandoffAdminPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "getOrganizationDirectoryHandoff", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetOrganizationDirectoryHandoffRequest returns an encoder for requests
+// sent to the admin getOrganizationDirectoryHandoff server.
+func EncodeGetOrganizationDirectoryHandoffRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.GetOrganizationDirectoryHandoffPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "getOrganizationDirectoryHandoff", "*admin.GetOrganizationDirectoryHandoffPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		values := req.URL.Query()
+		values.Add("organization_id", p.OrganizationID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetOrganizationDirectoryHandoffResponse returns a decoder for
+// responses returned by the admin getOrganizationDirectoryHandoff endpoint.
+// restoreBody controls whether the response body should be restored after
+// having been read.
+// DecodeGetOrganizationDirectoryHandoffResponse may return the following
+// errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetOrganizationDirectoryHandoffResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetOrganizationDirectoryHandoffResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationDirectoryHandoff", err)
+			}
+			err = ValidateGetOrganizationDirectoryHandoffResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationDirectoryHandoff", err)
+			}
+			res := NewGetOrganizationDirectoryHandoffDirectoryHandoffResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetOrganizationDirectoryHandoffUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationDirectoryHandoff", err)
+			}
+			err = ValidateGetOrganizationDirectoryHandoffUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationDirectoryHandoff", err)
+			}
+			return nil, NewGetOrganizationDirectoryHandoffUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetOrganizationDirectoryHandoffForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationDirectoryHandoff", err)
+			}
+			err = ValidateGetOrganizationDirectoryHandoffForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationDirectoryHandoff", err)
+			}
+			return nil, NewGetOrganizationDirectoryHandoffForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetOrganizationDirectoryHandoffBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationDirectoryHandoff", err)
+			}
+			err = ValidateGetOrganizationDirectoryHandoffBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationDirectoryHandoff", err)
+			}
+			return nil, NewGetOrganizationDirectoryHandoffBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetOrganizationDirectoryHandoffNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationDirectoryHandoff", err)
+			}
+			err = ValidateGetOrganizationDirectoryHandoffNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationDirectoryHandoff", err)
+			}
+			return nil, NewGetOrganizationDirectoryHandoffNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetOrganizationDirectoryHandoffConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationDirectoryHandoff", err)
+			}
+			err = ValidateGetOrganizationDirectoryHandoffConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationDirectoryHandoff", err)
+			}
+			return nil, NewGetOrganizationDirectoryHandoffConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetOrganizationDirectoryHandoffUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationDirectoryHandoff", err)
+			}
+			err = ValidateGetOrganizationDirectoryHandoffUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationDirectoryHandoff", err)
+			}
+			return nil, NewGetOrganizationDirectoryHandoffUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetOrganizationDirectoryHandoffInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationDirectoryHandoff", err)
+			}
+			err = ValidateGetOrganizationDirectoryHandoffInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationDirectoryHandoff", err)
+			}
+			return nil, NewGetOrganizationDirectoryHandoffInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetOrganizationDirectoryHandoffInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getOrganizationDirectoryHandoff", err)
+				}
+				err = ValidateGetOrganizationDirectoryHandoffInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getOrganizationDirectoryHandoff", err)
+				}
+				return nil, NewGetOrganizationDirectoryHandoffInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetOrganizationDirectoryHandoffUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getOrganizationDirectoryHandoff", err)
+				}
+				err = ValidateGetOrganizationDirectoryHandoffUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getOrganizationDirectoryHandoff", err)
+				}
+				return nil, NewGetOrganizationDirectoryHandoffUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "getOrganizationDirectoryHandoff", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetOrganizationDirectoryHandoffGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationDirectoryHandoff", err)
+			}
+			err = ValidateGetOrganizationDirectoryHandoffGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationDirectoryHandoff", err)
+			}
+			return nil, NewGetOrganizationDirectoryHandoffGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "getOrganizationDirectoryHandoff", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildSetOrganizationDirectoryHandoffRequest instantiates a HTTP request
+// object with method and path set to call the "admin" service
+// "setOrganizationDirectoryHandoff" endpoint
+func (c *Client) BuildSetOrganizationDirectoryHandoffRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SetOrganizationDirectoryHandoffAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "setOrganizationDirectoryHandoff", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSetOrganizationDirectoryHandoffRequest returns an encoder for requests
+// sent to the admin setOrganizationDirectoryHandoff server.
+func EncodeSetOrganizationDirectoryHandoffRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.SetOrganizationDirectoryHandoffPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "setOrganizationDirectoryHandoff", "*admin.SetOrganizationDirectoryHandoffPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewSetOrganizationDirectoryHandoffRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "setOrganizationDirectoryHandoff", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSetOrganizationDirectoryHandoffResponse returns a decoder for
+// responses returned by the admin setOrganizationDirectoryHandoff endpoint.
+// restoreBody controls whether the response body should be restored after
+// having been read.
+// DecodeSetOrganizationDirectoryHandoffResponse may return the following
+// errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSetOrganizationDirectoryHandoffResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SetOrganizationDirectoryHandoffResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setOrganizationDirectoryHandoff", err)
+			}
+			err = ValidateSetOrganizationDirectoryHandoffResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setOrganizationDirectoryHandoff", err)
+			}
+			res := NewSetOrganizationDirectoryHandoffDirectoryHandoffOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body SetOrganizationDirectoryHandoffUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setOrganizationDirectoryHandoff", err)
+			}
+			err = ValidateSetOrganizationDirectoryHandoffUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setOrganizationDirectoryHandoff", err)
+			}
+			return nil, NewSetOrganizationDirectoryHandoffUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SetOrganizationDirectoryHandoffForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setOrganizationDirectoryHandoff", err)
+			}
+			err = ValidateSetOrganizationDirectoryHandoffForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setOrganizationDirectoryHandoff", err)
+			}
+			return nil, NewSetOrganizationDirectoryHandoffForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SetOrganizationDirectoryHandoffBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setOrganizationDirectoryHandoff", err)
+			}
+			err = ValidateSetOrganizationDirectoryHandoffBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setOrganizationDirectoryHandoff", err)
+			}
+			return nil, NewSetOrganizationDirectoryHandoffBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SetOrganizationDirectoryHandoffNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setOrganizationDirectoryHandoff", err)
+			}
+			err = ValidateSetOrganizationDirectoryHandoffNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setOrganizationDirectoryHandoff", err)
+			}
+			return nil, NewSetOrganizationDirectoryHandoffNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SetOrganizationDirectoryHandoffConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setOrganizationDirectoryHandoff", err)
+			}
+			err = ValidateSetOrganizationDirectoryHandoffConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setOrganizationDirectoryHandoff", err)
+			}
+			return nil, NewSetOrganizationDirectoryHandoffConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SetOrganizationDirectoryHandoffUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setOrganizationDirectoryHandoff", err)
+			}
+			err = ValidateSetOrganizationDirectoryHandoffUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setOrganizationDirectoryHandoff", err)
+			}
+			return nil, NewSetOrganizationDirectoryHandoffUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SetOrganizationDirectoryHandoffInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setOrganizationDirectoryHandoff", err)
+			}
+			err = ValidateSetOrganizationDirectoryHandoffInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setOrganizationDirectoryHandoff", err)
+			}
+			return nil, NewSetOrganizationDirectoryHandoffInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SetOrganizationDirectoryHandoffInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "setOrganizationDirectoryHandoff", err)
+				}
+				err = ValidateSetOrganizationDirectoryHandoffInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "setOrganizationDirectoryHandoff", err)
+				}
+				return nil, NewSetOrganizationDirectoryHandoffInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SetOrganizationDirectoryHandoffUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "setOrganizationDirectoryHandoff", err)
+				}
+				err = ValidateSetOrganizationDirectoryHandoffUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "setOrganizationDirectoryHandoff", err)
+				}
+				return nil, NewSetOrganizationDirectoryHandoffUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "setOrganizationDirectoryHandoff", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SetOrganizationDirectoryHandoffGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setOrganizationDirectoryHandoff", err)
+			}
+			err = ValidateSetOrganizationDirectoryHandoffGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setOrganizationDirectoryHandoff", err)
+			}
+			return nil, NewSetOrganizationDirectoryHandoffGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "setOrganizationDirectoryHandoff", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildClearOrganizationDirectoryHandoffRequest instantiates a HTTP request
+// object with method and path set to call the "admin" service
+// "clearOrganizationDirectoryHandoff" endpoint
+func (c *Client) BuildClearOrganizationDirectoryHandoffRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ClearOrganizationDirectoryHandoffAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "clearOrganizationDirectoryHandoff", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeClearOrganizationDirectoryHandoffRequest returns an encoder for
+// requests sent to the admin clearOrganizationDirectoryHandoff server.
+func EncodeClearOrganizationDirectoryHandoffRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.ClearOrganizationDirectoryHandoffPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "clearOrganizationDirectoryHandoff", "*admin.ClearOrganizationDirectoryHandoffPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewClearOrganizationDirectoryHandoffRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "clearOrganizationDirectoryHandoff", err)
+		}
+		return nil
+	}
+}
+
+// DecodeClearOrganizationDirectoryHandoffResponse returns a decoder for
+// responses returned by the admin clearOrganizationDirectoryHandoff endpoint.
+// restoreBody controls whether the response body should be restored after
+// having been read.
+// DecodeClearOrganizationDirectoryHandoffResponse may return the following
+// errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeClearOrganizationDirectoryHandoffResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusNoContent:
+			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body ClearOrganizationDirectoryHandoffUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "clearOrganizationDirectoryHandoff", err)
+			}
+			err = ValidateClearOrganizationDirectoryHandoffUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "clearOrganizationDirectoryHandoff", err)
+			}
+			return nil, NewClearOrganizationDirectoryHandoffUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ClearOrganizationDirectoryHandoffForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "clearOrganizationDirectoryHandoff", err)
+			}
+			err = ValidateClearOrganizationDirectoryHandoffForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "clearOrganizationDirectoryHandoff", err)
+			}
+			return nil, NewClearOrganizationDirectoryHandoffForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ClearOrganizationDirectoryHandoffBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "clearOrganizationDirectoryHandoff", err)
+			}
+			err = ValidateClearOrganizationDirectoryHandoffBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "clearOrganizationDirectoryHandoff", err)
+			}
+			return nil, NewClearOrganizationDirectoryHandoffBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ClearOrganizationDirectoryHandoffNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "clearOrganizationDirectoryHandoff", err)
+			}
+			err = ValidateClearOrganizationDirectoryHandoffNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "clearOrganizationDirectoryHandoff", err)
+			}
+			return nil, NewClearOrganizationDirectoryHandoffNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ClearOrganizationDirectoryHandoffConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "clearOrganizationDirectoryHandoff", err)
+			}
+			err = ValidateClearOrganizationDirectoryHandoffConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "clearOrganizationDirectoryHandoff", err)
+			}
+			return nil, NewClearOrganizationDirectoryHandoffConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ClearOrganizationDirectoryHandoffUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "clearOrganizationDirectoryHandoff", err)
+			}
+			err = ValidateClearOrganizationDirectoryHandoffUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "clearOrganizationDirectoryHandoff", err)
+			}
+			return nil, NewClearOrganizationDirectoryHandoffUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ClearOrganizationDirectoryHandoffInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "clearOrganizationDirectoryHandoff", err)
+			}
+			err = ValidateClearOrganizationDirectoryHandoffInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "clearOrganizationDirectoryHandoff", err)
+			}
+			return nil, NewClearOrganizationDirectoryHandoffInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ClearOrganizationDirectoryHandoffInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "clearOrganizationDirectoryHandoff", err)
+				}
+				err = ValidateClearOrganizationDirectoryHandoffInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "clearOrganizationDirectoryHandoff", err)
+				}
+				return nil, NewClearOrganizationDirectoryHandoffInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ClearOrganizationDirectoryHandoffUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "clearOrganizationDirectoryHandoff", err)
+				}
+				err = ValidateClearOrganizationDirectoryHandoffUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "clearOrganizationDirectoryHandoff", err)
+				}
+				return nil, NewClearOrganizationDirectoryHandoffUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "clearOrganizationDirectoryHandoff", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ClearOrganizationDirectoryHandoffGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "clearOrganizationDirectoryHandoff", err)
+			}
+			err = ValidateClearOrganizationDirectoryHandoffGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "clearOrganizationDirectoryHandoff", err)
+			}
+			return nil, NewClearOrganizationDirectoryHandoffGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "clearOrganizationDirectoryHandoff", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalIdentityProviderReadinessCheckResponseBodyToTypesIdentityProviderReadinessCheck
 // builds a value of type *types.IdentityProviderReadinessCheck from a value of
 // type *IdentityProviderReadinessCheckResponseBody.
@@ -12250,6 +12947,26 @@ func unmarshalAssetResponseBodyToAdminAsset(v *AssetResponseBody) *admin.Asset {
 		ContentLength: *v.ContentLength,
 		CreatedAt:     *v.CreatedAt,
 		UpdatedAt:     *v.UpdatedAt,
+	}
+
+	return res
+}
+
+// unmarshalDirectoryHandoffResponseBodyToAdminDirectoryHandoff builds a value
+// of type *admin.DirectoryHandoff from a value of type
+// *DirectoryHandoffResponseBody.
+func unmarshalDirectoryHandoffResponseBodyToAdminDirectoryHandoff(v *DirectoryHandoffResponseBody) *admin.DirectoryHandoff {
+	if v == nil {
+		return nil
+	}
+	res := &admin.DirectoryHandoff{
+		OrganizationID:       *v.OrganizationID,
+		ScimBaseURL:          *v.ScimBaseURL,
+		TokenFingerprint:     *v.TokenFingerprint,
+		WorkosDirectoryID:    v.WorkosDirectoryID,
+		WorkosDirectoryState: v.WorkosDirectoryState,
+		SetBy:                *v.SetBy,
+		UpdatedAt:            *v.UpdatedAt,
 	}
 
 	return res

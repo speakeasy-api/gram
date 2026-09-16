@@ -805,7 +805,7 @@ func newAccessRoleProvider(ctx context.Context, logger *slog.Logger, guardianPol
 // server down over it would take login, the organizations list, the detail page
 // and every update endpoint with it. The condition is logged at Error on
 // startup, which is what makes it visible before an operator goes looking.
-func newAdminWorkOSOrganizationCreator(ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Policy, c *cli.Context) orgprovision.WorkOSOrganizationCreator {
+func newAdminWorkOSOrganizationCreator(ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Policy, c *cli.Context) admin.AdminWorkOS {
 	apiKey := c.String("workos-api-key")
 	haveRealKey := apiKey != "" && apiKey != "unset"
 	opts := workosClientOpts(c)
@@ -827,6 +827,25 @@ func newAdminWorkOSOrganizationCreator(ctx context.Context, logger *slog.Logger,
 	default:
 		logger.WarnContext(ctx, "organization creation is unavailable: WorkOS not configured")
 		return orgprovision.Unavailable{}
+	}
+}
+
+func adminWorkOSEnvironment(c *cli.Context) string {
+	if c.String("environment") == "local" && c.String("workos-endpoint") != "" {
+		idpClientSecret := c.String("idp-client-secret")
+		if idpClientSecret != "" && idpClientSecret != "unset" {
+			return "unknown"
+		}
+	}
+
+	apiKey := c.String("workos-api-key")
+	switch {
+	case strings.HasPrefix(apiKey, "sk_test_"):
+		return "development"
+	case strings.HasPrefix(apiKey, "sk_"):
+		return "production"
+	default:
+		return "unknown"
 	}
 }
 

@@ -13,6 +13,14 @@ import {
   IdentityProviderVerifyEvidence$inboundSchema,
 } from "./identityproviderverifyevidence.js";
 
+export const DirectoryState = {
+  Configured: "configured",
+  PendingValidation: "pending_validation",
+  Passed: "passed",
+  Failed: "failed",
+} as const;
+export type DirectoryState = ClosedEnum<typeof DirectoryState>;
+
 export const GroupsSource = {
   Token: "token",
   Directory: "directory",
@@ -54,6 +62,15 @@ export type IdentityProviderConnection = {
    */
   clientId?: string | undefined;
   createdAt: Date;
+  /**
+   * Number of groups observed in the linked WorkOS directory.
+   */
+  directoryGroupCount?: number | undefined;
+  directoryState?: DirectoryState | undefined;
+  /**
+   * Number of users observed in the linked WorkOS directory.
+   */
+  directoryUserCount?: number | undefined;
   displayName?: string | undefined;
   grantedScopes: Array<string>;
   /**
@@ -85,6 +102,11 @@ export type IdentityProviderConnection = {
 };
 
 /** @internal */
+export const DirectoryState$inboundSchema: z.ZodMiniEnum<
+  typeof DirectoryState
+> = z.enum(DirectoryState);
+
+/** @internal */
 export const GroupsSource$inboundSchema: z.ZodMiniEnum<typeof GroupsSource> = z
   .enum(GroupsSource);
 
@@ -114,6 +136,9 @@ export const IdentityProviderConnection$inboundSchema: z.ZodMiniType<
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
+    directory_group_count: z.optional(z.int()),
+    directory_state: z.optional(DirectoryState$inboundSchema),
+    directory_user_count: z.optional(z.int()),
     display_name: z.optional(z.string()),
     granted_scopes: z.array(z.string()),
     groups_claim_confirmed: z.optional(z.boolean()),
@@ -140,6 +165,9 @@ export const IdentityProviderConnection$inboundSchema: z.ZodMiniType<
     return remap$(v, {
       "client_id": "clientId",
       "created_at": "createdAt",
+      "directory_group_count": "directoryGroupCount",
+      "directory_state": "directoryState",
+      "directory_user_count": "directoryUserCount",
       "display_name": "displayName",
       "granted_scopes": "grantedScopes",
       "groups_claim_confirmed": "groupsClaimConfirmed",

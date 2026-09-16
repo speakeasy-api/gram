@@ -185,7 +185,24 @@ type Group struct {
 
 	// Name is the group's display name.
 	Name string
+
+	// Type identifies built-in groups that cannot be assigned to applications.
+	Type string
 }
+
+// ProvisioningConnection is the non-secret status returned for an application's SCIM connection.
+type ProvisioningConnection struct {
+	// Status is Okta's provisioning connection lifecycle state.
+	Status string `json:"status"`
+}
+
+const (
+	// DirectoryApplicationName is Okta's catalog key for its bearer-token SCIM test application.
+	DirectoryApplicationName = "scim2testapp"
+
+	// DirectoryApplicationLabel is the customer-visible label for the directory application.
+	DirectoryApplicationLabel = "Speakeasy Directory"
+)
 
 // AuthorizationServer identifies an Okta custom authorization server.
 type AuthorizationServer struct {
@@ -229,6 +246,11 @@ type createOIDCApplicationRequest struct {
 	SignOnMode  string                        `json:"signOnMode"`
 	Credentials applicationCredentialsRequest `json:"credentials"`
 	Settings    applicationSettingsRequest    `json:"settings"`
+}
+
+type createDirectoryApplicationRequest struct {
+	Name  string `json:"name"`
+	Label string `json:"label"`
 }
 
 type applicationCredentialsRequest struct {
@@ -334,9 +356,10 @@ func NewClient(logger *slog.Logger, guardianPolicy *guardian.Policy, opts ...Cli
 	}
 
 	resilience := guardian.WithResilience("okta", guardian.ResilienceConfig{
-		Partition: guardian.PartitionByHost(),
-		Limit:     guardian.PerMinute(600),
-		Breaker:   guardian.NoBreaker(),
+		Partition:       guardian.PartitionByHost(),
+		Limit:           guardian.PerMinute(600),
+		WaitForCapacity: false,
+		Breaker:         guardian.NoBreaker(),
 	})
 	httpClient := guardianPolicy.PooledClient(guardian.WithRetryConfig(retryConfig), resilience)
 	nonRetryingHTTPClient := guardianPolicy.PooledClient(resilience)
@@ -678,6 +701,21 @@ func DecodeApplication(raw json.RawMessage) (Application, error) {
 		return Application{ID: "", Status: "", Label: "", ClientID: "", SignOnMode: "", SignOnURL: "", LogoURL: ""}, fmt.Errorf("decode Okta application: %w", err)
 	}
 	return applicationFromResponse(response), nil
+}
+
+// DecodeGroup converts an Okta group response into assignment fields.
+func DecodeGroup(raw json.RawMessage) (Group, error) {
+	var response struct {
+		ID      string `json:"id"`
+		Type    string `json:"type"`
+		Profile struct {
+			Name string `json:"name"`
+		} `json:"profile"`
+	}
+	if err := json.Unmarshal(raw, &response); err != nil {
+		return Group{ID: "", Name: "", Type: ""}, fmt.Errorf("decode Okta group: %w", err)
+	}
+	return Group{ID: response.ID, Name: response.Profile.Name, Type: response.Type}, nil
 }
 
 // IsDirectApplicationUser reports whether an application user was assigned directly rather than through a group.
@@ -1046,6 +1084,31 @@ func (c *Client) CreateOIDCApplication(ctx context.Context, tenantDomain, access
 	return applicationFromResponse(response), nil
 }
 
+// CreateDirectoryApplication creates Okta's bearer-token SCIM catalog application.
+func (c *Client) CreateDirectoryApplication(ctx context.Context, tenantDomain, accessToken string) (Application, error) {
+	body, err := json.Marshal(createDirectoryApplicationRequest{Name: DirectoryApplicationName, Label: DirectoryApplicationLabel})
+	if err != nil {
+		return Application{}, fmt.Errorf("encode Okta directory application: %w", err)
+	}
+	requestURL, err := c.urlFor(tenantDomain, "/api/v1/apps")
+	if err != nil {
+		return Application{}, fmt.Errorf("create Okta directory application: %w", err)
+	}
+	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, requestURL, bytes.NewReader(body))
+	if err != nil {
+		return Application{}, fmt.Errorf("create Okta directory application request: %w", err)
+	}
+	httpRequest.Header.Set("Accept", "application/json")
+	httpRequest.Header.Set("Authorization", "Bearer "+accessToken)
+	httpRequest.Header.Set("Content-Type", "application/json")
+
+	var response applicationResponse
+	if _, err := c.doAuthorized(c.nonRetryingHTTPClient, httpRequest, accessToken, &response); err != nil {
+		return Application{}, err
+	}
+	return applicationFromResponse(response), nil
+}
+
 // FindActiveApplicationByLabel returns an existing active application and its
 // transient client secret when Okta includes it in the list response.
 func (c *Client) FindActiveApplicationByLabel(ctx context.Context, tenantDomain, accessToken, label string) (Application, string, bool, error) {
@@ -1097,6 +1160,30 @@ func (c *Client) GetApplication(ctx context.Context, tenantDomain, accessToken, 
 		return Application{}, err
 	}
 	return applicationFromResponse(response), nil
+}
+
+// GetProvisioningConnection reads the default SCIM provisioning connection status for an application.
+func (c *Client) GetProvisioningConnection(ctx context.Context, tenantDomain, accessToken, applicationID string) (ProvisioningConnection, error) {
+	if applicationID == "" {
+		return ProvisioningConnection{}, errors.New("get Okta provisioning connection: application ID is required")
+	}
+	path := "/api/v1/apps/" + url.PathEscape(applicationID) + "/connections/default"
+	requestURL, err := c.urlFor(tenantDomain, path)
+	if err != nil {
+		return ProvisioningConnection{}, fmt.Errorf("get Okta provisioning connection: %w", err)
+	}
+	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
+	if err != nil {
+		return ProvisioningConnection{}, fmt.Errorf("create Okta provisioning connection request: %w", err)
+	}
+	httpRequest.Header.Set("Accept", "application/json")
+	httpRequest.Header.Set("Authorization", "Bearer "+accessToken)
+
+	var response ProvisioningConnection
+	if _, err := c.doAuthorized(c.httpClient, httpRequest, accessToken, &response); err != nil {
+		return ProvisioningConnection{}, err
+	}
+	return response, nil
 }
 
 // EnsureOIDCApplicationRedirectURI appends a redirect URI without replacing existing application configuration.
@@ -1315,7 +1402,7 @@ func (c *Client) FindEveryoneGroup(ctx context.Context, tenantDomain, accessToke
 	}
 	for _, response := range responses {
 		if response.Type == "BUILT_IN" && response.Profile.Name == "Everyone" {
-			return Group{ID: response.ID, Name: response.Profile.Name}, nil
+			return Group{ID: response.ID, Name: response.Profile.Name, Type: response.Type}, nil
 		}
 	}
 	return Group{}, errors.New("find Okta Everyone group: group not found")

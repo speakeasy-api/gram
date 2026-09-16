@@ -465,6 +465,80 @@ WHERE om.id = sqlc.arg('id')::text
 ORDER BY (om.id = sqlc.arg('id')::text) DESC
 LIMIT 1;
 
+-- name: AdminGetOrganizationDirectoryHandoff :one
+SELECT
+    organization_id,
+    directory_scim_base_url,
+    directory_scim_token_encrypted,
+    directory_scim_token_fingerprint,
+    directory_workos_id,
+    directory_handoff_set_by_user_id,
+    directory_handoff_updated_at
+FROM organization_onboarding
+WHERE organization_id = @organization_id
+  AND directory_scim_base_url IS NOT NULL
+  AND directory_scim_token_encrypted IS NOT NULL
+  AND directory_scim_token_fingerprint IS NOT NULL
+  AND directory_handoff_set_by_user_id IS NOT NULL
+  AND directory_handoff_updated_at IS NOT NULL;
+
+-- name: AdminSetOrganizationDirectoryHandoff :one
+INSERT INTO organization_onboarding (
+    organization_id,
+    directory_scim_base_url,
+    directory_scim_token_encrypted,
+    directory_scim_token_fingerprint,
+    directory_handoff_set_by_user_id,
+    directory_handoff_updated_at
+)
+VALUES (
+    @organization_id,
+    @directory_scim_base_url,
+    @directory_scim_token_encrypted,
+    @directory_scim_token_fingerprint,
+    @directory_handoff_set_by_user_id,
+    clock_timestamp()
+)
+ON CONFLICT (organization_id) DO UPDATE
+SET
+    directory_scim_base_url = EXCLUDED.directory_scim_base_url,
+    directory_scim_token_encrypted = EXCLUDED.directory_scim_token_encrypted,
+    directory_scim_token_key_id = NULL,
+    directory_scim_token_fingerprint = EXCLUDED.directory_scim_token_fingerprint,
+    directory_workos_id = NULL,
+    directory_handoff_set_by_user_id = EXCLUDED.directory_handoff_set_by_user_id,
+    directory_handoff_updated_at = EXCLUDED.directory_handoff_updated_at,
+    updated_at = clock_timestamp()
+RETURNING
+    organization_id,
+    directory_scim_base_url,
+    directory_scim_token_fingerprint,
+    directory_workos_id,
+    directory_handoff_set_by_user_id,
+    directory_handoff_updated_at;
+
+-- name: AdminCacheOrganizationDirectoryWorkOSID :exec
+UPDATE organization_onboarding
+SET
+    directory_workos_id = @directory_workos_id,
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND directory_workos_id IS NULL;
+
+-- name: AdminClearOrganizationDirectoryHandoff :exec
+UPDATE organization_onboarding
+SET
+    directory_scim_base_url = NULL,
+    directory_scim_token_encrypted = NULL,
+    directory_scim_token_key_id = NULL,
+    directory_scim_token_fingerprint = NULL,
+    directory_workos_id = NULL,
+    directory_handoff_set_by_user_id = NULL,
+    directory_handoff_updated_at = NULL,
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND directory_scim_base_url IS NOT NULL;
+
 -- name: AdminSetStripeCustomer :one
 INSERT INTO billing_metadata (organization_id, stripe_customer_id)
 VALUES (sqlc.arg('organization_id')::text, sqlc.arg('stripe_customer_id')::text)

@@ -12,6 +12,27 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const cacheOrganizationDirectoryWorkOSID = `-- name: CacheOrganizationDirectoryWorkOSID :exec
+UPDATE organization_onboarding
+SET
+  directory_workos_id = $1,
+  updated_at = clock_timestamp()
+WHERE organization_id = $2
+  AND directory_scim_base_url IS NOT NULL
+  AND directory_scim_token_encrypted IS NOT NULL
+  AND directory_workos_id IS NULL
+`
+
+type CacheOrganizationDirectoryWorkOSIDParams struct {
+	DirectoryWorkosID pgtype.Text
+	OrganizationID    string
+}
+
+func (q *Queries) CacheOrganizationDirectoryWorkOSID(ctx context.Context, arg CacheOrganizationDirectoryWorkOSIDParams) error {
+	_, err := q.db.Exec(ctx, cacheOrganizationDirectoryWorkOSID, arg.DirectoryWorkosID, arg.OrganizationID)
+	return err
+}
+
 const createIdentityProviderConnection = `-- name: CreateIdentityProviderConnection :one
 INSERT INTO identity_provider_connections (
   organization_id,
@@ -221,13 +242,23 @@ SELECT
   o.groups_source,
   o.groups_claim_confirmed,
   o.sign_in_evidence,
+  o.directory_application_id,
+  o.directory_state,
+  o.directory_group_count,
+  o.directory_user_count,
+  o.directory_evidence,
   m.workos_id,
+  onboarding.directory_scim_base_url,
+  onboarding.directory_scim_token_encrypted,
+  onboarding.directory_workos_id,
   k.kid AS signing_key_kid
 FROM identity_provider_connections AS c
 JOIN okta_identity_provider_connections AS o
   ON o.identity_provider_connection_id = c.id
 JOIN organization_metadata AS m
   ON m.id = c.organization_id
+LEFT JOIN organization_onboarding AS onboarding
+  ON onboarding.organization_id = c.organization_id
 JOIN identity_provider_signing_keys AS k
   ON k.id = o.signing_key_id
   AND k.organization_id = c.organization_id
@@ -238,31 +269,39 @@ WHERE c.organization_id = $1
 `
 
 type GetIdentityProviderConnectionByOrganizationRow struct {
-	ID                   uuid.UUID
-	OrganizationID       string
-	Kind                 string
-	TenantIdentifier     string
-	DisplayName          pgtype.Text
-	Status               string
-	StatusDetail         pgtype.Text
-	Capabilities         []string
-	LastVerifiedAt       pgtype.Timestamptz
-	VerifyEvidence       []byte
-	CreatedAt            pgtype.Timestamptz
-	UpdatedAt            pgtype.Timestamptz
-	DeletedAt            pgtype.Timestamptz
-	Deleted              bool
-	ClientID             pgtype.Text
-	GrantedScopes        []string
-	SigningKeyID         uuid.NullUUID
-	SignInApplicationID  pgtype.Text
-	WorkosConnectionID   pgtype.Text
-	SignInState          pgtype.Text
-	GroupsSource         pgtype.Text
-	GroupsClaimConfirmed bool
-	SignInEvidence       []byte
-	WorkosID             pgtype.Text
-	SigningKeyKid        string
+	ID                          uuid.UUID
+	OrganizationID              string
+	Kind                        string
+	TenantIdentifier            string
+	DisplayName                 pgtype.Text
+	Status                      string
+	StatusDetail                pgtype.Text
+	Capabilities                []string
+	LastVerifiedAt              pgtype.Timestamptz
+	VerifyEvidence              []byte
+	CreatedAt                   pgtype.Timestamptz
+	UpdatedAt                   pgtype.Timestamptz
+	DeletedAt                   pgtype.Timestamptz
+	Deleted                     bool
+	ClientID                    pgtype.Text
+	GrantedScopes               []string
+	SigningKeyID                uuid.NullUUID
+	SignInApplicationID         pgtype.Text
+	WorkosConnectionID          pgtype.Text
+	SignInState                 pgtype.Text
+	GroupsSource                pgtype.Text
+	GroupsClaimConfirmed        bool
+	SignInEvidence              []byte
+	DirectoryApplicationID      pgtype.Text
+	DirectoryState              pgtype.Text
+	DirectoryGroupCount         pgtype.Int4
+	DirectoryUserCount          pgtype.Int4
+	DirectoryEvidence           []byte
+	WorkosID                    pgtype.Text
+	DirectoryScimBaseUrl        pgtype.Text
+	DirectoryScimTokenEncrypted pgtype.Text
+	DirectoryWorkosID           pgtype.Text
+	SigningKeyKid               string
 }
 
 func (q *Queries) GetIdentityProviderConnectionByOrganization(ctx context.Context, organizationID string) (GetIdentityProviderConnectionByOrganizationRow, error) {
@@ -292,7 +331,15 @@ func (q *Queries) GetIdentityProviderConnectionByOrganization(ctx context.Contex
 		&i.GroupsSource,
 		&i.GroupsClaimConfirmed,
 		&i.SignInEvidence,
+		&i.DirectoryApplicationID,
+		&i.DirectoryState,
+		&i.DirectoryGroupCount,
+		&i.DirectoryUserCount,
+		&i.DirectoryEvidence,
 		&i.WorkosID,
+		&i.DirectoryScimBaseUrl,
+		&i.DirectoryScimTokenEncrypted,
+		&i.DirectoryWorkosID,
 		&i.SigningKeyKid,
 	)
 	return i, err
@@ -377,6 +424,29 @@ func (q *Queries) HasDirectoryHandoff(ctx context.Context, organizationID string
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const lockOktaIdentityProviderDirectory = `-- name: LockOktaIdentityProviderDirectory :one
+SELECT c.id
+FROM identity_provider_connections AS c
+JOIN okta_identity_provider_connections AS o
+  ON o.identity_provider_connection_id = c.id
+WHERE c.organization_id = $1
+  AND c.id = $2
+  AND c.deleted IS FALSE
+FOR UPDATE OF o
+`
+
+type LockOktaIdentityProviderDirectoryParams struct {
+	OrganizationID               string
+	IdentityProviderConnectionID uuid.UUID
+}
+
+func (q *Queries) LockOktaIdentityProviderDirectory(ctx context.Context, arg LockOktaIdentityProviderDirectoryParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockOktaIdentityProviderDirectory, arg.OrganizationID, arg.IdentityProviderConnectionID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const lockOktaIdentityProviderSignIn = `-- name: LockOktaIdentityProviderSignIn :one
@@ -564,6 +634,78 @@ type UpdateOktaIdentityProviderClientIDParams struct {
 func (q *Queries) UpdateOktaIdentityProviderClientID(ctx context.Context, arg UpdateOktaIdentityProviderClientIDParams) error {
 	_, err := q.db.Exec(ctx, updateOktaIdentityProviderClientID, arg.ClientID, arg.OrganizationID, arg.IdentityProviderConnectionID)
 	return err
+}
+
+const updateOktaIdentityProviderDirectoryApplication = `-- name: UpdateOktaIdentityProviderDirectoryApplication :exec
+UPDATE okta_identity_provider_connections AS o
+SET
+  directory_application_id = $1,
+  directory_state = CASE WHEN o.directory_state = 'passed' THEN o.directory_state ELSE 'configured' END,
+  directory_group_count = CASE WHEN o.directory_state = 'passed' THEN o.directory_group_count END,
+  directory_user_count = CASE WHEN o.directory_state = 'passed' THEN o.directory_user_count END,
+  directory_evidence = CASE WHEN o.directory_state = 'passed' THEN o.directory_evidence END,
+  updated_at = clock_timestamp()
+FROM identity_provider_connections AS c
+WHERE o.identity_provider_connection_id = c.id
+  AND c.organization_id = $2
+  AND c.id = $3
+  AND c.deleted IS FALSE
+`
+
+type UpdateOktaIdentityProviderDirectoryApplicationParams struct {
+	DirectoryApplicationID       pgtype.Text
+	OrganizationID               string
+	IdentityProviderConnectionID uuid.UUID
+}
+
+func (q *Queries) UpdateOktaIdentityProviderDirectoryApplication(ctx context.Context, arg UpdateOktaIdentityProviderDirectoryApplicationParams) error {
+	_, err := q.db.Exec(ctx, updateOktaIdentityProviderDirectoryApplication, arg.DirectoryApplicationID, arg.OrganizationID, arg.IdentityProviderConnectionID)
+	return err
+}
+
+const updateOktaIdentityProviderDirectoryVerification = `-- name: UpdateOktaIdentityProviderDirectoryVerification :execrows
+UPDATE okta_identity_provider_connections AS o
+SET
+  directory_state = $1,
+  directory_group_count = $2,
+  directory_user_count = $3,
+  directory_evidence = $4,
+  updated_at = clock_timestamp()
+FROM identity_provider_connections AS c
+WHERE o.identity_provider_connection_id = c.id
+  AND c.organization_id = $5
+  AND c.id = $6
+  AND c.deleted IS FALSE
+  AND o.directory_application_id = $7
+  AND o.directory_evidence IS NOT DISTINCT FROM $8
+`
+
+type UpdateOktaIdentityProviderDirectoryVerificationParams struct {
+	DirectoryState               pgtype.Text
+	DirectoryGroupCount          pgtype.Int4
+	DirectoryUserCount           pgtype.Int4
+	DirectoryEvidence            []byte
+	OrganizationID               string
+	IdentityProviderConnectionID uuid.UUID
+	DirectoryApplicationID       pgtype.Text
+	PreviousDirectoryEvidence    []byte
+}
+
+func (q *Queries) UpdateOktaIdentityProviderDirectoryVerification(ctx context.Context, arg UpdateOktaIdentityProviderDirectoryVerificationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateOktaIdentityProviderDirectoryVerification,
+		arg.DirectoryState,
+		arg.DirectoryGroupCount,
+		arg.DirectoryUserCount,
+		arg.DirectoryEvidence,
+		arg.OrganizationID,
+		arg.IdentityProviderConnectionID,
+		arg.DirectoryApplicationID,
+		arg.PreviousDirectoryEvidence,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const updateOktaIdentityProviderGrantedScopes = `-- name: UpdateOktaIdentityProviderGrantedScopes :exec

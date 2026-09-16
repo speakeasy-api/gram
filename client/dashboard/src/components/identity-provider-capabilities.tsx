@@ -8,6 +8,12 @@ interface CapabilityCopy {
   access: string;
   /** The sub-step that stops working without this capability. */
   usedBy: string;
+  /**
+   * The noun the count is of, where the resource name is not one a person
+   * would read. Absent where the resource already says it, as `users` and
+   * `groups` do.
+   */
+  counted?: string;
 }
 
 // What each capability means in the administrator's terms. The server names
@@ -29,6 +35,11 @@ const CAPABILITY_COPY: Record<string, CapabilityCopy> = {
     access: "Create",
     usedBy: "Single sign-on",
   },
+  group_assignment: {
+    label: "Group assignments",
+    access: "Assign",
+    usedBy: "Directory sync",
+  },
 };
 
 /**
@@ -46,6 +57,31 @@ const RESOURCE_COPY: Record<string, CapabilityCopy> = {
     label: "Speakeasy's sign-in provider",
     access: "Create",
     usedBy: "Single sign-on",
+  },
+  // The directory check makes four reads across two capabilities, so the
+  // resource is the only thing telling them apart: two rows would otherwise
+  // both read "Group assignments" and two more "People and group membership".
+  directory_application: {
+    label: "Directory application in Okta",
+    access: "Create",
+    usedBy: "Directory sync",
+  },
+  directory_connection: {
+    label: "Provisioning connection in Okta",
+    access: "Read",
+    usedBy: "Directory sync",
+  },
+  directory_groups: {
+    label: "Groups arrived from Okta",
+    access: "Read",
+    usedBy: "Directory sync",
+    counted: "groups",
+  },
+  directory_users: {
+    label: "People arrived from Okta",
+    access: "Read",
+    usedBy: "Directory sync",
+    counted: "people",
   },
 };
 
@@ -67,7 +103,10 @@ function rowCopy(read: IdentityProviderCapabilityRead): CapabilityCopy {
 function readResult(read: IdentityProviderCapabilityRead): string {
   if (!read.ok) return "No answer";
   if (read.count === undefined) return "Active";
-  return `${read.count.toLocaleString()} ${read.resource}`;
+  // The resource is a key, and most of them happen to be the plural noun the
+  // count is of. The ones that are not say so, rather than printing
+  // "12 directory_groups" at an administrator.
+  return `${read.count.toLocaleString()} ${rowCopy(read).counted ?? read.resource}`;
 }
 
 const columns: Column<IdentityProviderCapabilityRead>[] = [
