@@ -15,7 +15,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
 import { Check, ChevronDown, ChevronRight, Copy } from "lucide-react";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
+import {
+  DARK_THEME,
+  highlightCode,
+  type CodeLine,
+} from "@/components/ui/lib/codeUtils";
 import { ErrorBoundary } from "react-error-boundary";
 import { formatNanoTimestamp } from "./utils";
 
@@ -355,14 +360,57 @@ function LogDetailContent({
               label="log record"
             />
           </div>
-          <div className="border-border flex-1 overflow-y-auto border p-4">
-            <pre className="font-mono text-sm break-all whitespace-pre-wrap">
-              {JSON.stringify(log, null, 2)}
-            </pre>
+          <div className="border-border flex-1 overflow-y-auto border">
+            <CodeBlock content={JSON.stringify(log, null, 2)} />
           </div>
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+/**
+ * A payload rendered the way a code editor renders it: Shiki tokens on a dark
+ * ground. Always dark, whichever theme the dashboard is in — these blocks are
+ * quoted machine output, and the shift in ground is what separates them from
+ * the sheet's own prose.
+ */
+function CodeBlock({ content }: { content: string }) {
+  const [lines, setLines] = useState<CodeLine[] | null>(null);
+
+  // Not every payload is JSON: a hook message body is plain text, and asking
+  // the JSON grammar to tokenize it produces a wall of error scopes.
+  const language = useMemo(() => {
+    const trimmed = content.trimStart();
+    return trimmed.startsWith("{") || trimmed.startsWith("[") ? "json" : "text";
+  }, [content]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void highlightCode(content, language, DARK_THEME).then((highlighted) => {
+      if (!cancelled) setLines(highlighted.lines);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [content, language]);
+
+  return (
+    <pre className="overflow-x-auto bg-[#0d1117] p-4 font-mono text-xs leading-relaxed text-[#e4e4e7]">
+      {lines
+        ? lines.map((line, lineIndex) => (
+            // Shiki returns tokens in source order, so the index is the
+            // identity here — there is nothing else to key on.
+            <div key={lineIndex} className="min-h-[1.2em]">
+              {line.tokens.map((token, tokenIndex) => (
+                <span key={tokenIndex} style={{ color: token.color }}>
+                  {token.content}
+                </span>
+              ))}
+            </div>
+          ))
+        : content}
+    </pre>
   );
 }
 
@@ -494,11 +542,9 @@ function CollapsibleBodySection({
       {isOpen && (
         <div
           id={contentId}
-          className="border-border max-h-96 overflow-y-auto border p-4"
+          className="border-border max-h-96 overflow-y-auto border"
         >
-          <pre className="font-mono text-sm break-words whitespace-pre-wrap">
-            {displayContent}
-          </pre>
+          <CodeBlock content={displayContent} />
         </div>
       )}
     </div>
