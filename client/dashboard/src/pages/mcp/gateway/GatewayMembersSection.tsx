@@ -711,14 +711,9 @@ export function AddServersSheet({
     };
   });
   const query = search.trim().toLowerCase();
-  const visibleOptions = options.filter((option, index) => {
-    const candidate = candidates[index];
-    const slug =
-      candidate?.kind === "toolset"
-        ? candidate.toolset.slug
-        : candidate?.server.slug;
-    return `${option.label} ${slug ?? ""}`.toLowerCase().includes(query);
-  });
+  const visibleOptions = options.filter((option) =>
+    `${option.label} ${option.slug ?? ""}`.toLowerCase().includes(query),
+  );
   const selectedCandidates = candidates.filter(
     (candidate) =>
       selected.includes(candidateKey(candidate, wrappers)) &&

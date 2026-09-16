@@ -101,15 +101,6 @@ vi.mock("@/routes", () => ({
   }),
 }));
 
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  let reject!: (reason: Error) => void;
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-  return { promise, resolve, reject };
-}
 const ok = <T,>(value: T) => ({ ok: true as const, value });
 
 afterEach(() => {
@@ -136,9 +127,9 @@ it("reconciles a failed wrapper attachment through parent invalidation and retri
   const initialMembers = [
     { id: "member", mcpServerId: existing.id, sortOrder: 4 },
   ];
-  const attach = deferred<void>();
+  const attach = Promise.withResolvers<void>();
   const refresh =
-    deferred<ReturnType<typeof ok<{ mcpServers: McpServer[] }>>>();
+    Promise.withResolvers<ReturnType<typeof ok<{ mcpServers: McpServer[] }>>>();
   api.servers.mockResolvedValue(ok({ mcpServers: [existing] }));
   api.members.mockResolvedValue(ok({ members: initialMembers }));
   api.toolsets.mockResolvedValue(
