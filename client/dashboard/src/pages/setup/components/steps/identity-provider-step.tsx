@@ -13,6 +13,7 @@ import { useIdentityProvider } from "@gram/client/react-query/identityProvider.j
 import { useOnboardingStatus } from "@gram/client/react-query/onboardingStatus";
 import { toast } from "sonner";
 import { GuidedReadinessPanel } from "@/components/guided-readiness/guided-readiness-panel";
+import { useGuidedReadiness } from "@/components/guided-readiness/use-guided-readiness";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -91,10 +92,18 @@ export function IdentityProviderStep({
     throwOnError: false,
   });
   const connection = identityProvider.data?.connection;
+  const readiness = useGuidedReadiness(true);
+  // A live connection is proof the pre-work was done, so it keeps the advanced
+  // flow whatever the checks say about the organization now.
+  const advancedOffered = !!connection || readiness.data?.eligible === true;
+  // Until the check answers, the card behaves as though the advanced flow is
+  // not offered. Offering it and then taking it back is worse than waiting.
+  const readinessSettled = !readiness.isPending;
   // An explicit pick wins. With no pick, a connection that already exists is
   // what the card is about: coming back to this page must not read as though
   // nothing had been set up.
-  const guided = provider ? provider.guided === true : !!connection;
+  const picked = provider ? provider.guided === true : !!connection;
+  const guided = picked && advancedOffered;
 
   return (
     <StepContainer
@@ -120,6 +129,8 @@ export function IdentityProviderStep({
           selectedProvider={selectedProvider}
           onSelectProvider={setSelectedProvider}
           guided={guided}
+          advancedOffered={advancedOffered}
+          readinessSettled={readinessSettled}
           connection={connection}
           isLoadingConnection={identityProvider.isPending}
         />
@@ -242,6 +253,8 @@ function SelectIdpSection({
   selectedProvider,
   onSelectProvider,
   guided,
+  advancedOffered,
+  readinessSettled,
   connection,
   isLoadingConnection,
 }: {
@@ -249,6 +262,10 @@ function SelectIdpSection({
   selectedProvider: string | null;
   onSelectProvider: (id: string | null) => void;
   guided: boolean;
+  /** Whether this organization can be taken down the advanced Okta flow. */
+  advancedOffered: boolean;
+  /** Whether the check behind that answer has come back yet. */
+  readinessSettled: boolean;
   connection: IdentityProviderConnection | undefined;
   isLoadingConnection: boolean;
 }): JSX.Element {
@@ -330,7 +347,10 @@ function SelectIdpSection({
                     <span className="text-foreground truncate text-sm font-medium">
                       {p.name}
                     </span>
-                    {p.badge ? (
+                    {/* The guided entry keeps its place in the grid whatever
+                        the checks say, but it only carries the badge where the
+                        flow behind it is actually offered. */}
+                    {p.badge && (!p.guided || advancedOffered) ? (
                       <Badge variant="success" background size="sm">
                         <Badge.Text>{p.badge}</Badge.Text>
                       </Badge>
@@ -350,6 +370,16 @@ function SelectIdpSection({
               </button>
             ))}
           </div>
+          {/* Said once, to the administrator who picked Okta and will be
+              taken through the portal like everybody else. Why it is not
+              offered is Speakeasy's business, not theirs. */}
+          {shown === GUIDED_PROVIDER_ID &&
+          readinessSettled &&
+          !advancedOffered ? (
+            <p className="text-muted-foreground mt-3 text-sm">
+              Guided setup for Okta is not available for this organization yet.
+            </p>
+          ) : null}
           {!isSearching &&
             !showAll &&
             !locked &&

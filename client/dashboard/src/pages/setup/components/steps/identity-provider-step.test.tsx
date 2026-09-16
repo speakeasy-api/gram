@@ -25,6 +25,12 @@ const applications = vi.hoisted(() => ({
     refetch: () => unknown;
   },
 }));
+const readiness = vi.hoisted(() => ({
+  current: { data: undefined, isPending: false } as {
+    data: { eligible: boolean } | undefined;
+    isPending: boolean;
+  },
+}));
 const identityProvider = vi.hoisted(() => ({
   current: { data: { connection: undefined }, isPending: false } as {
     data: { connection: { status: string } | undefined };
@@ -54,6 +60,14 @@ vi.mock("react-router", () => ({
 }));
 vi.mock("@gram/client/react-query/listIdentityProviderApplications.js", () => ({
   useListIdentityProviderApplications: () => applications.current,
+}));
+vi.mock("@/components/guided-readiness/use-guided-readiness", () => ({
+  useGuidedReadiness: () => ({
+    ...readiness.current,
+    isFetching: false,
+    error: null,
+    refetch: () => undefined,
+  }),
 }));
 vi.mock("@gram/client/react-query/identityProvider.js", () => ({
   useIdentityProvider: () => identityProvider.current,
@@ -88,8 +102,10 @@ vi.mock("@gram/client/react-query/deleteIdentityProvider.js", () => ({
   }),
 }));
 
-/** The Okta entry Speakeasy walks itself. */
+/** The Okta entry Speakeasy walks itself, once the flow is offered. */
 const guidedOkta = () => screen.getByRole("button", { name: /Okta Guided/ });
+/** The same entry where the advanced flow is not on offer: no badge. */
+const oidcOkta = () => screen.getByRole("button", { name: /Okta OIDC/ });
 /** The Okta entry that still hands off to the WorkOS portal. */
 const portalOkta = () => screen.getByRole("button", { name: /Okta SAML/ });
 
@@ -105,6 +121,8 @@ beforeEach(() => {
     data: { connection: undefined },
     isPending: false,
   };
+  // The organization has passed the checks unless a test says otherwise.
+  readiness.current = { data: { eligible: true }, isPending: false };
 });
 
 describe("IdentityProviderStep", () => {
@@ -224,6 +242,79 @@ describe("IdentityProviderStep", () => {
     expect(screen.getAllByText("Waiting")).toHaveLength(3);
     expect(screen.getByText("Later")).toBeTruthy();
     expect(screen.getByText(/Setup finishes without this/)).toBeTruthy();
+  });
+
+  describe("when the advanced flow is not offered", () => {
+    const NOT_AVAILABLE =
+      "Guided setup for Okta is not available for this organization yet.";
+
+    it("keeps Okta in the grid but takes the portal path, saying so once", () => {
+      readiness.current = { data: { eligible: false }, isPending: false };
+      render(<IdentityProviderStep onComplete={() => {}} />);
+
+      // The entry is still there and still pickable; what is gone is the
+      // badge, the fork behind it, and nothing else.
+      expect(oidcOkta()).toBeTruthy();
+      expect(screen.queryByRole("button", { name: /Okta Guided/ })).toBeNull();
+      expect(screen.queryByText(NOT_AVAILABLE)).toBeNull();
+
+      fireEvent.click(oidcOkta());
+
+      expect(screen.getByText(NOT_AVAILABLE)).toBeTruthy();
+      expect(screen.queryByLabelText("Okta organization URL")).toBeNull();
+      const connect = screen.getByRole("button", { name: "Connect" });
+      expect(connect.hasAttribute("disabled")).toBe(false);
+      fireEvent.click(connect);
+      expect(portal.mutate).toHaveBeenCalledOnce();
+    });
+
+    it("tells the customer nothing about why", () => {
+      readiness.current = { data: { eligible: false }, isPending: false };
+      render(<IdentityProviderStep onComplete={() => {}} />);
+      fireEvent.click(oidcOkta());
+
+      // One sentence, and no trace of the checks behind it: not the verdict,
+      // not a check key, not who has to act on one.
+      expect(screen.getAllByText(NOT_AVAILABLE)).toHaveLength(1);
+      expect(screen.queryByText(/readiness/i)).toBeNull();
+      expect(screen.queryByText(/eligible/i)).toBeNull();
+      expect(screen.queryByText(/workos_/)).toBeNull();
+      expect(screen.queryByText(/Platform admin/)).toBeNull();
+    });
+
+    it("says nothing at all until the check comes back", () => {
+      readiness.current = { data: undefined, isPending: true };
+      render(<IdentityProviderStep onComplete={() => {}} />);
+
+      // Neither answer is in yet, so the card claims neither: no badge to
+      // take away again, and no sentence to retract.
+      expect(screen.queryByRole("button", { name: /Okta Guided/ })).toBeNull();
+      expect(screen.queryByText(NOT_AVAILABLE)).toBeNull();
+
+      fireEvent.click(oidcOkta());
+
+      expect(screen.queryByText(NOT_AVAILABLE)).toBeNull();
+      // Pickable meanwhile, on the path every other provider takes.
+      expect(screen.queryByLabelText("Okta organization URL")).toBeNull();
+      expect(screen.getByRole("button", { name: "Connect" })).toBeTruthy();
+    });
+
+    it("keeps the advanced flow for an organization already connected", () => {
+      readiness.current = { data: { eligible: false }, isPending: false };
+      identityProvider.current = {
+        data: { connection: { status: "active" } },
+        isPending: false,
+      };
+      render(<IdentityProviderStep onComplete={() => {}} />);
+
+      // The connection is the proof the pre-work was done once, so a check
+      // that says otherwise now does not strand the organization mid-setup.
+      expect(guidedOkta()).toBeTruthy();
+      expect(screen.queryByText(NOT_AVAILABLE)).toBeNull();
+      expect(
+        screen.getByText("This is the one step that leaves Speakeasy"),
+      ).toBeTruthy();
+    });
   });
 
   it("keeps the provider grid on screen once a provider is picked", () => {
