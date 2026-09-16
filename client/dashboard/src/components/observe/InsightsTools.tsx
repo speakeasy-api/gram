@@ -29,8 +29,6 @@ import { telemetryGetToolUsageTargetTimeSeries } from "@gram/client/funcs/teleme
 import { telemetryGetToolUsageTargetToolBreakdown } from "@gram/client/funcs/telemetryGetToolUsageTargetToolBreakdown";
 import { telemetryGetToolUsageTotals } from "@gram/client/funcs/telemetryGetToolUsageTotals";
 import { telemetryGetToolUsageUsers } from "@gram/client/funcs/telemetryGetToolUsageUsers";
-import { telemetryGetToolUsageUsersByTarget } from "@gram/client/funcs/telemetryGetToolUsageUsersByTarget";
-import { telemetryGetToolUsageUserTimeSeries } from "@gram/client/funcs/telemetryGetToolUsageUserTimeSeries";
 import type { GetToolUsageSummaryResult } from "@gram/client/models/components/gettoolusagesummaryresult.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { unwrapAsync } from "@gram/client/types/fp";
@@ -199,30 +197,6 @@ export function InsightsToolsContent(): JSX.Element {
     throwOnError: false,
   });
 
-  const userTimeSeriesQuery = useQuery({
-    queryKey: ["tool-usage-user-time-series", ...sharedQueryKey],
-    queryFn: () =>
-      unwrapAsync(
-        telemetryGetToolUsageUserTimeSeries(client, {
-          getToolUsageSummaryPayload: summaryPayload,
-        }),
-      ),
-    enabled: !roleFilterPending,
-    throwOnError: false,
-  });
-
-  const usersByTargetQuery = useQuery({
-    queryKey: ["tool-usage-users-by-target", ...sharedQueryKey],
-    queryFn: () =>
-      unwrapAsync(
-        telemetryGetToolUsageUsersByTarget(client, {
-          getToolUsageSummaryPayload: summaryPayload,
-        }),
-      ),
-    enabled: !roleFilterPending,
-    throwOnError: false,
-  });
-
   const clientsQuery = useQuery({
     queryKey: ["tool-usage-clients", ...sharedQueryKey],
     queryFn: () =>
@@ -259,12 +233,12 @@ export function InsightsToolsContent(): JSX.Element {
             users: usersQuery.data?.users ?? [],
             targetTimeSeries:
               targetTimeSeriesQuery.data?.targetTimeSeries ?? [],
-            userTimeSeries: userTimeSeriesQuery.data?.userTimeSeries ?? [],
-            usersByTarget: usersByTargetQuery.data?.usersByTarget ?? [],
+            // Part of the summary contract, but no card on this board reads
+            // them, so they are not fetched.
+            userTimeSeries: [],
+            usersByTarget: [],
             targetToolBreakdown:
               targetToolBreakdownQuery.data?.targetToolBreakdown ?? [],
-            // The client aggregates are part of the summary contract but no
-            // panel on this page reads them yet, so they are not fetched.
             clients: clientsQuery.data?.clients ?? [],
             clientToolBreakdown: [],
           }
@@ -274,8 +248,6 @@ export function InsightsToolsContent(): JSX.Element {
       targetsQuery.data,
       usersQuery.data,
       targetTimeSeriesQuery.data,
-      userTimeSeriesQuery.data,
-      usersByTargetQuery.data,
       targetToolBreakdownQuery.data,
       clientsQuery.data,
     ],
@@ -288,14 +260,8 @@ export function InsightsToolsContent(): JSX.Element {
       pending: targetTimeSeriesQuery.isPending,
       error: targetTimeSeriesQuery.isError,
     },
-    userTimeSeries: {
-      pending: userTimeSeriesQuery.isPending,
-      error: userTimeSeriesQuery.isError,
-    },
-    usersByTarget: {
-      pending: usersByTargetQuery.isPending,
-      error: usersByTargetQuery.isError,
-    },
+    userTimeSeries: { pending: false, error: false },
+    usersByTarget: { pending: false, error: false },
     targetToolBreakdown: {
       pending: targetToolBreakdownQuery.isPending,
       error: targetToolBreakdownQuery.isError,
@@ -306,8 +272,7 @@ export function InsightsToolsContent(): JSX.Element {
   const { refetch: refetchTargets } = targetsQuery;
   const { refetch: refetchUsers } = usersQuery;
   const { refetch: refetchTargetTimeSeries } = targetTimeSeriesQuery;
-  const { refetch: refetchUserTimeSeries } = userTimeSeriesQuery;
-  const { refetch: refetchUsersByTarget } = usersByTargetQuery;
+  const { refetch: refetchClients } = clientsQuery;
   const { refetch: refetchTargetToolBreakdown } = targetToolBreakdownQuery;
 
   const isAnyFetching =
@@ -315,8 +280,7 @@ export function InsightsToolsContent(): JSX.Element {
     targetsQuery.isFetching ||
     usersQuery.isFetching ||
     targetTimeSeriesQuery.isFetching ||
-    userTimeSeriesQuery.isFetching ||
-    usersByTargetQuery.isFetching ||
+    clientsQuery.isFetching ||
     targetToolBreakdownQuery.isFetching;
 
   const { data: filterOptionsData } = useQuery({
@@ -373,16 +337,14 @@ export function InsightsToolsContent(): JSX.Element {
     void refetchTargets();
     void refetchUsers();
     void refetchTargetTimeSeries();
-    void refetchUserTimeSeries();
-    void refetchUsersByTarget();
+    void refetchClients();
     void refetchTargetToolBreakdown();
   }, [
     refetchTotals,
     refetchTargets,
     refetchUsers,
     refetchTargetTimeSeries,
-    refetchUserTimeSeries,
-    refetchUsersByTarget,
+    refetchClients,
     refetchTargetToolBreakdown,
   ]);
 

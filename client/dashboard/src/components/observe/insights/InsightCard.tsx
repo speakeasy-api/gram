@@ -46,7 +46,9 @@ export function InsightCard({
         )}
       </h3>
       {error ? (
-        <p className="text-muted-foreground text-sm">Failed to load</p>
+        <p role="alert" className="text-muted-foreground text-sm">
+          Failed to load
+        </p>
       ) : loading ? (
         <Skeleton className="h-20 w-full" />
       ) : (

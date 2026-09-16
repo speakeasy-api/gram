@@ -94,7 +94,10 @@ export function RankedList({
               className="absolute inset-y-0 left-0 z-0 opacity-0 transition-opacity duration-150 group-hover/row:opacity-[0.18]"
               style={{ width, backgroundColor: rowColor }}
             />
-            <span className="relative z-10 min-w-0 flex-1 truncate">
+            <span
+              className="relative z-10 min-w-0 flex-1 truncate"
+              title={row.label}
+            >
               {row.label}
             </span>
             <span className="relative z-10 shrink-0 font-mono text-xs tabular-nums">

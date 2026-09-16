@@ -9,6 +9,7 @@ import {
   selectedUserEmails,
   toTargetTypes,
 } from "@/components/observe/observeTargetFilters";
+import { useSlugs } from "@/contexts/Sdk";
 import type { GetToolUsageSummaryPayload } from "@gram/client/models/components/gettoolusagesummarypayload.js";
 import type { ToolUsageUserFilter } from "@gram/client/models/components/toolusageuserfilter.js";
 import { useMemo } from "react";
@@ -54,6 +55,10 @@ export function useToolUsagePayload({
   from,
   to,
 }: ToolUsagePayloadInputs): ToolUsagePayload {
+  // Two organizations can both have a project called "default". Without the
+  // tenant in the key, navigating between them reads the previous org's
+  // telemetry out of the cache.
+  const { orgSlug, projectSlug } = useSlugs();
   const serverFilters = useMemo(
     () => selectedTargetValues(activeFilters).map(parseTargetFilter),
     [activeFilters],
@@ -90,6 +95,14 @@ export function useToolUsagePayload({
     [activeFilters],
   );
 
+  // One normalization for the payload and the key: "no client filter" has to
+  // be the same value in both, or Logs and Insights build different keys for
+  // the same request and neither can paint from the other's cache.
+  const normalizedClientKeys = useMemo(
+    () => (clientKeys && clientKeys.length > 0 ? clientKeys : undefined),
+    [clientKeys],
+  );
+
   const summaryPayload = useMemo(
     () => ({
       from,
@@ -104,7 +117,7 @@ export function useToolUsagePayload({
       userFilters: userFilters.length > 0 ? userFilters : undefined,
       hookSources: hookSourceFilters.length > 0 ? hookSourceFilters : undefined,
       accountType: accountType || undefined,
-      clientKeys: clientKeys && clientKeys.length > 0 ? clientKeys : undefined,
+      clientKeys: normalizedClientKeys,
     }),
     [
       from,
@@ -116,12 +129,14 @@ export function useToolUsagePayload({
       userFilters,
       hookSourceFilters,
       accountType,
-      clientKeys,
+      normalizedClientKeys,
     ],
   );
 
   const sharedQueryKey = useMemo(
     () => [
+      orgSlug,
+      projectSlug,
       from.toISOString(),
       to.toISOString(),
       hostedToolsetSlugs,
@@ -131,9 +146,11 @@ export function useToolUsagePayload({
       hookSourceFilters,
       selectedHookTypes,
       accountType,
-      clientKeys,
+      normalizedClientKeys,
     ],
     [
+      orgSlug,
+      projectSlug,
       from,
       to,
       hostedToolsetSlugs,
@@ -143,7 +160,7 @@ export function useToolUsagePayload({
       hookSourceFilters,
       selectedHookTypes,
       accountType,
-      clientKeys,
+      normalizedClientKeys,
     ],
   );
 

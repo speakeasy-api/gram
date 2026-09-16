@@ -104,6 +104,7 @@ function FacetSection({
           <button
             type="button"
             onClick={() => onClearGroup(group.id)}
+            aria-label={`Reset ${group.label}`}
             className="text-muted-foreground hover:text-foreground shrink-0 text-[11px] lowercase"
           >
             Reset

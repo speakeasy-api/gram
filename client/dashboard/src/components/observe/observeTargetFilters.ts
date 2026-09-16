@@ -12,7 +12,7 @@ import type { TargetTypes } from "@gram/client/models/components/gettoolusagesum
 import type { Statuses } from "@gram/client/models/components/listtoolusagetracespayload";
 import { normalizeUserEmailFilter } from "./observeUserFilters";
 
-export const SERVER_FILTER_PATH = "gram.tool_call.source";
+const SERVER_FILTER_PATH = "gram.tool_call.source";
 export const USER_EMAIL_FILTER_PATH = "user.email";
 const HOOK_SOURCE_FILTER_PATH = "gram.hook.source";
 

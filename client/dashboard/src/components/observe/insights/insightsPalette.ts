@@ -10,7 +10,7 @@
  * labels, and a stacked chart puts ten of them side by side. At full
  * saturation that is a set of highlighter pens; muted, it stays a chart.
  */
-export const INSIGHT_HUES = {
+const INSIGHT_HUES = {
   blue: "#5b83a8",
   violet: "#8779ad",
   teal: "#4f938c",

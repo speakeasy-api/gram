@@ -222,7 +222,11 @@ export function LogsTools(): JSX.Element {
 
   // Feeds the strip. Same key Insights uses, so crossing over from a deep link
   // paints it from cache rather than refetching the window.
-  const { data: timeSeriesData, isPending: timeSeriesPending } = useQuery({
+  const {
+    data: timeSeriesData,
+    isPending: timeSeriesPending,
+    refetch: refetchTimeSeries,
+  } = useQuery({
     queryKey: ["tool-usage-target-time-series", ...sharedQueryKey],
     queryFn: () =>
       unwrapAsync(
@@ -454,7 +458,7 @@ export function LogsTools(): JSX.Element {
   // The window's real totals, not a count of what has been scrolled into view.
   // Same query key Insights uses, so arriving from a deep link paints these
   // immediately from its cache.
-  const { data: totalsData } = useQuery({
+  const { data: totalsData, refetch: refetchTotals } = useQuery({
     queryKey: ["tool-usage-totals", ...sharedQueryKey],
     queryFn: () =>
       unwrapAsync(
@@ -610,10 +614,15 @@ export function LogsTools(): JSX.Element {
     [client, expandedTraceId, from, handleLogClick, queryClient, to],
   );
 
+  // Refresh means the whole page, not just the rows: the metric tiles and the
+  // strip read separate queries, and leaving them on cached values is how they
+  // stay stuck on an empty result after logging is first enabled.
   const refetch = useCallback(() => {
     void refetchLogs();
+    void refetchTotals();
+    void refetchTimeSeries();
     void queryClient.invalidateQueries({ queryKey: ["trace-logs"] });
-  }, [queryClient, refetchLogs]);
+  }, [queryClient, refetchLogs, refetchTotals, refetchTimeSeries]);
 
   const handleAddFilterFromLog = useCallback(
     (path: string, op: Operator, value: string) => {
@@ -677,6 +686,7 @@ export function LogsTools(): JSX.Element {
             selectedTypes={selectedHookTypes}
             selectedStatuses={selectedStatuses}
             selectedRoleIds={selectedRoleIds}
+            selectedClientKeys={selectedClientKeys}
             expandedTraceId={expandedTraceId}
             openingTraceId={openingTraceId}
             toggleExpand={toggleExpand}
@@ -751,6 +761,7 @@ function LogsToolsContent({
   selectedTypes,
   selectedStatuses,
   selectedRoleIds,
+  selectedClientKeys,
   expandedTraceId,
   openingTraceId,
   toggleExpand,
@@ -802,6 +813,7 @@ function LogsToolsContent({
   selectedTypes: ToolUsageType[];
   selectedStatuses: ObserveStatusFilterValue[];
   selectedRoleIds: string[];
+  selectedClientKeys: string[];
   expandedTraceId: string | null;
   openingTraceId: string | null;
   toggleExpand: (trace: ToolUsageTraceSummary) => Promise<void>;
@@ -1028,6 +1040,7 @@ function LogsToolsContent({
                         !isDefaultToolUsageTypeSelection(selectedTypes) ||
                         selectedStatuses.length > 0 ||
                         selectedRoleIds.length > 0 ||
+                        selectedClientKeys.length > 0 ||
                         attributeFilters.length > 0 ||
                         accountType !== "" ||
                         Boolean(attributeSearchQuery)
@@ -1422,22 +1435,30 @@ function LogsToolsTraceRow({
           </IdentityLink>
         </div>
 
+        {/* The MCP client that made the call — the same dimension the Client
+            facet filters on. The harness is a separate column's business. */}
         <div className="flex w-32 shrink-0 items-center gap-1.5">
-          {trace.hookSource ? (
-            <>
-              <AgentProviderIcon
-                source={trace.hookSource}
-                className="size-3.5 shrink-0"
-              />
-              <span className="text-muted-foreground truncate text-xs">
-                {formatPlatform(trace.hookSource)}
-              </span>
-            </>
-          ) : (
-            <span className="text-muted-foreground/70 truncate text-xs">
-              Direct
-            </span>
+          {trace.hookSource && (
+            <AgentProviderIcon
+              source={trace.hookSource}
+              className="size-3.5 shrink-0"
+            />
           )}
+          <span
+            className={cn(
+              "truncate text-xs",
+              trace.clientKey === "unattributed"
+                ? "text-muted-foreground/70"
+                : "text-muted-foreground",
+            )}
+            title={
+              trace.clientVersion
+                ? `${trace.clientLabel} ${trace.clientVersion}`
+                : trace.clientLabel
+            }
+          >
+            {trace.clientLabel}
+          </span>
         </div>
       </div>
 

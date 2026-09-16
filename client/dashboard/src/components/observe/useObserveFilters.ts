@@ -195,10 +195,18 @@ function useObserveFiltersImpl<
     updateSearchParams({ from: null, to: null, label: null });
   }, [updateSearchParams]);
 
-  const { from, to } = useMemo(
-    () => customRange ?? getPresetRange(dateRange),
-    [customRange, dateRange],
-  );
+  // A preset range is anchored at `now`, which is a different millisecond on
+  // every mount — and therefore a different react-query key, so a drill-down
+  // from Insights into Logs would refetch what the other page already holds.
+  // Quantizing to the minute is what makes the two pages agree.
+  const { from, to } = useMemo(() => {
+    if (customRange) return customRange;
+    const range = getPresetRange(dateRange);
+    return {
+      from: new Date(Math.floor(range.from.getTime() / 60_000) * 60_000),
+      to: new Date(Math.ceil(range.to.getTime() / 60_000) * 60_000),
+    };
+  }, [customRange, dateRange]);
 
   const logFilters = useMemo(
     () => buildLogFilters(activeFilters, roleEmails),

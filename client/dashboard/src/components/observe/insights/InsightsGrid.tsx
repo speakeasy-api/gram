@@ -222,7 +222,13 @@ export function InsightsGrid({
       label: displayLabel(target),
       value: Number(target.failureCount),
       secondary: percent(target.failureRate),
-      href: logsLink({ ...targetScope(target), statuses: ["error"] }),
+      href: logsLink({
+        ...targetScope(target),
+        // A skill's identity is its tool name; targetScope only narrows to the
+        // type, which would open every failing skill.
+        ...(target.targetType === "skill" ? { toolName: target.targetId } : {}),
+        statuses: ["error"],
+      }),
     }));
 
   const skillRows: RankedRow[] = skills.map((target) => ({
