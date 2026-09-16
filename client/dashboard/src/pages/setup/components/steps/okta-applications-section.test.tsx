@@ -27,6 +27,9 @@ vi.mock("@tanstack/react-query", async (importOriginal) => ({
 }));
 vi.mock("react-router", () => ({
   useSearchParams: () => [new URLSearchParams(), vi.fn()],
+  Link: ({ to, children }: { to: string; children: ReactNode }) => (
+    <a href={to}>{children}</a>
+  ),
 }));
 vi.mock("@gram/client/react-query/listIdentityProviderApplications.js", () => ({
   useListIdentityProviderApplications: () => applications.current,
@@ -38,6 +41,11 @@ const sdk = vi.hoisted(() => ({
   createRemoteServer: vi.fn(),
   createMcpServer: vi.fn(),
   deleteRemoteServer: vi.fn(),
+  probeURL: vi.fn(),
+  discover: vi.fn(),
+  fetchIssuer: vi.fn(),
+  getIssuer: vi.fn(),
+  commit: vi.fn(),
   existingMcpServers: [] as Array<{ id: string; name?: string; slug?: string }>,
   invalidated: [] as string[],
 }));
@@ -50,9 +58,20 @@ vi.mock("@/contexts/Sdk", async (importOriginal) => ({
     remoteMcp: {
       createServer: (...args: unknown[]) => sdk.createRemoteServer(...args),
       deleteServer: (...args: unknown[]) => sdk.deleteRemoteServer(...args),
+      probeURL: (...args: unknown[]) => sdk.probeURL(...args),
+      discoverProtectedResourceMetadata: (...args: unknown[]) =>
+        sdk.discover(...args),
     },
     mcpServers: {
       create: (...args: unknown[]) => sdk.createMcpServer(...args),
+    },
+    remoteSessionIssuers: {
+      fetchMetadata: (...args: unknown[]) => sdk.fetchIssuer(...args),
+      get: (...args: unknown[]) => sdk.getIssuer(...args),
+    },
+    remoteSessions: {
+      commitServerIdentityConfiguration: (...args: unknown[]) =>
+        sdk.commit(...args),
     },
   }),
   useProjectSlugForRequests: () => "default",
@@ -76,6 +95,24 @@ vi.mock("@gram/client/react-query/mcpEndpoints.js", () => ({
     return Promise.resolve();
   },
 }));
+vi.mock("@gram/client/react-query/remoteSessionIssuers.js", () => ({
+  invalidateAllRemoteSessionIssuers: () => {
+    sdk.invalidated.push("remoteSessionIssuers");
+    return Promise.resolve();
+  },
+}));
+vi.mock("@gram/client/react-query/remoteSessionClients.js", () => ({
+  invalidateAllRemoteSessionClients: () => {
+    sdk.invalidated.push("remoteSessionClients");
+    return Promise.resolve();
+  },
+}));
+vi.mock("@gram/client/react-query/userSessionIssuers.js", () => ({
+  invalidateAllUserSessionIssuers: () => {
+    sdk.invalidated.push("userSessionIssuers");
+    return Promise.resolve();
+  },
+}));
 vi.mock("@/routes", () => ({
   useRoutes: () => ({
     mcp: {
@@ -88,6 +125,11 @@ vi.mock("@/routes", () => ({
           children: ReactNode;
         }) => <a href={`/mcp/${params[0]}`}>{children}</a>,
       },
+    },
+  }),
+  useOrgRoutes: () => ({
+    remoteIdentityProviders: {
+      issuerDetail: { href: (id: string) => `/providers/${id}` },
     },
   }),
 }));
@@ -192,15 +234,53 @@ beforeEach(() => {
     error: null,
     refetch: vi.fn(),
   };
-  sdk.createRemoteServer = vi.fn(async () => ({ id: "remote-1" }));
+  sdk.createRemoteServer = vi.fn(async () => ({
+    id: "remote-1",
+    url: "https://mcp.examplechat.test/mcp",
+  }));
   sdk.createMcpServer = vi.fn(async () => ({
     id: "mcp-1",
     slug: "example-chat",
   }));
   sdk.deleteRemoteServer = vi.fn(async () => undefined);
+  // Most upstreams in these tests ask for no sign-in; the ones that do say so
+  // per test. Placeholder hosts only.
+  sdk.probeURL = vi.fn(async () => ({ outcome: "mcp_available" }));
+  sdk.discover = vi.fn(async () => ({
+    available: true,
+    metadata: {
+      authorizationServers: ["https://id.example.test"],
+      scopesSupported: ["resource.read"],
+    },
+  }));
+  sdk.fetchIssuer = vi.fn(async () => ({
+    issuer: "https://id.example.test",
+    authorizationEndpoint: "https://id.example.test/authorize",
+    tokenEndpoint: "https://id.example.test/token",
+    registrationEndpoint: "https://id.example.test/register",
+    tokenEndpointAuthMethodsSupported: ["client_secret_basic"],
+  }));
+  sdk.getIssuer = vi.fn(async () => {
+    throw Object.assign(new Error("not found"), { statusCode: 404 });
+  });
+  sdk.commit = vi.fn(async () => ({
+    status: "registered",
+    registrationMethod: "dcr",
+    manualSetupRequired: false,
+    provider: { id: "provider-1" },
+  }));
   sdk.existingMcpServers = [];
   sdk.invalidated = [];
 });
+
+/** An upstream that answers the probe with an OAuth challenge. */
+function wantsSignIn() {
+  sdk.probeURL = vi.fn(async () => ({
+    outcome: "authentication_required",
+    protectedResourceMetadataUrl:
+      "https://mcp.examplechat.test/.well-known/oauth-protected-resource",
+  }));
+}
 
 function pressCreate() {
   fireEvent.click(screen.getByRole("button", { name: /^Create/ }));
@@ -523,6 +603,169 @@ describe("OktaApplicationsSection", () => {
     expect(message.textContent).toContain("remote-1");
     expect(message.textContent).toContain("link failed");
     expect(message.textContent).toContain("delete failed");
+  });
+
+  it("leaves the draft alone when the upstream asks for no sign-in", async () => {
+    withApplications([application()]);
+    render(<OktaApplicationsSection index={4} connection={connection()} />);
+
+    pressCreate();
+
+    await screen.findByText(/Draft created\./);
+    expect(sdk.probeURL).toHaveBeenCalledWith(
+      { probeURLForm: { url: "https://mcp.examplechat.test/mcp" } },
+      undefined,
+      undefined,
+    );
+    // Nothing asked for a sign-in, so nothing went looking for one.
+    expect(sdk.discover).not.toHaveBeenCalled();
+    expect(sdk.fetchIssuer).not.toHaveBeenCalled();
+    expect(sdk.commit).not.toHaveBeenCalled();
+    expect(screen.queryByText(/sign-in provider/)).toBeNull();
+  });
+
+  it("configures the sign-in provider the upstream asks for", async () => {
+    wantsSignIn();
+    withApplications([application()]);
+    render(<OktaApplicationsSection index={4} connection={connection()} />);
+
+    pressCreate();
+
+    await screen.findByText(/sign-in provider configured/);
+    // The issuer comes from the resource's own metadata, and the provider is
+    // built from what the authorization server published about itself.
+    expect(sdk.fetchIssuer).toHaveBeenCalledWith(
+      { fetchIssuerMetadataRequestBody: { issuer: "https://id.example.test" } },
+      undefined,
+      undefined,
+    );
+    const form =
+      sdk.commit.mock.calls[0]![0].commitServerIdentityConfigurationForm;
+    expect(form.mcpServerId).toBe("mcp-1");
+    expect(form.clientMode).toBe("auto");
+    expect(form.providerId).toBeUndefined();
+    expect(form.createProvider.issuer).toBe("https://id.example.test");
+    // The resource's own scopes win over the authorization server's list.
+    expect(form.clientConfiguration.scope).toEqual(["resource.read"]);
+    // Both ways on: the server, and the provider now standing behind it.
+    expect(
+      screen.getByRole("link", { name: "its page" }).getAttribute("href"),
+    ).toBe("/mcp/example-chat");
+    expect(
+      screen
+        .getByRole("link", { name: "its sign-in provider" })
+        .getAttribute("href"),
+    ).toBe("/providers/provider-1");
+    // A committed provider mints a client and links the server's own issuer,
+    // so those lists are refetched alongside the server ones.
+    expect(sdk.invalidated).toContain("remoteSessionIssuers");
+    expect(sdk.invalidated).toContain("remoteSessionClients");
+    expect(sdk.invalidated).toContain("userSessionIssuers");
+  });
+
+  it("reuses a provider the project already has for that issuer", async () => {
+    wantsSignIn();
+    sdk.getIssuer = vi.fn(async () => ({
+      id: "provider-existing",
+      issuer: "https://id.example.test",
+      authorizationEndpoint: "https://id.example.test/authorize",
+      tokenEndpoint: "https://id.example.test/token",
+    }));
+    withApplications([application()]);
+    render(<OktaApplicationsSection index={4} connection={connection()} />);
+
+    pressCreate();
+
+    await screen.findByText(/sign-in provider configured/);
+    const form =
+      sdk.commit.mock.calls[0]![0].commitServerIdentityConfigurationForm;
+    // Two applications behind one authorization server share its provider
+    // rather than each standing up another for the same issuer.
+    expect(form.providerId).toBe("provider-existing");
+    expect(form.createProvider).toBeUndefined();
+  });
+
+  it("says when a sign-in provider has to be set up by hand", async () => {
+    wantsSignIn();
+    sdk.commit = vi.fn(async () => ({
+      manualSetupRequired: true,
+      provider: { id: "provider-1" },
+    }));
+    withApplications([application()]);
+    render(<OktaApplicationsSection index={4} connection={connection()} />);
+
+    pressCreate();
+
+    await screen.findByText(/sign-in provider needs manual setup/);
+    // The draft still stands, and the provider is where the rest is finished.
+    expect(
+      screen.getByRole("link", { name: "its page" }).getAttribute("href"),
+    ).toBe("/mcp/example-chat");
+    expect(
+      screen
+        .getByRole("link", { name: "its sign-in provider" })
+        .getAttribute("href"),
+    ).toBe("/providers/provider-1");
+  });
+
+  it("reports why registration failed and retries only those steps", async () => {
+    wantsSignIn();
+    sdk.commit = vi.fn(async () => ({
+      manualSetupRequired: false,
+      failure: {
+        outcome: "refused",
+        reason: "authorization_rejected",
+        retryable: true,
+        providerMessage: "client registration is disabled for this tenant",
+      },
+    }));
+    withApplications([application()]);
+    render(<OktaApplicationsSection index={4} connection={connection()} />);
+
+    pressCreate();
+
+    await screen.findByText("The sign-in provider rejected the registration.");
+    // The provider's own words stay off the card; the taxonomy says enough.
+    expect(screen.queryByText(/client registration is disabled/)).toBeNull();
+    // The server was made and stays made: the card still links to it.
+    expect(screen.getByRole("link", { name: "its page" })).toBeTruthy();
+
+    sdk.commit = vi.fn(async () => ({
+      status: "registered",
+      manualSetupRequired: false,
+      provider: { id: "provider-1" },
+    }));
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+    await screen.findByText(/sign-in provider configured/);
+    // Only the sign-in steps ran again; the draft was not created twice.
+    expect(sdk.createRemoteServer).toHaveBeenCalledTimes(1);
+    expect(sdk.createMcpServer).toHaveBeenCalledTimes(1);
+  });
+
+  it("never puts anything off the committed client on the card", async () => {
+    wantsSignIn();
+    sdk.commit = vi.fn(async () => ({
+      status: "registered",
+      manualSetupRequired: false,
+      provider: { id: "provider-1" },
+      client: {
+        id: "client-1",
+        clientId: "abc123-registered-client",
+        redirectUris: ["https://app.example.test/callback"],
+      },
+    }));
+    withApplications([application()]);
+    const { container } = render(
+      <OktaApplicationsSection index={4} connection={connection()} />,
+    );
+
+    pressCreate();
+
+    await screen.findByText(/sign-in provider configured/);
+    // The card names the provider and nothing about the client Speakeasy holds.
+    expect(container.textContent).not.toContain("abc123-registered-client");
+    expect(container.textContent).not.toContain("client-1");
   });
 
   it("does not send an endpoint the catalog gave in a form that cannot work", async () => {

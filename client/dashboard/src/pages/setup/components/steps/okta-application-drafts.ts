@@ -1,20 +1,40 @@
 import { useCallback, useMemo, useState } from "react";
 import type { IdentityProviderApplication } from "@gram/client/models/components/identityproviderapplication.js";
+import type { McpServer } from "@gram/client/models/components/mcpserver.js";
+import type { RemoteMcpServer } from "@gram/client/models/components/remotemcpserver.js";
 import { invalidateAllMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import {
   invalidateAllMcpServers,
   useMcpServers,
 } from "@gram/client/react-query/mcpServers.js";
 import { invalidateAllRemoteMcpServers } from "@gram/client/react-query/remoteMcpServers.js";
+import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
+import { invalidateAllRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
+import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSessionIssuers.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
 import { createRemoteMcpServerPair } from "@/lib/remoteMcpServers";
 import { mcpServerRouteParam, validateMcpServerUrl } from "@/lib/sources";
+import {
+  configureDraftIdentity,
+  type DraftIdentityOutcome,
+} from "./configure-draft-identity";
+
+/** The two rows one draft is made of, kept so its sign-in can be tried again. */
+export interface DraftPair {
+  remoteMcpServer: RemoteMcpServer;
+  mcpServer: McpServer;
+}
 
 /** What became of one application's draft, as its card reports it. */
 export type DraftOutcome =
   | { status: "creating" }
-  | { status: "created"; mcpServerParam: string }
+  | {
+      status: "created";
+      mcpServerParam: string;
+      pair: DraftPair;
+      identity: DraftIdentityOutcome;
+    }
   | { status: "exists"; mcpServerParam: string }
   | { status: "failed"; message: string };
 
@@ -26,6 +46,11 @@ export interface ApplicationDrafts {
   creating: boolean;
   /** Creates one draft per application, in the order given. */
   create: (applications: IdentityProviderApplication[]) => Promise<void>;
+  /** Runs the sign-in provider steps again for a draft that already exists. */
+  configureIdentity: (
+    sourceApplicationId: string,
+    pair: DraftPair,
+  ) => Promise<void>;
 }
 
 function failureMessage(error: unknown): string {
@@ -34,7 +59,8 @@ function failureMessage(error: unknown): string {
 
 /**
  * Creates one private MCP server per Okta application, backed by a remote MCP
- * server at the endpoint the catalog match names.
+ * server at the endpoint the catalog match names, and carries each one on to
+ * the sign-in provider its upstream asks for.
  *
  * Created drafts are remembered for as long as the step is open, so pressing
  * the bar again with the same cards still picked does not make a second copy;
@@ -64,11 +90,51 @@ export function useApplicationDrafts(): ApplicationDrafts {
     return byName;
   }, [existing.data]);
 
+  const record = useCallback((id: string, outcome: DraftOutcome) => {
+    setOutcomes((previous) => ({ ...previous, [id]: outcome }));
+  }, []);
+
+  // The sign-in provider steps, from the probe to the committed client. They
+  // run after the server exists and can never take it back: whatever they
+  // report, the draft stands.
+  const runIdentity = useCallback(
+    async (id: string, pair: DraftPair) => {
+      const mcpServerParam = mcpServerRouteParam(pair.mcpServer);
+      const created = (identity: DraftIdentityOutcome): DraftOutcome => ({
+        status: "created",
+        mcpServerParam,
+        pair,
+        identity,
+      });
+
+      record(id, created({ status: "configuring" }));
+      const identity = await configureDraftIdentity({
+        client,
+        remoteMcpServer: pair.remoteMcpServer,
+        mcpServer: pair.mcpServer,
+      });
+      record(id, created(identity));
+
+      // A committed provider mints a client and links the server's own issuer,
+      // so those lists go stale too.
+      if (identity.status === "configured") {
+        await Promise.all([
+          invalidateAllRemoteSessionIssuers(queryClient, {
+            refetchType: "all",
+          }),
+          invalidateAllRemoteSessionClients(queryClient, {
+            refetchType: "all",
+          }),
+          invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
+        ]);
+      }
+    },
+    [client, queryClient, record],
+  );
+
   const create = useCallback(
     async (applications: IdentityProviderApplication[]) => {
       setCreating(true);
-      const record = (id: string, outcome: DraftOutcome) =>
-        setOutcomes((previous) => ({ ...previous, [id]: outcome }));
 
       try {
         for (const application of applications) {
@@ -101,15 +167,12 @@ export function useApplicationDrafts(): ApplicationDrafts {
           }
 
           record(id, { status: "creating" });
+          let pair: DraftPair;
           try {
-            const { mcpServer } = await createRemoteMcpServerPair(client, {
+            pair = await createRemoteMcpServerPair(client, {
               name: application.label,
               url: remoteUrl,
               visibility: "private",
-            });
-            record(id, {
-              status: "created",
-              mcpServerParam: mcpServerRouteParam(mcpServer),
             });
           } catch (error) {
             record(id, { status: "failed", message: failureMessage(error) });
@@ -124,13 +187,27 @@ export function useApplicationDrafts(): ApplicationDrafts {
             invalidateAllMcpServers(queryClient, { refetchType: "all" }),
             invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
           ]);
+
+          await runIdentity(id, pair);
         }
       } finally {
         setCreating(false);
       }
     },
-    [client, existingByName, queryClient],
+    [client, existingByName, queryClient, record, runIdentity],
   );
 
-  return { outcomes, projectSlug, creating, create };
+  const configureIdentity = useCallback(
+    async (sourceApplicationId: string, pair: DraftPair) => {
+      setCreating(true);
+      try {
+        await runIdentity(sourceApplicationId, pair);
+      } finally {
+        setCreating(false);
+      }
+    },
+    [runIdentity],
+  );
+
+  return { outcomes, projectSlug, creating, create, configureIdentity };
 }

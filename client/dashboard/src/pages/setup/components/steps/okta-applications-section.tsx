@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Check } from "lucide-react";
+import { Link } from "react-router";
 import type { IdentityProviderApplication } from "@gram/client/models/components/identityproviderapplication.js";
 import type { IdentityProviderConnection } from "@gram/client/models/components/identityproviderconnection.js";
 import { useListIdentityProviderApplications } from "@gram/client/react-query/listIdentityProviderApplications.js";
@@ -17,7 +18,7 @@ import { Button } from "@/components/ui/Button";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
-import { useRoutes } from "@/routes";
+import { useOrgRoutes, useRoutes } from "@/routes";
 import { StepSection } from "../step-section";
 import { errorMessage } from "./identity-provider-errors";
 import {
@@ -200,28 +201,57 @@ function SelectionMark({ selected }: { selected: boolean }): JSX.Element {
 
 const CARD_CLASS = "border-border bg-card flex flex-col gap-3 border p-4";
 
-/** The lead-in before the link, by what the card found at the end of the create. */
-function outcomeSentence(status: "created" | "exists"): string {
-  switch (status) {
-    case "created":
-      return "Draft created. Finish setup on ";
-    case "exists":
-      return "Already an MCP server in this project. Finish setup on ";
+/** The lead-in before the link, by how far the draft and its sign-in got. */
+function outcomeSentence(
+  outcome: DraftOutcome & { status: "created" | "exists" },
+): string {
+  if (outcome.status === "exists") {
+    return "Already an MCP server in this project. Finish setup on ";
   }
+  switch (outcome.identity.status) {
+    case "configured":
+      return "Draft created, sign-in provider configured. See ";
+    case "manual":
+      return "Draft created, sign-in provider needs manual setup. See ";
+    case "configuring":
+    case "failed":
+    case "none":
+      return "Draft created. Finish setup on ";
+  }
+}
+
+/** The provider's own page, where a sign-in nobody could finish is finished. */
+function ProviderLink({ providerId }: { providerId: string }): JSX.Element {
+  const orgRoutes = useOrgRoutes();
+
+  return (
+    <Link
+      to={orgRoutes.remoteIdentityProviders.issuerDetail.href(providerId)}
+      className="underline underline-offset-2"
+    >
+      its sign-in provider
+    </Link>
+  );
 }
 
 /**
  * What became of the draft, on the card that asked for it: one line, with the
- * way on to the server's own page where its setup is finished.
+ * way on to the server's own page where its setup is finished, and to the
+ * sign-in provider when there is one to look at.
+ *
+ * Only ever the sentences and links below — never a field off the committed
+ * client, and never an upstream's own words.
  */
 function DraftOutcomeLine({
   outcome,
   projectSlug,
   onRetry,
+  onRetryIdentity,
 }: {
   outcome: DraftOutcome;
   projectSlug: string;
   onRetry: () => void;
+  onRetryIdentity: () => void;
 }): JSX.Element {
   const routes = useRoutes({ projectSlug });
 
@@ -234,26 +264,80 @@ function DraftOutcomeLine({
   }
 
   if (outcome.status === "failed") {
+    return <FailureLine message={outcome.message} onRetry={onRetry} />;
+  }
+
+  if (
+    outcome.status === "created" &&
+    outcome.identity.status === "configuring"
+  ) {
     return (
-      <div className="flex items-start justify-between gap-2">
-        <Text variant="small" destructive className="break-words">
-          {outcome.message}
+      <Text variant="small" muted>
+        Draft created. Configuring its sign-in provider…
+      </Text>
+    );
+  }
+
+  // The server stands whatever became of its sign-in, so the failure sits
+  // under the line that says so, and the retry runs only those steps again.
+  if (outcome.status === "created" && outcome.identity.status === "failed") {
+    return (
+      <div className="space-y-2">
+        <Text variant="small">
+          Draft created. Finish setup on{" "}
+          <routes.mcp.x.Link params={[outcome.mcpServerParam]}>
+            its page
+          </routes.mcp.x.Link>
+          .
         </Text>
-        <Button variant="tertiary" size="sm" onClick={onRetry}>
-          Retry
-        </Button>
+        <FailureLine
+          message={outcome.identity.message}
+          onRetry={onRetryIdentity}
+        />
       </div>
     );
   }
 
+  const providerId =
+    outcome.status === "created" &&
+    (outcome.identity.status === "configured" ||
+      outcome.identity.status === "manual")
+      ? outcome.identity.providerId
+      : undefined;
+
   return (
     <Text variant="small">
-      {outcomeSentence(outcome.status)}
+      {outcomeSentence(outcome)}
       <routes.mcp.x.Link params={[outcome.mcpServerParam]}>
         its page
       </routes.mcp.x.Link>
+      {providerId ? (
+        <>
+          {" or "}
+          <ProviderLink providerId={providerId} />
+        </>
+      ) : null}
       .
     </Text>
+  );
+}
+
+function FailureLine({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry: () => void;
+}): JSX.Element {
+  return (
+    <div className="flex items-start justify-between gap-2">
+      <Text variant="small" destructive className="break-words">
+        {message}
+      </Text>
+      <Button variant="tertiary" size="sm" onClick={onRetry}>
+        Retry
+      </Button>
+    </div>
   );
 }
 
@@ -265,6 +349,7 @@ function ApplicationCard({
   outcome,
   projectSlug,
   onRetry,
+  onRetryIdentity,
 }: {
   application: IdentityProviderApplication;
   tenantHost: string;
@@ -273,6 +358,7 @@ function ApplicationCard({
   outcome: DraftOutcome | undefined;
   projectSlug: string;
   onRetry: () => void;
+  onRetryIdentity: () => void;
 }): JSX.Element {
   const host = signOnHost(application);
   const distinct = host && host.toLowerCase() !== tenantHost;
@@ -330,6 +416,7 @@ function ApplicationCard({
           outcome={outcome}
           projectSlug={projectSlug}
           onRetry={onRetry}
+          onRetryIdentity={onRetryIdentity}
         />
       ) : null}
     </>
@@ -518,6 +605,15 @@ function ApplicationsInventory({
                   outcome={drafts.outcomes[application.sourceApplicationId]}
                   projectSlug={drafts.projectSlug}
                   onRetry={() => void drafts.create([application])}
+                  onRetryIdentity={() => {
+                    const outcome =
+                      drafts.outcomes[application.sourceApplicationId];
+                    if (outcome?.status !== "created") return;
+                    void drafts.configureIdentity(
+                      application.sourceApplicationId,
+                      outcome.pair,
+                    );
+                  }}
                 />
               ))}
             </div>
