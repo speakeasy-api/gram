@@ -86,7 +86,7 @@ export type IdentityProviderConnection = {
   kind: IdentityProviderConnectionKind;
   lastVerifiedAt?: Date | undefined;
   /**
-   * Identifier of the WorkOS connection used for sign-in.
+   * Identifier of the sign-in provider connection used for sign-in.
    */
   signInConnectionId?: string | undefined;
   signInState?: SignInState | undefined;

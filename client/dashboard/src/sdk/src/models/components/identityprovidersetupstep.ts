@@ -30,14 +30,14 @@ import {
 } from "./identityproviderverifyresult.js";
 
 /**
- * WorkOS Admin Portal intent the dashboard should open for this step.
+ * Intent the dashboard should open in the setup portal for this step.
  */
 export const PortalIntent = {
   Sso: "sso",
   Dsync: "dsync",
 } as const;
 /**
- * WorkOS Admin Portal intent the dashboard should open for this step.
+ * Intent the dashboard should open in the setup portal for this step.
  */
 export type PortalIntent = ClosedEnum<typeof PortalIntent>;
 
@@ -69,7 +69,7 @@ export type IdentityProviderSetupStep = {
   key: string;
   lastOutcome?: IdentityProviderVerifyResult | undefined;
   /**
-   * WorkOS Admin Portal intent the dashboard should open for this step.
+   * Intent the dashboard should open in the setup portal for this step.
    */
   portalIntent?: PortalIntent | undefined;
   printedValues: Array<IdentityProviderPrintedValue>;

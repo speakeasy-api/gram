@@ -302,7 +302,7 @@ func TestSubmitSignInStepFallsBackToPublicClientIDResolution(t *testing.T) {
 	require.Equal(t, configuredSignInStep(manualClientID, false, false), result.Step)
 	require.Equal(t, []*gen.IdentityProviderFieldOutcome{
 		{Key: "client_id", Outcome: "accepted", Detail: "Okta sign-in Client ID saved."},
-		{Key: "client_secret", Outcome: "accepted", Detail: "Client secret sent to WorkOS and not retained."},
+		{Key: "client_secret", Outcome: "accepted", Detail: "Client secret sent to the sign-in provider and not retained."},
 	}, result.FieldOutcomes)
 	require.NoError(t, fake.ValidationError())
 
@@ -536,7 +536,7 @@ func TestSubmitSignInStepSelectsDirectoryGroups(t *testing.T) {
 
 func configuredSignInStep(clientID string, portalFallback, claimsProvisioned bool) *gen.IdentityProviderSetupStep {
 	instructions := []string{
-		"Speakeasy created the Okta sign-in application and WorkOS OIDC connection.",
+		"Speakeasy created the Okta sign-in application and sign-in provider connection.",
 		"Configure the groups claim in Okta, then confirm whether sign-in tokens or the directory will supply groups.",
 	}
 	deepLink := new("https://example-admin.okta.com/admin/app/oidc_client/instance/" + testSignInAppID + "/#tab-sign-on")
@@ -549,7 +549,7 @@ func configuredSignInStep(clientID string, portalFallback, claimsProvisioned boo
 	}
 	var repair *gen.IdentityProviderRepair
 	if claimsProvisioned {
-		instructions = []string{"Speakeasy created the Okta sign-in application, identity claims, and WorkOS OIDC connection."}
+		instructions = []string{"Speakeasy created the Okta sign-in application, identity claims, and sign-in provider connection."}
 		deepLink = nil
 		where = "our_page"
 		issuer += "/oauth2/default"
@@ -568,8 +568,8 @@ func configuredSignInStep(clientID string, portalFallback, claimsProvisioned boo
 	}
 	if portalFallback {
 		instructions = []string{
-			"Open WorkOS Admin Portal and choose the OpenID Connect connection.",
-			"Copy the client secret from the Okta application directly into WorkOS Admin Portal. It is not retained by Speakeasy.",
+			"Open the setup portal and choose the OpenID Connect connection.",
+			"Copy the client secret from the Okta application directly into the setup portal. It is not retained by Speakeasy.",
 			"Use the Client ID, issuer, and discovery URL shown below, then activate the connection.",
 		}
 		deepLink = new("https://example-admin.okta.com/admin/app/oidc_client/instance/" + testSignInAppID + "/#tab-general")

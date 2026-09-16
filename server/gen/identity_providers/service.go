@@ -202,7 +202,7 @@ type IdentityProviderConnection struct {
 	LastVerifiedAt *string
 	VerifyEvidence *IdentityProviderVerifyEvidence
 	SignInState    *string
-	// Identifier of the WorkOS connection used for sign-in.
+	// Identifier of the sign-in provider connection used for sign-in.
 	SignInConnectionID *string
 	GroupsSource       *string
 	// Whether an administrator confirmed the Okta groups claim filter is
@@ -265,7 +265,7 @@ type IdentityProviderSetupStep struct {
 	// Claims Speakeasy intends sign-in to carry.
 	Claims []*IdentityProviderClaim
 	Repair *IdentityProviderRepair
-	// WorkOS Admin Portal intent the dashboard should open for this step.
+	// Intent the dashboard should open in the setup portal for this step.
 	PortalIntent *string
 	State        string
 	LastOutcome  *IdentityProviderVerifyResult
