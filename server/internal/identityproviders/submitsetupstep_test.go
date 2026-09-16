@@ -172,11 +172,18 @@ func TestSubmitSignInStepProvisionsExactOktaApplicationAndAssignsEveryone(t *tes
 				"application_type": "web",
 				"grant_types":      []any{"authorization_code", "refresh_token"},
 				"response_types":   []any{"code"},
-				"redirect_uris":    []any{"https://api.workos.com/sso/callback"},
+				"redirect_uris":    []any{},
 				"consent_method":   "TRUSTED",
 			},
 		},
 	}, createdApplication)
+	updatedApplication, updateCount := fake.UpdatedApplication()
+	require.Equal(t, 1, updateCount)
+	settings, ok := updatedApplication["settings"].(map[string]any)
+	require.True(t, ok)
+	updatedOAuthClient, ok := settings["oauthClient"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, []any{testWorkOSRedirectURI}, updatedOAuthClient["redirect_uris"])
 	assignedAppID, assignedGroupID := fake.Assignment()
 	require.Equal(t, testSignInAppID, assignedAppID)
 	require.Equal(t, testEveryoneGroupID, assignedGroupID)
@@ -204,7 +211,7 @@ func TestSubmitSignInStepProvisionsExactOktaApplicationAndAssignsEveryone(t *tes
 	require.Equal(t, "token", stored.GroupsSource.String)
 	var evidence map[string]any
 	require.NoError(t, json.Unmarshal(stored.SignInEvidence, &evidence))
-	require.Equal(t, map[string]any{"client_id": testSignInClientID, "groups_claim_provisioned": true}, evidence)
+	require.Equal(t, map[string]any{"client_id": testSignInClientID, "groups_claim_provisioned": true, "redirect_uri": testWorkOSRedirectURI}, evidence)
 	require.NotContains(t, string(stored.SignInEvidence), testFakeClientSecret)
 
 	_, err = ti.service.SubmitSetupStep(ctx, &gen.SubmitSetupStepPayload{StepKey: "sign_in", Values: []*gen.IdentityProviderSetupValue{}, SessionToken: nil, ApikeyToken: nil})
@@ -290,7 +297,7 @@ func TestSubmitSignInStepFallsBackToPublicClientIDResolution(t *testing.T) {
 	require.Equal(t, "application_created", stored.SignInState.String)
 	var evidence map[string]any
 	require.NoError(t, json.Unmarshal(stored.SignInEvidence, &evidence))
-	require.Equal(t, map[string]any{"client_id": manualClientID}, evidence)
+	require.Equal(t, map[string]any{"client_id": manualClientID, "redirect_uri": testWorkOSRedirectURI}, evidence)
 	require.NotContains(t, string(stored.SignInEvidence), testFakeClientSecret)
 
 	retry, err := ti.service.SubmitSetupStep(ctx, &gen.SubmitSetupStepPayload{
@@ -445,6 +452,8 @@ func TestSubmitSignInStepAdoptsExistingActiveApplication(t *testing.T) {
 	require.Nil(t, fake.CreatedApplication())
 	created, _ := fake.ApplicationCounts()
 	require.Zero(t, created)
+	_, updateCount := fake.UpdatedApplication()
+	require.Equal(t, 1, updateCount)
 }
 
 func TestSubmitSignInStepRejectsConflictingGroupAcknowledgements(t *testing.T) {
@@ -551,18 +560,21 @@ func configuredSignInStep(clientID string, portalFallback, claimsProvisioned boo
 		portalIntent = new("sso")
 		where = "their_console"
 	}
+	printedValues := []*gen.IdentityProviderPrintedValue{
+		{Label: "Client ID", Value: clientID, Copyable: true},
+		{Label: "Issuer", Value: issuer, Copyable: true},
+		{Label: "Discovery URL", Value: issuer + "/.well-known/openid-configuration", Copyable: true},
+	}
+	if !portalFallback {
+		printedValues = append(printedValues, &gen.IdentityProviderPrintedValue{Label: "Sign-in redirect URI", Value: testWorkOSRedirectURI, Copyable: true})
+	}
 	return &gen.IdentityProviderSetupStep{
-		Key:          "sign_in",
-		Title:        "Configure Okta sign-in",
-		Where:        where,
-		Instructions: instructions,
-		DeepLink:     deepLink,
-		PrintedValues: []*gen.IdentityProviderPrintedValue{
-			{Label: "Client ID", Value: clientID, Copyable: true},
-			{Label: "Issuer", Value: issuer, Copyable: true},
-			{Label: "Discovery URL", Value: issuer + "/.well-known/openid-configuration", Copyable: true},
-			{Label: "Sign-in redirect URI", Value: "https://api.workos.com/sso/callback", Copyable: true},
-		},
+		Key:            "sign_in",
+		Title:          "Configure Okta sign-in",
+		Where:          where,
+		Instructions:   instructions,
+		DeepLink:       deepLink,
+		PrintedValues:  printedValues,
 		ExpectedValues: expectedValues,
 		Claims: []*gen.IdentityProviderClaim{
 			{Name: "email", Purpose: "identity", CarriesAccess: false, Provisioned: false},

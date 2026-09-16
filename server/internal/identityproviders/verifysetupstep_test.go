@@ -60,6 +60,8 @@ type fakeOktaServer struct {
 	validationErr        error
 	createdApp           map[string]any
 	createdAppCount      int
+	updatedApp           map[string]any
+	updatedAppCount      int
 	applicationReads     int
 	resolvedClientID     string
 	assignedAppID        string
@@ -635,6 +637,8 @@ func newFakeOktaServer(t *testing.T, mode string) *fakeOktaServer {
 		validationErr:        nil,
 		createdApp:           nil,
 		createdAppCount:      0,
+		updatedApp:           nil,
+		updatedAppCount:      0,
 		applicationReads:     0,
 		resolvedClientID:     "",
 		assignedAppID:        "",
@@ -996,8 +1000,29 @@ func (f *fakeOktaServer) handleEveryoneGroup(w http.ResponseWriter, r *http.Requ
 }
 
 func (f *fakeOktaServer) handleSignInApplication(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet || r.Header.Get("Authorization") != "Bearer "+testAccessToken {
+	if r.Header.Get("Authorization") != "Bearer "+testAccessToken {
 		f.fail(w, errors.New("unexpected sign-in application request"))
+		return
+	}
+	if r.Method == http.MethodPut {
+		if r.Header.Get("Content-Type") != "application/json" {
+			f.fail(w, errors.New("unexpected sign-in application update content type"))
+			return
+		}
+		var updated map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&updated); err != nil {
+			f.fail(w, err)
+			return
+		}
+		f.mu.Lock()
+		f.updatedApp = updated
+		f.updatedAppCount++
+		f.mu.Unlock()
+		f.writeApplication(w, "ACTIVE", f.SignInClientID())
+		return
+	}
+	if r.Method != http.MethodGet {
+		f.fail(w, errors.New("unexpected sign-in application method"))
 		return
 	}
 	f.mu.Lock()
@@ -1052,7 +1077,7 @@ func (f *fakeOktaServer) handleApplicationAssignment(w http.ResponseWriter, r *h
 
 func (f *fakeOktaServer) writeApplication(w http.ResponseWriter, status, clientID string) {
 	w.Header().Set("Content-Type", "application/json")
-	_, _ = w.Write([]byte(`{"id":"` + testSignInAppID + `","status":"` + status + `","label":"Speakeasy sign-in","credentials":{"oauthClient":{"client_id":"` + clientID + `","client_secret":"` + testFakeClientSecret + `"}}}`))
+	_, _ = w.Write([]byte(`{"id":"` + testSignInAppID + `","status":"` + status + `","name":"oidc_client","label":"Speakeasy sign-in","signOnMode":"OPENID_CONNECT","credentials":{"oauthClient":{"client_id":"` + clientID + `","client_secret":"` + testFakeClientSecret + `","token_endpoint_auth_method":"client_secret_post","autoKeyRotation":true}},"settings":{"oauthClient":{"application_type":"web","grant_types":["authorization_code","refresh_token"],"redirect_uris":[],"response_types":["code"],"consent_method":"TRUSTED"}}}`))
 }
 
 func (f *fakeOktaServer) handleCollection(w http.ResponseWriter, r *http.Request, resource string) {
@@ -1137,6 +1162,12 @@ func (f *fakeOktaServer) ApplicationCounts() (int, int) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.createdAppCount, f.applicationReads
+}
+
+func (f *fakeOktaServer) UpdatedApplication() (map[string]any, int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return maps.Clone(f.updatedApp), f.updatedAppCount
 }
 
 func (f *fakeOktaServer) ResolvedClientID() string {

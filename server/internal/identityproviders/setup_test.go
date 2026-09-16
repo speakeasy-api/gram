@@ -61,6 +61,8 @@ type mockWorkOSClient struct {
 	mock.Mock
 }
 
+const testWorkOSRedirectURI = "https://auth.example.test/sso/oidc/conn-example/callback"
+
 type catalogDouble struct {
 	mu              sync.Mutex
 	searches        map[string][]identityproviders.ApplicationCatalogCandidate
@@ -191,13 +193,28 @@ func expectDirectWorkOSConnection(t *testing.T, ti *testInstance, clientID strin
 			require.Equal(t, "token", stored.GroupsSource.String)
 		}
 	}).Return(workos.Connection{
-		ID:             "conn-example",
-		OrganizationID: "550e8400-e29b-41d4-a716-446655440000",
-		ConnectionType: "GenericOIDC",
-		Name:           "Okta",
-		State:          "active",
-		CreatedAt:      "2026-09-15T00:00:00Z",
-		UpdatedAt:      "2026-09-15T00:00:00Z",
+		ID:                    "conn-example",
+		OrganizationID:        "550e8400-e29b-41d4-a716-446655440000",
+		ConnectionType:        "GenericOIDC",
+		Name:                  "Okta",
+		State:                 "active",
+		CallbackEndpoint:      "",
+		OIDCDiscoveryEndpoint: "",
+		OIDCRedirectURI:       "",
+		CreatedAt:             "2026-09-15T00:00:00Z",
+		UpdatedAt:             "2026-09-15T00:00:00Z",
+	}, nil).Once()
+	ti.workos.On("GetConnection", mock.Anything, "conn-example").Return(workos.Connection{
+		ID:                    "conn-example",
+		OrganizationID:        "550e8400-e29b-41d4-a716-446655440000",
+		ConnectionType:        "GenericOIDC",
+		Name:                  "Okta",
+		State:                 "active",
+		CallbackEndpoint:      "https://auth.example.test/sso/oidc/legacy/callback",
+		OIDCDiscoveryEndpoint: discoveryEndpoint,
+		OIDCRedirectURI:       testWorkOSRedirectURI,
+		CreatedAt:             "2026-09-15T00:00:00Z",
+		UpdatedAt:             "2026-09-15T00:00:00Z",
 	}, nil).Once()
 	return &clientSecret
 }

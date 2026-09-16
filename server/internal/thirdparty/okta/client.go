@@ -1116,7 +1116,7 @@ func (c *Client) CreateOIDCApplication(ctx context.Context, tenantDomain, access
 				ApplicationType: "web",
 				GrantTypes:      []string{"authorization_code", "refresh_token"},
 				ResponseTypes:   []string{"code"},
-				RedirectURIs:    append([]string(nil), input.RedirectURIs...),
+				RedirectURIs:    append([]string{}, input.RedirectURIs...),
 				ConsentMethod:   "TRUSTED",
 			},
 		},
