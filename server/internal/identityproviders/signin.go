@@ -74,9 +74,9 @@ func (s *Service) submitSignInSetupStep(
 			}
 		}
 		if slices.Contains(before.Capabilities, capabilityClaimsProvisioning) {
-			before, err = s.provisionGroupsClaim(ctx, authCtx, logger, before)
+			before, err = s.provisionSignInClaims(ctx, authCtx, logger, before)
 			if err != nil {
-				return nil, oops.E(oops.CodeGatewayError, err, "error provisioning the Okta groups claim").LogError(ctx, logger)
+				return nil, oops.E(oops.CodeGatewayError, err, "error provisioning the Okta sign-in claims").LogError(ctx, logger)
 			}
 		}
 		step, err := buildSignInSetupStep(before)
@@ -271,9 +271,9 @@ func (s *Service) submitSignInApplication(
 			}
 		}
 		if canProvisionClaims {
-			before, err = s.provisionGroupsClaim(ctx, authCtx, logger, before)
+			before, err = s.provisionSignInClaims(ctx, authCtx, logger, before)
 			if err != nil {
-				return nil, oops.E(oops.CodeGatewayError, err, "error provisioning the Okta groups claim").LogError(ctx, logger)
+				return nil, oops.E(oops.CodeGatewayError, err, "error provisioning the Okta sign-in claims").LogError(ctx, logger)
 			}
 		}
 		if canProvision {
@@ -357,9 +357,9 @@ func (s *Service) submitSignInApplication(
 		}
 	}
 	if canProvisionClaims {
-		after, err = s.provisionGroupsClaim(ctx, authCtx, logger, after)
+		after, err = s.provisionSignInClaims(ctx, authCtx, logger, after)
 		if err != nil {
-			return nil, oops.E(oops.CodeGatewayError, err, "error provisioning the Okta groups claim").LogError(ctx, logger)
+			return nil, oops.E(oops.CodeGatewayError, err, "error provisioning the Okta sign-in claims").LogError(ctx, logger)
 		}
 	}
 	if canProvision && clientSecret == "" {
@@ -537,7 +537,7 @@ func (s *Service) assignSignInApplicationToEveryone(ctx context.Context, organiz
 	return nil
 }
 
-func (s *Service) provisionGroupsClaim(
+func (s *Service) provisionSignInClaims(
 	ctx context.Context,
 	authCtx *contextvalues.AuthContext,
 	logger *slog.Logger,
@@ -569,13 +569,13 @@ func (s *Service) provisionGroupsClaim(
 	if authorizationServerID == "" {
 		return repo.GetIdentityProviderConnectionByOrganizationRow{}, errors.New("find Okta default authorization server: server not found")
 	}
-	if err := s.okta.CreateGroupsClaim(ctx, tenantDomain, token.AccessToken, authorizationServerID); err != nil {
-		return repo.GetIdentityProviderConnectionByOrganizationRow{}, fmt.Errorf("create Okta groups claim: %w", err)
+	if _, err := s.okta.EnsureSignInClaims(ctx, tenantDomain, token.AccessToken, authorizationServerID); err != nil {
+		return repo.GetIdentityProviderConnectionByOrganizationRow{}, fmt.Errorf("ensure Okta sign-in claims: %w", err)
 	}
 	evidence.GroupsClaimProvisioned = true
 	encodedEvidence, err := json.Marshal(evidence)
 	if err != nil {
-		return repo.GetIdentityProviderConnectionByOrganizationRow{}, fmt.Errorf("encode provisioned Okta groups claim: %w", err)
+		return repo.GetIdentityProviderConnectionByOrganizationRow{}, fmt.Errorf("encode provisioned Okta sign-in claims: %w", err)
 	}
 	return s.persistSignInUpdate(ctx, authCtx, logger, before, func(queries *repo.Queries) error {
 		return queries.UpdateOktaIdentityProviderSignInAcknowledgement(ctx, repo.UpdateOktaIdentityProviderSignInAcknowledgementParams{
@@ -959,7 +959,7 @@ func buildSignInSetupStep(row repo.GetIdentityProviderConnectionByOrganizationRo
 	if canProvisionClaims {
 		step.Where = "our_page"
 		step.Instructions = []string{
-			"Speakeasy created the Okta sign-in application, groups claim, and WorkOS OIDC connection.",
+			"Speakeasy created the Okta sign-in application, identity claims, and WorkOS OIDC connection.",
 		}
 		step.PrintedValues = signInPrintedValues(row.TenantIdentifier, evidence.ClientID, true, evidence.RedirectURI)
 		if workOSConnectionMissing {
@@ -1028,8 +1028,8 @@ func signInPrintedValues(tenantIdentifier, clientID string, customAuthorizationS
 func signInClaims(groupsProvisioned bool) []*gen.IdentityProviderClaim {
 	return []*gen.IdentityProviderClaim{
 		{Name: "email", Purpose: "identity", CarriesAccess: false, Provisioned: false},
-		{Name: "first_name", Purpose: "display", CarriesAccess: false, Provisioned: false},
-		{Name: "last_name", Purpose: "display", CarriesAccess: false, Provisioned: false},
+		{Name: "first_name", Purpose: "display", CarriesAccess: false, Provisioned: groupsProvisioned},
+		{Name: "last_name", Purpose: "display", CarriesAccess: false, Provisioned: groupsProvisioned},
 		{Name: "groups", Purpose: "used by access rules", CarriesAccess: true, Provisioned: groupsProvisioned},
 	}
 }

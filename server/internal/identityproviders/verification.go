@@ -87,7 +87,7 @@ type OktaClient interface {
 	ListAuthorizationServers(context.Context, string, string) ([]okta.AuthorizationServer, error)
 	CreateOIDCApplication(context.Context, string, string, okta.CreateOIDCApplicationInput) (okta.Application, error)
 	EnsureOIDCApplicationRedirectURI(context.Context, string, string, string, string) error
-	CreateGroupsClaim(context.Context, string, string, string) error
+	EnsureSignInClaims(context.Context, string, string, string) ([]string, error)
 	FindActiveApplicationByLabel(context.Context, string, string, string) (okta.Application, string, bool, error)
 	GetApplication(context.Context, string, string, string) (okta.Application, error)
 	ResolveApplicationByClientID(context.Context, string, string, string) (okta.Application, error)

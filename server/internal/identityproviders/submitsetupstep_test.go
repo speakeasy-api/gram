@@ -187,9 +187,9 @@ func TestSubmitSignInStepProvisionsExactOktaApplicationAndAssignsEveryone(t *tes
 	assignedAppID, assignedGroupID := fake.Assignment()
 	require.Equal(t, testSignInAppID, assignedAppID)
 	require.Equal(t, testEveryoneGroupID, assignedGroupID)
-	claim, claimCount := fake.CreatedClaim()
-	require.Equal(t, 1, claimCount)
-	require.Equal(t, map[string]any{
+	claims, claimCount := fake.CreatedClaims()
+	require.Equal(t, 3, claimCount)
+	require.Equal(t, []map[string]any{{
 		"alwaysIncludeInToken": true,
 		"claimType":            "IDENTITY",
 		"conditions":           map[string]any{"scopes": []any{}},
@@ -198,7 +198,23 @@ func TestSubmitSignInStepProvisionsExactOktaApplicationAndAssignsEveryone(t *tes
 		"status":               "ACTIVE",
 		"value":                ".*",
 		"valueType":            "GROUPS",
-	}, claim)
+	}, {
+		"alwaysIncludeInToken": true,
+		"claimType":            "IDENTITY",
+		"conditions":           map[string]any{"scopes": []any{}},
+		"name":                 "given_name",
+		"status":               "ACTIVE",
+		"value":                "user.firstName",
+		"valueType":            "EXPRESSION",
+	}, {
+		"alwaysIncludeInToken": true,
+		"claimType":            "IDENTITY",
+		"conditions":           map[string]any{"scopes": []any{}},
+		"name":                 "family_name",
+		"status":               "ACTIVE",
+		"value":                "user.lastName",
+		"valueType":            "EXPRESSION",
+	}}, claims)
 	require.NoError(t, fake.ValidationError())
 
 	stored, err := repo.New(ti.conn).GetIdentityProviderConnectionByOrganization(ctx, ti.orgID)
@@ -216,8 +232,8 @@ func TestSubmitSignInStepProvisionsExactOktaApplicationAndAssignsEveryone(t *tes
 
 	_, err = ti.service.SubmitSetupStep(ctx, &gen.SubmitSetupStepPayload{StepKey: "sign_in", Values: []*gen.IdentityProviderSetupValue{}, SessionToken: nil, ApikeyToken: nil})
 	require.NoError(t, err)
-	_, claimCount = fake.CreatedClaim()
-	require.Equal(t, 1, claimCount)
+	_, claimCount = fake.CreatedClaims()
+	require.Equal(t, 3, claimCount)
 
 	afterAudits, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionIdentityProviderConnectionUpdated)
 	require.NoError(t, err)
@@ -533,7 +549,7 @@ func configuredSignInStep(clientID string, portalFallback, claimsProvisioned boo
 	}
 	var repair *gen.IdentityProviderRepair
 	if claimsProvisioned {
-		instructions = []string{"Speakeasy created the Okta sign-in application, groups claim, and WorkOS OIDC connection."}
+		instructions = []string{"Speakeasy created the Okta sign-in application, identity claims, and WorkOS OIDC connection."}
 		deepLink = nil
 		where = "our_page"
 		issuer += "/oauth2/default"
@@ -578,8 +594,8 @@ func configuredSignInStep(clientID string, portalFallback, claimsProvisioned boo
 		ExpectedValues: expectedValues,
 		Claims: []*gen.IdentityProviderClaim{
 			{Name: "email", Purpose: "identity", CarriesAccess: false, Provisioned: false},
-			{Name: "first_name", Purpose: "display", CarriesAccess: false, Provisioned: false},
-			{Name: "last_name", Purpose: "display", CarriesAccess: false, Provisioned: false},
+			{Name: "first_name", Purpose: "display", CarriesAccess: false, Provisioned: claimsProvisioned},
+			{Name: "last_name", Purpose: "display", CarriesAccess: false, Provisioned: claimsProvisioned},
 			{Name: "groups", Purpose: "used by access rules", CarriesAccess: true, Provisioned: claimsProvisioned},
 		},
 		Repair:       repair,

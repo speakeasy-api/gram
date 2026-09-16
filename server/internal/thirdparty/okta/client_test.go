@@ -647,7 +647,7 @@ func TestEnsureSignInClaimsCreatesRepairsVerifiesAndIsIdempotent(t *testing.T) {
 
 	names, err := client.EnsureSignInClaims(t.Context(), "example.okta.com", "test-access-token", "auth-server-1")
 	require.NoError(t, err)
-	require.Equal(t, []string{"groups", "given_name", "family_name", "email"}, names)
+	require.Equal(t, []string{"groups", "given_name", "family_name"}, names)
 	secondNames, err := client.EnsureSignInClaims(t.Context(), "example.okta.com", "test-access-token", "auth-server-1")
 	require.NoError(t, err)
 	require.Equal(t, names, secondNames)
@@ -696,12 +696,11 @@ func TestEnsureSignInClaimsCreatesExactPayloadsInDeterministicOrder(t *testing.T
 
 	names, err := newTestClient(t, server.URL).EnsureSignInClaims(t.Context(), "example.okta.com", "test-access-token", "auth-server-1")
 	require.NoError(t, err)
-	require.Equal(t, []string{"groups", "given_name", "family_name", "email"}, names)
-	require.Len(t, posted, 4)
+	require.Equal(t, []string{"groups", "given_name", "family_name"}, names)
+	require.Len(t, posted, 3)
 	require.JSONEq(t, `{"alwaysIncludeInToken":true,"claimType":"IDENTITY","conditions":{"scopes":[]},"group_filter_type":"REGEX","name":"groups","status":"ACTIVE","value":".*","valueType":"GROUPS"}`, string(posted[0]))
 	require.JSONEq(t, `{"alwaysIncludeInToken":true,"claimType":"IDENTITY","conditions":{"scopes":[]},"name":"given_name","status":"ACTIVE","value":"user.firstName","valueType":"EXPRESSION"}`, string(posted[1]))
 	require.JSONEq(t, `{"alwaysIncludeInToken":true,"claimType":"IDENTITY","conditions":{"scopes":[]},"name":"family_name","status":"ACTIVE","value":"user.lastName","valueType":"EXPRESSION"}`, string(posted[2]))
-	require.JSONEq(t, `{"alwaysIncludeInToken":true,"claimType":"IDENTITY","conditions":{"scopes":[]},"name":"email","status":"ACTIVE","value":"user.email","valueType":"EXPRESSION"}`, string(posted[3]))
 }
 
 func TestEnsureSignInClaimsFailsWhenVerificationDoesNotMatch(t *testing.T) {
@@ -714,18 +713,17 @@ func TestEnsureSignInClaimsFailsWhenVerificationDoesNotMatch(t *testing.T) {
 			gets.Add(1)
 			_, _ = w.Write([]byte(`[
 				{"id":"groups-claim","alwaysIncludeInToken":true,"claimType":"IDENTITY","conditions":{"scopes":[]},"group_filter_type":"REGEX","name":"groups","status":"ACTIVE","value":".*","valueType":"GROUPS"},
-				{"id":"given-claim","alwaysIncludeInToken":true,"claimType":"IDENTITY","conditions":{"scopes":[]},"name":"given_name","status":"ACTIVE","value":"user.firstName","valueType":"EXPRESSION"},
-				{"id":"family-claim","alwaysIncludeInToken":true,"claimType":"IDENTITY","conditions":{"scopes":[]},"name":"family_name","status":"ACTIVE","value":"user.lastName","valueType":"EXPRESSION"}
+				{"id":"given-claim","alwaysIncludeInToken":true,"claimType":"IDENTITY","conditions":{"scopes":[]},"name":"given_name","status":"ACTIVE","value":"user.firstName","valueType":"EXPRESSION"}
 			]`))
 			return
 		}
 		w.WriteHeader(http.StatusCreated)
-		_, _ = w.Write([]byte(`{"id":"email-claim"}`))
+		_, _ = w.Write([]byte(`{"id":"family-claim"}`))
 	}))
 	t.Cleanup(server.Close)
 
 	names, err := newTestClient(t, server.URL).EnsureSignInClaims(t.Context(), "example.okta.com", "test-access-token", "auth-server-1")
-	require.ErrorContains(t, err, `claim "email" did not match after update`)
+	require.ErrorContains(t, err, `claim "family_name" did not match after update`)
 	require.Nil(t, names)
 	require.Equal(t, int64(2), gets.Load())
 }

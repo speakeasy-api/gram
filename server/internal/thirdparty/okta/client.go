@@ -940,7 +940,7 @@ func (c *Client) EnsureAuthorizationServerPolicyClient(ctx context.Context, tena
 
 // EnsureSignInClaims creates or repairs the identity claims required by Gram sign-in.
 func (c *Client) EnsureSignInClaims(ctx context.Context, tenantDomain, accessToken, authorizationServerID string) ([]string, error) {
-	claimNames := []string{"groups", "given_name", "family_name", "email"}
+	claimNames := []string{"groups", "given_name", "family_name"}
 	if strings.TrimSpace(tenantDomain) == "" || strings.TrimSpace(accessToken) == "" || strings.TrimSpace(authorizationServerID) == "" {
 		return nil, errors.New("ensure Okta sign-in claims: tenant domain, access token, and authorization server ID are required")
 	}
@@ -948,7 +948,6 @@ func (c *Client) EnsureSignInClaims(ctx context.Context, tenantDomain, accessTok
 		{ID: "", AlwaysIncludeInToken: true, ClaimType: "IDENTITY", Conditions: authorizationClaimConditions{Scopes: []string{}}, GroupFilterType: "REGEX", Name: "groups", Status: "ACTIVE", Value: ".*", ValueType: "GROUPS"},
 		{ID: "", AlwaysIncludeInToken: true, ClaimType: "IDENTITY", Conditions: authorizationClaimConditions{Scopes: []string{}}, GroupFilterType: "", Name: "given_name", Status: "ACTIVE", Value: "user.firstName", ValueType: "EXPRESSION"},
 		{ID: "", AlwaysIncludeInToken: true, ClaimType: "IDENTITY", Conditions: authorizationClaimConditions{Scopes: []string{}}, GroupFilterType: "", Name: "family_name", Status: "ACTIVE", Value: "user.lastName", ValueType: "EXPRESSION"},
-		{ID: "", AlwaysIncludeInToken: true, ClaimType: "IDENTITY", Conditions: authorizationClaimConditions{Scopes: []string{}}, GroupFilterType: "", Name: "email", Status: "ACTIVE", Value: "user.email", ValueType: "EXPRESSION"},
 	}
 
 	claimsPath := "/api/v1/authorizationServers/" + url.PathEscape(authorizationServerID) + "/claims"

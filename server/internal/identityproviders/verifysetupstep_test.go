@@ -66,7 +66,7 @@ type fakeOktaServer struct {
 	resolvedClientID     string
 	assignedAppID        string
 	assignedGroupID      string
-	createdClaim         map[string]any
+	createdClaims        []map[string]any
 	createdClaimCount    int
 	inventoryApps        []map[string]any
 	assignmentCounts     map[string][2]int
@@ -643,7 +643,7 @@ func newFakeOktaServer(t *testing.T, mode string) *fakeOktaServer {
 		resolvedClientID:     "",
 		assignedAppID:        "",
 		assignedGroupID:      "",
-		createdClaim:         nil,
+		createdClaims:        nil,
 		createdClaimCount:    0,
 		inventoryApps:        nil,
 		assignmentCounts:     make(map[string][2]int),
@@ -784,7 +784,19 @@ func (f *fakeOktaServer) handleAuthorizationServers(w http.ResponseWriter, r *ht
 }
 
 func (f *fakeOktaServer) handleGroupsClaim(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost || r.Header.Get("Authorization") != "Bearer "+testAccessToken || r.Header.Get("Content-Type") != "application/json" {
+	if r.Header.Get("Authorization") != "Bearer "+testAccessToken {
+		f.fail(w, errors.New("unexpected groups claim request"))
+		return
+	}
+	if r.Method == http.MethodGet {
+		f.mu.Lock()
+		claims := append([]map[string]any(nil), f.createdClaims...)
+		f.mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(claims)
+		return
+	}
+	if r.Method != http.MethodPost || r.Header.Get("Content-Type") != "application/json" {
 		f.fail(w, errors.New("unexpected groups claim request"))
 		return
 	}
@@ -793,13 +805,19 @@ func (f *fakeOktaServer) handleGroupsClaim(w http.ResponseWriter, r *http.Reques
 		f.fail(w, err)
 		return
 	}
+	name, ok := claim["name"].(string)
+	if !ok || name == "" {
+		f.fail(w, errors.New("unexpected sign-in claim name"))
+		return
+	}
 	f.mu.Lock()
-	f.createdClaim = claim
+	claim["id"] = "claim-" + name
+	f.createdClaims = append(f.createdClaims, claim)
 	f.createdClaimCount++
 	f.mu.Unlock()
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	_, _ = w.Write([]byte(`{"id":"claim-groups"}`))
+	_ = json.NewEncoder(w).Encode(map[string]any{"id": claim["id"]})
 }
 
 func (f *fakeOktaServer) handleApplications(w http.ResponseWriter, r *http.Request) {
@@ -1182,10 +1200,15 @@ func (f *fakeOktaServer) Assignment() (string, string) {
 	return f.assignedAppID, f.assignedGroupID
 }
 
-func (f *fakeOktaServer) CreatedClaim() (map[string]any, int) {
+func (f *fakeOktaServer) CreatedClaims() ([]map[string]any, int) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return maps.Clone(f.createdClaim), f.createdClaimCount
+	claims := make([]map[string]any, len(f.createdClaims))
+	for i, claim := range f.createdClaims {
+		claims[i] = maps.Clone(claim)
+		delete(claims[i], "id")
+	}
+	return claims, f.createdClaimCount
 }
 
 func (f *fakeOktaServer) SetApplicationInventory(applications []map[string]any, counts map[string][2]int) {
