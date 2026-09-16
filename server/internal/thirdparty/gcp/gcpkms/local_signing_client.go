@@ -23,7 +23,7 @@ import (
 // the stand-in produces signatures the same width as production.
 const rsaLocalKeyBits = 2048
 
-var _ SigningClient = (*LocalSigningClient)(nil)
+var _ ProvisioningClient = (*LocalSigningClient)(nil)
 
 // LocalSigningClient is an in-process SigningClient backed by a private key, for
 // use where no GCP network path exists: CI, and local development without KMS
@@ -239,6 +239,50 @@ func (c *LocalSigningClient) AsymmetricSign(ctx context.Context, resourceName st
 	}
 
 	return signature, nil
+}
+
+// CreateSigningKey names a key the one in-process key then answers for.
+func (c *LocalSigningClient) CreateSigningKey(ctx context.Context, params CreateSigningKeyParams) (*CreatedSigningKey, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("create local %s signing key: %w", c.alg, err)
+	}
+
+	if err := validateCreateSigningKeyParams(params); err != nil {
+		return nil, err
+	}
+
+	if params.Algorithm != c.alg {
+		return nil, fmt.Errorf("%w: local client signs %s, caller asked for %s", ErrUnsupportedAlgorithm, c.alg, params.Algorithm)
+	}
+
+	keyName := params.KeyRing + "/cryptoKeys/" + params.KeyID
+
+	return &CreatedSigningKey{KeyName: keyName, KeyVersionName: signingKeyVersionName(keyName)}, nil
+}
+
+// GrantSignerVerifier validates its inputs; there is no IAM in-process.
+func (c *LocalSigningClient) GrantSignerVerifier(ctx context.Context, keyName, serviceAccountEmail string) error {
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("grant local signer verifier: %w", err)
+	}
+
+	if err := ValidateKeyName(keyName); err != nil {
+		return err
+	}
+	if serviceAccountEmail == "" {
+		return errors.New("grant local signer verifier: service account email is required")
+	}
+
+	return nil
+}
+
+// DisableKeyVersion validates the name; the in-process key stays usable.
+func (c *LocalSigningClient) DisableKeyVersion(ctx context.Context, versionName string) error {
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("disable local key version: %w", err)
+	}
+
+	return ValidateKeyVersionName(versionName)
 }
 
 // Close is a no-op: the key lives in memory and there is no connection to

@@ -43,25 +43,28 @@ INSERT INTO external_keys (
   provider,
   algorithm,
   name,
-  customer_grant_reference
+  customer_grant_reference,
+  identity_provider_connection_id
 ) VALUES (
   $1,
   $2,
   $3,
   $4,
   $5,
-  $6
+  $6,
+  $7
 )
 RETURNING id, organization_id, project_id, external_credential_id, provider, algorithm, name, customer_grant_reference, identity_provider_connection_id, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateExternalKeyParams struct {
-	OrganizationID         pgtype.Text
-	ExternalCredentialID   uuid.UUID
-	Provider               string
-	Algorithm              string
-	Name                   string
-	CustomerGrantReference pgtype.Text
+	OrganizationID               pgtype.Text
+	ExternalCredentialID         uuid.UUID
+	Provider                     string
+	Algorithm                    string
+	Name                         string
+	CustomerGrantReference       pgtype.Text
+	IdentityProviderConnectionID uuid.NullUUID
 }
 
 func (q *Queries) CreateExternalKey(ctx context.Context, arg CreateExternalKeyParams) (ExternalKey, error) {
@@ -72,6 +75,7 @@ func (q *Queries) CreateExternalKey(ctx context.Context, arg CreateExternalKeyPa
 		arg.Algorithm,
 		arg.Name,
 		arg.CustomerGrantReference,
+		arg.IdentityProviderConnectionID,
 	)
 	var i ExternalKey
 	err := row.Scan(
@@ -216,18 +220,26 @@ func (q *Queries) GetAwsKmsKey(ctx context.Context, arg GetAwsKmsKeyParams) (Get
 }
 
 const getExternalCredentialProviderForKey = `-- name: GetExternalCredentialProviderForKey :one
-SELECT provider
-FROM external_credentials
-WHERE id = $1
-  AND organization_id = $2
-  AND deleted IS FALSE
-  AND project_id IS NULL
-FOR SHARE
+SELECT
+  ec.provider,
+  COALESCE(gic.skip_project_verification, FALSE)::boolean AS skip_project_verification
+FROM external_credentials AS ec
+LEFT JOIN gcp_iam_credentials AS gic ON gic.external_credential_id = ec.id
+WHERE ec.id = $1
+  AND ec.organization_id = $2
+  AND ec.deleted IS FALSE
+  AND ec.project_id IS NULL
+FOR SHARE OF ec
 `
 
 type GetExternalCredentialProviderForKeyParams struct {
 	ExternalCredentialID uuid.UUID
 	OrganizationID       pgtype.Text
+}
+
+type GetExternalCredentialProviderForKeyRow struct {
+	Provider                string
+	SkipProjectVerification bool
 }
 
 // Loads the backing credential's provider, scoped to the organization, so the
@@ -239,11 +251,12 @@ type GetExternalCredentialProviderForKeyParams struct {
 // row lock would leave a TOCTOU window where a concurrent soft delete commits
 // between this read and the key write, producing a live key against a deleted
 // credential. FOR SHARE holds the credential row until the key write commits.
-func (q *Queries) GetExternalCredentialProviderForKey(ctx context.Context, arg GetExternalCredentialProviderForKeyParams) (string, error) {
+// skip_project_verification lets the caller refuse an exempted credential.
+func (q *Queries) GetExternalCredentialProviderForKey(ctx context.Context, arg GetExternalCredentialProviderForKeyParams) (GetExternalCredentialProviderForKeyRow, error) {
 	row := q.db.QueryRow(ctx, getExternalCredentialProviderForKey, arg.ExternalCredentialID, arg.OrganizationID)
-	var provider string
-	err := row.Scan(&provider)
-	return provider, err
+	var i GetExternalCredentialProviderForKeyRow
+	err := row.Scan(&i.Provider, &i.SkipProjectVerification)
+	return i, err
 }
 
 const getGcpKmsKey = `-- name: GetGcpKmsKey :one
@@ -434,7 +447,7 @@ func (q *Queries) ListExternalKeys(ctx context.Context, arg ListExternalKeysPara
 }
 
 const lockExternalKeyForDelete = `-- name: LockExternalKeyForDelete :one
-SELECT id
+SELECT id, identity_provider_connection_id
 FROM external_keys
 WHERE id = $1
   AND organization_id = $2
@@ -449,6 +462,11 @@ type LockExternalKeyForDeleteParams struct {
 	Provider       string
 }
 
+type LockExternalKeyForDeleteRow struct {
+	ID                           uuid.UUID
+	IdentityProviderConnectionID uuid.NullUUID
+}
+
 // Locks the external key row so the JWKS reference check below cannot be raced
 // by a concurrent JWKS write. FOR UPDATE is load-bearing and must not be
 // weakened to FOR NO KEY UPDATE: inserting a json_web_key_sets / json_web_keys
@@ -457,11 +475,11 @@ type LockExternalKeyForDeleteParams struct {
 // reopen the TOCTOU window where a JWKS insert commits between the reference
 // check and the soft delete. The JWKS create path takes the counterpart
 // FOR SHARE on this row (AIS-240).
-func (q *Queries) LockExternalKeyForDelete(ctx context.Context, arg LockExternalKeyForDeleteParams) (uuid.UUID, error) {
+func (q *Queries) LockExternalKeyForDelete(ctx context.Context, arg LockExternalKeyForDeleteParams) (LockExternalKeyForDeleteRow, error) {
 	row := q.db.QueryRow(ctx, lockExternalKeyForDelete, arg.ID, arg.OrganizationID, arg.Provider)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
+	var i LockExternalKeyForDeleteRow
+	err := row.Scan(&i.ID, &i.IdentityProviderConnectionID)
+	return i, err
 }
 
 const softDeleteExternalKey = `-- name: SoftDeleteExternalKey :one

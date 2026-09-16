@@ -515,6 +515,9 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *orgissuersgen.Updat
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "get organization admin remote session issuer").LogError(ctx, logger)
 	}
+	if err := requireIssuerWithoutManagedClients(ctx, logger, txRepo, issuerID, authCtx.ActiveOrganizationID); err != nil {
+		return nil, err
+	}
 	if v := conv.PtrValOr(tunneledMcpServerID, ""); v != "" {
 		if _, err := resolveIssuerTunnelBinding(ctx, logger, txRepo, authCtx, existing.ProjectID, tunneledMcpServerID); err != nil {
 			return nil, err
@@ -930,6 +933,10 @@ func (s *Service) MoveIssuer(ctx context.Context, payload *orgissuersgen.MoveIss
 		return nil, oops.E(oops.CodeUnexpected, err, "recheck organization admin remote session issuer").LogError(ctx, logger)
 	}
 
+	if err := requireIssuerWithoutManagedClients(ctx, logger, txRepo, issuerID, authCtx.ActiveOrganizationID); err != nil {
+		return nil, err
+	}
+
 	// A tunnel binding is project-scoped, so the issuer cannot leave its
 	// project while bound. Checked after the re-read so it sees the locked row.
 	if existing.TunneledMcpServerID.Valid && (!projectID.Valid || existing.ProjectID.UUID != projectID.UUID) {
@@ -1156,6 +1163,10 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orgissuersgen.Migr
 	// against rows a concurrent transaction could still change before we commit.
 	source, target, err = loadMigrationPair(ctx, txRepo, logger, authCtx.ActiveOrganizationID, payload.SourceID, payload.TargetID, true)
 	if err != nil {
+		return nil, err
+	}
+
+	if err := requireIssuerWithoutManagedClients(ctx, logger, txRepo, source.ID, authCtx.ActiveOrganizationID); err != nil {
 		return nil, err
 	}
 

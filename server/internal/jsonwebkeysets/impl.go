@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/jsonwebkeysets/repo"
+	"github.com/speakeasy-api/gram/server/internal/managedrows"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -170,9 +171,10 @@ func (s *Service) CreateSet(ctx context.Context, payload *gensvc.CreateSetPayloa
 	}
 
 	set, err := q.CreateJsonWebKeySet(ctx, repo.CreateJsonWebKeySetParams{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ExternalKeyID:  externalKeyID,
-		Name:           name,
+		OrganizationID:               authCtx.ActiveOrganizationID,
+		ExternalKeyID:                externalKeyID,
+		Name:                         name,
+		IdentityProviderConnectionID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error creating key set").LogError(ctx, logger)
@@ -256,6 +258,10 @@ func (s *Service) UpdateSet(ctx context.Context, payload *gensvc.UpdateSetPayloa
 		return nil, oops.E(oops.CodeNotFound, err, "key set not found")
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "error loading key set").LogError(ctx, logger)
+	}
+
+	if err := managedrows.RequireUnmanaged(current.IdentityProviderConnectionID, "this key set"); err != nil {
+		return nil, err
 	}
 
 	if err := s.lockBackingKey(ctx, logger, q, authCtx.ActiveOrganizationID, externalKeyID); err != nil {
@@ -403,7 +409,7 @@ func (s *Service) DeleteSet(ctx context.Context, payload *gensvc.DeleteSetPayloa
 	// The set lock is what makes the cascade sound: a concurrent publish also
 	// takes it, so a live key can never be inserted into the set between the
 	// cascade below and the set's own soft delete.
-	_, err = q.LockJsonWebKeySetForKeyWrite(ctx, repo.LockJsonWebKeySetForKeyWriteParams{
+	locked, err := q.LockJsonWebKeySetForKeyWrite(ctx, repo.LockJsonWebKeySetForKeyWriteParams{
 		ID:             id,
 		OrganizationID: authCtx.ActiveOrganizationID,
 	})
@@ -412,6 +418,10 @@ func (s *Service) DeleteSet(ctx context.Context, payload *gensvc.DeleteSetPayloa
 		return nil
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "error deleting key set").LogError(ctx, logger)
+	}
+
+	if err := managedrows.RequireUnmanaged(locked.IdentityProviderConnectionID, "this key set"); err != nil {
+		return err
 	}
 
 	// Refuse while a live remote_session_client still signs with this set.
@@ -536,6 +546,10 @@ func (s *Service) lockBackingKey(ctx context.Context, logger *slog.Logger, q *re
 
 	if key.Provider != externalKeyProviderGcpKms {
 		return oops.E(oops.CodeBadRequest, nil, "AWS KMS keys cannot back a JSON Web Key Set yet; choose a GCP KMS key").LogError(ctx, logger)
+	}
+
+	if err := managedrows.RequireUnmanaged(key.IdentityProviderConnectionID, "this external key"); err != nil {
+		return err
 	}
 
 	return nil

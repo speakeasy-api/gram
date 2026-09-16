@@ -48,6 +48,32 @@ type SigningClient interface {
 	io.Closer
 }
 
+// KeyProvisioner is the management-tier surface: key creation, IAM grants, and
+// disabling. Low quota; never call it on a request path.
+type KeyProvisioner interface {
+	// CreateSigningKey creates an ASYMMETRIC_SIGN key and returns once its
+	// first version can sign.
+	CreateSigningKey(ctx context.Context, params CreateSigningKeyParams) (*CreatedSigningKey, error)
+
+	// GrantSignerVerifier binds SignerVerifierRole for a service account on one
+	// crypto key, never on the ring. Idempotent.
+	GrantSignerVerifier(ctx context.Context, keyName, serviceAccountEmail string) error
+
+	// DisableKeyVersion disables a key version so it can no longer sign.
+	DisableKeyVersion(ctx context.Context, versionName string) error
+}
+
+// ProvisioningClient is a SigningClient that can also provision keys.
+type ProvisioningClient interface {
+	SigningClient
+	KeyProvisioner
+}
+
+// ProvisioningClientFactory builds a ProvisioningClient authenticated as some identity.
+type ProvisioningClientFactory func(ctx context.Context, tokenSource oauth2.TokenSource) (ProvisioningClient, error)
+
+var _ ProvisioningClientFactory = NewProvisioningClient
+
 // SigningClientFactory builds a SigningClient authenticated as some identity.
 // Services hold one of these rather than a SigningClient, because the identity
 // varies per credential and each client owns a connection that must be closed
