@@ -24,6 +24,10 @@ const (
 	AsyncShadowGateReasonSampledReal AsyncShadowGateReason = "sampled_real"
 	AsyncShadowGateReasonFlagOff     AsyncShadowGateReason = "flag_off"
 	AsyncShadowGateReasonGateError   AsyncShadowGateReason = "gate_error"
+	// AsyncShadowGateReasonNotGated is recorded by handlers that never consult
+	// the shadow gate because their traffic is already selected upstream by a
+	// feature flag; they always run their real engine.
+	AsyncShadowGateReasonNotGated AsyncShadowGateReason = "not_gated"
 )
 
 func (r AsyncShadowGateReason) Engine() string {
