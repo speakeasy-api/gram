@@ -12,6 +12,39 @@ export const CREATED_PRESETS = [
 ] as const;
 export type CreatedPreset = (typeof CREATED_PRESETS)[number]["value"];
 
+export type RelativeCreatedPreset = Exclude<CreatedPreset, "all" | "custom">;
+export type CreatedSelection = CreatedRange & {
+  createdPreset?: RelativeCreatedPreset;
+};
+
+/** Metadata describes a saved snapshot, never a request to advance its bounds. */
+export function selectedCreatedPreset(
+  raw: RawRange & { createdPreset?: unknown },
+  now = new Date(),
+): CreatedPreset {
+  const range = createdRange(raw);
+  if (!range.createdFrom && !range.createdTo) return "all";
+  const preset = raw.createdPreset;
+  if (
+    preset === "today" ||
+    preset === "7" ||
+    preset === "14" ||
+    preset === "30"
+  ) {
+    if (recognizeCreatedPreset(range, now) === preset) return preset;
+  }
+  // Manual URLs and explicitly chosen Custom must not be inferred as relative.
+  return "custom";
+}
+
+export function createdPresetMetadata(
+  raw: RawRange & { createdPreset?: unknown },
+  now = new Date(),
+): RelativeCreatedPreset | undefined {
+  const preset = selectedCreatedPreset(raw, now);
+  return preset === "all" || preset === "custom" ? undefined : preset;
+}
+
 function dateBound(value: unknown): string | undefined {
   if (
     typeof value !== "string" ||

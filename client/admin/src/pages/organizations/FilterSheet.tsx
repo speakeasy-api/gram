@@ -49,7 +49,7 @@ import {
   createdPresetRange,
   createdRange,
   createdRangeErrors,
-  recognizeCreatedPreset,
+  selectedCreatedPreset,
   type CreatedPreset,
 } from "@/lib/createdRange";
 import { cn } from "@/lib/utils";
@@ -85,7 +85,7 @@ export function FilterSheet({
   const membersId = useId();
   const createdId = useId();
   const [createdPreset, setCreatedPreset] = useState<CreatedPreset>(() =>
-    recognizeCreatedPreset(value),
+    selectedCreatedPreset(value),
   );
   const focusCustom = useRef(false);
   const open = openGroup !== null;
@@ -100,7 +100,7 @@ export function FilterSheet({
     setLastOpened(openGroup);
     if (open) {
       setDraft(value);
-      setCreatedPreset(recognizeCreatedPreset(value));
+      setCreatedPreset(selectedCreatedPreset(value));
     }
   }
 
@@ -120,7 +120,13 @@ export function FilterSheet({
       return;
     const dates =
       preset === "custom" ? createdRange(next) : createdPresetRange(preset);
-    onApply({ ...next, ...memberRange(next), ...dates });
+    onApply({
+      ...next,
+      ...memberRange(next),
+      ...dates,
+      createdPreset:
+        preset === "all" || preset === "custom" ? undefined : preset,
+    });
     onOpenChange(false);
   };
 

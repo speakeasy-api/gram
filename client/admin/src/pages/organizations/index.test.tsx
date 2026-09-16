@@ -1099,6 +1099,7 @@ describe("organizations list", () => {
         expect(lastListParams().disabled_status).toBe(status),
       );
       expect(currentSearch(router)).toContain(`disabledStatus=${status}`);
+      expect(screen.getByText(`Status: ${label}`)).toBeTruthy();
       expect(
         screen.getByRole("button", {
           name: `Clear Organization Status ${label}`,
@@ -4807,6 +4808,81 @@ describe("member range filters", () => {
 });
 
 describe("created date filters", () => {
+  it.each([
+    ["today", "Today", "2025-01-02"],
+    ["7", "Last 7 days", "2024-12-27"],
+    ["14", "Last 14 days", "2024-12-20"],
+    ["30", "Last 30 days", "2024-12-04"],
+  ])(
+    "renders one %s chip, preserves Custom and clears both relative bounds",
+    async (preset, label, from) => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2025-01-02T12:00:00Z"));
+      try {
+        mocks.listOrganizations.mockResolvedValue({
+          organizations: ORGS,
+          total: 101,
+        });
+        const { router } = await renderRouteTree(routeTree, {
+          initialPath:
+            "/organizations?disabledStatus=active&minMembers=%225%22&maxMembers=%2225%22",
+        });
+        expect(screen.getByText("Status: Active")).toBeTruthy();
+        expect(screen.getByText("Members: ≥ 5")).toBeTruthy();
+        expect(screen.getByText("Members: ≤ 25")).toBeTruthy();
+        await openFilters("Created date");
+        await chooseCreated(label!);
+        applyFilters();
+        await waitFor(() =>
+          expect(screen.getByText(`Created: ${label}`)).toBeTruthy(),
+        );
+        expect(
+          screen.queryByRole("button", { name: "Clear created from" }),
+        ).toBeNull();
+        expect(lastListParams()).toMatchObject({
+          created_from: from,
+          created_to: "2025-01-02",
+        });
+        expect(router.state.location.search.createdPreset).toBe(preset);
+        await openFilters("Created date");
+        expect(picker("Created date").textContent).toContain(label);
+        await chooseCreated("Custom");
+        applyFilters();
+        await waitFor(() =>
+          expect(screen.queryByText(`Created: ${label}`)).toBeNull(),
+        );
+        expect(screen.getByText(`Created: From ≥ ${from} UTC`)).toBeTruthy();
+        expect(screen.getByText("Created: To ≤ 2025-01-02 UTC")).toBeTruthy();
+        await openFilters("Created date");
+        expect(picker("Created date").textContent).toContain("Custom");
+        fireEvent.click(screen.getByRole("button", { name: "Close" }));
+        await act(async () => {
+          router.history.back();
+        });
+        await waitFor(() =>
+          expect(screen.getByText(`Created: ${label}`)).toBeTruthy(),
+        );
+        fireEvent.click(screen.getByRole("button", { name: "Next" }));
+        await waitFor(() => expect(lastListParams().page).toBe(2));
+        fireEvent.click(
+          screen.getByRole("button", { name: "Clear created date" }),
+        );
+        await waitFor(() => expect(lastListParams().page).toBe(1));
+        expect(lastListParams()).toMatchObject({
+          created_from: undefined,
+          created_to: undefined,
+          disabled_status: "active",
+          min_members: "5",
+          max_members: "25",
+        });
+        expect(currentSearch(router)).not.toContain("created");
+        expect(document.activeElement).toBe(filterTrigger());
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
   async function chooseCreated(option: string): Promise<void> {
     openOn(picker("Created date"));
     fireEvent.click(await screen.findByRole("option", { name: option }));
@@ -4817,6 +4893,107 @@ describe("created date filters", () => {
   function changeDate(name: "From" | "To", value: string): void {
     fireEvent.change(dateInput(name), { target: { value } });
   }
+  it("validates UI-only preset metadata without moving immutable URL bounds", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2025-01-02T12:00:00Z"));
+    try {
+      for (const createdPreset of [
+        undefined,
+        "custom",
+        "invalid",
+        "7",
+        ["today"],
+        7,
+      ]) {
+        expect(
+          organizationsSearchSchema({
+            createdFrom: "2025-01-02",
+            createdTo: "2025-01-02",
+            createdPreset,
+          }),
+        ).toMatchObject({
+          createdFrom: "2025-01-02",
+          createdTo: "2025-01-02",
+          createdPreset: undefined,
+        });
+      }
+      for (const bounds of [
+        { createdFrom: "invalid", createdTo: "2025-01-02" },
+        { createdFrom: "2025-01-02" },
+        { createdFrom: "2025-01-03", createdTo: "2025-01-02" },
+      ]) {
+        expect(
+          organizationsSearchSchema({ ...bounds, createdPreset: "today" })
+            .createdPreset,
+        ).toBeUndefined();
+      }
+      const saved = organizationsSearchSchema({
+        createdFrom: "2025-01-02",
+        createdTo: "2025-01-02",
+        createdPreset: "today",
+      });
+      expect(saved.createdPreset).toBe("today");
+      vi.setSystemTime(new Date("2025-01-03T00:00:00Z"));
+      expect(organizationsSearchSchema(saved)).toMatchObject({
+        createdFrom: "2025-01-02",
+        createdTo: "2025-01-02",
+        createdPreset: undefined,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it("reloads saved preset and Custom choices without changing requests or resetting pagination for metadata", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2025-01-02T12:00:00Z"));
+    try {
+      mocks.listOrganizations.mockResolvedValue({
+        organizations: ORGS,
+        total: 101,
+      });
+      const { router } = await renderRouteTree(routeTree, {
+        initialPath:
+          "/organizations?createdFrom=2025-01-02&createdTo=2025-01-02&createdPreset=today",
+      });
+      expect(screen.getByText("Created: Today")).toBeTruthy();
+      await waitFor(() =>
+        expect(
+          (screen.getByRole("button", { name: "Next" }) as HTMLButtonElement)
+            .disabled,
+        ).toBe(false),
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Next" }));
+      await waitFor(() => expect(lastListParams().page).toBe(2));
+      const calls = mocks.listOrganizations.mock.calls.length;
+      await act(async () => {
+        await router.navigate({
+          to: "/organizations",
+          search: (prev) => ({ ...prev, createdPreset: undefined }),
+        });
+      });
+      expect(screen.queryByText("Created: Today")).toBeNull();
+      expect(screen.getByText("Created: From ≥ 2025-01-02 UTC")).toBeTruthy();
+      expect(lastListParams().page).toBe(2);
+      expect(mocks.listOrganizations.mock.calls.length).toBe(calls);
+      const path = router.state.location.href;
+      cleanup();
+      await renderRouteTree(routeTree, { initialPath: path });
+      await openFilters("Created date");
+      expect(picker("Created date").textContent).toContain("Custom");
+      fireEvent.click(screen.getByRole("button", { name: "Close" }));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Clear created from" }),
+      );
+      await waitFor(() =>
+        expect(
+          screen.queryByRole("button", { name: "Clear created from" }),
+        ).toBeNull(),
+      );
+      expect(screen.getByText("Created: To ≤ 2025-01-02 UTC")).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
   it("validates URL endpoints independently and reversed pairs together", () => {
     expect(
       organizationsSearchSchema({
@@ -4889,7 +5066,7 @@ describe("created date filters", () => {
           created_to: "2025-01-01",
         }),
       );
-      expect(currentSearch(router)).not.toContain("preset");
+      expect(router.state.location.search.createdPreset).toBe("today");
       vi.setSystemTime(new Date("2025-01-02T00:00:01Z"));
       await openFilters("Created date");
       expect(picker("Created date").textContent).toContain("Custom");

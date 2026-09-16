@@ -1,4 +1,8 @@
-import { createdRange } from "@/lib/createdRange";
+import {
+  createdRange,
+  createdPresetMetadata,
+  type RelativeCreatedPreset,
+} from "@/lib/createdRange";
 import { createFileRoute } from "@tanstack/react-router";
 
 import {
@@ -31,6 +35,7 @@ export type OrganizationsSearch = {
   q?: string;
   createdFrom?: string;
   createdTo?: string;
+  createdPreset?: RelativeCreatedPreset;
   minMembers?: string;
   maxMembers?: string;
   type?: string[];
@@ -105,6 +110,7 @@ export function organizationsSearchSchema(
   return {
     ...memberRange(search),
     ...createdRange(search),
+    createdPreset: createdPresetMetadata(search),
     disabledStatus,
     // Router search merges validated fields with raw fields. Clear read aliases
     // explicitly so invalid/raw values cannot reappear or survive new writes.

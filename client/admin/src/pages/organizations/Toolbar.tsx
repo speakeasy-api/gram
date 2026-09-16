@@ -24,6 +24,7 @@ import {
   type FilterControlKey,
   type FilterSelection,
 } from "@/lib/organizationFilters";
+import { CREATED_PRESETS, createdPresetMetadata } from "@/lib/createdRange";
 import { cn } from "@/lib/utils";
 import type { OrganizationsSearch } from "@/routes/organizations.index";
 
@@ -124,10 +125,12 @@ export function Toolbar({
     disabled: statusSelection(search),
     createdFrom: search.createdFrom,
     createdTo: search.createdTo,
+    createdPreset: search.createdPreset,
     minMembers: search.minMembers,
     maxMembers: search.maxMembers,
   };
 
+  const relativePreset = createdPresetMetadata(filters);
   const applyFilters = useApplyFilters();
 
   const clearFilter = (next: FilterSelection): void => {
@@ -179,7 +182,9 @@ export function Toolbar({
                 })
               }
             >
-              {group.key === "disabled" ? label : `${group.label}: ${label}`}
+              {group.key === "disabled"
+                ? `Status: ${label}`
+                : `${group.label}: ${label}`}
             </AppliedFilterChip>
           );
         }),
@@ -192,21 +197,48 @@ export function Toolbar({
               clearLabel={`Clear ${key === "minMembers" ? "minimum" : "maximum"} members`}
               onClear={() => clearFilter({ ...filters, [key]: undefined })}
             >
-              Members {key === "minMembers" ? "≥" : "≤"} {filters[key]}
+              Members: {key === "minMembers" ? "≥" : "≤"} {filters[key]}
             </AppliedFilterChip>
           ),
       )}
-      {(["createdFrom", "createdTo"] as const).map(
-        (key) =>
-          filters[key] && (
-            <AppliedFilterChip
-              key={key}
-              clearLabel={`Clear created ${key === "createdFrom" ? "from" : "to"}`}
-              onClear={() => clearFilter({ ...filters, [key]: undefined })}
-            >
-              Created {key === "createdFrom" ? "≥" : "≤"} {filters[key]} UTC
-            </AppliedFilterChip>
-          ),
+      {relativePreset ? (
+        <AppliedFilterChip
+          clearLabel="Clear created date"
+          onClear={() =>
+            clearFilter({
+              ...filters,
+              createdFrom: undefined,
+              createdTo: undefined,
+              createdPreset: undefined,
+            })
+          }
+        >
+          Created:{" "}
+          {
+            CREATED_PRESETS.find((preset) => preset.value === relativePreset)
+              ?.label
+          }
+        </AppliedFilterChip>
+      ) : (
+        (["createdFrom", "createdTo"] as const).map(
+          (key) =>
+            filters[key] && (
+              <AppliedFilterChip
+                key={key}
+                clearLabel={`Clear created ${key === "createdFrom" ? "from" : "to"}`}
+                onClear={() =>
+                  clearFilter({
+                    ...filters,
+                    [key]: undefined,
+                    createdPreset: undefined,
+                  })
+                }
+              >
+                Created: {key === "createdFrom" ? "From ≥" : "To ≤"}{" "}
+                {filters[key]} UTC
+              </AppliedFilterChip>
+            ),
+        )
       )}
 
       <FilterSheet

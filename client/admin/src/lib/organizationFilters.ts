@@ -8,7 +8,7 @@
 
 import {
   createdRange,
-  type CreatedRange,
+  type CreatedSelection,
   type CreatedRangeKey,
 } from "@/lib/createdRange";
 import { ACCOUNT_TYPE_OPTIONS, isAccountType } from "@/lib/accountTypes";
@@ -35,7 +35,7 @@ export type FilterControlKey =
 /** Chosen values per group; status is empty (All) or a single state. */
 export type FilterSelection = Record<FilterGroupKey, string[]> &
   MemberRange &
-  CreatedRange;
+  CreatedSelection;
 
 export const NO_FILTERS: FilterSelection = {
   type: [],
@@ -196,7 +196,7 @@ export function disabledStates(chosen: string[]): DisabledState[] | undefined {
 
 /** Canonical status; old fields are read only for bookmark compatibility. */
 export type FilterSearch = MemberRange &
-  CreatedRange & {
+  CreatedSelection & {
     type?: string[];
     trial?: TrialState[];
     disabledStatus?: "all" | DisabledState;
@@ -206,7 +206,7 @@ export type FilterSearch = MemberRange &
 
 /** New navigations only write the canonical status, omitting All. */
 export function filtersToSearch(filters: FilterSelection): MemberRange &
-  CreatedRange & {
+  CreatedSelection & {
     type?: string[];
     trial?: TrialState[];
     disabledStatus?: DisabledState;
@@ -215,6 +215,7 @@ export function filtersToSearch(filters: FilterSelection): MemberRange &
   return {
     ...memberRange(filters),
     ...createdRange(filters),
+    createdPreset: filters.createdPreset,
     type: accountTypes(filters.type),
     trial: trialStates(filters.trial),
     disabledStatus: status?.length === 1 ? status[0] : undefined,
