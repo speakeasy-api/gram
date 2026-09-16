@@ -1942,6 +1942,37 @@ CREATE TABLE IF NOT EXISTS gcp_iam_credentials (
   CONSTRAINT gcp_iam_credentials_fkey FOREIGN KEY (external_credential_id, external_credentials_provider) REFERENCES external_credentials (id, provider) ON DELETE CASCADE
 );
 
+-- Org-scoped connection to a customer identity provider (Okta first; Entra
+-- later). Class Table Inheritance with `provider` as the discriminator:
+-- subtype: okta_identity_provider_connections (below remote_session_clients).
+-- Provider values are constrained by the subtype discriminator, not here.
+-- last_error carries a typed reason, never a raw body.
+CREATE TABLE IF NOT EXISTS identity_provider_connections (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  last_verified_at timestamptz,
+  last_error TEXT,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+  CONSTRAINT identity_provider_connections_pkey PRIMARY KEY (id),
+  CONSTRAINT identity_provider_connections_id_provider_key UNIQUE (id, provider),
+  CONSTRAINT identity_provider_connections_status_check CHECK (status IN ('pending', 'verified', 'degraded', 'revoked')),
+  CONSTRAINT identity_provider_connections_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+);
+
+-- One live connection per org per provider.
+CREATE UNIQUE INDEX IF NOT EXISTS identity_provider_connections_organization_id_provider_key
+ON identity_provider_connections (organization_id, provider)
+WHERE deleted IS FALSE;
+
+-- Composite FK target so managed rows pin the connection to one org.
+CREATE UNIQUE INDEX IF NOT EXISTS identity_provider_connections_organization_id_id_key
+ON identity_provider_connections (organization_id, id);
+
 -- Sharable records for referencing an externally-managed key, such as KMS key
 -- for signing. This is implemented using the Class Table Inheritance pattern
 -- with `provider` acting as the discriminator. Each row in
@@ -1968,6 +1999,9 @@ CREATE TABLE IF NOT EXISTS external_keys (
   -- can be compared against the current one to flag a stale grant and prompt a
   -- re-grant before signing starts failing.
   customer_grant_reference TEXT,
+  -- Managed-by marker: set when an identity provider connection provisioned
+  -- this key; its mutation guards refuse edits to marked rows.
+  identity_provider_connection_id uuid,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -1977,8 +2011,19 @@ CREATE TABLE IF NOT EXISTS external_keys (
   CONSTRAINT external_keys_provider_check CHECK (provider IN ('aws_kms', 'gcp_kms')),
   CONSTRAINT external_keys_external_credential_id_fkey FOREIGN KEY (external_credential_id) REFERENCES external_credentials (id),
   CONSTRAINT external_keys_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT external_keys_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+  CONSTRAINT external_keys_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT external_keys_identity_provider_connection_tenant_fkey FOREIGN KEY (organization_id, identity_provider_connection_id) REFERENCES identity_provider_connections (organization_id, id),
+  -- organization_id is nullable and the composite FK is MATCH SIMPLE, so a
+  -- NULL organization_id would skip the tenant check; require it when marked.
+  CONSTRAINT external_keys_identity_provider_connection_id_check CHECK (
+    identity_provider_connection_id IS NULL
+    OR organization_id IS NOT NULL
+  )
 );
+
+CREATE INDEX IF NOT EXISTS external_keys_identity_provider_connection_idx
+ON external_keys (organization_id, identity_provider_connection_id)
+WHERE identity_provider_connection_id IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS external_keys_organization_id_idx
 ON external_keys (organization_id)
@@ -2027,6 +2072,9 @@ CREATE TABLE IF NOT EXISTS json_web_key_sets (
   project_id uuid,
   external_key_id uuid NOT NULL,
   name TEXT NOT NULL,
+  -- Managed-by marker: set when an identity provider connection provisioned
+  -- this set; its mutation guards refuse edits to marked rows.
+  identity_provider_connection_id uuid,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -2034,8 +2082,14 @@ CREATE TABLE IF NOT EXISTS json_web_key_sets (
   CONSTRAINT json_web_key_sets_pkey PRIMARY KEY (id),
   CONSTRAINT json_web_key_sets_external_key_tenant_fkey FOREIGN KEY (organization_id, external_key_id) REFERENCES external_keys (organization_id, id),
   CONSTRAINT json_web_key_sets_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT json_web_key_sets_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+  CONSTRAINT json_web_key_sets_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  -- No NOT NULL CHECK needed here: organization_id is NOT NULL on this table.
+  CONSTRAINT json_web_key_sets_identity_provider_connection_tenant_fkey FOREIGN KEY (organization_id, identity_provider_connection_id) REFERENCES identity_provider_connections (organization_id, id)
 );
+
+CREATE INDEX IF NOT EXISTS json_web_key_sets_identity_provider_connection_idx
+ON json_web_key_sets (organization_id, identity_provider_connection_id)
+WHERE identity_provider_connection_id IS NOT NULL;
 
 -- Composite unique key so json_web_keys can composite-FK to (organization_id, id)
 -- and pin the reference to one org. A unique index for parity with external_keys.
@@ -2340,6 +2394,10 @@ CREATE INDEX IF NOT EXISTS remote_session_issuers_jwks_cache_expires_at_idx
 ON remote_session_issuers (jwks_cache_expires_at)
 WHERE jwks_uri IS NOT NULL AND deleted IS FALSE;
 
+-- Composite FK target so org-scoped children pin an issuer to one org.
+CREATE UNIQUE INDEX IF NOT EXISTS remote_session_issuers_organization_id_id_key
+ON remote_session_issuers (organization_id, id);
+
 -- Remote Session Clients are records of Gram's client registrations with
 -- upstream authorization servers
 CREATE TABLE IF NOT EXISTS remote_session_clients (
@@ -2435,12 +2493,22 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
   -- remote_session_issuer, which discovery keeps current.
   upstream_rejected_at timestamptz,
 
+  -- Managed-by marker: set when an identity provider connection provisioned
+  -- this client; its mutation guards refuse edits to marked rows.
+  identity_provider_connection_id uuid,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
   CONSTRAINT remote_session_clients_pkey PRIMARY KEY (id),
+  CONSTRAINT remote_session_clients_identity_provider_connection_tenant_fkey FOREIGN KEY (organization_id, identity_provider_connection_id) REFERENCES identity_provider_connections (organization_id, id),
+  -- Same MATCH SIMPLE gap as json_web_key_set_id below: require the org when marked.
+  CONSTRAINT remote_session_clients_identity_provider_connection_id_check CHECK (
+    identity_provider_connection_id IS NULL
+    OR organization_id IS NOT NULL
+  ),
   CONSTRAINT remote_session_clients_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
   CONSTRAINT remote_session_clients_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
   CONSTRAINT remote_session_clients_remote_session_issuer_id_fkey FOREIGN KEY (remote_session_issuer_id) REFERENCES remote_session_issuers (id) ON DELETE CASCADE,
@@ -2478,6 +2546,71 @@ WHERE deleted IS FALSE;
 
 CREATE INDEX IF NOT EXISTS remote_session_clients_json_web_key_set_idx
 ON remote_session_clients (organization_id, json_web_key_set_id);
+
+CREATE INDEX IF NOT EXISTS remote_session_clients_identity_provider_connection_idx
+ON remote_session_clients (organization_id, identity_provider_connection_id)
+WHERE identity_provider_connection_id IS NOT NULL;
+
+-- Composite FK target so org-scoped children pin a client to one org.
+CREATE UNIQUE INDEX IF NOT EXISTS remote_session_clients_organization_id_id_key
+ON remote_session_clients (organization_id, id);
+
+-- Okta subtype of identity_provider_connections (CTI: the discriminator column
+-- pins provider = 'okta' so the composite FK enforces 1:1 with the parent).
+-- The issuer and client rows it points at are pinned to the same org through
+-- composite FKs; organization_id on those parents is nullable, so the NOT NULL
+-- columns here keep MATCH SIMPLE from skipping the check. Holds no secrets:
+-- the client_id lives on remote_session_clients and private key material
+-- stays in KMS.
+-- Tombstoned with the parent in the same transaction. The connection->subtype
+-- FK cascades while managed-by markers are NO ACTION: a hard delete of a
+-- marked connection is blocked by design; app code soft-deletes.
+CREATE TABLE IF NOT EXISTS okta_identity_provider_connections (
+  identity_provider_connection_id uuid NOT NULL,
+  identity_provider_connections_provider TEXT NOT NULL DEFAULT 'okta',
+  organization_id TEXT NOT NULL,
+  org_url TEXT NOT NULL,
+  -- Normalized issuer URL from discovery; globally unique across orgs.
+  -- Mirrors remote_session_issuers.issuer for the referenced issuer; written
+  -- in the same transaction; the issuer row is authoritative.
+  issuer_url TEXT NOT NULL,
+  -- Set only by a platform admin to allow one Okta tenant on more than one
+  -- Speakeasy org.
+  issuer_url_override_reason TEXT,
+  remote_session_issuer_id uuid NOT NULL,
+  remote_session_client_id uuid NOT NULL,
+  dpop_required boolean NOT NULL DEFAULT FALSE,
+  granted_scopes TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  observed_admin_roles TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  listing_mode TEXT NOT NULL DEFAULT 'custom_app',
+  -- Display-only, admin-entered. The exchange path must never read these; the
+  -- exchange-side client id comes exclusively from remote_session_clients.client_id.
+  agent_id TEXT,
+  agent_app_id TEXT,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+  CONSTRAINT okta_identity_provider_connections_pkey PRIMARY KEY (identity_provider_connection_id),
+  CONSTRAINT okta_identity_provider_connections_provider_check CHECK (identity_provider_connections_provider = 'okta'),
+  CONSTRAINT okta_identity_provider_connections_listing_mode_check CHECK (listing_mode IN ('custom_app', 'oin')),
+  CONSTRAINT okta_identity_provider_connections_fkey FOREIGN KEY (identity_provider_connection_id, identity_provider_connections_provider) REFERENCES identity_provider_connections (id, provider) ON DELETE CASCADE,
+  CONSTRAINT okta_identity_provider_connections_connection_tenant_fkey FOREIGN KEY (organization_id, identity_provider_connection_id) REFERENCES identity_provider_connections (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT okta_identity_provider_connections_issuer_tenant_fkey FOREIGN KEY (organization_id, remote_session_issuer_id) REFERENCES remote_session_issuers (organization_id, id),
+  CONSTRAINT okta_identity_provider_connections_client_tenant_fkey FOREIGN KEY (organization_id, remote_session_client_id) REFERENCES remote_session_clients (organization_id, id)
+);
+
+-- One Okta tenant connects to one Speakeasy org unless a platform admin
+-- records an override reason.
+CREATE UNIQUE INDEX IF NOT EXISTS okta_identity_provider_connections_issuer_url_key
+ON okta_identity_provider_connections (issuer_url)
+WHERE deleted IS FALSE AND issuer_url_override_reason IS NULL;
+
+CREATE INDEX IF NOT EXISTS okta_identity_provider_connections_remote_session_issuer_idx
+ON okta_identity_provider_connections (organization_id, remote_session_issuer_id);
+
+CREATE INDEX IF NOT EXISTS okta_identity_provider_connections_remote_session_client_idx
+ON okta_identity_provider_connections (organization_id, remote_session_client_id);
 
 -- User Session Issuers house configuration for when Gram acts as an Authorization Server for MCP Clients
 -- See: https://datatracker.ietf.org/doc/html/rfc8414
