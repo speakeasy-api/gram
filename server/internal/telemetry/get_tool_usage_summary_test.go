@@ -405,7 +405,10 @@ func TestGetToolUsageFilterOptions_ReturnsUncappedShadowServersAndUsers(t *testi
 	})
 
 	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
-	require.Len(t, summary.Targets, 25)
+	// The summary's target list feeds several cards at once — servers, skills,
+	// most errors — so its limit sits far above what any one card shows and a
+	// project of this size comes back whole.
+	require.Len(t, summary.Targets, 30)
 }
 
 func TestGetToolUsageFilterOptions_ClassifiesHookObservedHostedMCP(t *testing.T) {

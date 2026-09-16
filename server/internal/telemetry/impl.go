@@ -3441,10 +3441,14 @@ func (s *Service) resolveToolUsageParams(ctx context.Context, f toolUsageFilters
 		HookSources:        f.HookSources,
 		ClientKeys:         f.ClientKeys,
 		AccountType:        conv.PtrValOr(f.AccountType, ""),
-		TargetLimit:        25,
+		// The insights board splits one ranking into several cards — servers,
+		// skills, most errors — and ranks tools across every target, so a
+		// limit sized for a single top-N list truncates before the split and
+		// lets one busy category crowd the others out of view.
+		TargetLimit:        200,
 		UserLimit:          25,
 		UsersByTargetLimit: 100,
-		TargetToolRowLimit: 100,
+		TargetToolRowLimit: 1000,
 		TimeSeriesRowLimit: 10000,
 		UserSeriesRowLimit: 10000,
 		ClientLimit:        25,
