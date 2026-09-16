@@ -144,9 +144,9 @@ func (f *fakeBillingOperations) SetStripeSubscriptionCancelAtPeriodEndForOrganiz
 func TestGetMeterUsageSelectsCanonicalOrganizationAndBoundedFamily(t *testing.T) {
 	t.Parallel()
 	ctx, svc, db, meterConn := newTestAdminMeterService(t)
-	organizationID := "org_meter_usage"
+	organizationID := "org_meter_usage_" + uuid.NewString()
 	organizationSlug := "meter-usage"
-	otherOrganizationID := "org_other_meter_usage"
+	otherOrganizationID := "org_other_meter_usage_" + uuid.NewString()
 	seedOrg(t, ctx, db, orgFixture{id: organizationID, name: "Meter Usage", slug: organizationSlug})
 	seedOrg(t, ctx, db, orgFixture{id: otherOrganizationID, name: "Other Meter Usage", slug: "other-meter-usage"})
 
