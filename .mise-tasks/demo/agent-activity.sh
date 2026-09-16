@@ -26,9 +26,10 @@ set -euo pipefail
 # attribute Gram reads. See local/otel/gram-demo-forward.yaml for the pipeline
 # that does it.
 #
-# Every prompt below is read-only work, and both harnesses are held to that:
-# an injected instruction picked up from a file, a plugin or an MCP response
-# cannot write to the checkout this runs in.
+# Every prompt below is read-only work, and both harnesses are held to that --
+# Codex by its read-only sandbox, Claude Code by an allowlist of the tools the
+# prompts actually name. An instruction injected through a file, a plugin or an
+# MCP response cannot write to the checkout this runs in.
 
 project_slug="${usage_project}"
 prompts_per_user="${usage_prompts}"
@@ -211,6 +212,13 @@ TOML
   )
 }
 
+# An allowlist rather than `--permission-mode bypassPermissions` with the
+# mutating tools disallowed: the bypass wins over a deny list, so that
+# combination reads as a restriction and enforces nothing. Listing what the
+# prompts need instead pre-approves exactly those and leaves everything else
+# to be denied, which in a headless turn happens without a prompt to answer.
+claude_allowed_tools="Bash,Read,Glob,Grep,Task,Skill,TodoWrite,mcp__assistants-dev__whoami"
+
 # Logs only, in both harnesses, for the same reason.
 run_claude() {
   CLAUDE_CODE_ENABLE_TELEMETRY=1 \
@@ -231,8 +239,7 @@ run_claude() {
     claude --model "$claude_model" \
       --setting-sources project,local \
       --plugin-dir "${plugin_out}/plugin-claude" \
-      --permission-mode bypassPermissions \
-      --disallowed-tools "Write,Edit,NotebookEdit,WebFetch,WebSearch" \
+      --allowed-tools "$claude_allowed_tools" \
       -p "$2" > "$turn_log" 2>&1
 }
 
