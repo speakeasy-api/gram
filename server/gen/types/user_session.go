@@ -13,7 +13,7 @@ type UserSession struct {
 	ID string
 	// The issuing user_session_issuer id.
 	UserSessionIssuerID string
-	// The session's subject URN (user:<id> | apikey:<uuid> |
+	// The session's subject URN (user:<id> | apikey:<uuid> | agent:<uuid> |
 	// anonymous:<mcp-session-id> | workload:<issuer-id>:<external-subject>).
 	SubjectUrn string
 	// Current access-token JTI; used by the revocation path.
@@ -49,7 +49,7 @@ type UserSession struct {
 	// for a client registered before the value was recorded;
 	// client_credential_kind separates those cases and is what should be displayed.
 	ClientTokenEndpointAuthMethod *string
-	// Subject kind: 'user', 'apikey', 'anonymous', or 'workload'.
+	// Subject kind: 'user', 'apikey', 'agent', 'anonymous', or 'workload'.
 	SubjectType string
 	// Resolved human-readable name of the subject, if known.
 	SubjectDisplayName *string
