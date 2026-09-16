@@ -106,8 +106,8 @@ func TestWorkloadIssuer_AssertionFromALiveIssuerVerifies(t *testing.T) {
 // A key retired by rotation is refused once the resolver holds the new set.
 //
 // Each presentation uses a cold resolver cache. A warm cache keeps the stored
-// set for jwks's 30s refreshCooldown, during which a retired key still
-// verifies; that window is by design and not asserted here.
+// set until its cache TTL expires, during which a retired key may still
+// verify; the test uses cold resolvers to avoid depending on that timing.
 //
 // Assertions use distinct jti values, since the replay guard would otherwise
 // refuse the second before its key is checked.

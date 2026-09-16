@@ -31,8 +31,9 @@ var (
 // order against real rows: resolve iss to a workload issuer in the endpoint's
 // tenancy, verify against that issuer's key set, then check admission.
 //
-// iss and sub are read unverified to find the issuer; Verify then requires both
-// to match. The read uses the verifier's algorithm allowlist.
+// iss is read unverified to find the issuer, and sub to seed the expected
+// subject; Verify checks both against the signed assertion before admission.
+// The read uses the verifier's algorithm allowlist.
 func AdmitWorkloadAssertion(
 	ctx context.Context,
 	db *pgxpool.Pool,
