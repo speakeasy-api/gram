@@ -34,6 +34,8 @@ type clientFactory struct {
 var _ ClientFactory = (*clientFactory)(nil)
 
 // NewClientFactory returns a factory backed by the real Okta Management API.
+// The pooled client is built without retries so the per-client no-redirect
+// policy NewClient installs is honored by the exchange itself.
 func NewClientFactory(logger *slog.Logger, guardianPolicy *guardian.Policy, signer remotesessions.TokenEndpointAssertionSigner) ClientFactory {
 	httpClient := guardianPolicy.PooledClient(
 		guardian.WithResilience("okta", guardian.ResilienceConfig{

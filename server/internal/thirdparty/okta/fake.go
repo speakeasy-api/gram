@@ -2,6 +2,7 @@ package okta
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"slices"
@@ -81,7 +82,7 @@ func (f *Fake) ListApps(_ context.Context, req ListAppsRequest) ([]App, error) {
 		if req.Query != "" && !strings.HasPrefix(strings.ToLower(app.Label), strings.ToLower(req.Query)) && !strings.HasPrefix(strings.ToLower(app.Name), strings.ToLower(req.Query)) {
 			continue
 		}
-		out = append(out, app)
+		out = append(out, cloneApp(app))
 	}
 	return out, nil
 }
@@ -90,20 +91,32 @@ func (f *Fake) GetApp(_ context.Context, appID string) (*App, error) {
 	if err := f.record("GetApp"); err != nil {
 		return nil, err
 	}
+	if appID == "" {
+		return nil, errors.New("okta: app id is required")
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	for _, app := range f.fixtures.Apps {
 		if app.ID == appID {
-			found := app
+			found := cloneApp(app)
 			return &found, nil
 		}
 	}
 	return nil, &APIError{Method: http.MethodGet, Path: "/api/v1/apps/" + appID, StatusCode: http.StatusNotFound, ErrorCode: "E0000007", Summary: fmt.Sprintf("Not found: Resource not found: %s (AppInstance)", appID)}
 }
 
+// cloneApp copies the Features slice so callers cannot mutate fixtures.
+func cloneApp(app App) App {
+	app.Features = slices.Clone(app.Features)
+	return app
+}
+
 func (f *Fake) ListAppUsers(_ context.Context, req ListAppUsersRequest) ([]AppUser, error) {
 	if err := f.record("ListAppUsers"); err != nil {
 		return nil, err
+	}
+	if req.AppID == "" {
+		return nil, errors.New("okta: app id is required")
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -113,6 +126,9 @@ func (f *Fake) ListAppUsers(_ context.Context, req ListAppUsersRequest) ([]AppUs
 func (f *Fake) ListAppGroups(_ context.Context, req ListAppGroupsRequest) ([]AppGroup, error) {
 	if err := f.record("ListAppGroups"); err != nil {
 		return nil, err
+	}
+	if req.AppID == "" {
+		return nil, errors.New("okta: app id is required")
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -141,13 +157,23 @@ func (f *Fake) VerifyScopes(_ context.Context, required []string) (*ScopeVerific
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	// Like Okta, a token carries only the requested scopes that are granted,
+	// an unscoped request carries every granted scope, and an all-ungranted
+	// request is refused with invalid_scope, which maps to no token at all.
+	granted := make([]string, 0, len(required))
 	missing := make([]string, 0)
+	if len(required) == 0 {
+		granted = append(granted, f.fixtures.GrantedScopes...)
+	}
 	for _, s := range required {
-		if !slices.Contains(f.fixtures.GrantedScopes, s) {
+		if slices.Contains(f.fixtures.GrantedScopes, s) {
+			granted = append(granted, s)
+		} else {
 			missing = append(missing, s)
 		}
 	}
-	granted := make([]string, 0, len(f.fixtures.GrantedScopes))
-	granted = append(granted, f.fixtures.GrantedScopes...)
+	if len(granted) == 0 {
+		return &ScopeVerification{Granted: granted, Missing: missing, DPoPBound: false, ExpiresAt: time.Time{}}, nil
+	}
 	return &ScopeVerification{Granted: granted, Missing: missing, DPoPBound: true, ExpiresAt: time.Now().Add(time.Hour)}, nil
 }

@@ -146,16 +146,18 @@ type ScopeVerification struct {
 	// Missing is every required scope absent from the access token.
 	Missing []string
 
-	// DPoPBound is true when Okta issued a DPoP token type.
+	// DPoPBound is true when Okta issued a DPoP token type. A bearer token
+	// never verifies; callers render "DPoP not bound" when Missing is empty
+	// and this is false.
 	DPoPBound bool
 
 	// ExpiresAt is when the verification token expires; zero when none was issued.
 	ExpiresAt time.Time
 }
 
-// OK reports whether every required scope was granted.
+// OK reports whether Okta issued a DPoP-bound token carrying every required scope.
 func (v *ScopeVerification) OK() bool {
-	return len(v.Missing) == 0
+	return v.DPoPBound && len(v.Missing) == 0
 }
 
 // ErrTooManyPages is returned when a listing exceeds the configured page cap.

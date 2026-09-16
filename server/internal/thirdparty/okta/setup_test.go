@@ -170,6 +170,9 @@ type stubOkta struct {
 	rateLimitLimit       int
 	rateLimitRemaining   int
 	rateLimitReset       int64
+	tokenType            string
+	tokenRedirect        string
+	tokenPending429      int
 	overrides            map[string]http.HandlerFunc
 }
 
@@ -204,6 +207,9 @@ func newStubOkta(t *testing.T, clock *fakeClock) *stubOkta {
 		rateLimitLimit:       0,
 		rateLimitRemaining:   0,
 		rateLimitReset:       0,
+		tokenType:            "DPoP",
+		tokenRedirect:        "",
+		tokenPending429:      0,
 		overrides:            map[string]http.HandlerFunc{},
 	}
 	mux := http.NewServeMux()
@@ -261,6 +267,27 @@ func (s *stubOkta) setRateLimit(limit, remaining int, reset int64) {
 	s.rateLimitLimit = limit
 	s.rateLimitRemaining = remaining
 	s.rateLimitReset = reset
+}
+
+func (s *stubOkta) setTokenType(tokenType string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.tokenType = tokenType
+}
+
+// setTokenRedirect makes the token endpoint answer 307 to location.
+func (s *stubOkta) setTokenRedirect(location string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.tokenRedirect = location
+}
+
+// setTokenPending429 makes the next n token requests answer 429 with the
+// configured rate limit headers.
+func (s *stubOkta) setTokenPending429(n int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.tokenPending429 = n
 }
 
 func (s *stubOkta) setTokenNonce(nonce string) {
@@ -395,7 +422,25 @@ func (s *stubOkta) verifyProof(w http.ResponseWriter, r *http.Request, accessTok
 func (s *stubOkta) handleToken(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	s.tokenRequests++
+	redirect := s.tokenRedirect
+	throttle := s.tokenPending429 > 0
+	if throttle {
+		s.tokenPending429--
+	}
+	if throttle && s.rateLimitLimit > 0 {
+		w.Header().Set("X-Rate-Limit-Limit", strconv.Itoa(s.rateLimitLimit))
+		w.Header().Set("X-Rate-Limit-Remaining", strconv.Itoa(s.rateLimitRemaining))
+		w.Header().Set("X-Rate-Limit-Reset", strconv.FormatInt(s.rateLimitReset, 10))
+	}
 	s.mu.Unlock()
+	if redirect != "" {
+		http.Redirect(w, r, redirect, http.StatusTemporaryRedirect)
+		return
+	}
+	if throttle {
+		s.writeJSON(w, http.StatusTooManyRequests, map[string]string{"errorCode": "E0000047", "errorSummary": "API call exceeded rate limit due to too many requests."})
+		return
+	}
 	if err := r.ParseForm(); err != nil {
 		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_request", "error_description": err.Error()})
 		return
@@ -414,6 +459,10 @@ func (s *stubOkta) handleToken(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.Form.Get("client_assertion_type") != clientAssertionType {
 		s.writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid_client", "error_description": "bad assertion type"})
+		return
+	}
+	if r.Form.Get("client_id") != stubClientID {
+		s.writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid_client", "error_description": "client_id mismatch"})
 		return
 	}
 	s.mu.Lock()
@@ -444,7 +493,7 @@ func (s *stubOkta) handleToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.mu.Lock()
-	requireNonce, nonce, granted := s.requireTokenNonce, s.tokenNonce, s.grantedScopes
+	requireNonce, nonce, granted, tokenType := s.requireTokenNonce, s.tokenNonce, s.grantedScopes, s.tokenType
 	if s.rotateTokenNonce {
 		s.tokenNonce = "rotated-" + uuid.NewString()
 	}
@@ -478,7 +527,7 @@ func (s *stubOkta) handleToken(w http.ResponseWriter, r *http.Request) {
 
 	s.writeJSON(w, http.StatusOK, map[string]any{
 		"access_token": token,
-		"token_type":   "DPoP",
+		"token_type":   tokenType,
 		"expires_in":   3600,
 		"scope":        strings.Join(scope, " "),
 	})
@@ -733,6 +782,36 @@ func stubApps(n int) []appJSON {
 		})
 	}
 	return apps
+}
+
+// sinkServer records every request that reaches it; the client must never
+// send one here.
+type sinkServer struct {
+	srv *httptest.Server
+
+	mu   sync.Mutex
+	hits []*http.Request
+}
+
+func newSinkServer(t *testing.T) *sinkServer {
+	t.Helper()
+	sink := &sinkServer{srv: nil, mu: sync.Mutex{}, hits: nil}
+	sink.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = r.ParseForm()
+		sink.mu.Lock()
+		sink.hits = append(sink.hits, r)
+		sink.mu.Unlock()
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"access_token":"leaked","token_type":"DPoP","expires_in":3600}`))
+	}))
+	t.Cleanup(sink.srv.Close)
+	return sink
+}
+
+func (s *sinkServer) Hits() []*http.Request {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.hits)
 }
 
 func mustParseURL(t *testing.T, raw string) *url.URL {

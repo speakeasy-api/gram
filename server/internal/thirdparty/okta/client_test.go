@@ -2,6 +2,7 @@ package okta
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
@@ -59,11 +60,9 @@ func TestClient_Token_ConcurrentFirstCallersShareOneHandshake(t *testing.T) {
 	var wg sync.WaitGroup
 	errs := make([]error, n)
 	for i := range n {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			_, errs[i] = tc.client.ListApps(t.Context(), ListAppsRequest{Query: "", Status: "", Limit: 0})
-		}()
+		})
 	}
 	wg.Wait()
 	for _, err := range errs {
@@ -605,6 +604,266 @@ func TestNewClient_RequiresTokenEndpointAudienceFormat(t *testing.T) {
 	cfg.RemoteSessionClientID = uuid.New()
 	_, err = factory.Client(cfg)
 	require.Error(t, err)
+}
+
+func TestNewClient_OrgURLRequiresHTTPSExceptLoopback(t *testing.T) {
+	t.Parallel()
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
+	require.NoError(t, err)
+	factory := NewClientFactory(testenv.NewLogger(t), policy, &stubSigner{clock: &fakeClock{mu: sync.Mutex{}, now: time.Now()}, mu: sync.Mutex{}, calls: 0, requests: nil, jtis: nil, replay: false, last: ""})
+
+	cfg := testConfig()
+	cfg.ClientID = stubClientID
+	cfg.AudienceFormat = string(remotesessions.TokenEndpointAuthAudienceTokenEndpoint)
+
+	for _, raw := range []string{
+		"https://example.okta.com",
+		"https://example.okta.com/",
+		"https://example.okta.com:8443",
+		"http://127.0.0.1:9000",
+		"http://localhost:9000",
+		"http://[::1]:9000",
+	} {
+		cfg.OrgURL = raw
+		cfg.RemoteSessionClientID = uuid.New()
+		_, err = factory.Client(cfg)
+		require.NoError(t, err, raw)
+	}
+
+	for _, raw := range []string{
+		"http://example.okta.com",
+		"http://127.0.0.1.example.com",
+		"ftp://example.okta.com",
+		"example.okta.com",
+		"https://example.okta.com/oauth2",
+		"https://example.okta.com/?x=1",
+		"https://example.okta.com/#frag",
+		"https://user:pw@example.okta.com",
+	} {
+		cfg.OrgURL = raw
+		cfg.RemoteSessionClientID = uuid.New()
+		_, err = factory.Client(cfg)
+		require.Error(t, err, raw)
+		require.Contains(t, err.Error(), "okta: ", raw)
+	}
+
+	cfg.OrgURL = "http://example.okta.com"
+	cfg.RemoteSessionClientID = uuid.New()
+	_, err = factory.Client(cfg)
+	require.EqualError(t, err, `okta: org url "http://example.okta.com" must use https`)
+
+	cfg.OrgURL = "https://example.okta.com/oauth2"
+	cfg.RemoteSessionClientID = uuid.New()
+	_, err = factory.Client(cfg)
+	require.EqualError(t, err, `okta: org url "https://example.okta.com/oauth2" must be an origin without path, query, fragment, or userinfo`)
+}
+
+func TestClient_VerifyScopes_BearerTokenIsNotOK(t *testing.T) {
+	t.Parallel()
+	tc := newDefaultTestClient(t)
+	tc.stub.setTokenType("Bearer")
+
+	v, err := tc.client.VerifyScopes(t.Context(), []string{"okta.apps.read", "okta.groups.read"})
+	require.NoError(t, err)
+	require.Empty(t, v.Missing)
+	require.Equal(t, []string{"okta.apps.read", "okta.groups.read"}, v.Granted)
+	require.False(t, v.DPoPBound)
+	require.False(t, v.OK())
+
+	_, err = tc.client.ListApps(t.Context(), ListAppsRequest{Query: "", Status: "", Limit: 0})
+	require.EqualError(t, err, `okta token response type "Bearer" is not DPoP`)
+}
+
+func TestClient_ResourceRedirectIsNotFollowed(t *testing.T) {
+	t.Parallel()
+	tc := newDefaultTestClient(t)
+	tc.stub.setApps(stubApps(1))
+	sink := newSinkServer(t)
+	tc.stub.setOverride("/api/v1/elsewhere", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, sink.srv.URL+"/api/v1/apps", http.StatusTemporaryRedirect)
+	})
+
+	_, _, err := getJSON[appJSON](t.Context(), tc.client, tc.client.apiURL("/api/v1/elsewhere", "", nil))
+	var apiErr *APIError
+	require.ErrorAs(t, err, &apiErr)
+	require.Equal(t, http.StatusTemporaryRedirect, apiErr.StatusCode)
+	require.Empty(t, sink.Hits())
+	require.Equal(t, 2, tc.signer.Calls())
+}
+
+func TestClient_TokenRedirectIsNotFollowed(t *testing.T) {
+	t.Parallel()
+	tc := newDefaultTestClient(t)
+	tc.stub.setApps(stubApps(1))
+	sink := newSinkServer(t)
+	tc.stub.setTokenRedirect(sink.srv.URL + tokenEndpointPath)
+
+	_, err := tc.client.ListApps(t.Context(), ListAppsRequest{Query: "", Status: "", Limit: 0})
+	var apiErr *APIError
+	require.ErrorAs(t, err, &apiErr)
+	require.Equal(t, http.StatusTemporaryRedirect, apiErr.StatusCode)
+	require.Equal(t, tokenEndpointPath, apiErr.Path)
+	require.Empty(t, sink.Hits())
+	require.Equal(t, 1, tc.signer.Calls())
+	require.Equal(t, stubCounts{tokenRequests: 1, assertionsSeen: 0, issuedTokens: 0}, tc.stub.counts())
+}
+
+func TestClient_TokenEndpoint429BacksOffWithFreshAssertion(t *testing.T) {
+	t.Parallel()
+	tc := newDefaultTestClient(t)
+	tc.stub.setApps(stubApps(1))
+	now := tc.clock.Now()
+	tc.stub.setTokenPending429(2)
+	tc.stub.setRateLimit(100, 0, now.Add(5*time.Second).Unix())
+
+	apps := listApps(t, tc)
+	require.Len(t, apps, 1)
+	require.Equal(t, []time.Duration{5 * time.Second, 5 * time.Second}, tc.sleeper.Waits())
+
+	// Two throttled attempts, one nonce challenge, one success: four assertions, all distinct.
+	require.Equal(t, 4, tc.signer.Calls())
+	jtis := tc.signer.JTIs()
+	require.Len(t, jtis, 4)
+	seen := map[string]bool{}
+	for _, jti := range jtis {
+		require.False(t, seen[jti])
+		seen[jti] = true
+	}
+	require.Equal(t, stubCounts{tokenRequests: 4, assertionsSeen: 2, issuedTokens: 1}, tc.stub.counts())
+}
+
+func TestClient_TokenEndpoint429ExhaustedReturnsError(t *testing.T) {
+	t.Parallel()
+	tc := newDefaultTestClient(t)
+	tc.stub.setApps(stubApps(1))
+	tc.stub.setTokenPending429(maxRateLimitRetries + 1)
+	tc.stub.setRateLimit(100, 0, tc.clock.Now().Add(time.Hour).Unix())
+
+	_, err := tc.client.ListApps(t.Context(), ListAppsRequest{Query: "", Status: "", Limit: 0})
+	var apiErr *APIError
+	require.ErrorAs(t, err, &apiErr)
+	require.Equal(t, http.StatusTooManyRequests, apiErr.StatusCode)
+	require.Equal(t, tokenEndpointPath, apiErr.Path)
+	require.Equal(t, maxRateLimitRetries+1, tc.signer.Calls())
+	waits := tc.sleeper.Waits()
+	require.Len(t, waits, maxRateLimitRetries)
+	for _, w := range waits {
+		require.Equal(t, maxRateLimitWait, w)
+	}
+	require.Equal(t, 0, tc.stub.counts().issuedTokens)
+}
+
+func TestClient_TokenRequestCarriesClientID(t *testing.T) {
+	t.Parallel()
+	tc := newDefaultTestClient(t)
+	tc.stub.setApps(stubApps(1))
+	tc.client.cfg.ClientID = "0oa-other-client"
+
+	_, err := tc.client.ListApps(t.Context(), ListAppsRequest{Query: "", Status: "", Limit: 0})
+	var apiErr *APIError
+	require.ErrorAs(t, err, &apiErr)
+	require.Equal(t, "invalid_client", apiErr.ErrorCode)
+	require.Contains(t, apiErr.Summary, "client_id mismatch")
+}
+
+func TestClient_WaitForSlowdownKeepsNewerDeadline(t *testing.T) {
+	t.Parallel()
+	tc := newDefaultTestClient(t)
+	now := tc.clock.Now()
+	first := now.Add(3 * time.Second)
+	second := now.Add(9 * time.Second)
+
+	tc.client.mu.Lock()
+	tc.client.slowUntil = first
+	tc.client.mu.Unlock()
+
+	// A concurrent observer moves the deadline while this waiter sleeps.
+	tc.client.sleep = func(ctx context.Context, d time.Duration) error {
+		tc.client.mu.Lock()
+		tc.client.slowUntil = second
+		tc.client.mu.Unlock()
+		return tc.sleeper.sleep(ctx, d)
+	}
+	require.NoError(t, tc.client.waitForSlowdown(t.Context()))
+	require.Equal(t, []time.Duration{3 * time.Second}, tc.sleeper.Waits())
+	tc.client.mu.Lock()
+	require.Equal(t, second, tc.client.slowUntil)
+	tc.client.mu.Unlock()
+
+	tc.client.sleep = tc.sleeper.sleep
+	require.NoError(t, tc.client.waitForSlowdown(t.Context()))
+	require.Equal(t, []time.Duration{3 * time.Second, 9 * time.Second}, tc.sleeper.Waits())
+	tc.client.mu.Lock()
+	require.True(t, tc.client.slowUntil.IsZero())
+	tc.client.mu.Unlock()
+}
+
+func TestFake_RequiresAppID(t *testing.T) {
+	t.Parallel()
+	fake := NewFake(Fixtures{Apps: nil, AppUsers: nil, AppGroups: nil, Groups: nil, GrantedScopes: nil})
+
+	_, err := fake.GetApp(t.Context(), "")
+	require.EqualError(t, err, "okta: app id is required")
+	_, err = fake.ListAppUsers(t.Context(), ListAppUsersRequest{AppID: "", Limit: 0})
+	require.EqualError(t, err, "okta: app id is required")
+	_, err = fake.ListAppGroups(t.Context(), ListAppGroupsRequest{AppID: "", Limit: 0})
+	require.EqualError(t, err, "okta: app id is required")
+}
+
+func TestFake_VerifyScopesMirrorsOkta(t *testing.T) {
+	t.Parallel()
+	fake := NewFake(Fixtures{Apps: nil, AppUsers: nil, AppGroups: nil, Groups: nil, GrantedScopes: []string{"okta.apps.read", "okta.groups.read"}})
+
+	v, err := fake.VerifyScopes(t.Context(), []string{"okta.apps.read", "okta.users.read"})
+	require.NoError(t, err)
+	require.Equal(t, []string{"okta.apps.read"}, v.Granted)
+	require.Equal(t, []string{"okta.users.read"}, v.Missing)
+	require.True(t, v.DPoPBound)
+	require.False(t, v.ExpiresAt.IsZero())
+	require.False(t, v.OK())
+
+	v, err = fake.VerifyScopes(t.Context(), []string{"okta.users.read"})
+	require.NoError(t, err)
+	require.Equal(t, []string{}, v.Granted)
+	require.Equal(t, []string{"okta.users.read"}, v.Missing)
+	require.False(t, v.DPoPBound)
+	require.True(t, v.ExpiresAt.IsZero())
+	require.False(t, v.OK())
+
+	v, err = fake.VerifyScopes(t.Context(), []string{"okta.groups.read"})
+	require.NoError(t, err)
+	require.Equal(t, []string{"okta.groups.read"}, v.Granted)
+	require.Empty(t, v.Missing)
+	require.True(t, v.OK())
+
+	v, err = fake.VerifyScopes(t.Context(), nil)
+	require.NoError(t, err)
+	require.Equal(t, []string{"okta.apps.read", "okta.groups.read"}, v.Granted)
+	require.True(t, v.OK())
+}
+
+func TestFake_ClonesAppFeatures(t *testing.T) {
+	t.Parallel()
+	fake := NewFake(Fixtures{
+		Apps:          []App{{ID: "0oa1", Label: "Gram", Name: "oidc_client", SignOnMode: "OPENID_CONNECT", Status: "ACTIVE", Features: []string{"PUSH_NEW_USERS"}, Created: time.Time{}, LastUpdated: time.Time{}}},
+		AppUsers:      nil,
+		AppGroups:     nil,
+		Groups:        nil,
+		GrantedScopes: nil,
+	})
+
+	apps, err := fake.ListApps(t.Context(), ListAppsRequest{Query: "", Status: "", Limit: 0})
+	require.NoError(t, err)
+	apps[0].Features[0] = "mutated"
+
+	app, err := fake.GetApp(t.Context(), "0oa1")
+	require.NoError(t, err)
+	require.Equal(t, []string{"PUSH_NEW_USERS"}, app.Features)
+	app.Features[0] = "mutated"
+
+	apps, err = fake.ListApps(t.Context(), ListAppsRequest{Query: "", Status: "", Limit: 0})
+	require.NoError(t, err)
+	require.Equal(t, []string{"PUSH_NEW_USERS"}, apps[0].Features)
 }
 
 func TestClientFactory_MemoizesAndForgets(t *testing.T) {
