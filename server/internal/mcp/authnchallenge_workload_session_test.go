@@ -163,6 +163,11 @@ func TestApplyIssuerGate_WorkloadSessionActsThroughItsAssignedAgent(t *testing.T
 	require.True(t, ok)
 	require.Empty(t, authCtx.UserID, "a workload session names no acting user")
 	require.Empty(t, authCtx.APIKeyID)
+
+	authorizer, owner, ok := contextvalues.PrincipalCredentialProvenance(admittedCtx)
+	require.True(t, ok)
+	require.Empty(t, authorizer, "a workload session records no approving human")
+	require.Equal(t, fx.userID, owner)
 }
 
 // The assignment is what confers authority, so removing it takes the authority

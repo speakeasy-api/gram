@@ -5,6 +5,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -18,10 +19,11 @@ import (
 // rather than something acting on an owner's behalf, so the owner bounds which
 // agent may be assigned, not what the machine may reach.
 type WorkloadSessionAdmission struct {
-	// AgentPrincipal is the agent the workload inherited from, recorded so
-	// attribution can name it.
+	// AgentPrincipal is the agent the workload inherited from. Admission
+	// refuses a result that names none.
 	AgentPrincipal string
-	// OwnerUserID owns that agent. Carried for attribution only.
+	// OwnerUserID owns that agent. Recorded as credential owner provenance for
+	// attribution only; the owner's own policy is never evaluated.
 	OwnerUserID string
 	// Ceiling is the session's immutable policy R, fixed at issuance.
 	Ceiling []Grant
@@ -65,8 +67,9 @@ func applyWorkloadSessionAdmission(ctx context.Context, admission WorkloadSessio
 	// An admission naming no agent authorizes nothing. Checked here as well as
 	// in the admitter so a future admitter cannot widen the boundary by
 	// returning a zero value.
-	if admission.AgentPrincipal == "" {
+	if admission.AgentPrincipal == "" || admission.OwnerUserID == "" {
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
+	ctx = contextvalues.WithPrincipalCredentialOwner(ctx, admission.OwnerUserID)
 	return workloadPoliciesToContext(ctx, admission.Ceiling, admission.Agent), nil
 }
