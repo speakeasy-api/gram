@@ -50,6 +50,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/urls"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -60,11 +61,25 @@ import (
 // public clients) via the body. Double-sending client_id is rejected by some
 // upstreams (e.g. Pylon) as ambiguous client identification.
 //
-// method must come from ResolveTokenEndpointAuthMethod, which guarantees a
+// Method must come from ResolveTokenEndpointAuthMethod, which guarantees a
 // Basic or Post client carries a non-empty secret and a secret-less client is
 // public.
-func newTokenEndpointRequest(ctx context.Context, endpoint string, form url.Values, method TokenEndpointAuthMethod, clientID, clientSecret string) (*http.Request, error) {
-	switch method {
+type tokenEndpointClientAuth struct {
+	Method                TokenEndpointAuthMethod
+	RemoteSessionClientID uuid.UUID
+	OrganizationID        string
+	JSONWebKeySetID       uuid.UUID
+	ClientID              string
+	ClientSecret          string
+	AssertionAudience     string
+	AssertionSigner       TokenEndpointAssertionSigner
+}
+
+func newTokenEndpointRequest(ctx context.Context, endpoint string, form url.Values, auth tokenEndpointClientAuth) (*http.Request, error) {
+	if !urls.IsAbsoluteHTTPSOrLoopback(endpoint) {
+		return nil, fmt.Errorf("token endpoint must be an absolute https URL, or http on loopback")
+	}
+	switch auth.Method {
 	case TokenEndpointAuthMethodBasic:
 		// Credentials ride the Authorization header only, set below once req
 		// exists. Strip any body copies so a caller-seeded client_id cannot
@@ -72,16 +87,28 @@ func newTokenEndpointRequest(ctx context.Context, endpoint string, form url.Valu
 		form.Del("client_id")
 		form.Del("client_secret")
 	case TokenEndpointAuthMethodPost:
-		form.Set("client_id", clientID)
-		form.Set("client_secret", clientSecret)
+		form.Set("client_id", auth.ClientID)
+		form.Set("client_secret", auth.ClientSecret)
 	case TokenEndpointAuthMethodNone:
-		form.Set("client_id", clientID)
+		form.Set("client_id", auth.ClientID)
 	case TokenEndpointAuthMethodPrivateKeyJWT:
-		// AIM-156 builds the RFC 7523 assertion this method needs. No client can
-		// store the value yet (it is absent from tokenEndpointAuthMethodEnum), so
-		// this is unreachable; it fails loudly rather than falling through to an
-		// unauthenticated request that the upstream rejects as an opaque 401.
-		return nil, fmt.Errorf("token endpoint auth method %q is not implemented", method)
+		if auth.AssertionSigner == nil {
+			return nil, fmt.Errorf("private_key_jwt signing is unavailable")
+		}
+		assertion, err := auth.AssertionSigner.SignClientAssertion(ctx, ClientAssertionRequest{
+			RemoteSessionClientID: auth.RemoteSessionClientID,
+			OrganizationID:        auth.OrganizationID,
+			JSONWebKeySetID:       auth.JSONWebKeySetID,
+			ClientID:              auth.ClientID,
+			Audience:              auth.AssertionAudience,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("sign private_key_jwt client assertion: %w", err)
+		}
+		form.Del("client_secret")
+		form.Set("client_id", auth.ClientID)
+		form.Set("client_assertion_type", clientAssertionType)
+		form.Set("client_assertion", assertion)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(form.Encode()))
@@ -90,11 +117,11 @@ func newTokenEndpointRequest(ctx context.Context, endpoint string, form url.Valu
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
-	if method == TokenEndpointAuthMethodBasic {
+	if auth.Method == TokenEndpointAuthMethodBasic {
 		// RFC 6749 §2.3.1: client credentials must be form-urlencoded before
 		// going into the Basic authorization header. Upstreams that decode per
 		// spec (e.g. Snowflake) reject raw credentials containing '+' or '%'.
-		req.SetBasicAuth(url.QueryEscape(clientID), url.QueryEscape(clientSecret))
+		req.SetBasicAuth(url.QueryEscape(auth.ClientID), url.QueryEscape(auth.ClientSecret))
 	}
 	return req, nil
 }
@@ -577,7 +604,7 @@ func (s *RefreshService) refreshSessionTokens(
 	}
 
 	var clientSecret string
-	if client.ClientSecretEncrypted.Valid {
+	if client.ClientSecretEncrypted.Valid && client.TokenEndpointAuthMethod.String != string(TokenEndpointAuthMethodPrivateKeyJWT) {
 		clientSecret, err = s.enc.Decrypt(client.ClientSecretEncrypted.String)
 		if err != nil {
 			return zero, noToken, newTokenRefreshError("the client secret could not be read; check the issuer's configuration", err)
@@ -587,6 +614,14 @@ func (s *RefreshService) refreshSessionTokens(
 	authMethod, err := ResolveTokenEndpointAuthMethod(client.TokenEndpointAuthMethod.String, clientSecret)
 	if err != nil {
 		return zero, noToken, newTokenRefreshError("the client's authentication configuration is invalid; check the issuer's configuration", err)
+	}
+	assertionAudience, err := ResolveTokenEndpointAuthAudience(
+		client.TokenEndpointAuthAudienceFormat.String,
+		clientAssertionIssuer(client.IssuerMetadata, client.IssuerUrl),
+		client.TokenEndpoint.String,
+	)
+	if err != nil && authMethod == TokenEndpointAuthMethodPrivateKeyJWT {
+		return zero, noToken, newTokenRefreshError("the client's assertion audience is invalid; check the issuer's configuration", err)
 	}
 
 	form := url.Values{}
@@ -607,7 +642,17 @@ func (s *RefreshService) refreshSessionTokens(
 	postCtx, cancel := context.WithTimeout(ctx, refreshUpstreamTimeout)
 	defer cancel()
 
-	tok, err := s.postRefreshGrant(postCtx, client, form, authMethod, clientSecret)
+	clientAuth := tokenEndpointClientAuth{
+		Method:                authMethod,
+		RemoteSessionClientID: client.ClientID,
+		OrganizationID:        client.ClientOrganizationID.String,
+		JSONWebKeySetID:       client.JsonWebKeySetID.UUID,
+		ClientID:              client.ExternalClientID,
+		ClientSecret:          clientSecret,
+		AssertionAudience:     assertionAudience,
+		AssertionSigner:       s.assertions,
+	}
+	tok, err := s.postRefreshGrant(postCtx, client, form, clientAuth)
 	if refreshErr, ok := errors.AsType[*TokenRefreshError](err); ok && sendResource && refreshErr.invalidTarget() {
 		// RFC 8707 invalid_target rejects this resource; the grant itself may
 		// still refresh without it, as the login did.
@@ -618,7 +663,7 @@ func (s *RefreshService) refreshSessionTokens(
 			attr.SlogError(err),
 		)
 		form.Del("resource")
-		tok, err = s.postRefreshGrant(postCtx, client, form, authMethod, clientSecret)
+		tok, err = s.postRefreshGrant(postCtx, client, form, clientAuth)
 	}
 	if err != nil {
 		return zero, noToken, err
@@ -714,12 +759,21 @@ func (s *RefreshService) restateIdentity(
 	interfaces := map[string]interfaceRecord{}
 	var access jwtAccessTokenResult
 	idTokenRejected := storedInterfaceRecords(sess.Enrichment)[IdentitySourceIDToken].Status == interfaceStatusRejected
-	if tok.IDToken != "" && client.JwksUri.Valid && client.JwksUri.String != "" {
+	// A bound issuer's key set is only readable over its tunnel, so without one
+	// this token cannot be verified at all. Treated like an issuer that
+	// publishes no key set — skipped, not rejected and not fetched over direct
+	// egress — so the steps below still run and the stored identity stands.
+	idTokenTransport, transportErr := issuerTunnelTransport(s.tunnels, client.TunneledMcpServerID)
+	if transportErr != nil {
+		logIdentityFailure(ctx, s.logger, "refresh id token not verified; key set transport unavailable", transportErr, attrs...)
+	}
+	if tok.IDToken != "" && client.JwksUri.Valid && client.JwksUri.String != "" && transportErr == nil {
 		verified, err := s.idTokens.Verify(ctx, tok.IDToken, IDTokenExpectation{
 			issuer:      client.IssuerUrl,
 			clientID:    client.ExternalClientID,
 			jwksURI:     client.JwksUri.String,
 			fetchScope:  client.RemoteSessionIssuerID.String(),
+			transport:   idTokenTransport,
 			signingAlgs: client.IDTokenSigningAlgValuesSupported,
 			nonce:       "",
 			subject:     previousSubject,
@@ -800,17 +854,21 @@ func (s *RefreshService) postRefreshGrant(
 	ctx context.Context,
 	client remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow,
 	form url.Values,
-	authMethod TokenEndpointAuthMethod,
-	clientSecret string,
+	clientAuth tokenEndpointClientAuth,
 ) (tokenResponse, error) {
 	var zero tokenResponse
 
-	req, err := newTokenEndpointRequest(ctx, client.TokenEndpoint.String, form, authMethod, client.ExternalClientID, clientSecret)
+	req, err := newTokenEndpointRequest(ctx, client.TokenEndpoint.String, form, clientAuth)
 	if err != nil {
 		return zero, fmt.Errorf("new refresh request: %w", err)
 	}
 
-	resp, err := noRedirectClient(s.policy.PooledClient()).Do(req)
+	doer, err := upstreamHTTPDoer(noRedirectClient(s.policy.PooledClient()), s.tunnels, client.TunneledMcpServerID)
+	if err != nil {
+		return zero, newTokenRefreshError("the tunnel transport for this identity provider is unavailable", err)
+	}
+
+	resp, err := doer.Do(req)
 	if err != nil {
 		return zero, fmt.Errorf("post refresh: %w: %w", errRefreshUpstreamUnreachable, err)
 	}

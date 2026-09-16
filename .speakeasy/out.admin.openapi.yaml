@@ -3692,6 +3692,81 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       x-speakeasy-name-override: getSession
+  /admin/trial.changeEndDate:
+    post:
+      tags:
+        - admin
+      summary: changeTrialEndDate admin
+      description: Sets a running trial's end date to a future instant, shortening or extending it without restarting the trial.
+      operationId: adminChangeTrialEndDate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangeTrialEndDateRequestBody'
+      responses:
+        "200":
+          description: OK response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOrganization'
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'conflict: resource already exists'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: changeTrialEndDate
   /admin/trial.convert:
     post:
       tags:
@@ -4614,6 +4689,20 @@ components:
           type: string
       required:
         - organization_id
+    ChangeTrialEndDateRequestBody:
+      type: object
+      properties:
+        ends_at:
+          type: string
+          description: New trial end date in UTC.
+          format: date-time
+        id:
+          type: string
+          description: Organization ID.
+          minLength: 1
+      required:
+        - id
+        - ends_at
     CreateOrganizationRequestBody:
       type: object
       properties:
@@ -4732,6 +4821,10 @@ components:
           items:
             type: string
           description: Token endpoint auth methods advertised by the issuer.
+        tunneled_mcp_server_id:
+          type: string
+          description: Route this issuer's OAuth endpoint calls through an MCP tunnel in the same project. Platform admins only.
+          format: uuid
         userinfo_endpoint:
           type: string
           description: OpenID Connect userinfo endpoint. Discovered from the issuer metadata document; rejected unless an absolute https URL, or http on loopback.
@@ -5254,6 +5347,10 @@ components:
           type: array
           items:
             type: string
+        tunneled_mcp_server_id:
+          type: string
+          description: When set, calls to this issuer's OAuth endpoints ride this MCP tunnel instead of dialing directly.
+          format: uuid
         updated_at:
           type: string
           format: date-time
@@ -5697,6 +5794,9 @@ components:
           type: array
           items:
             type: string
+        tunneled_mcp_server_id:
+          type: string
+          description: Set or clear this issuer's MCP tunnel binding. Omission keeps the binding; an empty string clears it; any other value must be a tunneled MCP server in the same project. Platform admins only.
         userinfo_endpoint:
           type: string
           description: Set or clear the OpenID Connect userinfo endpoint. An empty string clears it to NULL; any other value must be an absolute https URL, or http on loopback.

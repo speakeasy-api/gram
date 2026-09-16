@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -83,6 +84,7 @@ type RefreshService struct {
 	db      *pgxpool.Pool
 	enc     *encryption.Client
 	policy  *guardian.Policy
+	tunnels *tunnelrouting.HTTPClient
 	locks   cache.Cache
 	metrics *remotesessionmetrics.Refresh
 
@@ -93,6 +95,8 @@ type RefreshService struct {
 
 	// issuerMetadata refreshes the issuer's stored metadata when a session is refreshed; nil leaves the row as is.
 	issuerMetadata *IssuerMetadataRefresher
+
+	assertions TokenEndpointAssertionSigner
 
 	// restatements tracks identity restatements detached from request-path refreshes.
 	restatements sync.WaitGroup
@@ -129,26 +133,34 @@ func WithRefreshSessionEnricher(enricher *SessionEnricher) RefreshOption {
 	}
 }
 
+// WithRefreshTokenEndpointAssertionSigner signs private_key_jwt assertions for
+// refresh grants.
+func WithRefreshTokenEndpointAssertionSigner(signer TokenEndpointAssertionSigner) RefreshOption {
+	return func(s *RefreshService) { s.assertions = signer }
+}
+
 // NewRefreshService builds the service; without a guardian policy no enricher
 // is wired and a refresh restates nothing from the access token.
-func NewRefreshService(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, enc *encryption.Client, policy *guardian.Policy, locks cache.Cache, opts ...RefreshOption) *RefreshService {
+func NewRefreshService(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, enc *encryption.Client, policy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, locks cache.Cache, opts ...RefreshOption) *RefreshService {
 	s := &RefreshService{
 		logger:         logger.With(attr.SlogComponent("remotesessions_refresh")),
 		db:             db,
 		enc:            enc,
 		policy:         policy,
+		tunnels:        tunnels,
 		locks:          locks,
 		metrics:        remotesessionmetrics.NewRefresh(logger, meterProvider),
 		idTokens:       NoIDTokenVerifier(),
 		issuerMetadata: nil,
 		enricher:       nil,
+		assertions:     unavailableTokenEndpointAssertionSigner{},
 		restatements:   sync.WaitGroup{},
 	}
 	for _, opt := range opts {
 		opt(s)
 	}
 	if s.enricher == nil && policy != nil {
-		s.enricher = NewSessionEnricher(logger, enc, policy, nil, nil, s.issuerMetadata)
+		s.enricher = NewSessionEnricher(logger, enc, policy, nil, nil, tunnels, s.issuerMetadata)
 	}
 	return s
 }

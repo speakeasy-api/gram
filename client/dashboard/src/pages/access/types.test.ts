@@ -45,27 +45,3 @@ describe("unrestricted resource types", () => {
     expect(unrestrictedResourceLabel("agent")).toBe("All agents");
   });
 });
-
-describe("system role slug resolution", () => {
-  // Mirrors the GrantDrawer logic: system roles use toLowerCase(),
-  // custom roles use toRoleSlug().
-  function resolveSlug(name: string, isSystem: boolean): string {
-    return isSystem ? name.toLowerCase() : toRoleSlug(name);
-  }
-
-  it("system Admin → admin (no org- prefix)", () => {
-    expect(resolveSlug("Admin", true)).toBe("admin");
-  });
-
-  it("system Member → member (no org- prefix)", () => {
-    expect(resolveSlug("Member", true)).toBe("member");
-  });
-
-  it("custom Editor → org-editor", () => {
-    expect(resolveSlug("Editor", false)).toBe("org-editor");
-  });
-
-  it("custom role with spaces → org-prefixed slug", () => {
-    expect(resolveSlug("API Developer", false)).toBe("org-api-developer");
-  });
-});

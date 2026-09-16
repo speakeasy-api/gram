@@ -3,18 +3,27 @@ import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { Text } from "@/components/ui/Text";
 import { useOrgRoutes } from "@/routes";
-import type { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
+import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
+import {
+  UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat,
+  type UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat as AuthAudienceFormat,
+} from "@gram/client/models/components/updateremotesessionclientform.js";
 import { invalidateAllOrganizationRemoteSessionClient } from "@gram/client/react-query/organizationRemoteSessionClient.js";
 import { useOrganizationRemoteSessionIssuer } from "@gram/client/react-query/organizationRemoteSessionIssuer.js";
 import { useUpdateOrganizationRemoteSessionClientMutation } from "@gram/client/react-query/updateOrganizationRemoteSessionClient.js";
 import { Button } from "@/components/ui/Button";
 import { useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { remoteSessionClientDisplayName } from "../../clientDisplay";
-import { TokenEndpointAuthMethodField } from "../../../mcp/x/tabs/settings/sections/authentication/IssuerFormFields";
 import {
+  ClientAssertionAudienceField,
+  TokenEndpointAuthMethodField,
+} from "../../../mcp/x/tabs/settings/sections/authentication/IssuerFormFields";
+import {
+  clientSecretUpdateValue,
+  isPrivateKeyJwtAuthMethod,
   narrowTokenEndpointAuthMethod,
   parseScopes,
 } from "../../../mcp/x/tabs/settings/sections/authentication/issuerFormUtils";
@@ -30,9 +39,14 @@ export function SettingsTab({
 }): JSX.Element {
   const orgRoutes = useOrgRoutes();
   const queryClient = useQueryClient();
+  const persistedAuthMethod =
+    narrowTokenEndpointAuthMethod(client.tokenEndpointAuthMethod, true) ?? "";
   const [authMethod, setAuthMethod] = useState<
     CreateRemoteSessionClientFormTokenEndpointAuthMethod | ""
-  >(narrowTokenEndpointAuthMethod(client.tokenEndpointAuthMethod) ?? "");
+  >(persistedAuthMethod);
+  const [authAudienceFormat, setAuthAudienceFormat] = useState<
+    AuthAudienceFormat | undefined
+  >(client.tokenEndpointAuthAudienceFormat);
   const [scope, setScope] = useState((client.scope ?? []).join(", "));
   const [audience, setAudience] = useState(client.audience ?? "");
   const [clientSecret, setClientSecret] = useState("");
@@ -48,6 +62,35 @@ export function SettingsTab({
   // and be refused for having no set attached. AIM-156 makes that method
   // selectable; the sequencing is here so it is already right when it does.
   const [keySetPending, setKeySetPending] = useState(false);
+  const privateKeyJwtSelected = isPrivateKeyJwtAuthMethod(authMethod);
+  const privateKeyJwtMissingKeySet =
+    privateKeyJwtSelected && client.jsonWebKeySetId == null;
+
+  // The key-set field saves independently. If a detach succeeds while
+  // private_key_jwt is only a local, unsaved selection, its refetch removes the
+  // prerequisite beneath this draft. Reconcile to the persisted method so the
+  // next Save cannot submit a combination the server must reject. This also
+  // handles the set disappearing in another tab.
+  useEffect(() => {
+    if (client.jsonWebKeySetId != null) return;
+
+    setAuthMethod((current) => {
+      if (
+        !isPrivateKeyJwtAuthMethod(current) ||
+        isPrivateKeyJwtAuthMethod(persistedAuthMethod)
+      ) {
+        return current;
+      }
+      return persistedAuthMethod;
+    });
+  }, [client.jsonWebKeySetId, persistedAuthMethod]);
+
+  const handleAuthMethodChange = (
+    method: CreateRemoteSessionClientFormTokenEndpointAuthMethod | "",
+  ) => {
+    setAuthMethod(method);
+    if (isPrivateKeyJwtAuthMethod(method)) setClientSecret("");
+  };
 
   const update = useUpdateOrganizationRemoteSessionClientMutation({
     onSuccess: async () => {
@@ -70,9 +113,12 @@ export function SettingsTab({
         updateRemoteSessionClientForm: {
           id: client.id,
           tokenEndpointAuthMethod: authMethod || undefined,
+          tokenEndpointAuthAudienceFormat: privateKeyJwtSelected
+            ? authAudienceFormat
+            : undefined,
           scope: parseScopes(scope),
           audience: audience.trim() || undefined,
-          clientSecret: clientSecret.trim() || undefined,
+          clientSecret: clientSecretUpdateValue(authMethod, clientSecret),
         },
       },
     });
@@ -83,8 +129,18 @@ export function SettingsTab({
       <div className="flex flex-col gap-4">
         <TokenEndpointAuthMethodField
           value={authMethod}
-          onChange={setAuthMethod}
+          onChange={handleAuthMethodChange}
+          allowPrivateKeyJwt={client.jsonWebKeySetId != null}
         />
+        {privateKeyJwtSelected && (
+          <ClientAssertionAudienceField
+            value={
+              authAudienceFormat ??
+              UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat.Issuer
+            }
+            onChange={setAuthAudienceFormat}
+          />
+        )}
         {/* org:admin like the Save button below: attach and detach are
             org:admin on the server, so a reader must not get a live control
             whose every change 403s. */}
@@ -103,24 +159,33 @@ export function SettingsTab({
           <Label>Audience</Label>
           <Input value={audience} onChange={setAudience} />
         </div>
-        <div className="flex flex-col gap-1.5">
-          <Label>Rotate client secret</Label>
-          <Input
-            type="password"
-            value={clientSecret}
-            onChange={setClientSecret}
-            placeholder="Enter a new secret to rotate; leave blank to keep current"
-          />
+        {privateKeyJwtSelected ? (
           <Text small muted>
-            The secret is encrypted at rest and never displayed. Leave blank to
-            keep the existing secret.
+            Any existing client secret is retained but not used with
+            private_key_jwt.
           </Text>
-        </div>
+        ) : (
+          <div className="flex flex-col gap-1.5">
+            <Label>Rotate client secret</Label>
+            <Input
+              type="password"
+              value={clientSecret}
+              onChange={setClientSecret}
+              placeholder="Enter a new secret to rotate; leave blank to keep current"
+            />
+            <Text small muted>
+              The secret is encrypted at rest and never displayed. Leave blank
+              to keep the existing secret.
+            </Text>
+          </div>
+        )}
         <div>
           <RequireScope scope="org:admin" level="component">
             <Button
               onClick={handleSave}
-              disabled={update.isPending || keySetPending}
+              disabled={
+                update.isPending || keySetPending || privateKeyJwtMissingKeySet
+              }
             >
               <Button.Text>
                 {update.isPending ? "Saving…" : "Save changes"}

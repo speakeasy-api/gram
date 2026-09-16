@@ -1032,4 +1032,21 @@ var _ = Service("admin", func() {
 
 		Meta("openapi:operationId", "adminStartTrial")
 	})
+
+	Method("changeTrialEndDate", func() {
+		Description("Sets a running trial's end date to a future instant, shortening or extending it without restarting the trial.")
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("id", "ends_at")
+			Attribute("id", String, "Organization ID.", func() { MinLength(1) })
+			Attribute("ends_at", String, "New trial end date in UTC.", func() { Format(FormatDateTime) })
+		})
+		Result(AdminOrganization)
+		HTTP(func() {
+			POST("/admin/trial.changeEndDate")
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "adminChangeTrialEndDate")
+	})
+
 })

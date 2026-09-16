@@ -39,6 +39,9 @@ func (t *TemporalChatTitleGenerator) ScheduleChatTitleGeneration(ctx context.Con
 }
 
 func ExecuteGenerateChatTitleWorkflow(ctx context.Context, env *tenv.Environment, params GenerateChatTitleParams) (client.WorkflowRun, error) {
+	if env == nil {
+		return nil, tenv.ErrNotConfigured
+	}
 	id := fmt.Sprintf("v1:generate-chat-title:%s", params.ChatID)
 	return env.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:                    id,

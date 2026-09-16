@@ -248,6 +248,7 @@ var VerifyCimdURLResult = Type("VerifyCimdURLResult", func() {
 	Attribute("reason", String, "Stable machine label for the rule that rejected the document, e.g. client_id_mismatch. Set only for invalid_url and invalid_document.")
 	Attribute("detail", String, "Human-readable explanation, safe to display to the operator.")
 	Attribute("client_name", String, "The document's client_name, set only when verified. Lets an operator confirm the URL names the client they intended.")
+	Attribute("document", String, "The validated document rendered as JSON, set only when verified. Re-encoded from what Gram parsed rather than echoed from the wire, so it shows what the authorization server will act on.")
 
 	Required("verified", "outcome", "detail")
 })

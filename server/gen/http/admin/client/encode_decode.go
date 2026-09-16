@@ -11686,6 +11686,240 @@ func DecodeStartTrialResponse(decoder func(*http.Response) goahttp.Decoder, rest
 	}
 }
 
+// BuildChangeTrialEndDateRequest instantiates a HTTP request object with
+// method and path set to call the "admin" service "changeTrialEndDate" endpoint
+func (c *Client) BuildChangeTrialEndDateRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ChangeTrialEndDateAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "changeTrialEndDate", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeChangeTrialEndDateRequest returns an encoder for requests sent to the
+// admin changeTrialEndDate server.
+func EncodeChangeTrialEndDateRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.ChangeTrialEndDatePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "changeTrialEndDate", "*admin.ChangeTrialEndDatePayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewChangeTrialEndDateRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "changeTrialEndDate", err)
+		}
+		return nil
+	}
+}
+
+// DecodeChangeTrialEndDateResponse returns a decoder for responses returned by
+// the admin changeTrialEndDate endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeChangeTrialEndDateResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeChangeTrialEndDateResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ChangeTrialEndDateResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "changeTrialEndDate", err)
+			}
+			err = ValidateChangeTrialEndDateResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "changeTrialEndDate", err)
+			}
+			res := NewChangeTrialEndDateAdminOrganizationOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ChangeTrialEndDateUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "changeTrialEndDate", err)
+			}
+			err = ValidateChangeTrialEndDateUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "changeTrialEndDate", err)
+			}
+			return nil, NewChangeTrialEndDateUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ChangeTrialEndDateForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "changeTrialEndDate", err)
+			}
+			err = ValidateChangeTrialEndDateForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "changeTrialEndDate", err)
+			}
+			return nil, NewChangeTrialEndDateForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ChangeTrialEndDateBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "changeTrialEndDate", err)
+			}
+			err = ValidateChangeTrialEndDateBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "changeTrialEndDate", err)
+			}
+			return nil, NewChangeTrialEndDateBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ChangeTrialEndDateNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "changeTrialEndDate", err)
+			}
+			err = ValidateChangeTrialEndDateNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "changeTrialEndDate", err)
+			}
+			return nil, NewChangeTrialEndDateNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ChangeTrialEndDateConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "changeTrialEndDate", err)
+			}
+			err = ValidateChangeTrialEndDateConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "changeTrialEndDate", err)
+			}
+			return nil, NewChangeTrialEndDateConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ChangeTrialEndDateUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "changeTrialEndDate", err)
+			}
+			err = ValidateChangeTrialEndDateUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "changeTrialEndDate", err)
+			}
+			return nil, NewChangeTrialEndDateUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ChangeTrialEndDateInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "changeTrialEndDate", err)
+			}
+			err = ValidateChangeTrialEndDateInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "changeTrialEndDate", err)
+			}
+			return nil, NewChangeTrialEndDateInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ChangeTrialEndDateInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "changeTrialEndDate", err)
+				}
+				err = ValidateChangeTrialEndDateInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "changeTrialEndDate", err)
+				}
+				return nil, NewChangeTrialEndDateInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ChangeTrialEndDateUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "changeTrialEndDate", err)
+				}
+				err = ValidateChangeTrialEndDateUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "changeTrialEndDate", err)
+				}
+				return nil, NewChangeTrialEndDateUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "changeTrialEndDate", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ChangeTrialEndDateGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "changeTrialEndDate", err)
+			}
+			err = ValidateChangeTrialEndDateGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "changeTrialEndDate", err)
+			}
+			return nil, NewChangeTrialEndDateGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "changeTrialEndDate", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalAdminOrganizationMemberResponseBodyToAdminAdminOrganizationMember
 // builds a value of type *admin.AdminOrganizationMember from a value of type
 // *AdminOrganizationMemberResponseBody.
@@ -11868,6 +12102,7 @@ func unmarshalRemoteSessionIssuerResponseBodyToTypesRemoteSessionIssuer(v *Remot
 		Oidc:                              *v.Oidc,
 		Passthrough:                       *v.Passthrough,
 		ClientIDMetadataDocumentSupported: *v.ClientIDMetadataDocumentSupported,
+		TunneledMcpServerID:               v.TunneledMcpServerID,
 		UserinfoEndpoint:                  v.UserinfoEndpoint,
 		IntrospectionEndpoint:             v.IntrospectionEndpoint,
 		BackchannelLogoutSupported:        v.BackchannelLogoutSupported,

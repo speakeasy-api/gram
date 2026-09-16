@@ -162,20 +162,24 @@ func TestCreateRemoteSessionClient_Manual_WithAuthMethodPost(t *testing.T) {
 	clientID := "post-client-id"
 	clientSecret := "post-client-secret"
 	authMethod := "client_secret_post"
+	authAudienceFormat := "token_endpoint"
 
 	result, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
-		RemoteSessionIssuerID:   issuerID,
-		UserSessionIssuerIds:    []string{userIssuerID},
-		ClientID:                clientID,
-		ClientSecret:            &clientSecret,
-		TokenEndpointAuthMethod: &authMethod,
-		SessionToken:            nil,
-		ApikeyToken:             nil,
-		ProjectSlugInput:        nil,
+		RemoteSessionIssuerID:           issuerID,
+		UserSessionIssuerIds:            []string{userIssuerID},
+		ClientID:                        clientID,
+		ClientSecret:                    &clientSecret,
+		TokenEndpointAuthMethod:         &authMethod,
+		TokenEndpointAuthAudienceFormat: &authAudienceFormat,
+		SessionToken:                    nil,
+		ApikeyToken:                     nil,
+		ProjectSlugInput:                nil,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, result.TokenEndpointAuthMethod)
 	require.Equal(t, "client_secret_post", *result.TokenEndpointAuthMethod)
+	require.NotNil(t, result.TokenEndpointAuthAudienceFormat)
+	require.Equal(t, "token_endpoint", *result.TokenEndpointAuthAudienceFormat)
 
 	// Round-trip via Get to confirm the column survives a read after the
 	// transaction closes.
@@ -188,6 +192,8 @@ func TestCreateRemoteSessionClient_Manual_WithAuthMethodPost(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, fetched.TokenEndpointAuthMethod)
 	require.Equal(t, "client_secret_post", *fetched.TokenEndpointAuthMethod)
+	require.NotNil(t, fetched.TokenEndpointAuthAudienceFormat)
+	require.Equal(t, "token_endpoint", *fetched.TokenEndpointAuthAudienceFormat)
 }
 
 func TestCreateRemoteSessionClient_Manual_AuthMethodOmittedStaysNil(t *testing.T) {
@@ -606,17 +612,21 @@ func TestUpdateRemoteSessionClient_SwitchAuthMethod(t *testing.T) {
 	require.Nil(t, created.TokenEndpointAuthMethod)
 
 	post := "client_secret_post"
+	issuerAudience := "issuer"
 	updated, err := ti.service.UpdateRemoteSessionClient(ctx, &clientsgen.UpdateRemoteSessionClientPayload{
-		ID:                      created.ID,
-		ClientSecret:            nil,
-		TokenEndpointAuthMethod: &post,
-		SessionToken:            nil,
-		ApikeyToken:             nil,
-		ProjectSlugInput:        nil,
+		ID:                              created.ID,
+		ClientSecret:                    nil,
+		TokenEndpointAuthMethod:         &post,
+		TokenEndpointAuthAudienceFormat: &issuerAudience,
+		SessionToken:                    nil,
+		ApikeyToken:                     nil,
+		ProjectSlugInput:                nil,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, updated.TokenEndpointAuthMethod)
 	require.Equal(t, "client_secret_post", *updated.TokenEndpointAuthMethod)
+	require.NotNil(t, updated.TokenEndpointAuthAudienceFormat)
+	require.Equal(t, "issuer", *updated.TokenEndpointAuthAudienceFormat)
 }
 
 func TestCreateRemoteSessionClient_PersistsScopeOverride(t *testing.T) {

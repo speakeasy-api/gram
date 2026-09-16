@@ -194,7 +194,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 
 	registerReadTools(reg, reader, cursorKeyMaterial)
 	if postgresReader, ok := reader.(*PostgresReader); ok {
-		registerRiskToolsWithMutations(reg, postgresReader.riskReads, riskMutations)
+		registerRiskToolsWithMutations(reg, postgresReader.riskReads, postgresReader.riskAnalysisStatus, riskMutations)
 		if postgresReader.dataExports == nil {
 			registerUnavailableDataExportTools(reg)
 		} else {
@@ -217,7 +217,9 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		}
 		registerShadowInventoryTools(reg, postgresReader.shadowInventory)
 		registerShadowDecisionTool(reg, postgresReader.shadowDecisions)
+		registerShadowAITools(reg, postgresReader.shadowAI)
 	} else {
+		registerRiskAnalysisStatusTool(reg, nil)
 		registerUnavailableRiskToolsWithMutations(reg, riskMutations)
 		registerUnavailableDataExportTools(reg)
 		registerUnavailableDataExportMutationTool(reg)
@@ -225,6 +227,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		registerUnavailableOrganizationEventTools(reg)
 		registerUnavailableShadowInventoryTools(reg)
 		registerShadowDecisionTool(reg, nil)
+		registerUnavailableShadowAITools(reg)
 	}
 	registerSetupResources(reg, setupResources, time.Now)
 	if registrations == nil || !registrations.budgets.Docs.valid() {

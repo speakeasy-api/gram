@@ -46,7 +46,11 @@ func NewGlobalService(logger *slog.Logger, tp trace.TracerProvider, mp metric.Me
 		db:              db,
 		enc:             enc,
 		policy:          policy,
-		revoker:         NewUpstreamRevoker(logger, tp, mp, db, enc, policy),
+		tunnels:         nil,
 		jwksResolver:    jwks.NewResolver(policy, mp, logger),
+		// No tunnel transport: a global identity provider cannot be bound to a
+		// project tunnel, so revocation always dials directly. A binding that
+		// somehow existed would fail closed rather than silently dial out.
+		revoker: NewUpstreamRevoker(logger, tp, mp, db, enc, policy, nil),
 	}
 }

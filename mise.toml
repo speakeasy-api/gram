@@ -26,6 +26,7 @@ golangci-lint = "2.13.2"
 gomigrate = "4.19.1"
 gum = "0.17.0"
 jq = "1.8.2"
+stripe = "1.50.11"
 melange = "0.56.5"
 # Authoritative Node pin. `.node-version` mirrors it and must be kept in sync:
 # aube resolves its own runtime and cannot read this file, so without that

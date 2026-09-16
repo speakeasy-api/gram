@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -154,6 +155,12 @@ type enrichmentTarget struct {
 
 	// issuerUse is the issuer row snapshot a reactive metadata refresh plans from.
 	issuerUse IssuerMetadataUse
+
+	// tunneledMcpServerID is the issuer's transport binding. Every call this
+	// target names — userinfo, introspection, and the key set that verifies a
+	// signed introspection response — is served from inside the customer
+	// network when it is set.
+	tunneledMcpServerID uuid.NullUUID
 }
 
 func enrichmentTargetFromClient(row remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow, organizationID string) enrichmentTarget {
@@ -171,6 +178,7 @@ func enrichmentTargetFromClient(row remotesessions_repo.GetRemoteSessionClientWi
 		clientSecretEncrypted:        conv.FromPGTextOrEmpty[string](row.ClientSecretEncrypted),
 		tokenEndpointAuth:            conv.FromPGTextOrEmpty[string](row.TokenEndpointAuthMethod),
 		issuerUse:                    issuerUseFromClientRow(row),
+		tunneledMcpServerID:          row.TunneledMcpServerID,
 	}
 }
 
@@ -262,6 +270,10 @@ type SessionEnricher struct {
 	// client is shared by every call, the same pooled transport the revoker holds.
 	client *guardian.HTTPClient
 
+	// tunnels carries calls to issuers bound to a tunneled MCP server; nil
+	// leaves every call on direct egress, which only tests want.
+	tunnels *tunnelrouting.HTTPClient
+
 	// limiter paces calls per issuer and organization; nil leaves them unpaced, which only tests want.
 	limiter *ratelimit.Limiter
 
@@ -273,12 +285,14 @@ type SessionEnricher struct {
 }
 
 // NewSessionEnricher binds the transport, client-secret decryption, per-issuer
-// budget, key resolver, and issuer metadata refresher an enrichment call needs.
-func NewSessionEnricher(logger *slog.Logger, enc *encryption.Client, policy *guardian.Policy, keys *jwks.KeyResolver, limiter *ratelimit.Limiter, issuerMetadata *IssuerMetadataRefresher) *SessionEnricher {
+// budget, key resolver, tunnel transport, and issuer metadata refresher an
+// enrichment call needs.
+func NewSessionEnricher(logger *slog.Logger, enc *encryption.Client, policy *guardian.Policy, keys *jwks.KeyResolver, limiter *ratelimit.Limiter, tunnels *tunnelrouting.HTTPClient, issuerMetadata *IssuerMetadataRefresher) *SessionEnricher {
 	return &SessionEnricher{
 		logger:         logger.With(attr.SlogComponent("remote-session-enrichment")),
 		enc:            enc,
 		client:         noRedirectClient(policy.PooledClient()),
+		tunnels:        tunnels,
 		limiter:        limiter,
 		keys:           keys,
 		issuerMetadata: issuerMetadata,
@@ -311,7 +325,14 @@ func introspectionAuthMethod(advertised []string, tokenEndpointMethod string, cl
 		case TokenEndpointAuthMethodPrivateKeyJWT:
 		}
 	}
-	return ResolveTokenEndpointAuthMethod(tokenEndpointMethod, clientSecret)
+	method, err := ResolveTokenEndpointAuthMethod(tokenEndpointMethod, clientSecret)
+	if err != nil {
+		return "", err
+	}
+	if method == TokenEndpointAuthMethodPrivateKeyJWT {
+		return "", fmt.Errorf("private_key_jwt introspection authentication is not supported")
+	}
+	return method, nil
 }
 
 // run performs one enrichment call: the endpoint and budget gates, the request build, and the read.
@@ -342,13 +363,20 @@ func (e *SessionEnricher) run(ctx context.Context, target enrichmentTarget, name
 	ctx, cancel := context.WithTimeout(ctx, enrichmentInterfaceBudget)
 	defer cancel()
 
+	doer, err := upstreamHTTPDoer(e.client, e.tunnels, target.tunneledMcpServerID)
+	if err != nil {
+		logger.WarnContext(ctx, "enrichment transport unavailable", attr.SlogError(err))
+		res.fail("transport unavailable")
+		return none, res
+	}
+
 	req, err := build(ctx)
 	if err != nil {
 		logger.WarnContext(ctx, "enrichment request not built", attr.SlogError(err))
 		res.fail("request not built")
 		return none, res
 	}
-	resp, err := e.client.Do(req)
+	resp, err := doer.Do(req)
 	if err != nil {
 		logger.WarnContext(ctx, "enrichment interface unreachable", attr.SlogError(err))
 		res.fail("unreachable")
@@ -436,9 +464,13 @@ func (e *SessionEnricher) jwtAccessToken(ctx context.Context, target enrichmentT
 	}
 	ctx, cancel := context.WithTimeout(ctx, idTokenVerifyBudget)
 	defer cancel()
+	transport, err := issuerTunnelTransport(e.tunnels, target.tunneledMcpServerID)
+	if err != nil {
+		return out
+	}
 	var claims jwt.Claims
 	var all map[string]json.RawMessage
-	header, err := verifyIssuerSignedJWTWithKeyPolicy(ctx, e.keys, target.jwksURI, target.issuerID.String(), accessToken, jwks.AllowedSignatureAlgorithms(), validateJWTVerificationKeyStrength, &claims, &all)
+	header, err := verifyIssuerSignedJWTWithKeyPolicy(ctx, e.keys, target.jwksURI, target.issuerID.String(), transport, accessToken, jwks.AllowedSignatureAlgorithms(), validateJWTVerificationKeyStrength, &claims, &all)
 	if err != nil {
 		if ctx.Err() != nil || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) || errors.Is(err, errJWTKeySetUnavailable) {
 			return out
@@ -584,7 +616,16 @@ func (e *SessionEnricher) introspect(ctx context.Context, target enrichmentTarge
 		form := url.Values{}
 		form.Set("token", token)
 		form.Set("token_type_hint", hint)
-		req, err := newTokenEndpointRequest(ctx, target.introspectionEndpoint, form, authMethod, target.externalClientID, clientSecret)
+		req, err := newTokenEndpointRequest(ctx, target.introspectionEndpoint, form, tokenEndpointClientAuth{
+			Method:                authMethod,
+			RemoteSessionClientID: uuid.Nil,
+			OrganizationID:        "",
+			JSONWebKeySetID:       uuid.Nil,
+			ClientID:              target.externalClientID,
+			ClientSecret:          clientSecret,
+			AssertionAudience:     "",
+			AssertionSigner:       unavailableTokenEndpointAssertionSigner{},
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -640,11 +681,15 @@ func (e *SessionEnricher) decodeIntrospection(ctx context.Context, target enrich
 	if e.keys == nil || target.jwksURI == "" {
 		return nil, errors.New("signed introspection response cannot be verified without the issuer's key set")
 	}
+	transport, err := issuerTunnelTransport(e.tunnels, target.tunneledMcpServerID)
+	if err != nil {
+		return nil, fmt.Errorf("select introspection key set transport: %w", err)
+	}
 	var claims jwt.Claims
 	var envelope struct {
 		TokenIntrospection map[string]json.RawMessage `json:"token_introspection"`
 	}
-	header, err := verifyIssuerSignedJWT(ctx, e.keys, target.jwksURI, target.issuerID.String(), strings.TrimSpace(string(answer.body)), jwks.AllowedSignatureAlgorithms(), &claims, &envelope)
+	header, err := verifyIssuerSignedJWT(ctx, e.keys, target.jwksURI, target.issuerID.String(), transport, strings.TrimSpace(string(answer.body)), jwks.AllowedSignatureAlgorithms(), &claims, &envelope)
 	if err != nil {
 		return nil, err
 	}

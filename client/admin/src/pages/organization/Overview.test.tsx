@@ -218,7 +218,7 @@ describe("Overview", () => {
       name: `Mark ${ORG.name} as converted`,
     });
     const extend = within(trial).getByRole("button", {
-      name: `Extend trial for ${ORG.name}`,
+      name: `Change end date for ${ORG.name}`,
     });
     expect(buttons.indexOf(convert)).toBeLessThan(buttons.indexOf(extend));
     expect(convert.className).toContain("w-full");
@@ -1357,7 +1357,7 @@ describe("Overview", () => {
     const danger = panelNamed("Danger zone");
     expect(
       within(trial).getByRole("button", {
-        name: `Extend trial for ${ORG.name}`,
+        name: `Change end date for ${ORG.name}`,
       }),
     ).toBeTruthy();
     expect(
@@ -1368,7 +1368,7 @@ describe("Overview", () => {
     ).toBeTruthy();
     expect(
       within(danger).queryByRole("button", {
-        name: `Extend trial for ${ORG.name}`,
+        name: `Change end date for ${ORG.name}`,
       }),
     ).toBeNull();
   });

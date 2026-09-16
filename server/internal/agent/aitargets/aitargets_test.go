@@ -15,23 +15,39 @@ func TestDefaultsAreValid(t *testing.T) {
 	t.Parallel()
 
 	defaults := aitargets.Defaults()
-	require.Len(t, defaults, 11)
+	require.Len(t, defaults, 36)
 	require.NoError(t, aitargets.Validate(defaults))
-	for _, target := range defaults {
-		require.True(t, target.Enabled, "default %q must be enabled", target.ID)
-	}
 }
 
 func TestDefaultsReturnsACopy(t *testing.T) {
 	t.Parallel()
 
+	// Indexed by id rather than position: Defaults is derived from the
+	// aivendors registry now, so declaration order is the registry's business
+	// and a reordering there must not look like a copying bug here.
+	withBinaries := func(targets []aitargets.Target) *aitargets.Target {
+		for i := range targets {
+			if len(targets[i].Signatures.Binaries) > 0 {
+				return &targets[i]
+			}
+		}
+		return nil
+	}
+
 	first := aitargets.Defaults()
 	first[0].DisplayName = "mutated"
-	first[1].Signatures.Binaries[0] = "mutated"
+	mutable := withBinaries(first)
+	require.NotNil(t, mutable)
+	mutatedID := mutable.ID
+	mutable.Signatures.Binaries[0] = "mutated"
 
 	fresh := aitargets.Defaults()
 	require.NotEqual(t, "mutated", fresh[0].DisplayName)
-	require.NotEqual(t, "mutated", fresh[1].Signatures.Binaries[0])
+	for _, target := range fresh {
+		if target.ID == mutatedID {
+			require.NotEqual(t, "mutated", target.Signatures.Binaries[0])
+		}
+	}
 }
 
 func TestSnapshotSortsResolvesAndCopies(t *testing.T) {
@@ -90,7 +106,6 @@ func TestEnvelopeWireShape(t *testing.T) {
 			ProcessNames: []string{"Cursor"},
 		},
 		VersionHint: &aitargets.VersionHint{PlistKey: "CFBundleShortVersionString"},
-		Enabled:     true,
 	}})
 
 	data, err := json.Marshal(snapshot.Envelope())
@@ -108,7 +123,9 @@ func TestEnvelopeWireShape(t *testing.T) {
 	require.Len(t, targets, 1)
 	target, ok := targets[0].(map[string]any)
 	require.True(t, ok)
-	require.Equal(t, []string{"category", "display_name", "enabled", "id", "signatures", "version_hint"}, slices.Sorted(maps.Keys(target)))
+	// No enabled flag on the wire: presence in this list is what makes a
+	// target probed for, so there is nothing for a second field to say.
+	require.Equal(t, []string{"category", "display_name", "id", "signatures", "version_hint"}, slices.Sorted(maps.Keys(target)))
 	signatures, ok := target["signatures"].(map[string]any)
 	require.True(t, ok)
 	require.Equal(t, []string{"binaries", "bundle_ids", "config_dirs", "process_names"}, slices.Sorted(maps.Keys(signatures)))
