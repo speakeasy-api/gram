@@ -4,6 +4,7 @@ import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { Badge } from "@/components/ui/Badge";
 import { REVEAL_DENIED_REASON } from "@/pages/security/unmask";
 import {
+  getMatchStrings,
   getRiskBadgeLabel,
   hasHiddenMatch,
   shouldShowRiskRuleId,
@@ -11,19 +12,27 @@ import {
 
 /** Where the flagged message ended up relative to the loaded transcript. */
 type Location =
-  | "highlighted" // on screen and ringed, with its span marked
+  | "highlighted" // on screen and ringed, with its matched span marked
+  | "wholeMessage" // on screen and ringed, but the finding marks no span in it
   | "masked" // on screen and ringed, but the matched value was withheld
   | "unloaded"; // not in the loaded window, so there is nothing to ring yet
 
 function locationOf(finding: RiskResult, located: boolean): Location {
   if (!located) return "unloaded";
-  return hasHiddenMatch([finding]) ? "masked" : "highlighted";
+  if (hasHiddenMatch([finding])) return "masked";
+  // A judge finding's "match" is the whole event it read, and account_identity
+  // matches session metadata — neither marks a span, so promising a
+  // highlighted value would send the reader hunting for one.
+  if (getMatchStrings([finding]).length === 0) return "wholeMessage";
+  return "highlighted";
 }
 
 function sentenceFor(location: Location): string {
   switch (location) {
     case "highlighted":
       return "The matched value is highlighted in the message below.";
+    case "wholeMessage":
+      return "The message it flagged is highlighted below.";
     case "masked":
       return `The message it was found in is highlighted below, but the value itself stays masked. ${REVEAL_DENIED_REASON}`;
     case "unloaded":
