@@ -1,0 +1,6 @@
+---
+"server": minor
+"dashboard": patch
+---
+
+Remote session issuers can be bound to a tunneled MCP server, so Gram routes persisted issuer metadata refreshes and back-channel OAuth calls through the tunnel when the authorization server is unreachable from the public internet. That covers the whole back channel: the code exchange, token refresh, revocation, dynamic client registration, the issuer's JWK Set, and the userinfo and introspection calls that name a session's owner. Every issuer endpoint routed through the tunnel must be reachable from the same local origin as `TUNNEL_LOCAL_MCP_URL`; the agent pins tunneled requests to that origin while preserving their paths and queries. Discover by URL still uses Gram's direct egress; private issuer endpoints, including the DCR endpoint, can be entered manually in issuer settings. Platform admins can manage the binding from the issuer settings page; tunnel bindings and tunneled dynamic client registration remain platform-admin-only. Adding an MCP Catalogue server whose provider is already set up as a bound issuer is refused rather than registered over direct egress. Replacing a client registration the identity provider no longer recognizes also rides the binding, so a private provider's clients recover on their own instead of failing every login until an administrator re-registers them by hand.

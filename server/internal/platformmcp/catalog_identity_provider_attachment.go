@@ -153,13 +153,22 @@ func (s *CatalogIdentityProviderAttachmentService) attachLocked(ctx context.Cont
 		return CatalogIdentityProviderAttachmentResult{Attached: true, ProviderURL: metadata.Issuer}, nil
 	}
 
+	// Resolved before registering so a provider this flow cannot serve costs no
+	// upstream client: a dynamic registration may have no portable delete API,
+	// so one made and then abandoned is a client left behind at the provider.
+	existing, reuse, err := s.reusableIssuer(ctx, principal, project, metadata.Issuer)
+	if err != nil {
+		return CatalogIdentityProviderAttachmentResult{}, err
+	}
+
 	// This is server-to-server; any client secret stays in the stack frame only
 	// until createAndAttachClient encrypts it for persistence.
 	scope := strings.Join(resourceMetadata.ScopesSupported, " ")
-	registered, err := remotesessions.RegisterDynamicClient(ctx, s.policy, s.serverURL, remotesessions.ProxyRegisterRequest{
+	registered, err := remotesessions.RegisterDynamicClient(ctx, s.policy, nil, s.serverURL, remotesessions.ProxyRegisterRequest{
 		RegistrationEndpoint:    metadata.RegistrationEndpoint,
 		Scope:                   optionalString(scope),
 		TokenEndpointAuthMethod: optionalString(browserCatalogDCRAuthMethod),
+		TunneledMcpServerID:     nil,
 	})
 	if err != nil {
 		return CatalogIdentityProviderAttachmentResult{}, identityProviderDynamicRegistrationError(err)
@@ -167,9 +176,12 @@ func (s *CatalogIdentityProviderAttachmentService) attachLocked(ctx context.Cont
 	if !validBrowserCatalogDynamicClient(registered) {
 		return CatalogIdentityProviderAttachmentResult{}, ErrIdentityProviderAttachmentUnsupported
 	}
-	issuer, err := s.ensureIssuer(ctx, principal, project, registrationID, metadata)
-	if err != nil {
-		return CatalogIdentityProviderAttachmentResult{}, err
+	issuer := existing
+	if !reuse {
+		issuer, err = s.createIssuer(ctx, principal, project, registrationID, metadata)
+		if err != nil {
+			return CatalogIdentityProviderAttachmentResult{}, err
+		}
 	}
 
 	attached, err := s.createAndAttachClient(ctx, principal, project, registration.UserSessionIssuerID.UUID, issuer.ID, registered, remote.Url, resourceMetadata)
@@ -215,29 +227,50 @@ func (s *CatalogIdentityProviderAttachmentService) matchingAttachment(ctx contex
 	return true, nil
 }
 
-// ensureIssuer reuses the project's issuer for metadata.Issuer or creates one. The issuer carries authorization-server data only; the resource's display members live on the client.
-func (s *CatalogIdentityProviderAttachmentService) ensureIssuer(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID, metadata remotesessions.DiscoveredIssuerMetadata) (remotesessionsrepo.RemoteSessionIssuer, error) {
+// reusableIssuer resolves the project-owned issuer this attachment should reuse
+// for issuerURL, reporting false when none exists and the caller must create one.
+//
+// A stored issuer bound to a tunneled MCP server is refused rather than reused.
+// Everything this flow does reaches the provider over Gram's direct egress —
+// the metadata discovery above and the dynamic client registration below — but
+// once the client hangs off a tunnel-bound issuer, its refreshes and
+// revocations go out over the tunnel instead. An issuer is bound precisely
+// because it is unreachable from the cloud, so that client would be registered
+// against an authorization server the rest of its life cannot reach. A private
+// provider is set up from the issuer settings page, where the registration
+// takes the same route the binding names.
+func (s *CatalogIdentityProviderAttachmentService) reusableIssuer(ctx context.Context, principal Principal, project ResolvedProject, issuerURL string) (remotesessionsrepo.RemoteSessionIssuer, bool, error) {
+	var none remotesessionsrepo.RemoteSessionIssuer
 	issuers, err := remotesessionsrepo.New(s.db).ListRemoteSessionIssuersByIssuerURL(ctx, remotesessionsrepo.ListRemoteSessionIssuersByIssuerURLParams{
-		Issuers:               []string{metadata.Issuer},
+		Issuers:               []string{issuerURL},
 		ProjectID:             conv.ToNullUUID(project.ID),
 		IncludeOrganizational: false,
 		OrganizationID:        conv.ToPGText(principal.OrganizationID),
 		IncludeGlobal:         false,
 	})
 	if err != nil {
-		return remotesessionsrepo.RemoteSessionIssuer{}, fmt.Errorf("find registered identity provider: %w", err)
-	}
-	if len(issuers) == 1 {
-		issuer := issuers[0]
-		if !issuer.ProjectID.Valid || issuer.ProjectID.UUID != project.ID || !issuer.OrganizationID.Valid || issuer.OrganizationID.String != principal.OrganizationID || !issuer.AuthorizationEndpoint.Valid || issuer.AuthorizationEndpoint.String == "" || !issuer.TokenEndpoint.Valid || issuer.TokenEndpoint.String == "" || !issuer.RegistrationEndpoint.Valid || issuer.RegistrationEndpoint.String == "" {
-			return remotesessionsrepo.RemoteSessionIssuer{}, ErrIdentityProviderAttachmentConflict
-		}
-		return issuer, nil
+		return none, false, fmt.Errorf("find registered identity provider: %w", err)
 	}
 	if len(issuers) > 1 {
-		return remotesessionsrepo.RemoteSessionIssuer{}, ErrIdentityProviderAttachmentConflict
+		return none, false, ErrIdentityProviderAttachmentConflict
 	}
+	if len(issuers) == 0 {
+		return none, false, nil
+	}
+	issuer := issuers[0]
+	if !issuer.ProjectID.Valid || issuer.ProjectID.UUID != project.ID || !issuer.OrganizationID.Valid || issuer.OrganizationID.String != principal.OrganizationID || !issuer.AuthorizationEndpoint.Valid || issuer.AuthorizationEndpoint.String == "" || !issuer.TokenEndpoint.Valid || issuer.TokenEndpoint.String == "" || !issuer.RegistrationEndpoint.Valid || issuer.RegistrationEndpoint.String == "" {
+		return none, false, ErrIdentityProviderAttachmentConflict
+	}
+	if issuer.TunneledMcpServerID.Valid {
+		return none, false, ErrIdentityProviderAttachmentConflict
+	}
+	return issuer, true, nil
+}
 
+// createIssuer stores a new project-owned issuer for a discovered authorization
+// server. It carries authorization-server data only; the resource's display
+// members live on the client.
+func (s *CatalogIdentityProviderAttachmentService) createIssuer(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID, metadata remotesessions.DiscoveredIssuerMetadata) (remotesessionsrepo.RemoteSessionIssuer, error) {
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return remotesessionsrepo.RemoteSessionIssuer{}, fmt.Errorf("begin identity-provider issuer transaction: %w", err)
@@ -273,6 +306,7 @@ func (s *CatalogIdentityProviderAttachmentService) ensureIssuer(ctx context.Cont
 		ClientIDMetadataDocumentSupported: metadata.ClientIDMetadataDocumentSupported,
 		Oidc:                              false,
 		Passthrough:                       false,
+		TunneledMcpServerID:               uuid.NullUUID{},
 		// Discovery ran, so the enrichment capabilities are captured here
 		// rather than left NULL for a later refresh.
 		UserinfoEndpoint:                           conv.ToPGTextEmpty(metadata.UserinfoEndpoint),

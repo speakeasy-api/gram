@@ -1,5 +1,10 @@
 import { useFetcher } from "@/contexts/Fetcher";
-import { useSdkClient, useSlugs } from "@/contexts/Sdk";
+import { useIsPlatformAdmin } from "@/contexts/Auth";
+import {
+  useProjectSlugForRequests,
+  useSdkClient,
+  useSlugs,
+} from "@/contexts/Sdk";
 import {
   createDefaultMcpEndpoint,
   DEFAULT_ENDPOINT_FAILED_MESSAGE,
@@ -43,6 +48,8 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
   const { fetch: authedFetch } = useFetcher();
   const queryClient = useQueryClient();
   const { orgSlug } = useSlugs();
+  const projectSlug = useProjectSlugForRequests();
+  const isPlatformAdmin = useIsPlatformAdmin();
 
   return useMutation({
     mutationFn: async ({ name, url }) => {
@@ -60,6 +67,8 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
         authedFetch,
         remoteMcpServer,
         mcpServer,
+        isPlatformAdmin,
+        projectSlug,
       });
       const configuredMcpServer =
         authAutoConfig.status === "configured"

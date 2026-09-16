@@ -281,7 +281,11 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	}
 	clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
 
-	remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, enc, guardianPolicy, redisClient, serverURL, auditLogger, clientAssertionSigner)
+	tunnelHTTPClient, err := newTunnelHTTPClient(c, guardianPolicy, redisClient)
+	if err != nil {
+		return fmt.Errorf("build tunnel http client: %w", err)
+	}
+	remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, enc, guardianPolicy, tunnelHTTPClient, redisClient, serverURL, auditLogger, clientAssertionSigner)
 	if err != nil {
 		return err
 	}
