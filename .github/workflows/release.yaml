@@ -22,7 +22,7 @@ jobs:
       id-token: write # to publish to NPM
     outputs:
       published: ${{ steps.changesets.outputs.published }}
-      publishedPackages: ${{ steps.changesets.outputs.publishedPackages }}
+      publishedPackages: ${{ steps.changesets.outputs.published-packages }}
     env:
       GRAM_GIT_SHA: "${{ github.sha }}"
       # npm trusted publishing requires this GitHub-hosted job, so keep its
@@ -74,12 +74,10 @@ jobs:
         id: changesets
         uses: changesets/action@8488615a623b1b9c987934bb89eae8af6a946ac1 # v2.1.1
         with:
-          title: "chore: version packages"
-          version: mise exec -- aube exec changeset -- version
-          publish: mise exec --env viteprod -- aube exec changeset -- publish
-          setupGitUser: false
-        env:
-          GITHUB_TOKEN: ${{ steps.generate-token.outputs.token }}
+          github-token: ${{ steps.generate-token.outputs.token }}
+          pr-title: "chore: version packages"
+          version-script: mise exec -- aube exec changeset -- version
+          publish-script: mise exec --env viteprod -- aube exec changeset -- publish
 
       - name: Prune aube store
         run: aube store prune
