@@ -64,6 +64,47 @@ func TestValidatorBoundaryValidatedSessions(t *testing.T) {
 	}
 }
 
+// A workload session is attributable as a machine, and never as an acting user.
+func TestValidatorBoundaryStampsWorkloadSession(t *testing.T) {
+	t.Parallel()
+
+	subject := urn.NewWorkloadSubject(uuid.MustParse("33333333-3333-3333-3333-333333333333"), "repo:acme/payments-api:ref:refs/heads/main")
+	identity, ok := mcpidentity.FromContext(mcpidentity.NewValidatorBoundary().StampValidatedSession(t.Context(), validatedSession(t, subject)))
+	require.True(t, ok)
+	require.Equal(t, mcpidentity.KindWorkload, identity.Kind())
+	require.Empty(t, identity.UserID())
+}
+
+// Provenance already on the context belongs to another credential, so a
+// workload session must replace it rather than inherit it.
+func TestValidatorBoundaryWorkloadSessionReplacesEarlierProvenance(t *testing.T) {
+	t.Parallel()
+
+	boundary := mcpidentity.NewValidatorBoundary()
+	stamped := boundary.StampValidatedSession(t.Context(), validatedSession(t, urn.NewUserSubject("user_01J8EXAMPLE")))
+	_, ok := mcpidentity.FromContext(stamped)
+	require.True(t, ok, "the earlier session must be stamped, or the test proves nothing")
+
+	subject := urn.NewWorkloadSubject(uuid.MustParse("33333333-3333-3333-3333-333333333333"), "repo:acme/payments-api:ref:refs/heads/main")
+	identity, ok := mcpidentity.FromContext(boundary.StampValidatedSession(stamped, validatedSession(t, subject)))
+	require.True(t, ok)
+	require.Equal(t, mcpidentity.KindWorkload, identity.Kind())
+	require.Empty(t, identity.UserID(), "a workload session must not carry an earlier credential's user")
+}
+
+// A zero boundary cannot stamp provenance, so it cannot clear it either.
+func TestZeroValidatorBoundaryDoesNotClearProvenanceForWorkload(t *testing.T) {
+	t.Parallel()
+
+	stamped := mcpidentity.NewValidatorBoundary().StampAPIKey(t.Context())
+
+	var inert mcpidentity.ValidatorBoundary
+	subject := urn.NewWorkloadSubject(uuid.MustParse("33333333-3333-3333-3333-333333333333"), "repo:acme/payments-api:ref:refs/heads/main")
+	identity, ok := mcpidentity.FromContext(inert.StampValidatedSession(stamped, validatedSession(t, subject)))
+	require.True(t, ok)
+	require.Equal(t, mcpidentity.KindAPIKey, identity.Kind())
+}
+
 func TestValidatorBoundaryRejectsZeroValidatedSession(t *testing.T) {
 	t.Parallel()
 

@@ -69,6 +69,16 @@ func TestHostedCheckpoint_ReevaluatesAndFailsClosed(t *testing.T) {
 		resource: mcpmetrics.KillswitchResourceCanonicalServer,
 	}, recorder.observations[len(recorder.observations)-1])
 
+	workloadCtx := testIdentityContext(t, mcpidentity.KindWorkload, "")
+	disposition, err = checkpoint.Evaluate(workloadCtx, orgID, source)
+	require.NoError(t, err)
+	require.Equal(t, killswitches.TransportDispositionInfrastructureRejection, disposition.Kind())
+	require.Equal(t, coverageObservation{
+		surface:  mcpmetrics.KillswitchSurfaceHosted,
+		identity: mcpmetrics.KillswitchIdentityWorkload,
+		resource: mcpmetrics.KillswitchResourceCanonicalServer,
+	}, recorder.observations[len(recorder.observations)-1])
+
 	_, err = conn.Exec(t.Context(), "DROP TABLE killswitch_prescriptions CASCADE") //nolint:glint // notestingrawsql: deterministic DDL breakage in this test's isolated database forces an evaluator failure
 	require.NoError(t, err)
 

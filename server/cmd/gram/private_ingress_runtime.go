@@ -172,7 +172,9 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 		return nil, err
 	}
 	authzEngine := authz.NewEngine(logger, db, authz.ChallengeLoggingEnabled(newFeatureChecker(logger, productFeatures, productfeatures.FeatureAuthzChallengeLogging)), roleClient, authz.EngineOpts{
-		AdmitPrincipalCredential: runtimepolicy.AdmitPrincipalCredential, AdmitPrincipalCredentialWithDBTX: runtimepolicy.AdmitPrincipalCredentialWithDBTX, DevMode: c.String("environment") == "local",
+		AdmitPrincipalCredential: runtimepolicy.AdmitPrincipalCredential, AdmitPrincipalCredentialWithDBTX: runtimepolicy.AdmitPrincipalCredentialWithDBTX,
+		AdmitWorkloadSession: runtimepolicy.AdmitWorkloadSession, AdmitWorkloadSessionWithDBTX: runtimepolicy.AdmitWorkloadSessionWithDBTX,
+		DevMode: c.String("environment") == "local",
 	})
 	_, broker, stop, err := newPubSubClient(ctx, c, logger)
 	if err != nil {

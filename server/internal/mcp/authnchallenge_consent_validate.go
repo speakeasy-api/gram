@@ -282,8 +282,8 @@ func (s *Service) metaValidationTarget(
 		gate.userID = subject.ID
 	case urn.SessionSubjectKindAPIKey:
 		gate.apiKeyID = subject.ID
-	case urn.SessionSubjectKindAgent, urn.SessionSubjectKindAnonymous:
-		// The agent actor rides on ctx; the gate has no field for it.
+	case urn.SessionSubjectKindAgent, urn.SessionSubjectKindAnonymous, urn.SessionSubjectKindWorkload:
+		// The agent or workload actor rides on ctx; the gate has no field for it.
 	}
 	ctx = s.memberAttributionContext(ctx, logger, &gate)
 	// routeMetaMember, not dialMetaMember: a probe is not a dispatch to count.
