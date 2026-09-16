@@ -6,13 +6,11 @@ import (
 	cryptorand "crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"math/big"
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
@@ -28,15 +26,6 @@ const (
 
 	clientAffinityAuthPrefix = "auth"
 )
-
-// GatewayDialTimeout bounds only the TCP connect to a gateway. Route store
-// entries are advertise addresses of pods that can disappear without
-// unpublishing, so a stale route must be detected in about the time a live
-// gateway needs to accept a connection, not in the transport's default
-// minute-scale window. Every caller that dials a gateway — the MCP proxy and
-// the back-channel HTTP client — shares this value so the two paths give up
-// on a dead pod at the same point.
-const GatewayDialTimeout = 3 * time.Second
 
 // ClientAffinityKeyFromRequest derives the stable affinity key used for both
 // gateway-owner selection and local agent-session selection.
@@ -141,12 +130,11 @@ func Retryer(routes route.Store, tunnelID, selectedAddr, clientAffinityKey, forw
 		}
 
 		tunnelErr := resp.Header.Get(ErrorHeader)
-		var unpublishErr error
 		switch tunnelErr {
 		case wire.TunnelErrorNoLiveSession:
 			if selectedAddr != "" {
 				if err := routes.Unpublish(ctx, tunnelID, selectedAddr); err != nil {
-					unpublishErr = fmt.Errorf("unpublish stale tunnel route: %w", err)
+					return nil, fmt.Errorf("unpublish stale tunnel route: %w", err)
 				}
 			}
 		case wire.TunnelErrorTunnelBusy:
@@ -170,7 +158,7 @@ func Retryer(routes route.Store, tunnelID, selectedAddr, clientAffinityKey, forw
 
 		candidates, err := routes.Candidates(ctx, tunnelID)
 		if err != nil {
-			return nil, errors.Join(fmt.Errorf("list tunnel retry routes: %w", err), unpublishErr)
+			return nil, fmt.Errorf("list tunnel retry routes: %w", err)
 		}
 		exclude := map[string]struct{}{selectedAddr: {}}
 		if tunnelErr == wire.TunnelErrorSubstreamFailed {
@@ -178,11 +166,11 @@ func Retryer(routes route.Store, tunnelID, selectedAddr, clientAffinityKey, forw
 		}
 		addr, ok := SelectRoute(clientAffinityKey, candidates, exclude)
 		if !ok {
-			return nil, unpublishErr
+			return nil, nil
 		}
 		gatewayURL, err := GatewayURL(addr)
 		if err != nil {
-			return nil, errors.Join(fmt.Errorf("build tunnel retry route URL: %w", err), unpublishErr)
+			return nil, fmt.Errorf("build tunnel retry route URL: %w", err)
 		}
 		return &proxy.UpstreamResponseRetry{
 			RemoteURL: gatewayURL,

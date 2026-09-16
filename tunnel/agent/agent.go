@@ -224,24 +224,11 @@ func (a *Agent) buildHandler(target *url.URL) http.Handler {
 	baseDirector := proxy.Director
 	proxy.Director = func(req *http.Request) {
 		originalPath := req.URL.Path
-		originalRawPath := req.URL.RawPath
-		originalRawQuery := req.URL.RawQuery
-		originalForceQuery := req.URL.ForceQuery
 		baseDirector(req)
 		req.Host = target.Host
 		if target.Path != "" && (originalPath == "" || originalPath == "/") {
 			req.URL.Path = target.Path
 			req.URL.RawPath = target.RawPath
-		} else {
-			req.URL.Path = originalPath
-			req.URL.RawPath = originalRawPath
-			// The inbound path wins over the pinned one, but the pinned
-			// query does not lose with it: TUNNEL_LOCAL_MCP_URL may carry
-			// credentials the local origin authenticates every request by,
-			// and a tunneled OAuth call arrives on the issuer's own path.
-			// Merged the way httputil's director merges it, target first.
-			req.URL.RawQuery = mergeRawQuery(target.RawQuery, originalRawQuery)
-			req.URL.ForceQuery = originalForceQuery
 		}
 	}
 	proxy.ErrorHandler = func(w http.ResponseWriter, _ *http.Request, err error) {
@@ -266,20 +253,6 @@ func (a *Agent) buildHandler(target *url.URL) http.Handler {
 		proxy.ServeHTTP(w, r)
 	})
 	return mux
-}
-
-// mergeRawQuery combines the query pinned on the proxy target with the one the
-// inbound request carried, matching httputil.NewSingleHostReverseProxy's own
-// director: the target's parameters come first, and either side may be empty.
-func mergeRawQuery(targetRawQuery, inboundRawQuery string) string {
-	switch {
-	case targetRawQuery == "":
-		return inboundRawQuery
-	case inboundRawQuery == "":
-		return targetRawQuery
-	default:
-		return targetRawQuery + "&" + inboundRawQuery
-	}
 }
 
 func fullJitter(d time.Duration) time.Duration {

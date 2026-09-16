@@ -17,9 +17,8 @@ import {
   SheetTitle,
 } from "@/components/ui/Sheet";
 import { Text } from "@/components/ui/Text";
-import { useIsPlatformAdmin } from "@/contexts/Auth";
 import { useFetcher } from "@/contexts/Fetcher";
-import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
+import { useSdkClient } from "@/contexts/Sdk";
 import {
   buildUserSessionResourceSlug,
   DEFAULT_USER_SESSION_DURATION_HOURS,
@@ -53,11 +52,9 @@ import {
   availableClientTypes,
   type ClientType,
   deriveSlugFromUrl,
-  dynamicClientRegistrationAvailability,
   narrowTokenEndpointAuthMethod,
   parseScopes,
   pickPreferredAuthMethod,
-  TUNNELED_DCR_PERMISSION_MESSAGE,
 } from "./issuerFormUtils";
 import { IdentityProviderAttachmentErrorAlert } from "./IdentityProviderAttachmentErrorAlert";
 import { selectExistingClient } from "./selectExistingClient";
@@ -103,8 +100,6 @@ export function AttachRemoteIdentityProviderSheet({
   const client = useSdkClient();
   const { fetch: authedFetch } = useFetcher();
   const queryClient = useQueryClient();
-  const isPlatformAdmin = useIsPlatformAdmin();
-  const projectSlug = useProjectSlugForRequests();
 
   const hasSelectable = selectableIssuers.length > 0;
   const [mode, setMode] = useState<Mode>(
@@ -206,18 +201,10 @@ export function AttachRemoteIdentityProviderSheet({
   // DCR and CIMD availability drive the Client Type selector. In Add-new the
   // values come from the form (filled by discovery or typed); in
   // Select-existing they come from the picked issuer record.
-  const registrationEndpointForClient =
+  const dcrAvailable =
     mode === "new"
-      ? registrationEndpoint
-      : selectedIssuer?.registrationEndpoint;
-  const {
-    available: dcrAvailable,
-    permissionRestricted: tunneledDcrRestricted,
-  } = dynamicClientRegistrationAvailability({
-    registrationEndpoint: registrationEndpointForClient,
-    tunneled: !!selectedIssuer?.tunneledMcpServerId,
-    isPlatformAdmin,
-  });
+      ? registrationEndpoint.trim().length > 0
+      : !!selectedIssuer?.registrationEndpoint;
   const cimdAvailable =
     mode === "new"
       ? (discoveredSnapshot?.clientIdMetadataDocumentSupported ?? false)
@@ -409,8 +396,6 @@ export function AttachRemoteIdentityProviderSheet({
             // the client with that method. Omit when blank so the upstream
             // picks its own default.
             tokenEndpointAuthMethod: tokenEndpointAuthMethod || undefined,
-            tunneledMcpServerId: resolvedIssuer?.tunneledMcpServerId,
-            projectSlug,
           });
           const narrowedDcrMethod = narrowTokenEndpointAuthMethod(
             registered.tokenEndpointAuthMethod,
@@ -616,7 +601,6 @@ export function AttachRemoteIdentityProviderSheet({
     // Session client: attach an existing one, or complete the new-client form.
     if (effectiveClientMode === "select") return !!effectiveSelectedClientId;
     // Manual requires a client_id; DCR mints one; CIMD needs none.
-    if (!clientTypes.includes(clientType)) return false;
     if (clientType === "manual" && !clientId.trim()) return false;
     return true;
   }, [
@@ -627,7 +611,6 @@ export function AttachRemoteIdentityProviderSheet({
     effectiveClientMode,
     effectiveSelectedClientId,
     clientType,
-    clientTypes,
     clientId,
   ]);
 
@@ -675,11 +658,6 @@ export function AttachRemoteIdentityProviderSheet({
           onClientSecretChange={setClientSecret}
           onTokenEndpointAuthMethodChange={setTokenEndpointAuthMethod}
         />
-        {tunneledDcrRestricted && (
-          <Text muted small>
-            {TUNNELED_DCR_PERMISSION_MESSAGE}
-          </Text>
-        )}
         <OverridesFields
           scopeOverride={scopeOverride}
           audienceOverride={audienceOverride}

@@ -95,7 +95,6 @@ func newTestUpstreamRevoker(t *testing.T, ti *testInstance, signers ...remoteses
 		ti.conn,
 		testenv.NewEncryptionClient(t),
 		policy,
-		nil,
 		signers...,
 	)
 }
@@ -570,7 +569,6 @@ func seedRefreshableSharedGrant(t *testing.T, slug string, handler http.HandlerF
 		ti.conn,
 		enc,
 		policy,
-		nil,
 		cache.NoopCache,
 		mustURL(t, "http://localhost"),
 	)

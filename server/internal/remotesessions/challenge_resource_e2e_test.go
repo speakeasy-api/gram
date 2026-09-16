@@ -21,21 +21,16 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
-	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
 type resourceDanceFixture struct {
-	ti                  *testInstance
-	mgr                 *remotesessions.ChallengeManager
-	parent              remotesessions.ParentChallenge
-	clients             []remotesessions.Client
-	issuerID            uuid.UUID
-	userSessionIssuerID uuid.UUID
+	mgr     *remotesessions.ChallengeManager
+	parent  remotesessions.ParentChallenge
+	clients []remotesessions.Client
 }
 
 // setupResourceDanceFixture seeds an issuer (whose token endpoint is the
@@ -66,7 +61,6 @@ func setupResourceDanceFixture(t *testing.T, resource string, slugSuffix string,
 	tracerProvider := testenv.NewTracerProvider(t)
 	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
-	tunnels := tunnelrouting.NewHTTPClient(route.NewRouteTable(), "forward-token", policy, nil)
 	mgr := remotesessions.NewChallengeManager(
 		logger,
 		testenv.NewTracerProvider(t),
@@ -74,7 +68,6 @@ func setupResourceDanceFixture(t *testing.T, resource string, slugSuffix string,
 		ti.conn,
 		enc,
 		policy,
-		tunnels,
 		ti.redisCache,
 		mustURL(t, "http://localhost"),
 	)
@@ -127,7 +120,6 @@ func setupResourceDanceFixture(t *testing.T, resource string, slugSuffix string,
 
 	subject := urn.NewUserSubject("res-subject-" + slugSuffix)
 	return ctx, resourceDanceFixture{
-		ti:  ti,
 		mgr: mgr,
 		parent: remotesessions.ParentChallenge{
 			ID:                  uuid.NewString(),
@@ -140,9 +132,7 @@ func setupResourceDanceFixture(t *testing.T, resource string, slugSuffix string,
 			FinalRedirectURI:    "",
 			Resource:            resource,
 		},
-		clients:             clients,
-		issuerID:            issuer.ID,
-		userSessionIssuerID: userIssuer,
+		clients: clients,
 	}
 }
 

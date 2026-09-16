@@ -127,10 +127,6 @@ export type CreateIssuerRequestBody = {
    */
   tokenEndpointAuthMethodsSupported?: Array<string> | undefined;
   /**
-   * Route this issuer's OAuth endpoint calls through an MCP tunnel in the same project. Platform admins only.
-   */
-  tunneledMcpServerId?: string | undefined;
-  /**
    * OpenID Connect userinfo endpoint. Discovered from the issuer metadata document; rejected unless an absolute https URL, or http on loopback.
    */
   userinfoEndpoint?: string | undefined;
@@ -168,7 +164,6 @@ export type CreateIssuerRequestBody$Outbound = {
   slug: string;
   token_endpoint?: string | undefined;
   token_endpoint_auth_methods_supported?: Array<string> | undefined;
-  tunneled_mcp_server_id?: string | undefined;
   userinfo_endpoint?: string | undefined;
 };
 
@@ -208,7 +203,6 @@ export const CreateIssuerRequestBody$outboundSchema: z.ZodMiniType<
     slug: z.string(),
     tokenEndpoint: z.optional(z.string()),
     tokenEndpointAuthMethodsSupported: z.optional(z.array(z.string())),
-    tunneledMcpServerId: z.optional(z.string()),
     userinfoEndpoint: z.optional(z.string()),
   }),
   z.transform((v) => {
@@ -242,7 +236,6 @@ export const CreateIssuerRequestBody$outboundSchema: z.ZodMiniType<
       tokenEndpoint: "token_endpoint",
       tokenEndpointAuthMethodsSupported:
         "token_endpoint_auth_methods_supported",
-      tunneledMcpServerId: "tunneled_mcp_server_id",
       userinfoEndpoint: "userinfo_endpoint",
     });
   }),

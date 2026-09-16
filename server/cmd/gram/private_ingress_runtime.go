@@ -225,11 +225,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 		return nil, fmt.Errorf("build kms signing client factory: %w", err)
 	}
 	clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
-	tunnelHTTPClient, err := newTunnelHTTPClient(c, guardianPolicy, redisClient)
-	if err != nil {
-		return nil, fmt.Errorf("build tunnel http client: %w", err)
-	}
-	remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, enc, guardianPolicy, tunnelHTTPClient, redisClient, serverURL, auditLogger, clientAssertionSigner)
+	remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, enc, guardianPolicy, redisClient, serverURL, auditLogger, clientAssertionSigner)
 	if err != nil {
 		return nil, err
 	}

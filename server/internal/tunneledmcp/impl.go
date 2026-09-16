@@ -537,8 +537,7 @@ func (s *Service) DeleteServer(ctx context.Context, payload *gen.DeleteServerPay
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	txRepo := repo.New(dbtx)
-	deleted, err := txRepo.DeleteServer(ctx, repo.DeleteServerParams{
+	deleted, err := repo.New(dbtx).DeleteServer(ctx, repo.DeleteServerParams{
 		ID:        serverID,
 		ProjectID: *authCtx.ProjectID,
 	})

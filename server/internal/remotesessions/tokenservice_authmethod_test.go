@@ -68,7 +68,6 @@ func setupRefreshFixture(t *testing.T, authMethod string, clientSecret string, s
 		ti.conn,
 		enc,
 		policy,
-		nil,
 		cache.NoopCache,
 		mustURL(t, "http://localhost"),
 	)

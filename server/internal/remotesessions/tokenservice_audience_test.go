@@ -90,7 +90,6 @@ func setupRefreshFixtureWithHandler(t *testing.T, slugSuffix string, audience pg
 		ti.conn,
 		enc,
 		policy,
-		nil,
 		cache.NoopCache,
 		mustURL(t, "http://localhost"),
 	)

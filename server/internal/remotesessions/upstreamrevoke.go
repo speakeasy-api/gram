@@ -40,7 +40,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -81,23 +80,21 @@ type UpstreamRevoker struct {
 	db     *pgxpool.Pool
 	enc    *encryption.Client
 
-	// client is built once and shared by every direct-dial revocation.
-	// Guardian's pooled transport is meant for exactly this: a long-lived client
-	// making repeated requests to the same hosts. Even a batch spanning several
-	// clients' issuers repeats each host, so the pool amortizes every repeat.
-	// Constructing one per call instead would open a connection per session and
-	// hold each idle until it timed out, which is the file-descriptor leak
-	// PooledClient's own documentation warns against.
+	// client is built once and shared by every revocation. Guardian's pooled
+	// transport is meant for exactly this — a long-lived client making repeated
+	// requests to the same hosts — and a bulk revoke is the case it pays off
+	// on: even a batch spanning several clients' issuers repeats each host, and
+	// the pool amortizes every repeat. Constructing one per call instead would
+	// open a connection per session and hold each idle until it timed out,
+	// which is the file-descriptor leak PooledClient's own documentation warns
+	// against.
 	client *guardian.HTTPClient
-
-	// tunnels carries revocations for issuers bound to an MCP tunnel.
-	tunnels *tunnelrouting.HTTPClient
 
 	metrics    *remotesessionmetrics.Revoke
 	assertions TokenEndpointAssertionSigner
 }
 
-func NewUpstreamRevoker(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, enc *encryption.Client, policy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, signers ...TokenEndpointAssertionSigner) *UpstreamRevoker {
+func NewUpstreamRevoker(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, enc *encryption.Client, policy *guardian.Policy, signers ...TokenEndpointAssertionSigner) *UpstreamRevoker {
 	logger = logger.With(attr.SlogComponent("remote-session-upstream-revoke"))
 	var signer TokenEndpointAssertionSigner = unavailableTokenEndpointAssertionSigner{}
 	if len(signers) > 0 {
@@ -109,7 +106,6 @@ func NewUpstreamRevoker(logger *slog.Logger, tracerProvider trace.TracerProvider
 		db:         db,
 		enc:        enc,
 		client:     noRedirectClient(policy.PooledClient()),
-		tunnels:    tunnels,
 		metrics:    remotesessionmetrics.NewRevoke(logger, meterProvider),
 		assertions: signer,
 	}
@@ -583,13 +579,7 @@ func (r *UpstreamRevoker) revokeOnce(ctx context.Context, clientID uuid.UUID, to
 		return client.IssuerUrl, remotesessionmetrics.RevokeOutcomeInternal
 	}
 
-	doer, err := upstreamHTTPDoer(r.client, r.tunnels, client.TunneledMcpServerID)
-	if err != nil {
-		logger.WarnContext(ctx, "upstream revoke: no transport to the identity provider", attr.SlogError(err))
-		return client.IssuerUrl, remotesessionmetrics.RevokeOutcomeUnreachable
-	}
-
-	resp, err := doer.Do(req)
+	resp, err := r.client.Do(req)
 	if err != nil {
 		logger.WarnContext(ctx, "upstream revoke: identity provider unreachable",
 			attr.SlogOAuthGrant(hint),

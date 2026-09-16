@@ -1,10 +1,5 @@
 import { useFetcher } from "@/contexts/Fetcher";
-import { useIsPlatformAdmin } from "@/contexts/Auth";
-import {
-  useProjectSlugForRequests,
-  useSdkClient,
-  useSlugs,
-} from "@/contexts/Sdk";
+import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import {
   createDefaultMcpEndpoint,
   DEFAULT_ENDPOINT_FAILED_MESSAGE,
@@ -341,9 +336,6 @@ export function useRemoteMcpInstallWorkflow({
   const { fetch: authedFetch } = useFetcher();
   const queryClient = useQueryClient();
   const { orgSlug } = useSlugs();
-  const currentProjectSlug = useProjectSlugForRequests();
-  const isPlatformAdmin = useIsPlatformAdmin();
-  const targetProjectSlug = projectSlug ?? currentProjectSlug;
 
   // Informational "already installed" signal: a remote MCP server with a
   // matching URL already exists in the target project. Unproxied servers
@@ -660,8 +652,6 @@ export function useRemoteMcpInstallWorkflow({
         authedFetch,
         remoteMcpServer,
         mcpServer,
-        isPlatformAdmin,
-        projectSlug: targetProjectSlug,
         options: reqOpts,
       });
       const configuredMcpServer =
@@ -692,7 +682,7 @@ export function useRemoteMcpInstallWorkflow({
         iconPersistence,
       };
     },
-    [authedFetch, client, isPlatformAdmin, orgSlug, targetProjectSlug],
+    [authedFetch, client, orgSlug],
   );
 
   const startInstall = useCallback(async () => {

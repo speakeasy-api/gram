@@ -759,21 +759,12 @@ func (s *RefreshService) restateIdentity(
 	interfaces := map[string]interfaceRecord{}
 	var access jwtAccessTokenResult
 	idTokenRejected := storedInterfaceRecords(sess.Enrichment)[IdentitySourceIDToken].Status == interfaceStatusRejected
-	// A bound issuer's key set is only readable over its tunnel, so without one
-	// this token cannot be verified at all. Treated like an issuer that
-	// publishes no key set — skipped, not rejected and not fetched over direct
-	// egress — so the steps below still run and the stored identity stands.
-	idTokenTransport, transportErr := issuerTunnelTransport(s.tunnels, client.TunneledMcpServerID)
-	if transportErr != nil {
-		logIdentityFailure(ctx, s.logger, "refresh id token not verified; key set transport unavailable", transportErr, attrs...)
-	}
-	if tok.IDToken != "" && client.JwksUri.Valid && client.JwksUri.String != "" && transportErr == nil {
+	if tok.IDToken != "" && client.JwksUri.Valid && client.JwksUri.String != "" {
 		verified, err := s.idTokens.Verify(ctx, tok.IDToken, IDTokenExpectation{
 			issuer:      client.IssuerUrl,
 			clientID:    client.ExternalClientID,
 			jwksURI:     client.JwksUri.String,
 			fetchScope:  client.RemoteSessionIssuerID.String(),
-			transport:   idTokenTransport,
 			signingAlgs: client.IDTokenSigningAlgValuesSupported,
 			nonce:       "",
 			subject:     previousSubject,
@@ -863,12 +854,7 @@ func (s *RefreshService) postRefreshGrant(
 		return zero, fmt.Errorf("new refresh request: %w", err)
 	}
 
-	doer, err := upstreamHTTPDoer(noRedirectClient(s.policy.PooledClient()), s.tunnels, client.TunneledMcpServerID)
-	if err != nil {
-		return zero, newTokenRefreshError("the tunnel transport for this identity provider is unavailable", err)
-	}
-
-	resp, err := doer.Do(req)
+	resp, err := noRedirectClient(s.policy.PooledClient()).Do(req)
 	if err != nil {
 		return zero, fmt.Errorf("post refresh: %w: %w", errRefreshUpstreamUnreachable, err)
 	}

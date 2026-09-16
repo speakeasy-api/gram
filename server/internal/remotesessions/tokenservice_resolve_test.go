@@ -45,7 +45,6 @@ func newResolveManager(t *testing.T, conn *pgxpool.Pool, enc *encryption.Client)
 		conn,
 		enc,
 		policy,
-		nil,
 		cache.NoopCache,
 		mustURL(t, "http://localhost"),
 	)

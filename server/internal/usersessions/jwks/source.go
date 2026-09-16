@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
 	"net/url"
 	"strings"
 )
@@ -36,31 +35,6 @@ type Source struct {
 	// this source is charged to, when the KeyResolver has a fetch limiter.
 	// Empty means the shared unscoped budget.
 	fetchScope string
-
-	// doer replaces the resolver's own client for this source's fetches.
-	// Nil means the resolver's direct-egress client.
-	doer Doer
-}
-
-// Doer is the request surface a Source may carry in place of the resolver's
-// own HTTP client.
-type Doer interface {
-	Do(req *http.Request) (*http.Response, error)
-}
-
-// WithTransport returns a copy of the source whose upstream fetches go through
-// doer rather than the resolver's direct-egress client. It is how a key set
-// published inside a customer network is read: the caller supplies a transport
-// that reaches it, and the resolver's cache policy, screening, and telemetry
-// are unchanged.
-//
-// The transport plays no part in caching. A key set is stored under its URL
-// alone, and what a URL serves is public key material, so two issuers naming
-// the same jwks_uri share the stored document whichever transport fetched it
-// first. Nil restores the resolver's own client.
-func (s Source) WithTransport(doer Doer) Source {
-	s.doer = doer
-	return s
 }
 
 // WithFetchScope returns a copy of the source whose upstream consults are
@@ -78,9 +52,9 @@ func (s Source) WithFetchScope(scope string) Source {
 // The document is parsed and screened at resolve time, not here.
 func NewInlineSource(keySet json.RawMessage) (Source, error) {
 	if len(keySet) == 0 {
-		return Source{kind: "", inline: nil, uri: "", origin: "", fetchScope: "", doer: nil}, errors.New("inline key set is empty")
+		return Source{kind: "", inline: nil, uri: "", origin: "", fetchScope: ""}, errors.New("inline key set is empty")
 	}
-	return Source{kind: sourceInline, inline: keySet, uri: "", origin: "", fetchScope: "", doer: nil}, nil
+	return Source{kind: sourceInline, inline: keySet, uri: "", origin: "", fetchScope: ""}, nil
 }
 
 // NewRemoteSource returns a Source for a jwks_uri, whether it came from a
@@ -100,9 +74,9 @@ func NewInlineSource(keySet json.RawMessage) (Source, error) {
 func NewRemoteSource(jwksURI string) (Source, error) {
 	parsed, err := parseJWKSURI(jwksURI)
 	if err != nil {
-		return Source{kind: "", inline: nil, uri: "", origin: "", fetchScope: "", doer: nil}, err
+		return Source{kind: "", inline: nil, uri: "", origin: "", fetchScope: ""}, err
 	}
-	return Source{kind: sourceRemote, inline: nil, uri: jwksURI, origin: parsed.Host, fetchScope: "", doer: nil}, nil
+	return Source{kind: sourceRemote, inline: nil, uri: jwksURI, origin: parsed.Host, fetchScope: ""}, nil
 }
 
 // ValidateURI reports whether a jwks_uri satisfies the syntax every remote

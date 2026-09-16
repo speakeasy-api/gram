@@ -22,22 +22,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
-
-// tunnelBindingID renders an issuer's tunnel binding for ProxyRegisterRequest,
-// which carries it as an optional string. Empty means direct egress.
-func tunnelBindingID(binding uuid.NullUUID) string {
-	if !binding.Valid {
-		return ""
-	}
-	return binding.UUID.String()
-}
 
 // RotationTrigger names why a client registration was replaced. It is carried
 // on the log line and the audit entry so an operator can tell a rotation the
@@ -144,19 +134,10 @@ type RotateClientRegistrationParams struct {
 // binds grants to the client that obtained them and the replacement cannot
 // redeem them.
 type ClientRotator struct {
-	logger *slog.Logger
-	db     *pgxpool.Pool
-	enc    *encryption.Client
-	policy *guardian.Policy
-
-	// tunnels carries the probe and the re-registration for an issuer bound to
-	// a tunneled MCP server. Both endpoints they reach — the token endpoint and
-	// the registration endpoint — are private addresses for such an issuer, so
-	// without this a rotation can never complete and the stale registration
-	// stands: every login then fails at the issuer until an administrator
-	// re-registers the client by hand.
-	tunnels *tunnelrouting.HTTPClient
-
+	logger      *slog.Logger
+	db          *pgxpool.Pool
+	enc         *encryption.Client
+	policy      *guardian.Policy
 	serverURL   *url.URL
 	locks       cache.Cache
 	revoker     *UpstreamRevoker
@@ -165,13 +146,12 @@ type ClientRotator struct {
 
 // NewClientRotator wires a rotator over the same database, encryption key,
 // egress policy, and lease cache the refresh path uses.
-func NewClientRotator(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, policy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, locks cache.Cache, serverURL *url.URL, revoker *UpstreamRevoker, auditLogger *audit.Logger) *ClientRotator {
+func NewClientRotator(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, policy *guardian.Policy, locks cache.Cache, serverURL *url.URL, revoker *UpstreamRevoker, auditLogger *audit.Logger) *ClientRotator {
 	return &ClientRotator{
 		logger:      logger,
 		db:          db,
 		enc:         enc,
 		policy:      policy,
-		tunnels:     tunnels,
 		serverURL:   serverURL,
 		locks:       locks,
 		revoker:     revoker,
@@ -274,16 +254,10 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 		}
 	}
 
-	// The replacement is registered over whatever transport the issuer names,
-	// so a bound issuer's private registration endpoint is reachable. This is
-	// the rotator's own system path: it re-registers a client an administrator
-	// already authorized, at the endpoint the issuer row already carries, so
-	// it does not widen who can create a tunnel binding.
-	registered, err := RegisterDynamicClient(ctx, r.policy, r.tunnels, r.serverURL, ProxyRegisterRequest{
+	registered, err := RegisterDynamicClient(ctx, r.policy, r.serverURL, ProxyRegisterRequest{
 		RegistrationEndpoint:    endpoint,
 		Scope:                   conv.PtrEmpty(strings.Join(current.Scope, " ")),
 		TokenEndpointAuthMethod: conv.PtrEmpty(current.TokenEndpointAuthMethod.String),
-		TunneledMcpServerID:     conv.PtrEmpty(tunnelBindingID(row.IssuerTunneledMcpServerID)),
 	})
 	if err != nil {
 		return zero, fmt.Errorf("re-register client with issuer: %w", err)
@@ -502,11 +476,7 @@ func (r *ClientRotator) upstreamRecognizesClient(ctx context.Context, row repo.G
 	if err != nil {
 		return false, fmt.Errorf("build probe request: %w", err)
 	}
-	doer, err := upstreamHTTPDoer(r.policy.Client(), r.tunnels, row.IssuerTunneledMcpServerID)
-	if err != nil {
-		return false, fmt.Errorf("select probe transport: %w", err)
-	}
-	resp, err := doer.Do(req)
+	resp, err := r.policy.Client().Do(req)
 	if err != nil {
 		return false, fmt.Errorf("post probe to token endpoint: %w", err)
 	}
