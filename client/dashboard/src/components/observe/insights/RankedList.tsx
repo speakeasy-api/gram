@@ -1,5 +1,6 @@
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 
 export type RankedRow = {
@@ -27,6 +28,7 @@ export function RankedList({
   loading = false,
   emptyMessage = "No data in this period",
   maxRows = 5,
+  step = 10,
   className,
 }: {
   rows: RankedRow[];
@@ -41,9 +43,28 @@ export function RankedList({
   onRowHover?: (row: RankedRow | null) => void;
   loading?: boolean;
   emptyMessage?: string;
+  /** Rows shown before the reader asks for more. */
   maxRows?: number;
+  /** How many more each "Show more" reveals. */
+  step?: number;
   className?: string;
 }): JSX.Element {
+  // A card answers its question in five rows; the long tail is a second
+  // question ("who else?") and is revealed a page at a time rather than
+  // dumped, so the board keeps its shape until the reader asks otherwise.
+  const [shown, setShown] = useState(maxRows);
+  const listRef = useRef<HTMLUListElement>(null);
+
+  // The revealed rows scroll inside the card rather than growing it: these
+  // cards sit in a grid row, so one card growing would stretch its neighbours
+  // into tall empty boxes. Follow the new rows down so "show more" visibly
+  // does something.
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list || shown <= maxRows) return;
+    list.scrollTo({ top: list.scrollHeight, behavior: "smooth" });
+  }, [shown, maxRows]);
+
   if (loading) {
     return (
       <div className={cn("flex flex-col gap-2", className)}>
@@ -62,81 +83,108 @@ export function RankedList({
     );
   }
 
-  const visible = rows.slice(0, maxRows);
+  const visible = rows.slice(0, shown);
+  const remaining = rows.length - visible.length;
   // Scale against the top row, not the total: the leader fills the track and
   // the rest read as a share of it, which is the comparison being made.
   const max = Math.max(...visible.map((row) => row.value), 1);
 
   return (
-    <ul className={cn("flex flex-col", className)}>
-      {visible.map((row, index) => {
-        // Rank is graded into the fill — strongest at the top, faintest at the
-        // bottom — so the order survives even where two rows are close enough
-        // in length to look alike. Hover then lands a step stronger than any
-        // resting shade, which one flat fill could not do.
-        const depth = visible.length > 1 ? index / (visible.length - 1) : 0;
-        // A row carrying its own colour is already distinct, so it does not
-        // need the rank ramp to tell it apart from its neighbours.
-        const perRow = typeof color === "function";
-        const rowColor = perRow ? color(row) : color;
-        const opacity = perRow ? 0.3 : 0.22 - depth * 0.14;
-        const width = `${Math.max((row.value / max) * 100, 2)}%`;
+    <div className={cn("flex flex-col", className)}>
+      <ul
+        ref={listRef}
+        // Roughly the five rows a card shows before it is asked for more, so
+        // expanding one card never changes the height of the row it sits in.
+        className="flex max-h-[10.5rem] flex-col overflow-y-auto"
+      >
+        {visible.map((row, index) => {
+          // Rank is graded into the fill — strongest at the top, faintest at the
+          // bottom — so the order survives even where two rows are close enough
+          // in length to look alike. Hover then lands a step stronger than any
+          // resting shade, which one flat fill could not do.
+          const depth = visible.length > 1 ? index / (visible.length - 1) : 0;
+          // A row carrying its own colour is already distinct, so it does not
+          // need the rank ramp to tell it apart from its neighbours.
+          const perRow = typeof color === "function";
+          const rowColor = perRow ? color(row) : color;
+          const opacity = perRow ? 0.3 : 0.22 - depth * 0.14;
+          const width = `${Math.max((row.value / max) * 100, 2)}%`;
 
-        const content = (
-          <>
-            <span
-              aria-hidden
-              className="absolute inset-y-0 left-0 z-0"
-              style={{ width, backgroundColor: rowColor, opacity }}
-            />
-            <span
-              aria-hidden
-              className="absolute inset-y-0 left-0 z-0 opacity-0 transition-opacity duration-150 group-hover/row:opacity-[0.18]"
-              style={{ width, backgroundColor: rowColor }}
-            />
-            <span
-              className="relative z-10 min-w-0 flex-1 truncate"
-              title={row.label}
-            >
-              {row.label}
-            </span>
-            <span className="relative z-10 shrink-0 font-mono text-xs tabular-nums">
-              {row.value.toLocaleString()}
-            </span>
-            {row.secondary && (
-              <span className="text-destructive-default relative z-10 w-12 shrink-0 text-right font-mono text-xs tabular-nums">
-                {row.secondary}
-              </span>
-            )}
-          </>
-        );
-
-        const rowClass =
-          "group/row relative flex items-center gap-3 overflow-hidden px-2 py-1.5 text-sm";
-
-        return (
-          <li
-            key={row.id}
-            onMouseEnter={() => onRowHover?.(row)}
-            onMouseLeave={() => onRowHover?.(null)}
-            // A linked row is focusable, so the same relationship has to be
-            // reachable without a pointer.
-            onFocus={() => onRowHover?.(row)}
-            onBlur={() => onRowHover?.(null)}
-          >
-            {row.href ? (
-              <Link
-                to={row.href}
-                className={cn(rowClass, "text-foreground no-underline")}
+          const content = (
+            <>
+              <span
+                aria-hidden
+                className="absolute inset-y-0 left-0 z-0"
+                style={{ width, backgroundColor: rowColor, opacity }}
+              />
+              <span
+                aria-hidden
+                className="absolute inset-y-0 left-0 z-0 opacity-0 transition-opacity duration-150 group-hover/row:opacity-[0.18]"
+                style={{ width, backgroundColor: rowColor }}
+              />
+              <span
+                className="relative z-10 min-w-0 flex-1 truncate"
+                title={row.label}
               >
-                {content}
-              </Link>
-            ) : (
-              <div className={rowClass}>{content}</div>
-            )}
-          </li>
-        );
-      })}
-    </ul>
+                {row.label}
+              </span>
+              <span className="relative z-10 shrink-0 font-mono text-xs tabular-nums">
+                {row.value.toLocaleString()}
+              </span>
+              {row.secondary && (
+                <span className="text-destructive-default relative z-10 w-12 shrink-0 text-right font-mono text-xs tabular-nums">
+                  {row.secondary}
+                </span>
+              )}
+            </>
+          );
+
+          const rowClass =
+            "group/row relative flex items-center gap-3 overflow-hidden px-2 py-1.5 text-sm";
+
+          return (
+            <li
+              key={row.id}
+              onMouseEnter={() => onRowHover?.(row)}
+              onMouseLeave={() => onRowHover?.(null)}
+              // A linked row is focusable, so the same relationship has to be
+              // reachable without a pointer.
+              onFocus={() => onRowHover?.(row)}
+              onBlur={() => onRowHover?.(null)}
+            >
+              {row.href ? (
+                <Link
+                  to={row.href}
+                  className={cn(rowClass, "text-foreground no-underline")}
+                >
+                  {content}
+                </Link>
+              ) : (
+                <div className={rowClass}>{content}</div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      {(remaining > 0 || shown > maxRows) && (
+        // No collapse control: the rows scroll inside a fixed-height card, so
+        // an expanded list costs the board nothing and re-collapsing it only
+        // takes away what the reader just asked for.
+        <div className="text-eyebrow flex items-center gap-3 px-2 pt-2">
+          {remaining > 0 && (
+            <button
+              type="button"
+              onClick={() => setShown(shown + step)}
+              className="hover:text-foreground transition-colors"
+            >
+              Show {Math.min(step, remaining)} more
+            </button>
+          )}
+          <span className="text-muted-foreground/70 ml-auto normal-case">
+            {visible.length} of {rows.length}
+          </span>
+        </div>
+      )}
+    </div>
   );
 }
