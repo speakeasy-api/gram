@@ -1,8 +1,9 @@
-import type { GuidedReadiness } from "./types";
+import type { IdentityProviderReadiness } from "@gram/client/models/components/identityproviderreadiness.js";
+import { useGuidedReadiness as useGeneratedGuidedReadiness } from "@gram/client/react-query/guidedReadiness.js";
 
 /** The parts of a React Query result the readiness panel draws. */
 export interface GuidedReadinessQuery {
-  data: GuidedReadiness | undefined;
+  data: IdentityProviderReadiness | undefined;
   isPending: boolean;
   isFetching: boolean;
   error: unknown;
@@ -10,23 +11,25 @@ export interface GuidedReadinessQuery {
 }
 
 /**
- * The one seam between the readiness panel and the server.
+ * The one seam between the readiness surfaces and the server, so the panel and
+ * the provider grid read one answer through one call site.
  *
- * identityProviders.getGuidedReadiness is not generated yet, so this reports
- * the read as still in flight — which is what the panel already draws for a
- * slow one, and the only honest answer while nothing has been asked. Repoint
- * this body at the generated hook and every surface picks it up; nothing else
- * knows where readiness comes from.
- *
- * `enabled` is false for anyone who cannot see the panel, so the real hook
- * never fires a request the caller would throw away.
+ * `enabled` is false for anyone who cannot be shown the answer and for a caller
+ * that does not need it, so no request goes out to be thrown away.
  */
 export function useGuidedReadiness(enabled: boolean): GuidedReadinessQuery {
+  const query = useGeneratedGuidedReadiness(undefined, undefined, {
+    enabled,
+    // Readiness reports; a failed read is a state the surfaces draw rather
+    // than an error the page should fall over on.
+    throwOnError: false,
+  });
+
   return {
-    data: undefined,
-    isPending: enabled,
-    isFetching: false,
-    error: null,
-    refetch: () => undefined,
+    data: query.data,
+    isPending: query.isPending,
+    isFetching: query.isFetching,
+    error: query.error,
+    refetch: () => void query.refetch(),
   };
 }

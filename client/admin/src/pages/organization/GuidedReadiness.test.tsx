@@ -1,10 +1,8 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type {
-  GuidedReadiness,
-  GuidedReadinessQuery,
-} from "@/lib/guidedReadiness";
+import type { IdentityProviderReadiness } from "@gram/admin-client/models/components/identityproviderreadiness";
+import type { GuidedReadinessQuery } from "@/lib/guidedReadiness";
 
 const readiness = vi.hoisted(() => ({
   current: {} as GuidedReadinessQuery,
@@ -27,7 +25,9 @@ import { GuidedReadinessFacts } from "./GuidedReadiness";
 const ORG_ID = "00000000-0000-4000-8000-000000000000";
 const CHECKED_AT = new Date("2026-09-15T10:00:00Z");
 
-function aReadiness(overrides: Partial<GuidedReadiness> = {}): GuidedReadiness {
+function aReadiness(
+  overrides: Partial<IdentityProviderReadiness> = {},
+): IdentityProviderReadiness {
   return {
     provider: "okta",
     eligible: true,

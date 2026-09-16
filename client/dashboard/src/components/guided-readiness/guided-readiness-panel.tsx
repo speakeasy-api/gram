@@ -7,15 +7,15 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { useIsPlatformAdmin } from "@/contexts/Auth";
 import { cn } from "@/lib/utils";
+import type { IdentityProviderReadiness } from "@gram/client/models/components/identityproviderreadiness.js";
 import type {
-  GuidedReadiness,
-  GuidedReadinessCheck,
-  GuidedReadinessOwner,
-} from "./types";
+  IdentityProviderReadinessCheck,
+  Owner,
+} from "@gram/client/models/components/identityproviderreadinesscheck.js";
 import { useGuidedReadiness } from "./use-guided-readiness";
 
 /** Who acts on a check that did not pass, in the words staff use for it. */
-const OWNER_LABEL: Record<GuidedReadinessOwner, string> = {
+const OWNER_LABEL: Record<Owner, string> = {
   platform_admin: "Platform admin",
   customer: "Customer",
   speakeasy: "Speakeasy",
@@ -47,7 +47,11 @@ function CheckMark({ ok }: { ok: boolean }): JSX.Element {
   );
 }
 
-function CheckRow({ check }: { check: GuidedReadinessCheck }): JSX.Element {
+function CheckRow({
+  check,
+}: {
+  check: IdentityProviderReadinessCheck;
+}): JSX.Element {
   return (
     <div className="border-border flex items-start gap-3 border-t py-3 first:border-t-0 first:pt-0">
       <CheckMark ok={check.ok} />
@@ -74,7 +78,7 @@ function CheckRow({ check }: { check: GuidedReadinessCheck }): JSX.Element {
 function ReadinessBody({
   readiness,
 }: {
-  readiness: GuidedReadiness;
+  readiness: IdentityProviderReadiness;
 }): JSX.Element {
   return (
     <div className="space-y-3">

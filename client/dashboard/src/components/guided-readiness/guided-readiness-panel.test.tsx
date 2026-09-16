@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { GuidedReadiness } from "./types";
+import type { IdentityProviderReadiness } from "@gram/client/models/components/identityproviderreadiness.js";
 import type { GuidedReadinessQuery } from "./use-guided-readiness";
 
 const isPlatformAdmin = vi.fn();
@@ -23,7 +23,9 @@ import { GuidedReadinessPanel } from "./guided-readiness-panel";
 
 const CHECKED_AT = new Date("2026-09-15T10:00:00Z");
 
-function aReadiness(overrides: Partial<GuidedReadiness> = {}): GuidedReadiness {
+function aReadiness(
+  overrides: Partial<IdentityProviderReadiness> = {},
+): IdentityProviderReadiness {
   return {
     provider: "okta",
     eligible: true,

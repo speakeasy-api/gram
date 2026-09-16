@@ -4,17 +4,17 @@ import { CheckIcon, XIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  useOrganizationGuidedReadiness,
-  type GuidedReadiness,
-  type GuidedReadinessCheck,
-  type GuidedReadinessOwner,
-} from "@/lib/guidedReadiness";
+import type { IdentityProviderReadiness } from "@gram/admin-client/models/components/identityproviderreadiness";
+import type {
+  IdentityProviderReadinessCheck,
+  Owner,
+} from "@gram/admin-client/models/components/identityproviderreadinesscheck";
+import { useOrganizationGuidedReadiness } from "@/lib/guidedReadiness";
 import { errorMessage } from "@/lib/gramAdminApi";
 import { cn } from "@/lib/utils";
 
 /** Who acts on a check that did not pass, in the words staff use for it. */
-const OWNER_LABEL: Record<GuidedReadinessOwner, string> = {
+const OWNER_LABEL: Record<Owner, string> = {
   platform_admin: "Platform admin",
   customer: "Customer",
   speakeasy: "Speakeasy",
@@ -45,7 +45,11 @@ function CheckMark({ ok }: { ok: boolean }): JSX.Element {
   );
 }
 
-function CheckRow({ check }: { check: GuidedReadinessCheck }): JSX.Element {
+function CheckRow({
+  check,
+}: {
+  check: IdentityProviderReadinessCheck;
+}): JSX.Element {
   return (
     <div className="flex items-start gap-3 border-t py-3 first:border-t-0 first:pt-0">
       <CheckMark ok={check.ok} />
@@ -68,7 +72,7 @@ function CheckRow({ check }: { check: GuidedReadinessCheck }): JSX.Element {
 function ReadinessFacts({
   readiness,
 }: {
-  readiness: GuidedReadiness;
+  readiness: IdentityProviderReadiness;
 }): JSX.Element {
   return (
     <div className="space-y-3">
