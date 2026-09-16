@@ -955,25 +955,6 @@ func TestPluginsService_SetPluginAssignments_SystemURNReturnsBadRequest(t *testi
 	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
 }
 
-func TestPluginsService_SetPluginAssignments_WorkloadURNReturnsBadRequest(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestPluginsService(t)
-
-	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Workload URN Validation"})
-	require.NoError(t, err)
-
-	_, err = ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{
-		PluginID:      plugin.ID,
-		PrincipalUrns: []string{urn.NewWorkloadPrincipal(uuid.New(), "repo:acme/api:ref:refs/heads/main").String()},
-	})
-	require.Error(t, err)
-
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
-}
-
 func TestPluginsService_SetPluginAssignments_LegacyRoleURNReturnsBadRequest(t *testing.T) {
 	t.Parallel()
 

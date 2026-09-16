@@ -55,23 +55,3 @@ SELECT EXISTS (
     AND (project_id = @project_id OR project_id IS NULL)
     AND deleted IS FALSE
 );
-
--- name: ResolveWorkloadAgentAssignment :one
--- The agent a workload principal inherits its permission policy from.
---
--- Keyed on the workload principal itself — (organization, issuer row, subject) —
--- and deliberately not on an admission row. Admissions are tiered by project
--- while the principal is organization-scoped, so withdrawing one tier's
--- admission must not change what the workload may do under another. That is
--- also why no project arm appears here, unlike WorkloadIdentityIsAdmitted.
---
--- At most one row can match: workload_agent_assignments_workload_key is unique
--- on these three columns for live rows, which is where "one agent per workload"
--- is enforced. Unassigning is a soft delete, so deleted rows are excluded or the
--- workload would keep the authority an administrator believes they removed.
-SELECT agent_id
-FROM workload_agent_assignments
-WHERE organization_id = @organization_id
-  AND workload_issuer_id = @workload_issuer_id
-  AND subject = @subject
-  AND deleted IS FALSE;

@@ -81,10 +81,9 @@ func (a *AuthenticatedUserPrincipalAdapter) ValidateCurrentOrganization(ctx cont
 //
 // Only KindUserSession claims an authoritative acting user; that claim is
 // then revalidated as an active organization membership before producing the
-// single concrete candidate. Anonymous, API-key, assistant, agent,
-// chat-session, and workload provenance are deliberately unsupported.
-// Enforcement checkpoints explicitly reject agent and workload provenance until
-// the definition supports it. A stamped identity with a zero or
+// single concrete candidate. Anonymous, API-key, assistant, agent, and
+// chat-session provenance are deliberately unsupported. Enforcement checkpoints
+// explicitly reject agent provenance until the definition supports it. A stamped identity with a zero or
 // unknown kind, a malformed authoritative claim, or a membership lookup
 // failure is an error and follows the definition's fail-closed policy.
 func (a *AuthenticatedUserPrincipalAdapter) DeriveCandidates(ctx context.Context, organizationID killswitches.OrganizationID, source any) (killswitches.PrincipalCandidateResult, error) {
@@ -115,7 +114,7 @@ func (a *AuthenticatedUserPrincipalAdapter) DeriveCandidates(ctx context.Context
 			return killswitches.PrincipalCandidateResult{}, fmt.Errorf("build principal candidate: %w", err)
 		}
 		return result, nil
-	case mcpidentity.KindAnonymous, mcpidentity.KindAPIKey, mcpidentity.KindAssistant, mcpidentity.KindAgent, mcpidentity.KindChatSession, mcpidentity.KindWorkload:
+	case mcpidentity.KindAnonymous, mcpidentity.KindAPIKey, mcpidentity.KindAssistant, mcpidentity.KindAgent, mcpidentity.KindChatSession:
 		return killswitches.UnsupportedPrincipalCandidateResult(), nil
 	default:
 		return killswitches.PrincipalCandidateResult{}, fmt.Errorf("unknown identity provenance kind %q", identity.Kind())

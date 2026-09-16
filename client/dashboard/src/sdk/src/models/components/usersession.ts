@@ -85,11 +85,11 @@ export type UserSession = {
    */
   subjectPhotoUrl?: string | undefined;
   /**
-   * Subject kind: 'user', 'apikey', 'agent', 'anonymous', or 'workload'.
+   * Subject kind: 'user', 'apikey', or 'anonymous'.
    */
   subjectType: string;
   /**
-   * The session's subject URN (user:<id> | apikey:<uuid> | agent:<uuid> | anonymous:<mcp-session-id> | workload:<issuer-id>:<external-subject>).
+   * The session's subject URN (user:<id> | apikey:<uuid> | anonymous:<mcp-session-id>).
    */
   subjectUrn: string;
   updatedAt: Date;

@@ -47,11 +47,6 @@ const (
 	// end-user for attribution, but the credential proves only the session,
 	// so it is never an authoritative acting user.
 	KindChatSession Kind = "chat_session"
-
-	// KindWorkload marks a validated workload-subject session: a machine an
-	// external issuer vouched for. The agent it inherits authority from is
-	// attribution, not an authoritative acting user.
-	KindWorkload Kind = "workload"
 )
 
 // Identity is opaque validated provenance. Callers can inspect it but cannot
@@ -111,8 +106,6 @@ func (b *ValidatorBoundary) StampValidatedSession(ctx context.Context, session s
 		return b.withIdentity(ctx, KindAgent, "")
 	case urn.SessionSubjectKindAnonymous:
 		return b.withIdentity(ctx, KindAnonymous, "")
-	case urn.SessionSubjectKindWorkload:
-		return b.withIdentity(ctx, KindWorkload, "")
 	default:
 		return ctx
 	}

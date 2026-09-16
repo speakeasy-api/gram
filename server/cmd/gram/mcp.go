@@ -235,8 +235,6 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		roleClient, authz.EngineOpts{
 			AdmitPrincipalCredential:         runtimepolicy.AdmitPrincipalCredential,
 			AdmitPrincipalCredentialWithDBTX: runtimepolicy.AdmitPrincipalCredentialWithDBTX,
-			AdmitWorkloadSession:             runtimepolicy.AdmitWorkloadSession,
-			AdmitWorkloadSessionWithDBTX:     runtimepolicy.AdmitWorkloadSessionWithDBTX,
 			DevMode:                          serviceEnv == "local",
 		})
 

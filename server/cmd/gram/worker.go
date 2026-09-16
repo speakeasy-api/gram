@@ -592,8 +592,6 @@ func newWorkerCommand() *cli.Command {
 				authz.EngineOpts{
 					AdmitPrincipalCredential:         runtimepolicy.AdmitPrincipalCredential,
 					AdmitPrincipalCredentialWithDBTX: runtimepolicy.AdmitPrincipalCredentialWithDBTX,
-					AdmitWorkloadSession:             runtimepolicy.AdmitWorkloadSession,
-					AdmitWorkloadSessionWithDBTX:     runtimepolicy.AdmitWorkloadSessionWithDBTX,
 					DevMode:                          c.String("environment") == "local",
 				})
 

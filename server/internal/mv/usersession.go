@@ -22,10 +22,6 @@ func resolveSubject(row repo.ListUserSessionsByProjectIDRow) (subjectType string
 		return subjectType, conv.FromPGText[string](row.UserEmail)
 	case urn.SessionSubjectKindAPIKey:
 		return subjectType, conv.FromPGText[string](row.ApiKeyName)
-	case urn.SessionSubjectKindWorkload:
-		// The session row does not join the workload issuer, so there is no
-		// display name; subjectType names the caller.
-		return subjectType, nil
 	default:
 		return subjectType, nil
 	}

@@ -56,11 +56,9 @@ func deriveCoverage(
 	return result
 }
 
-// hasAgentBackedPrincipal reports provenance that acts under an agent's
-// policy: an agent session, or a workload inheriting from its assigned agent.
-func (d coverageDerivation) hasAgentBackedPrincipal() bool {
+func (d coverageDerivation) hasAgentPrincipal() bool {
 	identity, ok := d.principalSource.(mcpidentity.Identity)
-	return ok && (identity.Kind() == mcpidentity.KindAgent || identity.Kind() == mcpidentity.KindWorkload)
+	return ok && identity.Kind() == mcpidentity.KindAgent
 }
 
 func (d coverageDerivation) record(ctx context.Context, recorder IdentityCoverageRecorder, surface mcpmetrics.KillswitchCoverageSurface) {

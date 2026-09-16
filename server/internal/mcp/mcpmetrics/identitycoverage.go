@@ -63,10 +63,6 @@ const (
 	// external end-user and is not an authoritative acting user.
 	KillswitchIdentityChatSession KillswitchIdentityClass = "chat_session"
 
-	// KillswitchIdentityWorkload means the validated credential is a workload
-	// session, which is not an authoritative acting user.
-	KillswitchIdentityWorkload KillswitchIdentityClass = "workload"
-
 	// KillswitchIdentityUnattributed means the surface established no
 	// authentication provenance at all.
 	KillswitchIdentityUnattributed KillswitchIdentityClass = "unattributed"
@@ -115,7 +111,7 @@ func validKillswitchIdentityClass(class KillswitchIdentityClass) bool {
 	switch class {
 	case KillswitchIdentityActiveUser, KillswitchIdentityInactiveUser, KillswitchIdentityAnonymous,
 		KillswitchIdentityAPIKey, KillswitchIdentityAssistant, KillswitchIdentityAgent, KillswitchIdentityChatSession,
-		KillswitchIdentityWorkload, KillswitchIdentityUnattributed, KillswitchIdentityUnavailable:
+		KillswitchIdentityUnattributed, KillswitchIdentityUnavailable:
 		return true
 	default:
 		return false
