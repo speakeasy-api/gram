@@ -2486,11 +2486,11 @@ paths:
             operationId: adminListOrganizations
             parameters:
                 - allowEmptyValue: true
-                  description: Search term, trimmed of surrounding whitespace. Matches name and slug as a case-insensitive substring, with % and _ taken literally, and matches organization id and WorkOS id exactly, ignoring case. An id match also returns an organization that disabled_states or include_disabled would otherwise hide; it still respects account_type, account_types, trial_states and cursor.
+                  description: Search term, trimmed of surrounding whitespace. Matches name and slug as a case-insensitive substring, with % and _ taken literally, and matches organization id and WorkOS id exactly, ignoring case. All filters apply even to exact ID matches.
                   in: query
                   name: q
                   schema:
-                    description: Search term, trimmed of surrounding whitespace. Matches name and slug as a case-insensitive substring, with % and _ taken literally, and matches organization id and WorkOS id exactly, ignoring case. An id match also returns an organization that disabled_states or include_disabled would otherwise hide; it still respects account_type, account_types, trial_states and cursor.
+                    description: Search term, trimmed of surrounding whitespace. Matches name and slug as a case-insensitive substring, with % and _ taken literally, and matches organization id and WorkOS id exactly, ignoring case. All filters apply even to exact ID matches.
                     type: string
                 - allowEmptyValue: true
                   description: Filter by a single gram_account_type (e.g. free, pro, payg, enterprise). Superseded by account_types, which it joins as one more member of the same set.
@@ -2518,21 +2518,48 @@ paths:
                         type: string
                     type: array
                 - allowEmptyValue: true
-                  description: Match any of active or disabled. Empty falls back to include_disabled. An unrecognised value matches nothing rather than failing the request.
+                  description: 'Organization status: all (default), active (disabled_at IS NULL), or disabled (disabled_at IS NOT NULL). Applies even to exact ID matches.'
                   in: query
-                  name: disabled_states
+                  name: disabled_status
                   schema:
-                    description: Match any of active or disabled. Empty falls back to include_disabled. An unrecognised value matches nothing rather than failing the request.
-                    items:
-                        type: string
-                    type: array
+                    description: 'Organization status: all (default), active (disabled_at IS NULL), or disabled (disabled_at IS NOT NULL). Applies even to exact ID matches.'
+                    enum:
+                        - all
+                        - active
+                        - disabled
+                    type: string
                 - allowEmptyValue: true
-                  description: Include organizations with disabled_at set. Defaults to false. Superseded by disabled_states, which overrides it outright when supplied.
+                  description: Inclusive minimum active member count, from 0 through 9223372036854775807. The generated TypeScript SDK accepts bigint. The handwritten admin client accepts safe integers or decimal strings; use decimal strings above Number.MAX_SAFE_INTEGER.
                   in: query
-                  name: include_disabled
+                  name: min_members
                   schema:
-                    description: Include organizations with disabled_at set. Defaults to false. Superseded by disabled_states, which overrides it outright when supplied.
-                    type: boolean
+                    description: Inclusive minimum active member count, from 0 through 9223372036854775807. The generated TypeScript SDK accepts bigint. The handwritten admin client accepts safe integers or decimal strings; use decimal strings above Number.MAX_SAFE_INTEGER.
+                    format: int64
+                    minimum: 0
+                    type: integer
+                - allowEmptyValue: true
+                  description: Inclusive maximum active member count, from 0 through 9223372036854775807. Must be at least min_members. The generated TypeScript SDK accepts bigint. The handwritten admin client accepts safe integers or decimal strings; use decimal strings above Number.MAX_SAFE_INTEGER.
+                  in: query
+                  name: max_members
+                  schema:
+                    description: Inclusive maximum active member count, from 0 through 9223372036854775807. Must be at least min_members. The generated TypeScript SDK accepts bigint. The handwritten admin client accepts safe integers or decimal strings; use decimal strings above Number.MAX_SAFE_INTEGER.
+                    format: int64
+                    minimum: 0
+                    type: integer
+                - allowEmptyValue: true
+                  description: Inclusive creation date in strict YYYY-MM-DD UTC calendar format. Each date bound is optional; must not be after created_to.
+                  in: query
+                  name: created_from
+                  schema:
+                    description: Inclusive creation date in strict YYYY-MM-DD UTC calendar format. Each date bound is optional; must not be after created_to.
+                    type: string
+                - allowEmptyValue: true
+                  description: Inclusive creation date in strict YYYY-MM-DD UTC calendar format. Includes the entire UTC day, implemented as an exclusive bound at the following midnight.
+                  in: query
+                  name: created_to
+                  schema:
+                    description: Inclusive creation date in strict YYYY-MM-DD UTC calendar format. Includes the entire UTC day, implemented as an exclusive bound at the following midnight.
+                    type: string
                 - allowEmptyValue: true
                   description: 'Pagination cursor: id of the last item from the previous page in created_at descending, id ascending order. The anchor is resolved regardless of filters; a deleted or unknown id returns an empty page. Ignored when sort or page is supplied.'
                   in: query

@@ -537,7 +537,7 @@ func BuildListOrganizationActivityPayload(adminListOrganizationActivityOrganizat
 
 // BuildListOrganizationsPayload builds the payload for the admin
 // listOrganizations endpoint from CLI flags.
-func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrganizationsAccountType string, adminListOrganizationsAccountTypes string, adminListOrganizationsTrialStates string, adminListOrganizationsDisabledStates string, adminListOrganizationsIncludeDisabled string, adminListOrganizationsCursor string, adminListOrganizationsLimit string, adminListOrganizationsSort string, adminListOrganizationsDirection string, adminListOrganizationsPage string, adminListOrganizationsAdminSessionToken string) (*admin.ListOrganizationsPayload, error) {
+func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrganizationsAccountType string, adminListOrganizationsAccountTypes string, adminListOrganizationsTrialStates string, adminListOrganizationsDisabledStatus string, adminListOrganizationsMinMembers string, adminListOrganizationsMaxMembers string, adminListOrganizationsCreatedFrom string, adminListOrganizationsCreatedTo string, adminListOrganizationsCursor string, adminListOrganizationsLimit string, adminListOrganizationsSort string, adminListOrganizationsDirection string, adminListOrganizationsPage string, adminListOrganizationsAdminSessionToken string) (*admin.ListOrganizationsPayload, error) {
 	var err error
 	var q *string
 	{
@@ -569,24 +569,60 @@ func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrga
 			}
 		}
 	}
-	var disabledStates []string
+	var disabledStatus *string
 	{
-		if adminListOrganizationsDisabledStates != "" {
-			err = json.Unmarshal([]byte(adminListOrganizationsDisabledStates), &disabledStates)
+		if adminListOrganizationsDisabledStatus != "" {
+			disabledStatus = &adminListOrganizationsDisabledStatus
+			if !(*disabledStatus == "all" || *disabledStatus == "active" || *disabledStatus == "disabled") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("disabled_status", *disabledStatus, []any{"all", "active", "disabled"}))
+			}
 			if err != nil {
-				return nil, fmt.Errorf("invalid JSON for disabledStates, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"abc123\"\n   ]'")
+				return nil, err
 			}
 		}
 	}
-	var includeDisabled *bool
+	var minMembers *int64
 	{
-		if adminListOrganizationsIncludeDisabled != "" {
-			var val bool
-			val, err = strconv.ParseBool(adminListOrganizationsIncludeDisabled)
-			includeDisabled = &val
+		if adminListOrganizationsMinMembers != "" {
+			val, err := strconv.ParseInt(adminListOrganizationsMinMembers, 10, 64)
+			minMembers = &val
 			if err != nil {
-				return nil, fmt.Errorf("invalid value for includeDisabled, must be BOOL")
+				return nil, fmt.Errorf("invalid value for minMembers, must be INT64")
 			}
+			if *minMembers < 0 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("min_members", *minMembers, 0, true))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var maxMembers *int64
+	{
+		if adminListOrganizationsMaxMembers != "" {
+			val, err := strconv.ParseInt(adminListOrganizationsMaxMembers, 10, 64)
+			maxMembers = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for maxMembers, must be INT64")
+			}
+			if *maxMembers < 0 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("max_members", *maxMembers, 0, true))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var createdFrom *string
+	{
+		if adminListOrganizationsCreatedFrom != "" {
+			createdFrom = &adminListOrganizationsCreatedFrom
+		}
+	}
+	var createdTo *string
+	{
+		if adminListOrganizationsCreatedTo != "" {
+			createdTo = &adminListOrganizationsCreatedTo
 		}
 	}
 	var cursor *string
@@ -642,8 +678,11 @@ func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrga
 	v.AccountType = accountType
 	v.AccountTypes = accountTypes
 	v.TrialStates = trialStates
-	v.DisabledStates = disabledStates
-	v.IncludeDisabled = includeDisabled
+	v.DisabledStatus = disabledStatus
+	v.MinMembers = minMembers
+	v.MaxMembers = maxMembers
+	v.CreatedFrom = createdFrom
+	v.CreatedTo = createdTo
 	v.Cursor = cursor
 	v.Limit = limit
 	v.Sort = sort
