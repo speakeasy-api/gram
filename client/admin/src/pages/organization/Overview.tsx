@@ -15,6 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { GuidedReadinessFacts } from "@/pages/organization/GuidedReadiness";
 import { TrialFacts, TrialSummary } from "@/pages/organization/TrialFacts";
 import { OrganizationActions } from "@/pages/organizations/OrganizationActions";
 import { canStartTrial } from "@/pages/organizations/rowActions";
@@ -446,6 +447,10 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
             </div>
           </Row>
           <TrialFacts org={org} />
+        </Panel>
+
+        <Panel title="Guided setup readiness">
+          <GuidedReadinessFacts organizationID={org.id} />
         </Panel>
 
         <Panel
