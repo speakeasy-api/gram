@@ -40,15 +40,19 @@ import { Button } from "@/components/ui/Button";
 import { useSlugs } from "@/contexts/Sdk";
 import { StepContainer } from "../step-container";
 import {
-  RULE_CATEGORY_META,
-  DETECTION_RULES,
+  ruleCategoryMeta,
   POLICY_MESSAGE_TYPE_META,
+  type DetectorMode,
   type RuleCategory,
   type PolicyAction,
   type PolicyMessageType,
 } from "@/pages/security/policy-data";
-import { ruleIdToPresidioEntity } from "@/pages/security/rule-ids";
 import { policyDetectionCategories } from "@/pages/security/policy-form";
+import { useDetectorMode } from "@/pages/security/use-detector-mode";
+import {
+  buildPolicyPayload,
+  categoryMatchesPolicy,
+} from "./configure-policies-payload";
 import {
   acceptsDetectionScope,
   categoryRecommendationScope,
@@ -90,6 +94,18 @@ const WIZARD_CATEGORIES: RuleCategory[] = [
   "government_ids",
   "healthcare",
 ];
+
+// Under the LLM analyzer the model decides the personal-data category per
+// finding, so the wizard offers one PII row in place of the four Presidio ones.
+const LLM_WIZARD_CATEGORIES: RuleCategory[] = [
+  "secrets",
+  "pii",
+  "prompt_injection",
+];
+
+function wizardCategories(mode: DetectorMode): RuleCategory[] {
+  return mode === "llm" ? LLM_WIZARD_CATEGORIES : WIZARD_CATEGORIES;
+}
 
 // Smart defaults per category. Mirrors what we'd seed in the Policy Center if
 // the user just clicked through onboarding accepting everything.
@@ -180,50 +196,6 @@ function isPolicyAction(value: unknown): value is PolicyAction {
   );
 }
 
-const PRESIDIO_CATEGORIES: RuleCategory[] = [
-  "financial",
-  "pii",
-  "government_ids",
-  "healthcare",
-];
-
-function buildPolicyPayload(cat: RuleCategory): {
-  sources: string[];
-  presidioEntities?: string[];
-} {
-  if (cat === "shadow_mcp") return { sources: ["shadow_mcp"] };
-  if (cat === "secrets") return { sources: ["gitleaks"] };
-  if (cat === "prompt_injection") return { sources: ["prompt_injection"] };
-  if (PRESIDIO_CATEGORIES.includes(cat)) {
-    return {
-      sources: ["presidio"],
-      presidioEntities: DETECTION_RULES[cat]
-        .filter((r) => !r.hidden)
-        .map((r) => ruleIdToPresidioEntity(r.id)),
-    };
-  }
-  return { sources: [] };
-}
-
-function categoryMatchesPolicy(
-  cat: RuleCategory,
-  sources: string[],
-  presidioEntities?: string[],
-): boolean {
-  if (cat === "shadow_mcp") return sources.includes("shadow_mcp");
-  if (cat === "secrets") return sources.includes("gitleaks");
-  if (cat === "prompt_injection") return sources.includes("prompt_injection");
-  if (PRESIDIO_CATEGORIES.includes(cat)) {
-    if (!sources.includes("presidio") || !presidioEntities?.length)
-      return false;
-    const wire = new Set(
-      DETECTION_RULES[cat].map((r) => ruleIdToPresidioEntity(r.id)),
-    );
-    return presidioEntities.some((e) => wire.has(e));
-  }
-  return false;
-}
-
 function formatMessageTypes(types: Set<PolicyMessageType>): string {
   if (types.size === 0) return "Off — no message types";
   if (types.size === MESSAGE_TYPES.length) return "All message types";
@@ -279,6 +251,8 @@ export function ConfigurePoliciesStep({
 }: ConfigurePoliciesStepProps): JSX.Element {
   const { orgSlug = "" } = useSlugs();
   const location = useLocation();
+  const mode = useDetectorMode();
+  const categories = wizardCategories(mode);
 
   const projectSlug = useMemo(
     () => new URLSearchParams(location.search).get("projectSlug") || "default",
@@ -306,14 +280,14 @@ export function ConfigurePoliciesStep({
 
   const policyForCategory = useMemo(() => {
     const map = new Map<RuleCategory, (typeof policies)[number]>();
-    for (const cat of ["shadow_mcp" as RuleCategory, ...WIZARD_CATEGORIES]) {
+    for (const cat of ["shadow_mcp" as RuleCategory, ...categories]) {
       const policy = policies.find((p) =>
-        categoryMatchesPolicy(cat, p.sources ?? [], p.presidioEntities),
+        categoryMatchesPolicy(cat, p.sources ?? [], p.presidioEntities, mode),
       );
       if (policy) map.set(cat, policy);
     }
     return map;
-  }, [policies]);
+  }, [policies, categories, mode]);
 
   // Categories whose stored scope no checkbox set can express faithfully.
   const customScopeCategories = useMemo(() => {
@@ -363,7 +337,7 @@ export function ConfigurePoliciesStep({
         ? policyScopeUpdateForCategoryEdit({
             category: cat,
             kinds: [...nextCfg.messageTypes],
-            policyCategories: policyDetectionCategories(existing),
+            policyCategories: policyDetectionCategories(existing, mode),
             detectionScopes: existing.detectionScopes,
             categoryDefinitions,
           })
@@ -410,7 +384,7 @@ export function ConfigurePoliciesStep({
     setConfigs((prev) => {
       let changed = false;
       const next = { ...prev };
-      for (const cat of ["shadow_mcp" as RuleCategory, ...WIZARD_CATEGORIES]) {
+      for (const cat of ["shadow_mcp" as RuleCategory, ...categories]) {
         const existing = policyForCategory.get(cat);
         if (!existing) {
           if (next[cat].enabled) {
@@ -453,7 +427,7 @@ export function ConfigurePoliciesStep({
         requestAnimationFrame(() => setAnimationsReady(true));
       });
     }
-  }, [policiesData, policyForCategory, categoryDefinitions]);
+  }, [policiesData, policyForCategory, categoryDefinitions, categories]);
 
   const handleCategoryToggle = (cat: RuleCategory, checked: boolean) => {
     setConfigs((prev) => ({
@@ -469,7 +443,7 @@ export function ConfigurePoliciesStep({
           request: {
             createRiskPolicyRequestBody: {
               enabled: true,
-              ...buildPolicyPayload(cat),
+              ...buildPolicyPayload(cat, mode),
               ...(categoryDefinitions
                 ? {
                     detectionScopes: [
@@ -563,12 +537,12 @@ export function ConfigurePoliciesStep({
   };
 
   const shadow = configs.shadow_mcp;
-  const enabledCount = WIZARD_CATEGORIES.filter(
-    (c) => configs[c].enabled,
-  ).length;
+  const enabledCount = categories.filter((c) => configs[c].enabled).length;
 
   const activeCategory = openCategory;
-  const activeMeta = activeCategory ? RULE_CATEGORY_META[activeCategory] : null;
+  const activeMeta = activeCategory
+    ? ruleCategoryMeta(activeCategory, mode)
+    : null;
   const activeConfig = activeCategory ? configs[activeCategory] : null;
   const ActiveIcon = activeCategory
     ? (CATEGORY_ICONS[activeCategory] ?? ShieldCheck)
@@ -604,7 +578,7 @@ export function ConfigurePoliciesStep({
                 Detection categories
               </p>
               <span className="text-muted-foreground/70 text-[11px] tabular-nums">
-                {enabledCount}/{WIZARD_CATEGORIES.length} enabled
+                {enabledCount}/{categories.length} enabled
               </span>
             </div>
             <RouterLink
@@ -619,8 +593,8 @@ export function ConfigurePoliciesStep({
           </div>
 
           <div className="border-border bg-card divide-border/60 divide-y overflow-hidden border">
-            {WIZARD_CATEGORIES.map((cat) => {
-              const meta = RULE_CATEGORY_META[cat];
+            {categories.map((cat) => {
+              const meta = ruleCategoryMeta(cat, mode);
               const cfg = configs[cat];
               const Icon = CATEGORY_ICONS[cat] ?? ShieldCheck;
               return (

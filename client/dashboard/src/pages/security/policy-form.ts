@@ -1,10 +1,13 @@
 import celExamples from "./cel-examples.json";
 import {
   DETECTION_RULES,
+  type DetectorMode,
   type PolicyAction,
   type RuleCategory,
 } from "./policy-data";
 import { ruleIdToPresidioEntity } from "./rule-ids";
+
+export type { DetectorMode } from "./policy-data";
 
 /** Presidio-backed categories */
 export const PRESIDIO_CATEGORIES: RuleCategory[] = [
@@ -13,6 +16,15 @@ export const PRESIDIO_CATEGORIES: RuleCategory[] = [
   "government_ids",
   "healthcare",
 ];
+
+/** The personal-data categories the editor offers under `mode`. The LLM
+ *  analyzer decides the category per finding, so it exposes a single `pii`
+ *  detector in place of the four Presidio-backed ones. */
+export function personalDataCategories(
+  mode: DetectorMode = "presidio",
+): RuleCategory[] {
+  return mode === "llm" ? ["pii"] : PRESIDIO_CATEGORIES;
+}
 
 /** Categories that are currently available */
 export const AVAILABLE_CATEGORIES: Set<RuleCategory> = new Set([
@@ -26,6 +38,24 @@ export const AVAILABLE_CATEGORIES: Set<RuleCategory> = new Set([
   "custom",
 ]);
 
+const LLM_AVAILABLE_CATEGORIES: Set<RuleCategory> = new Set([
+  "secrets",
+  ...personalDataCategories("llm"),
+  "shadow_mcp",
+  "destructive_tool",
+  "cli_destructive",
+  "account_identity",
+  "prompt_injection",
+  "custom",
+]);
+
+/** Categories that are currently available under `mode`. */
+export function availableCategories(
+  mode: DetectorMode = "presidio",
+): Set<RuleCategory> {
+  return mode === "llm" ? LLM_AVAILABLE_CATEGORIES : AVAILABLE_CATEGORIES;
+}
+
 /** All rule categories in display order. */
 export const ALL_CATEGORIES: RuleCategory[] = [
   "secrets",
@@ -37,6 +67,23 @@ export const ALL_CATEGORIES: RuleCategory[] = [
   "account_identity",
   "prompt_injection",
 ];
+
+/** Display order under the LLM analyzer: one `pii` card, and no `off_policy`
+ *  placeholder (the model has no such risk). */
+const LLM_ALL_CATEGORIES: RuleCategory[] = [
+  "secrets",
+  ...personalDataCategories("llm"),
+  "shadow_mcp",
+  "destructive_tool",
+  "cli_destructive",
+  "account_identity",
+  "prompt_injection",
+];
+
+/** All rule categories in display order under `mode`. */
+export function allCategories(mode: DetectorMode = "presidio"): RuleCategory[] {
+  return mode === "llm" ? LLM_ALL_CATEGORIES : ALL_CATEGORIES;
+}
 
 /** Categories whose source the server rejects with action=block; the form
  * must force flag when any of these are selected. Mirrors validateSourceAction
@@ -57,6 +104,21 @@ export const CATEGORY_LEVEL_DETECTORS: Set<RuleCategory> = new Set([
   "cli_destructive",
 ]);
 
+const LLM_CATEGORY_LEVEL_DETECTORS: Set<RuleCategory> = new Set([
+  ...CATEGORY_LEVEL_DETECTORS,
+  "pii",
+]);
+
+/** Category-level detectors under `mode`. Under the LLM analyzer `pii` has no
+ *  rule list of its own, so selecting it enables the policy by itself. */
+export function categoryLevelDetectors(
+  mode: DetectorMode = "presidio",
+): Set<RuleCategory> {
+  return mode === "llm"
+    ? LLM_CATEGORY_LEVEL_DETECTORS
+    : CATEGORY_LEVEL_DETECTORS;
+}
+
 export type CategoriesPayload = {
   sources: string[];
   presidioEntities: string[];
@@ -72,6 +134,7 @@ export type CategoriesPayload = {
 export function policyToCategories(
   sources: string[],
   presidioEntities?: string[],
+  mode: DetectorMode = "presidio",
 ): Set<RuleCategory> {
   const cats = new Set<RuleCategory>();
   if (sources.includes("gitleaks")) cats.add("secrets");
@@ -80,6 +143,12 @@ export function policyToCategories(
   if (sources.includes("cli_destructive")) cats.add("cli_destructive");
   if (sources.includes("account_identity")) cats.add("account_identity");
   if (sources.includes("prompt_injection")) cats.add("prompt_injection");
+  if (mode === "llm") {
+    // The analyzer ignores the entity list: any presidio-sourced policy is a
+    // personal-data policy, entities or not.
+    if (sources.includes("presidio")) cats.add("pii");
+    return cats;
+  }
   for (const cat of PRESIDIO_CATEGORIES) {
     const wireEntities = DETECTION_RULES[cat].map((r) =>
       ruleIdToPresidioEntity(r.id),
@@ -105,11 +174,15 @@ export function policyToCategories(
  *   presidio in case of API drift.
  * - `promptInjectionRules` stays empty for backward compatibility — whether
  *   the L1 LLM judge runs on top of the L0 heuristics is chosen per-org via a
- *   feature flag, not by the policy author. */
+ *   feature flag, not by the policy author.
+ * - Under the `llm` mode the entity list is not consulted at all: `pii` on
+ *   means `sources` carries `presidio` with an empty `presidioEntities`, and
+ *   the model picks the personal-data category per finding. */
 export function categoriesToPayload(
   cats: Set<RuleCategory>,
   disabledRules: Set<string>,
   pinnedHidden: Set<string> = new Set(),
+  mode: DetectorMode = "presidio",
 ): CategoriesPayload {
   const sources: string[] = [];
   const presidioEntities: string[] = [];
@@ -121,6 +194,15 @@ export function categoriesToPayload(
   if (cats.has("cli_destructive")) sources.push("cli_destructive");
   if (cats.has("account_identity")) sources.push("account_identity");
   if (cats.has("prompt_injection")) sources.push("prompt_injection");
+  if (mode === "llm") {
+    if (cats.has("pii")) sources.push("presidio");
+    return {
+      sources,
+      presidioEntities,
+      promptInjectionRules,
+      disabledRules: persistedDisabledRules(cats, disabledRules, mode),
+    };
+  }
   for (const cat of PRESIDIO_CATEGORIES) {
     if (cats.has(cat)) {
       for (const rule of DETECTION_RULES[cat]) {
@@ -138,21 +220,35 @@ export function categoriesToPayload(
   }
   if (presidioEntities.length > 0) sources.push("presidio");
 
-  // Persist disabled ids only for currently-selected categories. If a user
-  // unselects a category they shouldn't carry over its per-rule overrides.
-  const persistedDisabled: string[] = [];
-  for (const cat of cats) {
-    for (const rule of DETECTION_RULES[cat] ?? []) {
-      if (disabledRules.has(rule.id)) persistedDisabled.push(rule.id);
-    }
-  }
-
   return {
     sources,
     presidioEntities,
     promptInjectionRules,
-    disabledRules: persistedDisabled,
+    disabledRules: persistedDisabledRules(cats, disabledRules, mode),
   };
+}
+
+/** Disabled ids worth persisting: only those of currently-selected
+ *  categories, so unselecting a category drops its per-rule overrides. Under
+ *  the LLM analyzer `pii` stands in for every Presidio-backed category, so a
+ *  stored override on any of them survives an edit (the analyzer ignores it;
+ *  turning the flag off restores it). */
+function persistedDisabledRules(
+  cats: Set<RuleCategory>,
+  disabledRules: Set<string>,
+  mode: DetectorMode,
+): string[] {
+  const persistedFor = new Set(cats);
+  if (mode === "llm" && cats.has("pii")) {
+    for (const cat of PRESIDIO_CATEGORIES) persistedFor.add(cat);
+  }
+  const persisted: string[] = [];
+  for (const cat of persistedFor) {
+    for (const rule of DETECTION_RULES[cat] ?? []) {
+      if (disabledRules.has(rule.id)) persisted.push(rule.id);
+    }
+  }
+  return persisted;
 }
 
 /** Parse the comma-separated approved-domains input into the array the API
@@ -167,18 +263,27 @@ export function parseApprovedEmailDomains(raw: string): string[] {
 
 /** Categories a policy detects on, for scope resolution. Broader than
  *  `policyToCategories`: a presidio policy with no entity list detects every
- *  presidio-backed category, and custom rules carry the `custom` category. */
-export function policyDetectionCategories(policy: {
-  policyType?: string;
-  sources?: string[];
-  presidioEntities?: string[];
-  customRuleIds?: string[];
-}): Set<RuleCategory> {
+ *  presidio-backed category, and custom rules carry the `custom` category.
+ *  Under the LLM analyzer any presidio policy detects the single `pii`
+ *  category, whatever its entity list says. */
+export function policyDetectionCategories(
+  policy: {
+    policyType?: string;
+    sources?: string[];
+    presidioEntities?: string[];
+    customRuleIds?: string[];
+  },
+  mode: DetectorMode = "presidio",
+): Set<RuleCategory> {
   if (policy.policyType === "prompt_based") return new Set(["prompt_policy"]);
 
   const sources = policy.sources ?? [];
-  const categories = policyToCategories(sources, policy.presidioEntities);
-  if (sources.includes("presidio") && !policy.presidioEntities?.length) {
+  const categories = policyToCategories(sources, policy.presidioEntities, mode);
+  if (
+    mode === "presidio" &&
+    sources.includes("presidio") &&
+    !policy.presidioEntities?.length
+  ) {
     for (const category of [...PRESIDIO_CATEGORIES, "off_policy" as const]) {
       categories.add(category);
     }

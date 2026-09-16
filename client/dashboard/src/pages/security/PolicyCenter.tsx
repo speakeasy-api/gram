@@ -92,6 +92,7 @@ import { useTelemetry } from "@/contexts/Telemetry";
 import { useRoutes } from "@/routes";
 import { Outlet } from "react-router";
 import { ACTION_OPTIONS, categoriesToPayload } from "./policy-form";
+import { useDetectorMode } from "./use-detector-mode";
 import {
   getPolicyDeleteImpactText,
   getPolicyDeleteRuleListItems,
@@ -463,7 +464,8 @@ function isPromptPolicy(policy: RiskPolicy): boolean {
  *  the name already says it, which is the common case for auto-generated names
  *  ("Secrets Exposure Flagger" over "Secrets"). */
 function PolicyNameCell({ row }: { row: PolicyRow }): JSX.Element {
-  const summary = policySummary(row.policy);
+  const mode = useDetectorMode();
+  const summary = policySummary(row.policy, mode);
 
   return (
     <span className="flex min-w-0 flex-col gap-0.5 py-0.5">
@@ -581,6 +583,7 @@ export function PolicyCenterRoot(): JSX.Element {
 }
 
 function PolicyCenterContent() {
+  const mode = useDetectorMode();
   const queryClient = useQueryClient();
   const routes = useRoutes();
   const telemetry = useTelemetry();
@@ -973,7 +976,7 @@ function PolicyCenterContent() {
   });
   const policyDeleteRuleListItems = policyToDelete
     ? getPolicyDeleteRuleListItems(
-        getPolicyRuleGroupNamesForDeleteDialog(policyToDelete.policy),
+        getPolicyRuleGroupNamesForDeleteDialog(policyToDelete.policy, mode),
       )
     : [];
   const policyDeleteImpactText = policyToDelete

@@ -134,3 +134,14 @@ describe("exactCandidate", () => {
     expect(exactCandidate(undefined, null, true)).toBeUndefined();
   });
 });
+
+describe("exclusionOptions under the LLM analyzer", () => {
+  it("stops advertising entity-type exclusions", () => {
+    const custom = (mode: "presidio" | "llm") =>
+      exclusionOptions([], undefined, undefined, mode).find(
+        (o) => o.value === "custom",
+      );
+    expect(custom("presidio")?.hint).toContain("entity types");
+    expect(custom("llm")?.hint).not.toContain("entity types");
+  });
+});

@@ -8,6 +8,7 @@ import {
   invalidateShadowMCPPolicyInventory,
   useShadowMCPPolicyInventory,
 } from "@/components/shadow-mcp/useShadowMCPPolicyInventory";
+import { Alert, AlertDescription } from "@/components/ui/Alert";
 import { Card } from "@/components/ui/Card";
 import { Heading } from "@/components/ui/Heading";
 import { Input } from "@/components/ui/Input";
@@ -92,7 +93,8 @@ import { SupersedeDecisionsDialog } from "./SupersedeDecisionsDialog";
 
 import {
   DETECTION_RULES,
-  RULE_CATEGORY_META,
+  ruleCategoryMeta,
+  type DetectorMode,
   type PolicyAction,
   type RuleCategory,
 } from "./policy-data";
@@ -110,18 +112,19 @@ import {
   useTogglePolicyEnabled,
 } from "./use-toggle-policy-enabled";
 import {
-  ALL_CATEGORIES,
   AVAILABLE_CATEGORIES,
-  CATEGORY_LEVEL_DETECTORS,
   FLAG_ONLY_CATEGORIES,
-  PRESIDIO_CATEGORIES,
   SCOPE_EXEMPT_CEL_EXAMPLES,
   SCOPE_INCLUDE_CEL_EXAMPLES,
+  allCategories,
   categoriesToPayload,
+  categoryLevelDetectors,
   parseApprovedEmailDomains,
+  personalDataCategories,
   pinnedHiddenRuleIds,
   policyToCategories,
 } from "./policy-form";
+import { useDetectorMode } from "./use-detector-mode";
 import { decodeKindScope, encodeKindScope } from "./policy-scope";
 import { SeverityBadge } from "./risk-ui";
 import { CelExpressionField } from "./cel-field";
@@ -1833,6 +1836,20 @@ const PRESIDIO_THRESHOLD_TICKS = [0, 0.25, 0.5, 0.75, 1];
 const DEFAULT_PRESIDIO_THRESHOLD = 0.5;
 const EMPTY_SHADOW_MCP_URLS: ReadonlySet<string> = new Set<string>();
 
+// Shown on personal-data policies while the LLM analyzer flag is on for the
+// organization. The stored Presidio settings stay on the policy (turning the
+// flag off restores them) but do not drive detection meanwhile.
+export const LLM_ANALYZER_NOTICE =
+  "Entity selection, detection sensitivity and entity-type exclusions are not applied while the LLM analyzer is enabled for this organization. The model decides which personal-data category applies per finding.";
+
+function LlmAnalyzerNotice(): JSX.Element {
+  return (
+    <Alert variant="info" alignTop>
+      <AlertDescription>{LLM_ANALYZER_NOTICE}</AlertDescription>
+    </Alert>
+  );
+}
+
 function SensitivitySection({
   threshold,
   setThreshold,
@@ -3427,6 +3444,10 @@ export function StandardPolicyEditor({
   const project = useProject();
   const queryClient = useQueryClient();
   const { customRules } = useDetectionRulesStore();
+  // Under the LLM analyzer flag the personal-data categories collapse into a
+  // single category-level `pii` detector and the Presidio-only controls
+  // (entity selection, sensitivity) leave the form. See `DetectorMode`.
+  const mode = useDetectorMode();
   const [initializedInventoryForPolicy, setInitializedInventoryForPolicy] =
     useState<string | null>(null);
 
@@ -3435,7 +3456,11 @@ export function StandardPolicyEditor({
   // Original values (edit mode) used for dirty tracking.
   const orig = useMemo(() => {
     if (!policy) return null;
-    const cats = policyToCategories(policy.sources, policy.presidioEntities);
+    const cats = policyToCategories(
+      policy.sources,
+      policy.presidioEntities,
+      mode,
+    );
     if ((policy.customRuleIds ?? []).length > 0) cats.add("custom");
     return {
       name: policy.name,
@@ -3458,7 +3483,7 @@ export function StandardPolicyEditor({
       presidioThreshold:
         policy.presidioScoreThreshold ?? DEFAULT_PRESIDIO_THRESHOLD,
     };
-  }, [policy]);
+  }, [policy, mode]);
 
   // ── Local form state, seeded from the policy (edit) or defaults (create). ──
   const [name, setName] = useState(policy?.name ?? "");
@@ -3570,14 +3595,23 @@ export function StandardPolicyEditor({
   const flagOnlySelected = [...FLAG_ONLY_CATEGORIES].some((c) =>
     selectedCategories.has(c),
   );
-  const presidioActive = PRESIDIO_CATEGORIES.some((c) =>
+  const personalDataActive = personalDataCategories(mode).some((c) =>
     selectedCategories.has(c),
   );
+  // The Presidio confidence threshold only exists for the legacy engine; the
+  // LLM analyzer's score is binary, so the control and the field disappear.
+  const presidioActive = mode === "presidio" && personalDataActive;
+  // The banner tells flagged orgs that the policy's stored Presidio settings
+  // are not what runs: shown for any personal-data policy, stored or drafted.
+  const llmAnalyzerActive =
+    mode === "llm" &&
+    (personalDataActive || (policy?.sources ?? []).includes("presidio"));
+  const modeCategoryLevelDetectors = categoryLevelDetectors(mode);
   const hasEnabledDetector =
     selectedCustomRuleIds.size > 0 ||
     [...selectedCategories].some(
       (c) =>
-        CATEGORY_LEVEL_DETECTORS.has(c) ||
+        modeCategoryLevelDetectors.has(c) ||
         DETECTION_RULES[c]?.some((r) => !r.hidden && !disabledRules.has(r.id)),
     );
   const audienceMissing =
@@ -3675,6 +3709,12 @@ export function StandardPolicyEditor({
     else next.delete(ruleId);
     setSelectedCustomRuleIds(next);
   };
+  // Category-level detectors have no rule list to customize; under the LLM
+  // analyzer that includes `pii`, whose entity picker would be ignored.
+  const customizeCategoryRules = (cat: RuleCategory) => {
+    if (modeCategoryLevelDetectors.has(cat)) return;
+    setCustomizeCategory(cat);
+  };
 
   // Build the full update/create body, mirroring PolicyCenter's standard branch.
   const save = (options?: { supersedeDecisions?: boolean }) => {
@@ -3687,7 +3727,14 @@ export function StandardPolicyEditor({
       selectedCategories,
       disabledRules,
       pinnedHiddenRuleIds(policy?.presidioEntities),
+      mode,
     );
+    // Under the LLM analyzer the entity list is not what runs, so an edit
+    // echoes the stored list back unchanged rather than the empty list the
+    // collapsed PII card would derive: turning the flag off must restore the
+    // policy exactly as it was. A create has nothing stored and sends [].
+    const updatePresidioEntities =
+      mode === "llm" ? (policy?.presidioEntities ?? []) : presidioEntities;
     // Flag-only sources (destructive_tool, cli_destructive, account_identity)
     // are rejected by the server with action=block, so force flag as a safety
     // net in case the form state drifted.
@@ -3751,7 +3798,7 @@ export function StandardPolicyEditor({
             id: policy.id,
             name: name.trim() || policy.name,
             sources,
-            presidioEntities,
+            presidioEntities: updatePresidioEntities,
             promptInjectionRules,
             detectionScopes,
             disabledRules: payloadDisabled,
@@ -3762,13 +3809,19 @@ export function StandardPolicyEditor({
             autoName,
             userMessage,
             score,
-            // Always send: default when no Presidio category is active, so
-            // disabling them resets the stored threshold instead of leaving a
-            // stale value that would resurface if Presidio is re-enabled later
-            // (update omits preserve prior values server-side).
-            presidioScoreThreshold: presidioActive
-              ? presidioThreshold
-              : DEFAULT_PRESIDIO_THRESHOLD,
+            // Always send under the legacy engine: default when no Presidio
+            // category is active, so disabling them resets the stored
+            // threshold instead of leaving a stale value that would resurface
+            // if Presidio is re-enabled later (update omits preserve prior
+            // values server-side). Under the LLM analyzer the field is
+            // omitted so the stored value stays untouched for a flag-off.
+            ...(mode === "presidio"
+              ? {
+                  presidioScoreThreshold: presidioActive
+                    ? presidioThreshold
+                    : DEFAULT_PRESIDIO_THRESHOLD,
+                }
+              : {}),
             ...setupFields,
             ...(options?.supersedeDecisions
               ? { supersedeDecisions: true }
@@ -3811,6 +3864,8 @@ export function StandardPolicyEditor({
     }
   };
 
+  const categoryCards = allCategories(mode);
+
   const header = (
     <PolicyHeader
       kind="standard"
@@ -3844,6 +3899,7 @@ export function StandardPolicyEditor({
             <Card>
               <SectionHeader description="Turn on detector categories and attach your organization's custom rules." />
               <Stack gap={5}>
+                {llmAnalyzerActive && <LlmAnalyzerNotice />}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <Label className="text-sm font-medium">
@@ -3851,14 +3907,14 @@ export function StandardPolicyEditor({
                     </Label>
                     <span className="text-muted-foreground text-xs">
                       {
-                        ALL_CATEGORIES.filter((c) => selectedCategories.has(c))
+                        categoryCards.filter((c) => selectedCategories.has(c))
                           .length
                       }{" "}
                       on
                     </span>
                   </div>
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    {ALL_CATEGORIES.map((cat) => (
+                    {categoryCards.map((cat) => (
                       <DetectorCard
                         key={cat}
                         category={cat}
@@ -3868,8 +3924,9 @@ export function StandardPolicyEditor({
                           cat,
                           selectedCategories,
                         )}
+                        mode={mode}
                         onToggle={(checked) => toggleCategory(cat, checked)}
-                        onCustomize={() => setCustomizeCategory(cat)}
+                        onCustomize={() => customizeCategoryRules(cat)}
                       />
                     ))}
                   </div>
@@ -3979,6 +4036,7 @@ export function StandardPolicyEditor({
             score={score}
             presidioActive={presidioActive}
             presidioThreshold={presidioThreshold}
+            mode={mode}
             audienceType={audienceType}
             audiencePrincipalCount={audiencePrincipalUrns.size}
           />
@@ -4013,6 +4071,7 @@ function StandardReview({
   score,
   presidioActive,
   presidioThreshold,
+  mode,
   audienceType,
   audiencePrincipalCount,
 }: {
@@ -4024,12 +4083,13 @@ function StandardReview({
   score: number;
   presidioActive: boolean;
   presidioThreshold: number;
+  mode: DetectorMode;
   audienceType: "everyone" | "targeted";
   audiencePrincipalCount: number;
 }): JSX.Element {
   const detectorLabels = [...categories]
     .filter((c) => c !== "custom")
-    .map((c) => RULE_CATEGORY_META[c].label);
+    .map((c) => ruleCategoryMeta(c, mode).label);
   if (customRuleCount > 0) {
     detectorLabels.push(
       `${customRuleCount} custom rule${customRuleCount === 1 ? "" : "s"}`,

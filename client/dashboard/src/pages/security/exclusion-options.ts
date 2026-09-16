@@ -1,5 +1,6 @@
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import type { ExclusionFields } from "./exclusion-expression";
+import type { DetectorMode } from "./policy-data";
 import { getRuleTitleFallback } from "./risk-utils";
 
 // The ready-made rules offered for a finding-originated exclusion. Each option
@@ -47,6 +48,14 @@ const CUSTOM_OPTION: ExclusionOption = {
   hint: "Regex, entity types, and rule/source filters.",
 };
 
+// Entity-type exclusions are a Presidio concept; the LLM analyzer does not
+// apply them, so the DSL box is not advertised as offering them.
+const LLM_CUSTOM_OPTION: ExclusionOption = {
+  value: "custom",
+  title: "Write it myself",
+  hint: "Regex and rule/source filters.",
+};
+
 function fields(
   matchType: ExclusionFields["matchType"],
   matchValue: string,
@@ -74,6 +83,7 @@ export function exclusionOptions(
   results: RiskResult[],
   exact?: ExactCandidate,
   presetRuleId?: string,
+  mode: DetectorMode = "presidio",
 ): ExclusionOption[] {
   const options: ExclusionOption[] = [];
 
@@ -113,6 +123,6 @@ export function exclusionOptions(
     });
   }
 
-  options.push(CUSTOM_OPTION);
+  options.push(mode === "llm" ? LLM_CUSTOM_OPTION : CUSTOM_OPTION);
   return options;
 }
