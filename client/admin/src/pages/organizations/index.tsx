@@ -129,6 +129,8 @@ export function OrganizationsList(): JSX.Element {
     account_types: search.type,
     trial_states: search.trial,
     ...statusParams(search),
+    min_members: search.minMembers,
+    max_members: search.maxMembers,
   };
 
   // omitUnset, not the raw object: the signature has to call a param unset

@@ -95,8 +95,8 @@ full filtered set independently of cursor, page, offset or limit.
   compatibility aliases.
 
 Invalid bounds, fractional or overflowing member counts, and invalid dates
-return a 4xx response. Member and date bounds are API-only; no member/date UI controls or
-preset-to-date mappings are introduced here.
+return a 4xx response. Date bounds remain API-only; no date controls or preset-to-date mappings are
+introduced here.
 
 The Organization Status dropdown offers All, Active, and Disabled. New URLs use
 `disabledStatus=active|disabled`, omitting All. Valid canonical values (including
@@ -104,6 +104,43 @@ explicit `all`) win over old URL fields. Otherwise `disabledOnly=true|false`
 wins over legacy `disabled` selections; explicit false means All. Invalid
 canonical values fall back through valid legacy fields, then All. Old fields
 are read for bookmarks but removed on new navigations.
+
+### Member range URLs
+
+The Member count sheet uses optional, inclusive Min / Max bounds. Blank means
+unbounded; zero is valid. UI state and the `minMembers` / `maxMembers` route
+parameters are decimal **strings**, not JavaScript numbers. The UI trims
+whitespace and removes leading zeros before applying.
+
+TanStack Router's default serializer quotes numeric-looking strings. For example,
+applying Min `0` and Max `9223372036854775807` produces:
+
+```text
+/organizations?minMembers=%220%22&maxMembers=%229223372036854775807%22
+```
+
+After percent-decoding, those values are JSON strings (`"0"` and
+`"9223372036854775807"`). Keep the quotes when constructing a link manually.
+Bare numeric URL values are unsupported: Router JSON-parses them before route
+validation, potentially losing integer precision or the original syntax. The
+route rejects all such numbers, even safe ones: `?maxMembers=0` drops that bound
+and therefore means **unbounded**, not zero. Use `?maxMembers=%220%22` instead.
+This route contract is distinct from the API's unquoted decimal query parameters
+(`min_members=0`, for example).
+
+Invalid bounds are dropped individually while valid counterparts are retained;
+a reversed pair drops both. Invalid sheet drafts instead show inline errors and
+disable Apply until corrected or cleared.
+
+#### Keyboard verification
+
+The admin test dependencies do not include `@testing-library/user-event`.
+`FilterSheet.test.tsx` checks initial Max autofocus and the Cancel restoration
+callback, not native Tab navigation. Read-only Chromium verification using the
+repository Playwright CLI covers actual Tab and Shift+Tab traversal between
+Min, Max, and the Clear all / Cancel / Apply footer controls, plus Cancel focus
+restoration to the Members trigger. Recheck this in a browser when changing
+sheet focus order; manually calling `.focus()` in a DOM test is not equivalent.
 
 ### Bigint React Query keys
 

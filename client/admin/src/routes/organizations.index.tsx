@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 
 import {
   accountTypes,
+  memberRange,
   disabledStates,
   DISABLED_STATES,
   trialStates,
@@ -27,6 +28,8 @@ import { OrganizationsList } from "@/pages/organizations/index";
  */
 export type OrganizationsSearch = {
   q?: string;
+  minMembers?: string;
+  maxMembers?: string;
   type?: string[];
   trial?: TrialState[];
   disabledStatus?: DisabledState;
@@ -97,6 +100,7 @@ export function organizationsSearchSchema(
     disabled: statuses(search["disabled"]),
   })[0] as DisabledState | undefined;
   return {
+    ...memberRange(search),
     disabledStatus,
     // Router search merges validated fields with raw fields. Clear read aliases
     // explicitly so invalid/raw values cannot reappear or survive new writes.

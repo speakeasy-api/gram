@@ -22,7 +22,7 @@ import {
   statusSelection,
   filterSummary,
   optionsFor,
-  type FilterGroupKey,
+  type FilterControlKey,
   type FilterSelection,
 } from "@/lib/organizationFilters";
 import { cn } from "@/lib/utils";
@@ -117,24 +117,26 @@ export function Toolbar({
   };
 
   // Which group the sheet is showing, and null when it is closed.
-  const [openGroup, setOpenGroup] = useState<FilterGroupKey | null>(null);
-  const triggers = useRef<Partial<Record<FilterGroupKey, HTMLButtonElement>>>(
+  const [openGroup, setOpenGroup] = useState<FilterControlKey | null>(null);
+  const triggers = useRef<Partial<Record<FilterControlKey, HTMLButtonElement>>>(
     {},
   );
   // The trigger the sheet has to give the keyboard back to. A ref rather than
   // `openGroup`, because the sheet asks for it as it unmounts: by then the
   // state that opened it has already been cleared.
-  const openedFrom = useRef<FilterGroupKey | null>(null);
+  const openedFrom = useRef<FilterControlKey | null>(null);
 
   const filters: FilterSelection = {
     type: search.type ?? [],
     trial: search.trial ?? [],
     disabled: statusSelection(search),
+    minMembers: search.minMembers,
+    maxMembers: search.maxMembers,
   };
 
   const applyFilters = useApplyFilters();
 
-  const openFilters = (group: FilterGroupKey): void => {
+  const openFilters = (group: FilterControlKey): void => {
     openedFrom.current = group;
     setOpenGroup(group);
   };
@@ -179,6 +181,41 @@ export function Toolbar({
           </Button>
         );
       })}
+
+      <Button
+        ref={(node) => {
+          if (node) triggers.current.minMembers = node;
+        }}
+        variant={
+          filters.minMembers !== undefined || filters.maxMembers !== undefined
+            ? "secondary"
+            : "ghost"
+        }
+        size="xs"
+        aria-label={`Members filter: ${filters.minMembers ?? "Any"} to ${filters.maxMembers ?? "Any"}`}
+        onClick={() => openFilters("minMembers")}
+      >
+        Members
+        {(filters.minMembers !== undefined ||
+          filters.maxMembers !== undefined) && <Badge>1</Badge>}
+      </Button>
+      {(["minMembers", "maxMembers"] as const).map(
+        (key) =>
+          filters[key] !== undefined && (
+            <Button
+              key={key}
+              variant="ghost"
+              size="xs"
+              aria-label={`Clear ${key === "minMembers" ? "minimum" : "maximum"} members`}
+              onClick={() => {
+                applyFilters({ ...filters, [key]: undefined });
+                triggers.current.minMembers?.focus();
+              }}
+            >
+              Members {key === "minMembers" ? "≥" : "≤"} {filters[key]} ×
+            </Button>
+          ),
+      )}
 
       {filters.disabled.length > 0 && (
         <Button

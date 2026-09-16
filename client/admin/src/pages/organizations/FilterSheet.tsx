@@ -1,6 +1,7 @@
 import { CheckIcon, ChevronsUpDownIcon } from "lucide-react";
 import { useId, useRef, useState, type JSX, type Ref } from "react";
 
+import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -32,12 +33,14 @@ import {
 } from "@/components/ui/sheet";
 import {
   FILTER_GROUPS,
+  memberRange,
+  memberRangeErrors,
   filterSummary,
   NO_FILTERS,
   optionsFor,
   toggleFilter,
   type FilterGroup,
-  type FilterGroupKey,
+  type FilterControlKey,
   type FilterOption,
   type FilterSelection,
 } from "@/lib/organizationFilters";
@@ -62,7 +65,7 @@ export function FilterSheet({
   // Which group the operator asked for, and null when the sheet is closed. The
   // sheet opens with that group's picker focused, so the trigger they pressed
   // is the control they land on.
-  openGroup: FilterGroupKey | null;
+  openGroup: FilterControlKey | null;
   onOpenChange: (open: boolean) => void;
   onApply: (next: FilterSelection) => void;
   // Called instead of Radix's own restore, which returns the keyboard to
@@ -71,25 +74,30 @@ export function FilterSheet({
   onReturnFocus: () => void;
 }): JSX.Element {
   const disabledId = useId();
+  const membersId = useId();
   const open = openGroup !== null;
   const [draft, setDraft] = useState(value);
   const [lastOpened, setLastOpened] = useState(openGroup);
+  const signature = JSON.stringify(value);
+  const [lastValue, setLastValue] = useState(signature);
 
-  // Seeded while rendering rather than in an effect, so a picker never paints
-  // the previous edit for a frame. Opening is the only moment the draft follows
-  // the URL: while the sheet is open the draft belongs to the operator, and a
-  // navigation landing underneath must not move it.
-  if (openGroup !== lastOpened) {
+  // Rehydrate on opening and on URL navigation, including Back/Forward.
+  if (openGroup !== lastOpened || signature !== lastValue) {
+    setLastValue(signature);
     setLastOpened(openGroup);
     if (open) setDraft(value);
   }
 
-  const pickers = useRef<Partial<Record<FilterGroupKey, HTMLButtonElement>>>(
-    {},
-  );
+  const pickers = useRef<
+    Partial<Record<FilterControlKey, HTMLButtonElement | HTMLInputElement>>
+  >({});
+
+  const errors = memberRangeErrors(draft);
+  const invalid = Object.keys(errors).length > 0;
 
   const apply = (next: FilterSelection): void => {
-    onApply(next);
+    if (Object.keys(memberRangeErrors(next)).length > 0) return;
+    onApply({ ...next, ...memberRange(next) });
     onOpenChange(false);
   };
 
@@ -171,6 +179,49 @@ export function FilterSheet({
               />
             ),
           )}
+          <fieldset className="grid gap-2">
+            <legend className="mb-2 text-sm font-medium">Member count</legend>
+            <div className="grid grid-cols-2 gap-3">
+              {(["minMembers", "maxMembers"] as const).map((key) => (
+                <div key={key} className="grid content-start gap-1.5">
+                  <label
+                    htmlFor={`${membersId}-${key}`}
+                    className="text-sm font-medium"
+                  >
+                    {key === "minMembers" ? "Min" : "Max"}
+                  </label>
+                  <Input
+                    id={`${membersId}-${key}`}
+                    type="text"
+                    inputMode="numeric"
+                    value={draft[key] ?? ""}
+                    aria-invalid={Boolean(errors[key])}
+                    aria-describedby={
+                      errors[key] ? `${membersId}-${key}-error` : undefined
+                    }
+                    onChange={(event) =>
+                      setDraft((previous) => ({
+                        ...previous,
+                        [key]: event.target.value,
+                      }))
+                    }
+                    ref={(node) => {
+                      if (node) pickers.current[key] = node;
+                    }}
+                  />
+                  {errors[key] && (
+                    <p
+                      id={`${membersId}-${key}-error`}
+                      role="alert"
+                      className="text-destructive text-sm"
+                    >
+                      {errors[key]}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </fieldset>
         </div>
 
         <SheetFooter className="flex-row justify-end">
@@ -180,7 +231,12 @@ export function FilterSheet({
           <Button variant="ghost" onClick={() => apply(NO_FILTERS)}>
             Clear all
           </Button>
-          <Button onClick={() => apply(draft)}>Apply</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button disabled={invalid} onClick={() => apply(draft)}>
+            Apply
+          </Button>
         </SheetFooter>
       </SheetContent>
     </Sheet>

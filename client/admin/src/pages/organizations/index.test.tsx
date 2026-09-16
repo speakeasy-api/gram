@@ -4475,3 +4475,233 @@ describe("starting a trial from the peek panel", () => {
 });
 
 afterEach(() => vi.useRealTimers());
+
+describe("member range filters", () => {
+  it("validates bounds in the route without forwarding malformed or reversed values", () => {
+    expect(
+      organizationsSearchSchema({
+        minMembers: "000",
+        maxMembers: "9223372036854775807",
+      }),
+    ).toMatchObject({ minMembers: "0", maxMembers: "9223372036854775807" });
+    expect(
+      organizationsSearchSchema({
+        minMembers: 9007199254740992,
+        maxMembers: "5",
+      }),
+    ).toMatchObject({ minMembers: undefined, maxMembers: "5" });
+    expect(
+      organizationsSearchSchema({ minMembers: "6", maxMembers: "5" }),
+    ).toMatchObject({ minMembers: undefined, maxMembers: undefined });
+  });
+
+  it("validates drafts accessibly, cancels without changes and applies exact decimal strings", async () => {
+    const { router } = await renderRouteTree(routeTree, {
+      initialPath: "/organizations",
+    });
+    const trigger = await openFilters("Members");
+    const min = screen.getByRole("textbox", { name: "Min" });
+    const max = screen.getByRole("textbox", { name: "Max" });
+    await waitFor(() => expect(document.activeElement).toBe(min));
+    for (const value of ["-1", "1.2", "1e3", "9223372036854775808", "bad"]) {
+      fireEvent.change(min, { target: { value } });
+      expect(min.getAttribute("aria-invalid")).toBe("true");
+      expect(
+        document
+          .getElementById(min.getAttribute("aria-describedby") ?? "")
+          ?.getAttribute("role"),
+      ).toBe("alert");
+      const apply = screen.getByRole("button", { name: "Apply" });
+      expect(apply.hasAttribute("disabled")).toBe(true);
+      fireEvent.click(apply);
+      expect(currentSearch(router)).toBe("");
+    }
+    // Recover in the same open sheet, without remounting away the error.
+    for (const corrected of ["0", ""]) {
+      fireEvent.change(min, { target: { value: "bad" } });
+      const errorId = min.getAttribute("aria-describedby");
+      expect(errorId).toBeTruthy();
+      fireEvent.change(min, { target: { value: corrected } });
+      expect(min.getAttribute("aria-invalid")).toBe("false");
+      expect(min.hasAttribute("aria-describedby")).toBe(false);
+      expect(document.getElementById(errorId ?? "")).toBeNull();
+      expect(screen.queryByRole("alert")).toBeNull();
+      expect(
+        screen.getByRole("button", { name: "Apply" }).hasAttribute("disabled"),
+      ).toBe(false);
+      expect(currentSearch(router)).toBe("");
+    }
+    fireEvent.change(min, { target: { value: "10" } });
+    fireEvent.change(max, { target: { value: "5" } });
+    expect(screen.getByRole("alert").textContent).toContain("Max must");
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+    expect(currentSearch(router)).toBe("");
+    await openFilters("Members");
+    expect(
+      (screen.getByRole("textbox", { name: "Min" }) as HTMLInputElement).value,
+    ).toBe("");
+    fireEvent.change(screen.getByRole("textbox", { name: "Min" }), {
+      target: { value: " 0009007199254740993 " },
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "Max" }), {
+      target: { value: "9223372036854775807" },
+    });
+    applyFilters();
+    await waitFor(() =>
+      expect(lastListParams()).toMatchObject({
+        min_members: "9007199254740993",
+        max_members: "9223372036854775807",
+      }),
+    );
+    expect(currentSearch(router)).toContain('minMembers="9007199254740993"');
+    expect(currentSearch(router)).toContain('maxMembers="9223372036854775807"');
+  });
+
+  it.each(["Min", "Max"])(
+    "recovers a reversed pair by clearing %s while preserving other filters",
+    async (cleared) => {
+      await renderRouteTree(routeTree, {
+        initialPath:
+          "/organizations?q=fixture&type=pro&trial=running&disabledStatus=disabled&dir=asc",
+      });
+      await openFilters("Members");
+      fireEvent.change(screen.getByRole("textbox", { name: "Min" }), {
+        target: { value: "10" },
+      });
+      const max = screen.getByRole("textbox", { name: "Max" });
+      fireEvent.change(max, { target: { value: "5" } });
+      const errorId = max.getAttribute("aria-describedby");
+      expect(errorId).toBeTruthy();
+      expect(screen.getByRole("alert").textContent).toContain("Max must");
+      expect(
+        screen.getByRole("button", { name: "Apply" }).hasAttribute("disabled"),
+      ).toBe(true);
+      fireEvent.change(screen.getByRole("textbox", { name: cleared }), {
+        target: { value: "" },
+      });
+      expect(max.getAttribute("aria-invalid")).toBe("false");
+      expect(max.hasAttribute("aria-describedby")).toBe(false);
+      expect(document.getElementById(errorId ?? "")).toBeNull();
+      expect(screen.queryByRole("alert")).toBeNull();
+      expect(
+        screen.getByRole("button", { name: "Apply" }).hasAttribute("disabled"),
+      ).toBe(false);
+      applyFilters();
+      await waitFor(() =>
+        expect(lastListParams()).toMatchObject({
+          min_members: cleared === "Min" ? undefined : "10",
+          max_members: cleared === "Max" ? undefined : "5",
+          q: "fixture",
+          account_types: ["pro"],
+          trial_states: ["running"],
+          disabled_status: "disabled",
+          direction: "asc",
+          sort: "created_at",
+          page: 1,
+        }),
+      );
+    },
+  );
+
+  it("resets pagination on either bound, preserves AND filters, and clears each bound with focus", async () => {
+    mocks.listOrganizations.mockResolvedValue({
+      organizations: ORGS,
+      total: 101,
+    });
+    const { router } = await renderRouteTree(routeTree, {
+      initialPath:
+        "/organizations?q=fixture&type=pro&trial=running&disabledStatus=disabled&dir=asc&minMembers=%220%22&maxMembers=%2210%22",
+    });
+    await waitFor(() =>
+      expect(lastListParams()).toMatchObject({
+        min_members: "0",
+        max_members: "10",
+        q: "fixture",
+        account_types: ["pro"],
+        trial_states: ["running"],
+        disabled_status: "disabled",
+        direction: "asc",
+      }),
+    );
+    for (const key of ["minimum", "maximum"]) {
+      fireEvent.click(screen.getByRole("button", { name: "Next" }));
+      await waitFor(() => expect(lastListParams().page).toBe(2));
+      fireEvent.click(
+        screen.getByRole("button", { name: `Clear ${key} members` }),
+      );
+      await waitFor(() => expect(lastListParams().page).toBe(1));
+      expect(lastListParams()).toMatchObject({
+        q: "fixture",
+        account_types: ["pro"],
+        trial_states: ["running"],
+        disabled_status: "disabled",
+        direction: "asc",
+      });
+      expect(document.activeElement).toBe(filterTrigger("Members"));
+    }
+    expect(lastListParams().min_members).toBeUndefined();
+    expect(lastListParams().max_members).toBeUndefined();
+    expect(currentSearch(router)).not.toContain("Members");
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    await waitFor(() => expect(lastListParams().page).toBe(2));
+    await openFilters("Members");
+    fireEvent.change(screen.getByRole("textbox", { name: "Min" }), {
+      target: { value: "0" },
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "Max" }), {
+      target: { value: "0" },
+    });
+    applyFilters();
+    await waitFor(() =>
+      expect(lastListParams()).toMatchObject({
+        min_members: "0",
+        max_members: "0",
+        page: 1,
+      }),
+    );
+    await openFilters("Members");
+    fireEvent.click(screen.getByRole("button", { name: "Clear all" }));
+    await waitFor(() => expect(lastListParams().min_members).toBeUndefined());
+    expect(lastListParams().max_members).toBeUndefined();
+    expect(lastListParams().disabled_status).toBe("all");
+    expect(lastListParams().account_types).toBeUndefined();
+    expect(lastListParams().trial_states).toBeUndefined();
+    expect(lastListParams().q).toBe("fixture");
+    expect(lastListParams().direction).toBe("asc");
+  });
+
+  it("rehydrates an open draft on history back and forward", async () => {
+    const { router } = await renderRouteTree(routeTree, {
+      initialPath: "/organizations?minMembers=%225%22",
+    });
+    await act(async () => {
+      await router.navigate({
+        to: "/organizations",
+        search: { minMembers: "10" },
+      });
+    });
+    await openFilters("Members");
+    fireEvent.change(screen.getByRole("textbox", { name: "Min" }), {
+      target: { value: "99" },
+    });
+    await act(async () => {
+      router.history.back();
+    });
+    await waitFor(() =>
+      expect(
+        (screen.getByRole("textbox", { name: "Min" }) as HTMLInputElement)
+          .value,
+      ).toBe("5"),
+    );
+    await act(async () => {
+      router.history.forward();
+    });
+    await waitFor(() =>
+      expect(
+        (screen.getByRole("textbox", { name: "Min" }) as HTMLInputElement)
+          .value,
+      ).toBe("10"),
+    );
+  });
+});
