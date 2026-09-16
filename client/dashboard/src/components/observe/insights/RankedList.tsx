@@ -104,10 +104,7 @@ export function RankedList({
               {row.value.toLocaleString()}
             </span>
             {row.secondary && (
-              <span
-                className="relative z-10 w-12 shrink-0 text-right font-mono text-xs tabular-nums"
-                style={{ color: rowColor }}
-              >
+              <span className="text-destructive-default relative z-10 w-12 shrink-0 text-right font-mono text-xs tabular-nums">
                 {row.secondary}
               </span>
             )}

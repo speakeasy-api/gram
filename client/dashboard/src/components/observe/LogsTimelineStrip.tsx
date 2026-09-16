@@ -104,6 +104,18 @@ export function LogsTimelineStrip({
       return format(date, showDate ? "MMM d" : "HH:mm");
     });
 
+    // No points at all: hand the chart empty labels so it renders its own
+    // no-data state instead of a full axis of zero-height bars.
+    if (timeSeries.length === 0) {
+      return {
+        bucketMs,
+        timestamps: [],
+        labels: [],
+        tooltipLabels: [],
+        datasets: [],
+      };
+    }
+
     return {
       bucketMs,
       timestamps,

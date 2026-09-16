@@ -39,7 +39,9 @@ import {
   type FacetGroup,
   type FacetValue,
 } from "@/components/observe/LogsFacetRail";
+import { ACCOUNT_TYPE_OPTIONS } from "@/components/observe/observeFilterConstants";
 import { LogsTimelineStrip } from "@/components/observe/LogsTimelineStrip";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/Sheet";
 import { useToolUsagePayload } from "@/components/observe/toolUsagePayload";
 import { useSlugs } from "@/contexts/Sdk";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
@@ -147,9 +149,12 @@ export function LogsTools(): JSX.Element {
     setRangeFromBrush,
     clearCustomRange,
     selectedRoleIds,
+    roleOptions,
+    handleRoleSelectionChange,
     roleEmails,
     roleFilterPending,
     accountType,
+    handleAccountTypeChange,
   } = useObserveFilters<ToolUsageType>({
     defaultTypes: TOOL_USAGE_DEFAULT_TYPES,
     validTypes: TOOL_USAGE_VALID_TYPES,
@@ -329,6 +334,26 @@ export function LogsTools(): JSX.Element {
         })),
       },
       {
+        id: "role",
+        label: "Role",
+        values: roleOptions.map((role) => ({
+          value: role.id,
+          label: role.name,
+          selected: selectedRoleIds.includes(role.id),
+        })),
+      },
+      {
+        id: "account_type",
+        label: "Account",
+        // One account type applies at a time, so picking one replaces the
+        // other rather than adding to it.
+        values: ACCOUNT_TYPE_OPTIONS.map((option) => ({
+          value: option.value,
+          label: option.label,
+          selected: accountType === option.value,
+        })),
+      },
+      {
         id: "user",
         label: "User",
         // The URL and the payload carry emails; an agent or an external id
@@ -345,9 +370,12 @@ export function LogsTools(): JSX.Element {
       },
     ];
   }, [
+    accountType,
     filterOptionsData,
     hookSourceOptions,
+    roleOptions,
     selectedClientKeys,
+    selectedRoleIds,
     selectedEmails,
     selectedHookTypes,
     selectedServerValues,
@@ -383,12 +411,21 @@ export function LogsTools(): JSX.Element {
         case "source":
           handleHookSourceSelectionChange(next(selectedSources));
           break;
+        case "role":
+          handleRoleSelectionChange(next(selectedRoleIds));
+          break;
+        case "account_type":
+          handleAccountTypeChange(nextSelected ? value : "");
+          break;
         case "user":
           handleUserEmailSelectionChange(next(selectedEmails));
           break;
       }
     },
     [
+      handleAccountTypeChange,
+      handleRoleSelectionChange,
+      selectedRoleIds,
       handleHookSourceSelectionChange,
       handleHookTypesChange,
       handleServerSelectionChange,
@@ -422,12 +459,20 @@ export function LogsTools(): JSX.Element {
         case "source":
           handleHookSourceSelectionChange([]);
           break;
+        case "role":
+          handleRoleSelectionChange([]);
+          break;
+        case "account_type":
+          handleAccountTypeChange("");
+          break;
         case "user":
           handleUserEmailSelectionChange([]);
           break;
       }
     },
     [
+      handleAccountTypeChange,
+      handleRoleSelectionChange,
       handleHookSourceSelectionChange,
       handleHookTypesChange,
       handleServerSelectionChange,
@@ -865,9 +910,43 @@ function LogsToolsContent({
   isZoomed: boolean;
 }) {
   const orgRoutes = useOrgRoutes();
+  // Below xl the rail does not fit beside the table. It is the only filter
+  // surface on this page, so it moves into a drawer rather than disappearing.
+  const [facetsOpen, setFacetsOpen] = useState(false);
+
+  const rail = (
+    <LogsFacetRail
+      header={
+        <TimeRangePicker
+          preset={customRange ? null : dateRange}
+          customRange={customRange}
+          customRangeLabel={customRangeLabel}
+          onPresetChange={(preset) => onDateRangeChange(preset)}
+          onCustomRangeChange={onCustomRangeChange}
+          onClearCustomRange={onClearCustomRange}
+          projectSlug={projectSlug}
+          // The rail is narrower than the picker's intrinsic width, so without
+          // letting the free-text input shrink the trigger overflows and the
+          // chevron sits outside its own border.
+          className="w-full [&_input]:min-w-0"
+        />
+      }
+      groups={facetGroups}
+      onToggle={onFacetToggle}
+      onClearGroup={onFacetClearGroup}
+      className="flex min-h-0 flex-col p-3"
+    />
+  );
 
   return (
     <>
+      <Sheet open={facetsOpen} onOpenChange={setFacetsOpen}>
+        <SheetContent side="left" className="w-[300px] overflow-y-auto">
+          <SheetTitle className="px-3 pt-4">Filters</SheetTitle>
+          {rail}
+        </SheetContent>
+      </Sheet>
+
       <div className="flex min-h-0 w-full flex-1 flex-col">
         <div className="flex min-h-0 flex-1 flex-col gap-6 px-8 pt-8">
           <div className="flex shrink-0 items-start justify-between gap-4">
@@ -876,6 +955,15 @@ function LogsToolsContent({
               description="Dive into tool traces across all tools, skills, and MCP servers used by organization members in this project"
             />
             <div className="flex items-center gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                className="xl:hidden"
+                onClick={() => setFacetsOpen(true)}
+              >
+                <Icon name="filter" className="size-4" />
+                Filters
+              </Button>
               <Button
                 variant="secondary"
                 size="sm"
@@ -975,27 +1063,9 @@ function LogsToolsContent({
             </div>
 
             <div className="flex min-h-0 flex-1 overflow-hidden">
-              <LogsFacetRail
-                header={
-                  <TimeRangePicker
-                    preset={customRange ? null : dateRange}
-                    customRange={customRange}
-                    customRangeLabel={customRangeLabel}
-                    onPresetChange={(preset) => onDateRangeChange(preset)}
-                    onCustomRangeChange={onCustomRangeChange}
-                    onClearCustomRange={onClearCustomRange}
-                    projectSlug={projectSlug}
-                    // The rail is narrower than the picker's intrinsic width,
-                    // so without letting the free-text input shrink the trigger
-                    // overflows and the chevron sits outside its own border.
-                    className="w-full [&_input]:min-w-0"
-                  />
-                }
-                groups={facetGroups}
-                onToggle={onFacetToggle}
-                onClearGroup={onFacetClearGroup}
-                className="border-border hidden w-[236px] shrink-0 flex-col border-r p-3 xl:flex"
-              />
+              <div className="border-border hidden w-[236px] shrink-0 border-r xl:flex">
+                {rail}
+              </div>
               <div className="bg-card min-h-0 flex-1 overflow-hidden">
                 <div className="bg-background relative flex h-full min-h-0 flex-col">
                   {/* Refetches of the whole list only. Paging in the next
