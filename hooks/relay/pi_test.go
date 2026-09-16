@@ -285,18 +285,60 @@ func TestPiOversizedGatedFramesBlock(t *testing.T) {
 		require.NoError(t, err)
 		return string(b)
 	}
+	// A payload the decoder rejects must fail closed too: the gate is blocked
+	// by the frame's own oversized flag, not by anything the handlers saw.
+	undecodable := func(seq int64, hook string) string {
+		b, err := json.Marshal(map[string]any{
+			"seq":       seq,
+			"hook":      hook,
+			"session":   map[string]any{"id": "pi-session-1", "cwd": t.TempDir()},
+			"oversized": true,
+			"input":     "not-an-object",
+		})
+		require.NoError(t, err)
+		return string(b)
+	}
+
 	replies := piServe(t, authedConfig(t, fs.URL),
 		oversized(1, piHookToolCall, map[string]any{"tool_call_id": "call-1", "tool_name": "bash"}),
 		oversized(2, piHookInput, map[string]any{"tool_call_id": "", "tool_name": ""}),
 		oversized(3, piHookToolResult, map[string]any{"tool_call_id": "call-1", "tool_name": "bash"}),
+		undecodable(4, piHookToolCall),
+		undecodable(5, piHookInput),
+		undecodable(6, piHookToolResult),
 	)
 
-	require.Len(t, replies, 3)
+	require.Len(t, replies, 6)
 	require.True(t, replies[0].Block)
 	require.Contains(t, replies[0].Reason, "too large")
 	require.True(t, replies[1].Block)
 	require.Contains(t, replies[1].Reason, "too large")
 	require.False(t, replies[2].Block)
+	require.True(t, replies[3].Block)
+	require.Contains(t, replies[3].Reason, "too large")
+	require.True(t, replies[4].Block)
+	require.False(t, replies[5].Block)
+}
+
+// An oversized tool_result keeps its failure classification: reporting a failed
+// tool as completed would hide it from failure telemetry.
+func TestPiOversizedToolResultKeepsFailure(t *testing.T) {
+	fs := newFakeServer(t, nil)
+	var frame map[string]any
+	require.NoError(t, json.Unmarshal([]byte(piFrameJSON(t, 1, piHookToolResult, t.TempDir(), map[string]any{
+		"tool_call_id": "call-1",
+		"tool_name":    "read",
+		"is_error":     true,
+	})), &frame))
+	frame["oversized"] = true
+	b, err := json.Marshal(frame)
+	require.NoError(t, err)
+
+	piServe(t, authedConfig(t, fs.URL), string(b))
+
+	requests := fs.all()
+	require.Len(t, requests, 1)
+	require.Equal(t, components.TypeToolFailed, requests[0].Event.Type)
 }
 
 // The initialize frame only starts the relay; it carries no event.

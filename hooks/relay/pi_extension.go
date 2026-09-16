@@ -102,6 +102,9 @@ const MAX_TEXT_BYTES = 32_000
 // under it. A larger one is sent as its identifying fields only, flagged
 // oversized, and the relay blocks it if it is a gate.
 const MAX_FRAME_BYTES = 4_000_000
+// Bounds each field of a reduced frame, so the frame that reports an oversized
+// payload cannot itself be oversized.
+const MAX_FIELD_CHARS = 512
 
 type Reply = { block?: boolean; reason?: string }
 
@@ -131,15 +134,23 @@ const textOf = (content: unknown): string => {
   }
   let out = ""
   let used = 0
+  // Tracked separately from out: an empty first block still separates the
+  // blocks that follow it.
+  let wrote = false
   for (const text of texts) {
-    const room = MAX_TEXT_BYTES - used - (out ? 1 : 0)
+    const room = MAX_TEXT_BYTES - used - (wrote ? 1 : 0)
     if (room <= 0) break
-    const piece = (out ? "\n" : "") + truncateUtf8(text, room)
+    const piece = (wrote ? "\n" : "") + truncateUtf8(text, room)
     out += piece
     used += Buffer.byteLength(piece, "utf8")
+    wrote = true
   }
   return out
 }
+
+// Keeps one field of a reduced frame short and a string.
+const boundedField = (value: unknown): string =>
+  typeof value === "string" ? value.slice(0, MAX_FIELD_CHARS) : ""
 
 const usageOf = (usage: any): Record<string, unknown> | null => {
   if (!usage || typeof usage !== "object") return null
@@ -239,12 +250,19 @@ export default function (pi: any) {
       let line = JSON.stringify({ seq: id, hook, session: session(ctx), input })
       if (Buffer.byteLength(line, "utf8") > MAX_FRAME_BYTES) {
         const fields = (input ?? {}) as any
+        const bounded: Record<string, string> = {}
+        for (const [key, value] of Object.entries(session(ctx))) bounded[key] = boundedField(value)
         line = JSON.stringify({
           seq: id,
           hook,
-          session: session(ctx),
+          session: bounded,
           oversized: true,
-          input: { tool_call_id: fields.tool_call_id ?? "", tool_name: fields.tool_name ?? "" },
+          input: {
+            tool_call_id: boundedField(fields.tool_call_id),
+            tool_name: boundedField(fields.tool_name),
+            // Kept so an oversized failure is not reported as a success.
+            is_error: fields.is_error === true,
+          },
         })
       }
       proc.stdin.write(line + "\n")

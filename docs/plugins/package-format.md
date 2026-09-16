@@ -433,7 +433,7 @@ Directory: `<org-slug>-observability-pi/`
 
 Pi has no hook configuration dialect and no MCP client, so the package is a TypeScript extension at `extensions/speakeasy-observability/index.ts`. Pi discovers extensions under `<config>/extensions/<name>/index.ts`, so extracting the package into `~/.pi/agent/` (all projects) or a repository's `.pi/` (that project only) installs it; project-local extensions load only after the project is trusted.
 
-The extension spawns `speakeasy-hooks pi serve` through the package's bootstrap script on the first event and forwards Pi's events as NDJSON frames. `tool_call` and `input` are gates: the relay's verdict comes back as `{ block: true, reason }` or `{ action: "handled" }`. The extension bounds each request at 30s and replaces the relay if it misses that deadline. A frame too large to send whole is reduced to its identifying fields and the relay blocks it.
+The extension spawns `speakeasy-hooks pi serve` through the package's bootstrap script on the first event and forwards Pi's events as NDJSON frames. `tool_call` and `input` are gates: the relay returns `{ block: true, reason }` when it blocks, and the extension turns a blocked prompt into Pi's `{ action: "handled" }` response. The extension bounds each request at 30s and replaces the relay if it misses that deadline. A frame too large to send whole is reduced to its identifying fields; oversized gate frames are blocked, while observe-only frames are still reported.
 
 MCP servers reach Pi only through third-party extensions, which register them as ordinary Pi tools. The relay reads the config those extensions share (`.pi/mcp.json`, then `~/.pi/agent/mcp.json`) to report inventory and attribute tool calls by name.
 
