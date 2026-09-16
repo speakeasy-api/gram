@@ -85,6 +85,40 @@ func (q *Queries) ListWorkloadIssuersByIssuerURL(ctx context.Context, arg ListWo
 	return items, nil
 }
 
+const resolveWorkloadAgentAssignment = `-- name: ResolveWorkloadAgentAssignment :one
+SELECT agent_id
+FROM workload_agent_assignments
+WHERE organization_id = $1
+  AND workload_issuer_id = $2
+  AND subject = $3
+  AND deleted IS FALSE
+`
+
+type ResolveWorkloadAgentAssignmentParams struct {
+	OrganizationID   string
+	WorkloadIssuerID uuid.UUID
+	Subject          string
+}
+
+// The agent a workload principal inherits its permission policy from.
+//
+// Keyed on the workload principal itself — (organization, issuer row, subject) —
+// and deliberately not on an admission row. Admissions are tiered by project
+// while the principal is organization-scoped, so withdrawing one tier's
+// admission must not change what the workload may do under another. That is
+// also why no project arm appears here, unlike WorkloadIdentityIsAdmitted.
+//
+// At most one row can match: workload_agent_assignments_workload_key is unique
+// on these three columns for live rows, which is where "one agent per workload"
+// is enforced. Unassigning is a soft delete, so deleted rows are excluded or the
+// workload would keep the authority an administrator believes they removed.
+func (q *Queries) ResolveWorkloadAgentAssignment(ctx context.Context, arg ResolveWorkloadAgentAssignmentParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, resolveWorkloadAgentAssignment, arg.OrganizationID, arg.WorkloadIssuerID, arg.Subject)
+	var agent_id uuid.UUID
+	err := row.Scan(&agent_id)
+	return agent_id, err
+}
+
 const workloadIdentityIsAdmitted = `-- name: WorkloadIdentityIsAdmitted :one
 SELECT EXISTS (
   SELECT 1

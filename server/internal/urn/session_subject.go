@@ -20,18 +20,35 @@ const (
 	SessionSubjectKindAPIKey    SessionSubjectKind = "apikey"
 	SessionSubjectKindAgent     SessionSubjectKind = "agent"
 	SessionSubjectKindAnonymous SessionSubjectKind = "anonymous"
+	SessionSubjectKindWorkload  SessionSubjectKind = "workload"
 )
+
+// MaxWorkloadExternalSubjectLength is the room left for the external subject
+// in a workload subject's id, after the issuer uuid and its delimiter. Exported
+// so admission can reject an over-long subject where an operator can fix it,
+// rather than at token exchange.
+const MaxWorkloadExternalSubjectLength = MaxWorkloadSubjectIDLength - uuidStringLength - len(delimiter)
+
+// MaxWorkloadSubjectIDLength is the byte limit for a workload subject's id. It
+// exceeds MaxSessionSubjectIDLength because the platform picks the external
+// subject, and an AWS IAM ARN can carry a 512-character path. It stays under
+// Postgres's ~2.7 KB B-tree entry limit and common ~8 KB header limits.
+const MaxWorkloadSubjectIDLength = 1024
+
+// uuidStringLength is the length of a uuid in canonical text form.
+const uuidStringLength = 36
 
 var sessionSubjectKinds = map[SessionSubjectKind]struct{}{
 	SessionSubjectKindUser:      {},
 	SessionSubjectKindAPIKey:    {},
 	SessionSubjectKindAgent:     {},
 	SessionSubjectKindAnonymous: {},
+	SessionSubjectKindWorkload:  {},
 }
 
 // SessionSubject is the URN that may appear as the `sub` claim of a
 // Gram-issued session JWT. Format: `<kind>:<id>` where kind is exactly one of
-// `user`, `apikey`, `agent`, or `anonymous`.
+// `user`, `apikey`, `agent`, `anonymous`, or `workload`.
 //
 // `role` is NOT a valid session subject — roles are not authentication
 // principals; use urn.Principal for RBAC subjects.
@@ -71,6 +88,68 @@ func NewAnonymousSubject(mcpSessionID string) SessionSubject {
 	s := SessionSubject{Kind: SessionSubjectKindAnonymous, ID: mcpSessionID, checked: false, err: nil}
 	_ = s.validate()
 	return s
+}
+
+// NewWorkloadSubject constructs a
+// `workload:<workloadIssuerID>:<externalSubject>` session subject.
+//
+// A `sub` is unique only within its issuer, so the issuer is part of the
+// identity. It is named by its workload_issuers row id rather than its URL, so
+// the identity survives a discovery refresh or URL edit; re-registering an
+// issuer is a new identity.
+func NewWorkloadSubject(workloadIssuerID uuid.UUID, externalSubject string) SessionSubject {
+	s := SessionSubject{
+		Kind:    SessionSubjectKindWorkload,
+		ID:      workloadIssuerID.String() + delimiter + externalSubject,
+		checked: false,
+		err:     nil,
+	}
+	_ = s.validate()
+	return s
+}
+
+// Workload splits a `workload:` subject into its issuer id and external
+// subject. It returns an error for any other kind.
+func (u SessionSubject) Workload() (uuid.UUID, string, error) {
+	if err := u.validate(); err != nil {
+		return uuid.Nil, "", err
+	}
+	if u.Kind != SessionSubjectKindWorkload {
+		return uuid.Nil, "", fmt.Errorf("%w: not a workload subject: %q", ErrInvalid, u.Kind)
+	}
+
+	issuerID, externalSubject, err := splitWorkloadID(u.ID)
+	if err != nil {
+		return uuid.Nil, "", err
+	}
+
+	return issuerID, externalSubject, nil
+}
+
+// splitWorkloadID splits a workload id on the first delimiter only, since
+// external subjects often contain colons (`repo:owner/name:ref:refs/heads/main`).
+func splitWorkloadID(id string) (uuid.UUID, string, error) {
+	parts := strings.SplitN(id, delimiter, 2)
+	if len(parts) != 2 {
+		return uuid.Nil, "", fmt.Errorf("%w: workload id must be <issuer-id>:<external-subject>", ErrInvalid)
+	}
+	issuerPart, externalSubject := parts[0], parts[1]
+
+	// Canonical form only: uuid.Parse also accepts uppercase and braced forms,
+	// which would give one workload several strings that compare unequal.
+	issuerID, err := uuid.Parse(issuerPart)
+	if err != nil || issuerID.String() != issuerPart {
+		return uuid.Nil, "", fmt.Errorf("%w: workload issuer reference must be a canonical uuid", ErrInvalid)
+	}
+	if issuerID == uuid.Nil {
+		// The nil uuid parses but names no workload_issuers row.
+		return uuid.Nil, "", fmt.Errorf("%w: workload issuer reference is the nil uuid", ErrInvalid)
+	}
+	if externalSubject == "" {
+		return uuid.Nil, "", fmt.Errorf("%w: workload external subject is empty", ErrInvalid)
+	}
+
+	return issuerID, externalSubject, nil
 }
 
 // ParseSessionSubject parses a string of the form `<kind>:<id>` into a
@@ -210,8 +289,12 @@ func (u *SessionSubject) validate() error {
 		return u.err
 	}
 
-	if len(u.ID) > MaxSessionSubjectIDLength {
-		u.err = fmt.Errorf("%w: id segment is too long (max %d, got %d)", ErrInvalid, MaxSessionSubjectIDLength, len(u.ID))
+	maxIDLength := MaxSessionSubjectIDLength
+	if u.Kind == SessionSubjectKindWorkload {
+		maxIDLength = MaxWorkloadSubjectIDLength
+	}
+	if len(u.ID) > maxIDLength {
+		u.err = fmt.Errorf("%w: id segment is too long (max %d, got %d)", ErrInvalid, maxIDLength, len(u.ID))
 		return u.err
 	}
 
@@ -223,6 +306,15 @@ func (u *SessionSubject) validate() error {
 		}
 		if u.Kind == SessionSubjectKindAgent && id.String() != u.ID {
 			u.err = fmt.Errorf("%w: agent id must use canonical uuid format", ErrInvalid)
+			return u.err
+		}
+	}
+
+	if u.Kind == SessionSubjectKindWorkload {
+		// An id that does not split into an issuer and a subject cannot say
+		// which issuer vouched for the workload.
+		if _, _, splitErr := splitWorkloadID(u.ID); splitErr != nil {
+			u.err = splitErr
 			return u.err
 		}
 	}

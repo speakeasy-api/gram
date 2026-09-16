@@ -278,6 +278,12 @@ var (
 	errAgentSessionCredentialLoad = errors.New("load agent session credential")
 )
 
+// errUnsupportedSessionSubject marks a session subject kind that parses but
+// that this path cannot describe as a caller. It is an error rather than a
+// fallback because a context with no actor reads to authz.Engine as an
+// authenticated session belonging to nobody.
+var errUnsupportedSessionSubject = errors.New("session subject kind cannot be described as a caller")
+
 // The gram.oauth.failure_reason values the issuer gate emits on its rejection
 // logs and on the mcp.request.rejected counter, beyond the bearer-token
 // classification issuerGateFailureReason produces. Together they are a closed
@@ -306,6 +312,8 @@ func issuerGateFailureReason(err error) string {
 		return "tool_selection_load_failed"
 	case errors.Is(err, errAgentSessionCredentialLoad):
 		return "agent_session_load_failed"
+	case errors.Is(err, errWorkloadSessionCredentialLoad):
+		return "workload_session_load_failed"
 	default:
 		return "invalid_bearer_token"
 	}
@@ -419,6 +427,26 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token string, en
 			return ctx, nil, nil, err
 		}
 	}
+	if subject.Kind == urn.SessionSubjectKindWorkload {
+		row, qerr := usersessions_repo.New(s.db).GetUserSessionPrincipalCredentialByJTI(ctx, usersessions_repo.GetUserSessionPrincipalCredentialByJTIParams{
+			UserSessionIssuerID: endpoint.UserSessionIssuerID,
+			Jti:                 session.JTI(),
+		})
+		if qerr != nil {
+			if errors.Is(qerr, pgx.ErrNoRows) {
+				return ctx, nil, nil, oops.C(oops.CodeUnauthorized)
+			}
+			return ctx, nil, nil, fmt.Errorf("%w: %w", errWorkloadSessionCredentialLoad, qerr)
+		}
+		credential, cerr := loadWorkloadSessionCredential(endpoint, subject, row.SubjectUrn, row.OrganizationID, row.DelegatedGrants, row.DelegatedGrantsVersion)
+		if cerr != nil {
+			return ctx, nil, nil, cerr
+		}
+		newCtx, err = s.admitWorkloadSession(newCtx, endpoint, subject, credential)
+		if err != nil {
+			return ctx, nil, nil, err
+		}
+	}
 	newCtx = s.identityValidator.StampValidatedSession(newCtx, session)
 	return newCtx, &subject, toolSelection, nil
 }
@@ -519,6 +547,17 @@ func (s *Service) contextForSessionSubject(
 		// Unreachable: anonymous subjects return ctx untouched above. Listed
 		// for exhaustiveness so the linter doesn't flag the switch.
 		return ctx, nil
+	case urn.SessionSubjectKindWorkload:
+		workloadIssuerID, externalSubject, workloadErr := subject.Workload()
+		if workloadErr != nil {
+			return nil, fmt.Errorf("%w: %w", errUnsupportedSessionSubject, workloadErr)
+		}
+		// The actor carries the whole identity, as for an agent. What the
+		// machine may do comes from the agent assigned to it, resolved during
+		// admission rather than here.
+		return contextvalues.WithAuthenticatedActor(
+			ctx, authCtx, urn.NewWorkloadPrincipal(workloadIssuerID, externalSubject),
+		), nil
 	}
 	return ctx, oops.C(oops.CodeUnauthorized)
 }

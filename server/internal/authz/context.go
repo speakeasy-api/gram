@@ -11,12 +11,22 @@ type contextKey string
 const (
 	grantsContextKey                      contextKey = "authz_grants"
 	principalCredentialPoliciesContextKey contextKey = "authz_principal_credential_policies" //nolint:gosec // private context key, not credential material
+	workloadPoliciesContextKey            contextKey = "authz_workload_policies"
 )
 
 type principalCredentialPolicies struct {
 	credential []Grant
 	agent      []Grant
 	owner      []Grant
+}
+
+// workloadPolicies is the two-set form a workload session acts under: the
+// session ceiling and the assigned agent's live policy. Kept separate from
+// principalCredentialPolicies rather than storing an empty owner set, which the
+// evaluator would read as "the owner allows nothing" and deny every check.
+type workloadPolicies struct {
+	ceiling []Grant
+	agent   []Grant
 }
 
 type grantAuthorization struct {
@@ -43,9 +53,20 @@ func principalCredentialPoliciesToContext(ctx context.Context, credential, agent
 	return context.WithValue(ctx, principalCredentialPoliciesContextKey, policies)
 }
 
+func workloadPoliciesToContext(ctx context.Context, ceiling, agent []Grant) context.Context {
+	policies := workloadPolicies{
+		ceiling: append([]Grant(nil), ceiling...),
+		agent:   append([]Grant(nil), agent...),
+	}
+	return context.WithValue(ctx, workloadPoliciesContextKey, policies)
+}
+
 func grantAuthorizationFromContext(ctx context.Context) (grantAuthorization, bool) {
 	if policies, ok := ctx.Value(principalCredentialPoliciesContextKey).(principalCredentialPolicies); ok {
 		return grantAuthorization{policies: [][]Grant{policies.credential, policies.agent, policies.owner}}, true
+	}
+	if policies, ok := ctx.Value(workloadPoliciesContextKey).(workloadPolicies); ok {
+		return grantAuthorization{policies: [][]Grant{policies.ceiling, policies.agent}}, true
 	}
 	if _, principalCredential := contextvalues.PrincipalCredentialAuthorization(ctx); principalCredential {
 		return grantAuthorization{policies: nil}, false
