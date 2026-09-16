@@ -341,20 +341,6 @@ interface IdentityProviderSetupStepPanelProps {
    */
   allowSubmitWithoutValues?: boolean;
   /**
-   * An action the step keeps offering after its sequence is done, for work the
-   * server redoes safely and that the administrator has reason to repeat —
-   * assigning groups added in Okta since the last submit. It sits below the
-   * numbered work rather than in it: it is not a step on the way anywhere, and
-   * numbering it would say the step is unfinished every time it is offered.
-   */
-  secondaryAction?: {
-    label: string;
-    /** When to reach for it, in the caller's own words. */
-    note?: string;
-    onClick: () => void;
-    isPending: boolean;
-  };
-  /**
    * The round trip through the setup portal, for the part of this step our own
    * API cannot do. `note` says what the administrator carries there.
    */
@@ -393,7 +379,6 @@ export function IdentityProviderSetupStepPanel({
   verifyLabel,
   deepLinkLabel,
   allowSubmitWithoutValues = false,
-  secondaryAction,
   portal,
   repair,
 }: IdentityProviderSetupStepPanelProps): JSX.Element {
@@ -565,24 +550,6 @@ export function IdentityProviderSetupStepPanel({
       ) : null}
 
       <ol className="space-y-5">{parts}</ol>
-
-      {secondaryAction ? (
-        <div className="flex flex-wrap items-center gap-3">
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={secondaryAction.isPending}
-            onClick={secondaryAction.onClick}
-          >
-            {secondaryAction.label}
-          </Button>
-          {secondaryAction.note ? (
-            <Text variant="small" muted>
-              {secondaryAction.note}
-            </Text>
-          ) : null}
-        </div>
-      ) : null}
 
       {verifyUnavailable ? (
         <Alert variant="info" alignTop>

@@ -97,20 +97,6 @@ export function OktaDirectorySection({
         }
         onSubmit={submitValues}
         submitLabel="Set up directory sync"
-        secondaryAction={
-          // The server checks each piece and creates only what is missing, so
-          // re-sending is how a group added in Okta after setup gets assigned.
-          // Offered only once the application exists: before that the primary
-          // action is the same request.
-          guided && applicationExists
-            ? {
-                label: submit.isPending ? "Assigning..." : "Assign new groups",
-                note: "Run this after adding a group in Okta.",
-                isPending: submit.isPending,
-                onClick: () => submitValues([]),
-              }
-            : undefined
-        }
         allowSubmitWithoutValues={Boolean(guided && !applicationExists)}
         verifyLabel="Check the directory"
         deepLinkLabel="Open the Provisioning tab in Okta"

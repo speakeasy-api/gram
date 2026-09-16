@@ -188,7 +188,9 @@ describe("OktaDirectorySection", () => {
     ).toBeTruthy();
   });
 
-  it("keeps assigning new groups on offer once the application exists", () => {
+  // Once the directory application exists the step asks for nothing, so it
+  // offers nothing to send: checking is all that is left here.
+  it("offers no submit once the application exists", () => {
     withStep(directoryStep({ state: "awaiting_verification" }));
     render(
       <OktaDirectorySection
@@ -197,31 +199,15 @@ describe("OktaDirectorySection", () => {
       />,
     );
 
-    // The primary action is gone once the application exists, so without this
-    // there is no way to assign a group added in Okta afterwards.
     expect(
       screen.queryByRole("button", { name: "Set up directory sync" }),
     ).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Assign new groups" }));
-
-    // The same request the primary action sends. The server creates only what
-    // is missing, so re-sending it assigns whatever is new.
-    expect(submit.mutate.mock.calls[0]![0]).toEqual({
-      request: {
-        submitSetupStepRequestBody: { stepKey: "directory", values: [] },
-      },
-    });
-  });
-
-  it("does not offer it before the application exists", () => {
-    withStep(directoryStep());
-    render(<OktaDirectorySection index={3} connection={connection()} />);
-
-    // Before setup the primary action sends the identical request, so a second
-    // control beside it would be two buttons for one thing.
     expect(
       screen.queryByRole("button", { name: "Assign new groups" }),
     ).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Check the directory" }),
+    ).toBeTruthy();
   });
 
   it("reports the outcome as one line, with no evidence table", () => {
