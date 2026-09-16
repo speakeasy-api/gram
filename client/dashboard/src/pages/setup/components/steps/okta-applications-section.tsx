@@ -16,7 +16,6 @@ import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { StepSection } from "../step-section";
 import { errorMessage } from "./identity-provider-errors";
-import { signOnModeLabel } from "./okta-sign-on-modes";
 
 const STATUS_FILTERS = defineFilters([
   {
@@ -156,13 +155,8 @@ function ApplicationCard({
         ) : null}
       </div>
 
-      <div className="border-border flex flex-wrap items-baseline gap-x-4 gap-y-1 border-t pt-3">
-        <Text variant="small" muted>
-          {signOnModeLabel(application.signOnMode)}
-        </Text>
-        <Text variant="small" className="ml-auto">
-          {assignedTo(application)}
-        </Text>
+      <div className="border-border border-t pt-3">
+        <Text variant="small">{assignedTo(application)}</Text>
       </div>
     </div>
   );

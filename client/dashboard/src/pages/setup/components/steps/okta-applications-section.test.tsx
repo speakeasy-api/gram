@@ -9,7 +9,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { IdentityProviderApplication } from "@gram/client/models/components/identityproviderapplication.js";
 import type { IdentityProviderConnection } from "@gram/client/models/components/identityproviderconnection.js";
 import { OktaApplicationsSection } from "./okta-applications-section";
-import { signOnModeLabel } from "./okta-sign-on-modes";
 
 const applications = vi.hoisted(() => ({
   current: {} as {
@@ -122,7 +121,6 @@ describe("OktaApplicationsSection", () => {
         sourceApplicationId: "0oaexampleapp2",
         label: "Example Docs",
         providerStatus: "INACTIVE",
-        signOnMode: "SAML_2_0",
         signOnUrl: "https://docs.example.test/acs",
         logoUrl: undefined,
         groupAssignmentCount: 1,
@@ -166,21 +164,6 @@ describe("OktaApplicationsSection", () => {
     expect(
       screen.getByText(/Assignment counts were omitted because/),
     ).toBeTruthy();
-  });
-
-  it("says how each application signs people in, in words", () => {
-    expect(signOnModeLabel("OPENID_CONNECT")).toBe("OpenID Connect");
-    expect(signOnModeLabel("SAML_2_0")).toBe("SAML");
-    expect(signOnModeLabel("BROWSER_PLUGIN")).toBe("Browser plugin");
-    expect(signOnModeLabel("BOOKMARK")).toBe("Bookmark");
-    expect(signOnModeLabel("AUTO_LOGIN")).toBe("Auto login");
-    expect(signOnModeLabel("WS_FEDERATION")).toBe("WS-Federation");
-    // A mode this build has no word for is shown as Okta wrote it: an
-    // unfamiliar name beats a wrong friendly one.
-    expect(signOnModeLabel("SECURE_WEB_AUTHENTICATION")).toBe(
-      "SECURE_WEB_AUTHENTICATION",
-    );
-    expect(signOnModeLabel(undefined)).toBe("—");
   });
 
   it("prints the sign-on host only where it differs from the tenant", () => {
