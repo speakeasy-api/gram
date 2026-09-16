@@ -268,7 +268,7 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     Sessions, Tool Filtering, Danger Zone order, with Advanced Headers directly
     after the Identity controls.
 
-18. **Billing meter usage** — select a custom trailing 14-day window. Storage
+19. **Billing meter usage** — select a custom trailing 14-day window. Storage
     shows s-tokens of stored content, bandwidth shows ingress and egress bytes,
     and risk content shows all six scanners. Department breakdown includes
     missing attribution and a remainder. Chart series and table totals sum to
