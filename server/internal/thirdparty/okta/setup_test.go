@@ -150,6 +150,7 @@ type stubOkta struct {
 	rotateTokenNonce     bool
 	tokenNonce           string
 	lastAppsQuery        url.Values
+	groupsQueries        []url.Values
 	emitResourceNonce    string
 	requireResourceNonce bool
 	resourceNonce        string
@@ -504,7 +505,7 @@ func (s *stubOkta) handleToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Like Okta, ungranted scopes are trimmed; all-ungranted is invalid_scope.
+	// Ungranted scopes are trimmed; this stub models the invalid_scope variant.
 	scope := granted
 	if requested := strings.Fields(r.Form.Get("scope")); len(requested) > 0 {
 		scope = make([]string, 0, len(requested))
@@ -656,7 +657,26 @@ func (s *stubOkta) handleAppGroups(w http.ResponseWriter, r *http.Request) {
 func (s *stubOkta) handleListGroups(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	groups := s.groups
+	s.groupsQueries = append(s.groupsQueries, r.URL.Query())
 	s.mu.Unlock()
+	if r.URL.Query().Has("q") {
+		http.Error(w, "q does not support pagination", http.StatusBadRequest)
+		return
+	}
+	if search := r.URL.Query().Get("search"); search != "" {
+		var prefix string
+		if !strings.HasPrefix(search, "profile.name sw ") || json.Unmarshal([]byte(strings.TrimPrefix(search, "profile.name sw ")), &prefix) != nil {
+			http.Error(w, "invalid search expression", http.StatusBadRequest)
+			return
+		}
+		filtered := make([]groupJSON, 0)
+		for _, group := range groups {
+			if strings.HasPrefix(strings.ToLower(group.Profile.Name), strings.ToLower(prefix)) {
+				filtered = append(filtered, group)
+			}
+		}
+		groups = filtered
+	}
 	s.writeJSON(w, http.StatusOK, paginate(s, w, r, groups))
 }
 
@@ -744,8 +764,15 @@ func newTestClient(t *testing.T, tracerProvider trace.TracerProvider, logger *sl
 	require.NoError(t, err)
 	impl, ok := client.(*httpClient)
 	require.True(t, ok)
-	impl.sleep = sleeper.sleep
+	impl.sleep = func(ctx context.Context, d time.Duration) error {
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("test sleep: %w", err)
+		}
+		clock.advance(d)
+		return sleeper.sleep(ctx, d)
+	}
 	impl.now = clock.Now
+	impl.jitter = func() time.Duration { return maxRateLimitJitter / 2 }
 
 	return testClient{client: impl, stub: stub, signer: signer, sleeper: sleeper, clock: clock}
 }

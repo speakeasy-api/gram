@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math/rand/v2"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -24,6 +25,7 @@ import (
 )
 
 const (
+	codeConsentRequired = "consent_required" // Okta reports this when none of the requested scopes are granted.
 	clientAssertionType = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
 	tokenEndpointPath   = "/oauth2/v1/token" //nolint:gosec // G101 false positive: a URL path, not a credential.
 
@@ -31,6 +33,7 @@ const (
 	tokenExpirySafetyMargin = 60 * time.Second
 	maxRateLimitRetries     = 3
 	maxRateLimitWait        = 2 * time.Minute
+	maxRateLimitJitter      = 250 * time.Millisecond
 	rateLimitSlowdownRatio  = 0.2
 
 	defaultMaxPages          = 50
@@ -88,9 +91,10 @@ type httpClient struct {
 	maxPages   int
 	now        func() time.Time
 	sleep      func(ctx context.Context, d time.Duration) error
+	jitter     func() time.Duration
 
-	// mintMu serializes token minting so concurrent callers share one handshake.
-	mintMu sync.Mutex
+	// mintAdmission serializes handshakes while allowing waiters to cancel.
+	mintAdmission chan struct{}
 
 	mu        sync.Mutex
 	cached    cachedToken
@@ -137,22 +141,23 @@ func NewClient(logger *slog.Logger, client *guardian.HTTPClient, signer remotese
 	noRedirect.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 
 	return &httpClient{
-		logger:     logger.With(attr.SlogComponent("okta_client")),
-		cfg:        cfg,
-		httpClient: &noRedirect,
-		signer:     signer,
-		key:        key,
-		orgURL:     orgURL,
-		tokenURL:   tokenURL,
-		audience:   audience,
-		maxPages:   maxPages,
-		now:        time.Now,
-		sleep:      sleepContext,
-		mintMu:     sync.Mutex{},
-		mu:         sync.Mutex{},
-		cached:     noToken,
-		nonce:      "",
-		slowUntil:  time.Time{},
+		logger:        logger.With(attr.SlogComponent("okta_client")),
+		cfg:           cfg,
+		httpClient:    &noRedirect,
+		signer:        signer,
+		key:           key,
+		orgURL:        orgURL,
+		tokenURL:      tokenURL,
+		audience:      audience,
+		maxPages:      maxPages,
+		now:           time.Now,
+		sleep:         sleepContext,
+		jitter:        rateLimitJitter,
+		mintAdmission: make(chan struct{}, 1),
+		mu:            sync.Mutex{},
+		cached:        noToken,
+		nonce:         "",
+		slowUntil:     time.Time{},
 	}, nil
 }
 
@@ -274,7 +279,10 @@ func (c *httpClient) ListAppGroups(ctx context.Context, req ListAppGroupsRequest
 
 func (c *httpClient) ListGroups(ctx context.Context, req ListGroupsRequest) ([]Group, error) {
 	q := url.Values{}
-	setQuery(q, "q", req.Search)
+	if req.Search != "" {
+		prefix, _ := json.Marshal(req.Search)
+		q.Set("search", "profile.name sw "+string(prefix))
+	}
 	setLimit(q, req.Limit)
 
 	raw, err := listAll[groupJSON](ctx, c, "/api/v1/groups", q)
@@ -298,13 +306,15 @@ func (c *httpClient) ListGroups(ctx context.Context, req ListGroupsRequest) ([]G
 // VerifyScopes always mints a fresh token for the required scopes; the
 // verification token is never cached because it may lack default scopes.
 func (c *httpClient) VerifyScopes(ctx context.Context, required []string) (*ScopeVerification, error) {
-	c.mintMu.Lock()
-	defer c.mintMu.Unlock()
+	if err := c.acquireMint(ctx); err != nil {
+		return nil, err
+	}
+	defer c.releaseMint()
 	c.evictToken()
 
 	tok, err := c.mint(ctx, required)
 	var apiErr *APIError
-	if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusBadRequest && apiErr.ErrorCode == oautherr.CodeInvalidScope {
+	if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusBadRequest && (apiErr.ErrorCode == oautherr.CodeInvalidScope || apiErr.ErrorCode == codeConsentRequired) {
 		return &ScopeVerification{
 			Granted:   make([]string, 0),
 			Missing:   append([]string(nil), required...),
@@ -466,7 +476,7 @@ func (c *httpClient) do(ctx context.Context, method string, target *url.URL) ([]
 				return nil, nil, newAPIError(method, target.Path, status, body)
 			}
 			tokenRetried = true
-			c.evictToken()
+			c.evictRejectedToken(tok.accessToken)
 			continue
 
 		default:
@@ -508,14 +518,47 @@ func (c *httpClient) evictToken() {
 	c.mu.Unlock()
 }
 
-// token returns the cached DPoP token or mints one under mintMu.
+// evictRejectedToken leaves a newer token installed by another request intact.
+func (c *httpClient) evictRejectedToken(accessToken string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.cached.accessToken == accessToken {
+		c.cached = noToken
+	}
+}
+
+// acquireMint admits one handshake, unless the caller has been canceled.
+func (c *httpClient) acquireMint(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("wait for okta token mint: %w", err)
+	}
+	select {
+	case <-ctx.Done():
+		return fmt.Errorf("wait for okta token mint: %w", ctx.Err())
+	case c.mintAdmission <- struct{}{}:
+		if err := ctx.Err(); err != nil {
+			c.releaseMint()
+			return fmt.Errorf("wait for okta token mint: %w", err)
+		}
+		return nil
+	}
+}
+
+func (c *httpClient) releaseMint() { <-c.mintAdmission }
+
+// token returns the cached DPoP token or mints one under mint admission.
 func (c *httpClient) token(ctx context.Context) (cachedToken, error) {
+	if err := ctx.Err(); err != nil {
+		return noToken, fmt.Errorf("get okta token: %w", err)
+	}
 	if tok, ok := c.cachedToken(); ok {
 		return tok, nil
 	}
 
-	c.mintMu.Lock()
-	defer c.mintMu.Unlock()
+	if err := c.acquireMint(ctx); err != nil {
+		return noToken, err
+	}
+	defer c.releaseMint()
 	if tok, ok := c.cachedToken(); ok {
 		return tok, nil
 	}
@@ -549,6 +592,9 @@ func (c *httpClient) mint(ctx context.Context, scopes []string) (cachedToken, er
 		if err != nil {
 			return cachedToken{}, err
 		}
+		if nextNonce := header.Get("DPoP-Nonce"); nextNonce != "" {
+			nonce = nextNonce
+		}
 
 		switch {
 		case status == http.StatusOK:
@@ -571,7 +617,6 @@ func (c *httpClient) mint(ctx context.Context, scopes []string) (cachedToken, er
 				return cachedToken{}, errors.New("okta token endpoint rejected dpop nonce twice")
 			}
 			nonceRetried = true
-			nonce = header.Get("DPoP-Nonce")
 			continue
 
 		default:
@@ -694,25 +739,26 @@ func (c *httpClient) observeRateLimit(header http.Header) {
 	c.mu.Unlock()
 }
 
-// waitForSlowdown sleeps until slowUntil and clears it only if no concurrent
-// observer moved the deadline while this waiter slept.
+// waitForSlowdown rechecks the shared deadline after every wake so concurrent
+// extensions are honored before another request is sent.
 func (c *httpClient) waitForSlowdown(ctx context.Context) error {
-	c.mu.Lock()
-	deadline := c.slowUntil
-	wait := deadline.Sub(c.now())
-	c.mu.Unlock()
-	if wait <= 0 {
-		return nil
+	for {
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("wait for okta slowdown: %w", err)
+		}
+		c.mu.Lock()
+		wait := c.slowUntil.Sub(c.now())
+		if wait <= 0 {
+			c.slowUntil = time.Time{}
+		}
+		c.mu.Unlock()
+		if wait <= 0 {
+			return nil
+		}
+		if err := c.sleep(ctx, min(wait, maxRateLimitWait)); err != nil {
+			return err
+		}
 	}
-	if err := c.sleep(ctx, min(wait, maxRateLimitWait)); err != nil {
-		return err
-	}
-	c.mu.Lock()
-	if c.slowUntil.Equal(deadline) {
-		c.slowUntil = time.Time{}
-	}
-	c.mu.Unlock()
-	return nil
 }
 
 func (c *httpClient) rateLimitWait(header http.Header) time.Duration {
@@ -720,7 +766,14 @@ func (c *httpClient) rateLimitWait(header http.Header) time.Duration {
 	if wait <= 0 {
 		wait = time.Second
 	}
-	return min(wait, maxRateLimitWait)
+	// Add positive post-reset jitter to spread retries across clients, while
+	// keeping the total sleep capped (including for saturated durations).
+	return min(min(wait, maxRateLimitWait)+c.jitter(), maxRateLimitWait)
+}
+
+func rateLimitJitter() time.Duration {
+	// The global generator is safe for concurrent callers; this is not security-sensitive.
+	return time.Duration(rand.Int64N(int64(maxRateLimitJitter))) + 1 //nolint:gosec // G404: retry jitter does not require cryptographic randomness.
 }
 
 func (c *httpClient) resetTime(header http.Header) time.Time {
@@ -784,5 +837,5 @@ func newAPIError(method, path string, status int, body []byte) *APIError {
 	if summary == "" {
 		summary = parsed.ErrorDescription
 	}
-	return &APIError{Method: method, Path: path, StatusCode: status, ErrorCode: code, Summary: summary}
+	return &APIError{Method: method, Path: "/" + strings.TrimLeft(path, "/"), StatusCode: status, ErrorCode: code, Summary: summary}
 }
