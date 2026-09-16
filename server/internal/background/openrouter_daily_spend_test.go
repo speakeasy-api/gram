@@ -84,7 +84,7 @@ func TestCollectOpenRouterDailySpendWorkflowPropagatesFailureAfterRetries(t *tes
 	require.True(t, env.IsWorkflowCompleted())
 	require.ErrorContains(t, env.GetWorkflowError(), "collect openrouter daily spend")
 	require.EqualValues(t, openRouterDailySpendActivityMaxAttempts, attempts.Load())
-	require.EqualValues(t, 1, settlementAttempts.Load(), "failed collection must still route independent TUM carries")
+	require.EqualValues(t, 1, settlementAttempts.Load(), "failed collection must still deliver existing allocations")
 	require.True(t, settled.RestrictOpenRouterToReadyOrganizations)
 	require.Empty(t, settled.OpenRouterReadyOrganizationIDs)
 }

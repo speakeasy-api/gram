@@ -58,8 +58,8 @@ func CollectOpenRouterDailySpendWorkflow(ctx workflow.Context) error {
 		collected.ReadyOrganizationIDs = nil
 	}
 
-	// A failed collection leaves the ready set empty, so settlement still routes
-	// independent TUM carries without freezing stale OpenRouter spend.
+	// A failed collection leaves the ready set empty. Settlement can still
+	// deliver existing allocations without freezing stale OpenRouter spend.
 	settlementErr := workflow.ExecuteActivity(ctx, a.SettleStripeInvoiceAllocations, activities.SettleStripeInvoiceAllocationsArgs{
 		Now:                                    workflow.Now(ctx).UTC(),
 		RestrictOpenRouterToReadyOrganizations: true,
