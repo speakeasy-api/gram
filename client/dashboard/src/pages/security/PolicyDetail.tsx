@@ -3093,6 +3093,10 @@ function JudgeSessionBanner({
   const detail = `${matchedCount} ${
     matchedCount === 1 ? "message" : "messages"
   } matched`;
+  let messageLimitNote = "";
+  if (evalResult.messageLimitHit) {
+    messageLimitNote = ` Only the first ${evalResult.judgedCount} of ${evalResult.inScopeMessageCount} in-scope messages were judged.`;
+  }
 
   if (evalResult.flagged) {
     return (
@@ -3109,7 +3113,7 @@ function JudgeSessionBanner({
           </div>
           <Text small muted>
             {detail} across {judgedLabel}. Matching messages are highlighted
-            below.
+            below.{messageLimitNote}
           </Text>
         </div>
       </div>
@@ -3127,7 +3131,7 @@ function JudgeSessionBanner({
           <Badge variant="neutral">Clean</Badge>
         </div>
         <Text small muted>
-          No messages matched across {judgedLabel}.
+          No messages matched across {judgedLabel}.{messageLimitNote}
         </Text>
       </div>
     </div>

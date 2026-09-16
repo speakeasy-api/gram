@@ -3093,7 +3093,7 @@ func (s *Service) evaluateGuardrailForChat(
 	}
 
 	occurredAt := time.Now().UTC()
-	verdicts, err := ra.EvalPromptGuardrail(
+	evaluation, err := ra.EvalPromptGuardrail(
 		ctx,
 		s.logger,
 		s.promptJudge,
@@ -3110,6 +3110,8 @@ func (s *Service) evaluateGuardrailForChat(
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid scope expression")
 	}
+
+	verdicts := evaluation.Verdicts
 
 	out := make([]*gen.PromptGuardrailMessageVerdict, 0, len(verdicts))
 	flagged := false
@@ -3165,12 +3167,14 @@ func (s *Service) evaluateGuardrailForChat(
 	}
 
 	return &gen.PromptGuardrailEvalResult{
-		ChatID:         chatID.String(),
-		Flagged:        flagged,
-		JudgedCount:    len(out),
-		TotalCostUsd:   totalCostUSD,
-		TotalLatencyMs: totalLatencyMs,
-		Verdicts:       out,
+		ChatID:              chatID.String(),
+		Flagged:             flagged,
+		JudgedCount:         len(out),
+		InScopeMessageCount: evaluation.InScopeMessageCount,
+		MessageLimitHit:     evaluation.MessageLimitHit,
+		TotalCostUsd:        totalCostUSD,
+		TotalLatencyMs:      totalLatencyMs,
+		Verdicts:            out,
 	}, nil
 }
 

@@ -1334,6 +1334,11 @@ type EvaluatePromptGuardrailResponseBody struct {
 	Flagged bool `form:"flagged" json:"flagged" xml:"flagged"`
 	// Number of in-scope messages the judge evaluated.
 	JudgedCount int `form:"judged_count" json:"judged_count" xml:"judged_count"`
+	// Total number of messages matching the guardrail scope before the replay
+	// limit.
+	InScopeMessageCount int `form:"in_scope_message_count" json:"in_scope_message_count" xml:"in_scope_message_count"`
+	// True when the replay judged only the first 200 in-scope messages.
+	MessageLimitHit bool `form:"message_limit_hit" json:"message_limit_hit" xml:"message_limit_hit"`
 	// Total OpenRouter cost across in-scope judge calls, in USD.
 	TotalCostUsd float64 `form:"total_cost_usd" json:"total_cost_usd" xml:"total_cost_usd"`
 	// Aggregate judge latency overhead across in-scope messages, computed as the
@@ -12392,11 +12397,13 @@ func NewTestDetectionRuleResponseBody(res *risk.TestDetectionRuleResult) *TestDe
 // the result of the "evaluatePromptGuardrail" endpoint of the "risk" service.
 func NewEvaluatePromptGuardrailResponseBody(res *risk.PromptGuardrailEvalResult) *EvaluatePromptGuardrailResponseBody {
 	body := &EvaluatePromptGuardrailResponseBody{
-		ChatID:         res.ChatID,
-		Flagged:        res.Flagged,
-		JudgedCount:    res.JudgedCount,
-		TotalCostUsd:   res.TotalCostUsd,
-		TotalLatencyMs: res.TotalLatencyMs,
+		ChatID:              res.ChatID,
+		Flagged:             res.Flagged,
+		JudgedCount:         res.JudgedCount,
+		InScopeMessageCount: res.InScopeMessageCount,
+		MessageLimitHit:     res.MessageLimitHit,
+		TotalCostUsd:        res.TotalCostUsd,
+		TotalLatencyMs:      res.TotalLatencyMs,
 	}
 	if res.Verdicts != nil {
 		body.Verdicts = make([]*PromptGuardrailMessageVerdictResponseBody, len(res.Verdicts))
