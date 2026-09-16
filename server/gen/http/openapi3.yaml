@@ -73797,6 +73797,7 @@ components:
                         - api_key
                         - assistant
                         - agent
+                        - workload
                 principal_urn:
                     type: string
                     description: Principal URN e.g. user:<uuid> or api_key:<id>.
@@ -74347,6 +74348,7 @@ components:
                         - api_key
                         - assistant
                         - agent
+                        - workload
                 principal_urn:
                     type: string
                     description: Principal URN e.g. user:<uuid> or api_key:<id>.

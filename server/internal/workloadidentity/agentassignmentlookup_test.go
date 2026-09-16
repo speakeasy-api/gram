@@ -200,6 +200,28 @@ func TestResolveAssignedAgent_AnUnassignedAgentDoesNotResolve(t *testing.T) {
 	require.False(t, found)
 }
 
+// Deleting an issuer withdraws the authority of every workload it vouched for,
+// even though their assignment rows stay live.
+func TestResolveAssignedAgent_ADeletedIssuerResolvesNothing(t *testing.T) {
+	t.Parallel()
+
+	conn, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	fixture := newAssignmentFixture(t, conn)
+	seedAssignment(t, conn, fixture.tenant.organizationID, fixture.issuerID, testSubject, fixture.agentID)
+
+	_, found, err := workloadidentity.ResolveAssignedAgent(t.Context(), conn, fixture.params())
+	require.NoError(t, err)
+	require.True(t, found, "the assignment must resolve before the delete, or the refusal below proves nothing")
+
+	softDelete(t, conn, fixture.issuerID)
+
+	_, found, err = workloadidentity.ResolveAssignedAgent(t.Context(), conn, fixture.params())
+
+	require.NoError(t, err)
+	require.False(t, found)
+}
+
 // Reassigning after unassigning resolves the new agent, which is what makes the
 // lookup safe to define as :one.
 func TestResolveAssignedAgent_ReassignmentResolvesTheNewAgent(t *testing.T) {

@@ -80,10 +80,15 @@ func loadWorkloadSessionCredential(
 	}, nil
 }
 
-func (s *Service) prepareWorkloadSessionContext(ctx context.Context, subject urn.SessionSubject, credential workloadSessionCredential) (context.Context, error) {
+func (s *Service) prepareWorkloadSessionContext(ctx context.Context, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, credential workloadSessionCredential) (context.Context, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || subject.Kind != urn.SessionSubjectKindWorkload {
 		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+	// A workload acts through an agent's policy, so it rides the agent
+	// authorization rollout and is hidden the same way while that is off.
+	if enabled, _ := s.agentAuthorizationRollout(ctx, s.logger, endpoint); !enabled {
+		return ctx, oops.C(oops.CodeNotFound)
 	}
 	workloadIssuerID, externalSubject, err := subject.Workload()
 	if err != nil {
@@ -100,7 +105,7 @@ func (s *Service) prepareWorkloadSessionContext(ctx context.Context, subject urn
 }
 
 func (s *Service) admitWorkloadSession(ctx context.Context, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, credential workloadSessionCredential) (context.Context, error) {
-	ctx, err := s.prepareWorkloadSessionContext(ctx, subject, credential)
+	ctx, err := s.prepareWorkloadSessionContext(ctx, endpoint, subject, credential)
 	if err != nil {
 		return ctx, err
 	}

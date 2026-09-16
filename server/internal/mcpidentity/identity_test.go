@@ -82,8 +82,10 @@ func TestValidatorBoundaryWorkloadSessionReplacesEarlierProvenance(t *testing.T)
 
 	boundary := mcpidentity.NewValidatorBoundary()
 	stamped := boundary.StampValidatedSession(t.Context(), validatedSession(t, urn.NewUserSubject("user_01J8EXAMPLE")))
-	_, ok := mcpidentity.FromContext(stamped)
+	earlier, ok := mcpidentity.FromContext(stamped)
 	require.True(t, ok, "the earlier session must be stamped, or the test proves nothing")
+	require.Equal(t, mcpidentity.KindUserSession, earlier.Kind(), "the earlier session must be a user session")
+	require.NotEmpty(t, earlier.UserID(), "the earlier session must carry a user, or the test proves nothing")
 
 	subject := urn.NewWorkloadSubject(uuid.MustParse("33333333-3333-3333-3333-333333333333"), "repo:acme/payments-api:ref:refs/heads/main")
 	identity, ok := mcpidentity.FromContext(boundary.StampValidatedSession(stamped, validatedSession(t, subject)))

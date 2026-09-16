@@ -35,7 +35,7 @@ func AdmitWorkloadSession(ctx context.Context, db *pgxpool.Pool) (authz.Workload
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
-	admission, err := AdmitWorkloadSessionWithDBTX(ctx, tx)
+	admission, err := admitWorkloadSessionInTx(ctx, tx)
 	if err != nil {
 		return authz.WorkloadSessionAdmission{}, err
 	}
@@ -47,15 +47,15 @@ func AdmitWorkloadSession(ctx context.Context, db *pgxpool.Pool) (authz.Workload
 	return admission, nil
 }
 
-// AdmitWorkloadSessionWithDBTX admits in the caller-owned transaction so refresh
-// admission and the request path share one snapshot.
+// admitWorkloadSessionInTx reads every row admission depends on from one
+// snapshot.
 //
 // Every refusal is the same unauthorized error. A workload with no assignment,
 // an assignment to a deleted agent, one to a suspended or revoked agent, and one
 // naming another organization's agent are indistinguishable to the caller, for
 // the reason agents.ResolvePrincipal collapses its own cases: a machine probing
 // this path must not learn which part of the configuration it tripped on.
-func AdmitWorkloadSessionWithDBTX(ctx context.Context, tx accessrepo.DBTX) (authz.WorkloadSessionAdmission, error) {
+func admitWorkloadSessionInTx(ctx context.Context, tx accessrepo.DBTX) (authz.WorkloadSessionAdmission, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	credential, hasCredential := contextvalues.PrincipalCredentialAuthorization(ctx)
 	actor, hasActor := contextvalues.AuthenticatedActor(ctx)
