@@ -18,7 +18,6 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"slices"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -464,14 +463,14 @@ func (s *Service) ServeGetAuthorizationServer(w http.ResponseWriter, r *http.Req
 	if mode != admission.ModeDisabled {
 		cimdSupported = conv.PtrEmpty(true)
 	}
-	grantTypes := slices.Clone(usersessions.SupportedGrantTypes)
+	grantTypes := []string{
+		oauthwire.GrantTypeAuthorizationCode,
+		oauthwire.GrantTypeRefreshToken,
+	}
 	var grantProfiles []string
 	if endpoint.idJAGConfigured {
+		grantTypes = append(grantTypes, oauthwire.GrantTypeJWTBearer)
 		grantProfiles = []string{oauthwire.GrantProfileIDJAG}
-	} else {
-		grantTypes = slices.DeleteFunc(grantTypes, func(grantType string) bool {
-			return grantType == oauthwire.GrantTypeJWTBearer
-		})
 	}
 	return writeJSONMetadata(ctx, w, r, s.logger, oauthAuthorizationServerMetadata{
 		AuthorizationEndpoint:                      urls.Authorize,
