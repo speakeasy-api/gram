@@ -137,6 +137,27 @@ func TestHandleRegister_SecretMintingByMethod(t *testing.T) {
 	require.NotContains(t, public, "client_secret")
 }
 
+func TestHandleRegister_JWTBearerWithoutRedirects(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	toolset, issuer, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	body := `{"client_name":"assertion-only","grant_types":["urn:ietf:params:oauth:grant-type:jwt-bearer"],"token_endpoint_auth_method":"none"}`
+	w, resp := registerJSON(t, ti, toolset.McpSlug.String, body)
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+	require.Equal(t, []any{}, resp["redirect_uris"])
+	require.Equal(t, []any{}, resp["response_types"])
+
+	clientID, ok := resp["client_id"].(string)
+	require.True(t, ok)
+	row, err := usersessions_repo.New(ti.conn).GetUserSessionClientByClientID(ctx, usersessions_repo.GetUserSessionClientByClientIDParams{
+		UserSessionIssuerID: issuer.ID,
+		ClientID:            clientID,
+	})
+	require.NoError(t, err)
+	require.Empty(t, row.RedirectUris)
+}
+
 // A CIMD document declaring private_key_jwt with an inline key set resolves
 // to a row the token endpoint holds to an assertion.
 func TestOAuthCIMD_PrivateKeyJWTInlineKeys(t *testing.T) {

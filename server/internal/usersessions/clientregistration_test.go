@@ -284,6 +284,26 @@ func TestRegistrationRequest_SetDefaults(t *testing.T) {
 	})
 }
 
+func TestRegistrationRequest_SetDefaultsNormalizesJWTBearerCollections(t *testing.T) {
+	t.Parallel()
+
+	req := &RegistrationRequest{
+		ClientName:              "enterprise managed client",
+		RedirectURIs:            nil,
+		GrantTypes:              []string{oauthwire.GrantTypeJWTBearer},
+		ResponseTypes:           nil,
+		TokenEndpointAuthMethod: oauthwire.AuthMethodNone,
+		JWKS:                    nil,
+		JWKSURI:                 "",
+	}
+	req.SetDefaults()
+
+	require.NotNil(t, req.RedirectURIs)
+	require.Empty(t, req.RedirectURIs)
+	require.NotNil(t, req.ResponseTypes)
+	require.Empty(t, req.ResponseTypes)
+}
+
 // testPublicJWKS is a single-key public JWK Set holding a real, freshly
 // generated ES256 key: the validators refuse a set with no usable signing
 // key, and a hand-written coordinate pair is not one.

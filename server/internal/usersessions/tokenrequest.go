@@ -106,12 +106,20 @@ func (r *RefreshTokenRequest) Validate() error {
 // by enterprise-managed authorization clients to present an ID-JAG.
 type JWTBearerTokenRequest struct {
 	Assertion string
+
+	// Resources holds every RFC 8707 `resource` indicator submitted with the
+	// assertion grant. Empty is permitted; submitted values are validated
+	// against the addressed endpoint by the token handler.
+	Resources []string
 }
 
 // JWTBearerTokenRequestFromForm decodes from url.Values (typically
 // r.PostForm).
 func JWTBearerTokenRequestFromForm(form url.Values) *JWTBearerTokenRequest {
-	return &JWTBearerTokenRequest{Assertion: form.Get("assertion")}
+	return &JWTBearerTokenRequest{
+		Assertion: form.Get("assertion"),
+		Resources: oauthwire.ResourceIndicatorsFrom(form),
+	}
 }
 
 // SetDefaults is a no-op because assertion is required.

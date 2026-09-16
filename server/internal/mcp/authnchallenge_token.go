@@ -189,11 +189,28 @@ func (s *Service) ServeToken(w http.ResponseWriter, r *http.Request, endpoint *R
 	// Computed before client authentication because an assertion's aud is
 	// checked against URLs derived from it.
 	baseURL := s.BaseURLForRequest(r)
-	// lookupClientOnly: any CIMD row was persisted at authorize time, and
-	// mid-flow token legs must keep working even if the issuer's admission
-	// policy changes between legs.
-	clientRow, err := s.resolveUserSessionClient(ctx, logger, endpoint, clientID, lookupClientOnly)
+	// Authorization-code and refresh grants continue an authorization that
+	// already passed admission. An assertion grant starts a new authorization
+	// at the token endpoint, so it applies current CIMD admission and resolves
+	// current client metadata before authenticating the client.
+	resolveMode := lookupClientOnly
+	if grantType == oauthwire.GrantTypeJWTBearer {
+		resolveMode = resolveClientCIMD
+	}
+	clientRow, err := s.resolveUserSessionClient(ctx, logger, endpoint, clientID, resolveMode)
 	if err != nil {
+		if admissionErr, ok := errors.AsType[*admission.DenialError](err); ok {
+			logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, "cimd_admission_denied")
+			return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", admissionErr.Description())
+		}
+		if _, ok := errors.AsType[*oauthwire.Error](err); ok {
+			logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, "cimd_metadata_invalid")
+			return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", clientAuthFailureDescription)
+		}
+		if errors.Is(err, errCIMDFetchFailed) {
+			logger.InfoContext(ctx, "cimd document fetch failed", attr.SlogError(err))
+			return writeTokenError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "failed to fetch client metadata document")
+		}
 		if errors.Is(err, pgx.ErrNoRows) {
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, "unknown_client_id")
 			return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", clientAuthFailureDescription)
@@ -304,6 +321,10 @@ func (s *Service) handleTokenJWTBearerGrant(
 	canonicalResource, err := endpoint.RootURL(baseURL)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build ID-JAG resource identifier").LogError(ctx, logger)
+	}
+	if err := oauthwire.ValidateResourceIndicators(req.Resources, canonicalResource); err != nil {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "resource_mismatch")
+		return writeTokenOAuthError(ctx, w, logger, http.StatusBadRequest, err)
 	}
 	result, err := s.idJAGValidator.Validate(ctx, req.Assertion, idjag.Request{
 		OrganizationID:      endpoint.OrganizationID,

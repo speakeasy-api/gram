@@ -88,6 +88,12 @@ func (r *RegistrationRequest) SetDefaults() {
 	if len(r.ResponseTypes) == 0 && slices.Contains(r.GrantTypes, oauthwire.GrantTypeAuthorizationCode) {
 		r.ResponseTypes = []string{oauthwire.ResponseTypeCode}
 	}
+	if r.RedirectURIs == nil {
+		r.RedirectURIs = []string{}
+	}
+	if r.ResponseTypes == nil {
+		r.ResponseTypes = []string{}
+	}
 	if r.TokenEndpointAuthMethod == "" {
 		r.TokenEndpointAuthMethod = oauthwire.AuthMethodClientSecretBasic
 	}
