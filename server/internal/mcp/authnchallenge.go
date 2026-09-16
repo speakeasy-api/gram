@@ -312,6 +312,8 @@ func issuerGateFailureReason(err error) string {
 		return "tool_selection_load_failed"
 	case errors.Is(err, errAgentSessionCredentialLoad):
 		return "agent_session_load_failed"
+	case errors.Is(err, errWorkloadSessionCredentialLoad):
+		return "workload_session_load_failed"
 	default:
 		return "invalid_bearer_token"
 	}
