@@ -41,9 +41,6 @@ func (s *Service) GetMeterUsageForOrganization(ctx context.Context, organization
 	if organizationID == "" {
 		return nil, oops.C(oops.CodeNotFound)
 	}
-	if s.meterReadConn == nil {
-		return nil, oops.E(oops.CodeUnavailable, nil, "meter usage is temporarily unavailable").LogWarn(ctx, s.logger)
-	}
 
 	family := metering.UsageFamily(payload.Family)
 	breakdown := ""
