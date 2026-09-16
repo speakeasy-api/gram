@@ -532,10 +532,18 @@ export function LogsTools(): JSX.Element {
     setStickyDayTs(current);
   }, []);
 
-  // A fresh filter or a first page arrives without a scroll event, so the
-  // pinned header has to be seeded from the list as it renders.
+  // The list changes height without a scroll event — a first page arrives, a
+  // filter narrows it, a row expands under the pointer — and every one of
+  // those moves a different day under the top of the list. Observing the
+  // container catches all of them, including the expansion whose content
+  // lands asynchronously.
   useEffect(() => {
-    if (containerRef.current) syncStickyDay(containerRef.current);
+    const container = containerRef.current;
+    if (!container) return;
+    syncStickyDay(container);
+    const observer = new ResizeObserver(() => syncStickyDay(container));
+    for (const child of container.children) observer.observe(child);
+    return () => observer.disconnect();
   }, [traces, syncStickyDay]);
 
   const stickyDayDate = useMemo(

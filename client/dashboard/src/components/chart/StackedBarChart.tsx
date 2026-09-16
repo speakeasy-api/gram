@@ -32,7 +32,7 @@ export type StackedBarDataset = {
   hoverBorderColor?: string;
 };
 
-export function hideZeroBarSegments(data: Array<number | null>) {
+function hideZeroBarSegments(data: Array<number | null>): Array<number | null> {
   return data.map((value) => (value === 0 ? null : value));
 }
 
@@ -90,7 +90,9 @@ export function StackedBarChart({
   expanded?: boolean;
   maxRows?: number;
   onShowAll?: () => void;
-}) {
+  // Returns null when there is nothing to chart, so the caller's card renders
+  // its own empty state rather than an axis with no bars.
+}): JSX.Element | null {
   const thickness = expanded ? BAR_THICKNESS.expanded : BAR_THICKNESS.collapsed;
   const hiddenCount =
     !expanded && maxRows && labels.length > maxRows

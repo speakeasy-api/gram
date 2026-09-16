@@ -119,6 +119,10 @@ export function RankedList({
             key={row.id}
             onMouseEnter={() => onRowHover?.(row)}
             onMouseLeave={() => onRowHover?.(null)}
+            // A linked row is focusable, so the same relationship has to be
+            // reachable without a pointer.
+            onFocus={() => onRowHover?.(row)}
+            onBlur={() => onRowHover?.(null)}
           >
             {row.href ? (
               <Link

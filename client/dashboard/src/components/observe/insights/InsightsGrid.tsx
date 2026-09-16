@@ -24,7 +24,7 @@ import type { ToolUsageTargetTimeSeriesPoint } from "@gram/client/models/compone
 import type { ToolUsageTargetToolBreakdownRow } from "@gram/client/models/components/toolusagetargettoolbreakdownrow.js";
 import type { ToolUsageTotals } from "@gram/client/models/components/toolusagetotals.js";
 import type { ToolUsageUserSummary } from "@gram/client/models/components/toolusageusersummary.js";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type SectionState = { pending: boolean; error: boolean };
 
@@ -47,8 +47,11 @@ function targetScope(target: ToolUsageTargetSummary): ObserveDeepLinkScope {
       return { target: { type: "gateway", id: target.targetId } };
     case "shadow_mcp_server":
       return { target: { type: "shadow", id: target.targetId } };
+    case "tunneled_mcp_server":
+      return { target: { type: "shadow", id: target.targetId } };
     case "skill":
       return { targetTypes: ["skill"] };
+    case "local_tool":
     default:
       return { targetTypes: ["local_tool"] };
   }
@@ -106,28 +109,6 @@ export function InsightsGrid({
         target.targetLabel)
       : target.targetLabel;
 
-  // A server keeps one colour everywhere it appears: its stack segment, its
-  // row in "most used", its row in "most errors". Without that the same name
-  // is blue in one place and amber in another, and the chart stops being
-  // readable against the lists beneath it.
-  const serverColors = useMemo(() => {
-    const byUsage = [...targets]
-      .filter((target) => SERVER_TARGET_TYPES.has(target.targetType))
-      .sort((a, b) => Number(b.eventCount) - Number(a.eventCount));
-    const colors = new Map<string, string>();
-    byUsage.forEach((target, index) => {
-      colors.set(
-        displayLabel(target),
-        INSIGHT_SERIES_COLORS[index % INSIGHT_SERIES_COLORS.length] ??
-          INSIGHT_OTHER_COLOR,
-      );
-    });
-    return colors;
-  }, [targets, serverNameMappings]);
-
-  const colorForServerRow = (row: RankedRow) =>
-    serverColors.get(row.label) ?? INSIGHT_OTHER_COLOR;
-
   const chartData = useMemo(
     () =>
       buildToolUsageTimeSeries(
@@ -146,6 +127,24 @@ export function InsightsGrid({
     [timeSeries, from, to, serverNameMappings],
   );
 
+  // A server keeps one colour everywhere it appears: its stack segment, its
+  // row in "most used", its row in "most errors". The chart builder is the one
+  // that decides those colours — it ranks the series and folds everything past
+  // the palette into a single "Other" — so the lists read their colours back
+  // off it rather than ranking a second time and disagreeing at the fold.
+  const seriesColors = useMemo(() => {
+    const colors = new Map<string, string>();
+    for (const dataset of chartData.datasets) {
+      if (dataset.label && typeof dataset.backgroundColor === "string") {
+        colors.set(dataset.label, dataset.backgroundColor);
+      }
+    }
+    return colors;
+  }, [chartData.datasets]);
+
+  const colorForServerRow = (row: RankedRow) =>
+    seriesColors.get(row.label) ?? INSIGHT_OTHER_COLOR;
+
   // Hovering a server row isolates it: the others fade rather than disappear,
   // so the bar heights stay put and the eye can still see the share it takes
   // out of each day.
@@ -153,7 +152,7 @@ export function InsightsGrid({
     () =>
       chartData.datasets.map((dataset) => {
         const color =
-          serverColors.get(dataset.label ?? "") ?? INSIGHT_OTHER_COLOR;
+          seriesColors.get(dataset.label ?? "") ?? INSIGHT_OTHER_COLOR;
         const dimmed =
           highlightedServer !== null && dataset.label !== highlightedServer;
         return {
@@ -162,10 +161,21 @@ export function InsightsGrid({
           hoverBackgroundColor: color,
         };
       }),
-    [chartData.datasets, serverColors, highlightedServer],
+    [chartData.datasets, seriesColors, highlightedServer],
   );
 
+  // Hovering a row the chart does not draw — a skill, a local tool, a server
+  // folded into "Other" — would dim every series and highlight nothing.
+  const highlightRow = (row: RankedRow | null) =>
+    setHighlightedServer(row && seriesColors.has(row.label) ? row.label : null);
+
   // The headline trend: total calls per bucket, for the sparkline silhouettes.
+  // A range or filter change can drop the hovered row out from under the
+  // pointer, which would otherwise leave the chart dimmed with nothing lit.
+  useEffect(() => {
+    setHighlightedServer(null);
+  }, [timeSeries, targets]);
+
   const callSeries = useMemo(() => {
     const buckets = new Map<string, number>();
     for (const point of timeSeries) {
@@ -341,7 +351,7 @@ export function InsightsGrid({
         >
           <RankedList
             color={colorForServerRow}
-            onRowHover={(row) => setHighlightedServer(row?.label ?? null)}
+            onRowHover={highlightRow}
             rows={serverRows}
           />
         </InsightCard>
@@ -376,7 +386,7 @@ export function InsightsGrid({
         >
           <RankedList
             color={colorForServerRow}
-            onRowHover={(row) => setHighlightedServer(row?.label ?? null)}
+            onRowHover={highlightRow}
             rows={erroringRows}
             emptyMessage="Nothing failed"
           />

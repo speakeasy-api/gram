@@ -9,7 +9,7 @@ import {
 import { useChartZoom } from "@/components/chart/useChartZoom";
 import type { TimeSeriesDataset } from "@/components/observe/toolUsageTimeSeriesChartData";
 import type { ChartOptions } from "chart.js";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { Bar } from "react-chartjs-2";
 
 export function StackedTimeBarChart({
@@ -35,7 +35,7 @@ export function StackedTimeBarChart({
   expanded?: boolean;
   /** Strip variant: no legend, no axis furniture — just the silhouette. */
   compact?: boolean;
-}) {
+}): JSX.Element {
   const { chartRef, zoomPluginOptions, resetZoom } = useChartZoom<"bar">({
     onRangeSelect,
     resolveRange: (min, max) => {
@@ -51,9 +51,18 @@ export function StackedTimeBarChart({
     },
   });
 
+  // Callers restyle datasets on hover, which rebuilds the array without
+  // changing a single number. Keying the reset on the array identity would
+  // throw away the reader's zoom every time the pointer moved, so key it on
+  // the data itself.
+  const dataSignature = useMemo(
+    () => JSON.stringify(datasets.map((dataset) => dataset.data)),
+    [datasets],
+  );
+
   useEffect(() => {
     resetZoom();
-  }, [datasets, resetZoom]);
+  }, [dataSignature, resetZoom]);
 
   if (labels.length === 0) {
     return <ChartNoData />;

@@ -64,8 +64,8 @@ export function LogsTimelineStrip({
     const bucketMs = pickTimeBucketMs(rangeMs);
     const bucketCount = Math.floor(rangeMs / bucketMs) + 1;
 
-    const ok = new Array<number>(bucketCount).fill(0);
-    const failed = new Array<number>(bucketCount).fill(0);
+    const ok = Array.from<number>({ length: bucketCount }).fill(0);
+    const failed = Array.from<number>({ length: bucketCount }).fill(0);
     const timestamps = Array.from(
       { length: bucketCount },
       (_, index) => fromMs + index * bucketMs,

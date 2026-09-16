@@ -20,6 +20,7 @@ import {
   DARK_THEME,
   highlightCode,
   type CodeLine,
+  type CodeToken,
 } from "@/components/ui/lib/codeUtils";
 import { ErrorBoundary } from "react-error-boundary";
 import { formatNanoTimestamp } from "./utils";
@@ -195,6 +196,14 @@ function LogDetailContent({
     filteredAttrs = removeNestedKey(filteredAttrs, HOOK_ERROR_KEY);
   }
 
+  // The row this was opened from derives failure from the HTTP status, so a
+  // 500 with no hook error must not read as a success here.
+  const statusCode = attrs
+    ? Number(getNestedValue(attrs, "http.response.status_code"))
+    : Number.NaN;
+  const failed =
+    Boolean(toolError) || (Number.isFinite(statusCode) && statusCode >= 400);
+
   return (
     <div className="flex flex-col gap-6 px-5 pt-6 pb-6">
       {/* Header — severity word + headline, then a hairline-ruled meta list */}
@@ -208,18 +217,18 @@ function LogDetailContent({
               aria-hidden
               className={cn(
                 "size-1.5 shrink-0 rounded-full",
-                blockReason || toolError ? "bg-rose-500" : "bg-emerald-500",
+                blockReason || failed ? "bg-rose-500" : "bg-emerald-500",
               )}
             />
             <span
               className={cn(
                 "font-mono text-xs tracking-wide uppercase",
-                blockReason || toolError
+                blockReason || failed
                   ? "text-destructive"
                   : "text-muted-foreground",
               )}
             >
-              {blockReason ? "Blocked" : toolError ? "Error" : "Success"}
+              {blockReason ? "Blocked" : failed ? "Error" : "Success"}
             </span>
             <span className="text-muted-foreground font-mono text-xs">
               {formatNanoTimestamp(log.timeUnixNano)}
@@ -375,39 +384,63 @@ function LogDetailContent({
  * quoted machine output, and the shift in ground is what separates them from
  * the sheet's own prose.
  */
+// Shiki's FontStyle bitmask. A theme that italicizes comments or bolds
+// keywords carries that in the token, not in its color.
+const FONT_STYLE_ITALIC = 1;
+const FONT_STYLE_BOLD = 2;
+const FONT_STYLE_UNDERLINE = 4;
+
+function tokenStyle(token: CodeToken): React.CSSProperties {
+  const style: React.CSSProperties = { color: token.color };
+  if (token.fontStyle == null) return style;
+  if (token.fontStyle & FONT_STYLE_ITALIC) style.fontStyle = "italic";
+  if (token.fontStyle & FONT_STYLE_BOLD) style.fontWeight = 700;
+  if (token.fontStyle & FONT_STYLE_UNDERLINE)
+    style.textDecoration = "underline";
+  return style;
+}
+
 function CodeBlock({ content }: { content: string }) {
   const [lines, setLines] = useState<CodeLine[] | null>(null);
 
   // Not every payload is JSON: a hook message body is plain text, and asking
-  // the JSON grammar to tokenize it produces a wall of error scopes.
-  const language = useMemo(() => {
+  // the JSON grammar to tokenize it produces a wall of error scopes. Plain
+  // text is also left untokenized entirely — the highlighter strips CodeHike
+  // annotation lines on its way through, and a log record has to read back
+  // exactly as it was recorded.
+  const isJson = useMemo(() => {
     const trimmed = content.trimStart();
-    return trimmed.startsWith("{") || trimmed.startsWith("[") ? "json" : "text";
+    return trimmed.startsWith("{") || trimmed.startsWith("[");
   }, [content]);
 
   useEffect(() => {
+    if (!isJson) {
+      setLines(null);
+      return;
+    }
     let cancelled = false;
-    void highlightCode(content, language, DARK_THEME).then((highlighted) => {
+    void highlightCode(content, "json", DARK_THEME).then((highlighted) => {
       if (!cancelled) setLines(highlighted.lines);
     });
     return () => {
       cancelled = true;
     };
-  }, [content, language]);
+  }, [content, isJson]);
 
   return (
-    <pre className="overflow-x-auto bg-[#0d1117] p-4 font-mono text-xs leading-relaxed text-[#e4e4e7]">
+    <pre className="bg-[#0d1117] p-4 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap text-[#e4e4e7]">
       {lines
         ? lines.map((line, lineIndex) => (
-            // Shiki returns tokens in source order, so the index is the
-            // identity here — there is nothing else to key on.
-            <div key={lineIndex} className="min-h-[1.2em]">
+            // A <pre> takes phrasing content, so each line is a block-display
+            // span rather than a div. Shiki returns tokens in source order, so
+            // the index is the identity here — there is nothing else to key on.
+            <span key={lineIndex} className="block min-h-[1.2em]">
               {line.tokens.map((token, tokenIndex) => (
-                <span key={tokenIndex} style={{ color: token.color }}>
+                <span key={tokenIndex} style={tokenStyle(token)}>
                   {token.content}
                 </span>
               ))}
-            </div>
+            </span>
           ))
         : content}
     </pre>
@@ -443,8 +476,12 @@ function CopyIconButton({
       className={cn("hover:bg-muted p-1.5", className)}
       onClick={(event) => {
         event.stopPropagation();
-        void navigator.clipboard.writeText(value);
-        setCopied(true);
+        // Clipboard access can be denied outright; announcing a copy that
+        // never happened is worse than showing nothing.
+        void navigator.clipboard.writeText(value).then(
+          () => setCopied(true),
+          () => setCopied(false),
+        );
       }}
     >
       {copied ? (
@@ -572,10 +609,11 @@ function MetadataRow({
     <button
       className="hover:bg-muted/50 flex items-center justify-between gap-4 py-2 text-left transition-colors"
       onClick={() => {
-        if (copyValue) {
-          void navigator.clipboard.writeText(copyValue);
-          setCopied(true);
-        }
+        if (!copyValue) return;
+        void navigator.clipboard.writeText(copyValue).then(
+          () => setCopied(true),
+          () => setCopied(false),
+        );
       }}
       disabled={!copyValue}
       title={copyValue ? `Copy ${label}` : undefined}

@@ -5,7 +5,7 @@ export function ChartNoData({
   message = "No data in this period",
 }: {
   message?: string;
-}) {
+}): JSX.Element {
   return (
     <div className="flex h-24 items-center justify-center">
       <Badge variant="neutral">

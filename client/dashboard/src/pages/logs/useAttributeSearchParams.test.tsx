@@ -39,7 +39,9 @@ describe("useAttributeSearchParams", () => {
     });
 
     act(() => {
-      result.current.navigate("/logs?q=refund&af=user.region%3Aeq%3Aus-east-1");
+      void result.current.navigate(
+        "/logs?q=refund&af=user.region%3Aeq%3Aus-east-1",
+      );
     });
 
     expect(result.current.attributeSearchQuery).toBe("refund");
