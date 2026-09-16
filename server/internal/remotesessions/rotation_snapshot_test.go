@@ -12,10 +12,12 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	orgclientsgen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_clients"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -34,11 +36,23 @@ func TestRotationSnapshot_RejectsChangesDuringHTTP(t *testing.T) {
 				entered, release := make(chan struct{}), make(chan struct{})
 				var once sync.Once
 				defer once.Do(func() { close(release) })
-				var registrations atomic.Int32
+				var registrations, probes atomic.Int32
 				upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					w.Header().Set("Content-Type", "application/json")
-					if r.URL.Path == "/register" {
+					if r.Method != http.MethodPost {
+						t.Errorf("unexpected rotation request method: %s", r.Method)
+						w.WriteHeader(http.StatusMethodNotAllowed)
+						return
+					}
+					switch r.URL.Path {
+					case "/register":
 						registrations.Add(1)
+					case "/token":
+						probes.Add(1)
+					default:
+						t.Errorf("unexpected rotation request path: %s", r.URL.Path)
+						http.NotFound(w, r)
+						return
 					}
 					if (stage == "registration" && r.URL.Path == "/register") || (stage != "registration" && r.URL.Path == "/token") {
 						close(entered)
@@ -74,7 +88,12 @@ func TestRotationSnapshot_RejectsChangesDuringHTTP(t *testing.T) {
 				rotator := remotesessions.NewClientRotator(logger, ti.conn, enc, policy, ti.redisCache, base, revoker, audit.NewLogger())
 				done := make(chan error, 1)
 				go func() {
-					_, err := rotator.Rotate(ctx, remotesessions.RotateClientRegistrationParams{ClientID: in.ClientID, Trigger: remotesessions.RotationTriggerManual, ConfirmUpstreamRejection: stage != "registration", OrganizationID: auth.ActiveOrganizationID, Actor: urn.NewSystemPrincipal("rotation-test")})
+					if stage == "registration" {
+						_, err := ti.service.RotateClient(ctx, &orgclientsgen.RotateClientPayload{ID: in.ClientID.String()})
+						done <- err
+						return
+					}
+					_, err := rotator.Rotate(ctx, remotesessions.RotateClientRegistrationParams{ClientID: in.ClientID, Trigger: remotesessions.RotationTriggerManual, ConfirmUpstreamRejection: true, OrganizationID: auth.ActiveOrganizationID, Actor: urn.NewSystemPrincipal("rotation-test")})
 					done <- err
 				}()
 				select {
@@ -97,6 +116,9 @@ func TestRotationSnapshot_RejectsChangesDuringHTTP(t *testing.T) {
 				select {
 				case err := <-done:
 					require.ErrorIs(t, err, remotesessions.ErrRotationSnapshotChanged)
+					if stage == "registration" {
+						requireOopsCode(t, err, oops.CodeConflict)
+					}
 				case <-time.After(5 * time.Second):
 					t.Fatal("rotation did not finish")
 				}
@@ -107,7 +129,9 @@ func TestRotationSnapshot_RejectsChangesDuringHTTP(t *testing.T) {
 				require.Equal(t, before.RemoteSessionClient.UpstreamRejectedAt, after.RemoteSessionClient.UpstreamRejectedAt, "a stale recognized probe cannot clear rejection")
 				if stage == "registration" {
 					require.EqualValues(t, 1, registrations.Load())
+					require.Zero(t, probes.Load(), "manual rotation does not probe")
 				} else {
+					require.EqualValues(t, 1, probes.Load(), "the intended probe must complete before snapshot rejection")
 					require.Zero(t, registrations.Load(), "revalidate before issuing a registration after the probe")
 				}
 			})

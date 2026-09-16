@@ -747,7 +747,7 @@ func (s *Service) RotateClient(ctx context.Context, payload *orgclientsgen.Rotat
 		var registrationErr *DynamicClientRegistrationError
 		switch {
 		case errors.Is(err, ErrRotationSnapshotChanged):
-			return nil, oops.E(oops.CodeConflict, err, "client or issuer changed during rotation; reload before retrying")
+			return nil, oops.E(oops.CodeConflict, err, "client or issuer changed during rotation; reload before retrying").LogWarn(ctx, logger)
 		case errors.Is(err, ErrClientNotRotatable):
 			return nil, oops.E(oops.CodeBadRequest, err, "only dynamically registered clients using a client secret or no client authentication can be rotated").LogWarn(ctx, logger)
 		case errors.Is(err, ErrIssuerHasNoRegistrationEndpoint):
