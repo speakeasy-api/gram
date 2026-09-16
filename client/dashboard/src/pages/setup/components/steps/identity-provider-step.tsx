@@ -466,7 +466,7 @@ function SingleSignOnSection({
       const result = await refetchOnboardingStatus();
       if (!result.data?.ssoConfigured) {
         toast.error(
-          "SSO connection not detected yet. Finish setup in the WorkOS tab, then try again.",
+          "SSO connection not detected yet. Finish setup in the sign-in provider tab, then try again.",
         );
       }
     } finally {
@@ -492,8 +492,8 @@ function SingleSignOnSection({
         {provider && !isPending && (
           <PortalNote>
             {portalOpened
-              ? `Finish configuring your ${provider.name} SSO connection in the WorkOS tab, then verify it here.`
-              : `After clicking Connect, the WorkOS portal opens in a new browser tab to configure your ${provider.name} SSO connection. Finish setup there, then come back and verify.`}
+              ? `Finish configuring your ${provider.name} SSO connection in the sign-in provider tab, then verify it here.`
+              : `After clicking Connect, the sign-in provider portal opens in a new browser tab to configure your ${provider.name} SSO connection. Finish setup there, then come back and verify.`}
           </PortalNote>
         )}
 
@@ -599,7 +599,7 @@ function DirectorySyncSection({
       const result = await refetchOnboardingStatus();
       if (!result.data?.dsyncConfigured) {
         toast.error(
-          "Directory sync not detected yet. Finish setup in the WorkOS tab, then try again.",
+          "Directory sync not detected yet. Finish setup in the sign-in provider tab, then try again.",
         );
       }
     } finally {
@@ -638,8 +638,8 @@ function DirectorySyncSection({
         ) : null}
         <PortalNote>
           {portalOpened
-            ? `Finish configuring the directory connection in the ${guided ? "portal" : "WorkOS"} tab, then verify it here.`
-            : `After clicking Connect directory, the ${guided ? "sign-in provider portal" : "WorkOS portal"} opens in a new browser tab. Finish configuring the connection there, then come back and verify.`}
+            ? "Finish configuring the directory connection in the sign-in provider tab, then verify it here."
+            : "After clicking Connect directory, the sign-in provider portal opens in a new browser tab. Finish configuring the connection there, then come back and verify."}
         </PortalNote>
         <div className="flex justify-end">
           {portalOpened ? (

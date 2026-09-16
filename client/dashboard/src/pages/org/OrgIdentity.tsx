@@ -117,9 +117,9 @@ function SSOConfigureButton() {
       {
         onSuccess: (data) => {
           if (openSafeExternalUrl(data.url)) {
-            toast.info("Continue setup in the WorkOS portal");
+            toast.info("Continue setup in the sign-in provider portal");
           } else {
-            toast.error("Unable to open the WorkOS portal");
+            toast.error("Unable to open the sign-in provider portal");
           }
         },
       },
@@ -169,9 +169,9 @@ function DirectorySyncConfigureButton() {
       {
         onSuccess: (data) => {
           if (openSafeExternalUrl(data.url)) {
-            toast.info("Continue setup in the WorkOS portal");
+            toast.info("Continue setup in the sign-in provider portal");
           } else {
-            toast.error("Unable to open the WorkOS portal");
+            toast.error("Unable to open the sign-in provider portal");
           }
         },
       },

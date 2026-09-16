@@ -199,7 +199,7 @@ describe("IdentityProviderStep", () => {
     // sign-on and directory are Speakeasy's own work, not the portal's.
     expect(screen.getByLabelText("Okta organization URL")).toBeTruthy();
     expect(
-      screen.queryByText(/WorkOS portal opens in a new browser tab/),
+      screen.queryByText(/sign-in provider portal opens in a new browser tab/),
     ).toBeNull();
     expect(screen.queryByRole("button", { name: "Connect" })).toBeNull();
     expect(
@@ -242,6 +242,20 @@ describe("IdentityProviderStep", () => {
     expect(screen.getAllByText("Waiting")).toHaveLength(3);
     expect(screen.getByText("Later")).toBeTruthy();
     expect(screen.getByText(/Setup finishes without this/)).toBeTruthy();
+  });
+
+  it("never names the sign-in provider vendor to the customer", () => {
+    render(<IdentityProviderStep onComplete={() => {}} />);
+    fireEvent.click(portalOkta());
+
+    // The portal is somebody else's product and the customer is not buying it
+    // from them. Every step that sends them there says whose job it does, not
+    // whose name is over the door.
+    expect(document.body.textContent).not.toMatch(/workos/i);
+    // Both round trips: sign-on and the directory.
+    expect(screen.getAllByText(/sign-in provider portal opens/)).toHaveLength(
+      2,
+    );
   });
 
   describe("when the advanced flow is not offered", () => {
