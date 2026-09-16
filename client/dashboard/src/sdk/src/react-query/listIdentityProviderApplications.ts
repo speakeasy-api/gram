@@ -59,7 +59,7 @@ export type ListIdentityProviderApplicationsQueryError =
  * listApplications identityProviders
  *
  * @remarks
- * List applications directly from the organization's identity provider.
+ * List applications from the organization's identity provider, using a five-minute in-memory cache unless force is true.
  */
 export function useListIdentityProviderApplications(
   request?: ListIdentityProviderApplicationsRequest | undefined,
@@ -88,7 +88,7 @@ export function useListIdentityProviderApplications(
  * listApplications identityProviders
  *
  * @remarks
- * List applications directly from the organization's identity provider.
+ * List applications from the organization's identity provider, using a five-minute in-memory cache unless force is true.
  */
 export function useListIdentityProviderApplicationsSuspense(
   request?: ListIdentityProviderApplicationsRequest | undefined,
@@ -117,6 +117,7 @@ export function setListIdentityProviderApplicationsData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
+      force?: boolean | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
     },
@@ -135,6 +136,7 @@ export function invalidateListIdentityProviderApplications(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
+      force?: boolean | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
     }]

@@ -12,6 +12,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 
 	identityproviders "github.com/speakeasy-api/gram/server/gen/identity_providers"
@@ -467,9 +468,21 @@ func DecodeListApplicationsRequest(mux goahttp.Muxer, decoder func(*http.Request
 	return func(r *http.Request) (*identityproviders.ListApplicationsPayload, error) {
 		var payload *identityproviders.ListApplicationsPayload
 		var (
+			force        *bool
 			sessionToken *string
 			apikeyToken  *string
+			err          error
 		)
+		{
+			forceRaw := r.URL.Query().Get("force")
+			if forceRaw != "" {
+				v, err2 := strconv.ParseBool(forceRaw)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("force", forceRaw, "boolean"))
+				}
+				force = &v
+			}
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -478,7 +491,10 @@ func DecodeListApplicationsRequest(mux goahttp.Muxer, decoder func(*http.Request
 		if apikeyTokenRaw != "" {
 			apikeyToken = &apikeyTokenRaw
 		}
-		payload = NewListApplicationsPayload(sessionToken, apikeyToken)
+		if err != nil {
+			return payload, err
+		}
+		payload = NewListApplicationsPayload(force, sessionToken, apikeyToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

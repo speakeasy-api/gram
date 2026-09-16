@@ -50,6 +50,7 @@ export function buildListIdentityProviderApplicationsQuery(
 } {
   return {
     queryKey: queryKeyListIdentityProviderApplications({
+      force: request?.force,
       gramSession: request?.gramSession,
       gramKey: request?.gramKey,
     }),
@@ -79,6 +80,7 @@ export function buildListIdentityProviderApplicationsQuery(
 
 export function queryKeyListIdentityProviderApplications(
   parameters: {
+    force?: boolean | undefined;
     gramSession?: string | undefined;
     gramKey?: string | undefined;
   },

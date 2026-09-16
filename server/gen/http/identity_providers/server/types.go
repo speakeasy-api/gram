@@ -2788,8 +2788,9 @@ func NewGetPayload(sessionToken *string, apikeyToken *string) *identityproviders
 
 // NewListApplicationsPayload builds a identityProviders service
 // listApplications endpoint payload.
-func NewListApplicationsPayload(sessionToken *string, apikeyToken *string) *identityproviders.ListApplicationsPayload {
+func NewListApplicationsPayload(force *bool, sessionToken *string, apikeyToken *string) *identityproviders.ListApplicationsPayload {
 	v := &identityproviders.ListApplicationsPayload{}
+	v.Force = force
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 

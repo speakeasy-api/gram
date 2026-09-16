@@ -70,6 +70,7 @@ type fakeOktaServer struct {
 	assignmentCounts     map[string][2]int
 	indirectUserCounts   map[string]int
 	duplicateUserCounts  map[string]int
+	assignmentRateLimits map[string]int
 	assignmentFailures   map[string]bool
 	assignmentStalls     map[string]bool
 	assignmentCanceled   chan string
@@ -644,6 +645,7 @@ func newFakeOktaServer(t *testing.T, mode string) *fakeOktaServer {
 		assignmentCounts:     make(map[string][2]int),
 		indirectUserCounts:   make(map[string]int),
 		duplicateUserCounts:  make(map[string]int),
+		assignmentRateLimits: make(map[string]int),
 		assignmentFailures:   make(map[string]bool),
 		assignmentStalls:     make(map[string]bool),
 		assignmentCanceled:   make(chan string, 1),
@@ -888,10 +890,23 @@ func (f *fakeOktaServer) handleInventoryAssignments(w http.ResponseWriter, r *ht
 	counts := f.assignmentCounts[applicationID]
 	indirectUserCount := f.indirectUserCounts[applicationID]
 	duplicateUserCount := f.duplicateUserCounts[applicationID]
+	rateLimitKey := applicationID + "/" + resource
+	rateLimited := f.assignmentRateLimits[rateLimitKey] > 0
+	if rateLimited {
+		f.assignmentRateLimits[rateLimitKey]--
+	}
 	failure := f.assignmentFailures[applicationID+"/"+resource]
 	stall := f.assignmentStalls[applicationID+"/"+resource]
 	embedInventoryGroups := f.embedInventoryGroups
 	f.mu.Unlock()
+	if rateLimited {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Rate-Limit-Remaining", "0")
+		w.Header().Set("X-Rate-Limit-Reset", fmt.Sprintf("%d", time.Now().Unix()))
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte(`{"errorCode":"E0000047","errorSummary":"API call exceeded rate limit."}`))
+		return
+	}
 	if failure {
 		http.Error(w, "assignment read failed", http.StatusServiceUnavailable)
 		return
@@ -1159,6 +1174,12 @@ func (f *fakeOktaServer) SetDuplicateUserAssignments(applicationID string, count
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.duplicateUserCounts[applicationID] = count
+}
+
+func (f *fakeOktaServer) SetAssignmentRateLimit(applicationID, resource string, count int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.assignmentRateLimits[applicationID+"/"+resource] = count
 }
 
 func (f *fakeOktaServer) SetEmbeddedInventoryGroups(enabled bool) {

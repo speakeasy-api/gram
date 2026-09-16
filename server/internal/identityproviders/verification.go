@@ -78,9 +78,12 @@ type OktaClient interface {
 	ListGroups(context.Context, string, string, okta.PageRequest) (okta.Page, error)
 	ListUsers(context.Context, string, string, okta.PageRequest) (okta.Page, error)
 	ListApplications(context.Context, string, string, okta.PageRequest) (okta.Page, error)
+	ListApplicationsOnce(context.Context, string, string, okta.PageRequest) (okta.Page, error)
 	ListApplicationGroups(context.Context, string, string, string, okta.PageRequest) (okta.Page, error)
-	GetGroup(context.Context, string, string, string) (okta.Group, error)
+	ListApplicationGroupsOnce(context.Context, string, string, string, okta.PageRequest) (okta.Page, error)
+	GetGroupOnce(context.Context, string, string, string) (okta.Group, okta.RateLimit, error)
 	ListApplicationUsers(context.Context, string, string, string, okta.PageRequest) (okta.Page, error)
+	ListApplicationUsersOnce(context.Context, string, string, string, okta.PageRequest) (okta.Page, error)
 	ListAuthorizationServers(context.Context, string, string) ([]okta.AuthorizationServer, error)
 	CreateOIDCApplication(context.Context, string, string, okta.CreateOIDCApplicationInput) (okta.Application, error)
 	CreateGroupsClaim(context.Context, string, string, string) error

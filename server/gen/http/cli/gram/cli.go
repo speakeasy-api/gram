@@ -1401,6 +1401,7 @@ func ParseEndpoint(
 		identityProvidersGetApikeyTokenFlag  = identityProvidersGetFlags.String("apikey-token", "", "")
 
 		identityProvidersListApplicationsFlags            = flag.NewFlagSet("list-applications", flag.ExitOnError)
+		identityProvidersListApplicationsForceFlag        = identityProvidersListApplicationsFlags.String("force", "", "")
 		identityProvidersListApplicationsSessionTokenFlag = identityProvidersListApplicationsFlags.String("session-token", "", "")
 		identityProvidersListApplicationsApikeyTokenFlag  = identityProvidersListApplicationsFlags.String("apikey-token", "", "")
 
@@ -8659,7 +8660,7 @@ func ParseEndpoint(
 				data, err = identityprovidersc.BuildGetPayload(*identityProvidersGetSessionTokenFlag, *identityProvidersGetApikeyTokenFlag)
 			case "list-applications":
 				endpoint = c.ListApplications()
-				data, err = identityprovidersc.BuildListApplicationsPayload(*identityProvidersListApplicationsSessionTokenFlag, *identityProvidersListApplicationsApikeyTokenFlag)
+				data, err = identityprovidersc.BuildListApplicationsPayload(*identityProvidersListApplicationsForceFlag, *identityProvidersListApplicationsSessionTokenFlag, *identityProvidersListApplicationsApikeyTokenFlag)
 			case "describe-setup":
 				endpoint = c.DescribeSetup()
 				data, err = identityprovidersc.BuildDescribeSetupPayload(*identityProvidersDescribeSetupSessionTokenFlag, *identityProvidersDescribeSetupApikeyTokenFlag)
@@ -15783,7 +15784,7 @@ func identityProvidersUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    create: Create the organization's identity provider connection and Speakeasy-held signing key.`)
 	fmt.Fprintln(os.Stderr, `    get: Get the organization's live identity provider connection, when configured.`)
-	fmt.Fprintln(os.Stderr, `    list-applications: List applications directly from the organization's identity provider.`)
+	fmt.Fprintln(os.Stderr, `    list-applications: List applications from the organization's identity provider, using a five-minute in-memory cache unless force is true.`)
 	fmt.Fprintln(os.Stderr, `    describe-setup: Describe the guided setup steps for the organization's identity provider connection.`)
 	fmt.Fprintln(os.Stderr, `    submit-setup-step: Submit administrator-provided values for an identity provider setup step.`)
 	fmt.Fprintln(os.Stderr, `    verify-setup-step: Verify an identity provider setup step.`)
@@ -15837,21 +15838,23 @@ func identityProvidersGetUsage() {
 func identityProvidersListApplicationsUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] identity-providers list-applications", os.Args[0])
+	fmt.Fprint(os.Stderr, " -force BOOL")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List applications directly from the organization's identity provider.`)
+	fmt.Fprintln(os.Stderr, `List applications from the organization's identity provider, using a five-minute in-memory cache unless force is true.`)
 
 	// Flags list
+	fmt.Fprintln(os.Stderr, `    -force BOOL: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity-providers list-applications --session-token \"abc123\" --apikey-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity-providers list-applications --force false --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func identityProvidersDescribeSetupUsage() {

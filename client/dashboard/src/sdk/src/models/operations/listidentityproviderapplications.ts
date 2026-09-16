@@ -12,6 +12,10 @@ export type ListIdentityProviderApplicationsSecurity = {
 
 export type ListIdentityProviderApplicationsRequest = {
   /**
+   * Bypass the cached application inventory and read it again from the identity provider.
+   */
+  force?: boolean | undefined;
+  /**
    * Session header
    */
   gramSession?: string | undefined;
@@ -58,6 +62,7 @@ export function listIdentityProviderApplicationsSecurityToJSON(
 
 /** @internal */
 export type ListIdentityProviderApplicationsRequest$Outbound = {
+  force?: boolean | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
 };
@@ -69,6 +74,7 @@ export const ListIdentityProviderApplicationsRequest$outboundSchema:
     ListIdentityProviderApplicationsRequest
   > = z.pipe(
     z.object({
+      force: z.optional(z.boolean()),
       gramSession: z.optional(z.string()),
       gramKey: z.optional(z.string()),
     }),

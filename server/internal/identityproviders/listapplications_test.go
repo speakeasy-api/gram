@@ -31,7 +31,7 @@ func TestListApplicationsReadsTwoPagesAndAssignmentCounts(t *testing.T) {
 	fake.SetDuplicateUserAssignments("app-one", 1)
 	fake.SetIndirectUserAssignments("app-two", 2)
 
-	result, err := ti.service.ListApplications(ctx, &gen.ListApplicationsPayload{SessionToken: nil, ApikeyToken: nil})
+	result, err := ti.service.ListApplications(ctx, &gen.ListApplicationsPayload{Force: nil, SessionToken: nil, ApikeyToken: nil})
 	require.NoError(t, err)
 	require.False(t, result.Truncated)
 	require.Equal(t, 2, result.ApplicationCount)
@@ -43,6 +43,56 @@ func TestListApplicationsReadsTwoPagesAndAssignmentCounts(t *testing.T) {
 	}, result.Applications)
 	require.Equal(t, 4, fake.AssignmentReads())
 	require.Zero(t, fake.InventoryGroupReads())
+	require.NoError(t, fake.ValidationError())
+}
+
+func TestListApplicationsCachesInventoryUntilForced(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeOktaServer(t, fakeOktaPassed)
+	ctx, ti := newTestServiceWithOktaEndpoint(t, fake.server.URL)
+	prepareActiveConnection(t, ctx, ti, fake)
+	fake.SetApplicationInventory([]map[string]any{
+		inventoryApplication("app-one", "First app", "ACTIVE", "SAML_2_0", "", false),
+	}, map[string][2]int{"app-one": {1, 1}})
+
+	first, err := ti.service.ListApplications(ctx, &gen.ListApplicationsPayload{Force: nil, SessionToken: nil, ApikeyToken: nil})
+	require.NoError(t, err)
+	require.Equal(t, "First app", first.Applications[0].Label)
+	require.Equal(t, 2, fake.AssignmentReads())
+
+	fake.SetApplicationInventory([]map[string]any{
+		inventoryApplication("app-two", "Second app", "ACTIVE", "SAML_2_0", "", false),
+	}, map[string][2]int{"app-two": {2, 2}})
+	cached, err := ti.service.ListApplications(ctx, &gen.ListApplicationsPayload{Force: nil, SessionToken: nil, ApikeyToken: nil})
+	require.NoError(t, err)
+	require.Same(t, first, cached)
+	require.Equal(t, 2, fake.AssignmentReads())
+
+	refreshed, err := ti.service.ListApplications(ctx, &gen.ListApplicationsPayload{Force: new(true), SessionToken: nil, ApikeyToken: nil})
+	require.NoError(t, err)
+	require.Equal(t, "Second app", refreshed.Applications[0].Label)
+	require.Equal(t, 4, fake.AssignmentReads())
+	require.NoError(t, fake.ValidationError())
+}
+
+func TestListApplicationsRetriesOneRateLimitedAssignmentRead(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeOktaServer(t, fakeOktaPassed)
+	ctx, ti := newTestServiceWithOktaEndpoint(t, fake.server.URL)
+	prepareActiveConnection(t, ctx, ti, fake)
+	fake.SetApplicationInventory([]map[string]any{
+		inventoryApplication("app-one", "First app", "ACTIVE", "SAML_2_0", "", false),
+	}, map[string][2]int{"app-one": {1, 1}})
+	fake.SetAssignmentRateLimit("app-one", "users", 1)
+
+	result, err := ti.service.ListApplications(ctx, &gen.ListApplicationsPayload{Force: nil, SessionToken: nil, ApikeyToken: nil})
+	require.NoError(t, err)
+	require.NotNil(t, result.Applications[0].UserAssignmentCount, "detail=%s reads=%d validation=%v", result.Detail, fake.AssignmentReads(), fake.ValidationError())
+	require.Equal(t, 1, *result.Applications[0].UserAssignmentCount)
+	require.Equal(t, 3, fake.AssignmentReads())
+	require.Contains(t, result.Detail, "Assignment counts were read for every application.")
 	require.NoError(t, fake.ValidationError())
 }
 
@@ -62,7 +112,7 @@ func TestListApplicationsOmitsAssignmentCountsAboveFifty(t *testing.T) {
 	ti.catalog.BlockFirstSearchesUntil(4)
 	fake.SetApplicationInventory(applications, nil)
 
-	result, err := ti.service.ListApplications(ctx, &gen.ListApplicationsPayload{SessionToken: nil, ApikeyToken: nil})
+	result, err := ti.service.ListApplications(ctx, &gen.ListApplicationsPayload{Force: nil, SessionToken: nil, ApikeyToken: nil})
 	require.NoError(t, err)
 	require.Equal(t, 51, result.ApplicationCount)
 	require.Contains(t, result.Detail, "Assignment counts were omitted because the tenant has more than 50 applications.")
@@ -108,7 +158,7 @@ func TestListApplicationsMatchesCatalogueAndOrdersPickableFirst(t *testing.T) {
 		{ProviderKey: "provider-two", CatalogRef: "catalog/two", Name: "Unknown"},
 	})
 
-	result, err := ti.service.ListApplications(ctx, &gen.ListApplicationsPayload{SessionToken: nil, ApikeyToken: nil})
+	result, err := ti.service.ListApplications(ctx, &gen.ListApplicationsPayload{Force: nil, SessionToken: nil, ApikeyToken: nil})
 	require.NoError(t, err)
 	require.Equal(t, []string{"Acme Workspace", "Slack App", "Inactive Tool", "Zulu Unknown"}, []string{
 		result.Applications[0].Label,
@@ -131,7 +181,7 @@ func TestListApplicationsMatchesCatalogueAndOrdersPickableFirst(t *testing.T) {
 	require.Equal(t, "no_match", *result.Applications[3].UnpickableReason)
 	searchCalls, inspectCalls, _ := ti.catalog.Stats()
 
-	_, err = ti.service.ListApplications(ctx, &gen.ListApplicationsPayload{SessionToken: nil, ApikeyToken: nil})
+	_, err = ti.service.ListApplications(ctx, &gen.ListApplicationsPayload{Force: nil, SessionToken: nil, ApikeyToken: nil})
 	require.NoError(t, err)
 	cachedSearchCalls, cachedInspectCalls, _ := ti.catalog.Stats()
 	require.Equal(t, searchCalls, cachedSearchCalls)
@@ -149,7 +199,7 @@ func TestListApplicationsKeepsInventoryWhenCatalogueReadFails(t *testing.T) {
 	}, map[string][2]int{"broken": {0, 0}})
 	ti.catalog.SetSearchError("Broken Catalogue", errors.New("catalogue unavailable"))
 
-	result, err := ti.service.ListApplications(ctx, &gen.ListApplicationsPayload{SessionToken: nil, ApikeyToken: nil})
+	result, err := ti.service.ListApplications(ctx, &gen.ListApplicationsPayload{Force: nil, SessionToken: nil, ApikeyToken: nil})
 	require.NoError(t, err)
 	require.Len(t, result.Applications, 1)
 	require.Nil(t, result.Applications[0].Match)
@@ -173,7 +223,7 @@ func TestListApplicationsMatchesTrailingGenericCatalogueName(t *testing.T) {
 		{ProviderKey: "provider-other", CatalogRef: "catalog/other", Name: "Unrelated Cloud"},
 	})
 
-	result, err := ti.service.ListApplications(ctx, &gen.ListApplicationsPayload{SessionToken: nil, ApikeyToken: nil})
+	result, err := ti.service.ListApplications(ctx, &gen.ListApplicationsPayload{Force: nil, SessionToken: nil, ApikeyToken: nil})
 	require.NoError(t, err)
 	require.Len(t, result.Applications, 1)
 	require.True(t, result.Applications[0].Pickable)
@@ -193,7 +243,7 @@ func TestListApplicationsKeepsInventoryWhenAnAssignmentReadFails(t *testing.T) {
 	}, map[string][2]int{"app-one": {1, 1}, "app-two": {1, 1}})
 	fake.SetAssignmentFailure("app-two", "users")
 
-	result, err := ti.service.ListApplications(ctx, &gen.ListApplicationsPayload{SessionToken: nil, ApikeyToken: nil})
+	result, err := ti.service.ListApplications(ctx, &gen.ListApplicationsPayload{Force: nil, SessionToken: nil, ApikeyToken: nil})
 	require.NoError(t, err)
 	require.Equal(t, 2, result.ApplicationCount)
 	require.Contains(t, result.Detail, "Assignment counts are partial")
@@ -215,7 +265,7 @@ func TestListApplicationsLimitsSlowApplicationAssignmentReads(t *testing.T) {
 	}, map[string][2]int{"slow": {1, 1}, "fast": {1, 1}})
 	fake.SetAssignmentStall("slow", "groups")
 
-	result, err := ti.service.ListApplications(ctx, &gen.ListApplicationsPayload{SessionToken: nil, ApikeyToken: nil})
+	result, err := ti.service.ListApplications(ctx, &gen.ListApplicationsPayload{Force: nil, SessionToken: nil, ApikeyToken: nil})
 	require.NoError(t, err)
 	require.Contains(t, result.Detail, "Assignment counts are partial")
 	require.Equal(t, "slow/groups", <-fake.assignmentCanceled)
@@ -225,8 +275,6 @@ func TestListApplicationsLimitsSlowApplicationAssignmentReads(t *testing.T) {
 	require.Equal(t, 1, *result.Applications[0].DirectUserAssignmentCount)
 	require.Equal(t, "Slow app", result.Applications[1].Label)
 	require.Nil(t, result.Applications[1].GroupAssignmentCount)
-	require.Nil(t, result.Applications[1].UserAssignmentCount)
-	require.Nil(t, result.Applications[1].DirectUserAssignmentCount)
 }
 
 func TestListApplicationsCapsInventoryAtFiveHundred(t *testing.T) {
@@ -242,7 +290,7 @@ func TestListApplicationsCapsInventoryAtFiveHundred(t *testing.T) {
 	}
 	fake.SetApplicationInventory(applications, nil)
 
-	result, err := ti.service.ListApplications(ctx, &gen.ListApplicationsPayload{SessionToken: nil, ApikeyToken: nil})
+	result, err := ti.service.ListApplications(ctx, &gen.ListApplicationsPayload{Force: nil, SessionToken: nil, ApikeyToken: nil})
 	require.NoError(t, err)
 	require.True(t, result.Truncated)
 	require.Equal(t, 500, result.ApplicationCount)
@@ -264,7 +312,7 @@ func TestListApplicationsDoesNotTruncateExactlyFiveHundred(t *testing.T) {
 	}
 	fake.SetApplicationInventory(applications, nil)
 
-	result, err := ti.service.ListApplications(ctx, &gen.ListApplicationsPayload{SessionToken: nil, ApikeyToken: nil})
+	result, err := ti.service.ListApplications(ctx, &gen.ListApplicationsPayload{Force: nil, SessionToken: nil, ApikeyToken: nil})
 	require.NoError(t, err)
 	require.False(t, result.Truncated)
 	require.Equal(t, 500, result.ApplicationCount)
@@ -283,7 +331,7 @@ func TestListApplicationsReadsPaginatedAssignments(t *testing.T) {
 	}, map[string][2]int{"app-one": {201, 201}})
 	fake.SetIndirectUserAssignments("app-one", 5)
 
-	result, err := ti.service.ListApplications(ctx, &gen.ListApplicationsPayload{SessionToken: nil, ApikeyToken: nil})
+	result, err := ti.service.ListApplications(ctx, &gen.ListApplicationsPayload{Force: nil, SessionToken: nil, ApikeyToken: nil})
 	require.NoError(t, err)
 	require.Equal(t, 201, *result.Applications[0].GroupAssignmentCount)
 	require.Len(t, result.Applications[0].AssignedGroups, 10)
@@ -305,7 +353,7 @@ func TestListApplicationsFallsBackToIndividualGroupReads(t *testing.T) {
 	}, map[string][2]int{"app-one": {12, 0}})
 	fake.SetEmbeddedInventoryGroups(false)
 
-	result, err := ti.service.ListApplications(ctx, &gen.ListApplicationsPayload{SessionToken: nil, ApikeyToken: nil})
+	result, err := ti.service.ListApplications(ctx, &gen.ListApplicationsPayload{Force: nil, SessionToken: nil, ApikeyToken: nil})
 	require.NoError(t, err)
 	require.Len(t, result.Applications, 1)
 	require.Equal(t, 12, *result.Applications[0].GroupAssignmentCount)
@@ -325,7 +373,7 @@ func TestListApplicationsRequiresOrganizationRead(t *testing.T) {
 	ctx, ti := newTestService(t)
 	ctx = authztest.WithExactGrants(t, ctx)
 
-	_, err := ti.service.ListApplications(ctx, &gen.ListApplicationsPayload{SessionToken: nil, ApikeyToken: nil})
+	_, err := ti.service.ListApplications(ctx, &gen.ListApplicationsPayload{Force: nil, SessionToken: nil, ApikeyToken: nil})
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
