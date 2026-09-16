@@ -113,6 +113,31 @@ func TestMetricsRejectUnboundedValues(t *testing.T) {
 		ProviderMessage: nil,
 	})
 
+	// The method is checked before the failure is, so the case above returns
+	// without ever reaching the bounded-field checks. These carry a valid
+	// method so RecordFailure evaluates the failure itself, one rejected
+	// field or combination at a time.
+	statusTooLow, statusTooHigh := 99, 600
+	for _, failure := range []registration.Failure{
+		// HTTP status outside the range a provider can answer with.
+		{Outcome: registration.OutcomeUnreachable, Reason: registration.ReasonTimeout, Retryable: true, HTTPStatus: &statusTooLow, ProviderMessage: nil},
+		{Outcome: registration.OutcomeUnreachable, Reason: registration.ReasonTimeout, Retryable: true, HTTPStatus: &statusTooHigh, ProviderMessage: nil},
+		// Unreachable is always retryable, and a reason that names a refusal
+		// is not a way to be unreachable.
+		{Outcome: registration.OutcomeUnreachable, Reason: registration.ReasonTimeout, Retryable: false, HTTPStatus: nil, ProviderMessage: nil},
+		{Outcome: registration.OutcomeUnreachable, Reason: registration.ReasonAuthorizationRejected, Retryable: true, HTTPStatus: nil, ProviderMessage: nil},
+		// A reason the inner switch has no case for falls out of it entirely,
+		// so an unrecognized pair is rejected rather than silently counted.
+		{Outcome: registration.OutcomeUnreachable, Reason: registration.Reason("not-a-reason"), Retryable: true, HTTPStatus: nil, ProviderMessage: nil},
+		// Refused is never retryable, and only a refusal reason belongs to it.
+		{Outcome: registration.OutcomeRefused, Reason: registration.ReasonAuthorizationRejected, Retryable: true, HTTPStatus: nil, ProviderMessage: nil},
+		{Outcome: registration.OutcomeRefused, Reason: registration.ReasonTimeout, Retryable: false, HTTPStatus: nil, ProviderMessage: nil},
+		// An outcome outside the contract is rejected whatever it carries.
+		{Outcome: registration.Outcome("not-an-outcome"), Reason: registration.ReasonTimeout, Retryable: false, HTTPStatus: nil, ProviderMessage: nil},
+	} {
+		metrics.RecordFailure(t.Context(), registration.MethodDCR, failure)
+	}
+
 	var rm metricdata.ResourceMetrics
 	require.NoError(t, reader.Collect(t.Context(), &rm))
 	require.Empty(t, rm.ScopeMetrics)
