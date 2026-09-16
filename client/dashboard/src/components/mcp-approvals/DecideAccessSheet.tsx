@@ -17,6 +17,7 @@ import { TextArea } from "@/components/ui/Textarea";
 import { useProject } from "@/contexts/Auth";
 import { cn } from "@/lib/utils";
 import type { ShadowMCPPolicyDisposition } from "@/components/shadow-mcp/shadowMCPInventoryStatus";
+import { toolNamespacePattern } from "@/components/shadow-mcp/shadowMCPServerIdentity";
 import { invalidateShadowMCPPolicyInventory } from "@/components/shadow-mcp/useShadowMCPPolicyInventory";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { Role } from "@gram/client/models/components/role.js";
@@ -109,6 +110,31 @@ function wireTargetKind(
   return targetKind === "stdio_command" ? "stdio_command" : "server_url";
 }
 
+/**
+ * The header's one enforcement statement. It must agree with the body's
+ * observe-only note: a header that promises enforcement over a body that
+ * takes it back reads as two different sheets.
+ */
+const ENFORCED_DESCRIPTION =
+  "The decision is recorded with its rationale and enforced across every blocking policy in this project.";
+const OBSERVE_ONLY_DESCRIPTION =
+  "The decision is recorded with its rationale as the decision of record. Nothing is enforced until this server has a URL for blocking policies to act on.";
+
+/**
+ * The line under the display name that says what the decision is keyed on:
+ * the server URL, or — for a tool namespace — the tool-name pattern the
+ * proxy observed, never the synthetic mcp-tool:// key as if it were an
+ * address. Null when it would only repeat the name.
+ */
+function targetIdentityLine(target: DecideAccessTarget): string | null {
+  if (target.targetKind === "tool_namespace") {
+    return toolNamespacePattern(target.canonicalServerUrl);
+  }
+  return target.canonicalServerUrl === target.displayName
+    ? null
+    : target.canonicalServerUrl;
+}
+
 /** Why a decision on this target is recorded without enforcement. */
 function observeOnlyNote(
   targetKind: DecideAccessTarget["targetKind"],
@@ -190,6 +216,7 @@ export function DecideAccessSheet({
   if (!target) return null;
 
   const observeOnly = observeOnlyNote(target.targetKind);
+  const identityLine = targetIdentityLine(target);
   // Under an allow-by-default policy a narrow approval is inexpressible —
   // approving clears the block for everyone — so the audience picker only
   // appears when a block-by-default policy can scope who passes. A stdio
@@ -309,8 +336,7 @@ export function DecideAccessSheet({
         <SheetHeader>
           <SheetTitle>Decide access</SheetTitle>
           <SheetDescription>
-            The decision is recorded with its rationale and enforced across
-            every blocking policy in this project.
+            {observeOnly ? OBSERVE_ONLY_DESCRIPTION : ENFORCED_DESCRIPTION}
           </SheetDescription>
         </SheetHeader>
 
@@ -320,9 +346,9 @@ export function DecideAccessSheet({
               <Text variant="small" className="font-medium break-all">
                 {target.displayName}
               </Text>
-              {target.canonicalServerUrl !== target.displayName && (
+              {identityLine && (
                 <Text muted small className="mt-1 break-all">
-                  {target.canonicalServerUrl}
+                  {identityLine}
                 </Text>
               )}
             </section>

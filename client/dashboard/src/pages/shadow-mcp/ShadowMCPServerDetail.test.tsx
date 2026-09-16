@@ -749,6 +749,17 @@ describe("ShadowMCPServerDetail", () => {
     expect(screen.getByText("Identity unresolved")).toBeTruthy();
     const sources = screen.getByText("seen via").closest("p")!;
     expect(within(sources).getByText("LiteLLM")).toBeTruthy();
+    // The summary's Status tile is a dash, like the inventory table: nothing
+    // enforces against an unresolved identity, so the access verdict the row
+    // carries would over-report control.
+    const statusTile = screen.getByText("Status").parentElement!;
+    expect(within(statusTile).getByText("—")).toBeTruthy();
+    expect(within(statusTile).queryByText("Allowed")).toBeNull();
+    expect(
+      within(statusTile).getByText(
+        "Identity unresolved. Decisions are recorded without enforcement.",
+      ),
+    ).toBeTruthy();
   });
 
   it("names the hook sources that observed a server URL", () => {

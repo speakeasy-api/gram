@@ -860,6 +860,54 @@ describe("ShadowMCPInventoryTable", () => {
     });
   });
 
+  it("groups observe-only rows together when sorting by Status", async () => {
+    mockShadowMCPInventory({
+      servers: [
+        inventoryServer({
+          access: "allowed",
+          canonicalServerUrl: "https://alpha.example.com/mcp",
+          serverName: "Alpha MCP",
+        }),
+        // Carries a "blocked" verdict the dash hides; without a common sort
+        // value it would land between Allowed and Observed.
+        inventoryServer({
+          access: "blocked",
+          canonicalServerUrl: "mcp-tool://github",
+          serverName: "github",
+          targetKind: "tool_namespace",
+          urlHost: "",
+        }),
+        inventoryServer({
+          access: "none",
+          canonicalServerUrl: "https://charlie.example.com/mcp",
+          serverName: "Charlie MCP",
+        }),
+        inventoryServer({
+          access: "none",
+          canonicalServerUrl: "npx local-mcp",
+          targetKind: "stdio_command",
+        }),
+      ],
+    });
+
+    renderInventoryTable();
+
+    await waitFor(() => {
+      expect(screen.getByText("Alpha MCP")).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Status" }));
+
+    // Both observe-only rows display "—", so they sort as one group (in
+    // their original order) ahead of the rows with a visible verdict,
+    // instead of being scattered by a verdict nobody can see.
+    const rows = screen.getAllByRole("row").slice(1);
+    expect(within(rows[0]!).getByText("github")).toBeTruthy();
+    expect(within(rows[1]!).getByText("npx local-mcp")).toBeTruthy();
+    expect(within(rows[2]!).getByText("Alpha MCP")).toBeTruthy();
+    expect(within(rows[3]!).getByText("Charlie MCP")).toBeTruthy();
+  });
+
   it("lists the hook sources that observed a server URL", async () => {
     mockShadowMCPInventory({
       servers: [

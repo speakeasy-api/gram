@@ -268,6 +268,51 @@ describe("DecideAccessSheet", () => {
     ).toBeGreaterThan(0);
   });
 
+  it("describes a tool namespace decision as observe-only and names the observed pattern", () => {
+    renderSheet({
+      target: {
+        targetKind: "tool_namespace",
+        canonicalServerUrl: "mcp-tool://github",
+        displayName: "github",
+      },
+    });
+
+    // One enforcement statement: the header must not promise enforcement
+    // the body then takes back.
+    expect(
+      screen.queryAllByText(/enforced across every blocking policy/),
+    ).toHaveLength(0);
+    expect(
+      screen.getAllByText(
+        "The decision is recorded with its rationale as the decision of record. Nothing is enforced until this server has a URL for blocking policies to act on.",
+      ).length,
+    ).toBeGreaterThan(0);
+    // The identity line shows the tool-name pattern the proxy observed, not
+    // the synthetic mcp-tool:// key dressed up as an address.
+    expect(screen.getAllByText("mcp__github__*").length).toBeGreaterThan(0);
+    expect(screen.queryAllByText("mcp-tool://github")).toHaveLength(0);
+    expect(screen.queryAllByText("Who the approval covers")).toHaveLength(0);
+  });
+
+  it("describes a command-line decision as observe-only", () => {
+    renderSheet({
+      target: {
+        targetKind: "stdio_command",
+        canonicalServerUrl: "npx local-mcp",
+        displayName: "npx local-mcp",
+      },
+    });
+
+    expect(
+      screen.queryAllByText(/enforced across every blocking policy/),
+    ).toHaveLength(0);
+    expect(
+      screen.getAllByText(
+        "The decision is recorded with its rationale as the decision of record. Nothing is enforced until this server has a URL for blocking policies to act on.",
+      ).length,
+    ).toBeGreaterThan(0);
+  });
+
   it("keeps the sheet open and reports an error when the decision fails", async () => {
     mocks.decideMutateAsync.mockRejectedValue(new Error("boom"));
     const onOpenChange = vi.fn<(open: boolean) => void>();

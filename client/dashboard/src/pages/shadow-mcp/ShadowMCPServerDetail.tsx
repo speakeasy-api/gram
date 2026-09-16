@@ -31,8 +31,10 @@ import {
   ShadowMCPUnresolvedIdentityBadge,
 } from "@/components/shadow-mcp/ShadowMCPInventoryCells";
 import {
+  isObserveOnlyShadowMCPTarget,
   isToolNamespaceServer,
   shadowMCPInventoryServerLabel,
+  shadowMCPObserveOnlyStatusDescription,
   toolNamespacePattern,
 } from "@/components/shadow-mcp/shadowMCPServerIdentity";
 import {
@@ -178,18 +180,38 @@ function statusTone(status: ShadowMCPInventoryStatus): MetricCardProps["tone"] {
  * island — giving every figure the same shape and its own column fills the
  * width by construction instead.
  */
-function ServerSummary({ server }: { server: ShadowMCPInventoryServer }) {
+/**
+ * What the Status tile shows. An observe-only target (a local command or an
+ * unresolved tool namespace) gets a dash like the inventory table's Status
+ * column: nothing enforces against it, so the verdict the row carries would
+ * over-report control.
+ */
+function statusTileProps(
+  server: ShadowMCPInventoryServer,
+): Pick<MetricCardProps, "value" | "tone" | "description"> {
+  if (isObserveOnlyShadowMCPTarget(server.targetKind)) {
+    return {
+      value: "—",
+      tone: "neutral",
+      description: shadowMCPObserveOnlyStatusDescription(server.targetKind),
+    };
+  }
   const status = shadowMCPInventoryStatus(server);
+  return {
+    value: shadowMCPInventoryStatusLabel(status),
+    tone: statusTone(status),
+    description: shadowMCPInventoryStatusDescription(server),
+  };
+}
 
+function ServerSummary({ server }: { server: ShadowMCPInventoryServer }) {
   return (
     <MetricCard.Group className="flex-wrap">
       <MetricCard
         label="Status"
-        value={shadowMCPInventoryStatusLabel(status)}
-        tone={statusTone(status)}
         size="xs"
         className={SUMMARY_TILE_CLASS}
-        description={shadowMCPInventoryStatusDescription(server)}
+        {...statusTileProps(server)}
       />
       {/* First-seen rides under the call count rather than taking a tile of
           its own: it is the span those calls happened over, not a figure

@@ -68,6 +68,16 @@ type InventoryPage = {
 
 const EMPTY_INVENTORY_PAGES: InventoryPage[] = [];
 
+/**
+ * What the Status column sorts by. Observe-only rows display a dash, so they
+ * share one value and group together instead of scattering by a verdict the
+ * dash hides.
+ */
+function statusSortValue(server: ShadowMCPInventoryServer): string {
+  if (isObserveOnlyShadowMCPTarget(server.targetKind)) return "";
+  return shadowMCPInventoryStatusLabel(shadowMCPInventoryStatus(server));
+}
+
 function InventoryStatusCell({ server }: { server: ShadowMCPInventoryServer }) {
   const status = shadowMCPInventoryStatus(server);
 
@@ -263,8 +273,7 @@ export function ShadowMCPInventoryTable({
       key: "status",
       header: "Status",
       sortable: true,
-      sortValue: (server) =>
-        shadowMCPInventoryStatusLabel(shadowMCPInventoryStatus(server)),
+      sortValue: statusSortValue,
       width: "0.9fr",
       // Nothing enforces against a local command or an unresolved identity,
       // so a verdict badge would over-report control.

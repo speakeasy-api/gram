@@ -29,6 +29,24 @@ export function isObserveOnlyShadowMCPTarget(
   return targetKind === "stdio_command" || targetKind === "tool_namespace";
 }
 
+/**
+ * The Status qualifier for an observe-only target, in place of the
+ * enforcement description a URL-keyed server gets: it says why the verdict
+ * is a dash rather than restating an access state nothing acts on.
+ */
+export function shadowMCPObserveOnlyStatusDescription(
+  targetKind: ShadowMCPTargetKind,
+): string {
+  switch (targetKind) {
+    case "tool_namespace":
+      return "Identity unresolved. Decisions are recorded without enforcement.";
+    case "stdio_command":
+    case "server_url":
+    case undefined:
+      return "No URL to enforce against. Decisions are recorded without enforcement.";
+  }
+}
+
 /** "mcp-tool://github" -> "github"; a non-namespace value passes through. */
 function toolNamespaceServerName(canonicalServerUrl: string): string {
   if (!canonicalServerUrl.startsWith(TOOL_NAMESPACE_SCHEME)) {
