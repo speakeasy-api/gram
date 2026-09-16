@@ -119,6 +119,7 @@ type MCP struct {
 	EffectiveEnabled bool              `json:"effective_enabled"`
 	Model            string            `json:"model"`
 	BackendKind      MCPBackendKind    `json:"backend_kind"`
+	UpstreamURL      string            `json:"upstream_url,omitempty"`
 	Source           MCPSource         `json:"source"`
 	Registration     *MCPRegistration  `json:"registration,omitempty"`
 	Readiness        MCPReadiness      `json:"readiness"`
