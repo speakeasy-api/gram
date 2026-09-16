@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -197,21 +198,29 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 		return oops.E(oops.CodeUnauthorized, err, "failed to exchange IDP code").LogError(ctx, logger)
 	}
 
-	// Run the standard post-IDP user bootstrap: UpsertUser + posthog
-	// signup event + WorkOS membership sync. Same side effects the
-	// session manager runs on dashboard logins.
-	gramUserID, err := s.identityResolver.UpsertUserFromIDP(ctx, idpUser)
+	// The shared post-IDP bootstrap: UpsertUser, posthog signup event, WorkOS
+	// membership sync and a fresh user-info read, exactly as dashboard logins
+	// run it. A failed sync fails the flow rather than falling back to local
+	// rows, so membership is never granted on unverified data.
+	login, err := s.identityResolver.CompleteIDPLogin(ctx, idpUser, identity.IDPLoginOptions{SkipMembershipSync: false})
 	if err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 		return oops.E(oops.CodeUnexpected, err, "failed to bootstrap user").LogError(ctx, logger)
 	}
+	gramUserID := login.UserID
 
 	// Validate the user belongs to the endpoint's organization before
 	// issuing a token. The mcp:connect RBAC policy operates at org level;
-	// this is the first gate. The user wanted in but policy refused — a
-	// config-relevant failure (e.g. the toolset is exposed to the wrong
-	// audience), not a user decline.
-	if _, _, ok := s.identityResolver.HasAccessToOrganization(ctx, endpoint.OrganizationID, gramUserID); !ok {
+	// this is the first gate. Read from the database, not the user-info
+	// cache, so the rows the bootstrap just reconciled are what gets judged.
+	// The user wanted in but policy refused — a config-relevant failure
+	// (e.g. the toolset is exposed to the wrong audience), not a user decline.
+	member, err := s.identityResolver.IsOrganizationMember(ctx, endpoint.OrganizationID, gramUserID)
+	if err != nil {
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
+		return oops.E(oops.CodeUnexpected, err, "failed to check organization membership").LogError(ctx, logger)
+	}
+	if !member {
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 		return oops.E(oops.CodeForbidden, nil, "user is not a member of this MCP server's organization").LogError(ctx, logger)
 	}
