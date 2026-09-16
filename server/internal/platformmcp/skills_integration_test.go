@@ -209,7 +209,7 @@ func TestPlatformMCPSkillsToolsRefuseReadablyWhenTheCapabilityIsOff(t *testing.T
 
 // Authorization is the acting user's, not the surface's. A connection whose
 // user only holds skill:read can inspect existing skills but cannot author one.
-func TestPlatformMCPSkillReadsAllowSkillReaderButWritesStillRequireAdmin(t *testing.T) {
+func TestPlatformMCPSkillReadsAllowSkillReaderButWritesRequireSkillWrite(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
@@ -254,7 +254,26 @@ func TestPlatformMCPSkillReadsAllowSkillReaderButWritesStillRequireAdmin(t *test
 
 	refusal := callSkillsRefusal(t, ctx, fixture.session, "create_skill", map[string]any{
 		"project_slug": fixture.project.Slug,
-		"content":      skillsFixtureManifest("reader-write", "Must remain admin-only in this PR.", "Body."),
+		"content":      skillsFixtureManifest("reader-write", "Requires skill write access.", "Body."),
+	})
+	require.Equal(t, "forbidden", refusal.Code)
+}
+
+func TestPlatformMCPSkillWriterCanAuthorButCannotDistribute(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	fixture := newSkillsVerticalFixture(t, ctx, "platform_mcp_skills_writer", skillsVerticalOptions{capabilityEnabled: true, grantSkillWrite: true})
+	created := callSkillsTool[SkillAuthoringResult](t, ctx, fixture.session, "create_skill", map[string]any{
+		"project_slug": fixture.project.Slug,
+		"content":      skillsFixtureManifest("delegated-writer", "Authored with skill write.", "Body."),
+	})
+	require.True(t, created.CreatedSkill)
+
+	refusal := callSkillsRefusal(t, ctx, fixture.session, "distribute_skill", map[string]any{
+		"project_slug": fixture.project.Slug,
+		"skill_id":     created.Skill.ID,
+		"plugin":       "marketing",
 	})
 	require.Equal(t, "permission_denied", refusal.Code)
 }
@@ -297,8 +316,9 @@ type skillsVerticalOptions struct {
 	capabilityEnabled bool
 	// grantAdmin gives the acting user real organization-admin grants. Off, the
 	// call travels the whole path and is refused by RBAC at the end of it.
-	grantAdmin     bool
-	grantSkillRead bool
+	grantAdmin      bool
+	grantSkillRead  bool
+	grantSkillWrite bool
 }
 
 func newSkillsVerticalFixture(t *testing.T, ctx context.Context, name string, options skillsVerticalOptions) *skillsVerticalFixture {
@@ -353,13 +373,20 @@ func newSkillsVerticalFixture(t *testing.T, ctx context.Context, name string, op
 		// assigning one is what makes this "authenticated but unauthorized"
 		// rather than an organization that predates RBAC.
 		require.NoError(t, authz.SeedSystemRoleGrants(ctx, conn, principal.OrganizationID))
-		if options.grantSkillRead {
-			selector, marshalErr := authz.NewSelector(authz.ScopeSkillRead, project.ID.String()).MarshalJSON()
+		grantedScope := authz.Scope("")
+		switch {
+		case options.grantSkillWrite:
+			grantedScope = authz.ScopeSkillWrite
+		case options.grantSkillRead:
+			grantedScope = authz.ScopeSkillRead
+		}
+		if grantedScope != "" {
+			selector, marshalErr := authz.NewSelector(grantedScope, project.ID.String()).MarshalJSON()
 			require.NoError(t, marshalErr)
 			_, grantErr := accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
 				OrganizationID: principal.OrganizationID,
 				PrincipalUrn:   urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID),
-				Scope:          string(authz.ScopeSkillRead),
+				Scope:          string(grantedScope),
 				Selectors:      selector,
 			})
 			require.NoError(t, grantErr)
@@ -406,7 +433,7 @@ func newSkillsVerticalFixture(t *testing.T, ctx context.Context, name string, op
 	)
 
 	runtimeAuthorizer := Authorizer(&testAuthorizer{})
-	if options.grantSkillRead {
+	if options.grantSkillRead || options.grantSkillWrite {
 		runtimeAuthorizer = NewLiveOrgAdminAuthorizer(conn, authzEngine)
 	}
 	runtime := NewRuntimeWithLifecycle(
