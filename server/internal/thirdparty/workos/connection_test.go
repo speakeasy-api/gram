@@ -312,6 +312,31 @@ func TestClientConnectionsAPIAvailableCachesEnabledCapability(t *testing.T) {
 	require.Equal(t, int64(1), calls.Load())
 }
 
+func TestClientConnectionsAPIAvailableRecognizesOrganizationValidation(t *testing.T) {
+	t.Parallel()
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		_, _ = w.Write([]byte(`{"errors":[{"code":"organization_id should not be empty"}]}`))
+	})
+
+	available, err := newClientWithHandler(t, handler).ConnectionsAPIAvailable(t.Context())
+	require.NoError(t, err)
+	require.True(t, available)
+}
+
+func TestClientConnectionsAPIAvailableRejectsOtherValidation(t *testing.T) {
+	t.Parallel()
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		_, _ = w.Write([]byte(`{"errors":[{"code":"organization_id is invalid"}]}`))
+	})
+
+	_, err := newClientWithHandler(t, handler).ConnectionsAPIAvailable(t.Context())
+	require.Error(t, err)
+}
+
 func TestClientConnectionsAPIAvailableCachesDisabledCapability(t *testing.T) {
 	t.Parallel()
 

@@ -16,7 +16,10 @@ import (
 
 const connectionsWriteUnavailableMessage = "This endpoint is part of the Connections API migration capabilities, which are not enabled for your environment. Contact support@workos.com to enable them."
 
-const connectionsCapabilityCacheTTL = time.Hour
+const (
+	connectionsCapabilityCacheTTL                 = time.Hour
+	connectionsCapabilityOrganizationRequiredCode = "organization_id should not be empty"
+)
 
 // Connection represents a WorkOS SSO connection.
 type Connection struct {
@@ -239,10 +242,16 @@ func (wc *Client) ConnectionsAPIAvailable(ctx context.Context) (bool, error) {
 
 	available := false
 	var response struct {
-		Code string `json:"code"`
+		Code   string `json:"code"`
+		Errors []struct {
+			Code string `json:"code"`
+		} `json:"errors"`
 	}
+	decoded := json.Unmarshal([]byte(apiErr.Body), &response) == nil
 	switch {
-	case apiErr.StatusCode == http.StatusBadRequest && json.Unmarshal([]byte(apiErr.Body), &response) == nil && response.Code == "connection_type_or_options_required":
+	case apiErr.StatusCode == http.StatusBadRequest && decoded && response.Code == "connection_type_or_options_required":
+		available = true
+	case apiErr.StatusCode == http.StatusUnprocessableEntity && decoded && len(response.Errors) > 0 && response.Errors[0].Code == connectionsCapabilityOrganizationRequiredCode:
 		available = true
 	case IsConnectionsWriteUnavailable(apiErr):
 		available = false
