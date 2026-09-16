@@ -280,7 +280,6 @@ describe("OktaConnectSection", () => {
 
     expect(screen.getByText(TENANT)).toBeTruthy();
     expect(screen.getByText("Connected")).toBeTruthy();
-    expect(screen.getByText("kid-abc123")).toBeTruthy();
     expect(screen.getByText("0oaexampleclientid")).toBeTruthy();
     expect(screen.getByText("People and group membership")).toBeTruthy();
     expect(screen.getByText("18 groups")).toBeTruthy();

@@ -15,7 +15,7 @@ function formatTimestamp(value: Date): string {
 
 /**
  * The connection once it has proved itself, shown in place of the exchange:
- * which tenant, what it can do there, and which key Okta reads to believe us.
+ * which tenant, and what it can do there.
  */
 export function OktaConnectionSummary({
   connection,
@@ -51,20 +51,6 @@ export function OktaConnectionSummary({
       ) : null}
 
       <IdentityProviderCapabilities reads={reads} />
-
-      <div className="space-y-1">
-        <Text variant="small" muted>
-          Speakeasy&apos;s key
-        </Text>
-        <code className="text-foreground block font-mono text-xs break-all">
-          {connection.signingKeyKid}
-        </code>
-        <Text variant="small" muted>
-          Okta fetches the public half of this key from the address you
-          installed, every time it authenticates Speakeasy. The private half
-          stays in Speakeasy.
-        </Text>
-      </div>
     </div>
   );
 }
