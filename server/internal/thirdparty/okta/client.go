@@ -334,9 +334,10 @@ func NewClient(logger *slog.Logger, guardianPolicy *guardian.Policy, opts ...Cli
 	}
 
 	resilience := guardian.WithResilience("okta", guardian.ResilienceConfig{
-		Partition: guardian.PartitionByHost(),
-		Limit:     guardian.PerMinute(600),
-		Breaker:   guardian.NoBreaker(),
+		Partition:       guardian.PartitionByHost(),
+		Limit:           guardian.PerMinute(600),
+		WaitForCapacity: false,
+		Breaker:         guardian.NoBreaker(),
 	})
 	httpClient := guardianPolicy.PooledClient(guardian.WithRetryConfig(retryConfig), resilience)
 	nonRetryingHTTPClient := guardianPolicy.PooledClient(resilience)
