@@ -34,19 +34,17 @@ import (
 type clientIDResolveMode string
 
 const (
-	// lookupClientOnly resolves strictly from the database. Used by the
-	// token and consent handlers: by the time they run, the authorize leg
-	// has already persisted any CIMD row, and mid-flow requests (a code
-	// exchange or refresh) must keep working even if the issuer's admission
-	// policy changes between legs.
+	// lookupClientOnly resolves strictly from the database. Used by consent
+	// and by token grants that continue an authorization already in progress:
+	// the authorize leg has persisted any CIMD row, and a code exchange or
+	// refresh must keep working even if admission changes between legs.
 	lookupClientOnly clientIDResolveMode = "lookup_only"
 
 	// resolveClientCIMD additionally treats a URL-shaped client_id as a
 	// Client ID Metadata Document reference: the row is read, the document
 	// fetched and validated when that row's cache has lapsed, and the row
-	// lazily upserted. Authorize-time only — the consent GET/POST re-resolve
-	// the client by client_id, so the row must exist before the flow leaves
-	// /authorize.
+	// lazily upserted. Used when a request starts a new authorization, either
+	// at /authorize or directly at /token with an assertion grant.
 	resolveClientCIMD clientIDResolveMode = "resolve_cimd"
 )
 
