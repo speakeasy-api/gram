@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -35,9 +34,6 @@ type WorkloadSessionAdmission struct {
 // making the generic authorization engine depend on agent policy.
 type WorkloadSessionAdmitter func(context.Context, *pgxpool.Pool) (WorkloadSessionAdmission, error)
 
-// WorkloadSessionDBTXAdmitter admits a workload session on a caller-owned snapshot.
-type WorkloadSessionDBTXAdmitter func(context.Context, accessrepo.DBTX) (WorkloadSessionAdmission, error)
-
 // AdmitWorkloadSession fails closed unless application-owned admission is
 // configured and succeeds, then preserves R and A as independent policies.
 func (e *Engine) AdmitWorkloadSession(ctx context.Context) (context.Context, error) {
@@ -48,22 +44,6 @@ func (e *Engine) AdmitWorkloadSession(ctx context.Context) (context.Context, err
 	if err != nil {
 		return ctx, err
 	}
-	return applyWorkloadSessionAdmission(ctx, admission)
-}
-
-// AdmitWorkloadSessionWithDBTX fails closed without transaction-bound admission.
-func (e *Engine) AdmitWorkloadSessionWithDBTX(ctx context.Context, db accessrepo.DBTX) (context.Context, error) {
-	if e.admitWorkloadSessionWithDBTX == nil {
-		return ctx, oops.C(oops.CodeUnauthorized)
-	}
-	admission, err := e.admitWorkloadSessionWithDBTX(ctx, db)
-	if err != nil {
-		return ctx, err
-	}
-	return applyWorkloadSessionAdmission(ctx, admission)
-}
-
-func applyWorkloadSessionAdmission(ctx context.Context, admission WorkloadSessionAdmission) (context.Context, error) {
 	// An admission naming no agent authorizes nothing. Checked here as well as
 	// in the admitter so a future admitter cannot widen the boundary by
 	// returning a zero value.
@@ -71,5 +51,7 @@ func applyWorkloadSessionAdmission(ctx context.Context, admission WorkloadSessio
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
 	ctx = contextvalues.WithPrincipalCredentialOwner(ctx, admission.OwnerUserID)
-	return workloadPoliciesToContext(ctx, admission.Ceiling, admission.Agent), nil
+	// Two sets and no owner set. An empty owner set would read as "the owner
+	// allows nothing" and deny every check.
+	return admittedPoliciesToContext(ctx, admission.Ceiling, admission.Agent), nil
 }

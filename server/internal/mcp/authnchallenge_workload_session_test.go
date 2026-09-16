@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
@@ -202,6 +203,79 @@ func TestApplyIssuerGate_WorkloadSessionWithNoAssignedAgentIsRefused(t *testing.
 	require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
 }
 
+func softDeleteWorkloadIssuer(t *testing.T, ctx context.Context, ti *testInstance, id uuid.UUID) {
+	t.Helper()
+
+	_, err := ti.conn.Exec( //nolint:glint // notestingrawsql: see seedWorkloadIssuer
+		ctx, `UPDATE workload_issuers SET deleted_at = clock_timestamp() WHERE id = $1`, id)
+	require.NoError(t, err)
+}
+
+// Deleting the issuer that vouched for a workload withdraws the authority of
+// sessions minted before the delete, even though the assignment stays live.
+func TestApplyIssuerGate_WorkloadSessionRefusedWhenItsIssuerIsDeleted(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	fx := newAgentConsentFixture(t, ctx, ti)
+	agent := createConsentAgent(t, ctx, ti, fx, "Workload deploy agent")
+	seedPrincipalMCPConnectGrant(t, ctx, ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), fx.target.MCPResourceID)
+
+	issuerID := seedWorkloadIssuer(t, ctx, ti, fx.orgID)
+	assignAgentToWorkload(t, ctx, ti, fx.orgID, issuerID, workloadSessionSubject, agent.ID)
+
+	subject := urn.NewWorkloadSubject(issuerID, workloadSessionSubject)
+	session := seedWorkloadSession(t, ctx, ti, fx, subject)
+	endpoint := workloadSessionEndpoint(fx)
+	token := mintWorkloadBearer(t, ti, fx, session)
+
+	w := httptest.NewRecorder()
+	_, _, _, err := ti.service.ApplyIssuerGate(t.Context(), w, token, ti.serverURL.String(), endpoint)
+	require.NoError(t, err, "the workload must be admitted before the delete, or the refusal below proves nothing")
+
+	softDeleteWorkloadIssuer(t, ctx, ti, issuerID)
+
+	w = httptest.NewRecorder()
+	_, _, _, err = ti.service.ApplyIssuerGate(t.Context(), w, token, ti.serverURL.String(), endpoint)
+	require.Error(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
+}
+
+// The agent authorization rollout gates workload sessions exactly as it gates
+// agent sessions. The gate answers a refused bearer with a re-auth challenge
+// either way, so the refusal surfaces as unauthorized.
+func TestApplyIssuerGate_WorkloadSessionHiddenWhenAgentRolloutDisabled(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	fx := newAgentConsentFixture(t, ctx, ti)
+	agent := createConsentAgent(t, ctx, ti, fx, "Workload deploy agent")
+	seedPrincipalMCPConnectGrant(t, ctx, ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), fx.target.MCPResourceID)
+
+	issuerID := seedWorkloadIssuer(t, ctx, ti, fx.orgID)
+	assignAgentToWorkload(t, ctx, ti, fx.orgID, issuerID, workloadSessionSubject, agent.ID)
+
+	subject := urn.NewWorkloadSubject(issuerID, workloadSessionSubject)
+	session := seedWorkloadSession(t, ctx, ti, fx, subject)
+	endpoint := workloadSessionEndpoint(fx)
+	token := mintWorkloadBearer(t, ti, fx, session)
+
+	w := httptest.NewRecorder()
+	_, _, _, err := ti.service.ApplyIssuerGate(t.Context(), w, token, ti.serverURL.String(), endpoint)
+	require.NoError(t, err, "the workload must be admitted while the rollout is on, or the refusal below proves nothing")
+
+	ti.features.SetFlag(feature.FlagAgentMCPAuthorizationM2, fx.orgID, false)
+
+	w = httptest.NewRecorder()
+	_, _, _, err = ti.service.ApplyIssuerGate(t.Context(), w, token, ti.serverURL.String(), endpoint)
+	require.Error(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
+}
+
 // An agent's lifecycle reaches every workload assigned to it, which is the
 // revocation path an operator gets for free by suspending the agent.
 func TestApplyIssuerGate_WorkloadSessionRefusedWhenItsAgentIsSuspended(t *testing.T) {
@@ -245,7 +319,9 @@ func TestApplyIssuerGate_WorkloadSessionDoesNotInheritAnUnassignedAgentsPolicy(t
 	assigned := createConsentAgent(t, ctx, ti, fx, "Assigned agent")
 	unrelated := createConsentAgent(t, ctx, ti, fx, "Unrelated agent")
 	// Only the unrelated agent may connect; the assigned one holds nothing.
+	// Every member may connect too, which a workload must never inherit.
 	seedPrincipalMCPConnectGrant(t, ctx, ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeAgent, unrelated.ID.String()), fx.target.MCPResourceID)
+	seedPrincipalMCPConnectGrant(t, ctx, ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeUser, urn.AllUsersPrincipalID), fx.target.MCPResourceID)
 
 	issuerID := seedWorkloadIssuer(t, ctx, ti, fx.orgID)
 	assignment := assignAgentToWorkload(t, ctx, ti, fx.orgID, issuerID, workloadSessionSubject, assigned.ID)

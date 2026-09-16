@@ -32,8 +32,6 @@ type EngineOpts struct {
 	// Omission disables them rather than falling back to user authorization,
 	// which would hand a machine the user:all grant set.
 	AdmitWorkloadSession WorkloadSessionAdmitter
-	// AdmitWorkloadSessionWithDBTX must be configured for atomic workload refresh.
-	AdmitWorkloadSessionWithDBTX WorkloadSessionDBTXAdmitter
 }
 
 // ChallengeLoggingEnabled checks whether authz challenge logging to ClickHouse
@@ -44,7 +42,6 @@ type Engine struct {
 	admitPrincipalCredential         PrincipalCredentialAdmitter
 	admitPrincipalCredentialWithDBTX PrincipalCredentialDBTXAdmitter
 	admitWorkloadSession             WorkloadSessionAdmitter
-	admitWorkloadSessionWithDBTX     WorkloadSessionDBTXAdmitter
 	logger                           *slog.Logger
 	db                               *pgxpool.Pool
 	challengeLoggingEnabled          ChallengeLoggingEnabled
@@ -63,13 +60,11 @@ func NewEngine(
 	var admitPrincipalCredential PrincipalCredentialAdmitter
 	var admitPrincipalCredentialWithDBTX PrincipalCredentialDBTXAdmitter
 	var admitWorkloadSession WorkloadSessionAdmitter
-	var admitWorkloadSessionWithDBTX WorkloadSessionDBTXAdmitter
 	if len(opts) > 0 {
 		devMode = opts[0].DevMode
 		admitPrincipalCredential = opts[0].AdmitPrincipalCredential
 		admitPrincipalCredentialWithDBTX = opts[0].AdmitPrincipalCredentialWithDBTX
 		admitWorkloadSession = opts[0].AdmitWorkloadSession
-		admitWorkloadSessionWithDBTX = opts[0].AdmitWorkloadSessionWithDBTX
 	}
 
 	authzLogger := logger.With(attr.SlogComponent("authz"))
@@ -78,7 +73,6 @@ func NewEngine(
 		admitPrincipalCredential:         admitPrincipalCredential,
 		admitPrincipalCredentialWithDBTX: admitPrincipalCredentialWithDBTX,
 		admitWorkloadSession:             admitWorkloadSession,
-		admitWorkloadSessionWithDBTX:     admitWorkloadSessionWithDBTX,
 		logger:                           authzLogger,
 		db:                               db,
 		challengeLoggingEnabled:          challengeLogging,

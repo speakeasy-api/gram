@@ -409,7 +409,6 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 		AdmitPrincipalCredential:         runtimepolicy.AdmitPrincipalCredential,
 		AdmitPrincipalCredentialWithDBTX: runtimepolicy.AdmitPrincipalCredentialWithDBTX,
 		AdmitWorkloadSession:             runtimepolicy.AdmitWorkloadSession,
-		AdmitWorkloadSessionWithDBTX:     runtimepolicy.AdmitWorkloadSessionWithDBTX,
 		DevMode:                          false,
 	})
 
