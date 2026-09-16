@@ -14,7 +14,6 @@ import { useOnboardingStatus } from "@gram/client/react-query/onboardingStatus";
 import { toast } from "sonner";
 import { GuidedReadinessPanel } from "@/components/guided-readiness/guided-readiness-panel";
 import { useGuidedReadiness } from "@/components/guided-readiness/use-guided-readiness";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";

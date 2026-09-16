@@ -3,6 +3,7 @@ package identityproviderreadiness
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -32,16 +33,24 @@ type DirectoryHandoffChecker interface {
 	HasDirectoryHandoff(context.Context, string) (bool, error)
 }
 
+type directoryHandoffQueries interface {
+	HasDirectoryHandoff(context.Context, string) (bool, error)
+}
+
 type DatabaseDirectoryHandoffChecker struct {
-	db identityproviderrepo.DBTX
+	queries directoryHandoffQueries
 }
 
 func NewDatabaseDirectoryHandoffChecker(db identityproviderrepo.DBTX) *DatabaseDirectoryHandoffChecker {
-	return &DatabaseDirectoryHandoffChecker{db: db}
+	return &DatabaseDirectoryHandoffChecker{queries: identityproviderrepo.New(db)}
 }
 
 func (c *DatabaseDirectoryHandoffChecker) HasDirectoryHandoff(ctx context.Context, organizationID string) (bool, error) {
-	return identityproviderrepo.New(c.db).HasDirectoryHandoff(ctx, organizationID)
+	stored, err := c.queries.HasDirectoryHandoff(ctx, organizationID)
+	if err != nil {
+		return false, fmt.Errorf("check directory handoff: %w", err)
+	}
+	return stored, nil
 }
 
 type UnavailableDirectoryHandoffChecker struct{}

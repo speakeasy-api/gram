@@ -57,6 +57,9 @@ func (d handoffDouble) HasDirectoryHandoff(context.Context, string) (bool, error
 }
 
 func readyDependencies() (*workOSDouble, featureDouble, handoffDouble) {
+	featureValues := map[productfeatures.Feature]bool{}
+	featureValues[productfeatures.FeatureSSO] = true
+	featureValues[productfeatures.FeatureSCIM] = true
 	return &workOSDouble{
 		domains: &workos.OrganizationDomainPolicy{Domains: []workos.OrganizationDomain{{
 			Domain: "example.test", State: workos.OrganizationDomainStateVerified,
@@ -67,12 +70,14 @@ func readyDependencies() (*workOSDouble, featureDouble, handoffDouble) {
 		connectionsAvailable: true,
 		connectionsErr:       nil,
 	}, featureDouble{
-		values: map[productfeatures.Feature]bool{productfeatures.FeatureSSO: true, productfeatures.FeatureSCIM: true},
+		values: featureValues,
 		errors: map[productfeatures.Feature]error{},
 	}, handoffDouble{stored: true, err: nil}
 }
 
 func TestEvaluateEligibleWhenEveryCheckPasses(t *testing.T) {
+	t.Parallel()
+
 	workosClient, features, handoff := readyDependencies()
 	result := identityproviderreadiness.New(workosClient, features, handoff).Evaluate(t.Context(), "organization", "workos-org")
 
@@ -95,6 +100,8 @@ func TestEvaluateEligibleWhenEveryCheckPasses(t *testing.T) {
 }
 
 func TestEvaluateReportsMissingWorkOSLinkWithoutDependentCalls(t *testing.T) {
+	t.Parallel()
+
 	workosClient, features, handoff := readyDependencies()
 	result := identityproviderreadiness.New(workosClient, features, handoff).Evaluate(t.Context(), "organization", "")
 
@@ -107,6 +114,8 @@ func TestEvaluateReportsMissingWorkOSLinkWithoutDependentCalls(t *testing.T) {
 }
 
 func TestEvaluateReportsUnverifiedDomain(t *testing.T) {
+	t.Parallel()
+
 	workosClient, features, handoff := readyDependencies()
 	workosClient.domains = &workos.OrganizationDomainPolicy{Domains: []workos.OrganizationDomain{{Domain: "example.test", State: workos.OrganizationDomainStatePending}}}
 	result := identityproviderreadiness.New(workosClient, features, handoff).Evaluate(t.Context(), "organization", "workos-org")
@@ -117,6 +126,8 @@ func TestEvaluateReportsUnverifiedDomain(t *testing.T) {
 }
 
 func TestEvaluateReportsUnavailableDirectoryHandoff(t *testing.T) {
+	t.Parallel()
+
 	workosClient, features, _ := readyDependencies()
 	result := identityproviderreadiness.New(workosClient, features, identityproviderreadiness.UnavailableDirectoryHandoffChecker{}).Evaluate(t.Context(), "organization", "workos-org")
 
@@ -126,6 +137,8 @@ func TestEvaluateReportsUnavailableDirectoryHandoff(t *testing.T) {
 }
 
 func TestEvaluateReportsMissingWorkOSDirectory(t *testing.T) {
+	t.Parallel()
+
 	workosClient, features, handoff := readyDependencies()
 	workosClient.directories = nil
 	result := identityproviderreadiness.New(workosClient, features, handoff).Evaluate(t.Context(), "organization", "workos-org")
@@ -136,6 +149,8 @@ func TestEvaluateReportsMissingWorkOSDirectory(t *testing.T) {
 }
 
 func TestEvaluateReportsUnavailableConnectionsAPI(t *testing.T) {
+	t.Parallel()
+
 	workosClient, features, handoff := readyDependencies()
 	workosClient.connectionsAvailable = false
 	result := identityproviderreadiness.New(workosClient, features, handoff).Evaluate(t.Context(), "organization", "workos-org")
@@ -146,6 +161,8 @@ func TestEvaluateReportsUnavailableConnectionsAPI(t *testing.T) {
 }
 
 func TestEvaluateReportsDisabledProductFeaturesIndependently(t *testing.T) {
+	t.Parallel()
+
 	workosClient, features, handoff := readyDependencies()
 	features.values[productfeatures.FeatureSSO] = false
 	features.values[productfeatures.FeatureSCIM] = false
@@ -156,6 +173,8 @@ func TestEvaluateReportsDisabledProductFeaturesIndependently(t *testing.T) {
 }
 
 func TestEvaluateDegradesWorkOSFailuresToChecks(t *testing.T) {
+	t.Parallel()
+
 	workosClient, features, handoff := readyDependencies()
 	workosClient.domainErr = errors.New("domain unavailable")
 	workosClient.directoryErr = errors.New("directory unavailable")
@@ -169,6 +188,8 @@ func TestEvaluateDegradesWorkOSFailuresToChecks(t *testing.T) {
 }
 
 func TestEvaluateDegradesFeatureFailuresToChecks(t *testing.T) {
+	t.Parallel()
+
 	workosClient, features, handoff := readyDependencies()
 	features.errors[productfeatures.FeatureSSO] = errors.New("SSO unavailable")
 	features.errors[productfeatures.FeatureSCIM] = errors.New("SCIM unavailable")
