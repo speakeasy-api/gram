@@ -12,6 +12,7 @@ import type { IdentityProviderConnection } from "@gram/client/models/components/
 import { useIdentityProvider } from "@gram/client/react-query/identityProvider.js";
 import { useOnboardingStatus } from "@gram/client/react-query/onboardingStatus";
 import { toast } from "sonner";
+import { GuidedReadinessPanel } from "@/components/guided-readiness/guided-readiness-panel";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -111,6 +112,9 @@ export function IdentityProviderStep({
           takes over step 1 and waits on the rest, and one it does not hands
           steps 2 and 3 to the portal. */}
       <div className="space-y-8">
+        {/* Staff only, and outside the numbered sections on purpose: it says
+            why the card looks the way it does, whichever step is showing. */}
+        <GuidedReadinessPanel />
         <SelectIdpSection
           index={1}
           selectedProvider={selectedProvider}
