@@ -27,6 +27,11 @@ const meta: Meta<typeof Button> = {
         "link",
       ],
     },
+    edge: {
+      control: { type: "select" },
+      options: ["none", "start", "end"],
+      description: "Align content to an edge without removing hover padding",
+    },
     context: {
       control: { type: "select" },
       options: ["product", "marketing"],
@@ -62,6 +67,19 @@ export const BrandMarketing: Story = {
     variant: "brand",
     context: "marketing",
   },
+};
+
+export const EdgeAligned: Story = {
+  render: () => (
+    <div className="max-w-sm border p-6">
+      <Button variant="tertiary" size="sm" edge="start">
+        <Button.Text>Back to workstreams</Button.Text>
+      </Button>
+      <p className="mt-2 text-sm">
+        Button content aligns with this text; its hover area retains padding.
+      </p>
+    </div>
+  ),
 };
 
 export const Primary: Story = {
