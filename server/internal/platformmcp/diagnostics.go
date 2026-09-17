@@ -501,7 +501,7 @@ func (s *DiagnosticsService) organizationProjectIDs(ctx context.Context, princip
 	for _, project := range projects.Projects {
 		ids = append(ids, project.ID)
 	}
-	return ids, projects.Truncated || projects.Filtered, nil
+	return ids, projects.Truncated || projects.authorizationFiltered, nil
 }
 
 // currentReadiness loads the persisted readiness result without probing the
