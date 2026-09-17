@@ -1,4 +1,8 @@
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
+import {
+  deleteSourceCascade,
+  fetchLinkedMcpServers,
+} from "@/pages/mcp/x/tabs/settings/sections/sourceDelete";
 import { formatTunneledMcpDisplay } from "@/lib/sources";
 import {
   createDefaultMcpEndpoint,
@@ -117,6 +121,9 @@ export function useRotateTunneledMcpServerKey(): UseMutationResult<
   const queryClient = useQueryClient();
 
   return useMutation({
+    // The result carries the plaintext key. Drop it from the mutation cache the
+    // moment nothing observes it; the section clears its own copy on close.
+    gcTime: 0,
     mutationFn: async ({ tunneledMcpServerId }) => {
       const result = await client.tunneledMcp.rotateServerKey({
         rotateTunneledMcpServerKeyForm: {
@@ -144,7 +151,6 @@ export function useRotateTunneledMcpServerKey(): UseMutationResult<
 
 export type DeleteTunneledMcpSourceVariables = {
   tunneledMcpServerId: string;
-  mcpServerIds: string[];
 };
 
 export function useDeleteTunneledMcpSource(): UseMutationResult<
@@ -156,23 +162,15 @@ export function useDeleteTunneledMcpSource(): UseMutationResult<
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ tunneledMcpServerId, mcpServerIds }) => {
-      // Linked-server deletes are independent; run them concurrently and
-      // surface any failure before touching the source itself.
-      const results = await Promise.allSettled(
-        mcpServerIds.map((id) => client.mcpServers.delete({ id })),
-      );
-      const failed = results.find(
-        (result): result is PromiseRejectedResult =>
-          result.status === "rejected",
-      );
-      if (failed) {
-        throw failed.reason instanceof Error
-          ? failed.reason
-          : new Error(String(failed.reason));
-      }
-
-      await client.tunneledMcp.deleteServer({ id: tunneledMcpServerId });
+    mutationFn: async ({ tunneledMcpServerId }) => {
+      await deleteSourceCascade({
+        listLinked: () =>
+          fetchLinkedMcpServers(client, queryClient, { tunneledMcpServerId }),
+        deleteMcpServer: (id) => client.mcpServers.delete({ id }),
+        deleteSource: () =>
+          client.tunneledMcp.deleteServer({ id: tunneledMcpServerId }),
+        sourceLabel: "tunneled MCP source",
+      });
     },
     onSuccess: async () => {
       // Mark stale only (refetchType "none"): the deleted source's own queries
@@ -188,6 +186,16 @@ export function useDeleteTunneledMcpSource(): UseMutationResult<
         invalidateAllMcpServers(queryClient, { refetchType: "none" }),
         invalidateAllMcpEndpoints(queryClient, { refetchType: "none" }),
         invalidateAllUserSessionIssuers(queryClient, { refetchType: "none" }),
+      ]);
+    },
+    onError: async () => {
+      // A partial run left some wrappers gone and the source in place. Refetch
+      // so the open dialog lists what remains before the user retries.
+      await Promise.all([
+        invalidateAllMcpServers(queryClient, { refetchType: "all" }),
+        invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
+        invalidateAllGetTunneledMcpServer(queryClient, { refetchType: "all" }),
+        invalidateAllTunneledMcpServers(queryClient, { refetchType: "all" }),
       ]);
     },
   });

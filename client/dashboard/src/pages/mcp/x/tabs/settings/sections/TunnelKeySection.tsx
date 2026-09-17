@@ -11,7 +11,7 @@ import {
 } from "@/pages/sources/tunneled-mcp/hooks";
 import type { TunneledMcpServer } from "@gram/client/models/components/tunneledmcpserver.js";
 import { KeyRound, Loader2, RotateCcw } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 
 export const MCP_TUNNEL_KEY_SECTION_ID = "tunnel-key";
@@ -67,29 +67,43 @@ export function TunnelKeySection({
   tunneledMcpServer: TunneledMcpServer;
 }): JSX.Element {
   const [rotateDialogOpen, setRotateDialogOpen] = useState(false);
+  // The plaintext key is held here, and only while the dialog is open. The
+  // mutation itself is reset as soon as it settles so the key never lingers
+  // in the mutation cache.
   const [rotatedKey, setRotatedKey] =
     useState<RotateTunneledMcpServerKeyData>();
+  const [rotateError, setRotateError] = useState<string>();
   const rotate = useRotateTunneledMcpServerKey();
+  // Tracks the open dialog so a rotation that resolves after Cancel is
+  // dropped instead of repopulating the cleared state.
+  const dialogOpenRef = useRef(false);
 
   const handleOpenChange = (open: boolean) => {
+    dialogOpenRef.current = open;
     setRotateDialogOpen(open);
     if (!open) {
       setRotatedKey(undefined);
+      setRotateError(undefined);
       rotate.reset();
     }
   };
 
   const handleRotate = async () => {
+    setRotateError(undefined);
     try {
       const result = await rotate.mutateAsync({
         tunneledMcpServerId: tunneledMcpServer.id,
       });
+      if (!dialogOpenRef.current) return;
       setRotatedKey(result);
       toast.success("Tunnel key rotated");
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to rotate tunnel key";
       toast.error(message);
+      if (dialogOpenRef.current) setRotateError(message);
+    } finally {
+      rotate.reset();
     }
   };
 
@@ -120,11 +134,15 @@ export function TunnelKeySection({
             The full key was shown once when it was issued.
           </SettingsSection.FooterHint>
           <SettingsSection.FooterActions>
-            <RequireScope scope="mcp:write" level="component">
+            <RequireScope
+              scope="mcp:write"
+              resourceId={tunneledMcpServer.projectId}
+              level="component"
+            >
               <Button
                 variant="secondary"
                 size="md"
-                onClick={() => setRotateDialogOpen(true)}
+                onClick={() => handleOpenChange(true)}
               >
                 <Button.LeftIcon>
                   <RotateCcw className="h-4 w-4" />
@@ -155,9 +173,9 @@ export function TunnelKeySection({
                 Running agents using the old key will be disconnected shortly
                 and must be restarted with the replacement key.
               </Alert>
-              {rotate.isError && (
+              {rotateError !== undefined && (
                 <Alert variant="error" dismissible={false}>
-                  {rotate.error.message}
+                  {rotateError}
                 </Alert>
               )}
               <Dialog.Footer>

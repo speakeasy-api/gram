@@ -1,6 +1,6 @@
 import { useListTools } from "@/hooks/toolTypes";
 import type { Tool } from "@/lib/toolTypes";
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import type { SourceKind } from "./sourceVersions";
 
 export type SourceTool = Extract<Tool, { type: "http" | "function" }>;
@@ -34,8 +34,9 @@ export function useSourceTools(
   toolUrns: string[];
   isLoading: boolean;
   isError: boolean;
+  refetch: () => void;
 } {
-  const { data, isLoading, isError } = useListTools();
+  const { data, isLoading, isError, refetch } = useListTools();
 
   const tools = useMemo(
     () =>
@@ -45,6 +46,9 @@ export function useSourceTools(
     [data, sourceKind, assetId],
   );
   const toolUrns = useMemo(() => tools.map((tool) => tool.toolUrn), [tools]);
+  const retry = useCallback(() => {
+    void refetch();
+  }, [refetch]);
 
-  return { tools, toolUrns, isLoading, isError };
+  return { tools, toolUrns, isLoading, isError, refetch: retry };
 }

@@ -53,7 +53,7 @@ export default function UploadOpenAPI(): JSX.Element {
   // instead of adding one. The list's "Upload new version" action and the
   // source page both link here that way.
   const slug = searchParams.get(NEW_VERSION_SLUG_PARAM);
-  const { sources, isLoading } = useProjectSources();
+  const { sources, isLoading, isError } = useProjectSources();
   const match = slug
     ? sources.find(
         (source) => source.kind === "openapi" && source.slug === slug,
@@ -71,16 +71,29 @@ export default function UploadOpenAPI(): JSX.Element {
       description={copy.description}
     >
       <div>
-        {slug && !isLoading && !existing && (
+        {/* A lookup that failed is not a slug that isn't there: adding a
+            document in its place would replace nothing, so the flow waits. */}
+        {slug && isError && (
+          <Alert variant="error" dismissible={false} className="mb-6">
+            The active deployment could not be fetched, so the document with the
+            slug "{slug}" cannot be matched. Reload to try again.
+          </Alert>
+        )}
+        {slug && !isLoading && !isError && !existing && (
           <Alert variant="warning" dismissible={false} className="mb-6">
             No OpenAPI document with the slug "{slug}" is in the active
             deployment, so this upload adds a new document instead.
           </Alert>
         )}
         {/* The stepper reads the document once, when it mounts, so it waits
-            for the lookup rather than starting without it. */}
-        {(!slug || !isLoading) && (
-          <UploadAssetStepper.Provider step={1} existingDocument={existing}>
+            for the lookup rather than starting without it, and is keyed by
+            the document so a change of slug on the same route re-seeds it. */}
+        {(!slug || (!isLoading && !isError)) && (
+          <UploadAssetStepper.Provider
+            key={`${slug ?? "new"}:${existing?.slug ?? "unknown"}`}
+            step={1}
+            existingDocument={existing}
+          >
             <UploadAssetStepper.Frame>
               <UploadAssetStep step={1}>
                 <UploadAssetStep.Indicator />

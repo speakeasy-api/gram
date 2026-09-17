@@ -23,6 +23,7 @@ export function ResourceIdentifierSection({
       label="Protected resource identifier"
       placeholder="https://mcp.internal.example.com/mcp"
       stored={tunneledMcpServer.resourceIdentifier ?? ""}
+      projectId={tunneledMcpServer.projectId}
       footerHint="Optional. Clearing the field unsets the identifier."
       save={async (value) => {
         // An empty string clears the identifier back to unset.

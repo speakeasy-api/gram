@@ -107,7 +107,11 @@ export function UpstreamUrlSection({
             server.
           </SettingsSection.FooterHint>
           <SettingsSection.FooterActions>
-            <RequireScope scope="mcp:write" level="component">
+            <RequireScope
+              scope="mcp:write"
+              resourceId={remoteMcpServer.projectId}
+              level="component"
+            >
               <VerifyRemoteMcpUrlButton
                 state={verify}
                 url={draft}

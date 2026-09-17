@@ -10,8 +10,9 @@ import {
 
 // Deleting a source-backed MCP server deletes the source row too, which
 // takes every sibling server and their endpoints with it. This picks the
-// delete mutation for the source kind and hands the cascade dialog the
-// exact list of servers it will remove.
+// delete mutation for the source kind. `linkedMcpServers` is what the dialog
+// lists; the mutation refetches the current set before deleting, so a sibling
+// created after the page loaded goes too.
 export function DeleteSourceBackedServerDialogContent({
   target,
   linkedMcpServers,
@@ -26,7 +27,6 @@ export function DeleteSourceBackedServerDialogContent({
   const deleteRemote = useDeleteRemoteMcpSource();
   const deleteTunneled = useDeleteTunneledMcpSource();
   const deleteUnproxied = useDeleteUnproxiedMcpSource();
-  const mcpServerIds = linkedMcpServers.map((server) => server.id);
 
   const mutation = {
     remote: deleteRemote,
@@ -39,19 +39,16 @@ export function DeleteSourceBackedServerDialogContent({
       case "remote":
         await deleteRemote.mutateAsync({
           remoteMcpServerId: target.source.id,
-          mcpServerIds,
         });
         return;
       case "tunneled":
         await deleteTunneled.mutateAsync({
           tunneledMcpServerId: target.source.id,
-          mcpServerIds,
         });
         return;
       case "unproxied":
         await deleteUnproxied.mutateAsync({
           unproxiedMcpServerId: target.source.id,
-          mcpServerIds,
         });
     }
   };

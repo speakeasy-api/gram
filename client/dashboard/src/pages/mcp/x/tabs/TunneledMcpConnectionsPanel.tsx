@@ -125,10 +125,10 @@ export function TunneledMcpConnectionsPanel({
   /** Settings anchor with the agent snippets, offered when nothing is connected. */
   agentSetupHref: string;
 }): JSX.Element {
+  // The status badge and last-seen come from the source row, so it polls on
+  // the same cadence as the connections table or it would go stale as agents
+  // come and go.
   const { data: source } = useGetTunneledMcpServer(
-    getTunneledMcpServerArgs(tunneledMcpServerId),
-  );
-  const { data, isLoading } = useListTunneledMcpServerConnections(
     getTunneledMcpServerArgs(tunneledMcpServerId),
     undefined,
     {
@@ -136,6 +136,15 @@ export function TunneledMcpConnectionsPanel({
       refetchIntervalInBackground: false,
     },
   );
+  const { data, isLoading, isError, refetch } =
+    useListTunneledMcpServerConnections(
+      getTunneledMcpServerArgs(tunneledMcpServerId),
+      undefined,
+      {
+        refetchInterval: CONNECTIONS_POLL_MS,
+        refetchIntervalInBackground: false,
+      },
+    );
 
   const connections = data?.connections ?? [];
   const status = connectionStatusPresentation(source?.connectionStatus);
@@ -152,6 +161,16 @@ export function TunneledMcpConnectionsPanel({
   );
   if (isLoading) {
     body = <SkeletonTable />;
+  } else if (isError && !data) {
+    // A failed poll with nothing loaded yet is not "no connections".
+    body = (
+      <div className="flex flex-col items-start gap-2 py-6">
+        <Text muted>Failed to load tunnel connections.</Text>
+        <Button size="sm" variant="secondary" onClick={() => void refetch()}>
+          <Button.Text>Retry</Button.Text>
+        </Button>
+      </div>
+    );
   } else if (connections.length === 0) {
     body = (
       <InlineEmptyState

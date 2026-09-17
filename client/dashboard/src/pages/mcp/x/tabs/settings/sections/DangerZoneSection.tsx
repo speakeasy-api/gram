@@ -1,7 +1,9 @@
 import { RequireScope } from "@/components/require-scope";
 import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
+import { useIsSpeakeasyStaff } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
+import { UNPROXIED_DELETE_STAFF_ONLY_MESSAGE } from "@/pages/sources/unproxied-mcp/hooks";
 import { useRoutes } from "@/routes";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import type {
@@ -100,10 +102,17 @@ const SOURCE_KIND_LABEL: Record<SourceBackedDeleteTarget["kind"], string> = {
 function deleteRowCopy(
   deleteTarget: SourceBackedDeleteTarget | undefined,
   sourceUnavailable: boolean,
+  staffOnly: boolean,
 ): {
   title: string;
   description: string;
 } {
+  if (staffOnly) {
+    return {
+      title: "Delete MCP Server and Source",
+      description: `${UNPROXIED_DELETE_STAFF_ONLY_MESSAGE} Deleting this server would also delete the unproxied MCP source behind it.`,
+    };
+  }
   if (sourceUnavailable && !deleteTarget) {
     return {
       title: "Delete MCP Server",
@@ -159,11 +168,18 @@ export function DangerZoneSection({
     mcpServer,
     linkedQuery.data?.mcpServers ?? [],
   );
+  // The unproxied source delete is staff-only server-side. Refuse up front
+  // rather than let the cascade delete the wrappers and then be turned away.
+  const isSpeakeasyStaff = useIsSpeakeasyStaff();
+  const staffOnly = deleteTarget?.kind === "unproxied" && !isSpeakeasyStaff;
+  // A refetch in flight means the sibling list may be about to change; wait
+  // for it so the dialog opens on the current set.
   const deleteReady =
-    !isSourceBacked ||
-    (!!deleteTarget && linkedQuery.isSuccess) ||
-    sourceUnavailable;
-  const deleteRow = deleteRowCopy(deleteTarget, sourceUnavailable);
+    !staffOnly &&
+    (!isSourceBacked ||
+      (!!deleteTarget && linkedQuery.isSuccess && !linkedQuery.isFetching) ||
+      sourceUnavailable);
+  const deleteRow = deleteRowCopy(deleteTarget, sourceUnavailable, staffOnly);
   const [pendingAvailability, setPendingAvailability] =
     useState<McpServerVisibility | null>(null);
   const queryClient = useQueryClient();
@@ -250,7 +266,11 @@ export function DangerZoneSection({
                 <Text muted small>
                   {enabled ? "Enabled" : "Disabled"}
                 </Text>
-                <RequireScope scope="mcp:write" level="component">
+                <RequireScope
+                  scope="mcp:write"
+                  resourceId={mcpServer.projectId}
+                  level="component"
+                >
                   <Switch
                     checked={enabled}
                     disabled={isUpdatingVisibility}
@@ -264,7 +284,11 @@ export function DangerZoneSection({
                 title={deleteRow.title}
                 description={deleteRow.description}
               >
-                <RequireScope scope="mcp:write" level="component">
+                <RequireScope
+                  scope="mcp:write"
+                  resourceId={mcpServer.projectId}
+                  level="component"
+                >
                   <Button
                     variant="destructive-primary"
                     size="md"

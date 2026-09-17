@@ -210,10 +210,13 @@ function headerDraftToWriteFields(draft: HeaderDraft): HeaderWriteFields {
 export function HeadersSection({
   remoteMcpServerId,
   mcpServerId,
+  projectId,
 }: {
   remoteMcpServerId: string;
   /** The server this section is rendered on, left out of the sibling list. */
   mcpServerId: string;
+  /** The server's own project, so every write gate matches what saving targets. */
+  projectId: string;
 }): JSX.Element {
   const routes = useRoutes();
 
@@ -451,6 +454,7 @@ export function HeadersSection({
               <HeaderDraftRow
                 key={draft.key}
                 draft={draft}
+                projectId={projectId}
                 onChange={(next) =>
                   setDrafts((current) =>
                     current.map((row, rowIndex) =>
@@ -482,7 +486,11 @@ export function HeadersSection({
               </Alert>
             ) : null}
 
-            <RequireScope scope="mcp:write" level="component">
+            <RequireScope
+              scope="mcp:write"
+              resourceId={projectId}
+              level="component"
+            >
               <Button
                 variant="secondary"
                 size="md"
@@ -505,7 +513,11 @@ export function HeadersSection({
             </Text>
 
             <Stack direction="horizontal" gap={2}>
-              <RequireScope scope="mcp:write" level="component">
+              <RequireScope
+                scope="mcp:write"
+                resourceId={projectId}
+                level="component"
+              >
                 <Button
                   variant="primary"
                   size="md"
@@ -533,10 +545,12 @@ export function HeadersSection({
 
 function HeaderDraftRow({
   draft,
+  projectId,
   onChange,
   onRemove,
 }: {
   draft: HeaderDraft;
+  projectId: string;
   onChange: (draft: HeaderDraft) => void;
   onRemove: () => void;
 }): JSX.Element {
@@ -584,7 +598,11 @@ function HeaderDraftRow({
               </SelectContent>
             </Select>
           </div>
-          <RequireScope scope="mcp:write" level="component">
+          <RequireScope
+            scope="mcp:write"
+            resourceId={projectId}
+            level="component"
+          >
             <Button
               variant="tertiary"
               size="md"

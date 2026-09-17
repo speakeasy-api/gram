@@ -36,6 +36,7 @@ export function RemoteSourceNameSection({
       label="Remote source name"
       placeholder="My MCP server"
       stored={remoteMcpServer.name ?? ""}
+      projectId={remoteMcpServer.projectId}
       footerHint="Optional. Defaults to the upstream URL when empty."
       save={async (value) => {
         // Empty string explicitly clears the name on the server side; nil
@@ -72,6 +73,7 @@ export function TunneledSourceNameSection({
       label="Tunneled source name"
       placeholder="Internal MCP server"
       stored={tunneledMcpServer.name}
+      projectId={tunneledMcpServer.projectId}
       requireValue
       footerHint="Required."
       save={async (value) => {

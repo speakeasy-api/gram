@@ -19,6 +19,7 @@ export function EditableSourceFieldSection({
   label,
   placeholder,
   stored,
+  projectId,
   requireValue = false,
   footerHint,
   save,
@@ -31,6 +32,8 @@ export function EditableSourceFieldSection({
   label: string;
   placeholder: string;
   stored: string;
+  // The source's own project, so the gate matches what saving will target.
+  projectId: string;
   requireValue?: boolean;
   footerHint?: string;
   // Persists the trimmed draft and returns the canonical stored value.
@@ -97,7 +100,11 @@ export function EditableSourceFieldSection({
         <SettingsSection.Footer>
           <SettingsSection.FooterHint>{footerHint}</SettingsSection.FooterHint>
           <SettingsSection.FooterActions>
-            <RequireScope scope="mcp:write" level="component">
+            <RequireScope
+              scope="mcp:write"
+              resourceId={projectId}
+              level="component"
+            >
               <FooterSaveButton
                 pending={saving}
                 disabled={saveDisabled}

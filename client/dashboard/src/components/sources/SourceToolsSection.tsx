@@ -9,12 +9,14 @@ import { SearchBar } from "@/components/ui/SearchBar";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
+import { useProject } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useToolUpdate } from "@/hooks/useToolUpdate";
 import { cn } from "@/lib/utils";
 import { invalidateAllListTools } from "@gram/client/react-query/listTools.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { useDeferredValue, useMemo, useState } from "react";
+import { SourceSectionError } from "./SourceSectionError";
 import type { SourceKind } from "./sourceVersions";
 import { useSourceToolActions } from "./useSourceToolActions";
 import type { SourceTool } from "./useSourceQueries";
@@ -195,17 +197,25 @@ export function SourceToolsSection({
   sourceKind,
   tools,
   isLoading,
+  isError = false,
+  onRetry,
 }: {
   sourceKind: SourceKind;
   tools: SourceTool[];
   isLoading: boolean;
+  /** The tool list failed to load; shown ahead of the empty state. */
+  isError?: boolean;
+  onRetry?: () => void;
 }): JSX.Element {
   const [facet, setFacet] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
 
+  // Edits go through the global variation upsert, which the server gates
+  // on project:write for this project.
+  const project = useProject();
   const { hasScope } = useRBAC();
-  const canWrite = hasScope("mcp:write");
+  const canWrite = hasScope("project:write", project.id);
 
   const queryClient = useQueryClient();
   const { updateTool, isUpdating } = useToolUpdate({
@@ -260,6 +270,8 @@ export function SourceToolsSection({
     >
       <SourceToolsBody
         isLoading={isLoading}
+        isError={isError}
+        onRetry={onRetry}
         count={count}
         toolbar={
           <div className="flex flex-wrap items-center justify-between gap-3 border-b px-6 py-3">
@@ -309,11 +321,15 @@ export function SourceToolsSection({
 
 function SourceToolsBody({
   isLoading,
+  isError,
+  onRetry,
   count,
   toolbar,
   children,
 }: {
   isLoading: boolean;
+  isError: boolean;
+  onRetry?: () => void;
   count: number;
   toolbar: React.ReactNode;
   children: React.ReactNode;
@@ -323,6 +339,16 @@ function SourceToolsBody({
       <div className="p-6">
         <SkeletonTable />
       </div>
+    );
+  }
+  // A failed read is not a source without tools.
+  if (isError && count === 0) {
+    return (
+      <SourceSectionError
+        heading="Couldn't load tools"
+        description="The project's tools could not be fetched, so this source's tools are unknown."
+        onRetry={onRetry}
+      />
     );
   }
   if (count === 0) {

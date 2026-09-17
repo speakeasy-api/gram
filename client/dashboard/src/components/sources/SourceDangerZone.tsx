@@ -5,6 +5,7 @@ import {
 import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/Button";
 import { Text } from "@/components/ui/Text";
+import { useProject } from "@/contexts/Auth";
 import { useRoutes } from "@/routes";
 import { Trash2, Upload } from "lucide-react";
 import { useState } from "react";
@@ -52,6 +53,7 @@ export function SourceDangerZone({
 }): JSX.Element {
   const routes = useRoutes();
   const navigate = useNavigate();
+  const project = useProject();
   const [deleteOpen, setDeleteOpen] = useState(false);
 
   return (
@@ -67,7 +69,11 @@ export function SourceDangerZone({
                 title="Upload a new version"
                 description="Replace this document with a newer one. Tools are regenerated from it on the next deployment."
               >
-                <RequireScope scope="project:write" level="component">
+                <RequireScope
+                  scope="project:write"
+                  resourceId={project.id}
+                  level="component"
+                >
                   <Button variant="secondary" size="md" asChild>
                     <routes.mcp.add.openapi.Link
                       queryParams={newVersionQueryParams(slug)}
@@ -99,7 +105,11 @@ export function SourceDangerZone({
               title="Delete source"
               description="Remove this source from the project's deployment. This action cannot be undone."
             >
-              <RequireScope scope="project:write" level="component">
+              <RequireScope
+                scope="project:write"
+                resourceId={project.id}
+                level="component"
+              >
                 <Button
                   variant="destructive-primary"
                   size="md"

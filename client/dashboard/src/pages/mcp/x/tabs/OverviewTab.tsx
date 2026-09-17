@@ -24,9 +24,9 @@ export function OverviewTab({
       />
     );
   }
-  if (!mcpServer.slug) return null;
-
-  const usage = (
+  // The usage dashboard is keyed by slug; a tunneled server without one still
+  // gets its connections panel.
+  const usage = mcpServer.slug ? (
     <MCPOverviewTab
       server={{
         kind: "mcp-server",
@@ -35,7 +35,7 @@ export function OverviewTab({
         name: mcpServer.name ?? "MCP Server",
       }}
     />
-  );
+  ) : null;
 
   if (!mcpServer.tunneledMcpServerId) return usage;
 

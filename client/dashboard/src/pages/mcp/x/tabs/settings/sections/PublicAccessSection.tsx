@@ -115,7 +115,11 @@ export function PublicAccessSection({
             {allowPublic ? "Enabled" : "Disabled"}
           </SettingsSection.FooterHint>
           <SettingsSection.FooterActions>
-            <RequireScope scope="mcp:write" level="component">
+            <RequireScope
+              scope="mcp:write"
+              resourceId={tunneledMcpServer.projectId}
+              level="component"
+            >
               <Button
                 variant="secondary"
                 size="md"

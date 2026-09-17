@@ -68,7 +68,11 @@ export function useFailedDeploymentSources(
     },
   );
 
-  const { data: toolsetsData } = useListToolsets();
+  // Toolsets only supply per-source tool counts, so a failed list degrades
+  // to zero counts rather than taking the caller's page down.
+  const { data: toolsetsData } = useListToolsets(undefined, undefined, {
+    throwOnError: false,
+  });
 
   const result = useMemo(() => {
     if (!deployment || !logs) {

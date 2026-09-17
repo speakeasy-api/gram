@@ -67,12 +67,15 @@ function summaryMetrics(summary: SourceTelemetrySummary): StatRowMetric[] {
  *
  * Reads the project's pre-aggregated overview and keeps the rows for this
  * source's tools: the summary endpoint is the fast path, and a per-source
- * scan of raw logs would not be.
+ * scan of raw logs would not be. The overview ranks the project's ten
+ * most-called tools and takes no per-source filter, so the panel is the
+ * source's share of that ranking, not its whole traffic, and says so.
  */
 export function SourceActivityPanel({
   sourceKey,
   toolUrns,
   isToolsLoading,
+  isToolsError = false,
 }: {
   /** Keys the query, so two sources never share a cache entry. */
   sourceKey: string;
@@ -80,6 +83,8 @@ export function SourceActivityPanel({
   /** True while the tool list is still loading, so an empty URN list does not
    * read as "no activity" before the tools are known. */
   isToolsLoading: boolean;
+  /** The tool list failed, so the URNs to match on are unknown. */
+  isToolsError?: boolean;
 }): JSX.Element {
   const client = useGramContext();
   // Fixed at mount: a window that moved with every render would re-key the
@@ -118,16 +123,17 @@ export function SourceActivityPanel({
   return (
     <Card.Dashboard
       title="Activity"
-      tooltip="Calls to the tools generated from this source, across every MCP server that carries them."
+      tooltip={`Calls to this source's tools that rank among the project's ${TOP_TOOLS} most-called tools, across every MCP server that carries them.`}
       action={
         <Text muted className="text-xs">
-          Last {WINDOW_DAYS} days
+          Last {WINDOW_DAYS} days · project top {TOP_TOOLS}
         </Text>
       }
     >
       <SourceActivityBody
         isLoading={isToolsLoading || (toolUrns.length > 0 && isLoading)}
         isError={isError && !isLogsDisabled}
+        isToolsError={isToolsError}
         isLogsDisabled={isLogsDisabled}
         metrics={metrics}
         summary={summary}
@@ -139,12 +145,14 @@ export function SourceActivityPanel({
 function SourceActivityBody({
   isLoading,
   isError,
+  isToolsError,
   isLogsDisabled,
   metrics,
   summary,
 }: {
   isLoading: boolean;
   isError: boolean;
+  isToolsError: boolean;
   isLogsDisabled: boolean;
   metrics: ToolMetric[];
   summary: SourceTelemetrySummary | null;
@@ -155,6 +163,13 @@ function SourceActivityBody({
         <Skeleton className="h-[136px]" />
         <Skeleton className="h-40" />
       </div>
+    );
+  }
+  // Without the tool list there is nothing to match activity against, which
+  // is a failure to read, not a quiet week.
+  if (isToolsError) {
+    return (
+      <WidgetEmptyState message="Couldn't load this source's tools, so its activity can't be read. Reload to try again." />
     );
   }
   if (isLogsDisabled) {
@@ -169,7 +184,9 @@ function SourceActivityBody({
   }
   if (!summary) {
     return (
-      <WidgetEmptyState message="No invocation data yet. Activity appears once tools from this source are called through an MCP server." />
+      <WidgetEmptyState
+        message={`No invocation data yet. Activity appears once tools from this source are among the project's ${TOP_TOOLS} most-called through an MCP server.`}
+      />
     );
   }
 
@@ -183,7 +200,9 @@ function SourceActivityBody({
     <div className="flex flex-col gap-6">
       <StatRow metrics={summaryMetrics(summary)} />
       <div className="flex flex-col gap-3">
-        <h4 className="text-eyebrow">Top tools by calls</h4>
+        <h4 className="text-eyebrow">
+          This source's tools in the project's top {TOP_TOOLS}
+        </h4>
         <RankedBarList items={topTools} />
       </div>
     </div>

@@ -1,6 +1,10 @@
 import { useFetcher } from "@/contexts/Fetcher";
 import { useIsPlatformAdmin } from "@/contexts/Auth";
 import {
+  deleteSourceCascade,
+  fetchLinkedMcpServers,
+} from "@/pages/mcp/x/tabs/settings/sections/sourceDelete";
+import {
   useProjectSlugForRequests,
   useSdkClient,
   useSlugs,
@@ -13,6 +17,7 @@ import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { RemoteMcpServer } from "@gram/client/models/components/remotemcpserver.js";
 import { invalidateAllMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
+import { invalidateAllGetRemoteMcpServer } from "@gram/client/react-query/getRemoteMcpServer.js";
 import { invalidateAllRemoteMcpServers } from "@gram/client/react-query/remoteMcpServers.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
 import { invalidateAllRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
@@ -121,10 +126,6 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
 
 export type DeleteRemoteMcpSourceVariables = {
   remoteMcpServerId: string;
-  // mcp_servers rows backed by this remote MCP server. Pre-fetched by the
-  // confirmation dialog so the same list the user just confirmed is exactly
-  // what gets soft-deleted.
-  mcpServerIds: string[];
 };
 
 export function useDeleteRemoteMcpSource(): UseMutationResult<
@@ -136,24 +137,17 @@ export function useDeleteRemoteMcpSource(): UseMutationResult<
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ remoteMcpServerId, mcpServerIds }) => {
+    mutationFn: async ({ remoteMcpServerId }) => {
       // Soft-delete each linked mcp_server first; the server-side handler
-      // cascades to its mcp_endpoints. The deletes are independent, so run
-      // them concurrently and surface any failure before touching the source.
-      const results = await Promise.allSettled(
-        mcpServerIds.map((id) => client.mcpServers.delete({ id })),
-      );
-      const failed = results.find(
-        (result): result is PromiseRejectedResult =>
-          result.status === "rejected",
-      );
-      if (failed) {
-        throw failed.reason instanceof Error
-          ? failed.reason
-          : new Error(String(failed.reason));
-      }
-
-      await client.remoteMcp.deleteServer({ id: remoteMcpServerId });
+      // cascades to its mcp_endpoints. Only then does the source go.
+      await deleteSourceCascade({
+        listLinked: () =>
+          fetchLinkedMcpServers(client, queryClient, { remoteMcpServerId }),
+        deleteMcpServer: (id) => client.mcpServers.delete({ id }),
+        deleteSource: () =>
+          client.remoteMcp.deleteServer({ id: remoteMcpServerId }),
+        sourceLabel: "remote MCP source",
+      });
     },
     onSuccess: async () => {
       // Mark stale only (refetchType "none"): the deleted server's own queries
@@ -166,6 +160,16 @@ export function useDeleteRemoteMcpSource(): UseMutationResult<
         invalidateAllMcpServers(queryClient, { refetchType: "none" }),
         invalidateAllMcpEndpoints(queryClient, { refetchType: "none" }),
         invalidateAllUserSessionIssuers(queryClient, { refetchType: "none" }),
+      ]);
+    },
+    onError: async () => {
+      // A partial run left some wrappers gone and the source in place. Refetch
+      // so the open dialog lists what remains before the user retries.
+      await Promise.all([
+        invalidateAllMcpServers(queryClient, { refetchType: "all" }),
+        invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
+        invalidateAllGetRemoteMcpServer(queryClient, { refetchType: "all" }),
+        invalidateAllRemoteMcpServers(queryClient, { refetchType: "all" }),
       ]);
     },
   });

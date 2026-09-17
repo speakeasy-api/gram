@@ -1,6 +1,19 @@
 import { useSdkClient } from "@/contexts/Sdk";
 import type { ProtectedResourceMetadata } from "@gram/client/models/components/protectedresourcemetadata.js";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, type QueryClient } from "@tanstack/react-query";
+
+const PROTECTED_RESOURCE_METADATA_QUERY_KEY = "protected-resource-metadata";
+
+// The probe is keyed by remote id but answers for whatever URL the remote had
+// when it ran, so a URL change must drop it or Authentication keeps showing
+// the old upstream's discovery for the rest of the stale window.
+export function invalidateAllProtectedResourceMetadata(
+  queryClient: QueryClient,
+): Promise<void> {
+  return queryClient.invalidateQueries({
+    queryKey: [PROTECTED_RESOURCE_METADATA_QUERY_KEY],
+  });
+}
 
 export type ProtectedResourceProbeStatus =
   | "idle"
@@ -26,7 +39,7 @@ export function useProtectedResourceMetadata(
   const client = useSdkClient();
 
   const query = useQuery({
-    queryKey: ["protected-resource-metadata", remoteMcpServerId],
+    queryKey: [PROTECTED_RESOURCE_METADATA_QUERY_KEY, remoteMcpServerId],
     queryFn: async () => {
       if (!remoteMcpServerId) throw new Error("no remote mcp server id");
       return client.remoteMcp.discoverProtectedResourceMetadata({

@@ -1,4 +1,5 @@
 import type { Action } from "@/components/ui/MoreActions";
+import { useProject } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useActiveDeployment } from "@/hooks/toolTypes";
 import { useRoutes } from "@/routes";
@@ -34,8 +35,9 @@ export function useSourceListActions({
 }): (source: SourceOption) => Action[] {
   const routes = useRoutes();
   const navigate = useNavigate();
+  const project = useProject();
   const { hasScope } = useRBAC();
-  const canWrite = hasScope("project:write");
+  const canWrite = hasScope("project:write", project.id);
   const download = useDownloadSource();
   const { data: deploymentResult } = useActiveDeployment();
   const deploymentId = deploymentResult?.deployment?.id;
@@ -90,6 +92,7 @@ export function useSourceListActions({
             kind: source.kind,
             assetId: sourceAssetId(source),
             name: source.name,
+            slug: source.slug,
           }),
       });
       return actions;

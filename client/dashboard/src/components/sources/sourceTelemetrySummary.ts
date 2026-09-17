@@ -8,8 +8,10 @@ export interface SourceTelemetrySummary {
   errorRate: number;
 }
 
-// The overview endpoint ranks tools project-wide; a source's activity is the
-// slice of that ranking its own tools occupy, in the same order.
+// The overview endpoint ranks the project's ten most-called tools and takes
+// no per-source filter, so a source's activity is the slice of that ranking
+// its own tools occupy, in the same order — a source whose tools all rank
+// lower reads as having none. The panel's copy says as much.
 export function selectSourceToolMetrics(
   metrics: ToolMetric[],
   toolUrns: string[],

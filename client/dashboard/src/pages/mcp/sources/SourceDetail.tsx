@@ -87,6 +87,8 @@ export default function SourceDetailRoute(): JSX.Element {
     tools,
     toolUrns,
     isLoading: isToolsLoading,
+    isError: isToolsError,
+    refetch: refetchTools,
   } = useSourceTools(kind, assetId);
 
   useScrollToSectionHash(!isLoading && source != null);
@@ -135,6 +137,7 @@ export default function SourceDetailRoute(): JSX.Element {
               sourceKey={assetId}
               toolUrns={toolUrns}
               isToolsLoading={isToolsLoading}
+              isToolsError={isToolsError}
             />
           ),
         },
@@ -146,6 +149,8 @@ export default function SourceDetailRoute(): JSX.Element {
               sourceKind={kind}
               tools={tools}
               isLoading={isToolsLoading}
+              isError={isToolsError}
+              onRetry={refetchTools}
             />
           ),
         },
@@ -164,7 +169,7 @@ export default function SourceDetailRoute(): JSX.Element {
           label: "Settings",
           content: (
             <SourceDangerZone
-              source={{ kind, assetId, name: source.name }}
+              source={{ kind, assetId, name: source.name, slug: source.slug }}
               slug={source.slug}
             />
           ),

@@ -70,25 +70,35 @@ export function RedirectToSourceDetail(): JSX.Element {
   const kind = parseLegacySourceKind(sourceKind);
   const lookups = legacySourceKindLookups(kind);
 
-  const deploymentQuery = useActiveDeployment({ enabled: lookups.deployment });
+  // The lookups never throw: a failed one falls through to the kind's
+  // fallback below instead of stranding the old URL on an error page.
+  const deploymentQuery = useActiveDeployment({
+    enabled: lookups.deployment,
+    throwOnError: false,
+  });
   const mcpServersQuery = useMcpServers(undefined, undefined, {
     enabled: lookups.mcpServers,
+    throwOnError: false,
   });
   const remoteQuery = useRemoteMcpServers(undefined, undefined, {
     enabled: kind === "remotemcp",
+    throwOnError: false,
   });
   const tunneledQuery = useTunneledMcpServers(undefined, undefined, {
     enabled: kind === "tunneledmcp",
+    throwOnError: false,
   });
   const unproxiedQuery = useUnproxiedMcpServers(undefined, undefined, {
     enabled: kind === "unproxiedmcp",
+    throwOnError: false,
   });
   const toolsetsQuery = useListToolsets(undefined, undefined, {
     enabled: lookups.toolsets,
+    throwOnError: false,
   });
 
   // isLoading is false for disabled queries, so only the lookups this kind
-  // enabled hold the redirect. A failed lookup falls through to the fallback.
+  // enabled hold the redirect.
   const resolving = [
     deploymentQuery,
     mcpServersQuery,

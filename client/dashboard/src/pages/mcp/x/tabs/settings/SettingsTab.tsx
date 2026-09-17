@@ -165,6 +165,7 @@ export function SettingsTab({
         <HeadersSection
           remoteMcpServerId={mcpServer.remoteMcpServerId}
           mcpServerId={mcpServer.id}
+          projectId={mcpServer.projectId}
         />
       ) : null}
       {tunneledMcpServer ? (

@@ -8,12 +8,16 @@ import { Skeleton, SkeletonTable } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { useActiveDeployment } from "@/hooks/toolTypes";
 import { dateTimeFormatters } from "@/lib/dates";
+import { handleError, toError } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import type { DeploymentSummary } from "@gram/client/models/components/deploymentsummary.js";
 import { useListDeployments } from "@gram/client/react-query/listDeployments.js";
+import { QueryErrorResetBoundary } from "@tanstack/react-query";
 import { ExternalLink } from "lucide-react";
 import { Suspense, useState } from "react";
+import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
+import { SourceSectionError } from "./SourceSectionError";
 import {
   attachmentTypeForSourceKind,
   deploymentCountsForSourceKind,
@@ -92,6 +96,49 @@ function VersionFact({
   );
 }
 
+// The logs read with suspense queries, which throw on failure. Caught here,
+// a failed read stays inside the Versions card rather than replacing the page.
+function VersionLogsErrorFallback({
+  error,
+  resetErrorBoundary,
+}: FallbackProps): JSX.Element {
+  handleError(toError(error), { silent: true });
+  return (
+    <SourceSectionError
+      heading="Couldn't load this deployment's logs"
+      description="The rest of the version is unaffected."
+      onRetry={resetErrorBoundary}
+    />
+  );
+}
+
+function VersionLogs({
+  deploymentId,
+  sourceKind,
+}: {
+  deploymentId: string;
+  sourceKind: SourceKind;
+}): JSX.Element {
+  return (
+    <QueryErrorResetBoundary>
+      {({ reset }) => (
+        <ErrorBoundary
+          onReset={reset}
+          fallbackRender={(props) => <VersionLogsErrorFallback {...props} />}
+        >
+          <Suspense fallback={<Skeleton className="h-40" />}>
+            <LogsTabContent
+              deploymentId={deploymentId}
+              embeddedMode
+              attachmentType={attachmentTypeForSourceKind(sourceKind)}
+            />
+          </Suspense>
+        </ErrorBoundary>
+      )}
+    </QueryErrorResetBoundary>
+  );
+}
+
 function VersionDetail({
   deployment,
   isActive,
@@ -131,13 +178,7 @@ function VersionDetail({
       </dl>
       {/* The logs for this kind of source only: a function's build output
           is noise on an OpenAPI document's page, and the reverse. */}
-      <Suspense fallback={<Skeleton className="h-40" />}>
-        <LogsTabContent
-          deploymentId={deployment.id}
-          embeddedMode
-          attachmentType={attachmentTypeForSourceKind(sourceKind)}
-        />
-      </Suspense>
+      <VersionLogs deploymentId={deployment.id} sourceKind={sourceKind} />
     </div>
   );
 }
@@ -155,7 +196,13 @@ export function SourceVersionsSection({
   sourceKind: SourceKind;
 }): JSX.Element {
   const routes = useRoutes();
-  const { data, isLoading } = useListDeployments({}, {});
+  // The list is one card of the page: a failed read is shown here, not
+  // thrown to the page's boundary.
+  const { data, isLoading, isError, refetch } = useListDeployments(
+    {},
+    {},
+    { throwOnError: false },
+  );
   const { data: activeResult } = useActiveDeployment();
   const activeId = activeResult?.deployment?.id;
   const versions = (data?.items ?? []).slice(0, VERSION_LIMIT);
@@ -181,7 +228,12 @@ export function SourceVersionsSection({
         </Button>
       }
     >
-      <SourceVersionsBody isLoading={isLoading} isEmpty={!selected}>
+      <SourceVersionsBody
+        isLoading={isLoading}
+        isError={isError}
+        onRetry={() => void refetch()}
+        isEmpty={!selected}
+      >
         {selected && (
           <div className="grid min-h-0 grid-cols-[240px_minmax(0,1fr)]">
             <ol className="bg-muted/30 max-h-[640px] overflow-y-auto border-r">
@@ -210,10 +262,14 @@ export function SourceVersionsSection({
 
 function SourceVersionsBody({
   isLoading,
+  isError,
+  onRetry,
   isEmpty,
   children,
 }: {
   isLoading: boolean;
+  isError: boolean;
+  onRetry: () => void;
   isEmpty: boolean;
   children: React.ReactNode;
 }): JSX.Element {
@@ -222,6 +278,16 @@ function SourceVersionsBody({
       <div className="p-6">
         <SkeletonTable />
       </div>
+    );
+  }
+  // A list that failed to load is not a project without deployments.
+  if (isError && isEmpty) {
+    return (
+      <SourceSectionError
+        heading="Couldn't load deployments"
+        description="The project's deployments could not be fetched, so this source's versions are unknown."
+        onRetry={onRetry}
+      />
     );
   }
   if (isEmpty) return <DeploymentsEmptyState />;

@@ -54,8 +54,11 @@ export function useProjectSources(): {
 } {
   const { data: deploymentResult, isLoading, isError } = useActiveDeployment();
   // Loading is keyed to the deployment alone: the assets only add dates and a
-  // format, and the list is usable before they land.
-  const { data: assetsResult } = useListAssets();
+  // format, and the list is usable before they land — or without them, so a
+  // failed read is not thrown to the page's error boundary.
+  const { data: assetsResult } = useListAssets(undefined, undefined, {
+    throwOnError: false,
+  });
   const deployment = deploymentResult?.deployment;
 
   const sources = useMemo(() => {
