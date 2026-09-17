@@ -3,7 +3,6 @@ import {
   bucketStartNsToMs,
   pickTimeBucketMs,
 } from "@/components/observe/toolUsageTimeSeriesChartData";
-import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import type { ToolUsageTargetTimeSeriesPoint } from "@gram/client/models/components/toolusagetargettimeseriespoint.js";
@@ -11,13 +10,14 @@ import { format } from "date-fns";
 import { useMemo } from "react";
 
 const HOUR_MS = 60 * 60 * 1000;
-// Successful calls take a desaturated emerald — the same reading as the green
-// status dot on a row, dialled down so a wall of them stays background. Grey
-// said "no data" rather than "these worked". Failures keep the only saturated
-// colour on the strip, so the eye lands on them first.
-const OK_COLOR = "#b3cfc3";
-const OK_HOVER_COLOR = "#9dc0b1";
+// The same colours the status dots use, so a red bar and a red dot are read as
+// the same fact rather than two palettes that happen to share a meaning.
+// emerald-500, rose-500, amber-500, and the muted grey a pending dot carries.
+const OK_COLOR = "#10b981";
+const OK_HOVER_COLOR = "#059669";
 const FAILED_COLOR = "#f43f5e";
+const BLOCKED_COLOR = "#f59e0b";
+const PENDING_COLOR = "#d4d4d8";
 
 /**
  * The shape of the window above the rows, and a way to narrow it: drag across
@@ -33,39 +33,25 @@ export function LogsTimelineStrip({
   timeSeries,
   from,
   to,
-  statuses = [],
   onRangeSelect,
   onResetRange,
   isZoomed = false,
   loading = false,
-  degraded = false,
   height = 88,
 }: {
   timeSeries: ToolUsageTargetTimeSeriesPoint[];
   from: Date;
   to: Date;
-  /** Applied status filter, honoured for the outcomes the series can express. */
-  statuses?: string[];
   onRangeSelect?: (from: Date, to: Date) => void;
   onResetRange?: () => void;
   isZoomed?: boolean;
   loading?: boolean;
-  degraded?: boolean;
   /** Shorter on a short viewport, where the list needs the pixels more. */
   height?: number;
 }): JSX.Element {
-  // Each bucket carries a total and a failure count, and nothing else. That
-  // expresses exactly one filter — errors — by dropping the successful half.
-  // Everything else (success, blocked, pending) would need per-status counts
-  // the server does not return: a "success" series here is really
-  // total-minus-failures, which still includes the blocked and pending calls
-  // the table is excluding. Rather than draw a shape that contradicts the rows
-  // beneath it, the strip widens back to the whole window and the caller's
-  // badge says so.
-  const errorsOnly =
-    statuses.length > 0 && statuses.every((s) => s === "error");
-  const showOk = !errorsOnly;
-  const showFailed = true;
+  // The series is filtered server-side by the same payload the rows are, and
+  // every outcome the status filter can express has its own count — so the
+  // strip draws whatever came back and needs no client-side correction.
   const chart = useMemo(() => {
     const fromMs = from.getTime();
     const rangeMs = Math.max(to.getTime() - fromMs, HOUR_MS);
@@ -74,6 +60,8 @@ export function LogsTimelineStrip({
 
     const ok = Array.from<number>({ length: bucketCount }).fill(0);
     const failed = Array.from<number>({ length: bucketCount }).fill(0);
+    const blocked = Array.from<number>({ length: bucketCount }).fill(0);
+    const pending = Array.from<number>({ length: bucketCount }).fill(0);
     const timestamps = Array.from(
       { length: bucketCount },
       (_, index) => fromMs + index * bucketMs,
@@ -89,9 +77,16 @@ export function LogsTimelineStrip({
         bucketCount - 1,
       );
       const failures = Number(point.failureCount);
+      const blocks = Number(point.blockedCount);
+      const pends = Number(point.pendingCount);
+      // eventCount is every call in the bucket, so the successful remainder is
+      // what the three named outcomes leave behind.
       ok[index] =
-        (ok[index] ?? 0) + Math.max(Number(point.eventCount) - failures, 0);
+        (ok[index] ?? 0) +
+        Math.max(Number(point.eventCount) - failures - blocks - pends, 0);
       failed[index] = (failed[index] ?? 0) + failures;
+      blocked[index] = (blocked[index] ?? 0) + blocks;
+      pending[index] = (pending[index] ?? 0) + pends;
     }
 
     const showDate = rangeMs > 24 * HOUR_MS;
@@ -126,8 +121,10 @@ export function LogsTimelineStrip({
       tooltipLabels: timestamps.map((ts) =>
         format(new Date(ts), showDate ? "MMM d, HH:mm" : "HH:mm"),
       ),
+      // A series of all zeroes still adds a legend entry and a tooltip line
+      // for an outcome that never happened, so each one earns its place.
       datasets: [
-        ...(showOk
+        ...(ok.some((value) => value > 0)
           ? [
               {
                 label: "Calls",
@@ -137,7 +134,7 @@ export function LogsTimelineStrip({
               },
             ]
           : []),
-        ...(showFailed
+        ...(failed.some((value) => value > 0)
           ? [
               {
                 label: "Failures",
@@ -147,11 +144,48 @@ export function LogsTimelineStrip({
               },
             ]
           : []),
+        ...(blocked.some((value) => value > 0)
+          ? [
+              {
+                label: "Blocked",
+                data: blocked,
+                backgroundColor: BLOCKED_COLOR,
+                hoverBackgroundColor: BLOCKED_COLOR,
+              },
+            ]
+          : []),
+        ...(pending.some((value) => value > 0)
+          ? [
+              {
+                label: "Pending",
+                data: pending,
+                backgroundColor: PENDING_COLOR,
+                hoverBackgroundColor: PENDING_COLOR,
+              },
+            ]
+          : []),
       ],
     };
-  }, [timeSeries, from, to, showOk, showFailed]);
+  }, [timeSeries, from, to]);
 
-  if (loading) return <Skeleton className="h-16 w-full" />;
+  // Only before there is anything to show. Once a shape has been drawn the
+  // caller keeps it on screen while the next one loads, so a narrowed filter
+  // updates the bars in place instead of flashing a grey block where the
+  // chart was.
+  if (loading) {
+    return (
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-muted-foreground/70 text-[11px]">
+            Drag to zoom
+          </span>
+        </div>
+        <div style={{ height }}>
+          <Skeleton className="size-full" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-1">
@@ -160,11 +194,6 @@ export function LogsTimelineStrip({
           Drag to zoom
         </span>
         <div className="flex items-center gap-2">
-          {degraded && (
-            <Badge variant="neutral">
-              <Badge.Text>Summary and timeline ignore this filter</Badge.Text>
-            </Badge>
-          )}
           {isZoomed && onResetRange && (
             <Button variant="tertiary" size="sm" onClick={onResetRange}>
               Reset range
@@ -173,16 +202,20 @@ export function LogsTimelineStrip({
         </div>
       </div>
 
-      <StackedTimeBarChart
-        labels={chart.labels}
-        timestamps={chart.timestamps}
-        bucketMs={chart.bucketMs}
-        tooltipLabels={chart.tooltipLabels}
-        datasets={chart.datasets}
-        onRangeSelect={onRangeSelect}
-        height={height}
-        compact
-      />
+      {/* The crosshair says the action is a horizontal selection before the
+          reader tries it. */}
+      <div className="cursor-crosshair" style={{ height }}>
+        <StackedTimeBarChart
+          labels={chart.labels}
+          timestamps={chart.timestamps}
+          bucketMs={chart.bucketMs}
+          tooltipLabels={chart.tooltipLabels}
+          datasets={chart.datasets}
+          onRangeSelect={onRangeSelect}
+          height={height}
+          compact
+        />
+      </div>
     </div>
   );
 }

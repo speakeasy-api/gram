@@ -96,13 +96,17 @@ export function StackedTimeBarChart({
         // three-line box has nowhere to sit and ends up over the bars it is
         // describing. Compact keeps it above the cursor and small enough to
         // clear them.
+        // Anchored to the bar the pointer is nearest and centred beside it,
+        // rather than floating above the middle of the stack: a tall tooltip
+        // over a short bar covers the chart it describes. xAlign is left to
+        // Chart.js so the box flips to whichever side has room near the edges.
+        position: "nearest" as const,
+        yAlign: "center" as const,
+        caretPadding: 8,
         ...(compact
           ? {
-              yAlign: "bottom" as const,
-              xAlign: "center" as const,
               displayColors: false,
               padding: 6,
-              caretPadding: 6,
               titleFont: { size: 10 },
               bodyFont: { size: 10 },
               titleMarginBottom: 2,
@@ -161,6 +165,15 @@ export function StackedTimeBarChart({
       },
     },
     transitions: SHARED_RESIZE_TRANSITION,
+    // Zooming replaces the whole bucket grid, so bar N of the old window and
+    // bar N of the new one describe different times. Animating x would slide
+    // every bar sideways to a position that means nothing; growing them in
+    // place from the baseline reads as the window redrawing.
+    animation: { duration: 220, easing: "easeOutQuad" },
+    animations: {
+      x: { duration: 0 },
+      y: { duration: 220, easing: "easeOutQuad" },
+    },
   };
 
   return (

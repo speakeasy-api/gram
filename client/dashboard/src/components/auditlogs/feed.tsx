@@ -25,11 +25,11 @@ export function DateGroupHeader({
   mode: TimestampMode;
 }): React.JSX.Element {
   return (
-    <div className="flex items-center gap-3 px-4 py-2">
+    <div className="bg-background flex items-center gap-3 px-4 py-2">
       {/* Short leading stub so the rule reads as one line the date sits on,
           rather than a label with a tail hanging off its right. */}
       <div className="bg-border h-px w-2.5 shrink-0" />
-      <span className="text-eyebrow text-foreground shrink-0 font-medium">
+      <span className="text-eyebrow text-foreground shrink-0 font-semibold">
         {formatDateHeader(date, mode)}
       </span>
       <div className="bg-border h-px flex-1" />

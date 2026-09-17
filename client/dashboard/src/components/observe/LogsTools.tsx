@@ -1,7 +1,6 @@
 import { traceLogsQueryOptions } from "@/pages/logs/traceLogsQuery";
 import { IdentityLink } from "@/components/identity-link";
 import { identityRefForKind } from "@/lib/identity-urn";
-import { AccountTypeIcon } from "@/components/account-type-icon";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { EnterpriseGate } from "@/components/enterprise-gate";
 import { InsightsConfig } from "@/components/insights-dock";
@@ -49,6 +48,8 @@ import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { useServerNameMappings } from "@/hooks/useServerNameMappings";
 import { HooksEmptyState } from "@/pages/hooks/HooksEmptyState";
 import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
+import { hasAgentProviderIcon } from "@/components/agent-providers/agent-provider-icon-kind";
+import { IdentityAvatar } from "@/components/identity-avatar";
 import { EditServerNameDialog } from "@/pages/hooks/EditServerNameDialog";
 import { LogDetailSheet } from "@/pages/logs/LogDetailSheet";
 import { LogFilterBar } from "@/pages/logs/LogFilterBar";
@@ -78,6 +79,7 @@ import { unwrapAsync } from "@gram/client/types/fp";
 import { Icon } from "@/components/ui/Icon";
 import { Skeleton } from "@/components/ui/Skeleton";
 import {
+  keepPreviousData,
   useInfiniteQuery,
   useQuery,
   useQueryClient,
@@ -110,13 +112,6 @@ function toSdkFilters(filters: ActiveLogFilter[]): LogFilter[] {
   });
 }
 
-function isCustomSearchActive(
-  attributeSearchQuery: string | null,
-  attributeFilters: ActiveLogFilter[],
-): boolean {
-  return (attributeSearchQuery?.length ?? 0) > 0 || attributeFilters.length > 0;
-}
-
 export function LogsTools(): JSX.Element {
   const { projectSlug } = useSlugs();
   const queryClient = useQueryClient();
@@ -143,7 +138,6 @@ export function LogsTools(): JSX.Element {
     handleHookTypesChange,
     dateRange,
     customRange,
-    customRangeLabel,
     setDateRangeParam,
     setCustomRangeParam,
     setRangeFromBrush,
@@ -207,6 +201,43 @@ export function LogsTools(): JSX.Element {
     [selectedStatuses],
   );
 
+  // account_type is sent as a first-class payload filter, not an attribute
+  // filter, so it stays on the fast trace_summaries path rather than forcing
+  // the raw-logs scan.
+  const queryFilters = useMemo(
+    () => toSdkFilters(attributeFilters),
+    [attributeFilters],
+  );
+
+  // The summary cards, the timeline and the rows all read this. They used to
+  // differ: the cards and the strip took only the window and the facets, so
+  // narrowing to errors left a header counting calls the table beneath it was
+  // excluding. One payload, one answer.
+  const narrowedPayload = useMemo(
+    () => ({
+      ...summaryPayload,
+      statuses,
+      query: attributeSearchQuery ?? undefined,
+      filters: queryFilters.length > 0 ? queryFilters : undefined,
+    }),
+    [summaryPayload, statuses, attributeSearchQuery, queryFilters],
+  );
+
+  // Appended only when something is actually narrowed, so an unfiltered Logs
+  // view still keys byte-identically to Insights and paints from its cache.
+  const narrowedQueryKey = useMemo(
+    () =>
+      statuses || attributeSearchQuery || queryFilters.length > 0
+        ? [
+            ...sharedQueryKey,
+            statuses ?? null,
+            attributeSearchQuery ?? null,
+            queryFilters,
+          ]
+        : sharedQueryKey,
+    [sharedQueryKey, statuses, attributeSearchQuery, queryFilters],
+  );
+
   const { data: filterOptionsData } = useQuery({
     queryKey: [
       "tool-usage-filter-options",
@@ -232,14 +263,19 @@ export function LogsTools(): JSX.Element {
     isPending: timeSeriesPending,
     refetch: refetchTimeSeries,
   } = useQuery({
-    queryKey: ["tool-usage-target-time-series", ...sharedQueryKey],
+    queryKey: ["tool-usage-target-time-series", ...narrowedQueryKey],
     queryFn: () =>
       unwrapAsync(
         telemetryGetToolUsageTargetTimeSeries(client, {
-          getToolUsageSummaryPayload: summaryPayload,
+          getToolUsageSummaryPayload: narrowedPayload,
         }),
       ),
     enabled: !roleFilterPending,
+    // Narrowing a facet asks the same question of a smaller set. Dropping the
+    // shape while the new one loads collapses the panel and jumps the page
+    // under the pointer; the previous one holds its place instead, and the
+    // progress bar above the list already says a fetch is in flight.
+    placeholderData: keepPreviousData,
     throwOnError: false,
   });
 
@@ -303,6 +339,9 @@ export function LogsTools(): JSX.Element {
           value: client.clientKey,
           label: client.clientLabel,
           count: Number(client.eventCount),
+          icon: hasAgentProviderIcon(client.clientLabel) ? (
+            <AgentProviderIcon source={client.clientLabel} className="size-4" />
+          ) : undefined,
           selected: selectedClientKeys.includes(client.clientKey),
         })),
       },
@@ -312,6 +351,7 @@ export function LogsTools(): JSX.Element {
         values: TOOL_USAGE_STATUS_OPTIONS.map((option) => ({
           value: option.value,
           label: option.label,
+          dotClassName: option.dotClassName,
           selected: selectedStatuses.includes(option.value),
         })),
       },
@@ -331,6 +371,12 @@ export function LogsTools(): JSX.Element {
         values: hookSourceOptions.map((source) => ({
           value: source,
           label: formatPlatform(source),
+          // The same logo the rows carry. Skipped where the provider is not one
+          // we have a mark for, rather than filling the gap with a globe that
+          // says nothing.
+          icon: hasAgentProviderIcon(source) ? (
+            <AgentProviderIcon source={source} className="size-4" />
+          ) : undefined,
           selected: selectedSources.includes(source),
         })),
       },
@@ -366,6 +412,7 @@ export function LogsTools(): JSX.Element {
             value: user.userKey,
             label: user.userLabel,
             count: Number(user.eventCount),
+            icon: <IdentityAvatar label={user.userLabel} className="size-5" />,
             selected: selectedEmails.includes(user.userKey),
           })),
       },
@@ -496,28 +543,21 @@ export function LogsTools(): JSX.Element {
   );
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const attributeSdkFilters = useMemo(
-    () => toSdkFilters(attributeFilters),
-    [attributeFilters],
-  );
-
-  // account_type is sent as a first-class payload filter (below), not an
-  // attribute filter, so it stays on the fast trace_summaries path rather than
-  // forcing the raw-logs scan.
-  const queryFilters = attributeSdkFilters;
-
   // The window's real totals, not a count of what has been scrolled into view.
   // Same query key Insights uses, so arriving from a deep link paints these
   // immediately from its cache.
   const { data: totalsData, refetch: refetchTotals } = useQuery({
-    queryKey: ["tool-usage-totals", ...sharedQueryKey],
+    queryKey: ["tool-usage-totals", ...narrowedQueryKey],
     queryFn: () =>
       unwrapAsync(
         telemetryGetToolUsageTotals(client, {
-          getToolUsageSummaryPayload: summaryPayload,
+          getToolUsageSummaryPayload: narrowedPayload,
         }),
       ),
     enabled: !roleFilterPending,
+    // Same reason as the series above: the tiles keep their numbers rather
+    // than blinking to em dashes and back.
+    placeholderData: keepPreviousData,
     throwOnError: false,
   });
 
@@ -532,24 +572,15 @@ export function LogsTools(): JSX.Element {
     isLogsDisabled: isLogsLogsDisabled,
   } = useLogsEnabledErrorCheck(
     useInfiniteQuery({
-      queryKey: [
-        "tool-usage-traces",
-        ...sharedQueryKey,
-        statuses,
-        attributeSearchQuery,
-        queryFilters,
-      ],
+      queryKey: ["tool-usage-traces", ...narrowedQueryKey],
       queryFn: ({ pageParam }) =>
         unwrapAsync(
           telemetryListToolUsageTraces(client, {
             listToolUsageTracesPayload: {
-              ...summaryPayload,
-              targetTypes: summaryPayload.targetTypes as
+              ...narrowedPayload,
+              targetTypes: narrowedPayload.targetTypes as
                 | ListToolUsageTracesPayloadTargetTypes[]
                 | undefined,
-              statuses,
-              query: attributeSearchQuery ?? undefined,
-              filters: queryFilters.length > 0 ? queryFilters : undefined,
               cursor: pageParam,
               limit: perPage,
               sort: "desc",
@@ -559,6 +590,9 @@ export function LogsTools(): JSX.Element {
       initialPageParam: undefined as string | undefined,
       getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
       enabled: !roleFilterPending,
+      // The rows hold too: an empty table between two filter states reads as
+      // "no results" for as long as the fetch takes.
+      placeholderData: keepPreviousData,
       throwOnError: false,
     }),
   );
@@ -752,7 +786,6 @@ export function LogsTools(): JSX.Element {
             isFetchingNextPage={isFetchingNextPage}
             dateRange={dateRange}
             customRange={customRange}
-            customRangeLabel={customRangeLabel}
             onDateRangeChange={setDateRangeParam}
             onCustomRangeChange={setCustomRangeParam}
             onClearCustomRange={clearCustomRange}
@@ -777,8 +810,7 @@ export function LogsTools(): JSX.Element {
   );
 }
 
-/** One cell of the summary row: quiet label, the number doing the talking. */
-/** The viewport heights a laptop lands on, matching the `short:` variant. */
+/** Window heights the page has to tighten for, matching the `short:` variant. */
 const SHORT_VIEWPORT_QUERY = "(max-height: 900px)";
 
 function useIsShortViewport(): boolean {
@@ -799,40 +831,71 @@ function useIsShortViewport(): boolean {
   return isShort;
 }
 
-const SUMMARY_PANEL_STORAGE_KEY = "gram.observe.logs.summaryOpen";
+const RAIL_WIDTH_STORAGE_KEY = "gram.observe.logs.railWidth";
+const RAIL_WIDTH_DEFAULT = 260;
+// Narrow enough that the facet labels still fit, wide enough for a long
+// address without truncation — past that the rail is just eating the table.
+const RAIL_WIDTH_MIN = 200;
+const RAIL_WIDTH_MAX = 340;
+
+/**
+ * The rail's width, dragged by its edge and remembered per browser.
+ *
+ * Facet values are addresses and server names, whose length is a property of
+ * the org rather than something a fixed column can be chosen for — so the
+ * reader sets it, once.
+ */
+function useRailWidth(): [number, (width: number) => void] {
+  const [width, setWidth] = useState(() => {
+    try {
+      const raw = Number(localStorage.getItem(RAIL_WIDTH_STORAGE_KEY));
+      return Number.isFinite(raw) && raw > 0 ? raw : RAIL_WIDTH_DEFAULT;
+    } catch {
+      return RAIL_WIDTH_DEFAULT;
+    }
+  });
+
+  const commit = useCallback((next: number) => {
+    const clamped = Math.min(Math.max(next, RAIL_WIDTH_MIN), RAIL_WIDTH_MAX);
+    setWidth(clamped);
+    try {
+      localStorage.setItem(RAIL_WIDTH_STORAGE_KEY, String(clamped));
+    } catch {
+      // A browser that refuses storage still resizes for this session.
+    }
+  }, []);
+
+  return [width, commit];
+}
+
+/**
+ * Screen heights that cannot hold the summary panel and a useful list at once:
+ * a laptop's built-in display. Measured against the screen rather than the
+ * window, because a window left short on a large display is one the reader can
+ * drag taller — folding their summary away for it reads as the page losing its
+ * own content.
+ */
+const LAPTOP_DISPLAY_QUERY = "(max-device-height: 1200px)";
 
 /**
  * Whether the summary panel is unfolded.
  *
- * The default follows the viewport — a short screen cannot afford the panel
- * and the list at once — but a reader's own choice outlives it, so once they
- * fold or unfold it the answer comes from storage instead. Kept per browser
- * rather than in the URL: it is a preference about this screen, not part of
- * the query a link describes.
+ * Decided once, on mount, and then owned by the reader for as long as the page
+ * is open. Deliberately not persisted: a fold made on a laptop used to follow
+ * the reader onto a large display and collapse a panel that fits there
+ * perfectly well, which is worse than re-folding it on the rare visit.
  */
 function useSummaryPanelOpen(): [boolean, (open: boolean) => void] {
-  const isShort = useIsShortViewport();
-  const [stored, setStored] = useState<boolean | null>(() => {
-    try {
-      const raw = localStorage.getItem(SUMMARY_PANEL_STORAGE_KEY);
-      return raw === null ? null : raw === "true";
-    } catch {
-      return null;
-    }
-  });
+  const [open, setOpen] = useState(
+    () =>
+      typeof window === "undefined" ||
+      !window.matchMedia(LAPTOP_DISPLAY_QUERY).matches,
+  );
 
-  const setOpen = useCallback((open: boolean) => {
-    setStored(open);
-    try {
-      localStorage.setItem(SUMMARY_PANEL_STORAGE_KEY, String(open));
-    } catch {
-      // A browser that refuses storage still gets a working toggle.
-    }
-  }, []);
-
-  return [stored ?? !isShort, setOpen];
+  return [open, setOpen];
 }
 
+/** One cell of the summary row: quiet label, the number doing the talking. */
 function SummaryStat({
   label,
   value,
@@ -882,7 +945,6 @@ function LogsToolsContent({
   isFetchingNextPage,
   dateRange,
   customRange,
-  customRangeLabel,
   onDateRangeChange,
   onCustomRangeChange,
   onClearCustomRange,
@@ -937,7 +999,6 @@ function LogsToolsContent({
   isFetchingNextPage: boolean;
   dateRange: DateRangePreset;
   customRange: { from: Date; to: Date } | null;
-  customRangeLabel: string | null;
   onDateRangeChange: (preset: DateRangePreset) => void;
   onCustomRangeChange: (from: Date, to: Date, label?: string) => void;
   onClearCustomRange: () => void;
@@ -970,6 +1031,7 @@ function LogsToolsContent({
   // surface on this page, so it moves into a drawer rather than disappearing.
   const [facetsOpen, setFacetsOpen] = useState(false);
   const [summaryOpen, setSummaryOpen] = useSummaryPanelOpen();
+  const [railWidth, setRailWidth] = useRailWidth();
   const stripHeight = useIsShortViewport() ? 64 : 88;
 
   const rail = (
@@ -978,7 +1040,11 @@ function LogsToolsContent({
         <TimeRangePicker
           preset={customRange ? null : dateRange}
           customRange={customRange}
-          customRangeLabel={customRangeLabel}
+          // The badge is a fixed-width slot for "1w" or "3mo". A brushed range
+          // arrives with a full "11 Sept, 7:28 - 16 Sept, 1:28" label, which
+          // bursts it; the picker falls back to "Custom" without one, and the
+          // field beside it already spells the range out.
+          customRangeLabel={null}
           onPresetChange={(preset) => onDateRangeChange(preset)}
           onCustomRangeChange={onCustomRangeChange}
           onClearCustomRange={onClearCustomRange}
@@ -986,13 +1052,15 @@ function LogsToolsContent({
           // The rail is narrower than the picker's intrinsic width, so without
           // letting the free-text input shrink the trigger overflows and the
           // chevron sits outside its own border.
-          className="w-full [&_input]:min-w-0"
+          // White against the rail's grey: it is a control you type into, not
+          // part of the panel behind it.
+          className="bg-card w-full [&_input]:min-w-0"
         />
       }
       groups={facetGroups}
       onToggle={onFacetToggle}
       onClearGroup={onFacetClearGroup}
-      className="flex min-h-0 flex-col p-3"
+      className="flex min-h-0 w-full flex-1 flex-col p-3"
     />
   );
 
@@ -1116,26 +1184,19 @@ function LogsToolsContent({
                   />
                 </div>
 
-                <div className="border-border border-t px-4 pt-3 pb-2">
+                {/* Graph paper: faint vertical rules on a grey ground, which
+                    is what a time axis looks like when it is furniture. A
+                    diagonal hatch reads as "unavailable" instead. */}
+                <div className="border-border bg-background relative isolate border-t bg-[length:24px_100%] px-4 pt-3 pb-2 [background-image:repeating-linear-gradient(to_right,rgba(0,0,0,0.035)_0,rgba(0,0,0,0.035)_1px,transparent_1px,transparent_24px)]">
                   <LogsTimelineStrip
                     height={stripHeight}
                     loading={timeSeriesPending}
                     timeSeries={timeSeries}
                     from={from}
                     to={to}
-                    statuses={selectedStatuses}
                     onRangeSelect={onRangeSelect}
                     onResetRange={onResetRange}
                     isZoomed={isZoomed}
-                    degraded={
-                      // The strip can express an errors-only filter and nothing
-                      // else: the summary series has no per-status counts, and a
-                      // free-text search has no time series at all.
-                      isCustomSearchActive(
-                        attributeSearchQuery,
-                        attributeFilters,
-                      ) || selectedStatuses.some((status) => status !== "error")
-                    }
                   />
                 </div>
               </>
@@ -1158,8 +1219,46 @@ function LogsToolsContent({
             </div>
 
             <div className="flex min-h-0 flex-1 overflow-hidden">
-              <div className="border-border hidden w-[236px] shrink-0 border-r xl:flex">
+              <div
+                className="border-border bg-background relative hidden shrink-0 border-r xl:flex"
+                style={{ width: railWidth }}
+              >
                 {rail}
+                {/* The border itself is the handle: a separate strip would
+                    either be invisible or add a line the layout does not need. */}
+                <div
+                  role="separator"
+                  aria-orientation="vertical"
+                  aria-label="Resize filters"
+                  tabIndex={0}
+                  onKeyDown={(event) => {
+                    if (event.key === "ArrowLeft") setRailWidth(railWidth - 16);
+                    if (event.key === "ArrowRight")
+                      setRailWidth(railWidth + 16);
+                  }}
+                  onPointerDown={(event) => {
+                    event.preventDefault();
+                    const startX = event.clientX;
+                    const startWidth = railWidth;
+                    const onMove = (move: PointerEvent) =>
+                      setRailWidth(startWidth + move.clientX - startX);
+                    const onUp = () => {
+                      window.removeEventListener("pointermove", onMove);
+                      window.removeEventListener("pointerup", onUp);
+                    };
+                    window.addEventListener("pointermove", onMove);
+                    window.addEventListener("pointerup", onUp);
+                  }}
+                  className="group/resize absolute inset-y-0 -right-1.5 z-10 flex w-3 cursor-col-resize justify-center outline-none"
+                >
+                  {/* Invisible until wanted: a permanent grip would draw a
+                      second vertical line beside the border that already
+                      separates these two panes. */}
+                  <span
+                    aria-hidden
+                    className="bg-foreground/0 group-hover/resize:bg-foreground/20 group-focus-visible/resize:bg-foreground/40 h-full w-px transition-colors"
+                  />
+                </div>
               </div>
               <div className="bg-card min-h-0 flex-1 overflow-hidden">
                 <div className="bg-background relative flex h-full min-h-0 flex-col">
@@ -1188,7 +1287,7 @@ function LogsToolsContent({
                       scrolling fast. This one never moves: only its date
                       changes, as the day under the top of the list changes. */}
                   {stickyDayDate && traces.length > 0 && (
-                    <div className="bg-card shrink-0 border-b">
+                    <div className="shrink-0 border-b">
                       <DateGroupHeader date={stickyDayDate} mode="local" />
                     </div>
                   )}
@@ -1585,15 +1684,20 @@ function LogsToolsTraceRow({
           </span>
         </div>
 
-        <div className="text-muted-foreground w-20 shrink-0 truncate font-mono text-[10px] tracking-wide uppercase">
-          {targetConfig.shortLabel}
+        <div className="w-20 shrink-0">
+          <span
+            title={targetConfig.label}
+            className={cn(
+              "inline-flex items-center px-1.5 py-0.5 font-mono text-[10px] tracking-wide uppercase",
+              targetConfig.badgeClassName,
+            )}
+          >
+            {targetConfig.shortLabel}
+          </span>
         </div>
 
         <div className="flex min-w-[180px] flex-1 items-center gap-2 text-xs">
-          <AccountTypeIcon
-            accountType={trace.accountType}
-            className="shrink-0"
-          />
+          <IdentityAvatar label={userLabel} />
           <IdentityLink
             identifier={identityRefForKind(trace.userKind, trace.userKey)}
             className="text-muted-foreground min-w-0 truncate"
@@ -1603,29 +1707,32 @@ function LogsToolsTraceRow({
         </div>
 
         {/* The MCP client that made the call — the same dimension the Client
-            facet filters on. The harness is a separate column's business. */}
+            facet filters on. The harness is a separate column's business, and
+            its logo has no place here: a Claude Code mark beside the word
+            "unattributed" claims an attribution nothing made. */}
         <div className="flex w-32 shrink-0 items-center gap-1.5">
-          {trace.hookSource && (
-            <AgentProviderIcon
-              source={trace.hookSource}
-              className="size-3.5 shrink-0"
-            />
+          {trace.clientKey === "unattributed" ? (
+            <span className="text-muted-foreground/50 text-xs">—</span>
+          ) : (
+            <>
+              {hasAgentProviderIcon(trace.clientLabel) && (
+                <AgentProviderIcon
+                  source={trace.clientLabel}
+                  className="size-3.5 shrink-0"
+                />
+              )}
+              <span
+                className="text-muted-foreground truncate text-xs"
+                title={
+                  trace.clientVersion
+                    ? `${trace.clientLabel} ${trace.clientVersion}`
+                    : trace.clientLabel
+                }
+              >
+                {trace.clientLabel}
+              </span>
+            </>
           )}
-          <span
-            className={cn(
-              "truncate text-xs",
-              trace.clientKey === "unattributed"
-                ? "text-muted-foreground/70"
-                : "text-muted-foreground",
-            )}
-            title={
-              trace.clientVersion
-                ? `${trace.clientLabel} ${trace.clientVersion}`
-                : trace.clientLabel
-            }
-          >
-            {trace.clientLabel}
-          </span>
         </div>
       </div>
 
@@ -1676,47 +1783,56 @@ function LogsToolsTraceRow({
   );
 }
 
-// The surface a call arrived through. Rendered as a dot plus a short mono
-// label rather than a filled badge: there is one on every row, and a column of
-// coloured blocks reads louder than the tool name it sits next to.
+// The surface a call arrived through, as a tinted badge — one hue per kind, so
+// a scan down the column separates hosted traffic from a shadow server without
+// reading the word. The fills stay at a tenth opacity: there is one on every
+// row, and at full strength a column of them shouts over the tool name beside
+// it.
 function getTargetConfig(targetType: ToolUsageTraceSummary["targetType"]) {
   switch (targetType) {
     case "hosted_mcp_server":
       return {
         label: "Hosted MCP",
         shortLabel: "Hosted",
-        dotClassName: "bg-blue-500",
+        badgeClassName:
+          "bg-blue-500/10 text-blue-700 dark:bg-blue-400/15 dark:text-blue-300",
       };
     case "tunneled_mcp_server":
       return {
         label: "Tunneled MCP",
         shortLabel: "Tunnel",
-        dotClassName: "bg-green-500",
+        badgeClassName:
+          "bg-teal-500/10 text-teal-700 dark:bg-teal-400/15 dark:text-teal-300",
       };
     case "meta_mcp_server":
       return {
         label: "Gateway",
         shortLabel: "Gateway",
-        dotClassName: "bg-cyan-500",
+        badgeClassName:
+          "bg-cyan-500/10 text-cyan-700 dark:bg-cyan-400/15 dark:text-cyan-300",
       };
     case "shadow_mcp_server":
       return {
         label: "Shadow MCP",
         shortLabel: "Shadow",
-        dotClassName: "bg-orange-500",
+        badgeClassName:
+          "bg-amber-500/10 text-amber-700 dark:bg-amber-400/15 dark:text-amber-300",
       };
     case "skill":
       return {
         label: "Skill",
         shortLabel: "Skill",
-        dotClassName: "bg-purple-500",
+        badgeClassName:
+          "bg-violet-500/10 text-violet-700 dark:bg-violet-400/15 dark:text-violet-300",
       };
     case "local_tool":
     default:
       return {
         label: "Local Tools",
         shortLabel: "Local",
-        dotClassName: "bg-muted-foreground/40",
+        // No hue: a local tool never reached a server, so it is the absence of
+        // the thing the other badges name.
+        badgeClassName: "bg-muted text-muted-foreground",
       };
   }
 }
@@ -1742,9 +1858,10 @@ function getStatusConfig(trace: ToolUsageTraceSummary): {
   if (trace.hookStatus) {
     switch (trace.hookStatus) {
       case "blocked":
-        // Blocked is a denial, not a fault, but it is the same answer to "did
-        // this call run": it did not.
-        return { ...failed, dotClassName: "bg-rose-500", label: "Blocked" };
+        // Blocked is the same answer to "did this call run" — it did not — but
+        // it is the policy working rather than something broken, so it takes
+        // amber and leaves red to mean failure.
+        return { ...failed, dotClassName: "bg-amber-500", label: "Blocked" };
       case "failure":
         return failed;
       case "success":

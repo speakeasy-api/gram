@@ -1,7 +1,8 @@
-import { MCPCard, MCPCardSkeleton } from "@/components/mcp/MCPCard";
-import { Card } from "@/components/ui/Card";
-import { useToolsets } from "@/pages/toolsets/useToolsets";
 import { useRoutes } from "@/routes";
+import { Link } from "react-router";
+import { IdentityAvatar } from "@/components/identity-avatar";
+import { IdentityLink } from "@/components/identity-link";
+import { identityRefForKind } from "@/lib/identity-urn";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/Sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { cn } from "@/lib/utils";
@@ -22,7 +23,6 @@ import {
   type CodeLine,
   type CodeToken,
 } from "@/components/ui/lib/codeUtils";
-import { ErrorBoundary } from "react-error-boundary";
 import { formatNanoTimestamp } from "./utils";
 
 interface LogDetailSheetProps {
@@ -111,40 +111,6 @@ function removeNestedKey(
   return clone;
 }
 
-function HostedServerCard({
-  toolsetSlug,
-}: {
-  toolsetSlug: string;
-}): JSX.Element {
-  const toolsets = useToolsets();
-  const routes = useRoutes();
-  const toolset = toolsets.find((item) => item.slug === toolsetSlug);
-  const unavailableCard = (
-    <Card href={routes.mcp.details.overview.href(toolsetSlug)}>
-      <Card.Header>
-        <Card.Title>{toolsetSlug}</Card.Title>
-        <Card.Description>Server details are unavailable</Card.Description>
-      </Card.Header>
-    </Card>
-  );
-  let card = unavailableCard;
-  if (toolset) {
-    card = (
-      <ErrorBoundary fallback={unavailableCard} resetKeys={[toolsetSlug]}>
-        <MCPCard toolset={toolset} />
-      </ErrorBoundary>
-    );
-  } else if (toolsets.isLoading) {
-    card = <MCPCardSkeleton />;
-  }
-  return (
-    <section aria-label="Hosted MCP server" className="flex flex-col gap-2">
-      <h3 className="text-eyebrow">Hosted MCP server</h3>
-      {card}
-    </section>
-  );
-}
-
 function LogDetailContent({
   log,
   hostedToolsetSlug,
@@ -154,6 +120,7 @@ function LogDetailContent({
   hostedToolsetSlug?: string;
   onAddFilter?: (path: string, op: Operator, value: string) => void;
 }) {
+  const routes = useRoutes();
   const resourceAttrs = log.resourceAttributes as
     | { gram?: { tool?: { urn?: string } } }
     | undefined;
@@ -196,6 +163,26 @@ function LogDetailContent({
     filteredAttrs = removeNestedKey(filteredAttrs, HOOK_ERROR_KEY);
   }
 
+  // The caller, by the same precedence the roster uses: an address first,
+  // then the ids an agent or an external user is keyed on.
+  const caller = (() => {
+    if (!attrs) return null;
+    const email = getNestedValue(attrs, "user.email");
+    if (email) return { label: email, ref: identityRefForKind("email", email) };
+    const externalUserID = getNestedValue(attrs, "gram.external_user.id");
+    if (externalUserID) {
+      return {
+        label: externalUserID,
+        ref: identityRefForKind("external_user_id", externalUserID),
+      };
+    }
+    const userID = getNestedValue(attrs, "user.id");
+    if (userID) {
+      return { label: userID, ref: identityRefForKind("user_id", userID) };
+    }
+    return null;
+  })();
+
   // The row this was opened from derives failure from the HTTP status, so a
   // 500 with no hook error must not read as a success here.
   const statusCode = attrs
@@ -217,15 +204,21 @@ function LogDetailContent({
               aria-hidden
               className={cn(
                 "size-1.5 shrink-0 rounded-full",
-                blockReason || failed ? "bg-rose-500" : "bg-emerald-500",
+                blockReason
+                  ? "bg-amber-500"
+                  : failed
+                    ? "bg-rose-500"
+                    : "bg-emerald-500",
               )}
             />
             <span
               className={cn(
                 "font-mono text-xs tracking-wide uppercase",
-                blockReason || failed
-                  ? "text-destructive"
-                  : "text-muted-foreground",
+                blockReason
+                  ? "text-[var(--color-feedback-orange-600)] dark:text-[var(--color-feedback-orange-400)]"
+                  : failed
+                    ? "text-destructive"
+                    : "text-muted-foreground",
               )}
             >
               {blockReason ? "Blocked" : failed ? "Error" : "Success"}
@@ -236,10 +229,36 @@ function LogDetailContent({
           </div>
           <SheetTitle className="flex items-baseline gap-1.5 font-mono text-base font-medium">
             {toolsetSlug && (
-              <span className="text-muted-foreground">{toolsetSlug} /</span>
+              <span className="text-muted-foreground">
+                <Link
+                  to={routes.mcp.details.overview.href(toolsetSlug)}
+                  className="hover:text-foreground hover:underline"
+                >
+                  {toolsetSlug}
+                </Link>{" "}
+                /
+              </span>
             )}
             <span>{toolName || log.body?.slice(0, 60) || "(no message)"}</span>
           </SheetTitle>
+          {/* Who made the call. The first question asked of a single trace is
+              usually "who did this", and it was previously only answerable by
+              unfolding Context. */}
+          {caller && (
+            <div className="flex items-center gap-2.5 pt-1.5">
+              <IdentityAvatar
+                label={caller.label}
+                className="size-7"
+                textClassName="text-xs"
+              />
+              <IdentityLink
+                identifier={caller.ref}
+                className="text-foreground truncate text-sm"
+              >
+                {caller.label}
+              </IdentityLink>
+            </div>
+          )}
         </div>
 
         {blockReason && (
@@ -255,8 +274,6 @@ function LogDetailContent({
           </div>
         )}
       </div>
-
-      {toolsetSlug && <HostedServerCard toolsetSlug={toolsetSlug} />}
 
       {/* Tabs: Details / Raw Data */}
       <Tabs defaultValue="details" className="w-full flex-1">

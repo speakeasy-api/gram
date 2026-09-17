@@ -9,7 +9,7 @@ import type { ToolUsageGatewayFilterOption } from "@gram/client/models/component
 import type { ToolUsageHostedServerFilterOption } from "@gram/client/models/components/toolusagehostedserverfilteroption.js";
 import type { ToolUsageShadowServerFilterOption } from "@gram/client/models/components/toolusageshadowserverfilteroption.js";
 import type { TargetTypes } from "@gram/client/models/components/gettoolusagesummarypayload";
-import type { Statuses } from "@gram/client/models/components/listtoolusagetracespayload";
+import type { Statuses } from "@gram/client/models/components/gettoolusagesummarypayload";
 import { normalizeUserEmailFilter } from "./observeUserFilters";
 
 const SERVER_FILTER_PATH = "gram.tool_call.source";
@@ -59,11 +59,19 @@ export const TOOL_USAGE_VALID_STATUSES: ObserveStatusFilterValue[] = [
 export const TOOL_USAGE_STATUS_OPTIONS: Array<{
   label: string;
   value: ObserveStatusFilterValue;
+  /** The dot a row with this status carries, so the two agree on sight. */
+  dotClassName: string;
 }> = [
-  { label: "Error", value: "error" },
-  { label: "Success", value: "success" },
-  { label: "Blocked", value: "blocked" },
-  { label: "Pending", value: "pending" },
+  { label: "Error", value: "error", dotClassName: "bg-rose-500" },
+  { label: "Success", value: "success", dotClassName: "bg-emerald-500" },
+  // Amber, not red: a denial is the policy working, not the call failing, and
+  // a reader scanning for breakage should not be pulled to it.
+  { label: "Blocked", value: "blocked", dotClassName: "bg-amber-500" },
+  {
+    label: "Pending",
+    value: "pending",
+    dotClassName: "bg-muted-foreground/30",
+  },
 ];
 
 export function toStatuses(
