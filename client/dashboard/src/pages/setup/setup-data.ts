@@ -128,15 +128,39 @@ const SETUP_AGENT_PLATFORMS: Array<{
       },
       {
         title: "Mark the observability plugin as Required",
-        description: `After the repo syncs, your plugins appear in a table on Claude.ai. Find the observability plugin row (slug below), open its Default access dropdown, and set it to Required. That pre-installs it for every org member and prevents them from disabling it — so tool events flow to Speakeasy without per-user opt-in. ${PERSONAL_ACCOUNT_GOVERNANCE_NOTE}`,
+        description: [
+          "After the repo syncs, your plugins appear in a table on Claude.ai. Find ",
+          {
+            code: "{{GRAM_CLAUDE_PLUGIN_NAME}}",
+            fallback: "the observability plugin",
+          },
+          ` in the plugin list and set Default access → Required. That pre-installs it for every org member and prevents them from disabling it — so tool events flow to Speakeasy without per-user opt-in. ${PERSONAL_ACCOUNT_GOVERNANCE_NOTE}`,
+        ],
         screenshot: {
           src: "/setup/claude-cowork-set-required.png",
           alt: "Claude.ai plugin access dropdown showing four options (Available to install, Installed by default, Not available, Required) with Required selected",
           caption:
             'Open the Default access dropdown on the observability plugin row and select "Required".',
         },
-        code: `{{GRAM_CLAUDE_PLUGIN_NAME}}`,
-        language: "text",
+      },
+      {
+        title: "Enable OTEL export",
+        description:
+          "In the Cowork tab of the Claude org settings, scroll to Monitoring and enter the values below.",
+        fields: [
+          {
+            label: "OTLP endpoint",
+            value: "https://app.getgram.ai/rpc/hooks.otel",
+          },
+          { label: "OTLP protocol", value: "http/json" },
+          {
+            label: "OTLP headers",
+            value: "Gram-Project=default,Gram-Key={{GRAM_API_KEY}}",
+            requiresApiKey: true,
+          },
+        ],
+        afterFields: "Save the settings in Claude.",
+        requiresApiKey: true,
       },
     ],
   },
@@ -186,6 +210,27 @@ const SETUP_AGENT_PLATFORMS: Array<{
     ],
   },
   {
+    id: "pi",
+    setupSteps: [
+      {
+        title: "Install the speakeasy-hooks binary",
+        description:
+          "Pi has no plugin marketplace and no hook configuration — observability is a Pi extension — so the speakeasy-hooks CLI renders it straight into your repo. Install the binary first.",
+        code: `curl -fsSL https://raw.githubusercontent.com/speakeasy-api/gram/main/hooks/install.sh | sh`,
+        language: "bash",
+      },
+      {
+        title: "Render the extension into your repo",
+        description:
+          "Run this from the repo you use Pi in. It writes .pi/extensions/speakeasy-observability/index.ts and speakeasy.json, which map Pi's lifecycle events to Speakeasy's dashboard. Pi loads project-local extensions only after you trust the project, so answer its trust prompt on first start.",
+        code: `GRAM_HOOKS_ORG_KEY="{{GRAM_API_KEY}}" \\
+speakeasy-hooks install --provider=pi --dir=. --project={{GRAM_PROJECT_SLUG}}`,
+        language: "bash",
+        requiresApiKey: true,
+      },
+    ],
+  },
+  {
     id: "opencode",
     setupSteps: [
       {
@@ -200,7 +245,7 @@ const SETUP_AGENT_PLATFORMS: Array<{
         description:
           "Run this from the repo you use opencode in. It writes .opencode/plugin/agenthooks.ts and speakeasy.json, which map opencode's events to Speakeasy's dashboard.",
         code: `GRAM_HOOKS_ORG_KEY="{{GRAM_API_KEY}}" \\
-speakeasy-hooks install --provider=opencode --dir=. --project=<your-project-slug>`,
+speakeasy-hooks install --provider=opencode --dir=. --project={{GRAM_PROJECT_SLUG}}`,
         language: "bash",
         requiresApiKey: true,
       },

@@ -26,6 +26,7 @@ import {
   type AdminOrganization,
   type ListOrganizationsParams,
 } from "@/lib/gramAdminApi";
+import { statusParams } from "@/lib/organizationFilters";
 import { cn } from "@/lib/utils";
 
 import { BulkAccountType } from "./BulkAccountType";
@@ -127,7 +128,11 @@ export function OrganizationsList(): JSX.Element {
     q: search.q,
     account_types: search.type,
     trial_states: search.trial,
-    disabled_states: search.disabled,
+    ...statusParams(search),
+    created_from: search.createdFrom,
+    created_to: search.createdTo,
+    min_members: search.minMembers,
+    max_members: search.maxMembers,
   };
 
   // omitUnset, not the raw object: the signature has to call a param unset

@@ -27,8 +27,12 @@ import (
 // mcp.HandleGetAuthorizationServer; enforced on the /register and
 // /authorize handlers by the typed request Validate methods.
 var (
-	SupportedGrantTypes    = []string{"authorization_code", "refresh_token"}
-	SupportedResponseTypes = []string{"code"}
+	SupportedGrantTypes = []string{
+		oauthwire.GrantTypeAuthorizationCode,
+		oauthwire.GrantTypeRefreshToken,
+		oauthwire.GrantTypeJWTBearer,
+	}
+	SupportedResponseTypes = []string{oauthwire.ResponseTypeCode}
 
 	// SupportedAuthMethods is the user-session AS's own accepted
 	// token_endpoint_auth_method set, and is not shared policy: the other
@@ -47,7 +51,7 @@ var (
 	// assertion from then on.
 	SupportedAuthMethods = []string{oauthwire.AuthMethodClientSecretBasic, oauthwire.AuthMethodClientSecretPost, oauthwire.AuthMethodNone, oauthwire.AuthMethodPrivateKeyJWT}
 
-	SupportedCodeChallengeMethods = []string{"S256"}
+	SupportedCodeChallengeMethods = []string{oauthwire.CodeChallengeMethodS256}
 )
 
 // RegistrationRequest is the RFC 7591 §3.1 client metadata document. Only
@@ -79,10 +83,16 @@ type RegistrationRequest struct {
 // correlation check sees materialized values.
 func (r *RegistrationRequest) SetDefaults() {
 	if len(r.GrantTypes) == 0 {
-		r.GrantTypes = []string{"authorization_code"}
+		r.GrantTypes = []string{oauthwire.GrantTypeAuthorizationCode}
 	}
-	if len(r.ResponseTypes) == 0 {
-		r.ResponseTypes = []string{"code"}
+	if len(r.ResponseTypes) == 0 && slices.Contains(r.GrantTypes, oauthwire.GrantTypeAuthorizationCode) {
+		r.ResponseTypes = []string{oauthwire.ResponseTypeCode}
+	}
+	if r.RedirectURIs == nil {
+		r.RedirectURIs = []string{}
+	}
+	if r.ResponseTypes == nil {
+		r.ResponseTypes = []string{}
 	}
 	if r.TokenEndpointAuthMethod == "" {
 		r.TokenEndpointAuthMethod = oauthwire.AuthMethodClientSecretBasic
@@ -94,18 +104,17 @@ func (r *RegistrationRequest) SetDefaults() {
 // must invoke SetDefaults first so grant_types / response_types / auth
 // method are populated.
 //
-// supportedAuthMethods is the caller's accepted token_endpoint_auth_method
-// set rather than a package-level list, because several authorization servers
-// share this request type while accepting different methods: a shared list
-// would let a method added for one server start being accepted by the others
-// without anyone deciding that. Pass the same slice the server advertises as
-// token_endpoint_auth_methods_supported, so what it accepts and what it
-// advertises cannot drift apart.
-func (r *RegistrationRequest) Validate(supportedAuthMethods []string) error {
+// supportedGrantTypes and supportedAuthMethods are the caller's accepted sets
+// rather than package-level policy, because several authorization servers
+// share this request type while supporting different token endpoints. Pass
+// the same slices the server advertises so acceptance and discovery cannot
+// drift apart.
+func (r *RegistrationRequest) Validate(supportedGrantTypes, supportedAuthMethods []string) error {
 	if r.ClientName == "" {
 		return &oauthwire.Error{Code: "invalid_client_metadata", Description: "client_name is required"}
 	}
-	if len(r.RedirectURIs) == 0 {
+	hasAuthCodeGrant := slices.Contains(r.GrantTypes, oauthwire.GrantTypeAuthorizationCode)
+	if hasAuthCodeGrant && len(r.RedirectURIs) == 0 {
 		return &oauthwire.Error{Code: "invalid_redirect_uri", Description: "redirect_uris is required"}
 	}
 	for _, u := range r.RedirectURIs {
@@ -117,7 +126,7 @@ func (r *RegistrationRequest) Validate(supportedAuthMethods []string) error {
 		}
 	}
 	for _, gt := range r.GrantTypes {
-		if !slices.Contains(SupportedGrantTypes, gt) {
+		if !slices.Contains(supportedGrantTypes, gt) {
 			return &oauthwire.Error{Code: "invalid_client_metadata", Description: fmt.Sprintf("unsupported grant_type %q", gt)}
 		}
 	}
@@ -140,8 +149,7 @@ func (r *RegistrationRequest) Validate(supportedAuthMethods []string) error {
 
 	// RFC 7591 §2.1 correlation: response_type "code" requires grant_type
 	// "authorization_code" and vice versa.
-	hasCodeResponse := slices.Contains(r.ResponseTypes, "code")
-	hasAuthCodeGrant := slices.Contains(r.GrantTypes, "authorization_code")
+	hasCodeResponse := slices.Contains(r.ResponseTypes, oauthwire.ResponseTypeCode)
 	if hasCodeResponse && !hasAuthCodeGrant {
 		return &oauthwire.Error{Code: "invalid_client_metadata", Description: `response_type "code" requires grant_type "authorization_code"`}
 	}
@@ -151,7 +159,7 @@ func (r *RegistrationRequest) Validate(supportedAuthMethods []string) error {
 	// refresh_token can only follow an initial authorization_code in our
 	// supported set; a client registering refresh_token alone has no way
 	// to ever obtain one.
-	if slices.Contains(r.GrantTypes, "refresh_token") && !hasAuthCodeGrant {
+	if slices.Contains(r.GrantTypes, oauthwire.GrantTypeRefreshToken) && !hasAuthCodeGrant {
 		return &oauthwire.Error{Code: "invalid_client_metadata", Description: `grant_type "refresh_token" requires grant_type "authorization_code"`}
 	}
 	return nil

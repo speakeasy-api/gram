@@ -26,7 +26,7 @@ func newJWTAccessTokenEnricher(t *testing.T, issuer *idTokenIssuer) *remotesessi
 	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
 	cache := jwks.NewMemoryCache()
 	require.NoError(t, cache.Put(t.Context(), issuer.jwksURI, jwks.CacheState{
-		Document: issuer.keySet, ExpiresAt: time.Now().Add(time.Hour), RefreshedAt: time.Now(),
+		Document: issuer.keySet, ETag: "", ExpiresAt: time.Now().Add(time.Hour), RefreshedAt: time.Now(), LastErrorAt: time.Time{}, LastError: "", Revision: "",
 	}))
 	keys, err := jwks.NewKeyResolver(
 		jwks.NewResolver(policy, testenv.NewMeterProvider(t), logger),
@@ -318,10 +318,14 @@ func TestSessionEnricherJWTAccessTokenSkipsWithoutKeySet(t *testing.T) {
 type failingJWKSCache struct{}
 
 func (failingJWKSCache) Get(context.Context, string) (jwks.CacheState, error) {
-	return jwks.CacheState{Document: nil, ETag: "", ExpiresAt: time.Time{}, RefreshedAt: time.Time{}}, errors.New("cache unavailable")
+	return jwks.CacheState{Document: nil, ETag: "", ExpiresAt: time.Time{}, RefreshedAt: time.Time{}, LastErrorAt: time.Time{}, LastError: "", Revision: ""}, errors.New("cache unavailable")
 }
 
 func (failingJWKSCache) Put(context.Context, string, jwks.CacheState) error { return nil }
+
+func (failingJWKSCache) PutIfUnchanged(context.Context, string, jwks.CacheState, jwks.CacheState) (bool, error) {
+	return false, errors.New("cache unavailable")
+}
 
 func TestSessionEnricherJWTAccessTokenTransientKeySetFailureIsNotRecorded(t *testing.T) {
 	t.Parallel()

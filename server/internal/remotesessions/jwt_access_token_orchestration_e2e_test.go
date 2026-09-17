@@ -320,6 +320,14 @@ func (c *hookJWKSCache) Put(ctx context.Context, key string, state jwks.CacheSta
 	return nil
 }
 
+func (c *hookJWKSCache) PutIfUnchanged(ctx context.Context, key string, prior, state jwks.CacheState) (bool, error) {
+	written, err := c.inner.PutIfUnchanged(ctx, key, prior, state)
+	if err != nil {
+		return false, fmt.Errorf("conditionally put cached JWKS: %w", err)
+	}
+	return written, nil
+}
+
 func TestJWTAccessTokenRefreshCASRejectsStaleRestatement(t *testing.T) {
 	t.Parallel()
 

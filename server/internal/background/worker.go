@@ -92,36 +92,35 @@ type WorkerOptions struct {
 
 	// GitHubEvidenceToken authenticates the recheck sweep's repository
 	// lookups; empty falls back to GitHub's small unauthenticated budget.
-	GitHubEvidenceToken      string
-	SiteURL                  *url.URL
-	BillingTracker           billing.Tracker
-	BillingRepository        billing.Repository
-	StripeClient             stripeclient.Client
-	TUMMeterStreamingEnabled bool
-	RedisClient              *redis.Client
-	CacheAdapter             cache.Cache
-	EmailService             *email.Service
-	PosthogClient            *posthog.Posthog
-	FunctionsDeployer        functions.Deployer
-	FunctionsVersion         functions.RunnerVersion
-	RagService               *rag.ToolsetVectorStore
-	MCPRegistryClient        *externalmcp.RegistryClient
-	TelemetryLogger          *telemetry.Logger
-	ClickhouseConn           clickhouse.Conn
-	TelemetryRepo            *telemetryrepo.Queries
-	TriggersApp              *bgtriggers.App
-	AssistantsCore           *assistants.ServiceCore
-	TemporalEnv              *tenv.Environment
-	PIIScanner               risk_analysis.PIIScanner
-	PIScanner                *promptinjection.Scanner
-	CustomRuleScanner        *customruleanalyzer.Scanner
-	BuiltinPresets           *presetlib.Library
-	ShadowMCPClient          *shadowmcp.Client
-	AuditLogger              *audit.Logger
-	WorkOSClient             activities.WorkOSClient
-	ProductFeatures          *productfeatures.Client
-	PluginPublisher          *plugins.Service
-	Publishers               *Publishers
+	GitHubEvidenceToken string
+	SiteURL             *url.URL
+	BillingTracker      billing.Tracker
+	BillingRepository   billing.Repository
+	StripeClient        stripeclient.Client
+	RedisClient         *redis.Client
+	CacheAdapter        cache.Cache
+	EmailService        *email.Service
+	PosthogClient       *posthog.Posthog
+	FunctionsDeployer   functions.Deployer
+	FunctionsVersion    functions.RunnerVersion
+	RagService          *rag.ToolsetVectorStore
+	MCPRegistryClient   *externalmcp.RegistryClient
+	TelemetryLogger     *telemetry.Logger
+	ClickhouseConn      clickhouse.Conn
+	TelemetryRepo       *telemetryrepo.Queries
+	TriggersApp         *bgtriggers.App
+	AssistantsCore      *assistants.ServiceCore
+	TemporalEnv         *tenv.Environment
+	PIIScanner          risk_analysis.PIIScanner
+	PIScanner           *promptinjection.Scanner
+	CustomRuleScanner   *customruleanalyzer.Scanner
+	BuiltinPresets      *presetlib.Library
+	ShadowMCPClient     *shadowmcp.Client
+	AuditLogger         *audit.Logger
+	WorkOSClient        activities.WorkOSClient
+	ProductFeatures     *productfeatures.Client
+	PluginPublisher     *plugins.Service
+	Publishers          *Publishers
 
 	// IssuerMetadataRefresher is optional. Share it with every in-process producer;
 	// the constructing caller owns it and must call Wait after those producers stop.
@@ -190,7 +189,6 @@ func ForDeploymentProcessing(
 		BillingTracker:               nil,
 		BillingRepository:            nil,
 		StripeClient:                 nil,
-		TUMMeterStreamingEnabled:     false,
 		RagService:                   nil,
 		RedisClient:                  nil,
 		PosthogClient:                nil,
@@ -266,7 +264,6 @@ func NewTemporalWorker(
 		BillingTracker:               nil,
 		BillingRepository:            nil,
 		StripeClient:                 nil,
-		TUMMeterStreamingEnabled:     false,
 		RedisClient:                  nil,
 		PosthogClient:                nil,
 		FunctionsDeployer:            nil,
@@ -319,7 +316,6 @@ func NewTemporalWorker(
 			BillingTracker:               conv.Default(o.BillingTracker, opts.BillingTracker),
 			BillingRepository:            conv.Default(o.BillingRepository, opts.BillingRepository),
 			StripeClient:                 conv.Default(o.StripeClient, opts.StripeClient),
-			TUMMeterStreamingEnabled:     conv.Default(o.TUMMeterStreamingEnabled, opts.TUMMeterStreamingEnabled),
 			RedisClient:                  conv.Default(o.RedisClient, opts.RedisClient),
 			PosthogClient:                conv.Default(o.PosthogClient, opts.PosthogClient),
 			FunctionsDeployer:            conv.Default(o.FunctionsDeployer, opts.FunctionsDeployer),
@@ -448,7 +444,6 @@ func NewTemporalWorker(
 		opts.GitHubEvidenceToken,
 		opts.RiskFingerprinter,
 		opts.DisableRiskRetroReconcile,
-		opts.TUMMeterStreamingEnabled,
 		idTokenVerifier,
 		opts.IssuerMetadataRefresher,
 		remoteSessionEnricher,
@@ -489,7 +484,6 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.RunDeviceIntegrationSync)
 	temporalWorker.RegisterActivity(activities.RefreshBillingUsage)
 	temporalWorker.RegisterActivity(activities.SnapshotBillingCycleUsage)
-	temporalWorker.RegisterActivity(activities.ReportTUMUsageToStripe)
 	temporalWorker.RegisterActivity(activities.ListWeeklyUsageSummaryTargets)
 	temporalWorker.RegisterActivity(activities.SendWeeklyUsageSummary)
 	temporalWorker.RegisterActivity(activities.ForwardTokenUsageToPostHog)

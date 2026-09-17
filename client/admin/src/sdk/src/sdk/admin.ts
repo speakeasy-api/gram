@@ -17,6 +17,7 @@ import { adminGetGlobalIssuerDuplicatePreflight } from "../funcs/adminGetGlobalI
 import { adminGetGlobalIssuerMigratePreflight } from "../funcs/adminGetGlobalIssuerMigratePreflight.js";
 import { adminGetInferenceKeys } from "../funcs/adminGetInferenceKeys.js";
 import { adminGetInferenceSpendHistory } from "../funcs/adminGetInferenceSpendHistory.js";
+import { adminGetMeterUsage } from "../funcs/adminGetMeterUsage.js";
 import { adminGetOrganization } from "../funcs/adminGetOrganization.js";
 import { adminGetOrganizationChatAnalysisSettings } from "../funcs/adminGetOrganizationChatAnalysisSettings.js";
 import { adminGetOrganizationFeatures } from "../funcs/adminGetOrganizationFeatures.js";
@@ -57,6 +58,7 @@ import { AdminInferenceKeyLimit } from "../models/components/admininferencekeyli
 import { AdminInferenceSpendMonth } from "../models/components/admininferencespendmonth.js";
 import { AdminListOrganizationMembersResult } from "../models/components/adminlistorganizationmembersresult.js";
 import { AdminListOrganizationProjectsResult } from "../models/components/adminlistorganizationprojectsresult.js";
+import { AdminMeterUsageResponse } from "../models/components/adminmeterusageresponse.js";
 import { AdminOrganization } from "../models/components/adminorganization.js";
 import { AdminOrganizationStats } from "../models/components/adminorganizationstats.js";
 import { AdminPaygBillingSummary } from "../models/components/adminpaygbillingsummary.js";
@@ -102,6 +104,7 @@ import { AdminGetGlobalIssuerDuplicatePreflightRequest } from "../models/operati
 import { AdminGetGlobalIssuerMigratePreflightRequest } from "../models/operations/admingetglobalissuermigratepreflight.js";
 import { AdminGetInferenceKeysRequest } from "../models/operations/admingetinferencekeys.js";
 import { AdminGetInferenceSpendHistoryRequest } from "../models/operations/admingetinferencespendhistory.js";
+import { AdminGetMeterUsageRequest } from "../models/operations/admingetmeterusage.js";
 import { AdminGetOrganizationRequest } from "../models/operations/admingetorganization.js";
 import { AdminGetOrganizationChatAnalysisSettingsRequest } from "../models/operations/admingetorganizationchatanalysissettings.js";
 import { AdminGetOrganizationFeaturesRequest } from "../models/operations/admingetorganizationfeatures.js";
@@ -553,6 +556,23 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AdminBulkUpdateAccountTypeResult> {
     return unwrapAsync(adminBulkUpdateAccountType(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * getMeterUsage admin
+   *
+   * @remarks
+   * Returns totals-only ordinary meter usage for an organization over a bounded UTC-day window.
+   */
+  async getMeterUsage(
+    request: AdminGetMeterUsageRequest,
+    options?: RequestOptions,
+  ): Promise<AdminMeterUsageResponse> {
+    return unwrapAsync(adminGetMeterUsage(
       this,
       request,
       options,

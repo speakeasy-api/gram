@@ -221,14 +221,6 @@ func (c *checkoutStripeClient) CreatePortalSession(_ context.Context, input stri
 	return &stripeclient.PortalSession{ID: "bps_test", CustomerID: customerID, URL: "https://billing.stripe.test/session"}, nil
 }
 
-func (c *checkoutStripeClient) CreateMeterEvent(context.Context, stripeclient.CreateMeterEventInput) error {
-	return errors.New("not implemented")
-}
-
-func (c *checkoutStripeClient) GetMeterEventSummary(context.Context, stripeclient.GetMeterEventSummaryInput) (float64, error) {
-	return 0, errors.New("not implemented")
-}
-
 func (c *checkoutStripeClient) GetInvoice(context.Context, string) (*stripeclient.InvoiceState, error) {
 	return nil, errors.New("not implemented")
 }
@@ -254,7 +246,7 @@ func (c *checkoutStripeClient) VerifyWebhook([]byte, string) (*stripeclient.Webh
 }
 
 func (c *checkoutStripeClient) Catalog() stripeclient.Catalog {
-	return stripeclient.Catalog{PriceIDTUM: "price_tum", MeterIDTUM: "mtr_tum", MeterEventName: "tum", PortalConfigurationID: "bpc_test"}
+	return stripeclient.Catalog{PriceIDTUM: "price_tum", PortalConfigurationID: "bpc_test"}
 }
 
 func (c *checkoutStripeClient) updates() []stripeclient.UpdateCustomerInput {

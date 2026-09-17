@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"log/slog"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -76,10 +77,12 @@ func ResolveJudgeRateLimitKey(ctx context.Context, logger *slog.Logger, resolver
 	}
 	resolved, err := resolver.ResolveKey(ctx, orgID, projectID, slot, KeyTypeInternal)
 	if err != nil {
-		logger.WarnContext(ctx, "judge key resolution failed, scoping rate limit to platform bucket",
-			attr.SlogError(err),
-			attr.SlogOrganizationID(orgID),
-		)
+		if ctx.Err() == nil && !errors.Is(err, context.Canceled) {
+			logger.WarnContext(ctx, "judge key resolution failed, scoping rate limit to platform bucket",
+				attr.SlogError(err),
+				attr.SlogOrganizationID(orgID),
+			)
+		}
 		resolved = PlatformKey()
 	}
 	return JudgeRateLimitKey(resolved, model)

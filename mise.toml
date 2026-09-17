@@ -1,6 +1,6 @@
 #:schema https://mise.en.dev/schema/mise.json
 
-min_version = "2026.7.6"
+min_version = "2026.9.9"
 
 [settings]
 pin = true
@@ -21,7 +21,7 @@ pin = true
 apko = "1.2.31"
 flyctl = "0.4.77"
 gh = "2.100.0"
-go = "1.27.0"
+go = "1.27.1"
 golangci-lint = "2.13.2"
 gomigrate = "4.19.1"
 gum = "0.17.0"

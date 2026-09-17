@@ -124,7 +124,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 
 // NewBillingOperations builds the narrow usage service used by trusted server
 // surfaces that authorize independently and pass canonical organization IDs.
-func NewBillingOperations(logger *slog.Logger, db *pgxpool.Pool, stripeClient stripeclient.Client, telemetryRepo *telemetryrepo.Queries, auditLogger *audit.Logger) *Service {
+func NewBillingOperations(logger *slog.Logger, db *pgxpool.Pool, stripeClient stripeclient.Client, telemetryRepo *telemetryrepo.Queries, auditLogger *audit.Logger, meterReadConn clickhouse.Conn) *Service {
 	return &Service{
 		tracer:          nil,
 		logger:          logger.With(attr.SlogComponent("usage-billing")),
@@ -137,7 +137,7 @@ func NewBillingOperations(logger *slog.Logger, db *pgxpool.Pool, stripeClient st
 		billingRepo:     nil,
 		orgRepo:         orgRepo.New(db),
 		telemetryRepo:   telemetryRepo,
-		meterReadConn:   nil,
+		meterReadConn:   meterReadConn,
 		auditLogger:     auditLogger,
 		posthogClient:   nil,
 		openRouter:      nil,

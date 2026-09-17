@@ -484,6 +484,24 @@ export interface AgentProviderIconProps {
   className?: string;
 }
 
+// Pi (pi.dev) — the agent is named for the letter, so the mark is a geometric
+// pi glyph drawn as paths so it needs no font. Uses currentColor like the
+// sibling icons.
+function PiIcon({ className }: { className?: string }): JSX.Element {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 300 300"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path d="M42 72H258V114H42V72Z" fill="currentColor" />
+      <path d="M78 114H120V258H78V114Z" fill="currentColor" />
+      <path d="M180 114H222V258H180V114Z" fill="currentColor" />
+    </svg>
+  );
+}
+
 export function AgentProviderIcon({
   source,
   className,
@@ -501,6 +519,8 @@ export function AgentProviderIcon({
       return <OpencodeIcon className={className} />;
     case "openclaw":
       return <OpenClawIcon className={className} />;
+    case "pi":
+      return <PiIcon className={className} />;
     case "litellm":
       return (
         <img src="/icons/platforms/litellm.png" alt="" className={className} />

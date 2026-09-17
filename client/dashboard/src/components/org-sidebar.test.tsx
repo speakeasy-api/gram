@@ -92,7 +92,9 @@ vi.mock("./trial-status-card", () => ({ TrialStatusCard: () => null }));
 
 afterEach(cleanup);
 it.each([
-  ["agents", "Identity"],
+  ["team", "Team"],
+  ["access", "Team"],
+  ["identity", "Team"],
   ["auditLogs", "Secure"],
 ])("selects the correct group for %s", (active, group) => {
   mocks.active = active;
@@ -115,8 +117,9 @@ it.each([false, true])(
       screen.queryByRole("link", { name: "platformRemoteIdentityProviders" }),
     ).toBeNull();
     expect(
-      screen.getByRole("link", { name: "remoteIdentityProviders" }),
-    ).toBeTruthy();
+      screen.queryByRole("link", { name: "remoteIdentityProviders" }),
+    ).toBeNull();
+    expect(screen.queryByRole("link", { name: "agents" })).toBeNull();
     if (isPlatformAdmin)
       expect(
         screen.getByRole("link", { name: "platformAdminOpenRouterKeys" }),
