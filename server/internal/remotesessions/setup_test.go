@@ -102,6 +102,7 @@ type testInstance struct {
 
 type testServiceConfig struct {
 	tunnelRouting bool
+	maxDBConns    int32
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
@@ -121,6 +122,14 @@ func newTestServiceWithConfig(t *testing.T, cfg testServiceConfig) (context.Cont
 
 	conn, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
+	if cfg.maxDBConns > 0 {
+		poolConfig := conn.Config()
+		conn.Close()
+		poolConfig.MaxConns = cfg.maxDBConns
+		conn, err = pgxpool.NewWithConfig(ctx, poolConfig)
+		require.NoError(t, err)
+		t.Cleanup(conn.Close)
+	}
 
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)

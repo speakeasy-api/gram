@@ -227,8 +227,7 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 		return nil
 	})
 
-	q := repo.New(r.db)
-	initial, err := q.GetRemoteSessionClientForRotation(ctx, params.ClientID)
+	initial, err := repo.New(r.db).GetRemoteSessionClientForRotation(ctx, params.ClientID)
 	if err != nil {
 		return zero, fmt.Errorf("load remote session client for rotation: %w", err)
 	}
@@ -252,16 +251,37 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 		}
 		return zero, fmt.Errorf("lock issuer configuration for client rotation: %w", err)
 	}
-	defer issuerLockConn.Release()
-	defer o11y.LogDefer(ctx, r.logger, "failed to unlock issuer configuration after client rotation", func() error {
-		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), refreshReleaseTimeout)
-		defer cancel()
-		_, unlockErr := issuerLockRepo.UnlockRemoteSessionIssuerForClientBindingSession(releaseCtx, lockedIssuerID)
-		if unlockErr != nil {
-			return fmt.Errorf("unlock issuer configuration: %w", unlockErr)
+	issuerLockReleased := false
+	releaseIssuerLock := func() error {
+		if issuerLockReleased {
+			return nil
 		}
-		return nil
-	})
+		issuerLockReleased = true
+
+		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), refreshReleaseTimeout)
+		_, unlockErr := issuerLockRepo.UnlockRemoteSessionIssuerForClientBindingSession(releaseCtx, lockedIssuerID)
+		cancel()
+		if unlockErr == nil {
+			issuerLockConn.Release()
+			return nil
+		}
+
+		// A failed unlock leaves the session's lock state ambiguous. Discard the
+		// connection instead of returning a potentially lock-owning session to
+		// the pool for unrelated work.
+		rawConn := issuerLockConn.Hijack()
+		closeCtx, closeCancel := context.WithTimeout(context.WithoutCancel(ctx), refreshReleaseTimeout)
+		closeErr := rawConn.Close(closeCtx)
+		closeCancel()
+		if closeErr != nil {
+			return errors.Join(
+				fmt.Errorf("unlock issuer configuration: %w", unlockErr),
+				fmt.Errorf("discard issuer lock connection: %w", closeErr),
+			)
+		}
+		return fmt.Errorf("unlock issuer configuration: %w", unlockErr)
+	}
+	defer o11y.LogDefer(ctx, r.logger, "failed to unlock issuer configuration after client rotation", releaseIssuerLock)
 	renewed, err := leaseLocks.RenewLease(ctx, leaseKey, leaseOwner, clientRotationLeaseTTL)
 	if err != nil {
 		return zero, fmt.Errorf("renew client rotation lease after issuer lock wait: %w", err)
@@ -321,7 +341,7 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 			return zero, fmt.Errorf("probe issuer for client registration: %w", err)
 		}
 		if recognized {
-			if _, err := q.ClearRemoteSessionClientUpstreamRejected(ctx, repo.ClearRemoteSessionClientUpstreamRejectedParams{ID: current.ID, ClientID: current.ClientID}); err != nil {
+			if _, err := issuerLockRepo.ClearRemoteSessionClientUpstreamRejected(ctx, repo.ClearRemoteSessionClientUpstreamRejectedParams{ID: current.ID, ClientID: current.ClientID}); err != nil {
 				logger.WarnContext(ctx, "failed to clear the upstream rejection marker on a client the issuer still recognizes", attr.SlogError(err))
 			}
 			logger.WarnContext(ctx, "issuer still recognizes the client registration; rotation skipped and rejection marker cleared")
@@ -412,7 +432,7 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 		// The row moved under us: another rotation, an administrator's update,
 		// or a deletion. Report whatever it carries now and abandon the
 		// registration this call obtained.
-		moved, readErr := q.GetRemoteSessionClientForRotation(ctx, current.ID)
+		moved, readErr := txRepo.GetRemoteSessionClientForRotation(ctx, current.ID)
 		if readErr != nil {
 			return zero, fmt.Errorf("re-read remote session client after lost rotation race: %w", readErr)
 		}
@@ -475,6 +495,11 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 	if err := dbtx.Commit(ctx); err != nil {
 		return zero, fmt.Errorf("commit client rotation: %w", err)
 	}
+
+	// Detached revocation workers read client metadata from the pool. Release
+	// the dedicated advisory-lock connection first so a constrained pool cannot
+	// deadlock waiting for the connection this rotation still owns.
+	_ = o11y.LogDefer(ctx, r.logger, "failed to unlock issuer configuration after client rotation", releaseIssuerLock)
 
 	// The revoked sessions' tokens are dropped at the issuer on the same
 	// best-effort terms as a delete: post-commit, bounded, never surfaced.

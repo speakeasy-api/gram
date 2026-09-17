@@ -195,7 +195,9 @@ func TestBuildAuthorizationUrl_RotatesRejectedRegistration(t *testing.T) {
 	t.Parallel()
 
 	upstream := &rotationUpstream{refreshStatus: http.StatusUnauthorized, refreshBody: invalidClientBody}
-	ctx, env := newSyntheticExpiryEnv(t, "rotate-rejected", upstream.handler())
+	// The rotator must release its advisory-lock connection before detached
+	// revocation workers borrow from the same pool.
+	ctx, env := newSyntheticExpiryEnv(t, "rotate-rejected", upstream.handler(), withMaxDBConns(1))
 	rejectedAt := time.Now().Add(-time.Hour)
 	stageRegistration(t, env, issuerTokenEndpoint(t, env)+"/register", &rejectedAt, nil)
 
@@ -227,7 +229,9 @@ func TestBuildAuthorizationUrl_KeepsRegistrationTheIssuerStillRecognizes(t *test
 	t.Parallel()
 
 	upstream := &rotationUpstream{refreshStatus: http.StatusBadRequest, refreshBody: `{"error":"invalid_grant","error_description":"Unknown refresh token"}`}
-	_, env := newSyntheticExpiryEnv(t, "rotate-recognized", upstream.handler())
+	// Clearing the stale rejection marker must reuse the advisory-lock
+	// connection instead of waiting for a second pooled connection.
+	_, env := newSyntheticExpiryEnv(t, "rotate-recognized", upstream.handler(), withMaxDBConns(1))
 	rejectedAt := time.Now().Add(-time.Hour)
 	stageRegistration(t, env, issuerTokenEndpoint(t, env)+"/register", &rejectedAt, nil)
 
