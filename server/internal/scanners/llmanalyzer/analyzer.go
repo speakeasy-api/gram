@@ -319,21 +319,36 @@ func IsDeadLetter(f scanners.Finding) bool {
 	return f.Source == Source && f.RuleID == RuleDeadLetter
 }
 
-// FindingsForSources keeps the findings a policy with the given sources acts
-// on: those whose rule id belongs to a risk key covering one of the sources.
-// A dead-letter sentinel is kept whenever at least one source is covered, so
-// a degraded lane still blocks every covered policy; policies with no covered
-// source get nothing. Order is preserved.
+// FindingsForSources fans the analyzer's findings out to a policy with the
+// given sources. A finding is kept when its risk key covers one of the
+// sources, and it is re-labelled for that source: the rule id becomes the
+// source's own id (RuleIDForSource) and the category tag follows, so a
+// destructive_tool_call verdict yields destructive_tool.llm for a
+// destructive_tool policy and cli_destructive.llm for a cli_destructive
+// policy. When several requested sources share a key the finding is emitted
+// once per source. A dead-letter sentinel is kept unchanged whenever at least
+// one source is covered, so a degraded lane still blocks every covered
+// policy; policies with no covered source get nothing. Order follows the
+// input findings, then the order of sources.
 func FindingsForSources(findings []scanners.Finding, sources []string) []scanners.Finding {
-	ruleIDs := make(map[string]struct{}, len(sources))
+	type target struct {
+		source string
+		key    string
+	}
+	targets := make([]target, 0, len(sources))
+	seen := make(map[string]struct{}, len(sources))
 	for _, source := range sources {
+		if _, dup := seen[source]; dup {
+			continue
+		}
 		if key, ok := RiskKeyForSource(source); ok {
-			ruleIDs[RuleIDForKey(key)] = struct{}{}
+			seen[source] = struct{}{}
+			targets = append(targets, target{source: source, key: key})
 		}
 	}
 
 	kept := make([]scanners.Finding, 0, len(findings))
-	if len(ruleIDs) == 0 {
+	if len(targets) == 0 {
 		return kept
 	}
 	for _, f := range findings {
@@ -341,8 +356,17 @@ func FindingsForSources(findings []scanners.Finding, sources []string) []scanner
 			kept = append(kept, f)
 			continue
 		}
-		if _, ok := ruleIDs[f.RuleID]; ok && f.Source == Source {
-			kept = append(kept, f)
+		if f.Source != Source {
+			continue
+		}
+		for _, t := range targets {
+			if f.RuleID != RuleIDForKey(t.key) {
+				continue
+			}
+			relabelled := f
+			relabelled.RuleID, _ = RuleIDForSource(t.source)
+			relabelled.Tags = []string{CategoryForSource(t.source)}
+			kept = append(kept, relabelled)
 		}
 	}
 	return kept
@@ -351,6 +375,25 @@ func FindingsForSources(findings []scanners.Finding, sources []string) []scanner
 // FindingsForSource is FindingsForSources for a single policy source.
 func FindingsForSource(findings []scanners.Finding, source string) []scanners.Finding {
 	return FindingsForSources(findings, []string{source})
+}
+
+// CategoryForSource returns the category name a covered policy source's
+// findings are tagged with, or an empty string for an uncovered source.
+func CategoryForSource(source string) string {
+	switch source {
+	case "gitleaks":
+		return string(categories.CategorySecrets)
+	case "presidio":
+		return string(categories.CategoryPII)
+	case "prompt_injection":
+		return string(categories.CategoryPromptInjection)
+	case "destructive_tool":
+		return string(categories.CategoryDestructiveTool)
+	case "cli_destructive":
+		return string(categories.CategoryCLIDestructive)
+	default:
+		return ""
+	}
 }
 
 // CategoryForKey returns the category name tagged on findings for a model
