@@ -5,10 +5,10 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import {
-  MigrateIssuerRequestBody,
-  MigrateIssuerRequestBody$Outbound,
-  MigrateIssuerRequestBody$outboundSchema,
-} from "../components/migrateissuerrequestbody.js";
+  MigrateIssuerRequestBody2,
+  MigrateIssuerRequestBody2$Outbound,
+  MigrateIssuerRequestBody2$outboundSchema,
+} from "../components/migrateissuerrequestbody2.js";
 
 export type MigrateOrganizationUserSessionIssuerSecurity = {
   sessionHeaderGramSession?: string | undefined;
@@ -19,7 +19,7 @@ export type MigrateOrganizationUserSessionIssuerRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  migrateIssuerRequestBody: MigrateIssuerRequestBody;
+  migrateIssuerRequestBody2: MigrateIssuerRequestBody2;
 };
 
 /** @internal */
@@ -57,7 +57,7 @@ export function migrateOrganizationUserSessionIssuerSecurityToJSON(
 /** @internal */
 export type MigrateOrganizationUserSessionIssuerRequest$Outbound = {
   "Gram-Session"?: string | undefined;
-  MigrateIssuerRequestBody: MigrateIssuerRequestBody$Outbound;
+  MigrateIssuerRequestBody2: MigrateIssuerRequestBody2$Outbound;
 };
 
 /** @internal */
@@ -68,12 +68,12 @@ export const MigrateOrganizationUserSessionIssuerRequest$outboundSchema:
   > = z.pipe(
     z.object({
       gramSession: z.optional(z.string()),
-      migrateIssuerRequestBody: MigrateIssuerRequestBody$outboundSchema,
+      migrateIssuerRequestBody2: MigrateIssuerRequestBody2$outboundSchema,
     }),
     z.transform((v) => {
       return remap$(v, {
         gramSession: "Gram-Session",
-        migrateIssuerRequestBody: "MigrateIssuerRequestBody",
+        migrateIssuerRequestBody2: "MigrateIssuerRequestBody2",
       });
     }),
   );

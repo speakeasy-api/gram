@@ -1069,3 +1069,53 @@ WHERE organization_id = @organization_id AND principal_urn LIKE 'agent:%';
 
 -- name: CountDemoSeedAPIKeysFixture :one
 SELECT count(*) FROM api_keys WHERE organization_id = @organization_id;
+
+-- name: InsertPrincipalRemoteSessionBindingFixture :one
+INSERT INTO principal_remote_session_bindings (
+  project_id,
+  organization_id,
+  principal_id,
+  user_session_issuer_id,
+  remote_session_client_id,
+  remote_session_id,
+  grant_generation,
+  attached_by_subject_id
+) VALUES (
+  @project_id,
+  @organization_id,
+  @principal_id,
+  @user_session_issuer_id,
+  @remote_session_client_id,
+  @remote_session_id,
+  @grant_generation,
+  @attached_by_subject_id
+)
+RETURNING id;
+
+-- name: GetPrincipalRemoteSessionBindingIssuerFixture :one
+SELECT user_session_issuer_id
+FROM principal_remote_session_bindings
+WHERE id = @id;
+
+-- name: InsertRemoteSessionEMABindingFixture :one
+INSERT INTO remote_session_ema_bindings (
+  project_id,
+  organization_id,
+  user_session_issuer_id,
+  remote_session_issuer_id,
+  resource,
+  remote_session_client_id
+) VALUES (
+  @project_id,
+  @organization_id,
+  @user_session_issuer_id,
+  @remote_session_issuer_id,
+  @resource,
+  @remote_session_client_id
+)
+RETURNING id;
+
+-- name: GetRemoteSessionEMABindingFixture :one
+SELECT user_session_issuer_id, generation
+FROM remote_session_ema_bindings
+WHERE id = @id;

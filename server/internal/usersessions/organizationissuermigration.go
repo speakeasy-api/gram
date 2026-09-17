@@ -3,6 +3,8 @@ package usersessions
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"slices"
@@ -192,7 +194,7 @@ func (s *Service) MoveIssuer(ctx context.Context, payload *orggen.MoveIssuerPayl
 	}
 	if targetProjectID.Valid {
 		incompatible, err := q.CountUserSessionIssuerIncompatibleProjectReferences(ctx, repo.CountUserSessionIssuerIncompatibleProjectReferencesParams{
-			UserSessionIssuerID: conv.ToNullUUID(issuerID),
+			UserSessionIssuerID: issuerID,
 			OrganizationID:      authCtx.ActiveOrganizationID,
 			TargetProjectID:     targetProjectID.UUID,
 		})
@@ -255,6 +257,7 @@ type userSessionMigrationPreflight struct {
 	principalBindingConflictCount, emaBindingConflictCount                       int32
 	platformOwned                                                                bool
 	warnings                                                                     []*orggen.UserSessionIssuerFieldMismatch
+	warningsFingerprint                                                          string
 }
 
 func (p userSessionMigrationPreflight) canMigrate() bool {
@@ -277,6 +280,25 @@ func userSessionMigrationWarnings(source, target repo.UserSessionIssuer) []*orgg
 		}
 	}
 	return warnings
+}
+
+func userSessionMigrationWarningsFingerprint(sourceID, targetID uuid.UUID, warnings []*orggen.UserSessionIssuerFieldMismatch) string {
+	if len(warnings) == 0 {
+		return ""
+	}
+
+	hash := sha256.New()
+	for _, value := range []string{sourceID.String(), targetID.String()} {
+		_, _ = hash.Write([]byte(value))
+		_, _ = hash.Write([]byte{0})
+	}
+	for _, warning := range warnings {
+		for _, value := range []string{warning.Field, warning.SourceValue, warning.TargetValue} {
+			_, _ = hash.Write([]byte(value))
+			_, _ = hash.Write([]byte{0})
+		}
+	}
+	return hex.EncodeToString(hash.Sum(nil))
 }
 
 func buildUserSessionMigrationPreflight(ctx context.Context, q *repo.Queries, organizationID string, source, target repo.UserSessionIssuer) (userSessionMigrationPreflight, error) {
@@ -320,10 +342,12 @@ func buildUserSessionMigrationPreflight(ctx context.Context, q *repo.Queries, or
 	if err != nil {
 		return userSessionMigrationPreflight{}, fmt.Errorf("check target Platform MCP ownership: %w", err)
 	}
+	warnings := userSessionMigrationWarnings(source, target)
 	return userSessionMigrationPreflight{
 		clientCount: clients, sessionCount: sessions, consentCount: consents, cimdClientCount: cimdClients, remoteSessionCount: remoteSessions,
 		conflictingClientIDs: conflicts, principalBindingConflictCount: principalConflicts, emaBindingConflictCount: emaConflicts,
-		platformOwned: sourceOwned || targetOwned, warnings: userSessionMigrationWarnings(source, target),
+		platformOwned: sourceOwned || targetOwned, warnings: warnings,
+		warningsFingerprint: userSessionMigrationWarningsFingerprint(source.ID, target.ID, warnings),
 	}, nil
 }
 
@@ -331,7 +355,7 @@ func userSessionMigrationPreflightView(preflight userSessionMigrationPreflight) 
 	return &orggen.OrganizationUserSessionIssuerMigratePreflight{
 		ClientCount: int(preflight.clientCount), SessionCount: int(preflight.sessionCount), ConsentCount: int(preflight.consentCount), CimdClientCount: int(preflight.cimdClientCount), RemoteSessionCount: int(preflight.remoteSessionCount),
 		ConflictingClientIds: preflight.conflictingClientIDs, PrincipalBindingConflictCount: int(preflight.principalBindingConflictCount), EmaBindingConflictCount: int(preflight.emaBindingConflictCount), PlatformOwned: preflight.platformOwned,
-		Warnings: preflight.warnings, CanMigrate: preflight.canMigrate(),
+		Warnings: preflight.warnings, WarningsFingerprint: preflight.warningsFingerprint, CanMigrate: preflight.canMigrate(),
 	}
 }
 
@@ -390,6 +414,17 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssu
 	if err != nil {
 		return nil, oops.E(oops.CodeConflict, err, "issuer scope changed while migration was being locked; retry").LogError(ctx, logger)
 	}
+	for _, issuer := range []repo.UserSessionIssuer{source, target} {
+		if issuer.ProjectID.Valid && (!issuer.OrganizationID.Valid || issuer.OrganizationID.String != authCtx.ActiveOrganizationID) {
+			if _, err := q.NormalizeLegacyProjectUserSessionIssuerOrganization(ctx, repo.NormalizeLegacyProjectUserSessionIssuerOrganizationParams{ID: issuer.ID, OrganizationID: authCtx.ActiveOrganizationID}); err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "normalize project user session issuer organization").LogError(ctx, logger)
+			}
+		}
+	}
+	source, target, err = loadUserSessionMigrationPair(ctx, q, authCtx.ActiveOrganizationID, sourceID, targetID, true)
+	if err != nil {
+		return nil, oops.E(oops.CodeConflict, err, "issuer scope changed while migration was normalized; retry").LogError(ctx, logger)
+	}
 	if err := q.LockUserSessionIssuerClientsForMigration(ctx, source.ID); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "lock source user session clients").LogError(ctx, logger)
 	}
@@ -400,9 +435,12 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssu
 	if !preflight.canMigrate() {
 		return nil, oops.E(oops.CodeConflict, nil, "user session issuer migration has unresolved blockers; refresh the preflight").LogError(ctx, logger)
 	}
+	if preflight.warningsFingerprint != "" && (payload.ConfirmedWarningsFingerprint == nil || *payload.ConfirmedWarningsFingerprint != preflight.warningsFingerprint) {
+		return nil, oops.E(oops.CodeConflict, nil, "user session issuer migration warnings have not been confirmed or changed; refresh the preflight and confirm its exact warnings fingerprint").LogError(ctx, logger)
+	}
 
 	targetProjectID := target.ProjectID
-	consentsMigrated, err := q.UpdateUserSessionConsentsToIssuerScope(ctx, repo.UpdateUserSessionConsentsToIssuerScopeParams{TargetProjectID: targetProjectID, OrganizationID: authCtx.ActiveOrganizationID, SourceIssuerID: source.ID})
+	consentsMigrated, err := q.UpdateUserSessionConsentsToIssuerScope(ctx, repo.UpdateUserSessionConsentsToIssuerScopeParams{TargetProjectID: targetProjectID, TargetIssuerID: target.ID, OrganizationID: authCtx.ActiveOrganizationID, SourceIssuerID: source.ID})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "normalize migrated user session consents").LogError(ctx, logger)
 	}
@@ -414,7 +452,7 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssu
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "migrate user sessions").LogError(ctx, logger)
 	}
-	if _, err := q.MergeDuplicateUserSessionIssuerCimdClients(ctx, repo.MergeDuplicateUserSessionIssuerCimdClientsParams{SourceIssuerID: source.ID, TargetIssuerID: target.ID}); err != nil {
+	if _, err := q.MergeDuplicateUserSessionIssuerCimdClients(ctx, repo.MergeDuplicateUserSessionIssuerCimdClientsParams{SourceIssuerID: source.ID, TargetIssuerID: target.ID, OrganizationID: authCtx.ActiveOrganizationID}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "merge duplicate CIMD clients").LogError(ctx, logger)
 	}
 	cimdClientsMigrated, err := q.UpdateUserSessionIssuerCimdClientsToIssuer(ctx, repo.UpdateUserSessionIssuerCimdClientsToIssuerParams{TargetIssuerID: target.ID, TargetProjectID: targetProjectID, OrganizationID: authCtx.ActiveOrganizationID, SourceIssuerID: source.ID})
@@ -428,7 +466,7 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssu
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "migrate remote-session provenance").LogError(ctx, logger)
 	}
-	if _, err := q.DeleteSourceRemoteSessionClientIssuerLinks(ctx, repo.DeleteSourceRemoteSessionClientIssuerLinksParams{SourceIssuerID: source.ID, OrganizationID: authCtx.ActiveOrganizationID}); err != nil {
+	if _, err := q.DeleteSourceRemoteSessionClientIssuerLinks(ctx, repo.DeleteSourceRemoteSessionClientIssuerLinksParams{SourceIssuerID: source.ID, TargetIssuerID: target.ID, OrganizationID: authCtx.ActiveOrganizationID}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "remove source remote-session client links").LogError(ctx, logger)
 	}
 	if _, err := q.UpdateRemoteSessionEMABindingsToUserSessionIssuer(ctx, repo.UpdateRemoteSessionEMABindingsToUserSessionIssuerParams{TargetIssuerID: target.ID, SourceIssuerID: source.ID, OrganizationID: authCtx.ActiveOrganizationID}); err != nil {
@@ -456,7 +494,7 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssu
 			return nil, oops.E(oops.CodeUnexpected, err, "migrate user session issuer %s", operation.name).LogError(ctx, logger)
 		}
 	}
-	deleted, err := q.SoftDeleteMigratedUserSessionIssuer(ctx, repo.SoftDeleteMigratedUserSessionIssuerParams{SourceIssuerID: source.ID, OrganizationID: authCtx.ActiveOrganizationID})
+	deleted, err := q.SoftDeleteMigratedUserSessionIssuer(ctx, repo.SoftDeleteMigratedUserSessionIssuerParams{SourceIssuerID: source.ID, TargetIssuerID: target.ID, OrganizationID: authCtx.ActiveOrganizationID})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "soft-delete migrated user session issuer").LogError(ctx, logger)
 	}

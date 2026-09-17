@@ -60,6 +60,10 @@ export type OrganizationUserSessionIssuerMigratePreflight = {
    * Configuration differences that do not invalidate existing sessions but change future authorization behavior.
    */
   warnings: Array<UserSessionIssuerFieldMismatch>;
+  /**
+   * Stable fingerprint of the current warnings. Empty when there are no warnings; otherwise pass this exact value to migrateIssuer to confirm them.
+   */
+  warningsFingerprint: string;
 };
 
 /** @internal */
@@ -78,6 +82,7 @@ export const OrganizationUserSessionIssuerMigratePreflight$inboundSchema:
         remote_session_count: z.int(),
         session_count: z.int(),
         warnings: z.array(UserSessionIssuerFieldMismatch$inboundSchema),
+        warnings_fingerprint: z.string(),
       }),
       z.transform((v) => {
         return remap$(v, {
@@ -91,6 +96,7 @@ export const OrganizationUserSessionIssuerMigratePreflight$inboundSchema:
           "principal_binding_conflict_count": "principalBindingConflictCount",
           "remote_session_count": "remoteSessionCount",
           "session_count": "sessionCount",
+          "warnings_fingerprint": "warningsFingerprint",
         });
       }),
     );

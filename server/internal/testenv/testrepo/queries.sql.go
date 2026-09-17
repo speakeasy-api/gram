@@ -996,6 +996,19 @@ func (q *Queries) GetPrincipalGrantEffectFixture(ctx context.Context, arg GetPri
 	return effect, err
 }
 
+const getPrincipalRemoteSessionBindingIssuerFixture = `-- name: GetPrincipalRemoteSessionBindingIssuerFixture :one
+SELECT user_session_issuer_id
+FROM principal_remote_session_bindings
+WHERE id = $1
+`
+
+func (q *Queries) GetPrincipalRemoteSessionBindingIssuerFixture(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getPrincipalRemoteSessionBindingIssuerFixture, id)
+	var user_session_issuer_id uuid.UUID
+	err := row.Scan(&user_session_issuer_id)
+	return user_session_issuer_id, err
+}
+
 const getPublishOutboxDeadLetter = `-- name: GetPublishOutboxDeadLetter :one
 SELECT id, public_id, organization_id, topic, message, attributes,
        attempts, last_error, enqueued_at, created_at
@@ -1060,6 +1073,24 @@ func (q *Queries) GetPublishOutboxRow(ctx context.Context, id int64) (GetPublish
 		&i.LeaseToken,
 		&i.CreatedAt,
 	)
+	return i, err
+}
+
+const getRemoteSessionEMABindingFixture = `-- name: GetRemoteSessionEMABindingFixture :one
+SELECT user_session_issuer_id, generation
+FROM remote_session_ema_bindings
+WHERE id = $1
+`
+
+type GetRemoteSessionEMABindingFixtureRow struct {
+	UserSessionIssuerID uuid.UUID
+	Generation          int64
+}
+
+func (q *Queries) GetRemoteSessionEMABindingFixture(ctx context.Context, id uuid.UUID) (GetRemoteSessionEMABindingFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getRemoteSessionEMABindingFixture, id)
+	var i GetRemoteSessionEMABindingFixtureRow
+	err := row.Scan(&i.UserSessionIssuerID, &i.Generation)
 	return i, err
 }
 
@@ -1508,6 +1539,98 @@ type InsertPluginAssignmentFixtureParams struct {
 func (q *Queries) InsertPluginAssignmentFixture(ctx context.Context, arg InsertPluginAssignmentFixtureParams) error {
 	_, err := q.db.Exec(ctx, insertPluginAssignmentFixture, arg.PluginID, arg.OrganizationID, arg.PrincipalUrn)
 	return err
+}
+
+const insertPrincipalRemoteSessionBindingFixture = `-- name: InsertPrincipalRemoteSessionBindingFixture :one
+INSERT INTO principal_remote_session_bindings (
+  project_id,
+  organization_id,
+  principal_id,
+  user_session_issuer_id,
+  remote_session_client_id,
+  remote_session_id,
+  grant_generation,
+  attached_by_subject_id
+) VALUES (
+  $1,
+  $2,
+  $3,
+  $4,
+  $5,
+  $6,
+  $7,
+  $8
+)
+RETURNING id
+`
+
+type InsertPrincipalRemoteSessionBindingFixtureParams struct {
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	PrincipalID           uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+	RemoteSessionClientID uuid.UUID
+	RemoteSessionID       uuid.UUID
+	GrantGeneration       int64
+	AttachedBySubjectID   string
+}
+
+func (q *Queries) InsertPrincipalRemoteSessionBindingFixture(ctx context.Context, arg InsertPrincipalRemoteSessionBindingFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, insertPrincipalRemoteSessionBindingFixture,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.PrincipalID,
+		arg.UserSessionIssuerID,
+		arg.RemoteSessionClientID,
+		arg.RemoteSessionID,
+		arg.GrantGeneration,
+		arg.AttachedBySubjectID,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const insertRemoteSessionEMABindingFixture = `-- name: InsertRemoteSessionEMABindingFixture :one
+INSERT INTO remote_session_ema_bindings (
+  project_id,
+  organization_id,
+  user_session_issuer_id,
+  remote_session_issuer_id,
+  resource,
+  remote_session_client_id
+) VALUES (
+  $1,
+  $2,
+  $3,
+  $4,
+  $5,
+  $6
+)
+RETURNING id
+`
+
+type InsertRemoteSessionEMABindingFixtureParams struct {
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	UserSessionIssuerID   uuid.UUID
+	RemoteSessionIssuerID uuid.UUID
+	Resource              string
+	RemoteSessionClientID uuid.NullUUID
+}
+
+func (q *Queries) InsertRemoteSessionEMABindingFixture(ctx context.Context, arg InsertRemoteSessionEMABindingFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, insertRemoteSessionEMABindingFixture,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.UserSessionIssuerID,
+		arg.RemoteSessionIssuerID,
+		arg.Resource,
+		arg.RemoteSessionClientID,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const insertUserFixture = `-- name: InsertUserFixture :exec

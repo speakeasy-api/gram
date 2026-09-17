@@ -310,7 +310,7 @@ func BuildMigrateIssuerPayload(organizationUserSessionIssuersMigrateIssuerBody s
 	{
 		err = json.Unmarshal([]byte(organizationUserSessionIssuersMigrateIssuerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"source_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"target_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"confirmed_warnings_fingerprint\": \"abc123\",\n      \"source_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"target_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.source_id", body.SourceID, goa.FormatUUID))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.target_id", body.TargetID, goa.FormatUUID))
@@ -325,8 +325,9 @@ func BuildMigrateIssuerPayload(organizationUserSessionIssuersMigrateIssuerBody s
 		}
 	}
 	v := &organizationusersessionissuers.MigrateIssuerPayload{
-		SourceID: body.SourceID,
-		TargetID: body.TargetID,
+		SourceID:                     body.SourceID,
+		TargetID:                     body.TargetID,
+		ConfirmedWarningsFingerprint: body.ConfirmedWarningsFingerprint,
 	}
 	v.SessionToken = sessionToken
 

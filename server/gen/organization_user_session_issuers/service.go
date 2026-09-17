@@ -213,8 +213,11 @@ type MigrateIssuerPayload struct {
 	// The user_session_issuer to migrate away from; soft-deleted on success.
 	SourceID string
 	// The surviving user_session_issuer.
-	TargetID     string
-	SessionToken *string
+	TargetID string
+	// The exact warnings_fingerprint returned by the latest preflight. Required
+	// when that preflight reports warnings.
+	ConfirmedWarningsFingerprint *string
+	SessionToken                 *string
 }
 
 // MigrateOrganizationUserSessionIssuerResult is the result type of the
@@ -289,6 +292,9 @@ type OrganizationUserSessionIssuerMigratePreflight struct {
 	// Configuration differences that do not invalidate existing sessions but
 	// change future authorization behavior.
 	Warnings []*UserSessionIssuerFieldMismatch
+	// Stable fingerprint of the current warnings. Empty when there are no
+	// warnings; otherwise pass this exact value to migrateIssuer to confirm them.
+	WarningsFingerprint string
 	// True when no hard blocker is present.
 	CanMigrate bool
 }

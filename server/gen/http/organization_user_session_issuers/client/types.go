@@ -73,6 +73,9 @@ type MigrateIssuerRequestBody struct {
 	SourceID string `form:"source_id" json:"source_id" xml:"source_id"`
 	// The surviving user_session_issuer.
 	TargetID string `form:"target_id" json:"target_id" xml:"target_id"`
+	// The exact warnings_fingerprint returned by the latest preflight. Required
+	// when that preflight reports warnings.
+	ConfirmedWarningsFingerprint *string `form:"confirmed_warnings_fingerprint,omitempty" json:"confirmed_warnings_fingerprint,omitempty" xml:"confirmed_warnings_fingerprint,omitempty"`
 }
 
 // CreateCimdClientRequestBody is the type of the
@@ -280,6 +283,9 @@ type GetIssuerMigratePreflightResponseBody struct {
 	// Configuration differences that do not invalidate existing sessions but
 	// change future authorization behavior.
 	Warnings []*UserSessionIssuerFieldMismatchResponseBody `form:"warnings,omitempty" json:"warnings,omitempty" xml:"warnings,omitempty"`
+	// Stable fingerprint of the current warnings. Empty when there are no
+	// warnings; otherwise pass this exact value to migrateIssuer to confirm them.
+	WarningsFingerprint *string `form:"warnings_fingerprint,omitempty" json:"warnings_fingerprint,omitempty" xml:"warnings_fingerprint,omitempty"`
 	// True when no hard blocker is present.
 	CanMigrate *bool `form:"can_migrate,omitempty" json:"can_migrate,omitempty" xml:"can_migrate,omitempty"`
 }
@@ -2926,8 +2932,9 @@ func NewMoveIssuerRequestBody(p *organizationusersessionissuers.MoveIssuerPayloa
 // the "migrateIssuer" endpoint of the "organizationUserSessionIssuers" service.
 func NewMigrateIssuerRequestBody(p *organizationusersessionissuers.MigrateIssuerPayload) *MigrateIssuerRequestBody {
 	body := &MigrateIssuerRequestBody{
-		SourceID: p.SourceID,
-		TargetID: p.TargetID,
+		SourceID:                     p.SourceID,
+		TargetID:                     p.TargetID,
+		ConfirmedWarningsFingerprint: p.ConfirmedWarningsFingerprint,
 	}
 	return body
 }
@@ -4140,6 +4147,7 @@ func NewGetIssuerMigratePreflightOrganizationUserSessionIssuerMigratePreflightOK
 		PrincipalBindingConflictCount: *body.PrincipalBindingConflictCount,
 		EmaBindingConflictCount:       *body.EmaBindingConflictCount,
 		PlatformOwned:                 *body.PlatformOwned,
+		WarningsFingerprint:           *body.WarningsFingerprint,
 		CanMigrate:                    *body.CanMigrate,
 	}
 	v.ConflictingClientIds = make([]string, len(body.ConflictingClientIds))
@@ -5425,6 +5433,9 @@ func ValidateGetIssuerMigratePreflightResponseBody(body *GetIssuerMigratePreflig
 	}
 	if body.Warnings == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("warnings", "body"))
+	}
+	if body.WarningsFingerprint == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("warnings_fingerprint", "body"))
 	}
 	if body.CanMigrate == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("can_migrate", "body"))

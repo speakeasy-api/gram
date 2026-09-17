@@ -106,7 +106,7 @@ async function $do(
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.MigrateIssuerRequestBody, {
+  const body = encodeJSON("body", payload.MigrateIssuerRequestBody2, {
     explode: true,
   });
 
