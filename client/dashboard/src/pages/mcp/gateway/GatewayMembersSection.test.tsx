@@ -775,35 +775,28 @@ it.each([{ toolsetsFailed: true }, { toolsetsLoading: true }])(
   },
 );
 
-it.each([
-  ["project:read:project", false],
-  ["mcp:write:gateway", true],
-  ["project:write:project", false],
-] as const)("matches catalog browse access for %s", (grant, allowed) => {
-  permissions.scopes = new Set([grant]);
-  setup();
-  if (!allowed) {
+it.each([["project:read:project", "mcp:write:gateway"], ["mcp:write:gateway"]])(
+  "allows catalog browsing with gateway write and grants %j",
+  (...grants) => {
+    permissions.scopes = new Set(grants);
+    setup();
     expect(
       (screen.getByRole("button", { name: "Add new" }) as HTMLButtonElement)
         .disabled,
-    ).toBe(true);
-    expect(permissions.navigate).not.toHaveBeenCalled();
-    return;
-  }
-  fireEvent.pointerDown(screen.getByRole("button", { name: "Add new" }), {
-    button: 0,
-    ctrlKey: false,
-    pointerType: "mouse",
-  });
-  const item = screen.getByRole("menuitem", { name: /^From the catalog/ });
-  expect(item.getAttribute("aria-disabled") === "true").toBe(!allowed);
-  fireEvent.click(item);
-  if (allowed)
+    ).toBe(false);
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Add new" }), {
+      button: 0,
+      ctrlKey: false,
+      pointerType: "mouse",
+    });
+    const item = screen.getByRole("menuitem", { name: /^From the catalog/ });
+    expect(item.getAttribute("aria-disabled")).not.toBe("true");
+    fireEvent.click(item);
     expect(permissions.navigate).toHaveBeenCalledWith(
       "/catalog?attachToGateway=gateway",
     );
-  else expect(permissions.navigate).not.toHaveBeenCalled();
-});
+  },
+);
 
 it.each([
   [true, { toolsetsLoading: true }],
@@ -833,16 +826,19 @@ it.each([
   },
 );
 
-it("prevents gateway creation navigation without target gateway write permission", () => {
-  permissions.scopes.delete("mcp:write:gateway");
-  setup();
-  const trigger = screen.getByRole("button", { name: "Add new" });
-  expect((trigger as HTMLButtonElement).disabled).toBe(true);
-  fireEvent.pointerDown(trigger, {
-    button: 0,
-    ctrlKey: false,
-    pointerType: "mouse",
-  });
-  expect(screen.queryByRole("menuitem")).toBeNull();
-  expect(permissions.navigate).not.toHaveBeenCalled();
-});
+it.each(["project:read:project", "project:write:project"])(
+  "prevents gateway creation navigation without gateway write despite %s",
+  (grant) => {
+    permissions.scopes = new Set([grant]);
+    setup();
+    const trigger = screen.getByRole("button", { name: "Add new" });
+    expect((trigger as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.pointerDown(trigger, {
+      button: 0,
+      ctrlKey: false,
+      pointerType: "mouse",
+    });
+    expect(screen.queryByRole("menuitem")).toBeNull();
+    expect(permissions.navigate).not.toHaveBeenCalled();
+  },
+);

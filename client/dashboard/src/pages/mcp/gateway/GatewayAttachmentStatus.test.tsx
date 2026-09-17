@@ -20,6 +20,8 @@ function flow(
 it("announces attachment retry progress after the previous error is cleared", () => {
   const state = flow({ attachmentError: "Could not attach" });
   const { rerender } = render(<GatewayAttachmentStatus flow={state} />);
+  expect(screen.getByRole("alert").textContent).toContain("Could not attach");
+  expect(screen.queryByRole("status")).toBeNull();
   fireEvent.click(
     screen.getByRole("button", { name: "Retry adding to gateway" }),
   );
@@ -29,9 +31,10 @@ it("announces attachment retry progress after the previous error is cleared", ()
       flow={{ ...state, attachmentError: null, isAttaching: true }}
     />,
   );
-  expect(screen.getByRole("status").textContent).toContain(
-    "Adding to gateway…",
-  );
+  expect(screen.getByRole("alert").textContent).toContain("Adding to gateway…");
+  expect(screen.queryByRole("status")).toBeNull();
+  expect(screen.getAllByText("Adding to gateway…")).toHaveLength(1);
+  expect(screen.queryByText("Could not attach")).toBeNull();
   expect(
     (
       screen.getByRole("button", {

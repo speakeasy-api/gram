@@ -10,9 +10,7 @@ export function GatewayAttachmentStatus({
   if (!flow.attachmentError && !flow.isAttaching) return null;
   return (
     <Alert variant={flow.isAttaching ? "info" : "error"} dismissible={false}>
-      <p role="status">
-        {flow.isAttaching ? "Adding to gateway…" : flow.attachmentError}
-      </p>
+      {!flow.isAttaching && <p>{flow.attachmentError}</p>}
       <Button
         type="button"
         variant="secondary"

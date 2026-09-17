@@ -73,7 +73,17 @@ vi.mock("./stepper/use-stepper", () => ({
 vi.mock("@/routes", () => ({
   useRoutes: () => ({ deployments: { deployment: { Link: () => null } } }),
 }));
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+  vi.useRealTimers();
+});
+
+const advancePolling = async () => {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(500);
+  });
+};
 beforeEach(() => {
   vi.resetAllMocks();
   state.cachedTools = [
@@ -326,6 +336,7 @@ it.each(["create", "update", "wrapper"] as const)(
 );
 
 it("retries polling the retained deployment without evolving it again", async () => {
+  vi.useFakeTimers();
   state.stepState = "idle";
   state.current = true;
   state.getDeployment
@@ -337,7 +348,7 @@ it("retries polling the retained deployment without evolving it again", async ()
       openapiv3ToolCount: 0,
     });
   const pending = vi.fn<(pending: boolean) => void>();
-  const error = vi.spyOn(console, "error").mockImplementation(() => {});
+  vi.spyOn(console, "error").mockImplementation(() => {});
   render(
     <DeployStep
       onPendingChange={pending}
@@ -348,16 +359,15 @@ it("retries polling the retained deployment without evolving it again", async ()
       }}
     />,
   );
-  expect(await screen.findByText(/Polling unavailable/)).toBeTruthy();
+  await advancePolling();
+  expect(screen.getByText(/Polling unavailable/)).toBeTruthy();
   expect(pending).toHaveBeenLastCalledWith(false);
   expect(state.evolve).not.toHaveBeenCalled();
-  await retry();
-  await waitFor(() =>
-    expect(state.setStepper).toHaveBeenCalledWith("completed"),
-  );
+  fireEvent.click(screen.getByRole("button", { name: /retry/i }));
+  await advancePolling();
+  expect(state.setStepper).toHaveBeenCalledWith("completed");
   expect(state.getDeployment).toHaveBeenCalledTimes(2);
   expect(state.evolve).not.toHaveBeenCalled();
-  error.mockRestore();
 });
 
 it("blocks cancellation while deployment creation is unresolved and ignores completion after unmount", async () => {
@@ -390,17 +400,19 @@ it("blocks cancellation while deployment creation is unresolved and ignores comp
 });
 
 it("does not create resources from partial tools after polling fails", async () => {
+  vi.useFakeTimers();
   state.stepState = "idle";
   state.current = true;
   state.getDeployment.mockRejectedValue(new Error("Polling unavailable"));
-  const error = vi.spyOn(console, "error").mockImplementation(() => {});
+  vi.spyOn(console, "error").mockImplementation(() => {});
   const complete = vi.fn();
   const view = render(
     <DeployStep
       gateway={{ gatewayId: "gateway", createdServerId: null, complete }}
     />,
   );
-  await screen.findByText(/Polling unavailable/);
+  await advancePolling();
+  expect(screen.getByText(/Polling unavailable/)).toBeTruthy();
   state.stepState = "failed";
   await act(async () => {
     view.rerender(
@@ -411,12 +423,12 @@ it("does not create resources from partial tools after polling fails", async () 
   });
   expect(state.create).not.toHaveBeenCalled();
   expect(complete).not.toHaveBeenCalled();
-  error.mockRestore();
 });
 
 it.each(["empty", "partial"])(
   "refreshes %s cached tools after a polling retry before creating the toolset",
   async (cache) => {
+    vi.useFakeTimers();
     state.stepState = "idle";
     state.current = true;
     state.getDeployment
@@ -425,7 +437,7 @@ it.each(["empty", "partial"])(
         ...state.meta.current.deployment,
         status: "completed",
       });
-    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
     let settle!: (value: unknown) => void;
     state.listTools.mockReturnValueOnce(
       new Promise((resolve) => {
@@ -441,16 +453,16 @@ it.each(["empty", "partial"])(
       />
     );
     const view = render(element);
-    await screen.findByText(/Polling unavailable/);
+    await advancePolling();
+    expect(screen.getByText(/Polling unavailable/)).toBeTruthy();
     state.stepState = "failed";
     if (cache === "empty") state.cachedTools = [];
     view.rerender(element);
-    await retry();
-    await waitFor(() =>
-      expect(state.listTools).toHaveBeenCalledWith({
-        deploymentId: "deployment",
-      }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: /retry/i }));
+    await advancePolling();
+    expect(state.listTools).toHaveBeenCalledWith({
+      deploymentId: "deployment",
+    });
     expect(state.create).not.toHaveBeenCalled();
     expect(pending).toHaveBeenLastCalledWith(true);
     state.cachedTools = [
@@ -471,17 +483,17 @@ it.each(["empty", "partial"])(
         })),
       });
     });
-    await waitFor(() => expect(complete).toHaveBeenCalledWith("server"));
+    expect(complete).toHaveBeenCalledWith("server");
     expect(state.update).toHaveBeenCalledWith({
       slug: "example",
       updateToolsetRequestBody: { toolUrns: ["urn:tool", "urn:second"] },
     });
     expect(state.evolve).not.toHaveBeenCalled();
-    error.mockRestore();
   },
 );
 
 it("ignores a terminal tools response after cancellation", async () => {
+  vi.useFakeTimers();
   state.stepState = "idle";
   state.current = true;
   state.getDeployment.mockResolvedValue({
@@ -502,7 +514,8 @@ it("ignores a terminal tools response after cancellation", async () => {
       gateway={{ gatewayId: "gateway", createdServerId: null, complete }}
     />,
   );
-  await waitFor(() => expect(state.listTools).toHaveBeenCalled());
+  await advancePolling();
+  expect(state.listTools).toHaveBeenCalled();
   expect(pending).toHaveBeenLastCalledWith(true);
   view.unmount();
   await act(async () => {
