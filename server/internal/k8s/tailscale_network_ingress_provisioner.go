@@ -39,6 +39,8 @@ const (
 	tailscaleParentResource              = "tailscale.com/parent-resource"
 	tailscaleProxyGroupAnnotation        = "tailscale.com/proxy-group"
 	tailscaleTagsAnnotation              = "tailscale.com/tags"
+	tailscaleExposeAnnotation            = "tailscale.com/expose"
+	tailscaleHostnameAnnotation          = "tailscale.com/hostname"
 	tailscaleIngressClass                = "tailscale"
 	networkIngressAttestorPort           = 8080
 	networkIngressAttestorHealthPort     = 8081
@@ -501,6 +503,20 @@ func mergeLabels(existing, desired map[string]string) map[string]string {
 	return result
 }
 
+func mergeServiceAnnotations(existing, desired map[string]string) map[string]string {
+	result := make(map[string]string, len(existing)+len(desired))
+	for key, value := range existing {
+		switch key {
+		case tailscaleExposeAnnotation, tailscaleHostnameAnnotation, tailscaleProxyGroupAnnotation, tailscaleTagsAnnotation:
+			continue
+		default:
+			result[key] = value
+		}
+	}
+	maps.Copy(result, desired)
+	return result
+}
+
 func unstructuredIngressLabels(desired NetworkIngressDesired) map[string]any {
 	labels := ingressLabels(desired)
 	result := make(map[string]any, len(labels))
@@ -689,7 +705,7 @@ func (p *TailscaleNetworkIngressProvisioner) applyDeployment(ctx context.Context
 //nolint:exhaustruct // Kubernetes desired-state literals omit API-owned defaults and status.
 func (p *TailscaleNetworkIngressProvisioner) applyService(ctx context.Context, desired NetworkIngressDesired) error {
 	labels := ingressLabels(desired)
-	service := &corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: desired.Resources.AttestorService, Namespace: desired.Resources.Namespace, Labels: labels}, Spec: corev1.ServiceSpec{Selector: labels, Ports: []corev1.ServicePort{{Name: "http", Port: 80, TargetPort: intstr.FromString("http")}}}}
+	service := &corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: desired.Resources.AttestorService, Namespace: desired.Resources.Namespace, Labels: labels, Annotations: map[string]string{networkIngressIDLabel: desired.ID.String()}}, Spec: corev1.ServiceSpec{Selector: labels, Ports: []corev1.ServicePort{{Name: "http", Port: 80, TargetPort: intstr.FromString("http")}}}}
 	client := p.clientset.CoreV1().Services(desired.Resources.Namespace)
 	existing, err := client.Get(ctx, service.Name, metav1.GetOptions{})
 	if k8serrors.IsNotFound(err) {
@@ -703,6 +719,8 @@ func (p *TailscaleNetworkIngressProvisioner) applyService(ctx context.Context, d
 		return fmt.Errorf("refuse to adopt attestor Service: %w", err)
 	}
 	service.ResourceVersion = existing.ResourceVersion
+	// Preserve controller metadata, but keep Tailscale exposure directives authoritative.
+	service.Annotations = mergeServiceAnnotations(existing.Annotations, service.Annotations)
 	service.Spec.ClusterIP = existing.Spec.ClusterIP
 	service.Spec.ClusterIPs = existing.Spec.ClusterIPs
 	service.Spec.IPFamilies = existing.Spec.IPFamilies
