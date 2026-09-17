@@ -20,23 +20,10 @@ WHERE external_credential_id = $1::uuid
   AND deleted IS FALSE
 `
 
-// Reports whether any live external key still names the credential, which
-// refuses the delete. Run inside the delete transaction, after taking the row
-// lock.
-//
-// Soft-deleted keys do not count: a deleted key signs nothing, so it cannot be
-// broken by removing the credential that reached it.
-//
-// The database will not enforce this. external_credentials.deleted is a
-// generated column, so the soft delete is an UPDATE and
-// external_keys_external_credential_id_fkey never fires — which is exactly why
-// soft-deleting a credential today silently orphans every key behind it.
-//
-// The parameter is explicitly cast because external_keys carries its own
-// external_credential_id column, which leaves sqlc unable to infer the named
-// parameter's type from the column reference alone. The check is a single
-// EXISTS: sqlc types `EXISTS(...) OR EXISTS(...)` as pgtype.Bool, and an unset
-// value there would read as "not referenced" and fail this preflight open.
+// Live managed signing keys (identity provider connections) that a platform
+// credential backs; mutating the credential would break every one of them. Run
+// after LockExternalCredentialForUpdate: a managed key insert takes FOR KEY
+// SHARE on the credential, so it either shows up here or waits behind the lock.
 // Live managed signing keys (identity provider connections) that a platform
 // credential backs; mutating the credential would break every one of them.
 func (q *Queries) CountLiveManagedExternalKeysByCredential(ctx context.Context, externalCredentialID uuid.UUID) (int64, error) {
@@ -405,6 +392,23 @@ SELECT EXISTS (
 )
 `
 
+// Reports whether any live external key still names the credential, which
+// refuses the delete. Run inside the delete transaction, after taking the row
+// lock.
+//
+// Soft-deleted keys do not count: a deleted key signs nothing, so it cannot be
+// broken by removing the credential that reached it.
+//
+// The database will not enforce this. external_credentials.deleted is a
+// generated column, so the soft delete is an UPDATE and
+// external_keys_external_credential_id_fkey never fires — which is exactly why
+// soft-deleting a credential today silently orphans every key behind it.
+//
+// The parameter is explicitly cast because external_keys carries its own
+// external_credential_id column, which leaves sqlc unable to infer the named
+// parameter's type from the column reference alone. The check is a single
+// EXISTS: sqlc types `EXISTS(...) OR EXISTS(...)` as pgtype.Bool, and an unset
+// value there would read as "not referenced" and fail this preflight open.
 func (q *Queries) SoftDeleteExternalCredentialPreflight(ctx context.Context, externalCredentialID uuid.UUID) (bool, error) {
 	row := q.db.QueryRow(ctx, softDeleteExternalCredentialPreflight, externalCredentialID)
 	var exists bool

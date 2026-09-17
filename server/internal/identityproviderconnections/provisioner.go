@@ -263,6 +263,9 @@ func (p *Provisioner) provisionRows(ctx context.Context, params ProvisionClientP
 	if err != nil {
 		return nil, err
 	}
+	if err := requireSigningCredentialUnchanged(ctx, tq, signer); err != nil {
+		return nil, err
+	}
 
 	jq := jwksrepo.New(dbtx)
 	set, err := jq.CreateJsonWebKeySet(ctx, jwksrepo.CreateJsonWebKeySetParams{
@@ -602,6 +605,9 @@ func (p *Provisioner) publishRotationRows(ctx context.Context, params RotateClie
 	if err != nil {
 		return nil, err
 	}
+	if err := requireSigningCredentialUnchanged(ctx, tq, signer); err != nil {
+		return nil, err
+	}
 	key, err := jq.CreateJsonWebKey(ctx, jwksrepo.CreateJsonWebKeyParams{
 		OrganizationID:  params.OrganizationID,
 		JsonWebKeySetID: set.ID,
@@ -626,15 +632,19 @@ func (p *Provisioner) publishRotationRows(ctx context.Context, params RotateClie
 	}
 	published, err := repo.New(p.db).ObserveRotationPublication(ctx, repo.ObserveRotationPublicationParams{ID: key.ID, OrganizationID: params.OrganizationID})
 	if err != nil {
-		return nil, fmt.Errorf("observe committed key publication: %w", err)
+		// The key is committed and referenced: cleanup must reconcile, never disable.
+		return nil, unobservedPublicationError(params.OrganizationID, fmt.Errorf("observe committed key publication: %w", err))
 	}
 	return &RotationPendingError{ReadyAt: published.Time.Add(ManagedJWKSCacheTTL)}, nil
 }
 
 // RevokeClient withdraws every key from the connection's managed set and
 // returns how many were revoked. The client and set stay live so the JWKS
-// document serves an empty set. Works on a soft-deleted connection too.
+// document serves an empty set. Works on a soft-deleted connection too. Once
+// the rows are committed, each key's KMS version is disabled and the signer's
+// grant on it withdrawn, best-effort.
 func (p *Provisioner) RevokeClient(ctx context.Context, organizationID string, connectionID uuid.UUID) (int, error) {
+	logger := p.logger.With(attr.SlogOrganizationID(organizationID), attr.SlogIdentityProviderConnectionID(connectionID.String()))
 	q := repo.New(p.db)
 
 	if _, err := q.GetIdentityProviderConnectionIncludingDeleted(ctx, repo.GetIdentityProviderConnectionIncludingDeletedParams{
@@ -696,7 +706,59 @@ func (p *Provisioner) RevokeClient(ctx context.Context, organizationID string, c
 		return 0, fmt.Errorf("commit revocation transaction: %w", err)
 	}
 
+	if len(live) > 0 {
+		p.retireKeyMaterial(ctx, logger, organizationID, live)
+	}
+
 	return len(live), nil
+}
+
+// retireKeyMaterial disables the KMS version behind each revoked key and
+// withdraws the signer's grant on it. Rows are already committed, so every
+// failure is logged for manual cleanup rather than returned.
+func (p *Provisioner) retireKeyMaterial(ctx context.Context, logger *slog.Logger, organizationID string, revoked []jwksrepo.JsonWebKey) {
+	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), keyCleanupTimeout)
+	defer cancel()
+
+	kms, err := p.openKMSClient(cleanupCtx)
+	if err != nil {
+		logger.ErrorContext(ctx, "failed to open kms client after revocation; disable the revoked key versions by hand", attr.SlogError(err))
+		return
+	}
+	defer o11y.LogDefer(ctx, logger, "failed to close gcp kms client", func() error { return kms.Close() })
+
+	eq := extkeysrepo.New(p.db)
+	q := repo.New(p.db)
+	for _, key := range revoked {
+		row, err := eq.GetGcpKmsKey(cleanupCtx, extkeysrepo.GetGcpKmsKeyParams{
+			ID:             key.ExternalKeyID,
+			OrganizationID: conv.ToPGText(organizationID),
+		})
+		if err != nil {
+			logger.ErrorContext(ctx, "failed to load revoked key resource; disable its kms version by hand", attr.SlogError(err))
+			continue
+		}
+		attrs := []any{attr.SlogGcpKmsKeyVersion(row.GcpKmsKey.ResourceName)}
+
+		if err := kms.DisableKeyVersion(cleanupCtx, row.GcpKmsKey.ResourceName); err != nil {
+			logger.ErrorContext(ctx, "failed to disable revoked kms key version; disable it by hand", append(attrs, attr.SlogError(err))...)
+		}
+
+		keyName, err := gcpkms.KeyNameForVersion(row.GcpKmsKey.ResourceName)
+		if err != nil {
+			logger.ErrorContext(ctx, "failed to derive revoked kms key name; remove the signer grant by hand", append(attrs, attr.SlogError(err))...)
+			continue
+		}
+		// The signer is the platform credential the key was minted under.
+		signer, err := q.GetPlatformGcpIamCredentialForProvisioning(cleanupCtx, row.ExternalKey.ExternalCredentialID)
+		if err != nil || signer.GcpIamCredential.ImpersonateServiceAccount.String == "" {
+			logger.ErrorContext(ctx, "revoked key has no live signing credential; remove the signer grant by hand", append(attrs, attr.SlogError(err))...)
+			continue
+		}
+		if err := kms.RevokeSignerVerifier(cleanupCtx, keyName, signer.GcpIamCredential.ImpersonateServiceAccount.String); err != nil {
+			logger.ErrorContext(ctx, "failed to revoke signer grant on revoked kms key; remove it by hand", append(attrs, attr.SlogError(err))...)
+		}
+	}
 }
 
 // ClientJSONWebKeySetURL returns the public URL of a connection's client key
@@ -829,6 +891,10 @@ func (p *Provisioner) createManagedExternalKey(ctx context.Context, dbtx pgx.Tx,
 type signingCredential struct {
 	credentialID uuid.UUID
 	credential   gcpauth.Credential
+
+	// identity is the stored row the screening ran on, re-checked under the
+	// write transaction.
+	identity repo.GcpIamCredential
 }
 
 // resolveSigningCredential loads the platform-tier credential and screens it.
@@ -858,7 +924,34 @@ func (p *Provisioner) resolveSigningCredential(ctx context.Context, logger *slog
 		return nil, fmt.Errorf("%w: cannot assume the signing identity: %w", ErrSigningCredentialUnusable, err)
 	}
 
-	return &signingCredential{credentialID: row.ExternalCredential.ID, credential: credential}, nil
+	return &signingCredential{credentialID: row.ExternalCredential.ID, credential: credential, identity: row.GcpIamCredential}, nil
+}
+
+// requireSigningCredentialUnchanged re-reads the platform credential inside the
+// write transaction, after the managed key insert took FOR KEY SHARE on it, so
+// a platform mutation that held the row FOR UPDATE cannot commit underneath the
+// screened identity.
+func requireSigningCredentialUnchanged(ctx context.Context, q *repo.Queries, signer *signingCredential) error {
+	row, err := q.GetPlatformGcpIamCredentialForProvisioning(ctx, signer.credentialID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return fmt.Errorf("%w: platform credential was deleted during provisioning", ErrSigningCredentialUnusable)
+	case err != nil:
+		return fmt.Errorf("re-read platform signing credential: %w", err)
+	}
+	if !sameSigningIdentity(row.GcpIamCredential, signer.identity) {
+		return fmt.Errorf("%w: platform credential changed during provisioning", ErrSigningCredentialUnusable)
+	}
+
+	return nil
+}
+
+func sameSigningIdentity(a, b repo.GcpIamCredential) bool {
+	return a.ImpersonateServiceAccount == b.ImpersonateServiceAccount &&
+		a.WifPoolID == b.WifPoolID &&
+		a.WifProviderID == b.WifProviderID &&
+		a.WifProjectNumber == b.WifProjectNumber &&
+		a.SkipProjectVerification == b.SkipProjectVerification
 }
 
 // createdKey is a KMS key plus the JWK minted from its public half.
@@ -951,6 +1044,12 @@ func commitPublication(ctx context.Context, tx pgx.Tx, organizationID string) er
 		return &publicationCommitError{organizationID: organizationID, err: err}
 	}
 	return nil
+}
+
+// unobservedPublicationError classifies a failure after a successful commit
+// as an uncertain publication, so abandonKey reconciles before disabling.
+func unobservedPublicationError(organizationID string, err error) error {
+	return &publicationCommitError{organizationID: organizationID, err: err}
 }
 
 func reconcilePublication(ctx context.Context, check func(context.Context) (bool, error)) (bool, error) {

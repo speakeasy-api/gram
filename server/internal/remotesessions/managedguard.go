@@ -15,14 +15,14 @@ import (
 // requireIssuerWithoutManagedClients refuses an issuer write while a managed
 // client in the organization is registered against it.
 func requireIssuerWithoutManagedClients(ctx context.Context, logger *slog.Logger, txRepo *repo.Queries, issuerID uuid.UUID, organizationID string) error {
-	managed, err := txRepo.CountManagedRemoteSessionClientsByIssuerID(ctx, repo.CountManagedRemoteSessionClientsByIssuerIDParams{
+	managed, err := txRepo.ManagedRemoteSessionClientExistsForIssuer(ctx, repo.ManagedRemoteSessionClientExistsForIssuerParams{
 		RemoteSessionIssuerID: issuerID,
 		OrganizationID:        conv.ToPGText(organizationID),
 	})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "count managed remote session clients").LogError(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "check for managed remote session clients").LogError(ctx, logger)
 	}
-	if managed > 0 {
+	if managed {
 		return managedrows.Error("this identity provider")
 	}
 

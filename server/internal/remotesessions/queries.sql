@@ -517,14 +517,16 @@ SET deleted_at = clock_timestamp()
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
 
--- name: CountManagedRemoteSessionClientsByIssuerID :one
--- Live managed clients on the issuer; the issuer mutation guards refuse any.
-SELECT COUNT(*)
-FROM remote_session_clients
-WHERE remote_session_issuer_id = @remote_session_issuer_id
-  AND organization_id = @organization_id
-  AND identity_provider_connection_id IS NOT NULL
-  AND deleted IS FALSE;
+-- name: ManagedRemoteSessionClientExistsForIssuer :one
+-- Whether any live managed client sits on the issuer; the issuer mutation guards refuse if so.
+SELECT EXISTS (
+  SELECT 1
+  FROM remote_session_clients
+  WHERE remote_session_issuer_id = @remote_session_issuer_id
+    AND organization_id = @organization_id
+    AND identity_provider_connection_id IS NOT NULL
+    AND deleted IS FALSE
+);
 
 -- name: CountRemoteSessionClientsByIssuerID :one
 -- Every non-deleted client on an issuer, across every tenancy tier. Delete

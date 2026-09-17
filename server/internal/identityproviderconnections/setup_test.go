@@ -90,9 +90,10 @@ func createIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, orgID s
 type hookedKMSClients struct {
 	inner *provisiontest.KMSClients
 
-	mu       sync.Mutex
-	created  []string
-	disabled []string
+	mu            sync.Mutex
+	created       []string
+	disabled      []string
+	revokedGrants []string
 
 	// afterCreate runs once the key exists and before provisioning continues.
 	afterCreate func(created *gcpkms.CreatedSigningKey)
@@ -117,6 +118,13 @@ func (c *hookedKMSClients) Disabled() []string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return append([]string(nil), c.disabled...)
+}
+
+// RevokedGrants lists "<key name> <service account>" per RevokeSignerVerifier call.
+func (c *hookedKMSClients) RevokedGrants() []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([]string(nil), c.revokedGrants...)
 }
 
 type hookedProvisioningClient struct {
@@ -150,6 +158,18 @@ func (c *hookedProvisioningClient) DisableKeyVersion(ctx context.Context, versio
 
 	if err := c.ProvisioningClient.DisableKeyVersion(ctx, versionName); err != nil {
 		return fmt.Errorf("disable hooked key version: %w", err)
+	}
+
+	return nil
+}
+
+func (c *hookedProvisioningClient) RevokeSignerVerifier(ctx context.Context, keyName, serviceAccountEmail string) error {
+	c.hooks.mu.Lock()
+	c.hooks.revokedGrants = append(c.hooks.revokedGrants, keyName+" "+serviceAccountEmail)
+	c.hooks.mu.Unlock()
+
+	if err := c.ProvisioningClient.RevokeSignerVerifier(ctx, keyName, serviceAccountEmail); err != nil {
+		return fmt.Errorf("revoke hooked signer grant: %w", err)
 	}
 
 	return nil

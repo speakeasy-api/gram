@@ -1,12 +1,16 @@
 package identityproviderconnections_test
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
 
+	jose "github.com/go-jose/go-jose/v4"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -475,6 +479,8 @@ func TestRotateClient_OverlapsThenRevokes(t *testing.T) {
 	revoked, err := rotator.RevokeClient(ctx, ti.orgID, connectionID)
 	require.NoError(t, err)
 	require.Equal(t, 2, revoked)
+	require.ElementsMatch(t, append(kms.Created(), rotatingKMS.Created()...), rotatingKMS.Disabled(), "both revoked versions are disabled in kms")
+	require.Len(t, rotatingKMS.RevokedGrants(), 2)
 
 	doc, err = remotesessionsrepo.New(ti.conn).GetRemoteSessionClientJsonWebKeySetDocument(ctx, after.ClientRowID)
 	require.NoError(t, err)
@@ -610,6 +616,133 @@ func TestRevokeClient_RequiresProvisionedConnection(t *testing.T) {
 	require.ErrorIs(t, err, identityproviderconnections.ErrConnectionNotFound)
 }
 
+// Revocation retires the KMS material too: the version is disabled, the
+// signer's grant withdrawn, and the stand-in refuses to sign with it after.
+func TestRevokeClient_RetiresKeyMaterial(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestDB(t)
+
+	issuerID := createIssuer(t, ctx, ti.conn, ti.orgID, noProject, tokenEndpoint)
+	credentialID := provisiontest.CreatePlatformSigningCredential(t, ctx, ti.conn)
+	connectionID := provisiontest.CreateConnection(t, ctx, ti.conn, ti.orgID, identityproviderconnections.ProviderOkta)
+	kms := &hookedKMSClients{inner: provisiontest.NewKMSClients(t)}
+	provisioner := provisiontest.NewProvisioner(t, ti.conn, kms.Factory, testServerURL, credentialID)
+
+	_, err := provisioner.ProvisionClient(ctx, oktaParams(ti.orgID, connectionID, issuerID))
+	require.NoError(t, err)
+	require.Len(t, kms.Created(), 1)
+	require.Empty(t, kms.Disabled())
+
+	revoked, err := provisioner.RevokeClient(ctx, ti.orgID, connectionID)
+	require.NoError(t, err)
+	require.Equal(t, 1, revoked)
+
+	version := kms.Created()[0]
+	keyName, err := gcpkms.KeyNameForVersion(version)
+	require.NoError(t, err)
+	require.Equal(t, []string{version}, kms.Disabled())
+	require.Equal(t, []string{keyName + " " + provisiontest.SigningServiceAccount()}, kms.RevokedGrants())
+
+	client, err := kms.inner.Factory(ctx, nil)
+	require.NoError(t, err)
+	_, err = client.GetPublicKey(ctx, version)
+	require.ErrorIs(t, err, gcpkms.ErrKeyVersionDisabled)
+	_, err = client.AsymmetricSign(ctx, version, jose.RS256, make([]byte, 32))
+	require.ErrorIs(t, err, gcpkms.ErrKeyVersionDisabled)
+
+	again, err := provisioner.RevokeClient(ctx, ti.orgID, connectionID)
+	require.NoError(t, err)
+	require.Equal(t, 0, again)
+	require.Len(t, kms.Disabled(), 1, "a no-op revoke touches no kms material")
+}
+
+// A platform credential mutation that lands after the key exists is caught
+// under the write transaction: no row commits and the key is disabled.
+func TestProvisionClient_RefusesCredentialMutatedUnderLock(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name   string
+		mutate func(t *testing.T, ctx context.Context, conn *pgxpool.Pool, credentialID uuid.UUID)
+	}{
+		{name: "deleted", mutate: func(t *testing.T, ctx context.Context, conn *pgxpool.Pool, credentialID uuid.UUID) {
+			t.Helper()
+			_, err := extcredrepo.New(conn).SoftDeleteExternalCredential(ctx, extcredrepo.SoftDeleteExternalCredentialParams{
+				ID:             credentialID,
+				OrganizationID: pgtype.Text{String: "", Valid: false},
+				Provider:       "gcp_iam",
+			})
+			require.NoError(t, err)
+		}},
+		{name: "identity replaced", mutate: func(t *testing.T, ctx context.Context, conn *pgxpool.Pool, credentialID uuid.UUID) {
+			t.Helper()
+			_, err := extcredrepo.New(conn).UpdateGcpIamCredential(ctx, extcredrepo.UpdateGcpIamCredentialParams{
+				ImpersonateServiceAccount: conv.ToPGText("other-signer@gram-test.iam.gserviceaccount.com"),
+				WifPoolID:                 pgtype.Text{String: "", Valid: false},
+				WifProviderID:             pgtype.Text{String: "", Valid: false},
+				WifProjectNumber:          pgtype.Text{String: "", Valid: false},
+				SkipProjectVerification:   true,
+				ExternalCredentialID:      credentialID,
+			})
+			require.NoError(t, err)
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestDB(t)
+
+			issuerID := createIssuer(t, ctx, ti.conn, ti.orgID, noProject, tokenEndpoint)
+			credentialID := provisiontest.CreatePlatformSigningCredential(t, ctx, ti.conn)
+			connectionID := provisiontest.CreateConnection(t, ctx, ti.conn, ti.orgID, identityproviderconnections.ProviderOkta)
+
+			kms := &hookedKMSClients{inner: provisiontest.NewKMSClients(t)}
+			kms.afterCreate = func(*gcpkms.CreatedSigningKey) { tc.mutate(t, ctx, ti.conn, credentialID) }
+			provisioner := provisiontest.NewProvisioner(t, ti.conn, kms.Factory, testServerURL, credentialID)
+
+			_, err := provisioner.ProvisionClient(ctx, oktaParams(ti.orgID, connectionID, issuerID))
+			require.ErrorIs(t, err, identityproviderconnections.ErrSigningCredentialUnusable)
+			require.Len(t, kms.Created(), 1)
+			require.Equal(t, kms.Created(), kms.Disabled())
+			_, err = provisioner.GetManagedClient(ctx, ti.orgID, connectionID)
+			require.ErrorIs(t, err, identityproviderconnections.ErrNotProvisioned)
+			require.Empty(t, auditActions(t, ctx, ti.conn, ti.orgID))
+		})
+	}
+}
+
+// The same recheck guards the rotation publication transaction.
+func TestRotateClient_RefusesCredentialMutatedUnderLock(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestDB(t)
+
+	issuerID := createIssuer(t, ctx, ti.conn, ti.orgID, noProject, tokenEndpoint)
+	credentialID := provisiontest.CreatePlatformSigningCredential(t, ctx, ti.conn)
+	connectionID := provisiontest.CreateConnection(t, ctx, ti.conn, ti.orgID, identityproviderconnections.ProviderOkta)
+	initial := provisiontest.NewProvisioner(t, ti.conn, provisiontest.NewKMSClients(t).Factory, testServerURL, credentialID)
+	before, err := initial.ProvisionClient(ctx, oktaParams(ti.orgID, connectionID, issuerID))
+	require.NoError(t, err)
+
+	kms := &hookedKMSClients{inner: provisiontest.NewKMSClients(t)}
+	kms.afterCreate = func(*gcpkms.CreatedSigningKey) {
+		_, err := extcredrepo.New(ti.conn).SoftDeleteExternalCredential(ctx, extcredrepo.SoftDeleteExternalCredentialParams{
+			ID:             credentialID,
+			OrganizationID: pgtype.Text{String: "", Valid: false},
+			Provider:       "gcp_iam",
+		})
+		require.NoError(t, err)
+	}
+	rotator := provisiontest.NewProvisioner(t, ti.conn, kms.Factory, testServerURL, credentialID)
+
+	_, err = rotator.RotateClient(ctx, identityproviderconnections.RotateClientParams{OrganizationID: ti.orgID, ConnectionID: connectionID, Provider: identityproviderconnections.ProviderOkta})
+	require.ErrorIs(t, err, identityproviderconnections.ErrSigningCredentialUnusable)
+	require.Len(t, kms.Created(), 1)
+	require.Equal(t, kms.Created(), kms.Disabled())
+
+	keys, err := jwksrepo.New(ti.conn).ListJsonWebKeys(ctx, jwksrepo.ListJsonWebKeysParams{JsonWebKeySetID: before.JSONWebKeySetID, OrganizationID: ti.orgID, IncludeRevoked: true})
+	require.NoError(t, err)
+	require.Len(t, keys, 1, "no pending key was published")
+}
+
 // The marker the owning packages' guards read is the one written on every row.
 func TestProvisionClient_MarksEveryRow(t *testing.T) {
 	t.Parallel()
@@ -626,9 +759,9 @@ func TestProvisionClient_MarksEveryRow(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, fx.ConnectionID, deleteLock.IdentityProviderConnectionID.UUID)
 
-	managed, err := remotesessionsrepo.New(ti.conn).CountManagedRemoteSessionClientsByIssuerID(ctx, remotesessionsrepo.CountManagedRemoteSessionClientsByIssuerIDParams{RemoteSessionIssuerID: issuerID, OrganizationID: conv.ToPGText(ti.orgID)})
+	managed, err := remotesessionsrepo.New(ti.conn).ManagedRemoteSessionClientExistsForIssuer(ctx, remotesessionsrepo.ManagedRemoteSessionClientExistsForIssuerParams{RemoteSessionIssuerID: issuerID, OrganizationID: conv.ToPGText(ti.orgID)})
 	require.NoError(t, err)
-	require.Equal(t, int64(1), managed)
+	require.True(t, managed)
 }
 
 // Parallel retries converge on a single committed pending key (extra KMS keys
@@ -680,6 +813,8 @@ func TestRotateClient_ConcurrentRetriesAndRevocation(t *testing.T) {
 	revoked, err := rotator.RevokeClient(ctx, ti.orgID, connectionID)
 	require.NoError(t, err)
 	require.Equal(t, 2, revoked)
+	require.Len(t, kms.Disabled(), minted+1, "losers, the surviving pending key, and the initial key are all disabled")
+	require.Subset(t, kms.Disabled(), kms.Created())
 	_, err = rotator.RotateClient(ctx, params)
 	require.ErrorIs(t, err, identityproviderconnections.ErrNotProvisioned)
 	require.Len(t, kms.Created(), minted, "a retry must not resurrect revoked keys")

@@ -47,18 +47,35 @@ func logPlatformMutation(ctx context.Context, logger *slog.Logger, authCtx *cont
 // organization handlers always pass a real organization id.
 var platformOrganizationID = pgtype.Text{String: "", Valid: false}
 
-// requireNoLiveManagedKeys refuses a platform credential mutation while
-// managed signing keys (identity provider connections) still sign through it.
-func requireNoLiveManagedKeys(ctx context.Context, logger *slog.Logger, q *repo.Queries, id uuid.UUID) error {
-	count, err := q.CountLiveManagedExternalKeysByCredential(ctx, id)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error counting managed signing keys").LogError(ctx, logger)
-	}
-	if count > 0 {
-		return oops.E(oops.CodeConflict, nil, "credential backs %d managed signing keys; rotate them first", count)
+// requireNoLiveManagedKeys locks the platform gcp_iam credential for the rest
+// of the transaction and refuses the mutation while managed signing keys
+// (identity provider connections) still sign through it. The row lock is what
+// closes the race with provisioning: a managed key insert takes FOR KEY SHARE
+// on the credential, so it is either counted here or blocked until this
+// transaction ends and the provisioner re-checks the credential. Reports false
+// when no live platform gcp_iam credential has the id.
+func requireNoLiveManagedKeys(ctx context.Context, logger *slog.Logger, q *repo.Queries, id uuid.UUID) (bool, error) {
+	_, err := q.LockExternalCredentialForUpdate(ctx, repo.LockExternalCredentialForUpdateParams{
+		ID:             id,
+		OrganizationID: platformOrganizationID,
+		Provider:       "gcp_iam",
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return false, nil
+	case err != nil:
+		return false, oops.E(oops.CodeUnexpected, err, "error locking platform external credential").LogError(ctx, logger)
 	}
 
-	return nil
+	count, err := q.CountLiveManagedExternalKeysByCredential(ctx, id)
+	if err != nil {
+		return false, oops.E(oops.CodeUnexpected, err, "error counting managed signing keys").LogError(ctx, logger)
+	}
+	if count > 0 {
+		return true, oops.E(oops.CodeConflict, nil, "credential backs %d managed signing keys; rotate them first", count)
+	}
+
+	return true, nil
 }
 
 func (s *Service) CreateGcpIamPlatformCredential(ctx context.Context, payload *adminecgen.CreateGcpIamPlatformCredentialPayload) (*adminecgen.GcpIamCredential, error) {
@@ -175,8 +192,13 @@ func (s *Service) UpdateGcpIamPlatformCredential(ctx context.Context, payload *a
 
 	// The update is a full replace of the identity, so any managed key still
 	// signing through this credential would lose its signer.
-	if err := requireNoLiveManagedKeys(ctx, logger, q, id); err != nil {
+	found, err := requireNoLiveManagedKeys(ctx, logger, q, id)
+	if err != nil {
 		return nil, err
+	}
+	if !found {
+		// A concurrent delete between the load above and the lock.
+		return nil, oops.E(oops.CodeNotFound, nil, "platform gcp iam credential not found")
 	}
 
 	ec, err := q.UpdateExternalCredential(ctx, repo.UpdateExternalCredentialParams{
@@ -335,11 +357,15 @@ func (s *Service) DeleteGcpIamPlatformCredential(ctx context.Context, payload *a
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	if err := requireNoLiveManagedKeys(ctx, logger, repo.New(dbtx), id); err != nil {
+	// A missing (or wrong-provider) id is a no-op so deletes stay idempotent.
+	found, err := requireNoLiveManagedKeys(ctx, logger, repo.New(dbtx), id)
+	if err != nil {
 		return err
 	}
+	if !found {
+		return nil
+	}
 
-	// A missing (or wrong-provider) id is a no-op so deletes stay idempotent.
 	deleted, err := repo.New(dbtx).SoftDeleteExternalCredential(ctx, repo.SoftDeleteExternalCredentialParams{
 		ID:             id,
 		OrganizationID: platformOrganizationID,

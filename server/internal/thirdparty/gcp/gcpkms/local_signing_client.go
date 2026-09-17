@@ -15,6 +15,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sync"
 
 	jose "github.com/go-jose/go-jose/v4"
 )
@@ -36,6 +37,15 @@ var _ ProvisioningClient = (*LocalSigningClient)(nil)
 type LocalSigningClient struct {
 	alg jose.SignatureAlgorithm
 	key crypto.Signer
+
+	// disabled records versions DisableKeyVersion was called for; they refuse
+	// to sign or export, as a DISABLED version does in KMS. IAM is not modelled.
+	mu       sync.Mutex
+	disabled map[string]bool
+}
+
+func newLocalSigningClient(alg jose.SignatureAlgorithm, key crypto.Signer) *LocalSigningClient {
+	return &LocalSigningClient{alg: alg, key: key, mu: sync.Mutex{}, disabled: map[string]bool{}}
 }
 
 // NewLocalSigningClient generates a key pair for the given algorithm.
@@ -46,14 +56,14 @@ func NewLocalSigningClient(alg jose.SignatureAlgorithm) (*LocalSigningClient, er
 		if err != nil {
 			return nil, fmt.Errorf("generate local rsa key: %w", err)
 		}
-		return &LocalSigningClient{alg: alg, key: key}, nil
+		return newLocalSigningClient(alg, key), nil
 
 	case jose.ES256:
 		key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 		if err != nil {
 			return nil, fmt.Errorf("generate local ecdsa key: %w", err)
 		}
-		return &LocalSigningClient{alg: alg, key: key}, nil
+		return newLocalSigningClient(alg, key), nil
 
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrUnsupportedAlgorithm, alg)
@@ -158,7 +168,7 @@ func readLocalSigningClient(alg jose.SignatureAlgorithm, path string) (*LocalSig
 	if rsaKey, ok := signer.Public().(*rsa.PublicKey); ok && rsaKey.N.BitLen() < rsaLocalKeyBits {
 		return nil, fmt.Errorf("persistent local %s key must be at least %d bits", alg, rsaLocalKeyBits)
 	}
-	return &LocalSigningClient{alg: alg, key: signer}, nil
+	return newLocalSigningClient(alg, signer), nil
 }
 
 // GetPublicKey returns the generated key pair's public half and the algorithm
@@ -175,7 +185,7 @@ func (c *LocalSigningClient) GetPublicKey(ctx context.Context, resourceName stri
 		return nil, fmt.Errorf("get local %s public key: %w", c.alg, err)
 	}
 
-	if err := ValidateKeyVersionName(resourceName); err != nil {
+	if err := c.requireEnabled(resourceName); err != nil {
 		return nil, err
 	}
 
@@ -214,7 +224,7 @@ func (c *LocalSigningClient) AsymmetricSign(ctx context.Context, resourceName st
 		return nil, fmt.Errorf("sign digest with local %s key: %w", c.alg, err)
 	}
 
-	if err := ValidateKeyVersionName(resourceName); err != nil {
+	if err := c.requireEnabled(resourceName); err != nil {
 		return nil, err
 	}
 
@@ -276,7 +286,7 @@ func (c *LocalSigningClient) GrantSignerVerifier(ctx context.Context, keyName, s
 	return nil
 }
 
-// DisableKeyVersion validates the name; the in-process key stays usable.
+// RevokeSignerVerifier validates its inputs; there is no IAM in-process.
 func (c *LocalSigningClient) RevokeSignerVerifier(ctx context.Context, keyName, serviceAccountEmail string) error {
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("revoke local signer verifier: %w", err)
@@ -291,12 +301,36 @@ func (c *LocalSigningClient) RevokeSignerVerifier(ctx context.Context, keyName, 
 	return nil
 }
 
+// DisableKeyVersion marks the version disabled: later signing and public key
+// reads for it fail, as they would against a DISABLED version in KMS.
 func (c *LocalSigningClient) DisableKeyVersion(ctx context.Context, versionName string) error {
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("disable local key version: %w", err)
 	}
+	if err := ValidateKeyVersionName(versionName); err != nil {
+		return err
+	}
 
-	return ValidateKeyVersionName(versionName)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.disabled[versionName] = true
+
+	return nil
+}
+
+// requireEnabled validates the version name and refuses a disabled version.
+func (c *LocalSigningClient) requireEnabled(versionName string) error {
+	if err := ValidateKeyVersionName(versionName); err != nil {
+		return err
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.disabled[versionName] {
+		return fmt.Errorf("%w: %s", ErrKeyVersionDisabled, versionName)
+	}
+
+	return nil
 }
 
 // Close is a no-op: the key lives in memory and there is no connection to

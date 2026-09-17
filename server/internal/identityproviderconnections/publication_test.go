@@ -22,6 +22,17 @@ func (tx *lostCommitResponse) Commit(context.Context) error {
 	return io.ErrUnexpectedEOF
 }
 
+// A failure after COMMIT succeeded is an uncertain publication: the key is
+// referenced, so cleanup must reconcile rather than disable it.
+func TestUnobservedPublicationIsUncertain(t *testing.T) {
+	t.Parallel()
+	err := unobservedPublicationError("test-org", io.ErrUnexpectedEOF)
+	var uncertain *publicationCommitError
+	require.ErrorAs(t, err, &uncertain)
+	require.Equal(t, "test-org", uncertain.organizationID)
+	require.ErrorIs(t, err, io.ErrUnexpectedEOF)
+}
+
 func TestPublicationCommitReconciliation(t *testing.T) {
 	t.Parallel()
 	tx := &lostCommitResponse{}

@@ -142,3 +142,13 @@ func validateCreateSigningKeyParams(params CreateSigningKeyParams) error {
 func signingKeyVersionName(keyName string) string {
 	return keyName + "/cryptoKeyVersions/1"
 }
+
+// KeyNameForVersion returns the crypto key a version name belongs to, which is
+// what IAM bindings attach to.
+func KeyNameForVersion(versionName string) (string, error) {
+	if err := ValidateKeyVersionName(versionName); err != nil {
+		return "", err
+	}
+
+	return versionName[:strings.LastIndex(versionName, "/cryptoKeyVersions/")], nil
+}

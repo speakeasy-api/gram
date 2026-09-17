@@ -55,6 +55,9 @@ type fakeKeyRing struct {
 
 	// createUnavailable persists the key but answers CreateCryptoKey Unavailable.
 	createUnavailable bool
+
+	// createDenied answers CreateCryptoKey PermissionDenied without persisting.
+	createDenied bool
 }
 
 func newFakeKeyRing() *fakeKeyRing {
@@ -69,6 +72,9 @@ func (f *fakeKeyRing) CreateCryptoKey(_ context.Context, req *kmspb.CreateCrypto
 	defer f.mu.Unlock()
 
 	name := req.GetParent() + "/cryptoKeys/" + req.GetCryptoKeyId()
+	if f.createDenied {
+		return nil, status.Error(codes.PermissionDenied, "caller lacks cloudkms.cryptoKeys.create") //nolint:wrapcheck // the fake speaks gRPC status codes, as GCP does
+	}
 	if f.createUnavailable {
 		// The key lands but every response is lost, including gapic retries.
 		f.keys[name] = req
@@ -463,6 +469,25 @@ func TestCreateSigningKey_ReconcilesUncertainCreate(t *testing.T) {
 	require.Equal(t, []string{testKeyRing + "/cryptoKeys/okta-lost/cryptoKeyVersions/1"}, fake.disabledVersions())
 }
 
+// A permanent create failure is surfaced as-is: nothing landed, so nothing is
+// reconciled or disabled.
+func TestCreateSigningKey_SurfacesPermanentCreateErrors(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeKeyRing()
+	fake.createDenied = true
+	client := newFakeProvisioningClient(t, fake, fake)
+
+	_, err := client.CreateSigningKey(t.Context(), CreateSigningKeyParams{KeyRing: testKeyRing, KeyID: "okta-denied", Algorithm: jose.RS256})
+	require.Error(t, err)
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+	require.ErrorContains(t, err, "create gcp kms crypto key")
+	require.NotContains(t, err.Error(), "may exist")
+	require.NotContains(t, err.Error(), "requires reconciliation")
+	require.Empty(t, fake.disabledVersions())
+	require.Zero(t, fake.versionReads, "no reconciliation read after a definite failure")
+}
+
 func TestGrantSignerVerifier_RejectsRingAndVersionNames(t *testing.T) {
 	t.Parallel()
 
@@ -493,6 +518,20 @@ func TestLocalSigningClient_CreateSigningKeyNamesItsKey(t *testing.T) {
 	require.NoError(t, client.GrantSignerVerifier(t.Context(), created.KeyName, "sa@p.iam.gserviceaccount.com"))
 	require.NoError(t, client.DisableKeyVersion(t.Context(), created.KeyVersionName))
 	require.ErrorIs(t, client.DisableKeyVersion(t.Context(), created.KeyName), ErrInvalidResourceName)
+
+	// A disabled version neither signs nor exports, as in KMS; other versions still do.
+	_, err = client.GetPublicKey(t.Context(), created.KeyVersionName)
+	require.ErrorIs(t, err, ErrKeyVersionDisabled)
+	_, err = client.AsymmetricSign(t.Context(), created.KeyVersionName, jose.RS256, make([]byte, 32))
+	require.ErrorIs(t, err, ErrKeyVersionDisabled)
+	_, err = client.GetPublicKey(t.Context(), testKeyRing+"/cryptoKeys/okta-other/cryptoKeyVersions/1")
+	require.NoError(t, err)
+
+	keyName, err := KeyNameForVersion(created.KeyVersionName)
+	require.NoError(t, err)
+	require.Equal(t, created.KeyName, keyName)
+	_, err = KeyNameForVersion(created.KeyName)
+	require.ErrorIs(t, err, ErrInvalidResourceName)
 
 	_, err = client.CreateSigningKey(t.Context(), CreateSigningKeyParams{KeyRing: testKeyRing, KeyID: "okta-ec", Algorithm: jose.ES256})
 	require.ErrorIs(t, err, ErrUnsupportedAlgorithm, "the local client holds one algorithm")

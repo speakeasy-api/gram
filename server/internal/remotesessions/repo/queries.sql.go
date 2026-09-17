@@ -472,28 +472,6 @@ func (q *Queries) CountActiveRemoteSessionsByClientID(ctx context.Context, remot
 	return count, err
 }
 
-const countManagedRemoteSessionClientsByIssuerID = `-- name: CountManagedRemoteSessionClientsByIssuerID :one
-SELECT COUNT(*)
-FROM remote_session_clients
-WHERE remote_session_issuer_id = $1
-  AND organization_id = $2
-  AND identity_provider_connection_id IS NOT NULL
-  AND deleted IS FALSE
-`
-
-type CountManagedRemoteSessionClientsByIssuerIDParams struct {
-	RemoteSessionIssuerID uuid.UUID
-	OrganizationID        pgtype.Text
-}
-
-// Live managed clients on the issuer; the issuer mutation guards refuse any.
-func (q *Queries) CountManagedRemoteSessionClientsByIssuerID(ctx context.Context, arg CountManagedRemoteSessionClientsByIssuerIDParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countManagedRemoteSessionClientsByIssuerID, arg.RemoteSessionIssuerID, arg.OrganizationID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
 const countRemoteSessionClientUserSessionIssuerBindings = `-- name: CountRemoteSessionClientUserSessionIssuerBindings :one
 SELECT COUNT(remote_session_client_id)
 FROM remote_session_client_user_session_issuers
@@ -6695,6 +6673,30 @@ func (q *Queries) LockRemoteSessionIssuerForMetadataRefresh(ctx context.Context,
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const managedRemoteSessionClientExistsForIssuer = `-- name: ManagedRemoteSessionClientExistsForIssuer :one
+SELECT EXISTS (
+  SELECT 1
+  FROM remote_session_clients
+  WHERE remote_session_issuer_id = $1
+    AND organization_id = $2
+    AND identity_provider_connection_id IS NOT NULL
+    AND deleted IS FALSE
+)
+`
+
+type ManagedRemoteSessionClientExistsForIssuerParams struct {
+	RemoteSessionIssuerID uuid.UUID
+	OrganizationID        pgtype.Text
+}
+
+// Whether any live managed client sits on the issuer; the issuer mutation guards refuse if so.
+func (q *Queries) ManagedRemoteSessionClientExistsForIssuer(ctx context.Context, arg ManagedRemoteSessionClientExistsForIssuerParams) (bool, error) {
+	row := q.db.QueryRow(ctx, managedRemoteSessionClientExistsForIssuer, arg.RemoteSessionIssuerID, arg.OrganizationID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const markRemoteSessionClientUpstreamRejected = `-- name: MarkRemoteSessionClientUpstreamRejected :execrows
