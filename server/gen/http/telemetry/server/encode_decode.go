@@ -9242,6 +9242,8 @@ func marshalTelemetryToolUsageTotalsToToolUsageTotalsResponseBody(v *telemetry.T
 		SuccessCount:  v.SuccessCount,
 		FailureCount:  v.FailureCount,
 		FailureRate:   v.FailureRate,
+		BlockedCount:  v.BlockedCount,
+		BlockedRate:   v.BlockedRate,
 		UniqueTools:   v.UniqueTools,
 		UniqueUsers:   v.UniqueUsers,
 		UniqueTargets: v.UniqueTargets,
@@ -9299,6 +9301,8 @@ func marshalTelemetryToolUsageTargetTimeSeriesPointToToolUsageTargetTimeSeriesPo
 		TargetLabel:   v.TargetLabel,
 		EventCount:    v.EventCount,
 		FailureCount:  v.FailureCount,
+		BlockedCount:  v.BlockedCount,
+		PendingCount:  v.PendingCount,
 	}
 
 	return res

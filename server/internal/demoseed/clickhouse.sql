@@ -116,10 +116,13 @@ SELECT
     '{"gram.tool.urn":"tools:http:acme:', tool_name, '"',
     ',"gram.tool.name":"', tool_name, '"',
     ',"gram.toolset.slug":"', if(i % 5 = 0, 'acme-ops', 'acme-support-tools'), '"',
-    ',"http.response.status_code":', toString(if(
-        (tool_name = 'process_refund' AND day_off <= 2 AND cityHash64('err', i, k) % 2 = 0)
-        OR cityHash64('errbg', i, k) % 30 = 0, 500, 200)),
+    ',"http.response.status_code":', toString(if(failed, 500, 200)),
     ',"http.server.request.duration":', toString(round(0.05 + (cityHash64(i, k) % 200) / 100, 3)),
+    -- The arguments and the result, as a real tool call records them. Without
+    -- these the log detail sheet has nothing to show but the tool's name, and
+    -- reports the payload as withheld by tool_io_logs.
+    ',"gen_ai.tool.call.arguments":"', tool_args, '"',
+    ',"gen_ai.tool.call.result":"', tool_result, '"',
     ',"gen_ai.conversation.id":"', chat_id, '"',
     ',"gram.project.id":"', toString(proj), '"',
     ',"user.email":"', email, '"',
@@ -210,6 +213,52 @@ FROM (
         1 + toUInt32(cityHash64('toolslot', number, k) % 16))) AS tool_name,
     arrayElement([0, 0, 1, 1, 1, 2, 3, 3, 3, 3, 4, 5, 5, 7, 8, 11],
                  1 + reinterpretAsUInt8(unhex(substring(h, 1, 2))) % 16) AS day_off,
+    -- One predicate for the status code and the result payload: a call that
+    -- returns 500 must not also carry a success body.
+    (tool_name = 'process_refund' AND day_off <= 2 AND cityHash64('err', i, k) % 2 = 0)
+      OR cityHash64('errbg', i, k) % 30 = 0 AS failed,
+    -- Short per-call ids so two calls to the same tool do not read as one
+    -- request replayed.
+    substring(lower(hex(MD5(concat('gram-demo-toolio-', toString(i), '-', toString(k))))), 1, 8) AS io_id,
+    toUInt32(cityHash64('iomag', i, k) % 900) AS io_mag,
+    -- Arguments and result are written per tool. Their JSON quotes are escaped
+    -- because these land INSIDE the attributes JSON document, as string values.
+    multiIf(
+      tool_name = 'search_logs',
+        '{\\"query\\":\\"level:error service:payments-api\\",\\"limit\\":100}',
+      tool_name = 'get_metrics',
+        '{\\"metric\\":\\"http.server.request.duration\\",\\"service\\":\\"payments-api\\",\\"window\\":\\"15m\\"}',
+      tool_name = 'query_db',
+        '{\\"sql\\":\\"SELECT id, status FROM refunds WHERE created_at > now() - interval 1 day LIMIT 50\\"}',
+      tool_name = 'get_customer',
+        concat('{\\"customer_id\\":\\"cus_', io_id, '\\"}'),
+      tool_name = 'list_deploys',
+        '{\\"service\\":\\"payments-api\\",\\"limit\\":10}',
+      tool_name = 'process_refund',
+        concat('{\\"order_id\\":\\"ord_', io_id, '\\",\\"amount_cents\\":', toString(1200 + io_mag * 7), ',\\"reason\\":\\"duplicate_charge\\"}'),
+      tool_name = 'fetch_traces',
+        concat('{\\"trace_id\\":\\"', io_id, io_id, '\\",\\"service\\":\\"payments-api\\"}'),
+      '{\\"service\\":\\"payments-api\\"}') AS tool_args,
+    multiIf(
+      failed AND tool_name = 'process_refund',
+        concat('{\\"error\\":\\"refund declined by the payment processor\\",\\"code\\":\\"processor_declined\\",\\"order_id\\":\\"ord_', io_id, '\\"}'),
+      failed,
+        concat('{\\"error\\":\\"upstream returned 500 after ', toString(1 + io_mag % 3), ' retries\\",\\"code\\":\\"upstream_error\\"}'),
+      tool_name = 'search_logs',
+        concat('{\\"matches\\":', toString(io_mag), ',\\"truncated\\":', if(io_mag > 500, 'true', 'false'), '}'),
+      tool_name = 'get_metrics',
+        concat('{\\"p50_ms\\":', toString(20 + io_mag % 80), ',\\"p95_ms\\":', toString(200 + io_mag), ',\\"error_rate\\":0.0', toString(io_mag % 9), '}'),
+      tool_name = 'query_db',
+        concat('{\\"rows\\":', toString(io_mag % 50), ',\\"elapsed_ms\\":', toString(8 + io_mag % 120), '}'),
+      tool_name = 'get_customer',
+        concat('{\\"customer_id\\":\\"cus_', io_id, '\\",\\"plan\\":\\"enterprise\\",\\"status\\":\\"active\\"}'),
+      tool_name = 'list_deploys',
+        concat('{\\"deploys\\":', toString(1 + io_mag % 9), ',\\"latest\\":\\"v2026.9.', toString(io_mag % 40), '\\"}'),
+      tool_name = 'process_refund',
+        concat('{\\"refund_id\\":\\"ref_', io_id, '\\",\\"status\\":\\"succeeded\\",\\"amount_cents\\":', toString(1200 + io_mag * 7), '}'),
+      tool_name = 'fetch_traces',
+        concat('{\\"spans\\":', toString(3 + io_mag % 40), ',\\"root_service\\":\\"payments-api\\"}'),
+      concat('{\\"status\\":\\"healthy\\",\\"checks_passed\\":', toString(4 + io_mag % 5), '}')) AS tool_result,
     arrayElement([8, 9, 9, 10, 10, 11, 11, 13, 14, 14, 15, 16, 16, 17, 18, 20],
                  1 + reinterpretAsUInt8(unhex(substring(h, 3, 2))) % 16) AS hour_off,
     toDateTime64(toStartOfDay(now()), 9)

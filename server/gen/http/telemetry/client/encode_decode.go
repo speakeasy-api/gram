@@ -9599,6 +9599,8 @@ func unmarshalToolUsageTotalsResponseBodyToTelemetryToolUsageTotals(v *ToolUsage
 		SuccessCount:  *v.SuccessCount,
 		FailureCount:  *v.FailureCount,
 		FailureRate:   *v.FailureRate,
+		BlockedCount:  *v.BlockedCount,
+		BlockedRate:   *v.BlockedRate,
 		UniqueTools:   *v.UniqueTools,
 		UniqueUsers:   *v.UniqueUsers,
 		UniqueTargets: *v.UniqueTargets,
@@ -9656,6 +9658,8 @@ func unmarshalToolUsageTargetTimeSeriesPointResponseBodyToTelemetryToolUsageTarg
 		TargetLabel:   *v.TargetLabel,
 		EventCount:    *v.EventCount,
 		FailureCount:  *v.FailureCount,
+		BlockedCount:  *v.BlockedCount,
+		PendingCount:  *v.PendingCount,
 	}
 
 	return res

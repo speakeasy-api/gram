@@ -1,0 +1,176 @@
+import { describe, expect, it } from "vitest";
+import {
+  OBSERVE_FILTER_PARAMS,
+  buildObserveHref,
+  carryObserveParams,
+} from "./observeDeepLink";
+
+const LOGS = "/org/project/logs";
+
+// Written out rather than read from OBSERVE_FILTER_PARAMS: a test that builds
+// both its fixture and its expectation from the constant passes just as
+// happily when a param is deleted from it, which is the regression that
+// silently drops a filter on the way between the two pages.
+const REQUIRED_SHARED_PARAMS = [
+  "server",
+  "user",
+  "source",
+  "role",
+  "hookTypes",
+  "status",
+  "account_type",
+  "client",
+  "range",
+  "from",
+  "to",
+  "label",
+];
+
+describe("carryObserveParams", () => {
+  it("carries every shared filter param", () => {
+    const current = new URLSearchParams();
+    for (const key of REQUIRED_SHARED_PARAMS) current.set(key, `v-${key}`);
+
+    const carried = carryObserveParams(current);
+
+    for (const key of REQUIRED_SHARED_PARAMS) {
+      expect(carried.get(key)).toBe(`v-${key}`);
+    }
+  });
+
+  it("keeps the shared param list and this test in step", () => {
+    expect([...OBSERVE_FILTER_PARAMS].sort()).toEqual(
+      [...REQUIRED_SHARED_PARAMS].sort(),
+    );
+  });
+
+  it("leaves page-local search behind", () => {
+    const current = new URLSearchParams({
+      server: "hosted:payments",
+      q: "timeout",
+      af: "gram.tool.name:eq:charge",
+    });
+
+    const carried = carryObserveParams(current);
+
+    expect(carried.get("server")).toBe("hosted:payments");
+    expect(carried.get("q")).toBeNull();
+    expect(carried.get("af")).toBeNull();
+  });
+});
+
+describe("buildObserveHref", () => {
+  it("keeps the window and adds the row's server", () => {
+    const current = new URLSearchParams({ range: "7d", user: "a@example.com" });
+
+    const href = buildObserveHref(LOGS, current, {
+      target: { type: "hosted", id: "payments" },
+    });
+    const params = new URLSearchParams(href.split("?")[1]);
+
+    expect(params.get("range")).toBe("7d");
+    expect(params.get("user")).toBe("a@example.com");
+    expect(params.get("server")).toBe("hosted:payments");
+  });
+
+  it("appends to an existing server selection rather than replacing it", () => {
+    const current = new URLSearchParams({ server: "hosted:payments" });
+
+    const href = buildObserveHref(LOGS, current, {
+      target: { type: "gateway", id: "gw-1" },
+    });
+
+    expect(new URLSearchParams(href.split("?")[1]).get("server")).toBe(
+      "hosted:payments,gateway:gw-1",
+    );
+  });
+
+  it("does not duplicate a server already selected", () => {
+    const current = new URLSearchParams({ server: "hosted:payments" });
+
+    const href = buildObserveHref(LOGS, current, {
+      target: { type: "hosted", id: "payments" },
+    });
+
+    expect(new URLSearchParams(href.split("?")[1]).get("server")).toBe(
+      "hosted:payments",
+    );
+  });
+
+  it("narrows skill rows by type, since they have no server identity", () => {
+    const href = buildObserveHref(LOGS, new URLSearchParams(), {
+      targetTypes: ["skill"],
+    });
+
+    expect(new URLSearchParams(href.split("?")[1]).get("hookTypes")).toBe(
+      "skill",
+    );
+  });
+
+  it("carries an errors-panel row as a status filter", () => {
+    const href = buildObserveHref(LOGS, new URLSearchParams({ range: "1d" }), {
+      target: { type: "hosted", id: "payments" },
+      statuses: ["error"],
+    });
+    const params = new URLSearchParams(href.split("?")[1]);
+
+    expect(params.get("status")).toBe("error");
+    expect(params.get("server")).toBe("hosted:payments");
+    expect(params.get("range")).toBe("1d");
+  });
+
+  it("sends a tool name through af, the only encoding the payload supports", () => {
+    const href = buildObserveHref(LOGS, new URLSearchParams(), {
+      toolName: "charge",
+    });
+
+    // Spelled out rather than built from TOOL_NAME_ATTRIBUTE_PATH: this is
+    // the wire format a bookmarked link depends on, so renaming the constant
+    // must fail here rather than quietly agree with itself.
+    expect(new URLSearchParams(href.split("?")[1]).get("af")).toBe(
+      "gram.tool.name:eq:charge",
+    );
+  });
+
+  it("merges a tool chip into chips the reader already had", () => {
+    const current = new URLSearchParams({ af: "user.region:eq:us-east-1" });
+
+    const href = buildObserveHref(LOGS, current, { toolName: "charge" });
+    const af = new URLSearchParams(href.split("?")[1]).get("af") ?? "";
+
+    expect(af).toContain("user.region:eq:us-east-1");
+    expect(af).toContain("gram.tool.name:eq:charge");
+  });
+
+  it("replaces a tool chip when the reader drills into a second tool", () => {
+    const current = new URLSearchParams({ af: "gram.tool.name:eq:refund" });
+
+    const href = buildObserveHref(LOGS, current, { toolName: "charge" });
+    const af = new URLSearchParams(href.split("?")[1]).get("af") ?? "";
+
+    // Two eq chips on one path would AND to nothing, so the new tool wins.
+    expect(af).toBe("gram.tool.name:eq:charge");
+  });
+
+  it("replaces the reader's status rather than adding to it", () => {
+    const current = new URLSearchParams({ status: "success" });
+
+    const href = buildObserveHref(LOGS, current, { statuses: ["error"] });
+
+    expect(new URLSearchParams(href.split("?")[1]).get("status")).toBe("error");
+  });
+
+  it("carries a client key so client panels can drill in", () => {
+    const href = buildObserveHref(LOGS, new URLSearchParams(), {
+      clientKey: "claude code",
+    });
+
+    expect(new URLSearchParams(href.split("?")[1]).get("client")).toBe(
+      "claude code",
+    );
+  });
+
+  it("returns the bare path when nothing is applied", () => {
+    expect(buildObserveHref(LOGS, new URLSearchParams())).toBe(LOGS);
+  });
+});

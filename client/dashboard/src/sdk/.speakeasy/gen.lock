@@ -6808,7 +6808,7 @@ examples:
   getToolUsageClientToolBreakdown:
     speakeasy-default-get-tool-usage-client-tool-breakdown:
       requestBody:
-        application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
+        application/json: {"filters": [{"operator": "eq", "path": "@user.region"}], "from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
       responses:
         "200":
           application/json: {"client_tool_breakdown": []}
@@ -6819,7 +6819,7 @@ examples:
   getToolUsageClients:
     speakeasy-default-get-tool-usage-clients:
       requestBody:
-        application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
+        application/json: {"filters": [{"operator": "eq", "path": "@user.region"}], "from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
       responses:
         "200":
           application/json: {"clients": []}
@@ -6841,10 +6841,10 @@ examples:
   getToolUsageSummary:
     speakeasy-default-get-tool-usage-summary:
       requestBody:
-        application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
+        application/json: {"filters": [{"operator": "eq", "path": "@user.region"}], "from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
       responses:
         "200":
-          application/json: {"client_tool_breakdown": [], "clients": [{"client_key": "<value>", "client_label": "<value>", "event_count": 655679, "failure_count": 908450, "failure_rate": 3743.13, "success_count": 540045, "unique_tools": 728520}], "target_time_series": [], "target_tool_breakdown": [{"event_count": 655679, "failure_count": 908450, "failure_rate": 3743.13, "success_count": 540045, "target_id": "<id>", "target_kind": "skill", "target_label": "<value>", "target_type": "hosted_mcp_server", "tool_name": "<value>"}], "targets": [], "totals": {"event_count": 497777, "failure_count": 36101, "failure_rate": 2345.24, "success_count": 527861, "unique_targets": 37301, "unique_tools": 472763, "unique_users": 968692}, "user_time_series": [], "users": [], "users_by_target": []}
+          application/json: {"client_tool_breakdown": [], "clients": [{"client_key": "<value>", "client_label": "<value>", "event_count": 655679, "failure_count": 908450, "failure_rate": 3743.13, "success_count": 540045, "unique_tools": 728520}], "target_time_series": [], "target_tool_breakdown": [{"event_count": 655679, "failure_count": 908450, "failure_rate": 3743.13, "success_count": 540045, "target_id": "<id>", "target_kind": "skill", "target_label": "<value>", "target_type": "hosted_mcp_server", "tool_name": "<value>"}], "targets": [], "totals": {"blocked_count": 124636, "blocked_rate": 9978.68, "event_count": 497777, "failure_count": 36101, "failure_rate": 2345.24, "success_count": 527861, "unique_targets": 37301, "unique_tools": 472763, "unique_users": 968692}, "user_time_series": [], "users": [], "users_by_target": []}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -6852,7 +6852,7 @@ examples:
   getToolUsageTargetTimeSeries:
     speakeasy-default-get-tool-usage-target-time-series:
       requestBody:
-        application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
+        application/json: {"filters": [{"operator": "eq", "path": "@user.region"}], "from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
       responses:
         "200":
           application/json: {"target_time_series": []}
@@ -6863,7 +6863,7 @@ examples:
   getToolUsageTargetToolBreakdown:
     speakeasy-default-get-tool-usage-target-tool-breakdown:
       requestBody:
-        application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
+        application/json: {"filters": [{"operator": "eq", "path": "@user.region"}], "from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
       responses:
         "200":
           application/json: {"target_tool_breakdown": []}
@@ -6874,7 +6874,7 @@ examples:
   getToolUsageTargets:
     speakeasy-default-get-tool-usage-targets:
       requestBody:
-        application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
+        application/json: {"filters": [{"operator": "eq", "path": "@user.region"}], "from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
       responses:
         "200":
           application/json: {"targets": [{"event_count": 979213, "failure_count": 989908, "failure_rate": 765.08, "success_count": 975140, "target_id": "<id>", "target_kind": "local_tools", "target_label": "<value>", "target_type": "tunneled_mcp_server", "unique_tools": 208855}]}
@@ -6885,10 +6885,10 @@ examples:
   getToolUsageTotals:
     speakeasy-default-get-tool-usage-totals:
       requestBody:
-        application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
+        application/json: {"filters": [{"operator": "eq", "path": "@user.region"}], "from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
       responses:
         "200":
-          application/json: {"totals": {"event_count": 279655, "failure_count": 247635, "failure_rate": 7317.76, "success_count": 145330, "unique_targets": 634848, "unique_tools": 940744, "unique_users": 975569}}
+          application/json: {"totals": {"blocked_count": 279655, "blocked_rate": 2476.35, "event_count": 279655, "failure_count": 247635, "failure_rate": 7317.76, "success_count": 145330, "unique_targets": 634848, "unique_tools": 940744, "unique_users": 975569}}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -6896,7 +6896,7 @@ examples:
   getToolUsageUserTimeSeries:
     speakeasy-default-get-tool-usage-user-time-series:
       requestBody:
-        application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
+        application/json: {"filters": [{"operator": "eq", "path": "@user.region"}], "from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
       responses:
         "200":
           application/json: {"user_time_series": []}
@@ -6907,7 +6907,7 @@ examples:
   getToolUsageUsers:
     speakeasy-default-get-tool-usage-users:
       requestBody:
-        application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
+        application/json: {"filters": [{"operator": "eq", "path": "@user.region"}], "from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
       responses:
         "200":
           application/json: {"users": [{"event_count": 702889, "failure_count": 274440, "failure_rate": 9768.86, "success_count": 218340, "unique_tools": 224466, "user_key": "<value>", "user_kind": "email", "user_label": "<value>"}]}
@@ -6918,7 +6918,7 @@ examples:
   getToolUsageUsersByTarget:
     speakeasy-default-get-tool-usage-users-by-target:
       requestBody:
-        application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
+        application/json: {"filters": [{"operator": "eq", "path": "@user.region"}], "from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
       responses:
         "200":
           application/json: {"users_by_target": []}

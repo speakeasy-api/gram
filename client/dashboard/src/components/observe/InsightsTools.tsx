@@ -2,7 +2,6 @@ import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { Page } from "@/components/page-layout";
 import { InsightsConfig } from "@/components/insights-dock";
 import { ErrorAlert } from "@/components/ui/Alert";
-import { Skeleton } from "@/components/ui/Skeleton";
 import { Button } from "@/components/ui/Button";
 import { Spinner } from "@/components/ui/Spinner";
 import {
@@ -11,53 +10,29 @@ import {
   type ObserveTypeFilterValue,
 } from "@/components/observe/ObserveFilterBar";
 import {
-  SERVER_FILTER_PATH,
   TOOL_USAGE_DEFAULT_TYPES,
   TOOL_USAGE_TYPE_OPTIONS,
   TOOL_USAGE_VALID_TYPES,
-  USER_EMAIL_FILTER_PATH,
   buildServerOptionGroups,
-  encodeGatewayServerFilter,
-  encodeHostedServerFilter,
-  encodeShadowServerFilter,
-  parseTargetFilter,
-  selectedHookSources,
-  selectedTargetValues,
   selectedUserEmails,
-  toTargetTypes,
 } from "@/components/observe/observeTargetFilters";
 import { useSlugs } from "@/contexts/Sdk";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { useServerNameMappings } from "@/hooks/useServerNameMappings";
-import { cn } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
-import { getPresetRange, type DateRangePreset } from "@/elements";
+import { type DateRangePreset } from "@/elements";
+import { telemetryGetToolUsageClients } from "@gram/client/funcs/telemetryGetToolUsageClients";
 import { telemetryGetToolUsageFilterOptions } from "@gram/client/funcs/telemetryGetToolUsageFilterOptions";
 import { telemetryGetToolUsageTargets } from "@gram/client/funcs/telemetryGetToolUsageTargets";
 import { telemetryGetToolUsageTargetTimeSeries } from "@gram/client/funcs/telemetryGetToolUsageTargetTimeSeries";
 import { telemetryGetToolUsageTargetToolBreakdown } from "@gram/client/funcs/telemetryGetToolUsageTargetToolBreakdown";
 import { telemetryGetToolUsageTotals } from "@gram/client/funcs/telemetryGetToolUsageTotals";
 import { telemetryGetToolUsageUsers } from "@gram/client/funcs/telemetryGetToolUsageUsers";
-import { telemetryGetToolUsageUsersByTarget } from "@gram/client/funcs/telemetryGetToolUsageUsersByTarget";
-import { telemetryGetToolUsageUserTimeSeries } from "@gram/client/funcs/telemetryGetToolUsageUserTimeSeries";
 import type { GetToolUsageSummaryResult } from "@gram/client/models/components/gettoolusagesummaryresult.js";
-import type { ToolUsageTargetTimeSeriesPoint } from "@gram/client/models/components/toolusagetargettimeseriespoint.js";
-import type { ToolUsageTargetToolBreakdownRow } from "@gram/client/models/components/toolusagetargettoolbreakdownrow.js";
-import type { ToolUsageUsersByTargetRow } from "@gram/client/models/components/toolusageusersbytargetrow.js";
-import type { ToolUsageUserSummary } from "@gram/client/models/components/toolusageusersummary.js";
-import type { ToolUsageUserTimeSeriesPoint } from "@gram/client/models/components/toolusageusertimeseriespoint.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { unwrapAsync } from "@gram/client/types/fp";
-import { Badge } from "@/components/ui/Badge";
 import { Icon } from "@/components/ui/Icon";
-import { ChartCard } from "@/components/chart/ChartCard";
-import { ACCENT_RED, TOOLTIP } from "@/components/chart/palette";
-import { useSeriesColors } from "@/components/chart/useSeriesColors";
-import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
-import { formatChartZoomRangeLabel } from "@/components/chart/chartUtils";
-import { useChartZoom } from "@/components/chart/useChartZoom";
-import { useExpandedChart } from "@/hooks/useExpandedChart";
 import { useQuery } from "@tanstack/react-query";
 import {
   BarElement,
@@ -70,24 +45,16 @@ import {
   Tooltip,
   Legend,
   Chart as ChartJS,
-  type TooltipItem,
-  type ChartOptions,
-  type Scale,
 } from "chart.js";
 import ZoomPlugin from "chartjs-plugin-zoom";
-import { Bar } from "react-chartjs-2";
 import { Settings } from "lucide-react";
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { Link } from "react-router";
 import { useObserveFilters } from "@/components/observe/useObserveFilters";
+import { useToolUsagePayload } from "@/components/observe/toolUsagePayload";
+import { InsightsGrid } from "@/components/observe/insights/InsightsGrid";
 import { HooksEmptyState } from "@/pages/hooks/HooksEmptyState";
-import { HooksSetupButton } from "@/pages/hooks/HooksSetupDialog";
 import type { MultiSelectGroup } from "@/components/ui/MultiSelect";
-import {
-  bucketStartNsToMs,
-  buildToolUsageTimeSeries,
-  type TimeSeriesDataset,
-} from "./toolUsageTimeSeriesChartData";
 
 ChartJS.register(
   CategoryScale,
@@ -102,123 +69,6 @@ ChartJS.register(
   ZoomPlugin,
 );
 
-const CHART_COLORS = {
-  label: "#737373",
-  labelFaded: "#A3A3A3",
-  gridLine: "#e5e5e5",
-} as const;
-
-// Failure stacks: the one brand-red accent leads, the neutral series steps
-// recede behind it so severity reads at a glance. Slice off the palette's
-// trailing entry — green has no place in a failure ramp.
-function failureColors(seriesColors: string[]): string[] {
-  return [ACCENT_RED, ...seriesColors.slice(0, -1)];
-}
-
-const COLLAPSED_BAR_CHART_MAX_ROWS = 6;
-const BAR_THICKNESS = { collapsed: 18, expanded: 24 };
-const BAR_ROW_HEIGHT = { collapsed: 18, expanded: 24 };
-const BAR_ROW_SPACER = { collapsed: 8, expanded: 12 };
-const BAR_BORDER_RADIUS = 0;
-const LINE_CHART_HEIGHT = { collapsed: 250, expanded: 600 };
-
-function displayTargetLabel(
-  targetLabel: string,
-  targetType: string,
-  serverNameMappings: ReturnType<typeof useServerNameMappings>,
-): string {
-  if (targetType === "local_tool") return "Local Tools";
-  if (targetType === "shadow_mcp_server") {
-    return serverNameMappings.rawToDisplay.get(targetLabel) ?? targetLabel;
-  }
-  return targetLabel;
-}
-
-type _BarLegend = Exclude<
-  NonNullable<ChartOptions<"bar">["plugins"]>["legend"],
-  false
->;
-type _BarTooltip = NonNullable<ChartOptions<"bar">["plugins"]>["tooltip"];
-type _BarScales = NonNullable<ChartOptions<"bar">["scales"]>;
-
-const SHARED_RESIZE_TRANSITION = {
-  resize: { animation: { duration: 0 } },
-} as const;
-
-const SHARED_LEGEND = {
-  display: false,
-} satisfies NonNullable<_BarLegend>;
-
-// Expanded charts have room for a legend: mono uppercase micro-labels with
-// square swatches (the eyebrow idiom, rendered on canvas).
-const EXPANDED_LEGEND = {
-  display: true,
-  position: "bottom",
-  align: "start",
-  labels: {
-    boxWidth: 8,
-    boxHeight: 8,
-    usePointStyle: false,
-    padding: 16,
-    color: CHART_COLORS.label,
-    font: { family: "monospace", size: 11 },
-    generateLabels: (chart: ChartJS) =>
-      ChartJS.defaults.plugins.legend.labels
-        .generateLabels(chart)
-        .map((item) => ({ ...item, text: item.text.toUpperCase() })),
-  },
-} satisfies NonNullable<_BarLegend>;
-
-const SHARED_TOOLTIP = {
-  ...TOOLTIP,
-  cornerRadius: 0,
-  boxWidth: 8,
-  boxHeight: 8,
-} satisfies _BarTooltip;
-
-// Category-axis labels are mostly emails. Keep the domain — it's how you tell
-// internal from external users — and spend the character budget on the local
-// part instead. Full label is still available in the tooltip title.
-const MAX_AXIS_LABEL_CHARS = 26;
-
-function truncateAxisLabel(label: string): string {
-  if (label.length <= MAX_AXIS_LABEL_CHARS) return label;
-
-  const at = label.lastIndexOf("@");
-  if (at > 0) {
-    const domain = label.slice(at);
-    if (domain.length <= MAX_AXIS_LABEL_CHARS - 4) {
-      return `${label.slice(0, MAX_AXIS_LABEL_CHARS - 1 - domain.length)}…${domain}`;
-    }
-  }
-
-  return `${label.slice(0, MAX_AXIS_LABEL_CHARS - 1)}…`;
-}
-
-const SHARED_BAR_SCALES = {
-  x: {
-    stacked: true,
-    grid: { color: CHART_COLORS.gridLine },
-    ticks: { color: CHART_COLORS.labelFaded, precision: 0 },
-    afterFit(scale: Scale) {
-      scale.paddingRight = 30;
-    },
-  },
-  y: {
-    stacked: true,
-    grid: { display: false },
-    ticks: {
-      color: CHART_COLORS.labelFaded,
-      crossAlign: "far" as const,
-      padding: 2,
-      font: { size: 12 },
-      callback(value) {
-        return truncateAxisLabel(this.getLabelForValue(value as number));
-      },
-    },
-  },
-} satisfies _BarScales;
-
 type ToolUsageSectionState = { pending: boolean; error: boolean };
 
 // Per-section load state for the split tool usage summary. Each entry drives the
@@ -232,6 +82,7 @@ type ToolUsageSectionStatus = {
   userTimeSeries: ToolUsageSectionState;
   usersByTarget: ToolUsageSectionState;
   targetToolBreakdown: ToolUsageSectionState;
+  clients: ToolUsageSectionState;
 };
 
 export function InsightsToolsContent(): JSX.Element {
@@ -254,13 +105,13 @@ export function InsightsToolsContent(): JSX.Element {
     handleUserEmailSelectionChange,
     hookSourceOptions,
     handleHookSourceSelectionChange,
-    addFilter,
     handleHookTypesChange,
     dateRange,
     customRange,
     customRangeLabel,
     setDateRangeParam,
     setCustomRangeParam,
+    setRangeFromBrush,
     clearCustomRange,
     selectedRoleIds,
     roleOptions,
@@ -276,85 +127,14 @@ export function InsightsToolsContent(): JSX.Element {
 
   const client = useGramContext();
 
-  const serverFilters = useMemo(
-    () => selectedTargetValues(activeFilters).map(parseTargetFilter),
-    [activeFilters],
-  );
-  const hostedToolsetSlugs = useMemo(
-    () =>
-      serverFilters
-        .filter((filter) => filter.type === "hosted")
-        .map((filter) => filter.id),
-    [serverFilters],
-  );
-  const shadowServerNames = useMemo(
-    () =>
-      serverFilters
-        .filter((filter) => filter.type === "shadow")
-        .map((filter) => filter.id),
-    [serverFilters],
-  );
-  const metaMcpServerIds = useMemo(
-    () =>
-      serverFilters
-        .filter((filter) => filter.type === "gateway")
-        .map((filter) => filter.id),
-    [serverFilters],
-  );
-  const userFilters = useMemo(() => {
-    const emails = [
-      ...new Set([...selectedUserEmails(activeFilters), ...roleEmails]),
-    ];
-    return emails.map((email) => ({ kind: "email" as const, key: email }));
-  }, [activeFilters, roleEmails]);
-  const hookSourceFilters = useMemo(
-    () => selectedHookSources(activeFilters),
-    [activeFilters],
-  );
-
-  // The tool usage summary is split across seven endpoints (one per panel) so the
-  // dashboard renders each card as its data lands instead of blocking on the
-  // slowest aggregate. They all share this payload; each has its own query so its
-  // own loading state drives its own card's skeleton.
-  const summaryPayload = useMemo(
-    () => ({
-      from,
-      to,
-      hostedToolsetSlugs:
-        hostedToolsetSlugs.length > 0 ? hostedToolsetSlugs : undefined,
-      shadowServerNames:
-        shadowServerNames.length > 0 ? shadowServerNames : undefined,
-      metaMcpServerIds:
-        metaMcpServerIds.length > 0 ? metaMcpServerIds : undefined,
-      targetTypes: toTargetTypes(selectedHookTypes),
-      userFilters: userFilters.length > 0 ? userFilters : undefined,
-      hookSources: hookSourceFilters.length > 0 ? hookSourceFilters : undefined,
-      accountType: accountType || undefined,
-    }),
-    [
-      from,
-      to,
-      hostedToolsetSlugs,
-      shadowServerNames,
-      metaMcpServerIds,
-      selectedHookTypes,
-      userFilters,
-      hookSourceFilters,
-      accountType,
-    ],
-  );
-
-  const sharedQueryKey = [
-    from.toISOString(),
-    to.toISOString(),
-    hostedToolsetSlugs,
-    shadowServerNames,
-    metaMcpServerIds,
-    userFilters,
-    hookSourceFilters,
+  const { summaryPayload, sharedQueryKey } = useToolUsagePayload({
+    activeFilters,
+    roleEmails,
     selectedHookTypes,
     accountType,
-  ];
+    from,
+    to,
+  });
 
   // Totals is the gate query: it decides the page shell (logs-disabled overlay,
   // "no data" empty state, KPI cards) and is the cheapest, so the page appears as
@@ -417,23 +197,11 @@ export function InsightsToolsContent(): JSX.Element {
     throwOnError: false,
   });
 
-  const userTimeSeriesQuery = useQuery({
-    queryKey: ["tool-usage-user-time-series", ...sharedQueryKey],
+  const clientsQuery = useQuery({
+    queryKey: ["tool-usage-clients", ...sharedQueryKey],
     queryFn: () =>
       unwrapAsync(
-        telemetryGetToolUsageUserTimeSeries(client, {
-          getToolUsageSummaryPayload: summaryPayload,
-        }),
-      ),
-    enabled: !roleFilterPending,
-    throwOnError: false,
-  });
-
-  const usersByTargetQuery = useQuery({
-    queryKey: ["tool-usage-users-by-target", ...sharedQueryKey],
-    queryFn: () =>
-      unwrapAsync(
-        telemetryGetToolUsageUsersByTarget(client, {
+        telemetryGetToolUsageClients(client, {
           getToolUsageSummaryPayload: summaryPayload,
         }),
       ),
@@ -465,13 +233,13 @@ export function InsightsToolsContent(): JSX.Element {
             users: usersQuery.data?.users ?? [],
             targetTimeSeries:
               targetTimeSeriesQuery.data?.targetTimeSeries ?? [],
-            userTimeSeries: userTimeSeriesQuery.data?.userTimeSeries ?? [],
-            usersByTarget: usersByTargetQuery.data?.usersByTarget ?? [],
+            // Part of the summary contract, but no card on this board reads
+            // them, so they are not fetched.
+            userTimeSeries: [],
+            usersByTarget: [],
             targetToolBreakdown:
               targetToolBreakdownQuery.data?.targetToolBreakdown ?? [],
-            // The client aggregates are part of the summary contract but no
-            // panel on this page reads them yet, so they are not fetched.
-            clients: [],
+            clients: clientsQuery.data?.clients ?? [],
             clientToolBreakdown: [],
           }
         : undefined,
@@ -480,9 +248,8 @@ export function InsightsToolsContent(): JSX.Element {
       targetsQuery.data,
       usersQuery.data,
       targetTimeSeriesQuery.data,
-      userTimeSeriesQuery.data,
-      usersByTargetQuery.data,
       targetToolBreakdownQuery.data,
+      clientsQuery.data,
     ],
   );
 
@@ -493,25 +260,19 @@ export function InsightsToolsContent(): JSX.Element {
       pending: targetTimeSeriesQuery.isPending,
       error: targetTimeSeriesQuery.isError,
     },
-    userTimeSeries: {
-      pending: userTimeSeriesQuery.isPending,
-      error: userTimeSeriesQuery.isError,
-    },
-    usersByTarget: {
-      pending: usersByTargetQuery.isPending,
-      error: usersByTargetQuery.isError,
-    },
+    userTimeSeries: { pending: false, error: false },
+    usersByTarget: { pending: false, error: false },
     targetToolBreakdown: {
       pending: targetToolBreakdownQuery.isPending,
       error: targetToolBreakdownQuery.isError,
     },
+    clients: { pending: clientsQuery.isPending, error: clientsQuery.isError },
   };
 
   const { refetch: refetchTargets } = targetsQuery;
   const { refetch: refetchUsers } = usersQuery;
   const { refetch: refetchTargetTimeSeries } = targetTimeSeriesQuery;
-  const { refetch: refetchUserTimeSeries } = userTimeSeriesQuery;
-  const { refetch: refetchUsersByTarget } = usersByTargetQuery;
+  const { refetch: refetchClients } = clientsQuery;
   const { refetch: refetchTargetToolBreakdown } = targetToolBreakdownQuery;
 
   const isAnyFetching =
@@ -519,8 +280,7 @@ export function InsightsToolsContent(): JSX.Element {
     targetsQuery.isFetching ||
     usersQuery.isFetching ||
     targetTimeSeriesQuery.isFetching ||
-    userTimeSeriesQuery.isFetching ||
-    usersByTargetQuery.isFetching ||
+    clientsQuery.isFetching ||
     targetToolBreakdownQuery.isFetching;
 
   const { data: filterOptionsData } = useQuery({
@@ -577,16 +337,14 @@ export function InsightsToolsContent(): JSX.Element {
     void refetchTargets();
     void refetchUsers();
     void refetchTargetTimeSeries();
-    void refetchUserTimeSeries();
-    void refetchUsersByTarget();
+    void refetchClients();
     void refetchTargetToolBreakdown();
   }, [
     refetchTotals,
     refetchTargets,
     refetchUsers,
     refetchTargetTimeSeries,
-    refetchUserTimeSeries,
-    refetchUsersByTarget,
+    refetchClients,
     refetchTargetToolBreakdown,
   ]);
 
@@ -636,7 +394,6 @@ export function InsightsToolsContent(): JSX.Element {
           sourceOptions={hookSourceOptions}
           onSourceSelectionChange={handleHookSourceSelectionChange}
           activeFilters={activeFilters}
-          addFilter={addFilter}
           selectedHookTypes={selectedHookTypes}
           onHookTypesChange={handleHookTypesChange}
           typeOptions={TOOL_USAGE_TYPE_OPTIONS}
@@ -648,6 +405,9 @@ export function InsightsToolsContent(): JSX.Element {
           customRangeLabel={customRangeLabel}
           onDateRangeChange={setDateRangeParam}
           onCustomRangeChange={setCustomRangeParam}
+          onRangeSelect={setRangeFromBrush}
+          from={from}
+          to={to}
           onClearCustomRange={clearCustomRange}
           projectSlug={projectSlug}
           serverNameMappings={serverNameMappings}
@@ -676,7 +436,6 @@ function HooksInnerContent({
   sourceOptions,
   onSourceSelectionChange,
   activeFilters,
-  addFilter,
   selectedHookTypes,
   onHookTypesChange,
   typeOptions,
@@ -688,6 +447,9 @@ function HooksInnerContent({
   customRangeLabel,
   onDateRangeChange,
   onCustomRangeChange,
+  onRangeSelect,
+  from,
+  to,
   onClearCustomRange,
   projectSlug,
   serverNameMappings,
@@ -711,7 +473,6 @@ function HooksInnerContent({
   sourceOptions: string[];
   onSourceSelectionChange: (values: string[]) => void;
   activeFilters: FilterChip[];
-  addFilter: (chip: FilterChip) => void;
   selectedHookTypes: ObserveTypeFilterValue[];
   onHookTypesChange: (types: ObserveTypeFilterValue[]) => void;
   typeOptions: Array<{ label: string; value: ObserveTypeFilterValue }>;
@@ -723,6 +484,9 @@ function HooksInnerContent({
   customRangeLabel: string | null;
   onDateRangeChange: (preset: DateRangePreset) => void;
   onCustomRangeChange: (from: Date, to: Date, label?: string) => void;
+  onRangeSelect: (from: Date, to: Date) => void;
+  from: Date;
+  to: Date;
   onClearCustomRange: () => void;
   projectSlug?: string;
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
@@ -736,20 +500,6 @@ function HooksInnerContent({
   isRefreshing: boolean;
 }) {
   const orgRoutes = useOrgRoutes();
-  const { from, to } = useMemo(
-    () => customRange ?? getPresetRange(dateRange),
-    [customRange, dateRange],
-  );
-  const { expandedChart, setExpandedChart } = useExpandedChart();
-  useEffect(() => {
-    if (summaryPending) setExpandedChart(null);
-  }, [summaryPending, setExpandedChart]);
-  const handleChartRangeSelect = useCallback(
-    (from: Date, to: Date) => {
-      onCustomRangeChange(from, to, formatChartZoomRangeLabel(from, to));
-    },
-    [onCustomRangeChange],
-  );
   const hasSummaryData = (summaryData?.totals.eventCount ?? 0) > 0;
 
   return (
@@ -767,7 +517,6 @@ function HooksInnerContent({
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <HooksSetupButton />
             <Button variant="secondary" size="sm" asChild>
               <Link to={orgRoutes.logs.href()}>
                 <Settings className="h-4 w-4" />
@@ -848,18 +597,11 @@ function HooksInnerContent({
                 serverNameMappings={serverNameMappings}
                 from={from}
                 to={to}
-                compact={false}
-                addFilter={addFilter}
-                onHookTypesChange={onHookTypesChange}
                 summaryData={summaryData}
                 summaryPending={summaryPending}
                 summaryIsError={summaryIsError}
                 sectionStatus={sectionStatus}
-                expandedChart={expandedChart}
-                onExpandedChartChange={setExpandedChart}
-                onRangeSelect={handleChartRangeSelect}
-                isZoomed={customRange !== null}
-                onResetZoom={onClearCustomRange}
+                onRangeSelect={onRangeSelect}
               />
             )}
           </div>
@@ -869,1335 +611,45 @@ function HooksInnerContent({
   );
 }
 
-type StackedBarDataset = {
-  label: string;
-  data: Array<number | null>;
-  backgroundColor: string;
-  borderColor?: string;
-  borderWidth?: number;
-  barThickness: number;
-  borderRadius?: number;
-  borderSkipped?: string | boolean;
-  hoverBackgroundColor?: string;
-  hoverBorderColor?: string;
-};
-
-function hideZeroBarSegments(data: Array<number | null>) {
-  return data.map((value) => (value === 0 ? null : value));
-}
-
-const stackTotalPlugin = {
-  id: "stackTotal",
-  afterDatasetsDraw(chart: ChartJS) {
-    const { ctx, data } = chart;
-    ctx.save();
-    ctx.font = "12px sans-serif";
-    ctx.fillStyle = CHART_COLORS.label;
-    ctx.textAlign = "left";
-    ctx.textBaseline = "middle";
-    for (let i = 0; i < (data.labels?.length ?? 0); i++) {
-      let total = 0;
-      let labelX: number | null = null;
-      let labelY: number | null = null;
-
-      data.datasets.forEach((dataset, datasetIndex) => {
-        const value = dataset.data[i];
-        if (typeof value !== "number" || value === 0) return;
-
-        total += value;
-        const bar = chart.getDatasetMeta(datasetIndex).data[i];
-        if (!bar) return;
-
-        if (labelX === null || bar.x > labelX) {
-          labelX = bar.x;
-          labelY = bar.y;
-        }
-      });
-
-      if (total > 0 && labelX !== null && labelY !== null) {
-        ctx.fillText(String(total), labelX + 4, labelY);
-      }
-    }
-    ctx.restore();
-  },
-};
-
-const STACKED_BAR_PLUGINS = [stackTotalPlugin];
-
-function StackedBarChart({
-  labels,
-  datasets,
-  handleFilter,
-  tooltipLabelFn,
-  expanded = false,
-  maxRows,
-  onShowAll,
-}: {
-  labels: string[];
-  datasets: StackedBarDataset[];
-  handleFilter?: (datasetLabel: string, rowLabel: string) => void;
-  tooltipLabelFn?: (item: TooltipItem<"bar">) => string | string[] | undefined;
-  expanded?: boolean;
-  maxRows?: number;
-  onShowAll?: () => void;
-}) {
-  const thickness = expanded ? BAR_THICKNESS.expanded : BAR_THICKNESS.collapsed;
-  const hiddenCount =
-    !expanded && maxRows && labels.length > maxRows
-      ? labels.length - maxRows
-      : 0;
-  const visibleLabels = hiddenCount > 0 ? labels.slice(0, maxRows) : labels;
-  const visibleDatasets = (
-    hiddenCount > 0
-      ? datasets.map((ds) => ({
-          ...ds,
-          data: ds.data.slice(0, maxRows),
-        }))
-      : datasets
-  ).map((ds) => ({
-    ...ds,
-    data: hideZeroBarSegments(ds.data),
-    barThickness: thickness,
-    borderRadius: BAR_BORDER_RADIUS,
-    borderSkipped: false,
-  }));
-
-  const rowH = expanded ? BAR_ROW_HEIGHT.expanded : BAR_ROW_HEIGHT.collapsed;
-  const rowS = expanded ? BAR_ROW_SPACER.expanded : BAR_ROW_SPACER.collapsed;
-  const containerHeight = Math.max(
-    120,
-    visibleLabels.length * (rowH + rowS) + 60,
-  );
-
-  const options = useMemo<ChartOptions<"bar">>(
-    () => ({
-      indexAxis: "y",
-      responsive: true,
-      maintainAspectRatio: false,
-      onClick(_, elements) {
-        if (!elements.length || !handleFilter) return;
-        const { datasetIndex, index } = elements[0]!;
-        const datasetLabel = datasets[datasetIndex]?.label;
-        const rowLabel = visibleLabels[index];
-        if (datasetLabel && rowLabel) handleFilter(datasetLabel, rowLabel);
-      },
-      onHover(event, elements) {
-        const el = event.native?.target as HTMLElement | null;
-        if (el) el.style.cursor = elements.length ? "pointer" : "default";
-      },
-      scales: SHARED_BAR_SCALES,
-      transitions: SHARED_RESIZE_TRANSITION,
-      plugins: {
-        legend: expanded ? EXPANDED_LEGEND : SHARED_LEGEND,
-        tooltip: {
-          ...SHARED_TOOLTIP,
-          callbacks: {
-            label:
-              tooltipLabelFn ??
-              ((item: TooltipItem<"bar">) =>
-                ` ${item.dataset.label}: ${item.parsed.x}`),
-          },
-        },
-      },
-    }),
-    [datasets, visibleLabels, handleFilter, tooltipLabelFn, expanded],
-  );
-
-  if (visibleLabels.length === 0) return null;
-
-  return (
-    <>
-      <div
-        className="transition-all duration-200 ease-in-out"
-        style={{ height: containerHeight }}
-      >
-        <Bar
-          plugins={STACKED_BAR_PLUGINS}
-          data={{ labels: visibleLabels, datasets: visibleDatasets }}
-          options={options}
-        />
-      </div>
-      {hiddenCount > 0 && onShowAll && (
-        <div className="mt-2 flex w-full">
-          <Button
-            variant="tertiary"
-            size="sm"
-            icon="chevron-down"
-            iconAfter={true}
-            onClick={onShowAll}
-          >
-            Show {hiddenCount} more
-          </Button>
-        </div>
-      )}
-    </>
-  );
-}
-
-function UsersPerServerChart({
-  title,
-  breakdown,
-  serverNameMappings,
-  handleFilter,
-  expandedChart,
-  onExpand,
-  loading,
-  error,
-}: {
-  title: string;
-  breakdown: ToolUsageUsersByTargetRow[];
-  serverNameMappings: ReturnType<typeof useServerNameMappings>;
-  handleFilter?: (userEmail: string, serverName: string) => void;
-  expandedChart: string | null;
-  onExpand: (id: string | null) => void;
-  loading?: boolean;
-  error?: boolean;
-}) {
-  const chartId = "users-per-server";
-  const expanded = expandedChart === chartId;
-  const seriesColors = useSeriesColors();
-  const { labels, datasets } = useMemo(() => {
-    const serverMap = new Map<string, Map<string, number>>();
-    const userSet = new Set<string>();
-    for (const row of breakdown) {
-      const user = row.userLabel || "unknown";
-      const displayName = displayTargetLabel(
-        row.targetLabel,
-        row.targetType,
-        serverNameMappings,
-      );
-      userSet.add(user);
-      const inner = serverMap.get(displayName) ?? new Map<string, number>();
-      inner.set(user, (inner.get(user) ?? 0) + row.eventCount);
-      serverMap.set(displayName, inner);
-    }
-
-    const sortedServers = Array.from(serverMap.entries())
-      .map(([server, userCounts]) => ({
-        server,
-        total: Array.from(userCounts.values()).reduce((a, b) => a + b, 0),
-        userCounts,
-      }))
-      .sort((a, b) => b.total - a.total);
-
-    const sortedUsers = Array.from(userSet).sort((a, b) => {
-      const aTotal = sortedServers.reduce(
-        (s, srv) => s + (srv.userCounts.get(a) ?? 0),
-        0,
-      );
-      const bTotal = sortedServers.reduce(
-        (s, srv) => s + (srv.userCounts.get(b) ?? 0),
-        0,
-      );
-      return bTotal - aTotal;
-    });
-
-    const chartLabels = sortedServers.map((s) => s.server);
-    const chartDatasets = sortedUsers.map((user, i) => ({
-      label: user,
-      barThickness: 24,
-      data: sortedServers.map((s) => s.userCounts.get(user) ?? 0),
-      backgroundColor: seriesColors[i % seriesColors.length]!,
-    }));
-
-    return { labels: chartLabels, datasets: chartDatasets };
-  }, [breakdown, serverNameMappings, seriesColors]);
-
-  return (
-    <ChartCard
-      title={title}
-      chartId={chartId}
-      expandedChart={expandedChart}
-      onExpand={onExpand}
-      loading={loading}
-      error={error}
-      hasData={labels.length > 0}
-    >
-      {labels.length === 0 ? (
-        <ChartNoData />
-      ) : (
-        <StackedBarChart
-          labels={labels}
-          datasets={datasets}
-          handleFilter={handleFilter}
-          expanded={expanded}
-          maxRows={COLLAPSED_BAR_CHART_MAX_ROWS}
-          onShowAll={() => onExpand(chartId)}
-        />
-      )}
-    </ChartCard>
-  );
-}
-
-function UserEventCountsChart({
-  title,
-  users,
-  handleFilter,
-  expandedChart,
-  onExpand,
-  loading,
-  error,
-}: {
-  title: string;
-  users: ToolUsageUserSummary[];
-  handleFilter?: (datasetLabel: string, userEmail: string) => void;
-  expandedChart: string | null;
-  onExpand: (id: string | null) => void;
-  loading?: boolean;
-  error?: boolean;
-}) {
-  const chartId = "user-event-counts";
-  const expanded = expandedChart === chartId;
-  const seriesColors = useSeriesColors();
-  const { labels, datasets } = useMemo(() => {
-    const sortedUsers = [...users].sort((a, b) => b.eventCount - a.eventCount);
-
-    const chartLabels = sortedUsers.map((user) => user.userLabel || "unknown");
-    // Single ranked series: ink, not a category color.
-    const color = seriesColors[0]!;
-    const chartDatasets = [
-      {
-        label: "Tool calls",
-        barThickness: 24,
-        data: sortedUsers.map((user) => user.eventCount),
-        backgroundColor: color,
-      },
-    ];
-
-    return { labels: chartLabels, datasets: chartDatasets };
-  }, [users, seriesColors]);
-
-  return (
-    <ChartCard
-      title={title}
-      chartId={chartId}
-      expandedChart={expandedChart}
-      onExpand={onExpand}
-      loading={loading}
-      error={error}
-      hasData={labels.length > 0}
-    >
-      {labels.length === 0 ? (
-        <ChartNoData />
-      ) : (
-        <StackedBarChart
-          labels={labels}
-          datasets={datasets}
-          handleFilter={handleFilter}
-          expanded={expanded}
-          maxRows={COLLAPSED_BAR_CHART_MAX_ROWS}
-          onShowAll={() => onExpand(chartId)}
-        />
-      )}
-    </ChartCard>
-  );
-}
-
-function ServerErrorRateChart({
-  title,
-  breakdown,
-  serverNameMappings,
-  expandedChart,
-  onExpand,
-  loading,
-  error,
-}: {
-  title: string;
-  breakdown: ToolUsageTargetToolBreakdownRow[];
-  serverNameMappings: ReturnType<typeof useServerNameMappings>;
-  expandedChart: string | null;
-  onExpand: (id: string | null) => void;
-  loading?: boolean;
-  error?: boolean;
-}) {
-  const chartId = "errors-per-server";
-  const expanded = expandedChart === chartId;
-  const seriesColors = useSeriesColors();
-  const { labels, datasets } = useMemo(() => {
-    const failureRamp = failureColors(seriesColors);
-    const serverMap = new Map<string, Map<string, number>>();
-    const toolSet = new Set<string>();
-    for (const row of breakdown) {
-      if (row.failureCount === 0) continue;
-      const displayName = displayTargetLabel(
-        row.targetLabel,
-        row.targetType,
-        serverNameMappings,
-      );
-      const tool = row.toolName || "unknown";
-      toolSet.add(tool);
-      const inner = serverMap.get(displayName) ?? new Map<string, number>();
-      inner.set(tool, (inner.get(tool) ?? 0) + row.failureCount);
-      serverMap.set(displayName, inner);
-    }
-
-    const sortedServers = Array.from(serverMap.entries())
-      .map(([displayName, toolCounts]) => ({
-        displayName,
-        total: Array.from(toolCounts.values()).reduce((a, b) => a + b, 0),
-        toolCounts,
-      }))
-      .sort((a, b) => b.total - a.total);
-
-    const sortedTools = Array.from(toolSet).sort((a, b) => {
-      const aTotal = sortedServers.reduce(
-        (s, srv) => s + (srv.toolCounts.get(a) ?? 0),
-        0,
-      );
-      const bTotal = sortedServers.reduce(
-        (s, srv) => s + (srv.toolCounts.get(b) ?? 0),
-        0,
-      );
-      return bTotal - aTotal;
-    });
-
-    const chartLabels = sortedServers.map((s) => s.displayName);
-    const chartDatasets = sortedTools.map((tool, i) => ({
-      label: tool,
-      barThickness: BAR_THICKNESS.collapsed,
-      data: sortedServers.map((s) => s.toolCounts.get(tool) ?? 0),
-      backgroundColor: failureRamp[i % failureRamp.length]!,
-    }));
-
-    return { labels: chartLabels, datasets: chartDatasets };
-  }, [breakdown, serverNameMappings, seriesColors]);
-
-  const hiddenCount =
-    !expanded && labels.length > COLLAPSED_BAR_CHART_MAX_ROWS
-      ? labels.length - COLLAPSED_BAR_CHART_MAX_ROWS
-      : 0;
-  const visibleLabels =
-    hiddenCount > 0 ? labels.slice(0, COLLAPSED_BAR_CHART_MAX_ROWS) : labels;
-  const thickness = expanded ? BAR_THICKNESS.expanded : BAR_THICKNESS.collapsed;
-  const visibleDatasets = (
-    hiddenCount > 0
-      ? datasets.map((ds) => ({
-          ...ds,
-          data: ds.data.slice(0, COLLAPSED_BAR_CHART_MAX_ROWS),
-        }))
-      : datasets
-  ).map((ds) => ({
-    ...ds,
-    data: hideZeroBarSegments(ds.data),
-    barThickness: thickness,
-    borderRadius: BAR_BORDER_RADIUS,
-    borderSkipped: false,
-  }));
-
-  const rowH = expanded ? BAR_ROW_HEIGHT.expanded : BAR_ROW_HEIGHT.collapsed;
-  const rowS = expanded ? BAR_ROW_SPACER.expanded : BAR_ROW_SPACER.collapsed;
-  const height = Math.max(120, visibleLabels.length * (rowH + rowS) + 60);
-
-  const options: ChartOptions<"bar"> = {
-    indexAxis: "y",
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: expanded ? EXPANDED_LEGEND : SHARED_LEGEND,
-      tooltip: {
-        ...SHARED_TOOLTIP,
-        callbacks: {
-          title: (items) => items[0]?.label ?? "",
-          label: (ctx: TooltipItem<"bar">) =>
-            `${ctx.dataset.label}: ${(ctx.parsed.x ?? 0).toLocaleString()}`,
-        },
-      },
-    },
-    scales: SHARED_BAR_SCALES,
-    transitions: SHARED_RESIZE_TRANSITION,
-  };
-
-  return (
-    <ChartCard
-      title={title}
-      chartId={chartId}
-      expandedChart={expandedChart}
-      onExpand={onExpand}
-      loading={loading}
-      error={error}
-      hasData={labels.length > 0}
-    >
-      {labels.length === 0 ? (
-        <ChartNoData message="No errors in this period" />
-      ) : (
-        <>
-          <div
-            className="relative transition-all duration-200 ease-in-out"
-            style={{ height }}
-          >
-            <Bar
-              data={{ labels: visibleLabels, datasets: visibleDatasets }}
-              options={options}
-            />
-          </div>
-          {hiddenCount > 0 && (
-            <button
-              type="button"
-              onClick={() => onExpand(chartId)}
-              className="text-muted-foreground hover:text-foreground mt-1 w-full text-center text-xs underline-offset-2 hover:underline"
-            >
-              Show {hiddenCount} more
-            </button>
-          )}
-        </>
-      )}
-    </ChartCard>
-  );
-}
-
-function ChartNoData({
-  message = "No data in this period",
-}: {
-  message?: string;
-}) {
-  return (
-    <div className="flex h-24 items-center justify-center">
-      <Badge variant="neutral">
-        <Badge.LeftIcon>
-          <Icon name="chart-no-axes-column" size="small" />
-        </Badge.LeftIcon>
-        <Badge.Text>{message}</Badge.Text>
-      </Badge>
-    </div>
-  );
-}
-
-function StackedTimeBarChart({
-  labels,
-  timestamps,
-  bucketMs,
-  tooltipLabels,
-  datasets,
-  tooltipAfterBody,
-  onRangeSelect,
-  height = 200,
-  expanded = false,
-}: {
-  labels: string[];
-  timestamps: number[];
-  bucketMs: number;
-  tooltipLabels: string[];
-  datasets: TimeSeriesDataset[];
-  tooltipAfterBody?: (dataIndex: number) => string[];
-  onRangeSelect?: (from: Date, to: Date) => void;
-  height?: number;
-  expanded?: boolean;
-}) {
-  const { chartRef, zoomPluginOptions, resetZoom } = useChartZoom<"bar">({
-    onRangeSelect,
-    resolveRange: (min, max) => {
-      if (timestamps.length === 0) return null;
-      const fromIndex = Math.max(0, Math.floor(min));
-      const toIndex = Math.min(timestamps.length - 1, Math.ceil(max));
-      const from = timestamps[fromIndex];
-      const to = timestamps[toIndex];
-      if (from == null || to == null) return null;
-      // `to` is a bucket start; extend by the bucket width so the selection
-      // covers the last bucket's events.
-      return { from: new Date(from), to: new Date(to + bucketMs) };
-    },
-  });
-
-  useEffect(() => {
-    resetZoom();
-  }, [datasets, resetZoom]);
-
-  if (labels.length === 0) {
-    return <ChartNoData />;
-  }
-
-  const options: ChartOptions<"bar"> = {
-    responsive: true,
-    maintainAspectRatio: false,
-    interaction: { mode: "index", intersect: false },
-    plugins: {
-      legend: expanded ? EXPANDED_LEGEND : SHARED_LEGEND,
-      tooltip: {
-        ...SHARED_TOOLTIP,
-        // Index-mode hover activates every series at that x. Drop zeros so a
-        // sparse multi-series chart doesn't build a tooltip listing every
-        // inactive source (which balloons until it covers the chart). Returning
-        // `undefined` from `label` is not enough — Chart.js treats that as
-        // "use the default callback" and still renders the line.
-        filter: (item) => (item.parsed.y ?? 0) !== 0,
-        callbacks: {
-          title: (items) => tooltipLabels[items[0]?.dataIndex ?? 0] ?? "",
-          label: (item) =>
-            item.formattedValue
-              ? `${item.dataset.label}: ${item.formattedValue}`
-              : "",
-          ...(tooltipAfterBody
-            ? {
-                afterBody: (items) =>
-                  tooltipAfterBody(items[0]?.dataIndex ?? 0),
-              }
-            : {}),
-        },
-      },
-      zoom: zoomPluginOptions,
-    },
-    scales: {
-      x: {
-        stacked: true,
-        grid: { display: false },
-        ticks: { maxTicksLimit: 8, color: CHART_COLORS.labelFaded },
-      },
-      y: {
-        stacked: true,
-        beginAtZero: true,
-        grid: { color: "rgba(128, 128, 128, 0.2)" },
-        ticks: { precision: 0, color: CHART_COLORS.labelFaded },
-      },
-    },
-    transitions: SHARED_RESIZE_TRANSITION,
-  };
-
-  return (
-    <div
-      className="relative transition-all duration-200 ease-in-out"
-      style={{ height }}
-    >
-      <Bar ref={chartRef} data={{ labels, datasets }} options={options} />
-    </div>
-  );
-}
-
-function ServerUsageTimeSeries({
-  timeSeries,
-  from,
-  to,
-  serverNameMappings,
-  expandedChart,
-  onExpand,
-  loading,
-  error,
-  onRangeSelect,
-  isZoomed,
-  onResetZoom,
-}: {
-  timeSeries: ToolUsageTargetTimeSeriesPoint[];
-  from: Date;
-  to: Date;
-  serverNameMappings: ReturnType<typeof useServerNameMappings>;
-  expandedChart: string | null;
-  onExpand: (id: string | null) => void;
-  loading?: boolean;
-  error?: boolean;
-  onRangeSelect?: (from: Date, to: Date) => void;
-  isZoomed?: boolean;
-  onResetZoom?: () => void;
-}) {
-  const chartId = "server-usage";
-  const expanded = expandedChart === chartId;
-  const seriesColors = useSeriesColors();
-  const { labels, timestamps, tooltipLabels, datasets, bucketMs } = useMemo(
-    () =>
-      buildToolUsageTimeSeries(
-        timeSeries,
-        (pt) =>
-          displayTargetLabel(pt.targetLabel, pt.targetType, serverNameMappings),
-        from,
-        to,
-        undefined,
-        seriesColors,
-      ),
-    [timeSeries, from, to, serverNameMappings, seriesColors],
-  );
-  return (
-    <ChartCard
-      title="Activity by Source"
-      chartId={chartId}
-      expandedChart={expandedChart}
-      onExpand={onExpand}
-      loading={loading}
-      error={error}
-      hasData={labels.length > 0}
-      isZoomed={isZoomed}
-      onResetZoom={onResetZoom}
-    >
-      <StackedTimeBarChart
-        labels={labels}
-        timestamps={timestamps}
-        bucketMs={bucketMs}
-        tooltipLabels={tooltipLabels}
-        datasets={datasets}
-        onRangeSelect={onRangeSelect}
-        height={
-          expanded ? LINE_CHART_HEIGHT.expanded : LINE_CHART_HEIGHT.collapsed
-        }
-        expanded={expanded}
-      />
-    </ChartCard>
-  );
-}
-
-function UserUsageTimeSeries({
-  timeSeries,
-  from,
-  to,
-  expandedChart,
-  onExpand,
-  loading,
-  error,
-  onRangeSelect,
-  isZoomed,
-  onResetZoom,
-}: {
-  timeSeries: ToolUsageUserTimeSeriesPoint[];
-  from: Date;
-  to: Date;
-  expandedChart: string | null;
-  onExpand: (id: string | null) => void;
-  loading?: boolean;
-  error?: boolean;
-  onRangeSelect?: (from: Date, to: Date) => void;
-  isZoomed?: boolean;
-  onResetZoom?: () => void;
-}) {
-  const chartId = "user-usage";
-  const expanded = expandedChart === chartId;
-  const seriesColors = useSeriesColors();
-  const { labels, timestamps, tooltipLabels, datasets, bucketMs } = useMemo(
-    () =>
-      buildToolUsageTimeSeries(
-        timeSeries,
-        (pt) => pt.userLabel,
-        from,
-        to,
-        undefined,
-        seriesColors,
-      ),
-    [timeSeries, from, to, seriesColors],
-  );
-  return (
-    <ChartCard
-      title="User Usage"
-      chartId={chartId}
-      expandedChart={expandedChart}
-      onExpand={onExpand}
-      loading={loading}
-      error={error}
-      hasData={labels.length > 0}
-      isZoomed={isZoomed}
-      onResetZoom={onResetZoom}
-    >
-      <StackedTimeBarChart
-        labels={labels}
-        timestamps={timestamps}
-        bucketMs={bucketMs}
-        tooltipLabels={tooltipLabels}
-        datasets={datasets}
-        onRangeSelect={onRangeSelect}
-        height={
-          expanded ? LINE_CHART_HEIGHT.expanded : LINE_CHART_HEIGHT.collapsed
-        }
-        expanded={expanded}
-      />
-    </ChartCard>
-  );
-}
-
-function SkillUsageTimeSeries({
-  skillTimeSeries,
-  from,
-  to,
-  expandedChart,
-  onExpand,
-  loading,
-  error,
-  onRangeSelect,
-  isZoomed,
-  onResetZoom,
-}: {
-  skillTimeSeries: ToolUsageTargetTimeSeriesPoint[];
-  from: Date;
-  to: Date;
-  expandedChart: string | null;
-  onExpand: (id: string | null) => void;
-  loading?: boolean;
-  error?: boolean;
-  onRangeSelect?: (from: Date, to: Date) => void;
-  isZoomed?: boolean;
-  onResetZoom?: () => void;
-}) {
-  const chartId = "skill-usage";
-  const expanded = expandedChart === chartId;
-  const seriesColors = useSeriesColors();
-  const { labels, timestamps, tooltipLabels, datasets, bucketMs } = useMemo(
-    () =>
-      buildToolUsageTimeSeries(
-        skillTimeSeries,
-        (pt) => pt.targetLabel,
-        from,
-        to,
-        undefined,
-        seriesColors,
-      ),
-    [skillTimeSeries, from, to, seriesColors],
-  );
-  return (
-    <ChartCard
-      title="Skill Usage"
-      chartId={chartId}
-      expandedChart={expandedChart}
-      onExpand={onExpand}
-      loading={loading}
-      error={error}
-      hasData={labels.length > 0}
-      isZoomed={isZoomed}
-      onResetZoom={onResetZoom}
-    >
-      <StackedTimeBarChart
-        labels={labels}
-        timestamps={timestamps}
-        bucketMs={bucketMs}
-        tooltipLabels={tooltipLabels}
-        datasets={datasets}
-        onRangeSelect={onRangeSelect}
-        height={
-          expanded ? LINE_CHART_HEIGHT.expanded : LINE_CHART_HEIGHT.collapsed
-        }
-        expanded={expanded}
-      />
-    </ChartCard>
-  );
-}
-
-function UsersPerSkillChart({
-  title,
-  skillBreakdown,
-  expandedChart,
-  onExpand,
-  loading,
-  error,
-}: {
-  title: string;
-  skillBreakdown: ToolUsageUsersByTargetRow[];
-  expandedChart: string | null;
-  onExpand: (id: string | null) => void;
-  loading?: boolean;
-  error?: boolean;
-}) {
-  const chartId = "users-per-skill";
-  const expanded = expandedChart === chartId;
-  const seriesColors = useSeriesColors();
-  const { labels, datasets } = useMemo(() => {
-    const skillMap = new Map<string, Map<string, number>>();
-    const userSet = new Set<string>();
-    for (const row of skillBreakdown) {
-      const user = row.userLabel || "unknown";
-      userSet.add(user);
-      const inner = skillMap.get(row.targetLabel) ?? new Map<string, number>();
-      inner.set(user, (inner.get(user) ?? 0) + row.eventCount);
-      skillMap.set(row.targetLabel, inner);
-    }
-
-    const sortedSkills = Array.from(skillMap.entries())
-      .map(([skill, userCounts]) => ({
-        skill,
-        total: Array.from(userCounts.values()).reduce((a, b) => a + b, 0),
-        userCounts,
-      }))
-      .sort((a, b) => b.total - a.total);
-
-    const userTotals = new Map<string, number>();
-    for (const user of userSet) {
-      userTotals.set(
-        user,
-        sortedSkills.reduce((s, sk) => s + (sk.userCounts.get(user) ?? 0), 0),
-      );
-    }
-    const sortedUsers = Array.from(userSet).sort(
-      (a, b) => (userTotals.get(b) ?? 0) - (userTotals.get(a) ?? 0),
-    );
-
-    const chartLabels = sortedSkills.map((s) => s.skill);
-    const chartDatasets = sortedUsers.map((user, i) => ({
-      label: user,
-      barThickness: BAR_THICKNESS.collapsed,
-      data: sortedSkills.map((s) => s.userCounts.get(user) ?? 0),
-      backgroundColor: seriesColors[i % seriesColors.length]!,
-    }));
-
-    return { labels: chartLabels, datasets: chartDatasets };
-  }, [skillBreakdown, seriesColors]);
-
-  return (
-    <ChartCard
-      title={title}
-      chartId={chartId}
-      expandedChart={expandedChart}
-      onExpand={onExpand}
-      loading={loading}
-      error={error}
-      hasData={labels.length > 0}
-    >
-      {labels.length === 0 ? (
-        <ChartNoData />
-      ) : (
-        <StackedBarChart
-          labels={labels}
-          datasets={datasets}
-          expanded={expanded}
-          maxRows={COLLAPSED_BAR_CHART_MAX_ROWS}
-          onShowAll={() => onExpand(chartId)}
-        />
-      )}
-    </ChartCard>
-  );
-}
-
-function ErrorsOverTimeChart({
-  timeSeries,
-  from,
-  to,
-  serverNameMappings,
-  expandedChart,
-  onExpand,
-  loading,
-  error,
-  onRangeSelect,
-  isZoomed,
-  onResetZoom,
-}: {
-  timeSeries: ToolUsageTargetTimeSeriesPoint[];
-  from: Date;
-  to: Date;
-  serverNameMappings: ReturnType<typeof useServerNameMappings>;
-  expandedChart: string | null;
-  onExpand: (id: string | null) => void;
-  loading?: boolean;
-  error?: boolean;
-  onRangeSelect?: (from: Date, to: Date) => void;
-  isZoomed?: boolean;
-  onResetZoom?: () => void;
-}) {
-  const {
-    labels,
-    timestamps,
-    bucketMs,
-    tooltipLabels,
-    datasets,
-    hasErrors,
-    perServerByIndex,
-  } = useMemo(() => {
-    const built = buildToolUsageTimeSeries(
-      timeSeries,
-      () => "errors",
-      from,
-      to,
-      (pt) => pt.failureCount,
-      [ACCENT_RED],
-    );
-    const renamedDatasets = built.datasets.map((ds) => ({
-      ...ds,
-      label: "Errors",
-    }));
-    const total = built.datasets[0]?.data.reduce((s, p) => s + p, 0) ?? 0;
-
-    const accumulator = new Map<number, Map<string, number>>(
-      built.timestamps.map((_, i): [number, Map<string, number>] => [
-        i,
-        new Map<string, number>(),
-      ]),
-    );
-
-    const fromMs = from.getTime();
-    for (const pt of timeSeries) {
-      if (pt.failureCount === 0) continue;
-      const ms = bucketStartNsToMs(pt.bucketStartNs);
-      if (ms == null) continue;
-      const idx = Math.min(
-        Math.max(Math.floor((ms - fromMs) / built.bucketMs), 0),
-        built.timestamps.length - 1,
-      );
-      const displayName = displayTargetLabel(
-        pt.targetLabel,
-        pt.targetType,
-        serverNameMappings,
-      );
-      const map = accumulator.get(idx)!;
-      map.set(displayName, (map.get(displayName) ?? 0) + pt.failureCount);
-    }
-
-    const perServerByIndex: { name: string; count: number }[][] = [];
-    for (const [i, map] of accumulator) {
-      perServerByIndex[i] = Array.from(map.entries())
-        .filter(([, count]) => count > 0)
-        .map(([name, count]) => ({ name, count }))
-        .sort((a, b) => b.count - a.count);
-    }
-
-    return {
-      labels: built.labels,
-      timestamps: built.timestamps,
-      bucketMs: built.bucketMs,
-      tooltipLabels: built.tooltipLabels,
-      datasets: renamedDatasets,
-      hasErrors: total > 0,
-      perServerByIndex,
-    };
-  }, [timeSeries, from, to, serverNameMappings]);
-
-  const chartId = "errors-over-time";
-  const expanded = expandedChart === chartId;
-
-  return (
-    <ChartCard
-      title="Errors Over Time"
-      chartId={chartId}
-      expandedChart={expandedChart}
-      onExpand={onExpand}
-      loading={loading}
-      error={error}
-      hasData={hasErrors}
-      isZoomed={isZoomed}
-      onResetZoom={onResetZoom}
-    >
-      {!hasErrors ? (
-        <ChartNoData message="No errors in this period" />
-      ) : (
-        <StackedTimeBarChart
-          labels={labels}
-          timestamps={timestamps}
-          bucketMs={bucketMs}
-          tooltipLabels={tooltipLabels}
-          datasets={datasets}
-          onRangeSelect={onRangeSelect}
-          height={
-            expanded ? LINE_CHART_HEIGHT.expanded : LINE_CHART_HEIGHT.collapsed
-          }
-          expanded={expanded}
-          tooltipAfterBody={(idx) => {
-            const servers = perServerByIndex[idx];
-            if (!servers || servers.length === 0) return [];
-            return servers.map((s) => `${s.name}: ${s.count}`);
-          }}
-        />
-      )}
-    </ChartCard>
-  );
-}
-
 function HooksAnalytics({
   serverNameMappings,
   from,
   to,
-  compact = false,
-  addFilter,
-  onHookTypesChange,
   summaryData,
   summaryPending,
   summaryIsError,
   sectionStatus,
-  expandedChart,
-  onExpandedChartChange: setExpandedChart,
   onRangeSelect,
-  isZoomed,
-  onResetZoom,
 }: {
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
   from: Date;
   to: Date;
-  compact?: boolean;
-  addFilter: (chip: FilterChip) => void;
-  onHookTypesChange: (types: ObserveTypeFilterValue[]) => void;
   summaryData: GetToolUsageSummaryResult | undefined;
   summaryPending: boolean;
   summaryIsError: boolean;
   sectionStatus: ToolUsageSectionStatus;
-  expandedChart: string | null;
-  onExpandedChartChange: (id: string | null) => void;
   onRangeSelect?: (from: Date, to: Date) => void;
-  isZoomed?: boolean;
-  onResetZoom?: () => void;
 }) {
-  const targets = summaryData?.targets;
-  // targetFiltersByLabel (below) is built from the targets section, which loads
-  // independently from the panels that trigger filtering. Until it resolves —
-  // and if it fails to resolve — suppress server-row clicks rather than apply
-  // the wrong fallback filter.
-  const targetsUnavailable =
-    sectionStatus.targets.pending || sectionStatus.targets.error;
-  const users = summaryData?.users ?? [];
-  const timeSeries = summaryData?.targetTimeSeries ?? [];
-  const userTimeSeries = summaryData?.userTimeSeries ?? [];
-  const usersByTarget = summaryData?.usersByTarget ?? [];
-  const targetToolBreakdown = summaryData?.targetToolBreakdown ?? [];
-  const skillTimeSeries = timeSeries.filter(
-    (point) => point.targetType === "skill",
-  );
-  const skillBreakdown = usersByTarget.filter(
-    (row) => row.targetType === "skill",
-  );
-
-  const kpis = useMemo(() => {
-    if (!summaryData) return null;
-    const totalEvents = summaryData.totals.eventCount;
-    const totalSuccesses = summaryData.totals.successCount;
-    const totalFailures = summaryData.totals.failureCount;
-    const completedEvents = totalSuccesses + totalFailures;
-    const avgSuccessRate =
-      completedEvents > 0 ? (totalSuccesses / completedEvents) * 100 : null;
-
-    const activeUsers = summaryData.totals.uniqueUsers;
-    const activeTargets = summaryData.totals.uniqueTargets;
-    const uniqueTools = summaryData.totals.uniqueTools;
-
-    return {
-      avgSuccessRate,
-      totalEvents,
-      activeUsers,
-      activeTargets,
-      uniqueTools,
-    };
-  }, [summaryData]);
-
-  const targetFiltersByLabel = useMemo(() => {
-    const filters = new Map<string, string[]>();
-    // Targets sharing a display label share a chart row; clicking it filters to all of them.
-    const addServerFilter = (label: string, value: string) => {
-      filters.set(label, [...(filters.get(label) ?? []), value]);
-    };
-    for (const target of targets ?? []) {
-      const label = displayTargetLabel(
-        target.targetLabel,
-        target.targetType,
-        serverNameMappings,
-      );
-      if (target.targetType === "hosted_mcp_server") {
-        addServerFilter(label, encodeHostedServerFilter(target.targetId));
-      } else if (target.targetType === "meta_mcp_server") {
-        addServerFilter(label, encodeGatewayServerFilter(target.targetId));
-      } else if (target.targetType === "shadow_mcp_server") {
-        addServerFilter(label, encodeShadowServerFilter(target.targetId));
-      } else if (target.targetType === "local_tool") {
-        filters.set(label, ["local_tool"]);
-      } else if (target.targetType === "skill") {
-        filters.set(label, ["skill"]);
-      }
-    }
-    return filters;
-  }, [serverNameMappings, targets]);
-
-  type FilterAxisConfig = Partial<Record<"user" | "server", "dataset" | "row">>;
-
-  const makeFilterHandler = useCallback(
-    (config: FilterAxisConfig) => (datasetLabel: string, rowLabel: string) => {
-      const localToolsDisplayName =
-        serverNameMappings.rawToDisplay.get("") ?? "Local Tools";
-      const apply = (value: string, filterType: "server" | "user") => {
-        if (!value || value === "unknown") return;
-        if (filterType === "server") {
-          // Skill/local-tool/hosted routing needs targetFiltersByLabel; if the
-          // targets section is still loading or failed, ignore the click instead
-          // of misrouting it to a raw server filter.
-          if (targetsUnavailable) return;
-          if (value === localToolsDisplayName) {
-            onHookTypesChange(["local_tool"]);
-            return;
-          }
-          const targetFilter = targetFiltersByLabel.get(value);
-          if (targetFilter?.includes("local_tool")) {
-            onHookTypesChange(["local_tool"]);
-            return;
-          }
-          if (targetFilter?.includes("skill")) {
-            onHookTypesChange(["skill"]);
-            return;
-          }
-          const rawFilters = targetFilter ??
-            serverNameMappings.displayToRaws.get(value) ?? [value];
-          addFilter({
-            display: value,
-            filters: rawFilters,
-            path: SERVER_FILTER_PATH,
-          });
-        } else {
-          addFilter({
-            display: value,
-            filters: [value],
-            path: USER_EMAIL_FILTER_PATH,
-          });
-        }
-      };
-      for (const [filterType, axis] of Object.entries(config) as [
-        "server" | "user",
-        "dataset" | "row",
-      ][]) {
-        apply(axis === "dataset" ? datasetLabel : rowLabel, filterType);
-      }
-    },
-    [
-      addFilter,
-      onHookTypesChange,
-      serverNameMappings.rawToDisplay,
-      serverNameMappings.displayToRaws,
-      targetFiltersByLabel,
-      targetsUnavailable,
-    ],
-  );
-
   return (
-    <div className="space-y-4">
-      <StatTileGroup className={cn(expandedChart && "hidden")}>
-        {summaryIsError && !summaryData ? (
-          <div className="w-full">
-            <ErrorAlert
-              error={new Error("Failed to load analytics summary")}
-              title="Error loading analytics"
-            />
-          </div>
-        ) : summaryPending || !summaryData ? (
-          <>
-            {Array.from({ length: compact ? 3 : 5 }).map((_, i) => (
-              <Skeleton key={i} className="h-[104px] flex-1" />
-            ))}
-          </>
-        ) : (
-          <>
-            <StatTile
-              title="Avg Success Rate"
-              value={kpis?.avgSuccessRate ?? 0}
-              tone="success"
-              format="percent"
-              icon="circle-check"
-            />
-            <StatTile
-              title="Total Events"
-              value={kpis?.totalEvents ?? 0}
-              tone="information"
-              icon="activity"
-            />
-            <StatTile
-              title="Active Users"
-              value={kpis?.activeUsers ?? 0}
-              tone="information"
-              icon="users"
-            />
-            <StatTile
-              title="Active Targets"
-              value={kpis?.activeTargets ?? 0}
-              tone="information"
-              icon="monitor"
-            />
-            <StatTile
-              title="Unique Tools"
-              value={kpis?.uniqueTools ?? 0}
-              tone="information"
-              icon="wrench"
-            />
-          </>
-        )}
-      </StatTileGroup>
-
-      <div
-        className={cn(
-          "grid gap-4",
-          expandedChart
-            ? "grid-cols-1"
-            : compact
-              ? "grid-cols-1"
-              : "grid-cols-1 lg:grid-cols-2",
-        )}
-      >
-        <ServerUsageTimeSeries
-          loading={sectionStatus.targetTimeSeries.pending}
-          error={sectionStatus.targetTimeSeries.error}
-          timeSeries={timeSeries}
-          from={from}
-          to={to}
-          serverNameMappings={serverNameMappings}
-          expandedChart={expandedChart}
-          onExpand={setExpandedChart}
-          onRangeSelect={onRangeSelect}
-          isZoomed={isZoomed}
-          onResetZoom={onResetZoom}
-        />
-
-        <UsersPerServerChart
-          loading={sectionStatus.usersByTarget.pending}
-          error={sectionStatus.usersByTarget.error}
-          title="Users by Source"
-          breakdown={usersByTarget}
-          serverNameMappings={serverNameMappings}
-          handleFilter={makeFilterHandler({
-            server: "row",
-            user: "dataset",
-          })}
-          expandedChart={expandedChart}
-          onExpand={setExpandedChart}
-        />
-
-        <UserUsageTimeSeries
-          loading={sectionStatus.userTimeSeries.pending}
-          error={sectionStatus.userTimeSeries.error}
-          timeSeries={userTimeSeries}
-          from={from}
-          to={to}
-          expandedChart={expandedChart}
-          onExpand={setExpandedChart}
-          onRangeSelect={onRangeSelect}
-          isZoomed={isZoomed}
-          onResetZoom={onResetZoom}
-        />
-
-        <UserEventCountsChart
-          loading={sectionStatus.users.pending}
-          error={sectionStatus.users.error}
-          title="Tool Calls by User"
-          users={users}
-          handleFilter={makeFilterHandler({ user: "row" })}
-          expandedChart={expandedChart}
-          onExpand={setExpandedChart}
-        />
-
-        <SkillUsageTimeSeries
-          loading={sectionStatus.targetTimeSeries.pending}
-          error={sectionStatus.targetTimeSeries.error}
-          skillTimeSeries={skillTimeSeries}
-          from={from}
-          to={to}
-          expandedChart={expandedChart}
-          onExpand={setExpandedChart}
-          onRangeSelect={onRangeSelect}
-          isZoomed={isZoomed}
-          onResetZoom={onResetZoom}
-        />
-
-        <UsersPerSkillChart
-          loading={sectionStatus.usersByTarget.pending}
-          error={sectionStatus.usersByTarget.error}
-          title="Users per Skill"
-          skillBreakdown={skillBreakdown}
-          expandedChart={expandedChart}
-          onExpand={setExpandedChart}
-        />
-
-        <ErrorsOverTimeChart
-          loading={sectionStatus.targetTimeSeries.pending}
-          error={sectionStatus.targetTimeSeries.error}
-          timeSeries={timeSeries}
-          from={from}
-          to={to}
-          serverNameMappings={serverNameMappings}
-          expandedChart={expandedChart}
-          onExpand={setExpandedChart}
-          onRangeSelect={onRangeSelect}
-          isZoomed={isZoomed}
-          onResetZoom={onResetZoom}
-        />
-
-        <ServerErrorRateChart
-          loading={sectionStatus.targetToolBreakdown.pending}
-          error={sectionStatus.targetToolBreakdown.error}
-          title="Failures by Source and Tool"
-          breakdown={targetToolBreakdown}
-          serverNameMappings={serverNameMappings}
-          expandedChart={expandedChart}
-          onExpand={setExpandedChart}
-        />
-      </div>
-    </div>
+    <InsightsGrid
+      totals={summaryData?.totals}
+      targets={summaryData?.targets ?? []}
+      users={summaryData?.users ?? []}
+      clients={summaryData?.clients ?? []}
+      targetToolBreakdown={summaryData?.targetToolBreakdown ?? []}
+      timeSeries={summaryData?.targetTimeSeries ?? []}
+      from={from}
+      to={to}
+      serverNameMappings={serverNameMappings}
+      status={{
+        totals: { pending: summaryPending, error: summaryIsError },
+        targets: sectionStatus.targets,
+        users: sectionStatus.users,
+        clients: sectionStatus.clients,
+        targetToolBreakdown: sectionStatus.targetToolBreakdown,
+        targetTimeSeries: sectionStatus.targetTimeSeries,
+      }}
+      onRangeSelect={onRangeSelect}
+    />
   );
 }
