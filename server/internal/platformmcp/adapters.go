@@ -313,6 +313,7 @@ type PostgresReader struct {
 	metadataVersionKey  []byte
 	riskReads           *RiskReadService
 	riskAnalysisStatus  *RiskAnalysisStatusService
+	riskFindings        *RiskFindingsService
 	dataExports         *DataExportReadService
 	dataExportMutations *dataExportMutationService
 	recentToolCalls     *RecentToolCallReadService
@@ -332,6 +333,7 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		metadataVersionKey:  nil,
 		riskReads:           nil,
 		riskAnalysisStatus:  nil,
+		riskFindings:        nil,
 		dataExports:         nil,
 		dataExportMutations: nil,
 		recentToolCalls:     nil,
@@ -361,6 +363,14 @@ func (r *PostgresReader) WithShadowInventory(service *ShadowInventoryService) *P
 func (r *PostgresReader) WithRiskAnalysisStatus(service *RiskAnalysisStatusService) *PostgresReader {
 	if r != nil && service.valid() {
 		r.riskAnalysisStatus = service
+	}
+	return r
+}
+
+// WithRiskFindings attaches privacy-safe Watchdog finding reads.
+func (r *PostgresReader) WithRiskFindings(service *RiskFindingsService) *PostgresReader {
+	if r != nil && service.valid() {
+		r.riskFindings = service
 	}
 	return r
 }
