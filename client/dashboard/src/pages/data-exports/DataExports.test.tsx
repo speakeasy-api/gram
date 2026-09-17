@@ -125,12 +125,22 @@ describe("ExportMap", () => {
             destinationName: "Clickstack",
           }),
         ]}
+        dataSources={[
+          {
+            value: "product_telemetry",
+            description: <a href="/event-feed">Event Feed</a>,
+          },
+          { value: "risk_findings", description: "Risk policies" },
+        ]}
         {...callbacks}
       />,
     );
 
     expect(screen.getByText("Product telemetry")).toBeTruthy();
     expect(screen.getByText("Risk findings")).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "Event Feed" }).getAttribute("href"),
+    ).toBe("/event-feed");
     expect(screen.getAllByText("Clickstack")).toHaveLength(1);
     expect(screen.getAllByText("https://clickstack.example.com")).toHaveLength(
       1,

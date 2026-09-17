@@ -32,7 +32,7 @@ import { invalidateDataExportDestinations } from "@gram/client/react-query/dataE
 import { buildListDataExportsForOrgQuery } from "@gram/client/react-query/listDataExportsForOrg.js";
 import { useUpdateDataExportDestinationMutation } from "@gram/client/react-query/updateDataExportDestination.js";
 import { useUpdateDataExportRouteMutation } from "@gram/client/react-query/updateDataExportRoute.js";
-import { useId, useState } from "react";
+import { type ReactNode, useId, useState } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
 import {
@@ -101,14 +101,17 @@ function visualDestination({
 type VisualSource = {
   key: string;
   name: string;
-  detail: string;
+  detail: ReactNode;
 };
 
-function visualSource({ route }: ProjectExportRow): VisualSource {
+function visualSource(
+  { route }: ProjectExportRow,
+  dataSources: Array<{ value: DataSourceValue; description: ReactNode }>,
+): VisualSource {
   return {
     key: route.id,
     name: sourceLabel(route.dataSource),
-    detail: sourceDescription(route.dataSource),
+    detail: sourceDescription(route.dataSource, dataSources),
   };
 }
 
@@ -137,10 +140,16 @@ function sourceLabel(dataSource: string): string {
   );
 }
 
-function sourceDescription(dataSource: string): string {
+function sourceDescription(
+  dataSource: string,
+  dataSources: Array<{
+    value: DataSourceValue;
+    description: ReactNode;
+  }> = DATA_SOURCE_OPTIONS,
+): ReactNode {
   return (
-    DATA_SOURCE_OPTIONS.find((option) => option.value === dataSource)
-      ?.description ?? "OTLP data"
+    dataSources.find((option) => option.value === dataSource)?.description ??
+    "OTLP data"
   );
 }
 
@@ -262,7 +271,7 @@ function DataExportsInner(): JSX.Element {
             Speakeasy&apos;s /otel/v1 endpoints — the same records the{" "}
             <Link
               to={`/${organization.slug}/data/event-feed`}
-              className="text-link-primary"
+              className="pointer-events-auto relative z-30 text-link-primary"
             >
               Event Feed
             </Link>{" "}
@@ -285,7 +294,7 @@ function DataExportsInner(): JSX.Element {
           {defaultProject ? (
             <Link
               to={`/${organization.slug}/projects/${defaultProject.slug}/risk-policies?tab=policies`}
-              className="text-link-primary"
+              className="pointer-events-auto relative z-30 text-link-primary"
             >
               risk policies
             </Link>
@@ -527,6 +536,7 @@ function DataExportsInner(): JSX.Element {
         <ExportAnimationStyles />
         <ExportMap
           exports={configuredExports}
+          dataSources={linkedDataSourceOptions}
           mutating={mutating}
           onConfigure={(project, route) =>
             setConfigureTarget({
@@ -674,6 +684,10 @@ function groupExportsByDestination(
 
 type ExportMapProps = {
   exports: ProjectExportRow[];
+  dataSources?: Array<{
+    value: DataSourceValue;
+    description: ReactNode;
+  }>;
   mutating: boolean;
   onConfigure: (project: ProjectEntry, route: DataExportRoute) => void;
   onConfigureDestination: (
@@ -690,6 +704,7 @@ type ExportMapProps = {
 
 export function ExportMap({
   exports,
+  dataSources = DATA_SOURCE_OPTIONS,
   mutating,
   onConfigure,
   onConfigureDestination,
@@ -720,6 +735,7 @@ export function ExportMap({
                 <ExportSourceNode
                   key={exportRow.route.id}
                   exportRow={exportRow}
+                  dataSources={dataSources}
                   row={rowIndex + 1}
                   mutating={mutating}
                   onConfigure={onConfigure}
@@ -749,6 +765,7 @@ export function ExportMap({
 
 function ExportSourceNode({
   exportRow,
+  dataSources,
   row,
   mutating,
   onConfigure,
@@ -756,6 +773,7 @@ function ExportSourceNode({
   onDelete,
 }: {
   exportRow: ProjectExportRow;
+  dataSources: NonNullable<ExportMapProps["dataSources"]>;
   row: number;
   mutating: boolean;
   onConfigure: ExportMapProps["onConfigure"];
@@ -763,7 +781,7 @@ function ExportSourceNode({
   onDelete: ExportMapProps["onDelete"];
 }): JSX.Element {
   const { project, route } = exportRow;
-  const source = visualSource(exportRow);
+  const source = visualSource(exportRow, dataSources);
 
   return (
     <div
