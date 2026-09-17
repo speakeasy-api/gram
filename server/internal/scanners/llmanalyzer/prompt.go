@@ -1,8 +1,6 @@
 package llmanalyzer
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"unicode/utf8"
@@ -165,23 +163,43 @@ func renderToolCalls(calls []ToolCall) string {
 	return b.String()
 }
 
-// jsonString quotes s as a JSON string without HTML escaping, matching Python's
-// json.dumps(ensure_ascii=False). encoding/json always escapes the U+2028 and
-// U+2029 line separators, which Python leaves literal, so those two escapes
-// are undone afterwards.
+// jsonString quotes s exactly as Python's json.dumps(ensure_ascii=False)
+// does, which is what the training rows contain: only the quote, the
+// backslash and C0 control characters are escaped (\n, \r, \t, \b and \f
+// by name, the rest as \u00XX); everything else, U+2028 and U+2029
+// included, stays literal. encoding/json cannot produce this: it always
+// escapes the two line separators.
 func jsonString(s string) string {
-	var buf bytes.Buffer
-	enc := json.NewEncoder(&buf)
-	enc.SetEscapeHTML(false)
-	if err := enc.Encode(s); err != nil {
-		// Encoding a string cannot fail; keep the prompt well-formed anyway.
-		return `""`
+	var b strings.Builder
+	b.Grow(len(s) + 2)
+	b.WriteByte('"')
+	for _, r := range s {
+		switch r {
+		case '"':
+			b.WriteString(`\"`)
+		case '\\':
+			b.WriteString(`\\`)
+		case '\n':
+			b.WriteString(`\n`)
+		case '\r':
+			b.WriteString(`\r`)
+		case '\t':
+			b.WriteString(`\t`)
+		case '\b':
+			b.WriteString(`\b`)
+		case '\f':
+			b.WriteString(`\f`)
+		default:
+			if r < 0x20 {
+				fmt.Fprintf(&b, `\u%04x`, r)
+				continue
+			}
+			b.WriteRune(r)
+		}
 	}
-	quoted := strings.TrimSuffix(buf.String(), "\n")
-	return lineSeparatorUnescaper.Replace(quoted)
+	b.WriteByte('"')
+	return b.String()
 }
-
-var lineSeparatorUnescaper = strings.NewReplacer(`\u2028`, "\u2028", `\u2029`, "\u2029")
 
 func capToolCalls(calls []judgemessage.ToolCall) ([]judgemessage.ToolCall, bool) {
 	if len(calls) <= maxToolCalls {

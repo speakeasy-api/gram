@@ -137,6 +137,21 @@ func TestBuildUserPrompt_KeepsLineSeparatorsLiteral(t *testing.T) {
 	require.NotContains(t, got, `\u2029`)
 }
 
+func TestBuildUserPrompt_EscapesLikePythonJSONDumps(t *testing.T) {
+	t.Parallel()
+
+	got := llmanalyzer.BuildUserPrompt(llmanalyzer.PromptInput{
+		Content: "",
+		ToolCalls: []llmanalyzer.ToolCall{
+			{ID: "toolu_0000001", Name: "Write", Arguments: "literal \\u2028 text \"quoted\" tab\tnl\ncr\rbell\x07del\x7f"},
+		},
+		ToolOutcome: "",
+	})
+
+	require.Contains(t, got, `"arguments": "literal \\u2028 text \"quoted\" tab\tnl\ncr\rbell\u0007del`+"\x7f"+`"`,
+		"a literal backslash-u2028 stays escaped as a backslash, controls escape like Python, DEL stays literal")
+}
+
 func TestBuildMessages_SystemThenUser(t *testing.T) {
 	t.Parallel()
 

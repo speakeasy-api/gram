@@ -205,11 +205,11 @@ func WithDialTimeout(timeout time.Duration) func(*httpClientOptions) {
 }
 
 // WithCheckRedirect installs the client's redirect policy, the same hook as
-// [http.Client.CheckRedirect]. It applies to the client that follows
-// redirects, which sits inside the retry layer when [WithRetryConfig] is
-// also set. Return [http.ErrUseLastResponse] to hand 3xx responses back to
-// the caller untouched; any other error is a transport failure to the retry
-// layer and is retried like one.
+// [http.Client.CheckRedirect]. It is invoked once per redirect by the client
+// that follows them, which sits inside the retry layer when
+// [WithRetryConfig] is also set. Return [http.ErrUseLastResponse] to hand
+// 3xx responses back to the caller untouched; any other error is a transport
+// failure to the retry layer and is retried like one.
 func WithCheckRedirect(fn func(req *http.Request, via []*http.Request) error) func(*httpClientOptions) {
 	return func(o *httpClientOptions) {
 		o.checkRedirect = fn
@@ -442,9 +442,14 @@ func (p *Policy) clientWithBaseTransport(transport *http.Transport, options ...f
 	}
 
 	client := retryClient.StandardClient()
-	// The standard client follows redirects on its own, so the policy has to
-	// sit on both layers for a 3xx to reach the caller.
-	client.CheckRedirect = opts.checkRedirect
+	// The inner client owns the redirect policy, so the only 3xx that reaches
+	// this layer is one the callback already chose to hand back; stop here
+	// without invoking the callback a second time.
+	if opts.checkRedirect != nil {
+		client.CheckRedirect = func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		}
+	}
 	client.Transport = &closeIdleRoundTripper{
 		RoundTripper:         client.Transport,
 		closeIdleConnections: transport.CloseIdleConnections,
