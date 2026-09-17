@@ -1300,16 +1300,17 @@ func TestPlatformMCPInventoryReturnsDashboardManagedRemoteUpstreamURL(t *testing
 
 	inventory := platformrepo.New(conn)
 	rows, err := inventory.ListPlatformMCPInventory(ctx, platformrepo.ListPlatformMCPInventoryParams{
-		OrganizationID:       principal.OrganizationID,
-		ConnectionID:         uuid.NullUUID{UUID: connectionIDFromPrincipal(t, principal), Valid: true},
-		ConnectionGeneration: uuid.NullUUID{UUID: connectionIDFromPrincipalGeneration(t, principal), Valid: true},
-		UserID:               pgtype.Text{},
-		ActingSurface:        pgtype.Text{},
-		ProjectID:            uuid.NullUUID{UUID: project.ID, Valid: true},
-		AfterMcpID:           uuid.NullUUID{},
-		QueryText:            "Registration cohort server",
-		ReadinessState:       pgtype.Text{},
-		LimitValue:           10,
+		OrganizationID:          principal.OrganizationID,
+		ConnectionID:            uuid.NullUUID{UUID: connectionIDFromPrincipal(t, principal), Valid: true},
+		ConnectionGeneration:    uuid.NullUUID{UUID: connectionIDFromPrincipalGeneration(t, principal), Valid: true},
+		SkipAuthorizationFilter: true,
+		UserID:                  pgtype.Text{},
+		ActingSurface:           pgtype.Text{},
+		ProjectID:               uuid.NullUUID{UUID: project.ID, Valid: true},
+		AfterMcpID:              uuid.NullUUID{},
+		QueryText:               "Registration cohort server",
+		ReadinessState:          pgtype.Text{},
+		LimitValue:              10,
 	})
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
