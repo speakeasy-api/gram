@@ -81,15 +81,16 @@ func seedWorkloadAgent(t *testing.T, ctx context.Context, conn *pgxpool.Pool, na
 	return agent
 }
 
-// seedWorkloadAssignment assigns an agent to a workload principal directly, for
-// the same reason seedWorkloadIssuer does.
+// seedWorkloadAssignment assigns an agent to a workload principal directly.
+// There is no create query yet: writes belong to the workload identity
+// management API.
 func seedWorkloadAssignment(t *testing.T, ctx context.Context, conn *pgxpool.Pool, issuerID uuid.UUID, subject string, agentID uuid.UUID) {
 	t.Helper()
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	_, err := conn.Exec( //nolint:glint // notestingrawsql: see seedWorkloadIssuer
+	_, err := conn.Exec( //nolint:glint // notestingrawsql: no create query exists yet; writes belong to the management API milestone
 		ctx, `
 		INSERT INTO workload_agent_assignments (organization_id, workload_issuer_id, subject, agent_id)
 		VALUES ($1, $2, $3, $4)
@@ -97,8 +98,8 @@ func seedWorkloadAssignment(t *testing.T, ctx context.Context, conn *pgxpool.Poo
 	require.NoError(t, err)
 }
 
-// seedWorkloadAdmission admits a workload directly, for the same reason
-// seedWorkloadIssuer does. A null projectID is the organization tier.
+// seedWorkloadAdmission admits a workload directly, since writes belong to the
+// workload identity management API. A null projectID is the organization tier.
 func seedWorkloadAdmission(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.NullUUID, issuerID uuid.UUID, subject string, name string) uuid.UUID {
 	t.Helper()
 
@@ -106,7 +107,7 @@ func seedWorkloadAdmission(t *testing.T, ctx context.Context, conn *pgxpool.Pool
 	require.True(t, ok)
 
 	var id uuid.UUID
-	err := conn.QueryRow( //nolint:glint // notestingrawsql: see seedWorkloadIssuer
+	err := conn.QueryRow( //nolint:glint // notestingrawsql: no create query exists yet; writes belong to the management API milestone
 		ctx, `
 		INSERT INTO workload_identity_admissions (organization_id, project_id, workload_issuer_id, subject, name)
 		VALUES ($1, $2, $3, $4, $5)
@@ -274,7 +275,7 @@ func TestListUserSessions_ListsEveryAdmissionLettingTheWorkloadIn(t *testing.T) 
 	siblingProjectID := createSiblingProject(t, ctx, ti.conn, "workload-admissions-sibling")
 
 	withdrawn := seedWorkloadAdmission(t, ctx, ti.conn, project, workloadIssuerID, workloadTestSubject, "Withdrawn admission")
-	_, err := ti.conn.Exec( //nolint:glint // notestingrawsql: see seedWorkloadIssuer
+	_, err := ti.conn.Exec( //nolint:glint // notestingrawsql: no create query exists yet; writes belong to the management API milestone
 		ctx, `UPDATE workload_identity_admissions SET deleted_at = clock_timestamp() WHERE id = $1`, withdrawn)
 	require.NoError(t, err)
 
@@ -304,7 +305,7 @@ func TestListUserSessions_AdmissionsUnderDeletedIssuerAreNotListed(t *testing.T)
 	issuerID := seedIssuer(t, ctx, ti, "workload-deleted-issuer")
 	workloadIssuerID := seedWorkloadIssuer(t, ctx, ti.conn, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, "Deleted issuer")
 	seedWorkloadAdmission(t, ctx, ti.conn, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, workloadIssuerID, workloadTestSubject, "Orphaned admission")
-	_, err := ti.conn.Exec( //nolint:glint // notestingrawsql: see seedWorkloadIssuer
+	_, err := ti.conn.Exec( //nolint:glint // notestingrawsql: no create query exists yet; writes belong to the management API milestone
 		ctx, `UPDATE workload_issuers SET deleted_at = clock_timestamp() WHERE id = $1`, workloadIssuerID)
 	require.NoError(t, err)
 
