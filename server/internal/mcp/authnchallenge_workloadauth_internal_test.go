@@ -6,6 +6,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
 	workloadidentity_repo "github.com/speakeasy-api/gram/server/internal/workloadidentity/repo"
 )
 
@@ -44,7 +45,7 @@ func TestWorkloadIssuerKeySource_EmptyJwksURIIsRefused(t *testing.T) {
 	require.ErrorContains(t, err, "gh-actions")
 }
 
-func TestWorkloadIssuerKeySource_RejectsUnusableJwksURI(t *testing.T) {
+func TestWorkloadIssuerKeySource_RefusesPlainHTTPJwksURI(t *testing.T) {
 	t.Parallel()
 
 	_, err := workloadIssuerKeySource(
@@ -52,7 +53,20 @@ func TestWorkloadIssuerKeySource_RejectsUnusableJwksURI(t *testing.T) {
 		workloadTestIssuer("gh-actions", "http://example.test/keys"),
 	)
 
-	require.Error(t, err, "plain http must not become a key source")
+	require.ErrorIs(t, err, workloadidentity.ErrJWKSURINotHTTPS, "plain http must not become a key source, and must be named as such")
+	require.ErrorContains(t, err, "gh-actions")
+}
+
+func TestWorkloadIssuerKeySource_RejectsMalformedHTTPSJwksURI(t *testing.T) {
+	t.Parallel()
+
+	_, err := workloadIssuerKeySource(
+		workloadTestEndpoint(uuid.New()),
+		workloadTestIssuer("gh-actions", "https://example.test/keys#frag"),
+	)
+
+	require.Error(t, err)
+	require.NotErrorIs(t, err, workloadidentity.ErrJWKSURINotHTTPS)
 	require.ErrorContains(t, err, "gh-actions")
 }
 
