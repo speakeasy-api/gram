@@ -1,0 +1,21 @@
+server/internal/networkingress/admission_test.go
+  h_9630b74bdac540 65-74
+server/cmd/gram/start_network_ingress_test.go
+  h_9630b74bdac540 31,34,59-86
+server/cmd/gram/start.go
+  h_9630b74bdac540 294,297-304,1120-1125,1909-1910
+server/internal/networkingress/admission.go
+  h_9630b74bdac540 7,25,30-32,35-38,90
+  h_9630b74bdac540 33-34
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8c43c90bcfbeee310ecbe1e889c1a2a59934c1dc",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
