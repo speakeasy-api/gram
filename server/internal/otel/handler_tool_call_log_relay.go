@@ -123,12 +123,23 @@ func (h *ToolCallLogRelayHandler) HandleBatchWithResult(
 	ctx context.Context,
 	messages []streams.BatchMessage[*telemetryv1.LogRecord],
 ) error {
+	relayMessages := make([]toolCallLogRelayMessage, len(messages))
+	for i, message := range messages {
+		relayMessages[i] = toolCallLogRelayMessage{
+			record: message.Message,
+			fail:   message.Fail,
+		}
+	}
+	return h.handleBatch(ctx, relayMessages)
+}
+
+func (h *ToolCallLogRelayHandler) handleBatch(ctx context.Context, messages []toolCallLogRelayMessage) error {
 	groups := make([]toolCallLogRouteGroup, 0)
 	indexes := make(map[relayRouteKey]int)
 	dropped := make(map[relayReason]int)
 
 	for _, message := range messages {
-		key, reason, ok := toolCallLogRouteKey(message.Message)
+		key, reason, ok := toolCallLogRouteKey(message.record)
 		if !ok {
 			dropped[reason]++
 			continue
@@ -140,10 +151,7 @@ func (h *ToolCallLogRelayHandler) HandleBatchWithResult(
 			indexes[key] = index
 			groups = append(groups, toolCallLogRouteGroup{key: key, messages: nil})
 		}
-		groups[index].messages = append(groups[index].messages, toolCallLogRelayMessage{
-			record: message.Message,
-			fail:   message.Fail,
-		})
+		groups[index].messages = append(groups[index].messages, message)
 	}
 
 	for reason, count := range dropped {
@@ -434,7 +442,7 @@ func telemetryKeyValues(attributes map[string]any) []*commonv1.KeyValue {
 func telemetryAnyValue(value any) *commonv1.AnyValue {
 	switch typed := value.(type) {
 	case nil:
-		return &commonv1.AnyValue{}
+		return &commonv1.AnyValue{Value: nil}
 	case string:
 		return &commonv1.AnyValue{Value: &commonv1.AnyValue_StringValue{StringValue: typed}}
 	case bool:
