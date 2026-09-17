@@ -262,6 +262,10 @@ export type AdminOrganization = {
   trial_tier?: string;
   trial_converted_at?: string;
   trial_demoted_at?: string;
+  // The flow that created the organization. Absent when nothing recorded one,
+  // and absent on every row the list endpoint returns: only the record read
+  // selects it.
+  creation_source?: string;
   member_count: number;
   created_at: string;
   updated_at: string;

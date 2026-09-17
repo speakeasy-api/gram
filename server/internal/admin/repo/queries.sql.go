@@ -263,6 +263,7 @@ SELECT
     t.ends_at AS trial_ends_at,
     t.converted_at AS trial_converted_at,
     t.demoted_at AS trial_demoted_at,
+    om.creation_source,
     om.created_at,
     om.updated_at,
     (
@@ -300,6 +301,7 @@ type AdminGetOrganizationRow struct {
 	TrialEndsAt          pgtype.Timestamptz
 	TrialConvertedAt     pgtype.Timestamptz
 	TrialDemotedAt       pgtype.Timestamptz
+	CreationSource       pgtype.Text
 	CreatedAt            pgtype.Timestamptz
 	UpdatedAt            pgtype.Timestamptz
 	MemberCount          int64
@@ -332,6 +334,7 @@ func (q *Queries) AdminGetOrganization(ctx context.Context, arg AdminGetOrganiza
 		&i.TrialEndsAt,
 		&i.TrialConvertedAt,
 		&i.TrialDemotedAt,
+		&i.CreationSource,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.MemberCount,

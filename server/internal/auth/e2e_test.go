@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgid "github.com/speakeasy-api/gram/server/internal/organizations/id"
+	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -259,6 +260,8 @@ func (e *e2eInstance) requireSignupProvisioned(ctx context.Context, t *testing.T
 	require.Equal(t, orgName, org.Name)
 	require.True(t, org.Whitelisted)
 	require.Equal(t, "enterprise", org.GramAccountType)
+	require.True(t, org.CreationSource.Valid)
+	require.Equal(t, orgprovision.SourceSignup, org.CreationSource.String)
 
 	trial, err := trialsRepo.New(e.conn).GetTrial(ctx, authCtx.ActiveOrganizationID)
 	require.NoError(t, err)
@@ -718,6 +721,11 @@ func TestE2E_Callback_NewUserNoWorkOSOrgs_AssistantsDisposition(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEqual(t, "enterprise", org.GramAccountType)
 	require.True(t, org.Whitelisted)
+
+	// Not "signup": an operator looking at this organization is looking at a
+	// product that made it, not at someone who asked for it.
+	require.True(t, org.CreationSource.Valid)
+	require.Equal(t, orgprovision.SourceAssistants, org.CreationSource.String)
 
 	_, err = trialsRepo.New(inst.conn).GetTrial(ctx, organizationID)
 	require.ErrorIs(t, err, pgx.ErrNoRows)

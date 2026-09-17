@@ -22,6 +22,28 @@ import (
 	orgid "github.com/speakeasy-api/gram/server/internal/organizations/id"
 )
 
+// Creation sources name the flow that created an organization. They are stored
+// verbatim in organization_metadata.creation_source and are informational: no
+// trial, entitlement or onboarding decision reads them.
+//
+// A row with no source is not a fourth value. It means nothing recorded one —
+// every organization created before the column existed, and every row first
+// written by WorkOS organization sync, which learns about an organization
+// without knowing what asked for it.
+const (
+	// SourceSignup is a self-serve signup: someone named a company and Gram
+	// created the organization around them.
+	SourceSignup = "signup"
+
+	// SourceAssistants is the organization auto-provisioned for a user who
+	// arrived through Assistants and never asked for one.
+	SourceAssistants = "assistants"
+
+	// SourcePlatformAdmin is an organization a platform admin created from the
+	// admin app, which is how the prospect flow starts.
+	SourcePlatformAdmin = "platform_admin"
+)
+
 // WorkOSOrganizationCreator is the WorkOS surface CreateInWorkOS needs. It
 // takes two methods rather than one because the Gram organization ID is derived
 // from the WorkOS ID that only the create call returns, so external_id can only
