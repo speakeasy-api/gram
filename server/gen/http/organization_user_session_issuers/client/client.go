@@ -42,6 +42,18 @@ type Client struct {
 	// deleteIssuer endpoint.
 	DeleteIssuerDoer goahttp.Doer
 
+	// MoveIssuer Doer is the HTTP client used to make requests to the moveIssuer
+	// endpoint.
+	MoveIssuerDoer goahttp.Doer
+
+	// GetIssuerMigratePreflight Doer is the HTTP client used to make requests to
+	// the getIssuerMigratePreflight endpoint.
+	GetIssuerMigratePreflightDoer goahttp.Doer
+
+	// MigrateIssuer Doer is the HTTP client used to make requests to the
+	// migrateIssuer endpoint.
+	MigrateIssuerDoer goahttp.Doer
+
 	// CreateCimdClient Doer is the HTTP client used to make requests to the
 	// createCimdClient endpoint.
 	CreateCimdClientDoer goahttp.Doer
@@ -79,21 +91,24 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		CreateIssuerDoer:             doer,
-		ListIssuersDoer:              doer,
-		GetIssuerDoer:                doer,
-		UpdateIssuerDoer:             doer,
-		GetIssuerDeletePreflightDoer: doer,
-		DeleteIssuerDoer:             doer,
-		CreateCimdClientDoer:         doer,
-		ListCimdClientsDoer:          doer,
-		GetCimdClientDoer:            doer,
-		DeleteCimdClientDoer:         doer,
-		RestoreResponseBody:          restoreBody,
-		scheme:                       scheme,
-		host:                         host,
-		decoder:                      dec,
-		encoder:                      enc,
+		CreateIssuerDoer:              doer,
+		ListIssuersDoer:               doer,
+		GetIssuerDoer:                 doer,
+		UpdateIssuerDoer:              doer,
+		GetIssuerDeletePreflightDoer:  doer,
+		DeleteIssuerDoer:              doer,
+		MoveIssuerDoer:                doer,
+		GetIssuerMigratePreflightDoer: doer,
+		MigrateIssuerDoer:             doer,
+		CreateCimdClientDoer:          doer,
+		ListCimdClientsDoer:           doer,
+		GetCimdClientDoer:             doer,
+		DeleteCimdClientDoer:          doer,
+		RestoreResponseBody:           restoreBody,
+		scheme:                        scheme,
+		host:                          host,
+		decoder:                       dec,
+		encoder:                       enc,
 	}
 }
 
@@ -236,6 +251,78 @@ func (c *Client) DeleteIssuer() goa.Endpoint {
 		resp, err := c.DeleteIssuerDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("organizationUserSessionIssuers", "deleteIssuer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// MoveIssuer returns an endpoint that makes HTTP requests to the
+// organizationUserSessionIssuers service moveIssuer server.
+func (c *Client) MoveIssuer() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeMoveIssuerRequest(c.encoder)
+		decodeResponse = DecodeMoveIssuerResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildMoveIssuerRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.MoveIssuerDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizationUserSessionIssuers", "moveIssuer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetIssuerMigratePreflight returns an endpoint that makes HTTP requests to
+// the organizationUserSessionIssuers service getIssuerMigratePreflight server.
+func (c *Client) GetIssuerMigratePreflight() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetIssuerMigratePreflightRequest(c.encoder)
+		decodeResponse = DecodeGetIssuerMigratePreflightResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetIssuerMigratePreflightRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetIssuerMigratePreflightDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizationUserSessionIssuers", "getIssuerMigratePreflight", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// MigrateIssuer returns an endpoint that makes HTTP requests to the
+// organizationUserSessionIssuers service migrateIssuer server.
+func (c *Client) MigrateIssuer() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeMigrateIssuerRequest(c.encoder)
+		decodeResponse = DecodeMigrateIssuerResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildMigrateIssuerRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.MigrateIssuerDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizationUserSessionIssuers", "migrateIssuer", err)
 		}
 		return decodeResponse(resp)
 	}

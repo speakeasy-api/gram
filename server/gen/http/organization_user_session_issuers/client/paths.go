@@ -37,6 +37,21 @@ func DeleteIssuerOrganizationUserSessionIssuersPath() string {
 	return "/rpc/organizationUserSessionIssuers.delete"
 }
 
+// MoveIssuerOrganizationUserSessionIssuersPath returns the URL path to the organizationUserSessionIssuers service moveIssuer HTTP endpoint.
+func MoveIssuerOrganizationUserSessionIssuersPath() string {
+	return "/rpc/organizationUserSessionIssuers.move"
+}
+
+// GetIssuerMigratePreflightOrganizationUserSessionIssuersPath returns the URL path to the organizationUserSessionIssuers service getIssuerMigratePreflight HTTP endpoint.
+func GetIssuerMigratePreflightOrganizationUserSessionIssuersPath() string {
+	return "/rpc/organizationUserSessionIssuers.getMigratePreflight"
+}
+
+// MigrateIssuerOrganizationUserSessionIssuersPath returns the URL path to the organizationUserSessionIssuers service migrateIssuer HTTP endpoint.
+func MigrateIssuerOrganizationUserSessionIssuersPath() string {
+	return "/rpc/organizationUserSessionIssuers.migrate"
+}
+
 // CreateCimdClientOrganizationUserSessionIssuersPath returns the URL path to the organizationUserSessionIssuers service createCimdClient HTTP endpoint.
 func CreateCimdClientOrganizationUserSessionIssuersPath() string {
 	return "/rpc/organizationUserSessionIssuers.createCimdClient"

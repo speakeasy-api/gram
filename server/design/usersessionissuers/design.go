@@ -275,6 +275,65 @@ var _ = Service("organizationUserSessionIssuers", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteOrganizationUserSessionIssuer"}`)
 	})
 
+	Method("moveIssuer", func() {
+		Description("Re-scope a user_session_issuer in the caller's organization. Provide a project_id to make it project-specific, or omit it to make it organization-owned. Existing clients and sessions move with the issuer. Requires org:admin.")
+		Payload(func() {
+			Attribute("id", String, "The user_session_issuer id.", func() { Format(FormatUUID) })
+			Attribute("project_id", String, "Target owning project id. Omit to make the issuer organization-owned.", func() { Format(FormatUUID) })
+			Required("id")
+			security.SessionPayload()
+		})
+		Result(UserSessionIssuer)
+		HTTP(func() {
+			POST("/rpc/organizationUserSessionIssuers.move")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "moveOrganizationUserSessionIssuer")
+		Meta("openapi:extension:x-speakeasy-name-override", "move")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "MoveOrganizationUserSessionIssuer"}`)
+	})
+
+	Method("getIssuerMigratePreflight", func() {
+		Description("Report the impact, blockers, and configuration warnings for consolidating one user_session_issuer onto another. Requires org:read.")
+		Payload(func() {
+			Attribute("source_id", String, "The user_session_issuer to migrate away from.", func() { Format(FormatUUID) })
+			Attribute("target_id", String, "The user_session_issuer to migrate onto.", func() { Format(FormatUUID) })
+			Required("source_id", "target_id")
+			security.SessionPayload()
+		})
+		Result(OrganizationUserSessionIssuerMigratePreflight)
+		HTTP(func() {
+			GET("/rpc/organizationUserSessionIssuers.getMigratePreflight")
+			Param("source_id")
+			Param("target_id")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "getOrganizationUserSessionIssuerMigratePreflight")
+		Meta("openapi:extension:x-speakeasy-name-override", "getMigratePreflight")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "OrganizationUserSessionIssuerMigratePreflight"}`)
+	})
+
+	Method("migrateIssuer", func() {
+		Description("Consolidate a source user_session_issuer onto a target issuer, preserving clients, sessions, attachments, and remote-session credentials before soft-deleting the source. The target must be in the same project or a broader organization scope. Requires org:admin.")
+		Payload(func() {
+			Attribute("source_id", String, "The user_session_issuer to migrate away from; soft-deleted on success.", func() { Format(FormatUUID) })
+			Attribute("target_id", String, "The surviving user_session_issuer.", func() { Format(FormatUUID) })
+			Required("source_id", "target_id")
+			security.SessionPayload()
+		})
+		Result(MigrateOrganizationUserSessionIssuerResult)
+		HTTP(func() {
+			POST("/rpc/organizationUserSessionIssuers.migrate")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "migrateOrganizationUserSessionIssuer")
+		Meta("openapi:extension:x-speakeasy-name-override", "migrate")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "MigrateOrganizationUserSessionIssuer"}`)
+	})
+
 	Method("createCimdClient", func() {
 		Description("Allow an additional CIMD document URL on an organization-owned user_session_issuer. Requires org:admin.")
 		Payload(func() {
@@ -473,4 +532,40 @@ var OrganizationUserSessionIssuerDeletePreflight = Type("OrganizationUserSession
 	Attribute("toolsets", ArrayOf(OrganizationUserSessionIssuerReference), "Live toolsets that block deletion.")
 	Attribute("can_delete", Boolean, "True when no live MCP server or toolset references the issuer.")
 	Required("client_count", "live_session_count", "mcp_servers", "toolsets", "can_delete")
+})
+
+var UserSessionIssuerFieldMismatch = Type("UserSessionIssuerFieldMismatch", func() {
+	Description("One user_session_issuer setting whose source and target values differ.")
+	Attribute("field", String, "The differing field name.")
+	Attribute("source_value", String, "The source issuer's rendered value. Empty when unset.")
+	Attribute("target_value", String, "The target issuer's rendered value. Empty when unset.")
+	Required("field", "source_value", "target_value")
+})
+
+var OrganizationUserSessionIssuerMigratePreflight = Type("OrganizationUserSessionIssuerMigratePreflight", func() {
+	Description("Authoritative impact summary for consolidating one user_session_issuer onto another.")
+	Attribute("client_count", Int, "Clients that would move.")
+	Attribute("session_count", Int, "User sessions that would move.")
+	Attribute("consent_count", Int, "User-session consents that would move.")
+	Attribute("cimd_client_count", Int, "Custom CIMD allowlist entries that would move or merge.")
+	Attribute("remote_session_count", Int, "Remote-session credentials whose issuer provenance would move.")
+	Attribute("conflicting_client_ids", ArrayOf(String), "Active OAuth client ids already present on both issuers. Non-empty blocks migration.")
+	Attribute("principal_binding_conflict_count", Int, "Active principal bindings that would violate target uniqueness. Non-zero blocks migration.")
+	Attribute("ema_binding_conflict_count", Int, "Enterprise-managed authorization bindings already present on the target. Non-zero blocks migration.")
+	Attribute("platform_owned", Boolean, "Whether a Platform MCP catalog registration owns either issuer. True blocks migration.")
+	Attribute("warnings", ArrayOf(UserSessionIssuerFieldMismatch), "Configuration differences that do not invalidate existing sessions but change future authorization behavior.")
+	Attribute("can_migrate", Boolean, "True when no hard blocker is present.")
+	Required("client_count", "session_count", "consent_count", "cimd_client_count", "remote_session_count", "conflicting_client_ids", "principal_binding_conflict_count", "ema_binding_conflict_count", "platform_owned", "warnings", "can_migrate")
+})
+
+var MigrateOrganizationUserSessionIssuerResult = Type("MigrateOrganizationUserSessionIssuerResult", func() {
+	Description("Outcome of consolidating a source user_session_issuer onto a target issuer.")
+	Attribute("issuer", UserSessionIssuer, "The surviving target issuer.")
+	Attribute("clients_migrated", Int, "Clients re-pointed to the target.")
+	Attribute("sessions_migrated", Int, "User sessions re-pointed to the target.")
+	Attribute("consents_migrated", Int, "Consents normalized to the target scope.")
+	Attribute("cimd_clients_migrated", Int, "CIMD allowlist entries moved or merged.")
+	Attribute("remote_sessions_migrated", Int, "Remote-session credentials whose provenance moved.")
+	Attribute("source_deleted", Boolean, "True when the source issuer was soft-deleted.")
+	Required("issuer", "clients_migrated", "sessions_migrated", "consents_migrated", "cimd_clients_migrated", "remote_sessions_migrated", "source_deleted")
 })
