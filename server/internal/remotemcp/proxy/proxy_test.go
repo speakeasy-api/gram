@@ -264,6 +264,30 @@ func TestProxy_Post_StripsCredentialsOnCrossOriginRedirect(t *testing.T) {
 	require.Empty(t, redirected.Get("X-Caller-Credential"), "the header a pass-through reads from leaks the same secret")
 }
 
+func TestProxy_Post_StopsSameOriginRedirectLoop(t *testing.T) {
+	t.Parallel()
+
+	var hits atomic.Int32
+	// Same-origin, so nothing else in the redirect policy stops it: only the
+	// hop limit can, and without one this spins until the phase timeout.
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		http.Redirect(w, r, "/loop", http.StatusFound)
+	}))
+	t.Cleanup(upstream.Close)
+
+	p := newProxyForTest(t, upstream.URL)
+	p.Identity.RemoteMCPServerID = "legacy-remote"
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req.Header.Set("Content-Type", "application/json")
+
+	err := p.Post(httptest.NewRecorder(), req)
+	require.Error(t, err)
+	require.Greater(t, hits.Load(), int32(1), "the loop should be followed, not refused outright")
+	require.LessOrEqual(t, hits.Load(), int32(12), "the loop must stop at the hop limit rather than run to the timeout")
+}
+
 func TestProxy_Post_RejectsCrossOriginBodyReplayingRedirect(t *testing.T) {
 	t.Parallel()
 

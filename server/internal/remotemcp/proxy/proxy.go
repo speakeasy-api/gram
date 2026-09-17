@@ -953,7 +953,14 @@ func (p *Proxy) forwardRequest(
 		}
 	} else if p.Identity.RemoteMCPServerID != "" {
 		configuredOrigin := upstreamReq.URL
-		client.CheckRedirect = func(req *http.Request, _ []*http.Request) error {
+		client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+			// Setting CheckRedirect replaces net/http's default policy, hop
+			// limit included, so the limit has to be restored here. Without
+			// it an upstream redirect loop runs until the phase timeout
+			// instead of stopping after a bounded number of hops.
+			if len(via) > maxRemoteMCPRedirects {
+				return fmt.Errorf("stopped after %d redirects", maxRemoteMCPRedirects)
+			}
 			if _, err := validateRemoteMCPTransportURL(req.URL.String()); err != nil {
 				return fmt.Errorf("validate remote MCP redirect: %w", err)
 			}
@@ -1627,6 +1634,11 @@ func (p *Proxy) dispatchInterceptorError(
 // echoed back in the synthesized error's "data" field. Enough to show the
 // upstream's actual response shape for debugging without relaying an
 // unbounded payload into a JSON-RPC error envelope.
+// maxRemoteMCPRedirects bounds redirect hops for hosted Remote MCP requests.
+// It matches the limit net/http applies by default, which this proxy's own
+// CheckRedirect would otherwise remove.
+const maxRemoteMCPRedirects = 10
+
 const maxNonJSONRPCEchoBytes = 2048
 
 // nonJSONRPCUpstreamData builds the JSON-RPC error "data" payload for a
