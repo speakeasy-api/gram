@@ -9,26 +9,16 @@ import (
 type contextKey string
 
 const (
-	grantsContextKey                      contextKey = "authz_grants"
-	principalCredentialPoliciesContextKey contextKey = "authz_principal_credential_policies" //nolint:gosec // private context key, not credential material
-	workloadPoliciesContextKey            contextKey = "authz_workload_policies"
+	grantsContextKey contextKey = "authz_grants"
+	// admittedPoliciesContextKey holds the policy sets of whichever admission
+	// ran last. Principal credential and workload admission share it, so a
+	// later admission always replaces an earlier one instead of being shadowed
+	// by it.
+	admittedPoliciesContextKey contextKey = "authz_admitted_policies"
 )
 
-type principalCredentialPolicies struct {
-	credential []Grant
-	agent      []Grant
-	owner      []Grant
-}
-
-// workloadPolicies is the two-set form a workload session acts under: the
-// session ceiling and the assigned agent's live policy. Kept separate from
-// principalCredentialPolicies rather than storing an empty owner set, which the
-// evaluator would read as "the owner allows nothing" and deny every check.
-type workloadPolicies struct {
-	ceiling []Grant
-	agent   []Grant
-}
-
+// grantAuthorization is the set of independent policies a caller acts under.
+// Every set must allow a check for it to pass.
 type grantAuthorization struct {
 	policies [][]Grant
 }
@@ -44,29 +34,17 @@ func GrantsFromContext(ctx context.Context) ([]Grant, bool) {
 	return grants, ok
 }
 
-func principalCredentialPoliciesToContext(ctx context.Context, credential, agent, owner []Grant) context.Context {
-	policies := principalCredentialPolicies{
-		credential: append([]Grant(nil), credential...),
-		agent:      append([]Grant(nil), agent...),
-		owner:      append([]Grant(nil), owner...),
+func admittedPoliciesToContext(ctx context.Context, sets ...[]Grant) context.Context {
+	policies := grantAuthorization{policies: make([][]Grant, 0, len(sets))}
+	for _, set := range sets {
+		policies.policies = append(policies.policies, append([]Grant(nil), set...))
 	}
-	return context.WithValue(ctx, principalCredentialPoliciesContextKey, policies)
-}
-
-func workloadPoliciesToContext(ctx context.Context, ceiling, agent []Grant) context.Context {
-	policies := workloadPolicies{
-		ceiling: append([]Grant(nil), ceiling...),
-		agent:   append([]Grant(nil), agent...),
-	}
-	return context.WithValue(ctx, workloadPoliciesContextKey, policies)
+	return context.WithValue(ctx, admittedPoliciesContextKey, policies)
 }
 
 func grantAuthorizationFromContext(ctx context.Context) (grantAuthorization, bool) {
-	if policies, ok := ctx.Value(principalCredentialPoliciesContextKey).(principalCredentialPolicies); ok {
-		return grantAuthorization{policies: [][]Grant{policies.credential, policies.agent, policies.owner}}, true
-	}
-	if policies, ok := ctx.Value(workloadPoliciesContextKey).(workloadPolicies); ok {
-		return grantAuthorization{policies: [][]Grant{policies.ceiling, policies.agent}}, true
+	if policies, ok := ctx.Value(admittedPoliciesContextKey).(grantAuthorization); ok {
+		return policies, true
 	}
 	if _, principalCredential := contextvalues.PrincipalCredentialAuthorization(ctx); principalCredential {
 		return grantAuthorization{policies: nil}, false

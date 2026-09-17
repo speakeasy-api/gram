@@ -34,7 +34,6 @@ vi.mock("@/routes", () => ({
     "data",
     "data/event-feed",
     "data/exports",
-    "agent-management",
     "setup",
     "setup/:taskSlug",
   ],

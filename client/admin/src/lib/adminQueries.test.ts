@@ -34,6 +34,74 @@ function org(id: string): AdminOrganization {
 }
 
 describe("organizationsListQuery", () => {
+  it("keys member bounds losslessly and independently alongside AND filters", () => {
+    const params = {
+      q: "fixture",
+      account_types: ["pro"],
+      trial_states: ["running"],
+      disabled_status: "active" as const,
+      sort: "created_at" as const,
+      direction: "asc" as const,
+      page: 2,
+    };
+    const min = organizationsListQuery({
+      ...params,
+      min_members: "9007199254740993",
+    }).queryKey;
+    const max = organizationsListQuery({
+      ...params,
+      max_members: "9007199254740993",
+    }).queryKey;
+    expect(min).not.toEqual(max);
+    expect(min[1]).toEqual({ ...params, min_members: "9007199254740993" });
+    expect(min).not.toEqual(
+      organizationsListQuery({ ...params, min_members: "9007199254740992" })
+        .queryKey,
+    );
+    expect(organizationsListQuery({ min_members: "0" }).queryKey).not.toEqual(
+      organizationsListQuery().queryKey,
+    );
+    expect(
+      organizationsListQuery({
+        min_members: "0",
+        max_members: "9223372036854775807",
+      }).queryKey[1],
+    ).toEqual({ min_members: "0", max_members: "9223372036854775807" });
+  });
+
+  it("separates disabled-only, unrestricted and legacy in-flight keys", () => {
+    const params = {
+      q: "org_exact_id",
+      account_types: ["pro"],
+      trial_states: ["running"],
+      direction: "asc" as const,
+      page: 2,
+    };
+    const unrestricted = organizationsListQuery({
+      ...params,
+      disabled_status: "all",
+    }).queryKey;
+    const disabled = organizationsListQuery({
+      ...params,
+      disabled_status: "disabled",
+    }).queryKey;
+    const active = organizationsListQuery({
+      ...params,
+      disabled_status: "active",
+    }).queryKey;
+    expect(active).not.toEqual(unrestricted);
+    expect(active).not.toEqual(disabled);
+    expect(unrestricted).not.toEqual(disabled);
+    expect(unrestricted).not.toEqual(organizationsListQuery(params).queryKey);
+    expect(disabled).not.toEqual(
+      organizationsListQuery({
+        ...params,
+        disabled_status: "disabled",
+        page: 1,
+      }).queryKey,
+    );
+  });
+
   it("invalidates every filtered page from the unfiltered key", () => {
     const qc = new QueryClient();
     const filtered = organizationsListQuery({ q: "x", cursor: "page-2" });

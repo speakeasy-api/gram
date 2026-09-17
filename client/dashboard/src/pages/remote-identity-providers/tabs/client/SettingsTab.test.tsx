@@ -9,7 +9,7 @@ import { SettingsTab } from "./SettingsTab";
 const mutation = vi.hoisted(() => ({ mutate: vi.fn() }));
 
 vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({ remoteIdentityProviders: { issuerDetail: {} } }),
+  useRoutes: () => ({ remoteIdentityProviders: { issuerDetail: {} } }),
 }));
 vi.mock("@/components/require-scope", () => ({
   RequireScope: ({ children }: { children: ReactNode }) => <>{children}</>,

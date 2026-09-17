@@ -256,10 +256,9 @@ export function cancelOrganizationFetches(qc: QueryClient): Promise<void> {
 // move the row out from under the operator who just acted on it; the detail
 // cache is separately invalidated after this immediate repaint.
 //
-// One consequence, accepted rather than overlooked: the default list request
-// sends no disabled_states, which asks for active organizations only, so a row
-// that has just been disabled keeps its place on a page whose filter no longer
-// describes it, until something else fetches that page. The alternative is
+// One consequence, accepted rather than overlooked: a status-changing write
+// keeps its row on a status-filtered page until something else fetches that
+// page, even when the filter no longer describes it. The alternative is
 // dropping the row from under the operator the moment they act on it, which is
 // worse.
 //

@@ -25,7 +25,9 @@ import (
 //
 // 4: ChatGPT Classic gained its process name, so an agent reports it as
 // running and not merely installed.
-const DefaultsVersion int32 = 4
+//
+// 5: Pi joined the catalog, so a device running it no longer scans clean.
+const DefaultsVersion int32 = 5
 
 // Source says where a target in an organization's list comes from.
 type Source string

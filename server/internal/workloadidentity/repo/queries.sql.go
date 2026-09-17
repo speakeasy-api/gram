@@ -86,12 +86,16 @@ func (q *Queries) ListWorkloadIssuersByIssuerURL(ctx context.Context, arg ListWo
 }
 
 const resolveWorkloadAgentAssignment = `-- name: ResolveWorkloadAgentAssignment :one
-SELECT agent_id
-FROM workload_agent_assignments
-WHERE organization_id = $1
-  AND workload_issuer_id = $2
-  AND subject = $3
-  AND deleted IS FALSE
+SELECT a.agent_id
+FROM workload_agent_assignments a
+JOIN workload_issuers i
+  ON i.organization_id = a.organization_id
+  AND i.id = a.workload_issuer_id
+WHERE a.organization_id = $1
+  AND a.workload_issuer_id = $2
+  AND a.subject = $3
+  AND a.deleted IS FALSE
+  AND i.deleted IS FALSE
 `
 
 type ResolveWorkloadAgentAssignmentParams struct {
@@ -112,6 +116,10 @@ type ResolveWorkloadAgentAssignmentParams struct {
 // on these three columns for live rows, which is where "one agent per workload"
 // is enforced. Unassigning is a soft delete, so deleted rows are excluded or the
 // workload would keep the authority an administrator believes they removed.
+//
+// The issuer must be live too. Deleting an issuer soft-deletes only its own
+// row, so without the join a session minted before the delete would keep the
+// authority of an identity the organization no longer trusts.
 func (q *Queries) ResolveWorkloadAgentAssignment(ctx context.Context, arg ResolveWorkloadAgentAssignmentParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, resolveWorkloadAgentAssignment, arg.OrganizationID, arg.WorkloadIssuerID, arg.Subject)
 	var agent_id uuid.UUID

@@ -69,9 +69,17 @@ SELECT EXISTS (
 -- on these three columns for live rows, which is where "one agent per workload"
 -- is enforced. Unassigning is a soft delete, so deleted rows are excluded or the
 -- workload would keep the authority an administrator believes they removed.
-SELECT agent_id
-FROM workload_agent_assignments
-WHERE organization_id = @organization_id
-  AND workload_issuer_id = @workload_issuer_id
-  AND subject = @subject
-  AND deleted IS FALSE;
+--
+-- The issuer must be live too. Deleting an issuer soft-deletes only its own
+-- row, so without the join a session minted before the delete would keep the
+-- authority of an identity the organization no longer trusts.
+SELECT a.agent_id
+FROM workload_agent_assignments a
+JOIN workload_issuers i
+  ON i.organization_id = a.organization_id
+  AND i.id = a.workload_issuer_id
+WHERE a.organization_id = @organization_id
+  AND a.workload_issuer_id = @workload_issuer_id
+  AND a.subject = @subject
+  AND a.deleted IS FALSE
+  AND i.deleted IS FALSE;
