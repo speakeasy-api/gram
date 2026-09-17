@@ -515,7 +515,7 @@ func TestFindingsForSources_FiltersByCoveredSource(t *testing.T) {
 	require.Equal(t, []string{llmanalyzer.RuleSecret}, ruleIDs(llmanalyzer.FindingsForSources(allFindings(), []string{"gitleaks"})))
 	require.Equal(t, []string{llmanalyzer.RulePII}, ruleIDs(llmanalyzer.FindingsForSource(allFindings(), "presidio")))
 	require.Equal(t, []string{llmanalyzer.RulePromptInjection}, ruleIDs(llmanalyzer.FindingsForSource(allFindings(), "prompt_injection")))
-	require.Equal(t, []string{llmanalyzer.RuleDestructiveTool}, ruleIDs(llmanalyzer.FindingsForSource(allFindings(), "cli_destructive")))
+	require.Equal(t, []string{llmanalyzer.RuleCLIDestructive}, ruleIDs(llmanalyzer.FindingsForSource(allFindings(), "cli_destructive")))
 	require.Equal(t, []string{llmanalyzer.RuleDestructiveTool}, ruleIDs(llmanalyzer.FindingsForSource(allFindings(), "destructive_tool")))
 	require.Equal(t,
 		[]string{llmanalyzer.RuleSecret, llmanalyzer.RulePII},
@@ -555,4 +555,31 @@ func TestFindingsForSources_IgnoresForeignSources(t *testing.T) {
 	foreign.Source = "gitleaks"
 
 	require.Empty(t, llmanalyzer.FindingsForSource([]scanners.Finding{foreign}, "gitleaks"))
+}
+
+func TestFindingsForSources_RelabelsSharedKeyPerSource(t *testing.T) {
+	t.Parallel()
+
+	verdict := []scanners.Finding{llmanalyzer.NewFinding(llmanalyzer.KeyDestructiveToolCall, "drops the table")}
+
+	both := llmanalyzer.FindingsForSources(verdict, []string{"destructive_tool", "cli_destructive", "cli_destructive"})
+	require.Equal(t, []string{llmanalyzer.RuleDestructiveTool, llmanalyzer.RuleCLIDestructive}, ruleIDs(both))
+	require.Equal(t, []string{"destructive_tool"}, both[0].Tags)
+	require.Equal(t, []string{"cli_destructive"}, both[1].Tags)
+	require.Equal(t, "drops the table", both[1].Description)
+	require.Equal(t, llmanalyzer.Source, both[1].Source)
+
+	// The input is never mutated.
+	require.Equal(t, llmanalyzer.RuleDestructiveTool, verdict[0].RuleID)
+	require.Equal(t, []string{"destructive_tool"}, verdict[0].Tags)
+}
+
+func TestCategoryForSource(t *testing.T) {
+	t.Parallel()
+
+	for _, source := range llmanalyzer.CoveredSources {
+		require.NotEmpty(t, llmanalyzer.CategoryForSource(source), source)
+	}
+	require.Equal(t, "cli_destructive", llmanalyzer.CategoryForSource("cli_destructive"))
+	require.Empty(t, llmanalyzer.CategoryForSource("shadow_mcp"))
 }
