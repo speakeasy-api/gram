@@ -4692,6 +4692,75 @@ func (q *Queries) ListPlatformMCPInventory(ctx context.Context, arg ListPlatform
 	return items, nil
 }
 
+const listPlatformMCPInventoryAuthorizationCandidatePage = `-- name: ListPlatformMCPInventoryAuthorizationCandidatePage :many
+SELECT m.id, m.project_id
+FROM mcp_servers AS m
+JOIN projects AS project
+  ON project.id = m.project_id
+ AND project.organization_id = $1
+ AND project.deleted IS FALSE
+WHERE m.deleted IS FALSE
+  AND ($2::uuid IS NULL OR m.project_id = $2::uuid)
+  AND ($3::uuid IS NULL OR m.id > $3::uuid)
+  AND (
+      $4::text = ''
+      OR m.id::text ILIKE '%' || $4::text || '%'
+      OR COALESCE(m.name, '') ILIKE '%' || $4::text || '%'
+      OR COALESCE(m.slug, '') ILIKE '%' || $4::text || '%'
+  )
+ORDER BY
+    CASE
+        WHEN $4::text <> ''
+         AND (m.id::text = $4::text OR LOWER(COALESCE(m.name, '')) = LOWER($4::text) OR LOWER(COALESCE(m.slug, '')) = LOWER($4::text))
+        THEN 0
+        ELSE 1
+    END,
+    m.id ASC
+LIMIT LEAST(GREATEST($5::integer, 1), 1001)
+`
+
+type ListPlatformMCPInventoryAuthorizationCandidatePageParams struct {
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+	AfterMcpID     uuid.NullUUID
+	QueryText      string
+	LimitValue     int32
+}
+
+type ListPlatformMCPInventoryAuthorizationCandidatePageRow struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Lightweight, bounded candidate selection before live RBAC evaluation. Match
+// the inventory projection's safe project/cursor/query filters and search order
+// so hidden resources do not consume caller-visible result pages.
+func (q *Queries) ListPlatformMCPInventoryAuthorizationCandidatePage(ctx context.Context, arg ListPlatformMCPInventoryAuthorizationCandidatePageParams) ([]ListPlatformMCPInventoryAuthorizationCandidatePageRow, error) {
+	rows, err := q.db.Query(ctx, listPlatformMCPInventoryAuthorizationCandidatePage,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.AfterMcpID,
+		arg.QueryText,
+		arg.LimitValue,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlatformMCPInventoryAuthorizationCandidatePageRow
+	for rows.Next() {
+		var i ListPlatformMCPInventoryAuthorizationCandidatePageRow
+		if err := rows.Scan(&i.ID, &i.ProjectID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPlatformMCPInventoryAuthorizationCandidates = `-- name: ListPlatformMCPInventoryAuthorizationCandidates :many
 SELECT m.id, m.project_id
 FROM mcp_servers AS m

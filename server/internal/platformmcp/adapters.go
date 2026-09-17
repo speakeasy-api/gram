@@ -499,7 +499,7 @@ func (r *PostgresReader) FindMCP(ctx context.Context, principal Principal, input
 	if query != "" {
 		limit = min(limit, 10)
 	}
-	allowedMCPIDs, err := r.allowedMCPIDs(ctx, principal.OrganizationID)
+	allowedMCPIDs, err := r.allowedMCPIDs(ctx, principal.OrganizationID, projectID, afterID, query)
 	if err != nil {
 		return FindMCPOutput{}, err
 	}
@@ -626,10 +626,21 @@ func inventoryMCPDisplayName(mcp *MCP) string {
 	return mcp.ID
 }
 
-func (r *PostgresReader) allowedMCPIDs(ctx context.Context, organizationID string) ([]uuid.UUID, error) {
-	servers, err := r.inventory.ListPlatformMCPInventoryAuthorizationCandidates(ctx, organizationID)
+const maxInventoryAuthorizationCandidates = 1000
+
+func (r *PostgresReader) allowedMCPIDs(ctx context.Context, organizationID string, projectID, afterID uuid.NullUUID, query string) ([]uuid.UUID, error) {
+	servers, err := r.inventory.ListPlatformMCPInventoryAuthorizationCandidatePage(ctx, platformrepo.ListPlatformMCPInventoryAuthorizationCandidatePageParams{
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+		AfterMcpID:     afterID,
+		QueryText:      query,
+		LimitValue:     maxInventoryAuthorizationCandidates + 1,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("list platform mcp authorization candidates: %w", err)
+	}
+	if len(servers) > maxInventoryAuthorizationCandidates {
+		return nil, fmt.Errorf("%w: inventory authorization candidate limit exceeded", ErrUnavailable)
 	}
 	checks := make([]authz.Check, 0, len(servers))
 	for _, server := range servers {
