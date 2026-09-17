@@ -8,6 +8,7 @@ import { ConfigurePoliciesStep } from "./configure-policies-step";
 const mocks = vi.hoisted(() => ({
   flagResult: vi.fn(),
   mutateCreate: vi.fn(),
+  mutateDelete: vi.fn(),
   policies: [] as unknown[],
 }));
 
@@ -44,7 +45,10 @@ vi.mock("@gram/client/react-query/riskCreatePolicy.js", () => ({
 }));
 
 vi.mock("@gram/client/react-query/riskPoliciesDelete.js", () => ({
-  useRiskPoliciesDeleteMutation: () => ({ isPending: false, mutate: vi.fn() }),
+  useRiskPoliciesDeleteMutation: () => ({
+    isPending: false,
+    mutate: mocks.mutateDelete,
+  }),
 }));
 
 vi.mock("@gram/client/react-query/riskPoliciesUpdate.js", () => ({
@@ -188,8 +192,13 @@ describe("ConfigurePoliciesStep detector mode", () => {
     fireEvent.click(
       screen.getByRole("button", { name: /^Financial Information/ }),
     );
+    // The row is bound to the stored policy, so turning it off deletes that
+    // policy rather than creating an entity-scoped duplicate next to it.
     fireEvent.click(screen.getByRole("switch", { name: "Enable detection" }));
-    fireEvent.click(screen.getByRole("switch", { name: "Enable detection" }));
+    expect(mocks.mutateDelete).toHaveBeenCalledTimes(1);
+    expect(mocks.mutateDelete.mock.calls[0]?.[0]?.request).toEqual({
+      id: "policy-1",
+    });
     expect(mocks.mutateCreate).not.toHaveBeenCalled();
   });
 });
