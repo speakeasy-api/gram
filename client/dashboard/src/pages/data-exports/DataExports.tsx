@@ -33,6 +33,7 @@ import { buildListDataExportsForOrgQuery } from "@gram/client/react-query/listDa
 import { useUpdateDataExportDestinationMutation } from "@gram/client/react-query/updateDataExportDestination.js";
 import { useUpdateDataExportRouteMutation } from "@gram/client/react-query/updateDataExportRoute.js";
 import { useId, useState } from "react";
+import { Link } from "react-router";
 import { toast } from "sonner";
 import {
   ConfigureDestinationSheet,
@@ -57,12 +58,12 @@ const DATA_SOURCE_OPTIONS: Array<{
     value: DataSource.ProductTelemetry,
     label: "Product telemetry",
     description:
-      "OTLP traces, logs, and metrics your agents and proxies send to Gram's /otel/v1 endpoints — the same records the Event Feed shows. Tool call logs that Gram records for its own MCP servers are not part of this stream.",
+      "OTLP traces, logs, and metrics your agent sessions send to Speakeasy's /otel/v1 endpoints — the same records the Event Feed shows. Tool call logs that are recorded for hosted or proxied MCP servers are not part of this stream.",
   },
   {
     value: DataSource.RiskFindings,
     label: "Risk findings",
-    description: "OTLP logs for findings detected by Gram risk scanners.",
+    description: "OTLP logs for findings detected by risk policies.",
   },
 ];
 
@@ -249,11 +250,58 @@ function DataExportsInner(): JSX.Element {
   const configureRoute = configureState?.routes.find(
     (route) => route.id === configureTarget?.routeId,
   );
+  const defaultProject =
+    projects.find((project) => project.slug === "default") ?? projects[0];
+  const linkedDataSourceOptions = DATA_SOURCE_OPTIONS.map((source) => {
+    if (source.value === DataSource.ProductTelemetry) {
+      return {
+        ...source,
+        description: (
+          <>
+            OTLP traces, logs, and metrics your agent sessions send to
+            Speakeasy&apos;s /otel/v1 endpoints — the same records the{" "}
+            <Link
+              to={`/${organization.slug}/data/event-feed`}
+              className="text-link-primary"
+            >
+              Event Feed
+            </Link>{" "}
+            shows. Tool call logs that are recorded for hosted or proxied MCP
+            servers are not part of this stream.
+          </>
+        ),
+      };
+    }
+
+    if (source.value !== DataSource.RiskFindings) {
+      return source;
+    }
+
+    return {
+      ...source,
+      description: (
+        <>
+          OTLP logs for findings detected by{" "}
+          {defaultProject ? (
+            <Link
+              to={`/${organization.slug}/projects/${defaultProject.slug}/risk-policies?tab=policies`}
+              className="text-link-primary"
+            >
+              risk policies
+            </Link>
+          ) : (
+            "risk policies"
+          )}
+          .
+        </>
+      ),
+    };
+  });
   const configureDataSources = configureRoute
-    ? DATA_SOURCE_OPTIONS.filter(
+    ? linkedDataSourceOptions.filter(
         (source) => source.value === configureRoute.dataSource,
       )
-    : DATA_SOURCE_OPTIONS.filter(
+    : linkedDataSourceOptions.filter(
         (source) =>
           !configureState?.routes.some(
             (route) => route.dataSource === source.value,
