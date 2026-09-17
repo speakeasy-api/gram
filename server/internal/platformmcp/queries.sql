@@ -808,6 +808,35 @@ JOIN projects AS project
 WHERE m.deleted IS FALSE
 ORDER BY m.id;
 
+-- name: ListPlatformMCPInventoryAuthorizationCandidatePage :many
+-- Lightweight, bounded candidate selection before live RBAC evaluation. Match
+-- the inventory projection's safe project/cursor/query filters and search order
+-- so hidden resources do not consume caller-visible result pages.
+SELECT m.id, m.project_id
+FROM mcp_servers AS m
+JOIN projects AS project
+  ON project.id = m.project_id
+ AND project.organization_id = @organization_id
+ AND project.deleted IS FALSE
+WHERE m.deleted IS FALSE
+  AND (sqlc.narg(project_id)::uuid IS NULL OR m.project_id = sqlc.narg(project_id)::uuid)
+  AND (sqlc.narg(after_mcp_id)::uuid IS NULL OR m.id > sqlc.narg(after_mcp_id)::uuid)
+  AND (
+      @query_text::text = ''
+      OR m.id::text ILIKE '%' || @query_text::text || '%'
+      OR COALESCE(m.name, '') ILIKE '%' || @query_text::text || '%'
+      OR COALESCE(m.slug, '') ILIKE '%' || @query_text::text || '%'
+  )
+ORDER BY
+    CASE
+        WHEN @query_text::text <> ''
+         AND (m.id::text = @query_text::text OR LOWER(COALESCE(m.name, '')) = LOWER(@query_text::text) OR LOWER(COALESCE(m.slug, '')) = LOWER(@query_text::text))
+        THEN 0
+        ELSE 1
+    END,
+    m.id ASC
+LIMIT LEAST(GREATEST(@limit_value::integer, 1), 1001);
+
 -- name: ListPlatformMCPInventory :many
 -- One bounded, tenant-qualified inventory projection for every Platform MCP
 -- read surface. Callers supply the live RBAC-filtered MCP IDs so authorization

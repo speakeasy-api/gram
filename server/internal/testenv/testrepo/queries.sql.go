@@ -245,6 +245,42 @@ func (q *Queries) CreateMCPGatewayFixture(ctx context.Context, arg CreateMCPGate
 	return id, err
 }
 
+const createMCPServerCatalogueFixtures = `-- name: CreateMCPServerCatalogueFixtures :execrows
+INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id, visibility)
+SELECT
+    generate_uuidv7(),
+    $1,
+    $2::text || LPAD(series::text, 4, '0'),
+    $3::text || LPAD(series::text, 4, '0'),
+    $4,
+    $5
+FROM generate_series(0, GREATEST($6::integer - 1, -1)) AS series
+`
+
+type CreateMCPServerCatalogueFixturesParams struct {
+	ProjectID   uuid.UUID
+	NamePrefix  string
+	SlugPrefix  string
+	ToolsetID   uuid.NullUUID
+	Visibility  string
+	ServerCount int32
+}
+
+func (q *Queries) CreateMCPServerCatalogueFixtures(ctx context.Context, arg CreateMCPServerCatalogueFixturesParams) (int64, error) {
+	result, err := q.db.Exec(ctx, createMCPServerCatalogueFixtures,
+		arg.ProjectID,
+		arg.NamePrefix,
+		arg.SlugPrefix,
+		arg.ToolsetID,
+		arg.Visibility,
+		arg.ServerCount,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const createOrganizationMetadataFixture = `-- name: CreateOrganizationMetadataFixture :exec
 INSERT INTO organization_metadata (
     id,
