@@ -49,11 +49,20 @@ describe("AGENT_PLATFORMS", () => {
     expect(step).toMatchObject({
       title: "Enable OTEL export",
       description:
-        "In the Cowork tab of the Claude org settings, scroll to Monitoring and enter the values below. Save the settings.",
-      code: `OTLP endpoint: https://app.getgram.ai/rpc/hooks.otel
-OTLP protocol: http/json
-OTLP headers: Gram-Project=default,Gram-Key={{GRAM_API_KEY}}`,
-      language: "text",
+        "In the Cowork tab of the Claude org settings, scroll to Monitoring and enter the values below.",
+      fields: [
+        {
+          label: "OTLP endpoint",
+          value: "https://app.getgram.ai/rpc/hooks.otel",
+        },
+        { label: "OTLP protocol", value: "http/json" },
+        {
+          label: "OTLP headers",
+          value: "Gram-Project=default,Gram-Key={{GRAM_API_KEY}}",
+          requiresApiKey: true,
+        },
+      ],
+      afterFields: "Save the settings in Claude.",
       requiresApiKey: true,
     });
   });

@@ -20,6 +20,9 @@ export interface PlatformSetupStep {
   description?: string;
   code?: string;
   language?: string;
+  /** Independently copyable values; API key placeholders are masked in the UI. */
+  fields?: Array<{ label: string; value: string; requiresApiKey?: boolean }>;
+  afterFields?: string;
   /** Optional screenshot rendered above the step title, used to point users at
    * a specific UI region (e.g. "the Managed Settings panel in claude.ai").
    * `caption` is rendered as a legend inside the bordered container, below the
@@ -28,7 +31,7 @@ export interface PlatformSetupStep {
   /**
    * When true, the instrument-agents component generates a Gram API key with
    * the "hooks" scope on demand and substitutes the literal "{{GRAM_API_KEY}}"
-   * marker in `code` with the issued key token.
+   * marker in `code` or `fields` with the issued key token.
    */
   requiresApiKey?: boolean;
   /**
