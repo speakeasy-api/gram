@@ -102,9 +102,11 @@ func TestParseVerdict_SkipsBracesInSurroundingProse(t *testing.T) {
 
 	verdictJSON := `{"secrets_leak": {"score": 1, "reasoning": "key printed"}, "personal_data_leak": 0, "prompt_injection": 0, "destructive_tool_call": 0}`
 	for name, text := range map[string]string{
-		"trailing prose with braces": verdictJSON + "\nNote: the empty {} object was ignored.",
-		"leading prose with braces":  "Here is {my} assessment: " + verdictJSON,
-		"stray object first":         "{} then " + verdictJSON,
+		"trailing prose with braces":  verdictJSON + "\nNote: the empty {} object was ignored.",
+		"leading prose with braces":   "Here is {my} assessment: " + verdictJSON,
+		"stray object first":          "{} then " + verdictJSON,
+		"unmatched brace in preamble": "Verdict {see below: " + verdictJSON,
+		"unclosed quote in preamble":  `I'd say " { hmm ` + verdictJSON,
 	} {
 		verdict, err := llmanalyzer.ParseVerdict(text)
 		require.NoError(t, err, name)

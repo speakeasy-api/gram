@@ -93,14 +93,16 @@ func ParseVerdict(text string) (Verdict, error) {
 	return Verdict{Risks: risks, Raw: text}, nil
 }
 
-// findVerdictObject returns the first top-level JSON object in text that
-// carries every risk key. It walks text once: nextObjectSpan delimits each
-// candidate object by brace depth, the candidate is decoded exactly once, and
-// the walk resumes after it. Work therefore stays linear in len(text) however
-// many braces a malformed reply contains, and at most maxVerdictCandidates
-// objects are tried. An object that decodes but lacks a key (a stray {} in
-// surrounding prose, say) is skipped, and the error of the last candidate is
-// reported when none qualifies.
+// findVerdictObject returns the first JSON object in text that carries every
+// risk key. nextObjectSpan delimits each candidate by brace depth and the
+// candidate is decoded exactly once. A candidate that decodes but lacks a key
+// (a stray {} in surrounding prose, say) is skipped and the walk resumes after
+// it. A candidate that fails to decode is usually prose with an unmatched '{'
+// that swallowed the real object, so the walk resumes at the next '{' inside
+// that span instead. Every candidate is one linear pass and at most
+// maxVerdictCandidates are tried, which bounds a brace-heavy malformed reply
+// to a small constant number of passes over the text. The error of the last
+// candidate is reported when none qualifies.
 func findVerdictObject(text string) (map[string]json.RawMessage, error) {
 	lastErr := errors.New("no json object in completion")
 	from := 0
@@ -109,13 +111,14 @@ func findVerdictObject(text string) (map[string]json.RawMessage, error) {
 		if !ok {
 			break
 		}
-		from = end
 
 		var object map[string]json.RawMessage
 		if err := json.Unmarshal([]byte(text[start:end]), &object); err != nil {
 			lastErr = err
+			from = start + 1
 		} else if key, ok := missingRiskKey(object); ok {
 			lastErr = fmt.Errorf("missing key %q", key)
+			from = end
 		} else {
 			return object, nil
 		}
