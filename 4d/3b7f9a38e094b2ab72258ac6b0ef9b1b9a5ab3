@@ -1,0 +1,19 @@
+server/internal/instances/impl.go
+  s_e708fb1e789d24::t_c9fb9d6c1be84b 73,129,375,377,379-395,403
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "4d3b7f9a38e094b2ab72258ac6b0ef9b1b9a5ab3",
+  "prompts": {},
+  "sessions": {
+    "s_e708fb1e789d24": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1a26c4a2-02c5-4f1b-91a9-ae649e8d9620",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
