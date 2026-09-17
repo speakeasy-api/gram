@@ -560,7 +560,15 @@ for (( round = 0; round < prompts_per_user; round++ )); do
 done
 
 echo ""
-echo "Done: ${sessions} sessions across ${#users[@]} users."
+# Users actually driven, not the size of the pool: a run that stopped early
+# touched the first few, and the round-outermost order is what makes that
+# count simply the smaller of the two.
+users_touched=$(( turns_done < ${#users[@]} ? turns_done : ${#users[@]} ))
+session_word="sessions"
+[ "$sessions" -eq 1 ] && session_word="session"
+user_word="users"
+[ "$users_touched" -eq 1 ] && user_word="user"
+echo "Done: ${sessions} ${session_word} across ${users_touched} ${user_word}."
 echo "The collector batches, so give it a few seconds before looking."
 echo "The sessions land wherever this branch reads agent telemetry: the"
 echo "observability pages today, and Explore once agent_events ships."
