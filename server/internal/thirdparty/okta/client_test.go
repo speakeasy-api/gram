@@ -590,21 +590,44 @@ func TestClient_VerifyScopes_ConsentRequiredIsMissingNotError(t *testing.T) {
 	require.False(t, cached)
 }
 
-func TestClient_VerifyScopes_EvictsCachedTokenAndDoesNotCacheVerification(t *testing.T) {
+// A verification token whose grant covers the default scopes is kept, so a
+// verify costs exactly one token request and the reads after it mint nothing.
+func TestClient_VerifyScopes_ReusesVerificationTokenCoveringDefaults(t *testing.T) {
 	t.Parallel()
 	tc := newDefaultTestClient(t)
 	tc.stub.setApps(stubApps(1))
 	listApps(t, tc)
-	require.Equal(t, 2, tc.signer.Calls())
+	require.Equal(t, 2, tc.stub.counts().tokenRequests, "the first mint pays the nonce challenge")
 
 	tc.stub.setGrantedScopes([]string{"okta.apps.read", "okta.users.read", "okta.groups.read"})
-	v, err := tc.client.VerifyScopes(t.Context(), []string{"okta.users.read"})
+	v, err := tc.client.VerifyScopes(t.Context(), []string{"okta.apps.read", "okta.users.read", "okta.groups.read"})
 	require.NoError(t, err)
 	require.True(t, v.OK())
+	require.Equal(t, 3, tc.stub.counts().tokenRequests)
 	require.Equal(t, 3, tc.signer.Calls())
 
 	listApps(t, tc)
-	require.Equal(t, 4, tc.signer.Calls())
+	require.Equal(t, 3, tc.stub.counts().tokenRequests, "the reads after a verify reuse its token")
+	require.Equal(t, 3, tc.signer.Calls())
+}
+
+// A verification token missing a default scope is never kept: the cached
+// token is evicted and the next read mints with the default scopes.
+func TestClient_VerifyScopes_EvictsWhenGrantLacksDefaults(t *testing.T) {
+	t.Parallel()
+	tc := newDefaultTestClient(t)
+	tc.stub.setApps(stubApps(1))
+	listApps(t, tc)
+	require.Equal(t, 2, tc.stub.counts().tokenRequests)
+
+	tc.stub.setGrantedScopes([]string{"okta.users.read"})
+	v, err := tc.client.VerifyScopes(t.Context(), []string{"okta.users.read"})
+	require.NoError(t, err)
+	require.True(t, v.OK())
+	require.Equal(t, 3, tc.stub.counts().tokenRequests)
+
+	listApps(t, tc)
+	require.Equal(t, 4, tc.stub.counts().tokenRequests, "a partial grant must not serve the reads")
 }
 
 func TestClient_AssignmentsAndGroups(t *testing.T) {

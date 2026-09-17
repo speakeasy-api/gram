@@ -2356,6 +2356,32 @@ WHERE (
     OR (@include_global::boolean AND i.project_id IS NULL AND i.organization_id IS NULL)
   )
   AND i.deleted IS FALSE
+  -- An issuer whose only live clients were left behind by tombstoned identity
+  -- provider connections is hidden until those clients are deleted; it then
+  -- lists again with no clients so the organization can delete it too.
+  AND (
+    NOT EXISTS (
+      SELECT 1
+      FROM remote_session_clients AS rc
+      JOIN identity_provider_connections AS ipc
+        ON ipc.id = rc.identity_provider_connection_id
+       AND ipc.organization_id = rc.organization_id
+      WHERE rc.remote_session_issuer_id = i.id
+        AND rc.deleted IS FALSE
+        AND ipc.deleted IS TRUE
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM remote_session_clients AS rc
+      LEFT JOIN identity_provider_connections AS ipc
+        ON ipc.id = rc.identity_provider_connection_id
+       AND ipc.organization_id = rc.organization_id
+      WHERE rc.remote_session_issuer_id = i.id
+        AND (i.organization_id = @organization_id OR rc.organization_id = @organization_id)
+        AND rc.deleted IS FALSE
+        AND ipc.deleted IS NOT TRUE
+    )
+  )
   AND (sqlc.narg('cursor')::uuid IS NULL OR i.id < sqlc.narg('cursor')::uuid)
 ORDER BY i.id DESC
 LIMIT sqlc.arg('limit_value');
@@ -2680,6 +2706,15 @@ WHERE c.remote_session_issuer_id = @remote_session_issuer_id
   AND (i.organization_id = @organization_id OR c.organization_id = @organization_id)
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE
+  -- Clients left behind by a tombstoned identity provider connection are
+  -- hidden; they stay reachable by id so the organization can delete them.
+  AND NOT EXISTS (
+    SELECT 1
+    FROM identity_provider_connections AS ipc
+    WHERE ipc.id = c.identity_provider_connection_id
+      AND ipc.organization_id = c.organization_id
+      AND ipc.deleted IS TRUE
+  )
   AND (sqlc.narg('cursor')::uuid IS NULL OR c.id < sqlc.narg('cursor')::uuid)
 ORDER BY c.id DESC
 LIMIT sqlc.arg('limit_value');

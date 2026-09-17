@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	extcredrepo "github.com/speakeasy-api/gram/server/internal/externalcredentials/repo"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections/provisiontest"
+	jwksrepo "github.com/speakeasy-api/gram/server/internal/jsonwebkeysets/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -104,4 +105,51 @@ func TestCreateGcpKmsKey_RefusesExemptedCredential(t *testing.T) {
 		CustomerGrantReference: nil,
 	})
 	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+// Once the connection is tombstoned its key drops out of the list and becomes
+// deletable after its set is gone, while re-pointing and probing stay refused.
+func TestManagedKey_DeletableOnceConnectionTombstoned(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	fx := provisionManagedKey(t, ctx, ti)
+	keyID := fx.Client.ExternalKeyID.String()
+
+	err := ti.service.DeleteGcpKmsKey(adminCtx(t, ctx), &gen.DeleteGcpKmsKeyPayload{ID: keyID, SessionToken: nil})
+	requireOopsCode(t, err, oops.CodeConflict)
+
+	provisiontest.SoftDeleteConnection(t, ctx, ti.conn, ti.orgID, fx.ConnectionID)
+
+	listed, err := ti.service.ListGcpKmsKeys(adminCtx(t, ctx), &gen.ListGcpKmsKeysPayload{SessionToken: nil})
+	require.NoError(t, err)
+	require.NotContains(t, keyIDs(listed), keyID, "a leftover key is hidden from the list")
+	got, err := ti.service.GetGcpKmsKey(adminCtx(t, ctx), &gen.GetGcpKmsKeyPayload{ID: keyID, SessionToken: nil})
+	require.NoError(t, err)
+	require.Equal(t, keyID, got.ID, "the leftover stays reachable by id")
+
+	ownCredential := createGcpIamCredential(t, ctx, ti, "managed-tombstone-cred")
+	_, err = ti.service.UpdateGcpKmsKey(adminCtx(t, ctx), &gen.UpdateGcpKmsKeyPayload{
+		ID:                     keyID,
+		SessionToken:           nil,
+		ExternalCredentialID:   ownCredential,
+		Name:                   "hijacked",
+		CustomerGrantReference: nil,
+	})
+	requireOopsCode(t, err, oops.CodeConflict)
+	_, err = ti.service.VerifyGcpKmsKey(adminCtx(t, ctx), &gen.VerifyGcpKmsKeyPayload{ID: keyID, SessionToken: nil})
+	requireOopsCode(t, err, oops.CodeConflict)
+
+	// The leftover set and its key still reference the external key; they go first.
+	err = ti.service.DeleteGcpKmsKey(adminCtx(t, ctx), &gen.DeleteGcpKmsKeyPayload{ID: keyID, SessionToken: nil})
+	requireOopsCode(t, err, oops.CodeConflict)
+	require.ErrorContains(t, err, "still in use")
+	_, err = fx.Provisioner.RevokeClient(ctx, ti.orgID, fx.ConnectionID)
+	require.NoError(t, err)
+	_, err = jwksrepo.New(ti.conn).SoftDeleteJsonWebKeySet(ctx, jwksrepo.SoftDeleteJsonWebKeySetParams{ID: fx.Client.JSONWebKeySetID, OrganizationID: ti.orgID})
+	require.NoError(t, err)
+
+	require.NoError(t, ti.service.DeleteGcpKmsKey(adminCtx(t, ctx), &gen.DeleteGcpKmsKeyPayload{ID: keyID, SessionToken: nil}))
+	_, err = ti.service.GetGcpKmsKey(adminCtx(t, ctx), &gen.GetGcpKmsKeyPayload{ID: keyID, SessionToken: nil})
+	requireOopsCode(t, err, oops.CodeNotFound)
 }

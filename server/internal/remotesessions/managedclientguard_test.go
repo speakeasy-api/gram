@@ -275,3 +275,59 @@ func TestManagedClient_RegistrationReplaceRefusesManagedRow(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, currentClientID, after.RemoteSessionClient.ClientID)
 }
+
+// Once the connection is tombstoned its client drops out of the lists and
+// becomes deletable, while every other mutation stays refused. The issuer
+// hides with it and lists again, deletable, once the client is gone.
+func TestManagedClient_DeletableOnceConnectionTombstoned(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	organizationID := activeOrganizationID(t, ctx)
+	ti.enableCustomerManagedKeys(t, ctx, organizationID)
+
+	issuerID, fx := provisionManagedClient(t, ctx, ti, "managed-tombstone-issuer")
+	clientID := fx.Client.ClientRowID.String()
+
+	err := ti.service.DeleteClient(ctx, &orgclientsgen.DeleteClientPayload{ID: clientID, SessionToken: nil, ApikeyToken: nil})
+	requireOopsCode(t, err, oops.CodeConflict)
+
+	provisiontest.SoftDeleteConnection(t, ctx, ti.conn, organizationID, fx.ConnectionID)
+
+	listed, err := ti.service.ListClients(ctx, &orgclientsgen.ListClientsPayload{IssuerID: issuerID, Cursor: nil, Limit: nil, SessionToken: nil, ApikeyToken: nil})
+	require.NoError(t, err)
+	require.Empty(t, listed.Items, "a leftover client is hidden from the list")
+	require.NotContains(t, listIssuerIDs(t, ctx, ti), issuerID, "an issuer with only leftover clients is hidden")
+
+	got, err := ti.service.GetClient(ctx, &orgclientsgen.GetClientPayload{ID: clientID, SessionToken: nil, ApikeyToken: nil})
+	require.NoError(t, err)
+	require.Equal(t, clientID, got.ID, "the leftover stays reachable by id")
+
+	method := "client_secret_basic"
+	_, err = ti.service.UpdateClient(ctx, &orgclientsgen.UpdateClientPayload{ID: clientID, TokenEndpointAuthMethod: &method})
+	requireOopsCode(t, err, oops.CodeConflict)
+	_, err = ti.service.RotateClient(ctx, &orgclientsgen.RotateClientPayload{ID: clientID})
+	requireOopsCode(t, err, oops.CodeConflict)
+	setID := createJsonWebKeySet(t, ctx, ti.conn, organizationID, "managed-tombstone-set")
+	_, err = ti.service.AttachClientKeySet(ctx, &orgclientsgen.AttachClientKeySetPayload{ID: clientID, JSONWebKeySetID: setID.String()})
+	requireOopsCode(t, err, oops.CodeConflict)
+
+	require.NoError(t, ti.service.DeleteClient(ctx, &orgclientsgen.DeleteClientPayload{ID: clientID, SessionToken: nil, ApikeyToken: nil}))
+	_, err = ti.service.GetClient(ctx, &orgclientsgen.GetClientPayload{ID: clientID, SessionToken: nil, ApikeyToken: nil})
+	requireOopsCode(t, err, oops.CodeNotFound)
+
+	require.Contains(t, listIssuerIDs(t, ctx, ti), issuerID, "the issuer lists again once its leftover client is gone")
+	require.NoError(t, ti.service.DeleteIssuer(ctx, &orgissuersgen.DeleteIssuerPayload{ID: issuerID, SessionToken: nil, ApikeyToken: nil}))
+}
+
+func listIssuerIDs(t *testing.T, ctx context.Context, ti *testInstance) []string {
+	t.Helper()
+
+	result, err := ti.service.ListIssuers(ctx, &orgissuersgen.ListIssuersPayload{Cursor: nil, Limit: nil, SessionToken: nil, ApikeyToken: nil})
+	require.NoError(t, err)
+	ids := make([]string, 0, len(result.Items))
+	for _, item := range result.Items {
+		ids = append(ids, item.Issuer.ID)
+	}
+	return ids
+}
