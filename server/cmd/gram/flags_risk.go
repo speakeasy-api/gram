@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/urfave/cli/v2"
 
@@ -94,11 +95,13 @@ func riskLLMFlags() []cli.Flag {
 }
 
 // llmAnalyzerConfigFromCLI reads the risk LLM flags into a client config.
-// Timeout and max tokens are code constants, not flags.
+// Timeout and max tokens are code constants, not flags. The URL and key are
+// trimmed because secrets copied from a manager routinely carry a trailing
+// newline, which would otherwise pass validation and break every request.
 func llmAnalyzerConfigFromCLI(c *cli.Context) llmanalyzer.Config {
 	return llmanalyzer.Config{
-		BaseURL:   c.String("risk-llm-url"),
-		APIKey:    c.String("risk-llm-api-key"),
+		BaseURL:   strings.TrimSpace(c.String("risk-llm-url")),
+		APIKey:    strings.TrimSpace(c.String("risk-llm-api-key")),
 		Model:     c.String("risk-llm-model"),
 		Timeout:   llmanalyzer.DefaultTimeout,
 		MaxTokens: llmanalyzer.DefaultMaxTokens,

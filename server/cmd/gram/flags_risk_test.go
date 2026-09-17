@@ -28,16 +28,17 @@ func TestRiskLLMFlagsAreRegisteredOnStreams(t *testing.T) {
 	}
 }
 
-func TestLLMAnalyzerConfigFromCLI(t *testing.T) {
-	t.Parallel()
+// Not parallel: the flags read GRAM_RISK_LLM_* from the process environment.
+func TestLLMAnalyzerConfigFromCLI(t *testing.T) { //nolint:paralleltest // temporarily modifies process environment
+	unsetRiskLLMEnv(t)
 
 	set := flag.NewFlagSet("streams", flag.ContinueOnError)
 	for _, f := range riskLLMFlags() {
 		require.NoError(t, f.Apply(set))
 	}
 	require.NoError(t, set.Parse([]string{
-		"--risk-llm-url", "https://model.example.com/v1",
-		"--risk-llm-api-key", "test-key",
+		"--risk-llm-url", " https://model.example.com/v1 ",
+		"--risk-llm-api-key", "test-key\n",
 	}))
 
 	cfg := llmAnalyzerConfigFromCLI(cli.NewContext(cli.NewApp(), set, nil))
@@ -51,8 +52,9 @@ func TestLLMAnalyzerConfigFromCLI(t *testing.T) {
 	require.NoError(t, cfg.Validate())
 }
 
-func TestLLMAnalyzerConfigFromCLI_DisabledWithoutURL(t *testing.T) {
-	t.Parallel()
+// Not parallel: the flags read GRAM_RISK_LLM_* from the process environment.
+func TestLLMAnalyzerConfigFromCLI_DisabledWithoutURL(t *testing.T) { //nolint:paralleltest // temporarily modifies process environment
+	unsetRiskLLMEnv(t)
 
 	set := flag.NewFlagSet("streams", flag.ContinueOnError)
 	for _, f := range riskLLMFlags() {
@@ -63,4 +65,11 @@ func TestLLMAnalyzerConfigFromCLI_DisabledWithoutURL(t *testing.T) {
 	cfg := llmAnalyzerConfigFromCLI(cli.NewContext(cli.NewApp(), set, nil))
 	require.False(t, cfg.Enabled())
 	require.Equal(t, llmanalyzer.DefaultModel, cfg.Model)
+}
+
+func unsetRiskLLMEnv(t *testing.T) {
+	t.Helper()
+	for _, name := range []string{"GRAM_RISK_LLM_URL", "GRAM_RISK_LLM_API_KEY", "GRAM_RISK_LLM_MODEL"} {
+		unsetEnv(t, name)
+	}
 }

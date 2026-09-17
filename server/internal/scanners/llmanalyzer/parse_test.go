@@ -97,6 +97,30 @@ func TestParseVerdict_Failures(t *testing.T) {
 	}
 }
 
+func TestParseVerdict_SkipsBracesInSurroundingProse(t *testing.T) {
+	t.Parallel()
+
+	verdictJSON := `{"secrets_leak": {"score": 1, "reasoning": "key printed"}, "personal_data_leak": 0, "prompt_injection": 0, "destructive_tool_call": 0}`
+	for name, text := range map[string]string{
+		"trailing prose with braces": verdictJSON + "\nNote: the empty {} object was ignored.",
+		"leading prose with braces":  "Here is {my} assessment: " + verdictJSON,
+		"stray object first":         "{} then " + verdictJSON,
+	} {
+		verdict, err := llmanalyzer.ParseVerdict(text)
+		require.NoError(t, err, name)
+		require.Equal(t, []string{llmanalyzer.KeySecretsLeak}, verdict.Flagged(), name)
+	}
+}
+
+func TestParseVerdict_NonStringReasoningKeepsScore(t *testing.T) {
+	t.Parallel()
+
+	verdict, err := llmanalyzer.ParseVerdict(`{"secrets_leak": {"score": 1, "reasoning": ["key printed"]}, "personal_data_leak": {"score": 0, "reasoning": null}, "prompt_injection": 0, "destructive_tool_call": 0}`)
+	require.NoError(t, err)
+	require.Equal(t, llmanalyzer.RiskVerdict{Score: 1, Reasoning: ""}, verdict.Risks[llmanalyzer.KeySecretsLeak])
+	require.Equal(t, []string{llmanalyzer.KeySecretsLeak}, verdict.Flagged())
+}
+
 func TestParseVerdict_CapsReasoning(t *testing.T) {
 	t.Parallel()
 

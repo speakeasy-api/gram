@@ -36,6 +36,7 @@ func TestConfig_Validate(t *testing.T) {
 		{name: "base url with fragment", mutate: func(c *llmanalyzer.Config) { c.BaseURL = "https://model.example.com/v1#v1" }, wantErr: "must not include a query or fragment"},
 		{name: "empty model", mutate: func(c *llmanalyzer.Config) { c.Model = "" }, wantErr: "model is required"},
 		{name: "empty api key", mutate: func(c *llmanalyzer.Config) { c.APIKey = "" }, wantErr: "api key is required"},
+		{name: "api key with newline", mutate: func(c *llmanalyzer.Config) { c.APIKey = "secret\n" }, wantErr: "api key must not contain control characters"},
 		{name: "negative timeout", mutate: func(c *llmanalyzer.Config) { c.Timeout = -time.Second }, wantErr: "timeout must not be negative"},
 		{name: "negative max tokens", mutate: func(c *llmanalyzer.Config) { c.MaxTokens = -1 }, wantErr: "max tokens must not be negative"},
 	}

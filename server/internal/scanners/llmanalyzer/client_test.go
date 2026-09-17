@@ -307,6 +307,25 @@ func TestClient_RetriesRateLimitedAndClampsRetryAfter(t *testing.T) {
 	require.Equal(t, int64(2), counterValue(t, data, "risk.llm.retries"))
 }
 
+func TestClient_RetryAfterZeroStillBacksOff(t *testing.T) {
+	t.Parallel()
+
+	tc := newTestClient(t, 5*time.Second, func(w http.ResponseWriter, _ *http.Request, n int) {
+		if n <= 2 {
+			w.Header().Set("Retry-After", "0")
+			http.Error(w, "slow down", http.StatusTooManyRequests)
+			return
+		}
+		writeCompletion(w, cleanVerdict, "", 1, 1)
+	})
+
+	start := time.Now()
+	completion, err := tc.client.Complete(t.Context(), testInfo, llmanalyzer.BuildMessages(llmanalyzer.PromptInput{Content: "x", ToolCalls: nil, ToolOutcome: ""}))
+	require.NoError(t, err)
+	require.Equal(t, 3, completion.Attempts)
+	require.GreaterOrEqual(t, time.Since(start), 200*time.Millisecond, "Retry-After: 0 must still wait the minimum backoff before each retry")
+}
+
 func TestClient_RateLimitedExhausted(t *testing.T) {
 	t.Parallel()
 

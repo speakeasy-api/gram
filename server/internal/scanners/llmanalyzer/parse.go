@@ -59,20 +59,15 @@ func (v Verdict) Flagged() []string {
 	return flagged
 }
 
-// ParseVerdict reads the model reply. It takes the outermost {...} span of the
-// text so prose or code fences around the object are tolerated, requires all
-// four risk keys, and accepts each value either as {"score": 0|1,
-// "reasoning": "..."} or as a bare score. Scores may be numbers, numeric
-// strings or booleans. Any other shape yields an error wrapping ErrParse.
+// ParseVerdict reads the model reply. It takes the first JSON object in the
+// text that carries all four risk keys, so prose or code fences around the
+// object are tolerated even when they contain braces of their own, and
+// accepts each value either as {"score": 0|1, "reasoning": "..."} or as a
+// bare score. Scores may be numbers, numeric strings or booleans. Any other
+// shape yields an error wrapping ErrParse.
 func ParseVerdict(text string) (Verdict, error) {
-	start := strings.IndexByte(text, '{')
-	end := strings.LastIndexByte(text, '}')
-	if start < 0 || end < start {
-		return Verdict{}, fmt.Errorf("%w: no json object in completion", ErrParse)
-	}
-
-	var object map[string]json.RawMessage
-	if err := json.Unmarshal([]byte(text[start:end+1]), &object); err != nil {
+	object, err := findVerdictObject(text)
+	if err != nil {
 		return Verdict{}, fmt.Errorf("%w: %w", ErrParse, err)
 	}
 
@@ -92,6 +87,40 @@ func ParseVerdict(text string) (Verdict, error) {
 	return Verdict{Risks: risks, Raw: text}, nil
 }
 
+// findVerdictObject decodes a JSON object from each '{' in text in turn and
+// returns the first one that carries every risk key. An object that decodes
+// but lacks a key (a stray {} in surrounding prose, say) is skipped, and the
+// error of the last candidate is reported when none qualifies.
+func findVerdictObject(text string) (map[string]json.RawMessage, error) {
+	var lastErr error = errors.New("no json object in completion")
+	for start := strings.IndexByte(text, '{'); start >= 0; {
+		var object map[string]json.RawMessage
+		if err := json.NewDecoder(strings.NewReader(text[start:])).Decode(&object); err != nil {
+			lastErr = err
+		} else if key, ok := missingRiskKey(object); ok {
+			lastErr = fmt.Errorf("missing key %q", key)
+		} else {
+			return object, nil
+		}
+		next := strings.IndexByte(text[start+1:], '{')
+		if next < 0 {
+			break
+		}
+		start += 1 + next
+	}
+	return nil, lastErr
+}
+
+// missingRiskKey reports the first risk key absent from object.
+func missingRiskKey(object map[string]json.RawMessage) (string, bool) {
+	for _, key := range riskKeys {
+		if _, ok := object[key]; !ok {
+			return key, true
+		}
+	}
+	return "", false
+}
+
 func parseRiskVerdict(raw json.RawMessage) (RiskVerdict, error) {
 	trimmed := strings.TrimSpace(string(raw))
 	if !strings.HasPrefix(trimmed, "{") {
@@ -104,7 +133,7 @@ func parseRiskVerdict(raw json.RawMessage) (RiskVerdict, error) {
 
 	var nested struct {
 		Score     json.RawMessage `json:"score"`
-		Reasoning string          `json:"reasoning"`
+		Reasoning json.RawMessage `json:"reasoning"`
 	}
 	if err := json.Unmarshal(raw, &nested); err != nil {
 		return RiskVerdict{}, fmt.Errorf("decode risk object: %w", err)
@@ -117,7 +146,13 @@ func parseRiskVerdict(raw json.RawMessage) (RiskVerdict, error) {
 		return RiskVerdict{}, err
 	}
 
-	reasoning := strings.TrimSpace(nested.Reasoning)
+	// Reasoning is advisory: a non-string value (an array, an object) drops
+	// to empty rather than discarding a parsed score.
+	var reasoning string
+	if err := json.Unmarshal(nested.Reasoning, &reasoning); err != nil {
+		reasoning = ""
+	}
+	reasoning = strings.TrimSpace(reasoning)
 	if utf8.RuneCountInString(reasoning) > maxReasoningRunes {
 		reasoning = string([]rune(reasoning)[:maxReasoningRunes])
 	}

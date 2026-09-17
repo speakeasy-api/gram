@@ -144,10 +144,12 @@ func NewClient(logger *slog.Logger, tracerProvider trace.TracerProvider, meterPr
 	retry.Backoff = clampedBackoff
 
 	return &Client{
-		logger:     logger,
-		tracer:     tracerProvider.Tracer(tracerName),
-		metrics:    newMetrics(meterProvider, logger),
-		httpClient: policy.Client(guardian.WithRetryConfig(retry), guardian.WithCheckRedirect(rejectRedirect)),
+		logger:  logger,
+		tracer:  tracerProvider.Tracer(tracerName),
+		metrics: newMetrics(meterProvider, logger),
+		// Pooled: the client lives for the process and always talks to the one
+		// configured host, so each call reuses the TLS connection.
+		httpClient: policy.PooledClient(guardian.WithRetryConfig(retry), guardian.WithCheckRedirect(rejectRedirect)),
 		cfg:        cfg,
 		endpoint:   strings.TrimRight(cfg.BaseURL, "/") + completionsPath,
 	}, nil
@@ -275,8 +277,13 @@ func (c *Client) complete(ctx context.Context, messages []Message) (Completion, 
 
 	payload, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
 	if err != nil {
-		if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		if errors.Is(err, context.DeadlineExceeded) {
 			return Completion{}, fmt.Errorf("%w: %w", ErrTimeout, err)
+		}
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			// The read failed for a reason other than the deadline it raced;
+			// keep the deadline in the chain so the outcome is timeout.
+			return Completion{}, fmt.Errorf("%w: %w: %w", ErrTimeout, context.DeadlineExceeded, err)
 		}
 		return Completion{}, fmt.Errorf("read risk llm response: %w", err)
 	}
@@ -375,8 +382,10 @@ func countingRetryPolicy(ctx context.Context, resp *http.Response, err error) (b
 }
 
 // clampedBackoff is retryablehttp's default backoff with the Retry-After
-// header capped at retryWaitMax. The default honors the header verbatim, so a
-// 429 asking for a minute would burn the whole call budget on one wait.
+// header clamped to [retryWaitMin, retryWaitMax]. The default honors the
+// header verbatim, so a 429 asking for a minute would burn the whole call
+// budget on one wait, and a zero or past Retry-After would retry with no
+// pause at all.
 func clampedBackoff(minWait, maxWait time.Duration, attemptNum int, resp *http.Response) time.Duration {
-	return min(retryablehttp.DefaultBackoff(minWait, maxWait, attemptNum, resp), maxWait)
+	return max(minWait, min(retryablehttp.DefaultBackoff(minWait, maxWait, attemptNum, resp), maxWait))
 }

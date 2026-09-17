@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/url"
 	"time"
+
+	"golang.org/x/net/http/httpguts"
 )
 
 const (
@@ -79,8 +81,13 @@ func (c Config) Validate() error {
 	if c.Model == "" {
 		errs = append(errs, errors.New("model is required"))
 	}
-	if c.APIKey == "" {
+	switch {
+	case c.APIKey == "":
 		errs = append(errs, errors.New("api key is required"))
+	case !httpguts.ValidHeaderFieldValue(c.APIKey):
+		// It travels as a header value; a control character (a pasted trailing
+		// newline, typically) would fail every request at the transport.
+		errs = append(errs, errors.New("api key must not contain control characters"))
 	}
 	if c.Timeout < 0 {
 		errs = append(errs, errors.New("timeout must not be negative"))
