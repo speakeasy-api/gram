@@ -8,7 +8,7 @@
 #USAGE flag "--minutes <n>" help="Give up after this many minutes, whichever comes first" default="15"
 #USAGE flag "--harnesses <list>" help="Comma-separated harnesses to deal the users across: claude, codex" default="claude,codex"
 #USAGE flag "--claude-model <model>" help="Model Claude Code drives. The cheapest one is the default: this is volume, not quality" default="haiku"
-#USAGE flag "--codex-model <model>" help="Model Codex drives. Falls back to whatever the machine's Codex config selects if this one will not resolve" default="gpt-5.4-mini"
+#USAGE flag "--codex-model <model>" help="Model Codex drives. The cheap one a ChatGPT account can reach is the default. Codex is dropped from the run if it will not resolve, rather than silently escalating; pass an empty string to accept the machine's configured model at whatever it costs" default="gpt-5.6-luna"
 
 set -euo pipefail
 
@@ -58,6 +58,8 @@ org_id=""
 codex_profile_owned=false
 current_turn_pid=""
 current_watchdog_pid=""
+codex_dropped=false
+codex_consecutive_failures=0
 
 db_query() {
   docker exec -i "${COMPOSE_PROJECT_NAME:-gram}-gram-db-1" psql -U gram -d gram -tA -v ON_ERROR_STOP=1 "$@"
@@ -228,6 +230,11 @@ write_codex_profile() {
   ( umask 077
     cat > "$codex_profile_file" <<TOML
 ${codex_profile_marker}
+# The other half of keeping this cheap: the model is only ever asked for the
+# shallowest reasoning it offers. These prompts are one-liners about files and
+# dates -- none of them is worth thinking hard about.
+model_reasoning_effort = "low"
+
 [otel]
 environment = "dev"
 log_user_prompt = true
@@ -344,19 +351,43 @@ run_turn() {
     claude) run_with_budget "$budget" run_claude "$email" "$prompt" ;;
     codex)
       if run_with_budget "$budget" run_codex "$email" "$prompt"; then
+        codex_consecutive_failures=0
         return 0
+      fi
+      codex_consecutive_failures=$(( codex_consecutive_failures + 1 ))
+
+      # Codex reaching nothing at all is not a turn that failed, it is a
+      # harness that cannot run: no credentials, or a provider that was
+      # configured and then taken away. Dealt with like the model case rather
+      # than letting a third of the run burn down one 401 at a time.
+      if grep -qEi '401 unauthorized|missing bearer|invalid_api_key|not (logged in|authenticated)' "$turn_log"; then
+        echo "        (codex has no working credentials here, so codex is out for this run."
+        echo "         Run \`codex login\`, or put an API key in the environment, then try again.)"
+        codex_dropped=true
+        return 1
       fi
       # The cheap model is a guess about someone else's Codex setup: it is a
       # deployment name on whatever provider they configured, and on a custom
-      # one it will not resolve. Give the guess up on that specific failure
-      # only — falling back on any failure would redo transient and auth
-      # errors as well, and quietly move later users onto another model.
-      if [ -n "$codex_model" ] && grep -qEi 'model_not_found|(model|deployment).{0,120}(not found|does not exist)' "$turn_log"; then
-        echo "        (codex could not run ${codex_model}; falling back to the configured model)"
-        codex_model=""
-        : > "$turn_log"
-        run_with_budget "$budget" run_codex "$email" "$prompt"
-        return $?
+      # one it will not resolve. What it must not do then is quietly carry on
+      # with whatever that machine has configured instead. This task exists to
+      # make volume, and the developer asked for the cheapest thing that can
+      # produce it -- a frontier model is not a reasonable substitute to pick
+      # on their behalf. Detected on that specific failure only, so transient
+      # and auth errors are not mistaken for it.
+      if [ -n "$codex_model" ] && grep -qEi 'model_not_found|(model|deployment).{0,120}(not found|does not exist|is not supported)' "$turn_log"; then
+        echo "        (codex cannot run ${codex_model} here, so codex is out for this run."
+        echo "         Pass --codex-model <name> for one that resolves, or --codex-model ''"
+        echo "         to accept whatever this machine has configured, at its cost.)"
+        codex_dropped=true
+        return 1
+      fi
+
+      # Whatever else is wrong, three in a row is a broken harness rather than
+      # bad luck, and the rest of its turns are better spent elsewhere.
+      if [ "$codex_consecutive_failures" -ge 3 ]; then
+        echo "        (three codex turns in a row failed, so codex is out for this run."
+        echo "         Its last output is the place to look.)"
+        codex_dropped=true
       fi
       return 1
       ;;
@@ -459,6 +490,16 @@ if $uses_codex; then
   write_codex_profile
 fi
 
+# Who picks up the slack if codex drops out over its model. Empty when codex
+# is the only harness, which the loop treats as the end of the run.
+standby_harness=""
+for harness in "${harnesses[@]}"; do
+  if [ "$harness" != "codex" ]; then
+    standby_harness="$harness"
+    break
+  fi
+done
+
 deadline=$(( $(date +%s) + minutes * 60 ))
 sessions=0
 turns_done=0
@@ -492,6 +533,17 @@ for (( round = 0; round < prompts_per_user; round++ )); do
 
     email="${users[$u]}"
     harness="${user_harness[$u]}"
+    # A harness that dropped out mid-run hands its remaining users to whoever
+    # is left, so the run still fills the dashboard rather than idling through
+    # every turn it had dealt away.
+    if [ "$harness" = "codex" ] && $codex_dropped; then
+      if [ -z "$standby_harness" ]; then
+        echo ""
+        echo "No harness left to run. Stopping."
+        break 2
+      fi
+      harness="$standby_harness"
+    fi
     # Offset per user so two users never run the same prompt in the same
     # round, and each works through the whole variety over the run.
     prompt="$(prompt_for "$harness" $(( round + u )))"
@@ -508,7 +560,7 @@ for (( round = 0; round < prompts_per_user; round++ )); do
 done
 
 echo ""
-echo "Done: ${sessions} sessions across ${#users[@]} users and ${#harnesses[@]} harness(es)."
+echo "Done: ${sessions} sessions across ${#users[@]} users."
 echo "The collector batches, so give it a few seconds before looking."
 echo "The sessions land wherever this branch reads agent telemetry: the"
 echo "observability pages today, and Explore once agent_events ships."
