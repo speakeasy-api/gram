@@ -17,8 +17,8 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 )
 
 // SupportedGrantTypes / SupportedResponseTypes / SupportedAuthMethods /

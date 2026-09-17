@@ -3469,6 +3469,12 @@ func marshalTypesRemoteSessionIssuerToRemoteSessionIssuerResponseBody(v *types.R
 			res.GrantTypesSupported[i] = val
 		}
 	}
+	if v.AuthorizationGrantProfilesSupported != nil {
+		res.AuthorizationGrantProfilesSupported = make([]string, len(v.AuthorizationGrantProfilesSupported))
+		for i, val := range v.AuthorizationGrantProfilesSupported {
+			res.AuthorizationGrantProfilesSupported[i] = val
+		}
+	}
 	if v.ResponseTypesSupported != nil {
 		res.ResponseTypesSupported = make([]string, len(v.ResponseTypesSupported))
 		for i, val := range v.ResponseTypesSupported {
@@ -3535,6 +3541,12 @@ func marshalTypesRemoteSessionClientToRemoteSessionClientResponseBody(v *types.R
 		Audience:                        v.Audience,
 		CreatedAt:                       v.CreatedAt,
 		UpdatedAt:                       v.UpdatedAt,
+	}
+	if v.GrantTypes != nil {
+		res.GrantTypes = make([]string, len(v.GrantTypes))
+		for i, val := range v.GrantTypes {
+			res.GrantTypes[i] = val
+		}
 	}
 	if v.UserSessionIssuerIds != nil {
 		res.UserSessionIssuerIds = make([]string, len(v.UserSessionIssuerIds))

@@ -10,6 +10,9 @@ package types
 // RemoteSessionClient is the result type of the
 // organizationRemoteSessionClients service getClient method.
 type RemoteSessionClient struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID string
 	// The owning project id. Empty for organization-level and global clients.

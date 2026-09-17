@@ -2,6 +2,7 @@ package usersessions_test
 
 import (
 	"context"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"testing"
 	"time"
 
@@ -301,7 +302,7 @@ func TestOrganizationUserSessionIssuerTrustedPairValidation(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeNotFound)
 
 	deletedClientID := seedTrustedRemoteSessionClientTarget(t, ctx, ti, remoteIssuerID, "trusted-validation-deleted-client", uuid.NullUUID{}, organizationID, []string{"openid", "email"})
-	deletedClientRows, err := remotesessionsrepo.New(ti.conn).SoftDeleteRemoteSessionClientFixture(ctx, deletedClientID)
+	deletedClientRows, err := testrepo.New(ti.conn).SoftDeleteRemoteSessionClientFixture(ctx, deletedClientID)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, deletedClientRows)
 	deletedClientIDString := deletedClientID.String()
@@ -316,7 +317,7 @@ func TestOrganizationUserSessionIssuerTrustedPairValidation(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeNotFound)
 
 	deletedIssuerID := seedTrustedRemoteSessionIssuerTarget(t, ctx, ti, "trusted-validation-deleted-issuer", uuid.NullUUID{}, organizationID)
-	deletedIssuerRows, err := remotesessionsrepo.New(ti.conn).SoftDeleteRemoteSessionIssuerFixture(ctx, deletedIssuerID)
+	deletedIssuerRows, err := testrepo.New(ti.conn).SoftDeleteRemoteSessionIssuerFixture(ctx, deletedIssuerID)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, deletedIssuerRows)
 	deletedIssuerIDString := deletedIssuerID.String()

@@ -2,12 +2,14 @@ package remotesessions
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
 	"reflect"
+	"slices"
 	"sync"
 	"time"
 
@@ -27,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -128,7 +131,9 @@ type issuerMetadataPlanner func(use IssuerMetadataUse, now time.Time) issuerMeta
 
 // planIssuerMetadataRefresh: fetch when never visited, when the last visit (fetched_at or last_error_at) is stale, or when an outright transient failure is past its retry window; re-project when a stored document has a NULL capability column, no definitive failure stands, and no fetch is due (a fetch writes every column the re-projection would).
 //
-// An error stands only when it is newer than the last successful fetch. A partial read stamps both together, so its unread candidate waits for the daily cadence rather than the hourly retry.
+// An error stands only when it is newer than the last successful fetch. Legacy
+// partial snapshots stamped both together; new incomplete reads record only a
+// failure and use the hourly retry without advancing the successful timestamp.
 func planIssuerMetadataRefresh(use IssuerMetadataUse, now time.Time) issuerMetadataPlan {
 	visited, visitedAt := lastIssuerMetadataVisit(use)
 	errorStands, transient := issuerMetadataFailureState(use)
@@ -398,6 +403,7 @@ func (r *IssuerMetadataRefresher) reproject(ctx context.Context, existing repo.R
 	outcome, err := r.apply(ctx, logger, existing, func(q *repo.Queries) (repo.RemoteSessionIssuer, error) {
 		return q.ReprojectRemoteSessionIssuerMetadataCapabilities(ctx, repo.ReprojectRemoteSessionIssuerMetadataCapabilitiesParams{
 			CodeChallengeMethodsSupported:              orEmptySlice(doc.CodeChallengeMethodsSupported),
+			AuthorizationGrantProfilesSupported:        orEmptySlice(doc.AuthorizationGrantProfilesSupported),
 			IntrospectionEndpointAuthMethodsSupported:  orEmptySlice(doc.IntrospectionEndpointAuthMethodsSupported),
 			IDTokenSigningAlgValuesSupported:           orEmptySlice(doc.IDTokenSigningAlgValuesSupported),
 			ClaimsSupported:                            orEmptySlice(doc.ClaimsSupported),
@@ -438,8 +444,15 @@ func (r *IssuerMetadataRefresher) refresh(ctx context.Context, existing repo.Rem
 		success = remotesessionmetrics.IssuerMetadataRefreshOutcomeRefreshedPartial
 	}
 	outcome, err := r.apply(ctx, logger, existing, func(q *repo.Queries) (repo.RemoteSessionIssuer, error) {
+		if err := guardEMAEndpointRefresh(ctx, q, existing, params); err != nil {
+			return repo.RemoteSessionIssuer{}, err
+		}
 		return q.UpdateRemoteSessionIssuerDiscoveredMetadata(ctx, params)
 	}, success)
+	if shared, ok := errors.AsType[*oops.ShareableError](err); ok && shared.Code == oops.CodeConflict {
+		logger.WarnContext(ctx, "refreshed issuer endpoints are blocked by an active client binding", attr.SlogError(err))
+		outcome, err = r.recordFailure(ctx, existing, "issuer metadata endpoint changes are blocked by an active client binding; remove the binding before refreshing", "", remotesessionmetrics.IssuerMetadataRefreshOutcomeDefinitiveFailure)
+	}
 	if errors.Is(err, errTrustedIdentityProviderClientIneligible) {
 		logger.WarnContext(ctx, "refreshed issuer metadata is incompatible with identity-provider login", attr.SlogError(err))
 		outcome, err = r.recordFailure(ctx, existing, trustedClientMetadataIncompatibility, "", remotesessionmetrics.IssuerMetadataRefreshOutcomeDefinitiveFailure)
@@ -479,7 +492,8 @@ func issuerMetadataUseFromRow(row repo.RemoteSessionIssuer) IssuerMetadataUse {
 			row.ClaimsSupported == nil ||
 			!row.BackchannelLogoutSupported.Valid ||
 			!row.AuthorizationResponseIssParameterSupported.Valid ||
-			row.CodeChallengeMethodsSupported == nil),
+			row.CodeChallengeMethodsSupported == nil ||
+			issuerProfilesNeedReprojection(row)),
 	}
 }
 
@@ -491,7 +505,7 @@ func decodeStoredIssuerDocument(existing repo.RemoteSessionIssuer) (rfc8414Docum
 	if len(existing.Metadata) == 0 {
 		return rfc8414Document{}, errors.New("no stored metadata document")
 	}
-	doc, err := decodeIssuerDocument(existing.Metadata, requested)
+	doc, err := decodeIssuerDocumentWithLegacyNulls(existing.Metadata, requested, true)
 	if err != nil {
 		return rfc8414Document{}, err
 	}
@@ -583,6 +597,11 @@ func (r *IssuerMetadataRefresher) apply(ctx context.Context, logger *slog.Logger
 
 	updated, err := write(txRepo)
 	if err != nil {
+		if shared, ok := errors.AsType[*oops.ShareableError](err); ok && shared.Code == oops.CodeConflict {
+			// Policy rejection is not a concurrent snapshot conflict. Let the
+			// caller persist a visible failure after this transaction rolls back.
+			return remotesessionmetrics.IssuerMetadataRefreshOutcomeDefinitiveFailure, err
+		}
 		if errors.Is(err, pgx.ErrNoRows) {
 			return remotesessionmetrics.IssuerMetadataRefreshOutcomeConflict, nil
 		}
@@ -636,10 +655,13 @@ func (r *IssuerMetadataRefresher) apply(ctx context.Context, logger *slog.Logger
 	return success, nil
 }
 
-// issuerViewChanged compares the audited views ignoring updated_at, which every write moves; the view carries none of the tracking columns.
+// issuerViewChanged ignores write and JWKS-cache freshness timestamps. A
+// refresh can move those without changing issuer configuration or capabilities.
 func issuerViewChanged(before, after *types.RemoteSessionIssuer) bool {
 	b, a := *before, *after
 	b.UpdatedAt, a.UpdatedAt = "", ""
+	b.JwksFetchedAt, a.JwksFetchedAt = nil, nil
+	b.JwksCacheExpiresAt, a.JwksCacheExpiresAt = nil, nil
 	return !reflect.DeepEqual(b, a)
 }
 
@@ -648,4 +670,22 @@ func sameTimestamp(a, b pgtype.Timestamptz) bool {
 		return false
 	}
 	return !a.Valid || a.Time.Equal(b.Time)
+}
+
+// The profile column predates capture and is non-null, so its empty default
+// cannot identify an uncaptured row. Compare it with the stored evidence.
+func issuerProfilesNeedReprojection(row repo.RemoteSessionIssuer) bool {
+	var members map[string]json.RawMessage
+	if err := json.Unmarshal(row.Metadata, &members); err != nil {
+		return true
+	}
+	raw, present := members["authorization_grant_profiles_supported"]
+	if !present {
+		return len(row.AuthorizationGrantProfilesSupported) != 0
+	}
+	var profiles []string
+	if err := json.Unmarshal(raw, &profiles); err != nil {
+		return true
+	}
+	return !slices.Equal(row.AuthorizationGrantProfilesSupported, profiles)
 }

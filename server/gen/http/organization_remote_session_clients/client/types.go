@@ -133,6 +133,9 @@ type ListClientsResponseBody struct {
 // GetClientResponseBody is the type of the "organizationRemoteSessionClients"
 // service "getClient" endpoint HTTP response body.
 type GetClientResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The owning project id. Empty for organization-level and global clients.
@@ -194,6 +197,9 @@ type GetClientDeletePreflightResponseBody struct {
 	CanDelete *bool `form:"can_delete,omitempty" json:"can_delete,omitempty" xml:"can_delete,omitempty"`
 	// Stable reason deletion is blocked. Present when can_delete is false.
 	BlockingReason *string `form:"blocking_reason,omitempty" json:"blocking_reason,omitempty" xml:"blocking_reason,omitempty"`
+	// Active identity-chaining bindings that must be explicitly unlinked before
+	// deletion.
+	EmaBindingCount *int64 `form:"ema_binding_count,omitempty" json:"ema_binding_count,omitempty" xml:"ema_binding_count,omitempty"`
 }
 
 // ListClientMcpServersResponseBody is the type of the
@@ -207,6 +213,9 @@ type ListClientMcpServersResponseBody struct {
 // "organizationRemoteSessionClients" service "createClient" endpoint HTTP
 // response body.
 type CreateClientResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The owning project id. Empty for organization-level and global clients.
@@ -257,6 +266,9 @@ type CreateClientResponseBody struct {
 // "organizationRemoteSessionClients" service "createCimdClient" endpoint HTTP
 // response body.
 type CreateCimdClientResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The owning project id. Empty for organization-level and global clients.
@@ -307,6 +319,9 @@ type CreateCimdClientResponseBody struct {
 // "organizationRemoteSessionClients" service "updateClient" endpoint HTTP
 // response body.
 type UpdateClientResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The owning project id. Empty for organization-level and global clients.
@@ -357,6 +372,9 @@ type UpdateClientResponseBody struct {
 // "organizationRemoteSessionClients" service "attachClientKeySet" endpoint
 // HTTP response body.
 type AttachClientKeySetResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The owning project id. Empty for organization-level and global clients.
@@ -407,6 +425,9 @@ type AttachClientKeySetResponseBody struct {
 // "organizationRemoteSessionClients" service "detachClientKeySet" endpoint
 // HTTP response body.
 type DetachClientKeySetResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The owning project id. Empty for organization-level and global clients.
@@ -457,6 +478,9 @@ type DetachClientKeySetResponseBody struct {
 // "organizationRemoteSessionClients" service "rotateClient" endpoint HTTP
 // response body.
 type RotateClientResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The owning project id. Empty for organization-level and global clients.
@@ -2836,6 +2860,9 @@ type OrganizationRemoteSessionClientResponseBody struct {
 // RemoteSessionClientResponseBody is used to define fields on response body
 // types.
 type RemoteSessionClientResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The owning project id. Empty for organization-level and global clients.
@@ -3192,6 +3219,12 @@ func NewGetClientRemoteSessionClientOK(body *GetClientResponseBody) *types.Remot
 		CreatedAt:                       *body.CreatedAt,
 		UpdatedAt:                       *body.UpdatedAt,
 	}
+	if body.GrantTypes != nil {
+		v.GrantTypes = make([]string, len(body.GrantTypes))
+		for i, val := range body.GrantTypes {
+			v.GrantTypes[i] = val
+		}
+	}
 	v.UserSessionIssuerIds = make([]string, len(body.UserSessionIssuerIds))
 	for i, val := range body.UserSessionIssuerIds {
 		v.UserSessionIssuerIds[i] = val
@@ -3361,9 +3394,10 @@ func NewGetClientGatewayError(body *GetClientGatewayErrorResponseBody) *goa.Serv
 // endpoint result from a HTTP "OK" response.
 func NewGetClientDeletePreflightOrganizationClientDeletePreflightOK(body *GetClientDeletePreflightResponseBody) *organizationremotesessionclients.OrganizationClientDeletePreflight {
 	v := &organizationremotesessionclients.OrganizationClientDeletePreflight{
-		SessionCount:   *body.SessionCount,
-		CanDelete:      *body.CanDelete,
-		BlockingReason: body.BlockingReason,
+		SessionCount:    *body.SessionCount,
+		CanDelete:       *body.CanDelete,
+		BlockingReason:  body.BlockingReason,
+		EmaBindingCount: *body.EmaBindingCount,
 	}
 	v.McpServerNames = make([]string, len(body.McpServerNames))
 	for i, val := range body.McpServerNames {
@@ -3732,6 +3766,12 @@ func NewCreateClientRemoteSessionClientOK(body *CreateClientResponseBody) *types
 		CreatedAt:                       *body.CreatedAt,
 		UpdatedAt:                       *body.UpdatedAt,
 	}
+	if body.GrantTypes != nil {
+		v.GrantTypes = make([]string, len(body.GrantTypes))
+		for i, val := range body.GrantTypes {
+			v.GrantTypes[i] = val
+		}
+	}
 	v.UserSessionIssuerIds = make([]string, len(body.UserSessionIssuerIds))
 	for i, val := range body.UserSessionIssuerIds {
 		v.UserSessionIssuerIds[i] = val
@@ -3916,6 +3956,12 @@ func NewCreateCimdClientRemoteSessionClientOK(body *CreateCimdClientResponseBody
 		Audience:                        body.Audience,
 		CreatedAt:                       *body.CreatedAt,
 		UpdatedAt:                       *body.UpdatedAt,
+	}
+	if body.GrantTypes != nil {
+		v.GrantTypes = make([]string, len(body.GrantTypes))
+		for i, val := range body.GrantTypes {
+			v.GrantTypes[i] = val
+		}
 	}
 	v.UserSessionIssuerIds = make([]string, len(body.UserSessionIssuerIds))
 	for i, val := range body.UserSessionIssuerIds {
@@ -4104,6 +4150,12 @@ func NewUpdateClientRemoteSessionClientOK(body *UpdateClientResponseBody) *types
 		CreatedAt:                       *body.CreatedAt,
 		UpdatedAt:                       *body.UpdatedAt,
 	}
+	if body.GrantTypes != nil {
+		v.GrantTypes = make([]string, len(body.GrantTypes))
+		for i, val := range body.GrantTypes {
+			v.GrantTypes[i] = val
+		}
+	}
 	v.UserSessionIssuerIds = make([]string, len(body.UserSessionIssuerIds))
 	for i, val := range body.UserSessionIssuerIds {
 		v.UserSessionIssuerIds[i] = val
@@ -4288,6 +4340,12 @@ func NewAttachClientKeySetRemoteSessionClientOK(body *AttachClientKeySetResponse
 		Audience:                        body.Audience,
 		CreatedAt:                       *body.CreatedAt,
 		UpdatedAt:                       *body.UpdatedAt,
+	}
+	if body.GrantTypes != nil {
+		v.GrantTypes = make([]string, len(body.GrantTypes))
+		for i, val := range body.GrantTypes {
+			v.GrantTypes[i] = val
+		}
 	}
 	v.UserSessionIssuerIds = make([]string, len(body.UserSessionIssuerIds))
 	for i, val := range body.UserSessionIssuerIds {
@@ -4492,6 +4550,12 @@ func NewDetachClientKeySetRemoteSessionClientOK(body *DetachClientKeySetResponse
 		CreatedAt:                       *body.CreatedAt,
 		UpdatedAt:                       *body.UpdatedAt,
 	}
+	if body.GrantTypes != nil {
+		v.GrantTypes = make([]string, len(body.GrantTypes))
+		for i, val := range body.GrantTypes {
+			v.GrantTypes[i] = val
+		}
+	}
 	v.UserSessionIssuerIds = make([]string, len(body.UserSessionIssuerIds))
 	for i, val := range body.UserSessionIssuerIds {
 		v.UserSessionIssuerIds[i] = val
@@ -4694,6 +4758,12 @@ func NewRotateClientRemoteSessionClientOK(body *RotateClientResponseBody) *types
 		Audience:                        body.Audience,
 		CreatedAt:                       *body.CreatedAt,
 		UpdatedAt:                       *body.UpdatedAt,
+	}
+	if body.GrantTypes != nil {
+		v.GrantTypes = make([]string, len(body.GrantTypes))
+		for i, val := range body.GrantTypes {
+			v.GrantTypes[i] = val
+		}
 	}
 	v.UserSessionIssuerIds = make([]string, len(body.UserSessionIssuerIds))
 	for i, val := range body.UserSessionIssuerIds {
@@ -5270,6 +5340,9 @@ func ValidateGetClientDeletePreflightResponseBody(body *GetClientDeletePreflight
 	if body.CanDelete == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("can_delete", "body"))
 	}
+	if body.EmaBindingCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("ema_binding_count", "body"))
+	}
 	for _, e := range body.TrustedUserSessionIssuers {
 		if e != nil {
 			if err2 := ValidateTrustedClientUserSessionIssuerReferenceResponseBody(e); err2 != nil {
@@ -5278,8 +5351,8 @@ func ValidateGetClientDeletePreflightResponseBody(body *GetClientDeletePreflight
 		}
 	}
 	if body.BlockingReason != nil {
-		if !(*body.BlockingReason == "identity_provider_login") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.blocking_reason", *body.BlockingReason, []any{"identity_provider_login"}))
+		if !(*body.BlockingReason == "identity_provider_login" || *body.BlockingReason == "identity_chaining") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.blocking_reason", *body.BlockingReason, []any{"identity_provider_login", "identity_chaining"}))
 		}
 	}
 	return

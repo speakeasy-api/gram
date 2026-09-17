@@ -2,6 +2,7 @@ package usersessions_test
 
 import (
 	"context"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"testing"
 	"time"
 
@@ -347,7 +348,7 @@ func TestListUserSessionsReturnsUpstreamsOnDetachedClient(t *testing.T) {
 	require.NotNil(t, authCtx.ProjectID)
 
 	clientID := seedUpstream(t, ctx, ti.conn, conv.ToNullUUID(*authCtx.ProjectID), issuerID, subject, "mcp.detached.example")
-	detached, err := remotesessions_repo.New(ti.conn).DetachRemoteSessionClientFromUserSessionIssuer(ctx, remotesessions_repo.DetachRemoteSessionClientFromUserSessionIssuerParams{
+	detached, err := testrepo.New(ti.conn).DetachRemoteSessionClientFromUserSessionIssuer(ctx, testrepo.DetachRemoteSessionClientFromUserSessionIssuerParams{
 		RemoteSessionClientID: clientID,
 		UserSessionIssuerID:   issuerID,
 	})

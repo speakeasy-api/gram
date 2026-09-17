@@ -888,7 +888,7 @@ func revokeJsonWebKey(t *testing.T, ctx context.Context, conn *pgxpool.Pool, org
 func forceTokenEndpointAuthMethod(t *testing.T, ctx context.Context, conn *pgxpool.Pool, clientID uuid.UUID, projectID uuid.UUID, method string) {
 	t.Helper()
 
-	rows, err := repo.New(conn).ForceRemoteSessionClientAuthMethodFixture(ctx, repo.ForceRemoteSessionClientAuthMethodFixtureParams{
+	rows, err := testrepo.New(conn).ForceRemoteSessionClientAuthMethodFixture(ctx, testrepo.ForceRemoteSessionClientAuthMethodFixtureParams{
 		TokenEndpointAuthMethod: conv.ToPGText(method),
 		ID:                      clientID,
 		ProjectID:               conv.ToNullUUID(projectID),

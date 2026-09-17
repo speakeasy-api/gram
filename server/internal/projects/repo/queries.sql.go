@@ -12,6 +12,22 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countActiveProjectEMABindings = `-- name: CountActiveProjectEMABindings :one
+SELECT count(*) FROM remote_session_ema_bindings WHERE project_id = $1 AND organization_id = $2 AND state IS DISTINCT FROM 'unlinked'
+`
+
+type CountActiveProjectEMABindingsParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) CountActiveProjectEMABindings(ctx context.Context, arg CountActiveProjectEMABindingsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countActiveProjectEMABindings, arg.ProjectID, arg.OrganizationID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createProject = `-- name: CreateProject :one
 INSERT INTO projects (
     name
@@ -62,6 +78,20 @@ func (q *Queries) DeleteProject(ctx context.Context, id uuid.UUID) (uuid.UUID, e
 	var id_2 uuid.UUID
 	err := row.Scan(&id_2)
 	return id_2, err
+}
+
+const deleteProjectEMATombstones = `-- name: DeleteProjectEMATombstones :exec
+DELETE FROM remote_session_ema_bindings WHERE project_id = $1 AND organization_id = $2 AND state = 'unlinked'
+`
+
+type DeleteProjectEMATombstonesParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) DeleteProjectEMATombstones(ctx context.Context, arg DeleteProjectEMATombstonesParams) error {
+	_, err := q.db.Exec(ctx, deleteProjectEMATombstones, arg.ProjectID, arg.OrganizationID)
+	return err
 }
 
 const getFirstProject = `-- name: GetFirstProject :one
@@ -421,6 +451,22 @@ func (q *Queries) ListProjectsByOrganizationLimited(ctx context.Context, arg Lis
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockProjectForEMADeletion = `-- name: LockProjectForEMADeletion :one
+SELECT id FROM projects WHERE id = $1 AND organization_id = $2 AND deleted IS FALSE FOR UPDATE
+`
+
+type LockProjectForEMADeletionParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) LockProjectForEMADeletion(ctx context.Context, arg LockProjectForEMADeletionParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockProjectForEMADeletion, arg.ProjectID, arg.OrganizationID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const setOrganizationWhitelist = `-- name: SetOrganizationWhitelist :exec

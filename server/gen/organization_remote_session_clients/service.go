@@ -260,6 +260,9 @@ type OrganizationClientDeletePreflight struct {
 	CanDelete bool
 	// Stable reason deletion is blocked. Present when can_delete is false.
 	BlockingReason *string
+	// Active identity-chaining bindings that must be explicitly unlinked before
+	// deletion.
+	EmaBindingCount int64
 }
 
 // An MCP server attached to a remote_session_client, with the fields the

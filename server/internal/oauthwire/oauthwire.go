@@ -1,14 +1,7 @@
-// Package oauthwire holds the pieces of the issuer-gated OAuth surface that
-// both the usersessions management API and its cimd subpackages need:
-// standardized wire identifiers, the wire-error shape, and redirect-URI
-// scheme rules.
-//
-// It exists to be a leaf. The cimd resolver has to construct OAuth errors
-// and validate redirect URIs, and the management API has to read the CIMD
-// preset catalog — without a shared leaf those two requirements form an
-// import cycle between usersessions and cimd. Keeping only
-// stdlib-dependent primitives here makes the cycle impossible to
-// reintroduce.
+// Package oauthwire provides shared OAuth wire identifiers, errors, and
+// redirect-URI validation for issuer and downstream client flows. It is a
+// standard-library-only leaf so consumers can share protocol primitives
+// without importing each other or sharing application policy.
 package oauthwire
 
 import (

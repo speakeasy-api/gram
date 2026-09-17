@@ -3,8 +3,8 @@ package mcp
 import (
 	"net/http"
 
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/privatekeyjwt"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 )
 
 // presentedClientCredentials is everything a token or revocation request

@@ -21,6 +21,10 @@ export type OrganizationIssuerDeletePreflight = {
    */
   clientCount: number;
   /**
+   * Active identity-chaining bindings that must be explicitly unlinked before deletion.
+   */
+  emaBindingCount: number;
+  /**
    * Display names of MCP servers attached to this issuer's clients.
    */
   mcpServerNames: Array<string>;
@@ -37,6 +41,7 @@ export const OrganizationIssuerDeletePreflight$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     client_count: z.int(),
+    ema_binding_count: z.int(),
     mcp_server_names: z.array(z.string()),
     trusted_user_session_issuers: z.array(
       TrustedUserSessionIssuerReference$inboundSchema,
@@ -45,6 +50,7 @@ export const OrganizationIssuerDeletePreflight$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "client_count": "clientCount",
+      "ema_binding_count": "emaBindingCount",
       "mcp_server_names": "mcpServerNames",
       "trusted_user_session_issuers": "trustedUserSessionIssuers",
     });
