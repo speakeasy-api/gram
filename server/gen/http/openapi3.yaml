@@ -27004,6 +27004,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'invalid: request contains one or more invalidation fields'
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'rate_limit_exceeded: rate limit exceeded'
                 "500":
                     content:
                         application/json:
@@ -27032,7 +27038,7 @@ paths:
                 name: CreateIdentityProviderConnection
     /rpc/identityProviderConnections.get:
         get:
-            description: Get a connection by ID, or the organization's live Okta connection when no ID is given. Requires org:read.
+            description: Get a connection by ID, or the organization's live Okta connection when no ID is given. Session only; requires org:read.
             operationId: getIdentityProviderConnection
             parameters:
                 - allowEmptyValue: true
@@ -27042,13 +27048,6 @@ paths:
                   schema:
                     description: Connection ID. Omit to fetch the organization's live connection.
                     format: uuid
-                    type: string
-                - allowEmptyValue: true
-                  description: API Key header
-                  in: header
-                  name: Gram-Key
-                  schema:
-                    description: API Key header
                     type: string
                 - allowEmptyValue: true
                   description: Session header
@@ -27125,7 +27124,6 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'unavailable: service temporarily unavailable'
             security:
-                - apikey_header_Gram-Key: []
                 - session_header_Gram-Session: []
             summary: get identityProviderConnections
             tags:

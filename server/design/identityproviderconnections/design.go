@@ -99,6 +99,7 @@ var _ = Service("identityProviderConnections", func() {
 	Method("create", func() {
 		Description("Create the organization's Okta connection. Discovers the org's authorization server, provisions a signing key and JWKS URL, and returns the console checklist. Requires org:admin and the okta-connections rollout. One live connection per organization; creation is rate limited.")
 		Error(string(oops.CodeFailedPrecondition), func() { Description(oops.CodeFailedPrecondition.UserMessage()) })
+		Error(string(oops.CodeRateLimitExceeded), func() { Description(oops.CodeRateLimitExceeded.UserMessage()) })
 
 		Security(security.Session)
 
@@ -119,6 +120,9 @@ var _ = Service("identityProviderConnections", func() {
 			security.SessionHeader()
 			Response(StatusOK)
 			Response(string(oops.CodeFailedPrecondition), StatusPreconditionFailed, func() {
+				ContentType("application/json")
+			})
+			Response(string(oops.CodeRateLimitExceeded), StatusTooManyRequests, func() {
 				ContentType("application/json")
 			})
 		})
@@ -200,15 +204,11 @@ var _ = Service("identityProviderConnections", func() {
 	})
 
 	Method("get", func() {
-		Description("Get a connection by ID, or the organization's live Okta connection when no ID is given. Requires org:read.")
+		Description("Get a connection by ID, or the organization's live Okta connection when no ID is given. Session only; requires org:read.")
 
-		Security(security.ByKey, func() {
-			Scope("consumer")
-		})
 		Security(security.Session)
 
 		Payload(func() {
-			security.ByKeyPayload()
 			security.SessionPayload()
 			Attribute("id", String, "Connection ID. Omit to fetch the organization's live connection.", func() {
 				Format(FormatUUID)
@@ -220,7 +220,6 @@ var _ = Service("identityProviderConnections", func() {
 		HTTP(func() {
 			GET("/rpc/identityProviderConnections.get")
 			Param("id")
-			security.ByKeyHeader()
 			security.SessionHeader()
 			Response(StatusOK)
 		})

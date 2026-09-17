@@ -59,6 +59,9 @@ func TestIdentityProviderConnectionRejectsInvalidValues(t *testing.T) {
 	_, err = urn.ParseIdentityProviderConnection("identity_provider_connection:not-a-uuid")
 	require.ErrorIs(t, err, urn.ErrInvalid)
 
+	_, err = urn.ParseIdentityProviderConnection("identity_provider_connection:00000000-0000-0000-0000-000000000000")
+	require.ErrorIs(t, err, urn.ErrInvalid)
+
 	_, err = urn.NewIdentityProviderConnection(uuid.Nil).MarshalJSON()
 	require.ErrorIs(t, err, urn.ErrInvalid)
 }

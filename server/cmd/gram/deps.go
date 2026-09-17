@@ -1503,13 +1503,9 @@ func newKMSSigningClients(ctx context.Context, logger *slog.Logger, c *cli.Conte
 		return gcpkms.NewSigningClient, nil
 	}
 
-	alg := defaultLocalSigningAlgorithm
-	if configured := strings.TrimSpace(c.String("local-kms-signing-algorithm")); configured != "" {
-		parsed, err := gcpkms.ParseSignatureAlgorithm(configured)
-		if err != nil {
-			return nil, fmt.Errorf("parse local kms signing algorithm: %w", err)
-		}
-		alg = parsed
+	alg, err := localKMSSigningAlgorithm(c)
+	if err != nil {
+		return nil, err
 	}
 
 	logger.WarnContext(ctx, fmt.Sprintf("using in-process kms signing client signing %s: local development has no cloud kms to reach", alg))
@@ -1524,6 +1520,19 @@ func newKMSSigningClients(ctx context.Context, logger *slog.Logger, c *cli.Conte
 	return func(_ context.Context, _ oauth2.TokenSource) (gcpkms.SigningClient, error) {
 		return client, nil
 	}, nil
+}
+
+// localKMSSigningAlgorithm is the algorithm the local KMS stand-in is configured to sign with.
+func localKMSSigningAlgorithm(c *cli.Context) (jose.SignatureAlgorithm, error) {
+	configured := strings.TrimSpace(c.String("local-kms-signing-algorithm"))
+	if configured == "" {
+		return defaultLocalSigningAlgorithm, nil
+	}
+	parsed, err := gcpkms.ParseSignatureAlgorithm(configured)
+	if err != nil {
+		return "", fmt.Errorf("parse local kms signing algorithm: %w", err)
+	}
+	return parsed, nil
 }
 
 // newPersistentLocalKMSClient loads or mints the in-process signing key every local KMS stand-in shares.
@@ -1560,8 +1569,12 @@ func newPersistentLocalKMSClient(alg jose.SignatureAlgorithm) (*gcpkms.LocalSign
 	return client, nil
 }
 
-// newIdentityProviderConnectionsProvisioner builds the provisioner, or nil when no signing credential is configured.
-func newIdentityProviderConnectionsProvisioner(ctx context.Context, logger *slog.Logger, c *cli.Context, db *pgxpool.Pool, gcpIdentity *gcpauth.Identity, auditLogger *audit.Logger, serverURL *url.URL) (*identityproviderconnections.Provisioner, error) {
+// newIdentityProviderConnectionsProvisioner builds the provisioner, or nil when
+// no signing credential is configured. Locally it provisions through the same
+// in-process client kmsSigningClients hands the assertion signer, so a revoked
+// key version is refused by both and the signing algorithm agrees; managed keys
+// are RS256, so any other configured local algorithm leaves the feature off.
+func newIdentityProviderConnectionsProvisioner(ctx context.Context, logger *slog.Logger, c *cli.Context, db *pgxpool.Pool, gcpIdentity *gcpauth.Identity, kmsSigningClients gcpkms.SigningClientFactory, auditLogger *audit.Logger, serverURL *url.URL) (*identityproviderconnections.Provisioner, error) {
 	rawCredentialID := strings.TrimSpace(c.String(identityProviderSigningCredentialIDFlag))
 	if rawCredentialID == "" {
 		logger.WarnContext(ctx, "identity provider connections are unavailable: no signing credential configured")
@@ -1583,9 +1596,21 @@ func newIdentityProviderConnectionsProvisioner(ctx context.Context, logger *slog
 
 	kmsClients := gcpkms.NewProvisioningClient
 	if local {
-		client, err := newPersistentLocalKMSClient(defaultLocalSigningAlgorithm)
+		alg, err := localKMSSigningAlgorithm(c)
 		if err != nil {
 			return nil, err
+		}
+		if alg != identityproviderconnections.ManagedKeyAlgorithm {
+			logger.WarnContext(ctx, fmt.Sprintf("identity provider connections are unavailable: local kms signs %s but managed keys are %s", alg, identityproviderconnections.ManagedKeyAlgorithm))
+			return nil, nil
+		}
+		shared, err := kmsSigningClients(ctx, nil)
+		if err != nil {
+			return nil, fmt.Errorf("load local kms signing client: %w", err)
+		}
+		client, ok := shared.(gcpkms.ProvisioningClient)
+		if !ok {
+			return nil, fmt.Errorf("local kms signing client %T cannot provision keys", shared)
 		}
 		kmsClients = func(_ context.Context, _ oauth2.TokenSource) (gcpkms.ProvisioningClient, error) {
 			return client, nil

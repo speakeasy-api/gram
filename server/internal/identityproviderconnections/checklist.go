@@ -88,8 +88,8 @@ func OktaChecklist(listingMode, jwksURL string) []ChecklistItem {
 		},
 		ChecklistItem{
 			Key:         "agent_public_key",
-			Title:       "Add the agent's public key",
-			Description: "On the agent's Credentials tab add a public key and point it at " + jwksURL + ".",
+			Title:       "Point the agent's credential at the JWKS URL",
+			Description: "On the agent's Credentials tab choose public key / private key authentication, select external key management, and enter " + jwksURL + " as the JWKS URI so Okta fetches Gram's key dynamically. Adding a public key by hand would not use the managed key.",
 		},
 		ChecklistItem{
 			Key:         "activate_agent",

@@ -126,27 +126,15 @@ func NewGetEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoin
 		p := req.(*GetPayload)
 		var err error
 		sc := security.APIKeyScheme{
-			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
-			RequiredScopes: []string{"consumer"},
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
 		}
 		var key string
-		if p.ApikeyToken != nil {
-			key = *p.ApikeyToken
+		if p.SessionToken != nil {
+			key = *p.SessionToken
 		}
 		ctx, err = authAPIKeyFn(ctx, key, &sc)
-		if err != nil {
-			sc := security.APIKeyScheme{
-				Name:           "session",
-				Scopes:         []string{},
-				RequiredScopes: []string{},
-			}
-			var key string
-			if p.SessionToken != nil {
-				key = *p.SessionToken
-			}
-			ctx, err = authAPIKeyFn(ctx, key, &sc)
-		}
 		if err != nil {
 			return nil, err
 		}

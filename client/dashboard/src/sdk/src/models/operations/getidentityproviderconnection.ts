@@ -6,7 +6,6 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 
 export type GetIdentityProviderConnectionSecurity = {
-  apikeyHeaderGramKey?: string | undefined;
   sessionHeaderGramSession?: string | undefined;
 };
 
@@ -16,10 +15,6 @@ export type GetIdentityProviderConnectionRequest = {
    */
   id?: string | undefined;
   /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
    * Session header
    */
   gramSession?: string | undefined;
@@ -27,7 +22,6 @@ export type GetIdentityProviderConnectionRequest = {
 
 /** @internal */
 export type GetIdentityProviderConnectionSecurity$Outbound = {
-  "apikey_header_Gram-Key"?: string | undefined;
   "session_header_Gram-Session"?: string | undefined;
 };
 
@@ -38,12 +32,10 @@ export const GetIdentityProviderConnectionSecurity$outboundSchema:
     GetIdentityProviderConnectionSecurity
   > = z.pipe(
     z.object({
-      apikeyHeaderGramKey: z.optional(z.string()),
       sessionHeaderGramSession: z.optional(z.string()),
     }),
     z.transform((v) => {
       return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
         sessionHeaderGramSession: "session_header_Gram-Session",
       });
     }),
@@ -62,7 +54,6 @@ export function getIdentityProviderConnectionSecurityToJSON(
 /** @internal */
 export type GetIdentityProviderConnectionRequest$Outbound = {
   id?: string | undefined;
-  "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
 };
 
@@ -73,12 +64,10 @@ export const GetIdentityProviderConnectionRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     id: z.optional(z.string()),
-    gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
-      gramKey: "Gram-Key",
       gramSession: "Gram-Session",
     });
   }),

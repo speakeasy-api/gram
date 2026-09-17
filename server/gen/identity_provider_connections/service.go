@@ -31,7 +31,7 @@ type Service interface {
 	// Requires org:admin.
 	Verify(context.Context, *VerifyPayload) (res *OktaIdentityProviderConnection, err error)
 	// Get a connection by ID, or the organization's live Okta connection when no
-	// ID is given. Requires org:read.
+	// ID is given. Session only; requires org:read.
 	Get(context.Context, *GetPayload) (res *GetIdentityProviderConnectionResult, err error)
 	// Record the Okta AI agent ID and the application it is bound to, for display.
 	// Okta does not expose these through its API. Requires org:admin.
@@ -85,7 +85,6 @@ type GetIdentityProviderConnectionResult struct {
 // GetPayload is the payload type of the identityProviderConnections service
 // get method.
 type GetPayload struct {
-	ApikeyToken  *string
 	SessionToken *string
 	// Connection ID. Omit to fetch the organization's live connection.
 	ID *string

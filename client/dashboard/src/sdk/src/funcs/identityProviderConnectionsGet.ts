@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * get identityProviderConnections
  *
  * @remarks
- * Get a connection by ID, or the organization's live Okta connection when no ID is given. Requires org:read.
+ * Get a connection by ID, or the organization's live Okta connection when no ID is given. Session only; requires org:read.
  */
 export function identityProviderConnectionsGet(
   client: GramCore,
@@ -116,10 +116,6 @@ async function $do(
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
-    "Gram-Key": encodeSimple("Gram-Key", payload?.["Gram-Key"], {
-      explode: false,
-      charEncoding: "none",
-    }),
     "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
       explode: false,
       charEncoding: "none",
@@ -127,13 +123,6 @@ async function $do(
   }));
 
   const requestSecurity = resolveSecurity(
-    [
-      {
-        fieldName: "Gram-Key",
-        type: "apiKey:header",
-        value: security?.apikeyHeaderGramKey,
-      },
-    ],
     [
       {
         fieldName: "Gram-Session",

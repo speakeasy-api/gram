@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"slices"
 	"strings"
 	"time"
@@ -60,9 +59,10 @@ func (o *verificationOutcome) lastError() string {
 }
 
 // verifyConnection mints a token for the required scopes and confirms each
-// granted scope with one cheap read. A credential rejection surfaces as
-// ErrCredentialRejected; any other transport failure is returned as-is.
-func verifyConnection(ctx context.Context, client okta.Client) (*verificationOutcome, error) {
+// granted scope with one cheap read. appID names the connection's own Okta
+// application, the target of the users read. A credential rejection surfaces
+// as ErrCredentialRejected; any other transport failure is returned as-is.
+func verifyConnection(ctx context.Context, client okta.Client, appID string) (*verificationOutcome, error) {
 	scopes, err := client.VerifyScopes(ctx, RequiredOktaScopes)
 	if err != nil {
 		if isCredentialRejection(err) {
@@ -87,7 +87,7 @@ func verifyConnection(ctx context.Context, client okta.Client) (*verificationOut
 	}
 
 	if len(outcome.Granted) > 0 {
-		failed, err := confirmReads(ctx, client, outcome.Granted)
+		failed, err := confirmReads(ctx, client, outcome.Granted, appID)
 		if err != nil {
 			return nil, err
 		}
@@ -102,24 +102,23 @@ func verifyConnection(ctx context.Context, client okta.Client) (*verificationOut
 
 // confirmReads performs one bounded read per granted scope and returns the
 // per-scope reason for each read that failed. A page cap of one still proves
-// the read was authorized, so hitting it is not a failure. Only a credential
-// rejection is returned as an error.
-func confirmReads(ctx context.Context, client okta.Client, granted []string) ([]string, error) {
+// the read was authorized, so hitting it is not a failure. The users read
+// targets the connection's own application, which exists by construction, so
+// every granted scope is read independently. Only a credential rejection is
+// returned as an error.
+func confirmReads(ctx context.Context, client okta.Client, granted []string, appID string) ([]string, error) {
 	failed := []string{}
-	var firstAppID string
 	if slices.Contains(granted, "okta.apps.read") {
-		apps, err := client.ListApps(ctx, okta.ListAppsRequest{Query: "", Status: "", Limit: 1})
+		_, err := client.ListApps(ctx, okta.ListAppsRequest{Query: "", Status: "", Limit: 1})
 		switch {
 		case isCredentialRejection(err):
 			return nil, ErrCredentialRejected
 		case err != nil && !errors.Is(err, okta.ErrTooManyPages):
 			failed = append(failed, ReasonReadFailedApps)
-		case len(apps) > 0:
-			firstAppID = apps[0].ID
 		}
 	}
-	if slices.Contains(granted, "okta.users.read") && firstAppID != "" {
-		_, err := client.ListAppUsers(ctx, okta.ListAppUsersRequest{AppID: firstAppID, Limit: 1})
+	if slices.Contains(granted, "okta.users.read") {
+		_, err := client.ListAppUsers(ctx, okta.ListAppUsersRequest{AppID: appID, Limit: 1})
 		switch {
 		case isCredentialRejection(err):
 			return nil, ErrCredentialRejected
@@ -140,13 +139,14 @@ func confirmReads(ctx context.Context, client okta.Client, granted []string) ([]
 }
 
 // isCredentialRejection reports whether Okta refused the client credential
-// itself rather than a particular scope or resource.
+// itself (invalid_client from the token endpoint) rather than a particular
+// scope or resource; a management-endpoint 401 is a failed read, not that.
 func isCredentialRejection(err error) bool {
 	var apiErr *okta.APIError
 	if !errors.As(err, &apiErr) {
 		return false
 	}
-	return apiErr.StatusCode == http.StatusUnauthorized || apiErr.ErrorCode == oautherr.CodeInvalidClient
+	return apiErr.ErrorCode == oautherr.CodeInvalidClient
 }
 
 // parseLastError splits a stored last_error into its typed reasons and the

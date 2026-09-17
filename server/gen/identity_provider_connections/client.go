@@ -40,6 +40,7 @@ func NewClient(create, submitClientID, verify, get, recordAgent, revoke goa.Endp
 // service.
 // Create may return the following errors:
 //   - "failed_precondition" (type *goa.ServiceError): resource is not in a valid state for this operation
+//   - "rate_limit_exceeded" (type *goa.ServiceError): rate limit exceeded
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid

@@ -5,8 +5,10 @@ import (
 	"errors"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2"
 
@@ -58,8 +60,13 @@ func TestCreate_RefusesIssuerMismatch(t *testing.T) {
 	_, err := si.svc.Create(ctx, &gen.CreatePayload{SessionToken: nil, OrgURL: fullOrgURL, ListingMode: nil})
 	requireOopsCode(t, err, oops.CodeFailedPrecondition)
 
+	// Byte-for-byte: a trailing slash is a different issuer.
+	si.discovery.issuerFor = func(orgURL string) string { return orgURL + "/" }
+	_, err = si.svc.Create(ctx, &gen.CreatePayload{SessionToken: nil, OrgURL: fullOrgURL, ListingMode: nil})
+	requireOopsCode(t, err, oops.CodeFailedPrecondition)
+
 	// Nothing was left behind for the organization.
-	empty, err := si.svc.Get(ctx, &gen.GetPayload{ApikeyToken: nil, SessionToken: nil, ID: nil})
+	empty, err := si.svc.Get(ctx, &gen.GetPayload{SessionToken: nil, ID: nil})
 	require.NoError(t, err)
 	require.Nil(t, empty.Connection)
 }
@@ -142,7 +149,7 @@ func TestCreate_ProvisionsPendingConnection(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, si.authCtx.UserID, record.ActorID)
 
-	fetched, err := si.svc.Get(ctx, &gen.GetPayload{ApikeyToken: nil, SessionToken: nil, ID: nil})
+	fetched, err := si.svc.Get(ctx, &gen.GetPayload{SessionToken: nil, ID: nil})
 	require.NoError(t, err)
 	require.Equal(t, created.ID, fetched.Connection.ID)
 }
@@ -264,7 +271,7 @@ func TestSubmitClientID_IsImmutable(t *testing.T) {
 	_, err = si.svc.SubmitClientID(ctx, &gen.SubmitClientIDPayload{SessionToken: nil, ID: created.ID, ClientID: testClientID})
 	requireOopsCode(t, err, oops.CodeConflict)
 
-	fetched, err := si.svc.Get(ctx, &gen.GetPayload{ApikeyToken: nil, SessionToken: nil, ID: &created.ID})
+	fetched, err := si.svc.Get(ctx, &gen.GetPayload{SessionToken: nil, ID: &created.ID})
 	require.NoError(t, err)
 	require.Equal(t, testClientID, conv.PtrValOr(fetched.Connection.ClientID, ""))
 }
@@ -295,7 +302,7 @@ func TestSubmitClientID_CredentialRejectedIsNotPersisted(t *testing.T) {
 	_, err := si.svc.SubmitClientID(ctx, &gen.SubmitClientIDPayload{SessionToken: nil, ID: created.ID, ClientID: testClientID})
 	requireOopsCode(t, err, oops.CodeFailedPrecondition)
 
-	fetched, err := si.svc.Get(ctx, &gen.GetPayload{ApikeyToken: nil, SessionToken: nil, ID: &created.ID})
+	fetched, err := si.svc.Get(ctx, &gen.GetPayload{SessionToken: nil, ID: &created.ID})
 	require.NoError(t, err)
 	require.Equal(t, identityproviderconnections.StatusPending, fetched.Connection.Status)
 	require.False(t, fetched.Connection.ClientIDSubmitted)
@@ -350,16 +357,25 @@ func TestVerify_ReadFailureDegrades(t *testing.T) {
 	submitClientID(t, ctx, si, created.ID)
 
 	fake := si.oktaFakes.Fake(fullOrgURL)
-	fake.SetError(&okta.APIError{Method: http.MethodGet, Path: "/api/v1/apps", StatusCode: http.StatusForbidden, ErrorCode: "E0000006", Summary: "You do not have permission to access the feature you are requesting"})
-	// VerifyScopes shares the fake error, so the token mint itself fails as a
-	// non-credential error: the connection keeps its status and records the
-	// typed failure.
-	_, err := si.svc.Verify(ctx, &gen.VerifyPayload{SessionToken: nil, ID: created.ID})
+	fake.SetMethodError("ListApps", &okta.APIError{Method: http.MethodGet, Path: "/api/v1/apps", StatusCode: http.StatusForbidden, ErrorCode: "E0000006", Summary: "You do not have permission to access the feature you are requesting"})
+	verified, err := si.svc.Verify(ctx, &gen.VerifyPayload{SessionToken: nil, ID: created.ID})
+	require.NoError(t, err)
+	require.Equal(t, identityproviderconnections.StatusDegraded, verified.Status)
+	require.Equal(t, []string{identityproviderconnections.ReasonReadFailedApps}, verified.VerificationReasons)
+	require.Nil(t, verified.LastError)
+	require.Equal(t, allScopes(), verified.GrantedScopes)
+	require.Contains(t, fake.Calls(), "ListAppUsers", "every granted scope is read")
+
+	// The token mint failing as a non-credential error keeps the status and
+	// records the typed failure.
+	fake.SetMethodError("ListApps", nil)
+	fake.SetError(&okta.APIError{Method: http.MethodPost, Path: "/oauth2/v1/token", StatusCode: http.StatusBadGateway, ErrorCode: "", Summary: "upstream unavailable"})
+	_, err = si.svc.Verify(ctx, &gen.VerifyPayload{SessionToken: nil, ID: created.ID})
 	requireOopsCode(t, err, oops.CodeUnavailable)
 
-	fetched, err := si.svc.Get(ctx, &gen.GetPayload{ApikeyToken: nil, SessionToken: nil, ID: &created.ID})
+	fetched, err := si.svc.Get(ctx, &gen.GetPayload{SessionToken: nil, ID: &created.ID})
 	require.NoError(t, err)
-	require.Equal(t, identityproviderconnections.StatusVerified, fetched.Connection.Status)
+	require.Equal(t, identityproviderconnections.StatusDegraded, fetched.Connection.Status)
 	require.Equal(t, identityproviderconnections.LastErrorOktaUnreachable, conv.PtrValOr(fetched.Connection.LastError, ""))
 }
 
@@ -370,16 +386,58 @@ func TestVerify_CredentialRejectedDegrades(t *testing.T) {
 	created := createConnection(t, ctx, si, fullOrgURL)
 	submitClientID(t, ctx, si, created.ID)
 
+	audited, err := audittest.AuditLogCountByAction(ctx, si.conn.conn, audit.ActionIdentityProviderConnectionVerify)
+	require.NoError(t, err)
+
 	si.oktaFakes.Fake(fullOrgURL).SetError(&okta.APIError{Method: http.MethodPost, Path: "/oauth2/v1/token", StatusCode: http.StatusBadRequest, ErrorCode: "invalid_client", Summary: "The client_assertion signature is invalid"})
-	_, err := si.svc.Verify(ctx, &gen.VerifyPayload{SessionToken: nil, ID: created.ID})
+	_, err = si.svc.Verify(ctx, &gen.VerifyPayload{SessionToken: nil, ID: created.ID})
 	requireOopsCode(t, err, oops.CodeFailedPrecondition)
 
-	fetched, err := si.svc.Get(ctx, &gen.GetPayload{ApikeyToken: nil, SessionToken: nil, ID: &created.ID})
+	fetched, err := si.svc.Get(ctx, &gen.GetPayload{SessionToken: nil, ID: &created.ID})
 	require.NoError(t, err)
 	require.Equal(t, identityproviderconnections.StatusDegraded, fetched.Connection.Status)
 	require.Equal(t, []string{identityproviderconnections.ReasonKeyNotFetched}, fetched.Connection.VerificationReasons)
 	require.Equal(t, identityproviderconnections.LastErrorCredentialRejected, conv.PtrValOr(fetched.Connection.LastError, ""))
 	require.NotNil(t, fetched.Connection.LastVerifiedAt, "the earlier verified outcome is kept")
+
+	// The status change is audited even though the attempt rolled back.
+	after, err := audittest.AuditLogCountByAction(ctx, si.conn.conn, audit.ActionIdentityProviderConnectionVerify)
+	require.NoError(t, err)
+	require.Equal(t, audited+1, after)
+	record, err := audittest.LatestAuditLogByAction(ctx, si.conn.conn, audit.ActionIdentityProviderConnectionVerify)
+	require.NoError(t, err)
+	require.Equal(t, si.authCtx.UserID, record.ActorID)
+}
+
+func TestVerify_StaleFailureDoesNotOverwriteALaterSuccess(t *testing.T) {
+	t.Parallel()
+	ctx, si := newTestService(t)
+
+	created := createConnection(t, ctx, si, fullOrgURL)
+	submitClientID(t, ctx, si, created.ID)
+	id := mustParseUUID(t, created.ID)
+	q := repo.New(si.conn.conn)
+
+	// The row a failed attempt observed before a concurrent verification committed.
+	observed, err := q.GetIdentityProviderConnection(ctx, repo.GetIdentityProviderConnectionParams{ID: id, OrganizationID: si.orgID})
+	require.NoError(t, err)
+	verified, err := si.svc.Verify(ctx, &gen.VerifyPayload{SessionToken: nil, ID: created.ID})
+	require.NoError(t, err)
+	require.Equal(t, identityproviderconnections.StatusVerified, verified.Status)
+
+	_, err = q.RecordIdentityProviderConnectionVerificationFailure(ctx, repo.RecordIdentityProviderConnectionVerificationFailureParams{
+		Status:            identityproviderconnections.StatusDegraded,
+		LastError:         conv.ToPGText(identityproviderconnections.LastErrorCredentialRejected),
+		ID:                id,
+		OrganizationID:    si.orgID,
+		ExpectedUpdatedAt: observed.UpdatedAt,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows, "the compare-and-swap refuses the stale write")
+
+	fetched, err := si.svc.Get(ctx, &gen.GetPayload{SessionToken: nil, ID: &created.ID})
+	require.NoError(t, err)
+	require.Equal(t, identityproviderconnections.StatusVerified, fetched.Connection.Status)
+	require.Nil(t, fetched.Connection.LastError)
 }
 
 func TestVerify_RateLimitedPerOrganization(t *testing.T) {
@@ -413,6 +471,14 @@ func TestRecordAgent_StoresDisplayIDs(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "0oaagent000000000001", conv.PtrValOr(recorded.AgentID, ""))
 	require.Equal(t, "0oassoapp00000000001", conv.PtrValOr(recorded.AgentAppID, ""))
+	// A subtype-only mutation moves the reported updated_at.
+	rows, err := repo.New(si.conn.conn).GetOktaIdentityProviderConnection(ctx, repo.GetOktaIdentityProviderConnectionParams{OrganizationID: si.orgID, ID: conv.ToNullUUID(mustParseUUID(t, created.ID))})
+	require.NoError(t, err)
+	require.True(t, rows.OktaIdentityProviderConnection.UpdatedAt.Time.After(rows.IdentityProviderConnection.UpdatedAt.Time))
+	require.Equal(t, rows.OktaIdentityProviderConnection.UpdatedAt.Time.UTC().Format(time.RFC3339), recorded.UpdatedAt)
+	fetchedAgent, err := si.svc.Get(ctx, &gen.GetPayload{SessionToken: nil, ID: &created.ID})
+	require.NoError(t, err)
+	require.Equal(t, recorded.UpdatedAt, fetchedAgent.Connection.UpdatedAt)
 
 	after, err := audittest.AuditLogCountByAction(ctx, si.conn.conn, audit.ActionIdentityProviderConnectionRecordAgent)
 	require.NoError(t, err)
@@ -435,6 +501,18 @@ func TestRecordAgent_StoresDisplayIDs(t *testing.T) {
 
 	_, err = si.svc.RecordAgent(ctx, &gen.RecordAgentPayload{SessionToken: nil, ID: created.ID, AgentID: conv.PtrEmpty("not an id!"), AgentAppID: nil})
 	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+func TestRevoke_BeforeSubmitReportsNoMissingScopes(t *testing.T) {
+	t.Parallel()
+	ctx, si := newTestService(t)
+
+	created := createConnection(t, ctx, si, fullOrgURL)
+	revoked, err := si.svc.Revoke(ctx, &gen.RevokePayload{SessionToken: nil, ID: created.ID})
+	require.NoError(t, err)
+	require.Equal(t, identityproviderconnections.StatusRevoked, revoked.Status)
+	require.Nil(t, revoked.LastVerifiedAt)
+	require.Empty(t, revoked.MissingScopes, "nothing was verified, so nothing is missing")
 }
 
 func TestRevoke_IsIdempotentAndFreesTheOrganization(t *testing.T) {
@@ -470,7 +548,7 @@ func TestRevoke_IsIdempotentAndFreesTheOrganization(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, si.authCtx.UserID, record.ActorID)
 
-	_, err = si.svc.Get(ctx, &gen.GetPayload{ApikeyToken: nil, SessionToken: nil, ID: &created.ID})
+	_, err = si.svc.Get(ctx, &gen.GetPayload{SessionToken: nil, ID: &created.ID})
 	requireOopsCode(t, err, oops.CodeNotFound)
 
 	_, err = si.svc.SubmitClientID(ctx, &gen.SubmitClientIDPayload{SessionToken: nil, ID: created.ID, ClientID: testClientID})
@@ -500,7 +578,7 @@ func TestMutations_RefuseSupportSessions(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeForbidden)
 
 	// Reads stay open to support.
-	fetched, err := si.svc.Get(supportCtx, &gen.GetPayload{ApikeyToken: nil, SessionToken: nil, ID: &created.ID})
+	fetched, err := si.svc.Get(supportCtx, &gen.GetPayload{SessionToken: nil, ID: &created.ID})
 	require.NoError(t, err)
 	require.Equal(t, identityproviderconnections.StatusPending, fetched.Connection.Status)
 }
@@ -512,9 +590,9 @@ func TestConnections_AreInvisibleToOtherOrganizations(t *testing.T) {
 	created := createConnection(t, ctx, si, fullOrgURL)
 	otherCtx, _ := asOtherOrganization(t, ctx, si)
 
-	_, err := si.svc.Get(otherCtx, &gen.GetPayload{ApikeyToken: nil, SessionToken: nil, ID: &created.ID})
+	_, err := si.svc.Get(otherCtx, &gen.GetPayload{SessionToken: nil, ID: &created.ID})
 	requireOopsCode(t, err, oops.CodeNotFound)
-	empty, err := si.svc.Get(otherCtx, &gen.GetPayload{ApikeyToken: nil, SessionToken: nil, ID: nil})
+	empty, err := si.svc.Get(otherCtx, &gen.GetPayload{SessionToken: nil, ID: nil})
 	require.NoError(t, err)
 	require.Nil(t, empty.Connection)
 	_, err = si.svc.SubmitClientID(otherCtx, &gen.SubmitClientIDPayload{SessionToken: nil, ID: created.ID, ClientID: testClientID})
@@ -526,7 +604,7 @@ func TestConnections_AreInvisibleToOtherOrganizations(t *testing.T) {
 	_, err = si.svc.Revoke(otherCtx, &gen.RevokePayload{SessionToken: nil, ID: created.ID})
 	requireOopsCode(t, err, oops.CodeNotFound)
 
-	_, err = si.svc.Get(ctx, &gen.GetPayload{ApikeyToken: nil, SessionToken: nil, ID: &created.ID})
+	_, err = si.svc.Get(ctx, &gen.GetPayload{SessionToken: nil, ID: &created.ID})
 	require.NoError(t, err)
 }
 
@@ -539,12 +617,12 @@ func TestRBAC_ReadersCannotMutate(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeForbidden)
 
 	created := createConnection(t, ctx, si, fullOrgURL)
-	fetched, err := si.svc.Get(readerCtx, &gen.GetPayload{ApikeyToken: nil, SessionToken: nil, ID: &created.ID})
+	fetched, err := si.svc.Get(readerCtx, &gen.GetPayload{SessionToken: nil, ID: &created.ID})
 	require.NoError(t, err)
 	require.Equal(t, created.ID, fetched.Connection.ID)
 
 	noneCtx := authztest.WithExactGrants(t, ctx)
-	_, err = si.svc.Get(noneCtx, &gen.GetPayload{ApikeyToken: nil, SessionToken: nil, ID: &created.ID})
+	_, err = si.svc.Get(noneCtx, &gen.GetPayload{SessionToken: nil, ID: &created.ID})
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
@@ -555,7 +633,7 @@ func TestFlag_OnlyGatesCreate(t *testing.T) {
 	created := createConnection(t, ctx, si, fullOrgURL)
 	si.flags.SetFlag(feature.FlagOktaConnections, si.orgID, false)
 
-	fetched, err := si.svc.Get(ctx, &gen.GetPayload{ApikeyToken: nil, SessionToken: nil, ID: nil})
+	fetched, err := si.svc.Get(ctx, &gen.GetPayload{SessionToken: nil, ID: nil})
 	require.NoError(t, err)
 	require.Equal(t, created.ID, fetched.Connection.ID)
 	revoked, err := si.svc.Revoke(ctx, &gen.RevokePayload{SessionToken: nil, ID: created.ID})
@@ -566,7 +644,7 @@ func TestFlag_OnlyGatesCreate(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeForbidden)
 
 	errCtx, errSi := newTestServiceWithFlags(t, errFlags{})
-	empty, err := errSi.svc.Get(errCtx, &gen.GetPayload{ApikeyToken: nil, SessionToken: nil, ID: nil})
+	empty, err := errSi.svc.Get(errCtx, &gen.GetPayload{SessionToken: nil, ID: nil})
 	require.NoError(t, err)
 	require.Nil(t, empty.Connection)
 	_, err = errSi.svc.Create(errCtx, &gen.CreatePayload{SessionToken: nil, OrgURL: fullOrgURL, ListingMode: nil})
@@ -601,7 +679,7 @@ func TestUnconfiguredDeployment_IsUnavailable(t *testing.T) {
 	ctx, si := newTestService(t)
 
 	unconfigured := newUnconfiguredService(t, si)
-	_, err := unconfigured.Get(ctx, &gen.GetPayload{ApikeyToken: nil, SessionToken: nil, ID: nil})
+	_, err := unconfigured.Get(ctx, &gen.GetPayload{SessionToken: nil, ID: nil})
 	requireOopsCode(t, err, oops.CodeUnavailable)
 	_, err = unconfigured.Create(ctx, &gen.CreatePayload{SessionToken: nil, OrgURL: fullOrgURL, ListingMode: nil})
 	requireOopsCode(t, err, oops.CodeUnavailable)
@@ -624,7 +702,7 @@ func TestMutations_RefuseLegacyAPIKeys(t *testing.T) {
 	_, err = si.svc.SubmitClientID(keyCtx, &gen.SubmitClientIDPayload{SessionToken: nil, ID: created.ID, ClientID: testClientID})
 	requireOopsCode(t, err, oops.CodeForbidden)
 
-	fetched, err := si.svc.Get(keyCtx, &gen.GetPayload{ApikeyToken: nil, SessionToken: nil, ID: &created.ID})
+	fetched, err := si.svc.Get(keyCtx, &gen.GetPayload{SessionToken: nil, ID: &created.ID})
 	require.NoError(t, err)
 	require.Equal(t, created.ID, fetched.Connection.ID)
 	require.Equal(t, identityproviderconnections.StatusPending, fetched.Connection.Status, "the key could not revoke it")
@@ -654,7 +732,7 @@ func TestCreate_ProvisionFailureLeavesOrgRetryable(t *testing.T) {
 	_, err := broken.Create(ctx, &gen.CreatePayload{SessionToken: nil, OrgURL: fullOrgURL, ListingMode: nil})
 	requireOopsCode(t, err, oops.CodeUnexpected)
 
-	empty, err := si.svc.Get(ctx, &gen.GetPayload{ApikeyToken: nil, SessionToken: nil, ID: nil})
+	empty, err := si.svc.Get(ctx, &gen.GetPayload{SessionToken: nil, ID: nil})
 	require.NoError(t, err)
 	require.Nil(t, empty.Connection)
 	issuers, err := remotesessionsrepo.New(si.conn.conn).ListOrganizationRemoteSessionIssuers(ctx, remotesessionsrepo.ListOrganizationRemoteSessionIssuersParams{OrganizationID: conv.ToPGText(si.orgID), IncludeGlobal: false, Cursor: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, LimitValue: 10})
@@ -705,7 +783,7 @@ func TestSubmitClientID_TransportFailureLeavesPending(t *testing.T) {
 	_, err := si.svc.SubmitClientID(ctx, &gen.SubmitClientIDPayload{SessionToken: nil, ID: created.ID, ClientID: testClientID})
 	requireOopsCode(t, err, oops.CodeUnavailable)
 
-	fetched, err := si.svc.Get(ctx, &gen.GetPayload{ApikeyToken: nil, SessionToken: nil, ID: &created.ID})
+	fetched, err := si.svc.Get(ctx, &gen.GetPayload{SessionToken: nil, ID: &created.ID})
 	require.NoError(t, err)
 	require.Equal(t, identityproviderconnections.StatusPending, fetched.Connection.Status)
 	require.False(t, fetched.Connection.ClientIDSubmitted)
@@ -775,7 +853,7 @@ func TestNormalizeOktaOrgURL(t *testing.T) {
 		_, err := identityproviderconnections.NormalizeOktaOrgURL(raw)
 		require.NoError(t, err, raw)
 	}
-	for _, raw := range []string{"https://okta.com", "https://okta.com.evil.com", "https://example.okta.com/path", "http://localhost", "https://[::1]", "https://example.okta.com.", "https://xn--exmple-cua.okta.com", "https://exämple.okta.com", "https://%zz.okta.com"} {
+	for _, raw := range []string{"https://okta.com", "https://okta.com.evil.com", "https://example.okta.com/path", "http://localhost", "https://[::1]", "https://example.okta.com.", "https://xn--exmple-cua.okta.com", "https://exämple.okta.com", "https://%zz.okta.com", "https://\u212Aexample.okta.com", "https://example.okta.com?", "https://example.okta.com#", "https://example.okta.com/#"} {
 		_, err := identityproviderconnections.NormalizeOktaOrgURL(raw)
 		require.Error(t, err, raw)
 	}

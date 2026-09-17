@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/url"
 	"strings"
+	"unicode"
 )
 
 // oktaOrgHostSuffixes are the Okta-owned domains an org URL may live under.
@@ -30,16 +31,22 @@ func NormalizeOktaOrgURL(raw string) (string, error) {
 	if parsed.Scheme != "https" {
 		return "", ErrOrgURLNotHTTPS
 	}
-	if parsed.Opaque != "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || parsed.Port() != "" {
+	// A bare trailing ? or # parses to an empty query or fragment; refuse them too.
+	if parsed.Opaque != "" || parsed.User != nil || parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" || strings.Contains(raw, "#") || parsed.Port() != "" {
 		return "", ErrOrgURLNotOrigin
 	}
 	if parsed.Path != "" && parsed.Path != "/" {
 		return "", ErrOrgURLNotOrigin
 	}
-	host := strings.ToLower(parsed.Hostname())
-	if host == "" || parsed.Host != parsed.Hostname() {
+	if parsed.Host == "" || parsed.Host != parsed.Hostname() {
 		return "", ErrOrgURLNotOrigin
 	}
+	// Checked before lowercasing: case folding maps some non-ASCII runes (the
+	// Kelvin sign) onto ASCII letters.
+	if !isASCII(parsed.Hostname()) {
+		return "", ErrOrgURLHostNotASCII
+	}
+	host := strings.ToLower(parsed.Hostname())
 	if strings.HasSuffix(host, ".") || !isPlainHostname(host) {
 		return "", ErrOrgURLHostNotASCII
 	}
@@ -54,6 +61,15 @@ func NormalizeOktaOrgURL(raw string) (string, error) {
 		return "", ErrOrgURLHostNotAllowed
 	}
 	return "https://" + host, nil
+}
+
+func isASCII(s string) bool {
+	for _, r := range s {
+		if r > unicode.MaxASCII {
+			return false
+		}
+	}
+	return true
 }
 
 // isPlainHostname admits lowercase LDH labels only: no punycode, no unicode.

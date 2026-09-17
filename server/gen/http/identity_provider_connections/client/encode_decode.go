@@ -58,6 +58,7 @@ func EncodeCreateRequest(encoder func(*http.Request) goahttp.Encoder) func(*http
 // the response body should be restored after having been read.
 // DecodeCreateResponse may return the following errors:
 //   - "failed_precondition" (type *goa.ServiceError): http.StatusPreconditionFailed
+//   - "rate_limit_exceeded" (type *goa.ServiceError): http.StatusTooManyRequests
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -114,6 +115,20 @@ func DecodeCreateResponse(decoder func(*http.Response) goahttp.Decoder, restoreB
 				return nil, goahttp.ErrValidationError("identityProviderConnections", "create", err)
 			}
 			return nil, NewCreateFailedPrecondition(&body)
+		case http.StatusTooManyRequests:
+			var (
+				body CreateRateLimitExceededResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "create", err)
+			}
+			err = ValidateCreateRateLimitExceededResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "create", err)
+			}
+			return nil, NewCreateRateLimitExceeded(&body)
 		case http.StatusUnauthorized:
 			var (
 				body CreateUnauthorizedResponseBody
@@ -863,10 +878,6 @@ func EncodeGetRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Re
 		p, ok := v.(*identityproviderconnections.GetPayload)
 		if !ok {
 			return goahttp.ErrInvalidType("identityProviderConnections", "get", "*identityproviderconnections.GetPayload", v)
-		}
-		if p.ApikeyToken != nil {
-			head := *p.ApikeyToken
-			req.Header.Set("Gram-Key", head)
 		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken

@@ -39,9 +39,10 @@ const (
 const testClientID = "0oaexampleclient00001"
 
 type serviceInstance struct {
-	svc          *identityproviderconnections.Service
-	conn         *testInstance
-	orgID        string
+	svc   *identityproviderconnections.Service
+	conn  *testInstance
+	orgID string
+	// flags is nil when the service was built over a caller-supplied provider.
 	flags        *feature.InMemory
 	oktaFakes    *okta.FakeFactory
 	discovery    *fakeDiscovery
@@ -164,9 +165,13 @@ func newTestServiceWithFlags(t *testing.T, features feature.Provider) (context.C
 	authCtx.ActiveOrganizationID = ti.orgID
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
-	flags := &feature.InMemory{}
-	flags.SetFlag(feature.FlagOktaConnections, ti.orgID, true)
+	// flags is only the effective provider when the caller supplied none; a
+	// service built over another provider exposes nil so toggling it cannot
+	// silently do nothing.
+	var flags *feature.InMemory
 	if features == nil {
+		flags = &feature.InMemory{}
+		flags.SetFlag(feature.FlagOktaConnections, ti.orgID, true)
 		features = flags
 	}
 

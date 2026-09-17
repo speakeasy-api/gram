@@ -190,7 +190,7 @@ async function $do(
   >(
     M.json(200, OktaIdentityProviderConnection$inboundSchema),
     M.jsonErr(
-      [400, 401, 403, 404, 409, 412, 415, 422],
+      [400, 401, 403, 404, 409, 412, 415, 422, 429],
       ServiceError$inboundSchema,
     ),
     M.jsonErr([500, 502, 503], ServiceError$inboundSchema),

@@ -33,7 +33,17 @@ func (r connectionRows) lastError() *string {
 
 // checked reports whether a verification has ever completed against Okta.
 func (r connectionRows) checked() bool {
-	return r.Connection.Status != StatusPending
+	return r.Connection.Status == StatusVerified || r.Connection.Status == StatusDegraded
+}
+
+// updatedAt is the later of the parent and Okta subtype timestamps, so a
+// subtype-only mutation such as recordAgent moves it.
+func (r connectionRows) updatedAt() time.Time {
+	updated := r.Connection.UpdatedAt.Time
+	if r.Okta.UpdatedAt.Time.After(updated) {
+		updated = r.Okta.UpdatedAt.Time
+	}
+	return updated
 }
 
 func missingScopes(granted []string) []string {
@@ -99,7 +109,7 @@ func buildConnectionView(r connectionRows) *gen.OktaIdentityProviderConnection {
 		ActiveKey:           activeKey,
 		Checklist:           items,
 		CreatedAt:           conv.FromPGTimestamptz(r.Connection.CreatedAt),
-		UpdatedAt:           conv.FromPGTimestamptz(r.Connection.UpdatedAt),
+		UpdatedAt:           r.updatedAt().UTC().Format(time.RFC3339),
 	}
 }
 

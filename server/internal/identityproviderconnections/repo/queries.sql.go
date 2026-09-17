@@ -239,40 +239,8 @@ func (q *Queries) GetIdentityProviderConnectionIncludingDeleted(ctx context.Cont
 	return i, err
 }
 
-const getLiveIdentityProviderConnectionForOrganization = `-- name: GetLiveIdentityProviderConnectionForOrganization :one
-
-SELECT id, organization_id, provider, status, last_verified_at, last_error, created_at, updated_at, deleted_at, deleted
-FROM identity_provider_connections
-WHERE organization_id = $1
-  AND provider = $2
-  AND deleted IS FALSE
-`
-
-type GetLiveIdentityProviderConnectionForOrganizationParams struct {
-	OrganizationID string
-	Provider       string
-}
-
-// Connection management API. Every query below is organization-qualified.
-func (q *Queries) GetLiveIdentityProviderConnectionForOrganization(ctx context.Context, arg GetLiveIdentityProviderConnectionForOrganizationParams) (IdentityProviderConnection, error) {
-	row := q.db.QueryRow(ctx, getLiveIdentityProviderConnectionForOrganization, arg.OrganizationID, arg.Provider)
-	var i IdentityProviderConnection
-	err := row.Scan(
-		&i.ID,
-		&i.OrganizationID,
-		&i.Provider,
-		&i.Status,
-		&i.LastVerifiedAt,
-		&i.LastError,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.Deleted,
-	)
-	return i, err
-}
-
 const getLiveOktaIdentityProviderConnectionForOrganization = `-- name: GetLiveOktaIdentityProviderConnectionForOrganization :one
+
 SELECT
   c.id, c.organization_id, c.provider, c.status, c.last_verified_at, c.last_error, c.created_at, c.updated_at, c.deleted_at, c.deleted,
   o.identity_provider_connection_id AS okta_identity_provider_connection_id
@@ -291,6 +259,7 @@ type GetLiveOktaIdentityProviderConnectionForOrganizationRow struct {
 	OktaIdentityProviderConnectionID uuid.NullUUID
 }
 
+// Connection management API. Every query below is organization-qualified.
 // The live parent with its Okta details if any; a parent without them is a
 // create that failed midway and can be abandoned.
 func (q *Queries) GetLiveOktaIdentityProviderConnectionForOrganization(ctx context.Context, organizationID string) (GetLiveOktaIdentityProviderConnectionForOrganizationRow, error) {
@@ -840,6 +809,53 @@ func (q *Queries) OktaIssuerURLInUse(ctx context.Context, issuerUrl string) (boo
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const recordIdentityProviderConnectionVerificationFailure = `-- name: RecordIdentityProviderConnectionVerificationFailure :one
+UPDATE identity_provider_connections
+SET status = $1,
+    last_error = $2,
+    updated_at = clock_timestamp()
+WHERE id = $3
+  AND organization_id = $4
+  AND updated_at = $5
+  AND deleted IS FALSE
+RETURNING id, organization_id, provider, status, last_verified_at, last_error, created_at, updated_at, deleted_at, deleted
+`
+
+type RecordIdentityProviderConnectionVerificationFailureParams struct {
+	Status            string
+	LastError         pgtype.Text
+	ID                uuid.UUID
+	OrganizationID    string
+	ExpectedUpdatedAt pgtype.Timestamptz
+}
+
+// A failed verification is written outside the rolled-back attempt; the
+// compare-and-swap on updated_at keeps it from clobbering a concurrent run
+// that committed in between.
+func (q *Queries) RecordIdentityProviderConnectionVerificationFailure(ctx context.Context, arg RecordIdentityProviderConnectionVerificationFailureParams) (IdentityProviderConnection, error) {
+	row := q.db.QueryRow(ctx, recordIdentityProviderConnectionVerificationFailure,
+		arg.Status,
+		arg.LastError,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ExpectedUpdatedAt,
+	)
+	var i IdentityProviderConnection
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Provider,
+		&i.Status,
+		&i.LastVerifiedAt,
+		&i.LastError,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const revokeIdentityProviderConnection = `-- name: RevokeIdentityProviderConnection :one

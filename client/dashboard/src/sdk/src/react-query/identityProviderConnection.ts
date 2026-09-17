@@ -59,7 +59,7 @@ export type IdentityProviderConnectionQueryError =
  * get identityProviderConnections
  *
  * @remarks
- * Get a connection by ID, or the organization's live Okta connection when no ID is given. Requires org:read.
+ * Get a connection by ID, or the organization's live Okta connection when no ID is given. Session only; requires org:read.
  */
 export function useIdentityProviderConnection(
   request?: GetIdentityProviderConnectionRequest | undefined,
@@ -88,7 +88,7 @@ export function useIdentityProviderConnection(
  * get identityProviderConnections
  *
  * @remarks
- * Get a connection by ID, or the organization's live Okta connection when no ID is given. Requires org:read.
+ * Get a connection by ID, or the organization's live Okta connection when no ID is given. Session only; requires org:read.
  */
 export function useIdentityProviderConnectionSuspense(
   request?: GetIdentityProviderConnectionRequest | undefined,
@@ -116,11 +116,7 @@ export function useIdentityProviderConnectionSuspense(
 export function setIdentityProviderConnectionData(
   client: QueryClient,
   queryKeyBase: [
-    parameters: {
-      id?: string | undefined;
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-    },
+    parameters: { id?: string | undefined; gramSession?: string | undefined },
   ],
   data: IdentityProviderConnectionQueryData,
 ): IdentityProviderConnectionQueryData | undefined {
@@ -132,11 +128,7 @@ export function setIdentityProviderConnectionData(
 export function invalidateIdentityProviderConnection(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      id?: string | undefined;
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-    }]
+    [parameters: { id?: string | undefined; gramSession?: string | undefined }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {

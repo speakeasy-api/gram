@@ -362,6 +362,25 @@ type CreateFailedPreconditionResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// CreateRateLimitExceededResponseBody is the type of the
+// "identityProviderConnections" service "create" endpoint HTTP response body
+// for the "rate_limit_exceeded" error.
+type CreateRateLimitExceededResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // CreateUnauthorizedResponseBody is the type of the
 // "identityProviderConnections" service "create" endpoint HTTP response body
 // for the "unauthorized" error.
@@ -1856,6 +1875,21 @@ func NewCreateOktaIdentityProviderConnectionOK(body *CreateResponseBody) *identi
 // NewCreateFailedPrecondition builds a identityProviderConnections service
 // create endpoint failed_precondition error.
 func NewCreateFailedPrecondition(body *CreateFailedPreconditionResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateRateLimitExceeded builds a identityProviderConnections service
+// create endpoint rate_limit_exceeded error.
+func NewCreateRateLimitExceeded(body *CreateRateLimitExceededResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -3686,6 +3720,30 @@ func ValidateRevokeResponseBody(body *RevokeResponseBody) (err error) {
 // ValidateCreateFailedPreconditionResponseBody runs the validations defined on
 // create_failed_precondition_response_body
 func ValidateCreateFailedPreconditionResponseBody(body *CreateFailedPreconditionResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateRateLimitExceededResponseBody runs the validations defined on
+// create_rate_limit_exceeded_response_body
+func ValidateCreateRateLimitExceededResponseBody(body *CreateRateLimitExceededResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

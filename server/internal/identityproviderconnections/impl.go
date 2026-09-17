@@ -378,7 +378,7 @@ func (s *Service) discoverOktaIssuer(ctx context.Context, logger *slog.Logger, o
 	if err != nil {
 		return none, oops.E(oops.CodeFailedPrecondition, err, "could not discover the Okta org's authorization server metadata").LogError(ctx, logger)
 	}
-	if strings.TrimRight(metadata.Issuer, "/") != orgURL {
+	if metadata.Issuer != orgURL {
 		return none, oops.E(oops.CodeFailedPrecondition, nil, "the discovered issuer does not match the org url").LogError(ctx, logger)
 	}
 	tokenEndpoint, err := url.Parse(metadata.TokenEndpoint)
@@ -659,7 +659,7 @@ func (s *Service) SubmitClientID(ctx context.Context, payload *gen.SubmitClientI
 		if rollbackErr := dbtx.Rollback(ctx); rollbackErr != nil {
 			logger.ErrorContext(ctx, "failed to roll back rejected client id submission", attr.SlogError(rollbackErr))
 		}
-		s.recordFailure(ctx, logger, before, err)
+		s.recordFailure(ctx, logger, authCtx, before, err)
 		return nil, s.mapVerificationError(ctx, logger, err)
 	}
 
@@ -712,7 +712,7 @@ func (s *Service) Verify(ctx context.Context, payload *gen.VerifyPayload) (*gen.
 		if rollbackErr := dbtx.Rollback(ctx); rollbackErr != nil {
 			logger.ErrorContext(ctx, "failed to release connection lock after verification failure", attr.SlogError(rollbackErr))
 		}
-		s.recordFailure(ctx, logger, before, err)
+		s.recordFailure(ctx, logger, authCtx, before, err)
 		return nil, s.mapVerificationError(ctx, logger, err)
 	}
 
@@ -748,7 +748,7 @@ func (s *Service) runVerification(ctx context.Context, logger *slog.Logger, rows
 
 	verifyCtx, cancel := context.WithTimeout(ctx, verifyTimeout)
 	defer cancel()
-	outcome, err := verifyConnection(verifyCtx, client)
+	outcome, err := verifyConnection(verifyCtx, client, rows.Managed.ClientID)
 	if err != nil {
 		s.oktaClients.Forget(rows.Managed.ClientRowID)
 		logger.WarnContext(ctx, "okta connection verification failed", attr.SlogError(err))
@@ -757,8 +757,11 @@ func (s *Service) runVerification(ctx context.Context, logger *slog.Logger, rows
 	return outcome, nil
 }
 
-// recordFailure stores the typed failure outside the rolled-back transaction. A rejected credential degrades a verified connection.
-func (s *Service) recordFailure(ctx context.Context, logger *slog.Logger, rows *connectionRows, cause error) {
+// recordFailure stores the typed failure outside the rolled-back attempt and
+// audits it, in one transaction. The write is a compare-and-swap on the row
+// the attempt locked: a concurrent run that committed in between wins. A
+// rejected credential degrades a verified connection.
+func (s *Service) recordFailure(ctx context.Context, logger *slog.Logger, authCtx *contextvalues.AuthContext, rows *connectionRows, cause error) {
 	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), keyCleanupTimeout)
 	defer cancel()
 
@@ -771,14 +774,36 @@ func (s *Service) recordFailure(ctx context.Context, logger *slog.Logger, rows *
 		}
 	}
 	s.metrics.recordVerify(ctx, ProviderOkta, outcome)
-	if _, err := repo.New(s.db).UpdateIdentityProviderConnectionVerification(writeCtx, repo.UpdateIdentityProviderConnectionVerificationParams{
-		Status:         status,
-		LastVerifiedAt: rows.Connection.LastVerifiedAt,
-		LastError:      conv.ToPGText(failureLastError(cause)),
-		ID:             rows.Connection.ID,
-		OrganizationID: rows.Connection.OrganizationID,
-	}); err != nil {
+
+	dbtx, err := s.db.Begin(writeCtx)
+	if err != nil {
+		logger.ErrorContext(ctx, "failed to begin recording connection verification failure", attr.SlogError(err))
+		return
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(writeCtx) })
+
+	connection, err := repo.New(dbtx).RecordIdentityProviderConnectionVerificationFailure(writeCtx, repo.RecordIdentityProviderConnectionVerificationFailureParams{
+		Status:            status,
+		LastError:         conv.ToPGText(failureLastError(cause)),
+		ID:                rows.Connection.ID,
+		OrganizationID:    rows.Connection.OrganizationID,
+		ExpectedUpdatedAt: rows.Connection.UpdatedAt,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		logger.InfoContext(ctx, "connection changed since the failed verification started; failure not recorded")
+		return
+	case err != nil:
 		logger.ErrorContext(ctx, "failed to record connection verification failure", attr.SlogError(err))
+		return
+	}
+	after := connectionRows{Connection: connection, Okta: rows.Okta, Managed: rows.Managed}
+	if err := s.audit.LogIdentityProviderConnectionVerify(writeCtx, dbtx, s.auditEvent(authCtx, rows.Connection.ID, snapshot(*rows), snapshot(after))); err != nil {
+		logger.ErrorContext(ctx, "failed to audit connection verification failure", attr.SlogError(err))
+		return
+	}
+	if err := dbtx.Commit(writeCtx); err != nil {
+		logger.ErrorContext(ctx, "failed to commit connection verification failure", attr.SlogError(err))
 	}
 }
 

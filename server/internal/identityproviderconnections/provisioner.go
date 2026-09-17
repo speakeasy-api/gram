@@ -41,8 +41,10 @@ var providerDisplayNames = map[string]string{
 	ProviderOkta: "Okta",
 }
 
-// signingAlgorithm is what every managed key signs with.
-const signingAlgorithm = jose.RS256
+// ManagedKeyAlgorithm is what every managed key signs with.
+const ManagedKeyAlgorithm = jose.RS256
+
+const signingAlgorithm = ManagedKeyAlgorithm
 
 // systemActorComponent names the provisioner in audit entries.
 const systemActorComponent = "identity-provider-connections"
@@ -685,6 +687,10 @@ func (p *Provisioner) SetClientID(ctx context.Context, dbtx pgx.Tx, params SetCl
 		return nil, fmt.Errorf("%w: placeholder", ErrClientIDRequired)
 	}
 
+	// Serializes concurrent claims of one client id on the issuer; no index enforces it.
+	if err := remotesessionsrepo.New(dbtx).LockRemoteSessionIssuerForClientBinding(ctx, existing.IssuerID); err != nil {
+		return nil, fmt.Errorf("lock issuer for client id collision check: %w", err)
+	}
 	inUse, err := q.ManagedClientIDInUse(ctx, repo.ManagedClientIDInUseParams{
 		RemoteSessionIssuerID: existing.IssuerID,
 		OrganizationID:        conv.ToPGText(params.OrganizationID),

@@ -47,6 +47,9 @@ func ParseIdentityProviderConnection(value string) (IdentityProviderConnection, 
 	if err != nil {
 		return IdentityProviderConnection{}, fmt.Errorf("%w: invalid identity_provider_connection uuid", ErrInvalid)
 	}
+	if id == uuid.Nil {
+		return IdentityProviderConnection{}, fmt.Errorf("%w: empty id", ErrInvalid)
+	}
 
 	return NewIdentityProviderConnection(id), nil
 }

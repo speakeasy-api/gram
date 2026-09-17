@@ -51,7 +51,6 @@ export function buildIdentityProviderConnectionQuery(
   return {
     queryKey: queryKeyIdentityProviderConnection({
       id: request?.id,
-      gramKey: request?.gramKey,
       gramSession: request?.gramSession,
     }),
     queryFn: async function identityProviderConnectionQueryFn(
@@ -79,11 +78,7 @@ export function buildIdentityProviderConnectionQuery(
 }
 
 export function queryKeyIdentityProviderConnection(
-  parameters: {
-    id?: string | undefined;
-    gramKey?: string | undefined;
-    gramSession?: string | undefined;
-  },
+  parameters: { id?: string | undefined; gramSession?: string | undefined },
 ): QueryKey {
   return ["@gram/client", "identityProviderConnections", "get", parameters];
 }

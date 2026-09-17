@@ -32,10 +32,11 @@ type Fixtures struct {
 // Fake is an in-memory Client for tests and local development. It matches
 // on Query and Search only; ListAppsRequest.Status is ignored.
 type Fake struct {
-	mu       sync.Mutex
-	fixtures Fixtures
-	calls    []string
-	err      error
+	mu         sync.Mutex
+	fixtures   Fixtures
+	calls      []string
+	err        error
+	methodErrs map[string]error
 }
 
 var _ Client = (*Fake)(nil)
@@ -47,7 +48,7 @@ func NewFake(fixtures Fixtures) *Fake {
 	if fixtures.AppGroups == nil {
 		fixtures.AppGroups = map[string][]AppGroup{}
 	}
-	return &Fake{mu: sync.Mutex{}, fixtures: fixtures, calls: nil, err: nil}
+	return &Fake{mu: sync.Mutex{}, fixtures: fixtures, calls: nil, err: nil, methodErrs: map[string]error{}}
 }
 
 // SetError makes every subsequent call fail with err until cleared with nil.
@@ -55,6 +56,18 @@ func (f *Fake) SetError(err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.err = err
+}
+
+// SetMethodError makes one method (by name, for example "ListApps") fail with
+// err until cleared with nil; SetError takes precedence.
+func (f *Fake) SetMethodError(name string, err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if err == nil {
+		delete(f.methodErrs, name)
+		return
+	}
+	f.methodErrs[name] = err
 }
 
 // Calls returns the method names invoked so far, in order.
@@ -68,7 +81,10 @@ func (f *Fake) record(name string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls = append(f.calls, name)
-	return f.err
+	if f.err != nil {
+		return f.err
+	}
+	return f.methodErrs[name]
 }
 
 func (f *Fake) ListApps(_ context.Context, req ListAppsRequest) ([]App, error) {

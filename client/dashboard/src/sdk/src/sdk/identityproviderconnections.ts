@@ -61,7 +61,7 @@ export class IdentityProviderConnections extends ClientSDK {
    * get identityProviderConnections
    *
    * @remarks
-   * Get a connection by ID, or the organization's live Okta connection when no ID is given. Requires org:read.
+   * Get a connection by ID, or the organization's live Okta connection when no ID is given. Session only; requires org:read.
    */
   async get(
     request?: GetIdentityProviderConnectionRequest | undefined,

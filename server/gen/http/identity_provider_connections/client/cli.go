@@ -110,7 +110,7 @@ func BuildVerifyPayload(identityProviderConnectionsVerifyBody string, identityPr
 
 // BuildGetPayload builds the payload for the identityProviderConnections get
 // endpoint from CLI flags.
-func BuildGetPayload(identityProviderConnectionsGetID string, identityProviderConnectionsGetApikeyToken string, identityProviderConnectionsGetSessionToken string) (*identityproviderconnections.GetPayload, error) {
+func BuildGetPayload(identityProviderConnectionsGetID string, identityProviderConnectionsGetSessionToken string) (*identityproviderconnections.GetPayload, error) {
 	var err error
 	var id *string
 	{
@@ -122,12 +122,6 @@ func BuildGetPayload(identityProviderConnectionsGetID string, identityProviderCo
 			}
 		}
 	}
-	var apikeyToken *string
-	{
-		if identityProviderConnectionsGetApikeyToken != "" {
-			apikeyToken = &identityProviderConnectionsGetApikeyToken
-		}
-	}
 	var sessionToken *string
 	{
 		if identityProviderConnectionsGetSessionToken != "" {
@@ -136,7 +130,6 @@ func BuildGetPayload(identityProviderConnectionsGetID string, identityProviderCo
 	}
 	v := &identityproviderconnections.GetPayload{}
 	v.ID = id
-	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
 	return v, nil

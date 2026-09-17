@@ -130,13 +130,6 @@ WHERE json_web_key_set_id = @json_web_key_set_id
 
 -- Connection management API. Every query below is organization-qualified.
 
--- name: GetLiveIdentityProviderConnectionForOrganization :one
-SELECT *
-FROM identity_provider_connections
-WHERE organization_id = @organization_id
-  AND provider = @provider
-  AND deleted IS FALSE;
-
 -- The live parent with its Okta details if any; a parent without them is a
 -- create that failed midway and can be abandoned.
 -- name: GetLiveOktaIdentityProviderConnectionForOrganization :one
@@ -251,6 +244,20 @@ SET status = @status,
     updated_at = clock_timestamp()
 WHERE id = @id
   AND organization_id = @organization_id
+  AND deleted IS FALSE
+RETURNING *;
+
+-- A failed verification is written outside the rolled-back attempt; the
+-- compare-and-swap on updated_at keeps it from clobbering a concurrent run
+-- that committed in between.
+-- name: RecordIdentityProviderConnectionVerificationFailure :one
+UPDATE identity_provider_connections
+SET status = @status,
+    last_error = @last_error,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND updated_at = @expected_updated_at
   AND deleted IS FALSE
 RETURNING *;
 
