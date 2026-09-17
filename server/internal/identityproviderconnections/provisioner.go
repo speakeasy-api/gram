@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections/repo"
 	"github.com/speakeasy-api/gram/server/internal/jsonwebkeysets"
 	jwksrepo "github.com/speakeasy-api/gram/server/internal/jsonwebkeysets/repo"
+	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -59,6 +60,9 @@ var (
 	ErrSigningCredentialUnusable   = errors.New("identityproviderconnections: signing credential unusable")
 	ErrNotProvisioned              = errors.New("identityproviderconnections: connection is not provisioned")
 	ErrKeyAlreadyPublished         = errors.New("identityproviderconnections: key material was already published into the set")
+	ErrClientIDRequired            = errors.New("identityproviderconnections: client id is required")
+	ErrClientIDAlreadySet          = errors.New("identityproviderconnections: client id was already submitted")
+	ErrClientIDInUse               = errors.New("identityproviderconnections: client id is already registered against this issuer")
 )
 
 // ManagedJWKSCacheTTL is the publish-before-sign window advertised by the JWKS endpoint.
@@ -294,7 +298,7 @@ func (p *Provisioner) provisionRows(ctx context.Context, params ProvisionClientP
 		ProjectID:                       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		OrganizationID:                  conv.ToPGText(params.OrganizationID),
 		RemoteSessionIssuerID:           issuer.ID,
-		ClientID:                        params.Provider + "-pending-" + params.ConnectionID.String(),
+		ClientID:                        PlaceholderClientID(params.Provider, params.ConnectionID),
 		ClientSecretEncrypted:           pgtype.Text{String: "", Valid: false},
 		ClientIDIssuedAt:                pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		ClientSecretExpiresAt:           pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
@@ -638,6 +642,103 @@ func (p *Provisioner) publishRotationRows(ctx context.Context, params RotateClie
 	return &RotationPendingError{ReadyAt: published.Time.Add(ManagedJWKSCacheTTL)}, nil
 }
 
+// PlaceholderClientID is the client_id a managed client carries until the
+// administrator submits the real one.
+func PlaceholderClientID(provider string, connectionID uuid.UUID) string {
+	return provider + "-pending-" + connectionID.String()
+}
+
+// SetClientIDParams names the managed client whose placeholder gives way to
+// the administrator-submitted client id.
+type SetClientIDParams struct {
+	OrganizationID string
+	ConnectionID   uuid.UUID
+	Provider       string
+	ClientID       string
+
+	// Actor is the administrator recorded on the client's audit entry.
+	Actor            urn.Principal
+	ActorDisplayName *string
+}
+
+// SetClientID replaces the placeholder client id inside the caller's transaction, once per connection.
+func (p *Provisioner) SetClientID(ctx context.Context, dbtx pgx.Tx, params SetClientIDParams) (*ManagedClient, error) {
+	if err := validateProvider(params.Provider); err != nil {
+		return nil, err
+	}
+	if params.ClientID == "" {
+		return nil, ErrClientIDRequired
+	}
+	q := repo.New(dbtx)
+	if err := requireConnection(ctx, q, params.OrganizationID, params.ConnectionID, params.Provider); err != nil {
+		return nil, err
+	}
+	row, existing, err := p.lookupManagedClientRow(ctx, q, params.OrganizationID, params.ConnectionID)
+	if err != nil {
+		return nil, err
+	}
+	placeholder := PlaceholderClientID(params.Provider, params.ConnectionID)
+	if existing.ClientID != placeholder {
+		return nil, ErrClientIDAlreadySet
+	}
+	if params.ClientID == placeholder {
+		return nil, fmt.Errorf("%w: placeholder", ErrClientIDRequired)
+	}
+
+	inUse, err := q.ManagedClientIDInUse(ctx, repo.ManagedClientIDInUseParams{
+		RemoteSessionIssuerID: existing.IssuerID,
+		OrganizationID:        conv.ToPGText(params.OrganizationID),
+		ClientID:              params.ClientID,
+		ExcludeID:             existing.ClientRowID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("check client id collision: %w", err)
+	}
+	if inUse {
+		return nil, ErrClientIDInUse
+	}
+
+	updated, err := q.SetManagedClientID(ctx, repo.SetManagedClientIDParams{
+		ClientID:                     params.ClientID,
+		ID:                           existing.ClientRowID,
+		OrganizationID:               conv.ToPGText(params.OrganizationID),
+		IdentityProviderConnectionID: conv.ToNullUUID(params.ConnectionID),
+		PlaceholderClientID:          placeholder,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, ErrClientIDAlreadySet
+	case err != nil:
+		return nil, fmt.Errorf("set managed client id: %w", err)
+	}
+
+	beforeView, err := mv.BuildRemoteSessionClientView(remotesessionsrepo.RemoteSessionClient(row.RemoteSessionClient), nil)
+	if err != nil {
+		return nil, fmt.Errorf("build managed client snapshot: %w", err)
+	}
+	afterView, err := mv.BuildRemoteSessionClientView(remotesessionsrepo.RemoteSessionClient(updated), nil)
+	if err != nil {
+		return nil, fmt.Errorf("build managed client snapshot: %w", err)
+	}
+	if err := p.audit.LogRemoteSessionClientUpdate(ctx, dbtx, audit.LogRemoteSessionClientUpdateEvent{
+		OrganizationID:         params.OrganizationID,
+		ProjectID:              uuid.Nil,
+		Actor:                  params.Actor,
+		ActorDisplayName:       params.ActorDisplayName,
+		ActorSlug:              nil,
+		RemoteSessionClientURN: urn.NewRemoteSessionClient(updated.ID),
+		ClientID:               updated.ClientID,
+		SnapshotBefore:         beforeView,
+		SnapshotAfter:          afterView,
+	}); err != nil {
+		return nil, fmt.Errorf("record managed client id submission: %w", err)
+	}
+
+	result := *existing
+	result.ClientID = updated.ClientID
+	return &result, nil
+}
+
 // RevokeClient withdraws every key from the connection's managed set and
 // returns how many were revoked. The client and set stay live so the JWKS
 // document serves an empty set. Works on a soft-deleted connection too. Once
@@ -837,18 +938,23 @@ func (p *Provisioner) loadIssuer(ctx context.Context, q *repo.Queries, organizat
 
 // lookupManagedClient reads the connection's managed rows, or reports ErrNotProvisioned.
 func (p *Provisioner) lookupManagedClient(ctx context.Context, q *repo.Queries, organizationID string, connectionID uuid.UUID) (*ManagedClient, error) {
+	_, client, err := p.lookupManagedClientRow(ctx, q, organizationID, connectionID)
+	return client, err
+}
+
+func (p *Provisioner) lookupManagedClientRow(ctx context.Context, q *repo.Queries, organizationID string, connectionID uuid.UUID) (repo.GetManagedClientRow, *ManagedClient, error) {
 	row, err := q.GetManagedClient(ctx, repo.GetManagedClientParams{
 		OrganizationID:               conv.ToPGText(organizationID),
 		IdentityProviderConnectionID: conv.ToNullUUID(connectionID),
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return nil, ErrNotProvisioned
+		return row, nil, ErrNotProvisioned
 	case err != nil:
-		return nil, fmt.Errorf("load managed client: %w", err)
+		return row, nil, fmt.Errorf("load managed client: %w", err)
 	}
 
-	return &ManagedClient{
+	return row, &ManagedClient{
 		ClientRowID:      row.RemoteSessionClient.ID,
 		ClientID:         row.RemoteSessionClient.ClientID,
 		IssuerID:         row.RemoteSessionClient.RemoteSessionIssuerID,
@@ -859,6 +965,12 @@ func (p *Provisioner) lookupManagedClient(ctx context.Context, q *repo.Queries, 
 		ActivatedAt:      row.ActivatedAt.Time,
 		JSONWebKeySetURL: remotesessions.ClientJSONWebKeySetURL(p.cfg.ServerURL, row.RemoteSessionClient.ID),
 	}, nil
+}
+
+// ProbeSigningCredential resolves and screens the platform signing credential without minting anything.
+func (p *Provisioner) ProbeSigningCredential(ctx context.Context) error {
+	_, err := p.resolveSigningCredential(ctx, p.logger, repo.New(p.db))
+	return err
 }
 
 // createManagedExternalKey writes the external_keys and gcp_kms_keys rows for a created key.

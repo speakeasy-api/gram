@@ -6778,6 +6778,35 @@ func (q *Queries) MarkTrustedIssuerJWKSConsultFailure(ctx context.Context, arg M
 	return result.RowsAffected(), nil
 }
 
+const oktaIdentityProviderConnectionReferencesIssuer = `-- name: OktaIdentityProviderConnectionReferencesIssuer :one
+SELECT EXISTS (
+  SELECT 1
+  FROM okta_identity_provider_connections AS o
+  JOIN identity_provider_connections AS c
+    ON c.id = o.identity_provider_connection_id
+   AND c.organization_id = o.organization_id
+   AND c.deleted IS FALSE
+  WHERE o.remote_session_issuer_id = $1
+    AND o.organization_id = $2
+    AND o.deleted IS FALSE
+)
+`
+
+type OktaIdentityProviderConnectionReferencesIssuerParams struct {
+	RemoteSessionIssuerID uuid.UUID
+	OrganizationID        string
+}
+
+// Whether a live Okta connection in the organization pins the issuer; the
+// issuer mutation guards refuse if so, and the pin lifts when the connection
+// is tombstoned.
+func (q *Queries) OktaIdentityProviderConnectionReferencesIssuer(ctx context.Context, arg OktaIdentityProviderConnectionReferencesIssuerParams) (bool, error) {
+	row := q.db.QueryRow(ctx, oktaIdentityProviderConnectionReferencesIssuer, arg.RemoteSessionIssuerID, arg.OrganizationID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const recordRemoteSessionIssuerMetadataRefreshFailure = `-- name: RecordRemoteSessionIssuerMetadataRefreshFailure :execrows
 UPDATE remote_session_issuers
 SET

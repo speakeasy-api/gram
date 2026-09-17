@@ -17,7 +17,9 @@ import (
 	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections/provisiontest"
+	idprepo "github.com/speakeasy-api/gram/server/internal/identityproviderconnections/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
@@ -153,6 +155,58 @@ func TestManagedClient_RefusesIssuerMutations(t *testing.T) {
 	other, err := ti.service.CreateIssuer(ctx, newCreateIssuerPayload("managed-guard-unrelated", nil))
 	require.NoError(t, err)
 	_, err = ti.service.UpdateIssuer(ctx, &orgissuersgen.UpdateIssuerPayload{ID: other.ID, Name: &name})
+	require.NoError(t, err)
+}
+
+// An issuer a live Okta connection references is pinned even without a managed
+// client on it, and the pin lifts once the connection is tombstoned.
+func TestOktaConnection_PinsIssuerUntilTombstoned(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	organizationID := activeOrganizationID(t, ctx)
+
+	issuer, err := ti.service.CreateIssuer(ctx, newCreateIssuerPayload("okta-pinned-issuer", nil))
+	require.NoError(t, err)
+	client, err := ti.service.CreateClient(ctx, newCreateClientPayload(issuer.ID, nil, nil))
+	require.NoError(t, err)
+
+	connectionID := provisiontest.CreateConnection(t, ctx, ti.conn, organizationID, identityproviderconnections.ProviderOkta)
+	_, err = idprepo.New(ti.conn).CreateOktaIdentityProviderConnection(ctx, idprepo.CreateOktaIdentityProviderConnectionParams{
+		IdentityProviderConnectionID: connectionID,
+		OrganizationID:               organizationID,
+		OrgUrl:                       issuer.Issuer,
+		IssuerUrl:                    issuer.Issuer,
+		RemoteSessionIssuerID:        uuid.MustParse(issuer.ID),
+		RemoteSessionClientID:        uuid.MustParse(client.ID),
+		ListingMode:                  identityproviderconnections.ListingModeCustomApp,
+	})
+	require.NoError(t, err)
+
+	name := "renamed"
+	tokenEndpoint := "https://attacker.example/token"
+	_, err = ti.service.UpdateIssuer(ctx, &orgissuersgen.UpdateIssuerPayload{ID: issuer.ID, Name: &name})
+	requireOopsCode(t, err, oops.CodeConflict)
+	_, err = ti.service.UpdateIssuer(ctx, &orgissuersgen.UpdateIssuerPayload{ID: issuer.ID, TokenEndpoint: &tokenEndpoint})
+	requireOopsCode(t, err, oops.CodeConflict)
+	slug := "okta-pinned-reslug"
+	_, err = ti.service.UpdateIssuer(ctx, &orgissuersgen.UpdateIssuerPayload{ID: issuer.ID, Slug: &slug})
+	requireOopsCode(t, err, oops.CodeConflict)
+	projectID := createProject(t, ctx, ti.conn, "okta-pinned-project").String()
+	_, err = ti.service.MoveIssuer(ctx, &orgissuersgen.MoveIssuerPayload{ID: issuer.ID, ProjectID: &projectID})
+	requireOopsCode(t, err, oops.CodeConflict)
+	target, err := ti.service.CreateIssuer(ctx, newCreateIssuerPayload("okta-pinned-migrate-target", nil))
+	require.NoError(t, err)
+	_, err = ti.service.MigrateIssuer(ctx, &orgissuersgen.MigrateIssuerPayload{SourceID: issuer.ID, TargetID: target.ID, SessionToken: nil, ApikeyToken: nil})
+	requireOopsCode(t, err, oops.CodeConflict)
+
+	still, err := ti.service.GetIssuer(ctx, &orgissuersgen.GetIssuerPayload{ID: issuer.ID, SessionToken: nil, ApikeyToken: nil})
+	require.NoError(t, err)
+	require.Equal(t, "okta-pinned-issuer", still.Slug)
+	require.Equal(t, "https://idp.example.com/token", *still.TokenEndpoint)
+
+	provisiontest.SoftDeleteConnection(t, ctx, ti.conn, organizationID, connectionID)
+	_, err = ti.service.UpdateIssuer(ctx, &orgissuersgen.UpdateIssuerPayload{ID: issuer.ID, Name: &name})
 	require.NoError(t, err)
 }
 

@@ -528,6 +528,22 @@ SELECT EXISTS (
     AND deleted IS FALSE
 );
 
+-- name: OktaIdentityProviderConnectionReferencesIssuer :one
+-- Whether a live Okta connection in the organization pins the issuer; the
+-- issuer mutation guards refuse if so, and the pin lifts when the connection
+-- is tombstoned.
+SELECT EXISTS (
+  SELECT 1
+  FROM okta_identity_provider_connections AS o
+  JOIN identity_provider_connections AS c
+    ON c.id = o.identity_provider_connection_id
+   AND c.organization_id = o.organization_id
+   AND c.deleted IS FALSE
+  WHERE o.remote_session_issuer_id = @remote_session_issuer_id
+    AND o.organization_id = @organization_id
+    AND o.deleted IS FALSE
+);
+
 -- name: CountRemoteSessionClientsByIssuerID :one
 -- Every non-deleted client on an issuer, across every tenancy tier. Delete
 -- guards use this as the fail-safe: a count that ignored rows the caller cannot
