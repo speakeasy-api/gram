@@ -53,9 +53,9 @@ type PlatformContext struct {
 	Overview string `json:"overview"`
 }
 
-// platformOverview is the one plain-language account of this platform a caller
-// gets. It names the stages in the order a person experiences them and glosses
-// the two words — project and plugin — that have no meaning outside Gram.
+// platformOverview explains the shared catalogue's RBAC behavior, including
+// why denied member reads may hide resources, and glosses the two platform
+// terms — project and plugin — that have no meaning outside Gram.
 const platformOverview = "This session exposes one shared tool catalogue. Your current organization membership and RBAC grants decide which calls can run and which resources are returned. " +
 	"Use list_projects, find_mcp, and list_skills to discover work you can access. A denied admin-gated call names the required permission and, when safe, offers a request-access link; member reads may instead hide inaccessible resources or return a generic denial. " +
 	"A project is where MCP servers and skills are kept. A plugin is a bundle administrators share with people. MCP read access, MCP connection access, and skill permissions remain separate."
