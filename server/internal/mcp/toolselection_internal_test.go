@@ -66,3 +66,26 @@ func TestIssuerGateFailureReason_WithdrawnAdmissionIsACredentialRejection(t *tes
 	require.ErrorIs(t, err, errCredentialRejected)
 	require.Equal(t, issuerGateReasonInvalidBearerToken, issuerGateFailureReason(err))
 }
+
+// A rollout state that could not be read is not a rollout decision, and neither
+// outcome is the credential's fault.
+func TestIssuerGateFailureReason_WorkloadRolloutUnavailable(t *testing.T) {
+	t.Parallel()
+
+	err := fmt.Errorf("%w: %w", errWorkloadRolloutUnavailable, oops.C(oops.CodeNotFound))
+	require.Equal(t, "workload_rollout_unavailable", issuerGateFailureReason(err))
+	require.NotErrorIs(t, err, errCredentialRejected)
+}
+
+// An engine that answers CodeUnexpected has judged nothing, so the workload
+// keeps its token even though the error is shareable.
+func TestIsCredentialDenial_OnlyDurableDenialCodes(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, isCredentialDenial(oops.C(oops.CodeForbidden)))
+	require.True(t, isCredentialDenial(oops.C(oops.CodeUnauthorized)))
+	require.False(t, isCredentialDenial(oops.C(oops.CodeUnexpected)))
+	require.False(t, isCredentialDenial(fmt.Errorf("wrapped: %w", oops.C(oops.CodeUnexpected))))
+	require.False(t, isCredentialDenial(errors.New("plain")))
+	require.True(t, isCredentialDenial(fmt.Errorf("wrapped: %w", oops.C(oops.CodeForbidden))))
+}

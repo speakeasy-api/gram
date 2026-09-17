@@ -293,6 +293,11 @@ var errCredentialRejected = errors.New("credential rejected")
 // a fresh token would hit the same gate, so this must not earn invalid_token.
 var errWorkloadRolloutDisabled = errors.New("workload session hidden by agent authorization rollout")
 
+// errWorkloadRolloutUnavailable marks a workload session refused because the
+// rollout state could not be read at all. The endpoint is hidden either way,
+// but an outage is not a rollout decision and is not reported as one.
+var errWorkloadRolloutUnavailable = errors.New("agent authorization rollout state unavailable")
+
 // errUnsupportedSessionSubject marks a session subject kind that parses but
 // that this path cannot describe as a caller. It is an error rather than a
 // fallback because a context with no actor reads to authz.Engine as an
@@ -321,6 +326,12 @@ const (
 	// endpoint whose organization has agent authorization switched off.
 	issuerGateReasonWorkloadRolloutDisabled = "workload_rollout_disabled"
 
+	// issuerGateReasonWorkloadRolloutUnavailable: the rollout state could not
+	// be read, so the endpoint stayed hidden without the feature being off.
+	// Separate from the line above so an outage cannot be mistaken for
+	// deliberate rollout state.
+	issuerGateReasonWorkloadRolloutUnavailable = "workload_rollout_unavailable"
+
 	// issuerGateReasonInvalidRemoteSession: the bearer token was accepted but
 	// a required upstream remote session for the issuer is missing or
 	// unusable, so the runtime challenged the client to reconnect.
@@ -345,6 +356,8 @@ func issuerGateFailureReason(err error) string {
 		return issuerGateReasonRevocationUnavailable
 	case errors.Is(err, errWorkloadRolloutDisabled):
 		return issuerGateReasonWorkloadRolloutDisabled
+	case errors.Is(err, errWorkloadRolloutUnavailable):
+		return issuerGateReasonWorkloadRolloutUnavailable
 	default:
 		return issuerGateReasonInvalidBearerToken
 	}
