@@ -15,9 +15,12 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -70,6 +73,9 @@ const (
 // query and fragment (RFC 9449 §4.2), emitted in the canonical form servers
 // compare against after RFC 3986 §6.2.2 and §6.2.3 normalization (§4.3).
 func HTU(target *url.URL) string {
+	if target == nil {
+		return ""
+	}
 	u := *target
 	// RFC 9449 §4.2: htu carries no query or fragment.
 	u.RawQuery = ""
@@ -82,8 +88,13 @@ func HTU(target *url.URL) string {
 	u.Scheme = strings.ToLower(u.Scheme)
 	u.Host = strings.ToLower(u.Host)
 	// RFC 3986 §6.2.3: drop the scheme's default port and use "/" for an empty path.
-	if port := u.Port(); (u.Scheme == "https" && port == "443") || (u.Scheme == "http" && port == "80") {
-		u.Host = strings.TrimSuffix(u.Host, ":"+port)
+	// The port is compared numerically so a zero-padded default (":0443") is also dropped.
+	if port, err := strconv.Atoi(u.Port()); err == nil {
+		if (u.Scheme == "https" && port == 443) || (u.Scheme == "http" && port == 80) {
+			u.Host = strings.TrimSuffix(u.Host, ":"+u.Port())
+		} else {
+			u.Host = net.JoinHostPort(u.Hostname(), strconv.Itoa(port))
+		}
 	}
 	if u.Host != "" && u.Path == "" {
 		u.Path = "/"
@@ -162,6 +173,9 @@ type ProofOptions struct {
 // for every attempt, including retries, so jti and iat are never reused
 // (RFC 9449 §7.3, §11.1).
 func (k *Key) Proof(method string, target *url.URL, opts ProofOptions) (string, error) {
+	if target == nil {
+		return "", errors.New("dpop proof: target url is required")
+	}
 	issuedAt := opts.IssuedAt
 	if issuedAt.IsZero() {
 		issuedAt = time.Now()

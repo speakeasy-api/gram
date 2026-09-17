@@ -171,12 +171,25 @@ func TestHTU_EmitsCanonicalForm(t *testing.T) {
 		"https://example.okta.com?x=1#f":           "https://example.okta.com/",
 		"https://user:pw@example.okta.com/token":   "https://example.okta.com/token",
 		"https://example.okta.com/a%2Fb/c":         "https://example.okta.com/a%2Fb/c",
+		"https://example.okta.com:0443/token":      "https://example.okta.com/token",
+		"http://[::1]:080/token":                   "http://[::1]/token",
+		"http://[::1]:08080/token":                 "http://[::1]:8080/token",
 	}
 	for raw, want := range cases {
 		target, err := url.Parse(raw)
 		require.NoError(t, err)
 		require.Equal(t, want, HTU(target), raw)
 	}
+}
+
+func TestProof_RejectsNilTarget(t *testing.T) {
+	t.Parallel()
+	key, err := NewKey()
+	require.NoError(t, err)
+
+	_, err = key.Proof(http.MethodGet, nil, ProofOptions{AccessToken: "", Nonce: "", IssuedAt: time.Time{}})
+	require.EqualError(t, err, "dpop proof: target url is required")
+	require.Empty(t, HTU(nil))
 }
 
 // RFC 9449 §7.1 Figure 14: ath for the RFC's example access token.

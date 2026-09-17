@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 	"slices"
 	"strings"
 	"sync"
@@ -104,7 +105,7 @@ func (f *Fake) GetApp(_ context.Context, appID string) (*App, error) {
 			return &found, nil
 		}
 	}
-	return nil, &APIError{Method: http.MethodGet, Path: "/api/v1/apps/" + appID, StatusCode: http.StatusNotFound, ErrorCode: "E0000007", Summary: fmt.Sprintf("Not found: Resource not found: %s (AppInstance)", appID)}
+	return nil, &APIError{Method: http.MethodGet, Path: "/api/v1/apps/" + url.PathEscape(appID), StatusCode: http.StatusNotFound, ErrorCode: "E0000007", Summary: fmt.Sprintf("Not found: Resource not found: %s (AppInstance)", appID)}
 }
 
 // cloneApp copies the Features slice so callers cannot mutate fixtures.

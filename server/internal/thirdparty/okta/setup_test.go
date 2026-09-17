@@ -169,64 +169,71 @@ type stubOkta struct {
 	resourceNonce        string
 	grantedScopes        []string
 	scopeErrorCode       string
-	proofJTIs            map[string]bool
-	assertionJTIs        map[string]bool
-	tokens               map[string]string
-	tokenCount           int
-	tokenRequests        int
-	assertionsSeen       int
-	proofs               []proofRecord
-	apps                 []appJSON
-	appUsers             map[string][]appUserJSON
-	appGroups            map[string][]appGroupJSON
-	groups               []groupJSON
-	pageSize             int
-	pending429           int
-	rateLimitLimit       int
-	rateLimitRemaining   int
-	rateLimitReset       int64
-	tokenType            string
-	tokenRedirect        string
-	tokenPending429      int
-	overrides            map[string]http.HandlerFunc
+
+	tokenRateLimitLimit     int
+	tokenRateLimitRemaining int
+	tokenRateLimitReset     int64
+	proofJTIs               map[string]bool
+	assertionJTIs           map[string]bool
+	tokens                  map[string]string
+	tokenCount              int
+	tokenRequests           int
+	assertionsSeen          int
+	proofs                  []proofRecord
+	apps                    []appJSON
+	appUsers                map[string][]appUserJSON
+	appGroups               map[string][]appGroupJSON
+	groups                  []groupJSON
+	pageSize                int
+	pending429              int
+	rateLimitLimit          int
+	rateLimitRemaining      int
+	rateLimitReset          int64
+	tokenType               string
+	tokenRedirect           string
+	tokenPending429         int
+	overrides               map[string]http.HandlerFunc
 }
 
 func newStubOkta(t *testing.T, clock *fakeClock) *stubOkta {
 	t.Helper()
 	s := &stubOkta{
-		t:                    t,
-		srv:                  nil,
-		clock:                clock,
-		mu:                   sync.Mutex{},
-		requireTokenNonce:    true,
-		rotateTokenNonce:     false,
-		tokenNonce:           "nonce-1",
-		lastAppsQuery:        nil,
-		emitResourceNonce:    "",
-		requireResourceNonce: false,
-		resourceNonce:        "",
-		grantedScopes:        strings.Fields(stubScopes),
-		scopeErrorCode:       "invalid_scope",
-		proofJTIs:            map[string]bool{},
-		assertionJTIs:        map[string]bool{},
-		tokens:               map[string]string{},
-		tokenCount:           0,
-		tokenRequests:        0,
-		assertionsSeen:       0,
-		proofs:               nil,
-		apps:                 nil,
-		appUsers:             map[string][]appUserJSON{},
-		appGroups:            map[string][]appGroupJSON{},
-		groups:               nil,
-		pageSize:             0,
-		pending429:           0,
-		rateLimitLimit:       0,
-		rateLimitRemaining:   0,
-		rateLimitReset:       0,
-		tokenType:            "DPoP",
-		tokenRedirect:        "",
-		tokenPending429:      0,
-		overrides:            map[string]http.HandlerFunc{},
+		t:                       t,
+		srv:                     nil,
+		clock:                   clock,
+		mu:                      sync.Mutex{},
+		requireTokenNonce:       true,
+		rotateTokenNonce:        false,
+		tokenNonce:              "nonce-1",
+		lastAppsQuery:           nil,
+		emitResourceNonce:       "",
+		requireResourceNonce:    false,
+		resourceNonce:           "",
+		grantedScopes:           strings.Fields(stubScopes),
+		scopeErrorCode:          "invalid_scope",
+		tokenRateLimitLimit:     0,
+		tokenRateLimitRemaining: 0,
+		tokenRateLimitReset:     0,
+		proofJTIs:               map[string]bool{},
+		assertionJTIs:           map[string]bool{},
+		tokens:                  map[string]string{},
+		tokenCount:              0,
+		tokenRequests:           0,
+		assertionsSeen:          0,
+		proofs:                  nil,
+		apps:                    nil,
+		appUsers:                map[string][]appUserJSON{},
+		appGroups:               map[string][]appGroupJSON{},
+		groups:                  nil,
+		pageSize:                0,
+		pending429:              0,
+		rateLimitLimit:          0,
+		rateLimitRemaining:      0,
+		rateLimitReset:          0,
+		tokenType:               "DPoP",
+		tokenRedirect:           "",
+		tokenPending429:         0,
+		overrides:               map[string]http.HandlerFunc{},
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /oauth2/v1/token", s.handleToken)
@@ -283,6 +290,13 @@ func (s *stubOkta) setRateLimit(limit, remaining int, reset int64) {
 	s.rateLimitLimit = limit
 	s.rateLimitRemaining = remaining
 	s.rateLimitReset = reset
+}
+
+// setTokenRateLimit reports quota headers on every token response, not only 429s.
+func (s *stubOkta) setTokenRateLimit(limit, remaining int, reset int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.tokenRateLimitLimit, s.tokenRateLimitRemaining, s.tokenRateLimitReset = limit, remaining, reset
 }
 
 func (s *stubOkta) setTokenType(tokenType string) {
@@ -460,6 +474,11 @@ func (s *stubOkta) handleToken(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Rate-Limit-Limit", strconv.Itoa(s.rateLimitLimit))
 		w.Header().Set("X-Rate-Limit-Remaining", strconv.Itoa(s.rateLimitRemaining))
 		w.Header().Set("X-Rate-Limit-Reset", strconv.FormatInt(s.rateLimitReset, 10))
+	}
+	if s.tokenRateLimitLimit > 0 {
+		w.Header().Set("X-Rate-Limit-Limit", strconv.Itoa(s.tokenRateLimitLimit))
+		w.Header().Set("X-Rate-Limit-Remaining", strconv.Itoa(s.tokenRateLimitRemaining))
+		w.Header().Set("X-Rate-Limit-Reset", strconv.FormatInt(s.tokenRateLimitReset, 10))
 	}
 	s.mu.Unlock()
 	if redirect != "" {

@@ -335,6 +335,9 @@ func (c *httpClient) VerifyScopes(ctx context.Context, required []string) (*Scop
 		return nil, err
 	}
 	defer c.releaseMint()
+	if err := c.waitForSlowdown(ctx); err != nil {
+		return nil, err
+	}
 	c.evictToken()
 
 	tok, err := c.mint(ctx, required)
@@ -422,11 +425,11 @@ func getJSON[T any](ctx context.Context, c *httpClient, target *url.URL) (T, *ur
 		return out, nil, err
 	}
 	if err := json.Unmarshal(body, &out); err != nil {
-		return out, nil, fmt.Errorf("decode okta %s response: %w", target.Path, err)
+		return out, nil, fmt.Errorf("decode okta %s response: %w", target.EscapedPath(), err)
 	}
 	next, err := nextLink(header, target)
 	if err != nil {
-		return out, nil, fmt.Errorf("parse okta %s next link: %w", target.Path, err)
+		return out, nil, fmt.Errorf("parse okta %s next link: %w", target.EscapedPath(), err)
 	}
 	return out, next, nil
 }
@@ -444,6 +447,10 @@ func (c *httpClient) do(ctx context.Context, method string, target *url.URL) ([]
 		}
 		tok, err := c.token(ctx)
 		if err != nil {
+			return nil, nil, err
+		}
+		// A token response can start a slowdown, so recheck before the resource call.
+		if err := c.waitForSlowdown(ctx); err != nil {
 			return nil, nil, err
 		}
 
@@ -465,7 +472,7 @@ func (c *httpClient) do(ctx context.Context, method string, target *url.URL) ([]
 
 		status, header, body, err := c.send(req)
 		if err != nil {
-			return nil, nil, fmt.Errorf("okta %s %s: %w", method, target.Path, err)
+			return nil, nil, fmt.Errorf("okta %s %s: %w", method, target.EscapedPath(), err)
 		}
 		// RFC 9449 §8.2, §9: a DPoP-Nonce on any response, success included, replaces the cached nonce.
 		c.nonce.Remember(header)
@@ -482,7 +489,7 @@ func (c *httpClient) do(ctx context.Context, method string, target *url.URL) ([]
 			wait := c.rateLimitWait(header)
 			c.logger.WarnContext(ctx, "okta rate limited, backing off",
 				attr.SlogHTTPRequestMethod(method),
-				attr.SlogHTTPRoute(target.Path),
+				attr.SlogHTTPRoute(target.EscapedPath()),
 				attr.SlogHTTPResponseStatusCode(status),
 			)
 			if err := c.sleep(ctx, wait); err != nil {
@@ -494,20 +501,20 @@ func (c *httpClient) do(ctx context.Context, method string, target *url.URL) ([]
 			// RFC 9449 §9: a 401 with WWW-Authenticate error="use_dpop_nonce" and DPoP-Nonce is retried once with that nonce.
 			if dpop.IsUseNonceChallenge(header, body) {
 				if nonceRetried {
-					return nil, nil, newAPIError(method, target.Path, status, body)
+					return nil, nil, newAPIError(method, target.EscapedPath(), status, body)
 				}
 				nonceRetried = true
 				continue
 			}
 			if tokenRetried {
-				return nil, nil, newAPIError(method, target.Path, status, body)
+				return nil, nil, newAPIError(method, target.EscapedPath(), status, body)
 			}
 			tokenRetried = true
 			c.evictRejectedToken(tok.accessToken)
 			continue
 
 		default:
-			return nil, nil, newAPIError(method, target.Path, status, body)
+			return nil, nil, newAPIError(method, target.EscapedPath(), status, body)
 		}
 	}
 }

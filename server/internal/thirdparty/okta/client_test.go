@@ -391,6 +391,47 @@ func TestClient_SlowsDownBelowTwentyPercentRemaining(t *testing.T) {
 	require.Len(t, tc.sleeper.Waits(), 1)
 }
 
+func TestClient_TokenResponseSlowdownDelaysFirstResourceCall(t *testing.T) {
+	t.Parallel()
+	tc := newDefaultTestClient(t)
+	tc.stub.setApps(stubApps(1))
+	tc.stub.setTokenRateLimit(100, 19, tc.clock.Now().Add(11*time.Second).Unix())
+
+	listApps(t, tc)
+	require.Equal(t, []time.Duration{11 * time.Second}, tc.sleeper.Waits())
+	require.Equal(t, 1, tc.stub.counts().issuedTokens)
+}
+
+func TestClient_VerifyScopes_HonorsSlowdown(t *testing.T) {
+	t.Parallel()
+	tc := newDefaultTestClient(t)
+	tc.stub.setApps(stubApps(1))
+	tc.stub.setRateLimit(100, 19, tc.clock.Now().Add(11*time.Second).Unix())
+
+	listApps(t, tc)
+	require.Empty(t, tc.sleeper.Waits())
+
+	v, err := tc.client.VerifyScopes(t.Context(), []string{"okta.apps.read"})
+	require.NoError(t, err)
+	require.True(t, v.OK())
+	require.Equal(t, []time.Duration{11 * time.Second}, tc.sleeper.Waits())
+}
+
+func TestClient_APIErrorPathIsEscaped(t *testing.T) {
+	t.Parallel()
+	tc := newDefaultTestClient(t)
+
+	_, err := tc.client.GetApp(t.Context(), "0oa 1?x")
+	var apiErr *APIError
+	require.ErrorAs(t, err, &apiErr)
+	require.Equal(t, "/api/v1/apps/0oa%201%3Fx", apiErr.Path)
+
+	fake := NewFake(Fixtures{Apps: nil, AppUsers: nil, AppGroups: nil, Groups: nil, GrantedScopes: nil})
+	_, err = fake.GetApp(t.Context(), "0oa 1?x")
+	require.ErrorAs(t, err, &apiErr)
+	require.Equal(t, "/api/v1/apps/0oa%201%3Fx", apiErr.Path)
+}
+
 func TestClient_SlowdownCapsAtMaxWaitAndResets(t *testing.T) {
 	t.Parallel()
 	tc := newDefaultTestClient(t)
