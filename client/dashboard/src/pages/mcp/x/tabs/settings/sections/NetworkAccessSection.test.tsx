@@ -36,6 +36,12 @@ const testState = vi.hoisted(() => ({
     | undefined,
 }));
 
+vi.mock("@/components/ui/CopyButton", () => ({
+  CopyButton: ({ text }: { text: string }) => (
+    <button type="button" aria-label={`Copy ${text}`} />
+  ),
+}));
+
 vi.mock("@/components/require-scope", () => ({
   RequireScope: ({
     children,
@@ -246,6 +252,20 @@ describe("NetworkAccessSection", () => {
     ).toBe("true");
   });
 
+  it("hides cached private URLs after admin access is revoked", () => {
+    testState.orgAdmin = false;
+    render(
+      <NetworkAccessSection
+        mcpServer={{ ...baseServer, networkAccessMode: "private_only" }}
+        endpoints={endpoints}
+      />,
+    );
+
+    expect(
+      screen.queryByText("https://private.example.ts.net/mcp/hosted-mcp"),
+    ).toBeNull();
+  });
+
   it("reports unavailable state when the ingress query fails", () => {
     testState.ingressQueryStatus = "error";
     render(
@@ -294,6 +314,20 @@ describe("NetworkAccessSection", () => {
       ).toBe("true");
     },
   );
+
+  it("hides cached private URLs while ingress data refetches", () => {
+    testState.ingressFetching = true;
+    render(
+      <NetworkAccessSection
+        mcpServer={{ ...baseServer, networkAccessMode: "private_only" }}
+        endpoints={endpoints}
+      />,
+    );
+
+    expect(
+      screen.queryByText("https://private.example.ts.net/mcp/hosted-mcp"),
+    ).toBeNull();
+  });
 
   it.each(["features", "ingress"] as const)(
     "keeps private choices available while successful %s data refetches",

@@ -28,6 +28,7 @@ import SkillUsage from "./pages/skills/SkillUsage";
 import SkillVersionHistory from "./pages/skills/SkillVersionHistory";
 import Deployment from "./pages/deployments/deployment/Deployment";
 import Deployments, { DeploymentsRoot } from "./pages/deployments/Deployments";
+import ProjectIdentityRedirect from "./pages/org/ProjectIdentityRedirect";
 import UserSessions from "./pages/org/UserSessions";
 import EventFeed from "./pages/data/EventFeed";
 import DataExports from "./pages/data-exports/DataExports";
@@ -654,6 +655,50 @@ const ROUTE_STRUCTURE = {
     icon: "layout-dashboard",
     component: InsightsRoot,
     indexComponent: InsightsHooksPage,
+  },
+  mcpSessions: {
+    title: "MCP Sessions",
+    url: "mcp-sessions",
+    icon: "users",
+    component: UserSessions,
+  },
+
+  remoteIdentityProviders: {
+    title: "Remote Identity Providers",
+    url: "remote-identity-providers",
+    icon: "key-round",
+    component: RemoteIdentityProvidersRoot,
+    indexComponent: RemoteIdentityProvidersPage,
+    subPages: {
+      issuerDetail: {
+        title: "Remote Identity Provider",
+        url: ":issuerId",
+        component: RemoteIdentityProviderDetail,
+        subPages: {
+          overview: { title: "Overview", url: "overview" },
+          clients: { title: "Clients", url: "clients" },
+          settings: { title: "Settings", url: "settings" },
+        },
+      },
+      clientDetail: {
+        title: "Remote Session Client",
+        url: ":issuerId/clients/:clientId",
+        component: RemoteSessionClientDetail,
+        subPages: {
+          overview: { title: "Overview", url: "overview" },
+          mcpServers: { title: "MCP Servers", url: "mcp-servers" },
+          sessions: { title: "Sessions", url: "sessions" },
+          settings: { title: "Settings", url: "settings" },
+        },
+      },
+    },
+  },
+
+  agents: {
+    title: "Agent Identity",
+    url: "agent-management",
+    icon: "bot",
+    component: AgentsPage,
   },
   // One page per person, reached from every surface that renders a human. The
   // URL segment is an identity URN (`user:...`, `email:...`, `external:...`),
@@ -1358,47 +1403,29 @@ const ORG_ROUTE_STRUCTURE = {
       },
     },
   },
-  mcpSessions: {
+  legacyAgents: {
+    title: "Agent Identity",
+    url: "agent-management",
+    legacyRedirect: true,
+    component: ProjectIdentityRedirect,
+  },
+  legacyMcpSessions: {
     title: "MCP Sessions",
     url: "mcp-sessions",
-    icon: "users",
-    component: UserSessions,
+    legacyRedirect: true,
+    component: ProjectIdentityRedirect,
+  },
+  legacyRemoteIdentityProviders: {
+    title: "Remote Identity Providers",
+    url: "remote-identity-providers/*",
+    legacyRedirect: true,
+    component: ProjectIdentityRedirect,
   },
   identity: {
     title: "IDP and SSO",
     url: "identity",
     icon: "fingerprint",
     component: OrgIdentity,
-  },
-  remoteIdentityProviders: {
-    title: "Remote Identity Providers",
-    url: "remote-identity-providers",
-    icon: "key-round",
-    component: RemoteIdentityProvidersRoot,
-    indexComponent: RemoteIdentityProvidersPage,
-    subPages: {
-      issuerDetail: {
-        title: "Remote Identity Provider",
-        url: ":issuerId",
-        component: RemoteIdentityProviderDetail,
-        subPages: {
-          overview: { title: "Overview", url: "overview" },
-          clients: { title: "Clients", url: "clients" },
-          settings: { title: "Settings", url: "settings" },
-        },
-      },
-      clientDetail: {
-        title: "Remote Session Client",
-        url: ":issuerId/clients/:clientId",
-        component: RemoteSessionClientDetail,
-        subPages: {
-          overview: { title: "Overview", url: "overview" },
-          mcpServers: { title: "MCP Servers", url: "mcp-servers" },
-          sessions: { title: "Sessions", url: "sessions" },
-          settings: { title: "Settings", url: "settings" },
-        },
-      },
-    },
   },
   // Platform Admin pages — the former floating Developer Toolkit, one page per
   // old tab. Speakeasy staff only (plus local dev); see PlatformAdminGate.
@@ -1454,12 +1481,6 @@ const ORG_ROUTE_STRUCTURE = {
         component: MdmIntegrationDetail,
       },
     },
-  },
-  agents: {
-    title: "Agents",
-    url: "agent-management",
-    icon: "bot",
-    component: AgentsPage,
   },
   access: {
     title: "Roles & Permissions",

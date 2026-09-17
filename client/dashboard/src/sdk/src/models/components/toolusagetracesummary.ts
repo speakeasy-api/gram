@@ -91,6 +91,18 @@ export type ToolUsageTraceSummary = {
    */
   blockReason?: string | undefined;
   /**
+   * Stable MCP client identity used by filters; 'unattributed' when the caller never reported one
+   */
+  clientKey: string;
+  /**
+   * User-facing MCP client label as the client reported it
+   */
+  clientLabel: string;
+  /**
+   * MCP client version when the client reported one alongside its name
+   */
+  clientVersion?: string | undefined;
+  /**
    * Telemetry event source
    */
   eventSource: string;
@@ -200,6 +212,9 @@ export const ToolUsageTraceSummary$inboundSchema: z.ZodMiniType<
   z.object({
     account_type: z.optional(z.string()),
     block_reason: z.optional(z.string()),
+    client_key: z.string(),
+    client_label: z.string(),
+    client_version: z.optional(z.string()),
     event_source: z.string(),
     gram_urn: z.string(),
     hook_source: z.optional(z.string()),
@@ -225,6 +240,9 @@ export const ToolUsageTraceSummary$inboundSchema: z.ZodMiniType<
     return remap$(v, {
       "account_type": "accountType",
       "block_reason": "blockReason",
+      "client_key": "clientKey",
+      "client_label": "clientLabel",
+      "client_version": "clientVersion",
       "event_source": "eventSource",
       "gram_urn": "gramUrn",
       "hook_source": "hookSource",

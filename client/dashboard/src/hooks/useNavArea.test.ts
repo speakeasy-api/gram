@@ -19,8 +19,11 @@ describe("useNavArea", () => {
   it.each([
     "/org/projects/proj/identities",
     "/org/projects/proj/identities/user%3A1/overview",
-  ])("puts %s in Observability", (path) => {
-    expect(areaAt(path)).toBe("Observability");
+    "/org/projects/proj/agent-management",
+    "/org/projects/proj/mcp-sessions",
+    "/org/projects/proj/remote-identity-providers/provider/clients/client/sessions",
+  ])("puts %s in Identity", (path) => {
+    expect(areaAt(path)).toBe("Identity");
   });
 
   it("leaves ungrouped project pages without an area", () => {

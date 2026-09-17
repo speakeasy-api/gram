@@ -21,6 +21,7 @@ import { Text } from "@/components/ui/Text";
 import { handleAPIError } from "@/lib/errors";
 import { toast } from "sonner";
 import { useNetworkIngressCheckHealthMutation } from "@gram/client/react-query/networkIngressCheckHealth.js";
+import { useNetworkIngressDeleteIngressMutation } from "@gram/client/react-query/networkIngressDeleteIngress.js";
 import { useNetworkIngressRollout } from "@/hooks/useNetworkIngressRollout";
 import { useOrganization } from "@/contexts/Auth";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
@@ -46,6 +47,75 @@ function statusVariant(
 
 function statusLabel(status: string): string {
   return status.replaceAll("_", " ");
+}
+
+function PrivateNetworkCleanup({
+  ingress,
+  statusStale,
+}: {
+  ingress: NetworkIngress;
+  statusStale: boolean;
+}): JSX.Element {
+  const queryClient = useQueryClient();
+  const retry = useNetworkIngressDeleteIngressMutation({
+    onSuccess: async () => {
+      await invalidateAllNetworkIngress(queryClient);
+      toast.success("Private network cleanup retried");
+    },
+    onError: (error) =>
+      handleAPIError(error, "Failed to retry private network cleanup"),
+  });
+
+  return (
+    <SettingsSection.Panel>
+      <SettingsSection.Body>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <Text variant="subheading">Tailscale</Text>
+              <Badge variant="warning" background>
+                Cleaning up
+              </Badge>
+            </div>
+            <Text small muted>
+              Hostname label <code>{ingress.hostname}</code>
+            </Text>
+          </div>
+          <Text small muted>
+            Removal started <HumanizeDateTime date={ingress.updatedAt} />
+          </Text>
+        </div>
+        <Alert variant="info" dismissible={false}>
+          Gram is removing the private route and its provider resources. You can
+          connect another tailnet after cleanup completes. This page checks for
+          completion automatically.
+        </Alert>
+        {statusStale && (
+          <Alert variant="warning" dismissible={false}>
+            Cleanup status may be out of date because the latest check failed.
+            You can retry cleanup while Gram continues polling.
+          </Alert>
+        )}
+      </SettingsSection.Body>
+      <SettingsSection.Footer>
+        <SettingsSection.FooterHint>
+          MCP server network modes are unchanged during cleanup.
+        </SettingsSection.FooterHint>
+        <SettingsSection.FooterActions>
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={retry.isPending}
+            onClick={() =>
+              retry.mutate({ security: { sessionHeaderGramSession: "" } })
+            }
+          >
+            {retry.isPending ? "Retrying..." : "Retry cleanup"}
+          </Button>
+        </SettingsSection.FooterActions>
+      </SettingsSection.Footer>
+    </SettingsSection.Panel>
+  );
 }
 
 function ConfiguredPrivateNetwork({
@@ -240,6 +310,8 @@ export function PrivateNetworkSection(): JSX.Element | null {
     enabled: rolloutEnabled,
     retry: (failureCount) => failureCount < 2,
     throwOnError: false,
+    refetchInterval: (query) =>
+      query.state.data?.ingress?.status === "deleting" ? 5_000 : false,
   });
   const ingress = ingressResult.data?.ingress;
   const [setupOpen, setSetupOpen] = useState(false);
@@ -255,7 +327,12 @@ export function PrivateNetworkSection(): JSX.Element | null {
           exposing a public fallback.
         </SettingsSection.Description>
       </SettingsSection.Header>
-      {ingressResult.isLoading || features.isLoading ? (
+      {ingress?.status === "deleting" ? (
+        <PrivateNetworkCleanup
+          ingress={ingress}
+          statusStale={ingressResult.isError}
+        />
+      ) : ingressResult.isLoading || features.isLoading ? (
         <SettingsSection.Panel>
           <SettingsSection.Body>
             <Text small muted>

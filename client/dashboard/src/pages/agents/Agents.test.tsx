@@ -3,6 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 import AgentsPage from "./Agents";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+vi.mock("@/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: () => ({ status: mocks.flagStatus }),
+}));
 function setup() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -37,6 +40,7 @@ vi.mock("./ManagedAgentSessions", () => ({
 }));
 
 const mocks = vi.hoisted(() => ({
+  flagStatus: "enabled",
   params: new URLSearchParams(),
   navigate: vi.fn(),
   list: vi.fn(),
@@ -165,6 +169,7 @@ vi.mock("@/components/page-templates", () => {
 
 afterEach(cleanup);
 beforeEach(() => {
+  mocks.flagStatus = "enabled";
   mocks.params = new URLSearchParams();
   mocks.unsupported = false;
   mocks.organizationId = "org_example";
@@ -178,6 +183,18 @@ beforeEach(() => {
 });
 
 describe("Agent owner access", () => {
+  it.each(["loading", "disabled", "missing", "error"])(
+    "does not request agents while the rollout is %s",
+    (status) => {
+      mocks.flagStatus = status;
+      setup();
+      expect(mocks.list).not.toHaveBeenCalled();
+      expect(
+        screen.queryByText("Unable to load agents. Try again."),
+      ).toBeNull();
+    },
+  );
+
   it("keeps search available after no results and restores agents when cleared", () => {
     setup();
     fireEvent.change(screen.getByPlaceholderText("Search agents"), {
@@ -239,7 +256,7 @@ describe("Agent owner access", () => {
   });
   it("keeps creation separate from the inventory", () => {
     setup();
-    fireEvent.click(screen.getByRole("button", { name: "Create agent" }));
+    fireEvent.click(screen.getByRole("button", { name: "New agent identity" }));
     expect(mocks.navigate).toHaveBeenCalledWith({ create: "true" });
   });
   it("does not fetch agent data in an organization override session", () => {

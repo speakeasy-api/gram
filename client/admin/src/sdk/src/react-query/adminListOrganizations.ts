@@ -27,7 +27,10 @@ import {
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
-import { AdminListOrganizationsRequest } from "../models/operations/adminlistorganizations.js";
+import {
+  AdminListOrganizationsRequest,
+  DisabledStatus,
+} from "../models/operations/adminlistorganizations.js";
 import { useGramContext } from "./_context.js";
 import {
   InfiniteQueryHookOptions,
@@ -214,8 +217,11 @@ export function setAdminListOrganizationsData(
       accountType?: string | undefined;
       accountTypes?: Array<string> | undefined;
       trialStates?: Array<string> | undefined;
-      disabledStates?: Array<string> | undefined;
-      includeDisabled?: boolean | undefined;
+      disabledStatus?: DisabledStatus | undefined;
+      minMembers?: bigint | undefined;
+      maxMembers?: bigint | undefined;
+      createdFrom?: string | undefined;
+      createdTo?: string | undefined;
       cursor?: string | undefined;
       limit?: number | undefined;
       sort?: string | undefined;
@@ -238,8 +244,11 @@ export function invalidateAdminListOrganizations(
       accountType?: string | undefined;
       accountTypes?: Array<string> | undefined;
       trialStates?: Array<string> | undefined;
-      disabledStates?: Array<string> | undefined;
-      includeDisabled?: boolean | undefined;
+      disabledStatus?: DisabledStatus | undefined;
+      minMembers?: bigint | undefined;
+      maxMembers?: bigint | undefined;
+      createdFrom?: string | undefined;
+      createdTo?: string | undefined;
       cursor?: string | undefined;
       limit?: number | undefined;
       sort?: string | undefined;
@@ -249,15 +258,17 @@ export function invalidateAdminListOrganizations(
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
-  return client.invalidateQueries({
+  const parameters = queryKeyBase[0];
+  const queryKeys = parameters === undefined
+    ? [["@gram/admin-client", "admin", "listOrganizations"]]
+    : [
+      queryKeyAdminListOrganizations(parameters),
+      queryKeyAdminListOrganizationsInfinite(parameters),
+    ];
+  return Promise.all(queryKeys.map((queryKey) => client.invalidateQueries({
     ...filters,
-    queryKey: [
-      "@gram/admin-client",
-      "admin",
-      "listOrganizations",
-      ...queryKeyBase,
-    ],
-  });
+    queryKey,
+  }))).then(() => {});
 }
 
 export function invalidateAllAdminListOrganizations(

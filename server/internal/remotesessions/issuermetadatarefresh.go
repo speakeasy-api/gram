@@ -54,6 +54,8 @@ const (
 
 	// issuerMetadataRefreshBudget caps one detached refresh: discovery's own ten-second budget plus the writes.
 	issuerMetadataRefreshBudget = 30 * time.Second
+
+	trustedClientMetadataIncompatibility = "issuer metadata is incompatible with a trusted identity-provider client"
 )
 
 // IssuerMetadataRefreshCandidate is one issuer to refresh, keyed by the identity every write re-asserts.
@@ -407,6 +409,10 @@ func (r *IssuerMetadataRefresher) reproject(ctx context.Context, existing repo.R
 			OrganizationID: existing.OrganizationID,
 		})
 	}, remotesessionmetrics.IssuerMetadataRefreshOutcomeReprojected)
+	if errors.Is(err, errTrustedIdentityProviderClientIneligible) {
+		logger.WarnContext(ctx, "reprojected issuer metadata is incompatible with identity-provider login", attr.SlogError(err))
+		outcome, err = r.recordReprojectionFailure(ctx, existing, trustedClientMetadataIncompatibility)
+	}
 	return r.record(ctx, existing.Issuer, reason, outcome), err
 }
 
@@ -434,6 +440,10 @@ func (r *IssuerMetadataRefresher) refresh(ctx context.Context, existing repo.Rem
 	outcome, err := r.apply(ctx, logger, existing, func(q *repo.Queries) (repo.RemoteSessionIssuer, error) {
 		return q.UpdateRemoteSessionIssuerDiscoveredMetadata(ctx, params)
 	}, success)
+	if errors.Is(err, errTrustedIdentityProviderClientIneligible) {
+		logger.WarnContext(ctx, "refreshed issuer metadata is incompatible with identity-provider login", attr.SlogError(err))
+		outcome, err = r.recordFailure(ctx, existing, trustedClientMetadataIncompatibility, "", remotesessionmetrics.IssuerMetadataRefreshOutcomeDefinitiveFailure)
+	}
 	return r.record(ctx, existing.Issuer, reason, outcome), err
 }
 
@@ -548,6 +558,9 @@ func (r *IssuerMetadataRefresher) apply(ctx context.Context, logger *slog.Logger
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := repo.New(dbtx)
+	if err := txRepo.LockRemoteSessionIssuerForClientBinding(ctx, existing.ID); err != nil {
+		return remotesessionmetrics.IssuerMetadataRefreshOutcomeInternalError, fmt.Errorf("lock remote session issuer configuration: %w", err)
+	}
 
 	locked, err := txRepo.LockRemoteSessionIssuerForMetadataRefresh(ctx, repo.LockRemoteSessionIssuerForMetadataRefreshParams{
 		ID:             existing.ID,
@@ -574,6 +587,9 @@ func (r *IssuerMetadataRefresher) apply(ctx context.Context, logger *slog.Logger
 			return remotesessionmetrics.IssuerMetadataRefreshOutcomeConflict, nil
 		}
 		return remotesessionmetrics.IssuerMetadataRefreshOutcomeInternalError, fmt.Errorf("write remote session issuer metadata: %w", err)
+	}
+	if err := validateTrustedIdentityProviderIssuerClients(ctx, txRepo, updated); err != nil {
+		return remotesessionmetrics.IssuerMetadataRefreshOutcomeInternalError, fmt.Errorf("refreshed metadata would invalidate identity-provider login: %w", err)
 	}
 
 	// Only a row with neither scope column is global; a legacy project row resolves its organization through the project.
