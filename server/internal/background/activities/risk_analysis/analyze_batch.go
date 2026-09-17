@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -60,6 +61,12 @@ type AnalyzeBatch struct {
 	promptPolicyPub        gcp.Publisher[*riskv1.PromptPolicyAnalysis]
 	customRulesPub         gcp.Publisher[*riskv1.CustomRulesAnalysis]
 	llmPub                 gcp.Publisher[*riskv1.LLMAnalysis]
+	// llmAnalyzerEnabled reports whether the streams process has a fine-tuned
+	// risk model to evaluate LLM analysis requests (GRAM_RISK_LLM_URL set).
+	// Without it the flag alone must not divert covered sources away from the
+	// legacy engines: the consumer would ack every request with no findings.
+	llmAnalyzerEnabled     bool
+	llmFallbackOnce        sync.Once
 	findingsPub            gcp.Publisher[*riskv1.Finding]
 	riskRecorder           *metering.RiskRecorder
 	customRuleScanner      *customruleanalyzer.Scanner
@@ -96,6 +103,7 @@ func NewAnalyzeBatch(
 	builtinPresets *presetlib.Library,
 	shadowMCPBypass shadowmcpscan.BypassChecker,
 	riskRecorder *metering.RiskRecorder,
+	llmAnalyzerEnabled bool,
 ) (*AnalyzeBatch, error) {
 	logger = logger.With(attr.SlogComponent("risk-analysis-dispatcher"))
 
@@ -149,6 +157,8 @@ func NewAnalyzeBatch(
 		celEng:                 celEng,
 		builtinPresets:         builtinPresets,
 		recommended:            recommended,
+		llmAnalyzerEnabled:     llmAnalyzerEnabled,
+		llmFallbackOnce:        sync.Once{},
 	}, nil
 }
 

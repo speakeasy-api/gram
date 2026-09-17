@@ -67,9 +67,10 @@ type llmLanePublishers struct {
 }
 
 // runLLMLaneBatch executes one AnalyzeBatch over messageIDs with the given
-// flag provider, capturing what reached each analysis lane. llmPub overrides
-// the captured LLM publisher when non-nil.
-func runLLMLaneBatch(t *testing.T, conn *pgxpool.Pool, td testData, flags feature.Provider, piiScanner risk_analysis.PIIScanner, llmPub gcp.Publisher[*riskv1.LLMAnalysis], messageIDs []uuid.UUID, sources []string) (risk_analysis.AnalyzeBatchResult, llmLanePublishers, error) {
+// flag provider, capturing what reached each analysis lane. analyzerEnabled
+// is what the worker knows about GRAM_RISK_LLM_URL; llmPub overrides the
+// captured LLM publisher when non-nil.
+func runLLMLaneBatch(t *testing.T, conn *pgxpool.Pool, td testData, flags feature.Provider, analyzerEnabled bool, piiScanner risk_analysis.PIIScanner, llmPub gcp.Publisher[*riskv1.LLMAnalysis], messageIDs []uuid.UUID, sources []string) (risk_analysis.AnalyzeBatchResult, llmLanePublishers, error) {
 	t.Helper()
 	capturedLLMPub, llmPublished := capturingPub[*riskv1.LLMAnalysis](t)
 	gitleaksPub, gitleaksPublished := capturingPub[*riskv1.GitleaksAnalysis](t)
@@ -102,6 +103,7 @@ func runLLMLaneBatch(t *testing.T, conn *pgxpool.Pool, td testData, flags featur
 		nil,
 		nil,
 		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		analyzerEnabled,
 	)
 	require.NoError(t, err)
 
@@ -148,7 +150,7 @@ func TestAnalyzeBatch_LLMAnalyzer_FlagOffKeepsLegacyEngines(t *testing.T) {
 	msgID := insertUserMessage(t, conn, td, "AccessKeyId ASIAZ2XY3WNBQR5TUVWX SecretAccessKey wJalrXUtnFEMIbKp7MDoRZfiCYqTvHgNsQ8xLcWd")
 
 	pii := &countingPIIScanner{}
-	result, pubs, err := runLLMLaneBatch(t, conn, td, &feature.InMemory{}, pii, nil, []uuid.UUID{msgID}, []string{risk_analysis.SourceGitleaks, risk_analysis.SourcePresidio})
+	result, pubs, err := runLLMLaneBatch(t, conn, td, &feature.InMemory{}, true, pii, nil, []uuid.UUID{msgID}, []string{risk_analysis.SourceGitleaks, risk_analysis.SourcePresidio})
 	require.NoError(t, err)
 
 	assert.Equal(t, 1, result.Processed)
@@ -174,7 +176,7 @@ func TestAnalyzeBatch_LLMAnalyzer_FlagOnRoutesCoveredSources(t *testing.T) {
 	flags.SetFlag(feature.FlagRiskLLMAnalyzer, td.orgID, true)
 	pii := &countingPIIScanner{}
 	sources := []string{risk_analysis.SourceGitleaks, risk_analysis.SourcePresidio, risk_analysis.SourceCustom}
-	result, pubs, err := runLLMLaneBatch(t, conn, td, flags, pii, nil, []uuid.UUID{first, second}, sources)
+	result, pubs, err := runLLMLaneBatch(t, conn, td, flags, true, pii, nil, []uuid.UUID{first, second}, sources)
 	require.NoError(t, err)
 
 	assert.Equal(t, 2, result.Processed)
@@ -233,7 +235,7 @@ func TestAnalyzeBatch_LLMAnalyzer_ToolCallMessageCarriesToolCalls(t *testing.T) 
 
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagRiskLLMAnalyzer, td.orgID, true)
-	result, pubs, err := runLLMLaneBatch(t, conn, td, flags, &countingPIIScanner{}, nil, []uuid.UUID{msgID}, []string{risk_analysis.SourceCLIDestructive, risk_analysis.SourceGitleaks})
+	result, pubs, err := runLLMLaneBatch(t, conn, td, flags, true, &countingPIIScanner{}, nil, []uuid.UUID{msgID}, []string{risk_analysis.SourceCLIDestructive, risk_analysis.SourceGitleaks})
 	require.NoError(t, err)
 
 	assert.Equal(t, 1, result.Processed)
@@ -263,9 +265,50 @@ func TestAnalyzeBatch_LLMAnalyzer_PublishFailureFailsActivity(t *testing.T) {
 	failing := gcp.NewMockPublisher[*riskv1.LLMAnalysis]()
 	failing.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewErrPublishResult(errors.New("topic unavailable")))
 
-	_, pubs, err := runLLMLaneBatch(t, conn, td, flags, &countingPIIScanner{}, failing, []uuid.UUID{msgID}, []string{risk_analysis.SourceGitleaks})
+	_, pubs, err := runLLMLaneBatch(t, conn, td, flags, true, &countingPIIScanner{}, failing, []uuid.UUID{msgID}, []string{risk_analysis.SourceGitleaks})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "llm analyzer scan dispatch")
 	assert.Contains(t, err.Error(), "topic unavailable")
 	assert.Empty(t, *pubs.gitleaks)
+}
+
+func TestAnalyzeBatch_LLMAnalyzer_FlagOnAnalyzerDisabledFallsBackToLegacyEngines(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+	td = seedCustomRulePolicySelection(t, conn, td, "custom.acme_token", `content.matchRegex("ACME-[A-Z0-9]{8}")`)
+	msgID := insertUserMessage(t, conn, td, "deploy ACME-ABC12345 with AccessKeyId ASIAZ2XY3WNBQR5TUVWX SecretAccessKey wJalrXUtnFEMIbKp7MDoRZfiCYqTvHgNsQ8xLcWd")
+
+	// The organization is on the flag, but this worker has no analyzer
+	// configured (GRAM_RISK_LLM_URL empty): the streams consumer would ack
+	// every request without findings, so the batch must keep the legacy
+	// engines rather than leave the covered sources unscanned.
+	flags := &feature.InMemory{}
+	flags.SetFlag(feature.FlagRiskLLMAnalyzer, td.orgID, true)
+	pii := &countingPIIScanner{}
+	sources := []string{risk_analysis.SourceGitleaks, risk_analysis.SourcePresidio, risk_analysis.SourceCustom}
+	result, pubs, err := runLLMLaneBatch(t, conn, td, flags, false, pii, nil, []uuid.UUID{msgID}, sources)
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, result.Processed)
+	assert.Equal(t, 2, result.Findings, "inline gitleaks and the custom rule both scan when the analyzer is unconfigured")
+	assert.Empty(t, *pubs.llm, "no LLM analysis request without an analyzer to serve it")
+	assert.Len(t, *pubs.gitleaks, 1, "legacy gitleaks lane is dispatched")
+	assert.Len(t, *pubs.presidio, 1, "legacy presidio lane is dispatched")
+	assert.Equal(t, int32(1), pii.calls.Load(), "inline presidio runs")
+
+	rows, err := riskrepo.New(conn).ListRiskResultsByProjectAndPolicy(t.Context(), riskrepo.ListRiskResultsByProjectAndPolicyParams{
+		ProjectID:    td.projectID,
+		RiskPolicyID: td.policyID,
+		CursorID:     uuid.NullUUID{},
+		PageLimit:    10,
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 2, "legacy and custom rule findings land in Postgres")
+	sourcesSeen := map[string]bool{}
+	for _, row := range rows {
+		sourcesSeen[row.Source] = true
+	}
+	assert.True(t, sourcesSeen[risk_analysis.SourceGitleaks], "gitleaks finding is stored")
+	assert.True(t, sourcesSeen[risk_analysis.SourceCustom], "custom rule finding is stored")
 }

@@ -86,7 +86,7 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.LLMAnalysis, _ gcp.Messa
 
 	if !h.analyzer.Enabled() {
 		h.disabledOnce.Do(func() {
-			h.logger.WarnContext(ctx, "LLM analyzer disabled: GRAM_RISK_LLM_URL empty; acking analysis requests without findings")
+			h.logger.WarnContext(ctx, "LLM analyzer disabled: GRAM_RISK_LLM_URL empty; acking analysis requests without findings; batch routing falls back to the legacy engines under this config, so this ack is only a safety net for in-flight requests")
 		})
 		h.metrics.RecordHandled(ctx, m.GetOrganizationId(), Source, scanners.AsyncScanEngineReal, scanners.AsyncScanOutcomeDisabled, scanners.AsyncShadowGateReasonNotGated)
 		return nil

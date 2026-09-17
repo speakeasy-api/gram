@@ -70,9 +70,10 @@ func parseOptionalPepperKeyRing(ctx context.Context, logger *slog.Logger, raw st
 	return fingerprinter, nil
 }
 
-// riskLLMFlags configure the fine-tuned risk model client. Only the streams
-// process consumes them: both analyzer lanes run there, while the server and
-// worker only publish requests.
+// riskLLMFlags configure the fine-tuned risk model client. The streams
+// process runs both analyzer lanes; the server and worker only read whether a
+// URL is set, so their batch scans fall back to the legacy engines when no
+// analyzer is deployed to evaluate the requests they would publish.
 func riskLLMFlags() []cli.Flag {
 	return []cli.Flag{
 		&cli.StringFlag{

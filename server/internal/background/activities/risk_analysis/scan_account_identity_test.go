@@ -146,6 +146,7 @@ func newAccountIdentityAnalyzeBatch(t *testing.T, conn *pgxpool.Pool, findingsPu
 		nil,
 		nil,
 		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		false,
 	)
 	require.NoError(t, err)
 	return ab

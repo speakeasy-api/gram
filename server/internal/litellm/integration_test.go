@@ -948,6 +948,7 @@ func TestRealHooksPureTextResponseProducesAssistantPolicyFinding(t *testing.T) {
 		nil,
 		nil,
 		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		false,
 	)
 	require.NoError(t, err)
 
