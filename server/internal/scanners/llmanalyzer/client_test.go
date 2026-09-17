@@ -404,6 +404,8 @@ func TestClient_EmptyCompletion(t *testing.T) {
 		{name: "no choices", body: `{"model": "m", "choices": [], "usage": {"prompt_tokens": 1, "completion_tokens": 0}}`},
 		{name: "blank content and reasoning", body: `{"model": "m", "choices": [{"message": {"content": "  ", "reasoning_content": ""}}]}`},
 		{name: "null content", body: `{"model": "m", "choices": [{"message": {"content": null}}]}`},
+		{name: "empty body", body: ""},
+		{name: "whitespace body", body: " \n\t"},
 	}
 	for _, tc := range cases {
 		body := tc.body
@@ -414,6 +416,25 @@ func TestClient_EmptyCompletion(t *testing.T) {
 		_, err := client.client.Complete(t.Context(), testInfo, llmanalyzer.BuildMessages(llmanalyzer.PromptInput{Content: "x", ToolCalls: nil, ToolOutcome: ""}))
 		require.ErrorIs(t, err, llmanalyzer.ErrEmptyCompletion, tc.name)
 	}
+}
+
+func TestClient_DoesNotFollowRedirects(t *testing.T) {
+	t.Parallel()
+
+	tc := newTestClient(t, 5*time.Second, func(w http.ResponseWriter, r *http.Request, _ int) {
+		if r.URL.Path == "/v1/chat/completions" {
+			http.Redirect(w, r, "/elsewhere", http.StatusTemporaryRedirect)
+			return
+		}
+		writeCompletion(w, cleanVerdict, "", 1, 1)
+	})
+
+	_, err := tc.client.Complete(t.Context(), testInfo, llmanalyzer.BuildMessages(llmanalyzer.PromptInput{Content: "x", ToolCalls: nil, ToolOutcome: ""}))
+	upstream, ok := errors.AsType[*llmanalyzer.UpstreamError](err)
+	require.True(t, ok, "expected *UpstreamError, got %v", err)
+	require.Equal(t, http.StatusTemporaryRedirect, upstream.Status)
+	require.Equal(t, int32(1), tc.upstream.requests.Load(), "the redirect target must never be requested")
+	require.Equal(t, "/v1/chat/completions", tc.upstream.lastRequest().path)
 }
 
 func TestClient_MalformedResponse(t *testing.T) {

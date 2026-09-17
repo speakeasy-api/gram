@@ -166,7 +166,9 @@ func renderToolCalls(calls []ToolCall) string {
 }
 
 // jsonString quotes s as a JSON string without HTML escaping, matching Python's
-// json.dumps(ensure_ascii=False) for every character it can.
+// json.dumps(ensure_ascii=False). encoding/json always escapes the U+2028 and
+// U+2029 line separators, which Python leaves literal, so those two escapes
+// are undone afterwards.
 func jsonString(s string) string {
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
@@ -175,8 +177,11 @@ func jsonString(s string) string {
 		// Encoding a string cannot fail; keep the prompt well-formed anyway.
 		return `""`
 	}
-	return strings.TrimSuffix(buf.String(), "\n")
+	quoted := strings.TrimSuffix(buf.String(), "\n")
+	return lineSeparatorUnescaper.Replace(quoted)
 }
+
+var lineSeparatorUnescaper = strings.NewReplacer(`\u2028`, "\u2028", `\u2029`, "\u2029")
 
 func capToolCalls(calls []judgemessage.ToolCall) ([]judgemessage.ToolCall, bool) {
 	if len(calls) <= maxToolCalls {

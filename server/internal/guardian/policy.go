@@ -144,6 +144,7 @@ type httpClientOptions struct {
 	allowedCIDRBlocks []*net.IPNet
 	dialTimeout       *time.Duration
 	resilience        *resilienceOptions
+	checkRedirect     func(req *http.Request, via []*http.Request) error
 }
 
 // ClientOption configures a single [Policy.Client] / [Policy.PooledClient]
@@ -200,6 +201,18 @@ func WithDialTimeout(timeout time.Duration) func(*httpClientOptions) {
 			timeout = 0
 		}
 		o.dialTimeout = &timeout
+	}
+}
+
+// WithCheckRedirect installs the client's redirect policy, the same hook as
+// [http.Client.CheckRedirect]. It applies to the client that follows
+// redirects, which sits inside the retry layer when [WithRetryConfig] is
+// also set. Return [http.ErrUseLastResponse] to hand 3xx responses back to
+// the caller untouched; any other error is a transport failure to the retry
+// layer and is retried like one.
+func WithCheckRedirect(fn func(req *http.Request, via []*http.Request) error) func(*httpClientOptions) {
+	return func(o *httpClientOptions) {
+		o.checkRedirect = fn
 	}
 }
 
@@ -398,13 +411,14 @@ func (p *Policy) clientWithBaseTransport(transport *http.Transport, options ...f
 	}
 
 	if opts.retryConfig == nil {
-		return &http.Client{Transport: roundTripper}
+		return &http.Client{Transport: roundTripper, CheckRedirect: opts.checkRedirect}
 	}
 
 	retryClient := retryablehttp.NewClient()
 	retryClient.Logger = nil // avoid noisy logs from retryablehttp
 	retryClient.HTTPClient = &http.Client{
-		Transport: roundTripper,
+		Transport:     roundTripper,
+		CheckRedirect: opts.checkRedirect,
 	}
 
 	checkRetry := opts.retryConfig.CheckRetry
@@ -428,6 +442,9 @@ func (p *Policy) clientWithBaseTransport(transport *http.Transport, options ...f
 	}
 
 	client := retryClient.StandardClient()
+	// The standard client follows redirects on its own, so the policy has to
+	// sit on both layers for a 3xx to reach the caller.
+	client.CheckRedirect = opts.checkRedirect
 	client.Transport = &closeIdleRoundTripper{
 		RoundTripper:         client.Transport,
 		closeIdleConnections: transport.CloseIdleConnections,

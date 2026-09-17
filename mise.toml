@@ -122,7 +122,7 @@ PRESIDIO_ANALYZER_URL = "http://127.0.0.1:{{env.PRESIDIO_PORT}}"
 ## /v1). An empty URL disables it; real values belong in mise.local.toml.
 GRAM_RISK_LLM_URL = ""
 GRAM_RISK_LLM_MODEL = "risk-judge-4b"
-GRAM_RISK_LLM_API_KEY = "unset"
+GRAM_RISK_LLM_API_KEY = ""
 
 ##########################################
 ## Gram server, admin and worker config ##

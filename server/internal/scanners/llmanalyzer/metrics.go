@@ -28,10 +28,6 @@ const (
 	// OutcomeRateLimited is the request outcome when the upstream kept
 	// answering 429 until the retry budget ran out.
 	OutcomeRateLimited o11y.Outcome = "rate_limited"
-
-	// OutcomeParseError is the outcome callers record on risk.llm.requests
-	// when the completion arrived but could not be parsed as a verdict.
-	OutcomeParseError o11y.Outcome = "parse_error"
 )
 
 // CallInfo carries the metric and span dimensions of one Complete call. The
@@ -172,7 +168,9 @@ func (m *metrics) RecordRetries(ctx context.Context, info CallInfo, model string
 	))
 }
 
-// RecordParseFailure records a completion that ParseVerdict rejected.
+// RecordParseFailure records a completion that ParseVerdict rejected. The
+// call itself was already recorded as a success on risk.llm.requests: that
+// counter tracks transport outcomes and this one tracks verdict quality.
 func (m *metrics) RecordParseFailure(ctx context.Context, info CallInfo, model string) {
 	if m.parseFailures == nil {
 		return

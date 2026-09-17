@@ -147,7 +147,7 @@ func NewClient(logger *slog.Logger, tracerProvider trace.TracerProvider, meterPr
 		logger:     logger,
 		tracer:     tracerProvider.Tracer(tracerName),
 		metrics:    newMetrics(meterProvider, logger),
-		httpClient: policy.Client(guardian.WithRetryConfig(retry)),
+		httpClient: policy.Client(guardian.WithRetryConfig(retry), guardian.WithCheckRedirect(rejectRedirect)),
 		cfg:        cfg,
 		endpoint:   strings.TrimRight(cfg.BaseURL, "/") + completionsPath,
 	}, nil
@@ -292,6 +292,10 @@ func (c *Client) complete(ctx context.Context, messages []Message) (Completion, 
 		}
 	}
 
+	if len(bytes.TrimSpace(payload)) == 0 {
+		return Completion{}, ErrEmptyCompletion
+	}
+
 	var parsed chatResponse
 	if err := json.Unmarshal(payload, &parsed); err != nil {
 		return Completion{}, fmt.Errorf("decode risk llm response: %w", err)
@@ -315,6 +319,14 @@ func (c *Client) complete(ctx context.Context, messages []Message) (Completion, 
 		Model:            conv.Default(parsed.Model, c.cfg.Model),
 		Attempts:         0,
 	}, nil
+}
+
+// rejectRedirect hands every 3xx back to complete, which reports it as an
+// *UpstreamError. The configured endpoint is the only host that may see the
+// bearer token and the prompt, so a redirect is a misconfiguration, never
+// something to follow.
+func rejectRedirect(*http.Request, []*http.Request) error {
+	return http.ErrUseLastResponse
 }
 
 // classifyRequestError maps a transport-level failure onto the typed errors:

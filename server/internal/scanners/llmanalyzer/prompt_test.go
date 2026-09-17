@@ -121,6 +121,22 @@ func TestBuildUserPrompt_DoesNotHTMLEscapeToolCalls(t *testing.T) {
 	require.NotContains(t, got, "\\u0026")
 }
 
+func TestBuildUserPrompt_KeepsLineSeparatorsLiteral(t *testing.T) {
+	t.Parallel()
+
+	got := llmanalyzer.BuildUserPrompt(llmanalyzer.PromptInput{
+		Content: "",
+		ToolCalls: []llmanalyzer.ToolCall{
+			{ID: "toolu_0000001", Name: "Write", Arguments: "line\u2028para\u2029end"},
+		},
+		ToolOutcome: "",
+	})
+
+	require.Contains(t, got, "\"arguments\": \"line\u2028para\u2029end\"")
+	require.NotContains(t, got, `\u2028`)
+	require.NotContains(t, got, `\u2029`)
+}
+
 func TestBuildMessages_SystemThenUser(t *testing.T) {
 	t.Parallel()
 

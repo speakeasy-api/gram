@@ -71,6 +71,8 @@ func (c Config) Validate() error {
 			errs = append(errs, errors.New("base url scheme must be https"))
 		case u.Host == "":
 			errs = append(errs, errors.New("base url must include a host"))
+		case u.RawQuery != "" || u.ForceQuery || u.Fragment != "":
+			errs = append(errs, errors.New("base url must not include a query or fragment"))
 		}
 	}
 

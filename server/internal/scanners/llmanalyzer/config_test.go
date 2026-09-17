@@ -32,6 +32,8 @@ func TestConfig_Validate(t *testing.T) {
 		{name: "relative base url", mutate: func(c *llmanalyzer.Config) { c.BaseURL = "model.example.com/v1" }, wantErr: "scheme must be https"},
 		{name: "base url without host", mutate: func(c *llmanalyzer.Config) { c.BaseURL = "https:///v1" }, wantErr: "must include a host"},
 		{name: "unparsable base url", mutate: func(c *llmanalyzer.Config) { c.BaseURL = "https://model.example.com/%zz" }, wantErr: "parse base url"},
+		{name: "base url with query", mutate: func(c *llmanalyzer.Config) { c.BaseURL = "https://model.example.com/v1?api-version=1" }, wantErr: "must not include a query or fragment"},
+		{name: "base url with fragment", mutate: func(c *llmanalyzer.Config) { c.BaseURL = "https://model.example.com/v1#v1" }, wantErr: "must not include a query or fragment"},
 		{name: "empty model", mutate: func(c *llmanalyzer.Config) { c.Model = "" }, wantErr: "model is required"},
 		{name: "empty api key", mutate: func(c *llmanalyzer.Config) { c.APIKey = "" }, wantErr: "api key is required"},
 		{name: "negative timeout", mutate: func(c *llmanalyzer.Config) { c.Timeout = -time.Second }, wantErr: "timeout must not be negative"},
