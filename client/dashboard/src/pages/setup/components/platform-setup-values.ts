@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
 import { useMarketplaceSettings } from "@gram/client/react-query/marketplaceSettings";
@@ -123,22 +123,35 @@ export interface PlatformApiKeys {
 }
 
 /** Mints the hooks-scoped API key a platform's snippets need, once each. */
-export function usePlatformApiKeys(): PlatformApiKeys {
+export function usePlatformApiKeys({
+  shareAnthropicKey = false,
+}: { shareAnthropicKey?: boolean } = {}): PlatformApiKeys {
   const [keys, setKeys] = useState<Record<string, string>>({});
   const [pending, setPending] = useState<Record<string, boolean>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const createKeyMutation = useCreateAPIKeyMutation();
+  // Reserve synchronously: sibling effects can ensure before React renders.
+  // Successful reservations stay locked; failures release them for retry.
+  const reserved = useRef(new Set<string>());
 
   const ensure = useCallback(
     (platform: AgentPlatform) => {
       const needsKey = platform.setupSteps.some((s) => s.requiresApiKey);
       if (!needsKey) return;
-      if (keys[platform.id] || pending[platform.id]) return;
+      const shared =
+        shareAnthropicKey &&
+        (platform.id === "claude" || platform.id === "claude-cowork");
+      const ids = shared ? ["claude", "claude-cowork"] : [platform.id];
+      const keyId = ids[0]!;
+      if (reserved.current.has(keyId)) return;
+      reserved.current.add(keyId);
+      const values = <T>(value: T): Record<string, T> =>
+        Object.fromEntries(ids.map((id) => [id, value]));
 
-      setPending((prev) => ({ ...prev, [platform.id]: true }));
+      setPending((prev) => ({ ...prev, ...values(true) }));
       setErrors((prev) => {
         const next = { ...prev };
-        delete next[platform.id];
+        for (const id of ids) delete next[id];
         return next;
       });
 
@@ -156,36 +169,38 @@ export function usePlatformApiKeys(): PlatformApiKeys {
           security: { sessionHeaderGramSession: "" },
           request: {
             createKeyForm: {
-              name: `${platform.name} hooks (setup ${timestamp} ${uniqueSuffix})`,
+              name: `${shared ? "Claude Code and Cowork" : platform.name} hooks (setup ${timestamp} ${uniqueSuffix})`,
               scopes: ["hooks"],
             },
           },
         },
         {
           onSuccess: (data) => {
-            setPending((prev) => ({ ...prev, [platform.id]: false }));
+            setPending((prev) => ({ ...prev, ...values(false) }));
             if (data.key) {
-              setKeys((prev) => ({ ...prev, [platform.id]: data.key! }));
+              setKeys((prev) => ({ ...prev, ...values(data.key!) }));
             } else {
+              reserved.current.delete(keyId);
               setErrors((prev) => ({
                 ...prev,
-                [platform.id]: "API key token missing from response.",
+                ...values("API key token missing from response."),
               }));
             }
           },
           onError: (err) => {
-            setPending((prev) => ({ ...prev, [platform.id]: false }));
+            reserved.current.delete(keyId);
+            setPending((prev) => ({ ...prev, ...values(false) }));
             const msg =
               err instanceof Error
                 ? err.message
                 : "Failed to generate API key.";
-            setErrors((prev) => ({ ...prev, [platform.id]: msg }));
+            setErrors((prev) => ({ ...prev, ...values(msg) }));
             toast.error(`Failed to generate API key: ${msg}`);
           },
         },
       );
     },
-    [keys, pending, createKeyMutation],
+    [shareAnthropicKey, createKeyMutation],
   );
 
   return { keys, pending, errors, ensure };

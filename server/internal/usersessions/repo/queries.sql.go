@@ -156,7 +156,8 @@ INSERT INTO user_session_issuers (
     authn_challenge_mode,
     session_duration,
     client_id_metadata_admission_mode,
-    trusted_remote_session_issuer_id
+    trusted_remote_session_issuer_id,
+    trusted_remote_session_client_id
 )
 VALUES (
     NULL,
@@ -165,7 +166,8 @@ VALUES (
     $3,
     $4,
     'open',
-    $5::uuid
+    $5::uuid,
+    $6::uuid
 )
 RETURNING id, project_id, organization_id, attachment_scope, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, trusted_remote_session_issuer_id, trusted_remote_session_client_id, created_at, updated_at, deleted_at, deleted
 `
@@ -176,6 +178,7 @@ type CreateOrganizationUserSessionIssuerParams struct {
 	AuthnChallengeMode           string
 	SessionDuration              pgtype.Interval
 	TrustedRemoteSessionIssuerID uuid.NullUUID
+	TrustedRemoteSessionClientID uuid.NullUUID
 }
 
 func (q *Queries) CreateOrganizationUserSessionIssuer(ctx context.Context, arg CreateOrganizationUserSessionIssuerParams) (UserSessionIssuer, error) {
@@ -185,6 +188,7 @@ func (q *Queries) CreateOrganizationUserSessionIssuer(ctx context.Context, arg C
 		arg.AuthnChallengeMode,
 		arg.SessionDuration,
 		arg.TrustedRemoteSessionIssuerID,
+		arg.TrustedRemoteSessionClientID,
 	)
 	var i UserSessionIssuer
 	err := row.Scan(
@@ -2348,7 +2352,7 @@ func (q *Queries) ListUserSessionsByProjectID(ctx context.Context, arg ListUserS
 }
 
 const lockOrganizationUserSessionIssuer = `-- name: LockOrganizationUserSessionIssuer :one
-SELECT id
+SELECT id, project_id, organization_id, attachment_scope, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, trusted_remote_session_issuer_id, trusted_remote_session_client_id, created_at, updated_at, deleted_at, deleted
 FROM user_session_issuers
 WHERE id = $1
   AND project_id IS NULL
@@ -2362,11 +2366,27 @@ type LockOrganizationUserSessionIssuerParams struct {
 	OrganizationID string
 }
 
-func (q *Queries) LockOrganizationUserSessionIssuer(ctx context.Context, arg LockOrganizationUserSessionIssuerParams) (uuid.UUID, error) {
+func (q *Queries) LockOrganizationUserSessionIssuer(ctx context.Context, arg LockOrganizationUserSessionIssuerParams) (UserSessionIssuer, error) {
 	row := q.db.QueryRow(ctx, lockOrganizationUserSessionIssuer, arg.ID, arg.OrganizationID)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
+	var i UserSessionIssuer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.AttachmentScope,
+		&i.Slug,
+		&i.AuthnChallengeMode,
+		&i.SessionDuration,
+		&i.Classification,
+		&i.ClientIDMetadataAdmissionMode,
+		&i.TrustedRemoteSessionIssuerID,
+		&i.TrustedRemoteSessionClientID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const lockUserSessionIssuer = `-- name: LockUserSessionIssuer :one
@@ -2917,10 +2937,15 @@ SET
         WHEN BTRIM($5::text) = '' THEN NULL
         ELSE $5::text::uuid
     END,
+    trusted_remote_session_client_id = CASE
+        WHEN $6::text IS NULL THEN trusted_remote_session_client_id
+        WHEN BTRIM($6::text) = '' THEN NULL
+        ELSE $6::text::uuid
+    END,
     updated_at = clock_timestamp()
-WHERE id = $6
+WHERE id = $7
   AND project_id IS NULL
-  AND organization_id = $7::text
+  AND organization_id = $8::text
   AND deleted IS FALSE
 RETURNING id, project_id, organization_id, attachment_scope, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, trusted_remote_session_issuer_id, trusted_remote_session_client_id, created_at, updated_at, deleted_at, deleted
 `
@@ -2931,6 +2956,7 @@ type UpdateOrganizationUserSessionIssuerParams struct {
 	SessionDuration               pgtype.Interval
 	ClientIDMetadataAdmissionMode pgtype.Text
 	TrustedRemoteSessionIssuerID  pgtype.Text
+	TrustedRemoteSessionClientID  pgtype.Text
 	ID                            uuid.UUID
 	OrganizationID                string
 }
@@ -2942,6 +2968,7 @@ func (q *Queries) UpdateOrganizationUserSessionIssuer(ctx context.Context, arg U
 		arg.SessionDuration,
 		arg.ClientIDMetadataAdmissionMode,
 		arg.TrustedRemoteSessionIssuerID,
+		arg.TrustedRemoteSessionClientID,
 		arg.ID,
 		arg.OrganizationID,
 	)

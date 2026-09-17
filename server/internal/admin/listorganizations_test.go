@@ -384,7 +384,7 @@ func TestListOrganizations_Empty(t *testing.T) {
 	require.Equal(t, int64(0), res.Total)
 }
 
-func TestListOrganizations_DefaultExcludesDisabled(t *testing.T) {
+func TestListOrganizations_ActiveExcludesDisabled(t *testing.T) {
 	t.Parallel()
 
 	ctx, svc, conn := newTestAdminService(t)
@@ -393,14 +393,14 @@ func TestListOrganizations_DefaultExcludesDisabled(t *testing.T) {
 	seedOrg(t, ctx, conn, orgFixture{id: "org_active", name: "Active Co", slug: "active-co", whitelisted: true})
 	seedOrg(t, ctx, conn, orgFixture{id: "org_disabled", name: "Disabled Co", slug: "disabled-co", whitelisted: true, disabledAt: &now})
 
-	res, err := svc.ListOrganizations(ctx, &gen.ListOrganizationsPayload{})
+	res, err := svc.ListOrganizations(ctx, &gen.ListOrganizationsPayload{DisabledStatus: new("active")})
 	require.NoError(t, err)
 	require.Len(t, res.Organizations, 1)
 	require.Equal(t, "org_active", res.Organizations[0].ID)
 	require.Nil(t, res.Organizations[0].DisabledAt)
 }
 
-func TestListOrganizations_IncludeDisabled(t *testing.T) {
+func TestListOrganizations_AllIncludesDisabled(t *testing.T) {
 	t.Parallel()
 
 	ctx, svc, conn := newTestAdminService(t)
@@ -409,8 +409,7 @@ func TestListOrganizations_IncludeDisabled(t *testing.T) {
 	seedOrg(t, ctx, conn, orgFixture{id: "org_a", name: "Alpha", slug: "alpha", whitelisted: true})
 	seedOrg(t, ctx, conn, orgFixture{id: "org_b", name: "Bravo", slug: "bravo", whitelisted: true, disabledAt: &now})
 
-	include := true
-	res, err := svc.ListOrganizations(ctx, &gen.ListOrganizationsPayload{IncludeDisabled: &include})
+	res, err := svc.ListOrganizations(ctx, &gen.ListOrganizationsPayload{DisabledStatus: new("all")})
 	require.NoError(t, err)
 	require.Len(t, res.Organizations, 2)
 
@@ -840,7 +839,7 @@ type searchFilterCase struct {
 }
 
 // An id match escapes the disabled filter and no other: it is still one arm of
-// the q group as far as every remaining filter is concerned. TestListOrganizations_SearchByIDFindsADisabledOrganization
+// the q group as far as every remaining filter is concerned. TestListOrganizations_SearchStatusIsStrict
 // covers the one filter it does escape.
 func TestListOrganizations_SearchByIDRespectsFilters(t *testing.T) {
 	t.Parallel()
@@ -892,24 +891,20 @@ func TestListOrganizations_SearchByIDRespectsFilters(t *testing.T) {
 }
 
 type searchDisabledCase struct {
-	name            string
-	q               string
-	includeDisabled bool
-	disabledStates  []string
-	wantIDs         []string
+	name           string
+	q              string
+	disabledStatus *string
+	wantIDs        []string
 }
 
-// Pasting the id of a suspended organization is a leading reason to paste an id
-// at all, so an exact id match reaches one whatever the disabled filter says.
-// Only the id arms escape it; the name and slug arms do not.
-func TestListOrganizations_SearchByIDFindsADisabledOrganization(t *testing.T) {
+// Status applies strictly to ID, WorkOS ID, name and slug searches.
+// Omitted status remains unrestricted.
+func TestListOrganizations_SearchStatusIsStrict(t *testing.T) {
 	t.Parallel()
 
 	ctx, svc, conn := newTestAdminService(t)
 
-	// Both ids are mixed case: the bypass carries its own copy of the id arms, so
-	// it needs its own proof that each folds case rather than borrowing the one
-	// TestListOrganizations_SearchByIDIgnoresCase gives an active organization.
+	// Both ID spaces remain case-insensitive when status is applied.
 	const (
 		disabledID = "org_search_id_Disabled"
 		activeID   = "org_search_id_active"
@@ -923,28 +918,31 @@ func TestListOrganizations_SearchByIDFindsADisabledOrganization(t *testing.T) {
 	seedOrg(t, ctx, conn, orgFixture{id: activeID, name: "Active Holdings", slug: "active-holdings", whitelisted: true})
 
 	cases := []searchDisabledCase{
-		{name: "disabled organization by id, disabled excluded", q: disabledID, wantIDs: []string{disabledID}},
-		{name: "disabled organization by id, disabled included", q: disabledID, includeDisabled: true, wantIDs: []string{disabledID}},
-		{name: "disabled organization by id, disabled_states active", q: disabledID, disabledStates: []string{"active"}, wantIDs: []string{disabledID}},
-		{name: "disabled organization by lowercased id, disabled excluded", q: strings.ToLower(disabledID), wantIDs: []string{disabledID}},
-		{name: "disabled organization by workos id, disabled excluded", q: disabledWorkosID, wantIDs: []string{disabledID}},
-		{name: "disabled organization by lowercased workos id, disabled excluded", q: strings.ToLower(disabledWorkosID), wantIDs: []string{disabledID}},
+		{name: "disabled organization by id, status omitted", q: disabledID, wantIDs: []string{disabledID}},
+		{name: "disabled organization by id, disabled included", q: disabledID, disabledStatus: new("all"), wantIDs: []string{disabledID}},
+		{name: "disabled lowercase ID excluded by active", q: strings.ToLower(disabledID), disabledStatus: new("active"), wantIDs: nil},
+		{name: "disabled WorkOS ID excluded by active", q: disabledWorkosID, disabledStatus: new("active"), wantIDs: nil},
+		{name: "disabled lowercase WorkOS ID excluded by active", q: strings.ToLower(disabledWorkosID), disabledStatus: new("active"), wantIDs: nil},
+		{name: "disabled ID matches disabled", q: disabledID, disabledStatus: new("disabled"), wantIDs: []string{disabledID}},
+		{name: "disabled organization by id, status active", q: disabledID, disabledStatus: new("active"), wantIDs: nil},
+		{name: "disabled organization by lowercased id, status omitted", q: strings.ToLower(disabledID), wantIDs: []string{disabledID}},
+		{name: "disabled organization by workos id, status omitted", q: disabledWorkosID, wantIDs: []string{disabledID}},
+		{name: "disabled organization by lowercased workos id, status omitted", q: strings.ToLower(disabledWorkosID), wantIDs: []string{disabledID}},
 
-		// The bypass is the two id arms, not the whole q group.
-		{name: "disabled organization by name, disabled excluded", q: "Disabled Holdings", wantIDs: nil},
-		{name: "disabled organization by slug, disabled excluded", q: "disabled-holdings", wantIDs: nil},
-		{name: "disabled organization by name, disabled included", q: "Disabled Holdings", includeDisabled: true, wantIDs: []string{disabledID}},
+		// Name and slug use the same status restriction.
+		{name: "disabled organization by name, disabled excluded", q: "Disabled Holdings", disabledStatus: new("active"), wantIDs: nil},
+		{name: "disabled organization by slug, disabled excluded", q: "disabled-holdings", disabledStatus: new("active"), wantIDs: nil},
+		{name: "disabled organization by name, disabled included", q: "Disabled Holdings", disabledStatus: new("all"), wantIDs: []string{disabledID}},
 
-		// Symmetric: the id arms escape the filter rather than widening it to disabled rows.
-		{name: "active organization by id, disabled_states disabled", q: activeID, disabledStates: []string{"disabled"}, wantIDs: []string{activeID}},
-		{name: "active organization by name, disabled_states disabled", q: "Active Holdings", disabledStates: []string{"disabled"}, wantIDs: nil},
+		// Symmetric: disabled status excludes active rows even by exact ID.
+		{name: "active organization by id, status disabled", q: activeID, disabledStatus: new("disabled"), wantIDs: nil},
+		{name: "active organization by name, status disabled", q: "Active Holdings", disabledStatus: new("disabled"), wantIDs: nil},
 	}
 
 	for _, c := range cases {
 		payload := &gen.ListOrganizationsPayload{
-			Q:               conv.PtrEmpty(c.q),
-			IncludeDisabled: conv.PtrEmpty(c.includeDisabled),
-			DisabledStates:  c.disabledStates,
+			Q:              conv.PtrEmpty(c.q),
+			DisabledStatus: c.disabledStatus,
 		}
 		requireSearchMatchesWithTotal(t, ctx, svc, payload, c.wantIDs, c.name)
 	}
@@ -1111,9 +1109,9 @@ func seedSortFixtures(t *testing.T, ctx context.Context, conn *pgxpool.Pool) {
 // sortPayload builds an offset-mode request over the sort fixtures, which are all disabled.
 func sortPayload(sort, direction string) *gen.ListOrganizationsPayload {
 	return &gen.ListOrganizationsPayload{
-		Sort:            new(sort),
-		Direction:       new(direction),
-		IncludeDisabled: new(true),
+		Sort:           new(sort),
+		Direction:      new(direction),
+		DisabledStatus: new("all"),
 	}
 }
 
@@ -1293,7 +1291,7 @@ func TestListOrganizations_OffsetPaging(t *testing.T) {
 
 	for _, c := range cases {
 		payload := sortPayload("name", "asc")
-		payload.IncludeDisabled = nil
+		payload.DisabledStatus = new("active")
 		payload.Limit, payload.Page = new(2), c.page
 		requireOrder(t, ctx, svc, payload, c.want, c.name)
 	}
@@ -1302,7 +1300,7 @@ func TestListOrganizations_OffsetPaging(t *testing.T) {
 	var walked []string
 	for page := 1; page <= 3; page++ {
 		payload := sortPayload("name", "asc")
-		payload.IncludeDisabled = nil
+		payload.DisabledStatus = new("active")
 		payload.Limit, payload.Page = new(2), new(page)
 
 		res, err := svc.ListOrganizations(ctx, payload)
@@ -1318,7 +1316,7 @@ func TestListOrganizations_OffsetPaging(t *testing.T) {
 	// and every case above uses limit 2.
 	for page := 1; page <= len(pageOrgsByName); page++ {
 		payload := sortPayload("name", "asc")
-		payload.IncludeDisabled = nil
+		payload.DisabledStatus = new("active")
 		payload.Limit, payload.Page = new(1), new(page)
 		requireOrder(t, ctx, svc, payload, pageOrgsByName[page-1:page], fmt.Sprintf("limit 1, page %d", page))
 	}
@@ -1362,21 +1360,21 @@ func TestListOrganizations_TotalCountsMatchesNotPageLength(t *testing.T) {
 		wantTotal int64
 		wantLen   int
 	}{
-		{name: "no filter, first page", payload: &gen.ListOrganizationsPayload{Sort: new("name"), Limit: new(2), Page: new(1)}, wantTotal: 7, wantLen: 2},
-		{name: "no filter, last page", payload: &gen.ListOrganizationsPayload{Sort: new("name"), Limit: new(2), Page: new(4)}, wantTotal: 7, wantLen: 1},
-		{name: "search filter", payload: &gen.ListOrganizationsPayload{Sort: new("name"), Limit: new(2), Q: new("holdings")}, wantTotal: 5, wantLen: 2},
+		{name: "no filter, first page", payload: &gen.ListOrganizationsPayload{Sort: new("name"), Limit: new(2), Page: new(1)}, wantTotal: 8, wantLen: 2},
+		{name: "no filter, last page", payload: &gen.ListOrganizationsPayload{Sort: new("name"), Limit: new(2), Page: new(4)}, wantTotal: 8, wantLen: 2},
+		{name: "search filter", payload: &gen.ListOrganizationsPayload{Sort: new("name"), Limit: new(2), Q: new("holdings")}, wantTotal: 6, wantLen: 2},
 		{name: "account type filter", payload: &gen.ListOrganizationsPayload{Sort: new("name"), Limit: new(2), AccountType: new("pro")}, wantTotal: 2, wantLen: 2},
-		{name: "disabled included", payload: &gen.ListOrganizationsPayload{Sort: new("name"), Limit: new(2), IncludeDisabled: new(true)}, wantTotal: 8, wantLen: 2},
+		{name: "disabled included", payload: &gen.ListOrganizationsPayload{Sort: new("name"), Limit: new(2), DisabledStatus: new("all")}, wantTotal: 8, wantLen: 2},
 		{name: "a filter matching nothing", payload: &gen.ListOrganizationsPayload{Sort: new("name"), Q: new("no such organization")}, wantTotal: 0, wantLen: 0},
 
 		// A page past the end still reports what the filters matched. A client that
 		// lands there, from a bookmark or from a filter typed while sitting on a
 		// later page, needs the count to find its way back to a page that exists.
-		{name: "past the end", payload: &gen.ListOrganizationsPayload{Sort: new("name"), Limit: new(2), Page: new(9)}, wantTotal: 7, wantLen: 0},
-		{name: "past the end under a filter", payload: &gen.ListOrganizationsPayload{Sort: new("name"), Limit: new(2), Q: new("holdings"), Page: new(4)}, wantTotal: 5, wantLen: 0},
+		{name: "past the end", payload: &gen.ListOrganizationsPayload{Sort: new("name"), Limit: new(2), Page: new(9)}, wantTotal: 8, wantLen: 0},
+		{name: "past the end under a filter", payload: &gen.ListOrganizationsPayload{Sort: new("name"), Limit: new(2), Q: new("holdings"), Page: new(4)}, wantTotal: 6, wantLen: 0},
 
-		{name: "cursor mode", payload: &gen.ListOrganizationsPayload{Limit: new(2)}, wantTotal: 7, wantLen: 2},
-		{name: "cursor mode under a filter", payload: &gen.ListOrganizationsPayload{Limit: new(2), Q: new("holdings")}, wantTotal: 5, wantLen: 2},
+		{name: "cursor mode", payload: &gen.ListOrganizationsPayload{Limit: new(2)}, wantTotal: 8, wantLen: 2},
+		{name: "cursor mode under a filter", payload: &gen.ListOrganizationsPayload{Limit: new(2), Q: new("holdings")}, wantTotal: 6, wantLen: 2},
 	}
 
 	for _, c := range cases {
@@ -1393,10 +1391,10 @@ func TestListOrganizations_TotalCountsMatchesNotPageLength(t *testing.T) {
 	for page := 1; ; page++ {
 		res, err := svc.ListOrganizations(ctx, &gen.ListOrganizationsPayload{Limit: new(2), Cursor: cursor})
 		require.NoError(t, err, "cursor page %d", page)
-		require.Equal(t, int64(7), res.Total, "total on cursor page %d", page)
+		require.Equal(t, int64(8), res.Total, "total on cursor page %d", page)
 
 		if res.NextCursor == nil {
-			require.Equal(t, 4, page, "the walk covers seven rows in four pages of two")
+			require.Equal(t, 4, page, "the walk covers eight rows in four pages of two")
 			break
 		}
 		cursor = res.NextCursor

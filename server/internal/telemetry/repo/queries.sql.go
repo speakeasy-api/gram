@@ -4062,13 +4062,19 @@ type GetToolUsageSummaryParams struct {
 	MetaMCPServerIDs   []string
 	UserFilters        []ToolUsageUserFilter
 	HookSources        []string
-	AccountType        string // Optional filter - filters by account_type (team|personal)
+	ClientKeys         []string          // Optional filter - lowercased MCP client names; "unattributed" selects calls with no reported client
+	AccountType        string            // Optional filter - filters by account_type (team|personal)
+	Statuses           []string          // Optional trace-outcome filter: error, success, blocked, pending. Empty means all.
+	Query              string            // Optional free-text attribute search. Forces the raw log path.
+	Filters            []AttributeFilter // Optional attribute conditions. Forces the raw log path.
 	TargetLimit        uint64
 	UserLimit          uint64
 	UsersByTargetLimit uint64
 	TargetToolRowLimit uint64
 	TimeSeriesRowLimit uint64
 	UserSeriesRowLimit uint64
+	ClientLimit        uint64
+	ClientToolRowLimit uint64
 }
 
 type ListToolUsageTracesParams struct {
@@ -4084,6 +4090,7 @@ type ListToolUsageTracesParams struct {
 	MetaMCPServerIDs   []string
 	UserFilters        []ToolUsageUserFilter
 	HookSources        []string
+	ClientKeys         []string // Optional filter - lowercased MCP client names; "unattributed" selects calls with no reported client
 	AccountType        string   // Optional filter - personal = exactly personal; team = not personal (includes unclassified)
 	Statuses           []string // Optional trace-outcome filter: error, success, blocked, pending. Empty means all.
 	Query              string
@@ -4103,6 +4110,8 @@ type ToolUsageSummary struct {
 	UserTimeSeries      []ToolUsageUserTimeSeriesPointRow
 	UsersByTarget       []ToolUsageUsersByTargetRow
 	TargetToolBreakdown []ToolUsageTargetToolBreakdownRow
+	Clients             []ToolUsageClientSummaryRow
+	ClientToolBreakdown []ToolUsageClientToolBreakdownRow
 }
 
 type ToolUsageTraceSummary struct {
@@ -4128,6 +4137,9 @@ type ToolUsageTraceSummary struct {
 	BlockReason       *string `ch:"block_reason"`
 	AccountType       *string `ch:"account_type"`
 	MetaMCPServerID   string  `ch:"meta_mcp_server_id"`
+	ClientKey         string  `ch:"client_key"`
+	ClientLabel       string  `ch:"client_label"`
+	ClientVersion     *string `ch:"client_version"`
 }
 
 // GetToolUsageFilterOptionsParams defines the parameters for tool usage filter option queries.
@@ -4146,6 +4158,7 @@ type ToolUsageFilterOptions struct {
 	ShadowServers []ToolUsageShadowServerFilterOptionRow
 	Gateways      []ToolUsageGatewayFilterOptionRow
 	Users         []ToolUsageUserFilterOptionRow
+	Clients       []ToolUsageClientFilterOptionRow
 }
 
 // GetMcpServerActivityParams defines the parameters for per-MCP-server tool-call
@@ -4191,11 +4204,19 @@ type ToolUsageUserFilterOptionRow struct {
 	EventCount uint64 `ch:"event_count"`
 }
 
+type ToolUsageClientFilterOptionRow struct {
+	ClientKey   string `ch:"client_key"`
+	ClientLabel string `ch:"client_label"`
+	EventCount  uint64 `ch:"event_count"`
+}
+
 type ToolUsageTotalsRow struct {
 	EventCount    uint64  `ch:"event_count"`
 	SuccessCount  uint64  `ch:"success_count"`
 	FailureCount  uint64  `ch:"failure_count"`
 	FailureRate   float64 `ch:"failure_rate"`
+	BlockedCount  uint64  `ch:"blocked_count"`
+	BlockedRate   float64 `ch:"blocked_rate"`
 	UniqueTools   uint64  `ch:"unique_tools"`
 	UniqueUsers   uint64  `ch:"unique_users"`
 	UniqueTargets uint64  `ch:"unique_targets"`
@@ -4224,6 +4245,16 @@ type ToolUsageUserSummaryRow struct {
 	FailureRate  float64 `ch:"failure_rate"`
 }
 
+type ToolUsageClientSummaryRow struct {
+	ClientKey    string  `ch:"client_key"`
+	ClientLabel  string  `ch:"client_label"`
+	EventCount   uint64  `ch:"event_count"`
+	UniqueTools  uint64  `ch:"unique_tools"`
+	SuccessCount uint64  `ch:"success_count"`
+	FailureCount uint64  `ch:"failure_count"`
+	FailureRate  float64 `ch:"failure_rate"`
+}
+
 type ToolUsageTargetTimeSeriesPointRow struct {
 	BucketStartNs int64  `ch:"bucket_start_ns"`
 	TargetType    string `ch:"target_type"`
@@ -4232,6 +4263,8 @@ type ToolUsageTargetTimeSeriesPointRow struct {
 	TargetLabel   string `ch:"target_label"`
 	EventCount    uint64 `ch:"event_count"`
 	FailureCount  uint64 `ch:"failure_count"`
+	BlockedCount  uint64 `ch:"blocked_count"`
+	PendingCount  uint64 `ch:"pending_count"`
 }
 
 type ToolUsageUserTimeSeriesPointRow struct {
@@ -4267,9 +4300,19 @@ type ToolUsageTargetToolBreakdownRow struct {
 	FailureRate  float64 `ch:"failure_rate"`
 }
 
+type ToolUsageClientToolBreakdownRow struct {
+	ClientKey    string  `ch:"client_key"`
+	ClientLabel  string  `ch:"client_label"`
+	ToolName     string  `ch:"tool_name"`
+	EventCount   uint64  `ch:"event_count"`
+	SuccessCount uint64  `ch:"success_count"`
+	FailureCount uint64  `ch:"failure_count"`
+	FailureRate  float64 `ch:"failure_rate"`
+}
+
 // GetToolUsageSummary retrieves target-aware MCP and tool usage aggregates.
 func (q *Queries) GetToolUsageSummary(ctx context.Context, arg GetToolUsageSummaryParams) (*ToolUsageSummary, error) {
-	// The seven aggregates are independent reads of the same window — run them
+	// The aggregates are independent reads of the same window — run them
 	// concurrently so the endpoint costs the slowest query, not the sum.
 	// Each goroutine writes a distinct field of summary.
 	var summary ToolUsageSummary
@@ -4309,6 +4352,16 @@ func (q *Queries) GetToolUsageSummary(ctx context.Context, arg GetToolUsageSumma
 		summary.TargetToolBreakdown, err = q.GetToolUsageTargetToolBreakdown(egCtx, arg)
 		return err
 	})
+	eg.Go(func() error {
+		var err error
+		summary.Clients, err = q.GetToolUsageClients(egCtx, arg)
+		return err
+	})
+	eg.Go(func() error {
+		var err error
+		summary.ClientToolBreakdown, err = q.GetToolUsageClientToolBreakdown(egCtx, arg)
+		return err
+	})
 	if err := eg.Wait(); err != nil {
 		return nil, fmt.Errorf("tool usage summary queries: %w", err)
 	}
@@ -4332,6 +4385,7 @@ func (q *Queries) GetToolUsageFilterOptions(ctx context.Context, arg GetToolUsag
 		MetaMCPServerIDs:   nil,
 		UserFilters:        nil,
 		HookSources:        nil,
+		ClientKeys:         nil,
 		AccountType:        "", // filter options enumerate all values, never scoped
 		TargetLimit:        0,
 		UserLimit:          0,
@@ -4339,6 +4393,14 @@ func (q *Queries) GetToolUsageFilterOptions(ctx context.Context, arg GetToolUsag
 		TargetToolRowLimit: 0,
 		TimeSeriesRowLimit: 0,
 		UserSeriesRowLimit: 0,
+		ClientLimit:        0,
+		ClientToolRowLimit: 0,
+		// Unscoped for the same reason as AccountType above: a dropdown that
+		// narrows itself by what is already applied dead-ends the moment a
+		// reader picks a value that excludes everything else.
+		Statuses: nil,
+		Query:    "",
+		Filters:  nil,
 	}
 
 	// Independent reads of the same window — run concurrently; each goroutine
@@ -4363,6 +4425,11 @@ func (q *Queries) GetToolUsageFilterOptions(ctx context.Context, arg GetToolUsag
 	eg.Go(func() error {
 		var err error
 		options.Users, err = q.getToolUsageUserFilterOptions(egCtx, summaryArg)
+		return err
+	})
+	eg.Go(func() error {
+		var err error
+		options.Clients, err = q.getToolUsageClientFilterOptions(egCtx, summaryArg)
 		return err
 	})
 	if err := eg.Wait(); err != nil {
@@ -4404,6 +4471,9 @@ func (q *Queries) ListToolUsageTraces(ctx context.Context, arg ListToolUsageTrac
 		"block_reason",
 		"account_type",
 		"meta_mcp_server_id",
+		"client_key",
+		"client_label",
+		"client_version",
 	).From("normalized_traces")
 
 	if len(arg.TargetTypes) > 0 {
@@ -4437,6 +4507,12 @@ func (q *Queries) ListToolUsageTraces(ctx context.Context, arg ListToolUsageTrac
 
 	if len(arg.HookSources) > 0 {
 		sb = sb.Where(squirrel.Eq{"hook_source": arg.HookSources})
+	}
+
+	// client_key is derived in the CTE and already folds calls with no reported
+	// client into one bucket, so filtering needs no special case for them.
+	if len(arg.ClientKeys) > 0 {
+		sb = sb.Where(squirrel.Eq{"client_key": arg.ClientKeys})
 	}
 
 	// account_type is carried on trace_summaries (fast path) and materialized on
@@ -4522,6 +4598,11 @@ func (q *Queries) GetToolUsageTotals(ctx context.Context, arg GetToolUsageSummar
 		"sum(success) AS success_count",
 		"sum(failure) AS failure_count",
 		"failure_count / greatest(success_count + failure_count, 1) AS failure_rate",
+		"sum(blocked) AS blocked_count",
+		// Over every call, not over the completed ones: a blocked call never
+		// reached the tool, so the failure rate's denominator would exclude
+		// exactly the events this rate is about.
+		"blocked_count / greatest(count(), 1) AS blocked_rate",
 		"uniqExact(tool_name) AS unique_tools",
 		"uniqExact(user_kind || ':' || user_key) AS unique_users",
 		"uniqExact(target_type || ':' || target_kind || ':' || target_id) AS unique_targets",
@@ -4547,6 +4628,8 @@ func (q *Queries) GetToolUsageTotals(ctx context.Context, arg GetToolUsageSummar
 			SuccessCount:  0,
 			FailureCount:  0,
 			FailureRate:   0,
+			BlockedCount:  0,
+			BlockedRate:   0,
 			UniqueTools:   0,
 			UniqueUsers:   0,
 			UniqueTargets: 0,
@@ -4635,6 +4718,7 @@ func (q *Queries) GetMcpServerActivity(ctx context.Context, arg GetMcpServerActi
 		ShadowServerNames:  nil,
 		MetaMCPServerIDs:   nil,
 		UserFilters:        nil,
+		ClientKeys:         nil,
 		HookSources:        nil,
 		AccountType:        "",
 		TargetLimit:        0,
@@ -4643,6 +4727,13 @@ func (q *Queries) GetMcpServerActivity(ctx context.Context, arg GetMcpServerActi
 		TargetToolRowLimit: 0,
 		TimeSeriesRowLimit: 0,
 		UserSeriesRowLimit: 0,
+		ClientLimit:        0,
+		ClientToolRowLimit: 0,
+		// The server listing is an inventory: a server that only ever failed,
+		// or that matches nobody's search, still has to appear with its counts.
+		Statuses: nil,
+		Query:    "",
+		Filters:  nil,
 	}
 
 	// RecentThresholdNs is a server-computed epoch value, so inlining it as a
@@ -4782,6 +4873,107 @@ func (q *Queries) GetToolUsageUsers(ctx context.Context, arg GetToolUsageSummary
 	return result, nil
 }
 
+// GetToolUsageClients ranks the MCP clients that called this project's tools.
+// Calls Gram never saw an initialize handshake for (hook-observed traffic,
+// pre-handshake sessions, non-MCP tool calls) collapse into a single
+// MCPClientUnattributed row rather than being dropped.
+//
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) GetToolUsageClients(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageClientSummaryRow, error) {
+	sb, err := toolUsageFilteredSelect(arg,
+		"client_key",
+		// Group on the folded key alone: a client that reports "Claude Code"
+		// from one machine and "claude code" from another is one client, and
+		// grouping on the label too would rank it as two.
+		"max(client_label) AS client_label",
+		"count() AS event_count",
+		"uniqExact(tool_name) AS unique_tools",
+		"sum(success) AS success_count",
+		"sum(failure) AS failure_count",
+		"failure_count / greatest(success_count + failure_count, 1) AS failure_rate",
+	)
+	if err != nil {
+		return nil, fmt.Errorf("building tool usage clients source: %w", err)
+	}
+	sb = sb.
+		GroupBy("client_key").
+		OrderBy("event_count DESC", "client_key ASC").
+		Limit(nonZeroLimit(arg.ClientLimit, 25))
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building tool usage clients query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := []ToolUsageClientSummaryRow{}
+	for rows.Next() {
+		var row ToolUsageClientSummaryRow
+		if err = rows.ScanStruct(&row); err != nil {
+			return nil, fmt.Errorf("scan tool usage client row: %w", err)
+		}
+		result = append(result, row)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// GetToolUsageClientToolBreakdown ranks (client, tool) pairs. It is its own read
+// rather than a third grouping column on the target breakdown: that query has a
+// shared row limit, so widening it there would silently truncate the per-target
+// panels that render fine today.
+//
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) GetToolUsageClientToolBreakdown(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageClientToolBreakdownRow, error) {
+	sb, err := toolUsageFilteredSelect(arg,
+		"client_key",
+		"max(client_label) AS client_label",
+		"tool_name",
+		"count() AS event_count",
+		"sum(success) AS success_count",
+		"sum(failure) AS failure_count",
+		"failure_count / greatest(success_count + failure_count, 1) AS failure_rate",
+	)
+	if err != nil {
+		return nil, fmt.Errorf("building tool usage client tool breakdown source: %w", err)
+	}
+	sb = sb.
+		GroupBy("client_key", "tool_name").
+		OrderBy("event_count DESC", "client_key ASC", "tool_name ASC").
+		Limit(nonZeroLimit(arg.ClientToolRowLimit, 100))
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building tool usage client tool breakdown query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := []ToolUsageClientToolBreakdownRow{}
+	for rows.Next() {
+		var row ToolUsageClientToolBreakdownRow
+		if err = rows.ScanStruct(&row); err != nil {
+			return nil, fmt.Errorf("scan tool usage client tool row: %w", err)
+		}
+		result = append(result, row)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetToolUsageTargetTimeSeries(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageTargetTimeSeriesPointRow, error) {
 	bucketExpr := fmt.Sprintf("intDiv(event_time_ns, %d) * %d AS bucket_start_ns", arg.BucketSizeNs, arg.BucketSizeNs)
@@ -4793,6 +4985,8 @@ func (q *Queries) GetToolUsageTargetTimeSeries(ctx context.Context, arg GetToolU
 		"target_label",
 		"count() AS event_count",
 		"sum(failure) AS failure_count",
+		"sum(blocked) AS blocked_count",
+		"sum(pending) AS pending_count",
 	)
 	if err != nil {
 		return nil, fmt.Errorf("building tool usage target time series source: %w", err)
@@ -5081,6 +5275,45 @@ func (q *Queries) getToolUsageGatewayFilterOptions(ctx context.Context, arg GetT
 }
 
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) getToolUsageClientFilterOptions(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageClientFilterOptionRow, error) {
+	sb, err := toolUsageBaseSelect(arg,
+		"client_key",
+		"max(client_label) AS client_label",
+		"count() AS event_count",
+	)
+	if err != nil {
+		return nil, fmt.Errorf("building tool usage client filter options source: %w", err)
+	}
+	sb = sb.
+		GroupBy("client_key").
+		OrderBy("event_count DESC", "client_key ASC")
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building tool usage client filter options query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := []ToolUsageClientFilterOptionRow{}
+	for rows.Next() {
+		var row ToolUsageClientFilterOptionRow
+		if err = rows.ScanStruct(&row); err != nil {
+			return nil, fmt.Errorf("scan tool usage client filter option row: %w", err)
+		}
+		result = append(result, row)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) getToolUsageUserFilterOptions(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageUserFilterOptionRow, error) {
 	sb, err := toolUsageBaseSelect(arg,
 		"user_key",
@@ -5184,10 +5417,59 @@ func toolUsageFilteredSelect(arg GetToolUsageSummaryParams, columns ...string) (
 		sb = sb.Where(squirrel.Eq{"hook_source": arg.HookSources})
 	}
 
+	// client_key is derived in the CTE and already folds calls with no reported
+	// client into one bucket, so filtering needs no special case for them.
+	if len(arg.ClientKeys) > 0 {
+		sb = sb.Where(squirrel.Eq{"client_key": arg.ClientKeys})
+	}
+
 	// account_type is carried on trace_summaries and projected through the CTE.
 	sb = withAccountTypeFilter(sb, arg.AccountType)
 
+	// The same outcomes the trace listing filters by, so the cards and the
+	// timeline narrow with the rows beneath them instead of answering for the
+	// whole window.
+	if pred := toolUsageSummaryOutcomePredicate(arg.Statuses); pred != nil {
+		sb = sb.Where(pred)
+	}
+
+	// An http.response.status_code chip is a statement about the trace, not
+	// about one of its log rows, so the raw path deliberately leaves it for
+	// here — the same split the trace listing makes. See toolUsageHTTPStatusPath.
+	for _, filter := range arg.Filters {
+		if filter.Path != toolUsageHTTPStatusPath || !validJSONPath.MatchString(filter.Path) {
+			continue
+		}
+		if pred := toolUsageStatusPredicate(filter); pred != nil {
+			sb = sb.Where(pred)
+		}
+	}
+
 	return sb, nil
+}
+
+// toolUsageSummaryOutcomePredicate narrows normalized_events to the requested
+// outcomes. It reads the per-trace classification columns the CTE projects
+// rather than re-deriving status from hook flags, which is what keeps it in
+// step with toolUsageOutcomePredicate over on the trace listing.
+func toolUsageSummaryOutcomePredicate(statuses []string) squirrel.Sqlizer {
+	or := squirrel.Or{}
+	for _, status := range statuses {
+		switch status {
+		case "blocked":
+			or = append(or, squirrel.Expr("blocked = 1"))
+		case "failure", "error":
+			or = append(or, squirrel.Expr("failure = 1"))
+		case "success":
+			or = append(or, squirrel.Expr("success = 1"))
+		case "pending":
+			or = append(or, squirrel.Expr("pending = 1"))
+		}
+	}
+	if len(or) == 0 {
+		return nil
+	}
+	return or
 }
 
 func toolUsageHostedMatcherArrays(matchers []HostedMCPMatcher) (toolsetSlugs []string, mcpSlugs []string, urlSuffixes []string) {
@@ -5322,6 +5604,8 @@ func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, 
 		"max(block_reason) AS g_block_reason",
 		"max(account_type) AS g_account_type",
 		"max(meta_mcp_server_id) AS g_meta_mcp_server_id",
+		"max(mcp_client_name) AS g_mcp_client_name",
+		"max(mcp_client_version) AS g_mcp_client_version",
 	).
 		From("(SELECT *, multiIf(has_block = 1, 3, has_error = 1, 2, has_result = 1, 1, 0) AS hook_status_rank FROM trace_summaries)").
 		Where("gram_project_id = ?", arg.GramProjectID).
@@ -5462,6 +5746,8 @@ func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, 
 		"'"+toolUsageUserKindUnknown+"'",
 	)
 	hookStatus := "if(g_event_source = 'hook', multiIf(g_hook_status_rank = 3, CAST('blocked' AS Nullable(String)), g_hook_status_rank = 2, CAST('failure' AS Nullable(String)), g_hook_status_rank = 1, CAST('success' AS Nullable(String)), CAST('pending' AS Nullable(String))), CAST(NULL AS Nullable(String)))"
+	clientKey := chMultiIf("g_mcp_client_name != ''", "lower(g_mcp_client_name)", "'"+MCPClientUnattributed+"'")
+	clientLabel := chMultiIf("g_mcp_client_name != ''", "g_mcp_client_name", "'"+MCPClientUnattributed+"'")
 
 	tracesSQL := fmt.Sprintf(`
 SELECT
@@ -5486,7 +5772,10 @@ SELECT
 	%s AS hook_status,
 	nullIf(g_block_reason, '') AS block_reason,
 	nullIf(g_account_type, '') AS account_type,
-	g_meta_mcp_server_id AS meta_mcp_server_id
+	g_meta_mcp_server_id AS meta_mcp_server_id,
+	%s AS client_key,
+	%s AS client_label,
+	nullIf(g_mcp_client_version, '') AS client_version
 FROM (%s)`,
 		toolName,
 		targetType,
@@ -5497,6 +5786,8 @@ FROM (%s)`,
 		userKey,
 		userKind,
 		hookStatus,
+		clientKey,
+		clientLabel,
 		sourceSQL,
 	)
 
@@ -5565,6 +5856,8 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 		"user_id",
 		"account_type",
 		"meta_mcp_server_id",
+		"mcp_client_name",
+		"mcp_client_version",
 		chAttr("gram.hook.source")+" AS hook_source",
 		chAttr("gen_ai.tool.call.result")+" AS tool_result",
 		chAttr("gram.hook.error")+" AS hook_error",
@@ -5784,7 +6077,9 @@ SELECT
 	if(event_source = 'hook', CAST(multiIf(block_reason != '', 3, hook_error != '', 2, tool_result != '', 1, 0) AS Nullable(UInt8)), CAST(NULL AS Nullable(UInt8))) AS hook_status_rank,
 	nullIf(block_reason, '') AS block_reason,
 	account_type,
-	meta_mcp_server_id
+	meta_mcp_server_id,
+	mcp_client_name,
+	mcp_client_version
 FROM (%s)`, logGroupKind, logGroupValue, chMultiIf(isSkillCall, skillLabel, resolvedToolName), targetType, targetKind, targetID, targetLabel, userKey, userKey, userKind, sourceSQL)
 
 	normalizedArgs := make([]any, 0, 7+len(sourceArgs))
@@ -5848,7 +6143,10 @@ normalized_traces AS (
 		) AS hook_status,
 		nullIf(anyIf(ifNull(block_reason, ''), ifNull(hook_status_rank, toUInt8(0)) = 3 AND ifNull(block_reason, '') != ''), '') AS block_reason,
 		nullIf(any(account_type), '') AS account_type,
-		max(meta_mcp_server_id) AS meta_mcp_server_id
+		max(meta_mcp_server_id) AS meta_mcp_server_id,
+		if(max(mcp_client_name) != '', lower(max(mcp_client_name)), '` + MCPClientUnattributed + `') AS client_key,
+		if(max(mcp_client_name) != '', max(mcp_client_name), '` + MCPClientUnattributed + `') AS client_label,
+		nullIf(max(mcp_client_version), '') AS client_version
 	FROM raw_normalized_events
 	GROUP BY log_group_kind, log_group_value, target_type, target_kind, target_id, target_label, tool_name, user_kind, user_key, user_label
 )`
@@ -5856,7 +6154,88 @@ normalized_traces AS (
 	return traceSQL, normalizedArgs, nil
 }
 
+// toolUsageRawNormalizedEventsCTE answers the summary from the same raw-log
+// scan the trace listing falls back to, so a free-text search or an attribute
+// chip narrows the cards and the timeline exactly as it narrows the rows.
+//
+// It reuses the listing's own CTE rather than restating the classification:
+// the two must agree about what a trace is and which outcome it had, and one
+// place to derive that is the only way to keep them agreeing.
+func toolUsageRawNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any, error) {
+	traceSQL, traceArgs, err := toolUsageTraceRowsCTE(ListToolUsageTracesParams{
+		GramProjectID:      arg.GramProjectID,
+		TimeStart:          arg.TimeStart,
+		TimeEnd:            arg.TimeEnd,
+		HostedMCPMatchers:  arg.HostedMCPMatchers,
+		MCPServerMatchers:  arg.MCPServerMatchers,
+		MetaMCPMatchers:    arg.MetaMCPMatchers,
+		TargetTypes:        nil,
+		HostedToolsetSlugs: nil,
+		ShadowServerNames:  nil,
+		MetaMCPServerIDs:   nil,
+		UserFilters:        nil,
+		HookSources:        nil,
+		ClientKeys:         nil,
+		AccountType:        "",
+		Statuses:           nil,
+		Query:              arg.Query,
+		Filters:            arg.Filters,
+		SortOrder:          "",
+		CursorTimeUnixNano: 0,
+		CursorID:           "",
+		Limit:              0,
+		// Every other narrowing stays with toolUsageFilteredSelect, which
+		// applies it to the projection below. Passing it twice would filter the
+		// same rows in two places and drift the moment one changes.
+	})
+	if err != nil {
+		return "", nil, err
+	}
+
+	// The outcome columns the summary aggregates over, derived from the same
+	// hook status and HTTP status the listing classifies by.
+	blocked := "toUInt8(ifNull(hook_status, '') = 'blocked')"
+	failure := "toUInt8(ifNull(hook_status, '') = 'failure' OR (hook_status IS NULL AND ifNull(http_status_code, 0) >= 400))"
+	success := "toUInt8(ifNull(hook_status, '') = 'success' OR (hook_status IS NULL AND ifNull(http_status_code, 0) >= 200 AND ifNull(http_status_code, 0) < 400))"
+	pending := "toUInt8(ifNull(hook_status, '') = 'pending')"
+
+	projection := fmt.Sprintf(`
+SELECT
+	start_time_unix_nano AS event_time_ns,
+	target_type,
+	target_kind,
+	target_id,
+	target_label,
+	tool_name,
+	user_key,
+	user_label,
+	user_kind,
+	%s AS success,
+	%s AS failure,
+	%s AS blocked,
+	%s AS pending,
+	ifNull(hook_source, '') AS hook_source,
+	-- Carried so an http.response.status_code chip can be applied over the
+	-- trace, the way the listing applies it.
+	http_status_code,
+	ifNull(account_type, '') AS account_type,
+	meta_mcp_server_id,
+	client_key,
+	client_label,
+	ifNull(client_version, '') AS client_version
+FROM normalized_traces`, success, failure, blocked, pending)
+
+	return traceSQL + ",\nnormalized_events AS (" + projection + ")", traceArgs, nil
+}
+
 func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any, error) {
+	// A free-text query or an attribute chip cannot be answered from the
+	// pre-aggregated view, which carries neither. Those fall through to the raw
+	// scan, exactly as the trace listing does.
+	if arg.Query != "" || len(arg.Filters) > 0 {
+		return toolUsageRawNormalizedEventsCTE(arg)
+	}
+
 	// Served from the trace_summaries materialized view (one row per trace) instead
 	// of scanning raw telemetry_logs. Tool calls carry a real trace_id (recorded by
 	// the gateway in ToolProxy.Do), so hosted MCP, shadow MCP, skill, and local tool
@@ -5878,6 +6257,15 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 	)
 	userKey := chFirstNonEmpty("g_user_email", "g_external_user_id", "g_user_id", "'Unknown'")
 
+	// The MCP client is self-reported at the initialize handshake, so it is only
+	// present on traffic Gram terminated as an MCP server. Hook-observed calls,
+	// pre-handshake sessions and non-MCP tool calls fold into one bucket rather
+	// than borrowing hook_source, which names a harness that never spoke MCP.
+	// Grouping folds case so "Claude Code" and "claude code" are one client; the
+	// version rides along for display and is never part of a group key.
+	clientKey := chMultiIf("g_mcp_client_name != ''", "lower(g_mcp_client_name)", "'"+MCPClientUnattributed+"'")
+	clientLabel := chMultiIf("g_mcp_client_name != ''", "g_mcp_client_name", "'"+MCPClientUnattributed+"'")
+
 	directGroupedSB := sq.Select(
 		"min(start_time_unix_nano) AS event_time_ns",
 		"max(toolset_slug) AS g_toolset_slug",
@@ -5890,6 +6278,8 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 		"ifNull(anyIfMerge(http_status_code), 0) AS g_http_status_code",
 		"max(account_type) AS g_account_type",
 		"max(meta_mcp_server_id) AS g_meta_mcp_server_id",
+		"max(mcp_client_name) AS g_mcp_client_name",
+		"max(mcp_client_version) AS g_mcp_client_version",
 	).
 		From("trace_summaries").
 		Where("gram_project_id = ?", arg.GramProjectID).
@@ -5914,8 +6304,11 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 		"any(hook_source) AS g_hook_source",
 		"max(has_result) AS g_has_result",
 		"max(has_error) AS g_has_error",
+		"max(has_block) AS g_has_block",
 		"max(account_type) AS g_account_type",
 		"max(meta_mcp_server_id) AS g_meta_mcp_server_id",
+		"max(mcp_client_name) AS g_mcp_client_name",
+		"max(mcp_client_version) AS g_mcp_client_version",
 	).
 		From("trace_summaries").
 		Where("gram_project_id = ?", arg.GramProjectID).
@@ -5993,9 +6386,14 @@ SELECT
 	%s AS user_kind,
 	toUInt8(g_http_status_code >= 200 AND g_http_status_code < 400) AS success,
 	toUInt8(g_http_status_code >= 400) AS failure,
+	toUInt8(0) AS blocked,
+	toUInt8(0) AS pending,
 	'' AS hook_source,
 	g_account_type AS account_type,
-	g_meta_mcp_server_id AS meta_mcp_server_id
+	g_meta_mcp_server_id AS meta_mcp_server_id,
+	%s AS client_key,
+	%s AS client_label,
+	g_mcp_client_version AS client_version
 FROM (%s)`,
 		directTargetType,
 		toolUsageTargetKindServer,
@@ -6005,6 +6403,8 @@ FROM (%s)`,
 		userKey,
 		userKey,
 		userKind,
+		clientKey,
+		clientLabel,
 		directSourceSQL,
 	)
 
@@ -6119,12 +6519,17 @@ SELECT
 	%s AS user_key,
 	%s AS user_label,
 	%s AS user_kind,
-	toUInt8(g_has_result = 1 AND g_has_error = 0) AS success,
-	toUInt8(g_has_error = 1) AS failure,
+	toUInt8(g_has_block = 0 AND g_has_error = 0 AND g_has_result = 1) AS success,
+	toUInt8(g_has_block = 0 AND g_has_error = 1) AS failure,
+	toUInt8(g_has_block = 1) AS blocked,
+	toUInt8(g_has_block = 0 AND g_has_error = 0 AND g_has_result = 0) AS pending,
 	g_hook_source AS hook_source,
 	g_account_type AS account_type,
-	g_meta_mcp_server_id AS meta_mcp_server_id
-FROM (%s)`, hookTargetType, hookTargetKind, hookTargetID, hookTargetLabel, hookToolName, userKey, userKey, userKind, hookSourceSQL)
+	g_meta_mcp_server_id AS meta_mcp_server_id,
+	%s AS client_key,
+	%s AS client_label,
+	g_mcp_client_version AS client_version
+FROM (%s)`, hookTargetType, hookTargetKind, hookTargetID, hookTargetLabel, hookToolName, userKey, userKey, userKind, clientKey, clientLabel, hookSourceSQL)
 
 	directArgs := make([]any, 0, 3+len(directSourceArgs))
 	if len(mcpSourceIDs) > 0 {

@@ -1,5 +1,11 @@
 # admin
 
+## 0.4.3
+
+### Patch Changes
+
+- 6f6ab02: Replace the admin trial extension action with Change end date. Operators can shorten or extend a running trial to any future UTC calendar date, with an audit record of the previous and new end dates. New and restarted trials still default to fourteen days.
+
 ## Unreleased
 
 ### Minor Changes

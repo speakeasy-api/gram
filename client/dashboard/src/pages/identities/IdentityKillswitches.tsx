@@ -26,7 +26,7 @@ import { Button } from "@/components/ui/Button";
 import { useSession } from "@/contexts/Auth";
 import { useKillswitchAccess } from "@/hooks/useKillswitchAccess";
 import { capitalize } from "@/lib/utils";
-import { useOrgRoutes } from "@/routes";
+import { useRoutes } from "@/routes";
 import type { IdentityModel } from "@gram/client/models/components/identitymodel.js";
 import type { KillswitchSummary } from "@gram/client/models/components/killswitchsummary.js";
 import { useCreateKillswitchMutation } from "@gram/client/react-query/createKillswitch.js";
@@ -105,7 +105,7 @@ function IdentityKillswitchesPanel({
 }): JSX.Element {
   const session = useSession();
   const security = { sessionHeaderGramSession: session.session };
-  const orgRoutes = useOrgRoutes();
+  const routes = useRoutes();
   const queryClient = useQueryClient();
   const [params, setParams] = useSearchParams();
   const [requestOpen, setRequestOpen] = useState(false);
@@ -400,7 +400,7 @@ function IdentityKillswitchesPanel({
             onSubmit={create}
             onView={openRecord}
             mcpSessionsHref={(id) =>
-              mcpSessionsUserHref(orgRoutes.mcpSessions.href(), id)
+              mcpSessionsUserHref(routes.mcpSessions.href(), id)
             }
           />
         </Suspense>

@@ -68,8 +68,8 @@ var File_gram_metering_v1_meter_reading_stripe_exporter_proto protoreflect.FileD
 
 const file_gram_metering_v1_meter_reading_stripe_exporter_proto_rawDesc = "" +
 	"\n" +
-	"4gram/metering/v1/meter_reading_stripe_exporter.proto\x12\x10gram.metering.v1\x1a\x1bgcp/pubsub/v1/options.proto\"Y\n" +
-	"\x1aMeterReadingStripeExporter:;\x92\xb5\x187\x12\x05\b\x80\xbd\xa3\x01\x18\x01\"\x02\b<2\t\n" +
+	"4gram/metering/v1/meter_reading_stripe_exporter.proto\x12\x10gram.metering.v1\x1a\x1bgcp/pubsub/v1/options.proto\"X\n" +
+	"\x1aMeterReadingStripeExporter::\x92\xb5\x186\x12\x04\b\x80\x8c\x15\x18\x01\"\x02\b<2\t\n" +
 	"\x02\b\n" +
 	"\x12\x03\b\xd8\x04R\x1dgram.metering.v1.MeterReadingBEZCgithub.com/speakeasy-api/gram/infra/gen/gram/metering/v1;meteringv1b\beditionsp\xe9\a"
 

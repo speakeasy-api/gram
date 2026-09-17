@@ -5,13 +5,37 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  TrustedClientUserSessionIssuerReference,
+  TrustedClientUserSessionIssuerReference$inboundSchema,
+} from "./trustedclientusersessionissuerreference.js";
 
 /**
- * Authoritative impact summary for deleting a remote_session_client: how many sessions it holds and the names of the MCP servers it is attached to.
+ * Stable reason deletion is blocked. Present when can_delete is false.
+ */
+export const BlockingReason = {
+  IdentityProviderLogin: "identity_provider_login",
+} as const;
+/**
+ * Stable reason deletion is blocked. Present when can_delete is false.
+ */
+export type BlockingReason = ClosedEnum<typeof BlockingReason>;
+
+/**
+ * Authoritative impact summary for deleting a remote_session_client, including identity-provider login references that block deletion.
  */
 export type OrganizationClientDeletePreflight = {
+  /**
+   * Stable reason deletion is blocked. Present when can_delete is false.
+   */
+  blockingReason?: BlockingReason | undefined;
+  /**
+   * Whether the client can be deleted now.
+   */
+  canDelete: boolean;
   /**
    * Display names of MCP servers this client is attached to.
    */
@@ -20,7 +44,16 @@ export type OrganizationClientDeletePreflight = {
    * Number of non-deleted remote_sessions minted against this client.
    */
   sessionCount: number;
+  /**
+   * Organization-owned user-session issuers that use this client for identity-provider login and block deletion.
+   */
+  trustedUserSessionIssuers: Array<TrustedClientUserSessionIssuerReference>;
 };
+
+/** @internal */
+export const BlockingReason$inboundSchema: z.ZodMiniEnum<
+  typeof BlockingReason
+> = z.enum(BlockingReason);
 
 /** @internal */
 export const OrganizationClientDeletePreflight$inboundSchema: z.ZodMiniType<
@@ -28,13 +61,21 @@ export const OrganizationClientDeletePreflight$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    blocking_reason: z.optional(BlockingReason$inboundSchema),
+    can_delete: z.boolean(),
     mcp_server_names: z.array(z.string()),
     session_count: z.int(),
+    trusted_user_session_issuers: z.array(
+      TrustedClientUserSessionIssuerReference$inboundSchema,
+    ),
   }),
   z.transform((v) => {
     return remap$(v, {
+      "blocking_reason": "blockingReason",
+      "can_delete": "canDelete",
       "mcp_server_names": "mcpServerNames",
       "session_count": "sessionCount",
+      "trusted_user_session_issuers": "trustedUserSessionIssuers",
     });
   }),
 );

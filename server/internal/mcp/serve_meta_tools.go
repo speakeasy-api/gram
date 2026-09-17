@@ -462,6 +462,7 @@ func (s *Service) buildMemberDispatch(
 		wrapperRBACResourceID:    "",
 		wrapperIsPublic:          nil,
 		metaMcpServerID:          gate.metaServerID.String(),
+		clientInfoScope:          metaClientInfoScope(gate.metaServerID),
 		skipProxyTools:           true,
 		tags:                     nil,
 		protocolVersion:          gate.protocolVersion,

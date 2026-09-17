@@ -2486,11 +2486,11 @@ paths:
             operationId: adminListOrganizations
             parameters:
                 - allowEmptyValue: true
-                  description: Search term, trimmed of surrounding whitespace. Matches name and slug as a case-insensitive substring, with % and _ taken literally, and matches organization id and WorkOS id exactly, ignoring case. An id match also returns an organization that disabled_states or include_disabled would otherwise hide; it still respects account_type, account_types, trial_states and cursor.
+                  description: Search term, trimmed of surrounding whitespace. Matches name and slug as a case-insensitive substring, with % and _ taken literally, and matches organization id and WorkOS id exactly, ignoring case. All filters apply even to exact ID matches.
                   in: query
                   name: q
                   schema:
-                    description: Search term, trimmed of surrounding whitespace. Matches name and slug as a case-insensitive substring, with % and _ taken literally, and matches organization id and WorkOS id exactly, ignoring case. An id match also returns an organization that disabled_states or include_disabled would otherwise hide; it still respects account_type, account_types, trial_states and cursor.
+                    description: Search term, trimmed of surrounding whitespace. Matches name and slug as a case-insensitive substring, with % and _ taken literally, and matches organization id and WorkOS id exactly, ignoring case. All filters apply even to exact ID matches.
                     type: string
                 - allowEmptyValue: true
                   description: Filter by a single gram_account_type (e.g. free, pro, payg, enterprise). Superseded by account_types, which it joins as one more member of the same set.
@@ -2518,21 +2518,48 @@ paths:
                         type: string
                     type: array
                 - allowEmptyValue: true
-                  description: Match any of active or disabled. Empty falls back to include_disabled. An unrecognised value matches nothing rather than failing the request.
+                  description: 'Organization status: all (default), active (disabled_at IS NULL), or disabled (disabled_at IS NOT NULL). Applies even to exact ID matches.'
                   in: query
-                  name: disabled_states
+                  name: disabled_status
                   schema:
-                    description: Match any of active or disabled. Empty falls back to include_disabled. An unrecognised value matches nothing rather than failing the request.
-                    items:
-                        type: string
-                    type: array
+                    description: 'Organization status: all (default), active (disabled_at IS NULL), or disabled (disabled_at IS NOT NULL). Applies even to exact ID matches.'
+                    enum:
+                        - all
+                        - active
+                        - disabled
+                    type: string
                 - allowEmptyValue: true
-                  description: Include organizations with disabled_at set. Defaults to false. Superseded by disabled_states, which overrides it outright when supplied.
+                  description: Inclusive minimum active member count, from 0 through 9223372036854775807. The generated TypeScript SDK accepts bigint. The handwritten admin client accepts safe integers or decimal strings; use decimal strings above Number.MAX_SAFE_INTEGER.
                   in: query
-                  name: include_disabled
+                  name: min_members
                   schema:
-                    description: Include organizations with disabled_at set. Defaults to false. Superseded by disabled_states, which overrides it outright when supplied.
-                    type: boolean
+                    description: Inclusive minimum active member count, from 0 through 9223372036854775807. The generated TypeScript SDK accepts bigint. The handwritten admin client accepts safe integers or decimal strings; use decimal strings above Number.MAX_SAFE_INTEGER.
+                    format: int64
+                    minimum: 0
+                    type: integer
+                - allowEmptyValue: true
+                  description: Inclusive maximum active member count, from 0 through 9223372036854775807. Must be at least min_members. The generated TypeScript SDK accepts bigint. The handwritten admin client accepts safe integers or decimal strings; use decimal strings above Number.MAX_SAFE_INTEGER.
+                  in: query
+                  name: max_members
+                  schema:
+                    description: Inclusive maximum active member count, from 0 through 9223372036854775807. Must be at least min_members. The generated TypeScript SDK accepts bigint. The handwritten admin client accepts safe integers or decimal strings; use decimal strings above Number.MAX_SAFE_INTEGER.
+                    format: int64
+                    minimum: 0
+                    type: integer
+                - allowEmptyValue: true
+                  description: Inclusive creation date in strict YYYY-MM-DD UTC calendar format. Each date bound is optional; must not be after created_to.
+                  in: query
+                  name: created_from
+                  schema:
+                    description: Inclusive creation date in strict YYYY-MM-DD UTC calendar format. Each date bound is optional; must not be after created_to.
+                    type: string
+                - allowEmptyValue: true
+                  description: Inclusive creation date in strict YYYY-MM-DD UTC calendar format. Includes the entire UTC day, implemented as an exclusive bound at the following midnight.
+                  in: query
+                  name: created_to
+                  schema:
+                    description: Inclusive creation date in strict YYYY-MM-DD UTC calendar format. Includes the entire UTC day, implemented as an exclusive bound at the following midnight.
+                    type: string
                 - allowEmptyValue: true
                   description: 'Pagination cursor: id of the last item from the previous page in created_at descending, id ascending order. The anchor is resolved regardless of filters; a deleted or unknown id returns an empty page. Ignored when sort or page is supplied.'
                   in: query
@@ -36286,7 +36313,7 @@ paths:
                 name: OrganizationRemoteSessionClient
     /rpc/organizationRemoteSessionClients.getDeletePreflight:
         get:
-            description: 'Authoritative impact summary for deleting a remote_session_client: associated session count and affected MCP server names. Requires org:read.'
+            description: 'Authoritative impact summary for deleting a remote_session_client: associated session count, affected MCP server names, and trusted identity-provider login references that must be explicitly unlinked before deletion. Requires org:read.'
             operationId: getOrganizationRemoteSessionClientDeletePreflight
             parameters:
                 - allowEmptyValue: true
@@ -59800,6 +59827,216 @@ paths:
             x-speakeasy-react-hook:
                 name: GetProjectOverview
                 type: query
+    /rpc/telemetry.getToolUsageClientToolBreakdown:
+        post:
+            description: Get per-tool MCP and tool usage grouped by MCP client
+            operationId: getToolUsageClientToolBreakdown
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/GetToolUsageSummaryPayload'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetToolUsageClientToolBreakdownResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getToolUsageClientToolBreakdown telemetry
+            tags:
+                - telemetry
+            x-speakeasy-name-override: getToolUsageClientToolBreakdown
+            x-speakeasy-react-hook:
+                name: GetToolUsageClientToolBreakdown
+                type: query
+    /rpc/telemetry.getToolUsageClients:
+        post:
+            description: Get top MCP clients by tool usage
+            operationId: getToolUsageClients
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/GetToolUsageSummaryPayload'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetToolUsageClientsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getToolUsageClients telemetry
+            tags:
+                - telemetry
+            x-speakeasy-name-override: getToolUsageClients
+            x-speakeasy-react-hook:
+                name: GetToolUsageClients
+                type: query
     /rpc/telemetry.getToolUsageFilterOptions:
         post:
             description: Get filter options for target-aware MCP and tool usage metrics
@@ -76222,6 +76459,10 @@ components:
                 slug:
                     type: string
                     description: Issuer slug. Unique for project-owned issuers; organization-owned issuer slugs may repeat.
+                trusted_remote_session_client_id:
+                    type: string
+                    description: Organization-level remote_session_client Gram uses with the trusted issuer. Must be supplied together with trusted_remote_session_issuer_id.
+                    format: uuid
                 trusted_remote_session_issuer_id:
                     type: string
                     description: Organization-level or global remote_session_issuer whose assertions this issuer trusts. Omit to leave enterprise-managed authorization disabled.
@@ -80567,6 +80808,28 @@ components:
                 - drift
                 - assistant_count
                 - prompt_injection_findings
+        GetToolUsageClientToolBreakdownResult:
+            type: object
+            properties:
+                client_tool_breakdown:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ToolUsageClientToolBreakdownRow'
+                    description: Per-tool usage rows grouped by MCP client
+            description: Per-tool MCP and tool usage grouped by MCP client
+            required:
+                - client_tool_breakdown
+        GetToolUsageClientsResult:
+            type: object
+            properties:
+                clients:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ToolUsageClientSummary'
+                    description: Top MCP clients for the selected filters and time range
+            description: Top MCP clients for the selected filters and time range
+            required:
+                - clients
         GetToolUsageFilterOptionsPayload:
             type: object
             properties:
@@ -80585,6 +80848,7 @@ components:
                             - shadow_servers
                             - gateways
                             - users
+                            - clients
                     description: Filter option types to include. Empty means all option types.
                 to:
                     type: string
@@ -80598,6 +80862,11 @@ components:
         GetToolUsageFilterOptionsResult:
             type: object
             properties:
+                clients:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ToolUsageClientFilterOption'
+                    description: MCP clients with usage in the selected time range
                 gateways:
                     type: array
                     items:
@@ -80624,12 +80893,23 @@ components:
                 - shadow_servers
                 - gateways
                 - users
+                - clients
         GetToolUsageSummaryPayload:
             type: object
             properties:
                 account_type:
                     type: string
                     description: Optional account type filter ('team' or 'personal').
+                client_keys:
+                    type: array
+                    items:
+                        type: string
+                    description: MCP client keys (lowercased self-reported client names; 'unattributed' selects calls Gram never saw an initialize handshake for) to include
+                filters:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/LogFilter'
+                    description: Arbitrary attribute filter conditions from the af URL param
                 from:
                     type: string
                     description: Start time in ISO 8601 format
@@ -80650,11 +80930,25 @@ components:
                     items:
                         type: string
                     description: 'Gateway (meta MCP server) ids to include: calls dispatched through the gateway to its members plus calls observed against the gateway itself'
+                query:
+                    type: string
+                    description: Free-text attribute search string from the q URL param, applied as the trace listing applies it.
                 shadow_server_names:
                     type: array
                     items:
                         type: string
                     description: Shadow MCP server names to include
+                statuses:
+                    type: array
+                    items:
+                        type: string
+                        description: Tool usage trace outcome
+                        enum:
+                            - error
+                            - success
+                            - blocked
+                            - pending
+                    description: Trace outcomes to include (error, success, blocked, pending). Empty means all.
                 target_types:
                     type: array
                     items:
@@ -80685,6 +80979,16 @@ components:
         GetToolUsageSummaryResult:
             type: object
             properties:
+                client_tool_breakdown:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ToolUsageClientToolBreakdownRow'
+                    description: Per-tool usage rows grouped by MCP client
+                clients:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ToolUsageClientSummary'
+                    description: Top MCP clients for the selected filters and time range
                 target_time_series:
                     type: array
                     items:
@@ -80726,6 +81030,8 @@ components:
                 - user_time_series
                 - users_by_target
                 - target_tool_breakdown
+                - clients
+                - client_tool_breakdown
         GetToolUsageTargetTimeSeriesResult:
             type: object
             properties:
@@ -84282,6 +84588,11 @@ components:
                 account_type:
                     type: string
                     description: Optional account type filter ('team' or 'personal'). 'team' includes unclassified traces.
+                client_keys:
+                    type: array
+                    items:
+                        type: string
+                    description: MCP client keys (lowercased self-reported client names; 'unattributed' selects calls Gram never saw an initialize handshake for) to include
                 cursor:
                     type: string
                     description: Cursor for pagination
@@ -86389,6 +86700,14 @@ components:
         OrganizationClientDeletePreflight:
             type: object
             properties:
+                blocking_reason:
+                    type: string
+                    description: Stable reason deletion is blocked. Present when can_delete is false.
+                    enum:
+                        - identity_provider_login
+                can_delete:
+                    type: boolean
+                    description: Whether the client can be deleted now.
                 mcp_server_names:
                     type: array
                     items:
@@ -86398,10 +86717,17 @@ components:
                     type: integer
                     description: Number of non-deleted remote_sessions minted against this client.
                     format: int64
-            description: 'Authoritative impact summary for deleting a remote_session_client: how many sessions it holds and the names of the MCP servers it is attached to.'
+                trusted_user_session_issuers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/TrustedClientUserSessionIssuerReference'
+                    description: Organization-owned user-session issuers that use this client for identity-provider login and block deletion.
+            description: Authoritative impact summary for deleting a remote_session_client, including identity-provider login references that block deletion.
             required:
                 - session_count
                 - mcp_server_names
+                - trusted_user_session_issuers
+                - can_delete
         OrganizationEntry:
             type: object
             properties:
@@ -95623,6 +95949,99 @@ components:
                 - count
                 - success_count
                 - failure_count
+        ToolUsageClientFilterOption:
+            type: object
+            properties:
+                client_key:
+                    type: string
+                    description: Stable MCP client identity used by filters
+                client_label:
+                    type: string
+                    description: User-facing label for the MCP client
+                event_count:
+                    type: integer
+                    description: Number of tool usage events observed for the MCP client
+                    format: int64
+            description: MCP client filter option with usage in the selected time window
+            required:
+                - client_key
+                - client_label
+                - event_count
+        ToolUsageClientSummary:
+            type: object
+            properties:
+                client_key:
+                    type: string
+                    description: Stable MCP client identity used by filters and chart grouping
+                client_label:
+                    type: string
+                    description: User-facing label for the MCP client
+                event_count:
+                    type: integer
+                    description: Total number of tool usage events for the MCP client
+                    format: int64
+                failure_count:
+                    type: integer
+                    description: Number of failed tool usage events for the MCP client
+                    format: int64
+                failure_rate:
+                    type: number
+                    description: Fraction of completed tool usage events for the MCP client that failed
+                    format: double
+                success_count:
+                    type: integer
+                    description: Number of successful tool usage events for the MCP client
+                    format: int64
+                unique_tools:
+                    type: integer
+                    description: Number of distinct tools observed for the MCP client
+                    format: int64
+            description: Aggregated tool usage metrics for one MCP client
+            required:
+                - client_key
+                - client_label
+                - event_count
+                - unique_tools
+                - success_count
+                - failure_count
+                - failure_rate
+        ToolUsageClientToolBreakdownRow:
+            type: object
+            properties:
+                client_key:
+                    type: string
+                    description: Stable MCP client identity used by filters and chart grouping
+                client_label:
+                    type: string
+                    description: User-facing label for the MCP client
+                event_count:
+                    type: integer
+                    description: Total number of tool usage events for the MCP client and tool
+                    format: int64
+                failure_count:
+                    type: integer
+                    description: Number of failed tool usage events for the MCP client and tool
+                    format: int64
+                failure_rate:
+                    type: number
+                    description: Fraction of completed tool usage events for the MCP client and tool that failed
+                    format: double
+                success_count:
+                    type: integer
+                    description: Number of successful tool usage events for the MCP client and tool
+                    format: int64
+                tool_name:
+                    type: string
+                    description: Observed tool name
+            description: Aggregated tool usage metrics for one MCP client and tool
+            required:
+                - client_key
+                - client_label
+                - tool_name
+                - event_count
+                - success_count
+                - failure_count
+                - failure_rate
         ToolUsageGatewayFilterOption:
             type: object
             properties:
@@ -95733,6 +96152,10 @@ components:
         ToolUsageTargetTimeSeriesPoint:
             type: object
             properties:
+                blocked_count:
+                    type: integer
+                    description: Number of tool usage events denied by a hook in the bucket
+                    format: int64
                 bucket_start_ns:
                     type: string
                     description: Bucket start time in Unix nanoseconds as a string for JavaScript integer safety
@@ -95743,6 +96166,10 @@ components:
                 failure_count:
                     type: integer
                     description: Number of failed tool usage events in the bucket
+                    format: int64
+                pending_count:
+                    type: integer
+                    description: Number of tool usage events observed starting but never finishing in the bucket
                     format: int64
                 target_id:
                     type: string
@@ -95776,6 +96203,8 @@ components:
                 - target_label
                 - event_count
                 - failure_count
+                - blocked_count
+                - pending_count
         ToolUsageTargetToolBreakdownRow:
             type: object
             properties:
@@ -95835,6 +96264,14 @@ components:
         ToolUsageTotals:
             type: object
             properties:
+                blocked_count:
+                    type: integer
+                    description: Number of tool usage events a policy denied
+                    format: int64
+                blocked_rate:
+                    type: number
+                    description: Fraction of all tool usage events a policy denied
+                    format: double
                 event_count:
                     type: integer
                     description: Total number of tool usage events
@@ -95869,6 +96306,8 @@ components:
                 - success_count
                 - failure_count
                 - failure_rate
+                - blocked_count
+                - blocked_rate
                 - unique_tools
                 - unique_users
                 - unique_targets
@@ -95899,6 +96338,15 @@ components:
                 block_reason:
                     type: string
                     description: Hook block reason when hook_status is blocked
+                client_key:
+                    type: string
+                    description: Stable MCP client identity used by filters; 'unattributed' when the caller never reported one
+                client_label:
+                    type: string
+                    description: User-facing MCP client label as the client reported it
+                client_version:
+                    type: string
+                    description: MCP client version when the client reported one alongside its name
                 event_source:
                     type: string
                     description: Telemetry event source
@@ -95997,6 +96445,8 @@ components:
                 - user_label
                 - user_kind
                 - event_source
+                - client_key
+                - client_label
         ToolUsageUserFilter:
             type: object
             properties:
@@ -96865,6 +97315,20 @@ components:
                     format: uuid
             required:
                 - id
+        TrustedClientUserSessionIssuerReference:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The user_session_issuer id.
+                    format: uuid
+                slug:
+                    type: string
+                    description: The user_session_issuer slug.
+            description: An organization-owned user-session issuer that uses this client for identity-provider login.
+            required:
+                - id
+                - slug
         TrustedUserSessionIssuerReference:
             type: object
             properties:
@@ -98097,6 +98561,9 @@ components:
                 slug:
                     type: string
                     description: Rename the slug.
+                trusted_remote_session_client_id:
+                    type: string
+                    description: Organization-level remote_session_client Gram uses with the trusted issuer. Omit to leave unchanged; pass an empty string to clear the link. The resulting issuer and client must either both be configured or both be absent.
                 trusted_remote_session_issuer_id:
                     type: string
                     description: Organization-level or global remote_session_issuer whose assertions this issuer trusts. Omit to leave unchanged; pass an empty string to clear the link.
@@ -99552,10 +100019,10 @@ components:
                     description: Avatar URL for the subject when it resolves to a Gram user with one. Null for API key and anonymous subjects, and for users who have no photo.
                 subject_type:
                     type: string
-                    description: 'Subject kind: ''user'', ''apikey'', or ''anonymous''.'
+                    description: 'Subject kind: ''user'', ''apikey'', ''anonymous'', or ''workload''.'
                 subject_urn:
                     type: string
-                    description: The session's subject URN (user:<id> | apikey:<uuid> | anonymous:<mcp-session-id>).
+                    description: The session's subject URN (user:<id> | apikey:<uuid> | anonymous:<mcp-session-id> | workload:<issuer-id>:<external-subject>).
                 updated_at:
                     type: string
                     format: date-time
@@ -99747,6 +100214,10 @@ components:
                 slug:
                     type: string
                     description: Issuer slug. Unique for project-owned issuers; organization-owned issuer slugs may repeat.
+                trusted_remote_session_client_id:
+                    type: string
+                    description: The organization-level remote_session_client Gram uses with the trusted issuer. Absent when enterprise-managed authorization is disabled.
+                    format: uuid
                 trusted_remote_session_issuer_id:
                     type: string
                     description: The organization-level or global remote_session_issuer whose assertions this issuer trusts. Absent when enterprise-managed authorization is disabled.

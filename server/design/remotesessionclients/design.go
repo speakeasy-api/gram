@@ -432,7 +432,7 @@ var _ = Service("organizationRemoteSessionClients", func() {
 	})
 
 	Method("getClientDeletePreflight", func() {
-		Description("Authoritative impact summary for deleting a remote_session_client: associated session count and affected MCP server names. Requires org:read.")
+		Description("Authoritative impact summary for deleting a remote_session_client: associated session count, affected MCP server names, and trusted identity-provider login references that must be explicitly unlinked before deletion. Requires org:read.")
 
 		Payload(func() {
 			Attribute("id", String, "The remote_session_client id.", func() {
