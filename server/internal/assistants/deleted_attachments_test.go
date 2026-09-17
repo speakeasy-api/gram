@@ -18,6 +18,7 @@ import (
 )
 
 func TestServiceLegacyDeletedAttachments(t *testing.T) {
+	t.Parallel()
 	for _, kind := range []string{"toolset", "mcp_server"} {
 		t.Run(kind, func(t *testing.T) {
 			t.Parallel()
@@ -55,9 +56,9 @@ func TestServiceLegacyDeletedAttachments(t *testing.T) {
 
 			// Reproduce attachments left behind by historical soft deletions.
 			if kind == "toolset" {
-				_, err = conn.Exec(ctx, "UPDATE toolsets SET deleted_at = clock_timestamp() WHERE id = $1", targetID)
+				_, err = toolsetsrepo.New(conn).DeleteToolset(ctx, toolsetsrepo.DeleteToolsetParams{Slug: ts.Slug, ProjectID: projectID})
 			} else {
-				_, err = conn.Exec(ctx, "UPDATE mcp_servers SET deleted_at = clock_timestamp() WHERE id = $1", targetID)
+				_, err = mcpserversrepo.New(conn).DeleteMCPServer(ctx, mcpserversrepo.DeleteMCPServerParams{ID: targetID, ProjectID: projectID})
 			}
 			require.NoError(t, err)
 

@@ -1,15 +1,17 @@
 package mcpservers_test
 
 import (
-	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_servers"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/assistants"
+	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -20,7 +22,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -413,9 +417,41 @@ func TestDeleteMcpServer_DetachesFromAssistants(t *testing.T) {
 	ctx, ti := newTestService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	var assistantID string
-	err := ti.conn.QueryRow(ctx, `INSERT INTO assistants (project_id, organization_id, name, model, instructions) VALUES ($1, $2, 'attachment test assistant', 'test-model', '') RETURNING id`, *authCtx.ProjectID, authCtx.ActiveOrganizationID).Scan(&assistantID)
+	ar := assistantsrepo.New(ti.conn)
+	assistant, err := ar.CreateAssistant(ctx, assistantsrepo.CreateAssistantParams{
+		ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID,
+		Name: "attachment test assistant", Model: "test-model", Status: "active", MaxConcurrency: 1,
+	})
 	require.NoError(t, err)
+	otherProject, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name: "Other project", Slug: "other-project", OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+	otherAssistant, err := ar.CreateAssistant(ctx, assistantsrepo.CreateAssistantParams{
+		ProjectID: otherProject.ID, OrganizationID: authCtx.ActiveOrganizationID,
+		Name: "other assistant", Model: "test-model", Status: "active", MaxConcurrency: 1,
+	})
+	require.NoError(t, err)
+	otherBackendID := seedRemoteMcpServer(t, ctx, ti.conn, otherProject.ID)
+	otherTarget, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID: uuid.New(), ProjectID: otherProject.ID,
+		Name: pgtype.Text{String: "Other server", Valid: true}, Slug: pgtype.Text{String: "other-server", Valid: true},
+		RemoteMcpServerID: uuid.NullUUID{UUID: otherBackendID, Valid: true}, Visibility: "private",
+	})
+	require.NoError(t, err)
+	_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID: otherProject.ID, McpServerID: uuid.NullUUID{UUID: otherTarget.ID, Valid: true}, Slug: "other-server-endpoint",
+	})
+	require.NoError(t, err)
+	_, err = ar.AddAssistantMcpServers(ctx, []assistantsrepo.AddAssistantMcpServersParams{{
+		AssistantID: otherAssistant.ID, McpServerID: otherTarget.ID, ProjectID: otherProject.ID,
+	}})
+	require.NoError(t, err)
+	otherBefore, err := ar.LoadAssistantMcpServers(ctx, assistantsrepo.LoadAssistantMcpServersParams{
+		AssistantIds: []uuid.UUID{otherAssistant.ID}, ProjectID: otherProject.ID,
+	})
+	require.NoError(t, err)
+	require.Len(t, otherBefore, 1)
 	var ids []string
 	var deleteID string
 	for i, name := range []string{"deleted target", "retained target"} {
@@ -430,28 +466,41 @@ func TestDeleteMcpServer_DetachesFromAssistants(t *testing.T) {
 		if i == 0 {
 			deleteID = created.ID
 		}
-		_, err = ti.conn.Exec(ctx, `INSERT INTO assistant_mcp_servers (assistant_id, mcp_server_id, project_id) VALUES ($1, $2, $3)`, assistantID, created.ID, *authCtx.ProjectID)
+		_, err = ar.AddAssistantMcpServers(ctx, []assistantsrepo.AddAssistantMcpServersParams{{
+			AssistantID: assistant.ID, McpServerID: uuid.MustParse(created.ID), ProjectID: *authCtx.ProjectID,
+		}})
 		require.NoError(t, err)
 	}
 	err = mcpserversrepo.New(ti.conn).DeleteAssistantMCPServersByMCPServer(ctx, mcpserversrepo.DeleteAssistantMCPServersByMCPServerParams{
-		McpServerID: uuid.MustParse(ids[0]), ProjectID: uuid.New(),
+		McpServerID: uuid.MustParse(ids[0]), ProjectID: otherProject.ID,
 	})
 	require.NoError(t, err)
-	var beforeCount int
-	err = ti.conn.QueryRow(ctx, `SELECT count(*) FROM assistant_mcp_servers WHERE assistant_id = $1`, assistantID).Scan(&beforeCount)
+	before, err := ar.LoadAssistantMcpServers(ctx, assistantsrepo.LoadAssistantMcpServersParams{
+		AssistantIds: []uuid.UUID{assistant.ID}, ProjectID: *authCtx.ProjectID,
+	})
 	require.NoError(t, err)
-	require.Equal(t, 2, beforeCount, "a different project cannot detach these attachments")
+	require.Len(t, before, 2, "a different project cannot detach these attachments")
 	err = ti.service.DeleteMcpServer(ctx, &gen.DeleteMcpServerPayload{ID: deleteID})
 	require.NoError(t, err)
-	for i, id := range ids {
-		var count int
-		err = ti.conn.QueryRow(ctx, `SELECT count(*) FROM assistant_mcp_servers WHERE assistant_id = $1 AND mcp_server_id = $2`, assistantID, id).Scan(&count)
-		require.NoError(t, err)
-		require.Equal(t, i, count, "deleted target must detach; unrelated target must remain")
-	}
+	counts, err := testrepo.New(ti.conn).CountAssistantAttachments(ctx, testrepo.CountAssistantAttachmentsParams{
+		ProjectID: *authCtx.ProjectID, AssistantID: assistant.ID,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, counts.McpServers, "deleted target must be physically detached")
+	remaining, err := ar.LoadAssistantMcpServers(ctx, assistantsrepo.LoadAssistantMcpServersParams{
+		AssistantIds: []uuid.UUID{assistant.ID}, ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Len(t, remaining, 1)
+	require.Equal(t, uuid.MustParse(ids[1]), remaining[0].McpServerID, "unrelated target must remain")
+	otherAfter, err := ar.LoadAssistantMcpServers(ctx, assistantsrepo.LoadAssistantMcpServersParams{
+		AssistantIds: []uuid.UUID{otherAssistant.ID}, ProjectID: otherProject.ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, otherBefore, otherAfter, "another project's independent attachments must survive deletion")
 
 	core := assistants.NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, nil, nil, nil, nil, nil, nil, nil, nil, audit.NewLogger())
-	reloaded, err := core.GetAssistant(ctx, *authCtx.ProjectID, uuid.MustParse(assistantID))
+	reloaded, err := core.GetAssistant(ctx, *authCtx.ProjectID, assistant.ID)
 	require.NoError(t, err)
 	require.Len(t, reloaded.MCPServers, 1)
 	name := "updated assistant"

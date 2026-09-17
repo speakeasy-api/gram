@@ -108,7 +108,11 @@ SELECT id, slug
 FROM toolsets
 WHERE project_id = @project_id
   AND slug = ANY(@slugs::TEXT[])
-  AND deleted IS FALSE;
+  AND deleted IS FALSE
+-- Serialize MCP-enable writes and deletion without blocking FK KEY SHARE
+-- locks when an MCP server concurrently switches to this toolset backend.
+ORDER BY id
+FOR NO KEY UPDATE;
 
 -- name: ResolveEnvironmentsForWrite :many
 SELECT id, slug
@@ -383,7 +387,9 @@ SELECT
 FROM mcp_servers ms
 WHERE ms.project_id = @project_id
   AND ms.slug = ANY(@slugs::TEXT[])
-  AND ms.deleted IS FALSE;
+  AND ms.deleted IS FALSE
+ORDER BY ms.id
+FOR UPDATE OF ms;
 
 -- name: ClearAssistantMcpServers :exec
 DELETE FROM assistant_mcp_servers
