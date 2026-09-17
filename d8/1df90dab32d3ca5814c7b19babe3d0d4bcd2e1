@@ -1,0 +1,38 @@
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/NetworkAccessSection.test.tsx
+  h_9630b74bdac540 255-268,318-331
+server/internal/k8s/tailscale_network_ingress_provisioner_test.go
+  h_9630b74bdac540 558,560-562,564-565,567-572,575-580,584-586
+  h_9630b74bdac540 563,566,573-574
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/NetworkAccessSection.tsx
+  h_9630b74bdac540 190-193
+  h_9630b74bdac540 189
+client/dashboard/src/components/mcp-server-x-sidebar-nav.tsx
+  h_9630b74bdac540 101-104,111,114-122,202-210,212-216,345-352,354,358-364,381-383,385-386,391,393-395
+  h_9630b74bdac540 99-100,105,113,211,344,384,387-390,392
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/ServerUrlSection.tsx
+  h_9630b74bdac540 36-37,96-98,103,250-251,253,261-263
+  h_9630b74bdac540 35,38,252,254,264
+client/dashboard/src/pages/org/PrivateNetworkSection.tsx
+  h_9630b74bdac540 54,57,93-98,330-335
+server/internal/k8s/tailscale_network_ingress_provisioner.go
+  h_9630b74bdac540 332,335,339-352,355,361,372,383,394,423,434,445,467
+client/dashboard/src/hooks/usePrivateMcpServerUrls.ts
+  h_9630b74bdac540 54,56,70-72,75-78,85,87-88
+  h_9630b74bdac540 69,73-74,79,86
+client/dashboard/src/hooks/usePrivateMcpServerUrls.test.ts
+  h_9630b74bdac540 1-5,8,10-41,73-81,99-152
+  h_9630b74bdac540 9,153-154
+client/dashboard/src/pages/org/PrivateNetworkSection.test.tsx
+  h_9630b74bdac540 238-262
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d81df90dab32d3ca5814c7b19babe3d0d4bcd2e1",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
