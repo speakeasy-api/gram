@@ -17,7 +17,8 @@ export type PlatformSetupStatus =
 
 export interface PlatformSetupStep {
   title: string;
-  description?: string;
+  /** Inline code values use the same placeholders as snippets, with a safe fallback. */
+  description?: string | Array<string | { code: string; fallback: string }>;
   code?: string;
   language?: string;
   /** Independently copyable values; API key placeholders are masked in the UI. */

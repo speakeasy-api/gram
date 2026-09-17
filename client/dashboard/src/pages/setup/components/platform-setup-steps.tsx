@@ -178,7 +178,16 @@ export function PlatformSetupStepBody({
       )}
       {step.description && (
         <p className="text-muted-foreground text-sm leading-relaxed">
-          {step.description}
+          {typeof step.description === "string"
+            ? step.description
+            : step.description.map((part, index) => {
+                if (typeof part === "string") return part;
+                const value = snippetFor({
+                  title: step.title,
+                  code: part.code,
+                });
+                return value ? <code key={index}>{value}</code> : part.fallback;
+              })}
         </p>
       )}
 

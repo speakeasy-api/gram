@@ -67,6 +67,20 @@ describe("AGENT_PLATFORMS", () => {
     });
   });
 
+  it("places the dynamic Cowork plugin identifier inline instead of a copy block", () => {
+    const step = AGENT_PLATFORMS.find(
+      ({ id }) => id === "claude-cowork",
+    )?.setupSteps.find(
+      ({ title }) => title === "Mark the observability plugin as Required",
+    );
+    expect(step?.description).toContainEqual({
+      code: "{{GRAM_CLAUDE_PLUGIN_NAME}}",
+      fallback: "the observability plugin",
+    });
+    expect(step).not.toHaveProperty("code");
+    expect(step).not.toHaveProperty("language");
+  });
+
   it("delegates Codex telemetry configuration to the device agent", () => {
     const codex = AGENT_PLATFORMS.find(({ id }) => id === "codex");
 

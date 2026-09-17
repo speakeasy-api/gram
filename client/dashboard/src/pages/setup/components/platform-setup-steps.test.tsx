@@ -10,8 +10,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AGENT_PLATFORMS } from "../setup-data";
 import { PlatformSetupStepBody } from "./platform-setup-steps";
 
+const mocks = vi.hoisted(() => ({
+  pluginName: "example-observability" as string | undefined,
+}));
 vi.mock("@gram/client/react-query/publishStatus", () => ({
-  usePublishStatus: () => ({}),
+  usePublishStatus: () => ({
+    data: { claudeObservabilityPlugin: mocks.pluginName },
+  }),
 }));
 vi.mock("@gram/client/react-query/marketplaceSettings", () => ({
   useMarketplaceSettings: () => ({}),
@@ -55,6 +60,7 @@ function copy(label: string) {
 beforeEach(() => {
   writeText.mockReset().mockResolvedValue(undefined);
   retry.mockReset();
+  mocks.pluginName = "example-observability";
   Object.defineProperty(navigator, "clipboard", {
     configurable: true,
     value: { writeText },
@@ -170,6 +176,38 @@ describe("copyable setup values", () => {
         expect(copy("headers").textContent).toContain("Copied"),
       );
       expect(screen.queryByRole("alert")).toBeNull();
+    },
+  );
+});
+
+describe("inline setup identifiers", () => {
+  it.each(["example-observability", "renamed-observability", undefined])(
+    "renders the resolved plugin %s inline without a copyable code block",
+    (pluginName) => {
+      mocks.pluginName = pluginName;
+      const requiredStep = AGENT_PLATFORMS.find(
+        ({ id }) => id === "claude-cowork",
+      )!.setupSteps.find(
+        ({ title }) => title === "Mark the observability plugin as Required",
+      )!;
+      const { container } = render(
+        <PlatformSetupStepBody
+          step={requiredStep}
+          eyebrow="Step 2"
+          onRetryApiKey={retry}
+          onEligibilityAnswer={() => {}}
+        />,
+      );
+      expect(container.textContent).toContain(
+        `Find ${pluginName ?? "the observability plugin"} in the plugin list and set Default access → Required.`,
+      );
+      expect(container.textContent).toContain(
+        "prevents them from disabling it",
+      );
+      expect(container.textContent).not.toContain("{{GRAM_");
+      expect(screen.queryByRole("button", { name: /Copy/ })).toBeNull();
+      expect(container.querySelector("pre")).toBeNull();
+      expect(container.querySelector("code")?.textContent).toBe(pluginName);
     },
   );
 });
