@@ -1,6 +1,7 @@
 package mcpservers_test
 
 import (
+	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"testing"
 
 	"github.com/google/uuid"
@@ -405,4 +406,56 @@ func TestDeleteMcpServer_SoftDeletesMetaMcpMemberships(t *testing.T) {
 	removeAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMetaMcpServerRemoveMember)
 	require.NoError(t, err)
 	require.Equal(t, removeBefore+1, removeAfter)
+}
+
+func TestDeleteMcpServer_DetachesFromAssistants(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	var assistantID string
+	err := ti.conn.QueryRow(ctx, `INSERT INTO assistants (project_id, organization_id, name, model, instructions) VALUES ($1, $2, 'attachment test assistant', 'test-model', '') RETURNING id`, *authCtx.ProjectID, authCtx.ActiveOrganizationID).Scan(&assistantID)
+	require.NoError(t, err)
+	var ids []string
+	var deleteID string
+	for i, name := range []string{"deleted target", "retained target"} {
+		backendID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+		created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{Name: name, RemoteMcpServerID: &backendID, Visibility: types.McpServerVisibility("private")})
+		require.NoError(t, err)
+		_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+			ProjectID: *authCtx.ProjectID, McpServerID: uuid.NullUUID{UUID: uuid.MustParse(created.ID), Valid: true}, Slug: "endpoint-" + created.ID,
+		})
+		require.NoError(t, err)
+		ids = append(ids, created.ID)
+		if i == 0 {
+			deleteID = created.ID
+		}
+		_, err = ti.conn.Exec(ctx, `INSERT INTO assistant_mcp_servers (assistant_id, mcp_server_id, project_id) VALUES ($1, $2, $3)`, assistantID, created.ID, *authCtx.ProjectID)
+		require.NoError(t, err)
+	}
+	err = mcpserversrepo.New(ti.conn).DeleteAssistantMCPServersByMCPServer(ctx, mcpserversrepo.DeleteAssistantMCPServersByMCPServerParams{
+		McpServerID: uuid.MustParse(ids[0]), ProjectID: uuid.New(),
+	})
+	require.NoError(t, err)
+	var beforeCount int
+	err = ti.conn.QueryRow(ctx, `SELECT count(*) FROM assistant_mcp_servers WHERE assistant_id = $1`, assistantID).Scan(&beforeCount)
+	require.NoError(t, err)
+	require.Equal(t, 2, beforeCount, "a different project cannot detach these attachments")
+	err = ti.service.DeleteMcpServer(ctx, &gen.DeleteMcpServerPayload{ID: deleteID})
+	require.NoError(t, err)
+	for i, id := range ids {
+		var count int
+		err = ti.conn.QueryRow(ctx, `SELECT count(*) FROM assistant_mcp_servers WHERE assistant_id = $1 AND mcp_server_id = $2`, assistantID, id).Scan(&count)
+		require.NoError(t, err)
+		require.Equal(t, i, count, "deleted target must detach; unrelated target must remain")
+	}
+
+	core := assistants.NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, nil, nil, nil, nil, nil, nil, nil, nil, audit.NewLogger())
+	reloaded, err := core.GetAssistant(ctx, *authCtx.ProjectID, uuid.MustParse(assistantID))
+	require.NoError(t, err)
+	require.Len(t, reloaded.MCPServers, 1)
+	name := "updated assistant"
+	updated, err := core.UpdateAssistant(ctx, *authCtx.ProjectID, reloaded.ID, &name, nil, nil, nil, []*types.AssistantMCPServerRef{{McpServerSlug: reloaded.MCPServers[0].ServerSlug.String}}, nil, nil, nil)
+	require.NoError(t, err)
+	require.Equal(t, name, updated.Name)
 }

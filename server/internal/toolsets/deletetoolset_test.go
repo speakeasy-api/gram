@@ -1,11 +1,16 @@
 package toolsets_test
 
 import (
+	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/assistants"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/toolsets"
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -237,4 +242,51 @@ func TestToolsetsService_DeleteToolset_NotFound_NoAuditLog(t *testing.T) {
 	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetDelete)
 	require.NoError(t, err)
 	require.Equal(t, beforeCount, afterCount)
+}
+
+func TestToolsetsService_DeleteToolset_DetachesFromAssistants(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestToolsetsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	var assistantID string
+	err := ti.conn.QueryRow(ctx, `INSERT INTO assistants (project_id, organization_id, name, model, instructions) VALUES ($1, $2, 'attachment test assistant', 'test-model', '') RETURNING id`, *authCtx.ProjectID, authCtx.ActiveOrganizationID).Scan(&assistantID)
+	require.NoError(t, err)
+	var ids []string
+	var deleteID string
+	for i, name := range []string{"deleted target", "retained target"} {
+		created, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{Name: name, ToolUrns: []string{}})
+		require.NoError(t, err)
+		ids = append(ids, created.ID)
+		if i == 0 {
+			deleteID = string(created.Slug)
+		}
+		_, err = ti.conn.Exec(ctx, `INSERT INTO assistant_toolsets (assistant_id, toolset_id, project_id) VALUES ($1, $2, $3)`, assistantID, created.ID, *authCtx.ProjectID)
+		require.NoError(t, err)
+	}
+	err = toolsetsrepo.New(ti.conn).DeleteAssistantToolsetsByToolset(ctx, toolsetsrepo.DeleteAssistantToolsetsByToolsetParams{
+		ToolsetID: uuid.MustParse(ids[0]), ProjectID: uuid.New(),
+	})
+	require.NoError(t, err)
+	var beforeCount int
+	err = ti.conn.QueryRow(ctx, `SELECT count(*) FROM assistant_toolsets WHERE assistant_id = $1`, assistantID).Scan(&beforeCount)
+	require.NoError(t, err)
+	require.Equal(t, 2, beforeCount, "a different project cannot detach these attachments")
+	err = ti.service.DeleteToolset(ctx, &gen.DeleteToolsetPayload{Slug: types.Slug(deleteID)})
+	require.NoError(t, err)
+	for i, id := range ids {
+		var count int
+		err = ti.conn.QueryRow(ctx, `SELECT count(*) FROM assistant_toolsets WHERE assistant_id = $1 AND toolset_id = $2`, assistantID, id).Scan(&count)
+		require.NoError(t, err)
+		require.Equal(t, i, count, "deleted target must detach; unrelated target must remain")
+	}
+
+	core := assistants.NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, nil, nil, nil, nil, nil, nil, nil, nil, audit.NewLogger())
+	reloaded, err := core.GetAssistant(ctx, *authCtx.ProjectID, uuid.MustParse(assistantID))
+	require.NoError(t, err)
+	require.Len(t, reloaded.Toolsets, 1)
+	name := "updated assistant"
+	updated, err := core.UpdateAssistant(ctx, *authCtx.ProjectID, reloaded.ID, &name, nil, nil, []*types.AssistantToolsetRef{{ToolsetSlug: reloaded.Toolsets[0].ToolsetSlug}}, nil, nil, nil, nil)
+	require.NoError(t, err)
+	require.Equal(t, name, updated.Name)
 }

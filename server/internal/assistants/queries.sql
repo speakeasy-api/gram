@@ -128,7 +128,7 @@ SELECT
   at.environment_id,
   e.slug AS environment_slug
 FROM assistant_toolsets at
-JOIN toolsets t ON t.id = at.toolset_id
+JOIN toolsets t ON t.id = at.toolset_id AND t.deleted IS FALSE
 LEFT JOIN environments e ON e.id = at.environment_id
 WHERE at.assistant_id = ANY(@assistant_ids::UUID[])
   AND at.project_id = @project_id
