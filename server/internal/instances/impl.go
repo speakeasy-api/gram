@@ -371,11 +371,11 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 
 	interceptor := newResponseInterceptor(w)
 
-	route := gateway.CallRoute{Source: gateway.ToolCallSourceDirect, ServerID: "", ToolsetID: ""}
+	route := gateway.CallRoute{Source: gateway.ToolCallSourceDirect, ServerID: "", ToolsetID: "", Payload: requestBodyBytes}
 	if toolset != nil {
 		route.ToolsetID = toolset.ID
 	}
-	err = s.toolProxy.Do(ctx, interceptor, requestBodyBytes, toolconfig.ToolCallEnv{
+	err = s.toolProxy.Do(ctx, interceptor, bytes.NewReader(requestBodyBytes), toolconfig.ToolCallEnv{
 		SystemEnv:  systemConfig,
 		UserConfig: ciEnv,
 		OAuthToken: "", // Instances do not support OAuth tokens for external MCP

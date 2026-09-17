@@ -1,12 +1,15 @@
 package gateway
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"testing/iotest"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -59,9 +62,10 @@ func TestToolProxy_RiskScanHTTPPreservesUpstreamResponse(t *testing.T) {
 		HeaderParams: nil, QueryParams: nil, PathParams: nil,
 		RequestContentType: NullString{Value: "application/json", Valid: true}, ResponseFilter: nil,
 	})
-	route := CallRoute{Source: ToolCallSourceMCP, ServerID: uuid.NewString(), ToolsetID: uuid.NewString()}
+	body := json.RawMessage(`{"body":{"selection":"unchanged"}}`)
+	route := CallRoute{Source: ToolCallSourceMCP, ServerID: uuid.NewString(), ToolsetID: uuid.NewString(), Payload: body}
 	recorder := httptest.NewRecorder()
-	err = proxy.Do(t.Context(), recorder, json.RawMessage(`{"body":{"selection":"unchanged"}}`), toolconfig.ToolCallEnv{
+	err = proxy.Do(t.Context(), recorder, iotest.OneByteReader(bytes.NewReader(body)), toolconfig.ToolCallEnv{
 		SystemEnv: toolconfig.NewCaseInsensitiveEnv(), UserConfig: toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "", GramEmail: "", GramChatID: "", MCPClient: toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: ""},
 	}, plan, tm.HTTPLogAttributes{}, route)
@@ -140,4 +144,24 @@ func TestToolProxy_RiskScanPromptPreservesRendering(t *testing.T) {
 		ResourceURI: "", PromptName: "", Phase: mcpriskscan.PhaseBeforeExecution,
 	}}, scan.events)
 	require.Equal(t, [][]byte{[]byte(`{"arguments":{"topic":"sample"}}`)}, scan.payloads)
+}
+
+func TestToolProxy_RiskScanAllowsStreamWithoutPayload(t *testing.T) {
+	t.Parallel()
+
+	tracerProvider := testenv.NewTracerProvider(t)
+	scan := &captureRiskScan{t: t, events: nil, payloads: nil}
+	proxy := NewToolProxy(testenv.NewLogger(t), tracerProvider, testenv.NewMeterProvider(t), ToolCallSourceMCP, nil, nil, nil, nil, nil, scan)
+	plan := newPromptToolCallPlanForTest("mustache")
+	body := iotest.OneByteReader(strings.NewReader(`{"arguments":{"topic":"streamed"}}`))
+	recorder := httptest.NewRecorder()
+	err := proxy.Do(t.Context(), recorder, body, toolconfig.ToolCallEnv{
+		SystemEnv: toolconfig.NewCaseInsensitiveEnv(), UserConfig: toolconfig.NewCaseInsensitiveEnv(),
+		OAuthToken: "", GramEmail: "", GramChatID: "", MCPClient: toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: ""},
+	}, plan, tm.HTTPLogAttributes{}, CallRoute{Source: ToolCallSourceMCP, ServerID: "", ToolsetID: "", Payload: nil})
+
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, "Summarize streamed", recorder.Body.String())
+	require.Equal(t, [][]byte{nil}, scan.payloads, "stream-only callers must not materialize a scan payload")
 }

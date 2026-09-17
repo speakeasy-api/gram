@@ -202,7 +202,7 @@ func handleResourcesRead(
 		telemLogger.Log(ctx, params)
 	}()
 
-	route := gateway.CallRoute{Source: gateway.ToolCallSourceMCP, ServerID: "", ToolsetID: toolset.ID}
+	route := gateway.CallRoute{Source: gateway.ToolCallSourceMCP, ServerID: "", ToolsetID: toolset.ID, Payload: nil}
 	if payload.mcpServerID != nil {
 		route.ServerID = payload.mcpServerID.String()
 	}

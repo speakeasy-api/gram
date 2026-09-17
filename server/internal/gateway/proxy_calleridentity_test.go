@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -73,14 +74,14 @@ func callFunctionToolWithClient(t *testing.T, client toolconfig.MCPClientIdentit
 	})
 	require.NoError(t, err)
 
-	err = proxy.Do(t.Context(), httptest.NewRecorder(), bodyBytes, toolconfig.ToolCallEnv{
+	err = proxy.Do(t.Context(), httptest.NewRecorder(), bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "",
 		GramEmail:  "",
 		GramChatID: "",
 		MCPClient:  client,
-	}, toolCallPlan, tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: ""})
+	}, toolCallPlan, tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: "", Payload: bodyBytes})
 	require.NoError(t, err)
 
 	return captured

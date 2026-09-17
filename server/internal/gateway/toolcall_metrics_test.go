@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -150,14 +151,14 @@ func callToolProxy(t *testing.T, ctx context.Context, proxy *ToolProxy, plan *To
 	t.Helper()
 
 	recorder := httptest.NewRecorder()
-	err := proxy.Do(ctx, recorder, []byte(body), toolconfig.ToolCallEnv{
+	err := proxy.Do(ctx, recorder, strings.NewReader(body), toolconfig.ToolCallEnv{
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "",
 		GramEmail:  "",
 		GramChatID: "",
 		MCPClient:  toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: ""},
-	}, plan, tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: ""})
+	}, plan, tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: "", Payload: []byte(body)})
 
 	return recorder, err
 }

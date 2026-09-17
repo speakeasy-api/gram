@@ -125,7 +125,7 @@ type PlatformResult struct {
 type ScanEvaluator interface {
 	// Scan deliberately returns no error during observation; organization-wide
 	// failure semantics are an AIS-688 contract. The payload reader is independent
-	// of execution and nil for resource calls.
+	// of execution and may be nil.
 	Scan(context.Context, io.Reader, mcpriskscan.Event)
 }
 
@@ -142,6 +142,12 @@ type CallRoute struct {
 
 	// ToolsetID identifies the toolset through which the call was routed.
 	ToolsetID string
+
+	// Payload optionally borrows already-materialized request bytes for observation
+	// during Do. When present, it must represent requestBody and remain unchanged
+	// until Do returns. Leave nil for stream-only callers and resource reads;
+	// never materialize a stream solely to populate it.
+	Payload []byte
 }
 
 type ToolProxy struct {
@@ -206,7 +212,7 @@ func (tp *ToolProxy) scanSurface(route CallRoute) string {
 func (tp *ToolProxy) Do(
 	ctx context.Context,
 	w http.ResponseWriter,
-	requestBody json.RawMessage,
+	requestBody io.Reader,
 	env toolconfig.ToolCallEnv,
 	plan *ToolCallPlan,
 	attrs tm.HTTPLogAttributes,
@@ -247,7 +253,11 @@ func (tp *ToolProxy) Do(
 		toolName = plan.Descriptor.URN.Name
 	}
 
-	tp.scanEvaluator.Scan(ctx, bytes.NewReader(requestBody), mcpriskscan.Event{
+	var payload io.Reader
+	if route.Payload != nil {
+		payload = bytes.NewReader(route.Payload)
+	}
+	tp.scanEvaluator.Scan(ctx, payload, mcpriskscan.Event{
 		Surface:        tp.scanSurface(route),
 		Method:         mcpriskscan.MethodToolsCall,
 		OrganizationID: plan.Descriptor.OrganizationID,
@@ -260,20 +270,19 @@ func (tp *ToolProxy) Do(
 		Phase:          mcpriskscan.PhaseBeforeExecution,
 	})
 
-	body := bytes.NewReader(requestBody)
 	switch plan.Kind {
 	case "":
 		return oops.E(oops.CodeInvariantViolation, nil, "tool kind is not set").LogError(ctx, tp.logger)
 	case ToolKindFunction:
-		return tp.doFunction(ctx, logger.With(attr.SlogComponent("gateway-function-caller")), w, body, env, plan.Descriptor, plan.Function, attrs)
+		return tp.doFunction(ctx, logger.With(attr.SlogComponent("gateway-function-caller")), w, requestBody, env, plan.Descriptor, plan.Function, attrs)
 	case ToolKindHTTP:
-		return tp.doHTTP(ctx, logger.With(attr.SlogComponent("gateway-http-caller")), w, body, env, plan.Descriptor, plan.HTTP, attrs)
+		return tp.doHTTP(ctx, logger.With(attr.SlogComponent("gateway-http-caller")), w, requestBody, env, plan.Descriptor, plan.HTTP, attrs)
 	case ToolKindPrompt:
-		return tp.doPrompt(ctx, logger.With(attr.SlogComponent("gateway-prompt-caller")), w, body, env, plan.Descriptor, plan.Prompt)
+		return tp.doPrompt(ctx, logger.With(attr.SlogComponent("gateway-prompt-caller")), w, requestBody, env, plan.Descriptor, plan.Prompt)
 	case ToolKindPlatform:
-		return tp.doPlatform(ctx, logger.With(attr.SlogComponent("gateway-platform-caller")), w, body, env, plan, attrs)
+		return tp.doPlatform(ctx, logger.With(attr.SlogComponent("gateway-platform-caller")), w, requestBody, env, plan, attrs)
 	case ToolKindExternalMCP:
-		return tp.doExternalMCP(ctx, logger.With(attr.SlogComponent("gateway-externalmcp-caller")), w, body, env, plan.Descriptor, plan.ExternalMCP)
+		return tp.doExternalMCP(ctx, logger.With(attr.SlogComponent("gateway-externalmcp-caller")), w, requestBody, env, plan.Descriptor, plan.ExternalMCP)
 	default:
 		return fmt.Errorf("tool type not supported: %s", plan.Kind)
 	}

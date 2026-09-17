@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -292,10 +293,10 @@ func TestToolProxy_Do_PathParams(t *testing.T) {
 
 			// Execute the proxy call
 			ciEnv := toolconfig.NewCaseInsensitiveEnv()
-			err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
+			err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
 				SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 				UserConfig: ciEnv,
-			}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: ""})
+			}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: "", Payload: bodyBytes})
 
 			if tt.expectedError {
 				require.Error(t, err)
@@ -423,10 +424,10 @@ func TestToolProxy_Do_HeaderParams(t *testing.T) {
 
 			// Execute the proxy call
 			ciEnv := toolconfig.NewCaseInsensitiveEnv()
-			err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
+			err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
 				SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 				UserConfig: ciEnv,
-			}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: ""})
+			}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: "", Payload: bodyBytes})
 
 			if tt.expectedError {
 				require.Error(t, err)
@@ -775,10 +776,10 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 
 			// Execute the proxy call
 			ciEnv := toolconfig.NewCaseInsensitiveEnv()
-			err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
+			err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
 				SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 				UserConfig: ciEnv,
-			}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: ""})
+			}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: "", Payload: bodyBytes})
 			require.NoError(t, err)
 			require.NotNil(t, capturedRequest)
 
@@ -997,10 +998,10 @@ func TestToolProxy_Do_Body(t *testing.T) {
 
 			// Execute the proxy call
 			ciEnv := toolconfig.NewCaseInsensitiveEnv()
-			err = proxy.Do(ctx, recorder, toolCallBodyBytes, toolconfig.ToolCallEnv{
+			err = proxy.Do(ctx, recorder, bytes.NewReader(toolCallBodyBytes), toolconfig.ToolCallEnv{
 				SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 				UserConfig: ciEnv,
-			}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: ""})
+			}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: "", Payload: toolCallBodyBytes})
 			require.NoError(t, err)
 			require.NotNil(t, capturedRequest)
 
@@ -1339,10 +1340,10 @@ func TestToolProxy_Do_StringifiedJSONBody(t *testing.T) {
 
 			// Execute the proxy call
 			ciEnv := toolconfig.NewCaseInsensitiveEnv()
-			err = proxy.Do(ctx, recorder, []byte(tt.toolCallBody), toolconfig.ToolCallEnv{
+			err = proxy.Do(ctx, recorder, strings.NewReader(tt.toolCallBody), toolconfig.ToolCallEnv{
 				SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 				UserConfig: ciEnv,
-			}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: ""})
+			}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: "", Payload: []byte(tt.toolCallBody)})
 
 			if tt.expectError {
 				require.Error(t, err)
@@ -1444,7 +1445,7 @@ func TestResourceProxy_ReadResource(t *testing.T) {
 
 	// Execute the resource read
 	ciEnv := toolconfig.NewCaseInsensitiveEnv()
-	route := CallRoute{Source: ToolCallSourceMCP, ServerID: uuid.NewString(), ToolsetID: uuid.NewString()}
+	route := CallRoute{Source: ToolCallSourceMCP, ServerID: uuid.NewString(), ToolsetID: uuid.NewString(), Payload: nil}
 	err = proxy.ReadResource(ctx, recorder, bytes.NewReader([]byte("{}")), toolconfig.ToolCallEnv{
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: ciEnv,
@@ -1607,10 +1608,10 @@ func TestToolProxy_Do_FunctionMetricsTrailers(t *testing.T) {
 
 	// Execute the proxy call
 	ciEnv := toolconfig.NewCaseInsensitiveEnv()
-	err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
+	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: ciEnv,
-	}, toolCallPlan, tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: ""})
+	}, toolCallPlan, tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: "", Payload: bodyBytes})
 
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, recorder.Code)
@@ -1691,10 +1692,10 @@ func TestToolProxy_Do_PlatformTool_UsesWrappedBodyPayload(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	logAttrs := tm.HTTPLogAttributes{}
 
-	err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
+	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
-	}, toolCallPlan, logAttrs, CallRoute{Source: "", ServerID: "", ToolsetID: ""})
+	}, toolCallPlan, logAttrs, CallRoute{Source: "", ServerID: "", ToolsetID: "", Payload: bodyBytes})
 	require.NoError(t, err)
 
 	require.JSONEq(t, `{
@@ -1758,10 +1759,10 @@ func TestToolProxy_Do_PlatformTool_PreservesRawBodyFieldPayload(t *testing.T) {
 
 	recorder := httptest.NewRecorder()
 
-	err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
+	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
-	}, toolCallPlan, tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: ""})
+	}, toolCallPlan, tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: "", Payload: bodyBytes})
 	require.NoError(t, err)
 
 	require.JSONEq(t, string(bodyBytes), string(platformExecutor.requestBody))
@@ -1807,10 +1808,10 @@ func TestToolProxy_Do_PlatformTool_PreservesCallerFaultAttribution(t *testing.T)
 		scan,
 	)
 
-	err = proxy.Do(ctx, httptest.NewRecorder(), []byte(`{}`), toolconfig.ToolCallEnv{
+	err = proxy.Do(ctx, httptest.NewRecorder(), strings.NewReader(`{}`), toolconfig.ToolCallEnv{
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
-	}, toolCallPlan, tm.HTTPLogAttributes{}, CallRoute{Source: ToolCallSourcePlatformMCP, ServerID: "", ToolsetID: ""})
+	}, toolCallPlan, tm.HTTPLogAttributes{}, CallRoute{Source: ToolCallSourcePlatformMCP, ServerID: "", ToolsetID: "", Payload: []byte(`{}`)})
 	require.Error(t, err)
 	require.True(t, oops.IsClientFault(err))
 	require.ErrorIs(t, err, platformExecutor.err)
@@ -1908,10 +1909,10 @@ func TestToolProxy_Do_HTTPTool_UserConfigVariablesSent(t *testing.T) {
 	userConfig.Set("API_KEY", "test-user-api-key")
 
 	// Execute the proxy call
-	err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
+	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: userConfig,
-	}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: ""})
+	}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: "", Payload: bodyBytes})
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedRequest)
@@ -1996,10 +1997,10 @@ func TestToolProxy_Do_HTTPTool_UserConfigNotInPlanNotSent(t *testing.T) {
 	userConfig.Set("ANOTHER_VAR", "also-should-not-be-sent")
 
 	// Execute the proxy call
-	err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
+	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: userConfig,
-	}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: ""})
+	}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: "", Payload: bodyBytes})
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedRequest)
@@ -2109,10 +2110,10 @@ func TestToolProxy_Do_FunctionTool_UserConfigNotInPlanNotSent(t *testing.T) {
 	userConfig.Set("SECRET_KEY", "also-should-not-be-sent")
 
 	// Execute the proxy call
-	err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
+	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: userConfig,
-	}, toolCallPlan, tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: ""})
+	}, toolCallPlan, tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: "", Payload: bodyBytes})
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedEnvironment)
@@ -2206,11 +2207,11 @@ func TestToolProxy_Do_HTTPTool_SystemEnvSentWhenInPlan(t *testing.T) {
 	systemEnv.Set("SYSTEM_API_KEY", "system-secret-key")
 
 	// Execute the proxy call
-	err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
+	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
 		SystemEnv:  systemEnv,
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "",
-	}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: ""})
+	}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: "", Payload: bodyBytes})
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedRequest)
@@ -2290,11 +2291,11 @@ func TestToolProxy_Do_HTTPTool_SystemEnvKeysConvertedToHTTPHeaders(t *testing.T)
 	systemEnv.Set("X_API_KEY", "my-api-key")
 	systemEnv.Set("X_CUSTOM_HEADER", "custom-value")
 
-	err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
+	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
 		SystemEnv:  systemEnv,
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "",
-	}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: ""})
+	}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: "", Payload: bodyBytes})
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedRequest)
@@ -2404,11 +2405,11 @@ func TestToolProxy_Do_FunctionTool_SystemEnvSentWhenInPlan(t *testing.T) {
 	systemEnv.Set("NOT_IN_PLAN", "should-not-be-sent")
 
 	// Execute the proxy call
-	err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
+	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
 		SystemEnv:  systemEnv,
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "",
-	}, toolCallPlan, tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: ""})
+	}, toolCallPlan, tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: "", Payload: bodyBytes})
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedEnvironment)
@@ -2506,10 +2507,10 @@ func TestToolProxy_Do_HTTPTool_UserConfigPrefersOverSystemEnv(t *testing.T) {
 	userConfig.Set("API_KEY", "user-override-key")
 
 	// Execute the proxy call
-	err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
+	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
 		SystemEnv:  systemEnv,
 		UserConfig: userConfig,
-	}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: ""})
+	}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: "", Payload: bodyBytes})
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedRequest)
@@ -2621,10 +2622,10 @@ func TestToolProxy_Do_FunctionTool_UserConfigPrefersOverSystemEnv(t *testing.T) 
 	userConfig.Set("API_KEY", "user-override-key")
 
 	// Execute the proxy call
-	err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
+	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
 		SystemEnv:  systemEnv,
 		UserConfig: userConfig,
-	}, toolCallPlan, tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: ""})
+	}, toolCallPlan, tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: "", Payload: bodyBytes})
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedEnvironment)
@@ -2735,10 +2736,10 @@ func TestToolProxy_Do_FunctionTool_AuthInputSentWhenInUserConfig(t *testing.T) {
 	userConfig.Set("OAUTH_TOKEN", "user-oauth-token-value")
 
 	// Execute the proxy call
-	err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
+	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: userConfig,
-	}, toolCallPlan, tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: ""})
+	}, toolCallPlan, tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: "", Payload: bodyBytes})
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedEnvironment)
@@ -2848,10 +2849,10 @@ func TestToolProxy_Do_FunctionTool_AuthInputNotSentWhenNotInUserConfig(t *testin
 	userConfig.Set("OTHER_VAR", "some-value")
 
 	// Execute the proxy call
-	err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
+	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: userConfig,
-	}, toolCallPlan, tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: ""})
+	}, toolCallPlan, tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: "", Payload: bodyBytes})
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedEnvironment)
@@ -2964,10 +2965,10 @@ func TestToolProxy_Do_FunctionTool_AuthInputPrefersUserConfigOverSystemEnv(t *te
 	userConfig.Set("BEARER_TOKEN", "user-bearer-token")
 
 	// Execute the proxy call
-	err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
+	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
 		SystemEnv:  systemEnv,
 		UserConfig: userConfig,
-	}, toolCallPlan, tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: ""})
+	}, toolCallPlan, tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: "", Payload: bodyBytes})
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedEnvironment)
@@ -3082,10 +3083,10 @@ func TestToolProxy_Do_FunctionTool_AuthInputSentWithRegularVariables(t *testing.
 	userConfig.Set("OAUTH_TOKEN", "oauth-token-value")
 
 	// Execute the proxy call
-	err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
+	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: userConfig,
-	}, toolCallPlan, tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: ""})
+	}, toolCallPlan, tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: "", Payload: bodyBytes})
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedEnvironment)
@@ -3194,10 +3195,10 @@ func TestToolProxy_Do_FunctionTool_AuthInputNilNotSent(t *testing.T) {
 	userConfig.Set("OAUTH_TOKEN", "should-not-be-sent")
 
 	// Execute the proxy call
-	err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
+	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: userConfig,
-	}, toolCallPlan, tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: ""})
+	}, toolCallPlan, tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: "", Payload: bodyBytes})
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedEnvironment)
