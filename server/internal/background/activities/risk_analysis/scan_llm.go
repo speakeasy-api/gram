@@ -29,17 +29,37 @@ func llmCoveredSources(sources sourceSet) []string {
 	return covered
 }
 
-// publishLLMScanRequests hands every message in the batch to the fine-tuned
-// risk model's async lane: one LLMAnalysis per message, carrying the same
-// provenance the legacy analysis requests carry so findings and usage
-// readings attribute identically. The publish must succeed for the activity
-// to succeed: this lane is the only engine evaluating the covered sources for
+// llmMessageSources keeps the covered sources whose detection scope admits
+// message i. It is the per-source prefilter the legacy engines apply through
+// CategoryScopeMasks.Subset, folded into the request: the consumer only
+// publishes findings for the sources the request names.
+func llmMessageSources(masks CategoryScopeMasks, i int, coveredSources []string) []string {
+	kept := make([]string, 0, len(coveredSources))
+	for _, source := range coveredSources {
+		if masks.AdmitsAny(i, sourceCategories[source]) {
+			kept = append(kept, source)
+		}
+	}
+	return kept
+}
+
+// publishLLMScanRequests hands the batch to the fine-tuned risk model's async
+// lane: one LLMAnalysis per message in scope for at least one covered
+// source, carrying the same provenance the legacy analysis requests carry so
+// findings and usage readings attribute identically. Messages every covered
+// source's detection scope excludes are not published, just as the legacy
+// engines never scan them. The publish must succeed for the activity to
+// succeed: this lane is the only engine evaluating the covered sources for
 // the organization, so a dropped request is a silently unscanned message.
-func (a *AnalyzeBatch) publishLLMScanRequests(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage, orgSlug string, coveredSources []string) error {
+func (a *AnalyzeBatch) publishLLMScanRequests(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage, orgSlug string, coveredSources []string, masks CategoryScopeMasks) error {
 	createdAt := time.Now().UTC().Format(time.RFC3339)
 	publishResults := make([]gcp.PublishResult, 0, len(messages))
 	requestID := batchScanRequestID(args, "standard")
-	for _, msg := range messages {
+	for i, msg := range messages {
+		sources := llmMessageSources(masks, i, coveredSources)
+		if len(sources) == 0 {
+			continue
+		}
 		chatMessageID, contentPartID := msg.anchorIDStrings()
 		provenance := batchRiskProvenance(args, msg, asyncStreamExecutionPath, requestID.String())
 		body, toolCalls := llmMessageInput(msg)
@@ -71,7 +91,7 @@ func (a *AnalyzeBatch) publishLLMScanRequests(ctx context.Context, args AnalyzeB
 			ToolName:         &provenance.ToolName,
 			ToolCalls:        toolCalls,
 			OrganizationSlug: &orgSlug,
-			Sources:          coveredSources,
+			Sources:          sources,
 			// The streams consumer applies the analyzer's input caps and
 			// reports truncation on its own span; the request carries the
 			// full text.
@@ -81,7 +101,7 @@ func (a *AnalyzeBatch) publishLLMScanRequests(ctx context.Context, args AnalyzeB
 	if err := drainPublishAcks(ctx, "publish llm analysis requests", publishResults); err != nil {
 		return err
 	}
-	a.metrics.RecordLLMPolicyEvaluation(ctx, args.OrganizationID, args.RiskPolicyID.String(), llmPolicyEvaluationPublished)
+	a.metrics.RecordLLMPolicyEvaluation(ctx, args.OrganizationID, args.RiskPolicyID.String(), llmPolicyEvaluationPublished, len(publishResults))
 	return nil
 }
 

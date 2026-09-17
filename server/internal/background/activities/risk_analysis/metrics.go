@@ -192,14 +192,16 @@ func (m *riskMetrics) RecordRecommendedScopeSuppressed(ctx context.Context, orgI
 	))
 }
 
-// RecordLLMPolicyEvaluation counts one policy evaluation the batch lane routed
-// to the fine-tuned LLM risk analyzer. The batch side only knows whether the
-// requests were published; verdict outcomes are recorded by the consumer.
-func (m *riskMetrics) RecordLLMPolicyEvaluation(ctx context.Context, orgID string, policyID string, outcome string) {
-	if m == nil || m.llmPolicyEvaluations == nil {
+// RecordLLMPolicyEvaluation counts the policy evaluations the batch lane
+// routed to the fine-tuned LLM risk analyzer, one per published message so
+// the count lines up with the consumer's per-request outcomes. The batch side
+// only knows whether the requests were published; verdict outcomes are
+// recorded by the consumer.
+func (m *riskMetrics) RecordLLMPolicyEvaluation(ctx context.Context, orgID string, policyID string, outcome string, count int) {
+	if m == nil || m.llmPolicyEvaluations == nil || count <= 0 {
 		return
 	}
-	m.llmPolicyEvaluations.Add(ctx, 1, metric.WithAttributes(
+	m.llmPolicyEvaluations.Add(ctx, int64(count), metric.WithAttributes(
 		attr.OrganizationID(orgID),
 		attr.RiskPolicyID(policyID),
 		attr.RiskLane("async"),
