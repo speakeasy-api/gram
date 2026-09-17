@@ -134,48 +134,72 @@ func base64IDToHex(raw *string) *string {
 	return &encoded
 }
 
-func clearNonFiniteFloats(message protoreflect.Message) {
+// clearNonFiniteFloats clears singular non-finite float fields in place and
+// reports whether the message is still usable. A non-finite value inside a
+// repeated float field (a histogram's explicit_bounds) cannot be removed
+// without desynchronising the parallel bucket_counts array, so such a message
+// is reported unusable and callers drop it whole: list items are removed,
+// singular fields are cleared.
+func clearNonFiniteFloats(message protoreflect.Message) bool {
 	if !message.IsValid() {
-		return
+		return true
 	}
+	keep := true
 	message.Range(func(field protoreflect.FieldDescriptor, value protoreflect.Value) bool {
 		switch {
 		case field.IsMap():
 			if isProtobufMessage(field.MapValue().Kind()) {
-				value.Map().Range(func(_ protoreflect.MapKey, item protoreflect.Value) bool {
-					clearNonFiniteFloats(item.Message())
+				var drop []protoreflect.MapKey
+				value.Map().Range(func(key protoreflect.MapKey, item protoreflect.Value) bool {
+					if !clearNonFiniteFloats(item.Message()) {
+						drop = append(drop, key)
+					}
 					return true
 				})
+				for _, key := range drop {
+					value.Map().Clear(key)
+				}
 			}
 		case field.IsList():
 			switch {
 			case isProtobufMessage(field.Kind()):
-				items := value.List()
-				for i := range items.Len() {
-					clearNonFiniteFloats(items.Get(i).Message())
-				}
+				dropUnusableMessages(value.List())
 			case isProtobufFloat(field.Kind()):
-				dropNonFiniteFloats(value.List())
+				if hasNonFiniteFloat(value.List()) {
+					keep = false
+				}
 			}
 		case isProtobufMessage(field.Kind()):
-			clearNonFiniteFloats(value.Message())
+			if !clearNonFiniteFloats(value.Message()) {
+				message.Clear(field)
+			}
 		case isProtobufFloat(field.Kind()) && !isFinite(value.Float()):
 			message.Clear(field)
 		}
 		return true
 	})
+	return keep
 }
 
-func dropNonFiniteFloats(list protoreflect.List) {
+func dropUnusableMessages(list protoreflect.List) {
 	kept := 0
 	for i := range list.Len() {
 		item := list.Get(i)
-		if isFinite(item.Float()) {
+		if clearNonFiniteFloats(item.Message()) {
 			list.Set(kept, item)
 			kept++
 		}
 	}
 	list.Truncate(kept)
+}
+
+func hasNonFiniteFloat(list protoreflect.List) bool {
+	for i := range list.Len() {
+		if !isFinite(list.Get(i).Float()) {
+			return true
+		}
+	}
+	return false
 }
 
 func isProtobufFloat(kind protoreflect.Kind) bool {

@@ -396,6 +396,12 @@ func TestHooksPayloadsClearNonFiniteDoubles(t *testing.T) {
 								Sum:            new(math.Inf(-1)),
 								BucketCounts:   []uint64{1, 1},
 								ExplicitBounds: []float64{1, math.Inf(1)},
+							}, {
+								TimeUnixNano:   4,
+								Count:          2,
+								Sum:            new(3.0),
+								BucketCounts:   []uint64{1, 1},
+								ExplicitBounds: []float64{1},
 							}},
 						}},
 					},
@@ -414,9 +420,13 @@ func TestHooksPayloadsClearNonFiniteDoubles(t *testing.T) {
 	require.True(t, ok)
 	points, ok := histogram["dataPoints"].([]any)
 	require.True(t, ok)
+	// The point with a non-finite bound is dropped whole: removing one bound
+	// would leave bucketCounts one element too long.
 	require.Len(t, points, 1)
 	point, ok := points[0].(map[string]any)
 	require.True(t, ok)
-	require.NotContains(t, point, "sum")
+	require.Equal(t, "4", point["timeUnixNano"])
+	require.InDelta(t, 3, point["sum"], 0)
 	require.Equal(t, []any{float64(1)}, point["explicitBounds"])
+	require.Len(t, point["bucketCounts"], 2)
 }
