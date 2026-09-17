@@ -41,6 +41,8 @@ function stepStateLabel(displayState: ProjectGuideDisplayState): string {
       return "running";
     case "preparing":
       return "preparing";
+    case "confirming":
+      return "complete";
     case "waiting":
       return "listening";
     case "paused":
