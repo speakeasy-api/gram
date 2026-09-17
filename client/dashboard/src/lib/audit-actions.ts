@@ -361,15 +361,15 @@ export function staticActionPhrase(action: AuditAction): string {
     case "gcp_kms_key:delete":
       return "removed GCP KMS key";
     case "identity-provider-connection:create":
-      return "connected an identity provider";
+      return "connected identity provider";
     case "identity-provider-connection:submit-client-id":
-      return "submitted the identity provider client ID";
+      return "submitted client ID for identity provider";
     case "identity-provider-connection:verify":
-      return "verified the identity provider connection";
+      return "verified identity provider connection to";
     case "identity-provider-connection:record-agent":
-      return "recorded the identity provider agent";
+      return "recorded agent for identity provider";
     case "identity-provider-connection:revoke":
-      return "revoked the identity provider connection";
+      return "revoked identity provider connection to";
     case "json_web_key_set:create":
       return "created JSON Web Key Set";
     case "json_web_key_set:update":
