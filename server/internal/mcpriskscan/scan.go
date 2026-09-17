@@ -19,7 +19,6 @@ const (
 	SurfacePlatformMCP = "platform_mcp"
 	SurfaceInstances   = "instances"
 	SurfaceRemoteMCP   = "remote_mcp"
-	SurfaceMetaMCP     = "meta_mcp"
 
 	MethodToolsCall     = "tools/call"
 	MethodResourcesRead = "resources/read"

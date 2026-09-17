@@ -65,15 +65,13 @@ func TestRiskScan_ProxiedMetaMember(t *testing.T) {
 	require.Equal(t, "pong from ping", text)
 	require.Empty(t, upstream.capturedAuth())
 
-	events := scanAttributes(recorder, mcpriskscan.SurfaceMetaMCP)
-	require.Len(t, events, 1)
-	require.Equal(t, memberID.String(), events[0][attr.McpServerIDKey])
-	require.Equal(t, "ping", events[0][attr.ToolNameKey])
-	require.Equal(t, mcpriskscan.MethodToolsCall, events[0]["gram.mcp.risk.scan.method"])
-	require.Equal(t, mcpriskscan.PhaseBeforeExecution, events[0]["gram.mcp.risk.scan.phase"])
-	require.Equal(t, "user_session", events[0]["gram.mcp.risk.scan.principal_kind"])
-	require.Equal(t, subject.ID, events[0][attr.UserIDKey])
-	require.Empty(t, scanAttributes(recorder, mcpriskscan.SurfaceHostedMCP))
+	scanCount := 0
+	for _, span := range recorder.Ended() {
+		if span.Name() == "mcp.risk.scan" {
+			scanCount++
+		}
+	}
+	require.Equal(t, 1, scanCount, "proxied members must be evaluated only at the remote seam")
 	remoteEvents := scanAttributes(recorder, mcpriskscan.SurfaceRemoteMCP)
 	require.Len(t, remoteEvents, 1)
 	require.Equal(t, memberID.String(), remoteEvents[0][attr.McpServerIDKey])
