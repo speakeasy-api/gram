@@ -139,13 +139,102 @@ export function buildAddCandidates(
     .filter((t) => matches(t.name, t.slug))
     .map((toolset) => ({ kind: "toolset", toolset }));
 
-  return [...serverCandidates, ...toolsetCandidates].sort((a, b) =>
-    candidateName(a).localeCompare(candidateName(b)),
+  return [...serverCandidates, ...toolsetCandidates].sort(
+    (a, b) =>
+      candidateName(a).localeCompare(candidateName(b)) ||
+      candidateKey(a).localeCompare(candidateKey(b)),
   );
 }
 
-function candidateName(candidate: AddCandidate): string {
+export function candidateName(candidate: AddCandidate): string {
   return candidate.kind === "server"
     ? (candidate.server.name ?? "")
     : candidate.toolset.name;
+}
+
+/** Only reconcile a toolset retry with the exact wrapper this batch created. */
+export function candidateKey(
+  candidate: AddCandidate,
+  wrappers?: ReadonlyMap<string, string>,
+): string {
+  if (candidate.kind === "toolset") return `toolset-${candidate.toolset.id}`;
+  for (const [key, serverId] of wrappers ?? []) {
+    if (serverId === candidate.server.id) return key;
+  }
+  return `server-${candidate.server.id}`;
+}
+
+export interface AddBatchState {
+  wrappers: Map<string, string>;
+  orders: Map<string, number>;
+  completed: Set<string>;
+}
+
+/** Fresh membership supersedes completed writes, not failed retries/wrappers. */
+export function reconcileCompletedMembers(
+  state: AddBatchState,
+  memberServerIds: ReadonlySet<string>,
+): void {
+  for (const key of state.completed) {
+    const serverId = state.wrappers.get(key) ?? key.slice("server-".length);
+    if (!memberServerIds.has(serverId)) {
+      state.completed.delete(key);
+      state.orders.delete(key);
+    }
+  }
+}
+
+export interface AddResult {
+  key: string;
+  name: string;
+  error?: string;
+}
+
+/** Allocate order before writing; retries keep their slot and successful writes. */
+export async function addCandidateBatch(
+  candidates: AddCandidate[],
+  startOrder: number,
+  state: AddBatchState,
+  dependencies: {
+    createWrapper: (toolset: ToolsetEntry) => Promise<string>;
+    attach: (serverId: string, sortOrder: number) => Promise<void>;
+  },
+): Promise<AddResult[]> {
+  let order = Math.max(
+    startOrder,
+    ...Array.from(state.orders.values(), (n) => n + 1),
+  );
+  for (const candidate of candidates) {
+    const key = candidateKey(candidate, state.wrappers);
+    if (!state.orders.has(key)) state.orders.set(key, order++);
+  }
+  const results: AddResult[] = [];
+  for (const candidate of candidates) {
+    const key = candidateKey(candidate, state.wrappers);
+    const result: AddResult = {
+      key,
+      name: candidateName(candidate) || "MCP server",
+    };
+    try {
+      if (!state.completed.has(key)) {
+        let serverId =
+          candidate.kind === "server"
+            ? candidate.server.id
+            : state.wrappers.get(key);
+        if (!serverId && candidate.kind === "toolset") {
+          serverId = await dependencies.createWrapper(candidate.toolset);
+          state.wrappers.set(key, serverId);
+        }
+        await dependencies.attach(serverId!, state.orders.get(key)!);
+        state.completed.add(key);
+      }
+    } catch (error) {
+      result.error =
+        error instanceof Error
+          ? error.message
+          : "Couldn't add this server. Try again.";
+    }
+    results.push(result);
+  }
+  return results;
 }
