@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   mcpServerInstallPageLinks,
   privateMcpEndpointUrls,
+  privateMcpInstallPageUrls,
   usePrivateMcpServerUrls,
 } from "./usePrivateMcpServerUrls";
 
@@ -15,6 +16,11 @@ const hookState = vi.hoisted(() => ({
   isFetching: false,
   isPending: false,
   isError: false,
+}));
+
+vi.mock("@/lib/utils", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/utils")>()),
+  getServerURL: () => "https://api.example.com",
 }));
 
 vi.mock("@/hooks/useNetworkIngressRollout", () => ({
@@ -98,11 +104,29 @@ describe("privateMcpEndpointUrls", () => {
   });
 });
 
+describe("privateMcpInstallPageUrls", () => {
+  it("hosts private install pages on Gram instead of the tailnet", () => {
+    expect(privateMcpInstallPageUrls(onlineIngress, endpoints)).toEqual([
+      "https://api.example.com/mcp/platform-server/install?network=private",
+    ]);
+  });
+
+  it.each([
+    { enabled: false, status: "disabled" },
+    { enabled: true, status: "pending" },
+    { enabled: true, status: "error" },
+  ])("does not link an unavailable private install route", (state) => {
+    expect(
+      privateMcpInstallPageUrls({ ...onlineIngress, ...state }, endpoints),
+    ).toEqual([]);
+  });
+});
+
 describe("mcpServerInstallPageLinks", () => {
   const publicInstallPageUrl = "https://public.example.com/mcp/server/install";
   const privateInstallPageUrls = [
-    "https://private.example.ts.net/mcp/server/install",
-    "https://private.example.ts.net/mcp/additional/install",
+    "https://app.example.com/mcp/server/install?network=private",
+    "https://app.example.com/mcp/additional/install?network=private",
   ];
 
   it("labels public and private links explicitly in dual mode", () => {
@@ -164,6 +188,9 @@ describe("usePrivateMcpServerUrls", () => {
       expect(result.current.privateMcpUrls).toEqual([
         "https://private.example.ts.net/mcp/platform-server",
       ]);
+      expect(result.current.privateInstallPageUrls).toEqual([
+        "https://api.example.com/mcp/platform-server/install?network=private",
+      ]);
       expect(result.current.canReadPrivateUrls).toBe(true);
     },
   );
@@ -199,6 +226,7 @@ describe("usePrivateMcpServerUrls", () => {
     );
 
     expect(result.current.privateMcpUrls).toEqual([]);
+    expect(result.current.privateInstallPageUrls).toEqual([]);
     expect(result.current.isError).toBe(true);
   });
 
@@ -208,6 +236,7 @@ describe("usePrivateMcpServerUrls", () => {
     );
 
     expect(result.current.privateMcpUrls).toEqual([]);
+    expect(result.current.privateInstallPageUrls).toEqual([]);
     expect(result.current.isLoading).toBe(false);
   });
 });

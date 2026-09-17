@@ -1,4 +1,5 @@
 import { useNetworkIngressRollout } from "@/hooks/useNetworkIngressRollout";
+import { getServerURL } from "@/lib/utils";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import type { NetworkIngress } from "@gram/client/models/components/networkingress.js";
 import {
@@ -17,6 +18,15 @@ export function endpointUsesPrivateIngress(
   }
 
   return endpoint.customDomainId === ingress.customDomainId;
+}
+
+function privateIngressEndpoints(
+  ingress: Pick<NetworkIngress, "endpointNamespaceKind" | "customDomainId">,
+  endpoints: McpEndpoint[],
+): McpEndpoint[] {
+  return endpoints.filter((endpoint) =>
+    endpointUsesPrivateIngress(endpoint, ingress),
+  );
 }
 
 export function privateMcpEndpointUrls(
@@ -38,9 +48,37 @@ export function privateMcpEndpointUrls(
 
   return Array.from(
     new Set(
-      endpoints
-        .filter((endpoint) => endpointUsesPrivateIngress(endpoint, ingress))
-        .map((endpoint) => `https://${ingress.dnsName}/mcp/${endpoint.slug}`),
+      privateIngressEndpoints(ingress, endpoints).map(
+        (endpoint) =>
+          `https://${ingress.dnsName}/mcp/${encodeURIComponent(endpoint.slug)}`,
+      ),
+    ),
+  );
+}
+
+export function privateMcpInstallPageUrls(
+  ingress:
+    | Pick<
+        NetworkIngress,
+        | "dnsName"
+        | "endpointNamespaceKind"
+        | "customDomainId"
+        | "enabled"
+        | "status"
+      >
+    | undefined,
+  endpoints: McpEndpoint[],
+): string[] {
+  if (!ingress?.dnsName || !ingress.enabled || ingress.status !== "online") {
+    return [];
+  }
+
+  return Array.from(
+    new Set(
+      privateIngressEndpoints(ingress, endpoints).map(
+        (endpoint) =>
+          `${getServerURL()}/mcp/${encodeURIComponent(endpoint.slug)}/install?network=private`,
+      ),
     ),
   );
 }
@@ -110,7 +148,10 @@ export function usePrivateMcpServerUrls(
 
   return {
     privateMcpUrls,
-    privateInstallPageUrls: privateMcpUrls.map((url) => `${url}/install`),
+    privateInstallPageUrls:
+      queryEnabled && ingressResult.isSuccess
+        ? privateMcpInstallPageUrls(ingressResult.data?.ingress, endpoints)
+        : [],
     canReadPrivateUrls: rolloutEnabled && canManageIngress,
     isLoading: queryEnabled && ingressResult.isPending,
     isError: queryEnabled && ingressResult.isError,
