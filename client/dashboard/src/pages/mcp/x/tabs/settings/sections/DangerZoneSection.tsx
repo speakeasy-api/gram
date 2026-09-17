@@ -14,7 +14,10 @@ import {
   invalidateAllGetMcpServer,
 } from "@gram/client/react-query/getMcpServer.js";
 import { invalidateAllMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
-import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
+import {
+  invalidateAllMcpServers,
+  useMcpServers,
+} from "@gram/client/react-query/mcpServers.js";
 import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSessionIssuers.js";
 import { useUpdateMcpServerMutation } from "@gram/client/react-query/updateMcpServer.js";
 import { Alert } from "@/components/ui/Alert";
@@ -27,6 +30,12 @@ import { useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { DangerSettingsSection } from "@/components/detail/settings-section";
+import { DeleteSourceBackedServerDialogContent } from "./DeleteSourceBackedServerDialogContent";
+import {
+  linkedMcpServersFilter,
+  serversBackedBySameSource,
+  type SourceBackedDeleteTarget,
+} from "./sourceDelete";
 
 function mcpServerVisibilityUpdateForm(
   mcpServer: McpServer,
@@ -82,16 +91,79 @@ function ServerControlRow({
   );
 }
 
+const SOURCE_KIND_LABEL: Record<SourceBackedDeleteTarget["kind"], string> = {
+  remote: "remote MCP source",
+  tunneled: "tunneled MCP source",
+  unproxied: "unproxied MCP source",
+};
+
+function deleteRowCopy(
+  deleteTarget: SourceBackedDeleteTarget | undefined,
+  sourceUnavailable: boolean,
+): {
+  title: string;
+  description: string;
+} {
+  if (sourceUnavailable && !deleteTarget) {
+    return {
+      title: "Delete MCP Server",
+      description:
+        "The source behind this server could not be loaded, so deleting removes only this server and its endpoints. This action cannot be undone.",
+    };
+  }
+  if (!deleteTarget) {
+    return {
+      title: "Delete MCP Server",
+      description:
+        "Permanently remove this server and all of its endpoints. This action cannot be undone.",
+    };
+  }
+  return {
+    title: "Delete MCP Server and Source",
+    description: `Permanently remove this server, the ${SOURCE_KIND_LABEL[deleteTarget.kind]} behind it, every other server backed by that source, and all of their endpoints. This action cannot be undone.`,
+  };
+}
+
 export function DangerZoneSection({
   mcpServer,
   endpoints,
+  deleteTarget,
+  sourceUnavailable = false,
 }: {
   mcpServer: McpServer;
   endpoints: McpEndpoint[];
+  /**
+   * The source row behind a remote/tunneled/unproxied server, once loaded.
+   * Deleting such a server must delete its source too, so the button waits
+   * for this rather than fall back to a wrapper-only delete that would
+   * orphan the source.
+   */
+  deleteTarget?: SourceBackedDeleteTarget;
+  /**
+   * The source row failed to load (already gone, or not readable). The
+   * wrapper-only delete is then the only way to clear the server, so it is
+   * allowed rather than leaving the button disabled forever.
+   */
+  sourceUnavailable?: boolean;
 }): JSX.Element {
   const navigate = useNavigate();
   const routes = useRoutes();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+
+  const linkedFilter = linkedMcpServersFilter(mcpServer);
+  const isSourceBacked = linkedFilter !== null;
+  const linkedQuery = useMcpServers(linkedFilter ?? undefined, undefined, {
+    enabled: isSourceBacked,
+  });
+  const linkedMcpServers = serversBackedBySameSource(
+    mcpServer,
+    linkedQuery.data?.mcpServers ?? [],
+  );
+  const deleteReady =
+    !isSourceBacked ||
+    (!!deleteTarget && linkedQuery.isSuccess) ||
+    sourceUnavailable;
+  const deleteRow = deleteRowCopy(deleteTarget, sourceUnavailable);
   const [pendingAvailability, setPendingAvailability] =
     useState<McpServerVisibility | null>(null);
   const queryClient = useQueryClient();
@@ -189,13 +261,14 @@ export function DangerZoneSection({
               </ServerControlRow>
 
               <ServerControlRow
-                title="Delete MCP Server"
-                description="Permanently remove this server and all of its endpoints. This action cannot be undone."
+                title={deleteRow.title}
+                description={deleteRow.description}
               >
                 <RequireScope scope="mcp:write" level="component">
                   <Button
                     variant="destructive-primary"
                     size="md"
+                    disabled={!deleteReady}
                     onClick={() => setDeleteDialogOpen(true)}
                   >
                     <Button.LeftIcon>
@@ -216,15 +289,27 @@ export function DangerZoneSection({
       </DangerSettingsSection>
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <Dialog.Content className="max-w-2xl!">
-          <DeleteMcpServerDialogContent
-            mcpServer={mcpServer}
-            endpoints={endpoints}
-            onClose={() => setDeleteDialogOpen(false)}
-            onSuccess={() => {
-              setDeleteDialogOpen(false);
-              void navigate(routes.mcp.href());
-            }}
-          />
+          {deleteTarget ? (
+            <DeleteSourceBackedServerDialogContent
+              target={deleteTarget}
+              linkedMcpServers={linkedMcpServers}
+              onClose={() => setDeleteDialogOpen(false)}
+              onSuccess={() => {
+                setDeleteDialogOpen(false);
+                void navigate(routes.mcp.href());
+              }}
+            />
+          ) : (
+            <DeleteMcpServerDialogContent
+              mcpServer={mcpServer}
+              endpoints={endpoints}
+              onClose={() => setDeleteDialogOpen(false)}
+              onSuccess={() => {
+                setDeleteDialogOpen(false);
+                void navigate(routes.mcp.href());
+              }}
+            />
+          )}
         </Dialog.Content>
       </Dialog>
       <ServerAvailabilityDialog

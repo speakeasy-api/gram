@@ -1,5 +1,18 @@
+import { Skeleton } from "@/components/ui/Skeleton";
+import { useActiveDeployment } from "@/hooks/toolTypes";
 import { useRoutes } from "@/routes";
+import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
+import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
+import { useRemoteMcpServers } from "@gram/client/react-query/remoteMcpServers.js";
+import { useTunneledMcpServers } from "@gram/client/react-query/tunneledMcpServers.js";
+import { useUnproxiedMcpServers } from "@gram/client/react-query/unproxiedMcpServers.js";
 import { Navigate, useParams } from "react-router";
+import {
+  legacySourceKindLookups,
+  parseLegacySourceKind,
+  resolveLegacySourceRedirect,
+  type LegacySourceTarget,
+} from "./legacySourceRedirect";
 
 /**
  * S-853 folded Sources and the catalog under /mcp: MCP is the inventory, and
@@ -25,11 +38,85 @@ export function RedirectToSources(): JSX.Element {
   return <Navigate to={routes.mcp.sources.href()} replace />;
 }
 
-// Individual source pages are gone — a source is read in the panel on the
-// list — so an old detail link lands on the list itself.
+function legacySourceTargetHref(
+  routes: ReturnType<typeof useRoutes>,
+  target: LegacySourceTarget,
+): string {
+  switch (target.kind) {
+    case "source":
+      return routes.mcp.sources.detail.href(target.assetId);
+    case "mcp-server":
+      return routes.mcp.x.overview.href(target.routeParam);
+    case "toolset":
+      return routes.mcp.details.href(target.slug);
+    case "sources-list":
+      return routes.mcp.sources.href();
+    case "mcp-list":
+      return routes.mcp.href();
+  }
+}
+
+// The per-kind source pages are gone, but what they showed still has a home:
+// OpenAPI and function sources at /mcp/sources/:sourceId, remote, tunneled and
+// unproxied sources on the /mcp/x page of the server fronting them, and an
+// external MCP on the toolset carrying its tools. The old URL carried a slug,
+// so the new address has to be looked up before redirecting.
 export function RedirectToSourceDetail(): JSX.Element {
   const routes = useRoutes();
-  return <Navigate to={routes.mcp.sources.href()} replace />;
+  const { sourceKind, sourceSlug } = useParams<{
+    sourceKind: string;
+    sourceSlug: string;
+  }>();
+  const kind = parseLegacySourceKind(sourceKind);
+  const lookups = legacySourceKindLookups(kind);
+
+  const deploymentQuery = useActiveDeployment({ enabled: lookups.deployment });
+  const mcpServersQuery = useMcpServers(undefined, undefined, {
+    enabled: lookups.mcpServers,
+  });
+  const remoteQuery = useRemoteMcpServers(undefined, undefined, {
+    enabled: kind === "remotemcp",
+  });
+  const tunneledQuery = useTunneledMcpServers(undefined, undefined, {
+    enabled: kind === "tunneledmcp",
+  });
+  const unproxiedQuery = useUnproxiedMcpServers(undefined, undefined, {
+    enabled: kind === "unproxiedmcp",
+  });
+  const toolsetsQuery = useListToolsets(undefined, undefined, {
+    enabled: lookups.toolsets,
+  });
+
+  // isLoading is false for disabled queries, so only the lookups this kind
+  // enabled hold the redirect. A failed lookup falls through to the fallback.
+  const resolving = [
+    deploymentQuery,
+    mcpServersQuery,
+    remoteQuery,
+    tunneledQuery,
+    unproxiedQuery,
+    toolsetsQuery,
+  ].some((query) => query.isLoading);
+
+  if (resolving) {
+    return (
+      <div className="mx-auto w-full max-w-[1270px] space-y-3 px-8 py-8">
+        <Skeleton className="h-6 w-64" />
+        <Skeleton className="h-4 w-96" />
+      </div>
+    );
+  }
+
+  const target = resolveLegacySourceRedirect(kind, sourceSlug ?? "", {
+    deployment: deploymentQuery.data?.deployment,
+    mcpServers: mcpServersQuery.data?.mcpServers ?? [],
+    remoteMcpServers: remoteQuery.data?.remoteMcpServers ?? [],
+    tunneledMcpServers: tunneledQuery.data?.tunneledMcpServers ?? [],
+    unproxiedMcpServers: unproxiedQuery.data?.unproxiedMcpServers ?? [],
+    toolsets: toolsetsQuery.data?.toolsets ?? [],
+  });
+
+  return <Navigate to={legacySourceTargetHref(routes, target)} replace />;
 }
 
 export function RedirectToAddRemoteMcp(): JSX.Element {

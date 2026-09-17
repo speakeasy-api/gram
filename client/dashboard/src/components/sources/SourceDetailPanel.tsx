@@ -4,20 +4,21 @@ import { Icon } from "@/components/ui/Icon";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { CopyButton } from "@/components/ui/CopyButton";
 import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
-import { useActiveDeployment, useListTools } from "@/hooks/toolTypes";
+import { useActiveDeployment } from "@/hooks/toolTypes";
+import { dateTimeFormatters } from "@/lib/dates";
 import { getServerURL } from "@/lib/utils";
 import { useListAssets } from "@gram/client/react-query/listAssets.js";
-import { useListDeployments } from "@gram/client/react-query/listDeployments.js";
 import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { useRoutes } from "@/routes";
-import type { Tool } from "@/lib/toolTypes";
 import { cn } from "@/lib/utils";
 import { Download, Loader2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { useSourceTools } from "./useSourceQueries";
 
 // Sizes are shown to give a sense of scale, not for accounting, so a single
 // significant decimal is enough.
@@ -104,64 +105,6 @@ function downloadFilename(
   const base = (name ?? "source").replace(/\.(zip|ya?ml|json)$/i, "");
   if (!isOpenAPI) return `${base}.zip`;
   return `${base}.${contentType?.includes("json") ? "json" : "yaml"}`;
-}
-
-const VERSION_LIMIT = 10;
-
-/**
- * The deployments a source is versioned by.
- *
- * Sources are not versioned individually: a push deploys every source in the
- * project together, so a source's history is the project's deployments. The
- * listing carries counts rather than each deployment's assets, so this says
- * which versions exist and links out, and stops short of claiming which of
- * them changed this particular source.
- */
-function SourceVersionsPanel({
-  activeDeploymentId,
-}: {
-  activeDeploymentId: string | undefined;
-}): React.JSX.Element | null {
-  const routes = useRoutes();
-  const { data, isLoading } = useListDeployments({}, {});
-  const versions = (data?.items ?? []).slice(0, VERSION_LIMIT);
-
-  if (isLoading || versions.length === 0) return null;
-
-  return (
-    <Card.Dashboard
-      title="Versions"
-      tooltip="Each push deploys every source in the project together, so a source's versions are the project's deployments."
-      bodyClassName="p-0"
-    >
-      <ol className="divide-border divide-y">
-        {versions.map((version) => (
-          <li
-            key={version.id}
-            className="flex items-center justify-between gap-4 px-6 py-3"
-          >
-            <div className="flex min-w-0 items-center gap-2">
-              <routes.deployments.deployment.Link
-                params={[version.id]}
-                className="truncate font-mono text-xs"
-              >
-                {version.id}
-              </routes.deployments.deployment.Link>
-              {version.id === activeDeploymentId && (
-                <Badge variant="neutral">
-                  <Badge.Text>Active</Badge.Text>
-                </Badge>
-              )}
-            </div>
-            <Text muted className="shrink-0 text-xs">
-              {version.openapiv3AssetCount + version.functionsAssetCount}{" "}
-              sources
-            </Text>
-          </li>
-        ))}
-      </ol>
-    </Card.Dashboard>
-  );
 }
 
 /** One labelled fact: label left, value right, in both surfaces. */
@@ -373,10 +316,11 @@ export function SourceDetail({
   const routes = useRoutes();
   const { data: deploymentResult } = useActiveDeployment();
   const {
-    data: toolsResult,
+    tools,
+    toolUrns,
     isLoading,
     isError: isToolsError,
-  } = useListTools();
+  } = useSourceTools(sourceKind, assetId);
   // The deployment names the source; the asset carries the file itself.
   const { data: assetsResult } = useListAssets();
 
@@ -396,17 +340,6 @@ export function SourceDetail({
 
   const isPage = variant === "page";
 
-  const tools = useMemo(
-    () =>
-      (toolsResult?.tools ?? []).filter((tool: Tool) =>
-        sourceKind === "openapi"
-          ? tool.type === "http" && tool.openapiv3DocumentId === assetId
-          : tool.type === "function" && tool.functionId === assetId,
-      ),
-    [toolsResult, sourceKind, assetId],
-  );
-  const toolUrns = useMemo(() => tools.map((tool) => tool.toolUrn), [tools]);
-
   const toolsSummary = isToolsError
     ? "Couldn't load this source's tools. A server built from it still starts with everything the source produced."
     : isLoading
@@ -415,6 +348,21 @@ export function SourceDetail({
 
   const facts = (
     <>
+      {/* The page has room for the identifiers the CLI and the upload flow
+          address a source by; the sheet already names the slug in its header. */}
+      {isPage && asset && (
+        <>
+          <SourceFact label="Slug" isPage={isPage}>
+            {asset.slug}
+          </SourceFact>
+          <SourceFact label="Source ID" isPage={isPage}>
+            <span className="inline-flex items-center gap-1">
+              {asset.id}
+              <CopyButton text={asset.id} size="xs" />
+            </span>
+          </SourceFact>
+        </>
+      )}
       {file && (
         <>
           <SourceFact label="File" isPage={isPage}>
@@ -426,6 +374,16 @@ export function SourceDetail({
           <SourceFact label="Type" isPage={isPage}>
             {file.contentType}
           </SourceFact>
+          {isPage && (
+            <>
+              <SourceFact label="Created" isPage={isPage}>
+                {dateTimeFormatters.humanize(file.createdAt)}
+              </SourceFact>
+              <SourceFact label="Updated" isPage={isPage}>
+                {dateTimeFormatters.humanize(file.updatedAt)}
+              </SourceFact>
+            </>
+          )}
         </>
       )}
       {functionAsset && (
@@ -478,47 +436,10 @@ export function SourceDetail({
           </Card.Dashboard>
         )}
 
-        {/* Where the source is used comes before what it produced: the
-            servers are what someone landing here is usually after. */}
+        {/* Where the source is used is what someone landing here is usually
+            after; the tools, activity and versions follow as sections of
+            their own. */}
         <SourceServersPanel toolUrns={toolUrns} isPage />
-
-        <Card.Dashboard
-          title="Tools"
-          bodyClassName={tools.length === 0 ? undefined : "p-0"}
-          action={
-            <Text muted className="text-xs">
-              {toolsSummary}
-            </Text>
-          }
-        >
-          {tools.length === 0 ? (
-            <Text muted small>
-              {isLoading
-                ? "Loading tools\u2026"
-                : "No tools yet. A server built from this source starts empty, and picks them up on the next deployment."}
-            </Text>
-          ) : (
-            <ol className="divide-border divide-y">
-              {tools.map((tool: Tool) => (
-                <li
-                  key={tool.toolUrn}
-                  className="flex flex-col gap-1 px-6 py-3"
-                >
-                  <Text small className="font-mono">
-                    {tool.name}
-                  </Text>
-                  {tool.description && (
-                    <Text small muted>
-                      {tool.description}
-                    </Text>
-                  )}
-                </li>
-              ))}
-            </ol>
-          )}
-        </Card.Dashboard>
-
-        <SourceVersionsPanel activeDeploymentId={deployment?.id} />
       </div>
     );
   }
@@ -556,7 +477,7 @@ export function SourceDetail({
           {/* A source's dozens of tools would push the file details off screen
               in the sheet, so the list scrolls in place here. */}
           <div className="max-h-96 overflow-y-auto">
-            {tools.map((tool: Tool) => (
+            {tools.map((tool) => (
               <div
                 key={tool.toolUrn}
                 className="border-foreground/10 flex flex-col gap-1 border-b py-3 last:border-b-0"

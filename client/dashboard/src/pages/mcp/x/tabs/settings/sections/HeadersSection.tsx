@@ -14,7 +14,6 @@ import { type PulseMCPServer, useListMCPCatalog } from "@/pages/catalog/hooks";
 import { catalogHeadersForRemoteUrl } from "@/pages/catalog/remotes";
 import { useRoutes } from "@/routes";
 import type { ExternalMCPRemoteHeader } from "@gram/client/models/components/externalmcpremoteheader.js";
-import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { RemoteMcpServerHeader } from "@gram/client/models/components/remotemcpserverheader.js";
 import { useCreateRemoteMcpServerHeaderMutation } from "@gram/client/react-query/createRemoteMcpServerHeader.js";
 import { useDeleteRemoteMcpServerHeaderMutation } from "@gram/client/react-query/deleteRemoteMcpServerHeader.js";
@@ -30,7 +29,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Eye, EyeOff, Loader2, Plus, Trash2 } from "lucide-react";
+import { Eye, EyeOff, Loader2, Plus, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
@@ -203,45 +202,35 @@ function headerDraftToWriteFields(draft: HeaderDraft): HeaderWriteFields {
   };
 }
 
-// A single remote_mcps row can back several mcp_servers rows. Its headers are
-// stored on the remote, so editing them from any one MCP server silently
-// rewrites the values every sibling server sends. HeadersSectionContext tells
-// the component which surface it's rendered from so it can guard against that:
-//  - "mcp-server": rendered on an MCP server's Settings tab. When the backing
-//    remote is shared by more than one server, editing is locked and the user
-//    is pointed at the Remote MCP source, the single canonical edit surface.
-//  - "remote-mcp": rendered on the Remote MCP source page. Always editable,
-//    with an indicator listing every MCP server the change will affect.
-export type HeadersSectionContext =
-  | { kind: "mcp-server" }
-  | { kind: "remote-mcp"; linkedMcpServers: McpServer[] };
-
+// A single remote_mcps row can back several mcp_servers rows (sources created
+// before #6012 made them 1:1). Its headers are stored on the remote, so editing
+// them from one MCP server rewrites the values every sibling sends. The
+// remote's own page is gone, so this is the only edit surface: rather than
+// lock it, name every sibling the change reaches.
 export function HeadersSection({
   remoteMcpServerId,
-  context,
+  mcpServerId,
 }: {
   remoteMcpServerId: string;
-  context: HeadersSectionContext;
+  /** The server this section is rendered on, left out of the sibling list. */
+  mcpServerId: string;
 }): JSX.Element {
   const routes = useRoutes();
 
-  // On an MCP server's Settings tab we need to know whether the backing remote
-  // is shared before deciding to lock editing. On the Remote MCP page the
-  // caller already knows the linked servers, so skip the extra fetch there.
-  const isMcpServerContext = context.kind === "mcp-server";
   const siblingsQuery = useMcpServers({ remoteMcpServerId }, undefined, {
-    enabled: isMcpServerContext && remoteMcpServerId !== "",
+    enabled: remoteMcpServerId !== "",
   });
-  const linkedMcpServers = useMemo(() => {
-    if (context.kind === "remote-mcp") return context.linkedMcpServers;
-    return (siblingsQuery.data?.mcpServers ?? []).filter(
-      (server) => server.remoteMcpServerId === remoteMcpServerId,
-    );
-  }, [context, siblingsQuery.data, remoteMcpServerId]);
+  const siblingMcpServers = useMemo(
+    () =>
+      (siblingsQuery.data?.mcpServers ?? []).filter(
+        (server) =>
+          server.remoteMcpServerId === remoteMcpServerId &&
+          server.id !== mcpServerId,
+      ),
+    [siblingsQuery.data, remoteMcpServerId, mcpServerId],
+  );
 
-  const sharedByOthers = linkedMcpServers.length > 1;
-  const readOnly = isMcpServerContext && sharedByOthers;
-  const siblingsLoading = isMcpServerContext && siblingsQuery.isLoading;
+  const siblingsLoading = siblingsQuery.isLoading;
 
   const headersQuery = useRemoteMcpServerHeaders(
     { remoteMcpServerId },
@@ -274,7 +263,7 @@ export function HeadersSection({
   // configured yet, seed the form with those rows so the user only has to fill
   // in values. Suggestions are unsaved drafts — nothing persists until Save.
   const headersEmpty = !!headersQuery.data && initialDrafts.length === 0;
-  const suggestionsEnabled = headersEmpty && !readOnly && !siblingsLoading;
+  const suggestionsEnabled = headersEmpty && !siblingsLoading;
   const { data: remoteMcpServer } = useGetRemoteMcpServer(
     { id: remoteMcpServerId },
     undefined,
@@ -320,16 +309,10 @@ export function HeadersSection({
   const saving =
     createHeader.isPending || updateHeader.isPending || deleteHeader.isPending;
   const saveDisabled =
-    readOnly ||
-    !dirty ||
-    saving ||
-    validationError !== null ||
-    headersQuery.isLoading;
+    !dirty || saving || validationError !== null || headersQuery.isLoading;
 
   const handleSave = async () => {
-    // Defensive: the save/add controls are hidden in read-only mode, but a
-    // shared remote must never be mutated from an MCP server's Settings tab.
-    if (readOnly || validationError) return;
+    if (validationError) return;
 
     const initialById = new Map(
       initialDrafts
@@ -410,10 +393,6 @@ export function HeadersSection({
   const mutationError =
     createHeader.error ?? updateHeader.error ?? deleteHeader.error;
 
-  const remoteSettingsHref = `${routes.mcp.x.settings.href(
-    remoteMcpServerId,
-  )}#settings`;
-
   return (
     <div className="border p-6">
       <Text variant="subheading" className="mb-1">
@@ -423,39 +402,22 @@ export function HeadersSection({
         Headers sent to the remote MCP URL.
       </Text>
       <Stack gap={4}>
-        {readOnly ? (
-          <Alert variant="warning" dismissible={false}>
-            <Stack gap={2}>
-              <Text small>
-                These headers are shared by {linkedMcpServers.length} MCP
-                servers backed by this remote source. Editing them here would
-                change the values every one of those servers sends, so editing
-                is disabled on this page.
-              </Text>
-              <Link
-                to={remoteSettingsHref}
-                className="text-primary inline-flex items-center gap-1 text-sm hover:underline"
-              >
-                Edit on the Remote MCP source
-                <ArrowRight className="size-3.5" />
-              </Link>
-            </Stack>
-          </Alert>
-        ) : null}
-
-        {context.kind === "remote-mcp" && linkedMcpServers.length > 0 ? (
+        {siblingMcpServers.length > 0 ? (
           <Alert variant="warning" dismissible={false}>
             <Stack gap={1}>
               <Text small>
-                Changes here affect {linkedMcpServers.length}{" "}
-                {linkedMcpServers.length === 1 ? "MCP server" : "MCP servers"}{" "}
-                backed by this source:
+                These headers are stored on the remote source, which also backs{" "}
+                {siblingMcpServers.length}{" "}
+                {siblingMcpServers.length === 1
+                  ? "other MCP server"
+                  : "other MCP servers"}
+                . Changes here apply to every one of them:
               </Text>
               <div className="flex flex-wrap gap-2">
-                {linkedMcpServers.map((server) => (
+                {siblingMcpServers.map((server) => (
                   <Link
                     key={server.id}
-                    to={routes.mcp.x.overview.href(mcpServerRouteParam(server))}
+                    to={routes.mcp.x.settings.href(mcpServerRouteParam(server))}
                     className="no-underline"
                   >
                     <Badge variant="neutral" className="hover:bg-muted">
@@ -489,7 +451,6 @@ export function HeadersSection({
               <HeaderDraftRow
                 key={draft.key}
                 draft={draft}
-                readOnly={readOnly}
                 onChange={(next) =>
                   setDrafts((current) =>
                     current.map((row, rowIndex) =>
@@ -507,7 +468,7 @@ export function HeadersSection({
           </Stack>
         )}
 
-        {readOnly || siblingsLoading ? null : (
+        {siblingsLoading ? null : (
           <>
             {validationError && dirty && !pristineSuggestions ? (
               <Text small className="text-destructive">
@@ -572,12 +533,10 @@ export function HeadersSection({
 
 function HeaderDraftRow({
   draft,
-  readOnly,
   onChange,
   onRemove,
 }: {
   draft: HeaderDraft;
-  readOnly: boolean;
   onChange: (draft: HeaderDraft) => void;
   onRemove: () => void;
 }): JSX.Element {
@@ -597,7 +556,6 @@ function HeaderDraftRow({
             </Text>
             <Input
               value={draft.name}
-              disabled={readOnly}
               onChange={(value) => onChange({ ...draft, name: value })}
               placeholder="Authorization"
             />
@@ -608,7 +566,6 @@ function HeaderDraftRow({
             </Text>
             <Select
               value={draft.source}
-              disabled={readOnly}
               onValueChange={(value) => {
                 const source = value as HeaderSource;
                 onChange({
@@ -627,21 +584,19 @@ function HeaderDraftRow({
               </SelectContent>
             </Select>
           </div>
-          {readOnly ? null : (
-            <RequireScope scope="mcp:write" level="component">
-              <Button
-                variant="tertiary"
-                size="md"
-                className="mt-6 shrink-0"
-                onClick={onRemove}
-                aria-label={`Remove header ${draft.name || "row"}`}
-              >
-                <Button.LeftIcon>
-                  <Trash2 className="size-4" />
-                </Button.LeftIcon>
-              </Button>
-            </RequireScope>
-          )}
+          <RequireScope scope="mcp:write" level="component">
+            <Button
+              variant="tertiary"
+              size="md"
+              className="mt-6 shrink-0"
+              onClick={onRemove}
+              aria-label={`Remove header ${draft.name || "row"}`}
+            >
+              <Button.LeftIcon>
+                <Trash2 className="size-4" />
+              </Button.LeftIcon>
+            </Button>
+          </RequireScope>
         </Stack>
 
         {draft.source === "static" ? (
@@ -651,7 +606,6 @@ function HeaderDraftRow({
             </Text>
             <Input
               value={draft.staticValue}
-              disabled={readOnly}
               onChange={(value) => onChange({ ...draft, staticValue: value })}
               onFocus={(event) => {
                 // Editing a redacted secret should replace it, not append to
@@ -689,7 +643,6 @@ function HeaderDraftRow({
             </Text>
             <Input
               value={draft.valueFromRequestHeader}
-              disabled={readOnly}
               onChange={(value) =>
                 onChange({ ...draft, valueFromRequestHeader: value })
               }
@@ -702,7 +655,6 @@ function HeaderDraftRow({
           <label className="flex items-center gap-2">
             <Checkbox
               checked={draft.isRequired}
-              disabled={readOnly}
               onCheckedChange={(checked) =>
                 onChange({ ...draft, isRequired: checked === true })
               }
@@ -713,7 +665,6 @@ function HeaderDraftRow({
             <label className="flex items-center gap-2">
               <Checkbox
                 checked={draft.isSecret}
-                disabled={readOnly}
                 onCheckedChange={(checked) =>
                   onChange({ ...draft, isSecret: checked === true })
                 }

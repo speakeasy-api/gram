@@ -6,6 +6,8 @@ import {
 } from "@/lib/mcpEndpoints";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { TunneledMcpServer } from "@gram/client/models/components/tunneledmcpserver.js";
+import { invalidateAllGetTunneledMcpServer } from "@gram/client/react-query/getTunneledMcpServer.js";
+import { invalidateAllListTunneledMcpServerConnections } from "@gram/client/react-query/listTunneledMcpServerConnections.js";
 import { invalidateAllMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { invalidateAllTunneledMcpServers } from "@gram/client/react-query/tunneledMcpServers.js";
@@ -92,6 +94,100 @@ export function useCreateTunneledMcpSource(): UseMutationResult<
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
         invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
         invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
+      ]);
+    },
+  });
+}
+
+export type RotateTunneledMcpServerKeyVariables = {
+  tunneledMcpServerId: string;
+};
+
+export type RotateTunneledMcpServerKeyData = {
+  tunneledMcpServer: TunneledMcpServer;
+  tunnelKey: string;
+};
+
+export function useRotateTunneledMcpServerKey(): UseMutationResult<
+  RotateTunneledMcpServerKeyData,
+  Error,
+  RotateTunneledMcpServerKeyVariables
+> {
+  const client = useSdkClient();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ tunneledMcpServerId }) => {
+      const result = await client.tunneledMcp.rotateServerKey({
+        rotateTunneledMcpServerKeyForm: {
+          id: tunneledMcpServerId,
+        },
+      });
+      return {
+        tunneledMcpServer: result.server,
+        tunnelKey: result.tunnelKey,
+      };
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        invalidateAllGetTunneledMcpServer(queryClient, {
+          refetchType: "all",
+        }),
+        invalidateAllListTunneledMcpServerConnections(queryClient, {
+          refetchType: "all",
+        }),
+        invalidateAllTunneledMcpServers(queryClient, { refetchType: "all" }),
+      ]);
+    },
+  });
+}
+
+export type DeleteTunneledMcpSourceVariables = {
+  tunneledMcpServerId: string;
+  mcpServerIds: string[];
+};
+
+export function useDeleteTunneledMcpSource(): UseMutationResult<
+  void,
+  Error,
+  DeleteTunneledMcpSourceVariables
+> {
+  const client = useSdkClient();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ tunneledMcpServerId, mcpServerIds }) => {
+      // Linked-server deletes are independent; run them concurrently and
+      // surface any failure before touching the source itself.
+      const results = await Promise.allSettled(
+        mcpServerIds.map((id) => client.mcpServers.delete({ id })),
+      );
+      const failed = results.find(
+        (result): result is PromiseRejectedResult =>
+          result.status === "rejected",
+      );
+      if (failed) {
+        throw failed.reason instanceof Error
+          ? failed.reason
+          : new Error(String(failed.reason));
+      }
+
+      await client.tunneledMcp.deleteServer({ id: tunneledMcpServerId });
+    },
+    onSuccess: async () => {
+      // Mark stale only (refetchType "none"): the deleted source's own queries
+      // are still mounted on the detail page until the caller navigates away,
+      // and force-refetching them here would block mutateAsync on requests for
+      // a resource that no longer exists, leaving the confirm dialog stuck on
+      // "Deleting". Consumers refetch on their next mount after navigation.
+      await Promise.all([
+        invalidateAllTunneledMcpServers(queryClient, { refetchType: "none" }),
+        invalidateAllListTunneledMcpServerConnections(queryClient, {
+          refetchType: "none",
+        }),
+        invalidateAllMcpServers(queryClient, { refetchType: "none" }),
+        invalidateAllMcpEndpoints(queryClient, { refetchType: "none" }),
+        invalidateAllUserSessionIssuers(queryClient, { refetchType: "none" }),
       ]);
     },
   });

@@ -118,3 +118,55 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
     },
   });
 }
+
+export type DeleteRemoteMcpSourceVariables = {
+  remoteMcpServerId: string;
+  // mcp_servers rows backed by this remote MCP server. Pre-fetched by the
+  // confirmation dialog so the same list the user just confirmed is exactly
+  // what gets soft-deleted.
+  mcpServerIds: string[];
+};
+
+export function useDeleteRemoteMcpSource(): UseMutationResult<
+  void,
+  Error,
+  DeleteRemoteMcpSourceVariables
+> {
+  const client = useSdkClient();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ remoteMcpServerId, mcpServerIds }) => {
+      // Soft-delete each linked mcp_server first; the server-side handler
+      // cascades to its mcp_endpoints. The deletes are independent, so run
+      // them concurrently and surface any failure before touching the source.
+      const results = await Promise.allSettled(
+        mcpServerIds.map((id) => client.mcpServers.delete({ id })),
+      );
+      const failed = results.find(
+        (result): result is PromiseRejectedResult =>
+          result.status === "rejected",
+      );
+      if (failed) {
+        throw failed.reason instanceof Error
+          ? failed.reason
+          : new Error(String(failed.reason));
+      }
+
+      await client.remoteMcp.deleteServer({ id: remoteMcpServerId });
+    },
+    onSuccess: async () => {
+      // Mark stale only (refetchType "none"): the deleted server's own queries
+      // are still mounted on its detail page until the caller navigates away,
+      // and force-refetching them here would block mutateAsync on requests for
+      // a resource that no longer exists. Consumers refetch on their next
+      // mount after navigation.
+      await Promise.all([
+        invalidateAllRemoteMcpServers(queryClient, { refetchType: "none" }),
+        invalidateAllMcpServers(queryClient, { refetchType: "none" }),
+        invalidateAllMcpEndpoints(queryClient, { refetchType: "none" }),
+        invalidateAllUserSessionIssuers(queryClient, { refetchType: "none" }),
+      ]);
+    },
+  });
+}
