@@ -235,26 +235,6 @@ if $started; then
 
     mise run "$start_task"
     mise run seed
-
-    # Deliberately not covered by --agent or -y. Everything else those flags
-    # auto-accept is setup: cheap, idempotent, and over in seconds. This
-    # drives real agent sessions for up to fifteen minutes, so it stays a
-    # question a person answers, even in a mode that answers everything else.
-    if ! $auto_yes && ! $agent_mode; then
-        echo ""
-        echo "Generate demo agent activity? Drives real Claude Code and Codex sessions"
-        echo "as the seeded users, so the observability pages have more than one person,"
-        echo "one harness and one tool in them. Cheapest models, stops after 15 minutes."
-        echo -n "[y/N] "
-        read -r answer
-        if [ "$(echo "$answer" | tr '[:upper:]' '[:lower:]')" = "y" ]; then
-            # Never fails the setup it runs at the end of. The stack is up and
-            # seeded by this point, so a machine with no agent CLI installed --
-            # or a run the developer interrupts -- should still reach the
-            # summary rather than exiting non-zero under `set -e`.
-            mise run demo:agent-activity || echo "Demo activity did not run; everything else is set up."
-        fi
-    fi
 else
     # Nothing will consume the cache, so stop paying for it: without this the
     # build runs to completion in the background of a `./zero` the user
