@@ -198,7 +198,7 @@ func normalizePreparationInput(in PreparationInput) (PreparationInput, error) {
 }
 func (s *Service) preparationTenant(ctx context.Context, write bool) (uuid.UUID, string, error) {
 	a, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || a == nil || a.ProjectID == nil {
+	if !ok || a == nil || a.ProjectID == nil || *a.ProjectID == uuid.Nil || a.ActiveOrganizationID == "" {
 		return uuid.Nil, "", oops.C(oops.CodeUnauthorized)
 	}
 	scope := authz.ScopeProjectRead
@@ -210,6 +210,20 @@ func (s *Service) preparationTenant(ctx context.Context, write bool) (uuid.UUID,
 	}
 	return *a.ProjectID, a.ActiveOrganizationID, nil
 }
+
+// recheckPreparationTenant preserves the tenant selected before waiting and
+// re-evaluates the request's required scope before starting a mutation.
+func (s *Service) recheckPreparationTenant(ctx context.Context, project uuid.UUID, org string, write bool) error {
+	currentProject, currentOrg, err := s.preparationTenant(ctx, write)
+	if err != nil {
+		return err
+	}
+	if currentProject != project || currentOrg != org {
+		return oops.C(oops.CodeForbidden)
+	}
+	return nil
+}
+
 func setPreparationBinding(ctx context.Context, q *repo.Queries, b repo.RemoteSessionEmaBinding, previous int64) (repo.RemoteSessionEmaBinding, error) {
 	result, err := q.SetEMABinding(ctx, repo.SetEMABindingParams{ID: b.ID, ProjectID: b.ProjectID, OrganizationID: b.OrganizationID, RemoteSessionClientID: b.RemoteSessionClientID, Generation: b.Generation, ExpectedGeneration: previous, State: conv.ToPGText(preparationBindingState(b.State)), GrantSource: conv.ToPGText(preparationBindingGrantSource(b.GrantSource)), RequestedScopes: b.RequestedScopes, ClaimID: b.ClaimID, ClaimedAt: b.ClaimedAt})
 	if err != nil {
@@ -244,6 +258,12 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 	// HTTP submission and outcome commit without an open transaction during HTTP.
 	// Process/connection loss releases the lock; the durable claim still prevents
 	// replay of an uncertain registration.
+	releaseAdmission, err := admitRegistration(ctx, s.db)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "admit preparation binding")
+	}
+	defer releaseAdmission()
+
 	conn, err := s.db.Acquire(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "lock preparation binding")
@@ -273,6 +293,9 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 		return nil, oops.E(oops.CodeUnexpected, err, "lock issuer registration")
 	}
 	defer releaseRegistration()
+	if err := s.recheckPreparationTenant(ctx, project, org, !read); err != nil {
+		return nil, err
+	}
 	tx, err := conn.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "prepare identity chaining")
@@ -295,6 +318,10 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 	}
 	if m := in.ResourceMetadata; m != nil && (m.Resource != in.Resource || !slices.Contains(m.AuthorizationServers, issuer.Issuer)) {
 		return nil, oops.E(oops.CodeBadRequest, nil, "resource authorization server association mismatch")
+	}
+	// Parent locks can also wait. Recheck before even creating a binding.
+	if err := s.recheckPreparationTenant(ctx, project, org, !read); err != nil {
+		return nil, err
 	}
 	// Read the client pointer before the binding lock; issuer lock serializes all
 	// preparation changes for this issuer and establishes lifecycle lock ordering.
@@ -341,6 +368,9 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 	b, err = q.LockEMABinding(ctx, repo.LockEMABindingParams(key))
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "prepare identity chaining")
+	}
+	if err := s.recheckPreparationTenant(ctx, project, org, !read); err != nil {
+		return nil, err
 	}
 	previous := b.Generation
 	if unlink {
@@ -432,6 +462,9 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 		if err = tx.Commit(ctx); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "prepare identity chaining")
 		}
+		// The authorized durable claim owns completion. Do not reauthorize after
+		// submission: losing permission then must not discard returned credentials
+		// or make an externally completed registration replayable.
 		return s.finishPreparationDCR(ctx, conn, in, b, issuer, method)
 	}
 	// Explicit selection is never inferred from interactive attachments or grants.

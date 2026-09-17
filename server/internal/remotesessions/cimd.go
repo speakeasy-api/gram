@@ -28,13 +28,6 @@ import (
 )
 
 const (
-	// clientMetadataDocumentMaxAgeSeconds is the Cache-Control max-age for
-	// served CIMD documents. Longer than the well-known metadata TTL: a
-	// document is keyed by an immutable client_id and changes only if the
-	// client's registration does, so upstream Authorization Servers can safely
-	// cache it for an hour.
-	clientMetadataDocumentMaxAgeSeconds = 3600
-
 	// clientJSONWebKeySetMaxAgeSeconds lets verifiers cache client public keys
 	// for an hour. Key rotation publishes pending keys before activating them
 	// and retains retired keys, so both sides of the rotation overlap this
@@ -189,7 +182,21 @@ func (m *ChallengeManager) HandleClientMetadataDocument(w http.ResponseWriter, r
 		return oops.E(oops.CodeUnexpected, err, "marshal client metadata document").LogError(ctx, m.logger)
 	}
 
-	return httpcache.WriteCacheableJSON(ctx, w, r, m.logger, "application/json; charset=utf-8", clientMetadataDocumentMaxAgeSeconds, body)
+	return httpcache.WriteCacheableJSON(ctx, clientMetadataResponseWriter{w}, r, m.logger, "application/json; charset=utf-8", 0, body)
+}
+
+// clientMetadataResponseWriter retains the shared ETag/conditional GET handling,
+// but overrides its freshness policy before either a 200 or 304 is committed.
+// A stable client_id does not imply immutable grant evidence: caches may store
+// the document, but must revalidate before reuse, including after revocation.
+// This policy is specific to metadata, not the rotation-aware JWKS endpoint.
+type clientMetadataResponseWriter struct {
+	http.ResponseWriter
+}
+
+func (w clientMetadataResponseWriter) WriteHeader(status int) {
+	w.Header().Set("Cache-Control", "public, no-cache")
+	w.ResponseWriter.WriteHeader(status)
 }
 
 // HandleClientJSONWebKeySet serves the public keys for a remote-session client

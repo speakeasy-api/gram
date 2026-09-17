@@ -235,6 +235,12 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 		return zero, fmt.Errorf("load remote session client for rotation: %w", err)
 	}
 
+	releaseAdmission, err := admitRegistration(ctx, r.db)
+	if err != nil {
+		return zero, fmt.Errorf("admit issuer rotation: %w", err)
+	}
+	defer releaseAdmission()
+
 	conn, err := r.db.Acquire(ctx)
 	if err != nil {
 		return zero, fmt.Errorf("acquire issuer rotation lock connection: %w", err)
