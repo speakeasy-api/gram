@@ -245,6 +245,18 @@ func (s *Service) withManagedClient(ctx context.Context, logger *slog.Logger, co
 	return &connectionRows{Connection: connection, Okta: oktaRow, Managed: managed}, nil
 }
 
+// withRevokedManagedClient tolerates managed rows the organization removed after revocation.
+func (s *Service) withRevokedManagedClient(ctx context.Context, logger *slog.Logger, connection repo.IdentityProviderConnection, oktaRow repo.OktaIdentityProviderConnection) (*connectionRows, error) {
+	managed, err := s.provisioner.GetManagedClient(ctx, connection.OrganizationID, connection.ID)
+	switch {
+	case errors.Is(err, ErrNotProvisioned):
+		managed = nil
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "load connection credential").LogError(ctx, logger)
+	}
+	return &connectionRows{Connection: connection, Okta: oktaRow, Managed: managed}, nil
+}
+
 func (s *Service) lock(ctx context.Context, logger *slog.Logger, q *repo.Queries, organizationID string, id uuid.UUID) (*connectionRows, error) {
 	row, err := q.LockOktaIdentityProviderConnection(ctx, repo.LockOktaIdentityProviderConnectionParams{
 		ID:             id,
@@ -1041,7 +1053,7 @@ func (s *Service) Revoke(ctx context.Context, payload *gen.RevokePayload) (*gen.
 	}
 
 	// The managed client lookup reflects the revoked key set.
-	rows, err := s.withManagedClient(ctx, logger, connection, oktaRow)
+	rows, err := s.withRevokedManagedClient(ctx, logger, connection, oktaRow)
 	if err != nil {
 		return nil, err
 	}
@@ -1067,7 +1079,7 @@ func (s *Service) loadRevocable(ctx context.Context, logger *slog.Logger, organi
 }
 
 func (s *Service) revokedView(ctx context.Context, logger *slog.Logger, existing *repo.GetOktaIdentityProviderConnectionIncludingDeletedRow) (*gen.OktaIdentityProviderConnection, error) {
-	rows, err := s.withManagedClient(ctx, logger, existing.IdentityProviderConnection, existing.OktaIdentityProviderConnection)
+	rows, err := s.withRevokedManagedClient(ctx, logger, existing.IdentityProviderConnection, existing.OktaIdentityProviderConnection)
 	if err != nil {
 		return nil, err
 	}

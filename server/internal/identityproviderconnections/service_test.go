@@ -810,6 +810,34 @@ func TestSubmitClientID_TransportFailureLeavesPending(t *testing.T) {
 	require.Equal(t, identityproviderconnections.StatusVerified, submitted.Status)
 }
 
+func TestRevoke_RetryAfterManagedClientDeleted(t *testing.T) {
+	t.Parallel()
+	ctx, si := newTestService(t)
+
+	created := createConnection(t, ctx, si, fullOrgURL)
+	submitClientID(t, ctx, si, created.ID)
+
+	revoked, err := si.svc.Revoke(ctx, &gen.RevokePayload{SessionToken: nil, ID: created.ID})
+	require.NoError(t, err)
+	require.Equal(t, identityproviderconnections.StatusRevoked, revoked.Status)
+
+	managed, err := si.provisioner.GetManagedClient(ctx, si.orgID, mustParseUUID(t, created.ID))
+	require.NoError(t, err)
+	_, err = remotesessionsrepo.New(si.conn.conn).DeleteOrganizationRemoteSessionClient(ctx, remotesessionsrepo.DeleteOrganizationRemoteSessionClientParams{
+		ID:             managed.ClientRowID,
+		OrganizationID: conv.ToPGText(si.orgID),
+	})
+	require.NoError(t, err, "a revoked connection's client is the organization's to remove")
+
+	again, err := si.svc.Revoke(ctx, &gen.RevokePayload{SessionToken: nil, ID: created.ID})
+	require.NoError(t, err)
+	require.Equal(t, identityproviderconnections.StatusRevoked, again.Status)
+	require.Nil(t, again.ActiveKey)
+	require.Nil(t, again.ClientID)
+	require.False(t, again.ClientIDSubmitted)
+	require.Empty(t, again.JwksURL)
+}
+
 func TestRevoke_ConcurrentCallsBothSucceedAndAuditOnce(t *testing.T) {
 	t.Parallel()
 	ctx, si := newTestService(t)
