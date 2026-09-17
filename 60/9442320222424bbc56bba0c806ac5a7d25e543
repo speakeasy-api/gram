@@ -1,0 +1,14 @@
+server/internal/mcp/risk_scan_test.go
+  h_e404c1a6a54184 68-74
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "609442320222424bbc56bba0c806ac5a7d25e543",
+  "prompts": {},
+  "humans": {
+    "h_e404c1a6a54184": {
+      "author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
