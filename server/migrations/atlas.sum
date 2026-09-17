@@ -1,4 +1,4 @@
-h1:PbaXEsgkxQgjTZg2Klpc/TeX65O86cy9RpdtY7bacEk=
+h1:YvntecPJRwi0hkGZA5mCMmVBu/Su/jPLK30rTB2rbxA=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -424,3 +424,4 @@ h1:PbaXEsgkxQgjTZg2Klpc/TeX65O86cy9RpdtY7bacEk=
 20260921220208_agents-add-project-id.sql h1:w3kTUDevybyLQ+rQq6W2eAxKzt8PuCkGLhlgdK4Z7Ro=
 20260921235858_user-session-issuers-add-use-authentication-host.sql h1:fR4/ocMxKb2wkgKku+DN0P1JTQSxPWmy8y4J+uxhNPA=
 20260922164230_make_user_sessions_refresh_token_hash_nullable.sql h1:g3F8wgOZBMkhnqBikWp/z+6DpadQ7tB2MUsBUbI2iHU=
+20260922174732_support-user-session-issuer-moves.sql h1:GzLWf5MujXAiDvMv1jcxWrKc+D6oz+SSAqW0XWYI5PI=
