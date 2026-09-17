@@ -97,6 +97,8 @@ type httpClient struct {
 	// mintAdmission serializes handshakes while allowing waiters to cancel.
 	mintAdmission chan struct{}
 
+	// nonce is shared by the token endpoint and the Management API because
+	// both live on the org host and Okta issues one nonce for both (RFC 9449 §9).
 	nonce dpop.NonceCache
 
 	mu        sync.Mutex
@@ -423,6 +425,7 @@ func (c *httpClient) do(ctx context.Context, method string, target *url.URL) ([]
 			return nil, nil, err
 		}
 
+		// RFC 9449 §7.3, §11.1: every attempt, including retries, signs a fresh proof with a new jti and iat.
 		proof, err := c.key.Proof(method, target, dpop.ProofOptions{AccessToken: tok.accessToken, Nonce: c.nonce.Current(), IssuedAt: c.now()})
 		if err != nil {
 			return nil, nil, fmt.Errorf("okta resource proof: %w", err)
@@ -433,13 +436,16 @@ func (c *httpClient) do(ctx context.Context, method string, target *url.URL) ([]
 			return nil, nil, fmt.Errorf("build okta request: %w", err)
 		}
 		req.Header.Set("Accept", "application/json")
+		// RFC 9449 §7.1: the DPoP-bound token uses the DPoP authorization scheme.
 		req.Header.Set("Authorization", dpop.TokenType+" "+tok.accessToken)
+		// RFC 9449 §4.1, §7: exactly one DPoP header carrying a proof with ath.
 		req.Header.Set(dpop.HeaderName, proof)
 
 		status, header, body, err := c.send(req)
 		if err != nil {
 			return nil, nil, fmt.Errorf("okta %s %s: %w", method, target.Path, err)
 		}
+		// RFC 9449 §8.2, §9: a DPoP-Nonce on any response, success included, replaces the cached nonce.
 		c.nonce.Remember(header)
 		if status != http.StatusTooManyRequests {
 			c.observeRateLimit(header)
@@ -463,6 +469,7 @@ func (c *httpClient) do(ctx context.Context, method string, target *url.URL) ([]
 			continue
 
 		case status == http.StatusUnauthorized:
+			// RFC 9449 §9: a 401 with WWW-Authenticate error="use_dpop_nonce" and DPoP-Nonce is retried once with that nonce.
 			if dpop.IsUseNonceChallenge(header, body) {
 				if nonceRetried {
 					return nil, nil, newAPIError(method, target.Path, status, body)
@@ -565,6 +572,7 @@ func (c *httpClient) token(ctx context.Context) (cachedToken, error) {
 	if err != nil {
 		return cachedToken{}, err
 	}
+	// RFC 9449 §5: a token_type other than DPoP means the token is not sender-constrained, so discard it.
 	if !strings.EqualFold(tok.tokenType, dpop.TokenType) {
 		return cachedToken{}, fmt.Errorf("okta token response type %q is not DPoP", tok.tokenType)
 	}
@@ -587,6 +595,7 @@ func (c *httpClient) mint(ctx context.Context, scopes []string) (cachedToken, er
 		if err != nil {
 			return cachedToken{}, err
 		}
+		// RFC 9449 §8.2: use the nonce the server most recently supplied on every later token request.
 		if nextNonce := header.Get(dpop.NonceHeaderName); nextNonce != "" {
 			nonce = nextNonce
 		}
@@ -607,6 +616,7 @@ func (c *httpClient) mint(ctx context.Context, scopes []string) (cachedToken, er
 			}
 			continue
 
+		// RFC 9449 §8: a 400 use_dpop_nonce with DPoP-Nonce is retried once with that nonce.
 		case status == http.StatusBadRequest && dpop.IsUseNonceChallenge(header, body):
 			if nonceRetried {
 				return cachedToken{}, errors.New("okta token endpoint rejected dpop nonce twice")
@@ -653,6 +663,7 @@ func (c *httpClient) requestToken(ctx context.Context, nonce string, scopes []st
 		return 0, nil, nil, fmt.Errorf("sign okta client assertion: %w", err)
 	}
 
+	// RFC 9449 §5: the token request carries a fresh proof for POST on the token endpoint, without ath.
 	proof, err := c.key.Proof(http.MethodPost, c.tokenURL, dpop.ProofOptions{AccessToken: "", Nonce: nonce, IssuedAt: c.now()})
 	if err != nil {
 		return 0, nil, nil, fmt.Errorf("okta token proof: %w", err)
@@ -680,6 +691,7 @@ func (c *httpClient) requestToken(ctx context.Context, nonce string, scopes []st
 	if err != nil {
 		return 0, nil, nil, fmt.Errorf("okta token request: %w", err)
 	}
+	// RFC 9449 §8.2: a DPoP-Nonce on any token response replaces the cached nonce.
 	c.nonce.Remember(header)
 	if status != http.StatusTooManyRequests {
 		c.observeRateLimit(header)

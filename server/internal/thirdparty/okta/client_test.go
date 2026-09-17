@@ -1224,3 +1224,23 @@ func TestClient_RateLimitJitterWaitCancellation(t *testing.T) {
 		})
 	}
 }
+
+// RFC 9449 §7.3: a resource retry after a transient 429 signs a fresh proof.
+func TestClient_Resource429RetrySignsFreshProof(t *testing.T) {
+	t.Parallel()
+	tc := newDefaultTestClient(t)
+	tc.stub.setApps(stubApps(1))
+	tc.stub.setPending429(1)
+
+	listApps(t, tc)
+
+	var resourceProofs []proofRecord
+	for _, p := range tc.stub.recordedProofs() {
+		if p.method == http.MethodGet {
+			resourceProofs = append(resourceProofs, p)
+		}
+	}
+	require.Len(t, resourceProofs, 2)
+	require.NotEqual(t, resourceProofs[0].jti, resourceProofs[1].jti)
+	require.Equal(t, resourceProofs[0].ath, resourceProofs[1].ath)
+}
