@@ -99,11 +99,13 @@ function CopyableSetupValue({
           disabled={value === undefined}
           onClick={() => void copy()}
         >
-          {status === "copied" ? (
-            <Check className="h-3 w-3" />
-          ) : (
-            <Copy className="h-3 w-3" />
-          )}
+          <Button.LeftIcon>
+            {status === "copied" ? (
+              <Check className="h-3 w-3" />
+            ) : (
+              <Copy className="h-3 w-3" />
+            )}
+          </Button.LeftIcon>
           <Button.Text>{status === "copied" ? "Copied" : "Copy"}</Button.Text>
         </Button>
       </div>
