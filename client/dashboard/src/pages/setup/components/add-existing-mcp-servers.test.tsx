@@ -64,15 +64,14 @@ describe("AddExistingMCPServers", () => {
     ).toBeTruthy();
     expect(screen.getByText("Optional")).toBeTruthy();
     expect(
-      screen.getByText(
-        "Already use remote MCP servers in Claude Code? Copy this prompt into Claude Code to check its Speakeasy connection before adding servers. This dashboard cannot verify which client is authenticated.",
-      ),
-    ).toBeTruthy();
+      screen.getByText("View prompt and setup help").closest("details")?.open,
+    ).toBe(false);
     expect(
       screen.getByText(
-        "Review the per-server results in Claude Code. You can skip this step.",
+        "Copy the prompt and paste it into Claude Code. Claude will guide you through choosing which remote MCP servers to import into Speakeasy.",
       ),
     ).toBeTruthy();
+    expect(screen.getByText("View prompt and setup help")).toBeTruthy();
     expect(
       screen
         .getByRole("link", {
@@ -135,9 +134,7 @@ describe("AddExistingMCPServers", () => {
       });
       render(<AddExistingMCPServers />);
       expect(
-        screen.getByText(
-          /This dashboard cannot verify which client is authenticated/,
-        ),
+        screen.getByText(/Copy the prompt and paste it into Claude Code/),
       ).toBeTruthy();
       const prompt = screen.getByText(existingMCPServersPrompt()).textContent!;
       expect(prompt).toContain("through your OWN Speakeasy connection");
@@ -200,7 +197,7 @@ describe("AddExistingMCPServers", () => {
     fireEvent.click(screen.getByRole("button", { name: "Copy prompt" }));
     expect(await screen.findByRole("alert")).toHaveProperty(
       "textContent",
-      "Could not copy the prompt. Select and copy it manually.",
+      "Could not copy the prompt. Open “View prompt and setup help” to copy it manually.",
     );
     expect(screen.queryByText("Prompt copied")).toBeNull();
   });

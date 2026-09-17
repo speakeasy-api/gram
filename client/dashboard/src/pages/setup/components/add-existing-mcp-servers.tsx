@@ -52,40 +52,35 @@ export function AddExistingMCPServers({
     >
       <div className="space-y-4">
         <p className="text-muted-foreground text-sm">
-          Already use remote MCP servers in Claude Code? Copy this prompt into
-          Claude Code to check its Speakeasy connection before adding servers.
-          This dashboard cannot verify which client is authenticated.
+          Copy the prompt and paste it into Claude Code. Claude will guide you
+          through choosing which remote MCP servers to import into Speakeasy.
         </p>
-        <p className="text-muted-foreground text-sm">
-          Discovery requires your informed consent: Claude's list command can
-          launch local processes and contact local/private-network servers
-          before filtering. Those processes may have side effects. You can
-          provide a sanitized manual inventory instead. The agent must not edit
-          local configuration or transfer credentials; authentication uses
-          Speakeasy's secure setup flow.
-        </p>
-        <p className="text-muted-foreground text-sm">
-          Manual MCP configuration does not install the reviewed skill.{" "}
-          <a
-            className="text-foreground underline underline-offset-4"
-            href="https://github.com/speakeasy-api/marketplace#readme"
-          >
-            Install the Speakeasy Platform MCP plugin
-          </a>{" "}
-          if the skill is unavailable.
-        </p>
-        <div className="border-border bg-muted/30 rounded-md border p-3">
-          <code className="block text-xs break-words whitespace-normal">
-            {prompt}
-          </code>
-        </div>
         <CopyPrompt
           key={JSON.stringify([organization.id, prompt])}
           prompt={prompt}
         />
-        <p className="text-muted-foreground text-sm">
-          Review the per-server results in Claude Code. You can skip this step.
-        </p>
+        <details className="text-muted-foreground text-sm">
+          <summary className="cursor-pointer">
+            View prompt and setup help
+          </summary>
+          <div className="mt-3 space-y-3">
+            <div className="border-border bg-muted/30 rounded-md border p-3">
+              <code className="block text-xs break-words whitespace-normal">
+                {prompt}
+              </code>
+            </div>
+            <p>
+              If Claude cannot find the import skill,{" "}
+              <a
+                className="text-foreground underline underline-offset-4"
+                href="https://github.com/speakeasy-api/marketplace#readme"
+              >
+                Install the Speakeasy Platform MCP plugin
+              </a>
+              .
+            </p>
+          </div>
+        </details>
       </div>
     </StepSection>
   );
@@ -121,7 +116,8 @@ function CopyPrompt({ prompt }: { prompt: string }): JSX.Element {
       )}
       {copyStatus === "error" && (
         <p role="alert" className="text-destructive text-sm">
-          Could not copy the prompt. Select and copy it manually.
+          Could not copy the prompt. Open “View prompt and setup help” to copy
+          it manually.
         </p>
       )}
     </div>
