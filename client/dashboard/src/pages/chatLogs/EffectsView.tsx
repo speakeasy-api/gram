@@ -30,6 +30,7 @@ import { RiskBadge, RevealSecretButton } from "./chatRisk";
 import {
   getMatchStrings,
   highlightMatches,
+  needsWholeMessageMask,
   resultsAreSensitive,
   sectionRiskLabel,
   useRowReveal,
@@ -185,7 +186,13 @@ function CompactMessageRow({
           )}
         >
           {hasDetailedRisk
-            ? highlightMatches(text, matches, sensitive && !revealed, sensitive)
+            ? highlightMatches(
+                text,
+                matches,
+                sensitive && !revealed,
+                sensitive,
+                needsWholeMessageMask(riskResults),
+              )
             : text}
         </p>
 

@@ -4,8 +4,11 @@ import {
   collapseToMatchWindows,
   getMatchStrings,
   getRiskBadgeLabel,
+  maskBlock,
   matchRanges,
   matchShownInDescription,
+  needsWholeMessageMask,
+  resultIsSpanlessSensitive,
   resultsAreSensitive,
   riskResultAnchorId,
   sectionRiskLabel,
@@ -149,6 +152,32 @@ describe("LLM analyzer findings in the transcript", () => {
     expect(resultsAreSensitive([result("prompt_injection", "{}")])).toBe(false);
   });
 
+  it("masks the whole message for secret and PII findings, which carry no span", () => {
+    expect(resultIsSpanlessSensitive(llm("secret.llm"))).toBe(true);
+    expect(resultIsSpanlessSensitive(llm("pii.llm"))).toBe(true);
+    expect(resultIsSpanlessSensitive(llm("prompt_injection.llm"))).toBe(false);
+    expect(resultIsSpanlessSensitive(llm("llm_analyzer.dead_letter"))).toBe(
+      false,
+    );
+    // Scanner findings locate their value, so span masking stays enough.
+    expect(resultIsSpanlessSensitive(result("gitleaks", "AKIAEXAMPLE"))).toBe(
+      false,
+    );
+    expect(needsWholeMessageMask([llm("secret.llm")])).toBe(true);
+    expect(needsWholeMessageMask([llm("prompt_injection.llm")])).toBe(false);
+    expect(needsWholeMessageMask([result("gitleaks", "AKIAEXAMPLE")])).toBe(
+      false,
+    );
+    // One spanless verdict is enough, whatever else was found alongside.
+    expect(
+      needsWholeMessageMask([
+        result("gitleaks", "AKIAEXAMPLE"),
+        llm("pii.llm"),
+      ]),
+    ).toBe(true);
+    expect(needsWholeMessageMask(undefined)).toBe(false);
+  });
+
   it.each([
     ["secret.llm", "SECRET"],
     ["pii.llm", "PII"],
@@ -239,5 +268,12 @@ describe("riskResultAnchorId", () => {
 
   it("falls back to the message anchor for legacy rows", () => {
     expect(riskResultAnchorId(result("gitleaks", "secret"))).toBe("m1");
+  });
+});
+
+describe("maskBlock", () => {
+  it("dots out every character but keeps line breaks", () => {
+    expect(maskBlock("ab\ncd")).toBe("••\n••");
+    expect(maskBlock("")).toBe("");
   });
 });

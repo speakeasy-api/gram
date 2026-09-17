@@ -82,6 +82,24 @@ export function resultsAreSensitive(
   return results?.some(resultIsSensitive) ?? false;
 }
 
+/** A sensitive finding with no span the transcript could dot out on its own:
+ * the LLM analyzer reports secrets and personal data without locating them
+ * (its match is empty, its rationale may quote the value), so the only thing
+ * left to mask is the message as a whole. Scanner findings always carry a
+ * span and never qualify. */
+export function resultIsSpanlessSensitive(result: RiskResult): boolean {
+  return resultIsSensitive(result) && !matchIsMessageContent(result);
+}
+
+/** Whether a row must mask its whole body rather than individual spans, see
+ * `resultIsSpanlessSensitive`. Until the analyzer emits a redacted span the
+ * body is the smallest unit that provably covers the flagged value. */
+export function needsWholeMessageMask(
+  results: RiskResult[] | undefined,
+): boolean {
+  return results?.some(resultIsSpanlessSensitive) ?? false;
+}
+
 /** Count of distinct findings (by source/rule/match), matching the RiskBadge's
  * grouping — used for the "N risks" turn-divider label. */
 export function distinctRiskCount(results: RiskResult[]): number {
@@ -167,6 +185,12 @@ export function maskValue(value: string): string {
   // Mask character-for-character so revealing/hiding doesn't change the text
   // length (and thus doesn't shift surrounding layout).
   return "•".repeat(value.length);
+}
+
+/** `maskValue` for a whole message body: line breaks survive so the masked
+ * block keeps the message's shape and revealing it doesn't reflow the row. */
+export function maskBlock(text: string): string {
+  return text.replace(/[^\n]/g, "•");
 }
 
 // Keep a per-row reveal toggle in sync with the panel-wide "reveal all" switch
@@ -311,7 +335,9 @@ export function collapseToMatchWindows(
 
 /** Wrap every occurrence of `matches` in `text` with a yellow highlight. When
  * `masked`, the matched characters are dotted out (the surrounding context
- * stays visible). */
+ * stays visible). With `maskWhole` the entire text is the sensitive value
+ * (see `needsWholeMessageMask`): it is dotted out as one block while masked
+ * and keeps the sensitive styling once revealed, any spans marked within. */
 export function highlightMatches(
   text: string,
   matches: string[],
@@ -319,7 +345,22 @@ export function highlightMatches(
   /** The spans are maskable (sensitive), so render them with the fixed-width
    * style in both states even when currently revealed — avoids reflow on toggle. */
   maskable = false,
+  maskWhole = false,
 ): ReactNode {
+  if (maskWhole) {
+    return (
+      <span
+        className={cn(
+          SENSITIVE_MARK_BASE,
+          masked ? SENSITIVE_MARK_MASKED : SENSITIVE_MARK_REVEALED,
+        )}
+      >
+        {masked
+          ? maskBlock(text)
+          : highlightMatches(text, matches, false, maskable)}
+      </span>
+    );
+  }
   if (matches.length === 0) return text;
 
   const merged = matchRanges(text, matches);
