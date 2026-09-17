@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -1333,7 +1334,7 @@ func TestToolProxy_Do_StringifiedJSONBody(t *testing.T) {
 
 			// Execute the proxy call
 			ciEnv := toolconfig.NewCaseInsensitiveEnv()
-			err = proxy.Do(ctx, recorder, bytes.NewReader([]byte(tt.toolCallBody)), toolconfig.ToolCallEnv{
+			err = proxy.Do(ctx, recorder, strings.NewReader(tt.toolCallBody), toolconfig.ToolCallEnv{
 				SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 				UserConfig: ciEnv,
 			}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{})
@@ -1375,7 +1376,7 @@ func TestResourceProxy_ReadResource(t *testing.T) {
 	defer mockServer.Close()
 
 	// Setup test dependencies
-	ctx := context.Background()
+	ctx := t.Context()
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
 	meterProvider := testenv.NewMeterProvider(t)
@@ -1522,7 +1523,7 @@ func TestToolProxy_Do_FunctionMetricsTrailers(t *testing.T) {
 	defer mockServer.Close()
 
 	// Setup test dependencies
-	ctx := context.Background()
+	ctx := t.Context()
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
 	meterProvider := testenv.NewMeterProvider(t)
@@ -1545,10 +1546,14 @@ func TestToolProxy_Do_FunctionMetricsTrailers(t *testing.T) {
 	}
 	toolCallPlan := NewFunctionToolCallPlan(tool, plan)
 	// Mock the functions.ToolCaller to return our mock server URL
+	var receivedInput json.RawMessage
 	mockFuncCaller := &mockToolCaller{
 		serverURL: mockServer.URL,
 		onCall: func(invID uuid.UUID) {
 			invocationID = invID
+		},
+		onRequest: func(req functions.RunnerToolCallRequest) {
+			receivedInput = req.Input
 		},
 	}
 
@@ -1590,6 +1595,9 @@ func TestToolProxy_Do_FunctionMetricsTrailers(t *testing.T) {
 	}, toolCallPlan, tm.HTTPLogAttributes{})
 
 	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.JSONEq(t, `{"result": "success"}`, recorder.Body.String())
+	require.JSONEq(t, string(bodyBytes), string(receivedInput))
 
 	// Verify trailers were proxied through
 	result := recorder.Result()
@@ -1740,7 +1748,7 @@ func TestToolProxy_Do_PlatformTool_PreservesRawBodyFieldPayload(t *testing.T) {
 func TestToolProxy_Do_PlatformTool_PreservesCallerFaultAttribution(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	recorder := tracetest.NewSpanRecorder()
 	tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
 	t.Cleanup(func() { require.NoError(t, tracerProvider.Shutdown(context.Background())) })
@@ -1771,12 +1779,13 @@ func TestToolProxy_Do_PlatformTool_PreservesCallerFaultAttribution(t *testing.T)
 		platformExecutor,
 	)
 
-	err = proxy.Do(ctx, httptest.NewRecorder(), bytes.NewReader([]byte(`{}`)), toolconfig.ToolCallEnv{
+	err = proxy.Do(ctx, httptest.NewRecorder(), strings.NewReader(`{}`), toolconfig.ToolCallEnv{
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
 	}, toolCallPlan, tm.HTTPLogAttributes{})
 	require.Error(t, err)
 	require.True(t, oops.IsClientFault(err))
+	require.ErrorIs(t, err, platformExecutor.err)
 	spans := recorder.Ended()
 	require.Len(t, spans, 1)
 	require.Equal(t, codes.Unset, spans[0].Status().Code, "caller faults must not mark gateway spans as errors")

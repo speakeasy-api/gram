@@ -21,6 +21,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
@@ -28,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
+	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -418,7 +420,7 @@ func TestServePlatformToolset_PlatformMCPReadNonManagedAssistantRejected(t *test
 func TestServePlatformToolset_PlatformMCPReadListProjectsCall(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestMCPService(t)
+	ctx, ti, recorder := newTestMCPServiceWithScanSpans(t)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -454,6 +456,16 @@ func TestServePlatformToolset_PlatformMCPReadListProjectsCall(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code, "list_projects call must succeed: %s", w.Body.String())
 	require.Contains(t, w.Body.String(), authCtx.ProjectID.String(), "the caller's project must appear in the listing")
+
+	events := scanAttributes(recorder, mcpriskscan.SurfacePlatformMCP)
+	require.Len(t, events, 1)
+	require.Equal(t, authCtx.ActiveOrganizationID, events[0][attr.OrganizationIDKey])
+	require.Equal(t, authCtx.ProjectID.String(), events[0][attr.ProjectIDKey])
+	require.Equal(t, "list_projects", events[0][attr.ToolNameKey])
+	require.Empty(t, events[0][attr.McpServerIDKey])
+	require.Empty(t, events[0][attr.ToolsetIDKey])
+	require.Equal(t, mcpriskscan.MethodToolsCall, events[0]["gram.mcp.risk.scan.method"])
+	require.Equal(t, mcpriskscan.PhaseBeforeExecution, events[0]["gram.mcp.risk.scan.phase"])
 }
 
 // grantLiveOrgAdmin persists an org:admin grant for the auth context's user.
