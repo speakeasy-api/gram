@@ -252,10 +252,8 @@ func TestSourceCategoriesConsistentWithClassify(t *testing.T) {
 
 	// One representative finding per (category, emitting source). The LLM
 	// analyzer stands in for several legacy sources, so the categories it
-	// covers list a second representative carrying its source and rule id.
-	// A cli_destructive policy fans out to the same destructive_tool.llm
-	// rule; the finding classifies as destructive_tool, which the source map
-	// also admits.
+	// covers list a second representative carrying its source and the rule
+	// id it emits for that source's policies.
 	representative := map[categories.Category][]scanners.Finding{
 		categories.CategoryAccountIdentity: {finding(accountidentity.Source, "identity.unapproved_domain")},
 		categories.CategorySecrets:         {finding(SourceGitleaks, "secret.generic-api-key"), finding(llmanalyzer.Source, llmanalyzer.RuleSecret)},
@@ -267,7 +265,7 @@ func TestSourceCategoriesConsistentWithClassify(t *testing.T) {
 		categories.CategoryPromptInjection: {finding(SourcePromptInjection, promptinjection.Rule), finding(llmanalyzer.Source, llmanalyzer.RulePromptInjection)},
 		categories.CategoryShadowMCP:       {finding(shadowmcp.SourceShadowMCP, "shadow_mcp")},
 		categories.CategoryDestructiveTool: {finding(shadowmcp.SourceDestructiveTool, destructivetool.Rule), finding(llmanalyzer.Source, llmanalyzer.RuleDestructiveTool)},
-		categories.CategoryCLIDestructive:  {finding(SourceCLIDestructive, "cli_destructive.rm_rf"), finding(llmanalyzer.Source, llmanalyzer.RuleDestructiveTool)},
+		categories.CategoryCLIDestructive:  {finding(SourceCLIDestructive, "cli_destructive.rm_rf"), finding(llmanalyzer.Source, llmanalyzer.RuleCLIDestructive)},
 		categories.CategoryPromptPolicy:    {finding(promptpolicy.Source, promptpolicy.Rule)},
 		categories.CategoryCustom:          {finding(SourceCustom, "custom.test")},
 	}

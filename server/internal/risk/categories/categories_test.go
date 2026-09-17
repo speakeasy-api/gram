@@ -28,6 +28,7 @@ func TestClassify_PinsPriorCASEBehavior(t *testing.T) {
 		{name: "llm analyzer pii", source: "llm_analyzer", ruleID: "pii.llm", want: CategoryPII},
 		{name: "llm analyzer prompt injection", source: "llm_analyzer", ruleID: "prompt_injection.llm", want: CategoryPromptInjection},
 		{name: "llm analyzer destructive tool", source: "llm_analyzer", ruleID: "destructive_tool.llm", want: CategoryDestructiveTool},
+		{name: "llm analyzer cli destructive", source: "llm_analyzer", ruleID: "cli_destructive.llm", want: CategoryCLIDestructive},
 		{name: "llm analyzer dead letter", source: "llm_analyzer", ruleID: "llm_analyzer.dead_letter", want: CategoryCustom},
 
 		// Secrets prefix.

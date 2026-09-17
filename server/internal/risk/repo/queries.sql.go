@@ -3309,6 +3309,7 @@ categorized AS (
         WHEN rr.source = 'llm_judge' THEN 'prompt_policy'
         WHEN rr.source IN ('shadow_mcp', 'destructive_tool', 'cli_destructive', 'prompt_injection') THEN rr.source
         WHEN rr.rule_id = 'destructive_tool.llm' THEN 'destructive_tool'
+        WHEN rr.rule_id = 'cli_destructive.llm' THEN 'cli_destructive'
         WHEN rr.rule_id = 'prompt_injection.llm' THEN 'prompt_injection'
         WHEN rr.rule_id LIKE 'secret.%' THEN 'secrets'
         WHEN rr.rule_id IN ('pii.credit_card', 'pii.iban_code', 'pii.us_bank_number', 'pii.crypto') THEN 'financial'
@@ -4155,6 +4156,7 @@ FROM (
       WHEN rr.source = 'llm_judge' THEN 'prompt_policy'
       WHEN rr.source IN ('shadow_mcp', 'destructive_tool', 'cli_destructive', 'prompt_injection') THEN rr.source
       WHEN rr.rule_id = 'destructive_tool.llm' THEN 'destructive_tool'
+      WHEN rr.rule_id = 'cli_destructive.llm' THEN 'cli_destructive'
       WHEN rr.rule_id = 'prompt_injection.llm' THEN 'prompt_injection'
       WHEN rr.rule_id LIKE 'secret.%' THEN 'secrets'
       WHEN rr.rule_id IN ('pii.credit_card', 'pii.iban_code', 'pii.us_bank_number', 'pii.crypto') THEN 'financial'
@@ -4404,6 +4406,7 @@ WITH categorized AS (
       WHEN rr.source = 'llm_judge' THEN 'prompt_policy'
       WHEN rr.source IN ('shadow_mcp', 'destructive_tool', 'cli_destructive', 'prompt_injection') THEN rr.source
       WHEN rr.rule_id = 'destructive_tool.llm' THEN 'destructive_tool'
+      WHEN rr.rule_id = 'cli_destructive.llm' THEN 'cli_destructive'
       WHEN rr.rule_id = 'prompt_injection.llm' THEN 'prompt_injection'
       WHEN rr.rule_id LIKE 'secret.%' THEN 'secrets'
       WHEN rr.rule_id IN ('pii.credit_card', 'pii.iban_code', 'pii.us_bank_number', 'pii.crypto') THEN 'financial'
@@ -4509,6 +4512,7 @@ WITH user_findings AS (
       WHEN rr.source = 'llm_judge' THEN 'prompt_policy'
       WHEN rr.source IN ('shadow_mcp', 'destructive_tool', 'cli_destructive', 'prompt_injection') THEN rr.source
       WHEN rr.rule_id = 'destructive_tool.llm' THEN 'destructive_tool'
+      WHEN rr.rule_id = 'cli_destructive.llm' THEN 'cli_destructive'
       WHEN rr.rule_id = 'prompt_injection.llm' THEN 'prompt_injection'
       WHEN rr.rule_id LIKE 'secret.%' THEN 'secrets'
       WHEN rr.rule_id IN ('pii.credit_card', 'pii.iban_code', 'pii.us_bank_number', 'pii.crypto') THEN 'financial'

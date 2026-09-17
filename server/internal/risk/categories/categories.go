@@ -93,6 +93,7 @@ var Definitions = []Definition{
 		Description: "Tool calls whose arguments match a curated set of destructive shell, git, database, or cloud CLI patterns (rm -rf, git push --force, DROP TABLE, kubectl delete ns, ...). Applies to native Bash / run_terminal_cmd as well as MCP-routed tools whose arguments carry destructive content.",
 		Icon:        "terminal",
 		Source:      "cli_destructive",
+		RuleIDs:     []string{"cli_destructive.llm"},
 	},
 	{
 		Category:    CategoryAccountIdentity,
