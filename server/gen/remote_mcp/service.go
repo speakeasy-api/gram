@@ -90,6 +90,11 @@ type CreateServerAndMcpServerPayload struct {
 	URL string
 	// The transport type for the remote MCP server (e.g. streamable-http)
 	TransportType string
+	// For createServerAndMcpServer, the ID of an existing project- or
+	// organization-owned user session issuer to attach to the linked MCP server.
+	// Omit to mint a project issuer. The source-only createServer method rejects
+	// this field.
+	UserSessionIssuerID *string
 }
 
 // CreateServerAndMcpServerResult is the result type of the remoteMcp service
@@ -136,6 +141,11 @@ type CreateServerPayload struct {
 	URL string
 	// The transport type for the remote MCP server (e.g. streamable-http)
 	TransportType string
+	// For createServerAndMcpServer, the ID of an existing project- or
+	// organization-owned user session issuer to attach to the linked MCP server.
+	// Omit to mint a project issuer. The source-only createServer method rejects
+	// this field.
+	UserSessionIssuerID *string
 }
 
 // DeleteServerHeaderPayload is the payload type of the remoteMcp service

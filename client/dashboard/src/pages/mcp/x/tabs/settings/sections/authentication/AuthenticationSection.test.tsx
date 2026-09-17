@@ -8,10 +8,12 @@ const {
   useProtectedResourceMetadata,
   useAllRemoteSessionClients,
   useUserSessionIssuer,
+  useEffectiveUserSessionIssuers,
 } = vi.hoisted(() => ({
   useProtectedResourceMetadata: vi.fn(),
   useAllRemoteSessionClients: vi.fn(),
   useUserSessionIssuer: vi.fn(),
+  useEffectiveUserSessionIssuers: vi.fn(),
 }));
 
 vi.mock("@gram/client/react-query/userSessionIssuer.js", () => ({
@@ -23,6 +25,17 @@ vi.mock("@gram/client/react-query/remoteSessionIssuers.js", () => ({
     data: { result: { items: [] } },
     isLoading: false,
   }),
+}));
+
+vi.mock("@/hooks/useEffectiveUserSessionIssuers", () => ({
+  useEffectiveUserSessionIssuers: (...args: unknown[]) =>
+    useEffectiveUserSessionIssuers(...args),
+}));
+
+vi.mock("./UserSessionIssuerField", () => ({
+  UserSessionIssuerField: ({ issuers }: { issuers: Array<{ id: string }> }) => (
+    <output>issuers-{issuers.map(({ id }) => id).join(",")}</output>
+  ),
 }));
 
 vi.mock("./authTarget", () => ({
@@ -57,8 +70,17 @@ vi.mock("./AttachRemoteIdentityProviderSheet", () => ({
 }));
 
 vi.mock("./RemoteIdentityProvidersField", () => ({
-  RemoteIdentityProvidersField: ({ onAdd }: { onAdd: () => void }) => (
-    <button onClick={onAdd}>Add provider</button>
+  RemoteIdentityProvidersField: ({
+    onAdd,
+    readOnly,
+  }: {
+    onAdd: () => void;
+    readOnly?: boolean;
+  }) => (
+    <>
+      <button onClick={onAdd}>Add provider</button>
+      <output>providers-{readOnly ? "read-only" : "editable"}</output>
+    </>
   ),
 }));
 
@@ -86,19 +108,24 @@ vi.mock("./ModifyRemoteIdentityProviderSheet", () => ({
 }));
 
 vi.mock("./UserSessionDurationField", () => ({
-  UserSessionDurationField: () => null,
+  UserSessionDurationField: ({ readOnly }: { readOnly?: boolean }) => (
+    <output>duration-{readOnly ? "read-only" : "editable"}</output>
+  ),
 }));
 
 vi.mock("./CimdAdmissionModeField", () => ({
   CimdAdmissionModeField: ({
     onDraftModeChange,
     children,
+    readOnly,
   }: {
     onDraftModeChange?: (mode: string) => void;
     children?: ReactNode;
+    readOnly?: boolean;
   }) => (
     <div>
       cimd-admission-mode
+      <output>cimd-{readOnly ? "read-only" : "editable"}</output>
       <button type="button" onClick={() => onDraftModeChange?.("presets")}>
         draft-presets
       </button>
@@ -115,6 +142,12 @@ vi.mock("./CimdCustomClientsField", () => ({
 }));
 
 beforeEach(() => {
+  useEffectiveUserSessionIssuers.mockReturnValue({
+    issuers: [],
+    organizationIssuers: [],
+    isLoading: false,
+    isError: false,
+  });
   useUserSessionIssuer.mockReturnValue({
     data: {
       id: "user-session-issuer",
@@ -148,6 +181,9 @@ describe("AuthenticationSectionBody", () => {
       <AuthenticationSectionBody target={remoteTargetWithSessionIssuer} />,
     );
 
+    expect(useEffectiveUserSessionIssuers).toHaveBeenCalledWith({
+      mcpResourceId: "mcp-server-1",
+    });
     expect(useProtectedResourceMetadata).toHaveBeenCalledWith(
       "remote-mcp-server",
       true,
@@ -237,6 +273,65 @@ describe("AuthenticationSectionBody", () => {
       "remote-mcp-server",
       false,
     );
+  });
+
+  it("keeps organization-owned issuer settings read-only", () => {
+    useUserSessionIssuer.mockReturnValue({
+      data: {
+        id: "organization-user-session-issuer",
+        projectId: "",
+        clientIdMetadataAdmissionMode: "reporting",
+      },
+      isLoading: false,
+      isError: false,
+    });
+    useAllRemoteSessionClients.mockReturnValue({ items: [], isLoading: false });
+    useProtectedResourceMetadata.mockReturnValue({
+      status: "idle",
+      metadata: null,
+    });
+
+    render(
+      <AuthenticationSectionBody target={remoteTargetWithSessionIssuer} />,
+    );
+
+    expect(screen.getByText("duration-read-only")).toBeDefined();
+    expect(screen.getByText("cimd-read-only")).toBeDefined();
+    expect(screen.getByText("providers-read-only")).toBeDefined();
+    expect(screen.queryByText("cimd-custom-clients")).toBeNull();
+  });
+
+  it("excludes organization issuers for targets whose backend cannot bind them", () => {
+    useUserSessionIssuer.mockReturnValue({
+      data: null,
+      isLoading: false,
+      isError: false,
+    });
+    useEffectiveUserSessionIssuers.mockReturnValue({
+      issuers: [
+        { id: "project-issuer", projectId: "project-1" },
+        { id: "organization-issuer", projectId: "" },
+      ],
+      organizationIssuers: [{ id: "organization-issuer", projectId: "" }],
+      isLoading: false,
+      isError: false,
+    });
+    useAllRemoteSessionClients.mockReturnValue({ items: [], isLoading: false });
+    useProtectedResourceMetadata.mockReturnValue({
+      status: "idle",
+      metadata: null,
+    });
+
+    render(
+      <AuthenticationSectionBody
+        target={{
+          ...remoteTargetWithoutSessionIssuer,
+          supportsOrganizationIssuers: false,
+        }}
+      />,
+    );
+
+    expect(screen.getByText("issuers-project-issuer")).toBeDefined();
   });
 
   it.each(["presets", "reporting"])(
@@ -353,6 +448,8 @@ describe("AuthenticationSectionBody", () => {
 const remoteTargetWithSessionIssuer: AuthTarget = {
   slug: "remote-server",
   projectId: "project-1",
+  permissionResourceId: "mcp-server-1",
+  supportsOrganizationIssuers: true,
   userSessionIssuerId: "user-session-issuer",
   remoteMcpServerId: "remote-mcp-server",
   invalidate: vi.fn(),

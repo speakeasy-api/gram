@@ -31,6 +31,8 @@ import {
 export type CreateRemoteMcpSourceVariables = {
   name?: string | undefined;
   url: string;
+  userSessionIssuerId?: string | undefined;
+  organizationOwnedUserSessionIssuer?: boolean | undefined;
 };
 
 export type CreateRemoteMcpSourceData = {
@@ -52,13 +54,19 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
   const isPlatformAdmin = useIsPlatformAdmin();
 
   return useMutation({
-    mutationFn: async ({ name, url }) => {
+    mutationFn: async ({
+      name,
+      url,
+      userSessionIssuerId,
+      organizationOwnedUserSessionIssuer,
+    }) => {
       const { remoteMcpServer, mcpServer } =
         await client.remoteMcp.createServerAndMcpServer({
           createServerForm: {
             name,
             url,
             transportType: "streamable-http",
+            userSessionIssuerId,
           },
         });
 
@@ -69,6 +77,7 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
         mcpServer,
         isPlatformAdmin,
         projectSlug,
+        organizationOwnedUserSessionIssuer,
       });
       const configuredMcpServer =
         authAutoConfig.status === "configured"
@@ -97,8 +106,8 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
         invalidateAllRemoteMcpServers(queryClient, { refetchType: "all" }),
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
         invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
-        // Every create links a fresh user_session_issuer, so its cache always
-        // goes stale regardless of whether auto-config attached a client.
+        // Creation either links an existing issuer or mints a project issuer,
+        // so refresh the effective list in both cases.
         invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
       ];
       // The issuer/client caches only change when auto-configuration actually

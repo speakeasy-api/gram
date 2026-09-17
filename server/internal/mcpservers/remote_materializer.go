@@ -42,6 +42,7 @@ func CreateRemoteBackedMCPServer(ctx context.Context, tx pgx.Tx, auditLogger *au
 		Visibility:            input.InitialVisibility,
 		NetworkAccessMode:     networkaccess.ModePublicOnly,
 		EnvironmentID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		UserSessionIssuerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		RemoteMCPServerID:     uuid.NullUUID{UUID: input.RemoteMCPServerID, Valid: true},
 		TunneledMCPServerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		ToolsetID:             uuid.NullUUID{UUID: uuid.Nil, Valid: false},

@@ -406,6 +406,9 @@ var CreateMcpServerForm = Type("CreateMcpServerForm", func() {
 	Attribute("tool_variations_group_id", String, "The ID of the tool variations group enabling MCP tool filtering for this server. Omit to leave filtering disabled.", func() {
 		Format(FormatUUID)
 	})
+	Attribute("user_session_issuer_id", String, "The ID of an existing project- or organization-owned user session issuer to attach. Omit to preserve the legacy create behavior, which mints an issuer for remote and tunneled backends.", func() {
+		Format(FormatUUID)
+	})
 	Attribute("visibility", McpServerVisibility, "The visibility of the server")
 	Attribute("network_access_mode", shared.NetworkAccessMode, "The allowed network surfaces. Omit to default to public_only.")
 
@@ -413,7 +416,7 @@ var CreateMcpServerForm = Type("CreateMcpServerForm", func() {
 })
 
 var UpdateMcpServerForm = Type("UpdateMcpServerForm", func() {
-	Description("Form for updating an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. The user session issuer cannot be changed after create. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id must be provided. Omit name to leave the existing display name unchanged; the slug is recomputed server-side from the resulting name.")
+	Description("Form for updating an MCP server. This is a full-record replace for backend references: fields omitted from the request become null on the stored record. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id must be provided. Omit name or user_session_issuer_id to preserve the existing value; the slug is recomputed server-side from the resulting name.")
 
 	Attribute("id", String, "The ID of the MCP server to update", func() {
 		Format(FormatUUID)
@@ -435,6 +438,9 @@ var UpdateMcpServerForm = Type("UpdateMcpServerForm", func() {
 		Format(FormatUUID)
 	})
 	Attribute("tool_variations_group_id", String, "The ID of the tool variations group enabling MCP tool filtering for this server. Omit to disable filtering (cleared to null, consistent with the full-record replace semantics of the other UUID references).", func() {
+		Format(FormatUUID)
+	})
+	Attribute("user_session_issuer_id", String, "The ID of an existing project- or organization-owned user session issuer to attach. Omit to preserve the current issuer.", func() {
 		Format(FormatUUID)
 	})
 	Attribute("visibility", McpServerVisibility, "The visibility of the server")

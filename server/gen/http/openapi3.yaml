@@ -69841,6 +69841,14 @@ paths:
                     format: int64
                     type: integer
                 - allowEmptyValue: true
+                  description: Optional MCP server or toolset resource ID used to authorize callers with resource-scoped mcp:write access. The resource must belong to the selected project.
+                  in: query
+                  name: mcp_resource_id
+                  schema:
+                    description: Optional MCP server or toolset resource ID used to authorize callers with resource-scoped mcp:write access. The resource must belong to the selected project.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
                   description: Session header
                   in: header
                   name: Gram-Session
@@ -76338,6 +76346,10 @@ components:
                     type: string
                     description: The ID of the unproxied MCP server to use as the backend
                     format: uuid
+                user_session_issuer_id:
+                    type: string
+                    description: The ID of an existing project- or organization-owned user session issuer to attach. Omit to preserve the legacy create behavior, which mints an issuer for remote and tunneled backends.
+                    format: uuid
                 visibility:
                     type: string
                     description: The visibility of an MCP server
@@ -77130,6 +77142,10 @@ components:
                     type: string
                     description: The URL of the remote MCP server
                     format: uri
+                user_session_issuer_id:
+                    type: string
+                    description: For createServerAndMcpServer, the ID of an existing project- or organization-owned user session issuer to attach to the linked MCP server. Omit to mint a project issuer. The source-only createServer method rejects this field.
+                    format: uuid
             description: Form for creating a new remote MCP server
             required:
                 - url
@@ -98365,6 +98381,10 @@ components:
                     type: string
                     description: The ID of the unproxied MCP server to use as the backend
                     format: uuid
+                user_session_issuer_id:
+                    type: string
+                    description: The ID of an existing project- or organization-owned user session issuer to attach. Omit to preserve the current issuer.
+                    format: uuid
                 visibility:
                     type: string
                     description: The visibility of an MCP server
@@ -98372,7 +98392,7 @@ components:
                         - disabled
                         - private
                         - public
-            description: 'Form for updating an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. The user session issuer cannot be changed after create. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id must be provided. Omit name to leave the existing display name unchanged; the slug is recomputed server-side from the resulting name.'
+            description: 'Form for updating an MCP server. This is a full-record replace for backend references: fields omitted from the request become null on the stored record. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id must be provided. Omit name or user_session_issuer_id to preserve the existing value; the slug is recomputed server-side from the resulting name.'
             required:
                 - id
                 - visibility
