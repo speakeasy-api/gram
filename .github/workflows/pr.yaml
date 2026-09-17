@@ -1,7 +1,7 @@
 name: Pull Request
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches:
       - main
@@ -45,6 +45,7 @@ jobs:
       webhooks-catalog: ${{ steps.gates.outputs.webhooks-catalog }}
       otel-collector: ${{ steps.gates.outputs.otel-collector }}
       tunnel: ${{ steps.gates.outputs.tunnel }}
+      preview-ui: ${{ steps.filter.outputs.preview-ui }}
       preview-retag-components: ${{ steps.preview-retag.outputs.components }}
       preview-tag: ${{ steps.preview-retag.outputs.tag }}
     steps:
@@ -2467,6 +2468,102 @@ jobs:
           openapi-file: ${{ env.SVIX_OPENAPI_FILE }}
           svix-api-key: ${{ secrets.SVIX_SYNC_KEY_US_PROD }}
           replace-all: true
+
+  preview-label:
+    name: Manage the preview label
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    needs:
+      [
+        changes,
+        docker-build-server,
+        docker-build-client,
+        docker-build-pystreams,
+        preview-image-tags,
+        upload-dashboard-assets,
+      ]
+    permissions:
+      pull-requests: write
+    # The `preview` label triggers gram-infra's gram-app-previews
+    # ApplicationSet, whose wait-for-images PreSync hook polls GCR for the
+    # pr-<number>-<sha8> tags of every component. Labelling before those tags
+    # exist leaves the hook polling for images that never arrive, and ArgoCD's
+    # selfHeal recreates it forever (this is what #2749 cleaned up), so the
+    # label is only added once this run has produced a complete tag set, and
+    # removed again the moment a head commit fails to produce one.
+    #
+    # A component's tag comes either from its docker build job or, when that
+    # job is skipped, from preview-image-tags aliasing main's image. Those two
+    # sources are keyed off the same `changes` gates, so readiness is checked
+    # as "gate closed, or the build succeeded" rather than as "not failed".
+    # `skipped` on its own is not enough: docker-build-server also needs
+    # server-build-lint, so a lint failure skips it under the default
+    # success() condition while its gate is open — leaving no server tag for
+    # preview-retag to have aliased either.
+    if: >-
+      !cancelled() &&
+      github.event_name == 'pull_request' &&
+      !github.event.pull_request.draft &&
+      !github.event.pull_request.head.repo.fork &&
+      github.event.pull_request.user.login != 'dependabot[bot]' &&
+      needs.changes.outputs.preview-ui == 'true'
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      REPO: ${{ github.repository }}
+      OPTED_OUT: ${{ contains(github.event.pull_request.labels.*.name, 'preview:off') }}
+      IMAGES_READY: >-
+        ${{ (needs.changes.outputs.server != 'true' ||
+             needs.docker-build-server.result == 'success') &&
+            ((needs.changes.outputs.server != 'true' && needs.changes.outputs.client != 'true') ||
+             needs.docker-build-client.result == 'success') &&
+            (needs.changes.outputs.pystreams != 'true' ||
+             needs.docker-build-pystreams.result == 'success') &&
+            ((needs.changes.outputs.server != 'true' && needs.changes.outputs.client != 'true') ||
+             needs.upload-dashboard-assets.result == 'success') &&
+            contains(fromJSON('["success","skipped"]'), needs.preview-image-tags.result) }}
+    steps:
+      - name: Add or remove the preview label
+        run: |
+          set -euo pipefail
+
+          has_label() {
+            gh pr view "$PR_NUMBER" --repo "$REPO" --json labels \
+              --jq 'any(.labels[]; .name == "preview")'
+          }
+
+          # preview:off both stops this job labelling and withdraws a preview
+          # that an earlier commit put up. It takes effect on the next run
+          # rather than on the label itself: triggering on `labeled` would
+          # start a full CI run every time any label is touched.
+          if [[ "$OPTED_OUT" == "true" ]]; then
+            if [[ "$(has_label)" == "true" ]]; then
+              echo "PR carries preview:off; removing the preview label."
+              gh pr edit "$PR_NUMBER" --repo "$REPO" --remove-label preview
+            else
+              echo "PR carries preview:off; nothing to do."
+            fi
+            exit 0
+          fi
+
+          if [[ "$IMAGES_READY" == "true" ]]; then
+            if [[ "$(has_label)" == "true" ]]; then
+              echo "Preview label already present."
+            else
+              echo "Every preview image tag exists for this commit; labelling."
+              gh pr edit "$PR_NUMBER" --repo "$REPO" --add-label preview
+            fi
+            exit 0
+          fi
+
+          # An image job failed, so this commit has no complete tag set. Drop
+          # the label rather than let the preview chase a tag that will never
+          # land; the next green commit puts it back.
+          if [[ "$(has_label)" == "true" ]]; then
+            echo "Preview images are incomplete for this commit; removing the label."
+            gh pr edit "$PR_NUMBER" --repo "$REPO" --remove-label preview
+          else
+            echo "Preview images are incomplete and the label is not set; nothing to do."
+          fi
 
   dispatch-release:
     runs-on: blacksmith-4vcpu-ubuntu-2404
