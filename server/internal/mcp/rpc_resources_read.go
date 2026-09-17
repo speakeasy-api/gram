@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
+	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -63,6 +64,7 @@ func handleResourcesRead(
 	billingRepository billing.Repository,
 	telemLogger *tm.Logger,
 	platformExtras []platformtools.ExternalTool,
+	scan mcpriskscan.Evaluator,
 ) (json.RawMessage, error) {
 	var params resourceReadParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
@@ -202,11 +204,23 @@ func handleResourcesRead(
 		telemLogger.Log(ctx, params)
 	}()
 
-	route := gateway.CallRoute{Source: gateway.ToolCallSourceMCP, ServerID: "", ToolsetID: toolset.ID}
+	serverID := ""
 	if payload.mcpServerID != nil {
-		route.ServerID = payload.mcpServerID.String()
+		serverID = payload.mcpServerID.String()
 	}
-	err = toolProxy.CallResource(ctx, rw, strings.NewReader("{}"), toolconfig.ToolCallEnv{
+	scan.Scan(ctx, nil, mcpriskscan.Event{
+		Surface:        mcpriskscan.SurfaceHostedMCP,
+		Method:         mcpriskscan.MethodResourcesRead,
+		OrganizationID: descriptor.OrganizationID,
+		ProjectID:      descriptor.ProjectID,
+		ServerID:       serverID,
+		ToolsetID:      toolset.ID,
+		ToolName:       "",
+		ResourceURI:    descriptor.URI,
+		PromptName:     "",
+		Phase:          mcpriskscan.PhaseBeforeRead,
+	})
+	err = toolProxy.ReadResource(ctx, rw, strings.NewReader("{}"), toolconfig.ToolCallEnv{
 		UserConfig: userConfig,
 		SystemEnv:  systemConfig,
 		OAuthToken: "", // Resources do not support OAuth tokens for external MCP
@@ -216,7 +230,7 @@ func handleResourcesRead(
 		// carries no caller identity, and the functions SDK exposes none on a
 		// resource handler.
 		MCPClient: toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: ""},
-	}, plan, logAttrs, route)
+	}, plan, logAttrs)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to execute resource call").LogError(ctx, logger)
 	}

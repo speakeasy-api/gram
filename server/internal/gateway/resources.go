@@ -20,7 +20,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// ReadResource executes an already-planned resource read without observation.
 func (tp *ToolProxy) ReadResource(
 	ctx context.Context,
 	w http.ResponseWriter,

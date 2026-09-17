@@ -73,10 +73,7 @@ import (
 	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
-var (
-	infra *testenv.Environment
-	funcs functions.ToolCaller
-)
+var infra *testenv.Environment
 
 func TestMain(m *testing.M) {
 	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, ClickHouse: true, Temporal: true})
@@ -147,6 +144,7 @@ func newTestMCPServiceWithoutTemporal(t *testing.T) (context.Context, *testInsta
 		false,
 		mcp.MetaRuntimeConfig{MemberCallTimeout: 0, ValidationTimeout: 0, AutoVerifyWait: 0},
 		testenv.NewTracerProvider(t),
+		nil,
 	)
 }
 
@@ -330,7 +328,7 @@ func newTestMCPServiceWithPoolConfig(
 	guardianOpts ...func(*guardian.Policy),
 ) (context.Context, *testInstance) {
 	t.Helper()
-	return newTestMCPServiceWithPoolConfigAndTemporal(t, logger, meterProvider, identityResolver, tunnelPublicConfig, wrapCache, configurePool, true, metaRuntime, testenv.NewTracerProvider(t), guardianOpts...)
+	return newTestMCPServiceWithPoolConfigAndTemporal(t, logger, meterProvider, identityResolver, tunnelPublicConfig, wrapCache, configurePool, true, metaRuntime, testenv.NewTracerProvider(t), nil, guardianOpts...)
 }
 
 func newTestMCPServiceWithPoolConfigAndTemporal(
@@ -344,6 +342,7 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 	withTemporal bool,
 	metaRuntime mcp.MetaRuntimeConfig,
 	tracerProvider trace.TracerProvider,
+	funcs functions.ToolCaller,
 	guardianOpts ...func(*guardian.Policy),
 ) (context.Context, *testInstance) {
 	t.Helper()
@@ -494,11 +493,15 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 	}
 }
 
-func newTestMCPServiceWithScanSpans(t *testing.T) (context.Context, *testInstance, *tracetest.SpanRecorder) {
+func newTestMCPServiceWithScanSpans(t *testing.T, callers ...functions.ToolCaller) (context.Context, *testInstance, *tracetest.SpanRecorder) {
 	t.Helper()
 	recorder := tracetest.NewSpanRecorder()
 	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
 	t.Cleanup(func() { require.NoError(t, provider.Shutdown(context.Background())) })
+	var caller functions.ToolCaller
+	if len(callers) > 0 {
+		caller = callers[0]
+	}
 	ctx, ti := newTestMCPServiceWithPoolConfigAndTemporal(t,
 		testenv.NewLogger(t), testenv.NewMeterProvider(t),
 		&mockIdentityResolver{hasAccessOK: true},
@@ -509,7 +512,7 @@ func newTestMCPServiceWithScanSpans(t *testing.T) (context.Context, *testInstanc
 			MaxRequestLifetime: 0,
 		}, nil, nil, false, mcp.MetaRuntimeConfig{
 			MemberCallTimeout: 0, ValidationTimeout: 0, AutoVerifyWait: 0, RecheckInterval: 0,
-		}, provider)
+		}, provider, caller)
 	return ctx, ti, recorder
 }
 

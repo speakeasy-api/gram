@@ -46,9 +46,6 @@ const (
 	ToolCallSourceDirect ToolCallSource = "direct"
 	ToolCallSourceMCP    ToolCallSource = "mcp"
 
-	// ToolCallSourcePlatformMCP identifies calls through the shared platform MCP engine.
-	ToolCallSourcePlatformMCP ToolCallSource = "platform_mcp"
-
 	// gramUserEmailEnvVar is the environment variable injected into function
 	// payloads when authInput.gramEmail is enabled and Gram has authenticated
 	// the identity accessing the MCP server.
@@ -130,7 +127,6 @@ type ToolProxy struct {
 	policy        *guardian.Policy
 	functions     functions.ToolCaller
 	platformTools PlatformExecutor
-	scanEvaluator ScanEvaluator
 }
 
 func NewToolProxy(
@@ -143,7 +139,6 @@ func NewToolProxy(
 	policy *guardian.Policy,
 	funcCaller functions.ToolCaller,
 	platformTools PlatformExecutor,
-	scanEvaluator ScanEvaluator,
 ) *ToolProxy {
 	tracer := tracerProivder.Tracer("github.com/speakeasy-api/gram/server/internal/gateway")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/gateway")
@@ -158,11 +153,9 @@ func NewToolProxy(
 		policy:        policy,
 		functions:     funcCaller,
 		platformTools: platformTools,
-		scanEvaluator: scanEvaluator,
 	}
 }
 
-// Do executes an already-planned tool call without observation.
 func (tp *ToolProxy) Do(
 	ctx context.Context,
 	w http.ResponseWriter,

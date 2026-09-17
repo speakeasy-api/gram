@@ -70,6 +70,7 @@ type Service struct {
 	environmentsRepo  *environments_repo.Queries
 	env               *environments.EnvironmentEntries
 	toolProxy         *gateway.ToolProxy
+	scanEvaluator     mcpriskscan.Evaluator
 	tracking          billing.Tracker
 	toolsetCache      cache.TypedCacheObject[mv.ToolsetBaseContents]
 	featuresClient    *productfeatures.Client
@@ -124,8 +125,8 @@ func NewService(
 			guardianPolicy,
 			funcCaller,
 			platformTools,
-			mcpriskscan.NewNoop(traceProvider, meterProvider, logger),
 		),
+		scanEvaluator:     mcpriskscan.NewNoop(traceProvider, meterProvider, logger),
 		toolsetCache:      cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
 		telemLogger:       telemLogger,
 		featuresClient:    featClient,
@@ -371,11 +372,27 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 
 	interceptor := newResponseInterceptor(w)
 
-	route := gateway.CallRoute{Source: gateway.ToolCallSourceDirect, ServerID: "", ToolsetID: ""}
+	scanToolsetID := ""
 	if toolset != nil {
-		route.ToolsetID = toolset.ID
+		scanToolsetID = toolset.ID
 	}
-	err = s.toolProxy.CallTool(ctx, interceptor, bytes.NewReader(requestBodyBytes), requestBodyBytes, toolconfig.ToolCallEnv{
+	scanToolName := descriptor.Name
+	if plan.Kind == gateway.ToolKindExternalMCP {
+		scanToolName = descriptor.URN.Name
+	}
+	s.scanEvaluator.Scan(ctx, bytes.NewReader(requestBodyBytes), mcpriskscan.Event{
+		Surface:        mcpriskscan.SurfaceInstances,
+		Method:         mcpriskscan.MethodToolsCall,
+		OrganizationID: descriptor.OrganizationID,
+		ProjectID:      descriptor.ProjectID,
+		ServerID:       "",
+		ToolsetID:      scanToolsetID,
+		ToolName:       scanToolName,
+		ResourceURI:    "",
+		PromptName:     "",
+		Phase:          mcpriskscan.PhaseBeforeExecution,
+	})
+	err = s.toolProxy.Do(ctx, interceptor, bytes.NewReader(requestBodyBytes), toolconfig.ToolCallEnv{
 		SystemEnv:  systemConfig,
 		UserConfig: ciEnv,
 		OAuthToken: "", // Instances do not support OAuth tokens for external MCP
@@ -383,7 +400,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		GramChatID: "",
 		// Direct invocation — there is no MCP client on the other end.
 		MCPClient: toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: ""},
-	}, plan, attrRecorder, route)
+	}, plan, attrRecorder)
 	if err != nil {
 		return fmt.Errorf("failed to proxy tool call: %w", err)
 	}
