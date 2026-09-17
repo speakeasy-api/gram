@@ -9,7 +9,11 @@ import {
 import { SourceToolsSection } from "@/components/sources/SourceToolsSection";
 import { SourceUploadVersionButton } from "@/components/sources/SourceUploadVersionButton";
 import { SourceVersionsSection } from "@/components/sources/SourceVersionsSection";
-import { sectionIdForHash } from "@/components/sources/sourceDetailSections";
+import {
+  DEFAULT_SOURCE_DETAIL_TAB,
+  tabForHash,
+  type SourceDetailTab,
+} from "@/components/sources/sourceDetailSections";
 import {
   sourceAssetId,
   useProjectSources,
@@ -19,39 +23,7 @@ import { useSourceTools } from "@/components/sources/useSourceQueries";
 import { Button } from "@/components/ui/Button";
 import { useProject } from "@/contexts/Auth";
 import { useRoutes } from "@/routes";
-import { useEffect } from "react";
 import { useLocation, useParams } from "react-router";
-
-// Brings the section a link names into view once the page has something to
-// scroll to. The sections render after the deployment loads, so a hash the
-// browser handled at navigation time pointed at nothing.
-function useScrollToSectionHash(ready: boolean): void {
-  const location = useLocation();
-
-  useEffect(() => {
-    if (!ready) return;
-    const targetId = sectionIdForHash(location.hash);
-    if (!targetId) return;
-
-    const animationFrame = window.requestAnimationFrame(() => {
-      document
-        .getElementById(targetId)
-        ?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
-    return () => window.cancelAnimationFrame(animationFrame);
-    // The path is a dependency too: two sources linked with the same hash
-    // would otherwise keep the first one's scroll position.
-  }, [ready, location.hash, location.pathname]);
-}
-
-function contentLabel(kind: SourceOption["kind"]): string {
-  switch (kind) {
-    case "openapi":
-      return "OpenAPI document";
-    case "function":
-      return "Function manifest";
-  }
-}
 
 function kindDescription(kind: SourceOption["kind"]): string {
   switch (kind) {
@@ -68,10 +40,13 @@ function kindDescription(kind: SourceOption["kind"]): string {
  * A source is read in a sheet where it is being chosen, but it also needs an
  * address: the CLI hands people a link after a push, and a source is the thing
  * worth pointing a colleague at. Both surfaces render the same details body;
- * the page adds the sections that only make sense with room to scroll.
+ * the page adds tabs for what only makes sense with room of its own. The
+ * tabs are addressed by hash, as the page always has been, so the route
+ * needs no sub-pages.
  */
 export default function SourceDetailRoute(): JSX.Element {
   const routes = useRoutes();
+  const location = useLocation();
   const { sourceId } = useParams<{ sourceId: string }>();
   const project = useProject();
   const { sources, isLoading, isError } = useProjectSources();
@@ -83,9 +58,11 @@ export default function SourceDetailRoute(): JSX.Element {
   );
   const kind = source?.kind ?? "openapi";
   const assetId = sourceId ?? "";
+  const activeTab = tabForHash(location.hash) ?? DEFAULT_SOURCE_DETAIL_TAB;
+  const tabHref = (tab: SourceDetailTab) => `${location.pathname}#${tab}`;
 
-  // The page's tools feed three sections, so they are read once here and
-  // handed down rather than filtered again in each.
+  // The page's tools feed two tabs, so they are read once here and handed
+  // down rather than filtered again in each.
   const {
     tools,
     toolUrns,
@@ -93,8 +70,6 @@ export default function SourceDetailRoute(): JSX.Element {
     isError: isToolsError,
     refetch: refetchTools,
   } = useSourceTools(kind, assetId);
-
-  useScrollToSectionHash(!isLoading && source != null);
 
   // A deployment that failed to load is not a source that isn't there: saying
   // "not found" for a dropped request sends people looking for the wrong
@@ -116,37 +91,36 @@ export default function SourceDetailRoute(): JSX.Element {
     );
   }
 
-  // Every section is rendered only once the source is known: the viewers key
+  // Every tab is rendered only once the source is known: the viewers key
   // their fetches on the kind, and a wrong guess would request the wrong
   // endpoint.
   const sections: DetailSection[] = source
     ? [
         {
-          id: "details",
-          label: "Details",
+          id: "overview",
+          label: "Overview",
+          href: tabHref("overview"),
           content: (
-            <SourceDetailBody
-              sourceKind={kind}
-              assetId={assetId}
-              variant="page"
-            />
-          ),
-        },
-        {
-          id: "activity",
-          label: "Activity",
-          content: (
-            <SourceActivityPanel
-              sourceKey={assetId}
-              toolUrns={toolUrns}
-              isToolsLoading={isToolsLoading}
-              isToolsError={isToolsError}
-            />
+            <div className="flex flex-col gap-8">
+              <SourceDetailBody
+                sourceKind={kind}
+                assetId={assetId}
+                variant="page"
+              />
+              <SourceActivityPanel
+                sourceKey={assetId}
+                toolUrns={toolUrns}
+                isToolsLoading={isToolsLoading}
+                isToolsError={isToolsError}
+              />
+              <SourceContentViewer sourceKind={kind} assetId={assetId} />
+            </div>
           ),
         },
         {
           id: "tools",
           label: `Tools (${tools.length})`,
+          href: tabHref("tools"),
           content: (
             <SourceToolsSection
               // Facet and search belong to one source; a new one starts clean.
@@ -160,18 +134,15 @@ export default function SourceDetailRoute(): JSX.Element {
           ),
         },
         {
-          id: "content",
-          label: contentLabel(kind),
-          content: <SourceContentViewer sourceKind={kind} assetId={assetId} />,
-        },
-        {
           id: "versions",
           label: "Versions",
-          content: <SourceVersionsSection sourceKind={kind} />,
+          href: tabHref("versions"),
+          content: <SourceVersionsSection />,
         },
         {
           id: "settings",
           label: "Settings",
+          href: tabHref("settings"),
           content: (
             <SourceDangerZone
               source={{ kind, assetId, name: source.name, slug: source.slug }}
@@ -185,7 +156,8 @@ export default function SourceDetailRoute(): JSX.Element {
     <DetailPage
       scope="mcp:read"
       resourceId={project.id}
-      layout="hash-scroll"
+      layout="routed"
+      activeSection={activeTab}
       loading={isLoading}
       title={source?.name ?? "Source"}
       description={kindDescription(kind)}

@@ -1,28 +1,30 @@
 import { describe, expect, it } from "vitest";
-import { sectionIdForHash } from "./sourceDetailSections";
+import { tabForHash } from "./sourceDetailSections";
 
-describe("sectionIdForHash", () => {
-  it("accepts current section ids with or without the hash", () => {
-    expect(sectionIdForHash("#tools")).toBe("tools");
-    expect(sectionIdForHash("settings")).toBe("settings");
+describe("tabForHash", () => {
+  it("accepts current tab ids with or without the hash", () => {
+    expect(tabForHash("#tools")).toBe("tools");
+    expect(tabForHash("settings")).toBe("settings");
   });
 
-  it("maps the old tab hashes onto the sections that replaced them", () => {
-    expect(sectionIdForHash("#overview")).toBe("details");
-    expect(sectionIdForHash("#mcp-servers")).toBe("details");
-    expect(sectionIdForHash("#spec")).toBe("content");
-    expect(sectionIdForHash("#deployments")).toBe("versions");
+  it("maps the old section and tab hashes onto the tabs that hold them", () => {
+    expect(tabForHash("#details")).toBe("overview");
+    expect(tabForHash("#activity")).toBe("overview");
+    expect(tabForHash("#content")).toBe("overview");
+    expect(tabForHash("#spec")).toBe("overview");
+    expect(tabForHash("#mcp-servers")).toBe("overview");
+    expect(tabForHash("#deployments")).toBe("versions");
   });
 
   it("ignores empty and unknown hashes", () => {
-    expect(sectionIdForHash("")).toBeNull();
-    expect(sectionIdForHash("#")).toBeNull();
-    expect(sectionIdForHash("#nope")).toBeNull();
+    expect(tabForHash("")).toBeNull();
+    expect(tabForHash("#")).toBeNull();
+    expect(tabForHash("#nope")).toBeNull();
   });
 
   it("ignores hashes named after inherited object properties", () => {
-    expect(sectionIdForHash("#constructor")).toBeNull();
-    expect(sectionIdForHash("#toString")).toBeNull();
-    expect(sectionIdForHash("#__proto__")).toBeNull();
+    expect(tabForHash("#constructor")).toBeNull();
+    expect(tabForHash("#toString")).toBeNull();
+    expect(tabForHash("#__proto__")).toBeNull();
   });
 });
