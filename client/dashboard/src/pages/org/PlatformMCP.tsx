@@ -627,25 +627,27 @@ function PlatformMCPOnboardingContentInner({
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
-      <Page.Section>
-        <Page.Section.Title stage="preview">Platform MCP</Page.Section.Title>
-        <Page.Section.Description className="max-w-3xl">
-          Manage MCPs, Risk Policies and explore logs in your favorite agent.
-        </Page.Section.Description>
-        {showManagement ? (
-          <Page.Section.Body>
-            <Text variant="subheading" className="mb-3">
-              Manage Platform MCP
-            </Text>
-            <PlatformMCPManagement
-              state={state}
-              isMutating={setOrganizationAccess.isPending}
-              accessError={accessError}
-              onDisable={() => setDisableConfirmationOpen(true)}
-            />
-          </Page.Section.Body>
-        ) : null}
-      </Page.Section>
+      {!embeddedInProjectSetup ? (
+        <Page.Section>
+          <Page.Section.Title stage="preview">Platform MCP</Page.Section.Title>
+          <Page.Section.Description className="max-w-3xl">
+            Manage MCPs, Risk Policies and explore logs in your favorite agent.
+          </Page.Section.Description>
+          {showManagement ? (
+            <Page.Section.Body>
+              <Text variant="subheading" className="mb-3">
+                Manage Platform MCP
+              </Text>
+              <PlatformMCPManagement
+                state={state}
+                isMutating={setOrganizationAccess.isPending}
+                accessError={accessError}
+                onDisable={() => setDisableConfirmationOpen(true)}
+              />
+            </Page.Section.Body>
+          ) : null}
+        </Page.Section>
+      ) : null}
 
       {reconnectRequired ? (
         <PlatformMCPReconnect

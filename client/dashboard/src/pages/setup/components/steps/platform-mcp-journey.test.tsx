@@ -122,6 +122,20 @@ describe("Platform MCP numbered journey", () => {
   it("supports a direct link to the optional step", () => {
     setup("?step=add-existing-mcp-servers");
     expect(
+      screen.getByRole("heading", { level: 1, name: "Platform MCP" }),
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("button", { name: "Back" })
+        .classList.contains("md:hidden"),
+    ).toBe(true);
+    expect(screen.queryByRole("button", { name: "Next step" })).toBeNull();
+    expect(
+      screen
+        .getByRole("button", { name: "Mark done" })
+        .hasAttribute("disabled"),
+    ).toBe(false);
+    expect(
       within(screen.getByRole("main")).getByRole("heading", {
         name: "Import existing MCP servers in Claude",
       }),

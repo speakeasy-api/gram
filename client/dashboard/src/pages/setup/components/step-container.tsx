@@ -80,7 +80,7 @@ export function StepContainer({
         const next = journey.steps[currentPosition + 1];
         if (next) journey.setActiveIndex(next.index);
       }}
-      className="gap-1.5"
+      className="gap-1.5 focus-visible:ring-2 focus-visible:ring-offset-3"
     >
       Next step
       <ArrowRight className="h-4 w-4" />
@@ -111,7 +111,7 @@ export function StepContainer({
             <Button
               variant="tertiary"
               onClick={() => journey.setActiveIndex(previousStep.index)}
-              className="text-muted-foreground hover:text-foreground gap-1.5 md:hidden"
+              className="text-muted-foreground hover:text-foreground gap-1.5 focus-visible:ring-2 focus-visible:ring-offset-3 md:hidden"
             >
               <ArrowLeft className="h-4 w-4" />
               Back
