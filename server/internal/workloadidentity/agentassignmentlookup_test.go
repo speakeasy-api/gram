@@ -48,9 +48,9 @@ func seedAgent(t *testing.T, conn *pgxpool.Pool, organizationID string) uuid.UUI
 	return agent.ID
 }
 
-// seedAssignment assigns an agent to a workload principal directly. Raw SQL for
-// the same reason seedIssuer uses it: writes are the management API's job, and
-// this package is read-only by design.
+// seedAssignment assigns an agent to a workload principal directly. Raw SQL
+// because writes are the management API's job and this package is read-only by
+// design.
 func seedAssignment(t *testing.T, conn *pgxpool.Pool, organizationID string, issuerID uuid.UUID, subject string, agentID uuid.UUID) uuid.UUID {
 	t.Helper()
 
@@ -70,7 +70,7 @@ func seedAssignment(t *testing.T, conn *pgxpool.Pool, organizationID string, iss
 func unassign(t *testing.T, conn *pgxpool.Pool, id uuid.UUID) {
 	t.Helper()
 
-	_, err := conn.Exec( //nolint:glint // notestingrawsql: see seedAssignment
+	_, err := conn.Exec( //nolint:glint // notestingrawsql: writes are the management API's job; this package is read-only
 		t.Context(), `UPDATE workload_agent_assignments SET deleted_at = clock_timestamp() WHERE id = $1`, id)
 	require.NoError(t, err)
 }
@@ -254,7 +254,7 @@ func TestResolveAssignedAgent_AWorkloadCannotHoldTwoLiveAgents(t *testing.T) {
 	seedAssignment(t, conn, fixture.tenant.organizationID, fixture.issuerID, testSubject, fixture.agentID)
 
 	second := seedAgent(t, conn, fixture.tenant.organizationID)
-	_, err = conn.Exec( //nolint:glint // notestingrawsql: see seedAssignment
+	_, err = conn.Exec( //nolint:glint // notestingrawsql: writes are the management API's job; this package is read-only
 		t.Context(), `
 		INSERT INTO workload_agent_assignments
 		  (organization_id, workload_issuer_id, subject, agent_id)
