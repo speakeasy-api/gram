@@ -148,6 +148,249 @@ func (q *Queries) CountOrganizationUserSessionIssuerLiveSessions(ctx context.Con
 	return column_1, err
 }
 
+const countUserSessionIssuerCimdClientsForMigration = `-- name: CountUserSessionIssuerCimdClientsForMigration :one
+SELECT COUNT(*)::int
+FROM user_session_issuer_cimd_clients AS cimd
+JOIN user_session_issuers AS issuer ON issuer.id = cimd.user_session_issuer_id
+WHERE issuer.id = $1
+  AND issuer.organization_id = $2::text
+  AND cimd.deleted IS FALSE
+`
+
+type CountUserSessionIssuerCimdClientsForMigrationParams struct {
+	UserSessionIssuerID uuid.UUID
+	OrganizationID      string
+}
+
+func (q *Queries) CountUserSessionIssuerCimdClientsForMigration(ctx context.Context, arg CountUserSessionIssuerCimdClientsForMigrationParams) (int32, error) {
+	row := q.db.QueryRow(ctx, countUserSessionIssuerCimdClientsForMigration, arg.UserSessionIssuerID, arg.OrganizationID)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const countUserSessionIssuerClientsForMigration = `-- name: CountUserSessionIssuerClientsForMigration :one
+SELECT COUNT(*)::int
+FROM user_session_clients AS client
+JOIN user_session_issuers AS issuer ON issuer.id = client.user_session_issuer_id
+WHERE issuer.id = $1
+  AND issuer.organization_id = $2::text
+  AND client.deleted IS FALSE
+`
+
+type CountUserSessionIssuerClientsForMigrationParams struct {
+	UserSessionIssuerID uuid.UUID
+	OrganizationID      string
+}
+
+func (q *Queries) CountUserSessionIssuerClientsForMigration(ctx context.Context, arg CountUserSessionIssuerClientsForMigrationParams) (int32, error) {
+	row := q.db.QueryRow(ctx, countUserSessionIssuerClientsForMigration, arg.UserSessionIssuerID, arg.OrganizationID)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const countUserSessionIssuerConsentsForMigration = `-- name: CountUserSessionIssuerConsentsForMigration :one
+SELECT COUNT(*)::int
+FROM user_session_consents AS consent
+JOIN user_session_clients AS client ON client.id = consent.user_session_client_id
+JOIN user_session_issuers AS issuer ON issuer.id = client.user_session_issuer_id
+WHERE issuer.id = $1
+  AND issuer.organization_id = $2::text
+  AND consent.deleted IS FALSE
+`
+
+type CountUserSessionIssuerConsentsForMigrationParams struct {
+	UserSessionIssuerID uuid.UUID
+	OrganizationID      string
+}
+
+func (q *Queries) CountUserSessionIssuerConsentsForMigration(ctx context.Context, arg CountUserSessionIssuerConsentsForMigrationParams) (int32, error) {
+	row := q.db.QueryRow(ctx, countUserSessionIssuerConsentsForMigration, arg.UserSessionIssuerID, arg.OrganizationID)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const countUserSessionIssuerEMABindingConflicts = `-- name: CountUserSessionIssuerEMABindingConflicts :one
+SELECT COUNT(*)::int
+FROM remote_session_ema_bindings AS source
+JOIN remote_session_ema_bindings AS target
+  ON target.project_id = source.project_id
+ AND target.remote_session_issuer_id = source.remote_session_issuer_id
+ AND target.resource = source.resource
+ AND target.user_session_issuer_id = $1
+WHERE source.user_session_issuer_id = $2
+  AND source.organization_id = $3::text
+`
+
+type CountUserSessionIssuerEMABindingConflictsParams struct {
+	TargetIssuerID uuid.UUID
+	SourceIssuerID uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) CountUserSessionIssuerEMABindingConflicts(ctx context.Context, arg CountUserSessionIssuerEMABindingConflictsParams) (int32, error) {
+	row := q.db.QueryRow(ctx, countUserSessionIssuerEMABindingConflicts, arg.TargetIssuerID, arg.SourceIssuerID, arg.OrganizationID)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const countUserSessionIssuerIncompatibleProjectReferences = `-- name: CountUserSessionIssuerIncompatibleProjectReferences :one
+SELECT COUNT(*)::int
+FROM (
+  SELECT server.id
+  FROM mcp_servers AS server
+  JOIN projects AS project ON project.id = server.project_id
+  WHERE server.user_session_issuer_id = $1
+    AND server.deleted IS FALSE
+    AND project.organization_id = $2::text
+    AND server.project_id <> $3::uuid
+
+  UNION ALL
+
+  SELECT toolset.id
+  FROM toolsets AS toolset
+  JOIN projects AS project ON project.id = toolset.project_id
+  WHERE toolset.user_session_issuer_id = $1
+    AND toolset.deleted IS FALSE
+    AND project.organization_id = $2::text
+    AND toolset.project_id <> $3::uuid
+
+  UNION ALL
+
+  SELECT meta.id
+  FROM meta_mcp_servers AS meta
+  WHERE meta.user_session_issuer_id = $1
+    AND meta.deleted IS FALSE
+    AND meta.organization_id = $2::text
+    AND meta.project_id <> $3::uuid
+
+  UNION ALL
+
+  SELECT registration.id
+  FROM platform_mcp_catalog_registrations AS registration
+  WHERE registration.user_session_issuer_id = $1
+    AND registration.deleted IS FALSE
+    AND registration.organization_id = $2::text
+    AND registration.project_id <> $3::uuid
+
+  UNION ALL
+
+  SELECT binding.id
+  FROM principal_remote_session_bindings AS binding
+  WHERE binding.user_session_issuer_id = $1
+    AND binding.organization_id = $2::text
+    AND binding.project_id <> $3::uuid
+
+  UNION ALL
+
+  SELECT binding.id
+  FROM remote_session_ema_bindings AS binding
+  WHERE binding.user_session_issuer_id = $1
+    AND binding.organization_id = $2::text
+    AND binding.project_id <> $3::uuid
+
+  UNION ALL
+
+  SELECT client.id
+  FROM remote_session_client_user_session_issuers AS link
+  JOIN remote_session_clients AS client ON client.id = link.remote_session_client_id
+  WHERE link.user_session_issuer_id = $1
+    AND client.deleted IS FALSE
+    AND NOT (
+      client.project_id = $3::uuid
+      OR (client.project_id IS NULL AND client.organization_id = $2::text)
+      OR (client.project_id IS NULL AND client.organization_id IS NULL)
+    )
+) AS incompatible
+`
+
+type CountUserSessionIssuerIncompatibleProjectReferencesParams struct {
+	UserSessionIssuerID uuid.NullUUID
+	OrganizationID      string
+	TargetProjectID     uuid.UUID
+}
+
+// Narrowing to a project is safe only when every project-scoped consumer is
+// already in that project and every linked remote client is visible there.
+func (q *Queries) CountUserSessionIssuerIncompatibleProjectReferences(ctx context.Context, arg CountUserSessionIssuerIncompatibleProjectReferencesParams) (int32, error) {
+	row := q.db.QueryRow(ctx, countUserSessionIssuerIncompatibleProjectReferences, arg.UserSessionIssuerID, arg.OrganizationID, arg.TargetProjectID)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const countUserSessionIssuerPrincipalBindingConflicts = `-- name: CountUserSessionIssuerPrincipalBindingConflicts :one
+SELECT COUNT(*)::int
+FROM principal_remote_session_bindings AS source
+JOIN principal_remote_session_bindings AS target
+  ON target.project_id = source.project_id
+ AND target.principal_id = source.principal_id
+ AND target.remote_session_client_id = source.remote_session_client_id
+ AND target.user_session_issuer_id = $1
+ AND target.revoked_at IS NULL
+WHERE source.user_session_issuer_id = $2
+  AND source.organization_id = $3::text
+  AND source.revoked_at IS NULL
+`
+
+type CountUserSessionIssuerPrincipalBindingConflictsParams struct {
+	TargetIssuerID uuid.UUID
+	SourceIssuerID uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) CountUserSessionIssuerPrincipalBindingConflicts(ctx context.Context, arg CountUserSessionIssuerPrincipalBindingConflictsParams) (int32, error) {
+	row := q.db.QueryRow(ctx, countUserSessionIssuerPrincipalBindingConflicts, arg.TargetIssuerID, arg.SourceIssuerID, arg.OrganizationID)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const countUserSessionIssuerRemoteSessionsForMigration = `-- name: CountUserSessionIssuerRemoteSessionsForMigration :one
+SELECT COUNT(*)::int
+FROM remote_sessions AS session
+JOIN user_session_issuers AS issuer ON issuer.id = session.user_session_issuer_id
+WHERE issuer.id = $1
+  AND issuer.organization_id = $2::text
+  AND session.deleted IS FALSE
+`
+
+type CountUserSessionIssuerRemoteSessionsForMigrationParams struct {
+	UserSessionIssuerID uuid.UUID
+	OrganizationID      string
+}
+
+func (q *Queries) CountUserSessionIssuerRemoteSessionsForMigration(ctx context.Context, arg CountUserSessionIssuerRemoteSessionsForMigrationParams) (int32, error) {
+	row := q.db.QueryRow(ctx, countUserSessionIssuerRemoteSessionsForMigration, arg.UserSessionIssuerID, arg.OrganizationID)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const countUserSessionIssuerSessionsForMigration = `-- name: CountUserSessionIssuerSessionsForMigration :one
+SELECT COUNT(*)::int
+FROM user_sessions AS session
+JOIN user_session_issuers AS issuer ON issuer.id = session.user_session_issuer_id
+WHERE issuer.id = $1
+  AND issuer.organization_id = $2::text
+  AND session.deleted IS FALSE
+`
+
+type CountUserSessionIssuerSessionsForMigrationParams struct {
+	UserSessionIssuerID uuid.UUID
+	OrganizationID      string
+}
+
+func (q *Queries) CountUserSessionIssuerSessionsForMigration(ctx context.Context, arg CountUserSessionIssuerSessionsForMigrationParams) (int32, error) {
+	row := q.db.QueryRow(ctx, countUserSessionIssuerSessionsForMigration, arg.UserSessionIssuerID, arg.OrganizationID)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const createOrganizationUserSessionIssuer = `-- name: CreateOrganizationUserSessionIssuer :one
 INSERT INTO user_session_issuers (
     project_id,
@@ -715,6 +958,27 @@ func (q *Queries) DeleteOrganizationUserSessionIssuerCimdClient(ctx context.Cont
 	return i, err
 }
 
+const deleteSourceRemoteSessionClientIssuerLinks = `-- name: DeleteSourceRemoteSessionClientIssuerLinks :execrows
+DELETE FROM remote_session_client_user_session_issuers AS link
+USING user_session_issuers AS issuer
+WHERE link.user_session_issuer_id = $1
+  AND issuer.id = $1
+  AND issuer.organization_id = $2::text
+`
+
+type DeleteSourceRemoteSessionClientIssuerLinksParams struct {
+	SourceIssuerID uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) DeleteSourceRemoteSessionClientIssuerLinks(ctx context.Context, arg DeleteSourceRemoteSessionClientIssuerLinksParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteSourceRemoteSessionClientIssuerLinks, arg.SourceIssuerID, arg.OrganizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteUserSessionIssuer = `-- name: DeleteUserSessionIssuer :one
 UPDATE user_session_issuers AS issuer
 SET deleted_at = clock_timestamp()
@@ -860,6 +1124,89 @@ func (q *Queries) GetLatestLiveUserSessionToolSelection(ctx context.Context, arg
 	var tool_selection []byte
 	err := row.Scan(&tool_selection)
 	return tool_selection, err
+}
+
+const getOrganizationManagedUserSessionIssuerByID = `-- name: GetOrganizationManagedUserSessionIssuerByID :one
+SELECT issuer.id, issuer.project_id, issuer.organization_id, issuer.attachment_scope, issuer.slug, issuer.authn_challenge_mode, issuer.session_duration, issuer.classification, issuer.client_id_metadata_admission_mode, issuer.trusted_remote_session_issuer_id, issuer.trusted_remote_session_client_id, issuer.created_at, issuer.updated_at, issuer.deleted_at, issuer.deleted
+FROM user_session_issuers AS issuer
+LEFT JOIN projects AS project ON project.id = issuer.project_id
+WHERE issuer.id = $1
+  AND issuer.deleted IS FALSE
+  AND (
+    (issuer.project_id IS NULL AND issuer.organization_id = $2::text)
+    OR (issuer.project_id IS NOT NULL AND project.organization_id = $2::text AND project.deleted IS FALSE)
+  )
+`
+
+type GetOrganizationManagedUserSessionIssuerByIDParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+// Organization administration spans organization-owned issuers and every
+// project-owned issuer whose project belongs to the organization.
+func (q *Queries) GetOrganizationManagedUserSessionIssuerByID(ctx context.Context, arg GetOrganizationManagedUserSessionIssuerByIDParams) (UserSessionIssuer, error) {
+	row := q.db.QueryRow(ctx, getOrganizationManagedUserSessionIssuerByID, arg.ID, arg.OrganizationID)
+	var i UserSessionIssuer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.AttachmentScope,
+		&i.Slug,
+		&i.AuthnChallengeMode,
+		&i.SessionDuration,
+		&i.Classification,
+		&i.ClientIDMetadataAdmissionMode,
+		&i.TrustedRemoteSessionIssuerID,
+		&i.TrustedRemoteSessionClientID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getOrganizationManagedUserSessionIssuerByIDForUpdate = `-- name: GetOrganizationManagedUserSessionIssuerByIDForUpdate :one
+SELECT issuer.id, issuer.project_id, issuer.organization_id, issuer.attachment_scope, issuer.slug, issuer.authn_challenge_mode, issuer.session_duration, issuer.classification, issuer.client_id_metadata_admission_mode, issuer.trusted_remote_session_issuer_id, issuer.trusted_remote_session_client_id, issuer.created_at, issuer.updated_at, issuer.deleted_at, issuer.deleted
+FROM user_session_issuers AS issuer
+LEFT JOIN projects AS project ON project.id = issuer.project_id
+WHERE issuer.id = $1
+  AND issuer.deleted IS FALSE
+  AND (
+    (issuer.project_id IS NULL AND issuer.organization_id = $2::text)
+    OR (issuer.project_id IS NOT NULL AND project.organization_id = $2::text AND project.deleted IS FALSE)
+  )
+FOR UPDATE OF issuer
+`
+
+type GetOrganizationManagedUserSessionIssuerByIDForUpdateParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) GetOrganizationManagedUserSessionIssuerByIDForUpdate(ctx context.Context, arg GetOrganizationManagedUserSessionIssuerByIDForUpdateParams) (UserSessionIssuer, error) {
+	row := q.db.QueryRow(ctx, getOrganizationManagedUserSessionIssuerByIDForUpdate, arg.ID, arg.OrganizationID)
+	var i UserSessionIssuer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.AttachmentScope,
+		&i.Slug,
+		&i.AuthnChallengeMode,
+		&i.SessionDuration,
+		&i.Classification,
+		&i.ClientIDMetadataAdmissionMode,
+		&i.TrustedRemoteSessionIssuerID,
+		&i.TrustedRemoteSessionClientID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const getOrganizationUserSessionIssuerByID = `-- name: GetOrganizationUserSessionIssuerByID :one
@@ -1418,6 +1765,30 @@ func (q *Queries) GetUserSessionToolSelectionByJTI(ctx context.Context, arg GetU
 	var i GetUserSessionToolSelectionByJTIRow
 	err := row.Scan(&i.ToolSelection, &i.ExpiresAt)
 	return i, err
+}
+
+const insertTargetRemoteSessionClientIssuerLinks = `-- name: InsertTargetRemoteSessionClientIssuerLinks :execrows
+INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id, user_session_issuer_id)
+SELECT link.remote_session_client_id, $1
+FROM remote_session_client_user_session_issuers AS link
+JOIN user_session_issuers AS issuer ON issuer.id = link.user_session_issuer_id
+WHERE link.user_session_issuer_id = $2
+  AND issuer.organization_id = $3::text
+ON CONFLICT (remote_session_client_id, user_session_issuer_id) DO NOTHING
+`
+
+type InsertTargetRemoteSessionClientIssuerLinksParams struct {
+	TargetIssuerID uuid.UUID
+	SourceIssuerID uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) InsertTargetRemoteSessionClientIssuerLinks(ctx context.Context, arg InsertTargetRemoteSessionClientIssuerLinksParams) (int64, error) {
+	result, err := q.db.Exec(ctx, insertTargetRemoteSessionClientIssuerLinks, arg.TargetIssuerID, arg.SourceIssuerID, arg.OrganizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const issuerAdmitsCimdClientURI = `-- name: IssuerAdmitsCimdClientURI :one
@@ -2062,6 +2433,46 @@ func (q *Queries) ListUserSessionIssuerCimdClientsByIssuerID(ctx context.Context
 	return items, nil
 }
 
+const listUserSessionIssuerClientIDConflicts = `-- name: ListUserSessionIssuerClientIDConflicts :many
+SELECT source.client_id
+FROM user_session_clients AS source
+JOIN user_session_clients AS target
+  ON target.user_session_issuer_id = $1
+ AND target.client_id = source.client_id
+ AND target.deleted IS FALSE
+JOIN user_session_issuers AS issuer ON issuer.id = source.user_session_issuer_id
+WHERE source.user_session_issuer_id = $2
+  AND source.deleted IS FALSE
+  AND issuer.organization_id = $3::text
+ORDER BY source.client_id
+`
+
+type ListUserSessionIssuerClientIDConflictsParams struct {
+	TargetIssuerID uuid.UUID
+	SourceIssuerID uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) ListUserSessionIssuerClientIDConflicts(ctx context.Context, arg ListUserSessionIssuerClientIDConflictsParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, listUserSessionIssuerClientIDConflicts, arg.TargetIssuerID, arg.SourceIssuerID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var client_id string
+		if err := rows.Scan(&client_id); err != nil {
+			return nil, err
+		}
+		items = append(items, client_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUserSessionIssuersByProjectID = `-- name: ListUserSessionIssuersByProjectID :many
 SELECT id, project_id, organization_id, attachment_scope, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, trusted_remote_session_issuer_id, trusted_remote_session_client_id, created_at, updated_at, deleted_at, deleted
 FROM user_session_issuers
@@ -2421,6 +2832,21 @@ func (q *Queries) LockUserSessionIssuer(ctx context.Context, arg LockUserSession
 	return id, err
 }
 
+const lockUserSessionIssuerClientsForMigration = `-- name: LockUserSessionIssuerClientsForMigration :exec
+SELECT client.id
+FROM user_session_clients AS client
+WHERE client.user_session_issuer_id = $1
+FOR UPDATE
+`
+
+// Locking an issuer row serializes direct child writes through PostgreSQL's
+// foreign-key key-share lock. Consents hang off clients instead, so lock the
+// source clients too before taking an authoritative migration preflight.
+func (q *Queries) LockUserSessionIssuerClientsForMigration(ctx context.Context, userSessionIssuerID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, lockUserSessionIssuerClientsForMigration, userSessionIssuerID)
+	return err
+}
+
 const lockUserSessionIssuerForOwnerBinding = `-- name: LockUserSessionIssuerForOwnerBinding :exec
 SELECT pg_advisory_xact_lock(hashtextextended(($1::uuid)::text, 1))
 `
@@ -2430,6 +2856,34 @@ SELECT pg_advisory_xact_lock(hashtextextended(($1::uuid)::text, 1))
 func (q *Queries) LockUserSessionIssuerForOwnerBinding(ctx context.Context, userSessionIssuerID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, lockUserSessionIssuerForOwnerBinding, userSessionIssuerID)
 	return err
+}
+
+const mergeDuplicateUserSessionIssuerCimdClients = `-- name: MergeDuplicateUserSessionIssuerCimdClients :execrows
+UPDATE user_session_issuer_cimd_clients AS source
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE source.user_session_issuer_id = $1
+  AND source.deleted IS FALSE
+  AND EXISTS (
+    SELECT 1
+    FROM user_session_issuer_cimd_clients AS target
+    WHERE target.user_session_issuer_id = $2
+      AND target.client_id_metadata_uri = source.client_id_metadata_uri
+      AND target.deleted IS FALSE
+  )
+`
+
+type MergeDuplicateUserSessionIssuerCimdClientsParams struct {
+	SourceIssuerID uuid.UUID
+	TargetIssuerID uuid.UUID
+}
+
+func (q *Queries) MergeDuplicateUserSessionIssuerCimdClients(ctx context.Context, arg MergeDuplicateUserSessionIssuerCimdClientsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, mergeDuplicateUserSessionIssuerCimdClients, arg.SourceIssuerID, arg.TargetIssuerID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const purgeUserSessionClientCIMDCache = `-- name: PurgeUserSessionClientCIMDCache :one
@@ -2499,6 +2953,96 @@ func (q *Queries) PurgeUserSessionClientCIMDCache(ctx context.Context, arg Purge
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const retierUserSessionClients = `-- name: RetierUserSessionClients :execrows
+UPDATE user_session_clients AS client
+SET project_id = $1::uuid,
+    organization_id = $2::text,
+    updated_at = clock_timestamp()
+WHERE client.user_session_issuer_id = $3
+`
+
+type RetierUserSessionClientsParams struct {
+	ProjectID           uuid.NullUUID
+	OrganizationID      string
+	UserSessionIssuerID uuid.UUID
+}
+
+func (q *Queries) RetierUserSessionClients(ctx context.Context, arg RetierUserSessionClientsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, retierUserSessionClients, arg.ProjectID, arg.OrganizationID, arg.UserSessionIssuerID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const retierUserSessionConsents = `-- name: RetierUserSessionConsents :execrows
+UPDATE user_session_consents AS consent
+SET project_id = $1::uuid,
+    organization_id = $2::text,
+    updated_at = clock_timestamp()
+FROM user_session_clients AS client
+WHERE consent.user_session_client_id = client.id
+  AND client.user_session_issuer_id = $3
+`
+
+type RetierUserSessionConsentsParams struct {
+	ProjectID           uuid.NullUUID
+	OrganizationID      string
+	UserSessionIssuerID uuid.UUID
+}
+
+func (q *Queries) RetierUserSessionConsents(ctx context.Context, arg RetierUserSessionConsentsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, retierUserSessionConsents, arg.ProjectID, arg.OrganizationID, arg.UserSessionIssuerID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const retierUserSessionIssuerCimdClients = `-- name: RetierUserSessionIssuerCimdClients :execrows
+UPDATE user_session_issuer_cimd_clients AS cimd
+SET project_id = $1::uuid,
+    organization_id = $2::text,
+    updated_at = clock_timestamp()
+WHERE cimd.user_session_issuer_id = $3
+`
+
+type RetierUserSessionIssuerCimdClientsParams struct {
+	ProjectID           uuid.NullUUID
+	OrganizationID      string
+	UserSessionIssuerID uuid.UUID
+}
+
+func (q *Queries) RetierUserSessionIssuerCimdClients(ctx context.Context, arg RetierUserSessionIssuerCimdClientsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, retierUserSessionIssuerCimdClients, arg.ProjectID, arg.OrganizationID, arg.UserSessionIssuerID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const retierUserSessions = `-- name: RetierUserSessions :execrows
+UPDATE user_sessions AS session
+SET project_id = $1::uuid,
+    organization_id = $2::text,
+    updated_at = clock_timestamp()
+WHERE session.user_session_issuer_id = $3
+`
+
+type RetierUserSessionsParams struct {
+	ProjectID           uuid.NullUUID
+	OrganizationID      string
+	UserSessionIssuerID uuid.UUID
+}
+
+func (q *Queries) RetierUserSessions(ctx context.Context, arg RetierUserSessionsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, retierUserSessions, arg.ProjectID, arg.OrganizationID, arg.UserSessionIssuerID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const revokeUserSession = `-- name: RevokeUserSession :one
@@ -2695,6 +3239,55 @@ func (q *Queries) RevokeUserSessionConsent(ctx context.Context, arg RevokeUserSe
 	return i, err
 }
 
+const setOrganizationManagedUserSessionIssuerProject = `-- name: SetOrganizationManagedUserSessionIssuerProject :one
+UPDATE user_session_issuers AS issuer
+SET project_id = $1::uuid,
+    organization_id = $2::text,
+    updated_at = clock_timestamp()
+WHERE issuer.id = $3
+  AND issuer.deleted IS FALSE
+  AND issuer.classification = 'custom'
+  AND (
+    issuer.organization_id = $2::text
+    OR EXISTS (
+      SELECT 1 FROM projects AS project
+      WHERE project.id = issuer.project_id
+        AND project.organization_id = $2::text
+        AND project.deleted IS FALSE
+    )
+  )
+RETURNING issuer.id, issuer.project_id, issuer.organization_id, issuer.attachment_scope, issuer.slug, issuer.authn_challenge_mode, issuer.session_duration, issuer.classification, issuer.client_id_metadata_admission_mode, issuer.trusted_remote_session_issuer_id, issuer.trusted_remote_session_client_id, issuer.created_at, issuer.updated_at, issuer.deleted_at, issuer.deleted
+`
+
+type SetOrganizationManagedUserSessionIssuerProjectParams struct {
+	ProjectID      uuid.NullUUID
+	OrganizationID string
+	ID             uuid.UUID
+}
+
+func (q *Queries) SetOrganizationManagedUserSessionIssuerProject(ctx context.Context, arg SetOrganizationManagedUserSessionIssuerProjectParams) (UserSessionIssuer, error) {
+	row := q.db.QueryRow(ctx, setOrganizationManagedUserSessionIssuerProject, arg.ProjectID, arg.OrganizationID, arg.ID)
+	var i UserSessionIssuer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.AttachmentScope,
+		&i.Slug,
+		&i.AuthnChallengeMode,
+		&i.SessionDuration,
+		&i.Classification,
+		&i.ClientIDMetadataAdmissionMode,
+		&i.TrustedRemoteSessionIssuerID,
+		&i.TrustedRemoteSessionClientID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const setUserSessionClientCIMDFetchedAt = `-- name: SetUserSessionClientCIMDFetchedAt :one
 UPDATE user_session_clients
 SET client_id_metadata_fetched_at = $1
@@ -2736,6 +3329,44 @@ func (q *Queries) SetUserSessionClientCIMDFetchedAt(ctx context.Context, arg Set
 		&i.TokenEndpointAuthMethod,
 		&i.ClientJwks,
 		&i.ClientJwksUri,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const softDeleteMigratedUserSessionIssuer = `-- name: SoftDeleteMigratedUserSessionIssuer :one
+UPDATE user_session_issuers AS issuer
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE issuer.id = $1
+  AND issuer.organization_id = $2::text
+  AND issuer.deleted IS FALSE
+RETURNING issuer.id, issuer.project_id, issuer.organization_id, issuer.attachment_scope, issuer.slug, issuer.authn_challenge_mode, issuer.session_duration, issuer.classification, issuer.client_id_metadata_admission_mode, issuer.trusted_remote_session_issuer_id, issuer.trusted_remote_session_client_id, issuer.created_at, issuer.updated_at, issuer.deleted_at, issuer.deleted
+`
+
+type SoftDeleteMigratedUserSessionIssuerParams struct {
+	SourceIssuerID uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) SoftDeleteMigratedUserSessionIssuer(ctx context.Context, arg SoftDeleteMigratedUserSessionIssuerParams) (UserSessionIssuer, error) {
+	row := q.db.QueryRow(ctx, softDeleteMigratedUserSessionIssuer, arg.SourceIssuerID, arg.OrganizationID)
+	var i UserSessionIssuer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.AttachmentScope,
+		&i.Slug,
+		&i.AuthnChallengeMode,
+		&i.SessionDuration,
+		&i.Classification,
+		&i.ClientIDMetadataAdmissionMode,
+		&i.TrustedRemoteSessionIssuerID,
+		&i.TrustedRemoteSessionClientID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -2925,6 +3556,52 @@ func (q *Queries) TouchUserSessionLastUsed(ctx context.Context, arg TouchUserSes
 	return err
 }
 
+const updateMCPServersToUserSessionIssuer = `-- name: UpdateMCPServersToUserSessionIssuer :execrows
+UPDATE mcp_servers AS server
+SET user_session_issuer_id = $1,
+    updated_at = clock_timestamp()
+FROM projects AS project
+WHERE server.user_session_issuer_id = $2
+  AND project.id = server.project_id
+  AND project.organization_id = $3::text
+`
+
+type UpdateMCPServersToUserSessionIssuerParams struct {
+	TargetIssuerID uuid.NullUUID
+	SourceIssuerID uuid.NullUUID
+	OrganizationID string
+}
+
+func (q *Queries) UpdateMCPServersToUserSessionIssuer(ctx context.Context, arg UpdateMCPServersToUserSessionIssuerParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateMCPServersToUserSessionIssuer, arg.TargetIssuerID, arg.SourceIssuerID, arg.OrganizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const updateMetaMCPServersToUserSessionIssuer = `-- name: UpdateMetaMCPServersToUserSessionIssuer :execrows
+UPDATE meta_mcp_servers AS server
+SET user_session_issuer_id = $1,
+    updated_at = clock_timestamp()
+WHERE server.user_session_issuer_id = $2
+  AND server.organization_id = $3::text
+`
+
+type UpdateMetaMCPServersToUserSessionIssuerParams struct {
+	TargetIssuerID uuid.NullUUID
+	SourceIssuerID uuid.NullUUID
+	OrganizationID string
+}
+
+func (q *Queries) UpdateMetaMCPServersToUserSessionIssuer(ctx context.Context, arg UpdateMetaMCPServersToUserSessionIssuerParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateMetaMCPServersToUserSessionIssuer, arg.TargetIssuerID, arg.SourceIssuerID, arg.OrganizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const updateOrganizationUserSessionIssuer = `-- name: UpdateOrganizationUserSessionIssuer :one
 UPDATE user_session_issuers
 SET
@@ -2991,6 +3668,99 @@ func (q *Queries) UpdateOrganizationUserSessionIssuer(ctx context.Context, arg U
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const updatePlatformMCPRegistrationsToUserSessionIssuer = `-- name: UpdatePlatformMCPRegistrationsToUserSessionIssuer :execrows
+UPDATE platform_mcp_catalog_registrations AS registration
+SET user_session_issuer_id = $1,
+    updated_at = clock_timestamp()
+WHERE registration.user_session_issuer_id = $2
+  AND registration.organization_id = $3::text
+  AND registration.user_session_issuer_owned IS FALSE
+`
+
+type UpdatePlatformMCPRegistrationsToUserSessionIssuerParams struct {
+	TargetIssuerID uuid.NullUUID
+	SourceIssuerID uuid.NullUUID
+	OrganizationID string
+}
+
+func (q *Queries) UpdatePlatformMCPRegistrationsToUserSessionIssuer(ctx context.Context, arg UpdatePlatformMCPRegistrationsToUserSessionIssuerParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updatePlatformMCPRegistrationsToUserSessionIssuer, arg.TargetIssuerID, arg.SourceIssuerID, arg.OrganizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const updateRemoteSessionEMABindingsToUserSessionIssuer = `-- name: UpdateRemoteSessionEMABindingsToUserSessionIssuer :execrows
+UPDATE remote_session_ema_bindings AS binding
+SET user_session_issuer_id = $1,
+    updated_at = clock_timestamp()
+WHERE binding.user_session_issuer_id = $2
+  AND binding.organization_id = $3::text
+`
+
+type UpdateRemoteSessionEMABindingsToUserSessionIssuerParams struct {
+	TargetIssuerID uuid.UUID
+	SourceIssuerID uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) UpdateRemoteSessionEMABindingsToUserSessionIssuer(ctx context.Context, arg UpdateRemoteSessionEMABindingsToUserSessionIssuerParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateRemoteSessionEMABindingsToUserSessionIssuer, arg.TargetIssuerID, arg.SourceIssuerID, arg.OrganizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const updateRemoteSessionsToUserSessionIssuer = `-- name: UpdateRemoteSessionsToUserSessionIssuer :execrows
+UPDATE remote_sessions AS session
+SET user_session_issuer_id = $1,
+    updated_at = clock_timestamp()
+FROM user_session_issuers AS issuer
+WHERE session.user_session_issuer_id = $2
+  AND issuer.id = $2
+  AND issuer.organization_id = $3::text
+`
+
+type UpdateRemoteSessionsToUserSessionIssuerParams struct {
+	TargetIssuerID uuid.UUID
+	SourceIssuerID uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) UpdateRemoteSessionsToUserSessionIssuer(ctx context.Context, arg UpdateRemoteSessionsToUserSessionIssuerParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateRemoteSessionsToUserSessionIssuer, arg.TargetIssuerID, arg.SourceIssuerID, arg.OrganizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const updateToolsetsToUserSessionIssuer = `-- name: UpdateToolsetsToUserSessionIssuer :execrows
+UPDATE toolsets AS toolset
+SET user_session_issuer_id = $1,
+    updated_at = clock_timestamp()
+FROM projects AS project
+WHERE toolset.user_session_issuer_id = $2
+  AND project.id = toolset.project_id
+  AND project.organization_id = $3::text
+`
+
+type UpdateToolsetsToUserSessionIssuerParams struct {
+	TargetIssuerID uuid.NullUUID
+	SourceIssuerID uuid.NullUUID
+	OrganizationID string
+}
+
+func (q *Queries) UpdateToolsetsToUserSessionIssuer(ctx context.Context, arg UpdateToolsetsToUserSessionIssuerParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateToolsetsToUserSessionIssuer, arg.TargetIssuerID, arg.SourceIssuerID, arg.OrganizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const updateUserSessionClientCIMDCache = `-- name: UpdateUserSessionClientCIMDCache :one
@@ -3142,6 +3912,59 @@ func (q *Queries) UpdateUserSessionClientFromCIMD(ctx context.Context, arg Updat
 	return i, err
 }
 
+const updateUserSessionClientsToIssuer = `-- name: UpdateUserSessionClientsToIssuer :execrows
+UPDATE user_session_clients AS client
+SET user_session_issuer_id = $1,
+    project_id = $2::uuid,
+    organization_id = $3::text,
+    updated_at = clock_timestamp()
+WHERE client.user_session_issuer_id = $4
+`
+
+type UpdateUserSessionClientsToIssuerParams struct {
+	TargetIssuerID  uuid.UUID
+	TargetProjectID uuid.NullUUID
+	OrganizationID  string
+	SourceIssuerID  uuid.UUID
+}
+
+func (q *Queries) UpdateUserSessionClientsToIssuer(ctx context.Context, arg UpdateUserSessionClientsToIssuerParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateUserSessionClientsToIssuer,
+		arg.TargetIssuerID,
+		arg.TargetProjectID,
+		arg.OrganizationID,
+		arg.SourceIssuerID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const updateUserSessionConsentsToIssuerScope = `-- name: UpdateUserSessionConsentsToIssuerScope :execrows
+UPDATE user_session_consents AS consent
+SET project_id = $1::uuid,
+    organization_id = $2::text,
+    updated_at = clock_timestamp()
+FROM user_session_clients AS client
+WHERE consent.user_session_client_id = client.id
+  AND client.user_session_issuer_id = $3
+`
+
+type UpdateUserSessionConsentsToIssuerScopeParams struct {
+	TargetProjectID uuid.NullUUID
+	OrganizationID  string
+	SourceIssuerID  uuid.UUID
+}
+
+func (q *Queries) UpdateUserSessionConsentsToIssuerScope(ctx context.Context, arg UpdateUserSessionConsentsToIssuerScopeParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateUserSessionConsentsToIssuerScope, arg.TargetProjectID, arg.OrganizationID, arg.SourceIssuerID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const updateUserSessionIssuer = `-- name: UpdateUserSessionIssuer :one
 UPDATE user_session_issuers
 SET
@@ -3197,6 +4020,64 @@ func (q *Queries) UpdateUserSessionIssuer(ctx context.Context, arg UpdateUserSes
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const updateUserSessionIssuerCimdClientsToIssuer = `-- name: UpdateUserSessionIssuerCimdClientsToIssuer :execrows
+UPDATE user_session_issuer_cimd_clients AS cimd
+SET user_session_issuer_id = $1,
+    project_id = $2::uuid,
+    organization_id = $3::text,
+    updated_at = clock_timestamp()
+WHERE cimd.user_session_issuer_id = $4
+`
+
+type UpdateUserSessionIssuerCimdClientsToIssuerParams struct {
+	TargetIssuerID  uuid.UUID
+	TargetProjectID uuid.NullUUID
+	OrganizationID  string
+	SourceIssuerID  uuid.UUID
+}
+
+func (q *Queries) UpdateUserSessionIssuerCimdClientsToIssuer(ctx context.Context, arg UpdateUserSessionIssuerCimdClientsToIssuerParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateUserSessionIssuerCimdClientsToIssuer,
+		arg.TargetIssuerID,
+		arg.TargetProjectID,
+		arg.OrganizationID,
+		arg.SourceIssuerID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const updateUserSessionsToIssuer = `-- name: UpdateUserSessionsToIssuer :execrows
+UPDATE user_sessions AS session
+SET user_session_issuer_id = $1,
+    project_id = $2::uuid,
+    organization_id = $3::text,
+    updated_at = clock_timestamp()
+WHERE session.user_session_issuer_id = $4
+`
+
+type UpdateUserSessionsToIssuerParams struct {
+	TargetIssuerID  uuid.UUID
+	TargetProjectID uuid.NullUUID
+	OrganizationID  string
+	SourceIssuerID  uuid.UUID
+}
+
+func (q *Queries) UpdateUserSessionsToIssuer(ctx context.Context, arg UpdateUserSessionsToIssuerParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateUserSessionsToIssuer,
+		arg.TargetIssuerID,
+		arg.TargetProjectID,
+		arg.OrganizationID,
+		arg.SourceIssuerID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const upsertUserSessionClientFromCIMD = `-- name: UpsertUserSessionClientFromCIMD :one
@@ -3384,6 +4265,29 @@ type UserSessionIssuerHasActiveOwnerParams struct {
 // This project mutation helper deliberately ignores organization-owned rows.
 func (q *Queries) UserSessionIssuerHasActiveOwner(ctx context.Context, arg UserSessionIssuerHasActiveOwnerParams) (bool, error) {
 	row := q.db.QueryRow(ctx, userSessionIssuerHasActiveOwner, arg.UserSessionIssuerID, arg.ProjectID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const userSessionIssuerIsPlatformOwned = `-- name: UserSessionIssuerIsPlatformOwned :one
+SELECT EXISTS (
+  SELECT 1
+  FROM platform_mcp_catalog_registrations AS registration
+  WHERE registration.user_session_issuer_id = $1
+    AND registration.organization_id = $2::text
+    AND registration.user_session_issuer_owned IS TRUE
+    AND registration.deleted IS FALSE
+)
+`
+
+type UserSessionIssuerIsPlatformOwnedParams struct {
+	UserSessionIssuerID uuid.NullUUID
+	OrganizationID      string
+}
+
+func (q *Queries) UserSessionIssuerIsPlatformOwned(ctx context.Context, arg UserSessionIssuerIsPlatformOwnedParams) (bool, error) {
+	row := q.db.QueryRow(ctx, userSessionIssuerIsPlatformOwned, arg.UserSessionIssuerID, arg.OrganizationID)
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err

@@ -9,12 +9,17 @@ import { organizationUserSessionIssuersDeleteCimdClient } from "../funcs/organiz
 import { organizationUserSessionIssuersGet } from "../funcs/organizationUserSessionIssuersGet.js";
 import { organizationUserSessionIssuersGetCimdClient } from "../funcs/organizationUserSessionIssuersGetCimdClient.js";
 import { organizationUserSessionIssuersGetDeletePreflight } from "../funcs/organizationUserSessionIssuersGetDeletePreflight.js";
+import { organizationUserSessionIssuersGetMigratePreflight } from "../funcs/organizationUserSessionIssuersGetMigratePreflight.js";
 import { organizationUserSessionIssuersList } from "../funcs/organizationUserSessionIssuersList.js";
 import { organizationUserSessionIssuersListCimdClients } from "../funcs/organizationUserSessionIssuersListCimdClients.js";
+import { organizationUserSessionIssuersMigrate } from "../funcs/organizationUserSessionIssuersMigrate.js";
+import { organizationUserSessionIssuersMove } from "../funcs/organizationUserSessionIssuersMove.js";
 import { organizationUserSessionIssuersUpdate } from "../funcs/organizationUserSessionIssuersUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { CreateUserSessionIssuerCimdClientResult } from "../models/components/createusersessionissuercimdclientresult.js";
+import { MigrateOrganizationUserSessionIssuerResult } from "../models/components/migrateorganizationusersessionissuerresult.js";
 import { OrganizationUserSessionIssuerDeletePreflight } from "../models/components/organizationusersessionissuerdeletepreflight.js";
+import { OrganizationUserSessionIssuerMigratePreflight } from "../models/components/organizationusersessionissuermigratepreflight.js";
 import { UserSessionIssuer } from "../models/components/usersessionissuer.js";
 import { UserSessionIssuerCimdClient } from "../models/components/usersessionissuercimdclient.js";
 import {
@@ -46,6 +51,10 @@ import {
   GetOrganizationUserSessionIssuerDeletePreflightSecurity,
 } from "../models/operations/getorganizationusersessionissuerdeletepreflight.js";
 import {
+  GetOrganizationUserSessionIssuerMigratePreflightRequest,
+  GetOrganizationUserSessionIssuerMigratePreflightSecurity,
+} from "../models/operations/getorganizationusersessionissuermigratepreflight.js";
+import {
   ListOrganizationUserSessionIssuerCimdClientsRequest,
   ListOrganizationUserSessionIssuerCimdClientsResponse,
   ListOrganizationUserSessionIssuerCimdClientsSecurity,
@@ -55,6 +64,14 @@ import {
   ListOrganizationUserSessionIssuersResponse,
   ListOrganizationUserSessionIssuersSecurity,
 } from "../models/operations/listorganizationusersessionissuers.js";
+import {
+  MigrateOrganizationUserSessionIssuerRequest,
+  MigrateOrganizationUserSessionIssuerSecurity,
+} from "../models/operations/migrateorganizationusersessionissuer.js";
+import {
+  MoveOrganizationUserSessionIssuerRequest,
+  MoveOrganizationUserSessionIssuerSecurity,
+} from "../models/operations/moveorganizationusersessionissuer.js";
 import {
   UpdateOrganizationUserSessionIssuerRequest,
   UpdateOrganizationUserSessionIssuerSecurity,
@@ -203,6 +220,27 @@ export class OrganizationUserSessionIssuers extends ClientSDK {
   }
 
   /**
+   * getIssuerMigratePreflight organizationUserSessionIssuers
+   *
+   * @remarks
+   * Report the impact, blockers, and configuration warnings for consolidating one user_session_issuer onto another. Requires org:read.
+   */
+  async getMigratePreflight(
+    request: GetOrganizationUserSessionIssuerMigratePreflightRequest,
+    security?:
+      | GetOrganizationUserSessionIssuerMigratePreflightSecurity
+      | undefined,
+    options?: RequestOptions,
+  ): Promise<OrganizationUserSessionIssuerMigratePreflight> {
+    return unwrapAsync(organizationUserSessionIssuersGetMigratePreflight(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * listIssuers organizationUserSessionIssuers
    *
    * @remarks
@@ -240,6 +278,44 @@ export class OrganizationUserSessionIssuers extends ClientSDK {
     >
   > {
     return unwrapResultIterator(organizationUserSessionIssuersListCimdClients(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * migrateIssuer organizationUserSessionIssuers
+   *
+   * @remarks
+   * Consolidate a source user_session_issuer onto a target issuer, preserving clients, sessions, attachments, and remote-session credentials before soft-deleting the source. The target must be in the same project or a broader organization scope. Requires org:admin.
+   */
+  async migrate(
+    request: MigrateOrganizationUserSessionIssuerRequest,
+    security?: MigrateOrganizationUserSessionIssuerSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<MigrateOrganizationUserSessionIssuerResult> {
+    return unwrapAsync(organizationUserSessionIssuersMigrate(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * moveIssuer organizationUserSessionIssuers
+   *
+   * @remarks
+   * Re-scope a user_session_issuer in the caller's organization. Provide a project_id to make it project-specific, or omit it to make it organization-owned. Existing clients and sessions move with the issuer. Requires org:admin.
+   */
+  async move(
+    request: MoveOrganizationUserSessionIssuerRequest,
+    security?: MoveOrganizationUserSessionIssuerSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<UserSessionIssuer> {
+    return unwrapAsync(organizationUserSessionIssuersMove(
       this,
       request,
       security,
