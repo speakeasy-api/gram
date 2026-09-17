@@ -1,13 +1,23 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { ReactNode } from "react";
 import {
   act,
   cleanup,
   fireEvent,
-  render,
+  render as renderView,
   screen,
   waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import DeployStep from "./deploy-step";
+const render = (children: ReactNode) => {
+  const client = new QueryClient();
+  return renderView(children, {
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    ),
+  });
+};
 const state = vi.hoisted(() => ({
   listTools: vi.fn(),
   cachedTools: [
@@ -23,6 +33,7 @@ const state = vi.hoisted(() => ({
   update: vi.fn(),
   wrapper: vi.fn(),
   listWrappers: vi.fn(),
+  listToolsets: vi.fn(),
   capture: vi.fn(),
   meta: {
     current: {
@@ -32,6 +43,7 @@ const state = vi.hoisted(() => ({
         id: "deployment",
         openapiv3Assets: [{ id: "document", slug: "example_api" }],
       },
+      existingDocument: null as { name: string; slug: string } | null,
       toolset: null,
     },
   },
@@ -43,7 +55,11 @@ vi.mock("@/contexts/Sdk", () => ({
       getById: state.getDeployment,
     },
     tools: { list: state.listTools },
-    toolsets: { create: state.create, updateBySlug: state.update },
+    toolsets: {
+      list: state.listToolsets,
+      create: state.create,
+      updateBySlug: state.update,
+    },
     mcpServers: { create: state.wrapper, list: state.listWrappers },
   }),
 }));
@@ -97,6 +113,8 @@ beforeEach(() => {
     openapiv3Assets: [{ id: "document", slug: "example_api" }],
   };
   state.meta.current.toolset = null;
+  state.meta.current.existingDocument = null;
+  state.listToolsets.mockResolvedValue({ toolsets: [] });
   state.listWrappers.mockResolvedValue({ mcpServers: [] });
   state.create.mockResolvedValue({
     id: "toolset",
@@ -532,5 +550,138 @@ it("ignores a terminal tools response after cancellation", async () => {
   });
   expect(state.setStep).not.toHaveBeenCalled();
   expect(state.create).not.toHaveBeenCalled();
+  expect(complete).not.toHaveBeenCalled();
+});
+
+it("preserves standalone source updates without duplicating toolsets", async () => {
+  state.meta.current.existingDocument = {
+    name: "Example API",
+    slug: "example_api",
+  };
+  render(<DeployStep />);
+  await act(async () => {});
+  expect(state.create).not.toHaveBeenCalled();
+  expect(state.wrapper).not.toHaveBeenCalled();
+});
+it("attaches the unique existing source server without creating or reseeding resources", async () => {
+  state.meta.current.existingDocument = {
+    name: "Example API",
+    slug: "example_api",
+  };
+  state.listToolsets.mockResolvedValue({
+    toolsets: [{ id: "existing-toolset", toolUrns: ["urn:tool"] }],
+  });
+  state.listWrappers.mockResolvedValue({
+    mcpServers: [{ id: "existing-server" }],
+  });
+  const complete = renderGateway();
+  await waitFor(() => expect(complete).toHaveBeenCalledWith("existing-server"));
+  expect(state.listWrappers).toHaveBeenCalledWith({
+    toolsetId: "existing-toolset",
+  });
+  expect(state.create).not.toHaveBeenCalled();
+  expect(state.update).not.toHaveBeenCalled();
+  expect(state.wrapper).not.toHaveBeenCalled();
+});
+it.each([
+  { toolsets: [] },
+  {
+    toolsets: [
+      { id: "one", toolUrns: ["urn:tool"] },
+      { id: "two", toolUrns: ["urn:tool"] },
+    ],
+  },
+])(
+  "stops uncertain source attachment without creating resources (%j)",
+  async ({ toolsets }) => {
+    state.meta.current.existingDocument = {
+      name: "Example API",
+      slug: "example_api",
+    };
+    state.listToolsets.mockResolvedValue({ toolsets });
+    const complete = renderGateway();
+    expect(
+      await screen.findByText(/Select the intended existing server/),
+    ).toBeTruthy();
+    expect(complete).not.toHaveBeenCalled();
+    expect(state.create).not.toHaveBeenCalled();
+    expect(state.wrapper).not.toHaveBeenCalled();
+  },
+);
+
+it("evolves the original document slug and invalidates source caches before completing", async () => {
+  state.stepState = "idle";
+  state.current = true;
+  state.meta.current.deployment = null as never;
+  state.meta.current.existingDocument = {
+    name: "Original API",
+    slug: "original",
+  };
+  state.evolve.mockResolvedValue({
+    deployment: {
+      id: "new-deployment",
+      status: "completed",
+      openapiv3Assets: [],
+    },
+  });
+  const invalidate = vi.spyOn(QueryClient.prototype, "invalidateQueries");
+  render(<DeployStep />);
+  await waitFor(() =>
+    expect(state.setStepper).toHaveBeenCalledWith("completed"),
+  );
+  expect(state.evolve).toHaveBeenCalledWith({
+    evolveForm: {
+      nonBlocking: true,
+      upsertOpenapiv3Assets: [
+        { assetId: "asset", name: "Original API", slug: "original" },
+      ],
+    },
+  });
+  expect(invalidate).toHaveBeenCalledTimes(6);
+  expect(state.create).not.toHaveBeenCalled();
+});
+it.each([{ mcpServers: [] }, { mcpServers: [{ id: "one" }, { id: "two" }] }])(
+  "requires an unambiguous wrapper for an existing source (%j)",
+  async ({ mcpServers }) => {
+    state.meta.current.existingDocument = {
+      name: "Example API",
+      slug: "example_api",
+    };
+    state.listToolsets.mockResolvedValue({
+      toolsets: [{ id: "existing-toolset", toolUrns: ["urn:tool"] }],
+    });
+    state.listWrappers.mockResolvedValue({ mcpServers });
+    const complete = renderGateway();
+    expect(
+      await screen.findByText(/Select the intended existing server/),
+    ).toBeTruthy();
+    expect(complete).not.toHaveBeenCalled();
+    expect(state.create).not.toHaveBeenCalled();
+    expect(state.wrapper).not.toHaveBeenCalled();
+  },
+);
+it("does not attach an existing-source server after leaving during lookup", async () => {
+  state.meta.current.existingDocument = {
+    name: "Example API",
+    slug: "example_api",
+  };
+  let settle!: (value: unknown) => void;
+  state.listToolsets.mockReturnValue(
+    new Promise((resolve) => {
+      settle = resolve;
+    }),
+  );
+  const complete = vi.fn();
+  const view = render(
+    <DeployStep
+      gateway={{ gatewayId: "gateway", createdServerId: null, complete }}
+    />,
+  );
+  await waitFor(() => expect(state.listToolsets).toHaveBeenCalledOnce());
+  view.unmount();
+  await act(async () => {
+    settle({ toolsets: [{ id: "existing-toolset", toolUrns: ["urn:tool"] }] });
+  });
+  expect(state.listWrappers).not.toHaveBeenCalled();
   expect(complete).not.toHaveBeenCalled();
 });

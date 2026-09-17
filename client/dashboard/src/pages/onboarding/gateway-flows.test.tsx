@@ -209,3 +209,11 @@ it.each([UploadOpenAPI, FunctionsOnboarding])(
     else expect(screen.getByText("CLI instructions")).toBeTruthy();
   },
 );
+
+vi.mock("react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-router")>()),
+  useSearchParams: () => [new URLSearchParams()],
+}));
+vi.mock("@/components/sources/source-list", () => ({
+  useProjectSources: () => ({ sources: [], isLoading: false, isError: false }),
+}));

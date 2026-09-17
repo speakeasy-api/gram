@@ -98,55 +98,61 @@ export default function UploadOpenAPI(): JSX.Element {
             for the lookup rather than starting without it, and is keyed by
             the document so a change of slug on the same route re-seeds it. */}
         {gateway.createdServerId ? (
-          <Text muted>Server created. Finish adding it to your gateway above.</Text>
-        ) : (!slug || (!isLoading && !isError)) && (
-          <UploadAssetStepper.Provider
-            key={`${slug ?? "new"}:${existing?.slug ?? "unknown"}`}
-            step={1}
-            existingDocument={existing}
-          >
-            <UploadAssetStepper.Frame>
-              <UploadAssetStep step={1}>
-                <UploadAssetStep.Indicator />
-                <UploadAssetStep.Header
-                  title="Upload OpenAPI Specification"
-                  description="Upload your OpenAPI specification to get started."
-                />
-                <UploadAssetStep.Content>
-                  <UploadFileStep />
-                </UploadAssetStep.Content>
-              </UploadAssetStep>
-
-              <UploadAssetStep step={2}>
-                <UploadAssetStep.Indicator />
-                <UploadAssetStep.Header
-                  title={copy.nameStep.title}
-                  description={copy.nameStep.description}
-                />
-                <UploadAssetStep.Content>
-                  <NameDeploymentStep />
-                </UploadAssetStep.Content>
-              </UploadAssetStep>
-
-              <UploadAssetStep step={3}>
-                <UploadAssetStep.Indicator />
-                <UploadAssetStep.Header
-                  title="Generate Tools"
-                  description="The platform will generate tools for your API."
-                />
-                <UploadAssetStep.Content>
-                  <DeployStep
-                    gateway={gateway}
-                    onPendingChange={setCreationPending}
+          <Text muted>
+            {gateway.isAttaching
+              ? "Adding server to gateway…"
+              : "Server created. Finish adding it to your gateway above."}
+          </Text>
+        ) : (
+          (!slug || (!isLoading && !isError)) && (
+            <UploadAssetStepper.Provider
+              key={`${slug ?? "new"}:${existing?.slug ?? "unknown"}`}
+              step={1}
+              existingDocument={existing}
+            >
+              <UploadAssetStepper.Frame>
+                <UploadAssetStep step={1}>
+                  <UploadAssetStep.Indicator />
+                  <UploadAssetStep.Header
+                    title="Upload OpenAPI Specification"
+                    description="Upload your OpenAPI specification to get started."
                   />
-                </UploadAssetStep.Content>
-              </UploadAssetStep>
+                  <UploadAssetStep.Content>
+                    <UploadFileStep />
+                  </UploadAssetStep.Content>
+                </UploadAssetStep>
 
-              <Stack direction="horizontal" justify="start">
-                <FooterActions gatewayMode={!!gateway.gatewayId} />
-              </Stack>
-            </UploadAssetStepper.Frame>
-          </UploadAssetStepper.Provider>
+                <UploadAssetStep step={2}>
+                  <UploadAssetStep.Indicator />
+                  <UploadAssetStep.Header
+                    title={copy.nameStep.title}
+                    description={copy.nameStep.description}
+                  />
+                  <UploadAssetStep.Content>
+                    <NameDeploymentStep />
+                  </UploadAssetStep.Content>
+                </UploadAssetStep>
+
+                <UploadAssetStep step={3}>
+                  <UploadAssetStep.Indicator />
+                  <UploadAssetStep.Header
+                    title="Generate Tools"
+                    description="The platform will generate tools for your API."
+                  />
+                  <UploadAssetStep.Content>
+                    <DeployStep
+                      gateway={gateway}
+                      onPendingChange={setCreationPending}
+                    />
+                  </UploadAssetStep.Content>
+                </UploadAssetStep>
+
+                <Stack direction="horizontal" justify="start">
+                  <FooterActions gatewayMode={!!gateway.gatewayId} />
+                </Stack>
+              </UploadAssetStepper.Frame>
+            </UploadAssetStepper.Provider>
+          )
         )}
         {gateway.gatewayId && (
           <Button

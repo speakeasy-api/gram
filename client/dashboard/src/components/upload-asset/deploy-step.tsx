@@ -139,7 +139,7 @@ export default function DeployStep({
       toolsetCreationAttempted.current ||
       gateway?.createdServerId ||
       toolUrns.length === 0 ||
-      stepper.meta.current.existingDocument
+      (stepper.meta.current.existingDocument && !gateway?.gatewayId)
     ) {
       return;
     }
@@ -153,6 +153,31 @@ export default function DeployStep({
     setCreationPending(true);
     const createToolset = async () => {
       try {
+        if (stepper.meta.current.existingDocument && gateway?.gatewayId) {
+          // Updating a source does not identify a server: reuse only an
+          // unambiguous existing association, never mint a duplicate toolset.
+          const { toolsets } = await client.toolsets.list();
+          if (!mounted.current) return;
+          const matches = toolsets.filter((toolset) =>
+            toolset.toolUrns?.some((urn) => toolUrns.includes(urn)),
+          );
+          if (matches.length !== 1 || !matches[0]) {
+            throw new Error(
+              "Source updated. Select the intended existing server from the gateway; its source association could not be determined uniquely.",
+            );
+          }
+          const { mcpServers } = await client.mcpServers.list({
+            toolsetId: matches[0].id,
+          });
+          if (!mounted.current) return;
+          if (mcpServers.length !== 1 || !mcpServers[0]) {
+            throw new Error(
+              "Source updated. Select the intended existing server from the gateway; its source association could not be determined uniquely.",
+            );
+          }
+          await gateway.complete(mcpServers[0].id);
+          return;
+        }
         // Gateway retries resume from the last successful stage.
         const toolset =
           (gateway?.gatewayId ? stepper.meta.current.toolset : null) ??
@@ -198,7 +223,8 @@ export default function DeployStep({
         if (!mounted.current) return;
         if (gateway?.gatewayId) {
           setCreationError(
-            !stepper.meta.current.toolset
+            !stepper.meta.current.toolset &&
+              !stepper.meta.current.existingDocument
               ? "Toolset creation could not be confirmed. Do not retry creation. Return to the gateway and manually inspect toolsets to recover any created resource before starting again."
               : error instanceof Error
                 ? error.message
@@ -547,7 +573,7 @@ const useCreateDeployment = (
     ]);
 
     return deployment;
-  }, [client.deployments, queryClient, stepper.meta]);
+  }, [client.deployments, mounted, queryClient, stepper.meta]);
 
   return _do;
 };
