@@ -657,13 +657,20 @@ function PlatformMCPOnboardingContentInner({
 
       <section
         className="border bg-card p-6"
-        aria-labelledby="platform-mcp-setup"
+        aria-labelledby={
+          embeddedInProjectSetup ? undefined : "platform-mcp-setup"
+        }
+        aria-label={embeddedInProjectSetup ? "Agent setup" : undefined}
       >
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <Text variant="subheading" id="platform-mcp-setup">
-              {showManagement ? "Set up another agent" : "Set up Platform MCP"}
-            </Text>
+            {!embeddedInProjectSetup ? (
+              <Text variant="subheading" id="platform-mcp-setup">
+                {showManagement
+                  ? "Set up another agent"
+                  : "Set up Platform MCP"}
+              </Text>
+            ) : null}
             <Text muted small className="mt-2 max-w-2xl">
               {showManagement
                 ? "Start a separate resumable checklist for another agent in this organization."

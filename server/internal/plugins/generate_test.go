@@ -3071,6 +3071,67 @@ func TestGeneratePlatformMCPPackageEmitsExistingServersWorkflow(t *testing.T) {
 	require.NotContains(t, workflow, "claude mcp remove")
 }
 
+// These are packaged-instruction regressions, not simulated agent/tool executions.
+func TestGeneratePlatformMCPExistingServersCatalogPreference(t *testing.T) {
+	t.Parallel()
+	files, err := PublicPlatformMCPFiles("https://app.example.com", "17")
+	require.NoError(t, err)
+	path := "skills/add-existing-mcp-servers/SKILL.md"
+	content := files["speakeasy/"+path]
+	require.NotEmpty(t, content)
+	require.Equal(t, content, files["agent-plugins/speakeasy/"+path])
+	workflow := string(content)
+	for _, scenario := range []struct {
+		name         string
+		instructions []string
+	}{
+		{"different endpoint found by synthetic service alias", []string{
+			"Search exact endpoint identity FIRST", "search local non-secret alias/provider/name SECONDARY",
+			"only inputs are optional `query`, `provider_key` and `cursor`",
+			"Follow `next_cursor` with the same `query` and `provider_key`",
+			"A URL search miss does not rule out a reviewed alternative",
+			"an absent `canonical_url` is unknown, not a match",
+			"region, product and tools differences", "explicitly mark unknown differences",
+		}},
+		{"ambiguous or declined synthetic alternatives", []string{
+			"never silently substitute based on a name", "ask for one exact candidate",
+			"Catalogue substitutions require separate confirmation",
+			"If the user declines, no suitable match exists", "offer the original safe direct remote path",
+			"Unresolved ambiguity must not trigger a catalogue write",
+		}},
+		{"accepted alternative uses reviewed registration", []string{
+			"call `register_catalog_mcp`", "only declared `non_secret_config`",
+			"Never create a custom direct-remote entry for a confirmed catalogue replacement",
+			"import does not require readiness or plugin distribution",
+		}},
+		{"two configurations of one catalogue reference require operation evidence", []string{
+			"Two configurations of one catalogue reference are not the same target",
+			"source/reference alone cannot prove configuration equivalence",
+			"match fresh inventory `registration.id` to the receipt's returned `registration_id`",
+			"correlated with the exact submitted confirmed configuration",
+			"do not invent fields or claim current configuration was read back",
+			"configuration equivalence remains unverified and requires manual resolution, not automatic reuse",
+			"do not claim already present or create a duplicate",
+		}},
+		{"confirmed catalogue target already present", []string{
+			"Recheck existing registrations after substitution",
+			"Deduplicate confirmed catalogue targets across aliases too",
+			"do not register again", "pending/incomplete or uncertain identity blocks duplicate creation",
+			"do not verify against the original URL when the confirmed replacement differs",
+			"Every selected supported server must be confirmed present",
+		}},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			t.Parallel()
+			for _, instruction := range scenario.instructions {
+				require.Contains(t, workflow, instruction)
+			}
+		})
+	}
+	require.Less(t, strings.Index(workflow, "Search exact endpoint identity FIRST"), strings.Index(workflow, "search local non-secret alias/provider/name SECONDARY"))
+	require.NotContains(t, workflow, "`lookup_url`")
+}
+
 func TestGeneratePlatformMCPPackageEmitsReviewedShadowWorkflow(t *testing.T) {
 	t.Parallel()
 

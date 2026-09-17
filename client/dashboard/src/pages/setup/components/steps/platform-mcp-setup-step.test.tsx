@@ -64,7 +64,7 @@ describe("PlatformMCPSetupStep", () => {
     const setup = screen.getByText("Platform MCP setup");
     const panel = screen.getByTestId("existing-mcp-follow-up");
     expect(panel.getAttribute("data-project")).toBe("example-project");
-    expect(setup.nextElementSibling).toBe(panel);
+    expect(setup.closest("section")?.nextElementSibling).toBe(panel);
     expect(panel.parentElement).toBe(screen.getByTestId("scope-boundary"));
     expect(panel.parentElement?.getAttribute("data-scope")).toBe("org:admin");
   });

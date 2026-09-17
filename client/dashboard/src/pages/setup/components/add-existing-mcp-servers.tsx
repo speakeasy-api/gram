@@ -1,7 +1,8 @@
 import { Button } from "@/components/ui/Button";
 import { useOrganization } from "@/contexts/Auth";
 import { useOrganizationPlatformMCPOnboarding } from "@/hooks/useOrganizationPlatformMCPOnboarding";
-import { useId, useState } from "react";
+import { useState } from "react";
+import { StepSection } from "./step-section";
 
 // oxlint-disable-next-line react/only-export-components -- Export the prompt alongside its panel for focused safety-contract tests.
 export function existingMCPServersPrompt(currentProjectSlug?: string): string {
@@ -15,6 +16,7 @@ export function existingMCPServersPrompt(currentProjectSlug?: string): string {
     "Before running claude mcp list, explain that it health-checks approved servers, can launch stdio processes and contact local/private-network endpoints BEFORE filtering, and may cause process side effects. Obtain explicit informed consent for those effects, or offer a user-sanitized manual inventory instead without running discovery. Show only sanitized inventory and explain excluded servers.",
     project,
     "Ask which servers I want, check for existing registrations, inspect missing candidates, and confirm the exact batch before adding anything.",
+    "For each missing server, search the catalogue by exact endpoint first, then by provider/name as a secondary lookup. Show candidate differences (endpoint, provider, capabilities, and authentication) and require my confirmation before substituting a catalogue candidate. Register confirmed candidates through the catalogue registration flow, not as direct remote servers. If I decline a candidate or no match exists, use the original URL registration path.",
     "Never copy local credentials or change local configuration. Authentication must happen through Speakeasy's secure setup flow.",
     "Verify and report every selected server separately. Do not claim partial success is complete, or require plugin/gateway distribution.",
   ].join(" ");
@@ -26,7 +28,6 @@ export function AddExistingMCPServers({
   currentProjectSlug?: string;
 }): JSX.Element | null {
   const organization = useOrganization();
-  const headingId = useId();
   const query = useOrganizationPlatformMCPOnboarding(organization.id, {
     throwOnError: false,
     staleTime: 10_000,
@@ -43,52 +44,50 @@ export function AddExistingMCPServers({
   }
   const prompt = existingMCPServersPrompt(currentProjectSlug);
   return (
-    <section
-      aria-labelledby={headingId}
-      className="border-border space-y-4 rounded-lg border p-6"
+    <StepSection
+      index={2}
+      slug="add-existing-mcp-servers"
+      title="Add existing MCP servers"
+      badge="Optional"
     >
-      <div className="flex flex-wrap items-center gap-2">
-        <h3 id={headingId} className="text-base font-medium">
-          Add existing MCP servers
-        </h3>
-        <span className="text-muted-foreground text-xs">Optional</span>
+      <div className="space-y-4">
+        <p className="text-muted-foreground text-sm">
+          Already use remote MCP servers in Claude Code? Copy this prompt into
+          Claude Code to check its Speakeasy connection before adding servers.
+          This dashboard cannot verify which client is authenticated.
+        </p>
+        <p className="text-muted-foreground text-sm">
+          Discovery requires your informed consent: Claude's list command can
+          launch local processes and contact local/private-network servers
+          before filtering. Those processes may have side effects. You can
+          provide a sanitized manual inventory instead. The agent must not edit
+          local configuration or transfer credentials; authentication uses
+          Speakeasy's secure setup flow.
+        </p>
+        <p className="text-muted-foreground text-sm">
+          Manual MCP configuration does not install the reviewed skill.{" "}
+          <a
+            className="text-foreground underline underline-offset-4"
+            href="https://github.com/speakeasy-api/marketplace#readme"
+          >
+            Install the Speakeasy Platform MCP plugin
+          </a>{" "}
+          if the skill is unavailable.
+        </p>
+        <div className="border-border bg-muted/30 rounded-md border p-3">
+          <code className="block text-xs break-words whitespace-normal">
+            {prompt}
+          </code>
+        </div>
+        <CopyPrompt
+          key={JSON.stringify([organization.id, prompt])}
+          prompt={prompt}
+        />
+        <p className="text-muted-foreground text-sm">
+          Review the per-server results in Claude Code. You can skip this step.
+        </p>
       </div>
-      <p className="text-muted-foreground text-sm">
-        Already use remote MCP servers in Claude Code? Copy this prompt into
-        Claude Code to check its Speakeasy connection before adding servers.
-        This dashboard cannot verify which client is authenticated.
-      </p>
-      <p className="text-muted-foreground text-sm">
-        Discovery requires your informed consent: Claude's list command can
-        launch local processes and contact local/private-network servers before
-        filtering. Those processes may have side effects. You can provide a
-        sanitized manual inventory instead. The agent must not edit local
-        configuration or transfer credentials; authentication uses Speakeasy's
-        secure setup flow.
-      </p>
-      <p className="text-muted-foreground text-sm">
-        Manual MCP configuration does not install the reviewed skill.{" "}
-        <a
-          className="text-foreground underline underline-offset-4"
-          href="https://github.com/speakeasy-api/marketplace#readme"
-        >
-          Install the Speakeasy Platform MCP plugin
-        </a>{" "}
-        if the skill is unavailable.
-      </p>
-      <div className="border-border bg-muted/30 rounded-md border p-3">
-        <code className="block text-xs break-words whitespace-normal">
-          {prompt}
-        </code>
-      </div>
-      <CopyPrompt
-        key={JSON.stringify([organization.id, prompt])}
-        prompt={prompt}
-      />
-      <p className="text-muted-foreground text-sm">
-        Review the per-server results in Claude Code. You can skip this step.
-      </p>
-    </section>
+    </StepSection>
   );
 }
 
