@@ -1721,6 +1721,19 @@ func TestTelemetryHookEventName_TranslatesCanonicalVocabulary(t *testing.T) {
 	require.Equal(t, "session.updated", telemetryHookEventName(withRaw("opencode", "session.updated", "message.part.updated")))
 	require.Equal(t, "AfterAgentResponse", telemetryHookEventName(withRaw("opencode", "assistant.responded", "session.idle")))
 
+	// Pi deliberately has no raw-name parser: its tool_result event covers
+	// both outcomes, so only the canonical Event.Type distinguishes a
+	// completed call from a failed one. Every Pi event's canonical type
+	// already maps to the right provider-style name, and adding a parser that
+	// resolved tool_result would erase the failure.
+	require.Equal(t, "PreToolUse", telemetryHookEventName(withRaw("pi", "tool.requested", "tool_call")))
+	require.Equal(t, "PostToolUse", telemetryHookEventName(withRaw("pi", "tool.completed", "tool_result")))
+	require.Equal(t, "PostToolUseFailure", telemetryHookEventName(withRaw("pi", "tool.failed", "tool_result")))
+	require.Equal(t, "UserPromptSubmit", telemetryHookEventName(withRaw("pi", "prompt.submitted", "input")))
+	require.Equal(t, "AfterAgentResponse", telemetryHookEventName(withRaw("pi", "assistant.responded", "message_end")))
+	require.Equal(t, "SessionStart", telemetryHookEventName(withRaw("pi", "session.started", "session_start")))
+	require.Equal(t, "SessionEnd", telemetryHookEventName(withRaw("pi", "session.ended", "session_shutdown")))
+
 	// Custom adapters have no raw vocabulary: canonical types map to their
 	// provider-style equivalents so summaries still count them.
 	require.Equal(t, "PostToolUse", telemetryHookEventName(canonicalIngestPayload("openclaw", "tool.completed", "vocab-session")))

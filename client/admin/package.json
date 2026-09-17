@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@tailwindcss/vite": "catalog:",
+    "@tanstack/charts": "^0.18.0",
     "@tanstack/react-form": "^1.33.5",
     "@tanstack/react-hotkeys": "^0.10.0",
     "@tanstack/react-query": "catalog:",

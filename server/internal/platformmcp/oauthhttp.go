@@ -50,6 +50,7 @@ var oauthPageHTML string
 var (
 	oauthPageTemplate      = template.Must(template.New("platform-mcp-oauth-page").Parse(oauthPageHTML))
 	errPlatformMCPDisabled = fmt.Errorf("platform mcp disabled: %w", ErrForbidden)
+	supportedGrantTypes    = []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken}
 
 	// supportedAuthMethods is the token_endpoint_auth_method set this
 	// authorization server accepts, advertised in its RFC 8414 metadata and
@@ -91,7 +92,7 @@ type oauthPageData struct {
 type BrowserIdentity interface {
 	BuildAuthorizationURL(ctx context.Context, params identity.AuthorizationURLParams) (*url.URL, error)
 	ExchangeCodeForTokens(ctx context.Context, code string) (*identity.IDPUserInfo, error)
-	UpsertUserFromIDP(ctx context.Context, idpUser *identity.IDPUserInfo) (string, error)
+	CompleteIDPLogin(ctx context.Context, idpUser *identity.IDPUserInfo, opts identity.IDPLoginOptions) (identity.IDPLoginResult, error)
 }
 
 type OrganizationOption struct {
@@ -257,7 +258,7 @@ func (s *OAuthHTTP) AuthorizationServerHandler() http.Handler {
 			"registration_endpoint":                 s.url("register"),
 			"revocation_endpoint":                   s.url("revoke"),
 			"response_types_supported":              usersessions.SupportedResponseTypes,
-			"grant_types_supported":                 usersessions.SupportedGrantTypes,
+			"grant_types_supported":                 supportedGrantTypes,
 			"token_endpoint_auth_methods_supported": supportedAuthMethods,
 			"code_challenge_methods_supported":      usersessions.SupportedCodeChallengeMethods,
 		}
@@ -286,7 +287,7 @@ func (s *OAuthHTTP) RegisterHandler() http.Handler {
 			return
 		}
 		request.SetDefaults()
-		if err := request.Validate(supportedAuthMethods); err != nil {
+		if err := request.Validate(supportedGrantTypes, supportedAuthMethods); err != nil {
 			writeRequestOAuthError(w, http.StatusBadRequest, err)
 			return
 		}
@@ -392,13 +393,13 @@ func (s *OAuthHTTP) IDPCallbackHandler() http.Handler {
 			writeOAuthError(w, http.StatusUnauthorized, "access_denied", "login could not be completed")
 			return
 		}
-		userID, err := s.identity.UpsertUserFromIDP(r.Context(), idpUser)
+		login, err := s.identity.CompleteIDPLogin(r.Context(), idpUser, identity.IDPLoginOptions{SkipMembershipSync: false})
 		if err != nil {
 			writeOAuthError(w, http.StatusInternalServerError, "server_error", "login could not be completed")
 			return
 		}
 		challenge.ID = uuid.NewString()
-		challenge.Subject = urn.NewUserSubject(userID).String()
+		challenge.Subject = urn.NewUserSubject(login.UserID).String()
 		if err := s.cache.Store(r.Context(), challenge); err != nil {
 			writeOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "could not continue authorization")
 			return

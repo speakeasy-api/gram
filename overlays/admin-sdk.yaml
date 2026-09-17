@@ -4,6 +4,16 @@ info:
   title: Admin SDK policy
   version: 0.0.0
 actions:
+  # HTTP int64 query values must not pass through JavaScript Number. Speakeasy's
+  # string/bigint mapping generates native bigint and lossless decimal strings.
+  # The server still enforces the documented nonnegative signed-int64 range.
+  # https://www.speakeasy.com/docs/sdks/customize/data-model/complex-numbers
+  - target: $.paths['/admin/organizations.list'].get.parameters[?@.name=='min_members' || @.name=='max_members'].schema.minimum
+    remove: true
+  - target: $.paths['/admin/organizations.list'].get.parameters[?@.name=='min_members' || @.name=='max_members'].schema
+    update:
+      type: string
+      format: bigint
   # Public images are raw binary, not the default Goa JSON response.
   - target: $.paths['/admin/assets.serveImage'].get.responses['200'].content
     remove: true
@@ -72,6 +82,9 @@ actions:
   - target: $.paths.*[?@.operationId=='adminGetInferenceSpendHistory']
     update:
       x-speakeasy-name-override: getInferenceSpendHistory
+  - target: $.paths.*[?@.operationId=='adminGetMeterUsage']
+    update:
+      x-speakeasy-name-override: getMeterUsage
   - target: $.paths.*[?@.operationId=='adminGetOrganization']
     update:
       x-speakeasy-name-override: getOrganization

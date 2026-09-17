@@ -14,6 +14,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
+	usagegen "github.com/speakeasy-api/gram/server/gen/usage"
 	"github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -172,6 +173,54 @@ func (s *Service) GetPaygBillingSummary(ctx context.Context, payload *gen.GetPay
 		TumUnitPriceUsd: summary.TumUnitPriceUsd, TumCostUsd: summary.TumCostUsd,
 		OtherInferenceSpendUsd: summary.OtherInferenceSpendUsd, RecordedThrough: summary.RecordedThrough,
 		EstimatedTotalUsd: summary.EstimatedTotalUsd,
+	}, nil
+}
+func (s *Service) GetMeterUsage(ctx context.Context, payload *gen.GetMeterUsagePayload) (*gen.AdminMeterUsageResponse, error) {
+	organization, err := repo.New(s.db).AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{
+		ID:        payload.OrganizationID,
+		AllowSlug: true,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.C(oops.CodeNotFound)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve meter usage organization").LogError(ctx, s.logger)
+	}
+	if s.billing == nil {
+		return nil, oops.E(oops.CodeUnavailable, nil, "billing operations are temporarily unavailable").LogWarn(ctx, s.logger)
+	}
+
+	report, err := s.billing.GetMeterUsageForOrganization(ctx, organization.ID, &usagegen.GetMeterUsagePayload{
+		SessionToken: nil,
+		Family:       payload.Family,
+		From:         payload.From,
+		To:           payload.To,
+		Breakdown:    conv.PtrEmpty("total"),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("get organization meter usage: %w", err)
+	}
+
+	billingCycles := make([]*gen.MeterUsageWindow, len(report.BillingCycles))
+	for index, cycle := range report.BillingCycles {
+		billingCycles[index] = &gen.MeterUsageWindow{From: cycle.From, To: cycle.To}
+	}
+	buckets := make([]*gen.AdminMeterUsageBucket, len(report.Buckets))
+	for index, bucket := range report.Buckets {
+		buckets[index] = &gen.AdminMeterUsageBucket{From: bucket.From, To: bucket.To, Total: bucket.Total}
+	}
+	return &gen.AdminMeterUsageResponse{
+		Family: report.Family,
+		Window: &gen.MeterUsageWindow{
+			From: report.Window.From,
+			To:   report.Window.To,
+		},
+		BillingCycles:     billingCycles,
+		Unit:              report.Unit,
+		Total:             report.Total,
+		Buckets:           buckets,
+		QueriedAt:         report.QueriedAt,
+		MeasurementMethod: report.MeasurementMethod,
 	}, nil
 }
 

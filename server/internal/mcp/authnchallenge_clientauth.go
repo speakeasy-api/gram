@@ -15,7 +15,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/clientauth"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/privatekeyjwt"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/clientcred"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
@@ -119,7 +119,7 @@ func (s *Service) authenticateOAuthClient(ctx context.Context, logger *slog.Logg
 // the expectation this endpoint imposes, returning the failure reason or ""
 // when the assertion verified. Every rejection reason comes from the
 // verifier's vocabulary so the logs read the same at both endpoints.
-func (s *Service) verifyClientAssertion(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, at clientAssertionEndpoint, row *usersessions_repo.UserSessionClient, assertion clientauth.Assertion, baseURL string) string {
+func (s *Service) verifyClientAssertion(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, at clientAssertionEndpoint, row *usersessions_repo.UserSessionClient, assertion privatekeyjwt.Assertion, baseURL string) string {
 	if s.clientAssertionVerifier == nil {
 		// No shared store, no single-use guarantee. Refused, and loudly:
 		// this is a surface that should not be receiving these requests.
@@ -142,10 +142,10 @@ func (s *Service) verifyClientAssertion(ctx context.Context, logger *slog.Logger
 	if err != nil {
 		// Cannot compute what aud may name, so nothing can be accepted.
 		logger.ErrorContext(ctx, "cannot derive assertion audiences for endpoint, failing closed", attr.SlogError(err))
-		return string(clientauth.ReasonVerifierMisconfigured)
+		return string(privatekeyjwt.ReasonVerifierMisconfigured)
 	}
 
-	result, err := s.clientAssertionVerifier.Verify(ctx, assertion, clientauth.ClientExpectation(
+	result, err := s.clientAssertionVerifier.Verify(ctx, assertion, privatekeyjwt.ClientExpectation(
 		row.ClientID,
 		// Scoped to the issuer, so every key set its clients name draws on
 		// one fetch budget.
@@ -157,7 +157,7 @@ func (s *Service) verifyClientAssertion(ctx context.Context, logger *slog.Logger
 		urls.clientAssertionAudiences(at),
 	))
 	if err != nil {
-		reason := clientauth.ReasonOf(err)
+		reason := privatekeyjwt.ReasonOf(err)
 		if reason == "" {
 			reason = "assertion_rejected"
 		}

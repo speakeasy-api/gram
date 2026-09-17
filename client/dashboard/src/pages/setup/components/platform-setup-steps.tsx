@@ -59,6 +59,70 @@ function HighlightedCode({
   );
 }
 
+function CopyableSetupValue({
+  label,
+  value,
+  displayValue,
+}: {
+  label: string;
+  value?: string;
+  displayValue?: string;
+}): JSX.Element {
+  const [status, setStatus] = useState<"idle" | "copied" | "error">("idle");
+  useEffect(() => {
+    setStatus("idle");
+  }, [value]);
+  useEffect(() => {
+    if (status !== "copied") return;
+    const timer = setTimeout(() => setStatus("idle"), 2000);
+    return () => clearTimeout(timer);
+  }, [status]);
+
+  async function copy(): Promise<void> {
+    if (value === undefined) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      setStatus("copied");
+    } catch {
+      setStatus("error");
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-foreground text-sm font-medium">{label}</span>
+        <Button
+          variant="secondary"
+          size="sm"
+          aria-label={`Copy ${label}`}
+          disabled={value === undefined}
+          onClick={() => void copy()}
+        >
+          <Button.LeftIcon>
+            {status === "copied" ? (
+              <Check className="h-3 w-3" />
+            ) : (
+              <Copy className="h-3 w-3" />
+            )}
+          </Button.LeftIcon>
+          <Button.Text>{status === "copied" ? "Copied" : "Copy"}</Button.Text>
+        </Button>
+      </div>
+      <div className="border-border bg-secondary/40 border px-3 py-2">
+        <code className="text-foreground text-[13px] break-all">
+          {displayValue ?? "Waiting for API key…"}
+        </code>
+      </div>
+      {status === "error" && (
+        <p role="alert" className="text-destructive text-xs">
+          Couldn't copy. Check clipboard permissions and try again.
+        </p>
+      )}
+    </div>
+  );
+}
+
 interface PlatformSetupStepBodyProps {
   step: PlatformSetupStep;
   /** Small label above the title, e.g. "Step 2". */
@@ -116,7 +180,16 @@ export function PlatformSetupStepBody({
       )}
       {step.description && (
         <p className="text-muted-foreground text-sm leading-relaxed">
-          {step.description}
+          {typeof step.description === "string"
+            ? step.description
+            : step.description.map((part, index) => {
+                if (typeof part === "string") return part;
+                const value = snippetFor({
+                  title: step.title,
+                  code: part.code,
+                });
+                return value ? <code key={index}>{value}</code> : part.fallback;
+              })}
         </p>
       )}
 
@@ -189,6 +262,25 @@ export function PlatformSetupStepBody({
             </button>
           </div>
         </div>
+      )}
+
+      {step.fields?.map((field) => {
+        const fieldStep = {
+          title: field.label,
+          code: field.value,
+          requiresApiKey: field.requiresApiKey,
+        };
+        return (
+          <CopyableSetupValue
+            key={field.label}
+            label={field.label}
+            value={snippetFor(fieldStep, apiKey)}
+            displayValue={snippetFor(fieldStep, "••••••••")}
+          />
+        );
+      })}
+      {step.afterFields && (
+        <p className="text-muted-foreground text-sm">{step.afterFields}</p>
       )}
 
       {snippet && (

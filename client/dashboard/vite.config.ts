@@ -15,6 +15,7 @@ import {
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { replaceAdminServerUrl } from "./src/lib/admin-server-url.ts";
+import { blankPreviewRuntimeValues } from "./src/lib/preview-runtime-values.ts";
 import { withoutLocalDevSlot } from "./dev-slot-plugin.ts";
 
 // Manually grouped vendor chunks. CAUTION: never group a package whose dist
@@ -419,6 +420,19 @@ export default defineConfig(async (env) => {
             html,
             process.env["GRAM_ADMIN_SERVER_URL"] || "",
           );
+        },
+      },
+      {
+        // The preview placeholders are substituted by the dashboard image's
+        // entrypoint (41-preview-runtime-values.sh), which never runs under
+        // `vite dev`. Blank them here so the dev server does not serve a
+        // literal "${GRAM_GUTTERNOTE_SCRIPT}" as visible text in the body.
+        // Only `serve` is touched: the build must emit the placeholders
+        // intact for the entrypoint to substitute at container start.
+        name: "preview-runtime-values",
+        transformIndexHtml(html) {
+          if (command !== "serve") return html;
+          return blankPreviewRuntimeValues(html);
         },
       },
       themeInitPlugin(),

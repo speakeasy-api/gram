@@ -857,6 +857,121 @@ export function CopilotInstallContent(): JSX.Element {
   );
 }
 
+/**
+ * Pi install. Pi has no plugin marketplace, no hook configuration, and no MCP
+ * client of its own — every integration point is a TypeScript extension loaded
+ * into the Pi process — so the primary path is the server-generated
+ * observability ZIP (plugins.downloadObservabilityPlugin?platform=pi): the
+ * generated extension plus speakeasy.json and bootstrappers, with a
+ * freshly-minted hooks-scoped key already embedded. The CLI path
+ * (speakeasy-hooks install --provider=pi) renders the same extension. The MCP
+ * snippet is the config a Pi MCP extension reads; Speakeasy reads the same
+ * file to report which servers a workspace can reach.
+ */
+function PiInstallContent(): JSX.Element {
+  const { isDownloading, download: handleDownloadPlugin } =
+    useObservabilityPluginDownload("pi", "observability-pi.zip");
+
+  const installBinary = `curl -fsSL https://raw.githubusercontent.com/speakeasy-api/gram/main/hooks/install.sh | sh`;
+
+  const installCommand = `GRAM_HOOKS_ORG_KEY="your-hooks-scoped-api-key" \\
+speakeasy-hooks install --provider=pi --dir=. --project=your-project-slug`;
+
+  const mcpConfig = `{
+  "mcpServers": {
+    "<server-name>": {
+      "transport": "streamable-http",
+      "url": "<mcp-server-url>"
+    }
+  }
+}`;
+
+  return (
+    <div className="min-w-0 space-y-6">
+      {/* ── Quick install ─────────────────────────────────────────────────── */}
+      <div>
+        <h3 className="mb-2 text-sm font-semibold">Quick install</h3>
+        <p className="text-muted-foreground mb-3 text-sm">
+          Download the Gram observability plugin as a ZIP — a self-contained Pi
+          extension with a hooks-scoped API key already embedded (no CLI, no key
+          to export). Extract it into your repo&apos;s{" "}
+          <code className="bg-muted px-1 py-0.5 text-xs">.pi/</code> (or{" "}
+          <code className="bg-muted px-1 py-0.5 text-xs">~/.pi/agent/</code> for
+          every repo) and Pi loads it on next start.
+        </p>
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={isDownloading}
+          onClick={() => void handleDownloadPlugin()}
+          className="inline-flex items-center gap-2"
+        >
+          <Download className="size-4" />
+          {isDownloading ? "Downloading…" : "Download Plugin"}
+        </Button>
+        <p className="text-muted-foreground mt-2 text-xs">
+          Then extract:{" "}
+          <code className="bg-muted px-1 py-0.5">
+            unzip observability-pi.zip -d .pi
+          </code>
+          , or for every repo:{" "}
+          <code className="bg-muted px-1 py-0.5">
+            unzip observability-pi.zip -d ~/.pi/agent
+          </code>
+        </p>
+        <p className="text-muted-foreground mt-2 text-xs">
+          Project-local extensions load only after you trust the project, so
+          answer Pi&apos;s trust prompt on first start.
+        </p>
+      </div>
+
+      <div className="border-t" />
+
+      {/* ── Manual setup ──────────────────────────────────────────────────── */}
+      <div className="space-y-4">
+        <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+          Manual setup
+        </p>
+        <p className="text-muted-foreground text-sm">
+          Prefer the CLI? Install the{" "}
+          <code className="bg-muted px-1 py-0.5 text-xs">speakeasy-hooks</code>{" "}
+          binary:
+        </p>
+        <CodeBlock language="bash" className="bg-background">
+          {installBinary}
+        </CodeBlock>
+        <p className="text-muted-foreground text-sm">
+          Then run it from your repo to render the same extension into{" "}
+          <code className="bg-muted px-1 py-0.5 text-xs">.pi/extensions/</code>:
+        </p>
+        <CodeBlock language="bash" className="bg-background">
+          {installCommand}
+        </CodeBlock>
+      </div>
+
+      {/* ── Connect an MCP server ─────────────────────────────────────────── */}
+      <div>
+        <h3 className="mb-2 text-sm font-semibold">Connect an MCP server</h3>
+        <p className="text-muted-foreground mb-3 text-sm">
+          Pi ships no MCP client. Install an MCP extension for Pi, then declare
+          servers in{" "}
+          <code className="bg-muted px-1 py-0.5 text-xs">.pi/mcp.json</code> (or{" "}
+          <code className="bg-muted px-1 py-0.5 text-xs">
+            ~/.pi/agent/mcp.json
+          </code>
+          ). Speakeasy reads the same file, so every server a Pi workspace can
+          reach shows up in your MCP inventory and its tool calls are attributed
+          to it. Replace the placeholders with the name and URL from that
+          server&apos;s own install page.
+        </p>
+        <CodeBlock language="json" className="bg-background">
+          {mcpConfig}
+        </CodeBlock>
+      </div>
+    </div>
+  );
+}
+
 type DialogProps = ContentProps & {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -1123,6 +1238,7 @@ export function InstallInstructionsDialog({
               )}
               {selected === "opencode" && <OpencodeInstallContent />}
               {selected === "copilot" && <CopilotInstallContent />}
+              {selected === "pi" && <PiInstallContent />}
             </div>
           </div>
         </div>

@@ -1586,7 +1586,7 @@ var _ = Service("risk", func() {
 	})
 
 	Method("evaluatePromptGuardrail", func() {
-		Description("Replay a prompt_based guardrail against a single chat session and return the LLM judge's per-message verdict. The guardrail (prompt + judge config + message-type scope + CEL scope) is passed inline so the policy-eval workbench can evaluate an unsaved draft before a policy exists. This path is read-only: it never writes risk_results, publishes to the outbox, or enforces. It exists purely to tune a guardrail against real transcripts. Judges only the chat's latest generation; message-type scoping and CEL scope predicates are both applied.")
+		Description("Replay a prompt_based guardrail against a single chat session and return the LLM judge's per-message verdict. The guardrail (prompt + judge config + message-type scope + CEL scope) is passed inline so the policy-eval workbench can evaluate an unsaved draft before a policy exists. This path is read-only: it never writes risk_results, publishes to the outbox, or enforces. It exists purely to tune a guardrail against real transcripts. Judges only the chat's latest generation and at most the first 200 in-scope messages in transcript order; message-type scoping and CEL scope predicates are both applied.")
 
 		Payload(func() {
 			security.ByKeyPayload()
@@ -1757,11 +1757,13 @@ var PromptGuardrailEvalResult = Type("PromptGuardrailEvalResult", func() {
 	})
 	Attribute("flagged", Boolean, "True when the guardrail flagged at least one in-scope message.")
 	Attribute("judged_count", Int, "Number of in-scope messages the judge evaluated.")
+	Attribute("in_scope_message_count", Int, "Total number of messages matching the guardrail scope before the replay limit.")
+	Attribute("message_limit_hit", Boolean, "True when the replay judged only the first 200 in-scope messages.")
 	Attribute("total_cost_usd", Float64, "Total OpenRouter cost across in-scope judge calls, in USD.")
 	Attribute("total_latency_ms", Int64, "Aggregate judge latency overhead across in-scope messages, computed as the sum of per-message judge latencies.")
 	Attribute("verdicts", ArrayOf(PromptGuardrailMessageVerdict), "Per-message verdicts for in-scope messages, ordered by seq.")
 
-	Required("chat_id", "flagged", "judged_count", "total_cost_usd", "total_latency_ms", "verdicts")
+	Required("chat_id", "flagged", "judged_count", "in_scope_message_count", "message_limit_hit", "total_cost_usd", "total_latency_ms", "verdicts")
 })
 
 var SuggestCustomDetectionRuleResult = Type("SuggestCustomDetectionRuleResult", func() {

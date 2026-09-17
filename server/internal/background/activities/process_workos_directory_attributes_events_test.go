@@ -432,11 +432,13 @@ func TestProcessWorkOSOrganizationEvents_DirectoryUserDeactivationDeprovisionsAc
 	require.True(t, latched.OwnerReassignmentRequiredAt.Valid)
 	require.Equal(t, "owner_inactive", latched.OwnerReassignmentReason.String)
 
-	// Cached user info is invalidated so org-access checks observe the
-	// deprovisioning without waiting out the cache TTL.
+	// Cached user info is invalidated on the membership add and again on the
+	// deprovisioning, so org-access checks never wait out the cache TTL.
 	deletedKeys := capturingCache.Deleted()
-	require.Len(t, deletedKeys, 1)
-	require.Contains(t, deletedKeys[0], sessions.UserInfoCacheKey(userID))
+	require.Len(t, deletedKeys, 2)
+	for _, key := range deletedKeys {
+		require.Contains(t, key, sessions.UserInfoCacheKey(userID))
+	}
 }
 
 func TestProcessWorkOSOrganizationEvents_DirectoryUserReactivationRestoresDirectoryUser(t *testing.T) {

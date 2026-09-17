@@ -188,7 +188,7 @@ describe("organization routes", () => {
 
 it("removes platform issuer management while preserving tenant and other admin routes", () => {
   expect(orgRoutePaths).not.toContain("platform-remote-identity-providers");
-  expect(orgRoutePaths).toContain("remote-identity-providers");
+  expect(orgRoutePaths).toContain("remote-identity-providers/*");
   expect(orgRoutePaths).toContain("platform-admin");
   expect(orgRoutePaths).toContain("platform-admin/openrouter-keys");
 });

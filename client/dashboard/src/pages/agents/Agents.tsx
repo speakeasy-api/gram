@@ -18,6 +18,9 @@ import {
   useOrganization,
   useSession,
 } from "@/contexts/Auth";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { DEMO_ORG_SLUG } from "@/lib/demo";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
@@ -45,6 +48,25 @@ import { AgentPolicySection } from "./AgentPolicySection";
 import { ManagedAgentSessions } from "./ManagedAgentSessions";
 
 export default function AgentsPage(): JSX.Element {
+  const flag = useFeatureFlag(FEATURE_FLAGS.agentManagement);
+  if (flag.status !== "enabled") {
+    return (
+      <FormPage
+        title="Agent Identity"
+        description={
+          flag.status === "loading"
+            ? "Loading agent management…"
+            : "Agent management is not enabled for this organization."
+        }
+      >
+        {null}
+      </FormPage>
+    );
+  }
+  return <AgentsPageContent />;
+}
+
+function AgentsPageContent(): JSX.Element {
   const organization = useOrganization();
   const session = useSession();
   const isPlatformAdmin = useIsPlatformAdmin();
@@ -160,7 +182,7 @@ function AgentList({
     <ResourceListPage
       title="Agents"
       description="Agents visible to you."
-      primaryAction={<Button onClick={onCreate}>Create agent</Button>}
+      primaryAction={<Button onClick={onCreate}>New agent identity</Button>}
       search={{
         value: search,
         onChange: setSearch,
@@ -177,7 +199,11 @@ function AgentList({
       isRefreshing={agents.isFetching}
     >
       {agents.isError ? (
-        <Text role="alert">Unable to load agents. Try again.</Text>
+        <Text role="alert">
+          {agents.error instanceof GramError && agents.error.statusCode === 404
+            ? "Agent management is not enabled for this organization."
+            : "Unable to load agents. Try again."}
+        </Text>
       ) : rows.length === 0 ? (
         <Text>No matching agents</Text>
       ) : (

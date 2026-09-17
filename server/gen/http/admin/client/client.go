@@ -212,6 +212,10 @@ type Client struct {
 	// changeTrialEndDate endpoint.
 	ChangeTrialEndDateDoer goahttp.Doer
 
+	// GetMeterUsage Doer is the HTTP client used to make requests to the
+	// getMeterUsage endpoint.
+	GetMeterUsageDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -281,6 +285,7 @@ func NewClient(
 		ServeImageDoer:                            doer,
 		StartTrialDoer:                            doer,
 		ChangeTrialEndDateDoer:                    doer,
+		GetMeterUsageDoer:                         doer,
 		RestoreResponseBody:                       restoreBody,
 		scheme:                                    scheme,
 		host:                                      host,
@@ -1465,6 +1470,30 @@ func (c *Client) ChangeTrialEndDate() goa.Endpoint {
 		resp, err := c.ChangeTrialEndDateDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "changeTrialEndDate", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetMeterUsage returns an endpoint that makes HTTP requests to the admin
+// service getMeterUsage server.
+func (c *Client) GetMeterUsage() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetMeterUsageRequest(c.encoder)
+		decodeResponse = DecodeGetMeterUsageResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetMeterUsageRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetMeterUsageDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getMeterUsage", err)
 		}
 		return decodeResponse(resp)
 	}

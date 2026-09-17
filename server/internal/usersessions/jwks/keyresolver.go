@@ -1,10 +1,13 @@
 package jwks
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-jose/go-jose/v4"
@@ -15,9 +18,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 )
 
-// refreshCooldown is the per-replica negative-cache window on the unknown-kid
-// path: a source whose upstream was consulted this recently is not consulted
-// again, whatever kid arrives. It is what makes probing with random kids
+// refreshCooldown is the short negative-cache window on the unknown-kid and
+// failed-refresh paths. It is what makes probing with random kids
 // cost nothing after the first refresh — without it, every probe would reach
 // the rate limiter (a Redis round trip) and drain the source's refresh
 // budget, delaying the legitimate rotation the budget exists to serve. The
@@ -48,6 +50,33 @@ var ErrFetchLimiterUnavailable = errors.New("key set fetch rate limiter unavaila
 // source for the whole window.
 func isFetchAdmissionError(err error) bool {
 	return errors.Is(err, ErrFetchRateLimited) || errors.Is(err, ErrFetchLimiterUnavailable)
+}
+
+const transientErrorReasonPrefix = "JWKS endpoint temporarily unavailable"
+
+func safeConsultFailureReason(err error) string {
+	if statusErr, ok := errors.AsType[*keySetHTTPError](err); ok {
+		if errors.Is(err, ErrKeySetUnavailable) {
+			return transientErrorReasonPrefix + " (HTTP " + strconv.Itoa(statusErr.status) + ")"
+		}
+		return "JWKS endpoint returned HTTP " + strconv.Itoa(statusErr.status)
+	}
+	if errors.Is(err, ErrKeySetUnavailable) {
+		return transientErrorReasonPrefix
+	}
+	if errors.Is(err, ErrKeySetTooLarge) {
+		return "JWKS response exceeded the size limit"
+	}
+	if errors.Is(err, ErrKeySetInvalid) {
+		return "JWKS response was invalid"
+	}
+	return "JWKS fetch failed"
+}
+
+func recentTransientFailure(state CacheState) bool {
+	elapsed := time.Since(state.LastErrorAt)
+	return strings.HasPrefix(state.LastError, transientErrorReasonPrefix) &&
+		!state.LastErrorAt.IsZero() && elapsed >= 0 && elapsed < refreshCooldown
 }
 
 // KeyResolver is the orchestrator request paths use to turn (source, kid)
@@ -86,7 +115,7 @@ type KeyResolver struct {
 // this constructor exists to catch.
 //
 // The limiter is charged once per forced (unknown-kid) refresh, keyed by the
-// source's CacheKey, and its budget is shared fleet-wide while caches are
+// source's URI, and its budget is shared fleet-wide while caches are
 // per-replica: after a real key rotation, each replica needs one forced
 // refresh to converge, so size the limiter burst at or above the replica
 // count or rotation propagates one replica per refill.
@@ -190,7 +219,7 @@ func (k *KeyResolver) verificationKey(ctx context.Context, source Source, pick f
 	if source.kind == sourceInline {
 		// Inline sets have no upstream to refresh from, so an unknown kid is
 		// terminal by construction and no rate limit applies.
-		result, err := k.resolver.Resolve(ctx, source, CacheState{Document: nil, ETag: "", ExpiresAt: time.Time{}, RefreshedAt: time.Time{}})
+		result, err := k.resolver.Resolve(ctx, source, CacheState{Document: nil, ETag: "", ExpiresAt: time.Time{}, RefreshedAt: time.Time{}, LastErrorAt: time.Time{}, LastError: "", Revision: ""})
 		if err != nil {
 			return nil, err
 		}
@@ -239,11 +268,17 @@ func (k *KeyResolver) resolveShared(ctx context.Context, source Source) (*Result
 		if err != nil {
 			return nil, err
 		}
+		if len(state.Document) > 0 && !state.ExpiresAt.After(time.Now()) && recentTransientFailure(state) {
+			return nil, ErrKeySetUnavailable
+		}
 		// The scope budget is charged by the resolver at the moment it
 		// issues a request, so a warm entry costs nothing and every
 		// consult costs exactly one, whichever cache condition caused it.
 		resolved, err := k.resolver.ResolveWithFetchHook(ctx, source, state, k.fetchHook(source))
 		if err != nil {
+			if ctx.Err() == nil && !isFetchAdmissionError(err) {
+				k.markConsultFailure(ctx, source, state, err)
+			}
 			return nil, err
 		}
 		k.store(ctx, source, state, resolved)
@@ -267,6 +302,14 @@ func (k *KeyResolver) refreshShared(ctx context.Context, source Source) (*Result
 		if err != nil {
 			return nil, err
 		}
+		if recentTransientFailure(state) {
+			if state.ExpiresAt.After(time.Now()) {
+				if keys, parseErr := parseKeySet(state.Document); parseErr == nil {
+					return &Result{Outcome: CacheOutcomeCached, KeySet: keys, Document: state.Document, ETag: state.ETag, TTL: 0}, nil
+				}
+			}
+			return nil, ErrKeySetUnavailable
+		}
 
 		// The negative cache: an upstream consulted within the cooldown gave
 		// a current answer, so serve the stored set for re-selection instead
@@ -288,7 +331,11 @@ func (k *KeyResolver) refreshShared(ctx context.Context, source Source) (*Result
 			// protecting; fall through to the limiter and refresh.
 		}
 
-		allowed, err := k.refreshLimiter.Allow(ctx, source.CacheKey())
+		refreshKey := source.uri
+		if source.refreshNamespace != "" {
+			refreshKey = source.refreshNamespace + "\x00" + source.uri
+		}
+		allowed, err := k.refreshLimiter.Allow(ctx, refreshKey)
 		if err != nil {
 			// A limiter store outage fails closed: rotation waits rather
 			// than the refresh path running unthrottled.
@@ -310,6 +357,9 @@ func (k *KeyResolver) refreshShared(ctx context.Context, source Source) (*Result
 			ETag:        state.ETag,
 			ExpiresAt:   time.Time{},
 			RefreshedAt: state.RefreshedAt,
+			LastErrorAt: state.LastErrorAt,
+			LastError:   state.LastError,
+			Revision:    state.Revision,
 		}
 		// The scope budget is charged only once the per-source limiter has
 		// admitted the refresh and the resolver is about to issue the
@@ -318,22 +368,13 @@ func (k *KeyResolver) refreshShared(ctx context.Context, source Source) (*Result
 		// exhausted source cannot drain the budget its neighbours share.
 		resolved, err := k.resolver.ResolveWithFetchHook(ctx, source, forced, k.fetchHook(source))
 		if err != nil {
-			// A failed consult still stamps the cooldown: the upstream was
-			// genuinely contacted, and without the marker every unknown-kid
-			// probe against an unreachable source would charge the limiter
-			// and retry the origin instead of being negative-cached like a
-			// successful consult. Everything else about the stored state is
-			// kept as it was.
-			//
-			// Two exceptions, for failures that never reached the origin. A
-			// canceled caller's failure says nothing about it, and a refusal
-			// at the fetch scope's admission happened before any request;
-			// stamping either would suppress refresh against a healthy source
-			// for the whole cooldown. The context check is on the caller's
-			// context, so a fetch timeout (whose deadline lives on the
-			// derived context) still counts as a consult.
+			// Persist a safe error category for an attempted consult. A
+			// transient failure then suppresses repeated probes for the short
+			// cooldown; a policy denial remains a hard failure on every call.
+			// Caller cancellation and fetch-scope admission did not attempt a
+			// consult, so neither changes the recorded state.
 			if ctx.Err() == nil && !isFetchAdmissionError(err) {
-				k.markConsultFailure(ctx, source, state)
+				k.markConsultFailure(ctx, source, state, err)
 			}
 			return nil, err
 		}
@@ -361,7 +402,7 @@ func (k *KeyResolver) refreshShared(ctx context.Context, source Source) (*Result
 func (k *KeyResolver) cachedState(ctx context.Context, source Source) (CacheState, error) {
 	state, err := k.cache.Get(ctx, source.CacheKey())
 	if err != nil {
-		return CacheState{Document: nil, ETag: "", ExpiresAt: time.Time{}, RefreshedAt: time.Time{}}, fmt.Errorf("read key set cache: %w", err)
+		return CacheState{Document: nil, ETag: "", ExpiresAt: time.Time{}, RefreshedAt: time.Time{}, LastErrorAt: time.Time{}, LastError: "", Revision: ""}, fmt.Errorf("read key set cache: %w", err)
 	}
 	state.ETag = httpcache.SanitizeETag(state.ETag, maxETagLength)
 	return state, nil
@@ -376,16 +417,15 @@ func (k *KeyResolver) cachedState(ctx context.Context, source Source) (CacheStat
 // prior is the stored state the resolution started from. The resolve and
 // refresh flights do not coalesce with each other, so a slow fetch can
 // complete after a concurrent flight already stored a fresher (possibly
-// post-rotation) document; re-reading the cache and skipping the write when
-// its RefreshedAt has moved past prior's keeps the newer result. The check
-// is read-then-write rather than atomic — the Cache interface has no
-// compare-and-swap — but it shrinks the overwrite window from a full fetch
-// (up to fetchTimeout) to the gap between these two calls.
+// post-rotation) document. The atomic conditional write keeps that newer
+// result when the state has changed since this resolution began. A failed
+// consult may update only the error metadata while this successful fetch is
+// in flight. If the fetch returned changed key material, reconcile only that
+// material while preserving the newer failure marker and the original
+// freshness bound; the in-flight response cannot prove it superseded the
+// failed consult.
 func (k *KeyResolver) store(ctx context.Context, source Source, prior CacheState, result *Result) {
 	if result.Outcome != CacheOutcomeRefreshed && result.Outcome != CacheOutcomeNotModified {
-		return
-	}
-	if current, err := k.cachedState(ctx, source); err == nil && current.RefreshedAt.After(prior.RefreshedAt) {
 		return
 	}
 	state := CacheState{
@@ -393,33 +433,86 @@ func (k *KeyResolver) store(ctx context.Context, source Source, prior CacheState
 		ETag:        result.ETag,
 		ExpiresAt:   time.Now().Add(result.TTL),
 		RefreshedAt: time.Now(),
+		LastErrorAt: time.Time{},
+		LastError:   "",
+		Revision:    "",
 	}
-	if err := k.cache.Put(ctx, source.CacheKey(), state); err != nil {
-		k.logger.WarnContext(ctx, "jwks key set cache write failed",
-			attr.SlogURLFull(source.uri),
-			attr.SlogJWKSOrigin(source.origin),
-			attr.SlogError(err),
-		)
+	written, err := k.cache.PutIfUnchanged(ctx, source.CacheKey(), prior, state)
+	if err != nil {
+		k.logCacheWriteFailure(ctx, source, err)
+		return
+	}
+	if written {
+		return
+	}
+
+	current, err := k.cachedState(ctx, source)
+	if err != nil {
+		k.logCacheWriteFailure(ctx, source, err)
+		return
+	}
+	reconciled, ok := reconcileKeysAfterConsultFailure(prior, current, result)
+	if !ok {
+		return
+	}
+	_, err = k.cache.PutIfUnchanged(ctx, source.CacheKey(), current, reconciled)
+	if err != nil {
+		k.logCacheWriteFailure(ctx, source, err)
 	}
 }
 
-// markConsultFailure re-stamps RefreshedAt on the stored state after a forced
-// refresh whose upstream consult failed, so the cooldown applies to failures
-// the same as to successes. The write failure policy matches store: log only,
-// and so does the recency guard — a concurrent flight that stored a fresher
-// document since this resolution began must not have it overwritten with the
-// prior one.
-func (k *KeyResolver) markConsultFailure(ctx context.Context, source Source, prior CacheState) {
-	if current, err := k.cachedState(ctx, source); err == nil && current.RefreshedAt.After(prior.RefreshedAt) {
+func reconcileKeysAfterConsultFailure(prior, current CacheState, result *Result) (CacheState, bool) {
+	if result.Outcome != CacheOutcomeRefreshed || bytes.Equal(result.Document, prior.Document) || !onlyConsultFailureChanged(prior, current) {
+		return CacheState{Document: nil, ETag: "", ExpiresAt: time.Time{}, RefreshedAt: time.Time{}, LastErrorAt: time.Time{}, LastError: "", Revision: ""}, false
+	}
+
+	current.Document = result.Document
+	current.ETag = result.ETag
+	return current, true
+}
+
+func onlyConsultFailureChanged(prior, current CacheState) bool {
+	successStateMatches := bytes.Equal(current.Document, prior.Document) &&
+		current.ETag == prior.ETag &&
+		current.ExpiresAt.Equal(prior.ExpiresAt) &&
+		current.RefreshedAt.Equal(prior.RefreshedAt)
+	failureStateChanged := !current.LastErrorAt.Equal(prior.LastErrorAt) || current.LastError != prior.LastError
+	return successStateMatches && failureStateChanged
+}
+
+func (k *KeyResolver) logCacheWriteFailure(ctx context.Context, source Source, err error) {
+	k.logger.WarnContext(ctx, "jwks key set cache write failed",
+		attr.SlogURLFull(source.uri),
+		attr.SlogJWKSOrigin(source.origin),
+		attr.SlogError(err),
+	)
+}
+
+// markConsultFailure records a safe reason and attempt time without changing
+// the last successful fetch time. Only transient errors suppress another
+// consult during the cooldown. The conditional write leaves a concurrent
+// successful refresh intact; storage errors are logged rather than replacing
+// the resolution error.
+func (k *KeyResolver) markConsultFailure(ctx context.Context, source Source, prior CacheState, consultErr error) {
+	reason := safeConsultFailureReason(consultErr)
+	if marker, ok := k.cache.(ConsultFailureMarker); ok {
+		if err := marker.MarkConsultFailure(ctx, source.CacheKey(), prior, time.Now(), reason); err != nil {
+			k.logger.WarnContext(ctx, "jwks consult failure marker write failed",
+				attr.SlogURLFull(source.uri), attr.SlogJWKSOrigin(source.origin), attr.SlogError(err))
+		}
 		return
 	}
 	marked := CacheState{
 		Document:    prior.Document,
 		ETag:        prior.ETag,
 		ExpiresAt:   prior.ExpiresAt,
-		RefreshedAt: time.Now(),
+		RefreshedAt: prior.RefreshedAt,
+		LastErrorAt: time.Now(),
+		LastError:   reason,
+		Revision:    prior.Revision,
 	}
-	if err := k.cache.Put(ctx, source.CacheKey(), marked); err != nil {
+	_, err := k.cache.PutIfUnchanged(ctx, source.CacheKey(), prior, marked)
+	if err != nil {
 		k.logger.WarnContext(ctx, "jwks consult-failure cooldown write failed",
 			attr.SlogURLFull(source.uri),
 			attr.SlogJWKSOrigin(source.origin),
