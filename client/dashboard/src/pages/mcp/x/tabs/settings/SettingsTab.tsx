@@ -62,6 +62,7 @@ export function SettingsTab({
             backend={{ mcpServerId: mcpServer.id }}
             endpoints={endpoints}
             isLoadingEndpoints={isLoadingEndpoints}
+            mcpServer={mcpServer}
           />
           <NetworkAccessSection mcpServer={mcpServer} endpoints={endpoints} />
         </>

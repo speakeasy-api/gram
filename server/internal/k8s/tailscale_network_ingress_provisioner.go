@@ -329,8 +329,39 @@ func (p *TailscaleNetworkIngressProvisioner) Delete(ctx context.Context, resourc
 		return err
 	}
 	ownerID := resources.OwnerID.String()
-	deleteIngress := func() error { return p.deleteOwnedIngress(ctx, resources, "Ingress") }
+	namespaceOwned := true
+	namespace, err := p.clientset.CoreV1().Namespaces().Get(ctx, resources.Namespace, metav1.GetOptions{})
+	if k8serrors.IsNotFound(err) {
+		namespaceOwned = false
+	} else if err != nil {
+		return fmt.Errorf("get namespace before teardown: %w", err)
+	} else if err := ensureResourceOwned(namespace.Labels, ownerID); err != nil {
+		actualOwner := namespace.Labels[networkIngressIDLabel]
+		parsedOwner, parseErr := uuid.Parse(actualOwner)
+		foreignOwner :=
+			namespace.Labels[managedByLabelKey] == networkIngressManagedBy &&
+				parseErr == nil &&
+				parsedOwner != uuid.Nil &&
+				parsedOwner.String() == actualOwner &&
+				actualOwner != ownerID
+		if !foreignOwner {
+			return fmt.Errorf("refuse to delete namespace with invalid ownership: %w", err)
+		}
+		// A foreign namespace may reuse the deterministic name after the original
+		// namespace is gone. Preserve it and everything scoped inside it, while
+		// continuing to clean independently ownership-checked external resources.
+		namespaceOwned = false
+	}
+	deleteIngress := func() error {
+		if !namespaceOwned {
+			return nil
+		}
+		return p.deleteOwnedIngress(ctx, resources, "Ingress")
+	}
 	deleteAttestorService := func() error {
+		if !namespaceOwned {
+			return nil
+		}
 		client := p.clientset.CoreV1().Services(resources.Namespace)
 		return deleteOwnedResource(ctx, resources.AttestorService, ownerID, "attestor Service", func(ctx context.Context, name string) (metav1.Object, error) {
 			return client.Get(ctx, name, metav1.GetOptions{})
@@ -339,6 +370,9 @@ func (p *TailscaleNetworkIngressProvisioner) Delete(ctx context.Context, resourc
 		})
 	}
 	deleteAttestorDeployment := func() error {
+		if !namespaceOwned {
+			return nil
+		}
 		client := p.clientset.AppsV1().Deployments(resources.Namespace)
 		return deleteOwnedResource(ctx, resources.AttestorDeployment, ownerID, "attestor Deployment", func(ctx context.Context, name string) (metav1.Object, error) {
 			return client.Get(ctx, name, metav1.GetOptions{})
@@ -347,6 +381,9 @@ func (p *TailscaleNetworkIngressProvisioner) Delete(ctx context.Context, resourc
 		})
 	}
 	deleteProxyGroupPolicy := func() error {
+		if !namespaceOwned {
+			return nil
+		}
 		return deleteOwnedDynamic(ctx, p.dynamic.Resource(proxyGroupPolicyGVR).Namespace(resources.Namespace), resources.ProxyGroupPolicy, ownerID, "ProxyGroupPolicy")
 	}
 	deleteProxyGroup := func() error {
@@ -355,15 +392,17 @@ func (p *TailscaleNetworkIngressProvisioner) Delete(ctx context.Context, resourc
 	// Foreground deletion retains controllers until their dependents are gone.
 	// Also wait for remaining pods before removing credentials or isolation.
 	waitForPods := func() error {
-		pods, err := p.clientset.CoreV1().Pods(resources.Namespace).List(ctx, metav1.ListOptions{})
-		if err != nil {
-			return fmt.Errorf("list attestor pods before teardown: %w", err)
-		}
-		if len(pods.Items) != 0 {
-			return fmt.Errorf("%w: attestor pods", ErrNetworkIngressDeletionPending)
+		if namespaceOwned {
+			pods, err := p.clientset.CoreV1().Pods(resources.Namespace).List(ctx, metav1.ListOptions{})
+			if err != nil {
+				return fmt.Errorf("list attestor pods before teardown: %w", err)
+			}
+			if len(pods.Items) != 0 {
+				return fmt.Errorf("%w: attestor pods", ErrNetworkIngressDeletionPending)
+			}
 		}
 		selector := labels.Set{tailscaleParentResourceType: "proxygroup", tailscaleParentResource: resources.ProxyGroup}.String()
-		pods, err = p.clientset.CoreV1().Pods(p.config.OperatorNamespace).List(ctx, metav1.ListOptions{LabelSelector: selector})
+		pods, err := p.clientset.CoreV1().Pods(p.config.OperatorNamespace).List(ctx, metav1.ListOptions{LabelSelector: selector})
 		if err != nil {
 			return fmt.Errorf("list proxy pods before teardown: %w", err)
 		}
@@ -382,6 +421,9 @@ func (p *TailscaleNetworkIngressProvisioner) Delete(ctx context.Context, resourc
 		return deleteWithoutReadConfirmation(ctx, resources.CredentialsSecret, "OAuth Secret", client.Delete)
 	}
 	deleteAttestorCASecret := func() error {
+		if !namespaceOwned {
+			return nil
+		}
 		client := p.clientset.CoreV1().Secrets(resources.Namespace)
 		return deleteOwnedResource(ctx, resources.AttestorCASecret, ownerID, "attestor CA Secret", func(ctx context.Context, name string) (metav1.Object, error) {
 			return client.Get(ctx, name, metav1.GetOptions{})
@@ -390,6 +432,9 @@ func (p *TailscaleNetworkIngressProvisioner) Delete(ctx context.Context, resourc
 		})
 	}
 	deleteAttestorServiceAccount := func() error {
+		if !namespaceOwned {
+			return nil
+		}
 		client := p.clientset.CoreV1().ServiceAccounts(resources.Namespace)
 		return deleteOwnedResource(ctx, resources.AttestorServiceAccount, ownerID, "attestor ServiceAccount", func(ctx context.Context, name string) (metav1.Object, error) {
 			return client.Get(ctx, name, metav1.GetOptions{})
@@ -398,6 +443,9 @@ func (p *TailscaleNetworkIngressProvisioner) Delete(ctx context.Context, resourc
 		})
 	}
 	deleteAttestorNetworkPolicy := func() error {
+		if !namespaceOwned {
+			return nil
+		}
 		client := p.clientset.NetworkingV1().NetworkPolicies(resources.Namespace)
 		return deleteOwnedResource(ctx, resources.AttestorNetworkPolicy, ownerID, "attestor NetworkPolicy", func(ctx context.Context, name string) (metav1.Object, error) {
 			return client.Get(ctx, name, metav1.GetOptions{})
@@ -417,6 +465,9 @@ func (p *TailscaleNetworkIngressProvisioner) Delete(ctx context.Context, resourc
 	// it explicitly would revoke the worker's access on a retry before it can
 	// confirm that namespaced resources are absent. Namespace GC removes it.
 	deleteNamespace := func() error {
+		if !namespaceOwned {
+			return nil
+		}
 		client := p.clientset.CoreV1().Namespaces()
 		return deleteOwnedResource(ctx, resources.Namespace, ownerID, "namespace", func(ctx context.Context, name string) (metav1.Object, error) {
 			return client.Get(ctx, name, metav1.GetOptions{})
