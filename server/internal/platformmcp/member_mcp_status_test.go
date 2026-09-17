@@ -13,9 +13,12 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	testrepo "github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -110,6 +113,19 @@ func TestMemberMCPConnectionStatusProjectsOnlyCallerState(t *testing.T) {
 		}
 	}
 	require.NotEqual(t, uuid.Nil, mcpID)
+	remoteIssuer, err := remotesessionsrepo.New(conn).CreateRemoteSessionIssuer(ctx, remotesessionsrepo.CreateRemoteSessionIssuerParams{
+		ProjectID: conv.ToNullUUID(project.ID), OrganizationID: conv.ToPGText(principal.OrganizationID),
+		Slug: "member-status-" + uuid.NewString()[:8], Issuer: "https://provider.example.test",
+		ScopesSupported: []string{}, GrantTypesSupported: []string{}, ResponseTypesSupported: []string{},
+		TokenEndpointAuthMethodsSupported: []string{}, CodeChallengeMethodsSupported: []string{},
+	})
+	require.NoError(t, err)
+	remoteIssuerID := remoteIssuer.ID
+	stamped, err := testrepo.New(conn).SetMCPServerRemoteSessionIssuerFixture(ctx, testrepo.SetMCPServerRemoteSessionIssuerFixtureParams{
+		RemoteSessionIssuerID: conv.ToNullUUID(remoteIssuerID), ID: mcpID, ProjectID: project.ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), stamped)
 	ctx = contextvalues.WithAuthenticatedActor(ctx, &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, OrganizationSlug: "example-org"}, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))
 	ctx = authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeMCPConnect, mcpID.String())})
 	serverURL, err := url.Parse("https://gram.example.test")
@@ -124,9 +140,9 @@ func TestMemberMCPConnectionStatusProjectsOnlyCallerState(t *testing.T) {
 		reason     string
 		nextAction string
 	}{
-		{name: "not connected", reader: testMemberMCPConnectionReader{clients: []remotesessions.Client{{ID: clientID}}}, state: MCPConnectionStateNotConnected, nextAction: "connect"},
-		{name: "active", reader: testMemberMCPConnectionReader{clients: []remotesessions.Client{{ID: clientID}}, statuses: map[uuid.UUID]remotesessions.RemoteSessionState{clientID: {Status: remotesessions.RemoteSessionActive}}}, state: MCPConnectionStateActive, nextAction: "use_mcp"},
-		{name: "rejected", reader: testMemberMCPConnectionReader{clients: []remotesessions.Client{{ID: clientID}}, statuses: map[uuid.UUID]remotesessions.RemoteSessionState{clientID: {Status: remotesessions.RemoteSessionActive, ValidationStatus: remotesessions.ValidationOutcomeInactive, ValidationReason: "sensitive provider reason"}}}, state: MCPConnectionStateReauthorizationRequired, reason: "authorization_rejected", nextAction: "reconnect"},
+		{name: "not connected", reader: testMemberMCPConnectionReader{clients: []remotesessions.Client{{ID: clientID, RemoteSessionIssuerID: remoteIssuerID}}}, state: MCPConnectionStateNotConnected, nextAction: "connect"},
+		{name: "active", reader: testMemberMCPConnectionReader{clients: []remotesessions.Client{{ID: clientID, RemoteSessionIssuerID: remoteIssuerID}}, statuses: map[uuid.UUID]remotesessions.RemoteSessionState{clientID: {Status: remotesessions.RemoteSessionActive}}}, state: MCPConnectionStateActive, nextAction: "use_mcp"},
+		{name: "rejected", reader: testMemberMCPConnectionReader{clients: []remotesessions.Client{{ID: clientID, RemoteSessionIssuerID: remoteIssuerID}}, statuses: map[uuid.UUID]remotesessions.RemoteSessionState{clientID: {Status: remotesessions.RemoteSessionActive, ValidationStatus: remotesessions.ValidationOutcomeInactive, ValidationReason: "sensitive provider reason"}}}, state: MCPConnectionStateReauthorizationRequired, reason: "authorization_rejected", nextAction: "reconnect"},
 		{name: "setup required", reader: testMemberMCPConnectionReader{clients: []remotesessions.Client{}}, state: MCPConnectionStateSetupRequired, reason: "upstream_authorization_not_configured", nextAction: "ask_administrator"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -181,7 +197,7 @@ func TestMemberMCPConnectionClientsSelectTargetIssuer(t *testing.T) {
 	otherClient := remotesessions.Client{ID: uuid.New(), RemoteSessionIssuerID: uuid.New()}
 
 	require.Equal(t, []remotesessions.Client{targetClient}, memberMCPConnectionClients([]remotesessions.Client{otherClient, targetClient}, targetIssuer))
-	require.Equal(t, []remotesessions.Client{otherClient, targetClient}, memberMCPConnectionClients([]remotesessions.Client{otherClient, targetClient}, uuid.Nil))
+	require.Empty(t, memberMCPConnectionClients([]remotesessions.Client{otherClient, targetClient}, uuid.Nil))
 	require.Empty(t, memberMCPConnectionClients([]remotesessions.Client{otherClient}, targetIssuer))
 }
 

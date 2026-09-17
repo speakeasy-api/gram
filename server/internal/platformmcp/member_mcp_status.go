@@ -113,16 +113,16 @@ func (s *PluginsService) GetMyMCPConnectionStatus(ctx context.Context, principal
 		return output, nil
 	}
 	output.ConnectionURL = s.serverURL.JoinPath("mcp", target.endpointSlug).String()
-	if target.userSessionIssuerID == uuid.Nil {
-		if target.remoteSessionIssuerID != uuid.Nil {
-			output.State = MCPConnectionStateSetupRequired
-			output.Reason = "authorization_status_unavailable"
-			output.NextAction = "ask_administrator"
-			return output, nil
-		}
+	if target.remoteSessionIssuerID == uuid.Nil {
 		output.State = MCPConnectionStateNotApplicable
 		output.Reason = "authorization_not_required"
 		output.NextAction = "use_mcp"
+		return output, nil
+	}
+	if target.userSessionIssuerID == uuid.Nil {
+		output.State = MCPConnectionStateSetupRequired
+		output.Reason = "authorization_status_unavailable"
+		output.NextAction = "ask_administrator"
 		return output, nil
 	}
 	if s.remoteSessions == nil {
@@ -237,9 +237,6 @@ func memberMCPAccessNextAction(requestAccessURL string) string {
 }
 
 func memberMCPConnectionClients(clients []remotesessions.Client, issuerID uuid.UUID) []remotesessions.Client {
-	if issuerID == uuid.Nil {
-		return clients
-	}
 	matched := make([]remotesessions.Client, 0, 1)
 	for _, client := range clients {
 		if client.RemoteSessionIssuerID == issuerID {
