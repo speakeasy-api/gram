@@ -19,6 +19,7 @@ describe("getCategoryForFinding for LLM analyzer findings", () => {
     ["pii.llm", "pii", "PII"],
     ["prompt_injection.llm", "prompt_injection", "PROMPT_INJECTION"],
     ["destructive_tool.llm", "destructive_tool", "DESTRUCTIVE_TOOL"],
+    ["cli_destructive.llm", "cli_destructive", "CLI_DESTRUCTIVE"],
     ["llm_analyzer.dead_letter", "custom", "CUSTOM"],
   ])("classifies %s by its rule id", (ruleId, category, code) => {
     expect(getCategoryForFinding("llm_analyzer", ruleId)).toBe(category);

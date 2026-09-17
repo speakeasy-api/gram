@@ -59,6 +59,7 @@ const LLM_ANALYZER_RULE_LABEL: ReadonlyMap<string, string> = new Map([
   ["pii.llm", "PII"],
   ["prompt_injection.llm", "Prompt injection"],
   ["destructive_tool.llm", "Destructive tool"],
+  ["cli_destructive.llm", "Destructive command"],
   [LLM_ANALYZER_DEAD_LETTER_RULE_ID, "Analysis unavailable"],
 ]);
 

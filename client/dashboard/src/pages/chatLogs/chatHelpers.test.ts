@@ -146,6 +146,7 @@ describe("LLM analyzer findings in the transcript", () => {
     expect(resultsAreSensitive([llm("pii.llm")])).toBe(true);
     expect(resultsAreSensitive([llm("prompt_injection.llm")])).toBe(false);
     expect(resultsAreSensitive([llm("destructive_tool.llm")])).toBe(false);
+    expect(resultsAreSensitive([llm("cli_destructive.llm")])).toBe(false);
     expect(resultsAreSensitive([llm("llm_analyzer.dead_letter")])).toBe(false);
     // Existing scanner behavior is untouched.
     expect(resultsAreSensitive([result("gitleaks", "AKIAEXAMPLE")])).toBe(true);
@@ -183,6 +184,7 @@ describe("LLM analyzer findings in the transcript", () => {
     ["pii.llm", "PII"],
     ["prompt_injection.llm", "PROMPT_INJECTION"],
     ["destructive_tool.llm", "DESTRUCTIVE_TOOL"],
+    ["cli_destructive.llm", "CLI_DESTRUCTIVE"],
     ["llm_analyzer.dead_letter", "ANALYSIS_UNAVAILABLE"],
   ])("badges %s as %s", (ruleId, badge) => {
     expect(getRiskBadgeLabel(llm(ruleId))).toBe(badge);

@@ -66,6 +66,7 @@ const LLM_ANALYZER_RULE_CATEGORY: ReadonlyMap<string, RuleCategory> = new Map<
   ["pii.llm", "pii"],
   ["prompt_injection.llm", "prompt_injection"],
   ["destructive_tool.llm", "destructive_tool"],
+  ["cli_destructive.llm", "cli_destructive"],
   [LLM_ANALYZER_DEAD_LETTER_RULE_ID, "custom"],
 ]);
 

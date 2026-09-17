@@ -163,6 +163,7 @@ describe("RuleLabel", () => {
     ["pii.llm", "PII"],
     ["prompt_injection.llm", "Prompt injection"],
     ["destructive_tool.llm", "Destructive tool"],
+    ["cli_destructive.llm", "Destructive command"],
     ["llm_analyzer.dead_letter", "Analysis unavailable"],
   ])(
     "renders %s from the LLM analyzer as %s, never the raw id",
@@ -181,6 +182,7 @@ describe("CategoryLabel", () => {
     ["pii.llm", "Personal Identifiable Information"],
     ["prompt_injection.llm", "Prompt Injection"],
     ["destructive_tool.llm", "Destructive Tools"],
+    ["cli_destructive.llm", "Destructive CLI Commands"],
   ])("classifies the LLM analyzer's %s under %s", (ruleId, label) => {
     render(
       <TooltipProvider>

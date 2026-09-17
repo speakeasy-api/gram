@@ -11,6 +11,7 @@ const LLM_RULE_IDS = [
   "pii.llm",
   "prompt_injection.llm",
   "destructive_tool.llm",
+  "cli_destructive.llm",
   "llm_analyzer.dead_letter",
 ];
 
@@ -20,6 +21,7 @@ describe("LLM analyzer rule ids", () => {
     ["pii.llm", "PII"],
     ["prompt_injection.llm", "Prompt injection"],
     ["destructive_tool.llm", "Destructive tool"],
+    ["cli_destructive.llm", "Destructive command"],
     ["llm_analyzer.dead_letter", "Analysis unavailable"],
   ])("humanizes %s as its category name", (ruleId, label) => {
     expect(humanizeRuleId(ruleId)).toBe(label);
@@ -32,6 +34,7 @@ describe("LLM analyzer rule ids", () => {
     ["pii.llm", "PII"],
     ["prompt_injection.llm", "PROMPT_INJECTION"],
     ["destructive_tool.llm", "DESTRUCTIVE_TOOL"],
+    ["cli_destructive.llm", "CLI_DESTRUCTIVE"],
     ["llm_analyzer.dead_letter", "ANALYSIS_UNAVAILABLE"],
   ])("badges %s without naming the engine", (ruleId, badge) => {
     expect(ruleIdCategoryLabel(ruleId)).toBe(badge);
