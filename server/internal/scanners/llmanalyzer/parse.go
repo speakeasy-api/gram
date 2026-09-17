@@ -59,10 +59,16 @@ func (v Verdict) Flagged() []string {
 	return flagged
 }
 
-// ParseVerdict reads the model reply. It takes the first JSON object in the
-// text that carries all four risk keys, so prose or code fences around the
-// object are tolerated even when they contain braces of their own, and
-// accepts each value either as {"score": 0|1, "reasoning": "..."} or as a
+// maxVerdictCandidates bounds how many JSON objects findVerdictObject decodes
+// from one completion. A reply that buries the verdict behind more stray
+// objects than this is treated as unparsable rather than scanned up to the
+// response size cap.
+const maxVerdictCandidates = 64
+
+// ParseVerdict reads the model reply. It takes the first top-level JSON
+// object in the text that carries all four risk keys, so prose or code fences
+// around the object are tolerated even when they contain braces of their own,
+// and accepts each value either as {"score": 0|1, "reasoning": "..."} or as a
 // bare score. Scores may be numbers, numeric strings or booleans. Any other
 // shape yields an error wrapping ErrParse.
 func ParseVerdict(text string) (Verdict, error) {
@@ -87,28 +93,74 @@ func ParseVerdict(text string) (Verdict, error) {
 	return Verdict{Risks: risks, Raw: text}, nil
 }
 
-// findVerdictObject decodes a JSON object from each '{' in text in turn and
-// returns the first one that carries every risk key. An object that decodes
-// but lacks a key (a stray {} in surrounding prose, say) is skipped, and the
-// error of the last candidate is reported when none qualifies.
+// findVerdictObject returns the first top-level JSON object in text that
+// carries every risk key. It walks text once: nextObjectSpan delimits each
+// candidate object by brace depth, the candidate is decoded exactly once, and
+// the walk resumes after it. Work therefore stays linear in len(text) however
+// many braces a malformed reply contains, and at most maxVerdictCandidates
+// objects are tried. An object that decodes but lacks a key (a stray {} in
+// surrounding prose, say) is skipped, and the error of the last candidate is
+// reported when none qualifies.
 func findVerdictObject(text string) (map[string]json.RawMessage, error) {
 	lastErr := errors.New("no json object in completion")
-	for start := strings.IndexByte(text, '{'); start >= 0; {
+	from := 0
+	for range maxVerdictCandidates {
+		start, end, ok := nextObjectSpan(text, from)
+		if !ok {
+			break
+		}
+		from = end
+
 		var object map[string]json.RawMessage
-		if err := json.NewDecoder(strings.NewReader(text[start:])).Decode(&object); err != nil {
+		if err := json.Unmarshal([]byte(text[start:end]), &object); err != nil {
 			lastErr = err
 		} else if key, ok := missingRiskKey(object); ok {
 			lastErr = fmt.Errorf("missing key %q", key)
 		} else {
 			return object, nil
 		}
-		next := strings.IndexByte(text[start+1:], '{')
-		if next < 0 {
-			break
-		}
-		start += 1 + next
 	}
 	return nil, lastErr
+}
+
+// nextObjectSpan locates the first '{' at or after from and returns the span
+// of the object it opens: end is the index just past the brace that returns
+// the depth to zero, or len(text) when the object never closes. Braces inside
+// JSON strings are skipped (with backslash escapes honoured), so a reasoning
+// value containing "}" neither ends the span early nor opens a new one.
+// Quotes outside an object are prose and carry no state.
+func nextObjectSpan(text string, from int) (start, end int, ok bool) {
+	offset := strings.IndexByte(text[from:], '{')
+	if offset < 0 {
+		return 0, 0, false
+	}
+	start = from + offset
+
+	depth, inString, escaped := 0, false, false
+	for i := start; i < len(text); i++ {
+		c := text[i]
+		switch {
+		case escaped:
+			escaped = false
+		case inString:
+			switch c {
+			case '\\':
+				escaped = true
+			case '"':
+				inString = false
+			}
+		case c == '"':
+			inString = true
+		case c == '{':
+			depth++
+		case c == '}':
+			depth--
+			if depth == 0 {
+				return start, i + 1, true
+			}
+		}
+	}
+	return start, len(text), true
 }
 
 // missingRiskKey reports the first risk key absent from object.

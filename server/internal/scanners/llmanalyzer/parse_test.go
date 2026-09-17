@@ -112,6 +112,64 @@ func TestParseVerdict_SkipsBracesInSurroundingProse(t *testing.T) {
 	}
 }
 
+func TestParseVerdict_BracesInsideStringsDoNotSplitObject(t *testing.T) {
+	t.Parallel()
+
+	verdictJSON := `{"secrets_leak": {"score": 1, "reasoning": "prints {\"token\": \"...\"} then }} closes"},` +
+		` "personal_data_leak": {"score": 0, "reasoning": "none {"}, "prompt_injection": 0, "destructive_tool_call": 0}`
+	text := "{} then " + verdictJSON + "\nThe {} above is fine. {\"note\": \"ignored\"}"
+
+	verdict, err := llmanalyzer.ParseVerdict(text)
+	require.NoError(t, err)
+	require.Equal(t, []string{llmanalyzer.KeySecretsLeak}, verdict.Flagged())
+	require.Equal(t, `prints {"token": "..."} then }} closes`, verdict.Risks[llmanalyzer.KeySecretsLeak].Reasoning)
+}
+
+func TestParseVerdict_VerdictAfterManyStrayObjects(t *testing.T) {
+	t.Parallel()
+
+	verdictJSON := `{"secrets_leak": 0, "personal_data_leak": 0, "prompt_injection": 1, "destructive_tool_call": 0}`
+
+	// 63 stray objects leave the verdict as the 64th candidate, inside the cap.
+	verdict, err := llmanalyzer.ParseVerdict(strings.Repeat("{} ", 63) + verdictJSON)
+	require.NoError(t, err)
+	require.Equal(t, []string{llmanalyzer.KeyPromptInjection}, verdict.Flagged())
+
+	// One more pushes it past the 64 candidate cap and the reply is rejected.
+	_, err = llmanalyzer.ParseVerdict(strings.Repeat("{} ", 64) + verdictJSON)
+	require.ErrorIs(t, err, llmanalyzer.ErrParse)
+	require.ErrorContains(t, err, `missing key "secrets_leak"`)
+}
+
+func TestParseVerdict_BraceHeavyGarbageFailsFast(t *testing.T) {
+	t.Parallel()
+
+	const size = 200 << 10
+	for name, text := range map[string]string{
+		"open braces":     strings.Repeat("{", size),
+		"close braces":    strings.Repeat("}", size),
+		"empty objects":   strings.Repeat("{}", size/2),
+		"nested objects":  strings.Repeat(`{"a":{"b":{"c":1}}}`, size/20),
+		"unclosed string": `{"a":"` + strings.Repeat("{", size),
+		"alternating":     strings.Repeat("{}{", size/3),
+	} {
+		_, err := llmanalyzer.ParseVerdict(text)
+		require.ErrorIs(t, err, llmanalyzer.ErrParse, name)
+	}
+}
+
+func BenchmarkFindVerdictObjectBraceHeavy(b *testing.B) {
+	text := strings.Repeat("{", 1<<20)
+	b.SetBytes(int64(len(text)))
+	b.ReportAllocs()
+	for b.Loop() {
+		_, err := llmanalyzer.ParseVerdict(text)
+		if err == nil {
+			b.Fatal("expected parse failure")
+		}
+	}
+}
+
 func TestParseVerdict_NonStringReasoningKeepsScore(t *testing.T) {
 	t.Parallel()
 
