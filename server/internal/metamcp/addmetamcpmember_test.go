@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -647,4 +648,46 @@ func TestAddMetaMcpMember_AutoAttachesProviderClient(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, gatewayClientsForUpstream(remoteIssuerID),
 		"one client per upstream per issuer")
+}
+
+func TestAddMetaMcpMember_RequiresProjectAndGatewayWrite(t *testing.T) {
+	t.Parallel()
+
+	for _, name := range []string{"project only", "gateway only", "gateway blocked", "wildcard allowed"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestService(t)
+			authCtx, ok := contextvalues.GetAuthContext(ctx)
+			require.True(t, ok)
+			meta := seedMetaMcpServer(t, ctx, ti, "authorized member host")
+			serverID := seedMcpServer(t, ctx, ti.conn, *authCtx.ProjectID)
+
+			grants := []authz.Grant{authz.NewGrant(authz.ScopeMCPWrite, authz.WildcardResource)}
+			switch name {
+			case "project only":
+				grants = []authz.Grant{authz.NewGrant(authz.ScopeMCPWrite, authCtx.ProjectID.String())}
+			case "gateway only":
+				grants = []authz.Grant{authz.NewGrant(authz.ScopeMCPWrite, meta.ID)}
+			case "gateway blocked":
+				grants = append(grants, authz.NewGrant(authz.ScopeMCPBlockedWrite, meta.ID))
+			}
+			restrictedCtx := withExactAuthzGrants(t, ctx, ti.conn, grants...)
+
+			member, err := ti.service.AddMetaMcpMember(restrictedCtx, &gen.AddMetaMcpMemberPayload{
+				SessionToken:     nil,
+				ApikeyToken:      nil,
+				ProjectSlugInput: nil,
+				MetaMcpServerID:  meta.ID,
+				McpServerID:      serverID.String(),
+				SortOrder:        nil,
+			})
+			if name == "wildcard allowed" {
+				require.NoError(t, err)
+				require.Equal(t, serverID.String(), member.McpServerID)
+			} else {
+				requireOopsCode(t, err, oops.CodeForbidden)
+				require.Nil(t, member)
+			}
+		})
+	}
 }

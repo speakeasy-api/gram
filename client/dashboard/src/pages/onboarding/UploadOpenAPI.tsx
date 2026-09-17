@@ -1,3 +1,5 @@
+import { GatewayAttachmentStatus } from "@/pages/mcp/gateway/GatewayAttachmentStatus";
+import { useGatewayCreation } from "@/pages/mcp/gateway/useGatewayCreation";
 import { FormPage } from "@/components/page-templates";
 import { NEW_VERSION_SLUG_PARAM } from "@/components/sources/source-list-actions";
 import { useProjectSources } from "@/components/sources/source-list";
@@ -15,6 +17,7 @@ import UploadFileStep from "@/components/upload-asset/upload-file-step";
 import { useRoutes } from "@/routes";
 import { Button } from "@/components/ui/Button";
 import { useProject } from "@/contexts/Auth";
+import { useState } from "react";
 import { ArrowRightIcon, RefreshCcwIcon } from "lucide-react";
 import { useSearchParams } from "react-router";
 
@@ -63,14 +66,20 @@ export default function UploadOpenAPI(): JSX.Element {
     match?.slug !== undefined ? { name: match.name, slug: match.slug } : null;
   const copy = pageCopy(existing);
 
+  const gateway = useGatewayCreation();
+  const [creationPending, setCreationPending] = useState(false);
   return (
     <FormPage
-      scope="project:write"
+      scope={
+        gateway.gatewayId ? ["project:write", "mcp:write"] : "project:write"
+      }
+      scopeAll
       resourceId={project.id}
       title={copy.title}
       description={copy.description}
     >
       <div>
+        <GatewayAttachmentStatus flow={gateway} />
         {/* A lookup that failed is not a slug that isn't there: adding a
             document in its place would replace nothing, so the flow waits. */}
         {slug && isError && (
@@ -88,51 +97,76 @@ export default function UploadOpenAPI(): JSX.Element {
         {/* The stepper reads the document once, when it mounts, so it waits
             for the lookup rather than starting without it, and is keyed by
             the document so a change of slug on the same route re-seeds it. */}
-        {(!slug || (!isLoading && !isError)) && (
-          <UploadAssetStepper.Provider
-            key={`${slug ?? "new"}:${existing?.slug ?? "unknown"}`}
-            step={1}
-            existingDocument={existing}
+        {gateway.createdServerId ? (
+          <Text muted>
+            {gateway.isAttaching
+              ? "Adding server to gateway…"
+              : "Server created. Finish adding it to your gateway above."}
+          </Text>
+        ) : (
+          (!slug || (!isLoading && !isError)) && (
+            <UploadAssetStepper.Provider
+              key={`${slug ?? "new"}:${existing?.slug ?? "unknown"}`}
+              step={1}
+              existingDocument={existing}
+            >
+              <UploadAssetStepper.Frame>
+                <UploadAssetStep step={1}>
+                  <UploadAssetStep.Indicator />
+                  <UploadAssetStep.Header
+                    title="Upload OpenAPI Specification"
+                    description="Upload your OpenAPI specification to get started."
+                  />
+                  <UploadAssetStep.Content>
+                    <UploadFileStep />
+                  </UploadAssetStep.Content>
+                </UploadAssetStep>
+
+                <UploadAssetStep step={2}>
+                  <UploadAssetStep.Indicator />
+                  <UploadAssetStep.Header
+                    title={copy.nameStep.title}
+                    description={copy.nameStep.description}
+                  />
+                  <UploadAssetStep.Content>
+                    <NameDeploymentStep />
+                  </UploadAssetStep.Content>
+                </UploadAssetStep>
+
+                <UploadAssetStep step={3}>
+                  <UploadAssetStep.Indicator />
+                  <UploadAssetStep.Header
+                    title="Generate Tools"
+                    description="The platform will generate tools for your API."
+                  />
+                  <UploadAssetStep.Content>
+                    <DeployStep
+                      gateway={gateway}
+                      onPendingChange={setCreationPending}
+                    />
+                  </UploadAssetStep.Content>
+                </UploadAssetStep>
+
+                <Stack direction="horizontal" justify="start">
+                  <FooterActions gatewayMode={!!gateway.gatewayId} />
+                </Stack>
+              </UploadAssetStepper.Frame>
+            </UploadAssetStepper.Provider>
+          )
+        )}
+        {gateway.gatewayId && (
+          <Button
+            variant="tertiary"
+            disabled={
+              gateway.isAttaching ||
+              (!gateway.createdServerId && creationPending)
+            }
+            onClick={() => {
+              gateway.cancel();
+            }}
           >
-            <UploadAssetStepper.Frame>
-              <UploadAssetStep step={1}>
-                <UploadAssetStep.Indicator />
-                <UploadAssetStep.Header
-                  title="Upload OpenAPI Specification"
-                  description="Upload your OpenAPI specification to get started."
-                />
-                <UploadAssetStep.Content>
-                  <UploadFileStep />
-                </UploadAssetStep.Content>
-              </UploadAssetStep>
-
-              <UploadAssetStep step={2}>
-                <UploadAssetStep.Indicator />
-                <UploadAssetStep.Header
-                  title={copy.nameStep.title}
-                  description={copy.nameStep.description}
-                />
-                <UploadAssetStep.Content>
-                  <NameDeploymentStep />
-                </UploadAssetStep.Content>
-              </UploadAssetStep>
-
-              <UploadAssetStep step={3}>
-                <UploadAssetStep.Indicator />
-                <UploadAssetStep.Header
-                  title="Generate Tools"
-                  description="The platform will generate tools for your API."
-                />
-                <UploadAssetStep.Content>
-                  <DeployStep />
-                </UploadAssetStep.Content>
-              </UploadAssetStep>
-
-              <Stack direction="horizontal" justify="start">
-                <FooterActions />
-              </Stack>
-            </UploadAssetStepper.Frame>
-          </UploadAssetStepper.Provider>
+            <Button.Text>Cancel</Button.Text>
+          </Button>
         )}
 
         {/* Help text */}
@@ -153,7 +187,7 @@ export default function UploadOpenAPI(): JSX.Element {
   );
 }
 
-function FooterActions() {
+function FooterActions({ gatewayMode = false }: { gatewayMode?: boolean }) {
   const stepper = useStepper();
   const routes = useRoutes();
 
@@ -168,6 +202,7 @@ function FooterActions() {
     case "idle":
       return null;
     case "completed":
+      if (gatewayMode) return null;
       return (
         <Button variant="primary" onClick={() => continueTo.goTo()}>
           <Button.Text>Continue</Button.Text>
@@ -178,6 +213,8 @@ function FooterActions() {
       );
     case "error":
       if (!deploymentId) {
+        // DeployStep retries only the failed stage in gateway mode.
+        if (gatewayMode) return null;
         // This should never happen, but just in case
         return (
           <Button variant="primary" onClick={stepper.reset}>
