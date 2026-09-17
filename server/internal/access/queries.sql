@@ -1224,3 +1224,78 @@ ORDER BY LOWER(name), id;
 -- ends. The role row lock is not enough on its own: a system role lives in
 -- global_roles and has no per-organization row to lock.
 SELECT pg_advisory_xact_lock(hashtextextended(@organization_id::text || ':' || sqlc.arg(role_urn)::text, 0));
+
+-- name: ListActorScopeIdentities :many
+-- Members whose identity-provider profile matches any of the requested
+-- departments, directory groups, or role slugs. Backs the actor dimensions of
+-- a logs:read grant: the caller intersects the dimensions of a single grant
+-- itself, so every row reports which values it matched on. Comparisons are
+-- case-insensitive because the values are provider-controlled.
+SELECT
+  users.id AS user_id,
+  LOWER(users.email)::text AS email,
+  LOWER(COALESCE(du.attributes ->> 'department_name', ''))::text AS department,
+  COALESCE(dg_names.group_names, '{}'::text[])::text[] AS group_names,
+  COALESCE(assigned_roles.role_slugs, '{}'::text[])::text[] AS role_slugs
+FROM organization_user_relationships AS our
+JOIN users
+  ON users.id = our.user_id
+LEFT JOIN LATERAL (
+  -- The member's directory profile, resolved exactly as ListAccessMembers
+  -- does so the Access page and log scoping never disagree about which
+  -- profile is current.
+  SELECT d.id, d.attributes
+  FROM directory_users d
+  WHERE d.organization_id = our.organization_id
+    AND d.deleted IS FALSE
+    AND d.workos_deleted IS FALSE
+    AND (d.user_id = users.id OR LOWER(d.email) = LOWER(users.email))
+  ORDER BY (d.user_id = users.id) DESC NULLS LAST, d.workos_updated_at DESC, d.id
+  LIMIT 1
+) du ON TRUE
+LEFT JOIN LATERAL (
+  SELECT ARRAY_AGG(DISTINCT LOWER(dg.name)) AS group_names
+  FROM directory_user_group_memberships m
+  INNER JOIN directory_groups dg
+    ON dg.id = m.directory_group_id
+    AND dg.organization_id = our.organization_id
+    AND dg.deleted IS FALSE
+    AND dg.workos_deleted IS FALSE
+  WHERE m.directory_user_id = du.id
+    AND m.deleted IS FALSE
+) dg_names ON TRUE
+LEFT JOIN LATERAL (
+  SELECT ARRAY_AGG(DISTINCT LOWER(COALESCE(organization_roles.workos_slug, global_roles.workos_slug))) AS role_slugs
+  FROM organization_role_assignments AS ora
+  LEFT JOIN organization_roles
+    ON ora.role_urn = 'role:organization:' || organization_roles.id::text
+    AND organization_roles.organization_id = ora.organization_id
+    AND organization_roles.deleted IS FALSE
+    AND organization_roles.workos_deleted IS FALSE
+  LEFT JOIN global_roles
+    ON ora.role_urn = 'role:global:' || global_roles.id::text
+    AND global_roles.deleted IS FALSE
+    AND global_roles.workos_deleted IS FALSE
+  WHERE ora.organization_id = our.organization_id
+    AND (ora.user_id = users.id OR ora.workos_user_id = users.workos_id)
+    AND ora.deleted_at IS NULL
+    AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) IS NOT NULL
+) assigned_roles ON TRUE
+WHERE our.organization_id = @organization_id
+  AND our.deleted IS FALSE
+  AND users.deleted_at IS NULL
+  AND users.email <> ''
+  AND (
+    LOWER(COALESCE(du.attributes ->> 'department_name', '')) = ANY(@departments::text[])
+    OR EXISTS (
+      SELECT 1
+      FROM unnest(COALESCE(dg_names.group_names, '{}'::text[])) AS group_name
+      WHERE group_name = ANY(@group_names::text[])
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM unnest(COALESCE(assigned_roles.role_slugs, '{}'::text[])) AS role_slug
+      WHERE role_slug = ANY(@role_slugs::text[])
+    )
+  )
+ORDER BY email, user_id;

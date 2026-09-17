@@ -63,6 +63,10 @@ type orgQueryScope struct {
 	timeEnd      int64
 	projectUUIDs []uuid.UUID
 	projectIDs   []string
+	// actorScope restricts the read to the actors a narrowed logs:read grant
+	// covers. Always nil for scopes resolved through resolveOrgQueryScope,
+	// which refuses narrowed grants outright.
+	actorScope *repo.ActorScope
 }
 
 // resolveOrgQueryScope authorizes the caller for org-wide telemetry reads
@@ -72,13 +76,33 @@ type orgQueryScope struct {
 // simply resolves to no projects (and an all-zero result) rather than acting
 // as an existence probe.
 func (s *Service) resolveOrgQueryScope(ctx context.Context, from, to string, projectID *string) (orgQueryScope, error) {
+	return s.resolveOrgQueryScopeParams(ctx, false, from, to, projectID)
+}
+
+// resolveScopedOrgQueryScope is resolveOrgQueryScope for an endpoint whose
+// query applies orgQueryScope.actorScope, so a narrowed logs:read grant is
+// honoured rather than refused.
+func (s *Service) resolveScopedOrgQueryScope(ctx context.Context, from, to string, projectID *string) (orgQueryScope, error) {
+	return s.resolveOrgQueryScopeParams(ctx, true, from, to, projectID)
+}
+
+func (s *Service) resolveOrgQueryScopeParams(ctx context.Context, actorScoped bool, from, to string, projectID *string) (orgQueryScope, error) {
 	var scope orgQueryScope
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return scope, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if actorScoped {
+		if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+			return scope, err
+		}
+		actorScope, err := s.resolveActorScope(ctx, authCtx)
+		if err != nil {
+			return scope, err
+		}
+		scope.actorScope = actorScope
+	} else if err := s.requireOrgLogRead(ctx, authCtx); err != nil {
 		return scope, err
 	}
 
@@ -116,7 +140,7 @@ func (s *Service) resolveOrgQueryScope(ctx context.Context, from, to string, pro
 // pre-aggregated attribute_metrics_summaries view; skill_version queries use
 // session-level raw telemetry joined to asynchronously reconciled mappings.
 func (s *Service) Query(ctx context.Context, payload *telem_gen.QueryPayload) (*telem_gen.QueryResult, error) {
-	scope, err := s.resolveOrgQueryScope(ctx, payload.From, payload.To, nil)
+	scope, err := s.resolveScopedOrgQueryScope(ctx, payload.From, payload.To, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -182,6 +206,7 @@ func (s *Service) Query(ctx context.Context, payload *telem_gen.QueryPayload) (*
 		GroupBy:              groupBy,
 		SortBy:               sortBy,
 		Filters:              filters,
+		ActorScope:           scope.actorScope,
 		IntervalSeconds:      interval,
 		CanonicalIdentityOrg: canonicalOrg,
 	}
@@ -458,6 +483,10 @@ func (s *Service) ListSessions(ctx context.Context, payload *telem_gen.ListSessi
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
 	}
+	actorScope, err := s.resolveActorScope(ctx, authCtx)
+	if err != nil {
+		return nil, err
+	}
 
 	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
@@ -529,6 +558,7 @@ func (s *Service) ListSessions(ctx context.Context, payload *telem_gen.ListSessi
 		TimeStart:            timeStart,
 		TimeEnd:              timeEnd,
 		Filters:              filters,
+		ActorScope:           actorScope,
 		SortBy:               sortBy,
 		CursorSortValue:      cursorSortValue,
 		CursorGramChatID:     cursorGramChatID,

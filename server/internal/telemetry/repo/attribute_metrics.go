@@ -196,6 +196,11 @@ type AttributeMetricsQueryParams struct {
 	SortBy     string   // measure key used for ORDER BY (table only)
 	Filters    []AttributeMetricsFilter
 
+	// ActorScope, when set, restricts the aggregate to the activity of the
+	// actors a narrowed logs:read grant covers. Nil reads the whole
+	// organization.
+	ActorScope *ActorScope
+
 	// CanonicalIdentityOrg, when set, folds the email dimension through the
 	// identity_map: filters compare and group-bys bucket canonical employee
 	// identities instead of literal emails. Empty disables folding.
@@ -367,6 +372,12 @@ func (q *Queries) QueryAttributeMetricsTable(ctx context.Context, arg AttributeM
 		return nil, nil
 	}
 
+	filters, inScope := actorScopeEmailFilter(arg.Filters, arg.ActorScope)
+	if !inScope {
+		return nil, nil
+	}
+	arg.Filters = filters
+
 	groupExpr, grouped, err := attributeGroupValueExpr(arg.GroupBy, canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg))
 	if err != nil {
 		return nil, err
@@ -440,6 +451,12 @@ func (q *Queries) QueryAttributeMetricsTimeseries(ctx context.Context, arg Attri
 	if len(arg.ProjectIDs) == 0 {
 		return nil, nil
 	}
+
+	filters, inScope := actorScopeEmailFilter(arg.Filters, arg.ActorScope)
+	if !inScope {
+		return nil, nil
+	}
+	arg.Filters = filters
 
 	groupExpr, grouped, err := attributeGroupValueExpr(arg.GroupBy, canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg))
 	if err != nil {

@@ -309,6 +309,7 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 		{scope: authz.ScopeRiskPolicyBlock, description: "Block specific shadow MCP servers under allow-by-default risk policies.", resourceType: "risk_policy"},
 		{scope: authz.ScopeChatRead, description: "Read and pin other members' agent session transcripts, and reveal secrets flagged in Risk Events. Everyone keeps their own sessions.", resourceType: "chat"},
 		{scope: authz.ScopeChatWrite, description: "Rename, delete, and give feedback on other members' agent sessions. Everyone keeps their own.", resourceType: "chat"},
+		{scope: authz.ScopeLogsRead, description: "Read observability logs, traces, and sessions. Narrow it to an actor department, directory group, or identity-provider role to scope what the holder sees; everyone keeps their own activity.", resourceType: "logs"},
 		{scope: authz.ScopeAgentRead, description: "View agents.", resourceType: "agent"},
 		{scope: authz.ScopeAgentWrite, description: "Create, configure, and manage agents.", resourceType: "agent"},
 		{scope: authz.ScopeAgentAuthorize, description: "Authorize and manage agent credentials.", resourceType: "agent"},
@@ -630,17 +631,29 @@ func genSelectorToAuthz(s *gen.Selector) authz.Selector {
 	if s.ServerURL != nil {
 		sel["server_url"] = *s.ServerURL
 	}
+	if s.ActorDepartment != nil {
+		sel[authz.SelectorKeyActorDepartment] = *s.ActorDepartment
+	}
+	if s.ActorGroup != nil {
+		sel[authz.SelectorKeyActorGroup] = *s.ActorGroup
+	}
+	if s.ActorRole != nil {
+		sel[authz.SelectorKeyActorRole] = *s.ActorRole
+	}
 	return sel
 }
 
 func authzSelectorToGen(sel authz.Selector) *gen.Selector {
 	s := &gen.Selector{
-		ResourceKind: sel["resource_kind"],
-		ResourceID:   sel["resource_id"],
-		Disposition:  nil,
-		Tool:         nil,
-		ProjectID:    nil,
-		ServerURL:    nil,
+		ResourceKind:    sel["resource_kind"],
+		ResourceID:      sel["resource_id"],
+		Disposition:     nil,
+		Tool:            nil,
+		ProjectID:       nil,
+		ServerURL:       nil,
+		ActorDepartment: nil,
+		ActorGroup:      nil,
+		ActorRole:       nil,
 	}
 	if v, ok := sel["disposition"]; ok {
 		s.Disposition = &v
@@ -653,6 +666,15 @@ func authzSelectorToGen(sel authz.Selector) *gen.Selector {
 	}
 	if v, ok := sel["server_url"]; ok {
 		s.ServerURL = &v
+	}
+	if v, ok := sel[authz.SelectorKeyActorDepartment]; ok {
+		s.ActorDepartment = &v
+	}
+	if v, ok := sel[authz.SelectorKeyActorGroup]; ok {
+		s.ActorGroup = &v
+	}
+	if v, ok := sel[authz.SelectorKeyActorRole]; ok {
+		s.ActorRole = &v
 	}
 	return s
 }
@@ -685,6 +707,7 @@ func userVisibleScopeGrants() []*gen.ListRoleGrant {
 		{Scope: string(authz.ScopeRiskPolicyBlock), Selectors: nil},
 		{Scope: string(authz.ScopeChatRead), Selectors: nil},
 		{Scope: string(authz.ScopeChatWrite), Selectors: nil},
+		{Scope: string(authz.ScopeLogsRead), Selectors: nil},
 		{Scope: string(authz.ScopeAgentRead), Selectors: nil},
 		{Scope: string(authz.ScopeAgentWrite), Selectors: nil},
 		{Scope: string(authz.ScopeAgentAuthorize), Selectors: nil},
