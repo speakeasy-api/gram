@@ -3021,6 +3021,47 @@ func TestMCPFingerprintsIsolatesChangePerPlugin(t *testing.T) {
 	require.Equal(t, base["plugin-b"], changedFP["plugin-b"], "untouched plugin's fingerprint must be stable")
 }
 
+func TestGeneratePlatformMCPPackageEmitsExistingServersWorkflow(t *testing.T) {
+	t.Parallel()
+	files, err := PublicPlatformMCPFiles("https://app.example.com", "17")
+	require.NoError(t, err)
+	const path = "skills/add-existing-mcp-servers/SKILL.md"
+	content := files["speakeasy/"+path]
+	require.NotEmpty(t, content)
+	require.Equal(t, content, files["agent-plugins/speakeasy/"+path])
+	workflow := string(content)
+	for _, required := range []string{
+		"name: add-existing-mcp-servers", "claude mcp list",
+		"OWN Speakeasy connection", "Before any local discovery",
+		"health-checks", "launch stdio processes", "BEFORE filtering",
+		"explicit informed consent", "user-sanitized manual inventory",
+		"process side effects",
+		"list_projects", "find_mcp", "get_mcp", "inspect_mcp_candidate",
+		"register_remote_mcp", "Never copy local credentials",
+		"Every selected supported server", "localhost", "stdio",
+		"obtain explicit permission", "current CLI user, working directory",
+		"Do not inspect credential files", "forward raw output",
+		"Never manufacture a safe URL", "not hostname or display name",
+		"connected Speakeasy management endpoint", "not display name alone",
+		"Confirm candidate selection and destination", "`truncated: true`",
+		"Follow every `next_cursor`", "Never combine `query` and `cursor`",
+		"explicit confirmation of the exact inspected batch and project",
+		"Catalogue substitutions require separate confirmation",
+		"Preserve all logical-operation inputs and the same idempotency key on retries",
+		"Continue independent items after failure", "Server validation remains authoritative",
+		"including already-present entries and uncertain write outcomes",
+		"Do not use cached preflight results as final evidence", "Zero selections is not success",
+		"Report registration and authentication/readiness separately",
+		"exact server-returned Speakeasy setup/authorization links",
+		"separate explicit consent for provider attachment", "Leave local config unchanged",
+	} {
+		require.Contains(t, workflow, required)
+	}
+	require.NotContains(t, workflow, "speakeasy-skill-feedback")
+	require.NotContains(t, workflow, "claude mcp add")
+	require.NotContains(t, workflow, "claude mcp remove")
+}
+
 func TestGeneratePlatformMCPPackageEmitsReviewedShadowWorkflow(t *testing.T) {
 	t.Parallel()
 

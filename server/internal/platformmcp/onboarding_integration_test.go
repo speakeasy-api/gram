@@ -200,3 +200,76 @@ func TestOnboardingServiceValidatesClientFamily(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, string(OnboardingClientOther), workflow.ClientFamily)
 }
+
+// Installation intent and active subject connections are independent. Keep this
+// database-to-dashboard boundary explicit: neither client names nor these generic
+// booleans can prove that the selected client is authenticated.
+func TestOnboardingMixedClientEvidenceIsNotClaudeAuthentication(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_mixed_clients")
+	require.NoError(t, err)
+	other, _ := seedRegistrationLifecycle(t, ctx, conn)
+	q := platformrepo.New(conn)
+	service := NewOnboardingService(conn)
+	_, err = service.Start(ctx, other.OrganizationID, other.UserID)
+	require.NoError(t, err)
+	_, err = service.RecordInstallIntent(ctx, other.OrganizationID, other.UserID, OnboardingClientClaudeCode)
+	require.NoError(t, err)
+	require.NoError(t, q.RecordPlatformMCPConnectionReady(ctx, platformrepo.RecordPlatformMCPConnectionReadyParams{
+		OrganizationID:       other.OrganizationID,
+		ConnectionID:         uuid.NullUUID{UUID: connectionIDFromPrincipal(t, other), Valid: true},
+		ConnectionGeneration: uuid.NullUUID{UUID: connectionIDFromPrincipalGeneration(t, other), Valid: true},
+	}))
+	assertOtherClientEvidence := func(t *testing.T) {
+		t.Helper()
+		projection, err := service.Get(ctx, other.OrganizationID, other.UserID)
+		require.NoError(t, err)
+		require.Len(t, projection.Connections, 1)
+		require.Equal(t, connectionIDFromPrincipal(t, other), projection.Connections[0].ID)
+		state := (&ManagementService{}).state(ctx, nil, projection, true, nil, false)
+		require.Equal(t, "claude_code", state.ClientFamily)
+		require.True(t, state.ConnectionAuthorized)
+		require.True(t, state.ConnectionReady)
+		require.Empty(t, state.ReauthorizationReason)
+	}
+	t.Run("other client authorized and only Claude install intent", func(t *testing.T) {
+		assertOtherClientEvidence(t)
+	})
+
+	// A second synthetic connection represents Claude by fixture provenance,
+	// not by its self-declared OAuth client display name.
+	client, err := q.CreatePlatformMCPOAuthClient(ctx, platformrepo.CreatePlatformMCPOAuthClientParams{
+		ClientID: "client-" + uuid.NewString(), ClientName: "Untrusted fixture label",
+		RedirectUris: []string{"https://client.example.test/callback"},
+	})
+	require.NoError(t, err)
+	claudeID, generation := uuid.New(), uuid.New()
+	now := time.Now().UTC()
+	_, err = q.CreatePlatformMCPConnection(ctx, platformrepo.CreatePlatformMCPConnectionParams{
+		ID: claudeID, OrganizationID: other.OrganizationID, SubjectUrn: userSubjectURN(other.UserID),
+		OauthClientID: client.ID, ActiveGeneration: generation,
+		AuthorizationExpiresAt: timestamp(now.Add(24 * time.Hour)),
+	})
+	require.NoError(t, err)
+	_, err = q.CreatePlatformMCPSession(ctx, platformrepo.CreatePlatformMCPSessionParams{
+		ID: uuid.New(), OrganizationID: other.OrganizationID, ConnectionID: claudeID,
+		OauthClientID: client.ID, ConnectionGeneration: generation,
+		Jti: "jti-" + uuid.NewString(), RefreshTokenHash: "refresh-" + uuid.NewString(),
+		ExpiresAt: timestamp(now.Add(time.Hour)), RefreshExpiresAt: timestamp(now.Add(24 * time.Hour)),
+	})
+	require.NoError(t, err)
+	require.NoError(t, q.RecordPlatformMCPConnectionReady(ctx, platformrepo.RecordPlatformMCPConnectionReadyParams{
+		OrganizationID:       other.OrganizationID,
+		ConnectionID:         uuid.NullUUID{UUID: claudeID, Valid: true},
+		ConnectionGeneration: uuid.NullUUID{UUID: generation, Valid: true},
+	}))
+	both, err := service.Get(ctx, other.OrganizationID, other.UserID)
+	require.NoError(t, err)
+	require.Len(t, both.Connections, 2)
+	_, err = conn.Exec(ctx, `UPDATE platform_mcp_connections SET revoked_at = now() WHERE organization_id = $1 AND id = $2`, other.OrganizationID, claudeID)
+	require.NoError(t, err)
+	t.Run("Claude revoked while other client remains active", func(t *testing.T) {
+		assertOtherClientEvidence(t)
+	})
+}

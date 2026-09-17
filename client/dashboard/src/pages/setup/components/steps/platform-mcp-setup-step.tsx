@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/Button";
 import { PlatformMCPOnboardingContent } from "@/pages/org/PlatformMCP";
 import { RequireScope } from "@/components/require-scope";
+import { AddExistingMCPServers } from "../add-existing-mcp-servers";
 import { StepSupportButton } from "../step-container";
 
 interface PlatformMCPSetupStepProps {
@@ -20,6 +21,7 @@ export function PlatformMCPSetupStep({
           embeddedInProjectSetup
           onSetupComplete={onComplete}
         />
+        <AddExistingMCPServers currentProjectSlug={currentProjectSlug} />
       </RequireScope>
       <div className="flex justify-end border-t pt-6">
         <div className="flex gap-3">
