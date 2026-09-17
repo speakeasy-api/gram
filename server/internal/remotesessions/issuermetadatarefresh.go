@@ -54,6 +54,8 @@ const (
 
 	// issuerMetadataRefreshBudget caps one detached refresh: discovery's own ten-second budget plus the writes.
 	issuerMetadataRefreshBudget = 30 * time.Second
+
+	trustedClientMetadataIncompatibility = "issuer metadata is incompatible with a trusted identity-provider client"
 )
 
 // IssuerMetadataRefreshCandidate is one issuer to refresh, keyed by the identity every write re-asserts.
@@ -407,6 +409,10 @@ func (r *IssuerMetadataRefresher) reproject(ctx context.Context, existing repo.R
 			OrganizationID: existing.OrganizationID,
 		})
 	}, remotesessionmetrics.IssuerMetadataRefreshOutcomeReprojected)
+	if errors.Is(err, errTrustedIdentityProviderClientIneligible) {
+		logger.WarnContext(ctx, "reprojected issuer metadata is incompatible with identity-provider login", attr.SlogError(err))
+		outcome, err = r.recordReprojectionFailure(ctx, existing, trustedClientMetadataIncompatibility)
+	}
 	return r.record(ctx, existing.Issuer, reason, outcome), err
 }
 
@@ -434,6 +440,10 @@ func (r *IssuerMetadataRefresher) refresh(ctx context.Context, existing repo.Rem
 	outcome, err := r.apply(ctx, logger, existing, func(q *repo.Queries) (repo.RemoteSessionIssuer, error) {
 		return q.UpdateRemoteSessionIssuerDiscoveredMetadata(ctx, params)
 	}, success)
+	if errors.Is(err, errTrustedIdentityProviderClientIneligible) {
+		logger.WarnContext(ctx, "refreshed issuer metadata is incompatible with identity-provider login", attr.SlogError(err))
+		outcome, err = r.recordFailure(ctx, existing, trustedClientMetadataIncompatibility, "", remotesessionmetrics.IssuerMetadataRefreshOutcomeDefinitiveFailure)
+	}
 	return r.record(ctx, existing.Issuer, reason, outcome), err
 }
 

@@ -6436,6 +6436,8 @@ ORDER BY c.id
 // Every live client actively used with this issuer for identity-provider login.
 // Issuer capability writers validate these rows before committing so an
 // existing trusted-login pair cannot be invalidated after it was linked.
+// Deliberately not tenant-scoped: issuer ids are globally unique, and changing
+// a global issuer must validate trusted clients in every organization.
 func (q *Queries) ListTrustedRemoteSessionClientsByIssuerID(ctx context.Context, remoteSessionIssuerID uuid.UUID) ([]RemoteSessionClient, error) {
 	rows, err := q.db.Query(ctx, listTrustedRemoteSessionClientsByIssuerID, remoteSessionIssuerID)
 	if err != nil {

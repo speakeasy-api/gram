@@ -2883,6 +2883,8 @@ FOR SHARE OF c, i;
 -- Every live client actively used with this issuer for identity-provider login.
 -- Issuer capability writers validate these rows before committing so an
 -- existing trusted-login pair cannot be invalidated after it was linked.
+-- Deliberately not tenant-scoped: issuer ids are globally unique, and changing
+-- a global issuer must validate trusted clients in every organization.
 SELECT c.*
 FROM remote_session_clients AS c
 WHERE c.remote_session_issuer_id = @remote_session_issuer_id

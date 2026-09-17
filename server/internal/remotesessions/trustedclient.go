@@ -2,6 +2,7 @@ package remotesessions
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 
@@ -9,6 +10,8 @@ import (
 )
 
 var requiredIdentityProviderScopes = [...]string{"openid", "email"}
+
+var errTrustedIdentityProviderClientIneligible = errors.New("trusted identity-provider client is ineligible")
 
 // ValidateTrustedIdentityProviderClient checks the stored configuration Gram
 // will use as an OAuth client of a trusted identity provider. It deliberately
@@ -60,7 +63,7 @@ func validateTrustedIdentityProviderIssuerClients(ctx context.Context, q *repo.Q
 	}
 	for _, client := range clients {
 		if err := ValidateTrustedIdentityProviderClient(client, issuer); err != nil {
-			return fmt.Errorf("client %s is no longer eligible: %w", client.ID, err)
+			return fmt.Errorf("%w: client %s: %w", errTrustedIdentityProviderClientIneligible, client.ID, err)
 		}
 	}
 	return nil

@@ -3,6 +3,7 @@ package usersessions_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -21,8 +22,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 func seedTrustedRemoteSessionIssuerTarget(t *testing.T, ctx context.Context, ti *testInstance, slug string, projectID uuid.NullUUID, organizationID pgtype.Text) uuid.UUID {
@@ -400,6 +403,39 @@ func TestOrganizationUserSessionIssuersCRUDAndListIsolation(t *testing.T) {
 	require.False(t, deleteAudit.ProjectID.Valid)
 	_, err = ti.service.GetIssuer(ctx, &orggen.GetIssuerPayload{ID: second.ID, SessionToken: nil})
 	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+func TestOrganizationUserSessionIssuerUpdateSerializesWithOwnerBinding(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	created, err := ti.service.CreateIssuer(ctx, &orggen.CreateIssuerPayload{
+		Slug:                 "org-update-owner-binding-lock",
+		AuthnChallengeMode:   "chain",
+		SessionDurationHours: 24,
+	})
+	require.NoError(t, err)
+	issuerID := uuid.MustParse(created.ID)
+
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, usersessionsrepo.New(tx).LockUserSessionIssuerForOwnerBinding(ctx, issuerID))
+
+	mode := "interactive"
+	done := make(chan error, 1)
+	go func() {
+		_, err := ti.service.UpdateIssuer(ctx, &orggen.UpdateIssuerPayload{
+			ID:                 created.ID,
+			AuthnChallengeMode: &mode,
+		})
+		done <- err
+	}()
+
+	require.Never(t, func() bool { return len(done) > 0 }, 500*time.Millisecond, 25*time.Millisecond,
+		"update completed while another transaction held the owner-binding lock")
+	require.NoError(t, tx.Rollback(ctx))
+	require.Eventually(t, func() bool { return len(done) > 0 }, 30*time.Second, 25*time.Millisecond,
+		"update did not complete after the owner-binding lock was released")
+	require.NoError(t, <-done)
 }
 
 func TestProjectIssuerMutationsRejectOrganizationOwnedIssuer(t *testing.T) {

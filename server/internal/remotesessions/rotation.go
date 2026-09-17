@@ -205,8 +205,12 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 	var zero repo.RemoteSessionClient
 
 	leaseKey := clientRotationLeaseKey(params.ClientID)
-	leaseAcquiredAt := time.Now()
-	held, err := r.locks.Add(ctx, leaseKey, clientRotationLeaseTTL)
+	leaseOwner := uuid.NewString()
+	leaseLocks, ok := r.locks.(cache.RenewableLeaseCache)
+	if !ok {
+		return zero, errors.New("client rotation requires an ownership-aware renewable lease cache")
+	}
+	held, err := leaseLocks.AcquireLease(ctx, leaseKey, leaseOwner, clientRotationLeaseTTL)
 	if err != nil {
 		return zero, fmt.Errorf("acquire client rotation lease: %w", err)
 	}
@@ -214,18 +218,13 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 		return zero, ErrClientRotationInProgress
 	}
 	defer o11y.LogDefer(ctx, r.logger, "failed to release client rotation lease", func() error {
-		// Past the TTL the key may already be a new holder's lease; deleting it
-		// would let a third caller in beside them. Leave it to expire.
-		if time.Since(leaseAcquiredAt) >= clientRotationLeaseTTL {
-			r.logger.WarnContext(ctx, "client rotation outlived its lease; leaving release to TTL",
-				attr.SlogRemoteSessionClientID(params.ClientID.String()),
-				attr.SlogCacheKey(leaseKey),
-			)
-			return nil
-		}
 		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), refreshReleaseTimeout)
 		defer cancel()
-		return r.locks.Delete(releaseCtx, leaseKey)
+		_, releaseErr := leaseLocks.ReleaseLeaseIfOwner(releaseCtx, leaseKey, leaseOwner)
+		if releaseErr != nil {
+			return fmt.Errorf("release client rotation lease: %w", releaseErr)
+		}
+		return nil
 	})
 
 	q := repo.New(r.db)
@@ -238,12 +237,22 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 	if err != nil {
 		return zero, fmt.Errorf("acquire issuer rotation lock connection: %w", err)
 	}
-	defer issuerLockConn.Release()
 	issuerLockRepo := repo.New(issuerLockConn)
 	lockedIssuerID := initial.RemoteSessionClient.RemoteSessionIssuerID
 	if err := issuerLockRepo.LockRemoteSessionIssuerForClientBindingSession(ctx, lockedIssuerID); err != nil {
+		// Cancellation can race PostgreSQL granting a session lock. Remove the
+		// connection from the pool and close it so an ambiguous acquisition can
+		// never return a lock-owning session for unrelated work.
+		rawConn := issuerLockConn.Hijack()
+		closeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), refreshReleaseTimeout)
+		closeErr := rawConn.Close(closeCtx)
+		cancel()
+		if closeErr != nil {
+			return zero, fmt.Errorf("lock issuer configuration for client rotation: %w", errors.Join(err, fmt.Errorf("discard ambiguous lock connection: %w", closeErr)))
+		}
 		return zero, fmt.Errorf("lock issuer configuration for client rotation: %w", err)
 	}
+	defer issuerLockConn.Release()
 	defer o11y.LogDefer(ctx, r.logger, "failed to unlock issuer configuration after client rotation", func() error {
 		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), refreshReleaseTimeout)
 		defer cancel()
@@ -253,6 +262,13 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 		}
 		return nil
 	})
+	renewed, err := leaseLocks.RenewLease(ctx, leaseKey, leaseOwner, clientRotationLeaseTTL)
+	if err != nil {
+		return zero, fmt.Errorf("renew client rotation lease after issuer lock wait: %w", err)
+	}
+	if !renewed {
+		return zero, ErrClientRotationInProgress
+	}
 
 	row, err := issuerLockRepo.GetRemoteSessionClientForRotation(ctx, params.ClientID)
 	if err != nil {
@@ -326,6 +342,13 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 	})
 	if err != nil {
 		return zero, fmt.Errorf("re-register client with issuer: %w", err)
+	}
+	renewed, err = leaseLocks.RenewLease(ctx, leaseKey, leaseOwner, clientRotationLeaseTTL)
+	if err != nil {
+		return zero, fmt.Errorf("renew client rotation lease after registration: %w", err)
+	}
+	if !renewed {
+		return zero, ErrClientRotationInProgress
 	}
 
 	var secretCiphertext pgtype.Text

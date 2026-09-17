@@ -57,6 +57,11 @@ func (s *noopCache) ReleaseLeaseIfOwner(ctx context.Context, key, owner string) 
 	return true, nil
 }
 
+// RenewLease implements [RenewableLeaseCache].
+func (s *noopCache) RenewLease(ctx context.Context, key, owner string, ttl time.Duration) (bool, error) {
+	return true, nil
+}
+
 // SetIfAbsent implements [ConditionalCache]. With no backing store every
 // caller wins, matching Add's graceful degradation semantics.
 func (s *noopCache) SetIfAbsent(ctx context.Context, key string, value any, ttl time.Duration) (bool, error) {
