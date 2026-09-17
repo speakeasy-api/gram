@@ -832,21 +832,37 @@ function useIsShortViewport(): boolean {
 }
 
 const RAIL_WIDTH_STORAGE_KEY = "gram.observe.logs.railWidth";
-const RAIL_WIDTH_DEFAULT = 260;
 // Narrow enough that the facet labels still fit, wide enough for a long
 // address without truncation — past that the rail is just eating the table.
-const RAIL_WIDTH_MIN = 200;
+const RAIL_WIDTH_MIN = 180;
 const RAIL_WIDTH_MAX = 340;
+const RAIL_WIDTH_DEFAULT = 280;
+// The rail may not take more than this share of the window. The table needs
+// six columns and the rail needs one, so a fixed width that reads as generous
+// at 1600px is most of the reader's tool names at 1000px.
+const RAIL_WIDTH_VIEWPORT_SHARE = 0.22;
+
+/** The widest the rail may be in this window, whatever the reader last chose. */
+function railWidthCeiling(): number {
+  if (typeof window === "undefined") return RAIL_WIDTH_MAX;
+  return Math.max(
+    RAIL_WIDTH_MIN,
+    Math.min(RAIL_WIDTH_MAX, Math.round(window.innerWidth * RAIL_WIDTH_VIEWPORT_SHARE)),
+  );
+}
 
 /**
  * The rail's width, dragged by its edge and remembered per browser.
  *
  * Facet values are addresses and server names, whose length is a property of
  * the org rather than something a fixed column can be chosen for — so the
- * reader sets it, once.
+ * reader sets it, once. What they set is their preference for a roomy window,
+ * though, so it is capped by what the current window can spare rather than
+ * applied literally: a 340px rail chosen on an external display would squeeze
+ * the table's tool names to ellipses back on the laptop.
  */
 function useRailWidth(): [number, (width: number) => void] {
-  const [width, setWidth] = useState(() => {
+  const [preferred, setPreferred] = useState(() => {
     try {
       const raw = Number(localStorage.getItem(RAIL_WIDTH_STORAGE_KEY));
       return Number.isFinite(raw) && raw > 0 ? raw : RAIL_WIDTH_DEFAULT;
@@ -854,18 +870,29 @@ function useRailWidth(): [number, (width: number) => void] {
       return RAIL_WIDTH_DEFAULT;
     }
   });
+  const [ceiling, setCeiling] = useState(railWidthCeiling);
 
-  const commit = useCallback((next: number) => {
-    const clamped = Math.min(Math.max(next, RAIL_WIDTH_MIN), RAIL_WIDTH_MAX);
-    setWidth(clamped);
-    try {
-      localStorage.setItem(RAIL_WIDTH_STORAGE_KEY, String(clamped));
-    } catch {
-      // A browser that refuses storage still resizes for this session.
-    }
+  useEffect(() => {
+    const update = () => setCeiling(railWidthCeiling());
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
   }, []);
 
-  return [width, commit];
+  const commit = useCallback(
+    (next: number) => {
+      const clamped = Math.min(Math.max(next, RAIL_WIDTH_MIN), ceiling);
+      setPreferred(clamped);
+    try {
+        localStorage.setItem(RAIL_WIDTH_STORAGE_KEY, String(clamped));
+      } catch {
+        // A browser that refuses storage still resizes for this session.
+      }
+    },
+    [ceiling],
+  );
+
+  return [Math.min(preferred, ceiling), commit];
 }
 
 /**
@@ -903,7 +930,7 @@ function SummaryStat({
 }: {
   label: string;
   value: string;
-  tone?: "default" | "destructive";
+  tone?: "default" | "destructive" | "warning";
 }) {
   return (
     <div className="flex flex-col gap-1 px-4 py-3 short:py-2">
@@ -911,7 +938,11 @@ function SummaryStat({
       <span
         className={cn(
           "font-mono text-2xl leading-none tabular-nums",
-          tone === "destructive" ? "text-destructive" : "text-foreground",
+          tone === "destructive" && "text-destructive",
+          // Amber, matching the blocked status dot: a denial is the policy
+          // working, not the call breaking.
+          tone === "warning" && "text-amber-500",
+          tone === "default" && "text-foreground",
         )}
       >
         {value}
@@ -1145,7 +1176,7 @@ function LogsToolsContent({
             </button>
             {summaryOpen && (
               <>
-                <div className="divide-border border-border grid grid-cols-2 divide-x border-t md:grid-cols-4">
+                <div className="divide-border border-border grid grid-cols-2 divide-x border-t md:grid-cols-3 lg:grid-cols-5">
                   <SummaryStat
                     label="Tool calls"
                     value={
@@ -1174,6 +1205,15 @@ function LogsToolsContent({
                       totals && totals.failureRate > 0
                         ? "destructive"
                         : "default"
+                    }
+                  />
+                  <SummaryStat
+                    label="Blocked rate"
+                    value={
+                      totals ? `${(totals.blockedRate * 100).toFixed(1)}%` : "—"
+                    }
+                    tone={
+                      totals && totals.blockedRate > 0 ? "warning" : "default"
                     }
                   />
                   <SummaryStat
