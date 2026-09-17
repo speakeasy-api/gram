@@ -2591,9 +2591,8 @@ CREATE TABLE IF NOT EXISTS okta_identity_provider_connections (
   -- Set only by a platform admin to allow one Okta tenant on more than one
   -- Speakeasy org.
   issuer_url_override_reason TEXT,
-  -- Preserve existing reservations and old writers during rollout. New creates
-  -- explicitly start unclaimed; only genuine credential proof claims them.
-  ownership_claimed boolean NOT NULL DEFAULT TRUE,
+  -- Set only by successful credential proof; pending rows never reserve an issuer.
+  ownership_claimed boolean NOT NULL DEFAULT FALSE,
   remote_session_issuer_id uuid NOT NULL,
   remote_session_client_id uuid NOT NULL,
   dpop_required boolean NOT NULL DEFAULT FALSE,

@@ -65,7 +65,7 @@ CREATE TABLE "okta_identity_provider_connections" (
   "org_url" text NOT NULL,
   "issuer_url" text NOT NULL,
   "issuer_url_override_reason" text NULL,
-  "ownership_claimed" boolean NOT NULL DEFAULT true,
+  "ownership_claimed" boolean NOT NULL DEFAULT false,
   "remote_session_issuer_id" uuid NOT NULL,
   "remote_session_client_id" uuid NOT NULL,
   "dpop_required" boolean NOT NULL DEFAULT false,
