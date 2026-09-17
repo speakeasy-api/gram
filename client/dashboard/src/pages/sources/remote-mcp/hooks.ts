@@ -170,6 +170,8 @@ export function useDeleteRemoteMcpSource(): UseMutationResult<
         invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
         invalidateAllGetRemoteMcpServer(queryClient, { refetchType: "all" }),
         invalidateAllRemoteMcpServers(queryClient, { refetchType: "all" }),
+        // A deleted wrapper takes its unowned issuer with it.
+        invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
       ]);
     },
   });

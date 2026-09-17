@@ -56,10 +56,18 @@ function toolSourceId(tool: Tool): string | undefined {
 export default function Sources(): JSX.Element {
   const routes = useRoutes();
   const project = useProject();
-  const { sources, isLoading } = useProjectSources();
+  const { sources, isLoading, assetsUnavailable } = useProjectSources();
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useViewMode();
   const filters = useFilterState(SOURCE_FILTERS);
+  // Format comes from the file facts. Without them a format filter would
+  // hide every OpenAPI document as "unknown", so it is held clear until the
+  // facts load.
+  const filterValues = useMemo(
+    () =>
+      assetsUnavailable ? { ...filters.values, format: [] } : filters.values,
+    [assetsUnavailable, filters.values],
+  );
   const [removing, setRemoving] = useState<RemovableSource | null>(null);
   const actionsFor = useSourceListActions({ onRemove: setRemoving });
 
@@ -101,10 +109,10 @@ export default function Sources(): JSX.Element {
           matchesSourceSearch(source, search) &&
           matchesSourceFilters(
             sourceFacets(source, toolsetToolUrns, failingKeys),
-            filters.values,
+            filterValues,
           ),
       ),
-    [sources, search, toolsetToolUrns, failingKeys, filters.values],
+    [sources, search, toolsetToolUrns, failingKeys, filterValues],
   );
 
   // The failure mark carries the deployment it links to, so a source that
@@ -137,7 +145,7 @@ export default function Sources(): JSX.Element {
       }}
       filters={{
         schema: SOURCE_FILTERS,
-        values: filters.values,
+        values: filterValues,
         optionsById: SOURCE_FILTER_OPTIONS,
         onChange: filters.setValue as (id: string, v: FilterValue) => void,
         onClear: filters.clearValue as (id: string) => void,
@@ -161,6 +169,12 @@ export default function Sources(): JSX.Element {
         ),
       }}
     >
+      {assetsUnavailable ? (
+        <Text muted small>
+          File details could not be loaded, so format and dates are unknown for
+          now.
+        </Text>
+      ) : null}
       {filtered.length === 0 ? (
         // Distinct from the empty state above: the project has sources, this
         // search just doesn't match any, so the toolbar stays put.

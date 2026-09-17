@@ -11,6 +11,7 @@ import { invalidateAllGetUnproxiedMcpServer } from "@gram/client/react-query/get
 import { invalidateAllMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { invalidateAllUnproxiedMcpServers } from "@gram/client/react-query/unproxiedMcpServers.js";
+import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSessionIssuers.js";
 import {
   useMutation,
   useQueryClient,
@@ -148,6 +149,8 @@ export function useDeleteUnproxiedMcpSource(): UseMutationResult<
         invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
         invalidateAllGetUnproxiedMcpServer(queryClient, { refetchType: "all" }),
         invalidateAllUnproxiedMcpServers(queryClient, { refetchType: "all" }),
+        // A deleted wrapper takes its unowned issuer with it.
+        invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
       ]);
     },
   });

@@ -196,6 +196,8 @@ export function useDeleteTunneledMcpSource(): UseMutationResult<
         invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
         invalidateAllGetTunneledMcpServer(queryClient, { refetchType: "all" }),
         invalidateAllTunneledMcpServers(queryClient, { refetchType: "all" }),
+        // A deleted wrapper takes its unowned issuer with it.
+        invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
       ]);
     },
   });

@@ -1,6 +1,7 @@
 import { DeploymentsEmptyState } from "@/pages/deployments/DeploymentsEmptyState";
 import { LogsTabContent } from "@/pages/deployments/deployment/LogsTabContent";
 import { Badge } from "@/components/ui/Badge";
+import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { CopyButton } from "@/components/ui/CopyButton";
@@ -291,5 +292,23 @@ function SourceVersionsBody({
     );
   }
   if (isEmpty) return <DeploymentsEmptyState />;
+  // A refetch that failed keeps the last list; say so rather than pass it
+  // off as current.
+  if (isError) {
+    return (
+      <div className="flex flex-col gap-4">
+        <Alert variant="error" dismissible={false}>
+          <span className="flex flex-wrap items-center gap-3">
+            The deployments list could not be refreshed. Showing the last
+            versions loaded.
+            <Button variant="tertiary" size="sm" onClick={onRetry}>
+              <Button.Text>Retry</Button.Text>
+            </Button>
+          </span>
+        </Alert>
+        {children}
+      </div>
+    );
+  }
   return <>{children}</>;
 }

@@ -182,8 +182,18 @@ describe("deleteSourceCascade", () => {
   ];
 
   it("deletes the current linked set, then the source", async () => {
-    const deleteMcpServer = vi.fn().mockResolvedValue(undefined);
-    const deleteSource = vi.fn().mockResolvedValue(undefined);
+    // Completion order, not call order: the source delete must start only
+    // once every wrapper delete has resolved, since the FK restricts it.
+    const order: string[] = [];
+    const deleteMcpServer = vi.fn(async (id: string) => {
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, id === "a" ? 5 : 1);
+      });
+      order.push(`server:${id}`);
+    });
+    const deleteSource = vi.fn(async () => {
+      order.push("source");
+    });
     await deleteSourceCascade({
       listLinked: () => Promise.resolve(linked),
       deleteMcpServer,
@@ -191,6 +201,7 @@ describe("deleteSourceCascade", () => {
       sourceLabel: "remote MCP source",
     });
     expect(deleteMcpServer.mock.calls.map(([id]) => id)).toEqual(["a", "b"]);
+    expect(order).toEqual(["server:b", "server:a", "source"]);
     expect(deleteSource).toHaveBeenCalledTimes(1);
   });
 

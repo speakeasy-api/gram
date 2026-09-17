@@ -22,7 +22,8 @@ async function downloadSourceFile({
   projectId: string;
   projectSlug: string | undefined;
   isOpenAPI: boolean;
-  filename: string;
+  /** Named once the file is in hand, so its content can settle the extension. */
+  filename: (blob: Blob) => Promise<string>;
 }): Promise<void> {
   const url = new URL(
     isOpenAPI ? "/rpc/assets.serveOpenAPIv3" : "/rpc/assets.serveFunction",
@@ -46,7 +47,7 @@ async function downloadSourceFile({
   const objectUrl = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = objectUrl;
-  anchor.download = filename;
+  anchor.download = await filename(blob);
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
@@ -59,12 +60,19 @@ async function downloadSourceFile({
 // The file the user gets back should be named like the thing they picked, and
 // carry the extension its content actually has: a function bundle is a zip,
 // and an OpenAPI document is whichever of YAML/JSON was uploaded.
-function sourceDownloadFilename(
+// When the file facts did not load there is no content type to go by, so the
+// document itself decides: JSON opens with a brace, YAML does not.
+async function sourceDownloadFilename(
   source: Pick<SourceOption, "kind" | "name" | "contentType">,
-): string {
+  blob: Blob,
+): Promise<string> {
   const base = source.name.replace(/\.(zip|ya?ml|json)$/i, "") || "source";
   if (source.kind !== "openapi") return `${base}.zip`;
-  return `${base}.${source.contentType?.includes("json") ? "json" : "yaml"}`;
+  if (source.contentType) {
+    return `${base}.${source.contentType.includes("json") ? "json" : "yaml"}`;
+  }
+  const head = (await blob.slice(0, 64).text()).trimStart();
+  return `${base}.${head.startsWith("{") ? "json" : "yaml"}`;
 }
 
 /** Returns a callback that downloads a source's file, toasting on failure. */
@@ -84,7 +92,7 @@ export function useDownloadSource(): (source: SourceOption) => Promise<void> {
           projectId: project.id,
           projectSlug,
           isOpenAPI: source.kind === "openapi",
-          filename: sourceDownloadFilename(source),
+          filename: (blob) => sourceDownloadFilename(source, blob),
         });
       } catch (error) {
         toast.error(
