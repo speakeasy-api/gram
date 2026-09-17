@@ -97,7 +97,13 @@ func TestServiceDeletionWaitsForAssistantAttachments(t *testing.T) {
 				// Keep detach as a separate statement so it sees the assistant commit.
 				deletionTx := testenv.BeginTx(t, ctx, conn)
 				finished := make(chan error, 1)
+				defer func() {
+					cancel()
+					for range finished {
+					}
+				}()
 				go func() {
+					defer close(finished)
 					var err error
 					if kind == "toolset" {
 						queries := toolsetsrepo.New(deletionTx)

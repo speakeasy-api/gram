@@ -97,7 +97,13 @@ func TestServiceConcurrentDeletedAttachments(t *testing.T) {
 				}
 				require.NoError(t, err)
 				finished := make(chan error, 1)
+				defer func() {
+					cancel()
+					for range finished {
+					}
+				}()
 				go func() {
+					defer close(finished)
 					if mutation == "create" {
 						_, err := svc.CreateAssistant(ctx, payload)
 						finished <- err
@@ -184,7 +190,13 @@ func TestServiceMixedAttachmentsConcurrentMCPBackendUpdate(t *testing.T) {
 	})
 	require.NoError(t, err)
 	finished := make(chan error, 1)
+	defer func() {
+		cancel()
+		for range finished {
+		}
+	}()
 	go func() {
+		defer close(finished)
 		_, err := svc.CreateAssistant(ctx, &gen.CreateAssistantPayload{
 			Name: "Mixed attachments", Model: "openai/gpt-4o-mini",
 			Toolsets:   []*types.AssistantToolsetRef{{ToolsetSlug: target.Slug}},
