@@ -1,27 +1,52 @@
-import { DetailPage } from "@/components/page-templates";
+import { DetailPage, type DetailSection } from "@/components/page-templates";
+import { SourceActivityPanel } from "@/components/sources/SourceActivityPanel";
 import { SourceContentViewer } from "@/components/sources/SourceContentViewer";
+import { SourceDangerZone } from "@/components/sources/SourceDangerZone";
 import {
   SourceDetail as SourceDetailBody,
   SourceDownloadButton,
 } from "@/components/sources/SourceDetailPanel";
+import { SourceToolsSection } from "@/components/sources/SourceToolsSection";
+import { SourceUploadVersionButton } from "@/components/sources/SourceUploadVersionButton";
+import { SourceVersionsSection } from "@/components/sources/SourceVersionsSection";
+import {
+  DEFAULT_SOURCE_DETAIL_TAB,
+  tabForHash,
+  type SourceDetailTab,
+} from "@/components/sources/sourceDetailSections";
 import {
   sourceAssetId,
   useProjectSources,
+  type SourceOption,
 } from "@/components/sources/source-list";
+import { useSourceTools } from "@/components/sources/useSourceQueries";
 import { Button } from "@/components/ui/Button";
 import { useProject } from "@/contexts/Auth";
 import { useRoutes } from "@/routes";
-import { useParams } from "react-router";
+import { useLocation, useParams } from "react-router";
+
+function kindDescription(kind: SourceOption["kind"]): string {
+  switch (kind) {
+    case "openapi":
+      return "An OpenAPI document in this project's active deployment.";
+    case "function":
+      return "A function in this project's active deployment.";
+  }
+}
 
 /**
  * One source at its own URL.
  *
  * A source is read in a sheet where it is being chosen, but it also needs an
  * address: the CLI hands people a link after a push, and a source is the thing
- * worth pointing a colleague at. Both surfaces render the same body.
+ * worth pointing a colleague at. Both surfaces render the same details body;
+ * the page adds tabs for what only makes sense with room of its own. The
+ * tabs are addressed by hash, as the page always has been, so the route
+ * needs no sub-pages.
  */
 export default function SourceDetailRoute(): JSX.Element {
   const routes = useRoutes();
+  const location = useLocation();
   const { sourceId } = useParams<{ sourceId: string }>();
   const project = useProject();
   const { sources, isLoading, isError } = useProjectSources();
@@ -32,6 +57,19 @@ export default function SourceDetailRoute(): JSX.Element {
     (candidate) => sourceAssetId(candidate) === sourceId,
   );
   const kind = source?.kind ?? "openapi";
+  const assetId = sourceId ?? "";
+  const activeTab = tabForHash(location.hash) ?? DEFAULT_SOURCE_DETAIL_TAB;
+  const tabHref = (tab: SourceDetailTab) => `${location.pathname}#${tab}`;
+
+  // The page's tools feed two tabs, so they are read once here and handed
+  // down rather than filtered again in each.
+  const {
+    tools,
+    toolUrns,
+    isLoading: isToolsLoading,
+    isError: isToolsError,
+    refetch: refetchTools,
+  } = useSourceTools(kind, assetId);
 
   // A deployment that failed to load is not a source that isn't there: saying
   // "not found" for a dropped request sends people looking for the wrong
@@ -53,60 +91,100 @@ export default function SourceDetailRoute(): JSX.Element {
     );
   }
 
+  // Every tab is rendered only once the source is known: the viewers key
+  // their fetches on the kind, and a wrong guess would request the wrong
+  // endpoint.
+  const sections: DetailSection[] = source
+    ? [
+        {
+          id: "overview",
+          label: "Overview",
+          href: tabHref("overview"),
+          content: (
+            <div className="flex flex-col gap-8">
+              <SourceDetailBody
+                sourceKind={kind}
+                assetId={assetId}
+                variant="page"
+              />
+              <SourceActivityPanel
+                sourceKey={assetId}
+                toolUrns={toolUrns}
+                isToolsLoading={isToolsLoading}
+                isToolsError={isToolsError}
+              />
+              <SourceContentViewer sourceKind={kind} assetId={assetId} />
+            </div>
+          ),
+        },
+        {
+          id: "tools",
+          label: `Tools (${tools.length})`,
+          href: tabHref("tools"),
+          content: (
+            <SourceToolsSection
+              // Facet and search belong to one source; a new one starts clean.
+              key={assetId}
+              sourceKind={kind}
+              tools={tools}
+              isLoading={isToolsLoading}
+              isError={isToolsError}
+              onRetry={refetchTools}
+            />
+          ),
+        },
+        {
+          id: "versions",
+          label: "Versions",
+          href: tabHref("versions"),
+          content: <SourceVersionsSection />,
+        },
+        {
+          id: "settings",
+          label: "Settings",
+          href: tabHref("settings"),
+          content: (
+            <SourceDangerZone
+              source={{ kind, assetId, name: source.name, slug: source.slug }}
+            />
+          ),
+        },
+      ]
+    : [];
+
   return (
     <DetailPage
       scope="mcp:read"
       resourceId={project.id}
-      layout="scroll"
+      layout="routed"
+      activeSection={activeTab}
       loading={isLoading}
       title={source?.name ?? "Source"}
-      description={
-        kind === "openapi"
-          ? "An OpenAPI document in this project's active deployment."
-          : "A function in this project's active deployment."
-      }
-      breadcrumbSubstitutions={{ [sourceId ?? ""]: source?.name }}
+      description={kindDescription(kind)}
+      breadcrumbSubstitutions={{ [assetId]: source?.name }}
       primaryAction={
         <>
           {/* The same action the sheet carries in its header, since the page
               is the other half of how a source is read. */}
           <SourceDownloadButton
             sourceKind={kind}
-            assetId={sourceId!}
+            assetId={assetId}
             variant="button"
           />
+          {kind === "openapi" && source?.slug ? (
+            <SourceUploadVersionButton slug={source.slug} />
+          ) : null}
           {/* Arriving from a source, that source is the choice already made. */}
           <Button variant="primary" asChild>
             <routes.mcp.add.fromSource.Link
-              queryParams={{ source: `${kind}:${sourceId ?? ""}` }}
+              queryParams={{ source: `${kind}:${assetId}` }}
             >
               <Button.Text>Build a server</Button.Text>
             </routes.mcp.add.fromSource.Link>
           </Button>
         </>
       }
-      sections={[
-        {
-          id: "details",
-          label: "Details",
-          content: (
-            <SourceDetailBody
-              sourceKind={kind}
-              assetId={sourceId!}
-              variant="page"
-            />
-          ),
-        },
-        {
-          id: "content",
-          label: kind === "openapi" ? "OpenAPI document" : "Function manifest",
-          // Rendered only once the source is known: the viewer keys its fetch
-          // on the kind, and a wrong guess would request the wrong endpoint.
-          content: source ? (
-            <SourceContentViewer sourceKind={kind} assetId={sourceId!} />
-          ) : null,
-        },
-      ]}
+      sections={sections}
     />
   );
 }

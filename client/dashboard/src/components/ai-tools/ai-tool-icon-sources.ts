@@ -14,6 +14,7 @@ export const ICON_SOURCE_BY_TARGET_ID: Record<string, string> = {
   claude: "claude",
   // ChatGPT and Codex share OpenAI's mark; AgentProviderIcon resolves both
   // through its codex case, which is the OpenAI monoblossom.
+  chatgpt: "chatgpt",
   "chatgpt-classic": "chatgpt",
   codex: "codex",
   cursor: "cursor",

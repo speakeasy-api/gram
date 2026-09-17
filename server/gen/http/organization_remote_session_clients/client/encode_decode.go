@@ -2946,6 +2946,19 @@ func unmarshalRemoteSessionClientResponseBodyToTypesRemoteSessionClient(v *Remot
 	return res
 }
 
+// unmarshalTrustedClientUserSessionIssuerReferenceResponseBodyToOrganizationremotesessionclientsTrustedClientUserSessionIssuerReference
+// builds a value of type
+// *organizationremotesessionclients.TrustedClientUserSessionIssuerReference
+// from a value of type *TrustedClientUserSessionIssuerReferenceResponseBody.
+func unmarshalTrustedClientUserSessionIssuerReferenceResponseBodyToOrganizationremotesessionclientsTrustedClientUserSessionIssuerReference(v *TrustedClientUserSessionIssuerReferenceResponseBody) *organizationremotesessionclients.TrustedClientUserSessionIssuerReference {
+	res := &organizationremotesessionclients.TrustedClientUserSessionIssuerReference{
+		ID:   *v.ID,
+		Slug: *v.Slug,
+	}
+
+	return res
+}
+
 // unmarshalOrganizationMcpServerResponseBodyToOrganizationremotesessionclientsOrganizationMcpServer
 // builds a value of type
 // *organizationremotesessionclients.OrganizationMcpServer from a value of type

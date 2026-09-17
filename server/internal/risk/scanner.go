@@ -1013,6 +1013,8 @@ func (s *Scanner) dispatchEnforcement(ctx context.Context, baseProvenance meteri
 			laneErr := outcome.Failed[lane]
 			if errors.Is(laneErr, context.DeadlineExceeded) || (laneErr == nil && outcome.Deadline) {
 				reason = "deadline"
+			} else if errors.Is(laneErr, context.Canceled) {
+				continue
 			} else if laneErr != nil {
 				reason = "request_error"
 			}

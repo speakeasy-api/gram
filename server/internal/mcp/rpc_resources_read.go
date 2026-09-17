@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
+	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -63,6 +64,7 @@ func handleResourcesRead(
 	billingRepository billing.Repository,
 	telemLogger *tm.Logger,
 	platformExtras []platformtools.ExternalTool,
+	scan mcpriskscan.Evaluator,
 ) (json.RawMessage, error) {
 	var params resourceReadParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
@@ -202,6 +204,22 @@ func handleResourcesRead(
 		telemLogger.Log(ctx, params)
 	}()
 
+	serverID := ""
+	if payload.mcpServerID != nil {
+		serverID = payload.mcpServerID.String()
+	}
+	scan.Scan(ctx, nil, mcpriskscan.Event{
+		Surface:        mcpriskscan.SurfaceHostedMCP,
+		Method:         mcpriskscan.MethodResourcesRead,
+		OrganizationID: descriptor.OrganizationID,
+		ProjectID:      descriptor.ProjectID,
+		ServerID:       serverID,
+		ToolsetID:      toolset.ID,
+		ToolName:       "",
+		ResourceURI:    descriptor.URI,
+		PromptName:     "",
+		Phase:          mcpriskscan.PhaseBeforeRead,
+	})
 	err = toolProxy.ReadResource(ctx, rw, strings.NewReader("{}"), toolconfig.ToolCallEnv{
 		UserConfig: userConfig,
 		SystemEnv:  systemConfig,

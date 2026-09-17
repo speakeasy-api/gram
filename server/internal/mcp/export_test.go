@@ -12,6 +12,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/workload"
@@ -156,4 +157,9 @@ func (s *Service) SetRemoteSessionRecheckPacing(rate ratelimit.Rate, batch int32
 	if r.limiterStore != nil {
 		r.limiter = ratelimit.New(r.limiterStore, "remote_session_recheck_host", rate)
 	}
+}
+
+// SetRiskScanEvaluator replaces observation only in the test binary.
+func (s *Service) SetRiskScanEvaluator(evaluator mcpriskscan.Evaluator) {
+	s.scanEvaluator = evaluator
 }

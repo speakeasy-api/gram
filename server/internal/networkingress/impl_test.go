@@ -81,6 +81,13 @@ func TestDeleteRetainsCleanupIdentityAndBlocksReplacement(t *testing.T) {
 	require.True(t, deleted.CredentialsEncrypted.Valid)
 	require.NotEqual(t, []byte("{}"), deleted.ProviderResources)
 
+	visible, err := ti.service.GetIngress(ctx, &gen.GetIngressPayload{})
+	require.NoError(t, err)
+	require.NotNil(t, visible.Ingress)
+	require.Equal(t, created.ID, visible.Ingress.ID)
+	require.Equal(t, "deleting", visible.Ingress.Status)
+	require.False(t, visible.Ingress.Enabled)
+
 	_, err = ti.service.CreateIngress(ctx, &gen.CreateIngressPayload{Provider: networkingress.ProviderTailscale, Hostname: "replacement", OauthClientID: "next", OauthClientSecret: "next-secret"})
 	requireOopsCode(t, err, oops.CodeConflict)
 
