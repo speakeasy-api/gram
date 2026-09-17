@@ -142,7 +142,6 @@ func NewRuntimeWithRiskMutations(logger *slog.Logger, authenticator Authenticato
 	}
 	server, registrar := newServerWithRiskMutations(reader, catalog, registrations, cursorKeyMaterial, setupResources, feedback, onboarding, distributions, skills, diagnostics, plugins, sessionRecall, riskMutations, candidate, accessReads, accessRoleMutations)
 	registrar.withExternalAuthorizer(authorizer)
-	server.AddReceivingMiddleware(capabilityCatalogueMiddleware(registrar))
 	runtime := &Runtime{
 		authenticator:        authenticator,
 		gate:                 gate,
@@ -153,24 +152,33 @@ func NewRuntimeWithRiskMutations(logger *slog.Logger, authenticator Authenticato
 		server:               server,
 		registrar:            registrar,
 	}
+	// Register both wrappers together so their order is reviewable: readiness is
+	// outside catalogue aggregation and therefore observes one completed external
+	// tools/list call, never the SDK pages the catalogue middleware reads inside.
+	middlewares := []mcp.Middleware{capabilityCatalogueMiddleware(registrar)}
 	if readiness != nil {
-		runtime.server.AddReceivingMiddleware(func(next mcp.MethodHandler) mcp.MethodHandler {
-			return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
-				result, err := next(ctx, method, req)
-				if method == "tools/list" && err == nil && result != nil {
-					if principal, ok := PrincipalFromContext(ctx); ok {
-						if recordErr := runtime.readiness.RecordReady(ctx, principal, time.Now()); recordErr != nil {
-							// Discovery succeeded; the idempotent lifecycle projection is
-							// best-effort and must not turn an MCP response into a failure.
-							logger.WarnContext(ctx, "record platform mcp connection readiness", attr.SlogError(recordErr))
-						}
+		middlewares = append([]mcp.Middleware{readinessMiddleware(runtime, logger)}, middlewares...)
+	}
+	runtime.server.AddReceivingMiddleware(middlewares...)
+	return runtime
+}
+
+func readinessMiddleware(runtime *Runtime, logger *slog.Logger) mcp.Middleware {
+	return func(next mcp.MethodHandler) mcp.MethodHandler {
+		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+			result, err := next(ctx, method, req)
+			if method == "tools/list" && err == nil && result != nil {
+				if principal, ok := PrincipalFromContext(ctx); ok {
+					if recordErr := runtime.readiness.RecordReady(ctx, principal, time.Now()); recordErr != nil {
+						// Discovery succeeded; the idempotent lifecycle projection is
+						// best-effort and must not turn an MCP response into a failure.
+						logger.WarnContext(ctx, "record platform mcp connection readiness", attr.SlogError(recordErr))
 					}
 				}
-				return result, err
 			}
-		})
+			return result, err
+		}
 	}
-	return runtime
 }
 
 // capabilityCatalogueMiddleware filters tools/list after the request context has

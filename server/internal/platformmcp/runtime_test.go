@@ -125,7 +125,7 @@ func TestRuntimeHandlerRecordsReadyAfterSuccessfulToolsList(t *testing.T) {
 	t.Parallel()
 
 	recorder := &testReadinessRecorder{}
-	handler := NewRuntime(
+	runtime := NewRuntime(
 		testenv.NewLogger(t),
 		&testAuthenticator{principal: testPrincipal()},
 		testGate{enabled: true},
@@ -137,7 +137,9 @@ func TestRuntimeHandlerRecordsReadyAfterSuccessfulToolsList(t *testing.T) {
 		nil,
 		recorder,
 		nil,
-	).Handler()
+	)
+	require.Greater(t, len(runtime.registrar.For(AudienceExternal)), 32, "exercise internal SDK pagination")
+	handler := runtime.Handler()
 	req := httptest.NewRequest(http.MethodPost, Path, strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
 	req.Header.Set("Authorization", "Bearer access-token")
 	req.Header.Set("Content-Type", "application/json")
@@ -154,53 +156,95 @@ func TestRuntimeHandlerRecordsReadyAfterSuccessfulToolsList(t *testing.T) {
 func TestRuntimeHandlerFiltersToolsListByPreparedGrants(t *testing.T) {
 	t.Parallel()
 
-	authorizer := &testAuthorizer{grants: []authz.Grant{authz.NewGrant(authz.ScopeProjectRead, "project-1")}}
-	handler := NewRuntime(
-		testenv.NewLogger(t),
-		&testAuthenticator{principal: testPrincipal()},
-		testGate{enabled: true},
-		authorizer,
-		"",
-		"test-cursor-key",
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-	).Handler()
-	req := httptest.NewRequest(http.MethodPost, Path, strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
-	req.Header.Set("Authorization", "Bearer access-token")
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json, text/event-stream")
-	res := httptest.NewRecorder()
+	for _, tc := range []struct {
+		name        string
+		grants      []authz.Grant
+		contains    []string
+		notContains []string
+	}{
+		{
+			name:        "project reader",
+			grants:      []authz.Grant{authz.NewGrant(authz.ScopeProjectRead, "project-1")},
+			contains:    []string{"get_platform_context", "list_projects", "list_my_sessions"},
+			notContains: []string{"find_mcp", "list_skills", "create_skill", "distribute_skill"},
+		},
+		{
+			name:        "skill reader",
+			grants:      []authz.Grant{authz.NewGrant(authz.ScopeSkillRead, "skill-1")},
+			contains:    []string{"get_platform_context", "list_skills", "get_skill"},
+			notContains: []string{"list_projects", "create_skill", "distribute_skill"},
+		},
+		{
+			name:        "skill writer",
+			grants:      []authz.Grant{authz.NewGrant(authz.ScopeSkillWrite, "skill-1")},
+			contains:    []string{"list_skills", "create_skill", "add_skill_version", "update_skill_metadata"},
+			notContains: []string{"list_projects", "distribute_skill"},
+		},
+		{
+			name:        "organization admin",
+			grants:      []authz.Grant{authz.NewGrant(authz.ScopeOrgAdmin, testPrincipal().OrganizationID)},
+			contains:    []string{"get_platform_context", "distribute_skill"},
+			notContains: []string{"list_projects", "list_skills", "create_skill"},
+		},
+		{
+			name:        "missing prepared grants",
+			grants:      nil,
+			contains:    []string{},
+			notContains: []string{"get_platform_context", "list_projects", "list_skills", "distribute_skill"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	handler.ServeHTTP(res, req)
+			authorizer := &testAuthorizer{grants: tc.grants}
+			handler := NewRuntime(
+				testenv.NewLogger(t),
+				&testAuthenticator{principal: testPrincipal()},
+				testGate{enabled: true},
+				authorizer,
+				"",
+				"test-cursor-key",
+				nil,
+				nil,
+				nil,
+				nil,
+				nil,
+			).Handler()
+			req := httptest.NewRequest(http.MethodPost, Path, strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
+			req.Header.Set("Authorization", "Bearer access-token")
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Accept", "application/json, text/event-stream")
+			res := httptest.NewRecorder()
 
-	require.Equal(t, http.StatusOK, res.Code, res.Body.String())
-	var response struct {
-		Result struct {
-			Tools []struct {
-				Name string `json:"name"`
-			} `json:"tools"`
-			NextCursor string `json:"nextCursor"`
-			TTLMs      int    `json:"ttlMs"`
-			CacheScope string `json:"cacheScope"`
-		} `json:"result"`
+			handler.ServeHTTP(res, req)
+
+			require.Equal(t, http.StatusOK, res.Code, res.Body.String())
+			var response struct {
+				Result struct {
+					Tools []struct {
+						Name string `json:"name"`
+					} `json:"tools"`
+					NextCursor string `json:"nextCursor"`
+					TTLMs      int    `json:"ttlMs"`
+					CacheScope string `json:"cacheScope"`
+				} `json:"result"`
+			}
+			require.NoError(t, json.Unmarshal(res.Body.Bytes(), &response))
+			names := make([]string, 0, len(response.Result.Tools))
+			for _, tool := range response.Result.Tools {
+				names = append(names, tool.Name)
+			}
+			for _, name := range tc.contains {
+				require.Contains(t, names, name)
+			}
+			for _, name := range tc.notContains {
+				require.NotContains(t, names, name)
+			}
+			require.Empty(t, response.Result.NextCursor)
+			require.Zero(t, response.Result.TTLMs)
+			require.Equal(t, "private", response.Result.CacheScope)
+		})
 	}
-	require.NoError(t, json.Unmarshal(res.Body.Bytes(), &response))
-	names := make([]string, 0, len(response.Result.Tools))
-	for _, tool := range response.Result.Tools {
-		names = append(names, tool.Name)
-	}
-	require.Contains(t, names, "get_platform_context")
-	require.Contains(t, names, "list_projects")
-	require.Contains(t, names, "list_my_sessions")
-	require.NotContains(t, names, "find_mcp")
-	require.NotContains(t, names, "create_skill")
-	require.NotContains(t, names, "distribute_skill")
-	require.Empty(t, response.Result.NextCursor)
-	require.Zero(t, response.Result.TTLMs)
-	require.Equal(t, "private", response.Result.CacheScope)
 }
 
 func TestRuntimeAuthenticateAcceptsCaseInsensitiveBearer(t *testing.T) {

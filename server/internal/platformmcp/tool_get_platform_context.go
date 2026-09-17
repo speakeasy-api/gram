@@ -46,7 +46,8 @@ func platformWorkflowCategories(grants []authz.Grant, organizationID string) ([]
 	}{
 		{name: "project discovery", scopes: discoveryProjectRead},
 		{name: "MCP discovery and connection", scopes: discoveryMCPReadOrConnect},
-		{name: "assigned plugin installation", scopes: discoveryOrgReadOrMCPConnect},
+		{name: "assigned plugin installation", scopes: discoveryOrgRead},
+		{name: "standalone MCP installation", scopes: []authz.Scope{authz.ScopeMCPConnect}},
 		{name: "skill reading and feedback", scopes: discoverySkillRead},
 		{name: "skill authoring", scopes: discoverySkillWrite},
 		{name: "organization administration", scopes: []authz.Scope{authz.ScopeOrgAdmin}},
