@@ -1,0 +1,19 @@
+pystreams/src/pystreams/cmd/multi.py
+  s_b390d6ce53b276::t_ebe9adac8df7e0 338-348,353
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "9b698a609d0a1e9ec13c643c603bd5f22211c50f",
+  "prompts": {},
+  "sessions": {
+    "s_b390d6ce53b276": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c7be466b-35a7-46f8-83d3-cbbede48fd92",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
