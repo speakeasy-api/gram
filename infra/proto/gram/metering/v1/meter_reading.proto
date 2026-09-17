@@ -55,7 +55,7 @@ message MeterReading {
 
   option (gcp.pubsub.v1.topic) = {
     retention_hint: {
-      seconds: 345600 /* 4 days */
+      seconds: 345600 /* 4 days - overlaps weekends with added buffer to deal with issues */
     }
   };
 }
