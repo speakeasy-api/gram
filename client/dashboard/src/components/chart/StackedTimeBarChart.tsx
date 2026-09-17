@@ -80,7 +80,10 @@ export function StackedTimeBarChart({
     [datasets, compact],
   );
 
-  if (labels.length === 0) {
+  // Datasets too, not just labels: a window whose every bucket is zero still
+  // produces a full axis, and the series are dropped for being empty — which
+  // would draw a labelled but entirely blank chart.
+  if (labels.length === 0 || datasets.length === 0) {
     // Inside the caller's height: the compact strip is 76-88px and ChartNoData
     // is a fixed 96, so letting it size itself makes the panel jump taller the
     // moment a filter empties it.

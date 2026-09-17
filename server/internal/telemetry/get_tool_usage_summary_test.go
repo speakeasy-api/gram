@@ -1051,6 +1051,10 @@ func TestGetToolUsageTotals_NarrowsByQueryOnTheRawPath(t *testing.T) {
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 	query := "charge"
 
+	all, err := ti.service.GetToolUsageTotals(ctx, &gen.GetToolUsageTotalsPayload{From: from, To: to})
+	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.Equal(t, int64(2), all.Totals.EventCount)
+
 	res, err := ti.service.GetToolUsageTotals(ctx, &gen.GetToolUsageTotalsPayload{
 		From:  from,
 		To:    to,
