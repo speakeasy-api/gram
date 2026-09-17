@@ -12,6 +12,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 
 	identityproviderconnections "github.com/speakeasy-api/gram/server/gen/identity_provider_connections"
@@ -1457,6 +1458,462 @@ func EncodeRevokeError(encoder func(context.Context, http.ResponseWriter) goahtt
 	}
 }
 
+// EncodeSyncApplicationsResponse returns an encoder for responses returned by
+// the identityProviderConnections syncApplications endpoint.
+func EncodeSyncApplicationsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*identityproviderconnections.OktaIdentityProviderConnection)
+		enc := encoder(ctx, w)
+		body := NewSyncApplicationsResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeSyncApplicationsRequest returns a decoder for requests sent to the
+// identityProviderConnections syncApplications endpoint.
+func DecodeSyncApplicationsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*identityproviderconnections.SyncApplicationsPayload, error) {
+	return func(r *http.Request) (*identityproviderconnections.SyncApplicationsPayload, error) {
+		var payload *identityproviderconnections.SyncApplicationsPayload
+		var (
+			body SyncApplicationsRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateSyncApplicationsRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			sessionToken *string
+		)
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		payload = NewSyncApplicationsPayload(&body, sessionToken)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeSyncApplicationsError returns an encoder for errors returned by the
+// syncApplications identityProviderConnections endpoint.
+func EncodeSyncApplicationsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSyncApplicationsUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSyncApplicationsForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSyncApplicationsBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSyncApplicationsNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSyncApplicationsConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSyncApplicationsUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSyncApplicationsInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSyncApplicationsInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSyncApplicationsUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSyncApplicationsGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		case "unavailable":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSyncApplicationsUnavailableResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeListApplicationsResponse returns an encoder for responses returned by
+// the identityProviderConnections listApplications endpoint.
+func EncodeListApplicationsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*identityproviderconnections.ListIdentityProviderConnectionApplicationsResult)
+		enc := encoder(ctx, w)
+		body := NewListApplicationsResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeListApplicationsRequest returns a decoder for requests sent to the
+// identityProviderConnections listApplications endpoint.
+func DecodeListApplicationsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*identityproviderconnections.ListApplicationsPayload, error) {
+	return func(r *http.Request) (*identityproviderconnections.ListApplicationsPayload, error) {
+		var payload *identityproviderconnections.ListApplicationsPayload
+		var (
+			id             string
+			includeRemoved bool
+			sessionToken   *string
+			err            error
+		)
+		qp := r.URL.Query()
+		id = qp.Get("id")
+		if id == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("id", "query string"))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		{
+			includeRemovedRaw := qp.Get("include_removed")
+			if includeRemovedRaw != "" {
+				v, err2 := strconv.ParseBool(includeRemovedRaw)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("include_removed", includeRemovedRaw, "boolean"))
+				}
+				includeRemoved = v
+			}
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewListApplicationsPayload(id, includeRemoved, sessionToken)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeListApplicationsError returns an encoder for errors returned by the
+// listApplications identityProviderConnections endpoint.
+func EncodeListApplicationsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListApplicationsUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListApplicationsForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListApplicationsBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListApplicationsNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListApplicationsConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListApplicationsUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListApplicationsInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListApplicationsInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListApplicationsUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListApplicationsGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		case "unavailable":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListApplicationsUnavailableResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // marshalIdentityproviderconnectionsIdentityProviderConnectionActiveKeyToIdentityProviderConnectionActiveKeyResponseBody
 // builds a value of type *IdentityProviderConnectionActiveKeyResponseBody from
 // a value of type
@@ -1483,6 +1940,19 @@ func marshalIdentityproviderconnectionsIdentityProviderConnectionChecklistItemTo
 		Key:         v.Key,
 		Title:       v.Title,
 		Description: v.Description,
+	}
+
+	return res
+}
+
+// marshalIdentityproviderconnectionsIdentityProviderConnectionApplicationsSyncToIdentityProviderConnectionApplicationsSyncResponseBody
+// builds a value of type
+// *IdentityProviderConnectionApplicationsSyncResponseBody from a value of type
+// *identityproviderconnections.IdentityProviderConnectionApplicationsSync.
+func marshalIdentityproviderconnectionsIdentityProviderConnectionApplicationsSyncToIdentityProviderConnectionApplicationsSyncResponseBody(v *identityproviderconnections.IdentityProviderConnectionApplicationsSync) *IdentityProviderConnectionApplicationsSyncResponseBody {
+	res := &IdentityProviderConnectionApplicationsSyncResponseBody{
+		IntervalSeconds: v.IntervalSeconds,
+		SyncedAt:        v.SyncedAt,
 	}
 
 	return res
@@ -1560,6 +2030,71 @@ func marshalIdentityproviderconnectionsOktaIdentityProviderConnectionToOktaIdent
 		}
 	} else {
 		res.Checklist = []*IdentityProviderConnectionChecklistItemResponseBody{}
+	}
+	if v.ApplicationsSync != nil {
+		res.ApplicationsSync = marshalIdentityproviderconnectionsIdentityProviderConnectionApplicationsSyncToIdentityProviderConnectionApplicationsSyncResponseBody(v.ApplicationsSync)
+	}
+
+	return res
+}
+
+// marshalIdentityproviderconnectionsIdentityProviderConnectionApplicationToIdentityProviderConnectionApplicationResponseBody
+// builds a value of type *IdentityProviderConnectionApplicationResponseBody
+// from a value of type
+// *identityproviderconnections.IdentityProviderConnectionApplication.
+func marshalIdentityproviderconnectionsIdentityProviderConnectionApplicationToIdentityProviderConnectionApplicationResponseBody(v *identityproviderconnections.IdentityProviderConnectionApplication) *IdentityProviderConnectionApplicationResponseBody {
+	res := &IdentityProviderConnectionApplicationResponseBody{
+		OktaAppID:        v.OktaAppID,
+		Label:            v.Label,
+		Name:             v.Name,
+		SignOnMode:       v.SignOnMode,
+		Status:           v.Status,
+		UserAssignments:  v.UserAssignments,
+		GroupAssignments: v.GroupAssignments,
+		FirstSeenAt:      v.FirstSeenAt,
+		LastSeenAt:       v.LastSeenAt,
+		RemovedAt:        v.RemovedAt,
+	}
+	if v.Features != nil {
+		res.Features = make([]string, len(v.Features))
+		for i, val := range v.Features {
+			res.Features[i] = val
+		}
+	} else {
+		res.Features = []string{}
+	}
+
+	return res
+}
+
+// marshalIdentityproviderconnectionsIdentityProviderConnectionReconcileRunToIdentityProviderConnectionReconcileRunResponseBody
+// builds a value of type *IdentityProviderConnectionReconcileRunResponseBody
+// from a value of type
+// *identityproviderconnections.IdentityProviderConnectionReconcileRun.
+func marshalIdentityproviderconnectionsIdentityProviderConnectionReconcileRunToIdentityProviderConnectionReconcileRunResponseBody(v *identityproviderconnections.IdentityProviderConnectionReconcileRun) *IdentityProviderConnectionReconcileRunResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &IdentityProviderConnectionReconcileRunResponseBody{
+		ID:                  v.ID,
+		Status:              v.Status,
+		StartedAt:           v.StartedAt,
+		FinishedAt:          v.FinishedAt,
+		ApplicationsSeen:    v.ApplicationsSeen,
+		ApplicationsAdded:   v.ApplicationsAdded,
+		ApplicationsRemoved: v.ApplicationsRemoved,
+		AssignmentsAdded:    v.AssignmentsAdded,
+		AssignmentsRemoved:  v.AssignmentsRemoved,
+		Truncated:           v.Truncated,
+		Error:               v.Error,
+	}
+	if v.SkippedAppIds != nil {
+		res.SkippedAppIds = make([]string, len(v.SkippedAppIds))
+		for i, val := range v.SkippedAppIds {
+			res.SkippedAppIds[i] = val
+		}
+	} else {
+		res.SkippedAppIds = []string{}
 	}
 
 	return res

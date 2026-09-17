@@ -28,9 +28,74 @@ var ActiveKey = Type("IdentityProviderConnectionActiveKey", func() {
 	})
 })
 
+var ApplicationsSync = Type("IdentityProviderConnectionApplicationsSync", func() {
+	Description("Cadence and watermark of the scheduled applications snapshot.")
+	Required("interval_seconds")
+	Attribute("interval_seconds", Int, "How often the snapshot is reconciled, in seconds.")
+	Attribute("synced_at", String, "ISO 8601 timestamp of the last completed run. Omitted until the first run, and cleared by syncApplications so the next coordinator pass runs immediately.", func() {
+		Format(FormatDateTime)
+	})
+})
+
+var ReconcileRun = Type("IdentityProviderConnectionReconcileRun", func() {
+	Description("One applications snapshot run and the changes it applied.")
+	Required("id", "status", "started_at", "applications_seen", "applications_added", "applications_removed", "assignments_added", "assignments_removed", "skipped_app_ids", "truncated")
+	Attribute("id", String, "Run ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("status", String, "running, succeeded, or failed.", func() {
+		Enum("running", "succeeded", "failed")
+	})
+	Attribute("started_at", String, func() {
+		Format(FormatDateTime)
+	})
+	Attribute("finished_at", String, "Omitted while running.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("applications_seen", Int, "Applications in the snapshot after skipping Okta-internal ones.")
+	Attribute("applications_added", Int)
+	Attribute("applications_removed", Int)
+	Attribute("assignments_added", Int)
+	Attribute("assignments_removed", Int)
+	Attribute("skipped_app_ids", ArrayOf(String), "Okta-internal application ids left out of the snapshot.")
+	Attribute("truncated", Boolean, "Whether a listing hit the page or application cap; nothing missing from a truncated listing is removed.")
+	Attribute("error", String, "Typed reason when the run failed.", func() {
+		Enum("rate_limited", "credential_rejected", "okta_unreachable", "too_many_applications", "client_unavailable", "interrupted")
+	})
+})
+
+var Application = Type("IdentityProviderConnectionApplication", func() {
+	Description("One Okta application in the snapshot, keyed by its Okta id.")
+	Required("okta_app_id", "label", "name", "sign_on_mode", "status", "features", "user_assignments", "group_assignments", "first_seen_at", "last_seen_at")
+	Attribute("okta_app_id", String, "Okta application id.")
+	Attribute("label", String, "Admin-facing label. Admin-editable; never a key.")
+	Attribute("name", String, "Okta application template name.")
+	Attribute("sign_on_mode", String)
+	Attribute("status", String, "ACTIVE or INACTIVE.")
+	Attribute("features", ArrayOf(String))
+	Attribute("user_assignments", Int, "Live direct and group-derived user assignments.")
+	Attribute("group_assignments", Int, "Live group assignments.")
+	Attribute("first_seen_at", String, func() {
+		Format(FormatDateTime)
+	})
+	Attribute("last_seen_at", String, func() {
+		Format(FormatDateTime)
+	})
+	Attribute("removed_at", String, "Set when the application disappeared from a run; only returned with include_removed.", func() {
+		Format(FormatDateTime)
+	})
+})
+
+var ListApplicationsResult = Type("ListIdentityProviderConnectionApplicationsResult", func() {
+	Required("applications", "sync")
+	Attribute("applications", ArrayOf(Application), "Applications ordered by label.")
+	Attribute("sync", ApplicationsSync)
+	Attribute("last_run", ReconcileRun, "Omitted before the first run.")
+})
+
 var Connection = Type("OktaIdentityProviderConnection", func() {
 	Description("An organization's Okta connection: the service application Gram authenticates to the Okta Management API with, its verification state, and the console checklist. Never carries key material or tokens.")
-	Required("id", "organization_id", "provider", "status", "org_url", "issuer_url", "listing_mode", "jwks_url", "client_id_submitted", "dpop_required", "required_scopes", "granted_scopes", "missing_scopes", "verification_reasons", "checklist", "created_at", "updated_at")
+	Required("id", "organization_id", "provider", "status", "org_url", "issuer_url", "listing_mode", "jwks_url", "client_id_submitted", "dpop_required", "required_scopes", "granted_scopes", "missing_scopes", "verification_reasons", "checklist", "applications_sync", "created_at", "updated_at")
 	Attribute("id", String, "Connection ID.", func() {
 		Format(FormatUUID)
 	})
@@ -68,6 +133,7 @@ var Connection = Type("OktaIdentityProviderConnection", func() {
 	Attribute("agent_app_id", String, "Admin-entered Okta application ID the AI agent is bound to. Display only.")
 	Attribute("active_key", ActiveKey)
 	Attribute("checklist", ArrayOf(ChecklistItem), "Console steps for the connection's listing mode, in order.")
+	Attribute("applications_sync", ApplicationsSync)
 	Attribute("created_at", String, func() {
 		Format(FormatDateTime)
 	})
@@ -283,5 +349,63 @@ var _ = Service("identityProviderConnections", func() {
 		Meta("openapi:operationId", "revokeIdentityProviderConnection")
 		Meta("openapi:extension:x-speakeasy-name-override", "revoke")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RevokeIdentityProviderConnection"}`)
+	})
+
+	Method("syncApplications", func() {
+		Description("Run the applications snapshot now instead of at the next scheduled interval. The connection must be verified. Rate limited per organization. Requires org:admin.")
+
+		Security(security.Session)
+
+		Payload(func() {
+			security.SessionPayload()
+			Meta("openapi:typename", "SyncIdentityProviderConnectionApplicationsRequestBody")
+			Attribute("id", String, "Connection ID.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+		})
+
+		Result(Connection)
+
+		HTTP(func() {
+			POST("/rpc/identityProviderConnections.syncApplications")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "syncIdentityProviderConnectionApplications")
+		Meta("openapi:extension:x-speakeasy-name-override", "syncApplications")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SyncIdentityProviderConnectionApplications"}`)
+	})
+
+	Method("listApplications", func() {
+		Description("List the applications snapshot for the connection with live assignment counts and the last reconcile run. Requires org:admin.")
+
+		Security(security.Session)
+
+		Payload(func() {
+			security.SessionPayload()
+			Attribute("id", String, "Connection ID.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("include_removed", Boolean, "Include applications that disappeared from a run.", func() {
+				Default(false)
+			})
+			Required("id")
+		})
+
+		Result(ListApplicationsResult)
+
+		HTTP(func() {
+			GET("/rpc/identityProviderConnections.listApplications")
+			security.SessionHeader()
+			Param("id")
+			Param("include_removed")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listIdentityProviderConnectionApplications")
+		Meta("openapi:extension:x-speakeasy-name-override", "listApplications")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "IdentityProviderConnectionApplications"}`)
 	})
 })

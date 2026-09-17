@@ -115,6 +115,7 @@ func buildConnectionView(r connectionRows) *gen.OktaIdentityProviderConnection {
 		AgentAppID:          conv.FromPGText[string](r.Okta.AgentAppID),
 		ActiveKey:           activeKey,
 		Checklist:           items,
+		ApplicationsSync:    buildApplicationsSyncView(r.Okta),
 		CreatedAt:           conv.FromPGTimestamptz(r.Connection.CreatedAt),
 		UpdatedAt:           r.updatedAt().UTC().Format(time.RFC3339),
 	}
@@ -141,5 +142,12 @@ func snapshot(r connectionRows) *audit.IdentityProviderConnectionSnapshot {
 		LastError:     conv.PtrValOr(r.lastError(), ""),
 		AgentID:       r.Okta.AgentID.String,
 		AgentAppID:    r.Okta.AgentAppID.String,
+	}
+}
+
+func buildApplicationsSyncView(o repo.OktaIdentityProviderConnection) *gen.IdentityProviderConnectionApplicationsSync {
+	return &gen.IdentityProviderConnectionApplicationsSync{
+		IntervalSeconds: int(o.ApplicationsSyncIntervalSeconds),
+		SyncedAt:        conv.PtrEmpty(conv.FromPGTimestamptz(o.ApplicationsSyncedAt)),
 	}
 }

@@ -69,6 +69,12 @@ const (
 
 	// verifyMaxPages caps the confirmation reads at one page each.
 	verifyMaxPages = 1
+
+	// syncRatePerMinute caps manual applications syncs per organization.
+	syncRatePerMinute = 1
+
+	// listApplicationsLimit bounds one snapshot listing.
+	listApplicationsLimit = 2000
 )
 
 // oktaClientIDPattern matches Okta application client ids.
@@ -76,6 +82,11 @@ var oktaClientIDPattern = regexp.MustCompile(`^0oa[A-Za-z0-9]{17,}$`)
 
 // oktaObjectIDPattern bounds the admin-entered agent and app ids.
 var oktaObjectIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
+
+// ApplicationSyncTrigger runs the applications snapshot coordinator promptly.
+type ApplicationSyncTrigger interface {
+	TriggerApplicationSync(ctx context.Context) error
+}
 
 // Discoverer fetches an issuer's authorization server metadata.
 type Discoverer func(ctx context.Context, issuerURL string) (remotesessions.DiscoveredIssuerMetadata, error)
@@ -100,6 +111,8 @@ type Service struct {
 	discover      Discoverer
 	verifyLimiter *ratelimit.Limiter
 	createLimiter *ratelimit.Limiter
+	syncLimiter   *ratelimit.Limiter
+	syncTrigger   ApplicationSyncTrigger
 	createSlots   chan struct{}
 	metrics       *serviceMetrics
 }
@@ -145,6 +158,7 @@ func NewService(
 	oktaClients okta.ClientFactory,
 	discover Discoverer,
 	limitStore ratelimit.Store,
+	syncTrigger ApplicationSyncTrigger,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("identityproviderconnections.api"))
 	return &Service{
@@ -164,6 +178,10 @@ func NewService(
 		createLimiter: ratelimit.New(limitStore, "identity-provider-connection-create",
 			ratelimit.PerMinute(createRatePerMinute).WithBurst(createRateBurst),
 			ratelimit.WithMetrics(meterProvider)),
+		syncLimiter: ratelimit.New(limitStore, "identity-provider-connection-sync-applications",
+			ratelimit.PerMinute(syncRatePerMinute),
+			ratelimit.WithMetrics(meterProvider)),
+		syncTrigger: syncTrigger,
 		createSlots: createAdmission(db),
 		metrics:     newServiceMetrics(logger, meterProvider),
 	}
@@ -1043,6 +1061,18 @@ func (s *Service) Revoke(ctx context.Context, payload *gen.RevokePayload) (*gen.
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "tombstone okta connection details").LogError(ctx, logger)
+	}
+	if _, err := q.DeleteOktaApplicationsForConnection(ctx, repo.DeleteOktaApplicationsForConnectionParams{
+		OrganizationID:               authCtx.ActiveOrganizationID,
+		IdentityProviderConnectionID: id,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "delete applications snapshot").LogError(ctx, logger)
+	}
+	if _, err := q.DeleteOktaApplicationReconcileRunsForConnection(ctx, repo.DeleteOktaApplicationReconcileRunsForConnectionParams{
+		OrganizationID:               authCtx.ActiveOrganizationID,
+		IdentityProviderConnectionID: id,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "delete applications reconcile runs").LogError(ctx, logger)
 	}
 	after := connectionRows{Connection: connection, Okta: oktaRow, Managed: before.Managed}
 	if err := s.audit.LogIdentityProviderConnectionRevoke(ctx, dbtx, s.auditEvent(authCtx, id, snapshot(*before), snapshot(after))); err != nil {

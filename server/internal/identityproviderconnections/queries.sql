@@ -326,3 +326,33 @@ SELECT EXISTS (
     AND id <> @exclude_id
     AND deleted IS FALSE
 );
+
+-- Revocation deletes the applications snapshot outright: it is tenant-wide
+-- directory data. Assignments cascade from the application rows.
+-- name: DeleteOktaApplicationsForConnection :execrows
+DELETE FROM okta_applications
+WHERE organization_id = @organization_id
+  AND identity_provider_connection_id = @identity_provider_connection_id;
+
+-- name: DeleteOktaApplicationReconcileRunsForConnection :execrows
+DELETE FROM okta_application_reconcile_runs
+WHERE organization_id = @organization_id
+  AND identity_provider_connection_id = @identity_provider_connection_id;
+
+-- Clearing the watermark makes the connection due on the coordinator's next pass.
+-- name: MarkOktaApplicationsSyncDue :one
+UPDATE okta_identity_provider_connections
+SET applications_synced_at = NULL,
+    updated_at = clock_timestamp()
+WHERE identity_provider_connection_id = @identity_provider_connection_id
+  AND organization_id = @organization_id
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: GetLatestOktaApplicationReconcileRun :one
+SELECT *
+FROM okta_application_reconcile_runs
+WHERE organization_id = @organization_id
+  AND identity_provider_connection_id = @identity_provider_connection_id
+ORDER BY started_at DESC, id DESC
+LIMIT 1;

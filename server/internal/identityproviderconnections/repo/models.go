@@ -46,6 +46,25 @@ type IdentityProviderConnection struct {
 	Deleted        bool
 }
 
+type OktaApplicationReconcileRun struct {
+	ID                           uuid.UUID
+	OrganizationID               string
+	IdentityProviderConnectionID uuid.UUID
+	Status                       string
+	StartedAt                    pgtype.Timestamptz
+	FinishedAt                   pgtype.Timestamptz
+	ApplicationsSeen             int32
+	ApplicationsAdded            int32
+	ApplicationsRemoved          int32
+	AssignmentsAdded             int32
+	AssignmentsRemoved           int32
+	SkippedAppIds                []string
+	Truncated                    bool
+	Error                        pgtype.Text
+	CreatedAt                    pgtype.Timestamptz
+	UpdatedAt                    pgtype.Timestamptz
+}
+
 type OktaIdentityProviderConnection struct {
 	IdentityProviderConnectionID        uuid.UUID
 	IdentityProviderConnectionsProvider string

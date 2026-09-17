@@ -135,7 +135,7 @@ func UsageCommands() []string {
 		"hooks-server-names (list|upsert|delete)",
 		"hooks (claude|cursor|codex|ingest|upload-skill-content|skill-feedback|logs|metrics)",
 		"identity resolve",
-		"identity-provider-connections (create|submit-client-id|verify|get|record-agent|revoke)",
+		"identity-provider-connections (create|submit-client-id|verify|get|record-agent|revoke|sync-applications|list-applications)",
 		"instances get-instance",
 		"integrations (get|list)",
 		"json-web-key-sets (create-set|update-set|list-sets|get-set|get-set-delete-preflight|delete-set|list-keys|publish-key|activate-key|retire-key|revoke-key)",
@@ -1418,6 +1418,15 @@ func ParseEndpoint(
 		identityProviderConnectionsRevokeFlags            = flag.NewFlagSet("revoke", flag.ExitOnError)
 		identityProviderConnectionsRevokeBodyFlag         = identityProviderConnectionsRevokeFlags.String("body", "REQUIRED", "")
 		identityProviderConnectionsRevokeSessionTokenFlag = identityProviderConnectionsRevokeFlags.String("session-token", "", "")
+
+		identityProviderConnectionsSyncApplicationsFlags            = flag.NewFlagSet("sync-applications", flag.ExitOnError)
+		identityProviderConnectionsSyncApplicationsBodyFlag         = identityProviderConnectionsSyncApplicationsFlags.String("body", "REQUIRED", "")
+		identityProviderConnectionsSyncApplicationsSessionTokenFlag = identityProviderConnectionsSyncApplicationsFlags.String("session-token", "", "")
+
+		identityProviderConnectionsListApplicationsFlags              = flag.NewFlagSet("list-applications", flag.ExitOnError)
+		identityProviderConnectionsListApplicationsIDFlag             = identityProviderConnectionsListApplicationsFlags.String("id", "REQUIRED", "")
+		identityProviderConnectionsListApplicationsIncludeRemovedFlag = identityProviderConnectionsListApplicationsFlags.String("include-removed", "", "")
+		identityProviderConnectionsListApplicationsSessionTokenFlag   = identityProviderConnectionsListApplicationsFlags.String("session-token", "", "")
 
 		instancesFlags = flag.NewFlagSet("instances", flag.ContinueOnError)
 
@@ -4523,6 +4532,8 @@ func ParseEndpoint(
 	identityProviderConnectionsGetFlags.Usage = identityProviderConnectionsGetUsage
 	identityProviderConnectionsRecordAgentFlags.Usage = identityProviderConnectionsRecordAgentUsage
 	identityProviderConnectionsRevokeFlags.Usage = identityProviderConnectionsRevokeUsage
+	identityProviderConnectionsSyncApplicationsFlags.Usage = identityProviderConnectionsSyncApplicationsUsage
+	identityProviderConnectionsListApplicationsFlags.Usage = identityProviderConnectionsListApplicationsUsage
 
 	instancesFlags.Usage = instancesUsage
 	instancesGetInstanceFlags.Usage = instancesGetInstanceUsage
@@ -6131,6 +6142,12 @@ func ParseEndpoint(
 
 			case "revoke":
 				epf = identityProviderConnectionsRevokeFlags
+
+			case "sync-applications":
+				epf = identityProviderConnectionsSyncApplicationsFlags
+
+			case "list-applications":
+				epf = identityProviderConnectionsListApplicationsFlags
 
 			}
 
@@ -8708,6 +8725,12 @@ func ParseEndpoint(
 			case "revoke":
 				endpoint = c.Revoke()
 				data, err = identityproviderconnectionsc.BuildRevokePayload(*identityProviderConnectionsRevokeBodyFlag, *identityProviderConnectionsRevokeSessionTokenFlag)
+			case "sync-applications":
+				endpoint = c.SyncApplications()
+				data, err = identityproviderconnectionsc.BuildSyncApplicationsPayload(*identityProviderConnectionsSyncApplicationsBodyFlag, *identityProviderConnectionsSyncApplicationsSessionTokenFlag)
+			case "list-applications":
+				endpoint = c.ListApplications()
+				data, err = identityproviderconnectionsc.BuildListApplicationsPayload(*identityProviderConnectionsListApplicationsIDFlag, *identityProviderConnectionsListApplicationsIncludeRemovedFlag, *identityProviderConnectionsListApplicationsSessionTokenFlag)
 			}
 		case "instances":
 			c := instancesc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -15856,6 +15879,8 @@ func identityProviderConnectionsUsage() {
 	fmt.Fprintln(os.Stderr, `    get: Get a connection by ID, or the organization's live Okta connection when no ID is given. Session only; requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    record-agent: Record the Okta AI agent ID and the application it is bound to, for display. Okta does not expose these through its API. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    revoke: Revoke the connection: withdraw every signing key from the JWKS, disable the key material, and tombstone the connection so a new one can be created. Idempotent. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    sync-applications: Run the applications snapshot now instead of at the next scheduled interval. The connection must be verified. Rate limited per organization. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    list-applications: List the applications snapshot for the connection with live assignment counts and the last reconcile run. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s identity-provider-connections COMMAND --help\n", os.Args[0])
@@ -15978,6 +16003,48 @@ func identityProviderConnectionsRevokeUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity-provider-connections revoke --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
+}
+
+func identityProviderConnectionsSyncApplicationsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] identity-provider-connections sync-applications", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Run the applications snapshot now instead of at the next scheduled interval. The connection must be verified. Rate limited per organization. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity-provider-connections sync-applications --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
+}
+
+func identityProviderConnectionsListApplicationsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] identity-provider-connections list-applications", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -include-removed BOOL")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the applications snapshot for the connection with live assignment counts and the last reconcile run. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -include-removed BOOL: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity-provider-connections list-applications --id \"550e8400-e29b-41d4-a716-446655440000\" --include-removed false --session-token \"abc123\"")
 }
 
 // instancesUsage displays the usage of the instances command and its

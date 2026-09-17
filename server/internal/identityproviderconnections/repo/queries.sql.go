@@ -158,6 +158,46 @@ func (q *Queries) CreateOktaIdentityProviderConnection(ctx context.Context, arg 
 	return i, err
 }
 
+const deleteOktaApplicationReconcileRunsForConnection = `-- name: DeleteOktaApplicationReconcileRunsForConnection :execrows
+DELETE FROM okta_application_reconcile_runs
+WHERE organization_id = $1
+  AND identity_provider_connection_id = $2
+`
+
+type DeleteOktaApplicationReconcileRunsForConnectionParams struct {
+	OrganizationID               string
+	IdentityProviderConnectionID uuid.UUID
+}
+
+func (q *Queries) DeleteOktaApplicationReconcileRunsForConnection(ctx context.Context, arg DeleteOktaApplicationReconcileRunsForConnectionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteOktaApplicationReconcileRunsForConnection, arg.OrganizationID, arg.IdentityProviderConnectionID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteOktaApplicationsForConnection = `-- name: DeleteOktaApplicationsForConnection :execrows
+DELETE FROM okta_applications
+WHERE organization_id = $1
+  AND identity_provider_connection_id = $2
+`
+
+type DeleteOktaApplicationsForConnectionParams struct {
+	OrganizationID               string
+	IdentityProviderConnectionID uuid.UUID
+}
+
+// Revocation deletes the applications snapshot outright: it is tenant-wide
+// directory data. Assignments cascade from the application rows.
+func (q *Queries) DeleteOktaApplicationsForConnection(ctx context.Context, arg DeleteOktaApplicationsForConnectionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteOktaApplicationsForConnection, arg.OrganizationID, arg.IdentityProviderConnectionID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getConnectionIssuerBySlug = `-- name: GetConnectionIssuerBySlug :one
 SELECT id
 FROM remote_session_issuers
@@ -240,6 +280,44 @@ func (q *Queries) GetIdentityProviderConnectionIncludingDeleted(ctx context.Cont
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.Deleted,
+	)
+	return i, err
+}
+
+const getLatestOktaApplicationReconcileRun = `-- name: GetLatestOktaApplicationReconcileRun :one
+SELECT id, organization_id, identity_provider_connection_id, status, started_at, finished_at, applications_seen, applications_added, applications_removed, assignments_added, assignments_removed, skipped_app_ids, truncated, error, created_at, updated_at
+FROM okta_application_reconcile_runs
+WHERE organization_id = $1
+  AND identity_provider_connection_id = $2
+ORDER BY started_at DESC, id DESC
+LIMIT 1
+`
+
+type GetLatestOktaApplicationReconcileRunParams struct {
+	OrganizationID               string
+	IdentityProviderConnectionID uuid.UUID
+}
+
+func (q *Queries) GetLatestOktaApplicationReconcileRun(ctx context.Context, arg GetLatestOktaApplicationReconcileRunParams) (OktaApplicationReconcileRun, error) {
+	row := q.db.QueryRow(ctx, getLatestOktaApplicationReconcileRun, arg.OrganizationID, arg.IdentityProviderConnectionID)
+	var i OktaApplicationReconcileRun
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.IdentityProviderConnectionID,
+		&i.Status,
+		&i.StartedAt,
+		&i.FinishedAt,
+		&i.ApplicationsSeen,
+		&i.ApplicationsAdded,
+		&i.ApplicationsRemoved,
+		&i.AssignmentsAdded,
+		&i.AssignmentsRemoved,
+		&i.SkippedAppIds,
+		&i.Truncated,
+		&i.Error,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -778,6 +856,52 @@ func (q *Queries) ManagedKeyResourceExists(ctx context.Context, resourceName str
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const markOktaApplicationsSyncDue = `-- name: MarkOktaApplicationsSyncDue :one
+UPDATE okta_identity_provider_connections
+SET applications_synced_at = NULL,
+    updated_at = clock_timestamp()
+WHERE identity_provider_connection_id = $1
+  AND organization_id = $2
+  AND deleted IS FALSE
+RETURNING identity_provider_connection_id, identity_provider_connections_provider, organization_id, attachment_scope, org_url, issuer_url, issuer_url_override_reason, ownership_claimed, remote_session_issuer_id, remote_session_client_id, dpop_required, granted_scopes, observed_admin_roles, listing_mode, agent_id, agent_app_id, applications_sync_interval_seconds, applications_synced_at, created_at, updated_at, deleted_at, deleted
+`
+
+type MarkOktaApplicationsSyncDueParams struct {
+	IdentityProviderConnectionID uuid.UUID
+	OrganizationID               string
+}
+
+// Clearing the watermark makes the connection due on the coordinator's next pass.
+func (q *Queries) MarkOktaApplicationsSyncDue(ctx context.Context, arg MarkOktaApplicationsSyncDueParams) (OktaIdentityProviderConnection, error) {
+	row := q.db.QueryRow(ctx, markOktaApplicationsSyncDue, arg.IdentityProviderConnectionID, arg.OrganizationID)
+	var i OktaIdentityProviderConnection
+	err := row.Scan(
+		&i.IdentityProviderConnectionID,
+		&i.IdentityProviderConnectionsProvider,
+		&i.OrganizationID,
+		&i.AttachmentScope,
+		&i.OrgUrl,
+		&i.IssuerUrl,
+		&i.IssuerUrlOverrideReason,
+		&i.OwnershipClaimed,
+		&i.RemoteSessionIssuerID,
+		&i.RemoteSessionClientID,
+		&i.DpopRequired,
+		&i.GrantedScopes,
+		&i.ObservedAdminRoles,
+		&i.ListingMode,
+		&i.AgentID,
+		&i.AgentAppID,
+		&i.ApplicationsSyncIntervalSeconds,
+		&i.ApplicationsSyncedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const markRotationPublicationUnobserved = `-- name: MarkRotationPublicationUnobserved :exec

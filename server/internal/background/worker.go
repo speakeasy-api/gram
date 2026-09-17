@@ -482,6 +482,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.GetAIIntegrationsCandidates)
 	temporalWorker.RegisterActivity(activities.GetDeviceIntegrationSyncCandidates)
 	temporalWorker.RegisterActivity(activities.RunDeviceIntegrationSync)
+	temporalWorker.RegisterActivity(activities.GetOktaApplicationSyncCandidates)
+	temporalWorker.RegisterActivity(activities.RunOktaApplicationSync)
 	temporalWorker.RegisterActivity(activities.RefreshBillingUsage)
 	temporalWorker.RegisterActivity(activities.SnapshotBillingCycleUsage)
 	temporalWorker.RegisterActivity(activities.ListWeeklyUsageSummaryTargets)
@@ -615,6 +617,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(AIUsagePollerCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(DeviceIntegrationSyncCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(DeviceIntegrationSyncWorkflow)
+	temporalWorker.RegisterWorkflow(OktaApplicationSyncCoordinatorWorkflow)
+	temporalWorker.RegisterWorkflow(OktaApplicationSyncWorkflow)
 	temporalWorker.RegisterWorkflow(AIUsagePollerWorkflow)
 	temporalWorker.RegisterWorkflow(RefreshBillingUsageWorkflow)
 	temporalWorker.RegisterWorkflow(WeeklyUsageSummaryWorkflow)
@@ -736,6 +740,12 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 	if err := AddDeviceIntegrationSyncCoordinatorSchedule(ctx, env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(ctx, "failed to add device integration sync schedule", attr.SlogError(err))
+		}
+	}
+
+	if err := AddOktaApplicationSyncCoordinatorSchedule(ctx, env); err != nil {
+		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
+			logger.ErrorContext(ctx, "failed to add okta application sync schedule", attr.SlogError(err))
 		}
 	}
 

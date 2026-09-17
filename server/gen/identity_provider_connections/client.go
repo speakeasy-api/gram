@@ -15,24 +15,28 @@ import (
 
 // Client is the "identityProviderConnections" service client.
 type Client struct {
-	CreateEndpoint         goa.Endpoint
-	SubmitClientIDEndpoint goa.Endpoint
-	VerifyEndpoint         goa.Endpoint
-	GetEndpoint            goa.Endpoint
-	RecordAgentEndpoint    goa.Endpoint
-	RevokeEndpoint         goa.Endpoint
+	CreateEndpoint           goa.Endpoint
+	SubmitClientIDEndpoint   goa.Endpoint
+	VerifyEndpoint           goa.Endpoint
+	GetEndpoint              goa.Endpoint
+	RecordAgentEndpoint      goa.Endpoint
+	RevokeEndpoint           goa.Endpoint
+	SyncApplicationsEndpoint goa.Endpoint
+	ListApplicationsEndpoint goa.Endpoint
 }
 
 // NewClient initializes a "identityProviderConnections" service client given
 // the endpoints.
-func NewClient(create, submitClientID, verify, get, recordAgent, revoke goa.Endpoint) *Client {
+func NewClient(create, submitClientID, verify, get, recordAgent, revoke, syncApplications, listApplications goa.Endpoint) *Client {
 	return &Client{
-		CreateEndpoint:         create,
-		SubmitClientIDEndpoint: submitClientID,
-		VerifyEndpoint:         verify,
-		GetEndpoint:            get,
-		RecordAgentEndpoint:    recordAgent,
-		RevokeEndpoint:         revoke,
+		CreateEndpoint:           create,
+		SubmitClientIDEndpoint:   submitClientID,
+		VerifyEndpoint:           verify,
+		GetEndpoint:              get,
+		RecordAgentEndpoint:      recordAgent,
+		RevokeEndpoint:           revoke,
+		SyncApplicationsEndpoint: syncApplications,
+		ListApplicationsEndpoint: listApplications,
 	}
 }
 
@@ -183,4 +187,52 @@ func (c *Client) Revoke(ctx context.Context, p *RevokePayload) (res *OktaIdentit
 		return
 	}
 	return ires.(*OktaIdentityProviderConnection), nil
+}
+
+// SyncApplications calls the "syncApplications" endpoint of the
+// "identityProviderConnections" service.
+// SyncApplications may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - error: internal error
+func (c *Client) SyncApplications(ctx context.Context, p *SyncApplicationsPayload) (res *OktaIdentityProviderConnection, err error) {
+	var ires any
+	ires, err = c.SyncApplicationsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*OktaIdentityProviderConnection), nil
+}
+
+// ListApplications calls the "listApplications" endpoint of the
+// "identityProviderConnections" service.
+// ListApplications may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - error: internal error
+func (c *Client) ListApplications(ctx context.Context, p *ListApplicationsPayload) (res *ListIdentityProviderConnectionApplicationsResult, err error) {
+	var ires any
+	ires, err = c.ListApplicationsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListIdentityProviderConnectionApplicationsResult), nil
 }

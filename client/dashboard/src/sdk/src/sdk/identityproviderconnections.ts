@@ -4,12 +4,15 @@
 
 import { identityProviderConnectionsCreate } from "../funcs/identityProviderConnectionsCreate.js";
 import { identityProviderConnectionsGet } from "../funcs/identityProviderConnectionsGet.js";
+import { identityProviderConnectionsListApplications } from "../funcs/identityProviderConnectionsListApplications.js";
 import { identityProviderConnectionsRecordAgent } from "../funcs/identityProviderConnectionsRecordAgent.js";
 import { identityProviderConnectionsRevoke } from "../funcs/identityProviderConnectionsRevoke.js";
 import { identityProviderConnectionsSubmitClientId } from "../funcs/identityProviderConnectionsSubmitClientId.js";
+import { identityProviderConnectionsSyncApplications } from "../funcs/identityProviderConnectionsSyncApplications.js";
 import { identityProviderConnectionsVerify } from "../funcs/identityProviderConnectionsVerify.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { GetIdentityProviderConnectionResult } from "../models/components/getidentityproviderconnectionresult.js";
+import { ListIdentityProviderConnectionApplicationsResult } from "../models/components/listidentityproviderconnectionapplicationsresult.js";
 import { OktaIdentityProviderConnection } from "../models/components/oktaidentityproviderconnection.js";
 import {
   CreateIdentityProviderConnectionRequest,
@@ -19,6 +22,10 @@ import {
   GetIdentityProviderConnectionRequest,
   GetIdentityProviderConnectionSecurity,
 } from "../models/operations/getidentityproviderconnection.js";
+import {
+  ListIdentityProviderConnectionApplicationsRequest,
+  ListIdentityProviderConnectionApplicationsSecurity,
+} from "../models/operations/listidentityproviderconnectionapplications.js";
 import {
   RecordIdentityProviderConnectionAgentRequest,
   RecordIdentityProviderConnectionAgentSecurity,
@@ -31,6 +38,10 @@ import {
   SubmitIdentityProviderConnectionClientIdRequest,
   SubmitIdentityProviderConnectionClientIdSecurity,
 } from "../models/operations/submitidentityproviderconnectionclientid.js";
+import {
+  SyncIdentityProviderConnectionApplicationsRequest,
+  SyncIdentityProviderConnectionApplicationsSecurity,
+} from "../models/operations/syncidentityproviderconnectionapplications.js";
 import {
   VerifyIdentityProviderConnectionRequest,
   VerifyIdentityProviderConnectionSecurity,
@@ -69,6 +80,25 @@ export class IdentityProviderConnections extends ClientSDK {
     options?: RequestOptions,
   ): Promise<GetIdentityProviderConnectionResult> {
     return unwrapAsync(identityProviderConnectionsGet(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listApplications identityProviderConnections
+   *
+   * @remarks
+   * List the applications snapshot for the connection with live assignment counts and the last reconcile run. Requires org:admin.
+   */
+  async listApplications(
+    request: ListIdentityProviderConnectionApplicationsRequest,
+    security?: ListIdentityProviderConnectionApplicationsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListIdentityProviderConnectionApplicationsResult> {
+    return unwrapAsync(identityProviderConnectionsListApplications(
       this,
       request,
       security,
@@ -126,6 +156,25 @@ export class IdentityProviderConnections extends ClientSDK {
     options?: RequestOptions,
   ): Promise<OktaIdentityProviderConnection> {
     return unwrapAsync(identityProviderConnectionsSubmitClientId(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * syncApplications identityProviderConnections
+   *
+   * @remarks
+   * Run the applications snapshot now instead of at the next scheduled interval. The connection must be verified. Rate limited per organization. Requires org:admin.
+   */
+  async syncApplications(
+    request: SyncIdentityProviderConnectionApplicationsRequest,
+    security?: SyncIdentityProviderConnectionApplicationsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<OktaIdentityProviderConnection> {
+    return unwrapAsync(identityProviderConnectionsSyncApplications(
       this,
       request,
       security,

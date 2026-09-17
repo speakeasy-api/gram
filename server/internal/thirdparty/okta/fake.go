@@ -54,6 +54,19 @@ func NewFake(fixtures Fixtures) *Fake {
 	return &Fake{mu: sync.Mutex{}, fixtures: fixtures, calls: nil, err: nil, methodErrs: map[string]error{}}
 }
 
+// SetFixtures replaces the in-memory data for subsequent calls.
+func (f *Fake) SetFixtures(fixtures Fixtures) {
+	if fixtures.AppUsers == nil {
+		fixtures.AppUsers = map[string][]AppUser{}
+	}
+	if fixtures.AppGroups == nil {
+		fixtures.AppGroups = map[string][]AppGroup{}
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.fixtures = fixtures
+}
+
 // SetError makes every subsequent call fail with err until cleared with nil.
 func (f *Fake) SetError(err error) {
 	f.mu.Lock()
