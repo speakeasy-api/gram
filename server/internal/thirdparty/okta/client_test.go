@@ -931,18 +931,6 @@ func TestNextLink_ParsesRelParams(t *testing.T) {
 	require.Nil(t, next)
 }
 
-func TestDPoPKey_ThumbprintDiffersPerInstance(t *testing.T) {
-	t.Parallel()
-	a, err := newDPoPKey()
-	require.NoError(t, err)
-	b, err := newDPoPKey()
-	require.NoError(t, err)
-	require.NotEqual(t, a.thumbprint, b.thumbprint)
-
-	target := mustParseURL(t, "https://example.okta.com/api/v1/apps?limit=1#frag")
-	require.Equal(t, "https://example.okta.com/api/v1/apps", dpopHTU(target))
-}
-
 func TestFake_Fixtures(t *testing.T) {
 	t.Parallel()
 	fake := NewFake(Fixtures{

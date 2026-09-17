@@ -24,6 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/speakeasy-api/gram/server/internal/dpop"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -364,7 +365,7 @@ func (s *stubOkta) verifyProof(w http.ResponseWriter, r *http.Request, accessTok
 		return s.rejectProof(w, http.StatusBadRequest, err.Error())
 	}
 	header := parsed.Signatures[0].Header
-	if typ, _ := header.ExtraHeaders[jose.HeaderType].(string); typ != dpopProofType {
+	if typ, _ := header.ExtraHeaders[jose.HeaderType].(string); typ != dpop.ProofType {
 		return s.rejectProof(w, http.StatusBadRequest, "wrong typ")
 	}
 	if header.JSONWebKey == nil {
@@ -724,9 +725,7 @@ type testClient struct {
 }
 
 func (tc testClient) currentNonce() string {
-	tc.client.mu.Lock()
-	defer tc.client.mu.Unlock()
-	return tc.client.nonce
+	return tc.client.nonce.Current()
 }
 
 func (tc testClient) clearSlowdown() {
