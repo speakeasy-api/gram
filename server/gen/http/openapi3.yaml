@@ -80901,6 +80901,11 @@ components:
                     items:
                         type: string
                     description: MCP client keys (lowercased self-reported client names; 'unattributed' selects calls Gram never saw an initialize handshake for) to include
+                filters:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/LogFilter'
+                    description: Arbitrary attribute filter conditions from the af URL param
                 from:
                     type: string
                     description: Start time in ISO 8601 format
@@ -80921,11 +80926,25 @@ components:
                     items:
                         type: string
                     description: 'Gateway (meta MCP server) ids to include: calls dispatched through the gateway to its members plus calls observed against the gateway itself'
+                query:
+                    type: string
+                    description: Free-text attribute search string from the q URL param, applied as the trace listing applies it.
                 shadow_server_names:
                     type: array
                     items:
                         type: string
                     description: Shadow MCP server names to include
+                statuses:
+                    type: array
+                    items:
+                        type: string
+                        description: Tool usage trace outcome
+                        enum:
+                            - error
+                            - success
+                            - blocked
+                            - pending
+                    description: Trace outcomes to include (error, success, blocked, pending). Empty means all.
                 target_types:
                     type: array
                     items:
@@ -96114,6 +96133,10 @@ components:
         ToolUsageTargetTimeSeriesPoint:
             type: object
             properties:
+                blocked_count:
+                    type: integer
+                    description: Number of tool usage events denied by a hook in the bucket
+                    format: int64
                 bucket_start_ns:
                     type: string
                     description: Bucket start time in Unix nanoseconds as a string for JavaScript integer safety
@@ -96124,6 +96147,10 @@ components:
                 failure_count:
                     type: integer
                     description: Number of failed tool usage events in the bucket
+                    format: int64
+                pending_count:
+                    type: integer
+                    description: Number of tool usage events observed starting but never finishing in the bucket
                     format: int64
                 target_id:
                     type: string
@@ -96157,6 +96184,8 @@ components:
                 - target_label
                 - event_count
                 - failure_count
+                - blocked_count
+                - pending_count
         ToolUsageTargetToolBreakdownRow:
             type: object
             properties:

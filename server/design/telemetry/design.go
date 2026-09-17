@@ -2531,6 +2531,14 @@ var GetToolUsageSummaryPayload = Type("GetToolUsageSummaryPayload", func() {
 	Attribute("hook_sources", ArrayOf(String), "Hook plugin sources to include. Direct hosted MCP calls have no hook source and are excluded when this filter is set.")
 	Attribute("client_keys", ArrayOf(String), "MCP client keys (lowercased self-reported client names; 'unattributed' selects calls Gram never saw an initialize handshake for) to include")
 	Attribute("account_type", String, "Optional account type filter ('team' or 'personal').")
+	// The same three narrowing inputs the trace listing takes. Without them the
+	// summary cards and the timeline answer for the whole window while the rows
+	// beneath them answer for a filtered one, and the page has to apologise for
+	// the difference. A query or a filter drops this read onto the same raw log
+	// scan the listing falls back to, which is the cost of the two agreeing.
+	Attribute("statuses", ArrayOf(ToolUsageStatus), "Trace outcomes to include (error, success, blocked, pending). Empty means all.")
+	Attribute("query", String, "Free-text attribute search string from the q URL param, applied as the trace listing applies it.")
+	Attribute("filters", ArrayOf(LogFilter), "Arbitrary attribute filter conditions from the af URL param")
 
 	Required("from", "to")
 })
@@ -2845,8 +2853,13 @@ var ToolUsageTargetTimeSeriesPoint = Type("ToolUsageTargetTimeSeriesPoint", func
 	Attribute("target_label", String, "User-facing label for the target")
 	Attribute("event_count", Int64, "Number of tool usage events in the bucket")
 	Attribute("failure_count", Int64, "Number of failed tool usage events in the bucket")
+	// Counted apart from failures: a denial is the policy working and a pending
+	// call has not finished, so folding either into "failed" overstates how much
+	// is broken.
+	Attribute("blocked_count", Int64, "Number of tool usage events denied by a hook in the bucket")
+	Attribute("pending_count", Int64, "Number of tool usage events observed starting but never finishing in the bucket")
 
-	Required("bucket_start_ns", "target_type", "target_kind", "target_id", "target_label", "event_count", "failure_count")
+	Required("bucket_start_ns", "target_type", "target_kind", "target_id", "target_label", "event_count", "failure_count", "blocked_count", "pending_count")
 })
 
 var ToolUsageUserTimeSeriesPoint = Type("ToolUsageUserTimeSeriesPoint", func() {

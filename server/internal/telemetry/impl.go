@@ -3338,6 +3338,9 @@ func (s *Service) GetToolUsageSummary(ctx context.Context, payload *telem_gen.Ge
 		HookSources:        payload.HookSources,
 		ClientKeys:         payload.ClientKeys,
 		AccountType:        payload.AccountType,
+		Statuses:           toolUsageStatusStrings(payload.Statuses),
+		Query:              payload.Query,
+		Filters:            payload.Filters,
 	})
 	if err != nil {
 		return nil, err
@@ -3365,11 +3368,30 @@ type toolUsageFilters struct {
 	HookSources        []string
 	ClientKeys         []string
 	AccountType        *string
+	// Carried here so the summary cards and the timeline narrow with the rows
+	// rather than answering for the whole window.
+	Statuses []string
+	Query    *string
+	Filters  []*telem_gen.LogFilter
 }
 
 // resolveToolUsageParams authorizes the caller, verifies logging is enabled, and
 // builds the ClickHouse query parameters shared by the tool usage summary aggregate
 // and its per-panel endpoints. All returned errors are already oops-wrapped.
+// toolUsageStatusStrings flattens the generated status enum to the strings the
+// repo predicates switch on. Every summary endpoint takes the same filter, so
+// the conversion lives once rather than in each handler.
+func toolUsageStatusStrings(statuses []telem_gen.ToolUsageStatus) []string {
+	if len(statuses) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(statuses))
+	for _, status := range statuses {
+		out = append(out, string(status))
+	}
+	return out
+}
+
 func (s *Service) resolveToolUsageParams(ctx context.Context, f toolUsageFilters) (repo.GetToolUsageSummaryParams, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -3441,6 +3463,9 @@ func (s *Service) resolveToolUsageParams(ctx context.Context, f toolUsageFilters
 		HookSources:        f.HookSources,
 		ClientKeys:         f.ClientKeys,
 		AccountType:        conv.PtrValOr(f.AccountType, ""),
+		Statuses:           f.Statuses,
+		Query:              conv.PtrValOr(f.Query, ""),
+		Filters:            toRepoAttributeFilters(f.Filters),
 		// The insights board splits one ranking into several cards — servers,
 		// skills, most errors — and ranks tools across every target, so a
 		// limit sized for a single top-N list truncates before the split and
@@ -3469,6 +3494,9 @@ func (s *Service) GetToolUsageTotals(ctx context.Context, payload *telem_gen.Get
 		HookSources:        payload.HookSources,
 		ClientKeys:         payload.ClientKeys,
 		AccountType:        payload.AccountType,
+		Statuses:           toolUsageStatusStrings(payload.Statuses),
+		Query:              payload.Query,
+		Filters:            payload.Filters,
 	})
 	if err != nil {
 		return nil, err
@@ -3495,6 +3523,9 @@ func (s *Service) GetToolUsageTargets(ctx context.Context, payload *telem_gen.Ge
 		HookSources:        payload.HookSources,
 		ClientKeys:         payload.ClientKeys,
 		AccountType:        payload.AccountType,
+		Statuses:           toolUsageStatusStrings(payload.Statuses),
+		Query:              payload.Query,
+		Filters:            payload.Filters,
 	})
 	if err != nil {
 		return nil, err
@@ -3521,6 +3552,9 @@ func (s *Service) GetToolUsageUsers(ctx context.Context, payload *telem_gen.GetT
 		HookSources:        payload.HookSources,
 		ClientKeys:         payload.ClientKeys,
 		AccountType:        payload.AccountType,
+		Statuses:           toolUsageStatusStrings(payload.Statuses),
+		Query:              payload.Query,
+		Filters:            payload.Filters,
 	})
 	if err != nil {
 		return nil, err
@@ -3547,6 +3581,9 @@ func (s *Service) GetToolUsageClients(ctx context.Context, payload *telem_gen.Ge
 		HookSources:        payload.HookSources,
 		ClientKeys:         payload.ClientKeys,
 		AccountType:        payload.AccountType,
+		Statuses:           toolUsageStatusStrings(payload.Statuses),
+		Query:              payload.Query,
+		Filters:            payload.Filters,
 	})
 	if err != nil {
 		return nil, err
@@ -3573,6 +3610,9 @@ func (s *Service) GetToolUsageClientToolBreakdown(ctx context.Context, payload *
 		HookSources:        payload.HookSources,
 		ClientKeys:         payload.ClientKeys,
 		AccountType:        payload.AccountType,
+		Statuses:           toolUsageStatusStrings(payload.Statuses),
+		Query:              payload.Query,
+		Filters:            payload.Filters,
 	})
 	if err != nil {
 		return nil, err
@@ -3599,6 +3639,9 @@ func (s *Service) GetToolUsageTargetTimeSeries(ctx context.Context, payload *tel
 		HookSources:        payload.HookSources,
 		ClientKeys:         payload.ClientKeys,
 		AccountType:        payload.AccountType,
+		Statuses:           toolUsageStatusStrings(payload.Statuses),
+		Query:              payload.Query,
+		Filters:            payload.Filters,
 	})
 	if err != nil {
 		return nil, err
@@ -3625,6 +3668,9 @@ func (s *Service) GetToolUsageUserTimeSeries(ctx context.Context, payload *telem
 		HookSources:        payload.HookSources,
 		ClientKeys:         payload.ClientKeys,
 		AccountType:        payload.AccountType,
+		Statuses:           toolUsageStatusStrings(payload.Statuses),
+		Query:              payload.Query,
+		Filters:            payload.Filters,
 	})
 	if err != nil {
 		return nil, err
@@ -3651,6 +3697,9 @@ func (s *Service) GetToolUsageUsersByTarget(ctx context.Context, payload *telem_
 		HookSources:        payload.HookSources,
 		ClientKeys:         payload.ClientKeys,
 		AccountType:        payload.AccountType,
+		Statuses:           toolUsageStatusStrings(payload.Statuses),
+		Query:              payload.Query,
+		Filters:            payload.Filters,
 	})
 	if err != nil {
 		return nil, err
@@ -3677,6 +3726,9 @@ func (s *Service) GetToolUsageTargetToolBreakdown(ctx context.Context, payload *
 		HookSources:        payload.HookSources,
 		ClientKeys:         payload.ClientKeys,
 		AccountType:        payload.AccountType,
+		Statuses:           toolUsageStatusStrings(payload.Statuses),
+		Query:              payload.Query,
+		Filters:            payload.Filters,
 	})
 	if err != nil {
 		return nil, err
@@ -4340,6 +4392,8 @@ func toToolUsageTargetTimeSeries(rows []repo.ToolUsageTargetTimeSeriesPointRow) 
 			TargetLabel:   row.TargetLabel,
 			EventCount:    uint64ToInt64(row.EventCount),
 			FailureCount:  uint64ToInt64(row.FailureCount),
+			BlockedCount:  uint64ToInt64(row.BlockedCount),
+			PendingCount:  uint64ToInt64(row.PendingCount),
 		})
 	}
 	return out
