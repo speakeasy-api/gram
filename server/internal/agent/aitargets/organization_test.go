@@ -110,33 +110,80 @@ func TestListVersionIsTheDefaultsRevision(t *testing.T) {
 	require.Equal(t, aitargets.DefaultsVersion, aitargets.ListVersion())
 }
 
-// ChatGPT Classic and the current ChatGPT app ship different bundle ids:
-// Classic kept com.openai.chat while the shipping app moved to
-// com.openai.codex. That is what lets a detection be attributed to Classic
-// rather than to "ChatGPT" generally, so the id is asserted here and not just
-// left to the registry. The process name is what turns an install into a
-// running signal, which is the whole point of detecting the app in use.
-func TestChatGPTClassicIsDetectableInstalledAndRunning(t *testing.T) {
+// ChatGPT ships as two desktop builds that a device tells apart by bundle id
+// and nothing else: Classic kept com.openai.chat, the identifier the app first
+// shipped under, and the current app moved to com.openai.codex. Both ids are
+// asserted here rather than left to the registry, because dropping either one
+// makes that build invisible on the device while the other still reports, and
+// the resulting inventory looks correct.
+func TestBothChatGPTBuildsAreDetectableInstalledAndRunning(t *testing.T) {
 	t.Parallel()
 
-	var classic *aitargets.Target
-	for _, entry := range aitargets.Defaults() {
-		if entry.ID == "chatgpt-classic" {
-			classic = &entry
-			break
+	byID := func(id string) *aitargets.Target {
+		for _, entry := range aitargets.Defaults() {
+			if entry.ID == id {
+				return &entry
+			}
 		}
+		return nil
 	}
-	require.NotNil(t, classic, "chatgpt-classic must stay in the compiled-in defaults")
 
+	current := byID("chatgpt")
+	require.NotNil(t, current, "chatgpt must stay in the compiled-in defaults")
+	require.Contains(t, current.Signatures.BundleIDs, "com.openai.codex",
+		"the bundle id the current app moved to is the only thing that detects it")
+	require.Contains(t, current.Signatures.ProcessNames, "ChatGPT",
+		"without the process name an agent can only ever report the app as installed")
+
+	classic := byID("chatgpt-classic")
+	require.NotNil(t, classic, "chatgpt-classic must stay in the compiled-in defaults")
 	require.Contains(t, classic.Signatures.BundleIDs, "com.openai.chat",
-		"the bundle id Classic kept is what distinguishes it from the current ChatGPT app")
+		"the bundle id Classic kept is what distinguishes it from the current app")
 	require.Contains(t, classic.Signatures.ProcessNames, "ChatGPT Classic",
 		"without the process name an agent can only ever report Classic as installed")
-	// Deliberately no config dir. Classic inherited the original desktop app's
-	// support directory, which macOS leaves behind after an uninstall, so it
-	// would report Classic for anyone who has since moved to the current app.
+
+	// Process names are matched exactly, so the shorter name must not be a
+	// prefix match that reports the current app on every Classic device.
+	require.NotContains(t, classic.Signatures.ProcessNames, "ChatGPT")
+	require.NotContains(t, current.Signatures.ProcessNames, "ChatGPT Classic")
+
+	// Deliberately no config dirs. Classic inherited the original desktop
+	// app's support directory and the current app keeps its own, and macOS
+	// leaves both behind after an uninstall, so either would report someone
+	// who no longer runs the app.
 	require.Empty(t, classic.Signatures.ConfigDirs,
 		"the inherited support directory would fire for people who no longer run Classic")
+	require.Empty(t, current.Signatures.ConfigDirs,
+		"a support directory outlives the app it belonged to")
+}
+
+// A decision about one product must not reach another. Both ChatGPT builds
+// authorize through chatgpt.com and present the same documents, so the
+// identity a caller proves is "a ChatGPT client" and goes no finer. The
+// matchers therefore belong to the general app alone: registering them on
+// Classic as well would make blocking Classic refuse everyone on the current
+// app and on chatgpt.com.
+func TestOnlyTheGeneralChatGPTTargetIsEnforceable(t *testing.T) {
+	t.Parallel()
+
+	var current, classic *aitargets.Target
+	for _, entry := range aitargets.Defaults() {
+		switch entry.ID {
+		case "chatgpt":
+			current = &entry
+		case "chatgpt-classic":
+			classic = &entry
+		}
+	}
+	require.NotNil(t, current)
+	require.NotNil(t, classic)
+
+	require.True(t, aitargets.Enforceable(*current),
+		"the ChatGPT documents have to live somewhere or no ChatGPT caller can be blocked")
+	require.False(t, aitargets.Enforceable(*classic),
+		"blocking Classic would refuse every ChatGPT caller, which no one asked for")
+	require.True(t, classic.GatewayClient.IsZero(),
+		"a self-reported client name would attribute shared traffic to Classic just as wrongly")
 }
 
 // builtinRow is the row BuiltInUpsertParams writes for a built-in: the
