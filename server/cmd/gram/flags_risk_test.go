@@ -2,6 +2,7 @@ package gram
 
 import (
 	"flag"
+	"os"
 	"slices"
 	"testing"
 
@@ -70,6 +71,9 @@ func TestLLMAnalyzerConfigFromCLI_DisabledWithoutURL(t *testing.T) { //nolint:pa
 func unsetRiskLLMEnv(t *testing.T) {
 	t.Helper()
 	for _, name := range []string{"GRAM_RISK_LLM_URL", "GRAM_RISK_LLM_API_KEY", "GRAM_RISK_LLM_MODEL"} {
-		unsetEnv(t, name)
+		// t.Setenv registers the restore; Unsetenv then removes the variable so
+		// the flag falls back to its default instead of reading an empty value.
+		t.Setenv(name, "")
+		require.NoError(t, os.Unsetenv(name))
 	}
 }
