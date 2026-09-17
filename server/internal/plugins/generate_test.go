@@ -3104,14 +3104,37 @@ func TestGeneratePlatformMCPExistingServersCatalogPreference(t *testing.T) {
 			"Never create a custom direct-remote entry for a confirmed catalogue replacement",
 			"import does not require readiness or plugin distribution",
 		}},
-		{"two configurations of one catalogue reference require operation evidence", []string{
+		{"two configurations of one catalogue reference require persisted evidence", []string{
 			"Two configurations of one catalogue reference are not the same target",
 			"source/reference alone cannot prove configuration equivalence",
 			"match fresh inventory `registration.id` to the receipt's returned `registration_id`",
-			"correlated with the exact submitted confirmed configuration",
+			"Receipt-ID correlation alone is not persisted configuration proof",
 			"do not invent fields or claim current configuration was read back",
 			"configuration equivalence remains unverified and requires manual resolution, not automatic reuse",
 			"do not claim already present or create a duplicate",
+		}},
+		{"reused wrong configuration returns matching registration ID", []string{
+			"reuse an existing registration for the same source/reference with different configuration unchanged",
+			"Neither a new receipt nor `replayed: false` proves that the submitted configuration took effect",
+			"Require server-backed evidence of the registration's exact effective confirmed configuration",
+			"even when the returned ID matches the receipt and live status is registered with complete components",
+		}},
+		{"race or unknown existing registration cannot prove creation", []string{
+			"A concurrent registration after preflight, an unknown existing registration or an uncertain write outcome",
+			"must not be treated as newly created or correctly configured from the receipt",
+			"keep it unverified, do not create a duplicate, and offer manual dashboard resolution",
+		}},
+		{"empty request and configless candidate are not persisted proof", []string{
+			"Distinguish a configless candidate from an empty submitted `non_secret_config`",
+			"omitted values can use declared defaults",
+			"absent/empty `configuration` only describes the current candidate",
+			"inventory does not bind persisted configuration to that inspected candidate version",
+			"even an apparently configless candidate remains unverified/manual resolution",
+		}},
+		{"declined catalogue needs separate inspected direct batch consent", []string{
+			"call `inspect_mcp_candidate` with the original `remote_url`",
+			"After declining a catalogue candidate, require explicit confirmation of the inspected direct target, destination project and exact direct batch before `register_remote_mcp`",
+			"declining the candidate is not consent to the fallback",
 		}},
 		{"confirmed catalogue target already present", []string{
 			"Recheck existing registrations after substitution",
@@ -3130,6 +3153,8 @@ func TestGeneratePlatformMCPExistingServersCatalogPreference(t *testing.T) {
 	}
 	require.Less(t, strings.Index(workflow, "Search exact endpoint identity FIRST"), strings.Index(workflow, "search local non-secret alias/provider/name SECONDARY"))
 	require.NotContains(t, workflow, "`lookup_url`")
+	require.NotContains(t, workflow, "This proves which request produced that registration")
+	require.NotContains(t, workflow, "Without correlated operation evidence for an existing registration")
 }
 
 func TestGeneratePlatformMCPPackageEmitsReviewedShadowWorkflow(t *testing.T) {

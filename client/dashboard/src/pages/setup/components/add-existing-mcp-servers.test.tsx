@@ -71,7 +71,10 @@ describe("AddExistingMCPServers", () => {
         "Copy the prompt and paste it into Claude Code. Claude will guide you through choosing which remote MCP servers to import into Speakeasy.",
       ),
     ).toBeTruthy();
-    expect(screen.getByText("View prompt and setup help")).toBeTruthy();
+    fireEvent.click(screen.getByText("View prompt and setup help"));
+    expect(
+      screen.getByText("View prompt and setup help").closest("details")?.open,
+    ).toBe(true);
     expect(
       screen
         .getByRole("link", {
@@ -224,7 +227,7 @@ describe("existingMCPServersPrompt", () => {
         "Before running claude mcp list, explain that it health-checks approved servers, can launch stdio processes and contact local/private-network endpoints BEFORE filtering, and may cause process side effects. Obtain explicit informed consent for those effects, or offer a user-sanitized manual inventory instead without running discovery. Show only sanitized inventory and explain excluded servers.",
         "List eligible Speakeasy projects and ask me to choose the destination.",
         "Ask which servers I want, check for existing registrations, inspect missing candidates, and confirm the exact batch before adding anything.",
-        "For each missing server, search the catalogue by exact endpoint first, then by provider/name as a secondary lookup. Show candidate differences (endpoint, provider, capabilities, and authentication) and require my confirmation before substituting a catalogue candidate. Register confirmed candidates through the catalogue registration flow, not as direct remote servers. If I decline a candidate or no match exists, use the original URL registration path.",
+        "For each missing server, search the catalogue by exact endpoint first, then by provider/name as a secondary lookup. Show candidate differences (endpoint, provider, capabilities, and authentication) and require my confirmation before substituting a catalogue candidate. Register confirmed candidates through the catalogue registration flow, not as direct remote servers. If I decline a candidate or no match exists, offer the original URL registration path, inspect that direct target, and require fresh explicit confirmation of the direct target and exact batch before registering. Do not treat confirmation of a declined catalogue candidate as consent to direct registration.",
         "Never copy local credentials or change local configuration. Authentication must happen through Speakeasy's secure setup flow.",
         "Verify and report every selected server separately. Do not claim partial success is complete, or require plugin/gateway distribution.",
       ].join(" "),
