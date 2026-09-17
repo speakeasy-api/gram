@@ -47,7 +47,7 @@ func assignAgentToWorkload(t *testing.T, ctx context.Context, ti *testInstance, 
 	t.Helper()
 
 	var id uuid.UUID
-	err := ti.conn.QueryRow( //nolint:glint // notestingrawsql: see seedWorkloadIssuer
+	err := ti.conn.QueryRow( //nolint:glint // notestingrawsql: no create query exists yet; writes belong to the management API milestone
 		ctx, `
 		INSERT INTO workload_agent_assignments (organization_id, workload_issuer_id, subject, agent_id)
 		VALUES ($1, $2, $3, $4)
@@ -61,7 +61,7 @@ func assignAgentToWorkload(t *testing.T, ctx context.Context, ti *testInstance, 
 func unassignWorkloadAgent(t *testing.T, ctx context.Context, ti *testInstance, id uuid.UUID) {
 	t.Helper()
 
-	_, err := ti.conn.Exec( //nolint:glint // notestingrawsql: see seedWorkloadIssuer
+	_, err := ti.conn.Exec( //nolint:glint // notestingrawsql: no create query exists yet; writes belong to the management API milestone
 		ctx, `UPDATE workload_agent_assignments SET deleted_at = clock_timestamp() WHERE id = $1`, id)
 	require.NoError(t, err)
 }
@@ -206,7 +206,7 @@ func TestApplyIssuerGate_WorkloadSessionWithNoAssignedAgentIsRefused(t *testing.
 func softDeleteWorkloadIssuer(t *testing.T, ctx context.Context, ti *testInstance, id uuid.UUID) {
 	t.Helper()
 
-	_, err := ti.conn.Exec( //nolint:glint // notestingrawsql: see seedWorkloadIssuer
+	_, err := ti.conn.Exec( //nolint:glint // notestingrawsql: no create query exists yet; writes belong to the management API milestone
 		ctx, `UPDATE workload_issuers SET deleted_at = clock_timestamp() WHERE id = $1`, id)
 	require.NoError(t, err)
 }
