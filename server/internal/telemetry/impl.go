@@ -172,7 +172,7 @@ func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsP
 		to = payload.Filter.To
 	}
 
-	params, err := s.prepareTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, from, to)
+	params, err := s.prepareScopedTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, from, to)
 	if err != nil {
 		return nil, err
 	}
@@ -220,6 +220,7 @@ func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsP
 		ExternalUserID:         externalUserID,
 		EventSource:            eventSource,
 		AttributeFilters:       attributeFilters,
+		ActorScope:             params.actorScope,
 		SortOrder:              params.sortOrder,
 		Cursor:                 params.cursor,
 		Limit:                  params.limit + 1,
@@ -325,7 +326,7 @@ func (s *Service) SearchChats(ctx context.Context, payload *telem_gen.SearchChat
 		from, to = payload.Filter.From, payload.Filter.To
 	}
 
-	params, err := s.prepareTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, from, to)
+	params, err := s.prepareScopedTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, from, to)
 	if err != nil {
 		return nil, err
 	}
@@ -346,6 +347,7 @@ func (s *Service) SearchChats(ctx context.Context, payload *telem_gen.SearchChat
 		GramURN:          gramURN,
 		UserID:           userID,
 		ExternalUserID:   externalUserID,
+		ActorScope:       params.actorScope,
 		SortOrder:        params.sortOrder,
 		Cursor:           params.cursor,
 		Limit:            params.limit + 1,
@@ -1322,7 +1324,7 @@ func (s *Service) GetProjectMetricsSummary(ctx context.Context, payload *telem_g
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.requireProjectLogRead(ctx, authCtx); err != nil {
 		return nil, err
 	}
 
@@ -1415,7 +1417,7 @@ func (s *Service) GetUserMetricsSummary(ctx context.Context, payload *telem_gen.
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.requireProjectLogRead(ctx, authCtx); err != nil {
 		return nil, err
 	}
 
@@ -1484,7 +1486,7 @@ func (s *Service) GetEmployeeDataFlowGraph(ctx context.Context, payload *telem_g
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.requireProjectLogRead(ctx, authCtx); err != nil {
 		return nil, err
 	}
 
@@ -1751,16 +1753,48 @@ type searchParams struct {
 	cursor         string
 	timeStart      int64
 	timeEnd        int64
+	// actorScope restricts the read to the actors a narrowed logs:read grant
+	// covers. Always nil for searches prepared through prepareTelemetrySearch,
+	// which refuses narrowed grants outright.
+	actorScope *repo.ActorScope
 }
 
-// prepareTelemetrySearch validates and prepares common search parameters.
+// prepareTelemetrySearch validates and prepares common search parameters for a
+// search that returns actor data it cannot filter. It requires unrestricted
+// log access, so a new endpoint added here fails closed for the holder of a
+// narrowed logs:read grant until it can scope its own rows.
 func (s *Service) prepareTelemetrySearch(ctx context.Context, limit int, sort string, cursor *string, from, to *string) (*searchParams, error) {
+	return s.prepareTelemetrySearchParams(ctx, false, limit, sort, cursor, from, to)
+}
+
+// prepareScopedTelemetrySearch prepares a search whose query applies
+// searchParams.actorScope, so a narrowed logs:read grant is honoured rather
+// than refused. Callers MUST pass the resolved scope to every repo call they
+// make.
+func (s *Service) prepareScopedTelemetrySearch(ctx context.Context, limit int, sort string, cursor *string, from, to *string) (*searchParams, error) {
+	return s.prepareTelemetrySearchParams(ctx, true, limit, sort, cursor, from, to)
+}
+
+func (s *Service) prepareTelemetrySearchParams(ctx context.Context, actorScoped bool, limit int, sort string, cursor *string, from, to *string) (*searchParams, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	var actorScope *repo.ActorScope
+	if actorScoped {
+		// logs:read is not required here: the scope resolution degrades a
+		// caller who holds none to their own activity, the way the chat
+		// session list does for members without chat:read.
+		if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+			return nil, err
+		}
+		resolved, err := s.resolveActorScope(ctx, authCtx)
+		if err != nil {
+			return nil, err
+		}
+		actorScope = resolved
+	} else if err := s.requireProjectLogRead(ctx, authCtx); err != nil {
 		return nil, err
 	}
 
@@ -1802,6 +1836,7 @@ func (s *Service) prepareTelemetrySearch(ctx context.Context, limit int, sort st
 		cursor:         cursorVal,
 		timeStart:      timeStart,
 		timeEnd:        timeEnd,
+		actorScope:     actorScope,
 	}, nil
 }
 
@@ -1967,7 +2002,7 @@ func (s *Service) GetMetaMcpServerUsage(ctx context.Context, payload *telem_gen.
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.requireProjectLogRead(ctx, authCtx); err != nil {
 		return nil, err
 	}
 	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
@@ -2048,7 +2083,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.requireProjectLogRead(ctx, authCtx); err != nil {
 		return nil, err
 	}
 
@@ -2252,7 +2287,7 @@ func (s *Service) GetUnproxiedMcpServerUsage(ctx context.Context, payload *telem
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.requireProjectLogRead(ctx, authCtx); err != nil {
 		return nil, err
 	}
 
@@ -2302,7 +2337,7 @@ func (s *Service) GetUnproxiedMcpServerToolUsage(ctx context.Context, payload *t
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.requireProjectLogRead(ctx, authCtx); err != nil {
 		return nil, err
 	}
 
@@ -2365,7 +2400,7 @@ func (s *Service) GetUnproxiedMcpServerUserUsage(ctx context.Context, payload *t
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.requireProjectLogRead(ctx, authCtx); err != nil {
 		return nil, err
 	}
 
@@ -2430,7 +2465,7 @@ func (s *Service) GetUnproxiedMcpServerClientUsage(ctx context.Context, payload 
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.requireProjectLogRead(ctx, authCtx); err != nil {
 		return nil, err
 	}
 
@@ -2494,7 +2529,7 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.requireProjectLogRead(ctx, authCtx); err != nil {
 		return nil, err
 	}
 
@@ -2948,7 +2983,7 @@ func (s *Service) ListFilterOptions(ctx context.Context, payload *telem_gen.List
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.requireProjectLogRead(ctx, authCtx); err != nil {
 		return nil, err
 	}
 
@@ -3001,7 +3036,7 @@ func (s *Service) ListAttributeKeys(ctx context.Context, payload *telem_gen.List
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.requireProjectLogRead(ctx, authCtx); err != nil {
 		return nil, err
 	}
 
@@ -3053,7 +3088,7 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.requireProjectLogRead(ctx, authCtx); err != nil {
 		return nil, err
 	}
 
@@ -3374,7 +3409,7 @@ func (s *Service) resolveToolUsageParams(ctx context.Context, f toolUsageFilters
 		return repo.GetToolUsageSummaryParams{}, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.requireProjectLogRead(ctx, authCtx); err != nil {
 		return repo.GetToolUsageSummaryParams{}, err
 	}
 
@@ -3630,7 +3665,7 @@ func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.Li
 
 	logger := s.logger
 
-	params, err := s.prepareTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, &payload.From, &payload.To)
+	params, err := s.prepareScopedTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, &payload.From, &payload.To)
 	if err != nil {
 		return nil, err
 	}
@@ -3695,6 +3730,7 @@ func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.Li
 		Statuses:           statuses,
 		Query:              conv.PtrValOr(payload.Query, ""),
 		Filters:            toRepoAttributeFilters(payload.Filters),
+		ActorScope:         params.actorScope,
 		SortOrder:          params.sortOrder,
 		CursorTimeUnixNano: cursorTimeUnixNano,
 		CursorID:           cursorID,
@@ -3720,7 +3756,7 @@ func (s *Service) GetToolUsageFilterOptions(ctx context.Context, payload *telem_
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.requireProjectLogRead(ctx, authCtx); err != nil {
 		return nil, err
 	}
 
@@ -3777,7 +3813,7 @@ func (s *Service) GetMcpServerActivity(ctx context.Context, payload *telem_gen.G
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.requireProjectLogRead(ctx, authCtx); err != nil {
 		return nil, err
 	}
 
@@ -4336,7 +4372,7 @@ func toToolUsageSummaryResult(summary *repo.ToolUsageSummary) *telem_gen.GetTool
 // ListHooksTraces retrieves hook trace summaries with pagination and filtering.
 // Uses materialized columns for efficient querying while accessing user_email from JSON.
 func (s *Service) ListHooksTraces(ctx context.Context, payload *telem_gen.ListHooksTracesPayload) (res *telem_gen.ListHooksTracesResult, err error) {
-	params, err := s.prepareTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, &payload.From, &payload.To)
+	params, err := s.prepareScopedTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, &payload.From, &payload.To)
 	if err != nil {
 		return nil, err
 	}
@@ -4352,6 +4388,7 @@ func (s *Service) ListHooksTraces(ctx context.Context, payload *telem_gen.ListHo
 		TimeEnd:              params.timeEnd,
 		Filters:              attributeFilters,
 		TypesToInclude:       payload.TypesToInclude,
+		ActorScope:           params.actorScope,
 		SortOrder:            params.sortOrder,
 		Cursor:               params.cursor,
 		Limit:                params.limit + 1,

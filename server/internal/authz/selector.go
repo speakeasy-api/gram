@@ -22,7 +22,23 @@ const (
 	SelectorKeyProjectID      = "project_id"
 	SelectorKeyServerURL      = "server_url"
 	SelectorKeyServerIdentity = "server_identity"
+	// The actor_* keys narrow a logs:read grant to the population whose
+	// activity the holder may read. They match the identity snapshot recorded
+	// on each telemetry event, not the grant holder: actor_department is the
+	// directory department attribute, actor_group a directory group name, and
+	// actor_role an identity-provider role slug.
+	SelectorKeyActorDepartment = "actor_department"
+	SelectorKeyActorGroup      = "actor_group"
+	SelectorKeyActorRole       = "actor_role"
 )
+
+// ActorSelectorKeys are the logs:read selector dimensions that narrow log
+// visibility to an actor population, in stable order.
+var ActorSelectorKeys = []string{
+	SelectorKeyActorDepartment,
+	SelectorKeyActorGroup,
+	SelectorKeyActorRole,
+}
 
 // Matches reports whether this (grant) selector satisfies the given check
 // selector. A nil/empty grant selector matches any check (defensive fallback).
@@ -82,6 +98,8 @@ func ResourceKindForScope(scope Scope) string {
 		return ResourceKindChat
 	case "agent":
 		return ResourceKindAgent
+	case "logs":
+		return ResourceKindLogs
 	default:
 		return ResourceKindWildcard
 	}
@@ -118,6 +136,11 @@ var allowedSelectorKeys = map[string]map[string]bool{
 	ResourceKindRiskPolicy: {
 		SelectorKeyServerURL:      true,
 		SelectorKeyServerIdentity: true,
+	},
+	ResourceKindLogs: {
+		SelectorKeyActorDepartment: true,
+		SelectorKeyActorGroup:      true,
+		SelectorKeyActorRole:       true,
 	},
 }
 

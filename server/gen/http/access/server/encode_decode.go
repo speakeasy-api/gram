@@ -5877,12 +5877,15 @@ func marshalAccessSelectorToSelectorResponseBody(v *access.Selector) *SelectorRe
 		return nil
 	}
 	res := &SelectorResponseBody{
-		ResourceKind: v.ResourceKind,
-		ResourceID:   v.ResourceID,
-		Disposition:  v.Disposition,
-		Tool:         v.Tool,
-		ProjectID:    v.ProjectID,
-		ServerURL:    v.ServerURL,
+		ResourceKind:    v.ResourceKind,
+		ResourceID:      v.ResourceID,
+		Disposition:     v.Disposition,
+		Tool:            v.Tool,
+		ProjectID:       v.ProjectID,
+		ServerURL:       v.ServerURL,
+		ActorDepartment: v.ActorDepartment,
+		ActorGroup:      v.ActorGroup,
+		ActorRole:       v.ActorRole,
 	}
 
 	return res
@@ -5915,12 +5918,15 @@ func unmarshalSelectorRequestBodyToAccessSelector(v *SelectorRequestBody) *acces
 		return nil
 	}
 	res := &access.Selector{
-		ResourceKind: *v.ResourceKind,
-		ResourceID:   *v.ResourceID,
-		Disposition:  v.Disposition,
-		Tool:         v.Tool,
-		ProjectID:    v.ProjectID,
-		ServerURL:    v.ServerURL,
+		ResourceKind:    *v.ResourceKind,
+		ResourceID:      *v.ResourceID,
+		Disposition:     v.Disposition,
+		Tool:            v.Tool,
+		ProjectID:       v.ProjectID,
+		ServerURL:       v.ServerURL,
+		ActorDepartment: v.ActorDepartment,
+		ActorGroup:      v.ActorGroup,
+		ActorRole:       v.ActorRole,
 	}
 
 	return res

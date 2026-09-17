@@ -2,6 +2,7 @@ package repo
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strconv"
@@ -213,7 +214,12 @@ func buildSkillVersionMetricsQuery(arg AttributeMetricsQueryParams, timeseries b
 		return "", nil, fmt.Errorf("sort_by measure %q is not supported for skill version grouping", arg.SortBy)
 	}
 
-	versionFilters, sessionFilters := partitionSkillVersionFilters(arg.Filters)
+	filters, inScope := actorScopeEmailFilter(arg.Filters, arg.ActorScope)
+	if !inScope {
+		return "", nil, errActorScopeCoversNobody
+	}
+
+	versionFilters, sessionFilters := partitionSkillVersionFilters(filters)
 	mappingRows := skillVersionMappingRows(arg.ProjectIDs, versionFilters)
 	mappings := mappingRows.Columns(
 		"project_id",
@@ -294,6 +300,9 @@ func (q *Queries) QuerySkillVersionMetricsTable(ctx context.Context, arg Attribu
 		return nil, nil
 	}
 	query, args, err := buildSkillVersionMetricsQuery(arg, false)
+	if errors.Is(err, errActorScopeCoversNobody) {
+		return nil, nil
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -320,6 +329,9 @@ func (q *Queries) QuerySkillVersionMetricsTimeseries(ctx context.Context, arg At
 		return nil, nil
 	}
 	query, args, err := buildSkillVersionMetricsQuery(arg, true)
+	if errors.Is(err, errActorScopeCoversNobody) {
+		return nil, nil
+	}
 	if err != nil {
 		return nil, err
 	}

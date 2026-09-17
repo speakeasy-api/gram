@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  actorScopeSummaries,
   isUnrestrictedResourceType,
   toRoleSlug,
   unrestrictedResourceLabel,
@@ -43,5 +44,45 @@ describe("unrestricted resource types", () => {
   it("treats agents as unrestricted", () => {
     expect(isUnrestrictedResourceType("agent")).toBe(true);
     expect(unrestrictedResourceLabel("agent")).toBe("All agents");
+  });
+
+  it("offers logs access as a whole-organization grant", () => {
+    expect(isUnrestrictedResourceType("logs")).toBe(true);
+    expect(unrestrictedResourceLabel("logs")).toBe("All activity");
+  });
+});
+
+describe("actorScopeSummaries", () => {
+  it("is empty for an unrestricted grant", () => {
+    expect(actorScopeSummaries(null)).toEqual([]);
+    expect(
+      actorScopeSummaries([{ resourceKind: "logs", resourceId: "*" }]),
+    ).toEqual([]);
+  });
+
+  it("describes one narrowing per selector", () => {
+    expect(
+      actorScopeSummaries([
+        {
+          resourceKind: "logs",
+          resourceId: "*",
+          actorDepartment: "Engineering",
+        },
+        { resourceKind: "logs", resourceId: "*", actorGroup: "platform-leads" },
+      ]),
+    ).toEqual(["department Engineering", "group platform-leads"]);
+  });
+
+  it("joins the dimensions of one selector, which must all hold", () => {
+    expect(
+      actorScopeSummaries([
+        {
+          resourceKind: "logs",
+          resourceId: "*",
+          actorDepartment: "Engineering",
+          actorRole: "member",
+        },
+      ]),
+    ).toEqual(["department Engineering and role member"]);
   });
 });
