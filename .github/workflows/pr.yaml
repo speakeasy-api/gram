@@ -2492,8 +2492,13 @@ jobs:
     # removed again the moment a head commit fails to produce one.
     #
     # A component's tag comes either from its docker build job or, when that
-    # job is skipped, from preview-image-tags aliasing main's image. So
-    # `skipped` is a ready state here and only `failure`/`cancelled` are not.
+    # job is skipped, from preview-image-tags aliasing main's image. Those two
+    # sources are keyed off the same `changes` gates, so readiness is checked
+    # as "gate closed, or the build succeeded" rather than as "not failed".
+    # `skipped` on its own is not enough: docker-build-server also needs
+    # server-build-lint, so a lint failure skips it under the default
+    # success() condition while its gate is open — leaving no server tag for
+    # preview-retag to have aliased either.
     if: >-
       !cancelled() &&
       github.event_name == 'pull_request' &&
@@ -2507,11 +2512,15 @@ jobs:
       REPO: ${{ github.repository }}
       OPTED_OUT: ${{ contains(github.event.pull_request.labels.*.name, 'preview:off') }}
       IMAGES_READY: >-
-        ${{ contains(fromJSON('["success","skipped"]'), needs.docker-build-server.result) &&
-            contains(fromJSON('["success","skipped"]'), needs.docker-build-client.result) &&
-            contains(fromJSON('["success","skipped"]'), needs.docker-build-pystreams.result) &&
-            contains(fromJSON('["success","skipped"]'), needs.preview-image-tags.result) &&
-            contains(fromJSON('["success","skipped"]'), needs.upload-dashboard-assets.result) }}
+        ${{ (needs.changes.outputs.server != 'true' ||
+             needs.docker-build-server.result == 'success') &&
+            ((needs.changes.outputs.server != 'true' && needs.changes.outputs.client != 'true') ||
+             needs.docker-build-client.result == 'success') &&
+            (needs.changes.outputs.pystreams != 'true' ||
+             needs.docker-build-pystreams.result == 'success') &&
+            ((needs.changes.outputs.server != 'true' && needs.changes.outputs.client != 'true') ||
+             needs.upload-dashboard-assets.result == 'success') &&
+            contains(fromJSON('["success","skipped"]'), needs.preview-image-tags.result) }}
     steps:
       - name: Add or remove the preview label
         run: |
@@ -2522,8 +2531,17 @@ jobs:
               --jq 'any(.labels[]; .name == "preview")'
           }
 
+          # preview:off both stops this job labelling and withdraws a preview
+          # that an earlier commit put up. It takes effect on the next run
+          # rather than on the label itself: triggering on `labeled` would
+          # start a full CI run every time any label is touched.
           if [[ "$OPTED_OUT" == "true" ]]; then
-            echo "PR carries preview:off; leaving the label alone."
+            if [[ "$(has_label)" == "true" ]]; then
+              echo "PR carries preview:off; removing the preview label."
+              gh pr edit "$PR_NUMBER" --repo "$REPO" --remove-label preview
+            else
+              echo "PR carries preview:off; nothing to do."
+            fi
             exit 0
           fi
 
