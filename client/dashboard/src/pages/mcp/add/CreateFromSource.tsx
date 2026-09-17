@@ -1,3 +1,6 @@
+import { ensureToolsetWrapper } from "@/pages/mcp/gateway/ensureToolsetWrapper";
+import { GatewayAttachmentStatus } from "@/pages/mcp/gateway/GatewayAttachmentStatus";
+import { useGatewayCreation } from "@/pages/mcp/gateway/useGatewayCreation";
 import { FormPage } from "@/components/page-templates";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
@@ -15,7 +18,7 @@ import { useListTools } from "@/hooks/toolTypes";
 import { useRoutes } from "@/routes";
 import { Loader2 } from "lucide-react";
 import { SearchBar } from "@/components/ui/SearchBar";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 
@@ -29,6 +32,8 @@ const VISIBLE_SOURCE_LIMIT = 10;
  * only route to a toolset was an empty one you then had to fill by hand.
  */
 export default function CreateFromSource(): JSX.Element {
+  const flow = useGatewayCreation();
+  const creationLocked = flow.createdServerId !== null || flow.isAttaching;
   const routes = useRoutes();
   const client = useSdkClient();
   const { openPanel } = useSidePanel();
@@ -44,6 +49,12 @@ export default function CreateFromSource(): JSX.Element {
   // different source should not leave the previous source's name behind.
   const [isNameOwned, setIsNameOwned] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const retainedToolset = useRef<Awaited<
+    ReturnType<typeof client.toolsets.create>
+  > | null>(null);
+  const seeded = useRef(false);
+  const wrapperAttempted = useRef(false);
+  const [hasRetainedToolset, setHasRetainedToolset] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
@@ -98,29 +109,44 @@ export default function CreateFromSource(): JSX.Element {
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (creationLocked || isCreating) return;
     if (!selected || !name.trim()) return;
     setError(null);
     setIsCreating(true);
     try {
-      const toolset = await client.toolsets.create({
-        createToolsetRequestBody: { name: name.trim() },
-      });
+      const toolset =
+        retainedToolset.current ??
+        (await client.toolsets.create({
+          createToolsetRequestBody: { name: name.trim() },
+        }));
+      if (flow.gatewayId) {
+        retainedToolset.current = toolset;
+        setHasRetainedToolset(true);
+      }
       // Created empty, then filled: the create call takes no tools, so the
       // seeding is a second write. A server with no tools is still a usable
       // landing point if this half fails, so the error is surfaced rather than
       // rolled back.
-      if (toolUrns.length > 0) {
+      if (!seeded.current && toolUrns.length > 0) {
         await client.toolsets.updateBySlug({
           slug: toolset.slug,
           updateToolsetRequestBody: { toolUrns },
         });
       }
+      if (flow.gatewayId) seeded.current = true;
       toast.success(
         toolUrns.length > 0
           ? `Created "${toolset.name}" with ${toolUrns.length} tool${toolUrns.length === 1 ? "" : "s"}`
           : `Created "${toolset.name}"`,
       );
-      routes.mcp.details.tools.goTo(toolset.slug);
+      if (flow.gatewayId) {
+        const reconcile = wrapperAttempted.current;
+        wrapperAttempted.current = true;
+        const serverId = await ensureToolsetWrapper(client, toolset, reconcile);
+        await flow.complete(serverId);
+      } else {
+        routes.mcp.details.tools.goTo(toolset.slug);
+      }
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to create MCP server",
@@ -144,100 +170,106 @@ export default function CreateFromSource(): JSX.Element {
         noValidate
       >
         <Stack gap={8}>
-          <Stack gap={4}>
-            {isLoading && (
-              <Text small muted>
-                Loading sources…
-              </Text>
-            )}
-            {!isLoading && sources.length === 0 && (
-              <Alert variant="warning" dismissible={false}>
-                This project has no OpenAPI documents or functions yet. Add one
-                from the Advanced section first.
-              </Alert>
-            )}
-            {sources.length > 0 && (
-              <SearchBar
-                value={search}
-                onChange={setSearch}
-                placeholder="Search sources..."
+          <fieldset
+            disabled={creationLocked || isCreating || hasRetainedToolset}
+            className="contents"
+          >
+            <Stack gap={4}>
+              {isLoading && (
+                <Text small muted>
+                  Loading sources…
+                </Text>
+              )}
+              {!isLoading && sources.length === 0 && (
+                <Alert variant="warning" dismissible={false}>
+                  This project has no OpenAPI documents or functions yet. Add
+                  one from the Advanced section first.
+                </Alert>
+              )}
+              {sources.length > 0 && (
+                <SearchBar
+                  value={search}
+                  onChange={setSearch}
+                  placeholder="Search sources..."
+                />
+              )}
+              {sources.length > 0 && (
+                <div className="@2xl/main:grid-cols-2 grid grid-cols-1 gap-4">
+                  {visible.map((source) => (
+                    <SourceCard
+                      key={source.key}
+                      source={source}
+                      selected={source.key === selectedKey}
+                      onSelect={() => {
+                        if (creationLocked || isCreating) return;
+                        setSelectedKey(source.key);
+                        // The source name is the obvious default, and most
+                        // people keep it.
+                        if (!isNameOwned) setName(source.name);
+                      }}
+                      onInspect={() =>
+                        openPanel({
+                          kind: "source",
+                          title: source.name,
+                          subtitle: "Source",
+                          props: {
+                            sourceKind: source.kind,
+                            assetId: sourceAssetId(source),
+                          },
+                        })
+                      }
+                    />
+                  ))}
+                </div>
+              )}
+              {hiddenCount > 0 && (
+                <div>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setShowAll(true)}
+                  >
+                    <Button.Text>{`View all ${filtered.length}`}</Button.Text>
+                  </Button>
+                </div>
+              )}
+              {sources.length > 0 && filtered.length === 0 && (
+                <Text small muted>
+                  No sources match “{search}”.
+                </Text>
+              )}
+            </Stack>
+
+            <div className="border-foreground/10 border-t" />
+
+            <Stack gap={1}>
+              <label
+                htmlFor="from-source-name"
+                className="text-sm leading-none font-medium"
+              >
+                Server name
+              </label>
+              <Input
+                id="from-source-name"
+                placeholder="My MCP server"
+                value={name}
+                onChange={(value) => {
+                  setName(value);
+                  // Clearing the field hands the name back to the selection.
+                  setIsNameOwned(value.trim() !== "");
+                }}
               />
-            )}
-            {sources.length > 0 && (
-              <div className="@2xl/main:grid-cols-2 grid grid-cols-1 gap-4">
-                {visible.map((source) => (
-                  <SourceCard
-                    key={source.key}
-                    source={source}
-                    selected={source.key === selectedKey}
-                    onSelect={() => {
-                      setSelectedKey(source.key);
-                      // The source name is the obvious default, and most
-                      // people keep it.
-                      if (!isNameOwned) setName(source.name);
-                    }}
-                    onInspect={() =>
-                      openPanel({
-                        kind: "source",
-                        title: source.name,
-                        subtitle: "Source",
-                        props: {
-                          sourceKind: source.kind,
-                          assetId: sourceAssetId(source),
-                        },
-                      })
-                    }
-                  />
-                ))}
-              </div>
-            )}
-            {hiddenCount > 0 && (
-              <div>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => setShowAll(true)}
-                >
-                  <Button.Text>{`View all ${filtered.length}`}</Button.Text>
-                </Button>
-              </div>
-            )}
-            {sources.length > 0 && filtered.length === 0 && (
-              <Text small muted>
-                No sources match “{search}”.
-              </Text>
-            )}
-          </Stack>
-
-          <div className="border-foreground/10 border-t" />
-
-          <Stack gap={1}>
-            <label
-              htmlFor="from-source-name"
-              className="text-sm leading-none font-medium"
-            >
-              Server name
-            </label>
-            <Input
-              id="from-source-name"
-              placeholder="My MCP server"
-              value={name}
-              onChange={(value) => {
-                setName(value);
-                // Clearing the field hands the name back to the selection.
-                setIsNameOwned(value.trim() !== "");
-              }}
-            />
-            {selected && (
-              <Text muted small>
-                {toolUrns.length === 0
-                  ? "This source has no tools yet — the server starts empty."
-                  : `${toolUrns.length} tool${toolUrns.length === 1 ? "" : "s"} from this source will be added.`}
-              </Text>
-            )}
-          </Stack>
-
+              {selected && (
+                <Text muted small>
+                  {toolUrns.length === 0
+                    ? "This source has no tools yet — the server starts empty."
+                    : `${toolUrns.length} tool${toolUrns.length === 1 ? "" : "s"} from this source will be added.`}
+                </Text>
+              )}
+            </Stack>
+          </fieldset>
+          <GatewayAttachmentStatus flow={flow} />
           {error && (
             <Alert variant="error" dismissible={false}>
               {error}
@@ -248,20 +280,30 @@ export default function CreateFromSource(): JSX.Element {
             <Button
               type="submit"
               variant="primary"
-              disabled={!selected || !name.trim() || isCreating}
+              disabled={
+                creationLocked || !selected || !name.trim() || isCreating
+              }
             >
               {isCreating ? (
                 <Button.LeftIcon>
                   <Loader2 className="size-4 animate-spin" />
                 </Button.LeftIcon>
               ) : null}
-              <Button.Text>{isCreating ? "Creating" : "Create"}</Button.Text>
+              <Button.Text>
+                {isCreating
+                  ? "Creating"
+                  : hasRetainedToolset
+                    ? "Retry"
+                    : "Create"}
+              </Button.Text>
             </Button>
             <Button
               type="button"
               variant="secondary"
-              disabled={isCreating}
-              onClick={() => routes.mcp.add.goTo()}
+              disabled={isCreating || flow.isAttaching}
+              onClick={() => {
+                if (!flow.cancel()) routes.mcp.add.goTo();
+              }}
             >
               <Button.Text>Cancel</Button.Text>
             </Button>

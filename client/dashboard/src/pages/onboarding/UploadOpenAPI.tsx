@@ -1,3 +1,5 @@
+import { GatewayAttachmentStatus } from "@/pages/mcp/gateway/GatewayAttachmentStatus";
+import { useGatewayCreation } from "@/pages/mcp/gateway/useGatewayCreation";
 import { FormPage } from "@/components/page-templates";
 import { NEW_VERSION_SLUG_PARAM } from "@/components/sources/source-list-actions";
 import { useProjectSources } from "@/components/sources/source-list";
@@ -63,14 +65,19 @@ export default function UploadOpenAPI(): JSX.Element {
     match?.slug !== undefined ? { name: match.name, slug: match.slug } : null;
   const copy = pageCopy(existing);
 
+  const gateway = useGatewayCreation();
   return (
     <FormPage
-      scope="project:write"
+      scope={
+        gateway.gatewayId ? ["project:write", "mcp:write"] : "project:write"
+      }
+      scopeAll
       resourceId={project.id}
       title={copy.title}
       description={copy.description}
     >
       <div>
+        <GatewayAttachmentStatus flow={gateway} />
         {/* A lookup that failed is not a slug that isn't there: adding a
             document in its place would replace nothing, so the flow waits. */}
         {slug && isError && (
@@ -88,7 +95,9 @@ export default function UploadOpenAPI(): JSX.Element {
         {/* The stepper reads the document once, when it mounts, so it waits
             for the lookup rather than starting without it, and is keyed by
             the document so a change of slug on the same route re-seeds it. */}
-        {(!slug || (!isLoading && !isError)) && (
+        {gateway.createdServerId ? (
+          <Text muted>Server created. Finish adding it to your gateway above.</Text>
+        ) : (!slug || (!isLoading && !isError)) && (
           <UploadAssetStepper.Provider
             key={`${slug ?? "new"}:${existing?.slug ?? "unknown"}`}
             step={1}
@@ -124,15 +133,26 @@ export default function UploadOpenAPI(): JSX.Element {
                   description="The platform will generate tools for your API."
                 />
                 <UploadAssetStep.Content>
-                  <DeployStep />
+                  <DeployStep gateway={gateway} />
                 </UploadAssetStep.Content>
               </UploadAssetStep>
 
               <Stack direction="horizontal" justify="start">
-                <FooterActions />
+                {!gateway.gatewayId && <FooterActions />}
               </Stack>
             </UploadAssetStepper.Frame>
           </UploadAssetStepper.Provider>
+        )}
+        {gateway.gatewayId && (
+          <Button
+            variant="tertiary"
+            disabled={gateway.isAttaching}
+            onClick={() => {
+              gateway.cancel();
+            }}
+          >
+            <Button.Text>Cancel</Button.Text>
+          </Button>
         )}
 
         {/* Help text */}

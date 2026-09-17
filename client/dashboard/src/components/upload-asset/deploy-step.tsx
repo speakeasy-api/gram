@@ -3,6 +3,8 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/Collapsible";
+import { Button } from "@/components/ui/Button";
+import { ensureToolsetWrapper } from "@/pages/mcp/gateway/ensureToolsetWrapper";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useListTools } from "@/hooks/toolTypes";
@@ -27,7 +29,15 @@ import { Text } from "@/components/ui/Text";
 import { useStep } from "./step/use-step";
 import { useStepper } from "./stepper/use-stepper";
 
-export default function DeployStep(): React.JSX.Element | null {
+export default function DeployStep({
+  gateway,
+}: {
+  gateway?: {
+    gatewayId: string | null;
+    createdServerId: string | null;
+    complete: (mcpServerId: string) => Promise<void>;
+  };
+}): React.JSX.Element | null {
   const stepper = useStepper();
   const step = useStep();
   const telemetry = useTelemetry();
@@ -43,6 +53,11 @@ export default function DeployStep(): React.JSX.Element | null {
 
   const client = useSdkClient();
   const toolsetCreationAttempted = React.useRef(false);
+  const toolsSeeded = React.useRef(false);
+  const wrapperAttempted = React.useRef(false);
+  const createdWrapperId = React.useRef<string | null>(null);
+  const [creationError, setCreationError] = React.useState<string | null>(null);
+  const [retryAttempt, setRetryAttempt] = React.useState(0);
 
   const { toolCount, toolUrns } = React.useMemo(() => {
     const { deployment, uploadResult, assetName } = stepper.meta.current;
@@ -79,6 +94,7 @@ export default function DeployStep(): React.JSX.Element | null {
     if (
       !stepDone ||
       toolsetCreationAttempted.current ||
+      gateway?.createdServerId ||
       toolUrns.length === 0 ||
       stepper.meta.current.existingDocument
     ) {
@@ -93,36 +109,67 @@ export default function DeployStep(): React.JSX.Element | null {
 
     const createToolset = async () => {
       try {
-        // First create the toolset without tools
-        const toolset = await client.toolsets.create({
-          createToolsetRequestBody: {
-            name: assetName,
-            description: `Tools generated from ${assetName}`,
-          },
-        });
+        // Gateway retries resume from the last successful stage.
+        const toolset =
+          (gateway?.gatewayId ? stepper.meta.current.toolset : null) ??
+          (await client.toolsets.create({
+            createToolsetRequestBody: {
+              name: assetName,
+              description: `Tools generated from ${assetName}`,
+            },
+          }));
+        if (gateway?.gatewayId) stepper.meta.current.toolset = toolset;
 
-        // Then add the tools via update
-        await client.toolsets.updateBySlug({
-          slug: toolset.slug,
-          updateToolsetRequestBody: {
-            toolUrns,
-          },
-        });
+        if (!toolsSeeded.current) {
+          await client.toolsets.updateBySlug({
+            slug: toolset.slug,
+            updateToolsetRequestBody: { toolUrns },
+          });
+          toolsSeeded.current = true;
+        }
 
         stepper.meta.current.toolset = toolset;
+        if (gateway?.gatewayId) {
+          if (!createdWrapperId.current) {
+            const reconcile = wrapperAttempted.current;
+            wrapperAttempted.current = true;
+            createdWrapperId.current = await ensureToolsetWrapper(
+              client,
+              toolset,
+              reconcile,
+            );
+          }
+          await gateway.complete(createdWrapperId.current);
+        }
         telemetry.capture("onboarding_event", {
           action: "toolset_auto_created",
           toolset_name: assetName,
           tool_count: toolUrns.length,
         });
       } catch (error) {
-        // Silently fail - toolset creation is optional
-        console.error("Failed to auto-create toolset:", error);
+        if (gateway?.gatewayId) {
+          setCreationError(
+            error instanceof Error
+              ? error.message
+              : "Failed to create MCP server",
+          );
+        } else {
+          // Standalone toolset creation remains optional.
+          console.error("Failed to auto-create toolset:", error);
+        }
       }
     };
 
     void createToolset();
-  }, [step.state, toolUrns, client.toolsets, stepper.meta, telemetry]);
+  }, [
+    step.state,
+    toolUrns,
+    client,
+    stepper.meta,
+    telemetry,
+    gateway,
+    retryAttempt,
+  ]);
 
   const deploymentLogs = useDeploymentLogs(
     {
@@ -174,6 +221,25 @@ export default function DeployStep(): React.JSX.Element | null {
     stepper,
     telemetry,
   ]);
+
+  if (gateway?.gatewayId && creationError) {
+    return (
+      <Stack gap={3}>
+        <Alert variant="error" dismissible={false}>
+          {creationError}
+        </Alert>
+        <Button
+          onClick={() => {
+            setCreationError(null);
+            toolsetCreationAttempted.current = false;
+            setRetryAttempt((attempt) => attempt + 1);
+          }}
+        >
+          Retry
+        </Button>
+      </Stack>
+    );
+  }
 
   if (!step.isCurrentStep) return null;
 

@@ -137,7 +137,7 @@ describe("Add servers sheet", () => {
         ],
         [
           "Hosted remotely",
-          "Add a server that already runs elsewhere by its URL, proxied or not.",
+          "Add a server that already runs elsewhere by its URL, proxied through Gram.",
         ],
         [
           "Reachable through a tunnel",
@@ -548,7 +548,7 @@ describe("Add servers sheet", () => {
           screen
             .getByRole("menuitem", { name: new RegExp(`^${label}`) })
             .getAttribute("aria-disabled") === "true",
-        ).toBe(scope === "project:write");
+        ).toBe(true);
       }
     },
   );
@@ -576,12 +576,12 @@ describe("Add servers sheet", () => {
 
   it.each([
     ["From the catalog", "/catalog?attachToGateway=gateway"],
-    ["Hosted remotely", "/remote"],
-    ["Reachable through a tunnel", "/tunneled"],
-    ["From your API", "/openapi"],
-    ["From an existing source", "/fromSource"],
-    ["Write custom code", "/function"],
-  ])("opens %s directly without an all-route attach handoff", (label, href) => {
+    ["Hosted remotely", "/remote?attachToGateway=gateway"],
+    ["Reachable through a tunnel", "/tunneled?attachToGateway=gateway"],
+    ["From your API", "/openapi?attachToGateway=gateway"],
+    ["From an existing source", "/fromSource?attachToGateway=gateway"],
+    ["Write custom code", "/function?attachToGateway=gateway"],
+  ])("opens %s with gateway context", (label, href) => {
     setup();
     fireEvent.pointerDown(screen.getByRole("button", { name: "Add new" }), {
       button: 0,
@@ -782,6 +782,14 @@ it.each([
 ] as const)("matches catalog browse access for %s", (grant, allowed) => {
   permissions.scopes = new Set([grant]);
   setup();
+  if (!allowed) {
+    expect(
+      (screen.getByRole("button", { name: "Add new" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(permissions.navigate).not.toHaveBeenCalled();
+    return;
+  }
   fireEvent.pointerDown(screen.getByRole("button", { name: "Add new" }), {
     button: 0,
     ctrlKey: false,
@@ -824,3 +832,24 @@ it.each([
     ).toBeNull();
   },
 );
+
+it.each([
+  ["Hosted remotely", "remote"],
+  ["Reachable through a tunnel", "tunneled"],
+  ["From your API", "openapi"],
+  ["From an existing source", "fromSource"],
+  ["Write custom code", "function"],
+])("carries gateway context into %s creation", (label, path) => {
+  setup();
+  fireEvent.pointerDown(screen.getByRole("button", { name: "Add new" }), {
+    button: 0,
+    ctrlKey: false,
+    pointerType: "mouse",
+  });
+  fireEvent.click(
+    screen.getByRole("menuitem", { name: new RegExp(`^${label}`) }),
+  );
+  expect(permissions.navigate).toHaveBeenCalledWith(
+    `/${path}?attachToGateway=gateway`,
+  );
+});
