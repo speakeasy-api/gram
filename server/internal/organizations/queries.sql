@@ -4,13 +4,15 @@ INSERT INTO organization_metadata (
     name,
     slug,
     workos_id,
-    whitelisted
+    whitelisted,
+    creation_source
 ) VALUES (
     @id,
     @name,
     @slug,
     @workos_id,
-    COALESCE(sqlc.narg('whitelisted')::boolean, FALSE)
+    COALESCE(sqlc.narg('whitelisted')::boolean, FALSE),
+    sqlc.narg('creation_source')::text
 )
 ON CONFLICT (id) DO UPDATE SET
     name = EXCLUDED.name,
@@ -21,6 +23,12 @@ ON CONFLICT (id) DO UPDATE SET
         WHEN sqlc.narg('whitelisted')::boolean IS NOT NULL THEN sqlc.narg('whitelisted')::boolean
         ELSE organization_metadata.whitelisted
     END,
+    -- The conflict arm is reachable because WorkOS organization sync can insert
+    -- the row first, and it records no source. A caller that knows the flow
+    -- therefore has to be able to fill that gap. A caller that does not know it
+    -- passes null and leaves whatever is already recorded alone, so a later
+    -- upsert from an unrelated path cannot erase the flow that created the row.
+    creation_source = COALESCE(EXCLUDED.creation_source, organization_metadata.creation_source),
     updated_at = clock_timestamp()
 RETURNING *;
 

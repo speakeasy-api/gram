@@ -75138,6 +75138,9 @@ components:
                     type: string
                     description: The creation date of the organization.
                     format: date-time
+                creation_source:
+                    type: string
+                    description: The flow that created the organization (e.g. signup, assistants, platform_admin). Absent when nothing recorded one. Informational only.
                 disabled_at:
                     type: string
                     description: The time at which the organization was disabled, if any.

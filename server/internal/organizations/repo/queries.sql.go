@@ -2096,13 +2096,15 @@ INSERT INTO organization_metadata (
     name,
     slug,
     workos_id,
-    whitelisted
+    whitelisted,
+    creation_source
 ) VALUES (
     $1,
     $2,
     $3,
     $4,
-    COALESCE($5::boolean, FALSE)
+    COALESCE($5::boolean, FALSE),
+    $6::text
 )
 ON CONFLICT (id) DO UPDATE SET
     name = EXCLUDED.name,
@@ -2113,16 +2115,23 @@ ON CONFLICT (id) DO UPDATE SET
         WHEN $5::boolean IS NOT NULL THEN $5::boolean
         ELSE organization_metadata.whitelisted
     END,
+    -- The conflict arm is reachable because WorkOS organization sync can insert
+    -- the row first, and it records no source. A caller that knows the flow
+    -- therefore has to be able to fill that gap. A caller that does not know it
+    -- passes null and leaves whatever is already recorded alone, so a later
+    -- upsert from an unrelated path cannot erase the flow that created the row.
+    creation_source = COALESCE(EXCLUDED.creation_source, organization_metadata.creation_source),
     updated_at = clock_timestamp()
 RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, creation_source, created_at, updated_at, disabled_at
 `
 
 type UpsertOrganizationMetadataParams struct {
-	ID          string
-	Name        string
-	Slug        string
-	WorkosID    pgtype.Text
-	Whitelisted pgtype.Bool
+	ID             string
+	Name           string
+	Slug           string
+	WorkosID       pgtype.Text
+	Whitelisted    pgtype.Bool
+	CreationSource pgtype.Text
 }
 
 func (q *Queries) UpsertOrganizationMetadata(ctx context.Context, arg UpsertOrganizationMetadataParams) (OrganizationMetadatum, error) {
@@ -2132,6 +2141,7 @@ func (q *Queries) UpsertOrganizationMetadata(ctx context.Context, arg UpsertOrga
 		arg.Slug,
 		arg.WorkosID,
 		arg.Whitelisted,
+		arg.CreationSource,
 	)
 	var i OrganizationMetadatum
 	err := row.Scan(

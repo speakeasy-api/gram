@@ -387,6 +387,9 @@ type AdminOrganization struct {
 	TrialDemotedAt *string
 	// Number of active members in the organization.
 	MemberCount int
+	// The flow that created the organization (e.g. signup, assistants,
+	// platform_admin). Absent when nothing recorded one. Informational only.
+	CreationSource *string
 	// The creation date of the organization.
 	CreatedAt string
 	// The last update date of the organization.

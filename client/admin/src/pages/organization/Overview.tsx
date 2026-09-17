@@ -30,6 +30,10 @@ import { Switch } from "@/components/ui/switch";
 import { useOnUnmount } from "@/hooks/useOnUnmount";
 import { ACCOUNT_TYPE_OPTIONS, isAccountType } from "@/lib/accountTypes";
 import {
+  creationSourceLabel,
+  isPlatformAdminCreated,
+} from "@/lib/creationSource";
+import {
   cancelOrganizationFetches,
   invalidateOrganizationActivity,
   invalidateOrganizationDetails,
@@ -362,6 +366,23 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
               value={org.id}
               className="text-sm"
             />
+          </Row>
+          <Row label="Created via">
+            <div className="flex flex-wrap items-center gap-2">
+              <span
+                className={cn(
+                  "text-sm",
+                  org.creation_source ? undefined : "text-muted-foreground",
+                )}
+              >
+                {creationSourceLabel(org.creation_source)}
+              </span>
+              {isPlatformAdminCreated(org.creation_source) && (
+                <span className="text-muted-foreground rounded-full border px-2 py-0.5 text-[0.6875rem] font-medium tracking-wide">
+                  PROSPECT FLOW
+                </span>
+              )}
+            </div>
           </Row>
           <Row label="WorkOS org ID">
             {org.workos_id ? (

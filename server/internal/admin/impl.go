@@ -1422,6 +1422,11 @@ func (s *Service) CreateOrganization(ctx context.Context, payload *gen.CreateOrg
 		// FALSE states that an operator creating an organization is not
 		// whitelisting it.
 		Whitelisted: pgtype.Bool{Bool: false, Valid: true},
+		// Records the prospect flow this create starts. The conflict arm above
+		// is reachable — the WorkOS webhook can have inserted the row already —
+		// and that path records no source, so writing it here is what makes the
+		// two orderings agree.
+		CreationSource: conv.ToPGText(orgprovision.SourcePlatformAdmin),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create organization metadata: %w", err), organizationCreationUncertain).LogError(ctx, logger)
@@ -1782,6 +1787,7 @@ func adminOrganizationFromGetRow(row repo.AdminGetOrganizationRow) *gen.AdminOrg
 		TrialEndsAt:          pgTimestampPtr(row.TrialEndsAt),
 		TrialConvertedAt:     pgTimestampPtr(row.TrialConvertedAt),
 		TrialDemotedAt:       pgTimestampPtr(row.TrialDemotedAt),
+		CreationSource:       conv.FromPGText[string](row.CreationSource),
 		MemberCount:          int(row.MemberCount),
 		CreatedAt:            row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:            row.UpdatedAt.Time.Format(time.RFC3339),
@@ -1804,9 +1810,12 @@ func adminOrganizationFromRow(row repo.AdminListOrganizationsRow) *gen.AdminOrga
 		TrialEndsAt:          pgTimestampPtr(row.TrialEndsAt),
 		TrialConvertedAt:     nil,
 		TrialDemotedAt:       nil,
-		MemberCount:          int(row.MemberCount),
-		CreatedAt:            row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:            row.UpdatedAt.Time.Format(time.RFC3339),
+		// The list does not select it. The record view asks for one organization
+		// and reads it there, like trial_tier above.
+		CreationSource: nil,
+		MemberCount:    int(row.MemberCount),
+		CreatedAt:      row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:      row.UpdatedAt.Time.Format(time.RFC3339),
 	}
 }
 

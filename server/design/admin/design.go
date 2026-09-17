@@ -59,6 +59,10 @@ var AdminOrganization = Type("AdminOrganization", func() {
 		Format(FormatDateTime)
 	})
 	Attribute("member_count", Int, "Number of active members in the organization.")
+	// Deliberately not an Enum. The value is whatever the creating flow
+	// recorded, so a new flow added on the server would otherwise fail response
+	// validation until this list caught up. Absent means no flow recorded one.
+	Attribute("creation_source", String, "The flow that created the organization (e.g. signup, assistants, platform_admin). Absent when nothing recorded one. Informational only.")
 	Attribute("created_at", String, func() {
 		Description("The creation date of the organization.")
 		Format(FormatDateTime)

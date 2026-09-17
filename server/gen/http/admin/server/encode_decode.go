@@ -11537,6 +11537,7 @@ func marshalAdminAdminOrganizationToAdminOrganizationResponseBody(v *admin.Admin
 		TrialConvertedAt:     v.TrialConvertedAt,
 		TrialDemotedAt:       v.TrialDemotedAt,
 		MemberCount:          v.MemberCount,
+		CreationSource:       v.CreationSource,
 		CreatedAt:            v.CreatedAt,
 		UpdatedAt:            v.UpdatedAt,
 	}
