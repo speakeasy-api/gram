@@ -1,0 +1,61 @@
+server/internal/gateway/proxy.go
+  s_a9f30837f96a6a::t_8eda318f369eb8 50-52,124-146,157,170,189-205,213,250-252,255-256
+server/internal/gateway/proxy_test.go
+  s_a9f30837f96a6a::t_4b5000524e6b4e 298,429,781,1003,1345,1419,1447,1451,1460-1461,1464,1564-1565,1572-1574,1613,1619,1623-1624,1697,1764,1796,1813,1818,1822,1914,2002,2115,2213,2297,2411,2512,2627,2741,2854,2970,3088,3200
+server/internal/gateway/resources.go
+  s_a9f30837f96a6a::t_3e525168c86d70 31,55-58,61-62
+server/internal/instances/impl.go
+  s_a9f30837f96a6a::t_4d1383c9f8e319 374,376,386
+server/internal/mcp/rpc_resources_read.go
+  s_a9f30837f96a6a::t_7d4ffc0fc6049f 205,207,219
+server/internal/mcp/rpc_tools_call.go
+  s_a9f30837f96a6a::t_5b9020e65e2a8c 439,441,443
+server/internal/mcp/serve_platform.go
+  s_a9f30837f96a6a::t_9ddf2f15c71119 479-480
+server/internal/mcpriskscan/scan.go
+  s_a9f30837f96a6a::t_1ed656f352867b 6,18-26,33-35,40-42,64,70-75,77,93,115,118,121-122,125,140-142
+server/internal/mcpriskscan/scan_test.go
+  s_a9f30837f96a6a::t_635806760885ae 4,6,34,36-38,66,68-72,75-77,91-95,99,104-105,133
+server/internal/gateway/proxy_calleridentity_test.go
+  s_a9f30837f96a6a::t_34f8f90821f167 83
+server/internal/gateway/proxy_riskscan_test.go
+  s_a9f30837f96a6a::t_de53d94a27e96e 22-24,27-34,36,53,62,67,73-74,77,87,96,100,110,119,123,130,138,142
+server/internal/gateway/toolcall_metrics_test.go
+  s_a9f30837f96a6a::t_7f8621e7c0801b 160
+server/internal/mcp/risk_scan_test.go
+  s_a9f30837f96a6a::t_fa2c94cc1515e7 62,71,117,121
+server/internal/mcp/rpc_prompt_get.go
+  s_a9f30837f96a6a::t_880213fe8c61ba 53-57
+server/internal/mcp/serve_meta_proxy.go
+  s_a9f30837f96a6a::t_666aa2d83e78f3 614,616
+server/internal/remotemcp/proxymanager.go
+  s_e708fb1e789d24::t_8200ae9188f3ba 289-291,293,303
+server/internal/remotemcp/tools_call_risk_scan_interceptor.go
+  s_e708fb1e789d24::t_183bafbb0f04a2 4,18-27,35
+server/internal/remotemcp/tools_call_risk_scan_interceptor_test.go
+  s_e708fb1e789d24::t_848ee908c0b47a 31-34,37-40,47-49,52,54,115,156-157,160,184
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "bb7c5efb38742ab24929654b5f332441f97c6e6c",
+  "prompts": {},
+  "sessions": {
+    "s_a9f30837f96a6a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0afbb-bf9d-7d63-a73e-d4b97b0cff05",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    },
+    "s_e708fb1e789d24": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1a26c4a2-02c5-4f1b-91a9-ae649e8d9620",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
