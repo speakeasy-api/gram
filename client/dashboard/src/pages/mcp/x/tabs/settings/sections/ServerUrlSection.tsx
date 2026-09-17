@@ -32,7 +32,10 @@ import { CopyButton } from "@/components/ui/CopyButton";
 import type { CustomDomain } from "@gram/client/models/components/customdomain.js";
 import { Dialog } from "@/components/ui/Dialog";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
-import type { McpServer } from "@gram/client/models/components/mcpserver.js";
+import {
+  McpServerNetworkAccessMode,
+  type McpServer,
+} from "@gram/client/models/components/mcpserver.js";
 import { RequireScope } from "@/components/require-scope";
 import { SettingsInlineEmptyState } from "../SettingsInlineEmptyState";
 import { SettingsSection } from "@/components/detail/settings-section";
@@ -90,10 +93,14 @@ export function ServerUrlSection({
   const orgRoutes = useOrgRoutes();
   const { hasScope } = useRBAC();
   const canManageDomains = hasScope("org:admin");
+  const privateMode =
+    mcpServer?.networkAccessMode === McpServerNetworkAccessMode.Dual ||
+    mcpServer?.networkAccessMode === McpServerNetworkAccessMode.PrivateOnly;
   const {
     privateMcpUrls,
     privateInstallPageUrls,
     isLoading: isLoadingPrivateUrls,
+    isError: privateUrlsError,
   } = usePrivateMcpServerUrls(mcpServer, endpoints);
 
   const platformEndpoint = useMemo(
@@ -240,12 +247,20 @@ export function ServerUrlSection({
               </Field>
 
               {mcpServer &&
-                (isLoadingPrivateUrls || privateMcpUrls.length > 0) && (
+                canManageDomains &&
+                privateMode &&
+                (isLoadingPrivateUrls ||
+                  privateUrlsError ||
+                  privateMcpUrls.length > 0) && (
                   <Field>
                     <FieldLabel>Private Address</FieldLabel>
                     {isLoadingPrivateUrls ? (
                       <Text muted small>
                         Loading…
+                      </Text>
+                    ) : privateUrlsError ? (
+                      <Text muted small>
+                        Private address could not be loaded.
                       </Text>
                     ) : (
                       <div className="space-y-2">

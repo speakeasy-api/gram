@@ -51,8 +51,10 @@ function statusLabel(status: string): string {
 
 function PrivateNetworkCleanup({
   ingress,
+  statusStale,
 }: {
   ingress: NetworkIngress;
+  statusStale: boolean;
 }): JSX.Element {
   const queryClient = useQueryClient();
   const retry = useNetworkIngressDeleteIngressMutation({
@@ -88,6 +90,12 @@ function PrivateNetworkCleanup({
           connect another tailnet after cleanup completes. This page checks for
           completion automatically.
         </Alert>
+        {statusStale && (
+          <Alert variant="warning" dismissible={false}>
+            Cleanup status may be out of date because the latest check failed.
+            You can retry cleanup while Gram continues polling.
+          </Alert>
+        )}
       </SettingsSection.Body>
       <SettingsSection.Footer>
         <SettingsSection.FooterHint>
@@ -319,7 +327,12 @@ export function PrivateNetworkSection(): JSX.Element | null {
           exposing a public fallback.
         </SettingsSection.Description>
       </SettingsSection.Header>
-      {ingressResult.isLoading || features.isLoading ? (
+      {ingress?.status === "deleting" ? (
+        <PrivateNetworkCleanup
+          ingress={ingress}
+          statusStale={ingressResult.isError}
+        />
+      ) : ingressResult.isLoading || features.isLoading ? (
         <SettingsSection.Panel>
           <SettingsSection.Body>
             <Text small muted>
@@ -336,8 +349,6 @@ export function PrivateNetworkSection(): JSX.Element | null {
             </Alert>
           </SettingsSection.Body>
         </SettingsSection.Panel>
-      ) : ingress?.status === "deleting" ? (
-        <PrivateNetworkCleanup ingress={ingress} />
       ) : ingress ? (
         <ConfiguredPrivateNetwork ingress={ingress} entitled={entitled} />
       ) : (

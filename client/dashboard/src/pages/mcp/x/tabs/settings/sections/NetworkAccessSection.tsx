@@ -186,8 +186,11 @@ function NetworkAccessSectionContent({
     );
   }, [domains, endpoints]);
   const privateEndpointUrls = useMemo(
-    () => privateMcpEndpointUrls(ingress, endpoints),
-    [endpoints, ingress],
+    () =>
+      ingressQuerySuccessful && !ingressResult.isFetching
+        ? privateMcpEndpointUrls(ingress, endpoints)
+        : [],
+    [endpoints, ingress, ingressQuerySuccessful, ingressResult.isFetching],
   );
 
   const update = useUpdateMcpServerMutation({

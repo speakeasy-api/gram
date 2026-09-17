@@ -51,7 +51,9 @@ export function usePrivateMcpServerUrls(
 ): {
   privateMcpUrls: string[];
   privateInstallPageUrls: string[];
+  canReadPrivateUrls: boolean;
   isLoading: boolean;
+  isError: boolean;
 } {
   const { rolloutEnabled, canManageIngress } = useNetworkIngressRollout();
   const privateMode =
@@ -64,13 +66,25 @@ export function usePrivateMcpServerUrls(
     throwOnError: false,
   });
   const privateMcpUrls = useMemo(
-    () => privateMcpEndpointUrls(ingressResult.data?.ingress, endpoints),
-    [endpoints, ingressResult.data?.ingress],
+    () =>
+      queryEnabled && ingressResult.isSuccess && !ingressResult.isFetching
+        ? privateMcpEndpointUrls(ingressResult.data?.ingress, endpoints)
+        : [],
+    [
+      endpoints,
+      ingressResult.data?.ingress,
+      ingressResult.isFetching,
+      ingressResult.isSuccess,
+      queryEnabled,
+    ],
   );
 
   return {
     privateMcpUrls,
     privateInstallPageUrls: privateMcpUrls.map((url) => `${url}/install`),
-    isLoading: queryEnabled && ingressResult.isPending,
+    canReadPrivateUrls: rolloutEnabled && canManageIngress,
+    isLoading:
+      queryEnabled && (ingressResult.isPending || ingressResult.isFetching),
+    isError: queryEnabled && ingressResult.isError,
   };
 }

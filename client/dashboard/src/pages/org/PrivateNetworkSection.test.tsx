@@ -235,6 +235,31 @@ describe("PrivateNetworkSection", () => {
     });
   });
 
+  it("keeps cached cleanup controls visible when polling fails", () => {
+    state.ingressError = true;
+    state.ingress = {
+      id: "ingress-1",
+      organizationId: "org-1",
+      provider: "tailscale",
+      hostname: "private-mcp",
+      endpointNamespaceKind: "platform",
+      enabled: false,
+      identityRequired: false,
+      credentialsConfigured: true,
+      status: "deleting",
+      createdAt: new Date(0),
+      updatedAt: new Date(1_000),
+    };
+
+    render(<PrivateNetworkSection />);
+
+    expect(screen.getByText("Cleaning up")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Retry cleanup" })).toBeTruthy();
+    expect(
+      screen.queryByText(/Private network settings could not be loaded/),
+    ).toBeNull();
+  });
+
   it("does not show setup without entitlement", () => {
     state.entitled = false;
     render(<PrivateNetworkSection />);

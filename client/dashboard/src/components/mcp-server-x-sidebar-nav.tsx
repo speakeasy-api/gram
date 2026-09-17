@@ -96,20 +96,30 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
     endpoints,
     isLoadingEndpoints,
   );
-  const { privateMcpUrls, privateInstallPageUrls } = usePrivateMcpServerUrls(
-    mcpServer,
-    endpoints,
-  );
-  const privateMcpUrl = privateMcpUrls[0];
+  const {
+    privateMcpUrls,
+    privateInstallPageUrls,
+    canReadPrivateUrls,
+    isLoading: isLoadingPrivateUrls,
+    isError: privateUrlsError,
+  } = usePrivateMcpServerUrls(mcpServer, endpoints);
   const publicRoutesEnabled =
     mcpServer?.networkAccessMode !== McpServerNetworkAccessMode.PrivateOnly;
   const privateRoutesEnabled =
     mcpServer?.networkAccessMode === McpServerNetworkAccessMode.Dual ||
     mcpServer?.networkAccessMode === McpServerNetworkAccessMode.PrivateOnly;
-  const effectiveInstallPageUrl =
+  const effectiveInstallPageUrls =
     mcpServer?.networkAccessMode === McpServerNetworkAccessMode.PrivateOnly
-      ? privateInstallPageUrls[0]
-      : installPageUrl;
+      ? privateInstallPageUrls
+      : installPageUrl
+        ? [installPageUrl]
+        : [];
+  const privateUrlAssessable =
+    canReadPrivateUrls && !isLoadingPrivateUrls && !privateUrlsError;
+  const serverUrlReady =
+    mcpServer?.networkAccessMode === McpServerNetworkAccessMode.PrivateOnly
+      ? privateMcpUrls.length > 0
+      : !!mcpUrl;
 
   const remoteMcpServerId = mcpServer?.remoteMcpServerId ?? "";
   const { data: remoteMcpServer } = useGetRemoteMcpServer(
@@ -189,10 +199,21 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
           label: "Server URL",
           description: isUnproxied
             ? "Not applicable — unproxied servers have no Speakeasy-hosted endpoint."
-            : mcpUrl
-              ? "Endpoint is live and ready to connect to."
-              : "Add an endpoint so this server has a URL to connect to.",
-          ready: isUnproxied || !!mcpUrl,
+            : mcpServer.networkAccessMode ===
+                  McpServerNetworkAccessMode.PrivateOnly &&
+                !privateUrlAssessable
+              ? !canReadPrivateUrls
+                ? "Private URL visibility requires organization admin access."
+                : isLoadingPrivateUrls
+                  ? "Checking private URL availability."
+                  : "Private URL availability could not be checked."
+              : serverUrlReady
+                ? "Endpoint is live and ready to connect to."
+                : mcpServer.networkAccessMode ===
+                    McpServerNetworkAccessMode.PrivateOnly
+                  ? "Bring private ingress online so this server has a URL to connect to."
+                  : "Add an endpoint so this server has a URL to connect to.",
+          ready: isUnproxied || serverUrlReady,
           href: isUnproxied
             ? undefined
             : `${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_SERVER_URL_SECTION_ID}`,
@@ -320,19 +341,27 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
         />
       )}
 
-      {privateRoutesEnabled && privateMcpUrl && (
-        <SidebarUrl
-          label="Private URL"
-          url={privateMcpUrl}
-          copyTooltip="Copy private URL"
-        />
-      )}
+      {privateRoutesEnabled &&
+        privateMcpUrls.map((url, index) => (
+          <SidebarUrl
+            key={url}
+            label={index === 0 ? "Private URL" : "Private URL (additional)"}
+            url={url}
+            copyTooltip="Copy private URL"
+          />
+        ))}
 
-      {privateRoutesEnabled && !privateMcpUrl && (
+      {privateRoutesEnabled && privateMcpUrls.length === 0 && (
         <div className="flex flex-col gap-1">
           <DetailSidebarInfoLabel>Private URL</DetailSidebarInfoLabel>
           <Text variant="small" muted>
-            Available to organization admins while private ingress is online.
+            {isLoadingPrivateUrls
+              ? "Loading private URL…"
+              : !canReadPrivateUrls
+                ? "Available to organization admins while private ingress is online."
+                : privateUrlsError
+                  ? "Private URL could not be loaded."
+                  : "Bring private ingress online to use the private URL."}
           </Text>
         </div>
       )}
@@ -349,16 +378,21 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
           flex-1 the rule sat at the container's midpoint, which the longer
           label crowded while the shorter one left slack. */}
       <div className="border-border flex items-stretch justify-center gap-3 border-t pt-3">
-        {effectiveInstallPageUrl ? (
-          <a
-            href={effectiveInstallPageUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs font-semibold transition-colors hover:no-underline"
-          >
-            Install page
-            <ExternalLink className="h-3 w-3" />
-          </a>
+        {effectiveInstallPageUrls.length > 0 ? (
+          <div className="flex flex-col items-center gap-1">
+            {effectiveInstallPageUrls.map((url, index) => (
+              <a
+                key={url}
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs font-semibold transition-colors hover:no-underline"
+              >
+                {index === 0 ? "Install page" : `Install page ${index + 1}`}
+                <ExternalLink className="h-3 w-3" />
+              </a>
+            ))}
+          </div>
         ) : (
           <span className="text-muted-foreground/50 flex cursor-not-allowed items-center gap-1 text-xs font-semibold">
             Install page
