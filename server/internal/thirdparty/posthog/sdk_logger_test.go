@@ -5,21 +5,31 @@ import (
 	"encoding/json"
 	"log/slog"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
 )
 
 type capturedLog struct {
-	Level string `json:"level"`
-	Msg   string `json:"msg"`
+	Level     string `json:"level"`
+	Msg       string `json:"msg"`
+	Component string `json:"gram.component,omitempty"`
+}
+
+func newCapturingLogger(t *testing.T, level slog.Level) (*slog.Logger, *bytes.Buffer) {
+	t.Helper()
+
+	var buf bytes.Buffer
+	return slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: level, AddSource: false, ReplaceAttr: nil})), &buf
 }
 
 func newCapturingSDKLogger(t *testing.T, level slog.Level) (*sdkLogger, *bytes.Buffer) {
 	t.Helper()
 
-	var buf bytes.Buffer
-	logger := slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: level, AddSource: false, ReplaceAttr: nil}))
-	return &sdkLogger{logger: logger}, &buf
+	logger, buf := newCapturingLogger(t, level)
+	return &sdkLogger{logger: logger}, buf
 }
 
 func decodeCapturedLogs(t *testing.T, buf *bytes.Buffer) []capturedLog {
@@ -77,4 +87,52 @@ func TestSDKLoggerKeepsFetchErrorsAtError(t *testing.T) {
 	require.Equal(t, []capturedLog{
 		{Level: "ERROR", Msg: "Unable to fetch feature flags: connection refused"},
 	}, decodeCapturedLogs(t, buf))
+}
+
+// The SDK configuration must route diagnostics through the logger it is given
+// rather than the SDK's default stderr logger, so entries keep the attributes
+// (such as the component) that New attaches.
+func TestNewSDKConfigRoutesSDKLogsThroughLogger(t *testing.T) {
+	t.Parallel()
+
+	logger, buf := newCapturingLogger(t, slog.LevelDebug)
+
+	config := newSDKConfig(logger.With(attr.SlogComponent("posthog")), "https://posthog.example.test", "")
+	require.NotNil(t, config.Logger)
+	require.Empty(t, config.PersonalApiKey)
+	require.Zero(t, config.DefaultFeatureFlagsPollingInterval)
+
+	config.Logger.Warnf("Unable to compute flag locally (%s) - %s", "some-flag", "reason")
+	config.Logger.Errorf("Unable to fetch feature flags: %s", "connection refused")
+
+	require.Equal(t, []capturedLog{
+		{Level: "DEBUG", Msg: "Unable to compute flag locally (some-flag) - reason", Component: "posthog"},
+		{Level: "ERROR", Msg: "Unable to fetch feature flags: connection refused", Component: "posthog"},
+	}, decodeCapturedLogs(t, buf))
+}
+
+func TestNewSDKConfigEnablesLocalEvaluationWithPersonalAPIKey(t *testing.T) {
+	t.Parallel()
+
+	logger, _ := newCapturingLogger(t, slog.LevelDebug)
+
+	config := newSDKConfig(logger, "https://posthog.example.test", "personal-api-key")
+	require.Equal(t, "personal-api-key", config.PersonalApiKey)
+	require.Equal(t, time.Minute, config.DefaultFeatureFlagsPollingInterval)
+	require.NotNil(t, config.Logger)
+}
+
+// New tags its logger with the posthog component before handing it to the
+// SDK, so every entry, including its own, is attributable in log aggregation.
+func TestNewTagsLoggerWithComponent(t *testing.T) {
+	t.Parallel()
+
+	logger, buf := newCapturingLogger(t, slog.LevelDebug)
+
+	provider := New(t.Context(), logger, "", "", "")
+	require.True(t, provider.disabled)
+
+	logs := decodeCapturedLogs(t, buf)
+	require.Len(t, logs, 1)
+	require.Equal(t, "posthog", logs[0].Component)
 }

@@ -46,20 +46,9 @@ func New(ctx context.Context, logger *slog.Logger, posthogAPIKey string, posthog
 		}
 	}
 
-	phConfig := posthog.Config{
-		Endpoint: posthogEndpoint,
-		Logger:   &sdkLogger{logger: logger},
-	}
-
-	// Having a personal (private) API key allow posthog to maintain its own state of feature flags via polling
-	if posthogPersonalAPIKey != "" {
-		phConfig.PersonalApiKey = posthogPersonalAPIKey
-		phConfig.DefaultFeatureFlagsPollingInterval = 1 * time.Minute
-	}
-
 	client, err := posthog.NewWithConfig(
 		posthogAPIKey,
-		phConfig,
+		newSDKConfig(logger, posthogEndpoint, posthogPersonalAPIKey),
 	)
 	if err != nil {
 		logger.ErrorContext(ctx, "failed to instantiate posthog client", attr.SlogError(err))
@@ -77,6 +66,22 @@ func New(ctx context.Context, logger *slog.Logger, posthogAPIKey string, posthog
 		localEvaluation: posthogPersonalAPIKey != "",
 		logger:          logger,
 	}
+}
+
+// newSDKConfig builds the PostHog client configuration. SDK diagnostics are
+// routed through logger so they carry its attributes. A personal API key
+// turns on local flag evaluation, with the SDK polling flag definitions every
+// minute.
+func newSDKConfig(logger *slog.Logger, endpoint string, personalAPIKey string) posthog.Config {
+	config := posthog.Config{
+		Endpoint: endpoint,
+		Logger:   &sdkLogger{logger: logger},
+	}
+	if personalAPIKey != "" {
+		config.PersonalApiKey = personalAPIKey
+		config.DefaultFeatureFlagsPollingInterval = 1 * time.Minute
+	}
+	return config
 }
 
 func (p *Posthog) IsFlagEnabled(ctx context.Context, flag feature.Flag, distinctID string, groups map[string]string) (bool, error) {
