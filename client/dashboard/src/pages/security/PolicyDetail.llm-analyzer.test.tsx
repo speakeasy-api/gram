@@ -126,7 +126,9 @@ function renderEditor(
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  return render(
+  // A fresh element per call: React bails out on an identical one, so the
+  // mocked flag would not be re-read.
+  const tree = () => (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <StandardPolicyEditor
@@ -134,8 +136,16 @@ function renderEditor(
           initialCategories={initialCategories}
         />
       </TooltipProvider>
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
+  const view = render(tree());
+  return { ...view, rerender: () => view.rerender(tree()) };
+}
+
+function updateBody() {
+  expect(mocks.mutateUpdate).toHaveBeenCalledTimes(1);
+  return mocks.mutateUpdate.mock.calls[0]?.[0]?.request
+    ?.updateRiskPolicyRequestBody;
 }
 
 function presidioPolicy(overrides: Partial<RiskPolicy> = {}): RiskPolicy {
@@ -241,16 +251,95 @@ describe("StandardPolicyEditor under the LLM analyzer", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
 
-    expect(mocks.mutateUpdate).toHaveBeenCalledTimes(1);
-    const body =
-      mocks.mutateUpdate.mock.calls[0]?.[0]?.request
-        ?.updateRiskPolicyRequestBody;
+    const body = updateBody();
     expect(body).toMatchObject({
       id: "policy-1",
       sources: ["gitleaks", "presidio"],
       presidioEntities: ["CREDIT_CARD", "US_SSN"],
     });
     expect(body).not.toHaveProperty("presidioScoreThreshold");
+  });
+
+  it("keeps stored personal-data overrides across a PII off/on flip", () => {
+    renderEditor(
+      presidioPolicy({
+        disabledRules: ["pii.email_address", "pii.credit_card"],
+      }),
+    );
+
+    const pii = screen.getByRole("switch", { name: "PII built-in rule" });
+    fireEvent.click(pii);
+    fireEvent.click(pii);
+    fireEvent.click(
+      screen.getByRole("switch", { name: "Secrets built-in rule" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(updateBody()?.disabledRules?.sort()).toEqual([
+      "pii.credit_card",
+      "pii.email_address",
+    ]);
+  });
+
+  it("drops the stored entity list once PII is turned off", () => {
+    renderEditor(presidioPolicy());
+
+    fireEvent.click(
+      screen.getByRole("switch", { name: "Secrets built-in rule" }),
+    );
+    fireEvent.click(screen.getByRole("switch", { name: "PII built-in rule" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(updateBody()).toMatchObject({
+      sources: ["gitleaks"],
+      presidioEntities: [],
+    });
+  });
+
+  it("keeps a legacy per-category scope across an edit", () => {
+    renderEditor(
+      presidioPolicy({
+        detectionScopes: [
+          { category: "financial", scopeInclude: "message.kind == 'tool'" },
+        ],
+      }),
+    );
+
+    fireEvent.click(
+      screen.getByRole("switch", { name: "Secrets built-in rule" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(updateBody()?.detectionScopes).toEqual([
+      { category: "financial", scopeInclude: "message.kind == 'tool'" },
+    ]);
+  });
+
+  it("folds a legacy selection into PII when the flag resolves after mount", () => {
+    mocks.flagResult.mockReturnValue({ status: "loading" });
+    const view = renderEditor(
+      presidioPolicy({ presidioEntities: ["CREDIT_CARD"] }),
+    );
+    expect(
+      screen
+        .getByRole("switch", { name: "Financial Information built-in rule" })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
+
+    mocks.flagResult.mockReturnValue({ status: "enabled" });
+    view.rerender();
+
+    const pii = screen.getByRole("switch", { name: "PII built-in rule" });
+    expect(pii.getAttribute("aria-checked")).toBe("true");
+    fireEvent.click(
+      screen.getByRole("switch", { name: "Secrets built-in rule" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(updateBody()).toMatchObject({
+      sources: ["gitleaks", "presidio"],
+      presidioEntities: ["CREDIT_CARD"],
+    });
   });
 });
 

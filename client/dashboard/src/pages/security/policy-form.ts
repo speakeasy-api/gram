@@ -119,6 +119,34 @@ export function categoryLevelDetectors(
     : CATEGORY_LEVEL_DETECTORS;
 }
 
+/** The Presidio-backed categories that have no card of their own under the
+ *  LLM analyzer. */
+const LEGACY_PERSONAL_DATA_CATEGORIES = PRESIDIO_CATEGORIES.filter(
+  (c) => c !== "pii",
+);
+
+/** The selected category set expressed in the vocabulary of `mode`. The flag
+ *  that picks the mode resolves asynchronously, so a form seeded under the
+ *  legacy engine can find itself under the LLM analyzer with one of the
+ *  Presidio-backed categories selected and no `pii` card to show it on; fold
+ *  those into `pii` so the card and the saved sources agree. Returns `cats`
+ *  itself when nothing needs to change. */
+export function normalizeCategoriesForMode(
+  cats: Set<RuleCategory>,
+  mode: DetectorMode,
+): Set<RuleCategory> {
+  if (
+    mode !== "llm" ||
+    !LEGACY_PERSONAL_DATA_CATEGORIES.some((c) => cats.has(c))
+  ) {
+    return cats;
+  }
+  const next = new Set(cats);
+  for (const c of LEGACY_PERSONAL_DATA_CATEGORIES) next.delete(c);
+  next.add("pii");
+  return next;
+}
+
 export type CategoriesPayload = {
   sources: string[];
   presidioEntities: string[];
@@ -195,12 +223,13 @@ export function categoriesToPayload(
   if (cats.has("account_identity")) sources.push("account_identity");
   if (cats.has("prompt_injection")) sources.push("prompt_injection");
   if (mode === "llm") {
-    if (cats.has("pii")) sources.push("presidio");
+    const llmCats = normalizeCategoriesForMode(cats, mode);
+    if (llmCats.has("pii")) sources.push("presidio");
     return {
       sources,
       presidioEntities,
       promptInjectionRules,
-      disabledRules: persistedDisabledRules(cats, disabledRules, mode),
+      disabledRules: persistedDisabledRules(llmCats, disabledRules, mode),
     };
   }
   for (const cat of PRESIDIO_CATEGORIES) {
@@ -228,22 +257,30 @@ export function categoriesToPayload(
   };
 }
 
-/** Disabled ids worth persisting: only those of currently-selected
- *  categories, so unselecting a category drops its per-rule overrides. Under
- *  the LLM analyzer `pii` stands in for every Presidio-backed category, so a
- *  stored override on any of them survives an edit (the analyzer ignores it;
- *  turning the flag off restores it). */
+/** The categories whose stored per-category settings (rule overrides,
+ *  detection scopes) an edit keeps: the selected ones, so unselecting a
+ *  category drops its settings. Under the LLM analyzer `pii` stands in for
+ *  every Presidio-backed category, so a stored setting on any of them
+ *  survives an edit (the analyzer ignores it; turning the flag off restores
+ *  it). */
+export function persistedCategories(
+  cats: Set<RuleCategory>,
+  mode: DetectorMode,
+): Set<RuleCategory> {
+  if (mode !== "llm" || !cats.has("pii")) return cats;
+  // `off_policy` rides along: the legacy engine resolves it for an
+  // entity-less presidio policy, so it can carry a stored scope too.
+  return new Set([...cats, ...PRESIDIO_CATEGORIES, "off_policy"]);
+}
+
+/** Disabled ids worth persisting, see `persistedCategories`. */
 function persistedDisabledRules(
   cats: Set<RuleCategory>,
   disabledRules: Set<string>,
   mode: DetectorMode,
 ): string[] {
-  const persistedFor = new Set(cats);
-  if (mode === "llm" && cats.has("pii")) {
-    for (const cat of PRESIDIO_CATEGORIES) persistedFor.add(cat);
-  }
   const persisted: string[] = [];
-  for (const cat of persistedFor) {
+  for (const cat of persistedCategories(cats, mode)) {
     for (const rule of DETECTION_RULES[cat] ?? []) {
       if (disabledRules.has(rule.id)) persisted.push(rule.id);
     }

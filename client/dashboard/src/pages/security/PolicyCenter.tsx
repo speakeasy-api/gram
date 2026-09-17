@@ -757,6 +757,8 @@ function PolicyCenterContent() {
           } = categoriesToPayload(
             new Set<RuleCategory>(["secrets", "pii"]),
             new Set(),
+            new Set(),
+            mode,
           );
           createMutation.mutate({
             request: {

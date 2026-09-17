@@ -429,6 +429,19 @@ export function ConfigurePoliciesStep({
     }
   }, [policiesData, policyForCategory, categoryDefinitions, categories]);
 
+  // The flag behind `mode` can resolve while a sheet is open; if its row is
+  // no longer offered, close it rather than leave controls whose edits go
+  // nowhere.
+  useEffect(() => {
+    if (
+      openCategory &&
+      openCategory !== "shadow_mcp" &&
+      !categories.includes(openCategory)
+    ) {
+      setOpenCategory(null);
+    }
+  }, [openCategory, categories]);
+
   const handleCategoryToggle = (cat: RuleCategory, checked: boolean) => {
     setConfigs((prev) => ({
       ...prev,

@@ -9,6 +9,7 @@ import {
   availableCategories,
   categoriesToPayload,
   categoryLevelDetectors,
+  normalizeCategoriesForMode,
   policyDetectionCategories,
   policyToCategories,
 } from "./policy-form";
@@ -74,6 +75,39 @@ describe("llm detector mode", () => {
         "llm",
       ).sources,
     ).not.toContain("presidio");
+  });
+
+  it("folds a legacy personal-data selection into PII", () => {
+    const seededUnderPresidio = new Set<RuleCategory>([
+      "secrets",
+      "financial",
+      "healthcare",
+    ]);
+    expect(normalizeCategoriesForMode(seededUnderPresidio, "llm")).toEqual(
+      new Set(["secrets", "pii"]),
+    );
+    // Nothing to fold: the same instance comes back so state stays put.
+    const alreadyLlm = new Set<RuleCategory>(["secrets", "pii"]);
+    expect(normalizeCategoriesForMode(alreadyLlm, "llm")).toBe(alreadyLlm);
+    expect(normalizeCategoriesForMode(seededUnderPresidio, "presidio")).toBe(
+      seededUnderPresidio,
+    );
+  });
+
+  it("keeps the presidio source for a legacy selection the flag outran", () => {
+    expect(
+      categoriesToPayload(
+        new Set<RuleCategory>(["financial"]),
+        new Set(["pii.credit_card"]),
+        new Set(),
+        "llm",
+      ),
+    ).toEqual({
+      sources: ["presidio"],
+      presidioEntities: [],
+      promptInjectionRules: [],
+      disabledRules: ["pii.credit_card"],
+    });
   });
 
   it("keeps stored personal-data rule overrides across an edit", () => {

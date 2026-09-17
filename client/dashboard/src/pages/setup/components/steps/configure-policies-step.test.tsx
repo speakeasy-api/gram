@@ -78,11 +78,15 @@ beforeEach(() => {
 });
 
 function renderStep() {
-  return render(
+  // A fresh element per call: React bails out on an identical one, so the
+  // mocked flag would not be re-read.
+  const tree = () => (
     <MemoryRouter>
       <ConfigurePoliciesStep onComplete={() => {}} />
-    </MemoryRouter>,
+    </MemoryRouter>
   );
+  const view = render(tree());
+  return { ...view, rerender: () => view.rerender(tree()) };
 }
 
 const PRESIDIO_ONLY_ROWS = [
@@ -130,6 +134,25 @@ describe("ConfigurePoliciesStep detector mode", () => {
       presidioEntities: [],
       action: "flag",
     });
+  });
+
+  it("closes a legacy category sheet when the flag resolves to the analyzer", () => {
+    mocks.flagResult.mockReturnValue({ status: "loading" });
+    const view = renderStep();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /^Financial Information/ }),
+    );
+    expect(
+      screen.getByRole("switch", { name: "Enable detection" }),
+    ).toBeTruthy();
+
+    mocks.flagResult.mockReturnValue({ status: "enabled" });
+    view.rerender();
+
+    expect(
+      screen.queryByRole("switch", { name: "Enable detection" }),
+    ).toBeNull();
   });
 
   it("shows an entity-scoped presidio policy as the PII row under the analyzer", () => {

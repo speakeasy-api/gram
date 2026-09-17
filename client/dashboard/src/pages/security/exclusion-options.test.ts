@@ -142,6 +142,8 @@ describe("exclusionOptions under the LLM analyzer", () => {
         (o) => o.value === "custom",
       );
     expect(custom("presidio")?.hint).toContain("entity types");
-    expect(custom("llm")?.hint).not.toContain("entity types");
+    const llmCustom = custom("llm");
+    expect(llmCustom).toBeDefined();
+    expect(llmCustom?.hint).not.toContain("entity types");
   });
 });

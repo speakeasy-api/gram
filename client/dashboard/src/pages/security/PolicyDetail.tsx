@@ -119,7 +119,9 @@ import {
   allCategories,
   categoriesToPayload,
   categoryLevelDetectors,
+  normalizeCategoriesForMode,
   parseApprovedEmailDomains,
+  persistedCategories,
   personalDataCategories,
   pinnedHiddenRuleIds,
   policyToCategories,
@@ -1760,9 +1762,11 @@ function scopeSummaryText(customizedScopeCount: number): string {
 function detectionScopesPayload(
   selectedCategories: Set<RuleCategory>,
   overrides: Map<string, ScopeOverride>,
+  mode: DetectorMode = "presidio",
 ): RiskDetectionScope[] {
+  const persistedFor = persistedCategories(selectedCategories, mode);
   return [...overrides]
-    .filter(([category]) => selectedCategories.has(category as RuleCategory))
+    .filter(([category]) => persistedFor.has(category as RuleCategory))
     .map(([category, override]) => ({
       category,
       ...(override.scopeInclude.trim()
@@ -3490,6 +3494,13 @@ export function StandardPolicyEditor({
   const [selectedCategories, setSelectedCategories] = useState<
     Set<RuleCategory>
   >(() => new Set(orig?.categories ?? initialCategories));
+  // The flag behind `mode` resolves asynchronously, so the seed above may
+  // predate it; fold any legacy personal-data selection into `pii` once the
+  // LLM analyzer applies, or the collapsed card would hide it and a save
+  // would drop the presidio source.
+  useEffect(() => {
+    setSelectedCategories((prev) => normalizeCategoriesForMode(prev, mode));
+  }, [mode]);
   const [disabledRules, setDisabledRules] = useState<Set<string>>(
     () => new Set(policy?.disabledRules ?? []),
   );
@@ -3691,7 +3702,12 @@ export function StandardPolicyEditor({
       return;
     }
 
-    const rules = DETECTION_RULES[cat].filter((r) => !r.hidden);
+    // A category-level detector has no rule list to reset; under the LLM
+    // analyzer that includes `pii`, whose stored Presidio overrides must
+    // survive a flip so a flag-off restores them.
+    const rules = modeCategoryLevelDetectors.has(cat)
+      ? []
+      : DETECTION_RULES[cat].filter((r) => !r.hidden);
     const nextCats = new Set(selectedCategories);
     const nextDisabled = new Set(disabledRules);
     if (checked) nextCats.add(cat);
@@ -3732,9 +3748,13 @@ export function StandardPolicyEditor({
     // Under the LLM analyzer the entity list is not what runs, so an edit
     // echoes the stored list back unchanged rather than the empty list the
     // collapsed PII card would derive: turning the flag off must restore the
-    // policy exactly as it was. A create has nothing stored and sends [].
+    // policy exactly as it was. Only while PII stays on, though: once the
+    // presidio source is gone the entities go with it, or a flag-off would
+    // read them back as selected detectors. A create has nothing stored.
     const updatePresidioEntities =
-      mode === "llm" ? (policy?.presidioEntities ?? []) : presidioEntities;
+      mode === "llm" && sources.includes("presidio")
+        ? (policy?.presidioEntities ?? [])
+        : presidioEntities;
     // Flag-only sources (destructive_tool, cli_destructive, account_identity)
     // are rejected by the server with action=block, so force flag as a safety
     // net in case the form state drifted.
@@ -3754,6 +3774,7 @@ export function StandardPolicyEditor({
     const detectionScopes = detectionScopesPayload(
       selectedCategories,
       scopeOverrides,
+      mode,
     );
     const shadowMcpAllowedUrls = shadowMCPAllowedURLsForMutation({
       action: resolvedAction,
