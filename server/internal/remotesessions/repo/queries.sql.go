@@ -3753,10 +3753,13 @@ func (q *Queries) GetRemoteSessionClientForClientMetadataDocument(ctx context.Co
 const getRemoteSessionClientForRotation = `-- name: GetRemoteSessionClientForRotation :one
 SELECT
     c.id, c.project_id, c.organization_id, c.attachment_scope, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.grant_types, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.resource_identifier, c.resource_name, c.resource_documentation, c.resource_policy_uri, c.resource_tos_uri, c.upstream_rejected_at, c.identity_provider_connection_id, c.created_at, c.updated_at, c.deleted_at, c.deleted,
-    i.issuer                   AS issuer_url,
-    i.token_endpoint           AS issuer_token_endpoint,
-    i.registration_endpoint    AS issuer_registration_endpoint,
-    i.tunneled_mcp_server_id   AS issuer_tunneled_mcp_server_id
+    i.issuer                 AS issuer_url,
+    i.token_endpoint         AS issuer_token_endpoint,
+    i.registration_endpoint  AS issuer_registration_endpoint,
+    i.updated_at             AS issuer_updated_at,
+    i.project_id             AS issuer_project_id,
+    i.organization_id        AS issuer_organization_id,
+    i.tunneled_mcp_server_id AS issuer_tunneled_mcp_server_id
 FROM remote_session_clients AS c
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
 WHERE c.id = $1
@@ -3769,6 +3772,9 @@ type GetRemoteSessionClientForRotationRow struct {
 	IssuerUrl                  string
 	IssuerTokenEndpoint        pgtype.Text
 	IssuerRegistrationEndpoint pgtype.Text
+	IssuerUpdatedAt            pgtype.Timestamptz
+	IssuerProjectID            uuid.NullUUID
+	IssuerOrganizationID       pgtype.Text
 	IssuerTunneledMcpServerID  uuid.NullUUID
 }
 
@@ -3814,6 +3820,9 @@ func (q *Queries) GetRemoteSessionClientForRotation(ctx context.Context, id uuid
 		&i.IssuerUrl,
 		&i.IssuerTokenEndpoint,
 		&i.IssuerRegistrationEndpoint,
+		&i.IssuerUpdatedAt,
+		&i.IssuerProjectID,
+		&i.IssuerOrganizationID,
 		&i.IssuerTunneledMcpServerID,
 	)
 	return i, err
@@ -8031,6 +8040,28 @@ func (q *Queries) LockRemoteSessionIssuerForMetadataRefresh(ctx context.Context,
 	return i, err
 }
 
+const lockRotationIssuerSnapshot = `-- name: LockRotationIssuerSnapshot :one
+SELECT id FROM remote_session_issuers
+WHERE id = $1 AND project_id IS NOT DISTINCT FROM $2::uuid
+AND organization_id IS NOT DISTINCT FROM $3::text
+AND deleted IS FALSE FOR UPDATE
+`
+
+type LockRotationIssuerSnapshotParams struct {
+	ID             uuid.UUID
+	ProjectID      uuid.NullUUID
+	OrganizationID pgtype.Text
+}
+
+// Lock only the exact pre-HTTP issuer identity and tenant. The client is locked
+// next; publication rechecks both versions while these locks are held.
+func (q *Queries) LockRotationIssuerSnapshot(ctx context.Context, arg LockRotationIssuerSnapshotParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockRotationIssuerSnapshot, arg.ID, arg.ProjectID, arg.OrganizationID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const lockTrustedRemoteSessionClientForOrganization = `-- name: LockTrustedRemoteSessionClientForOrganization :one
 SELECT c.id, c.project_id, c.organization_id, c.attachment_scope, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.grant_types, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.resource_identifier, c.resource_name, c.resource_documentation, c.resource_policy_uri, c.resource_tos_uri, c.upstream_rejected_at, c.identity_provider_connection_id, c.created_at, c.updated_at, c.deleted_at, c.deleted, i.id, i.project_id, i.organization_id, i.attachment_scope, i.slug, i.issuer, i.authorization_endpoint, i.token_endpoint, i.revocation_endpoint, i.registration_endpoint, i.jwks_uri, i.jwks, i.jwks_fetched_at, i.jwks_last_error, i.jwks_last_error_at, i.jwks_cache_expires_at, i.jwks_etag, i.service_documentation, i.op_policy_uri, i.op_tos_uri, i.scopes_supported, i.grant_types_supported, i.authorization_grant_profiles_supported, i.response_types_supported, i.token_endpoint_auth_methods_supported, i.code_challenge_methods_supported, i.client_id_metadata_document_supported, i.userinfo_endpoint, i.introspection_endpoint, i.introspection_endpoint_auth_methods_supported, i.id_token_signing_alg_values_supported, i.claims_supported, i.backchannel_logout_supported, i.authorization_response_iss_parameter_supported, i.scope_override, i.resource_indicator_supported, i.oidc, i.passthrough, i.tunneled_mcp_server_id, i.name, i.logo_asset_id, i.client_setup_documentation_url, i.metadata, i.metadata_fetched_at, i.metadata_last_error, i.metadata_last_error_at, i.metadata_last_error_url, i.created_at, i.updated_at, i.deleted_at, i.deleted
 FROM remote_session_clients AS c
@@ -8488,6 +8519,8 @@ WHERE id = $6
   AND client_id = $7
   AND updated_at = $8
   AND remote_session_issuer_id = $9
+  AND project_id IS NOT DISTINCT FROM $10::uuid
+  AND organization_id IS NOT DISTINCT FROM $11::text
   AND deleted IS FALSE
   AND client_id_metadata_uri IS NULL
 RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, created_at, updated_at, deleted_at, deleted
@@ -8503,6 +8536,8 @@ type ReplaceRemoteSessionClientRegistrationParams struct {
 	ExpectedClientID        string
 	ExpectedUpdatedAt       pgtype.Timestamptz
 	ExpectedIssuerID        uuid.UUID
+	ExpectedProjectID       uuid.NullUUID
+	ExpectedOrganizationID  pgtype.Text
 }
 
 // Swaps the row onto a freshly registered upstream client in place, so the
@@ -8527,6 +8562,8 @@ func (q *Queries) ReplaceRemoteSessionClientRegistration(ctx context.Context, ar
 		arg.ExpectedClientID,
 		arg.ExpectedUpdatedAt,
 		arg.ExpectedIssuerID,
+		arg.ExpectedProjectID,
+		arg.ExpectedOrganizationID,
 	)
 	var i RemoteSessionClient
 	err := row.Scan(

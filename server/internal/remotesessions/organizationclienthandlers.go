@@ -199,13 +199,19 @@ func (s *Service) GetClientDeletePreflight(ctx context.Context, payload *orgclie
 		return nil, oops.E(oops.CodeUnexpected, err, "count identity-chaining bindings")
 	}
 
+	if canDelete && emaCount > 0 {
+		canDelete = false
+		reason := "identity_chaining"
+		blockingReason = &reason
+	}
+
 	return &orgclientsgen.OrganizationClientDeletePreflight{
 		SessionCount:              int(sessionCount),
 		McpServerNames:            names,
 		TrustedUserSessionIssuers: trustedIssuers,
 		CanDelete:                 canDelete,
 		BlockingReason:            blockingReason,
-		EmaBindingCount: emaCount,
+		EmaBindingCount:           emaCount,
 	}, nil
 }
 

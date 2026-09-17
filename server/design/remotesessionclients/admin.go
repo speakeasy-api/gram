@@ -81,7 +81,7 @@ var OrganizationClientDeletePreflight = Type("OrganizationClientDeletePreflight"
 	Attribute("trusted_user_session_issuers", ArrayOf(TrustedClientUserSessionIssuerReference), "Organization-owned user-session issuers that use this client for identity-provider login and block deletion.")
 	Attribute("can_delete", Boolean, "Whether the client can be deleted now.")
 	Attribute("blocking_reason", String, "Stable reason deletion is blocked. Present when can_delete is false.", func() {
-		Enum("identity_provider_login")
+		Enum("identity_provider_login", "identity_chaining")
 	})
 
 	Required("session_count", "mcp_server_names", "trusted_user_session_issuers", "can_delete")
