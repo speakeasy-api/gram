@@ -231,8 +231,37 @@ func TestUpdateClient(t *testing.T) {
 	require.Nil(t, recleared.Audience)
 }
 
-// TestGetClientDeletePreflight reports the client's active session count and
-// (empty) MCP server names.
+func TestUpdateClientRejectsInvalidIdentityProviderConfiguration(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	issuerID, clientID := seedTrustedIdentityProviderClient(t, ctx, ti.conn, "admin-update-trusted")
+	createTrustedClientOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "admin-update-trusted-usi", issuerID, clientID)
+
+	updatedScope := []string{"openid"}
+	_, err := ti.service.UpdateClient(ctx, &orgclientsgen.UpdateClientPayload{
+		SessionToken:            nil,
+		ApikeyToken:             nil,
+		ID:                      clientID.String(),
+		ClientSecret:            nil,
+		TokenEndpointAuthMethod: nil,
+		Scope:                   updatedScope,
+		Audience:                nil,
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	stored, err := repo.New(ti.conn).GetOrganizationRemoteSessionClientByID(ctx, repo.GetOrganizationRemoteSessionClientByIDParams{
+		ID:             clientID,
+		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"openid", "email", "offline_access"}, stored.RemoteSessionClient.Scope)
+}
+
+// TestGetClientDeletePreflight reports the client's active session count,
+// attachments, and identity-provider login deletion blocker.
 func TestGetClientDeletePreflight(t *testing.T) {
 	t.Parallel()
 
@@ -242,6 +271,11 @@ func TestGetClientDeletePreflight(t *testing.T) {
 	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "admin-preflight-usi")
 	clientID := createRemoteClient(t, ctx, ti, issuerID, userIssuerID.String(), "admin-preflight-client")
 	insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject("admin-preflight-subject"), userIssuerID.String(), clientID)
+	issuerUUID, err := uuid.Parse(issuerID)
+	require.NoError(t, err)
+	clientUUID, err := uuid.Parse(clientID)
+	require.NoError(t, err)
+	trustedIssuerID := createTrustedClientOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "admin-preflight-trusted-usi", issuerUUID, clientUUID)
 
 	preflight, err := ti.service.GetClientDeletePreflight(ctx, &orgclientsgen.GetClientDeletePreflightPayload{
 		ID:           clientID,
@@ -251,6 +285,67 @@ func TestGetClientDeletePreflight(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, preflight.SessionCount)
 	require.Empty(t, preflight.McpServerNames)
+	require.False(t, preflight.CanDelete)
+	require.NotNil(t, preflight.BlockingReason)
+	require.Equal(t, "identity_provider_login", *preflight.BlockingReason)
+	require.Len(t, preflight.TrustedUserSessionIssuers, 1)
+	require.Equal(t, trustedIssuerID.String(), preflight.TrustedUserSessionIssuers[0].ID)
+}
+
+func TestGetClientDeletePreflightIncludesHiddenIdentityProviderLoginBlocker(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	issuerID, clientID := seedTrustedIdentityProviderClient(t, ctx, ti.conn, "admin-preflight-hidden")
+	otherOrganizationID := createOrganization(t, ctx, ti.conn, "admin-preflight-hidden-other")
+	createTrustedClientOrganizationTierUserSessionIssuerForOrganization(
+		t,
+		ctx,
+		ti.conn,
+		"admin-preflight-hidden-usi",
+		otherOrganizationID,
+		issuerID,
+		clientID,
+	)
+
+	preflight, err := ti.service.GetClientDeletePreflight(ctx, &orgclientsgen.GetClientDeletePreflightPayload{
+		ID:           clientID.String(),
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	require.NoError(t, err)
+	require.False(t, preflight.CanDelete)
+	require.NotNil(t, preflight.BlockingReason)
+	require.Equal(t, "identity_provider_login", *preflight.BlockingReason)
+	require.Empty(t, preflight.TrustedUserSessionIssuers, "cross-organization details must remain hidden")
+}
+
+func TestDeleteClientRejectsIdentityProviderLoginReference(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	issuerID := createRemoteIssuer(t, ctx, ti, "admin-delclient-trusted-issuer", "")
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "admin-delclient-trusted-project-usi")
+	clientID := createRemoteClient(t, ctx, ti, issuerID, userIssuerID.String(), "admin-delclient-trusted-client")
+	issuerUUID, err := uuid.Parse(issuerID)
+	require.NoError(t, err)
+	clientUUID, err := uuid.Parse(clientID)
+	require.NoError(t, err)
+	createTrustedClientOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "admin-delclient-trusted-usi", issuerUUID, clientUUID)
+
+	err = ti.service.DeleteClient(ctx, &orgclientsgen.DeleteClientPayload{
+		ID:           clientID,
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	requireOopsCode(t, err, oops.CodeConflict)
+
+	_, err = ti.service.GetClient(ctx, &orgclientsgen.GetClientPayload{
+		ID:           clientID,
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	require.NoError(t, err)
 }
 
 // TestUpdateClient_RotatesSecret proves an org admin can rotate a client's

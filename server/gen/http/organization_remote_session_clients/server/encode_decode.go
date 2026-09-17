@@ -2758,6 +2758,19 @@ func marshalTypesRemoteSessionClientToRemoteSessionClientResponseBody(v *types.R
 	return res
 }
 
+// marshalOrganizationremotesessionclientsTrustedClientUserSessionIssuerReferenceToTrustedClientUserSessionIssuerReferenceResponseBody
+// builds a value of type *TrustedClientUserSessionIssuerReferenceResponseBody
+// from a value of type
+// *organizationremotesessionclients.TrustedClientUserSessionIssuerReference.
+func marshalOrganizationremotesessionclientsTrustedClientUserSessionIssuerReferenceToTrustedClientUserSessionIssuerReferenceResponseBody(v *organizationremotesessionclients.TrustedClientUserSessionIssuerReference) *TrustedClientUserSessionIssuerReferenceResponseBody {
+	res := &TrustedClientUserSessionIssuerReferenceResponseBody{
+		ID:   v.ID,
+		Slug: v.Slug,
+	}
+
+	return res
+}
+
 // marshalOrganizationremotesessionclientsOrganizationMcpServerToOrganizationMcpServerResponseBody
 // builds a value of type *OrganizationMcpServerResponseBody from a value of
 // type *organizationremotesessionclients.OrganizationMcpServer.

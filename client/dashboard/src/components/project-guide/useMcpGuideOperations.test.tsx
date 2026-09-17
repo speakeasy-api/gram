@@ -253,6 +253,8 @@ function toolTrace(
   overrides: Partial<ToolUsageTraceSummary> = {},
 ): ToolUsageTraceSummary {
   return {
+    clientKey: "claude code",
+    clientLabel: "Claude Code",
     eventSource: "mcp-proxy",
     gramUrn: "tools:linear-governed:list_issues",
     httpStatusCode: 200,

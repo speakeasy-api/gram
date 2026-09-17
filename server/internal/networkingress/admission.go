@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync/atomic"
 
 	"github.com/jackc/pgx/v5"
 
@@ -21,12 +22,20 @@ type ExpansionAdmission struct {
 	features *productfeatures.Client
 	flags    feature.Provider
 	orgs     *orgrepo.Queries
-	ready    bool
+	ready    atomic.Bool
 	enabled  bool
 }
 
 func NewExpansionAdmission(features *productfeatures.Client, flags feature.Provider, orgs *orgrepo.Queries, ready, enabled bool) *ExpansionAdmission {
-	return &ExpansionAdmission{features: features, flags: flags, orgs: orgs, ready: ready, enabled: enabled}
+	admission := &ExpansionAdmission{features: features, flags: flags, orgs: orgs, ready: atomic.Bool{}, enabled: enabled}
+	admission.ready.Store(ready)
+	return admission
+}
+
+func (a *ExpansionAdmission) SetReconcilerReady(ready bool) {
+	if a != nil {
+		a.ready.Store(ready)
+	}
 }
 
 func (a *ExpansionAdmission) CheckExpansion(ctx context.Context, organizationID string) error {
@@ -78,7 +87,7 @@ func (a *ExpansionAdmission) PrepareNetworkAccess(ctx context.Context, input net
 	if err := a.CheckExpansion(ctx, input.OrganizationID); err != nil {
 		return networkaccess.AdmissionFinalizer{}, err
 	}
-	if !a.ready {
+	if !a.ready.Load() {
 		return networkaccess.AdmissionFinalizer{}, fmt.Errorf("network ingress reconciliation is unavailable")
 	}
 	return networkaccess.NewAdmissionFinalizer(func(ctx context.Context, tx pgx.Tx) error {

@@ -15,6 +15,14 @@ const state = vi.hoisted(() => ({
   featuresError: false,
   featuresAvailable: true,
   ingressError: false,
+  ingressOptions: undefined as
+    | {
+        refetchInterval?: (query: {
+          state: { data?: { ingress?: { status?: string } } };
+        }) => number | false;
+      }
+    | undefined,
+  deleteMutate: vi.fn(),
   ingress: undefined as
     | {
         id: string;
@@ -60,12 +68,15 @@ vi.mock("@gram/client/react-query/productFeatures.js", () => ({
 
 vi.mock("@gram/client/react-query/networkIngress.js", () => ({
   invalidateAllNetworkIngress: vi.fn(),
-  useNetworkIngress: () => ({
-    data: { ingress: state.ingress },
-    error: state.ingressError ? new Error("unavailable") : null,
-    isLoading: false,
-    isError: state.ingressError,
-  }),
+  useNetworkIngress: (...args: unknown[]) => {
+    state.ingressOptions = args[2] as typeof state.ingressOptions;
+    return {
+      data: { ingress: state.ingress },
+      error: state.ingressError ? new Error("unavailable") : null,
+      isLoading: false,
+      isError: state.ingressError,
+    };
+  },
 }));
 
 vi.mock("@gram/client/react-query/createNetworkIngress.js", () => ({
@@ -89,7 +100,7 @@ vi.mock("@gram/client/react-query/rotateNetworkIngressCredentials.js", () => ({
 vi.mock("@gram/client/react-query/networkIngressDeleteIngress.js", () => ({
   useNetworkIngressDeleteIngressMutation: () => ({
     isPending: false,
-    mutate: vi.fn(),
+    mutate: state.deleteMutate,
   }),
 }));
 vi.mock("@gram/client/react-query/networkIngressCheckHealth.js", () => ({
@@ -120,6 +131,8 @@ beforeEach(() => {
   state.featuresError = false;
   state.featuresAvailable = true;
   state.ingressError = false;
+  state.ingressOptions = undefined;
+  state.deleteMutate.mockReset();
   state.ingress = undefined;
 });
 
@@ -184,6 +197,68 @@ describe("PrivateNetworkSection", () => {
       expect(screen.queryByRole("button", { name: "Remove" })).toBeNull();
     },
   );
+
+  it("shows and polls pending cleanup instead of clearing the UI", () => {
+    state.ingress = {
+      id: "ingress-1",
+      organizationId: "org-1",
+      provider: "tailscale",
+      hostname: "private-mcp",
+      endpointNamespaceKind: "platform",
+      enabled: false,
+      identityRequired: false,
+      credentialsConfigured: true,
+      status: "deleting",
+      createdAt: new Date(0),
+      updatedAt: new Date(1_000),
+    };
+
+    render(<PrivateNetworkSection />);
+
+    expect(screen.getByText("Cleaning up")).toBeTruthy();
+    expect(
+      screen.getByText(/connect another tailnet after cleanup completes/),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Connect Tailscale" }),
+    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Remove" })).toBeNull();
+    expect(
+      state.ingressOptions?.refetchInterval?.({
+        state: { data: { ingress: { status: "deleting" } } },
+      }),
+    ).toBe(5_000);
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry cleanup" }));
+    expect(state.deleteMutate).toHaveBeenCalledWith({
+      security: { sessionHeaderGramSession: "" },
+    });
+  });
+
+  it("keeps cached cleanup controls visible when polling fails", () => {
+    state.ingressError = true;
+    state.ingress = {
+      id: "ingress-1",
+      organizationId: "org-1",
+      provider: "tailscale",
+      hostname: "private-mcp",
+      endpointNamespaceKind: "platform",
+      enabled: false,
+      identityRequired: false,
+      credentialsConfigured: true,
+      status: "deleting",
+      createdAt: new Date(0),
+      updatedAt: new Date(1_000),
+    };
+
+    render(<PrivateNetworkSection />);
+
+    expect(screen.getByText("Cleaning up")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Retry cleanup" })).toBeTruthy();
+    expect(
+      screen.queryByText(/Private network settings could not be loaded/),
+    ).toBeNull();
+  });
 
   it("does not show setup without entitlement", () => {
     state.entitled = false;
