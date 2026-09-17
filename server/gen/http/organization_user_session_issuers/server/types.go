@@ -73,6 +73,9 @@ type MigrateIssuerRequestBody struct {
 	SourceID *string `form:"source_id,omitempty" json:"source_id,omitempty" xml:"source_id,omitempty"`
 	// The surviving user_session_issuer.
 	TargetID *string `form:"target_id,omitempty" json:"target_id,omitempty" xml:"target_id,omitempty"`
+	// The exact warnings_fingerprint returned by the latest preflight. Required
+	// when that preflight reports warnings.
+	ConfirmedWarningsFingerprint *string `form:"confirmed_warnings_fingerprint,omitempty" json:"confirmed_warnings_fingerprint,omitempty" xml:"confirmed_warnings_fingerprint,omitempty"`
 }
 
 // CreateCimdClientRequestBody is the type of the
@@ -280,6 +283,9 @@ type GetIssuerMigratePreflightResponseBody struct {
 	// Configuration differences that do not invalidate existing sessions but
 	// change future authorization behavior.
 	Warnings []*UserSessionIssuerFieldMismatchResponseBody `form:"warnings" json:"warnings" xml:"warnings"`
+	// Stable fingerprint of the current warnings. Empty when there are no
+	// warnings; otherwise pass this exact value to migrateIssuer to confirm them.
+	WarningsFingerprint string `form:"warnings_fingerprint" json:"warnings_fingerprint" xml:"warnings_fingerprint"`
 	// True when no hard blocker is present.
 	CanMigrate bool `form:"can_migrate" json:"can_migrate" xml:"can_migrate"`
 }
@@ -3030,6 +3036,7 @@ func NewGetIssuerMigratePreflightResponseBody(res *organizationusersessionissuer
 		PrincipalBindingConflictCount: res.PrincipalBindingConflictCount,
 		EmaBindingConflictCount:       res.EmaBindingConflictCount,
 		PlatformOwned:                 res.PlatformOwned,
+		WarningsFingerprint:           res.WarningsFingerprint,
 		CanMigrate:                    res.CanMigrate,
 	}
 	if res.ConflictingClientIds != nil {
@@ -5172,8 +5179,9 @@ func NewGetIssuerMigratePreflightPayload(sourceID string, targetID string, sessi
 // migrateIssuer endpoint payload.
 func NewMigrateIssuerPayload(body *MigrateIssuerRequestBody, sessionToken *string) *organizationusersessionissuers.MigrateIssuerPayload {
 	v := &organizationusersessionissuers.MigrateIssuerPayload{
-		SourceID: *body.SourceID,
-		TargetID: *body.TargetID,
+		SourceID:                     *body.SourceID,
+		TargetID:                     *body.TargetID,
+		ConfirmedWarningsFingerprint: body.ConfirmedWarningsFingerprint,
 	}
 	v.SessionToken = sessionToken
 

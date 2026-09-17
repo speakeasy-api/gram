@@ -79,6 +79,14 @@ WHERE id = @id
   AND organization_id = @organization_id
   AND deleted IS FALSE;
 
+-- name: GetProjectByIDAndOrganizationIDForUpdate :one
+SELECT *
+FROM projects
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND deleted IS FALSE
+FOR UPDATE;
+
 -- name: GetProjectWithOrganizationMetadata :one
 SELECT 
     -- Project fields

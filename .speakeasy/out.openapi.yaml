@@ -37346,7 +37346,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/MigrateIssuerRequestBody'
+              $ref: '#/components/schemas/MigrateIssuerRequestBody2'
         required: true
       responses:
         "200":
@@ -84449,6 +84449,23 @@ components:
       required:
         - source_id
         - target_id
+    MigrateIssuerRequestBody2:
+      type: object
+      properties:
+        confirmed_warnings_fingerprint:
+          type: string
+          description: The exact warnings_fingerprint returned by the latest preflight. Required when that preflight reports warnings.
+        source_id:
+          type: string
+          description: The user_session_issuer to migrate away from; soft-deleted on success.
+          format: uuid
+        target_id:
+          type: string
+          description: The surviving user_session_issuer.
+          format: uuid
+      required:
+        - source_id
+        - target_id
     MigrateOrganizationRemoteSessionIssuerResult:
       type: object
       properties:
@@ -85725,6 +85742,9 @@ components:
           items:
             $ref: '#/components/schemas/UserSessionIssuerFieldMismatch'
           description: Configuration differences that do not invalidate existing sessions but change future authorization behavior.
+        warnings_fingerprint:
+          type: string
+          description: Stable fingerprint of the current warnings. Empty when there are no warnings; otherwise pass this exact value to migrateIssuer to confirm them.
       description: Authoritative impact summary for consolidating one user_session_issuer onto another.
       required:
         - client_count
@@ -85737,6 +85757,7 @@ components:
         - ema_binding_conflict_count
         - platform_owned
         - warnings
+        - warnings_fingerprint
         - can_migrate
     OrganizationUserSessionIssuerReference:
       type: object

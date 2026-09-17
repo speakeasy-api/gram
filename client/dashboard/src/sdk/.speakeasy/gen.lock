@@ -1318,6 +1318,7 @@ trackedFiles:
   src/models/components/meterusageseries.ts: {}
   src/models/components/meterusagewindow.ts: {}
   src/models/components/migrateissuerrequestbody.ts: {}
+  src/models/components/migrateissuerrequestbody2.ts: {}
   src/models/components/migrateorganizationremotesessionissuerresult.ts: {}
   src/models/components/migrateorganizationusersessionissuerresult.ts: {}
   src/models/components/migrateremotesessionissuerrequestbody.ts: {}
@@ -6664,7 +6665,7 @@ examples:
           target_id: "6dcbb5e1-5161-4baf-ac8d-f4611f29834a"
       responses:
         "200":
-          application/json: {"can_migrate": true, "cimd_client_count": 501939, "client_count": 28777, "conflicting_client_ids": [], "consent_count": 553825, "ema_binding_conflict_count": 650417, "platform_owned": false, "principal_binding_conflict_count": 90292, "remote_session_count": 748407, "session_count": 154481, "warnings": []}
+          application/json: {"can_migrate": true, "cimd_client_count": 501939, "client_count": 28777, "conflicting_client_ids": [], "consent_count": 553825, "ema_binding_conflict_count": 650417, "platform_owned": false, "principal_binding_conflict_count": 90292, "remote_session_count": 748407, "session_count": 154481, "warnings": [], "warnings_fingerprint": "<value>"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":

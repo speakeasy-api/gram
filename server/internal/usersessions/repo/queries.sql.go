@@ -168,8 +168,12 @@ const countUserSessionIssuerCimdClientsForMigration = `-- name: CountUserSession
 SELECT COUNT(*)::int
 FROM user_session_issuer_cimd_clients AS cimd
 JOIN user_session_issuers AS issuer ON issuer.id = cimd.user_session_issuer_id
+LEFT JOIN projects AS project ON project.id = issuer.project_id
 WHERE issuer.id = $1
-  AND issuer.organization_id = $2::text
+  AND (
+    (issuer.project_id IS NULL AND issuer.organization_id = $2::text)
+    OR (issuer.project_id IS NOT NULL AND project.organization_id = $2::text AND project.deleted IS FALSE)
+  )
   AND cimd.deleted IS FALSE
 `
 
@@ -189,8 +193,12 @@ const countUserSessionIssuerClientsForMigration = `-- name: CountUserSessionIssu
 SELECT COUNT(*)::int
 FROM user_session_clients AS client
 JOIN user_session_issuers AS issuer ON issuer.id = client.user_session_issuer_id
+LEFT JOIN projects AS project ON project.id = issuer.project_id
 WHERE issuer.id = $1
-  AND issuer.organization_id = $2::text
+  AND (
+    (issuer.project_id IS NULL AND issuer.organization_id = $2::text)
+    OR (issuer.project_id IS NOT NULL AND project.organization_id = $2::text AND project.deleted IS FALSE)
+  )
   AND client.deleted IS FALSE
 `
 
@@ -211,8 +219,12 @@ SELECT COUNT(*)::int
 FROM user_session_consents AS consent
 JOIN user_session_clients AS client ON client.id = consent.user_session_client_id
 JOIN user_session_issuers AS issuer ON issuer.id = client.user_session_issuer_id
+LEFT JOIN projects AS project ON project.id = issuer.project_id
 WHERE issuer.id = $1
-  AND issuer.organization_id = $2::text
+  AND (
+    (issuer.project_id IS NULL AND issuer.organization_id = $2::text)
+    OR (issuer.project_id IS NOT NULL AND project.organization_id = $2::text AND project.deleted IS FALSE)
+  )
   AND consent.deleted IS FALSE
 `
 
@@ -238,6 +250,17 @@ JOIN remote_session_ema_bindings AS target
  AND target.user_session_issuer_id = $1
 WHERE source.user_session_issuer_id = $2
   AND source.organization_id = $3::text
+  AND 2 = (
+    SELECT COUNT(*)
+    FROM user_session_issuers AS issuer
+    LEFT JOIN projects AS project ON project.id = issuer.project_id
+    WHERE issuer.id IN ($2, $1)
+      AND issuer.deleted IS FALSE
+      AND (
+        (issuer.project_id IS NULL AND issuer.organization_id = $3::text)
+        OR (issuer.project_id IS NOT NULL AND project.organization_id = $3::text AND project.deleted IS FALSE)
+      )
+  )
 `
 
 type CountUserSessionIssuerEMABindingConflictsParams struct {
@@ -256,13 +279,50 @@ func (q *Queries) CountUserSessionIssuerEMABindingConflicts(ctx context.Context,
 const countUserSessionIssuerIncompatibleProjectReferences = `-- name: CountUserSessionIssuerIncompatibleProjectReferences :one
 SELECT COUNT(*)::int
 FROM (
+  SELECT client.id
+  FROM user_session_clients AS client
+  WHERE client.user_session_issuer_id = $1::uuid
+    AND client.deleted IS FALSE
+    AND client.project_id IS NOT NULL
+    AND client.project_id <> $2::uuid
+
+  UNION ALL
+
+  SELECT session.id
+  FROM user_sessions AS session
+  WHERE session.user_session_issuer_id = $1::uuid
+    AND session.deleted IS FALSE
+    AND session.project_id IS NOT NULL
+    AND session.project_id <> $2::uuid
+
+  UNION ALL
+
+  SELECT consent.id
+  FROM user_session_consents AS consent
+  JOIN user_session_clients AS client ON client.id = consent.user_session_client_id
+  WHERE client.user_session_issuer_id = $1::uuid
+    AND consent.deleted IS FALSE
+    AND consent.project_id IS NOT NULL
+    AND consent.project_id <> $2::uuid
+
+  UNION ALL
+
+  SELECT cimd.id
+  FROM user_session_issuer_cimd_clients AS cimd
+  WHERE cimd.user_session_issuer_id = $1::uuid
+    AND cimd.deleted IS FALSE
+    AND cimd.project_id IS NOT NULL
+    AND cimd.project_id <> $2::uuid
+
+  UNION ALL
+
   SELECT server.id
   FROM mcp_servers AS server
   JOIN projects AS project ON project.id = server.project_id
   WHERE server.user_session_issuer_id = $1
     AND server.deleted IS FALSE
-    AND project.organization_id = $2::text
-    AND server.project_id <> $3::uuid
+    AND project.organization_id = $3::text
+    AND server.project_id <> $2::uuid
 
   UNION ALL
 
@@ -271,8 +331,8 @@ FROM (
   JOIN projects AS project ON project.id = toolset.project_id
   WHERE toolset.user_session_issuer_id = $1
     AND toolset.deleted IS FALSE
-    AND project.organization_id = $2::text
-    AND toolset.project_id <> $3::uuid
+    AND project.organization_id = $3::text
+    AND toolset.project_id <> $2::uuid
 
   UNION ALL
 
@@ -280,8 +340,8 @@ FROM (
   FROM meta_mcp_servers AS meta
   WHERE meta.user_session_issuer_id = $1
     AND meta.deleted IS FALSE
-    AND meta.organization_id = $2::text
-    AND meta.project_id <> $3::uuid
+    AND meta.organization_id = $3::text
+    AND meta.project_id <> $2::uuid
 
   UNION ALL
 
@@ -289,24 +349,24 @@ FROM (
   FROM platform_mcp_catalog_registrations AS registration
   WHERE registration.user_session_issuer_id = $1
     AND registration.deleted IS FALSE
-    AND registration.organization_id = $2::text
-    AND registration.project_id <> $3::uuid
+    AND registration.organization_id = $3::text
+    AND registration.project_id <> $2::uuid
 
   UNION ALL
 
   SELECT binding.id
   FROM principal_remote_session_bindings AS binding
   WHERE binding.user_session_issuer_id = $1
-    AND binding.organization_id = $2::text
-    AND binding.project_id <> $3::uuid
+    AND binding.organization_id = $3::text
+    AND binding.project_id <> $2::uuid
 
   UNION ALL
 
   SELECT binding.id
   FROM remote_session_ema_bindings AS binding
   WHERE binding.user_session_issuer_id = $1
-    AND binding.organization_id = $2::text
-    AND binding.project_id <> $3::uuid
+    AND binding.organization_id = $3::text
+    AND binding.project_id <> $2::uuid
 
   UNION ALL
 
@@ -316,23 +376,23 @@ FROM (
   WHERE link.user_session_issuer_id = $1
     AND client.deleted IS FALSE
     AND NOT (
-      client.project_id = $3::uuid
-      OR (client.project_id IS NULL AND client.organization_id = $2::text)
+      client.project_id = $2::uuid
+      OR (client.project_id IS NULL AND client.organization_id = $3::text)
       OR (client.project_id IS NULL AND client.organization_id IS NULL)
     )
 ) AS incompatible
 `
 
 type CountUserSessionIssuerIncompatibleProjectReferencesParams struct {
-	UserSessionIssuerID uuid.NullUUID
-	OrganizationID      string
+	UserSessionIssuerID uuid.UUID
 	TargetProjectID     uuid.UUID
+	OrganizationID      string
 }
 
 // Narrowing to a project is safe only when every project-scoped consumer is
 // already in that project and every linked remote client is visible there.
 func (q *Queries) CountUserSessionIssuerIncompatibleProjectReferences(ctx context.Context, arg CountUserSessionIssuerIncompatibleProjectReferencesParams) (int32, error) {
-	row := q.db.QueryRow(ctx, countUserSessionIssuerIncompatibleProjectReferences, arg.UserSessionIssuerID, arg.OrganizationID, arg.TargetProjectID)
+	row := q.db.QueryRow(ctx, countUserSessionIssuerIncompatibleProjectReferences, arg.UserSessionIssuerID, arg.TargetProjectID, arg.OrganizationID)
 	var column_1 int32
 	err := row.Scan(&column_1)
 	return column_1, err
@@ -350,6 +410,17 @@ JOIN principal_remote_session_bindings AS target
 WHERE source.user_session_issuer_id = $2
   AND source.organization_id = $3::text
   AND source.revoked_at IS NULL
+  AND 2 = (
+    SELECT COUNT(*)
+    FROM user_session_issuers AS issuer
+    LEFT JOIN projects AS project ON project.id = issuer.project_id
+    WHERE issuer.id IN ($2, $1)
+      AND issuer.deleted IS FALSE
+      AND (
+        (issuer.project_id IS NULL AND issuer.organization_id = $3::text)
+        OR (issuer.project_id IS NOT NULL AND project.organization_id = $3::text AND project.deleted IS FALSE)
+      )
+  )
 `
 
 type CountUserSessionIssuerPrincipalBindingConflictsParams struct {
@@ -369,8 +440,12 @@ const countUserSessionIssuerRemoteSessionsForMigration = `-- name: CountUserSess
 SELECT COUNT(*)::int
 FROM remote_sessions AS session
 JOIN user_session_issuers AS issuer ON issuer.id = session.user_session_issuer_id
+LEFT JOIN projects AS project ON project.id = issuer.project_id
 WHERE issuer.id = $1
-  AND issuer.organization_id = $2::text
+  AND (
+    (issuer.project_id IS NULL AND issuer.organization_id = $2::text)
+    OR (issuer.project_id IS NOT NULL AND project.organization_id = $2::text AND project.deleted IS FALSE)
+  )
   AND session.deleted IS FALSE
 `
 
@@ -390,8 +465,12 @@ const countUserSessionIssuerSessionsForMigration = `-- name: CountUserSessionIss
 SELECT COUNT(*)::int
 FROM user_sessions AS session
 JOIN user_session_issuers AS issuer ON issuer.id = session.user_session_issuer_id
+LEFT JOIN projects AS project ON project.id = issuer.project_id
 WHERE issuer.id = $1
-  AND issuer.organization_id = $2::text
+  AND (
+    (issuer.project_id IS NULL AND issuer.organization_id = $2::text)
+    OR (issuer.project_id IS NOT NULL AND project.organization_id = $2::text AND project.deleted IS FALSE)
+  )
   AND session.deleted IS FALSE
 `
 
@@ -979,19 +1058,28 @@ func (q *Queries) DeleteOrganizationUserSessionIssuerCimdClient(ctx context.Cont
 
 const deleteSourceRemoteSessionClientIssuerLinks = `-- name: DeleteSourceRemoteSessionClientIssuerLinks :execrows
 DELETE FROM remote_session_client_user_session_issuers AS link
-USING user_session_issuers AS issuer
 WHERE link.user_session_issuer_id = $1
-  AND issuer.id = $1
-  AND issuer.organization_id = $2::text
+  AND 2 = (
+    SELECT COUNT(*)
+    FROM user_session_issuers AS issuer
+    LEFT JOIN projects AS project ON project.id = issuer.project_id
+    WHERE issuer.id IN ($1, $2)
+      AND issuer.deleted IS FALSE
+      AND (
+        (issuer.project_id IS NULL AND issuer.organization_id = $3::text)
+        OR (issuer.project_id IS NOT NULL AND project.organization_id = $3::text AND project.deleted IS FALSE)
+      )
+  )
 `
 
 type DeleteSourceRemoteSessionClientIssuerLinksParams struct {
 	SourceIssuerID uuid.UUID
+	TargetIssuerID uuid.UUID
 	OrganizationID string
 }
 
 func (q *Queries) DeleteSourceRemoteSessionClientIssuerLinks(ctx context.Context, arg DeleteSourceRemoteSessionClientIssuerLinksParams) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteSourceRemoteSessionClientIssuerLinks, arg.SourceIssuerID, arg.OrganizationID)
+	result, err := q.db.Exec(ctx, deleteSourceRemoteSessionClientIssuerLinks, arg.SourceIssuerID, arg.TargetIssuerID, arg.OrganizationID)
 	if err != nil {
 		return 0, err
 	}
@@ -1147,7 +1235,7 @@ func (q *Queries) GetLatestLiveUserSessionToolSelection(ctx context.Context, arg
 }
 
 const getOrganizationManagedUserSessionIssuerByID = `-- name: GetOrganizationManagedUserSessionIssuerByID :one
-SELECT issuer.id, issuer.project_id, issuer.organization_id, issuer.attachment_scope, issuer.slug, issuer.authn_challenge_mode, issuer.session_duration, issuer.classification, issuer.client_id_metadata_admission_mode, issuer.trusted_remote_session_issuer_id, issuer.trusted_remote_session_client_id, issuer.created_at, issuer.updated_at, issuer.deleted_at, issuer.deleted
+SELECT issuer.id, issuer.project_id, issuer.organization_id, issuer.attachment_scope, issuer.slug, issuer.authn_challenge_mode, issuer.session_duration, issuer.classification, issuer.client_id_metadata_admission_mode, issuer.trusted_remote_session_issuer_id, issuer.trusted_remote_session_client_id, issuer.use_authentication_host, issuer.created_at, issuer.updated_at, issuer.deleted_at, issuer.deleted
 FROM user_session_issuers AS issuer
 LEFT JOIN projects AS project ON project.id = issuer.project_id
 WHERE issuer.id = $1
@@ -1180,6 +1268,7 @@ func (q *Queries) GetOrganizationManagedUserSessionIssuerByID(ctx context.Contex
 		&i.ClientIDMetadataAdmissionMode,
 		&i.TrustedRemoteSessionIssuerID,
 		&i.TrustedRemoteSessionClientID,
+		&i.UseAuthenticationHost,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -1189,7 +1278,7 @@ func (q *Queries) GetOrganizationManagedUserSessionIssuerByID(ctx context.Contex
 }
 
 const getOrganizationManagedUserSessionIssuerByIDForUpdate = `-- name: GetOrganizationManagedUserSessionIssuerByIDForUpdate :one
-SELECT issuer.id, issuer.project_id, issuer.organization_id, issuer.attachment_scope, issuer.slug, issuer.authn_challenge_mode, issuer.session_duration, issuer.classification, issuer.client_id_metadata_admission_mode, issuer.trusted_remote_session_issuer_id, issuer.trusted_remote_session_client_id, issuer.created_at, issuer.updated_at, issuer.deleted_at, issuer.deleted
+SELECT issuer.id, issuer.project_id, issuer.organization_id, issuer.attachment_scope, issuer.slug, issuer.authn_challenge_mode, issuer.session_duration, issuer.classification, issuer.client_id_metadata_admission_mode, issuer.trusted_remote_session_issuer_id, issuer.trusted_remote_session_client_id, issuer.use_authentication_host, issuer.created_at, issuer.updated_at, issuer.deleted_at, issuer.deleted
 FROM user_session_issuers AS issuer
 LEFT JOIN projects AS project ON project.id = issuer.project_id
 WHERE issuer.id = $1
@@ -1221,6 +1310,7 @@ func (q *Queries) GetOrganizationManagedUserSessionIssuerByIDForUpdate(ctx conte
 		&i.ClientIDMetadataAdmissionMode,
 		&i.TrustedRemoteSessionIssuerID,
 		&i.TrustedRemoteSessionClientID,
+		&i.UseAuthenticationHost,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -1795,9 +1885,18 @@ const insertTargetRemoteSessionClientIssuerLinks = `-- name: InsertTargetRemoteS
 INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id, user_session_issuer_id)
 SELECT link.remote_session_client_id, $1
 FROM remote_session_client_user_session_issuers AS link
-JOIN user_session_issuers AS issuer ON issuer.id = link.user_session_issuer_id
 WHERE link.user_session_issuer_id = $2
-  AND issuer.organization_id = $3::text
+  AND 2 = (
+    SELECT COUNT(*)
+    FROM user_session_issuers AS issuer
+    LEFT JOIN projects AS project ON project.id = issuer.project_id
+    WHERE issuer.id IN ($2, $1)
+      AND issuer.deleted IS FALSE
+      AND (
+        (issuer.project_id IS NULL AND issuer.organization_id = $3::text)
+        OR (issuer.project_id IS NOT NULL AND project.organization_id = $3::text AND project.deleted IS FALSE)
+      )
+  )
 ON CONFLICT (remote_session_client_id, user_session_issuer_id) DO NOTHING
 `
 
@@ -1843,6 +1942,45 @@ func (q *Queries) IssuerAdmitsCimdClientURI(ctx context.Context, arg IssuerAdmit
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const listMCPServerProjectIDsForUserSessionIssuerMigration = `-- name: ListMCPServerProjectIDsForUserSessionIssuerMigration :many
+SELECT DISTINCT server.project_id
+FROM mcp_servers AS server
+JOIN projects AS project ON project.id = server.project_id
+WHERE server.user_session_issuer_id IN ($1, $2)
+  AND server.deleted IS FALSE
+  AND project.organization_id = $3::text
+  AND project.deleted IS FALSE
+ORDER BY server.project_id
+`
+
+type ListMCPServerProjectIDsForUserSessionIssuerMigrationParams struct {
+	SourceIssuerID uuid.NullUUID
+	TargetIssuerID uuid.NullUUID
+	OrganizationID string
+}
+
+// Every affected project must recompute its denormalized remote-session issuer
+// after client links and server ownership move to the target issuer.
+func (q *Queries) ListMCPServerProjectIDsForUserSessionIssuerMigration(ctx context.Context, arg ListMCPServerProjectIDsForUserSessionIssuerMigrationParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listMCPServerProjectIDsForUserSessionIssuerMigration, arg.SourceIssuerID, arg.TargetIssuerID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var project_id uuid.UUID
+		if err := rows.Scan(&project_id); err != nil {
+			return nil, err
+		}
+		items = append(items, project_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listOrganizationUserSessionIssuerCimdClientsByIssuerID = `-- name: ListOrganizationUserSessionIssuerCimdClientsByIssuerID :many
@@ -2512,10 +2650,19 @@ JOIN user_session_clients AS target
   ON target.user_session_issuer_id = $1
  AND target.client_id = source.client_id
  AND target.deleted IS FALSE
-JOIN user_session_issuers AS issuer ON issuer.id = source.user_session_issuer_id
 WHERE source.user_session_issuer_id = $2
   AND source.deleted IS FALSE
-  AND issuer.organization_id = $3::text
+  AND 2 = (
+    SELECT COUNT(*)
+    FROM user_session_issuers AS issuer
+    LEFT JOIN projects AS project ON project.id = issuer.project_id
+    WHERE issuer.id IN ($2, $1)
+      AND issuer.deleted IS FALSE
+      AND (
+        (issuer.project_id IS NULL AND issuer.organization_id = $3::text)
+        OR (issuer.project_id IS NOT NULL AND project.organization_id = $3::text AND project.deleted IS FALSE)
+      )
+  )
 ORDER BY source.client_id
 `
 
@@ -3117,6 +3264,17 @@ SET deleted_at = clock_timestamp(),
     updated_at = clock_timestamp()
 WHERE source.user_session_issuer_id = $1
   AND source.deleted IS FALSE
+  AND 2 = (
+    SELECT COUNT(*)
+    FROM user_session_issuers AS issuer
+    LEFT JOIN projects AS project ON project.id = issuer.project_id
+    WHERE issuer.id IN ($1, $2)
+      AND issuer.deleted IS FALSE
+      AND (
+        (issuer.project_id IS NULL AND issuer.organization_id = $3::text)
+        OR (issuer.project_id IS NOT NULL AND project.organization_id = $3::text AND project.deleted IS FALSE)
+      )
+  )
   AND EXISTS (
     SELECT 1
     FROM user_session_issuer_cimd_clients AS target
@@ -3129,14 +3287,59 @@ WHERE source.user_session_issuer_id = $1
 type MergeDuplicateUserSessionIssuerCimdClientsParams struct {
 	SourceIssuerID uuid.UUID
 	TargetIssuerID uuid.UUID
+	OrganizationID string
 }
 
 func (q *Queries) MergeDuplicateUserSessionIssuerCimdClients(ctx context.Context, arg MergeDuplicateUserSessionIssuerCimdClientsParams) (int64, error) {
-	result, err := q.db.Exec(ctx, mergeDuplicateUserSessionIssuerCimdClients, arg.SourceIssuerID, arg.TargetIssuerID)
+	result, err := q.db.Exec(ctx, mergeDuplicateUserSessionIssuerCimdClients, arg.SourceIssuerID, arg.TargetIssuerID, arg.OrganizationID)
 	if err != nil {
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const normalizeLegacyProjectUserSessionIssuerOrganization = `-- name: NormalizeLegacyProjectUserSessionIssuerOrganization :one
+UPDATE user_session_issuers AS issuer
+SET organization_id = $1::text,
+    updated_at = clock_timestamp()
+FROM projects AS project
+WHERE issuer.id = $2
+  AND issuer.project_id = project.id
+  AND issuer.deleted IS FALSE
+  AND project.organization_id = $1::text
+  AND project.deleted IS FALSE
+RETURNING issuer.id, issuer.project_id, issuer.organization_id, issuer.attachment_scope, issuer.slug, issuer.authn_challenge_mode, issuer.session_duration, issuer.classification, issuer.client_id_metadata_admission_mode, issuer.trusted_remote_session_issuer_id, issuer.trusted_remote_session_client_id, issuer.use_authentication_host, issuer.created_at, issuer.updated_at, issuer.deleted_at, issuer.deleted
+`
+
+type NormalizeLegacyProjectUserSessionIssuerOrganizationParams struct {
+	OrganizationID string
+	ID             uuid.UUID
+}
+
+// Older project-owned issuers may predate organization_id on the issuer row.
+// The owning project remains authoritative for their tenant.
+func (q *Queries) NormalizeLegacyProjectUserSessionIssuerOrganization(ctx context.Context, arg NormalizeLegacyProjectUserSessionIssuerOrganizationParams) (UserSessionIssuer, error) {
+	row := q.db.QueryRow(ctx, normalizeLegacyProjectUserSessionIssuerOrganization, arg.OrganizationID, arg.ID)
+	var i UserSessionIssuer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.AttachmentScope,
+		&i.Slug,
+		&i.AuthnChallengeMode,
+		&i.SessionDuration,
+		&i.Classification,
+		&i.ClientIDMetadataAdmissionMode,
+		&i.TrustedRemoteSessionIssuerID,
+		&i.TrustedRemoteSessionClientID,
+		&i.UseAuthenticationHost,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const purgeUserSessionClientCIMDCache = `-- name: PurgeUserSessionClientCIMDCache :one
@@ -3214,6 +3417,17 @@ SET project_id = $1::uuid,
     organization_id = $2::text,
     updated_at = clock_timestamp()
 WHERE client.user_session_issuer_id = $3
+  AND EXISTS (
+    SELECT 1
+    FROM user_session_issuers AS issuer
+    LEFT JOIN projects AS project ON project.id = issuer.project_id
+    WHERE issuer.id = $3
+      AND issuer.deleted IS FALSE
+      AND (
+        (issuer.project_id IS NULL AND issuer.organization_id = $2::text)
+        OR (issuer.project_id IS NOT NULL AND project.organization_id = $2::text AND project.deleted IS FALSE)
+      )
+  )
 `
 
 type RetierUserSessionClientsParams struct {
@@ -3238,6 +3452,17 @@ SET project_id = $1::uuid,
 FROM user_session_clients AS client
 WHERE consent.user_session_client_id = client.id
   AND client.user_session_issuer_id = $3
+  AND EXISTS (
+    SELECT 1
+    FROM user_session_issuers AS issuer
+    LEFT JOIN projects AS project ON project.id = issuer.project_id
+    WHERE issuer.id = $3
+      AND issuer.deleted IS FALSE
+      AND (
+        (issuer.project_id IS NULL AND issuer.organization_id = $2::text)
+        OR (issuer.project_id IS NOT NULL AND project.organization_id = $2::text AND project.deleted IS FALSE)
+      )
+  )
 `
 
 type RetierUserSessionConsentsParams struct {
@@ -3260,6 +3485,17 @@ SET project_id = $1::uuid,
     organization_id = $2::text,
     updated_at = clock_timestamp()
 WHERE cimd.user_session_issuer_id = $3
+  AND EXISTS (
+    SELECT 1
+    FROM user_session_issuers AS issuer
+    LEFT JOIN projects AS project ON project.id = issuer.project_id
+    WHERE issuer.id = $3
+      AND issuer.deleted IS FALSE
+      AND (
+        (issuer.project_id IS NULL AND issuer.organization_id = $2::text)
+        OR (issuer.project_id IS NOT NULL AND project.organization_id = $2::text AND project.deleted IS FALSE)
+      )
+  )
 `
 
 type RetierUserSessionIssuerCimdClientsParams struct {
@@ -3282,6 +3518,17 @@ SET project_id = $1::uuid,
     organization_id = $2::text,
     updated_at = clock_timestamp()
 WHERE session.user_session_issuer_id = $3
+  AND EXISTS (
+    SELECT 1
+    FROM user_session_issuers AS issuer
+    LEFT JOIN projects AS project ON project.id = issuer.project_id
+    WHERE issuer.id = $3
+      AND issuer.deleted IS FALSE
+      AND (
+        (issuer.project_id IS NULL AND issuer.organization_id = $2::text)
+        OR (issuer.project_id IS NOT NULL AND project.organization_id = $2::text AND project.deleted IS FALSE)
+      )
+  )
 `
 
 type RetierUserSessionsParams struct {
@@ -3509,7 +3756,7 @@ WHERE issuer.id = $3
         AND project.deleted IS FALSE
     )
   )
-RETURNING issuer.id, issuer.project_id, issuer.organization_id, issuer.attachment_scope, issuer.slug, issuer.authn_challenge_mode, issuer.session_duration, issuer.classification, issuer.client_id_metadata_admission_mode, issuer.trusted_remote_session_issuer_id, issuer.trusted_remote_session_client_id, issuer.created_at, issuer.updated_at, issuer.deleted_at, issuer.deleted
+RETURNING issuer.id, issuer.project_id, issuer.organization_id, issuer.attachment_scope, issuer.slug, issuer.authn_challenge_mode, issuer.session_duration, issuer.classification, issuer.client_id_metadata_admission_mode, issuer.trusted_remote_session_issuer_id, issuer.trusted_remote_session_client_id, issuer.use_authentication_host, issuer.created_at, issuer.updated_at, issuer.deleted_at, issuer.deleted
 `
 
 type SetOrganizationManagedUserSessionIssuerProjectParams struct {
@@ -3533,6 +3780,7 @@ func (q *Queries) SetOrganizationManagedUserSessionIssuerProject(ctx context.Con
 		&i.ClientIDMetadataAdmissionMode,
 		&i.TrustedRemoteSessionIssuerID,
 		&i.TrustedRemoteSessionClientID,
+		&i.UseAuthenticationHost,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -3595,18 +3843,29 @@ UPDATE user_session_issuers AS issuer
 SET deleted_at = clock_timestamp(),
     updated_at = clock_timestamp()
 WHERE issuer.id = $1
-  AND issuer.organization_id = $2::text
   AND issuer.deleted IS FALSE
-RETURNING issuer.id, issuer.project_id, issuer.organization_id, issuer.attachment_scope, issuer.slug, issuer.authn_challenge_mode, issuer.session_duration, issuer.classification, issuer.client_id_metadata_admission_mode, issuer.trusted_remote_session_issuer_id, issuer.trusted_remote_session_client_id, issuer.created_at, issuer.updated_at, issuer.deleted_at, issuer.deleted
+  AND 2 = (
+    SELECT COUNT(*)
+    FROM user_session_issuers AS scoped_issuer
+    LEFT JOIN projects AS project ON project.id = scoped_issuer.project_id
+    WHERE scoped_issuer.id IN ($1, $2)
+      AND scoped_issuer.deleted IS FALSE
+      AND (
+        (scoped_issuer.project_id IS NULL AND scoped_issuer.organization_id = $3::text)
+        OR (scoped_issuer.project_id IS NOT NULL AND project.organization_id = $3::text AND project.deleted IS FALSE)
+      )
+  )
+RETURNING issuer.id, issuer.project_id, issuer.organization_id, issuer.attachment_scope, issuer.slug, issuer.authn_challenge_mode, issuer.session_duration, issuer.classification, issuer.client_id_metadata_admission_mode, issuer.trusted_remote_session_issuer_id, issuer.trusted_remote_session_client_id, issuer.use_authentication_host, issuer.created_at, issuer.updated_at, issuer.deleted_at, issuer.deleted
 `
 
 type SoftDeleteMigratedUserSessionIssuerParams struct {
 	SourceIssuerID uuid.UUID
+	TargetIssuerID uuid.UUID
 	OrganizationID string
 }
 
 func (q *Queries) SoftDeleteMigratedUserSessionIssuer(ctx context.Context, arg SoftDeleteMigratedUserSessionIssuerParams) (UserSessionIssuer, error) {
-	row := q.db.QueryRow(ctx, softDeleteMigratedUserSessionIssuer, arg.SourceIssuerID, arg.OrganizationID)
+	row := q.db.QueryRow(ctx, softDeleteMigratedUserSessionIssuer, arg.SourceIssuerID, arg.TargetIssuerID, arg.OrganizationID)
 	var i UserSessionIssuer
 	err := row.Scan(
 		&i.ID,
@@ -3620,6 +3879,7 @@ func (q *Queries) SoftDeleteMigratedUserSessionIssuer(ctx context.Context, arg S
 		&i.ClientIDMetadataAdmissionMode,
 		&i.TrustedRemoteSessionIssuerID,
 		&i.TrustedRemoteSessionClientID,
+		&i.UseAuthenticationHost,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -3817,6 +4077,17 @@ FROM projects AS project
 WHERE server.user_session_issuer_id = $2
   AND project.id = server.project_id
   AND project.organization_id = $3::text
+  AND 2 = (
+    SELECT COUNT(*)
+    FROM user_session_issuers AS issuer
+    LEFT JOIN projects AS issuer_project ON issuer_project.id = issuer.project_id
+    WHERE issuer.id IN ($2, $1)
+      AND issuer.deleted IS FALSE
+      AND (
+        (issuer.project_id IS NULL AND issuer.organization_id = $3::text)
+        OR (issuer.project_id IS NOT NULL AND issuer_project.organization_id = $3::text AND issuer_project.deleted IS FALSE)
+      )
+  )
 `
 
 type UpdateMCPServersToUserSessionIssuerParams struct {
@@ -3839,6 +4110,17 @@ SET user_session_issuer_id = $1,
     updated_at = clock_timestamp()
 WHERE server.user_session_issuer_id = $2
   AND server.organization_id = $3::text
+  AND 2 = (
+    SELECT COUNT(*)
+    FROM user_session_issuers AS issuer
+    LEFT JOIN projects AS project ON project.id = issuer.project_id
+    WHERE issuer.id IN ($2, $1)
+      AND issuer.deleted IS FALSE
+      AND (
+        (issuer.project_id IS NULL AND issuer.organization_id = $3::text)
+        OR (issuer.project_id IS NOT NULL AND project.organization_id = $3::text AND project.deleted IS FALSE)
+      )
+  )
 `
 
 type UpdateMetaMCPServersToUserSessionIssuerParams struct {
@@ -3931,6 +4213,17 @@ SET user_session_issuer_id = $1,
 WHERE registration.user_session_issuer_id = $2
   AND registration.organization_id = $3::text
   AND registration.user_session_issuer_owned IS FALSE
+  AND 2 = (
+    SELECT COUNT(*)
+    FROM user_session_issuers AS issuer
+    LEFT JOIN projects AS project ON project.id = issuer.project_id
+    WHERE issuer.id IN ($2, $1)
+      AND issuer.deleted IS FALSE
+      AND (
+        (issuer.project_id IS NULL AND issuer.organization_id = $3::text)
+        OR (issuer.project_id IS NOT NULL AND project.organization_id = $3::text AND project.deleted IS FALSE)
+      )
+  )
 `
 
 type UpdatePlatformMCPRegistrationsToUserSessionIssuerParams struct {
@@ -3950,9 +4243,21 @@ func (q *Queries) UpdatePlatformMCPRegistrationsToUserSessionIssuer(ctx context.
 const updateRemoteSessionEMABindingsToUserSessionIssuer = `-- name: UpdateRemoteSessionEMABindingsToUserSessionIssuer :execrows
 UPDATE remote_session_ema_bindings AS binding
 SET user_session_issuer_id = $1,
+    generation = generation + 1,
     updated_at = clock_timestamp()
 WHERE binding.user_session_issuer_id = $2
   AND binding.organization_id = $3::text
+  AND 2 = (
+    SELECT COUNT(*)
+    FROM user_session_issuers AS issuer
+    LEFT JOIN projects AS project ON project.id = issuer.project_id
+    WHERE issuer.id IN ($2, $1)
+      AND issuer.deleted IS FALSE
+      AND (
+        (issuer.project_id IS NULL AND issuer.organization_id = $3::text)
+        OR (issuer.project_id IS NOT NULL AND project.organization_id = $3::text AND project.deleted IS FALSE)
+      )
+  )
 `
 
 type UpdateRemoteSessionEMABindingsToUserSessionIssuerParams struct {
@@ -3973,10 +4278,19 @@ const updateRemoteSessionsToUserSessionIssuer = `-- name: UpdateRemoteSessionsTo
 UPDATE remote_sessions AS session
 SET user_session_issuer_id = $1,
     updated_at = clock_timestamp()
-FROM user_session_issuers AS issuer
 WHERE session.user_session_issuer_id = $2
-  AND issuer.id = $2
-  AND issuer.organization_id = $3::text
+  AND session.deleted IS FALSE
+  AND 2 = (
+    SELECT COUNT(*)
+    FROM user_session_issuers AS issuer
+    LEFT JOIN projects AS project ON project.id = issuer.project_id
+    WHERE issuer.id IN ($2, $1)
+      AND issuer.deleted IS FALSE
+      AND (
+        (issuer.project_id IS NULL AND issuer.organization_id = $3::text)
+        OR (issuer.project_id IS NOT NULL AND project.organization_id = $3::text AND project.deleted IS FALSE)
+      )
+  )
 `
 
 type UpdateRemoteSessionsToUserSessionIssuerParams struct {
@@ -4001,6 +4315,17 @@ FROM projects AS project
 WHERE toolset.user_session_issuer_id = $2
   AND project.id = toolset.project_id
   AND project.organization_id = $3::text
+  AND 2 = (
+    SELECT COUNT(*)
+    FROM user_session_issuers AS issuer
+    LEFT JOIN projects AS issuer_project ON issuer_project.id = issuer.project_id
+    WHERE issuer.id IN ($2, $1)
+      AND issuer.deleted IS FALSE
+      AND (
+        (issuer.project_id IS NULL AND issuer.organization_id = $3::text)
+        OR (issuer.project_id IS NOT NULL AND issuer_project.organization_id = $3::text AND issuer_project.deleted IS FALSE)
+      )
+  )
 `
 
 type UpdateToolsetsToUserSessionIssuerParams struct {
@@ -4173,6 +4498,18 @@ SET user_session_issuer_id = $1,
     organization_id = $3::text,
     updated_at = clock_timestamp()
 WHERE client.user_session_issuer_id = $4
+  AND client.deleted IS FALSE
+  AND 2 = (
+    SELECT COUNT(*)
+    FROM user_session_issuers AS issuer
+    LEFT JOIN projects AS project ON project.id = issuer.project_id
+    WHERE issuer.id IN ($4, $1)
+      AND issuer.deleted IS FALSE
+      AND (
+        (issuer.project_id IS NULL AND issuer.organization_id = $3::text)
+        OR (issuer.project_id IS NOT NULL AND project.organization_id = $3::text AND project.deleted IS FALSE)
+      )
+  )
 `
 
 type UpdateUserSessionClientsToIssuerParams struct {
@@ -4203,16 +4540,34 @@ SET project_id = $1::uuid,
 FROM user_session_clients AS client
 WHERE consent.user_session_client_id = client.id
   AND client.user_session_issuer_id = $3
+  AND consent.deleted IS FALSE
+  AND 2 = (
+    SELECT COUNT(*)
+    FROM user_session_issuers AS issuer
+    LEFT JOIN projects AS project ON project.id = issuer.project_id
+    WHERE issuer.id IN ($3, $4)
+      AND issuer.deleted IS FALSE
+      AND (
+        (issuer.project_id IS NULL AND issuer.organization_id = $2::text)
+        OR (issuer.project_id IS NOT NULL AND project.organization_id = $2::text AND project.deleted IS FALSE)
+      )
+  )
 `
 
 type UpdateUserSessionConsentsToIssuerScopeParams struct {
 	TargetProjectID uuid.NullUUID
 	OrganizationID  string
 	SourceIssuerID  uuid.UUID
+	TargetIssuerID  uuid.UUID
 }
 
 func (q *Queries) UpdateUserSessionConsentsToIssuerScope(ctx context.Context, arg UpdateUserSessionConsentsToIssuerScopeParams) (int64, error) {
-	result, err := q.db.Exec(ctx, updateUserSessionConsentsToIssuerScope, arg.TargetProjectID, arg.OrganizationID, arg.SourceIssuerID)
+	result, err := q.db.Exec(ctx, updateUserSessionConsentsToIssuerScope,
+		arg.TargetProjectID,
+		arg.OrganizationID,
+		arg.SourceIssuerID,
+		arg.TargetIssuerID,
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -4284,6 +4639,18 @@ SET user_session_issuer_id = $1,
     organization_id = $3::text,
     updated_at = clock_timestamp()
 WHERE cimd.user_session_issuer_id = $4
+  AND cimd.deleted IS FALSE
+  AND 2 = (
+    SELECT COUNT(*)
+    FROM user_session_issuers AS issuer
+    LEFT JOIN projects AS project ON project.id = issuer.project_id
+    WHERE issuer.id IN ($4, $1)
+      AND issuer.deleted IS FALSE
+      AND (
+        (issuer.project_id IS NULL AND issuer.organization_id = $3::text)
+        OR (issuer.project_id IS NOT NULL AND project.organization_id = $3::text AND project.deleted IS FALSE)
+      )
+  )
 `
 
 type UpdateUserSessionIssuerCimdClientsToIssuerParams struct {
@@ -4313,6 +4680,18 @@ SET user_session_issuer_id = $1,
     organization_id = $3::text,
     updated_at = clock_timestamp()
 WHERE session.user_session_issuer_id = $4
+  AND session.deleted IS FALSE
+  AND 2 = (
+    SELECT COUNT(*)
+    FROM user_session_issuers AS issuer
+    LEFT JOIN projects AS project ON project.id = issuer.project_id
+    WHERE issuer.id IN ($4, $1)
+      AND issuer.deleted IS FALSE
+      AND (
+        (issuer.project_id IS NULL AND issuer.organization_id = $3::text)
+        OR (issuer.project_id IS NOT NULL AND project.organization_id = $3::text AND project.deleted IS FALSE)
+      )
+  )
 `
 
 type UpdateUserSessionsToIssuerParams struct {

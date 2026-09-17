@@ -1331,6 +1331,19 @@ func (q *Queries) GetPrincipalGrantEffectFixture(ctx context.Context, arg GetPri
 	return effect, err
 }
 
+const getPrincipalRemoteSessionBindingIssuerFixture = `-- name: GetPrincipalRemoteSessionBindingIssuerFixture :one
+SELECT user_session_issuer_id
+FROM principal_remote_session_bindings
+WHERE id = $1
+`
+
+func (q *Queries) GetPrincipalRemoteSessionBindingIssuerFixture(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getPrincipalRemoteSessionBindingIssuerFixture, id)
+	var user_session_issuer_id uuid.UUID
+	err := row.Scan(&user_session_issuer_id)
+	return user_session_issuer_id, err
+}
+
 const getPublishOutboxDeadLetter = `-- name: GetPublishOutboxDeadLetter :one
 SELECT id, public_id, organization_id, topic, message, attributes,
        attempts, last_error, enqueued_at, created_at
@@ -1395,6 +1408,24 @@ func (q *Queries) GetPublishOutboxRow(ctx context.Context, id int64) (GetPublish
 		&i.LeaseToken,
 		&i.CreatedAt,
 	)
+	return i, err
+}
+
+const getRemoteSessionEMABindingFixture = `-- name: GetRemoteSessionEMABindingFixture :one
+SELECT user_session_issuer_id, generation
+FROM remote_session_ema_bindings
+WHERE id = $1
+`
+
+type GetRemoteSessionEMABindingFixtureRow struct {
+	UserSessionIssuerID uuid.UUID
+	Generation          int64
+}
+
+func (q *Queries) GetRemoteSessionEMABindingFixture(ctx context.Context, id uuid.UUID) (GetRemoteSessionEMABindingFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getRemoteSessionEMABindingFixture, id)
+	var i GetRemoteSessionEMABindingFixtureRow
+	err := row.Scan(&i.UserSessionIssuerID, &i.Generation)
 	return i, err
 }
 
@@ -1473,6 +1504,65 @@ func (q *Queries) GetTransactionClockFixture(ctx context.Context) (GetTransactio
 	row := q.db.QueryRow(ctx, getTransactionClockFixture)
 	var i GetTransactionClockFixtureRow
 	err := row.Scan(&i.TransactionNow, &i.SevenDaysAgo, &i.InSevenDays)
+	return i, err
+}
+
+const getUserSessionMigrationTombstonesFixture = `-- name: GetUserSessionMigrationTombstonesFixture :one
+SELECT
+  client.user_session_issuer_id AS client_issuer_id,
+  client.project_id AS client_project_id,
+  session.user_session_issuer_id AS session_issuer_id,
+  session.project_id AS session_project_id,
+  consent.project_id AS consent_project_id,
+  cimd.user_session_issuer_id AS cimd_issuer_id,
+  cimd.project_id AS cimd_project_id,
+  remote.user_session_issuer_id AS remote_session_issuer_id
+FROM user_session_clients AS client
+JOIN user_sessions AS session ON session.id = $1
+JOIN user_session_consents AS consent ON consent.id = $2
+JOIN user_session_issuer_cimd_clients AS cimd ON cimd.id = $3
+JOIN remote_sessions AS remote ON remote.id = $4
+WHERE client.id = $5
+`
+
+type GetUserSessionMigrationTombstonesFixtureParams struct {
+	SessionID       uuid.UUID
+	ConsentID       uuid.UUID
+	CimdID          uuid.UUID
+	RemoteSessionID uuid.UUID
+	ClientID        uuid.UUID
+}
+
+type GetUserSessionMigrationTombstonesFixtureRow struct {
+	ClientIssuerID        uuid.UUID
+	ClientProjectID       uuid.NullUUID
+	SessionIssuerID       uuid.UUID
+	SessionProjectID      uuid.NullUUID
+	ConsentProjectID      uuid.NullUUID
+	CimdIssuerID          uuid.UUID
+	CimdProjectID         uuid.NullUUID
+	RemoteSessionIssuerID uuid.UUID
+}
+
+func (q *Queries) GetUserSessionMigrationTombstonesFixture(ctx context.Context, arg GetUserSessionMigrationTombstonesFixtureParams) (GetUserSessionMigrationTombstonesFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getUserSessionMigrationTombstonesFixture,
+		arg.SessionID,
+		arg.ConsentID,
+		arg.CimdID,
+		arg.RemoteSessionID,
+		arg.ClientID,
+	)
+	var i GetUserSessionMigrationTombstonesFixtureRow
+	err := row.Scan(
+		&i.ClientIssuerID,
+		&i.ClientProjectID,
+		&i.SessionIssuerID,
+		&i.SessionProjectID,
+		&i.ConsentProjectID,
+		&i.CimdIssuerID,
+		&i.CimdProjectID,
+		&i.RemoteSessionIssuerID,
+	)
 	return i, err
 }
 
@@ -1907,6 +1997,98 @@ type InsertPluginAssignmentFixtureParams struct {
 func (q *Queries) InsertPluginAssignmentFixture(ctx context.Context, arg InsertPluginAssignmentFixtureParams) error {
 	_, err := q.db.Exec(ctx, insertPluginAssignmentFixture, arg.PluginID, arg.OrganizationID, arg.PrincipalUrn)
 	return err
+}
+
+const insertPrincipalRemoteSessionBindingFixture = `-- name: InsertPrincipalRemoteSessionBindingFixture :one
+INSERT INTO principal_remote_session_bindings (
+  project_id,
+  organization_id,
+  principal_id,
+  user_session_issuer_id,
+  remote_session_client_id,
+  remote_session_id,
+  grant_generation,
+  attached_by_subject_id
+) VALUES (
+  $1,
+  $2,
+  $3,
+  $4,
+  $5,
+  $6,
+  $7,
+  $8
+)
+RETURNING id
+`
+
+type InsertPrincipalRemoteSessionBindingFixtureParams struct {
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	PrincipalID           uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+	RemoteSessionClientID uuid.UUID
+	RemoteSessionID       uuid.UUID
+	GrantGeneration       int64
+	AttachedBySubjectID   string
+}
+
+func (q *Queries) InsertPrincipalRemoteSessionBindingFixture(ctx context.Context, arg InsertPrincipalRemoteSessionBindingFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, insertPrincipalRemoteSessionBindingFixture,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.PrincipalID,
+		arg.UserSessionIssuerID,
+		arg.RemoteSessionClientID,
+		arg.RemoteSessionID,
+		arg.GrantGeneration,
+		arg.AttachedBySubjectID,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const insertRemoteSessionEMABindingFixture = `-- name: InsertRemoteSessionEMABindingFixture :one
+INSERT INTO remote_session_ema_bindings (
+  project_id,
+  organization_id,
+  user_session_issuer_id,
+  remote_session_issuer_id,
+  resource,
+  remote_session_client_id
+) VALUES (
+  $1,
+  $2,
+  $3,
+  $4,
+  $5,
+  $6
+)
+RETURNING id
+`
+
+type InsertRemoteSessionEMABindingFixtureParams struct {
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	UserSessionIssuerID   uuid.UUID
+	RemoteSessionIssuerID uuid.UUID
+	Resource              string
+	RemoteSessionClientID uuid.NullUUID
+}
+
+func (q *Queries) InsertRemoteSessionEMABindingFixture(ctx context.Context, arg InsertRemoteSessionEMABindingFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, insertRemoteSessionEMABindingFixture,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.UserSessionIssuerID,
+		arg.RemoteSessionIssuerID,
+		arg.Resource,
+		arg.RemoteSessionClientID,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const insertUserFixture = `-- name: InsertUserFixture :exec
@@ -4273,6 +4455,73 @@ func (q *Queries) SoftDeleteRemoteSessionClientsForKeySetFixture(ctx context.Con
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const softDeleteUserSessionMigrationChildrenFixture = `-- name: SoftDeleteUserSessionMigrationChildrenFixture :one
+WITH client AS (
+  UPDATE user_session_clients SET deleted_at = clock_timestamp()
+  WHERE user_session_clients.id = $1 AND user_session_clients.deleted IS FALSE
+  RETURNING user_session_clients.id
+), session AS (
+  UPDATE user_sessions SET deleted_at = clock_timestamp()
+  WHERE user_sessions.id = $2 AND user_sessions.deleted IS FALSE
+  RETURNING user_sessions.id
+), consent AS (
+  UPDATE user_session_consents SET deleted_at = clock_timestamp()
+  WHERE user_session_consents.id = $3 AND user_session_consents.deleted IS FALSE
+  RETURNING user_session_consents.id
+), cimd AS (
+  UPDATE user_session_issuer_cimd_clients SET deleted_at = clock_timestamp()
+  WHERE user_session_issuer_cimd_clients.id = $4 AND user_session_issuer_cimd_clients.deleted IS FALSE
+  RETURNING user_session_issuer_cimd_clients.id
+), remote AS (
+  UPDATE remote_sessions SET deleted_at = clock_timestamp()
+  WHERE remote_sessions.id = $5 AND remote_sessions.deleted IS FALSE
+  RETURNING remote_sessions.id
+)
+SELECT
+  (SELECT count(*)::int FROM client) AS clients,
+  (SELECT count(*)::int FROM session) AS sessions,
+  (SELECT count(*)::int FROM consent) AS consents,
+  (SELECT count(*)::int FROM cimd) AS cimd_clients,
+  (SELECT count(*)::int FROM remote) AS remote_sessions
+`
+
+type SoftDeleteUserSessionMigrationChildrenFixtureParams struct {
+	ClientID        uuid.UUID
+	SessionID       uuid.UUID
+	ConsentID       uuid.UUID
+	CimdID          uuid.UUID
+	RemoteSessionID uuid.UUID
+}
+
+type SoftDeleteUserSessionMigrationChildrenFixtureRow struct {
+	Clients        int32
+	Sessions       int32
+	Consents       int32
+	CimdClients    int32
+	RemoteSessions int32
+}
+
+// Builds tombstones across every counted migration child table without
+// invoking production cascades that would erase the independent test cases.
+func (q *Queries) SoftDeleteUserSessionMigrationChildrenFixture(ctx context.Context, arg SoftDeleteUserSessionMigrationChildrenFixtureParams) (SoftDeleteUserSessionMigrationChildrenFixtureRow, error) {
+	row := q.db.QueryRow(ctx, softDeleteUserSessionMigrationChildrenFixture,
+		arg.ClientID,
+		arg.SessionID,
+		arg.ConsentID,
+		arg.CimdID,
+		arg.RemoteSessionID,
+	)
+	var i SoftDeleteUserSessionMigrationChildrenFixtureRow
+	err := row.Scan(
+		&i.Clients,
+		&i.Sessions,
+		&i.Consents,
+		&i.CimdClients,
+		&i.RemoteSessions,
+	)
+	return i, err
 }
 
 const softDeleteWorkloadIssuerFixture = `-- name: SoftDeleteWorkloadIssuerFixture :execrows

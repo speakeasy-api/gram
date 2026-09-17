@@ -320,6 +320,7 @@ var _ = Service("organizationUserSessionIssuers", func() {
 		Payload(func() {
 			Attribute("source_id", String, "The user_session_issuer to migrate away from; soft-deleted on success.", func() { Format(FormatUUID) })
 			Attribute("target_id", String, "The surviving user_session_issuer.", func() { Format(FormatUUID) })
+			Attribute("confirmed_warnings_fingerprint", String, "The exact warnings_fingerprint returned by the latest preflight. Required when that preflight reports warnings.")
 			Required("source_id", "target_id")
 			security.SessionPayload()
 		})
@@ -554,8 +555,9 @@ var OrganizationUserSessionIssuerMigratePreflight = Type("OrganizationUserSessio
 	Attribute("ema_binding_conflict_count", Int, "Enterprise-managed authorization bindings already present on the target. Non-zero blocks migration.")
 	Attribute("platform_owned", Boolean, "Whether a Platform MCP catalog registration owns either issuer. True blocks migration.")
 	Attribute("warnings", ArrayOf(UserSessionIssuerFieldMismatch), "Configuration differences that do not invalidate existing sessions but change future authorization behavior.")
+	Attribute("warnings_fingerprint", String, "Stable fingerprint of the current warnings. Empty when there are no warnings; otherwise pass this exact value to migrateIssuer to confirm them.")
 	Attribute("can_migrate", Boolean, "True when no hard blocker is present.")
-	Required("client_count", "session_count", "consent_count", "cimd_client_count", "remote_session_count", "conflicting_client_ids", "principal_binding_conflict_count", "ema_binding_conflict_count", "platform_owned", "warnings", "can_migrate")
+	Required("client_count", "session_count", "consent_count", "cimd_client_count", "remote_session_count", "conflicting_client_ids", "principal_binding_conflict_count", "ema_binding_conflict_count", "platform_owned", "warnings", "warnings_fingerprint", "can_migrate")
 })
 
 var MigrateOrganizationUserSessionIssuerResult = Type("MigrateOrganizationUserSessionIssuerResult", func() {
