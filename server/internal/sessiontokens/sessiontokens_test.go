@@ -275,8 +275,12 @@ func TestSigner_FailsClosedOnRevocation(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = signer.ValidateBearer(t.Context(), token, "platform-mcp", revoked{})
-	require.ErrorContains(t, err, "token is revoked")
+	require.ErrorIs(t, err, sessiontokens.ErrTokenRevoked)
 
+	// A store that cannot answer still fails the request closed, but it is not
+	// the same outcome: callers key a "discard your token" challenge off the
+	// revoked sentinel alone.
 	_, err = signer.ValidateBearer(t.Context(), token, "platform-mcp", unavailableRevocationStore{})
-	require.ErrorContains(t, err, "check revocation")
+	require.ErrorIs(t, err, sessiontokens.ErrRevocationUnavailable)
+	require.NotErrorIs(t, err, sessiontokens.ErrTokenRevoked)
 }

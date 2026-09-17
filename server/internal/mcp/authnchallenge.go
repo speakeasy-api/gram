@@ -279,6 +279,20 @@ var (
 	errAgentSessionCredentialLoad = errors.New("load agent session credential")
 )
 
+// errCredentialRejected marks a rejection the presented credential itself
+// earned: a bad signature, the wrong audience, an expired or revoked token, a
+// session row that is gone, or a principal whose admission has been withdrawn.
+// It is what makes the invalid_token challenge opt-in. A failure on Gram's side
+// — an unreachable revocation store, a policy read that never returned, a
+// rollout gate that hides the endpoint — leaves it unset, so the client is told
+// to retry rather than to throw a live credential away.
+var errCredentialRejected = errors.New("credential rejected")
+
+// errWorkloadRolloutDisabled marks a workload session hidden by the agent
+// authorization rollout rather than by anything wrong with its token. Exchanging
+// a fresh token would hit the same gate, so this must not earn invalid_token.
+var errWorkloadRolloutDisabled = errors.New("workload session hidden by agent authorization rollout")
+
 // errUnsupportedSessionSubject marks a session subject kind that parses but
 // that this path cannot describe as a caller. It is an error rather than a
 // fallback because a context with no actor reads to authz.Engine as an
@@ -296,6 +310,16 @@ const (
 	// rejections because it is by far the largest 401 population and would
 	// otherwise swamp the rejected share.
 	issuerGateReasonNoCredentials = "no_credentials"
+
+	// issuerGateReasonRevocationUnavailable: the revocation store could not
+	// answer, so the request failed closed without judging the credential.
+	// Labeled apart from a bad token so an outage does not read as a spike of
+	// bad credentials.
+	issuerGateReasonRevocationUnavailable = "revocation_check_unavailable"
+
+	// issuerGateReasonWorkloadRolloutDisabled: a workload session reached an
+	// endpoint whose organization has agent authorization switched off.
+	issuerGateReasonWorkloadRolloutDisabled = "workload_rollout_disabled"
 
 	// issuerGateReasonInvalidRemoteSession: the bearer token was accepted but
 	// a required upstream remote session for the issuer is missing or
@@ -317,6 +341,10 @@ func issuerGateFailureReason(err error) string {
 		return "workload_session_load_failed"
 	case errors.Is(err, errWorkloadSessionAdmissionLoad):
 		return "workload_admission_load_failed"
+	case errors.Is(err, sessiontokens.ErrRevocationUnavailable):
+		return issuerGateReasonRevocationUnavailable
+	case errors.Is(err, errWorkloadRolloutDisabled):
+		return issuerGateReasonWorkloadRolloutDisabled
 	default:
 		return issuerGateReasonInvalidBearerToken
 	}
@@ -397,7 +425,12 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token, baseURL s
 		Legacy:   legacyAudience,
 	})
 	if err != nil {
-		return ctx, nil, nil, fmt.Errorf("validate user-session bearer: %w", err)
+		// A revocation store that could not answer judged nothing; everything
+		// else here is the token failing on its own merits.
+		if errors.Is(err, sessiontokens.ErrRevocationUnavailable) {
+			return ctx, nil, nil, fmt.Errorf("validate user-session bearer: %w", err)
+		}
+		return ctx, nil, nil, fmt.Errorf("%w: validate user-session bearer: %w", errCredentialRejected, err)
 	}
 	if acceptedAudience == userSessionAudienceLegacy {
 		s.metrics.RecordLegacyAudienceAccepted(ctx, endpoint.UserSessionIssuerID.String())
@@ -449,14 +482,15 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token, baseURL s
 			Jti:                 session.JTI(),
 		})
 		if qerr != nil {
+			// The session row is gone: revoked, or never ours.
 			if errors.Is(qerr, pgx.ErrNoRows) {
-				return ctx, nil, nil, oops.C(oops.CodeUnauthorized)
+				return ctx, nil, nil, fmt.Errorf("%w: %w", errCredentialRejected, oops.C(oops.CodeUnauthorized))
 			}
 			return ctx, nil, nil, fmt.Errorf("%w: %w", errWorkloadSessionCredentialLoad, qerr)
 		}
 		credential, cerr := loadWorkloadSessionCredential(endpoint, subject, row.SubjectUrn, row.OrganizationID, row.DelegatedGrants, row.DelegatedGrantsVersion)
 		if cerr != nil {
-			return ctx, nil, nil, cerr
+			return ctx, nil, nil, fmt.Errorf("%w: %w", errCredentialRejected, cerr)
 		}
 		newCtx, err = s.admitWorkloadSession(newCtx, endpoint, subject, credential)
 		if err != nil {
@@ -743,7 +777,7 @@ func (s *Service) authenticateIssuerGate(
 		}
 		s.metrics.RecordMCPRequestRejected(ctx, reason, mcpURL, surface)
 		const message = "expired or invalid access token"
-		if reason == issuerGateReasonInvalidBearerToken && s.isWorkloadSessionBearer(authToken) {
+		if errors.Is(valErr, errCredentialRejected) && s.isWorkloadSessionBearer(authToken) {
 			return ctx, nil, nil, writeInvalidTokenChallenge(w, protectedResourceURL, message)
 		}
 		return ctx, nil, nil, WriteAuthenticateChallenge(w, protectedResourceURL, message)

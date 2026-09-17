@@ -16,6 +16,7 @@ import (
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -51,7 +52,7 @@ func newWorkloadChallengeFixture(t *testing.T, ctx context.Context, ti *testInst
 		agent:               agent,
 		assignment:          assignment,
 		session:             session,
-		token:               mintWorkloadBearer(t, ti, fx, session),
+		token:               mintSessionBearerExpiringAt(t, ti, fx, session, session.ExpiresAt.Time),
 	}
 }
 
@@ -191,7 +192,7 @@ func TestServePublic_WorkloadToolDeniedByAgentPolicyIsNotInvalidToken(t *testing
 	issuerID := seedWorkloadIssuer(t, ctx, ti, fx.orgID)
 	assignAgentToWorkload(t, ctx, ti, fx.orgID, issuerID, workloadSessionSubject, agent.ID)
 	session := seedWorkloadSession(t, ctx, ti, fx, urn.NewWorkloadSubject(issuerID, workloadSessionSubject))
-	token := mintWorkloadBearer(t, ti, fx, session)
+	token := mintSessionBearerExpiringAt(t, ti, fx, session, session.ExpiresAt.Time)
 	slug := fx.toolset.McpSlug.String
 
 	requireAdmitted(t, serveMCPResponse(t, ti, slug, makeInitializeBody(), token))
@@ -226,6 +227,32 @@ func TestServePublic_ExpiredHumanSessionChallengeIsUnchanged(t *testing.T) {
 
 // A token Gram did not sign names nobody, so it cannot claim the workload
 // challenge by asserting a workload subject.
+func requireBareChallenge(t *testing.T, ti *testInstance, slug string, w *httptest.ResponseRecorder) {
+	t.Helper()
+	require.Equal(t, http.StatusUnauthorized, w.Code, "body=%s", w.Body.String())
+	require.Equal(t,
+		`Bearer resource_metadata="`+ti.serverURL.String()+`/.well-known/oauth-protected-resource/mcp/`+slug+`"`,
+		w.Header().Get("WWW-Authenticate"),
+	)
+}
+
+// The rollout gate hides the endpoint from a workload whose token is perfectly
+// good. Naming that invalid_token would send the workload to the token endpoint
+// for a credential that meets the same gate, forever.
+func TestServePublic_WorkloadSessionHiddenByRolloutGetsBareChallenge(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	fx := newWorkloadChallengeFixture(t, ctx, ti)
+	slug := fx.toolset.McpSlug.String
+
+	requireAdmitted(t, serveMCPResponse(t, ti, slug, makeInitializeBody(), fx.token))
+
+	ti.features.SetFlag(feature.FlagAgentMCPAuthorizationM2, fx.orgID, false)
+
+	requireBareChallenge(t, ti, slug, serveMCPResponse(t, ti, slug, makeInitializeBody(), fx.token))
+}
+
 func TestServePublic_ForgedWorkloadBearerGetsBareChallenge(t *testing.T) {
 	t.Parallel()
 
@@ -233,10 +260,5 @@ func TestServePublic_ForgedWorkloadBearerGetsBareChallenge(t *testing.T) {
 	fx := newWorkloadChallengeFixture(t, ctx, ti)
 	slug := fx.toolset.McpSlug.String
 
-	w := serveMCPResponse(t, ti, slug, makeInitializeBody(), fx.token+"tampered")
-	require.Equal(t, http.StatusUnauthorized, w.Code, "body=%s", w.Body.String())
-	require.Equal(t,
-		`Bearer resource_metadata="`+ti.serverURL.String()+`/.well-known/oauth-protected-resource/mcp/`+slug+`"`,
-		w.Header().Get("WWW-Authenticate"),
-	)
+	requireBareChallenge(t, ti, slug, serveMCPResponse(t, ti, slug, makeInitializeBody(), fx.token+"tampered"))
 }
