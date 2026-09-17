@@ -12,13 +12,20 @@ import { afterEach, expect, it, vi } from "vitest";
 import { RemoteIdentityProvidersPage } from "./RemoteIdentityProviders";
 
 vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({
+  useRoutes: (overrides?: { projectSlug?: string }) => ({
     remoteIdentityProviders: {
       issuerDetail: {
-        href: (id: string) => `/example/remote-identity-providers/${id}`,
+        href: (id: string) =>
+          `/example/projects/${overrides?.projectSlug ?? "active"}/remote-identity-providers/${id}`,
       },
     },
   }),
+}));
+vi.mock("@/contexts/Auth", () => ({
+  useOrganization: () => ({
+    projects: [{ id: "example-project", slug: "owning" }],
+  }),
+  useProject: () => ({ id: "active-project", slug: "active" }),
 }));
 vi.mock("@/components/require-scope", () => ({
   RequireScope: ({ children }: { children: ReactNode }) => <>{children}</>,
@@ -133,6 +140,17 @@ it("preserves tenant actions and read-only platform browsing without platform ma
     </QueryClientProvider>,
   );
   expect(screen.getByText("Platform Remote Identity Providers")).toBeTruthy();
+  for (const [name, slug, id] of [
+    ["Platform Example", "active", "platform-provider"],
+    ["Organization Example", "active", "org-provider"],
+    ["Project Example", "owning", "project-provider"],
+  ]) {
+    expect(
+      screen
+        .getByRole("link", { name: `View remote identity provider ${name}` })
+        .getAttribute("href"),
+    ).toBe(`/example/projects/${slug}/remote-identity-providers/${id}`);
+  }
   for (const name of ["Organization Example", "Project Example"]) {
     const row = screen.getByText(name).closest("tr");
     expect(row).not.toBeNull();
