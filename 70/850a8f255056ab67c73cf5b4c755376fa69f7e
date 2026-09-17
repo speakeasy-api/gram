@@ -1,0 +1,19 @@
+.changeset/ignore-caller-cancel-degradation.md
+  s_a9f30837f96a6a::t_23ed4dc93da29f 1-5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "70850a8f255056ab67c73cf5b4c755376fa69f7e",
+  "prompts": {},
+  "sessions": {
+    "s_a9f30837f96a6a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0afbb-bf9d-7d63-a73e-d4b97b0cff05",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
