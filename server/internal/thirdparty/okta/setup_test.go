@@ -26,9 +26,9 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/dpop"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 )
 
 const (
