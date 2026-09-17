@@ -49,10 +49,7 @@ import {
 } from "@/pages/security/policy-data";
 import { policyDetectionCategories } from "@/pages/security/policy-form";
 import { useDetectorMode } from "@/pages/security/use-detector-mode";
-import {
-  buildPolicyPayload,
-  categoryMatchesPolicy,
-} from "./configure-policies-payload";
+import { buildPolicyPayload } from "./configure-policies-payload";
 import {
   acceptsDetectionScope,
   categoryRecommendationScope,
@@ -280,11 +277,16 @@ export function ConfigurePoliciesStep({
 
   const policyForCategory = useMemo(() => {
     const map = new Map<RuleCategory, (typeof policies)[number]>();
+    // The same category resolution the scope editor and the delete dialog
+    // use, so an entity-less presidio policy (what the LLM analyzer writes
+    // for PII) backs the personal-data rows after a flag-off instead of
+    // hiding behind them and getting duplicated.
+    const resolved = policies.map(
+      (p) => [p, policyDetectionCategories(p, mode)] as const,
+    );
     for (const cat of ["shadow_mcp" as RuleCategory, ...categories]) {
-      const policy = policies.find((p) =>
-        categoryMatchesPolicy(cat, p.sources ?? [], p.presidioEntities, mode),
-      );
-      if (policy) map.set(cat, policy);
+      const hit = resolved.find(([, cats]) => cats.has(cat));
+      if (hit) map.set(cat, hit[0]);
     }
     return map;
   }, [policies, categories, mode]);

@@ -164,6 +164,24 @@ describe("llm detector mode", () => {
     ).toEqual(new Set(["pii", "custom"]));
   });
 
+  it("matches a presidio policy to the categories its entities name", () => {
+    expect(
+      policyDetectionCategories({
+        sources: ["presidio"],
+        presidioEntities: ["CREDIT_CARD"],
+      }),
+    ).toEqual(new Set(["financial"]));
+    expect(
+      policyDetectionCategories({
+        sources: ["presidio"],
+        presidioEntities: ["EMAIL_ADDRESS"],
+      }),
+    ).toEqual(new Set(["pii"]));
+    expect(policyDetectionCategories({ sources: ["gitleaks"] })).toEqual(
+      new Set(["secrets"]),
+    );
+  });
+
   it("still expands an entity-less presidio policy under the presidio mode", () => {
     expect(
       policyDetectionCategories({

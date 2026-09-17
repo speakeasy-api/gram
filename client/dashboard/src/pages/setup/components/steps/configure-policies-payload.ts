@@ -33,24 +33,3 @@ export function buildPolicyPayload(
   }
   return { sources: [] };
 }
-
-export function categoryMatchesPolicy(
-  cat: RuleCategory,
-  sources: string[],
-  presidioEntities?: string[],
-  mode: DetectorMode = "presidio",
-): boolean {
-  if (cat === "shadow_mcp") return sources.includes("shadow_mcp");
-  if (cat === "secrets") return sources.includes("gitleaks");
-  if (cat === "prompt_injection") return sources.includes("prompt_injection");
-  if (mode === "llm" && cat === "pii") return sources.includes("presidio");
-  if (PRESIDIO_CATEGORIES.includes(cat)) {
-    if (!sources.includes("presidio") || !presidioEntities?.length)
-      return false;
-    const wire = new Set(
-      DETECTION_RULES[cat].map((r) => ruleIdToPresidioEntity(r.id)),
-    );
-    return presidioEntities.some((e) => wire.has(e));
-  }
-  return false;
-}

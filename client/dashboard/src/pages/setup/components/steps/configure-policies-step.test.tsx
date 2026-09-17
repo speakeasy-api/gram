@@ -2,10 +2,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FeatureFlagResult } from "@/hooks/useFeatureFlag";
-import {
-  buildPolicyPayload,
-  categoryMatchesPolicy,
-} from "./configure-policies-payload";
+import { buildPolicyPayload } from "./configure-policies-payload";
 import { ConfigurePoliciesStep } from "./configure-policies-step";
 
 const mocks = vi.hoisted(() => ({
@@ -172,6 +169,29 @@ describe("ConfigurePoliciesStep detector mode", () => {
 
     expect(screen.getByText("1/3 enabled")).toBeTruthy();
   });
+
+  it("backs every personal-data row with an entity-less presidio policy once the flag is off", () => {
+    mocks.policies = [
+      {
+        id: "policy-1",
+        name: "PII",
+        enabled: true,
+        action: "flag",
+        sources: ["presidio"],
+        presidioEntities: [],
+        detectionScopes: [],
+      },
+    ];
+    renderStep();
+
+    expect(screen.getByText("4/6 enabled")).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: /^Financial Information/ }),
+    );
+    fireEvent.click(screen.getByRole("switch", { name: "Enable detection" }));
+    fireEvent.click(screen.getByRole("switch", { name: "Enable detection" }));
+    expect(mocks.mutateCreate).not.toHaveBeenCalled();
+  });
 });
 
 describe("buildPolicyPayload", () => {
@@ -186,25 +206,5 @@ describe("buildPolicyPayload", () => {
       sources: ["presidio"],
       presidioEntities: [],
     });
-  });
-});
-
-describe("categoryMatchesPolicy", () => {
-  it("matches PII to any presidio policy under the LLM analyzer", () => {
-    expect(categoryMatchesPolicy("pii", ["presidio"], [], "llm")).toBe(true);
-    expect(
-      categoryMatchesPolicy("pii", ["presidio"], ["CREDIT_CARD"], "llm"),
-    ).toBe(true);
-    expect(categoryMatchesPolicy("pii", ["gitleaks"], [], "llm")).toBe(false);
-  });
-
-  it("needs a PII entity under the presidio engine", () => {
-    expect(categoryMatchesPolicy("pii", ["presidio"], [])).toBe(false);
-    expect(categoryMatchesPolicy("pii", ["presidio"], ["CREDIT_CARD"])).toBe(
-      false,
-    );
-    expect(categoryMatchesPolicy("pii", ["presidio"], ["EMAIL_ADDRESS"])).toBe(
-      true,
-    );
   });
 });
