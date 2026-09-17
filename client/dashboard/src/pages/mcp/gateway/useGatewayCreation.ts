@@ -1,3 +1,4 @@
+import { nextSortOrder } from "./memberRows";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useRoutes } from "@/routes";
 import { invalidateAllMetaMcpMembers } from "@gram/client/react-query/metaMcpMembers.js";
@@ -33,22 +34,35 @@ export function useGatewayCreation(): GatewayCreationFlow {
     if (!gatewayId || cancelled.current) return;
     setIsAttaching(true);
     setAttachmentError(null);
-    const isMember = async () => {
+    const listMembers = async () => {
       const { members } = await client.metaMcp.listMembers({
         metaMcpServerId: gatewayId,
       });
-      return members.some((member) => member.mcpServerId === mcpServerId);
+      return members;
     };
     try {
       // Fresh reads protect retries, including a committed write whose response
       // was lost. Never assume an error means the member was not added.
-      if (!(await isMember()) && !cancelled.current) {
+      const members = await listMembers();
+      if (
+        !members.some((member) => member.mcpServerId === mcpServerId) &&
+        !cancelled.current
+      ) {
         try {
           await client.metaMcp.addMember({
-            addMetaMcpMemberForm: { metaMcpServerId: gatewayId, mcpServerId },
+            addMetaMcpMemberForm: {
+              metaMcpServerId: gatewayId,
+              mcpServerId,
+              sortOrder: nextSortOrder(members),
+            },
           });
         } catch (error) {
-          if (!(await isMember())) throw error;
+          if (
+            !(await listMembers()).some(
+              (member) => member.mcpServerId === mcpServerId,
+            )
+          )
+            throw error;
         }
       }
       await invalidateAllMetaMcpMembers(queryClient);

@@ -17,6 +17,7 @@ import UploadFileStep from "@/components/upload-asset/upload-file-step";
 import { useRoutes } from "@/routes";
 import { Button } from "@/components/ui/Button";
 import { useProject } from "@/contexts/Auth";
+import { useState } from "react";
 import { ArrowRightIcon, RefreshCcwIcon } from "lucide-react";
 import { useSearchParams } from "react-router";
 
@@ -66,6 +67,7 @@ export default function UploadOpenAPI(): JSX.Element {
   const copy = pageCopy(existing);
 
   const gateway = useGatewayCreation();
+  const [creationPending, setCreationPending] = useState(false);
   return (
     <FormPage
       scope={
@@ -133,12 +135,15 @@ export default function UploadOpenAPI(): JSX.Element {
                   description="The platform will generate tools for your API."
                 />
                 <UploadAssetStep.Content>
-                  <DeployStep gateway={gateway} />
+                  <DeployStep
+                    gateway={gateway}
+                    onPendingChange={setCreationPending}
+                  />
                 </UploadAssetStep.Content>
               </UploadAssetStep>
 
               <Stack direction="horizontal" justify="start">
-                {!gateway.gatewayId && <FooterActions />}
+                <FooterActions gatewayMode={!!gateway.gatewayId} />
               </Stack>
             </UploadAssetStepper.Frame>
           </UploadAssetStepper.Provider>
@@ -146,7 +151,10 @@ export default function UploadOpenAPI(): JSX.Element {
         {gateway.gatewayId && (
           <Button
             variant="tertiary"
-            disabled={gateway.isAttaching}
+            disabled={
+              gateway.isAttaching ||
+              (!gateway.createdServerId && creationPending)
+            }
             onClick={() => {
               gateway.cancel();
             }}
@@ -173,7 +181,7 @@ export default function UploadOpenAPI(): JSX.Element {
   );
 }
 
-function FooterActions() {
+function FooterActions({ gatewayMode = false }: { gatewayMode?: boolean }) {
   const stepper = useStepper();
   const routes = useRoutes();
 
@@ -188,6 +196,7 @@ function FooterActions() {
     case "idle":
       return null;
     case "completed":
+      if (gatewayMode) return null;
       return (
         <Button variant="primary" onClick={() => continueTo.goTo()}>
           <Button.Text>Continue</Button.Text>
@@ -198,6 +207,8 @@ function FooterActions() {
       );
     case "error":
       if (!deploymentId) {
+        // DeployStep retries only the failed stage in gateway mode.
+        if (gatewayMode) return null;
         // This should never happen, but just in case
         return (
           <Button variant="primary" onClick={stepper.reset}>

@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -199,11 +200,18 @@ for (const { name, Component, fill, button } of cases) {
           .disabled,
       ).toBe(true);
     });
-    it("returns to the gateway on cancel", () => {
+    it("returns to the gateway on cancel without creating anything", async () => {
       render(<Component />);
-      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      fill();
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      });
       expect(state.flow.cancel).toHaveBeenCalled();
       expect(state.navigate).not.toHaveBeenCalled();
+      expect(state.create).not.toHaveBeenCalled();
+      expect(state.createToolset).not.toHaveBeenCalled();
+      expect(state.createServer).not.toHaveBeenCalled();
+      expect(state.flow.complete).not.toHaveBeenCalled();
     });
     it("locks creation and shows attachment recovery after failure", () => {
       state.flow.createdServerId = "server";
@@ -239,12 +247,19 @@ for (const { name, Component, fill, button } of cases) {
       expect(state.flow.complete).not.toHaveBeenCalled();
       expect(state.createServer).not.toHaveBeenCalled();
     });
-    it("keeps standalone cancellation", () => {
+    it("keeps standalone cancellation without creating anything", async () => {
       state.flow.gatewayId = null;
       state.flow.cancel.mockReturnValue(false);
       render(<Component />);
-      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      fill();
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      });
       expect(state.navigate).toHaveBeenCalled();
+      expect(state.create).not.toHaveBeenCalled();
+      expect(state.createToolset).not.toHaveBeenCalled();
+      expect(state.createServer).not.toHaveBeenCalled();
+      expect(state.flow.complete).not.toHaveBeenCalled();
     });
   });
 }
@@ -316,13 +331,13 @@ describe("source wrapper recovery", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
     await screen.findByText("Wrapper failed");
   }
-  it("retries the wrapper without recreating the retained toolset", async () => {
+  it("fails closed when the uncertain wrapper is absent from read results", async () => {
     await failWrapper();
     fireEvent.click(screen.getByRole("button", { name: /Create|Retry/ }));
-    await waitFor(() =>
-      expect(state.flow.complete).toHaveBeenCalledWith("server"),
-    );
+    await screen.findByText(/manually locate and attach/);
     expect(state.createToolset).toHaveBeenCalledOnce();
+    expect(state.createServer).toHaveBeenCalledOnce();
+    expect(state.flow.complete).not.toHaveBeenCalled();
     expect(state.listServers).toHaveBeenCalledWith({ toolsetId: "toolset" });
   });
   it("recovers a lost wrapper response by exact toolset before retrying writes", async () => {
@@ -353,6 +368,7 @@ describe("source wrapper recovery", () => {
       expect(state.createToolset).toHaveBeenCalledOnce();
       expect(state.createServer).toHaveBeenCalledOnce();
       expect(state.flow.complete).not.toHaveBeenCalled();
+      state.listServers.mockResolvedValue({ mcpServers: [{ id: "server" }] });
       fireEvent.click(screen.getByRole("button", { name: /Create|Retry/ }));
       await waitFor(() =>
         expect(state.flow.complete).toHaveBeenCalledWith("server"),

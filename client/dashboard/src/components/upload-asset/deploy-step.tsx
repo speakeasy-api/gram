@@ -8,6 +8,7 @@ import { ensureToolsetWrapper } from "@/pages/mcp/gateway/ensureToolsetWrapper";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useListTools } from "@/hooks/toolTypes";
+import { asTools } from "@/lib/toolTypes";
 import { slugify } from "@/lib/constants";
 import { useRoutes } from "@/routes";
 import { Deployment } from "@gram/client/models/components/deployment.js";
@@ -31,7 +32,9 @@ import { useStepper } from "./stepper/use-stepper";
 
 export default function DeployStep({
   gateway,
+  onPendingChange,
 }: {
+  onPendingChange?: (pending: boolean) => void;
   gateway?: {
     gatewayId: string | null;
     createdServerId: string | null;
@@ -52,6 +55,45 @@ export default function DeployStep({
   );
 
   const client = useSdkClient();
+  const mounted = React.useRef(false);
+  React.useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const deploymentAttempted = React.useRef(false);
+  const [terminalTools, setTerminalTools] = React.useState<ReturnType<
+    typeof asTools
+  > | null>(null);
+  // Gateway creation must not consume cached or in-flight pre-terminal query data.
+  const tools =
+    gateway?.gatewayId && deploymentAttempted.current
+      ? terminalTools
+      : toolsList.data?.tools;
+  const [deploymentPending, setDeploymentPending] = React.useState(false);
+  const [deploymentError, setDeploymentError] = React.useState<string | null>(
+    null,
+  );
+  const [deploymentRetry, setDeploymentRetry] = React.useState(0);
+  const [creationPending, setCreationPending] = React.useState(false);
+  React.useEffect(() => {
+    onPendingChange?.(
+      creationPending ||
+        deploymentPending ||
+        (step.isCurrentStep && step.state === "idle" && !deploymentError) ||
+        (stepDone && !!toolsList.isLoading),
+    );
+  }, [
+    creationPending,
+    deploymentPending,
+    step.isCurrentStep,
+    step.state,
+    stepDone,
+    toolsList.isLoading,
+    onPendingChange,
+    deploymentError,
+  ]);
   const toolsetCreationAttempted = React.useRef(false);
   const toolsSeeded = React.useRef(false);
   const wrapperAttempted = React.useRef(false);
@@ -61,7 +103,7 @@ export default function DeployStep({
 
   const { toolCount, toolUrns } = React.useMemo(() => {
     const { deployment, uploadResult, assetName } = stepper.meta.current;
-    if (!toolsList.data || !deployment || !uploadResult || !assetName) {
+    if (!tools || !deployment || !uploadResult || !assetName) {
       return { toolCount: 0, toolUrns: [] as string[] };
     }
 
@@ -73,7 +115,7 @@ export default function DeployStep({
         (doc) => doc.assetId === uploadResult.asset.id,
       )?.id;
 
-    const matchingTools = toolsList.data.tools.filter(
+    const matchingTools = tools.filter(
       (tool) => tool.type === "http" && tool.openapiv3DocumentId === documentId,
     );
 
@@ -81,12 +123,13 @@ export default function DeployStep({
       toolCount: matchingTools.length,
       toolUrns: matchingTools.map((tool) => tool.toolUrn),
     };
-  }, [toolsList.data, stepper.meta]);
+  }, [tools, stepper.meta]);
 
   // Auto-create toolset after tools are loaded (regardless of overall deployment status)
   // The deployment may fail due to unrelated issues (e.g., external MCP), but if tools
   // were created for this asset, we should still create a toolset for them.
   React.useEffect(() => {
+    if (gateway?.gatewayId && (deploymentError || deploymentPending)) return;
     // Only run when step processing is done (completed or failed) and we have tools
     const stepDone = step.state === "completed" || step.state === "failed";
     // A new version of an existing document already has servers carrying
@@ -107,6 +150,7 @@ export default function DeployStep({
     // Mark as attempted immediately to prevent duplicate calls
     toolsetCreationAttempted.current = true;
 
+    setCreationPending(true);
     const createToolset = async () => {
       try {
         // Gateway retries resume from the last successful stage.
@@ -118,6 +162,7 @@ export default function DeployStep({
               description: `Tools generated from ${assetName}`,
             },
           }));
+        if (!mounted.current) return;
         if (gateway?.gatewayId) stepper.meta.current.toolset = toolset;
 
         if (!toolsSeeded.current) {
@@ -125,6 +170,7 @@ export default function DeployStep({
             slug: toolset.slug,
             updateToolsetRequestBody: { toolUrns },
           });
+          if (!mounted.current) return;
           toolsSeeded.current = true;
         }
 
@@ -139,24 +185,31 @@ export default function DeployStep({
               reconcile,
             );
           }
+          if (!mounted.current) return;
           await gateway.complete(createdWrapperId.current);
         }
+        if (!mounted.current) return;
         telemetry.capture("onboarding_event", {
           action: "toolset_auto_created",
           toolset_name: assetName,
           tool_count: toolUrns.length,
         });
       } catch (error) {
+        if (!mounted.current) return;
         if (gateway?.gatewayId) {
           setCreationError(
-            error instanceof Error
-              ? error.message
-              : "Failed to create MCP server",
+            !stepper.meta.current.toolset
+              ? "Toolset creation could not be confirmed. Do not retry creation. Return to the gateway and manually inspect toolsets to recover any created resource before starting again."
+              : error instanceof Error
+                ? error.message
+                : "Failed to create MCP server",
           );
         } else {
           // Standalone toolset creation remains optional.
           console.error("Failed to auto-create toolset:", error);
         }
+      } finally {
+        if (mounted.current) setCreationPending(false);
       }
     };
 
@@ -169,6 +222,8 @@ export default function DeployStep({
     telemetry,
     gateway,
     retryAttempt,
+    deploymentError,
+    deploymentPending,
   ]);
 
   const deploymentLogs = useDeploymentLogs(
@@ -179,12 +234,26 @@ export default function DeployStep({
     { enabled: stepDone },
   );
 
-  const createOrEvolveDeployment = useCreateDeployment();
+  const createOrEvolveDeployment = useCreateDeployment(mounted);
 
   React.useEffect(() => {
-    if (!step.isCurrentStep || step.state !== "idle") return;
+    if (
+      !step.isCurrentStep ||
+      (step.state !== "idle" && !deploymentRetry) ||
+      deploymentAttempted.current ||
+      gateway?.createdServerId
+    )
+      return;
+    deploymentAttempted.current = true;
+    setDeploymentPending(true);
     createOrEvolveDeployment()
-      .then((result) => {
+      .then(async (result) => {
+        if (!mounted.current) return;
+        if (gateway?.gatewayId) {
+          const response = await client.tools.list({ deploymentId: result.id });
+          if (!mounted.current) return;
+          setTerminalTools(asTools(response.tools));
+        }
         stepper.meta.current.deployment = result;
 
         // Always mark as "completed" so we can check tool count
@@ -209,18 +278,49 @@ export default function DeployStep({
         }
       })
       .catch((err) => {
+        if (!mounted.current) return;
+        setDeploymentError(
+          err instanceof Error ? err.message : "Deployment failed",
+        );
         console.error("Deployment failed:", err);
         step.setState("failed");
         stepper.setState("error");
+      })
+      .finally(() => {
+        if (mounted.current) setDeploymentPending(false);
       });
   }, [
     step.isCurrentStep,
     step.state,
     createOrEvolveDeployment,
+    deploymentRetry,
+    gateway?.createdServerId,
+    gateway?.gatewayId,
+    client.tools,
     step,
     stepper,
     telemetry,
   ]);
+
+  if (gateway?.gatewayId && deploymentError) {
+    return (
+      <Stack gap={3}>
+        <Alert variant="error" dismissible={false}>
+          {deploymentError}
+        </Alert>
+        <Button
+          onClick={() => {
+            setDeploymentError(null);
+            setDeploymentPending(true);
+            deploymentAttempted.current = false;
+            setDeploymentRetry((attempt) => attempt + 1);
+          }}
+        >
+          Retry deployment
+        </Button>
+      </Stack>
+    );
+  }
 
   if (gateway?.gatewayId && creationError) {
     return (
@@ -228,15 +328,17 @@ export default function DeployStep({
         <Alert variant="error" dismissible={false}>
           {creationError}
         </Alert>
-        <Button
-          onClick={() => {
-            setCreationError(null);
-            toolsetCreationAttempted.current = false;
-            setRetryAttempt((attempt) => attempt + 1);
-          }}
-        >
-          Retry
-        </Button>
+        {stepper.meta.current.toolset && (
+          <Button
+            onClick={() => {
+              setCreationError(null);
+              toolsetCreationAttempted.current = false;
+              setRetryAttempt((attempt) => attempt + 1);
+            }}
+          >
+            Retry
+          </Button>
+        )}
       </Stack>
     );
   }
@@ -372,7 +474,9 @@ function DeploymentDetailsCollapsible({
  * Returns a function that creates or evolves a deployment based on the latest
  * deployment state.
  */
-const useCreateDeployment = (): (() => Promise<Deployment>) => {
+const useCreateDeployment = (
+  mounted: React.RefObject<boolean>,
+): (() => Promise<Deployment>) => {
   const stepper = useStepper();
   const client = useSdkClient();
   const queryClient = useQueryClient();
@@ -384,24 +488,28 @@ const useCreateDeployment = (): (() => Promise<Deployment>) => {
       throw new Error("Asset or file not found");
     }
 
-    // The upsert is keyed by slug: a new version keeps the existing
-    // document's slug so it replaces that document rather than adding one.
-    const result = await client.deployments.evolveDeployment({
-      evolveForm: {
-        nonBlocking: true,
-        upsertOpenapiv3Assets: [
-          {
-            assetId: uploadResult.asset.id,
-            name: existingDocument?.name ?? assetName,
-            slug: existingDocument?.slug ?? slugify(assetName),
-          },
-        ],
-      },
-    });
-
-    let deployment = result.deployment;
+    let deployment = stepper.meta.current.deployment;
     if (!deployment) {
-      throw new Error("Deployment not found");
+      const result = await client.deployments.evolveDeployment({
+        evolveForm: {
+          nonBlocking: true,
+          upsertOpenapiv3Assets: [
+            {
+              assetId: uploadResult.asset.id,
+              name: existingDocument?.name ?? assetName,
+              slug: existingDocument?.slug ?? slugify(assetName),
+            },
+          ],
+        },
+      });
+
+      if (!mounted.current) throw new Error("Deployment view closed");
+      deployment = result.deployment ?? null;
+      if (!deployment) {
+        throw new Error("Deployment not found");
+      }
+
+      stepper.meta.current.deployment = deployment;
     }
 
     // Poll until the deployment reaches a terminal state so we can
@@ -418,9 +526,12 @@ const useCreateDeployment = (): (() => Promise<Deployment>) => {
       await new Promise((resolve) => {
         void setTimeout(resolve, 500);
       });
+      if (!mounted.current) throw new Error("Deployment view closed");
       deployment = (await client.deployments.getById({
         id: deployment.id,
       })) as Deployment;
+      if (!mounted.current) throw new Error("Deployment view closed");
+      stepper.meta.current.deployment = deployment;
     }
 
     // The sources shelf and every source page read these from the cache;

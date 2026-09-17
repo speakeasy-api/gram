@@ -940,13 +940,17 @@ export function AddServersSheet({
               <DropdownMenuTrigger
                 asChild
                 disabled={
-                  busy || !creationOptions.some((option) => option.allowed)
+                  busy ||
+                  !canWrite ||
+                  !creationOptions.some((option) => option.allowed)
                 }
               >
                 <Button
                   variant="primary"
                   disabled={
-                    busy || !creationOptions.some((option) => option.allowed)
+                    busy ||
+                    !canWrite ||
+                    !creationOptions.some((option) => option.allowed)
                   }
                 >
                   <Button.LeftIcon>
@@ -980,9 +984,9 @@ export function AddServersSheet({
                             key={option.href}
                             className="items-start"
                             textValue={option.label}
-                            disabled={busy || !option.allowed}
+                            disabled={busy || !canWrite || !option.allowed}
                             onSelect={() => {
-                              if (!busy && option.allowed)
+                              if (!busy && canWrite && option.allowed)
                                 void navigate(option.href);
                             }}
                           >

@@ -776,7 +776,7 @@ it.each([{ toolsetsFailed: true }, { toolsetsLoading: true }])(
 );
 
 it.each([
-  ["project:read:project", true],
+  ["project:read:project", false],
   ["mcp:write:gateway", true],
   ["project:write:project", false],
 ] as const)("matches catalog browse access for %s", (grant, allowed) => {
@@ -833,23 +833,16 @@ it.each([
   },
 );
 
-it.each([
-  ["Hosted remotely", "remote"],
-  ["Reachable through a tunnel", "tunneled"],
-  ["From your API", "openapi"],
-  ["From an existing source", "fromSource"],
-  ["Write custom code", "function"],
-])("carries gateway context into %s creation", (label, path) => {
+it("prevents gateway creation navigation without target gateway write permission", () => {
+  permissions.scopes.delete("mcp:write:gateway");
   setup();
-  fireEvent.pointerDown(screen.getByRole("button", { name: "Add new" }), {
+  const trigger = screen.getByRole("button", { name: "Add new" });
+  expect((trigger as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.pointerDown(trigger, {
     button: 0,
     ctrlKey: false,
     pointerType: "mouse",
   });
-  fireEvent.click(
-    screen.getByRole("menuitem", { name: new RegExp(`^${label}`) }),
-  );
-  expect(permissions.navigate).toHaveBeenCalledWith(
-    `/${path}?attachToGateway=gateway`,
-  );
+  expect(screen.queryByRole("menuitem")).toBeNull();
+  expect(permissions.navigate).not.toHaveBeenCalled();
 });

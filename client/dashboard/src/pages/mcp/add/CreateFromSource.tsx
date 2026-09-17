@@ -55,6 +55,8 @@ export default function CreateFromSource(): JSX.Element {
   const seeded = useRef(false);
   const wrapperAttempted = useRef(false);
   const [hasRetainedToolset, setHasRetainedToolset] = useState(false);
+  const sourceSelectionLocked =
+    creationLocked || isCreating || hasRetainedToolset;
   const [error, setError] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
@@ -194,14 +196,18 @@ export default function CreateFromSource(): JSX.Element {
                 />
               )}
               {sources.length > 0 && (
-                <div className="@2xl/main:grid-cols-2 grid grid-cols-1 gap-4">
+                <div
+                  className="@2xl/main:grid-cols-2 grid grid-cols-1 gap-4"
+                  inert={sourceSelectionLocked}
+                  aria-disabled={sourceSelectionLocked}
+                >
                   {visible.map((source) => (
                     <SourceCard
                       key={source.key}
                       source={source}
                       selected={source.key === selectedKey}
                       onSelect={() => {
-                        if (creationLocked || isCreating) return;
+                        if (sourceSelectionLocked) return;
                         setSelectedKey(source.key);
                         // The source name is the obvious default, and most
                         // people keep it.

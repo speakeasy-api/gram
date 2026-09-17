@@ -49,7 +49,11 @@ it("attaches the created server, invalidates membership and returns to the gatew
   const { result } = setup();
   await act(() => result.current.complete("server"));
   expect(api.add).toHaveBeenCalledWith({
-    addMetaMcpMemberForm: { metaMcpServerId: "gateway", mcpServerId: "server" },
+    addMetaMcpMemberForm: {
+      metaMcpServerId: "gateway",
+      mcpServerId: "server",
+      sortOrder: 0,
+    },
   });
   expect(api.invalidate).toHaveBeenCalledTimes(1);
   expect(api.navigate).toHaveBeenCalledWith("/gateway/gateway");
@@ -168,4 +172,36 @@ it("does not attach when cancelled during the membership read", async () => {
   });
   expect(api.add).not.toHaveBeenCalled();
   expect(api.navigate).toHaveBeenCalledTimes(1);
+});
+
+it("appends after the highest fetched sort order on each attempt", async () => {
+  api.list.mockResolvedValue({
+    members: [
+      { mcpServerId: "other", sortOrder: 7 },
+      { mcpServerId: "first", sortOrder: 2 },
+    ],
+  });
+  api.add.mockRejectedValueOnce(new Error("offline"));
+  const { result } = setup();
+  await act(async () => {
+    await expect(result.current.complete("server")).rejects.toThrow("offline");
+  });
+  expect(api.add).toHaveBeenLastCalledWith({
+    addMetaMcpMemberForm: {
+      metaMcpServerId: "gateway",
+      mcpServerId: "server",
+      sortOrder: 8,
+    },
+  });
+  api.list.mockResolvedValue({
+    members: [{ mcpServerId: "other", sortOrder: 12 }],
+  });
+  await act(() => result.current.retry());
+  expect(api.add).toHaveBeenLastCalledWith({
+    addMetaMcpMemberForm: {
+      metaMcpServerId: "gateway",
+      mcpServerId: "server",
+      sortOrder: 13,
+    },
+  });
 });
