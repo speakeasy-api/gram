@@ -7,6 +7,7 @@ import {
   SourceDownloadButton,
 } from "@/components/sources/SourceDetailPanel";
 import { SourceToolsSection } from "@/components/sources/SourceToolsSection";
+import { SourceUploadVersionButton } from "@/components/sources/SourceUploadVersionButton";
 import { SourceVersionsSection } from "@/components/sources/SourceVersionsSection";
 import { sectionIdForHash } from "@/components/sources/sourceDetailSections";
 import {
@@ -170,7 +171,6 @@ export default function SourceDetailRoute(): JSX.Element {
           content: (
             <SourceDangerZone
               source={{ kind, assetId, name: source.name, slug: source.slug }}
-              slug={source.slug}
             />
           ),
         },
@@ -195,6 +195,9 @@ export default function SourceDetailRoute(): JSX.Element {
             assetId={assetId}
             variant="button"
           />
+          {kind === "openapi" && source?.slug ? (
+            <SourceUploadVersionButton slug={source.slug} />
+          ) : null}
           {/* Arriving from a source, that source is the choice already made. */}
           <Button variant="primary" asChild>
             <routes.mcp.add.fromSource.Link

@@ -1,17 +1,13 @@
-import {
-  DangerSettingsSection,
-  SettingsSection,
-} from "@/components/detail/settings-section";
+import { DangerSettingsSection } from "@/components/detail/settings-section";
 import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/Button";
 import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
 import { useRoutes } from "@/routes";
-import { Trash2, Upload } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { RemoveSourceDialog, type RemovableSource } from "./RemoveSourceDialog";
-import { newVersionQueryParams } from "./source-list-actions";
 
 function SourceSettingRow({
   title,
@@ -38,18 +34,13 @@ function SourceSettingRow({
 }
 
 /**
- * What changes a source: a new version of the document, or its removal.
- *
- * Only OpenAPI documents take a new version here; functions are pushed from
- * the CLI, and a push is their upload.
+ * Removing the source. Uploading a new version lives in the page header
+ * beside "Build a server", so this section holds only the destructive action.
  */
 export function SourceDangerZone({
   source,
-  slug,
 }: {
   source: RemovableSource;
-  /** The deployment's slug for the source, which the upload flow keys on. */
-  slug: string | undefined;
 }): JSX.Element {
   const routes = useRoutes();
   const navigate = useNavigate();
@@ -57,40 +48,7 @@ export function SourceDangerZone({
   const [deleteOpen, setDeleteOpen] = useState(false);
 
   return (
-    <div className="flex flex-col gap-8">
-      {source.kind === "openapi" && slug && (
-        <SettingsSection>
-          <SettingsSection.Header>
-            <SettingsSection.Title>Manage</SettingsSection.Title>
-          </SettingsSection.Header>
-          <SettingsSection.Panel>
-            <SettingsSection.Body>
-              <SourceSettingRow
-                title="Upload a new version"
-                description="Replace this document with a newer one. Tools are regenerated from it on the next deployment."
-              >
-                <RequireScope
-                  scope="project:write"
-                  resourceId={project.id}
-                  level="component"
-                >
-                  <Button variant="secondary" size="md" asChild>
-                    <routes.mcp.add.openapi.Link
-                      queryParams={newVersionQueryParams(slug)}
-                    >
-                      <Button.LeftIcon>
-                        <Upload className="size-4" />
-                      </Button.LeftIcon>
-                      <Button.Text>Upload new version</Button.Text>
-                    </routes.mcp.add.openapi.Link>
-                  </Button>
-                </RequireScope>
-              </SourceSettingRow>
-            </SettingsSection.Body>
-          </SettingsSection.Panel>
-        </SettingsSection>
-      )}
-
+    <>
       <DangerSettingsSection>
         <DangerSettingsSection.Header>
           <DangerSettingsSection.Title>Danger zone</DangerSettingsSection.Title>
@@ -132,6 +90,6 @@ export function SourceDangerZone({
         onOpenChange={setDeleteOpen}
         onRemoved={() => void navigate(routes.mcp.sources.href())}
       />
-    </div>
+    </>
   );
 }
