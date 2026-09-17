@@ -16,6 +16,18 @@ import (
 // Every tool the deployment registers declares an audience. A tool with none
 // would be unreachable; a tool admitted by accident would reach a surface
 // nobody reviewed it for, which is what the audience model exists to prevent.
+func TestListProjectsDescriptionDoesNotAdvertiseHiddenResourceSignals(t *testing.T) {
+	t.Parallel()
+
+	server := mcp.NewServer(&mcp.Implementation{Name: "list-projects-description-test", Version: "0.0.1"}, nil)
+	registrar := newRegistrar(server)
+	registerListProjectsTool(registrar, nil)
+
+	descriptor := registrar.Descriptors()[0]
+	require.Equal(t, "list_projects", descriptor.Name)
+	require.NotContains(t, descriptor.Description, "filtered")
+}
+
 func TestEveryRegisteredToolDeclaresAnAudience(t *testing.T) {
 	t.Parallel()
 
