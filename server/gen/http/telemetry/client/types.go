@@ -8582,6 +8582,10 @@ type ToolUsageTotalsResponseBody struct {
 	FailureCount *int64 `form:"failure_count,omitempty" json:"failure_count,omitempty" xml:"failure_count,omitempty"`
 	// Fraction of completed tool usage events that failed
 	FailureRate *float64 `form:"failure_rate,omitempty" json:"failure_rate,omitempty" xml:"failure_rate,omitempty"`
+	// Number of tool usage events a policy denied
+	BlockedCount *int64 `form:"blocked_count,omitempty" json:"blocked_count,omitempty" xml:"blocked_count,omitempty"`
+	// Fraction of all tool usage events a policy denied
+	BlockedRate *float64 `form:"blocked_rate,omitempty" json:"blocked_rate,omitempty" xml:"blocked_rate,omitempty"`
 	// Number of distinct tools observed
 	UniqueTools *int64 `form:"unique_tools,omitempty" json:"unique_tools,omitempty" xml:"unique_tools,omitempty"`
 	// Number of distinct user identities observed
@@ -26837,6 +26841,12 @@ func ValidateToolUsageTotalsResponseBody(body *ToolUsageTotalsResponseBody) (err
 	}
 	if body.FailureRate == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("failure_rate", "body"))
+	}
+	if body.BlockedCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("blocked_count", "body"))
+	}
+	if body.BlockedRate == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("blocked_rate", "body"))
 	}
 	if body.UniqueTools == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("unique_tools", "body"))

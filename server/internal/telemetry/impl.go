@@ -4340,6 +4340,8 @@ func toToolUsageTotals(row repo.ToolUsageTotalsRow) *telem_gen.ToolUsageTotals {
 		SuccessCount:  uint64ToInt64(row.SuccessCount),
 		FailureCount:  uint64ToInt64(row.FailureCount),
 		FailureRate:   row.FailureRate,
+		BlockedCount:  uint64ToInt64(row.BlockedCount),
+		BlockedRate:   row.BlockedRate,
 		UniqueTools:   uint64ToInt64(row.UniqueTools),
 		UniqueUsers:   uint64ToInt64(row.UniqueUsers),
 		UniqueTargets: uint64ToInt64(row.UniqueTargets),

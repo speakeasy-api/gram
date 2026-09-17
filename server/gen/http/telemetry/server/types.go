@@ -8459,6 +8459,10 @@ type ToolUsageTotalsResponseBody struct {
 	FailureCount int64 `form:"failure_count" json:"failure_count" xml:"failure_count"`
 	// Fraction of completed tool usage events that failed
 	FailureRate float64 `form:"failure_rate" json:"failure_rate" xml:"failure_rate"`
+	// Number of tool usage events a policy denied
+	BlockedCount int64 `form:"blocked_count" json:"blocked_count" xml:"blocked_count"`
+	// Fraction of all tool usage events a policy denied
+	BlockedRate float64 `form:"blocked_rate" json:"blocked_rate" xml:"blocked_rate"`
 	// Number of distinct tools observed
 	UniqueTools int64 `form:"unique_tools" json:"unique_tools" xml:"unique_tools"`
 	// Number of distinct user identities observed
