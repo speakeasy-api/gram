@@ -1,0 +1,23 @@
+server/internal/gateway/proxy.go
+  s_e708fb1e789d24::t_ba379091336829 165
+server/internal/gateway/proxy_riskscan_test.go
+  s_e708fb1e789d24::t_ddcf06f5841fa5 66,68,158,161,168-187
+server/internal/gateway/resources.go
+  s_e708fb1e789d24::t_23cf58a985eef9 23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "6ffedb2aaec102b8691bc15efa747cfe3b475bc1",
+  "prompts": {},
+  "sessions": {
+    "s_e708fb1e789d24": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1a26c4a2-02c5-4f1b-91a9-ae649e8d9620",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
