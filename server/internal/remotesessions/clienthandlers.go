@@ -792,8 +792,7 @@ func (s *Service) DetachUserSessionIssuer(ctx context.Context, payload *gen.Deta
 	}
 	if removed > 0 {
 		// A conflict rolls back the tentative removal with the transaction.
-		count, err := txRepo.CountActiveEMABindingsForClient(ctx, repo.CountActiveEMABindingsForClientParams{ClientID: conv.ToNullUUID(clientID), ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID})
-		if err := requireNoEMABindings(count, err); err != nil {
+		if err := guardEMABindingsForClientUserIssuer(ctx, txRepo, authCtx.ActiveOrganizationID, *authCtx.ProjectID, clientID, userIssuerID); err != nil {
 			return nil, err
 		}
 	}

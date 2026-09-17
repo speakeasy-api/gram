@@ -540,6 +540,32 @@ func (q *Queries) CountActiveEMABindingsForClient(ctx context.Context, arg Count
 	return count, err
 }
 
+const countActiveEMABindingsForClientUserIssuer = `-- name: CountActiveEMABindingsForClientUserIssuer :one
+SELECT count(*) FROM remote_session_ema_bindings
+WHERE remote_session_client_id = $1 AND user_session_issuer_id = $2
+AND state IS DISTINCT FROM 'unlinked' AND organization_id = $3
+AND ($4::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR project_id = $4)
+`
+
+type CountActiveEMABindingsForClientUserIssuerParams struct {
+	ClientID            uuid.NullUUID
+	UserSessionIssuerID uuid.UUID
+	OrganizationID      string
+	ProjectID           uuid.UUID
+}
+
+func (q *Queries) CountActiveEMABindingsForClientUserIssuer(ctx context.Context, arg CountActiveEMABindingsForClientUserIssuerParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countActiveEMABindingsForClientUserIssuer,
+		arg.ClientID,
+		arg.UserSessionIssuerID,
+		arg.OrganizationID,
+		arg.ProjectID,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countActiveEMABindingsForIssuer = `-- name: CountActiveEMABindingsForIssuer :one
 SELECT count(*) FROM remote_session_ema_bindings WHERE remote_session_issuer_id = $1 AND state IS DISTINCT FROM 'unlinked'
 AND ($2::text = '' OR organization_id = $2) AND ($3::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR project_id = $3)

@@ -369,6 +369,11 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 		}
 		return preparationResult(b, issuer, client, state), nil
 	}
+	// Registration evidence is durable; readiness is not. Recompute completed
+	// provider registrations without replaying DCR or replacing effective scopes.
+	if (read || (in.Mechanism == "dcr" && in.ClientID == uuid.Nil)) && b.RemoteSessionClientID.Valid && preparationBindingGrantSource(b.GrantSource) == "provider_returned" {
+		return preparationResult(b, issuer, client, preparationRegistrationReadiness(ctx, q, client, issuer, org)), nil
+	}
 	eligibility := PreparationEligibility(issuer.AuthorizationGrantProfilesSupported, issuer.GrantTypesSupported)
 	if eligibility != "eligible" {
 		return preparationResult(b, issuer, client, eligibility), nil
@@ -385,12 +390,6 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 		}
 	}
 	if read {
-		return preparationResult(b, issuer, client, preparationBindingState(b.State)), nil
-	}
-	// A completed DCR claim is a durable result, including scope narrowing.
-	// Repeating the original preparation request must neither register again
-	// nor overwrite the provider's effective scope with the requested scope.
-	if in.Mechanism == "dcr" && in.ClientID == uuid.Nil && b.RemoteSessionClientID.Valid && preparationBindingGrantSource(b.GrantSource) == "provider_returned" {
 		return preparationResult(b, issuer, client, preparationBindingState(b.State)), nil
 	}
 	changed := preparationBindingState(b.State) == "provider_rejection" || selected != b.RemoteSessionClientID.UUID || preparationBindingState(b.State) == "unlinked" || !slices.Equal(b.RequestedScopes, in.Scopes) || (in.ConfirmGrants != nil && (!samePreparationGrants(in.ConfirmGrants, client.GrantTypes) || preparationBindingGrantSource(b.GrantSource) != "administrator_declared")) || (in.Mechanism == "cimd" && (!slices.Contains(client.GrantTypes, PreparationJWTBearerGrant) || preparationBindingGrantSource(b.GrantSource) != "cimd_published"))
@@ -524,6 +523,24 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 		return nil, oops.E(oops.CodeUnexpected, err, "prepare identity chaining")
 	}
 	return preparationResult(b, issuer, client, state), nil
+}
+
+// A completed provider registration can recover as discovery or credentials
+// change, but only current grant evidence can make it ready.
+func preparationRegistrationReadiness(ctx context.Context, q *repo.Queries, client repo.RemoteSessionClient, issuer repo.RemoteSessionIssuer, org string) string {
+	if eligibility := PreparationEligibility(issuer.AuthorizationGrantProfilesSupported, issuer.GrantTypesSupported); eligibility != "eligible" {
+		return eligibility
+	}
+	if preparationMetadataTransient(issuer) {
+		return "transient_failure"
+	}
+	if !preparationClientConfigurationValid(ctx, q, client, issuer, org) {
+		return "manual_setup_required"
+	}
+	if !slices.Contains(client.GrantTypes, PreparationJWTBearerGrant) {
+		return preparationMissingGrantsState(client.GrantTypes)
+	}
+	return "ready"
 }
 
 // Readiness is a current local configuration check, never a provider acceptance

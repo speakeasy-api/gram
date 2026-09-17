@@ -191,11 +191,7 @@ func (s *Service) finishPreparationDCR(ctx context.Context, conn *pgxpool.Conn, 
 		// A confirmed registration must be retained even when it is not usable.
 		// Recheck after all lock waits and writes: metadata can change while the
 		// POST is in flight, and a returned secret can expire before completion.
-		if preparationMetadataTransient(currentIssuer) {
-			state = "transient_failure"
-		} else if !preparationClientConfigurationValid(saveCtx, q, client, currentIssuer, b.OrganizationID) {
-			state = "manual_setup_required"
-		}
+		state = preparationRegistrationReadiness(saveCtx, q, client, currentIssuer, b.OrganizationID)
 	}
 	b.State = conv.ToPGText(state)
 	b, err = setPreparationBinding(saveCtx, q, b, b.Generation)

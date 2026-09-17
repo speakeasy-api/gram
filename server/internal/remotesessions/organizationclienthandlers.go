@@ -963,7 +963,7 @@ func (s *Service) RemoveClientFromMcpServer(ctx context.Context, payload *orgcli
 		return oops.E(oops.CodeNotFound, nil, "mcp server is not attached to this client").LogError(ctx, logger)
 	}
 
-	if err := guardEMABindingsForClient(ctx, txRepo, authCtx.ActiveOrganizationID, client.ProjectID.UUID, clientID); err != nil {
+	if err := guardEMABindingsForClientUserIssuer(ctx, txRepo, authCtx.ActiveOrganizationID, uuid.Nil, clientID, server.UserSessionIssuerID.UUID); err != nil {
 		return err
 	}
 

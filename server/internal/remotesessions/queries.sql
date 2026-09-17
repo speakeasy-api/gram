@@ -3787,6 +3787,12 @@ AND ((remote_session_clients.project_id = @project_id AND EXISTS (
 SELECT count(*) FROM remote_session_ema_bindings WHERE remote_session_client_id = @client_id AND state IS DISTINCT FROM 'unlinked'
 AND (@organization_id::text = '' OR organization_id = @organization_id) AND (@project_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR project_id = @project_id);
 
+-- name: CountActiveEMABindingsForClientUserIssuer :one
+SELECT count(*) FROM remote_session_ema_bindings
+WHERE remote_session_client_id = @client_id AND user_session_issuer_id = @user_session_issuer_id
+AND state IS DISTINCT FROM 'unlinked' AND organization_id = @organization_id
+AND (@project_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR project_id = @project_id);
+
 -- name: CountActiveEMABindingsForIssuer :one
 SELECT count(*) FROM remote_session_ema_bindings WHERE remote_session_issuer_id = @issuer_id AND state IS DISTINCT FROM 'unlinked'
 AND (@organization_id::text = '' OR organization_id = @organization_id) AND (@project_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR project_id = @project_id);
