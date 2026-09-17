@@ -30,9 +30,29 @@ func TestTailscaleNetworkIngressProvisionerApplyObserveAndDelete(t *testing.T) {
 	first, err := provisioner.Apply(t.Context(), desired)
 	require.NoError(t, err)
 	require.Equal(t, NetworkIngressStatusPending, first.Status)
+	service, err := typed.CoreV1().Services(desired.Resources.Namespace).Get(t.Context(), desired.Resources.AttestorService, metav1.GetOptions{})
+	require.NoError(t, err)
+	service.Annotations["controller.example/preserved"] = "true"
+	service.Annotations["tailscale.com/controller-state"] = "preserved"
+	service.Annotations[tailscaleExposeAnnotation] = "true"
+	service.Annotations[tailscaleHostnameAnnotation] = "unexpected-hostname"
+	service.Annotations[tailscaleProxyGroupAnnotation] = "unexpected-proxy-group"
+	service.Annotations[tailscaleTagsAnnotation] = "tag:unexpected"
+	service.Annotations[networkIngressIDLabel] = "wrong-ingress-id"
+	_, err = typed.CoreV1().Services(desired.Resources.Namespace).Update(t.Context(), service, metav1.UpdateOptions{})
+	require.NoError(t, err)
 	second, err := provisioner.Apply(t.Context(), desired)
 	require.NoError(t, err)
 	require.Equal(t, NetworkIngressStatusPending, second.Status)
+	service, err = typed.CoreV1().Services(desired.Resources.Namespace).Get(t.Context(), desired.Resources.AttestorService, metav1.GetOptions{})
+	require.NoError(t, err)
+	require.Equal(t, "true", service.Annotations["controller.example/preserved"])
+	require.Equal(t, "preserved", service.Annotations["tailscale.com/controller-state"])
+	require.NotContains(t, service.Annotations, tailscaleExposeAnnotation)
+	require.NotContains(t, service.Annotations, tailscaleHostnameAnnotation)
+	require.NotContains(t, service.Annotations, tailscaleProxyGroupAnnotation)
+	require.NotContains(t, service.Annotations, tailscaleTagsAnnotation)
+	require.Equal(t, desired.ID.String(), service.Annotations[networkIngressIDLabel])
 
 	secret, err := typed.CoreV1().Secrets("tailscale").Get(t.Context(), desired.Resources.CredentialsSecret, metav1.GetOptions{})
 	require.NoError(t, err)
@@ -80,6 +100,9 @@ func TestTailscaleNetworkIngressProvisionerApplyObserveAndDelete(t *testing.T) {
 	caSecret, err := typed.CoreV1().Secrets(desired.Resources.Namespace).Get(t.Context(), desired.Resources.AttestorCASecret, metav1.GetOptions{})
 	require.NoError(t, err)
 	require.Equal(t, []byte("test-ca"), caSecret.Data["ca.crt"])
+	service, err = typed.CoreV1().Services(desired.Resources.Namespace).Get(t.Context(), desired.Resources.AttestorService, metav1.GetOptions{})
+	require.NoError(t, err)
+	require.Equal(t, desired.ID.String(), service.Annotations[networkIngressIDLabel])
 
 	attestorPolicy, err := typed.NetworkingV1().NetworkPolicies(desired.Resources.Namespace).Get(t.Context(), desired.Resources.AttestorNetworkPolicy, metav1.GetOptions{})
 	require.NoError(t, err)
