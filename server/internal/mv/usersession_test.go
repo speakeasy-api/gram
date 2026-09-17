@@ -128,6 +128,8 @@ func TestBuildUserSessionView_WorkloadFallsBackToParsedSubject(t *testing.T) {
 	require.Equal(t, "repo:acme/payments-api:ref:refs/heads/main", got.Workload.ExternalSubject)
 	require.Nil(t, got.Workload.WorkloadIssuerName)
 	require.Nil(t, got.Workload.AgentID)
+	require.NotNil(t, got.Workload.Admissions)
+	require.Empty(t, got.Workload.Admissions)
 }
 
 func TestBuildUserSessionWorkloadIndex_ReportsAgentStatus(t *testing.T) {
@@ -156,7 +158,7 @@ func TestBuildUserSessionWorkloadIndex_ReportsAgentStatus(t *testing.T) {
 		},
 	}
 
-	index := BuildUserSessionWorkloadIndex(rows)
+	index := BuildUserSessionWorkloadIndex(rows, nil)
 
 	active := index[WorkloadKey{WorkloadIssuerID: issuerID, ExternalSubject: "sub-active"}]
 	require.NotNil(t, active.AgentStatus)
@@ -169,6 +171,50 @@ func TestBuildUserSessionWorkloadIndex_ReportsAgentStatus(t *testing.T) {
 	unassigned := index[WorkloadKey{WorkloadIssuerID: issuerID, ExternalSubject: "sub-unassigned"}]
 	require.Nil(t, unassigned.AgentID)
 	require.Nil(t, unassigned.AgentStatus)
+	require.NotNil(t, unassigned.Admissions, "admissions is required, so an unadmitted workload reports an empty list")
+	require.Empty(t, unassigned.Admissions)
+}
+
+func TestBuildUserSessionWorkloadIndex_GroupsAdmissionsByWorkload(t *testing.T) {
+	t.Parallel()
+
+	issuerID := uuid.New()
+	projectAdmission := uuid.New()
+	orgAdmission := uuid.New()
+	otherIssuerAdmission := uuid.New()
+	rows := []repo.ListWorkloadSessionLabelsRow{
+		{WorkloadIssuerID: issuerID, Subject: "sub"},
+	}
+	admissions := []repo.ListWorkloadSessionAdmissionsRow{
+		{
+			WorkloadIssuerID: issuerID,
+			Subject:          "sub",
+			ID:               projectAdmission,
+			ProjectID:        uuid.NullUUID{UUID: uuid.New(), Valid: true},
+			Name:             pgtype.Text{String: "Payments deploy", Valid: true},
+		},
+		{
+			WorkloadIssuerID: issuerID,
+			Subject:          "sub",
+			ID:               orgAdmission,
+		},
+		{
+			WorkloadIssuerID: uuid.New(),
+			Subject:          "sub",
+			ID:               otherIssuerAdmission,
+		},
+	}
+
+	got := BuildUserSessionWorkloadIndex(rows, admissions)[WorkloadKey{WorkloadIssuerID: issuerID, ExternalSubject: "sub"}]
+
+	require.Len(t, got.Admissions, 2, "an admission under another issuer belongs to a different workload")
+	require.Equal(t, projectAdmission.String(), got.Admissions[0].ID)
+	require.Equal(t, "project", got.Admissions[0].Tier)
+	require.NotNil(t, got.Admissions[0].Name)
+	require.Equal(t, "Payments deploy", *got.Admissions[0].Name)
+	require.Equal(t, orgAdmission.String(), got.Admissions[1].ID)
+	require.Equal(t, "organization", got.Admissions[1].Tier)
+	require.Nil(t, got.Admissions[1].Name)
 }
 
 func TestBuildUserSessionView_ResolvesClientCredentialKind(t *testing.T) {

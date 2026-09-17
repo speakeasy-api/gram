@@ -56,8 +56,19 @@ func WorkloadKeyForSession(subject urn.SessionSubject) (WorkloadKey, bool) {
 }
 
 // BuildUserSessionWorkloadIndex keys resolved workload labels by the workload
-// they describe, so a page of sessions is labelled in one pass.
-func BuildUserSessionWorkloadIndex(rows []repo.ListWorkloadSessionLabelsRow) map[WorkloadKey]*types.UserSessionWorkload {
+// they describe, so a page of sessions is labelled in one pass. Each workload
+// carries the admissions that currently let it in.
+func BuildUserSessionWorkloadIndex(rows []repo.ListWorkloadSessionLabelsRow, admissionRows []repo.ListWorkloadSessionAdmissionsRow) map[WorkloadKey]*types.UserSessionWorkload {
+	admissions := make(map[WorkloadKey][]*types.UserSessionWorkloadAdmission, len(rows))
+	for _, row := range admissionRows {
+		key := WorkloadKey{WorkloadIssuerID: row.WorkloadIssuerID, ExternalSubject: row.Subject}
+		admissions[key] = append(admissions[key], &types.UserSessionWorkloadAdmission{
+			ID:   row.ID.String(),
+			Tier: conv.Ternary(row.ProjectID.Valid, "project", "organization"),
+			Name: conv.FromPGText[string](row.Name),
+		})
+	}
+
 	index := make(map[WorkloadKey]*types.UserSessionWorkload, len(rows))
 	for _, row := range rows {
 		var agentID *string
@@ -87,6 +98,7 @@ func BuildUserSessionWorkloadIndex(rows []repo.ListWorkloadSessionLabelsRow) map
 			AgentID:            agentID,
 			AgentName:          conv.FromPGText[string](row.AgentName),
 			AgentStatus:        agentStatus,
+			Admissions:         conv.DefaultSlice(admissions[key], []*types.UserSessionWorkloadAdmission{}),
 		}
 	}
 	return index
@@ -112,6 +124,7 @@ func buildWorkloadView(subject urn.SessionSubject, workloads map[WorkloadKey]*ty
 		AgentID:            nil,
 		AgentName:          nil,
 		AgentStatus:        nil,
+		Admissions:         []*types.UserSessionWorkloadAdmission{},
 	}
 }
 

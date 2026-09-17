@@ -89,7 +89,8 @@ func (s *Service) loadWorkloadLabelsForSessions(ctx context.Context, projectID u
 		return map[mv.WorkloadKey]*types.UserSessionWorkload{}, nil
 	}
 
-	labelRows, err := repo.New(s.db).ListWorkloadSessionLabels(ctx, repo.ListWorkloadSessionLabelsParams{
+	queries := repo.New(s.db)
+	labelRows, err := queries.ListWorkloadSessionLabels(ctx, repo.ListWorkloadSessionLabelsParams{
 		WorkloadIssuerIds: issuerIDs,
 		Subjects:          subjects,
 		OrganizationID:    organizationID,
@@ -99,7 +100,17 @@ func (s *Service) loadWorkloadLabelsForSessions(ctx context.Context, projectID u
 		return nil, oops.E(oops.CodeUnexpected, err, "list workload session labels").LogError(ctx, s.logger)
 	}
 
-	return mv.BuildUserSessionWorkloadIndex(labelRows), nil
+	admissionRows, err := queries.ListWorkloadSessionAdmissions(ctx, repo.ListWorkloadSessionAdmissionsParams{
+		WorkloadIssuerIds: issuerIDs,
+		Subjects:          subjects,
+		OrganizationID:    organizationID,
+		ProjectID:         projectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list workload session admissions").LogError(ctx, s.logger)
+	}
+
+	return mv.BuildUserSessionWorkloadIndex(labelRows, admissionRows), nil
 }
 
 // Lists issued sessions; keyset paginated by id (descending).

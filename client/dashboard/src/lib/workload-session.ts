@@ -1,4 +1,5 @@
 import type { UserSessionWorkload } from "@gram/client/models/components/usersessionworkload.js";
+import type { UserSessionWorkloadAdmission } from "@gram/client/models/components/usersessionworkloadadmission.js";
 
 /**
  * How the workload's issuer reads on screen. The id is the fallback: an issuer
@@ -25,4 +26,21 @@ export function workloadAgentLabel(workload: UserSessionWorkload): string {
     case undefined:
       return `Agent ${name}`;
   }
+}
+
+function admissionLabel(admission: UserSessionWorkloadAdmission): string {
+  const tier =
+    admission.tier === "project" ? "this project" : "the organization";
+  return admission.name
+    ? `${admission.name} (${tier})`
+    : `Admission for ${tier}`;
+}
+
+/**
+ * The admissions that currently let the workload in, as one phrase. Every one
+ * of them has to be withdrawn before the workload stops reconnecting.
+ */
+export function workloadAdmissionsLabel(workload: UserSessionWorkload): string {
+  if (workload.admissions.length === 0) return "Not admitted";
+  return workload.admissions.map(admissionLabel).join(", ");
 }

@@ -1080,6 +1080,8 @@ BEGIN
   -- the managed-agent session above is: an invalid refresh hash, an empty
   -- delegation, and a jti no token carries. Assignments point at the managed
   -- agents above, one active and one suspended, so both agent states render.
+  -- The payments workload is admitted at both tiers, so its row shows that
+  -- withdrawing one admission still leaves it able to reconnect.
   ------------------------------------------------------------------
   INSERT INTO workload_issuers (id, organization_id, project_id, name, issuer, jwks_uri)
   VALUES
@@ -1095,7 +1097,10 @@ BEGIN
      'repo:acme/payments-api:ref:refs/heads/main', 'Payments deploy'),
     (demo.det_uuid('gram-demo-workload-admission-2'), demo_org, NULL,
      demo.det_uuid('gram-demo-workload-issuer-1'),
-     'repo:acme/docs-site:environment:production', 'Docs publish');
+     'repo:acme/docs-site:environment:production', 'Docs publish'),
+    (demo.det_uuid('gram-demo-workload-admission-3'), demo_org, NULL,
+     demo.det_uuid('gram-demo-workload-issuer-1'),
+     'repo:acme/payments-api:ref:refs/heads/main', 'Payments deploy (all projects)');
 
   INSERT INTO workload_agent_assignments
     (id, organization_id, workload_issuer_id, subject, agent_id)
@@ -2890,8 +2895,8 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
 
   SELECT count(*) INTO stray FROM workload_identity_admissions
   WHERE organization_id = demo_org AND deleted IS FALSE;
-  IF stray <> 2 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 2 workload admissions, found %', stray;
+  IF stray <> 3 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 3 workload admissions, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM workload_agent_assignments

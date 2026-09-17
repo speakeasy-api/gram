@@ -8,6 +8,10 @@ import { safeParse } from "../../lib/schemas.js";
 import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  UserSessionWorkloadAdmission,
+  UserSessionWorkloadAdmission$inboundSchema,
+} from "./usersessionworkloadadmission.js";
 
 /**
  * Lifecycle state of the assigned agent.
@@ -26,6 +30,10 @@ export type AgentStatus = ClosedEnum<typeof AgentStatus>;
  * The workload behind a workload session.
  */
 export type UserSessionWorkload = {
+  /**
+   * Every admission currently letting this workload in, from this project and from the organization. Withdrawing one leaves the others admitting it. Empty when nothing admits the workload any more.
+   */
+  admissions: Array<UserSessionWorkloadAdmission>;
   /**
    * The agent this workload is assigned to, whose policy it inherits. Null when the workload has no live assignment.
    */
@@ -66,6 +74,7 @@ export const UserSessionWorkload$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    admissions: z.array(UserSessionWorkloadAdmission$inboundSchema),
     agent_id: z.optional(z.string()),
     agent_name: z.optional(z.string()),
     agent_status: z.optional(AgentStatus$inboundSchema),

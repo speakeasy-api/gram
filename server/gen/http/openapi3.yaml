@@ -99888,6 +99888,11 @@ components:
         UserSessionWorkload:
             type: object
             properties:
+                admissions:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/UserSessionWorkloadAdmission'
+                    description: Every admission currently letting this workload in, from this project and from the organization. Withdrawing one leaves the others admitting it. Empty when nothing admits the workload any more.
                 agent_id:
                     type: string
                     description: The agent this workload is assigned to, whose policy it inherits. Null when the workload has no live assignment.
@@ -99919,6 +99924,27 @@ components:
             required:
                 - workload_issuer_id
                 - external_subject
+                - admissions
+        UserSessionWorkloadAdmission:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The workload_identity_admissions row.
+                    format: uuid
+                name:
+                    type: string
+                    description: The operator-chosen label for the admission.
+                tier:
+                    type: string
+                    description: Whether the admission belongs to this project or to the whole organization.
+                    enum:
+                        - project
+                        - organization
+            description: An admission that lets a workload in.
+            required:
+                - id
+                - tier
         UserSummary:
             type: object
             properties:

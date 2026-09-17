@@ -216,8 +216,27 @@ var UserSessionWorkload = Type("UserSessionWorkload", func() {
 	Attribute("agent_status", String, "Lifecycle state of the assigned agent.", func() {
 		Enum("active", "suspended", "revoked")
 	})
+	Attribute("admissions", ArrayOf(UserSessionWorkloadAdmission), "Every admission currently letting this workload in, from this project and from the organization. Withdrawing one leaves the others admitting it. Empty when nothing admits the workload any more.")
 
-	Required("workload_issuer_id", "external_subject")
+	Required("workload_issuer_id", "external_subject", "admissions")
+})
+
+// UserSessionWorkloadAdmission is one admission that lets a workload exchange
+// its platform token for a Gram session.
+var UserSessionWorkloadAdmission = Type("UserSessionWorkloadAdmission", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("An admission that lets a workload in.")
+
+	Attribute("id", String, "The workload_identity_admissions row.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("tier", String, "Whether the admission belongs to this project or to the whole organization.", func() {
+		Enum("project", "organization")
+	})
+	Attribute("name", String, "The operator-chosen label for the admission.")
+
+	Required("id", "tier")
 })
 
 // UserSessionUpstream is the outbound leg of a brokered connection. A

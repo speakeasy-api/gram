@@ -2347,6 +2347,82 @@ func (q *Queries) ListUserSessionsByProjectID(ctx context.Context, arg ListUserS
 	return items, nil
 }
 
+const listWorkloadSessionAdmissions = `-- name: ListWorkloadSessionAdmissions :many
+SELECT wia.workload_issuer_id,
+       wia.subject,
+       wia.id,
+       wia.project_id,
+       wia.name
+FROM workload_identity_admissions AS wia
+JOIN workload_issuers AS wi
+  ON wi.organization_id = wia.organization_id
+  AND wi.id = wia.workload_issuer_id
+  AND wi.deleted IS FALSE
+JOIN (
+       SELECT unnest($1::uuid[]) AS workload_issuer_id,
+              unnest($2::text[]) AS subject
+     ) AS w
+  ON w.workload_issuer_id = wia.workload_issuer_id
+  AND w.subject = wia.subject
+WHERE wia.organization_id = $3::text
+  AND (wia.project_id = $4::uuid OR wia.project_id IS NULL)
+  AND wia.deleted IS FALSE
+ORDER BY wia.project_id NULLS LAST, wia.created_at ASC, wia.id ASC
+`
+
+type ListWorkloadSessionAdmissionsParams struct {
+	WorkloadIssuerIds []uuid.UUID
+	Subjects          []string
+	OrganizationID    string
+	ProjectID         uuid.UUID
+}
+
+type ListWorkloadSessionAdmissionsRow struct {
+	WorkloadIssuerID uuid.UUID
+	Subject          string
+	ID               uuid.UUID
+	ProjectID        uuid.NullUUID
+	Name             pgtype.Text
+}
+
+// The admissions currently letting one page of workloads in, so an operator can
+// see every row they would have to withdraw to keep a workload out. A workload
+// admitted at both tiers reconnects through whichever one is left.
+//
+// Tenancy matches WorkloadIdentityIsAdmitted: the caller's own project tier and
+// the organization tier, never a sibling project's. Admissions under a deleted
+// issuer admit nothing, so they are left out.
+func (q *Queries) ListWorkloadSessionAdmissions(ctx context.Context, arg ListWorkloadSessionAdmissionsParams) ([]ListWorkloadSessionAdmissionsRow, error) {
+	rows, err := q.db.Query(ctx, listWorkloadSessionAdmissions,
+		arg.WorkloadIssuerIds,
+		arg.Subjects,
+		arg.OrganizationID,
+		arg.ProjectID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListWorkloadSessionAdmissionsRow
+	for rows.Next() {
+		var i ListWorkloadSessionAdmissionsRow
+		if err := rows.Scan(
+			&i.WorkloadIssuerID,
+			&i.Subject,
+			&i.ID,
+			&i.ProjectID,
+			&i.Name,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listWorkloadSessionLabels = `-- name: ListWorkloadSessionLabels :many
 SELECT w.workload_issuer_id::uuid AS workload_issuer_id,
        w.subject::text AS subject,

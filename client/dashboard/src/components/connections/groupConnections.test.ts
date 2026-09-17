@@ -55,6 +55,7 @@ describe("groupConnections", () => {
       agentId: "agent-1",
       agentName: "Deploy bot",
       agentStatus: "active" as const,
+      admissions: [],
     };
     const subjectUrn = `workload:${workload.workloadIssuerId}:${workload.externalSubject}`;
     const groups = groupConnections(

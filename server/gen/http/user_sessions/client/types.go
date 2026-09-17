@@ -933,6 +933,21 @@ type UserSessionWorkloadResponseBody struct {
 	AgentName *string `form:"agent_name,omitempty" json:"agent_name,omitempty" xml:"agent_name,omitempty"`
 	// Lifecycle state of the assigned agent.
 	AgentStatus *string `form:"agent_status,omitempty" json:"agent_status,omitempty" xml:"agent_status,omitempty"`
+	// Every admission currently letting this workload in, from this project and
+	// from the organization. Withdrawing one leaves the others admitting it. Empty
+	// when nothing admits the workload any more.
+	Admissions []*UserSessionWorkloadAdmissionResponseBody `form:"admissions,omitempty" json:"admissions,omitempty" xml:"admissions,omitempty"`
+}
+
+// UserSessionWorkloadAdmissionResponseBody is used to define fields on
+// response body types.
+type UserSessionWorkloadAdmissionResponseBody struct {
+	// The workload_identity_admissions row.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Whether the admission belongs to this project or to the whole organization.
+	Tier *string `form:"tier,omitempty" json:"tier,omitempty" xml:"tier,omitempty"`
+	// The operator-chosen label for the admission.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 }
 
 // UserSessionFacetOptionResponseBody is used to define fields on response body
@@ -2782,6 +2797,9 @@ func ValidateUserSessionWorkloadResponseBody(body *UserSessionWorkloadResponseBo
 	if body.ExternalSubject == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("external_subject", "body"))
 	}
+	if body.Admissions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("admissions", "body"))
+	}
 	if body.WorkloadIssuerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.workload_issuer_id", *body.WorkloadIssuerID, goa.FormatUUID))
 	}
@@ -2791,6 +2809,33 @@ func ValidateUserSessionWorkloadResponseBody(body *UserSessionWorkloadResponseBo
 	if body.AgentStatus != nil {
 		if !(*body.AgentStatus == "active" || *body.AgentStatus == "suspended" || *body.AgentStatus == "revoked") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.agent_status", *body.AgentStatus, []any{"active", "suspended", "revoked"}))
+		}
+	}
+	for _, e := range body.Admissions {
+		if e != nil {
+			if err2 := ValidateUserSessionWorkloadAdmissionResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateUserSessionWorkloadAdmissionResponseBody runs the validations
+// defined on UserSessionWorkloadAdmissionResponseBody
+func ValidateUserSessionWorkloadAdmissionResponseBody(body *UserSessionWorkloadAdmissionResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Tier == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tier", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.Tier != nil {
+		if !(*body.Tier == "project" || *body.Tier == "organization") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.tier", *body.Tier, []any{"project", "organization"}))
 		}
 	}
 	return

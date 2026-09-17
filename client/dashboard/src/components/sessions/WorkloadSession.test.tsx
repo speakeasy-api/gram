@@ -6,6 +6,7 @@ import type { UserSessionWorkload } from "@gram/client/models/components/userses
 
 import { RevokeSessionDialog } from "./RevokeSessionDialog";
 import {
+  workloadAdmissionsLabel,
   workloadAgentLabel,
   workloadIssuerLabel,
 } from "@/lib/workload-session";
@@ -25,6 +26,17 @@ const workload: UserSessionWorkload = {
   agentId: "22222222-2222-4222-8222-222222222222",
   agentName: "Deploy bot",
   agentStatus: "active",
+  admissions: [
+    {
+      id: "33333333-3333-4333-8333-333333333333",
+      tier: "project",
+      name: "Payments deploy",
+    },
+    {
+      id: "44444444-4444-4444-8444-444444444444",
+      tier: "organization",
+    },
+  ],
 };
 
 describe("workload labels", () => {
@@ -50,7 +62,39 @@ describe("workload labels", () => {
   });
 });
 
+describe("workloadAdmissionsLabel", () => {
+  it("names every admission with its tier", () => {
+    expect(workloadAdmissionsLabel(workload)).toBe(
+      "Payments deploy (this project), Admission for the organization",
+    );
+  });
+
+  it("says when nothing admits the workload", () => {
+    expect(workloadAdmissionsLabel({ ...workload, admissions: [] })).toBe(
+      "Not admitted",
+    );
+  });
+});
+
 describe("WorkloadRevocationLadder", () => {
+  it("tells the operator to withdraw every admission when there are several", () => {
+    render(<WorkloadRevocationLadder workload={workload} />);
+
+    expect(
+      screen.getByText(/Admitted by 2: .*Withdraw every one/),
+    ).not.toBeNull();
+  });
+
+  it("says a workload nothing admits cannot come back", () => {
+    render(
+      <WorkloadRevocationLadder workload={{ ...workload, admissions: [] }} />,
+    );
+
+    expect(
+      screen.getByText(/Nothing admits this workload any more/),
+    ).not.toBeNull();
+  });
+
   it("orders the controls narrowest first and marks which keep the workload out", () => {
     render(<WorkloadRevocationLadder workload={workload} />);
 

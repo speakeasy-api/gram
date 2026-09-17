@@ -1061,6 +1061,27 @@ func unmarshalUserSessionWorkloadResponseBodyToTypesUserSessionWorkload(v *UserS
 		AgentName:          v.AgentName,
 		AgentStatus:        v.AgentStatus,
 	}
+	res.Admissions = make([]*types.UserSessionWorkloadAdmission, len(v.Admissions))
+	for i, val := range v.Admissions {
+		if val == nil {
+			res.Admissions[i] = nil
+			continue
+		}
+		res.Admissions[i] = unmarshalUserSessionWorkloadAdmissionResponseBodyToTypesUserSessionWorkloadAdmission(val)
+	}
+
+	return res
+}
+
+// unmarshalUserSessionWorkloadAdmissionResponseBodyToTypesUserSessionWorkloadAdmission
+// builds a value of type *types.UserSessionWorkloadAdmission from a value of
+// type *UserSessionWorkloadAdmissionResponseBody.
+func unmarshalUserSessionWorkloadAdmissionResponseBodyToTypesUserSessionWorkloadAdmission(v *UserSessionWorkloadAdmissionResponseBody) *types.UserSessionWorkloadAdmission {
+	res := &types.UserSessionWorkloadAdmission{
+		ID:   *v.ID,
+		Tier: *v.Tier,
+		Name: v.Name,
+	}
 
 	return res
 }

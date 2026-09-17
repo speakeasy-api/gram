@@ -1206,3 +1206,32 @@ LEFT JOIN agents AS a
   ON a.organization_id = wa.organization_id
   AND a.id = wa.agent_id
   AND a.deleted IS FALSE;
+
+-- name: ListWorkloadSessionAdmissions :many
+-- The admissions currently letting one page of workloads in, so an operator can
+-- see every row they would have to withdraw to keep a workload out. A workload
+-- admitted at both tiers reconnects through whichever one is left.
+--
+-- Tenancy matches WorkloadIdentityIsAdmitted: the caller's own project tier and
+-- the organization tier, never a sibling project's. Admissions under a deleted
+-- issuer admit nothing, so they are left out.
+SELECT wia.workload_issuer_id,
+       wia.subject,
+       wia.id,
+       wia.project_id,
+       wia.name
+FROM workload_identity_admissions AS wia
+JOIN workload_issuers AS wi
+  ON wi.organization_id = wia.organization_id
+  AND wi.id = wia.workload_issuer_id
+  AND wi.deleted IS FALSE
+JOIN (
+       SELECT unnest(@workload_issuer_ids::uuid[]) AS workload_issuer_id,
+              unnest(@subjects::text[]) AS subject
+     ) AS w
+  ON w.workload_issuer_id = wia.workload_issuer_id
+  AND w.subject = wia.subject
+WHERE wia.organization_id = @organization_id::text
+  AND (wia.project_id = @project_id::uuid OR wia.project_id IS NULL)
+  AND wia.deleted IS FALSE
+ORDER BY wia.project_id NULLS LAST, wia.created_at ASC, wia.id ASC;

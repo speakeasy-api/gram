@@ -932,6 +932,21 @@ type UserSessionWorkloadResponseBody struct {
 	AgentName *string `form:"agent_name,omitempty" json:"agent_name,omitempty" xml:"agent_name,omitempty"`
 	// Lifecycle state of the assigned agent.
 	AgentStatus *string `form:"agent_status,omitempty" json:"agent_status,omitempty" xml:"agent_status,omitempty"`
+	// Every admission currently letting this workload in, from this project and
+	// from the organization. Withdrawing one leaves the others admitting it. Empty
+	// when nothing admits the workload any more.
+	Admissions []*UserSessionWorkloadAdmissionResponseBody `form:"admissions" json:"admissions" xml:"admissions"`
+}
+
+// UserSessionWorkloadAdmissionResponseBody is used to define fields on
+// response body types.
+type UserSessionWorkloadAdmissionResponseBody struct {
+	// The workload_identity_admissions row.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Whether the admission belongs to this project or to the whole organization.
+	Tier string `form:"tier" json:"tier" xml:"tier"`
+	// The operator-chosen label for the admission.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 }
 
 // UserSessionFacetOptionResponseBody is used to define fields on response body

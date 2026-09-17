@@ -3,6 +3,7 @@ import { Icon } from "@/components/ui/Icon";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { cn } from "@/lib/utils";
 import {
+  workloadAdmissionsLabel,
   workloadAgentLabel,
   workloadIssuerLabel,
 } from "@/lib/workload-session";
@@ -45,6 +46,8 @@ function WorkloadTooltip({
       <dd className="break-all">{workload.externalSubject}</dd>
       <dt className="text-muted-foreground">Authority</dt>
       <dd>{workloadAgentLabel(workload)}</dd>
+      <dt className="text-muted-foreground">Admitted by</dt>
+      <dd>{workloadAdmissionsLabel(workload)}</dd>
     </dl>
   );
 }
@@ -80,6 +83,17 @@ type LadderStep = {
   available: boolean;
 };
 
+function withdrawAdmissionEffect(workload: UserSessionWorkload): string {
+  switch (workload.admissions.length) {
+    case 0:
+      return "The kill switch. Nothing admits this workload any more, so it cannot exchange a new token.";
+    case 1:
+      return `The kill switch. Admitted only by ${workloadAdmissionsLabel(workload)}.`;
+    default:
+      return `The kill switch. Admitted by ${workload.admissions.length}: ${workloadAdmissionsLabel(workload)}. Withdraw every one, or the workload reconnects through the rest.`;
+  }
+}
+
 function ladderSteps(workload: UserSessionWorkload): LadderStep[] {
   const agent = workload.agentName ?? "the agent";
   return [
@@ -106,8 +120,7 @@ function ladderSteps(workload: UserSessionWorkload): LadderStep[] {
     },
     {
       title: "Withdraw the admission",
-      effect:
-        "The kill switch. Admissions exist per project and for the whole organization; withdraw each one that admits this workload.",
+      effect: withdrawAdmissionEffect(workload),
       stopsReconnect: true,
       available: false,
     },

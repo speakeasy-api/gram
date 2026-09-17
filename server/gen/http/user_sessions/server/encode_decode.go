@@ -1047,6 +1047,31 @@ func marshalTypesUserSessionWorkloadToUserSessionWorkloadResponseBody(v *types.U
 		AgentName:          v.AgentName,
 		AgentStatus:        v.AgentStatus,
 	}
+	if v.Admissions != nil {
+		res.Admissions = make([]*UserSessionWorkloadAdmissionResponseBody, len(v.Admissions))
+		for i, val := range v.Admissions {
+			if val == nil {
+				res.Admissions[i] = nil
+				continue
+			}
+			res.Admissions[i] = marshalTypesUserSessionWorkloadAdmissionToUserSessionWorkloadAdmissionResponseBody(val)
+		}
+	} else {
+		res.Admissions = []*UserSessionWorkloadAdmissionResponseBody{}
+	}
+
+	return res
+}
+
+// marshalTypesUserSessionWorkloadAdmissionToUserSessionWorkloadAdmissionResponseBody
+// builds a value of type *UserSessionWorkloadAdmissionResponseBody from a
+// value of type *types.UserSessionWorkloadAdmission.
+func marshalTypesUserSessionWorkloadAdmissionToUserSessionWorkloadAdmissionResponseBody(v *types.UserSessionWorkloadAdmission) *UserSessionWorkloadAdmissionResponseBody {
+	res := &UserSessionWorkloadAdmissionResponseBody{
+		ID:   v.ID,
+		Tier: v.Tier,
+		Name: v.Name,
+	}
 
 	return res
 }

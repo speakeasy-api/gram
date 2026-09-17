@@ -27,4 +27,8 @@ type UserSessionWorkload struct {
 	AgentName *string
 	// Lifecycle state of the assigned agent.
 	AgentStatus *string
+	// Every admission currently letting this workload in, from this project and
+	// from the organization. Withdrawing one leaves the others admitting it. Empty
+	// when nothing admits the workload any more.
+	Admissions []*UserSessionWorkloadAdmission
 }

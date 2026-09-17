@@ -97,6 +97,26 @@ func seedWorkloadAssignment(t *testing.T, ctx context.Context, conn *pgxpool.Poo
 	require.NoError(t, err)
 }
 
+// seedWorkloadAdmission admits a workload directly, for the same reason
+// seedWorkloadIssuer does. A null projectID is the organization tier.
+func seedWorkloadAdmission(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.NullUUID, issuerID uuid.UUID, subject string, name string) uuid.UUID {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	var id uuid.UUID
+	err := conn.QueryRow( //nolint:glint // notestingrawsql: see seedWorkloadIssuer
+		ctx, `
+		INSERT INTO workload_identity_admissions (organization_id, project_id, workload_issuer_id, subject, name)
+		VALUES ($1, $2, $3, $4, $5)
+		RETURNING id
+	`, authCtx.ActiveOrganizationID, projectID, issuerID, subject, name).Scan(&id)
+	require.NoError(t, err)
+
+	return id
+}
+
 func listAllSessions(t *testing.T, ctx context.Context, ti *testInstance, status *string) []*types.UserSession {
 	t.Helper()
 
@@ -238,6 +258,62 @@ func TestListUserSessions_ReportsSuspendedWorkloadAgent(t *testing.T) {
 	got := sessionByID(t, listAllSessions(t, ctx, ti, nil), session.ID).Workload
 	require.NotNil(t, got.AgentStatus)
 	require.Equal(t, "suspended", *got.AgentStatus)
+}
+
+func TestListUserSessions_ListsEveryAdmissionLettingTheWorkloadIn(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	project := uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true}
+	organization := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+
+	issuerID := seedIssuer(t, ctx, ti, "workload-admissions")
+	workloadIssuerID := seedWorkloadIssuer(t, ctx, ti.conn, organization, "Admitting issuer")
+	siblingProjectID := createSiblingProject(t, ctx, ti.conn, "workload-admissions-sibling")
+
+	withdrawn := seedWorkloadAdmission(t, ctx, ti.conn, project, workloadIssuerID, workloadTestSubject, "Withdrawn admission")
+	_, err := ti.conn.Exec( //nolint:glint // notestingrawsql: see seedWorkloadIssuer
+		ctx, `UPDATE workload_identity_admissions SET deleted_at = clock_timestamp() WHERE id = $1`, withdrawn)
+	require.NoError(t, err)
+
+	projectAdmission := seedWorkloadAdmission(t, ctx, ti.conn, project, workloadIssuerID, workloadTestSubject, "Project admission")
+	orgAdmission := seedWorkloadAdmission(t, ctx, ti.conn, organization, workloadIssuerID, workloadTestSubject, "Organization admission")
+	seedWorkloadAdmission(t, ctx, ti.conn, uuid.NullUUID{UUID: siblingProjectID, Valid: true}, workloadIssuerID, workloadTestSubject, "Sibling admission")
+	seedWorkloadAdmission(t, ctx, ti.conn, project, workloadIssuerID, "some-other-subject", "Other subject")
+
+	session, err := seedUserSession(t, ctx, ti.conn, issuerID, urn.NewWorkloadSubject(workloadIssuerID, workloadTestSubject))
+	require.NoError(t, err)
+
+	got := sessionByID(t, listAllSessions(t, ctx, ti, nil), session.ID).Workload
+	require.NotNil(t, got)
+	require.Len(t, got.Admissions, 2, "only live admissions for this workload at this project or the organization")
+	require.Equal(t, projectAdmission.String(), got.Admissions[0].ID)
+	require.Equal(t, "project", got.Admissions[0].Tier)
+	require.Equal(t, "Project admission", *got.Admissions[0].Name)
+	require.Equal(t, orgAdmission.String(), got.Admissions[1].ID)
+	require.Equal(t, "organization", got.Admissions[1].Tier)
+}
+
+func TestListUserSessions_AdmissionsUnderDeletedIssuerAreNotListed(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	issuerID := seedIssuer(t, ctx, ti, "workload-deleted-issuer")
+	workloadIssuerID := seedWorkloadIssuer(t, ctx, ti.conn, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, "Deleted issuer")
+	seedWorkloadAdmission(t, ctx, ti.conn, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, workloadIssuerID, workloadTestSubject, "Orphaned admission")
+	_, err := ti.conn.Exec( //nolint:glint // notestingrawsql: see seedWorkloadIssuer
+		ctx, `UPDATE workload_issuers SET deleted_at = clock_timestamp() WHERE id = $1`, workloadIssuerID)
+	require.NoError(t, err)
+
+	session, err := seedUserSession(t, ctx, ti.conn, issuerID, urn.NewWorkloadSubject(workloadIssuerID, workloadTestSubject))
+	require.NoError(t, err)
+
+	got := sessionByID(t, listAllSessions(t, ctx, ti, nil), session.ID).Workload
+	require.NotNil(t, got)
+	require.Empty(t, got.Admissions, "a deleted issuer admits nothing")
 }
 
 func TestRevokeUserSession_WorkloadSession(t *testing.T) {
