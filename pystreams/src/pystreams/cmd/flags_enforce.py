@@ -6,10 +6,9 @@ import click
 def enforce_options() -> Sequence[click.Option]:
     """Options for the Presidio enforcement lane (reply inbox + fingerprints).
 
-    The lane activates only when both the Redis address and the pepper keyring
-    are set; otherwise the enforcement receiver is not registered and the
-    process serves only the batch subscriptions. The Redis password is
-    independently optional.
+    In the default ``all`` role, the lane activates only when both the Redis
+    address and pepper keyring are set. The dedicated ``enforcement`` role
+    requires both. The Redis password is independently optional.
     """
     return [
         click.Option(
