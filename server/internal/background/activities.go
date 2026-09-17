@@ -243,6 +243,7 @@ func NewActivities(
 	githubEvidenceToken string,
 	riskFingerprinter risk.Fingerprinter,
 	disableRiskRetroReconcile bool,
+	llmAnalyzerEnabled bool,
 	idTokenVerifier remotesessions.IDTokenVerifier,
 	issuerMetadataRefresher *remotesessions.IssuerMetadataRefresher,
 	remoteSessionEnricher *remotesessions.SessionEnricher,
@@ -292,6 +293,7 @@ func NewActivities(
 			evaluator: risk.NewPolicyBypassEvaluator(logger, db),
 		},
 		riskRecorder,
+		llmAnalyzerEnabled,
 	)
 	if err != nil {
 		panic(fmt.Errorf("new analyze batch: %w", err))

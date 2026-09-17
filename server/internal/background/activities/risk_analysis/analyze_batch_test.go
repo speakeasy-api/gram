@@ -185,7 +185,7 @@ func capturingFindingsPub(t *testing.T) (*gcp.MockPublisher[*riskv1.Finding], *[
 
 func TestAnalyzeBatch_EmptyMessageIDs(t *testing.T) {
 	t.Parallel()
-	ab, err := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, nil, &risk_analysis.StubPIIScanner{}, nil, nil, nil, nil, nil, newPresidioPub(), newGitleaksPub(), newPromptInjectionPub(), newPromptPolicyPub(), newCustomRulesPub(), newLLMPub(), newFindingsPub(), mustCustomRuleScanner(t, nil), mustCELEngine(t), nil, nil, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+	ab, err := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, nil, &risk_analysis.StubPIIScanner{}, nil, nil, nil, nil, nil, newPresidioPub(), newGitleaksPub(), newPromptInjectionPub(), newPromptPolicyPub(), newCustomRulesPub(), newLLMPub(), newFindingsPub(), mustCustomRuleScanner(t, nil), mustCELEngine(t), nil, nil, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()), false)
 	require.NoError(t, err)
 	require.NotNil(t, ab)
 
@@ -226,6 +226,7 @@ func TestAnalyzeBatch_MeterPublishFailureDoesNotDiscardFindings(t *testing.T) {
 		newPromptPolicyPub(), newCustomRulesPub(), newLLMPub(), newFindingsPub(),
 		mustCustomRuleScanner(t, conn), mustCELEngine(t), nil, nil,
 		metering.NewRiskRecorder(publisher),
+		false,
 	)
 	require.NoError(t, err)
 	var ts testsuite.WorkflowTestSuite
@@ -316,6 +317,7 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 		nil,
 		nil,
 		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		false,
 	)
 	require.NoError(t, err)
 
@@ -401,6 +403,7 @@ func TestAnalyzeBatch_ContentSourcesNotRepublishedToFindingsTopic(t *testing.T) 
 		nil,
 		nil,
 		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		false,
 	)
 	require.NoError(t, err)
 
@@ -617,6 +620,7 @@ func TestAnalyzeBatch_PromptInjectionPublishesAsyncRequestsForEveryMessage(t *te
 		nil,
 		nil,
 		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		false,
 	)
 	require.NoError(t, err)
 
@@ -720,6 +724,7 @@ func TestAnalyzeBatch_PromptInjectionPublishesStrictlyBoundedTrajectory(t *testi
 		nil,
 		nil,
 		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		false,
 	)
 	require.NoError(t, err)
 
@@ -794,6 +799,7 @@ func TestAnalyzeBatch_PromptPolicyPublishesAsyncRequestsForEveryEligibleMessage(
 		nil,
 		nil,
 		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		false,
 	)
 	require.NoError(t, err)
 
@@ -896,6 +902,7 @@ func TestAnalyzeBatch_PromptJudgeUsesToolCallPayload(t *testing.T) {
 		nil,
 		nil,
 		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		false,
 	)
 	require.NoError(t, err)
 
@@ -1002,6 +1009,7 @@ func TestAnalyzeBatch_PromptJudgeMultiToolCallAttribution(t *testing.T) {
 		nil,
 		nil,
 		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		false,
 	)
 	require.NoError(t, err)
 
@@ -1197,6 +1205,7 @@ func TestAnalyzeBatch_PolicyDeletedMidAnalysisPublishesNothing(t *testing.T) {
 		nil,
 		nil,
 		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		false,
 	)
 	require.NoError(t, err)
 
@@ -1303,6 +1312,7 @@ func TestAnalyzeBatch_Presidio_PIIInToolCallArgsOnly(t *testing.T) {
 		nil,
 		nil,
 		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		false,
 	)
 	require.NoError(t, err)
 
@@ -1832,6 +1842,7 @@ func executeAnalyzeBatchForIDs(t *testing.T, conn *pgxpool.Pool, assetStorage as
 		nil,
 		nil,
 		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		false,
 	)
 	require.NoError(t, err)
 

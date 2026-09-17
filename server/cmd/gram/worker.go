@@ -343,6 +343,7 @@ func newWorkerCommand() *cli.Command {
 	flags = append(flags, pluginsFlags()...)
 	flags = append(flags, posthogFlags()...)
 	flags = append(flags, riskReconcileFlags()...)
+	flags = append(flags, riskLLMFlags()...)
 	flags = append(flags, gcpFlags()...)
 
 	return &cli.Command{
@@ -853,6 +854,7 @@ func newWorkerCommand() *cli.Command {
 				TrialEmailsService:           trialEmailsService,
 				RiskFingerprinter:            riskFingerprinter,
 				DisableRiskRetroReconcile:    c.Bool("disable-clickhouse-risk-retro-reconcile"),
+				LLMAnalyzerEnabled:           llmAnalyzerConfigFromCLI(c).Enabled(),
 			})
 
 			// Flush the throttle's queued trailing risk signals before this Action

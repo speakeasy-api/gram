@@ -17,6 +17,13 @@ import (
 // where the model reply is known.
 const llmPolicyEvaluationPublished = "published"
 
+// llmPolicyEvaluationFallbackLegacy is the policy_evaluations outcome recorded
+// when the organization is on the LLM analyzer flag but the worker has no
+// analyzer configured, so the batch ran the legacy engines instead. It is
+// counted once per batch: no request reaches the consumer, so there is no
+// per-message outcome to line up with.
+const llmPolicyEvaluationFallbackLegacy = "fallback_legacy"
+
 // llmCoveredSources returns, in llmanalyzer.CoveredSources order, the policy
 // sources the fine-tuned model stands in for on this batch.
 func llmCoveredSources(sources sourceSet) []string {

@@ -172,10 +172,27 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 	// legacy engines: no inline scan, no legacy analysis request, and no
 	// Postgres rows for those sources, whose findings are ClickHouse-only.
 	// Custom rules, shadow_mcp and account_identity keep their engines.
+	//
+	// The flag only diverts when this worker knows an analyzer is configured:
+	// with GRAM_RISK_LLM_URL empty the streams consumer acks every request
+	// without findings, so honoring the flag would leave the organization with
+	// no async coverage at all. The legacy engines run instead.
 	llmMode := false
 	llmOrgSlug := ""
 	if llmanalyzer.CoversAnySource(args.Sources) {
-		llmMode, llmOrgSlug = policyflags.ProjectFlagState(ctx, a.logger, repo.New(a.db), a.flags, args.OrganizationID, args.ProjectID, feature.FlagRiskLLMAnalyzer)
+		flagOn, orgSlug := policyflags.ProjectFlagState(ctx, a.logger, repo.New(a.db), a.flags, args.OrganizationID, args.ProjectID, feature.FlagRiskLLMAnalyzer)
+		switch {
+		case flagOn && a.llmAnalyzerEnabled:
+			llmMode, llmOrgSlug = true, orgSlug
+		case flagOn:
+			a.llmFallbackOnce.Do(func() {
+				a.logger.WarnContext(ctx, "LLM analyzer flag on but GRAM_RISK_LLM_URL empty; batch scans fall back to legacy engines",
+					attr.SlogOrganizationID(args.OrganizationID),
+					attr.SlogRiskPolicyID(args.RiskPolicyID.String()),
+				)
+			})
+			a.metrics.RecordLLMPolicyEvaluation(ctx, args.OrganizationID, args.RiskPolicyID.String(), llmPolicyEvaluationFallbackLegacy, 1)
+		}
 	}
 
 	var wg sync.WaitGroup
