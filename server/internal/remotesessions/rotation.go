@@ -230,6 +230,9 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 		return nil
 	})
 
+	// ClientID is selected by the tenant-authorized admin or login path. The
+	// query additionally checks issuer visibility from that client's tenant;
+	// returning issuer ownership alone would not validate a stale binding.
 	initial, err := repo.New(r.db).GetRemoteSessionClientForRotation(ctx, params.ClientID)
 	if err != nil {
 		return zero, fmt.Errorf("load remote session client for rotation: %w", err)

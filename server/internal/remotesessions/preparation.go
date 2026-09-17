@@ -413,11 +413,13 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 	if (read || (in.Mechanism == "dcr" && in.ClientID == uuid.Nil)) && b.RemoteSessionClientID.Valid && preparationBindingGrantSource(b.GrantSource) == "provider_returned" {
 		return preparationResult(b, issuer, client, preparationRegistrationReadiness(ctx, q, client, issuer, org)), nil
 	}
+	// Record explicit manual setup independently of automatic readiness.
+	manual := !read && selected != uuid.Nil && (in.Mechanism == "manual" || in.Mechanism == "")
 	eligibility := PreparationEligibility(issuer.AuthorizationGrantProfilesSupported, issuer.GrantTypesSupported)
-	if eligibility != "eligible" {
+	if !manual && eligibility != "eligible" {
 		return preparationResult(b, issuer, client, eligibility), nil
 	}
-	if preparationMetadataTransient(issuer) {
+	if !manual && preparationMetadataTransient(issuer) {
 		return preparationResult(b, issuer, client, "transient_failure"), nil
 	}
 	if (read || in.Mechanism == "dcr") && (preparationBindingState(b.State) == "ready" || preparationBindingState(b.State) == "published_acceptance_unverified") {
@@ -488,11 +490,11 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 		if !client.ClientIDMetadataUri.Valid || !issuer.ClientIDMetadataDocumentSupported {
 			return preparationResult(b, issuer, client, "manual_setup_required"), nil
 		}
-		if client.GrantTypes == nil {
-			grants = append(grants, "authorization_code", "refresh_token")
-		} else {
-			grants = append(slices.Clone(grants), client.GrantTypes...)
+		// Unknown legacy grants require administrator confirmation, not guesses.
+		if grants == nil {
+			return preparationResult(b, issuer, client, "unknown_grants"), nil
 		}
+		grants = append(slices.Clone(grants), client.GrantTypes...)
 		slices.Sort(grants)
 		grants = slices.Compact(grants)
 		if !slices.Contains(grants, PreparationJWTBearerGrant) {
@@ -563,6 +565,13 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "prepare identity chaining")
+	}
+	// The binding records registration evidence, not discovery eligibility.
+	// Reads apply these same gates and recover when discovery becomes eligible.
+	if manual && eligibility != "eligible" {
+		state = eligibility
+	} else if manual && preparationMetadataTransient(issuer) {
+		state = "transient_failure"
 	}
 	return preparationResult(b, issuer, client, state), nil
 }

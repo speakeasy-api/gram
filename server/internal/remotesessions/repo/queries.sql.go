@@ -3323,6 +3323,14 @@ JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
 WHERE c.id = $1
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE
+  AND (
+    i.project_id = c.project_id
+    OR (i.project_id IS NULL AND i.organization_id IS NULL)
+    OR (i.project_id IS NULL AND i.organization_id = CASE
+      WHEN c.project_id IS NULL THEN c.organization_id
+      ELSE (SELECT p.organization_id FROM projects p WHERE p.id = c.project_id AND p.deleted IS FALSE)
+    END)
+  )
 `
 
 type GetRemoteSessionClientForRotationRow struct {
@@ -3342,7 +3350,11 @@ type GetRemoteSessionClientForRotationRow struct {
 // binding, since both of those endpoints are only reachable over the tunnel
 // when one is set. Not locked: the rotation talks to the issuer between this
 // read and its write, and the write compares the client_id it read here so a
-// concurrent rotation is detected rather than blocked.
+// concurrent rotation is detected rather than blocked. The ID comes from an
+// authorized client selection, not a caller-supplied issuer ID. Restrict the
+// joined issuer to that client's project and inherited organization/global
+// tiers; a stale or invalid binding must not expose another tenant's endpoints.
+// Resolve legacy project clients' organization through projects.
 func (q *Queries) GetRemoteSessionClientForRotation(ctx context.Context, id uuid.UUID) (GetRemoteSessionClientForRotationRow, error) {
 	row := q.db.QueryRow(ctx, getRemoteSessionClientForRotation, id)
 	var i GetRemoteSessionClientForRotationRow

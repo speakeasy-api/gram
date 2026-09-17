@@ -70,6 +70,8 @@ func RunRegistrationAdmissionRegression(t *testing.T, pool *pgxpool.Pool) {
 	for range 2 {
 		select {
 		case <-entered:
+		case err := <-done:
+			t.Fatalf("registration worker exited before entering upstream: %v", err)
 		case <-ctx.Done():
 			t.Fatal(ctx.Err())
 		}
