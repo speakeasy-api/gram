@@ -3,7 +3,6 @@ package remotesessions_test
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -201,11 +200,12 @@ func TestManagedClient_RegistrationReplaceRefusesManagedRow(t *testing.T) {
 	ctx, ti := newTestService(t)
 	_, fx := provisionManagedClient(t, ctx, ti, "managed-guard-replace-issuer")
 
-	var currentClientID string
-	var updatedAt pgtype.Timestamptz
-	require.NoError(t, ti.conn.QueryRow(ctx, `SELECT client_id, updated_at FROM remote_session_clients WHERE id = $1`, fx.Client.ClientRowID).Scan(&currentClientID, &updatedAt))
+	before, err := repo.New(ti.conn).GetRemoteSessionClientForRotation(ctx, fx.Client.ClientRowID)
+	require.NoError(t, err)
+	currentClientID := before.RemoteSessionClient.ClientID
+	updatedAt := before.RemoteSessionClient.UpdatedAt
 
-	_, err := repo.New(ti.conn).ReplaceRemoteSessionClientRegistration(ctx, repo.ReplaceRemoteSessionClientRegistrationParams{
+	_, err = repo.New(ti.conn).ReplaceRemoteSessionClientRegistration(ctx, repo.ReplaceRemoteSessionClientRegistrationParams{
 		ClientID:                "rotated-" + uuid.NewString(),
 		ClientSecretEncrypted:   pgtype.Text{String: "", Valid: false},
 		ClientIDIssuedAt:        pgtype.Timestamptz{Time: updatedAt.Time, InfinityModifier: pgtype.Finite, Valid: true},
@@ -215,9 +215,9 @@ func TestManagedClient_RegistrationReplaceRefusesManagedRow(t *testing.T) {
 		ExpectedClientID:        currentClientID,
 		ExpectedUpdatedAt:       updatedAt,
 	})
-	require.True(t, errors.Is(err, pgx.ErrNoRows), "managed row must not be replaceable, got %v", err)
+	require.ErrorIs(t, err, pgx.ErrNoRows, "managed row must not be replaceable")
 
-	var afterClientID string
-	require.NoError(t, ti.conn.QueryRow(ctx, `SELECT client_id FROM remote_session_clients WHERE id = $1`, fx.Client.ClientRowID).Scan(&afterClientID))
-	require.Equal(t, currentClientID, afterClientID)
+	after, err := repo.New(ti.conn).GetRemoteSessionClientForRotation(ctx, fx.Client.ClientRowID)
+	require.NoError(t, err)
+	require.Equal(t, currentClientID, after.RemoteSessionClient.ClientID)
 }

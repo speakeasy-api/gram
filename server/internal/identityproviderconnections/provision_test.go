@@ -2,6 +2,7 @@ package identityproviderconnections_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -706,7 +707,10 @@ func TestNewProvisioner_RejectsPlaintextServerURL(t *testing.T) {
 				ServerURL:           mustURL(t, serverURL),
 			},
 		)
-		return err
+		if err != nil {
+			return fmt.Errorf("build provisioner: %w", err)
+		}
+		return nil
 	}
 
 	require.Error(t, build("http://app.getgram.ai"))
