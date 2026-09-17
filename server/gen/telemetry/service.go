@@ -90,6 +90,10 @@ type Service interface {
 	GetToolUsageTargets(context.Context, *GetToolUsageTargetsPayload) (res *GetToolUsageTargetsResult, err error)
 	// Get top MCP and tool usage user identities
 	GetToolUsageUsers(context.Context, *GetToolUsageUsersPayload) (res *GetToolUsageUsersResult, err error)
+	// Get top MCP clients by tool usage
+	GetToolUsageClients(context.Context, *GetToolUsageClientsPayload) (res *GetToolUsageClientsResult, err error)
+	// Get per-tool MCP and tool usage grouped by MCP client
+	GetToolUsageClientToolBreakdown(context.Context, *GetToolUsageClientToolBreakdownPayload) (res *GetToolUsageClientToolBreakdownResult, err error)
 	// Get time-series MCP and tool usage grouped by target
 	GetToolUsageTargetTimeSeries(context.Context, *GetToolUsageTargetTimeSeriesPayload) (res *GetToolUsageTargetTimeSeriesResult, err error)
 	// Get time-series MCP and tool usage grouped by user identity
@@ -133,7 +137,7 @@ const ServiceName = "telemetry"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [33]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getEmployeeDataFlowGraph", "getObservabilityOverview", "getMetaMcpServerUsage", "getProjectOverview", "getUnproxiedMcpServerUsage", "getUnproxiedMcpServerToolUsage", "getUnproxiedMcpServerUserUsage", "getUnproxiedMcpServerClientUsage", "query", "queryTumDetails", "listSessions", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "getToolUsageSummary", "getToolUsageTotals", "getToolUsageTargets", "getToolUsageUsers", "getToolUsageTargetTimeSeries", "getToolUsageUserTimeSeries", "getToolUsageUsersByTarget", "getToolUsageTargetToolBreakdown", "listToolUsageTraces", "getToolUsageFilterOptions", "getMcpServerActivity", "listHooksTraces"}
+var MethodNames = [35]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getEmployeeDataFlowGraph", "getObservabilityOverview", "getMetaMcpServerUsage", "getProjectOverview", "getUnproxiedMcpServerUsage", "getUnproxiedMcpServerToolUsage", "getUnproxiedMcpServerUserUsage", "getUnproxiedMcpServerClientUsage", "query", "queryTumDetails", "listSessions", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "getToolUsageSummary", "getToolUsageTotals", "getToolUsageTargets", "getToolUsageUsers", "getToolUsageClients", "getToolUsageClientToolBreakdown", "getToolUsageTargetTimeSeries", "getToolUsageUserTimeSeries", "getToolUsageUsersByTarget", "getToolUsageTargetToolBreakdown", "listToolUsageTraces", "getToolUsageFilterOptions", "getMcpServerActivity", "listHooksTraces"}
 
 // CaptureEventPayload is the payload type of the telemetry service
 // captureEvent method.
@@ -442,6 +446,82 @@ type GetProjectOverviewResult struct {
 	MetricsMode string
 }
 
+// GetToolUsageClientToolBreakdownPayload is the payload type of the telemetry
+// service getToolUsageClientToolBreakdown method.
+type GetToolUsageClientToolBreakdownPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Start time in ISO 8601 format
+	From string
+	// End time in ISO 8601 format
+	To string
+	// Target types to include. Empty means all target types.
+	TargetTypes []ToolUsageTargetType
+	// Hosted MCP toolset slugs to include
+	HostedToolsetSlugs []string
+	// Shadow MCP server names to include
+	ShadowServerNames []string
+	// Gateway (meta MCP server) ids to include: calls dispatched through the
+	// gateway to its members plus calls observed against the gateway itself
+	MetaMcpServerIds []string
+	// Typed user identities to include
+	UserFilters []*ToolUsageUserFilter
+	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
+	// and are excluded when this filter is set.
+	HookSources []string
+	// MCP client keys (lowercased self-reported client names; 'unattributed'
+	// selects calls Gram never saw an initialize handshake for) to include
+	ClientKeys []string
+	// Optional account type filter ('team' or 'personal').
+	AccountType *string
+}
+
+// GetToolUsageClientToolBreakdownResult is the result type of the telemetry
+// service getToolUsageClientToolBreakdown method.
+type GetToolUsageClientToolBreakdownResult struct {
+	// Per-tool usage rows grouped by MCP client
+	ClientToolBreakdown []*ToolUsageClientToolBreakdownRow
+}
+
+// GetToolUsageClientsPayload is the payload type of the telemetry service
+// getToolUsageClients method.
+type GetToolUsageClientsPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Start time in ISO 8601 format
+	From string
+	// End time in ISO 8601 format
+	To string
+	// Target types to include. Empty means all target types.
+	TargetTypes []ToolUsageTargetType
+	// Hosted MCP toolset slugs to include
+	HostedToolsetSlugs []string
+	// Shadow MCP server names to include
+	ShadowServerNames []string
+	// Gateway (meta MCP server) ids to include: calls dispatched through the
+	// gateway to its members plus calls observed against the gateway itself
+	MetaMcpServerIds []string
+	// Typed user identities to include
+	UserFilters []*ToolUsageUserFilter
+	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
+	// and are excluded when this filter is set.
+	HookSources []string
+	// MCP client keys (lowercased self-reported client names; 'unattributed'
+	// selects calls Gram never saw an initialize handshake for) to include
+	ClientKeys []string
+	// Optional account type filter ('team' or 'personal').
+	AccountType *string
+}
+
+// GetToolUsageClientsResult is the result type of the telemetry service
+// getToolUsageClients method.
+type GetToolUsageClientsResult struct {
+	// Top MCP clients for the selected filters and time range
+	Clients []*ToolUsageClientSummary
+}
+
 // GetToolUsageFilterOptionsPayload is the payload type of the telemetry
 // service getToolUsageFilterOptions method.
 type GetToolUsageFilterOptionsPayload struct {
@@ -467,6 +547,8 @@ type GetToolUsageFilterOptionsResult struct {
 	Gateways []*ToolUsageGatewayFilterOption
 	// User identities with usage in the selected time range
 	Users []*ToolUsageUserFilterOption
+	// MCP clients with usage in the selected time range
+	Clients []*ToolUsageClientFilterOption
 }
 
 // GetToolUsageSummaryPayload is the payload type of the telemetry service
@@ -493,6 +575,9 @@ type GetToolUsageSummaryPayload struct {
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string
+	// MCP client keys (lowercased self-reported client names; 'unattributed'
+	// selects calls Gram never saw an initialize handshake for) to include
+	ClientKeys []string
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string
 }
@@ -514,6 +599,10 @@ type GetToolUsageSummaryResult struct {
 	UsersByTarget []*ToolUsageUsersByTargetRow
 	// Per-tool usage rows grouped by target
 	TargetToolBreakdown []*ToolUsageTargetToolBreakdownRow
+	// Top MCP clients for the selected filters and time range
+	Clients []*ToolUsageClientSummary
+	// Per-tool usage rows grouped by MCP client
+	ClientToolBreakdown []*ToolUsageClientToolBreakdownRow
 }
 
 // GetToolUsageTargetTimeSeriesPayload is the payload type of the telemetry
@@ -540,6 +629,9 @@ type GetToolUsageTargetTimeSeriesPayload struct {
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string
+	// MCP client keys (lowercased self-reported client names; 'unattributed'
+	// selects calls Gram never saw an initialize handshake for) to include
+	ClientKeys []string
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string
 }
@@ -575,6 +667,9 @@ type GetToolUsageTargetToolBreakdownPayload struct {
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string
+	// MCP client keys (lowercased self-reported client names; 'unattributed'
+	// selects calls Gram never saw an initialize handshake for) to include
+	ClientKeys []string
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string
 }
@@ -610,6 +705,9 @@ type GetToolUsageTargetsPayload struct {
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string
+	// MCP client keys (lowercased self-reported client names; 'unattributed'
+	// selects calls Gram never saw an initialize handshake for) to include
+	ClientKeys []string
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string
 }
@@ -645,6 +743,9 @@ type GetToolUsageTotalsPayload struct {
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string
+	// MCP client keys (lowercased self-reported client names; 'unattributed'
+	// selects calls Gram never saw an initialize handshake for) to include
+	ClientKeys []string
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string
 }
@@ -680,6 +781,9 @@ type GetToolUsageUserTimeSeriesPayload struct {
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string
+	// MCP client keys (lowercased self-reported client names; 'unattributed'
+	// selects calls Gram never saw an initialize handshake for) to include
+	ClientKeys []string
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string
 }
@@ -715,6 +819,9 @@ type GetToolUsageUsersByTargetPayload struct {
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string
+	// MCP client keys (lowercased self-reported client names; 'unattributed'
+	// selects calls Gram never saw an initialize handshake for) to include
+	ClientKeys []string
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string
 }
@@ -750,6 +857,9 @@ type GetToolUsageUsersPayload struct {
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string
+	// MCP client keys (lowercased self-reported client names; 'unattributed'
+	// selects calls Gram never saw an initialize handshake for) to include
+	ClientKeys []string
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string
 }
@@ -1123,6 +1233,9 @@ type ListToolUsageTracesPayload struct {
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string
+	// MCP client keys (lowercased self-reported client names; 'unattributed'
+	// selects calls Gram never saw an initialize handshake for) to include
+	ClientKeys []string
 	// Optional account type filter ('team' or 'personal'). 'team' includes
 	// unclassified traces.
 	AccountType *string
@@ -1880,6 +1993,53 @@ type ToolUsage struct {
 	FailureCount int64
 }
 
+// MCP client filter option with usage in the selected time window
+type ToolUsageClientFilterOption struct {
+	// Stable MCP client identity used by filters
+	ClientKey string
+	// User-facing label for the MCP client
+	ClientLabel string
+	// Number of tool usage events observed for the MCP client
+	EventCount int64
+}
+
+// Aggregated tool usage metrics for one MCP client
+type ToolUsageClientSummary struct {
+	// Stable MCP client identity used by filters and chart grouping
+	ClientKey string
+	// User-facing label for the MCP client
+	ClientLabel string
+	// Total number of tool usage events for the MCP client
+	EventCount int64
+	// Number of distinct tools observed for the MCP client
+	UniqueTools int64
+	// Number of successful tool usage events for the MCP client
+	SuccessCount int64
+	// Number of failed tool usage events for the MCP client
+	FailureCount int64
+	// Fraction of completed tool usage events for the MCP client that failed
+	FailureRate float64
+}
+
+// Aggregated tool usage metrics for one MCP client and tool
+type ToolUsageClientToolBreakdownRow struct {
+	// Stable MCP client identity used by filters and chart grouping
+	ClientKey string
+	// User-facing label for the MCP client
+	ClientLabel string
+	// Observed tool name
+	ToolName string
+	// Total number of tool usage events for the MCP client and tool
+	EventCount int64
+	// Number of successful tool usage events for the MCP client and tool
+	SuccessCount int64
+	// Number of failed tool usage events for the MCP client and tool
+	FailureCount int64
+	// Fraction of completed tool usage events for the MCP client and tool that
+	// failed
+	FailureRate float64
+}
+
 // Tool usage filter option type
 type ToolUsageFilterOptionType string
 
@@ -2064,6 +2224,13 @@ type ToolUsageTraceSummary struct {
 	// Display name of the dispatching gateway; a deleted gateway keeps its last
 	// name
 	ViaMetaMcpServerName *string
+	// Stable MCP client identity used by filters; 'unattributed' when the caller
+	// never reported one
+	ClientKey string
+	// User-facing MCP client label as the client reported it
+	ClientLabel string
+	// MCP client version when the client reported one alongside its name
+	ClientVersion *string
 }
 
 // Typed user identity filter

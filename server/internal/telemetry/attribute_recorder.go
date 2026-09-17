@@ -140,6 +140,19 @@ func (h HTTPLogAttributes) RecordMCPURL(url string) {
 	}
 }
 
+// RecordMCPClient stamps the caller's self-reported MCP client identity from
+// the initialize handshake. A version without a name is not attributable, so
+// both are dropped together.
+func (h HTTPLogAttributes) RecordMCPClient(name, version string) {
+	if name == "" {
+		return
+	}
+	h[attr.McpClientNameKey] = name
+	if version != "" {
+		h[attr.McpClientVersionKey] = version
+	}
+}
+
 func truncateBody(body []byte) string {
 	if len(body) <= maxBodyContentBytes {
 		return string(body)
