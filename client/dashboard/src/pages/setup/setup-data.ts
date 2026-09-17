@@ -128,15 +128,39 @@ const SETUP_AGENT_PLATFORMS: Array<{
       },
       {
         title: "Mark the observability plugin as Required",
-        description: `After the repo syncs, your plugins appear in a table on Claude.ai. Find the observability plugin row (slug below), open its Default access dropdown, and set it to Required. That pre-installs it for every org member and prevents them from disabling it — so tool events flow to Speakeasy without per-user opt-in. ${PERSONAL_ACCOUNT_GOVERNANCE_NOTE}`,
+        description: [
+          "After the repo syncs, your plugins appear in a table on Claude.ai. Find ",
+          {
+            code: "{{GRAM_CLAUDE_PLUGIN_NAME}}",
+            fallback: "the observability plugin",
+          },
+          ` in the plugin list and set Default access → Required. That pre-installs it for every org member and prevents them from disabling it — so tool events flow to Speakeasy without per-user opt-in. ${PERSONAL_ACCOUNT_GOVERNANCE_NOTE}`,
+        ],
         screenshot: {
           src: "/setup/claude-cowork-set-required.png",
           alt: "Claude.ai plugin access dropdown showing four options (Available to install, Installed by default, Not available, Required) with Required selected",
           caption:
             'Open the Default access dropdown on the observability plugin row and select "Required".',
         },
-        code: `{{GRAM_CLAUDE_PLUGIN_NAME}}`,
-        language: "text",
+      },
+      {
+        title: "Enable OTEL export",
+        description:
+          "In the Cowork tab of the Claude org settings, scroll to Monitoring and enter the values below.",
+        fields: [
+          {
+            label: "OTLP endpoint",
+            value: "https://app.getgram.ai/rpc/hooks.otel",
+          },
+          { label: "OTLP protocol", value: "http/json" },
+          {
+            label: "OTLP headers",
+            value: "Gram-Project=default,Gram-Key={{GRAM_API_KEY}}",
+            requiresApiKey: true,
+          },
+        ],
+        afterFields: "Save the settings in Claude.",
+        requiresApiKey: true,
       },
     ],
   },
