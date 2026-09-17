@@ -278,6 +278,12 @@ var (
 	errAgentSessionCredentialLoad = errors.New("load agent session credential")
 )
 
+// errUnsupportedSessionSubject marks a session subject kind that parses but
+// that this path cannot describe as a caller. It is an error rather than a
+// fallback because a context with no actor reads to authz.Engine as an
+// authenticated session belonging to nobody.
+var errUnsupportedSessionSubject = errors.New("session subject kind cannot be described as a caller")
+
 // The gram.oauth.failure_reason values the issuer gate emits on its rejection
 // logs and on the mcp.request.rejected counter, beyond the bearer-token
 // classification issuerGateFailureReason produces. Together they are a closed
@@ -366,17 +372,25 @@ func (s *Service) touchUserSessionLastUsed(ctx context.Context, endpoint *Resolv
 // authz.Engine.ShouldEnforce / PrepareContext treat the request as a real
 // authenticated session. AccountType is retained as session metadata but does
 // not control RBAC enforcement.
-func (s *Service) validateUserSessionToken(ctx context.Context, token string, endpoint *ResolvedMcpEndpoint) (context.Context, *urn.SessionSubject, *toolfilter.SessionSelection, error) {
+func (s *Service) validateUserSessionToken(ctx context.Context, token, baseURL string, endpoint *ResolvedMcpEndpoint) (context.Context, *urn.SessionSubject, *toolfilter.SessionSelection, error) {
 	if token == "" {
 		return ctx, nil, nil, nil
 	}
-	session, err := s.userSessionSigner.ValidateBearer(ctx, token, endpoint.AudienceURN, s.chatSessionsManager)
+	resource, err := endpoint.RootURL(baseURL)
 	if err != nil {
-		legacySession, ok := s.validateLegacyToolsetAudience(ctx, token, endpoint, err)
-		if !ok {
-			return ctx, nil, nil, fmt.Errorf("validate user-session bearer: %w", err)
-		}
-		session = legacySession
+		return ctx, nil, nil, fmt.Errorf("build user-session resource audience: %w", err)
+	}
+	legacyAudience, _ := endpoint.legacyToolsetAudienceURN()
+	session, acceptedAudience, err := validateUserSessionBearerAudiences(ctx, s.userSessionSigner, s.chatSessionsManager, token, userSessionBearerAudiences{
+		Resource: resource,
+		Current:  endpoint.AudienceURN,
+		Legacy:   legacyAudience,
+	})
+	if err != nil {
+		return ctx, nil, nil, fmt.Errorf("validate user-session bearer: %w", err)
+	}
+	if acceptedAudience == userSessionAudienceLegacy {
+		s.metrics.RecordLegacyAudienceAccepted(ctx, endpoint.UserSessionIssuerID.String())
 	}
 
 	// The consent-screen tool selection loads for every subject kind —
@@ -423,21 +437,52 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token string, en
 	return newCtx, &subject, toolSelection, nil
 }
 
-// validateLegacyToolsetAudience re-validates a bearer that failed the primary
-// audience check against the pre-migration toolset-URN audience (AIS-633;
-// counted acceptance, deleted by AIS-646). ok is false when inapplicable or
-// the legacy validation fails too — callers surface the original error.
-func (s *Service) validateLegacyToolsetAudience(ctx context.Context, token string, endpoint *ResolvedMcpEndpoint, primaryErr error) (sessiontokens.ValidatedSession, bool) {
-	legacyAudience, ok := endpoint.legacyToolsetAudienceURN()
-	if !ok || !errors.Is(primaryErr, jwt.ErrTokenInvalidAudience) {
-		return sessiontokens.ValidatedSession{}, false
+type userSessionBearerAudiences struct {
+	Resource string
+	Current  string
+	Legacy   string
+}
+
+type userSessionAcceptedAudience uint8
+
+const (
+	userSessionAudienceResource userSessionAcceptedAudience = iota
+	userSessionAudienceCurrent
+	userSessionAudienceLegacy
+)
+
+// validateUserSessionBearerAudiences applies the rollout-safe audience order:
+// exact endpoint resource first, current issuer-scoped audience second, then
+// the pre-migration toolset audience. It falls through only on an audience
+// mismatch; every other validation failure is final.
+func validateUserSessionBearerAudiences(
+	ctx context.Context,
+	signer *sessiontokens.Signer,
+	revocation sessiontokens.RevocationChecker,
+	token string,
+	audiences userSessionBearerAudiences,
+) (sessiontokens.ValidatedSession, userSessionAcceptedAudience, error) {
+	session, err := signer.ValidateExactAudienceBearer(ctx, token, audiences.Resource, revocation)
+	if err == nil {
+		return session, userSessionAudienceResource, nil
 	}
-	session, err := s.userSessionSigner.ValidateBearer(ctx, token, legacyAudience, s.chatSessionsManager)
-	if err != nil {
-		return sessiontokens.ValidatedSession{}, false
+	if !errors.Is(err, jwt.ErrTokenInvalidAudience) {
+		return sessiontokens.ValidatedSession{}, userSessionAudienceResource, fmt.Errorf("validate resource audience: %w", err)
 	}
-	s.metrics.RecordLegacyAudienceAccepted(ctx, endpoint.UserSessionIssuerID.String())
-	return session, true
+
+	session, currentErr := signer.ValidateBearer(ctx, token, audiences.Current, revocation)
+	if currentErr == nil {
+		return session, userSessionAudienceCurrent, nil
+	}
+	if audiences.Legacy == "" || !errors.Is(currentErr, jwt.ErrTokenInvalidAudience) {
+		return sessiontokens.ValidatedSession{}, userSessionAudienceCurrent, fmt.Errorf("validate current audience: %w", currentErr)
+	}
+
+	session, legacyErr := signer.ValidateBearer(ctx, token, audiences.Legacy, revocation)
+	if legacyErr != nil {
+		return sessiontokens.ValidatedSession{}, userSessionAudienceLegacy, fmt.Errorf("validate legacy audience: %w", legacyErr)
+	}
+	return session, userSessionAudienceLegacy, nil
 }
 
 // contextForSessionSubject stamps the request context for a resolved session
@@ -519,6 +564,10 @@ func (s *Service) contextForSessionSubject(
 		// Unreachable: anonymous subjects return ctx untouched above. Listed
 		// for exhaustiveness so the linter doesn't flag the switch.
 		return ctx, nil
+	case urn.SessionSubjectKindWorkload:
+		// This path resolves no actor for a workload, and the anonymous
+		// treatment would skip authorization for an issuer-vouched machine.
+		return nil, fmt.Errorf("%w: %q", errUnsupportedSessionSubject, subject.Kind)
 	}
 	return ctx, oops.C(oops.CodeUnauthorized)
 }
@@ -606,7 +655,7 @@ func (s *Service) authenticateIssuerGate(
 		surface = mcpmetrics.SurfaceMeta
 	}
 
-	newCtx, subject, toolSelection, valErr := s.validateUserSessionToken(ctx, authToken, endpoint)
+	newCtx, subject, toolSelection, valErr := s.validateUserSessionToken(ctx, authToken, baseURL, endpoint)
 	if subject == nil {
 		// Accept an assistant-runtime JWT, but only when the assistant
 		// belongs to the endpoint's project — otherwise a token minted
@@ -761,6 +810,7 @@ func (s *Service) RequireUserSessionIssuer(ctx context.Context, endpoint *Resolv
 	// Carried verbatim, NULL included; admission.ResolveMode is the one
 	// place that decides what an absent or unrecognized value means.
 	endpoint.CIMDAdmissionModeRaw = issuer.ClientIDMetadataAdmissionMode
+	endpoint.idJAGConfigured = !issuer.ProjectID.Valid && issuer.OrganizationID.Valid && issuer.TrustedRemoteSessionIssuerID.Valid
 	return nil
 }
 

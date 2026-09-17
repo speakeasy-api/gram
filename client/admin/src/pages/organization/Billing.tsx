@@ -36,6 +36,7 @@ import {
   formatRecordedThrough,
   formatTokenCount,
 } from "./billingState";
+import { MeterUsage } from "./MeterUsage";
 
 function Group({
   title,
@@ -494,7 +495,12 @@ export function BillingRoute(): JSX.Element | null {
   const { idOrSlug } = useParams({ from: "/organizations/$idOrSlug" });
   const { data } = useQuery(organizationQuery(idOrSlug));
   if (!data) return null;
-  return <Billing key={data.id} org={data} />;
+  return (
+    <div className="flex min-w-0 flex-col gap-6">
+      <MeterUsage key={`usage-${data.id}`} organizationID={data.id} />
+      <Billing key={data.id} org={data} />
+    </div>
+  );
 }
 
 export function Billing({ org }: { org: AdminOrganization }): JSX.Element {

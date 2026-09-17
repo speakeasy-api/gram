@@ -251,3 +251,8 @@ func StartTrialAdminPath() string {
 func ChangeTrialEndDateAdminPath() string {
 	return "/admin/trial.changeEndDate"
 }
+
+// GetMeterUsageAdminPath returns the URL path to the admin service getMeterUsage HTTP endpoint.
+func GetMeterUsageAdminPath() string {
+	return "/admin/organizations.getMeterUsage"
+}

@@ -136,7 +136,6 @@ type Activities struct {
 	reapFlyApps                     *activities.ReapFlyApps
 	refreshBillingUsage             *activities.RefreshBillingUsage
 	snapshotBillingCycleUsage       *activities.SnapshotBillingCycleUsage
-	reportTUMUsageToStripe          *activities.ReportTUMUsageToStripe
 	weeklyUsageSummary              *activities.WeeklyUsageSummary
 	forwardTokenUsageToPostHog      *activities.ForwardTokenUsageToPostHog
 	refreshOpenRouterKey            *activities.RefreshOpenRouterKey
@@ -243,7 +242,6 @@ func NewActivities(
 	githubEvidenceToken string,
 	riskFingerprinter risk.Fingerprinter,
 	disableRiskRetroReconcile bool,
-	tumMeterStreamingEnabled bool,
 	idTokenVerifier remotesessions.IDTokenVerifier,
 	issuerMetadataRefresher *remotesessions.IssuerMetadataRefresher,
 	remoteSessionEnricher *remotesessions.SessionEnricher,
@@ -425,7 +423,6 @@ func NewActivities(
 		reapFlyApps:                     activities.NewReapFlyApps(logger, meterProvider, db, functionsDeployer, 1),
 		refreshBillingUsage:             activities.NewRefreshBillingUsage(logger, db, billingRepo),
 		snapshotBillingCycleUsage:       activities.NewSnapshotBillingCycleUsage(logger, db, chConn, cacheAdapter, emailService),
-		reportTUMUsageToStripe:          activities.NewReportTUMUsageToStripe(logger, db, stripeClient, !tumMeterStreamingEnabled),
 		weeklyUsageSummary:              activities.NewWeeklyUsageSummary(logger, db, chConn, emailService, siteURL),
 		forwardTokenUsageToPostHog:      activities.NewForwardTokenUsageToPostHog(logger, db, posthogClient, cacheAdapter),
 		refreshOpenRouterKey:            activities.NewRefreshOpenRouterKey(logger, db, openrouterProvisioner),
@@ -729,10 +726,6 @@ func (a *Activities) RefreshBillingUsage(ctx context.Context, orgIDs []string) e
 
 func (a *Activities) SnapshotBillingCycleUsage(ctx context.Context, orgIDs []string) error {
 	return a.snapshotBillingCycleUsage.Do(ctx, orgIDs)
-}
-
-func (a *Activities) ReportTUMUsageToStripe(ctx context.Context, input activities.ReportTUMUsageToStripeInput) error {
-	return a.reportTUMUsageToStripe.Do(ctx, input)
 }
 
 func (a *Activities) ForwardTokenUsageToPostHog(ctx context.Context, orgIDs []string) error {

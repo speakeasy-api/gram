@@ -2477,7 +2477,7 @@ func (q *Queries) GetPlatformMCPInstallTarget(ctx context.Context, arg GetPlatfo
 }
 
 const getPlatformMCPInventoryItem = `-- name: GetPlatformMCPInventoryItem :one
-SELECT mcp_server_id, project_id, project_name, project_slug, mcp_name, mcp_slug, visibility, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, registration_id, source_kind, catalog_provider, catalog_reference, registration_status, registration_remote_mcp_server_id, registration_user_session_issuer_id, registration_mcp_server_id, registration_mcp_endpoint_id, readiness_state, readiness_checked_at, readiness_expires_at
+SELECT mcp_server_id, project_id, project_name, project_slug, mcp_name, mcp_slug, visibility, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, upstream_url, registration_id, source_kind, catalog_provider, catalog_reference, registration_status, registration_remote_mcp_server_id, registration_user_session_issuer_id, registration_mcp_server_id, registration_mcp_endpoint_id, readiness_state, readiness_checked_at, readiness_expires_at
 FROM (
     SELECT
         m.id AS mcp_server_id,
@@ -2491,6 +2491,7 @@ FROM (
         m.tunneled_mcp_server_id,
         m.toolset_id,
         m.unproxied_mcp_server_id,
+        COALESCE(remote.url, '') AS upstream_url,
         COALESCE(registration.id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_id,
         COALESCE(registration.source_kind, '') AS source_kind,
         COALESCE(registration.catalog_provider, '') AS catalog_provider,
@@ -2508,6 +2509,10 @@ FROM (
       ON project.id = m.project_id
      AND project.organization_id = $1
      AND project.deleted IS FALSE
+    LEFT JOIN remote_mcp_servers AS remote
+      ON remote.id = m.remote_mcp_server_id
+     AND remote.project_id = m.project_id
+     AND remote.deleted IS FALSE
     LEFT JOIN LATERAL (
         SELECT registration.id, registration.organization_id, registration.project_id, registration.source_kind, registration.catalog_provider, registration.catalog_reference, registration.status, registration.remote_mcp_server_id, registration.remote_mcp_server_owned, registration.user_session_issuer_id, registration.user_session_issuer_owned, registration.mcp_server_id, registration.mcp_server_owned, registration.mcp_endpoint_id, registration.mcp_endpoint_owned, registration.connection_id, registration.connection_generation, registration.user_id, registration.acting_surface, registration.created_at, registration.updated_at, registration.deleted_at, registration.deleted
         FROM platform_mcp_catalog_registrations AS registration
@@ -2565,6 +2570,7 @@ type GetPlatformMCPInventoryItemRow struct {
 	TunneledMcpServerID             uuid.NullUUID
 	ToolsetID                       uuid.NullUUID
 	UnproxiedMcpServerID            uuid.NullUUID
+	UpstreamUrl                     string
 	RegistrationID                  uuid.UUID
 	SourceKind                      string
 	CatalogProvider                 string
@@ -2602,6 +2608,7 @@ func (q *Queries) GetPlatformMCPInventoryItem(ctx context.Context, arg GetPlatfo
 		&i.TunneledMcpServerID,
 		&i.ToolsetID,
 		&i.UnproxiedMcpServerID,
+		&i.UpstreamUrl,
 		&i.RegistrationID,
 		&i.SourceKind,
 		&i.CatalogProvider,
@@ -4658,6 +4665,7 @@ SELECT
     m.tunneled_mcp_server_id,
     m.toolset_id,
     m.unproxied_mcp_server_id,
+    COALESCE(remote.url, '') AS upstream_url,
     COALESCE(registration.id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_id,
     COALESCE(registration.source_kind, '') AS source_kind,
     COALESCE(registration.catalog_provider, '') AS catalog_provider,
@@ -4675,6 +4683,10 @@ JOIN projects AS project
   ON project.id = m.project_id
  AND project.organization_id = $1
  AND project.deleted IS FALSE
+LEFT JOIN remote_mcp_servers AS remote
+  ON remote.id = m.remote_mcp_server_id
+ AND remote.project_id = m.project_id
+ AND remote.deleted IS FALSE
 LEFT JOIN LATERAL (
     SELECT registration.id, registration.organization_id, registration.project_id, registration.source_kind, registration.catalog_provider, registration.catalog_reference, registration.status, registration.remote_mcp_server_id, registration.remote_mcp_server_owned, registration.user_session_issuer_id, registration.user_session_issuer_owned, registration.mcp_server_id, registration.mcp_server_owned, registration.mcp_endpoint_id, registration.mcp_endpoint_owned, registration.connection_id, registration.connection_generation, registration.user_id, registration.acting_surface, registration.created_at, registration.updated_at, registration.deleted_at, registration.deleted
     FROM platform_mcp_catalog_registrations AS registration
@@ -4762,6 +4774,7 @@ type ListPlatformMCPInventoryRow struct {
 	TunneledMcpServerID             uuid.NullUUID
 	ToolsetID                       uuid.NullUUID
 	UnproxiedMcpServerID            uuid.NullUUID
+	UpstreamUrl                     string
 	RegistrationID                  uuid.UUID
 	SourceKind                      string
 	CatalogProvider                 string
@@ -4816,6 +4829,7 @@ func (q *Queries) ListPlatformMCPInventory(ctx context.Context, arg ListPlatform
 			&i.TunneledMcpServerID,
 			&i.ToolsetID,
 			&i.UnproxiedMcpServerID,
+			&i.UpstreamUrl,
 			&i.RegistrationID,
 			&i.SourceKind,
 			&i.CatalogProvider,

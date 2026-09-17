@@ -1,5 +1,17 @@
 # admin
 
+## Unreleased
+
+### Minor Changes
+
+- Add totals-only organization meter usage charts for storage, MCP bandwidth,
+  and risk scans, with daily, weekly, monthly, and cumulative views, billing
+  cycles, shareable date filters, and an authenticated admin usage endpoint.
+  Admin startup now requires primary and read-replica ClickHouse connections;
+  meter usage reads from the replica without a telemetry enablement flag.
+  Filter changes retain the previous report with an updating indicator and
+  matching labels; chart axes use integer ticks for small usage quantities.
+
 ## 0.4.2
 
 ### Patch Changes

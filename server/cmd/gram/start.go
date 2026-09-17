@@ -1861,7 +1861,6 @@ func newStartCommand() *cli.Command {
 						BillingTracker:               billingTracker,
 						BillingRepository:            billingRepo,
 						StripeClient:                 stripeClient,
-						TUMMeterStreamingEnabled:     c.Bool(stripeTUMMeterStreamingFlagName),
 						RedisClient:                  redisClient,
 						PosthogClient:                posthogClient,
 						FunctionsDeployer:            functionsOrchestrator,

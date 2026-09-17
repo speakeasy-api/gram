@@ -29,7 +29,7 @@ vi.mock("@/contexts/Auth", () => ({
   useSession: () => ({ session: "session-1" }),
 }));
 vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({
+  useRoutes: () => ({
     killswitch: {
       detail: { href: (id: string) => `/acme/killswitch/${id}`, goTo: vi.fn() },
     },

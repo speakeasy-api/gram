@@ -85,9 +85,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/idjag"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/privatekeyjwt"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/clientauth"
 	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
@@ -96,8 +97,8 @@ import (
 type IdentityResolver interface {
 	BuildAuthorizationURL(ctx context.Context, params identity.AuthorizationURLParams) (*url.URL, error)
 	ExchangeCodeForTokens(ctx context.Context, code string) (*identity.IDPUserInfo, error)
-	UpsertUserFromIDP(ctx context.Context, idpUser *identity.IDPUserInfo) (string, error)
-	HasAccessToOrganization(ctx context.Context, organizationID, userID string) (*sessions.Organization, string, bool)
+	CompleteIDPLogin(ctx context.Context, idpUser *identity.IDPUserInfo, opts identity.IDPLoginOptions) (identity.IDPLoginResult, error)
+	IsOrganizationMember(ctx context.Context, organizationID, userID string) (bool, error)
 }
 
 type Service struct {
@@ -134,7 +135,10 @@ type Service struct {
 	// clientAssertionVerifier verifies private_key_jwt client assertions at
 	// the token and revocation endpoints. Nil without Redis, in which case
 	// assertion clients are refused rather than admitted unverified.
-	clientAssertionVerifier *clientauth.Verifier
+	clientAssertionVerifier *privatekeyjwt.Verifier
+	// idJAGValidator authenticates enterprise identity grants, enforces replay
+	// protection, and resolves their subjects to provisioned Gram users.
+	idJAGValidator *idjag.Validator
 	// aiToolBlockReads are the database reads behind the Shadow AI gateway
 	// block check, held as values so a test can make one of them fail.
 	aiToolBlockReads       aiToolBlockReads
@@ -391,6 +395,10 @@ func NewService(
 	if err != nil {
 		return nil, fmt.Errorf("initialize hosted MCP kill-switch checkpoint: %w", err)
 	}
+	idJAGValidator, err := newIDJAGValidator(db, redisClient, guardianPolicy, meterProvider, logger)
+	if err != nil {
+		return nil, fmt.Errorf("initialize ID-JAG validator: %w", err)
+	}
 
 	platformSvc := platformtoolsruntime.NewService(
 		logger,
@@ -427,6 +435,7 @@ func NewService(
 		cimdResolver:              cimd.NewResolver(guardianPolicy, meterProvider, logger),
 		cimdAdmissionMetrics:      admission.NewMetrics(meterProvider, logger),
 		clientAssertionVerifier:   newClientAssertionVerifier(redisClient, guardianPolicy, meterProvider, logger),
+		idJAGValidator:            idJAGValidator,
 		aiToolBlockReads:          defaultAIToolBlockReads(),
 		toolProxy: gateway.NewToolProxy(
 			logger,
