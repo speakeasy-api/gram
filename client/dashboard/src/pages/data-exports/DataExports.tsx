@@ -57,7 +57,7 @@ const DATA_SOURCE_OPTIONS: Array<{
     value: DataSource.ProductTelemetry,
     label: "Product telemetry",
     description:
-      "OTLP traces, logs, and metrics from MCP servers and tool calls.",
+      "OTLP traces, logs, and metrics your agents and proxies send to Gram's /otel/v1 endpoints — the same records the Event Feed shows. Tool call logs that Gram records for its own MCP servers are not part of this stream.",
   },
   {
     value: DataSource.RiskFindings,
