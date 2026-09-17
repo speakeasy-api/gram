@@ -92,7 +92,7 @@ func ParseVerdict(text string) (Verdict, error) {
 // but lacks a key (a stray {} in surrounding prose, say) is skipped, and the
 // error of the last candidate is reported when none qualifies.
 func findVerdictObject(text string) (map[string]json.RawMessage, error) {
-	var lastErr error = errors.New("no json object in completion")
+	lastErr := errors.New("no json object in completion")
 	for start := strings.IndexByte(text, '{'); start >= 0; {
 		var object map[string]json.RawMessage
 		if err := json.NewDecoder(strings.NewReader(text[start:])).Decode(&object); err != nil {
