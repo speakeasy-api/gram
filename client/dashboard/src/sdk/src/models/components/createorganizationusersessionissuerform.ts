@@ -35,6 +35,10 @@ export type CreateOrganizationUserSessionIssuerForm = {
    */
   slug: string;
   /**
+   * Organization-level remote_session_client Gram uses with the trusted issuer. Must be supplied together with trusted_remote_session_issuer_id.
+   */
+  trustedRemoteSessionClientId?: string | undefined;
+  /**
    * Organization-level or global remote_session_issuer whose assertions this issuer trusts. Omit to leave enterprise-managed authorization disabled.
    */
   trustedRemoteSessionIssuerId?: string | undefined;
@@ -50,6 +54,7 @@ export type CreateOrganizationUserSessionIssuerForm$Outbound = {
   authn_challenge_mode: string;
   session_duration_hours: number;
   slug: string;
+  trusted_remote_session_client_id?: string | undefined;
   trusted_remote_session_issuer_id?: string | undefined;
 };
 
@@ -63,12 +68,14 @@ export const CreateOrganizationUserSessionIssuerForm$outboundSchema:
       authnChallengeMode: AuthnChallengeMode$outboundSchema,
       sessionDurationHours: z.int(),
       slug: z.string(),
+      trustedRemoteSessionClientId: z.optional(z.string()),
       trustedRemoteSessionIssuerId: z.optional(z.string()),
     }),
     z.transform((v) => {
       return remap$(v, {
         authnChallengeMode: "authn_challenge_mode",
         sessionDurationHours: "session_duration_hours",
+        trustedRemoteSessionClientId: "trusted_remote_session_client_id",
         trustedRemoteSessionIssuerId: "trusted_remote_session_issuer_id",
       });
     }),

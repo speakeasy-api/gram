@@ -446,6 +446,9 @@ func newAdminCommand() *cli.Command {
 			trialNotifier := trialemails.NewService(db, loopsWorkflowClient, logger, c.String("site-url"))
 
 			billingOperations := usage.NewBillingOperations(logger, db, stripeClient, billingTelemetry, audit.NewLogger(), meterReadConn)
+			if err := admin.SeedSupportMatrix(ctx, db); err != nil {
+				return fmt.Errorf("initialize support matrix: %w", err)
+			}
 			adminService := admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminOpenRouter, trialNotifier, productFeatures, chatAnalysisSignaler, openRouterSpendCap, billingOperations, siteURL)
 			applicationEncryption, err := newAdminIssuerEncryption(c.String("encryption-key"))
 			if err != nil {

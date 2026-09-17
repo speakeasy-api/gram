@@ -9,6 +9,7 @@
 @import "./components/ui/styles/utilities.css";
 
 @custom-variant dark (&:where(.dark, .dark *));
+@custom-variant short (@media (height <= 900px));
 @custom-variant interact {
   &:hover,
   &:focus-visible {

@@ -267,7 +267,7 @@ func (s *Service) handleMetaExecuteToolCall(
 	body, err := handleToolsCall(ctx, logger, s.metrics, nil, s.authz, s.guardianPolicy, s.db, s.env,
 		inputs, syntheticReq, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache,
 		s.telemLogger, s.vectorToolStore, s.mcpMetadataRepo, s.auditLogger,
-		s.platformExtras, s.sessionClientInfo)
+		s.platformExtras, s.sessionClientInfo, s.scanEvaluator)
 	if err != nil {
 		// A member's execution failure must degrade that member, not the
 		// call: on a multi-member gateway an aborted JSON-RPC call reads as
@@ -462,6 +462,7 @@ func (s *Service) buildMemberDispatch(
 		wrapperRBACResourceID:    "",
 		wrapperIsPublic:          nil,
 		metaMcpServerID:          gate.metaServerID.String(),
+		clientInfoScope:          metaClientInfoScope(gate.metaServerID),
 		skipProxyTools:           true,
 		tags:                     nil,
 		protocolVersion:          gate.protocolVersion,

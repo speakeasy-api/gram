@@ -16,7 +16,8 @@ import (
 const maxOTLPMetricsPerExport = 10_000
 
 func (s *Service) Metrics(ctx context.Context, payload *gen.MetricsPayload, body io.ReadCloser) error {
-	return ingestOTLPExport(ctx, s.logger, otlpIngestSpec[*otelv1.InboundMetric]{
+	var export *collectormetricsv1.ExportMetricsServiceRequest
+	err := ingestOTLPExport(ctx, s.logger, otlpIngestSpec[*otelv1.InboundMetric]{
 		signal:          "metric",
 		contentEncoding: payload.ContentEncoding,
 		body:            body,
@@ -26,19 +27,41 @@ func (s *Service) Metrics(ctx context.Context, payload *gen.MetricsPayload, body
 				OrganizationId: &tenant.organizationID,
 				ProjectId:      &tenant.projectID,
 			}).Build()
-			return decodeOTLPMetricExport(raw, provenance)
+			request, err := unmarshalOTLPMetricExport(raw)
+			if err != nil {
+				return nil, err
+			}
+			export = request
+			return inboundMetricsFromExport(request, provenance)
 		},
 		validate:  validateInboundMetric,
 		publisher: s.metricPublisher,
 	})
+	if err != nil {
+		return err
+	}
+	// See Logs: forward only once the event feed publish is durable.
+	s.forwardMetricsToHooks(ctx, export)
+	return nil
 }
 
-func decodeOTLPMetricExport(raw []byte, provenance *otelv1.InboundMetric_Provenance) ([]*otelv1.InboundMetric, error) {
+func unmarshalOTLPMetricExport(raw []byte) (*collectormetricsv1.ExportMetricsServiceRequest, error) {
 	request := &collectormetricsv1.ExportMetricsServiceRequest{ResourceMetrics: nil}
 	if err := proto.Unmarshal(raw, request); err != nil {
 		return nil, fmt.Errorf("decode OTLP metric export: %w", err)
 	}
+	return request, nil
+}
 
+func decodeOTLPMetricExport(raw []byte, provenance *otelv1.InboundMetric_Provenance) ([]*otelv1.InboundMetric, error) {
+	request, err := unmarshalOTLPMetricExport(raw)
+	if err != nil {
+		return nil, err
+	}
+	return inboundMetricsFromExport(request, provenance)
+}
+
+func inboundMetricsFromExport(request *collectormetricsv1.ExportMetricsServiceRequest, provenance *otelv1.InboundMetric_Provenance) ([]*otelv1.InboundMetric, error) {
 	metrics := make([]*otelv1.InboundMetric, 0)
 	normalizedSize := 0
 	for _, resourceMetrics := range request.GetResourceMetrics() {

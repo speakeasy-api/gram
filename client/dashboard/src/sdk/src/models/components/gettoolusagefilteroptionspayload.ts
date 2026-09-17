@@ -14,6 +14,7 @@ export const OptionTypes = {
   ShadowServers: "shadow_servers",
   Gateways: "gateways",
   Users: "users",
+  Clients: "clients",
 } as const;
 /**
  * Tool usage filter option type

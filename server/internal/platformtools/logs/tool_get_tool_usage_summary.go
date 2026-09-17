@@ -24,6 +24,7 @@ type getToolUsageSummaryInput struct {
 	ShadowServerNames  []string `json:"shadow_server_names,omitempty" jsonschema:"Shadow MCP server names to include."`
 	MetaMcpServerIDs   []string `json:"meta_mcp_server_ids,omitempty" jsonschema:"Gateway (meta MCP server) ids to include: calls dispatched through the gateway plus calls observed against it."`
 	HookSources        []string `json:"hook_sources,omitempty" jsonschema:"Hook plugin sources to include. Direct MCP calls have no hook source."`
+	ClientKeys         []string `json:"client_keys,omitempty" jsonschema:"MCP clients to include, lowercased as the client named itself at the initialize handshake. Use \"unattributed\" for calls whose caller reported no client name."`
 }
 
 func NewGetToolUsageSummaryTool(telemetrySvc TelemetryService) *GetToolUsageSummary {
@@ -61,6 +62,7 @@ func (s *GetToolUsageSummary) Call(ctx context.Context, _ toolconfig.ToolCallEnv
 		ShadowServerNames:  nil,
 		MetaMcpServerIDs:   nil,
 		HookSources:        nil,
+		ClientKeys:         nil,
 	}
 	if err := core.DecodeInput(payload, &input); err != nil {
 		return err
@@ -85,6 +87,12 @@ func (s *GetToolUsageSummary) Call(ctx context.Context, _ toolconfig.ToolCallEnv
 		UserFilters:        nil,
 		AccountType:        nil,
 		HookSources:        input.HookSources,
+		ClientKeys:         input.ClientKeys,
+		// The MCP tool exposes no status, search or attribute filter, so the
+		// summary it returns covers the whole window it was asked for.
+		Statuses: nil,
+		Query:    nil,
+		Filters:  nil,
 	})
 	if err != nil {
 		if errors.Is(err, telemetryerrs.ErrLogsDisabled) {

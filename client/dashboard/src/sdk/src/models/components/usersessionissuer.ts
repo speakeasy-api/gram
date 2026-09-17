@@ -59,6 +59,10 @@ export type UserSessionIssuer = {
    */
   slug: string;
   /**
+   * The organization-level remote_session_client Gram uses with the trusted issuer. Absent when enterprise-managed authorization is disabled.
+   */
+  trustedRemoteSessionClientId?: string | undefined;
+  /**
    * The organization-level or global remote_session_issuer whose assertions this issuer trusts. Absent when enterprise-managed authorization is disabled.
    */
   trustedRemoteSessionIssuerId?: string | undefined;
@@ -88,6 +92,7 @@ export const UserSessionIssuer$inboundSchema: z.ZodMiniType<
     project_id: z.string(),
     session_duration_hours: z.int(),
     slug: z.string(),
+    trusted_remote_session_client_id: z.optional(z.string()),
     trusted_remote_session_issuer_id: z.optional(z.string()),
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),
@@ -102,6 +107,7 @@ export const UserSessionIssuer$inboundSchema: z.ZodMiniType<
       "organization_id": "organizationId",
       "project_id": "projectId",
       "session_duration_hours": "sessionDurationHours",
+      "trusted_remote_session_client_id": "trustedRemoteSessionClientId",
       "trusted_remote_session_issuer_id": "trustedRemoteSessionIssuerId",
       "updated_at": "updatedAt",
     });
