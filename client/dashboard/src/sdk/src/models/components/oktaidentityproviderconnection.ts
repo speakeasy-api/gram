@@ -74,6 +74,7 @@ export type OktaIdentityProviderConnectionStatus = ClosedEnum<
 
 export const VerificationReasons = {
   MissingScope: "missing_scope",
+  MissingRole: "missing_role",
   DpopNotBound: "dpop_not_bound",
   KeyNotFetched: "key_not_fetched",
   ReadFailedOktaAppsRead: "read_failed:okta.apps.read",

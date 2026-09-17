@@ -1,3 +1,7 @@
+-- Serialize the entire create saga, including recovery and external provisioning.
+-- name: LockIdentityProviderConnectionCreate :one
+SELECT pg_try_advisory_xact_lock(hashtextextended('identity-provider-create:' || @organization_id::text, 0));
+
 -- Every query here is organization-qualified. Rows the provisioner writes go
 -- through the owning repos (externalkeys, jsonwebkeysets, remotesessions).
 
@@ -170,6 +174,7 @@ INSERT INTO okta_identity_provider_connections (
   organization_id,
   org_url,
   issuer_url,
+  ownership_claimed,
   remote_session_issuer_id,
   remote_session_client_id,
   listing_mode
@@ -179,6 +184,7 @@ VALUES (
   @organization_id,
   @org_url,
   @issuer_url,
+  FALSE,
   @remote_session_issuer_id,
   @remote_session_client_id,
   @listing_mode
@@ -225,17 +231,6 @@ WHERE c.id = @id
   AND c.deleted IS FALSE
 FOR UPDATE OF c;
 
--- Global by design: one Okta tenant connects to one organization unless a
--- platform admin recorded an override. Returns a boolean only.
--- name: OktaIssuerURLInUse :one
-SELECT EXISTS (
-  SELECT 1
-  FROM okta_identity_provider_connections
-  WHERE issuer_url = @issuer_url
-    AND deleted IS FALSE
-    AND issuer_url_override_reason IS NULL
-);
-
 -- name: UpdateIdentityProviderConnectionVerification :one
 UPDATE identity_provider_connections
 SET status = @status,
@@ -263,7 +258,8 @@ RETURNING *;
 
 -- name: UpdateOktaIdentityProviderConnectionVerification :one
 UPDATE okta_identity_provider_connections
-SET dpop_required = @dpop_required,
+SET ownership_claimed = ownership_claimed OR @ownership_claimed::boolean,
+    dpop_required = @dpop_required,
     granted_scopes = @granted_scopes,
     updated_at = clock_timestamp()
 WHERE identity_provider_connection_id = @identity_provider_connection_id

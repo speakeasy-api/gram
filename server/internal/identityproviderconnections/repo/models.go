@@ -54,6 +54,7 @@ type OktaIdentityProviderConnection struct {
 	OrgUrl                              string
 	IssuerUrl                           string
 	IssuerUrlOverrideReason             pgtype.Text
+	OwnershipClaimed                    bool
 	RemoteSessionIssuerID               uuid.UUID
 	RemoteSessionClientID               uuid.UUID
 	DpopRequired                        bool

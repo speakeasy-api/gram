@@ -55,7 +55,7 @@ var Connection = Type("OktaIdentityProviderConnection", func() {
 	Attribute("missing_scopes", ArrayOf(String), "Required scopes Okta did not grant at the last verification.")
 	Attribute("verification_reasons", ArrayOf(String), "Typed reasons recorded by the last verification; empty when verified or not yet verified. missing_role is reserved for a later release.", func() {
 		Elem(func() {
-			Enum("missing_scope", "dpop_not_bound", "key_not_fetched", "read_failed:okta.apps.read", "read_failed:okta.users.read", "read_failed:okta.groups.read")
+			Enum("missing_scope", "missing_role", "dpop_not_bound", "key_not_fetched", "read_failed:okta.apps.read", "read_failed:okta.users.read", "read_failed:okta.groups.read")
 		})
 	})
 	Attribute("last_verified_at", String, "ISO 8601 timestamp of the last verification that found every required scope granted. Omitted until then.", func() {

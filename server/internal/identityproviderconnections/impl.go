@@ -7,9 +7,12 @@ import (
 	"log/slog"
 	"net/url"
 	"regexp"
+	"runtime"
 	"slices"
 	"strings"
+	"sync"
 	"time"
+	"weak"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
@@ -97,6 +100,7 @@ type Service struct {
 	discover      Discoverer
 	verifyLimiter *ratelimit.Limiter
 	createLimiter *ratelimit.Limiter
+	createSlots   chan struct{}
 	metrics       *serviceMetrics
 }
 
@@ -104,6 +108,28 @@ var (
 	_ gen.Service = (*Service)(nil)
 	_ gen.Auther  = (*Service)(nil)
 )
+
+// Share admission across service instances using the same pool. Weak keys and
+// cleanup avoid retaining closed pools (notably short-lived test instances).
+var createAdmissions sync.Map // weak.Pointer[pgxpool.Pool] -> chan struct{}
+
+func createAdmission(db *pgxpool.Pool) chan struct{} {
+	key := weak.Make(db)
+	// Each admitted saga holds a lock connection and needs another connection
+	// to make progress. A one-connection pool cannot safely run a create.
+	slots := make(chan struct{}, db.Config().MaxConns/2)
+	actual, loaded := createAdmissions.LoadOrStore(key, slots)
+	if !loaded {
+		runtime.AddCleanup(db, func(key weak.Pointer[pgxpool.Pool]) {
+			createAdmissions.Delete(key)
+		}, key)
+	}
+	admission, ok := actual.(chan struct{})
+	if !ok {
+		panic("unexpected create admission type")
+	}
+	return admission
+}
 
 // NewService wires the connection management API. A nil provisioner reports the feature unavailable.
 func NewService(
@@ -138,7 +164,8 @@ func NewService(
 		createLimiter: ratelimit.New(limitStore, "identity-provider-connection-create",
 			ratelimit.PerMinute(createRatePerMinute).WithBurst(createRateBurst),
 			ratelimit.WithMetrics(meterProvider)),
-		metrics: newServiceMetrics(logger, meterProvider),
+		createSlots: createAdmission(db),
+		metrics:     newServiceMetrics(logger, meterProvider),
 	}
 }
 
@@ -283,6 +310,32 @@ func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*gen.
 		return nil, oops.E(oops.CodeBadRequest, err, "%s", err.Error())
 	}
 
+	// Admit without waiting and before borrowing the lock connection. Different
+	// organizations must not fill the pool with locks and starve the saga writes.
+	select {
+	case s.createSlots <- struct{}{}:
+		defer func() { <-s.createSlots }()
+	default:
+		return nil, oops.E(oops.CodeUnavailable, nil, "connection creation is busy or the database pool is too small; try again shortly")
+	}
+
+	// Serialize the entire create saga, including recovery, durable limits,
+	// external KMS provisioning and subtype attachment, across all instances.
+	createLock, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin create serialization").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return createLock.Rollback(context.WithoutCancel(ctx)) })
+	// Do not queue holding pool connections: provisioning needs its own database
+	// transactions and could otherwise be starved by waiting duplicate requests.
+	locked, err := repo.New(createLock).LockIdentityProviderConnectionCreate(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "serialize connection creation").LogError(ctx, logger)
+	}
+	if !locked {
+		return nil, oops.E(oops.CodeConflict, nil, "connection creation is already in progress")
+	}
+
 	if err := s.allow(ctx, logger, s.createLimiter, authCtx.ActiveOrganizationID, "create rate limit exceeded, try again shortly"); err != nil {
 		return nil, err
 	}
@@ -307,15 +360,6 @@ func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*gen.
 	if err != nil {
 		s.metrics.recordCreate(ctx, ProviderOkta, createOutcomeDiscoveryFailed)
 		return nil, err
-	}
-
-	inUse, err := q.OktaIssuerURLInUse(ctx, orgURL)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "check issuer availability").LogError(ctx, logger)
-	}
-	if inUse {
-		s.metrics.recordCreate(ctx, ProviderOkta, createOutcomeConflict)
-		return nil, oops.E(oops.CodeConflict, nil, "this Okta org is already connected to another organization")
 	}
 
 	connection, issuerID, err := s.createConnectionRows(ctx, logger, authCtx.ActiveOrganizationID, orgURL, metadata)
@@ -659,12 +703,13 @@ func (s *Service) SubmitClientID(ctx context.Context, payload *gen.SubmitClientI
 		if rollbackErr := dbtx.Rollback(ctx); rollbackErr != nil {
 			logger.ErrorContext(ctx, "failed to roll back rejected client id submission", attr.SlogError(rollbackErr))
 		}
-		s.recordFailure(ctx, logger, authCtx, before, err)
+		s.recordFailure(ctx, logger, authCtx, before, err, true)
 		return nil, s.mapVerificationError(ctx, logger, err)
 	}
 
 	after, err := s.persistVerification(ctx, logger, q, current, outcome)
 	if err != nil {
+		s.oktaClients.Forget(managed.ClientRowID)
 		return nil, err
 	}
 	if err := s.audit.LogIdentityProviderConnectionSubmitClientID(ctx, dbtx, s.auditEvent(authCtx, id, snapshot(*before), snapshot(*after))); err != nil {
@@ -712,7 +757,7 @@ func (s *Service) Verify(ctx context.Context, payload *gen.VerifyPayload) (*gen.
 		if rollbackErr := dbtx.Rollback(ctx); rollbackErr != nil {
 			logger.ErrorContext(ctx, "failed to release connection lock after verification failure", attr.SlogError(rollbackErr))
 		}
-		s.recordFailure(ctx, logger, authCtx, before, err)
+		s.recordFailure(ctx, logger, authCtx, before, err, false)
 		return nil, s.mapVerificationError(ctx, logger, err)
 	}
 
@@ -748,7 +793,7 @@ func (s *Service) runVerification(ctx context.Context, logger *slog.Logger, rows
 
 	verifyCtx, cancel := context.WithTimeout(ctx, verifyTimeout)
 	defer cancel()
-	outcome, err := verifyConnection(verifyCtx, client, rows.Managed.ClientID)
+	outcome, err := verifyConnection(verifyCtx, client)
 	if err != nil {
 		s.oktaClients.Forget(rows.Managed.ClientRowID)
 		logger.WarnContext(ctx, "okta connection verification failed", attr.SlogError(err))
@@ -761,7 +806,7 @@ func (s *Service) runVerification(ctx context.Context, logger *slog.Logger, rows
 // audits it, in one transaction. The write is a compare-and-swap on the row
 // the attempt locked: a concurrent run that committed in between wins. A
 // rejected credential degrades a verified connection.
-func (s *Service) recordFailure(ctx context.Context, logger *slog.Logger, authCtx *contextvalues.AuthContext, rows *connectionRows, cause error) {
+func (s *Service) recordFailure(ctx context.Context, logger *slog.Logger, authCtx *contextvalues.AuthContext, rows *connectionRows, cause error, submittedClientID bool) {
 	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), keyCleanupTimeout)
 	defer cancel()
 
@@ -798,7 +843,11 @@ func (s *Service) recordFailure(ctx context.Context, logger *slog.Logger, authCt
 		return
 	}
 	after := connectionRows{Connection: connection, Okta: rows.Okta, Managed: rows.Managed}
-	if err := s.audit.LogIdentityProviderConnectionVerify(writeCtx, dbtx, s.auditEvent(authCtx, rows.Connection.ID, snapshot(*rows), snapshot(after))); err != nil {
+	logFailure := s.audit.LogIdentityProviderConnectionVerify
+	if submittedClientID {
+		logFailure = s.audit.LogIdentityProviderConnectionSubmitClientID
+	}
+	if err := logFailure(writeCtx, dbtx, s.auditEvent(authCtx, rows.Connection.ID, snapshot(*rows), snapshot(after))); err != nil {
 		logger.ErrorContext(ctx, "failed to audit connection verification failure", attr.SlogError(err))
 		return
 	}
@@ -831,12 +880,17 @@ func (s *Service) persistVerification(ctx context.Context, logger *slog.Logger, 
 		return nil, oops.E(oops.CodeUnexpected, err, "record verification").LogError(ctx, logger)
 	}
 	oktaRow, err := q.UpdateOktaIdentityProviderConnectionVerification(ctx, repo.UpdateOktaIdentityProviderConnectionVerificationParams{
+		OwnershipClaimed:             outcome.CredentialProven,
 		DpopRequired:                 outcome.DPoPBound,
 		GrantedScopes:                outcome.Granted,
 		IdentityProviderConnectionID: rows.Connection.ID,
 		OrganizationID:               rows.Connection.OrganizationID,
 	})
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation && pgErr.ConstraintName == "okta_identity_provider_connections_issuer_url_key" {
+			return nil, oops.E(oops.CodeConflict, nil, "this Okta org is already connected to another organization")
+		}
 		return nil, oops.E(oops.CodeUnexpected, err, "record verification details").LogError(ctx, logger)
 	}
 	return &connectionRows{Connection: connection, Okta: oktaRow, Managed: rows.Managed}, nil

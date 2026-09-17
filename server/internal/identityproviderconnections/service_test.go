@@ -3,7 +3,9 @@ package identityproviderconnections_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
+	"sync"
 	"testing"
 	"time"
 
@@ -179,15 +181,21 @@ func TestCreate_SecondLiveConnectionConflicts(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeConflict)
 }
 
-func TestCreate_SameOktaOrgInAnotherOrganizationConflicts(t *testing.T) {
+func TestCreate_PendingIssuersCoexistUntilCredentialProof(t *testing.T) {
 	t.Parallel()
 	ctx, si := newTestService(t)
-
-	createConnection(t, ctx, si, fullOrgURL)
-
+	first := createConnection(t, ctx, si, fullOrgURL)
 	otherCtx, _ := asOtherOrganization(t, ctx, si)
-	_, err := si.svc.Create(otherCtx, &gen.CreatePayload{SessionToken: nil, OrgURL: fullOrgURL, ListingMode: nil})
+	second := createConnection(t, otherCtx, si, fullOrgURL)
+
+	// The later creator can prove ownership; the earlier pending row cannot squat.
+	submitClientID(t, otherCtx, si, second.ID)
+	_, err := si.svc.SubmitClientID(ctx, &gen.SubmitClientIDPayload{ID: first.ID, ClientID: testClientID})
 	requireOopsCode(t, err, oops.CodeConflict)
+	fetched, err := si.svc.Get(ctx, &gen.GetPayload{ID: &first.ID})
+	require.NoError(t, err)
+	require.False(t, fetched.Connection.ClientIDSubmitted, "conflicting claim rolls back the client id")
+	require.Equal(t, identityproviderconnections.StatusPending, fetched.Connection.Status)
 }
 
 func TestSubmitClientID_RejectsMalformedIDs(t *testing.T) {
@@ -225,7 +233,7 @@ func TestSubmitClientID_VerifiesAndPersists(t *testing.T) {
 	require.Nil(t, submitted.LastError)
 
 	fake := si.oktaFakes.Fake(fullOrgURL)
-	require.Equal(t, []string{"VerifyScopes", "ListApps", "ListAppUsers", "ListGroups"}, fake.Calls())
+	require.Equal(t, []string{"VerifyScopes", "ListApps", "ListUsers", "ListGroups"}, fake.Calls())
 
 	managed, err := si.provisioner.GetManagedClient(ctx, si.orgID, mustParseUUID(t, created.ID))
 	require.NoError(t, err)
@@ -308,6 +316,13 @@ func TestSubmitClientID_CredentialRejectedIsNotPersisted(t *testing.T) {
 	require.False(t, fetched.Connection.ClientIDSubmitted)
 	require.Equal(t, identityproviderconnections.LastErrorCredentialRejected, conv.PtrValOr(fetched.Connection.LastError, ""))
 
+	submits, err := audittest.AuditLogCountByAction(ctx, si.conn.conn, audit.ActionIdentityProviderConnectionSubmitClientID)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, submits)
+	verifies, err := audittest.AuditLogCountByAction(ctx, si.conn.conn, audit.ActionIdentityProviderConnectionVerify)
+	require.NoError(t, err)
+	require.Zero(t, verifies, "a failed submission must not masquerade as Verify")
+
 	// The corrected submission goes through once Okta accepts the credential.
 	si.oktaFakes.Fake(rejectedOrgURL).SetError(nil)
 	submitted := submitClientID(t, ctx, si, created.ID)
@@ -361,10 +376,10 @@ func TestVerify_ReadFailureDegrades(t *testing.T) {
 	verified, err := si.svc.Verify(ctx, &gen.VerifyPayload{SessionToken: nil, ID: created.ID})
 	require.NoError(t, err)
 	require.Equal(t, identityproviderconnections.StatusDegraded, verified.Status)
-	require.Equal(t, []string{identityproviderconnections.ReasonReadFailedApps}, verified.VerificationReasons)
+	require.Equal(t, []string{identityproviderconnections.ReasonReadFailedApps, identityproviderconnections.ReasonMissingRole}, verified.VerificationReasons)
 	require.Nil(t, verified.LastError)
 	require.Equal(t, allScopes(), verified.GrantedScopes)
-	require.Contains(t, fake.Calls(), "ListAppUsers", "every granted scope is read")
+	require.Contains(t, fake.Calls(), "ListUsers", "every granted scope is read")
 
 	// The token mint failing as a non-credential error keeps the status and
 	// records the typed failure.
@@ -828,18 +843,15 @@ func TestRevoke_ConcurrentCallsBothSucceedAndAuditOnce(t *testing.T) {
 func TestCreate_SameOktaOrgFreedByRevoke(t *testing.T) {
 	t.Parallel()
 	ctx, si := newTestService(t)
-
 	first := createConnection(t, ctx, si, fullOrgURL)
+	submitClientID(t, ctx, si, first.ID)
 	otherCtx, _ := asOtherOrganization(t, ctx, si)
-	_, err := si.svc.Create(otherCtx, &gen.CreatePayload{SessionToken: nil, OrgURL: fullOrgURL, ListingMode: nil})
+	second := createConnection(t, otherCtx, si, fullOrgURL)
+	_, err := si.svc.SubmitClientID(otherCtx, &gen.SubmitClientIDPayload{ID: second.ID, ClientID: testClientID})
 	requireOopsCode(t, err, oops.CodeConflict)
-
-	_, err = si.svc.Revoke(ctx, &gen.RevokePayload{SessionToken: nil, ID: first.ID})
+	_, err = si.svc.Revoke(ctx, &gen.RevokePayload{ID: first.ID})
 	require.NoError(t, err)
-
-	second, err := si.svc.Create(otherCtx, &gen.CreatePayload{SessionToken: nil, OrgURL: fullOrgURL, ListingMode: nil})
-	require.NoError(t, err)
-	require.NotEqual(t, first.ID, second.ID)
+	submitClientID(t, otherCtx, si, second.ID)
 }
 
 func TestNormalizeOktaOrgURL(t *testing.T) {
@@ -857,4 +869,200 @@ func TestNormalizeOktaOrgURL(t *testing.T) {
 		_, err := identityproviderconnections.NormalizeOktaOrgURL(raw)
 		require.Error(t, err, raw)
 	}
+}
+
+func TestCreate_ConcurrentInstanceCannotAbandonProvisioning(t *testing.T) {
+	t.Parallel()
+	ctx, si := newTestService(t)
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	var enterOnce, releaseOnce sync.Once
+	unblock := func() { releaseOnce.Do(func() { close(release) }) }
+	t.Cleanup(unblock)
+	kms := provisiontest.NewKMSClients(t)
+	blocked := provisiontest.NewProvisioner(t, si.conn.conn, func(ctx context.Context, ts oauth2.TokenSource) (gcpkms.ProvisioningClient, error) {
+		enterOnce.Do(func() { close(entered) })
+		select {
+		case <-release:
+			return kms.Factory(ctx, ts)
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}, testServerURL, si.credentialID)
+	firstService := si.build(blocked)
+	secondService := si.build(si.provisioner)
+	first := make(chan error, 1)
+	go func() {
+		_, err := firstService.Create(ctx, &gen.CreatePayload{OrgURL: fullOrgURL})
+		first <- err
+	}()
+	select {
+	case <-entered:
+	case <-time.After(10 * time.Second):
+		t.Fatal("create did not reach KMS provisioning")
+	}
+	parent, err := repo.New(si.conn.conn).GetLiveOktaIdentityProviderConnectionForOrganization(ctx, si.orgID)
+	require.NoError(t, err)
+	second := make(chan error, 1)
+	go func() {
+		_, err := secondService.Create(ctx, &gen.CreatePayload{OrgURL: fullOrgURL})
+		second <- err
+	}()
+	// The second instance must refuse recovery while the first is paused after
+	// the parent commit, not abandon it as an interrupted create.
+	select {
+	case err := <-second:
+		requireOopsCode(t, err, oops.CodeConflict)
+	case <-time.After(10 * time.Second):
+		t.Fatal("concurrent create blocked rather than returning conflict")
+	}
+	unblock()
+	require.NoError(t, <-first)
+	preserved, err := repo.New(si.conn.conn).GetIdentityProviderConnectionIncludingDeleted(ctx, repo.GetIdentityProviderConnectionIncludingDeletedParams{
+		ID: parent.IdentityProviderConnection.ID, OrganizationID: si.orgID,
+	})
+	require.NoError(t, err)
+	require.False(t, preserved.Deleted, "the active parent must not be abandoned and recreated")
+}
+
+func TestSubmitClientID_NoMintedTokenDoesNotClaimIssuer(t *testing.T) {
+	t.Parallel()
+	ctx, si := newTestService(t)
+	// The default empty fixture returns missing scopes and no minted token.
+	const orgURL = "https://unproven.okta.com"
+	first := createConnection(t, ctx, si, orgURL)
+	otherCtx, _ := asOtherOrganization(t, ctx, si)
+	second := createConnection(t, otherCtx, si, orgURL)
+	contexts := []context.Context{ctx, otherCtx}
+	for i, connection := range []*gen.OktaIdentityProviderConnection{first, second} {
+		result := submitClientID(t, contexts[i], si, connection.ID)
+		require.Equal(t, identityproviderconnections.StatusDegraded, result.Status)
+		stored, err := repo.New(si.conn.conn).GetOktaIdentityProviderConnection(ctx, repo.GetOktaIdentityProviderConnectionParams{
+			OrganizationID: connection.OrganizationID, ID: conv.ToNullUUID(mustParseUUID(t, connection.ID)),
+		})
+		require.NoError(t, err)
+		require.False(t, stored.OktaIdentityProviderConnection.OwnershipClaimed, "nil verification error is not credential proof")
+	}
+}
+
+func TestSubmitClientID_ConcurrentIssuerClaimsHaveOneWinner(t *testing.T) {
+	t.Parallel()
+	ctx, si := newTestService(t)
+	first := createConnection(t, ctx, si, fullOrgURL)
+	otherCtx, _ := asOtherOrganization(t, ctx, si)
+	second := createConnection(t, otherCtx, si, fullOrgURL)
+	start := make(chan struct{})
+	results := make(chan error, 2)
+	contexts := []context.Context{ctx, otherCtx}
+	connections := []*gen.OktaIdentityProviderConnection{first, second}
+	for i, connection := range connections {
+		go func() {
+			<-start
+			_, err := si.svc.SubmitClientID(contexts[i], &gen.SubmitClientIDPayload{ID: connection.ID, ClientID: testClientID})
+			results <- err
+		}()
+	}
+	close(start)
+	a, b := <-results, <-results
+	if a == nil {
+		requireOopsCode(t, b, oops.CodeConflict)
+	} else {
+		requireOopsCode(t, a, oops.CodeConflict)
+		require.NoError(t, b)
+	}
+	claimed := 0
+	for _, connection := range connections {
+		stored, err := repo.New(si.conn.conn).GetOktaIdentityProviderConnection(ctx, repo.GetOktaIdentityProviderConnectionParams{
+			OrganizationID: connection.OrganizationID, ID: conv.ToNullUUID(mustParseUUID(t, connection.ID)),
+		})
+		require.NoError(t, err)
+		if stored.OktaIdentityProviderConnection.OwnershipClaimed {
+			claimed++
+		}
+	}
+	require.Equal(t, 1, claimed)
+}
+
+func TestCreate_SmallPoolAdmissionPreventsCrossOrganizationStarvation(t *testing.T) {
+	t.Parallel()
+	for _, maxConns := range []int32{2, 4} {
+		t.Run(fmt.Sprintf("pool_%d", maxConns), func(t *testing.T) {
+			t.Parallel()
+			ctx, si := newTestServiceWithPoolLimit(t, nil, maxConns)
+			ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+			defer cancel()
+			slots := int(maxConns / 2)
+			contexts := []context.Context{ctx}
+			for range slots {
+				otherCtx, _ := asOtherOrganization(t, ctx, si)
+				contexts = append(contexts, otherCtx)
+			}
+			entered := make(chan struct{}, slots)
+			release := make(chan struct{})
+			var releaseOnce sync.Once
+			unblock := func() { releaseOnce.Do(func() { close(release) }) }
+			t.Cleanup(unblock)
+			kms := provisiontest.NewKMSClients(t)
+			blocked := provisiontest.NewProvisioner(t, si.conn.conn, func(ctx context.Context, ts oauth2.TokenSource) (gcpkms.ProvisioningClient, error) {
+				entered <- struct{}{}
+				select {
+				case <-release:
+					return kms.Factory(ctx, ts)
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				}
+			}, testServerURL, si.credentialID)
+			results := make(chan error, slots)
+			for i := range slots {
+				// Separate Service values deliberately share the same pool: admission
+				// must not accidentally give each instance its own full allowance.
+				service := si.build(blocked)
+				go func() {
+					_, err := service.Create(contexts[i], &gen.CreatePayload{OrgURL: fullOrgURL})
+					results <- err
+				}()
+			}
+			for range slots {
+				select {
+				case <-entered:
+				case <-ctx.Done():
+					t.Fatal("admitted creates starved before reaching KMS")
+				}
+			}
+			// Every admitted create is holding its advisory connection at KMS.
+			// An additional organization must be refused, not take the last
+			// connection and prevent their subsequent database writes.
+			overflowCtx, overflowCancel := context.WithTimeout(contexts[slots], time.Second)
+			defer overflowCancel()
+			_, err := si.svc.Create(overflowCtx, &gen.CreatePayload{OrgURL: fullOrgURL})
+			requireOopsCode(t, err, oops.CodeUnavailable)
+			require.NoError(t, overflowCtx.Err(), "admission must fail without waiting")
+			unblock()
+			for range slots {
+				select {
+				case err := <-results:
+					require.NoError(t, err)
+				case <-ctx.Done():
+					t.Fatal("admitted creates starved after KMS completed")
+				}
+			}
+			// Completion returns admission capacity, including across instances.
+			createConnection(t, contexts[slots], si, fullOrgURL)
+		})
+	}
+}
+
+func TestCreate_SingleConnectionPoolIsUnavailable(t *testing.T) {
+	t.Parallel()
+	ctx, si := newTestServiceWithPoolLimit(t, nil, 1)
+	ctx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+	_, err := si.svc.Create(ctx, &gen.CreatePayload{OrgURL: fullOrgURL})
+	requireOopsCode(t, err, oops.CodeUnavailable)
+	require.NoError(t, ctx.Err())
+	count, err := repo.New(si.conn.conn).CountIdentityProviderConnectionsCreatedSince(ctx, repo.CountIdentityProviderConnectionsCreatedSinceParams{
+		OrganizationID: si.orgID, Provider: identityproviderconnections.ProviderOkta, Since: conv.ToPGTimestamptz(time.Time{}),
+	})
+	require.NoError(t, err)
+	require.Zero(t, count)
 }

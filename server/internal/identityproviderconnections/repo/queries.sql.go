@@ -92,6 +92,7 @@ INSERT INTO okta_identity_provider_connections (
   organization_id,
   org_url,
   issuer_url,
+  ownership_claimed,
   remote_session_issuer_id,
   remote_session_client_id,
   listing_mode
@@ -101,11 +102,12 @@ VALUES (
   $2,
   $3,
   $4,
+  FALSE,
   $5,
   $6,
   $7
 )
-RETURNING identity_provider_connection_id, identity_provider_connections_provider, organization_id, attachment_scope, org_url, issuer_url, issuer_url_override_reason, remote_session_issuer_id, remote_session_client_id, dpop_required, granted_scopes, observed_admin_roles, listing_mode, agent_id, agent_app_id, created_at, updated_at, deleted_at, deleted
+RETURNING identity_provider_connection_id, identity_provider_connections_provider, organization_id, attachment_scope, org_url, issuer_url, issuer_url_override_reason, ownership_claimed, remote_session_issuer_id, remote_session_client_id, dpop_required, granted_scopes, observed_admin_roles, listing_mode, agent_id, agent_app_id, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateOktaIdentityProviderConnectionParams struct {
@@ -137,6 +139,7 @@ func (q *Queries) CreateOktaIdentityProviderConnection(ctx context.Context, arg 
 		&i.OrgUrl,
 		&i.IssuerUrl,
 		&i.IssuerUrlOverrideReason,
+		&i.OwnershipClaimed,
 		&i.RemoteSessionIssuerID,
 		&i.RemoteSessionClientID,
 		&i.DpopRequired,
@@ -371,7 +374,7 @@ func (q *Queries) GetManagedClient(ctx context.Context, arg GetManagedClientPara
 }
 
 const getOktaIdentityProviderConnection = `-- name: GetOktaIdentityProviderConnection :one
-SELECT c.id, c.organization_id, c.provider, c.status, c.last_verified_at, c.last_error, c.created_at, c.updated_at, c.deleted_at, c.deleted, o.identity_provider_connection_id, o.identity_provider_connections_provider, o.organization_id, o.attachment_scope, o.org_url, o.issuer_url, o.issuer_url_override_reason, o.remote_session_issuer_id, o.remote_session_client_id, o.dpop_required, o.granted_scopes, o.observed_admin_roles, o.listing_mode, o.agent_id, o.agent_app_id, o.created_at, o.updated_at, o.deleted_at, o.deleted
+SELECT c.id, c.organization_id, c.provider, c.status, c.last_verified_at, c.last_error, c.created_at, c.updated_at, c.deleted_at, c.deleted, o.identity_provider_connection_id, o.identity_provider_connections_provider, o.organization_id, o.attachment_scope, o.org_url, o.issuer_url, o.issuer_url_override_reason, o.ownership_claimed, o.remote_session_issuer_id, o.remote_session_client_id, o.dpop_required, o.granted_scopes, o.observed_admin_roles, o.listing_mode, o.agent_id, o.agent_app_id, o.created_at, o.updated_at, o.deleted_at, o.deleted
 FROM identity_provider_connections AS c
 JOIN okta_identity_provider_connections AS o
   ON o.identity_provider_connection_id = c.id
@@ -416,6 +419,7 @@ func (q *Queries) GetOktaIdentityProviderConnection(ctx context.Context, arg Get
 		&i.OktaIdentityProviderConnection.OrgUrl,
 		&i.OktaIdentityProviderConnection.IssuerUrl,
 		&i.OktaIdentityProviderConnection.IssuerUrlOverrideReason,
+		&i.OktaIdentityProviderConnection.OwnershipClaimed,
 		&i.OktaIdentityProviderConnection.RemoteSessionIssuerID,
 		&i.OktaIdentityProviderConnection.RemoteSessionClientID,
 		&i.OktaIdentityProviderConnection.DpopRequired,
@@ -433,7 +437,7 @@ func (q *Queries) GetOktaIdentityProviderConnection(ctx context.Context, arg Get
 }
 
 const getOktaIdentityProviderConnectionIncludingDeleted = `-- name: GetOktaIdentityProviderConnectionIncludingDeleted :one
-SELECT c.id, c.organization_id, c.provider, c.status, c.last_verified_at, c.last_error, c.created_at, c.updated_at, c.deleted_at, c.deleted, o.identity_provider_connection_id, o.identity_provider_connections_provider, o.organization_id, o.attachment_scope, o.org_url, o.issuer_url, o.issuer_url_override_reason, o.remote_session_issuer_id, o.remote_session_client_id, o.dpop_required, o.granted_scopes, o.observed_admin_roles, o.listing_mode, o.agent_id, o.agent_app_id, o.created_at, o.updated_at, o.deleted_at, o.deleted
+SELECT c.id, c.organization_id, c.provider, c.status, c.last_verified_at, c.last_error, c.created_at, c.updated_at, c.deleted_at, c.deleted, o.identity_provider_connection_id, o.identity_provider_connections_provider, o.organization_id, o.attachment_scope, o.org_url, o.issuer_url, o.issuer_url_override_reason, o.ownership_claimed, o.remote_session_issuer_id, o.remote_session_client_id, o.dpop_required, o.granted_scopes, o.observed_admin_roles, o.listing_mode, o.agent_id, o.agent_app_id, o.created_at, o.updated_at, o.deleted_at, o.deleted
 FROM identity_provider_connections AS c
 JOIN okta_identity_provider_connections AS o
   ON o.identity_provider_connection_id = c.id
@@ -476,6 +480,7 @@ func (q *Queries) GetOktaIdentityProviderConnectionIncludingDeleted(ctx context.
 		&i.OktaIdentityProviderConnection.OrgUrl,
 		&i.OktaIdentityProviderConnection.IssuerUrl,
 		&i.OktaIdentityProviderConnection.IssuerUrlOverrideReason,
+		&i.OktaIdentityProviderConnection.OwnershipClaimed,
 		&i.OktaIdentityProviderConnection.RemoteSessionIssuerID,
 		&i.OktaIdentityProviderConnection.RemoteSessionClientID,
 		&i.OktaIdentityProviderConnection.DpopRequired,
@@ -610,6 +615,18 @@ func (q *Queries) GetPlatformGcpIamCredentialForProvisioning(ctx context.Context
 	return i, err
 }
 
+const lockIdentityProviderConnectionCreate = `-- name: LockIdentityProviderConnectionCreate :one
+SELECT pg_try_advisory_xact_lock(hashtextextended('identity-provider-create:' || $1::text, 0))
+`
+
+// Serialize the entire create saga, including recovery and external provisioning.
+func (q *Queries) LockIdentityProviderConnectionCreate(ctx context.Context, organizationID string) (bool, error) {
+	row := q.db.QueryRow(ctx, lockIdentityProviderConnectionCreate, organizationID)
+	var pg_try_advisory_xact_lock bool
+	err := row.Scan(&pg_try_advisory_xact_lock)
+	return pg_try_advisory_xact_lock, err
+}
+
 const lockIdentityProviderConnectionForProvisioning = `-- name: LockIdentityProviderConnectionForProvisioning :one
 SELECT id, organization_id, provider, status, last_verified_at, last_error, created_at, updated_at, deleted_at, deleted
 FROM identity_provider_connections
@@ -644,7 +661,7 @@ func (q *Queries) LockIdentityProviderConnectionForProvisioning(ctx context.Cont
 }
 
 const lockOktaIdentityProviderConnection = `-- name: LockOktaIdentityProviderConnection :one
-SELECT c.id, c.organization_id, c.provider, c.status, c.last_verified_at, c.last_error, c.created_at, c.updated_at, c.deleted_at, c.deleted, o.identity_provider_connection_id, o.identity_provider_connections_provider, o.organization_id, o.attachment_scope, o.org_url, o.issuer_url, o.issuer_url_override_reason, o.remote_session_issuer_id, o.remote_session_client_id, o.dpop_required, o.granted_scopes, o.observed_admin_roles, o.listing_mode, o.agent_id, o.agent_app_id, o.created_at, o.updated_at, o.deleted_at, o.deleted
+SELECT c.id, c.organization_id, c.provider, c.status, c.last_verified_at, c.last_error, c.created_at, c.updated_at, c.deleted_at, c.deleted, o.identity_provider_connection_id, o.identity_provider_connections_provider, o.organization_id, o.attachment_scope, o.org_url, o.issuer_url, o.issuer_url_override_reason, o.ownership_claimed, o.remote_session_issuer_id, o.remote_session_client_id, o.dpop_required, o.granted_scopes, o.observed_admin_roles, o.listing_mode, o.agent_id, o.agent_app_id, o.created_at, o.updated_at, o.deleted_at, o.deleted
 FROM identity_provider_connections AS c
 JOIN okta_identity_provider_connections AS o
   ON o.identity_provider_connection_id = c.id
@@ -689,6 +706,7 @@ func (q *Queries) LockOktaIdentityProviderConnection(ctx context.Context, arg Lo
 		&i.OktaIdentityProviderConnection.OrgUrl,
 		&i.OktaIdentityProviderConnection.IssuerUrl,
 		&i.OktaIdentityProviderConnection.IssuerUrlOverrideReason,
+		&i.OktaIdentityProviderConnection.OwnershipClaimed,
 		&i.OktaIdentityProviderConnection.RemoteSessionIssuerID,
 		&i.OktaIdentityProviderConnection.RemoteSessionClientID,
 		&i.OktaIdentityProviderConnection.DpopRequired,
@@ -790,25 +808,6 @@ func (q *Queries) ObserveRotationPublication(ctx context.Context, arg ObserveRot
 	var updated_at pgtype.Timestamptz
 	err := row.Scan(&updated_at)
 	return updated_at, err
-}
-
-const oktaIssuerURLInUse = `-- name: OktaIssuerURLInUse :one
-SELECT EXISTS (
-  SELECT 1
-  FROM okta_identity_provider_connections
-  WHERE issuer_url = $1
-    AND deleted IS FALSE
-    AND issuer_url_override_reason IS NULL
-)
-`
-
-// Global by design: one Okta tenant connects to one organization unless a
-// platform admin recorded an override. Returns a boolean only.
-func (q *Queries) OktaIssuerURLInUse(ctx context.Context, issuerUrl string) (bool, error) {
-	row := q.db.QueryRow(ctx, oktaIssuerURLInUse, issuerUrl)
-	var exists bool
-	err := row.Scan(&exists)
-	return exists, err
 }
 
 const recordIdentityProviderConnectionVerificationFailure = `-- name: RecordIdentityProviderConnectionVerificationFailure :one
@@ -1021,7 +1020,7 @@ SET deleted_at = clock_timestamp(),
 WHERE identity_provider_connection_id = $1
   AND organization_id = $2
   AND deleted IS FALSE
-RETURNING identity_provider_connection_id, identity_provider_connections_provider, organization_id, attachment_scope, org_url, issuer_url, issuer_url_override_reason, remote_session_issuer_id, remote_session_client_id, dpop_required, granted_scopes, observed_admin_roles, listing_mode, agent_id, agent_app_id, created_at, updated_at, deleted_at, deleted
+RETURNING identity_provider_connection_id, identity_provider_connections_provider, organization_id, attachment_scope, org_url, issuer_url, issuer_url_override_reason, ownership_claimed, remote_session_issuer_id, remote_session_client_id, dpop_required, granted_scopes, observed_admin_roles, listing_mode, agent_id, agent_app_id, created_at, updated_at, deleted_at, deleted
 `
 
 type SoftDeleteOktaIdentityProviderConnectionParams struct {
@@ -1040,6 +1039,7 @@ func (q *Queries) SoftDeleteOktaIdentityProviderConnection(ctx context.Context, 
 		&i.OrgUrl,
 		&i.IssuerUrl,
 		&i.IssuerUrlOverrideReason,
+		&i.OwnershipClaimed,
 		&i.RemoteSessionIssuerID,
 		&i.RemoteSessionClientID,
 		&i.DpopRequired,
@@ -1108,7 +1108,7 @@ SET agent_id = $1,
 WHERE identity_provider_connection_id = $3
   AND organization_id = $4
   AND deleted IS FALSE
-RETURNING identity_provider_connection_id, identity_provider_connections_provider, organization_id, attachment_scope, org_url, issuer_url, issuer_url_override_reason, remote_session_issuer_id, remote_session_client_id, dpop_required, granted_scopes, observed_admin_roles, listing_mode, agent_id, agent_app_id, created_at, updated_at, deleted_at, deleted
+RETURNING identity_provider_connection_id, identity_provider_connections_provider, organization_id, attachment_scope, org_url, issuer_url, issuer_url_override_reason, ownership_claimed, remote_session_issuer_id, remote_session_client_id, dpop_required, granted_scopes, observed_admin_roles, listing_mode, agent_id, agent_app_id, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateOktaIdentityProviderConnectionAgentParams struct {
@@ -1134,6 +1134,7 @@ func (q *Queries) UpdateOktaIdentityProviderConnectionAgent(ctx context.Context,
 		&i.OrgUrl,
 		&i.IssuerUrl,
 		&i.IssuerUrlOverrideReason,
+		&i.OwnershipClaimed,
 		&i.RemoteSessionIssuerID,
 		&i.RemoteSessionClientID,
 		&i.DpopRequired,
@@ -1152,16 +1153,18 @@ func (q *Queries) UpdateOktaIdentityProviderConnectionAgent(ctx context.Context,
 
 const updateOktaIdentityProviderConnectionVerification = `-- name: UpdateOktaIdentityProviderConnectionVerification :one
 UPDATE okta_identity_provider_connections
-SET dpop_required = $1,
-    granted_scopes = $2,
+SET ownership_claimed = ownership_claimed OR $1::boolean,
+    dpop_required = $2,
+    granted_scopes = $3,
     updated_at = clock_timestamp()
-WHERE identity_provider_connection_id = $3
-  AND organization_id = $4
+WHERE identity_provider_connection_id = $4
+  AND organization_id = $5
   AND deleted IS FALSE
-RETURNING identity_provider_connection_id, identity_provider_connections_provider, organization_id, attachment_scope, org_url, issuer_url, issuer_url_override_reason, remote_session_issuer_id, remote_session_client_id, dpop_required, granted_scopes, observed_admin_roles, listing_mode, agent_id, agent_app_id, created_at, updated_at, deleted_at, deleted
+RETURNING identity_provider_connection_id, identity_provider_connections_provider, organization_id, attachment_scope, org_url, issuer_url, issuer_url_override_reason, ownership_claimed, remote_session_issuer_id, remote_session_client_id, dpop_required, granted_scopes, observed_admin_roles, listing_mode, agent_id, agent_app_id, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateOktaIdentityProviderConnectionVerificationParams struct {
+	OwnershipClaimed             bool
 	DpopRequired                 bool
 	GrantedScopes                []string
 	IdentityProviderConnectionID uuid.UUID
@@ -1170,6 +1173,7 @@ type UpdateOktaIdentityProviderConnectionVerificationParams struct {
 
 func (q *Queries) UpdateOktaIdentityProviderConnectionVerification(ctx context.Context, arg UpdateOktaIdentityProviderConnectionVerificationParams) (OktaIdentityProviderConnection, error) {
 	row := q.db.QueryRow(ctx, updateOktaIdentityProviderConnectionVerification,
+		arg.OwnershipClaimed,
 		arg.DpopRequired,
 		arg.GrantedScopes,
 		arg.IdentityProviderConnectionID,
@@ -1184,6 +1188,7 @@ func (q *Queries) UpdateOktaIdentityProviderConnectionVerification(ctx context.C
 		&i.OrgUrl,
 		&i.IssuerUrl,
 		&i.IssuerUrlOverrideReason,
+		&i.OwnershipClaimed,
 		&i.RemoteSessionIssuerID,
 		&i.RemoteSessionClientID,
 		&i.DpopRequired,

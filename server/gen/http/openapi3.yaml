@@ -87030,6 +87030,7 @@ components:
                         type: string
                         enum:
                             - missing_scope
+                            - missing_role
                             - dpop_not_bound
                             - key_not_fetched
                             - read_failed:okta.apps.read

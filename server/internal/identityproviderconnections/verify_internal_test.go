@@ -31,8 +31,8 @@ func (c *stubClient) ListApps(context.Context, okta.ListAppsRequest) ([]okta.App
 	return []okta.App{{ID: "0oaapp00000000000001"}}, nil
 }
 
-func (c *stubClient) ListAppUsers(context.Context, okta.ListAppUsersRequest) ([]okta.AppUser, error) {
-	return nil, c.failing["ListAppUsers"]
+func (c *stubClient) ListUsers(context.Context, okta.ListUsersRequest) ([]okta.User, error) {
+	return nil, c.failing["ListUsers"]
 }
 
 func (c *stubClient) ListGroups(context.Context, okta.ListGroupsRequest) ([]okta.Group, error) {
@@ -47,11 +47,11 @@ func TestVerifyConnection_CollectsEveryReason(t *testing.T) {
 		verification: &okta.ScopeVerification{Granted: []string{"okta.apps.read", "okta.groups.read"}, Missing: []string{"okta.users.read"}, DPoPBound: false},
 		failing:      map[string]error{"ListGroups": &okta.APIError{StatusCode: http.StatusForbidden, ErrorCode: "E0000006"}},
 	}
-	outcome, err := verifyConnection(t.Context(), client, "0oaapp00000000000001")
+	outcome, err := verifyConnection(t.Context(), client)
 	require.NoError(t, err)
 	require.Equal(t, StatusDegraded, outcome.Status)
-	require.Equal(t, []string{ReasonMissingScope, ReasonDPoPNotBound, ReasonReadFailedGroup}, outcome.Reasons)
-	require.Equal(t, "missing_scope,dpop_not_bound,read_failed:okta.groups.read", outcome.lastError())
+	require.Equal(t, []string{ReasonMissingScope, ReasonDPoPNotBound, ReasonReadFailedGroup, ReasonMissingRole}, outcome.Reasons)
+	require.Equal(t, "missing_scope,dpop_not_bound,read_failed:okta.groups.read,missing_role", outcome.lastError())
 }
 
 func TestVerifyConnection_CredentialRejectionDuringReadsIsAnError(t *testing.T) {
@@ -62,7 +62,7 @@ func TestVerifyConnection_CredentialRejectionDuringReadsIsAnError(t *testing.T) 
 		verification: &okta.ScopeVerification{Granted: []string{"okta.apps.read"}, Missing: nil, DPoPBound: true},
 		failing:      map[string]error{"ListApps": &okta.APIError{StatusCode: http.StatusUnauthorized, ErrorCode: "invalid_client"}},
 	}
-	_, err := verifyConnection(t.Context(), client, "0oaapp00000000000001")
+	_, err := verifyConnection(t.Context(), client)
 	require.ErrorIs(t, err, ErrCredentialRejected)
 }
 
@@ -72,12 +72,12 @@ func TestVerifyConnection_UsersReadIsIndependentOfApps(t *testing.T) {
 	client := &stubClient{
 		Client:       nil,
 		verification: &okta.ScopeVerification{Granted: []string{"okta.apps.read", "okta.users.read", "okta.groups.read"}, Missing: nil, DPoPBound: true},
-		failing:      map[string]error{"ListApps": okta.ErrTooManyPages, "ListAppUsers": &okta.APIError{StatusCode: http.StatusForbidden, ErrorCode: "E0000006"}},
+		failing:      map[string]error{"ListApps": okta.ErrTooManyPages, "ListUsers": &okta.APIError{StatusCode: http.StatusForbidden, ErrorCode: "E0000006"}},
 	}
-	outcome, err := verifyConnection(t.Context(), client, "0oaapp00000000000001")
+	outcome, err := verifyConnection(t.Context(), client)
 	require.NoError(t, err)
 	require.Equal(t, StatusDegraded, outcome.Status)
-	require.Equal(t, []string{ReasonReadFailedUsers}, outcome.Reasons, "the page cap is not a failure; the users read still ran")
+	require.Equal(t, []string{ReasonReadFailedUsers, ReasonMissingRole}, outcome.Reasons, "the page cap is not a failure; the users read still ran")
 }
 
 func TestVerifyConnection_ManagementUnauthorizedIsAReadFailure(t *testing.T) {
@@ -88,7 +88,7 @@ func TestVerifyConnection_ManagementUnauthorizedIsAReadFailure(t *testing.T) {
 		verification: &okta.ScopeVerification{Granted: []string{"okta.apps.read"}, Missing: nil, DPoPBound: true},
 		failing:      map[string]error{"ListApps": &okta.APIError{StatusCode: http.StatusUnauthorized, ErrorCode: "E0000011"}},
 	}
-	outcome, err := verifyConnection(t.Context(), client, "0oaapp00000000000001")
+	outcome, err := verifyConnection(t.Context(), client)
 	require.NoError(t, err)
 	require.Equal(t, []string{ReasonReadFailedApps}, outcome.Reasons)
 }
@@ -109,4 +109,39 @@ func TestParseLastError(t *testing.T) {
 	require.Empty(t, failure)
 
 	require.Equal(t, LastErrorOktaUnreachable, failureLastError(errors.New("dial tcp")))
+}
+
+func TestVerifyConnection_ForbiddenReadsReportMissingRoleOnce(t *testing.T) {
+	t.Parallel()
+	client := &stubClient{
+		verification: &okta.ScopeVerification{Granted: RequiredOktaScopes, DPoPBound: true},
+		failing:      map[string]error{},
+	}
+	for _, method := range []string{"ListApps", "ListUsers", "ListGroups"} {
+		client.failing[method] = &okta.APIError{StatusCode: http.StatusForbidden, ErrorCode: "E0000006"}
+	}
+	outcome, err := verifyConnection(t.Context(), client)
+	require.NoError(t, err)
+	require.Equal(t, []string{ReasonReadFailedApps, ReasonMissingRole, ReasonReadFailedUsers, ReasonReadFailedGroup}, outcome.Reasons)
+	reasons, failure := parseLastError(outcome.lastError())
+	require.Equal(t, outcome.Reasons, reasons)
+	require.Empty(t, failure)
+}
+
+func TestVerifyConnection_UsersOnlyNeedsNoAppID(t *testing.T) {
+	t.Parallel()
+	client := okta.NewFake(okta.Fixtures{GrantedScopes: []string{"okta.users.read"}})
+	_, err := verifyConnection(t.Context(), client)
+	require.NoError(t, err)
+	require.Equal(t, []string{"VerifyScopes", "ListUsers"}, client.Calls())
+}
+
+func TestVerifyConnection_CredentialProofRequiresMintedToken(t *testing.T) {
+	t.Parallel()
+	for _, granted := range [][]string{nil, {"okta.users.read"}} {
+		client := okta.NewFake(okta.Fixtures{GrantedScopes: granted})
+		outcome, err := verifyConnection(t.Context(), client)
+		require.NoError(t, err)
+		require.Equal(t, len(granted) > 0, outcome.CredentialProven)
+	}
 }

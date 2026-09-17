@@ -47,6 +47,29 @@ func TestIdentityProviderConnectionRoundTrip(t *testing.T) {
 	require.Equal(t, original.ID, fromDB.ID)
 }
 
+func TestIdentityProviderConnectionValidatesCurrentID(t *testing.T) {
+	t.Parallel()
+
+	u := urn.NewIdentityProviderConnection(uuid.New())
+	u.ID = uuid.Nil
+
+	_, err := json.Marshal(u)
+	require.ErrorIs(t, err, urn.ErrInvalid)
+	_, err = u.MarshalText()
+	require.ErrorIs(t, err, urn.ErrInvalid)
+	_, err = u.Value()
+	require.ErrorIs(t, err, urn.ErrInvalid)
+
+	u = urn.NewIdentityProviderConnection(uuid.Nil)
+	u.ID = uuid.New()
+	_, err = json.Marshal(u)
+	require.NoError(t, err)
+	_, err = u.MarshalText()
+	require.NoError(t, err)
+	_, err = u.Value()
+	require.NoError(t, err)
+}
+
 func TestIdentityProviderConnectionRejectsInvalidValues(t *testing.T) {
 	t.Parallel()
 

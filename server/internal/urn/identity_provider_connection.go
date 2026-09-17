@@ -11,21 +11,10 @@ import (
 
 type IdentityProviderConnection struct {
 	ID uuid.UUID
-
-	checked bool
-	err     error
 }
 
 func NewIdentityProviderConnection(id uuid.UUID) IdentityProviderConnection {
-	c := IdentityProviderConnection{
-		ID:      id,
-		checked: false,
-		err:     nil,
-	}
-
-	_ = c.validate()
-
-	return c
+	return IdentityProviderConnection{ID: id}
 }
 
 func ParseIdentityProviderConnection(value string) (IdentityProviderConnection, error) {
@@ -143,16 +132,9 @@ func (u *IdentityProviderConnection) UnmarshalText(text []byte) error {
 	return nil
 }
 
-func (u *IdentityProviderConnection) validate() error {
-	if u.checked {
-		return u.err
-	}
-
-	u.checked = true
-
+func (u IdentityProviderConnection) validate() error {
 	if u.ID == uuid.Nil {
-		u.err = fmt.Errorf("%w: empty id", ErrInvalid)
-		return u.err
+		return fmt.Errorf("%w: empty id", ErrInvalid)
 	}
 
 	return nil

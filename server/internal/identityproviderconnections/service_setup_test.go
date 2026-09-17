@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/identity_provider_connections"
@@ -131,9 +132,10 @@ func allScopes() []string {
 func oktaFixtures() map[string]okta.Fixtures {
 	apps := []okta.App{{ID: "0oaresourceapp000001", Label: "Notion MCP", Name: "oidc_client", SignOnMode: "OPENID_CONNECT", Status: "ACTIVE", Features: nil, Created: testTime(), LastUpdated: testTime()}}
 	return map[string]okta.Fixtures{
-		fullOrgURL:     {Apps: apps, AppUsers: nil, AppGroups: nil, Groups: nil, GrantedScopes: allScopes()},
-		degradedOrgURL: {Apps: apps, AppUsers: nil, AppGroups: nil, Groups: nil, GrantedScopes: []string{"okta.apps.read"}},
-		rejectedOrgURL: {Apps: apps, AppUsers: nil, AppGroups: nil, Groups: nil, GrantedScopes: allScopes()},
+		"https://unproven.okta.com": {},
+		fullOrgURL:                  {Apps: apps, AppUsers: nil, AppGroups: nil, Groups: nil, GrantedScopes: allScopes()},
+		degradedOrgURL:              {Apps: apps, AppUsers: nil, AppGroups: nil, Groups: nil, GrantedScopes: []string{"okta.apps.read"}},
+		rejectedOrgURL:              {Apps: apps, AppUsers: nil, AppGroups: nil, Groups: nil, GrantedScopes: allScopes()},
 	}
 }
 
@@ -148,8 +150,22 @@ func newTestService(t *testing.T) (context.Context, *serviceInstance) {
 
 func newTestServiceWithFlags(t *testing.T, features feature.Provider) (context.Context, *serviceInstance) {
 	t.Helper()
+	return newTestServiceWithPoolLimit(t, features, 0)
+}
+
+func newTestServiceWithPoolLimit(t *testing.T, features feature.Provider, maxConns int32) (context.Context, *serviceInstance) {
+	t.Helper()
 
 	ctx, ti := newTestDB(t)
+	if maxConns > 0 {
+		config := ti.conn.Config()
+		config.MaxConns = maxConns
+		config.MinConns = 0
+		pool, err := pgxpool.NewWithConfig(ctx, config)
+		require.NoError(t, err)
+		t.Cleanup(pool.Close)
+		ti.conn = pool
+	}
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
 

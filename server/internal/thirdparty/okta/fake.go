@@ -13,6 +13,9 @@ import (
 
 // Fixtures seeds a Fake with in-memory Okta data.
 type Fixtures struct {
+	// Users are directory users returned by ListUsers.
+	Users []User
+
 	// Apps are the applications returned by ListApps and GetApp.
 	Apps []App
 
@@ -66,6 +69,9 @@ func (f *Fake) SetMethodError(name string, err error) {
 	if err == nil {
 		delete(f.methodErrs, name)
 		return
+	}
+	if f.methodErrs == nil {
+		f.methodErrs = make(map[string]error)
 	}
 	f.methodErrs[name] = err
 }
@@ -192,4 +198,17 @@ func (f *Fake) VerifyScopes(_ context.Context, required []string) (*ScopeVerific
 		return &ScopeVerification{Granted: granted, Missing: missing, DPoPBound: false, ExpiresAt: time.Time{}}, nil
 	}
 	return &ScopeVerification{Granted: granted, Missing: missing, DPoPBound: true, ExpiresAt: time.Now().Add(time.Hour)}, nil
+}
+
+func (f *Fake) ListUsers(_ context.Context, req ListUsersRequest) ([]User, error) {
+	if err := f.record("ListUsers"); err != nil {
+		return nil, err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	users := f.fixtures.Users
+	if req.Limit > 0 && req.Limit < len(users) {
+		users = users[:req.Limit]
+	}
+	return slices.Clone(users), nil
 }

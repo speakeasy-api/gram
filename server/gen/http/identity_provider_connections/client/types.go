@@ -3252,8 +3252,8 @@ func ValidateCreateResponseBody(body *CreateResponseBody) (err error) {
 		}
 	}
 	for _, e := range body.VerificationReasons {
-		if !(e == "missing_scope" || e == "dpop_not_bound" || e == "key_not_fetched" || e == "read_failed:okta.apps.read" || e == "read_failed:okta.users.read" || e == "read_failed:okta.groups.read") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.verification_reasons[*]", e, []any{"missing_scope", "dpop_not_bound", "key_not_fetched", "read_failed:okta.apps.read", "read_failed:okta.users.read", "read_failed:okta.groups.read"}))
+		if !(e == "missing_scope" || e == "missing_role" || e == "dpop_not_bound" || e == "key_not_fetched" || e == "read_failed:okta.apps.read" || e == "read_failed:okta.users.read" || e == "read_failed:okta.groups.read") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.verification_reasons[*]", e, []any{"missing_scope", "missing_role", "dpop_not_bound", "key_not_fetched", "read_failed:okta.apps.read", "read_failed:okta.users.read", "read_failed:okta.groups.read"}))
 		}
 	}
 	if body.LastVerifiedAt != nil {
@@ -3358,8 +3358,8 @@ func ValidateSubmitClientIDResponseBody(body *SubmitClientIDResponseBody) (err e
 		}
 	}
 	for _, e := range body.VerificationReasons {
-		if !(e == "missing_scope" || e == "dpop_not_bound" || e == "key_not_fetched" || e == "read_failed:okta.apps.read" || e == "read_failed:okta.users.read" || e == "read_failed:okta.groups.read") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.verification_reasons[*]", e, []any{"missing_scope", "dpop_not_bound", "key_not_fetched", "read_failed:okta.apps.read", "read_failed:okta.users.read", "read_failed:okta.groups.read"}))
+		if !(e == "missing_scope" || e == "missing_role" || e == "dpop_not_bound" || e == "key_not_fetched" || e == "read_failed:okta.apps.read" || e == "read_failed:okta.users.read" || e == "read_failed:okta.groups.read") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.verification_reasons[*]", e, []any{"missing_scope", "missing_role", "dpop_not_bound", "key_not_fetched", "read_failed:okta.apps.read", "read_failed:okta.users.read", "read_failed:okta.groups.read"}))
 		}
 	}
 	if body.LastVerifiedAt != nil {
@@ -3463,8 +3463,8 @@ func ValidateVerifyResponseBody(body *VerifyResponseBody) (err error) {
 		}
 	}
 	for _, e := range body.VerificationReasons {
-		if !(e == "missing_scope" || e == "dpop_not_bound" || e == "key_not_fetched" || e == "read_failed:okta.apps.read" || e == "read_failed:okta.users.read" || e == "read_failed:okta.groups.read") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.verification_reasons[*]", e, []any{"missing_scope", "dpop_not_bound", "key_not_fetched", "read_failed:okta.apps.read", "read_failed:okta.users.read", "read_failed:okta.groups.read"}))
+		if !(e == "missing_scope" || e == "missing_role" || e == "dpop_not_bound" || e == "key_not_fetched" || e == "read_failed:okta.apps.read" || e == "read_failed:okta.users.read" || e == "read_failed:okta.groups.read") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.verification_reasons[*]", e, []any{"missing_scope", "missing_role", "dpop_not_bound", "key_not_fetched", "read_failed:okta.apps.read", "read_failed:okta.users.read", "read_failed:okta.groups.read"}))
 		}
 	}
 	if body.LastVerifiedAt != nil {
@@ -3579,8 +3579,8 @@ func ValidateRecordAgentResponseBody(body *RecordAgentResponseBody) (err error) 
 		}
 	}
 	for _, e := range body.VerificationReasons {
-		if !(e == "missing_scope" || e == "dpop_not_bound" || e == "key_not_fetched" || e == "read_failed:okta.apps.read" || e == "read_failed:okta.users.read" || e == "read_failed:okta.groups.read") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.verification_reasons[*]", e, []any{"missing_scope", "dpop_not_bound", "key_not_fetched", "read_failed:okta.apps.read", "read_failed:okta.users.read", "read_failed:okta.groups.read"}))
+		if !(e == "missing_scope" || e == "missing_role" || e == "dpop_not_bound" || e == "key_not_fetched" || e == "read_failed:okta.apps.read" || e == "read_failed:okta.users.read" || e == "read_failed:okta.groups.read") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.verification_reasons[*]", e, []any{"missing_scope", "missing_role", "dpop_not_bound", "key_not_fetched", "read_failed:okta.apps.read", "read_failed:okta.users.read", "read_failed:okta.groups.read"}))
 		}
 	}
 	if body.LastVerifiedAt != nil {
@@ -3684,8 +3684,8 @@ func ValidateRevokeResponseBody(body *RevokeResponseBody) (err error) {
 		}
 	}
 	for _, e := range body.VerificationReasons {
-		if !(e == "missing_scope" || e == "dpop_not_bound" || e == "key_not_fetched" || e == "read_failed:okta.apps.read" || e == "read_failed:okta.users.read" || e == "read_failed:okta.groups.read") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.verification_reasons[*]", e, []any{"missing_scope", "dpop_not_bound", "key_not_fetched", "read_failed:okta.apps.read", "read_failed:okta.users.read", "read_failed:okta.groups.read"}))
+		if !(e == "missing_scope" || e == "missing_role" || e == "dpop_not_bound" || e == "key_not_fetched" || e == "read_failed:okta.apps.read" || e == "read_failed:okta.users.read" || e == "read_failed:okta.groups.read") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.verification_reasons[*]", e, []any{"missing_scope", "missing_role", "dpop_not_bound", "key_not_fetched", "read_failed:okta.apps.read", "read_failed:okta.users.read", "read_failed:okta.groups.read"}))
 		}
 	}
 	if body.LastVerifiedAt != nil {
@@ -5554,8 +5554,8 @@ func ValidateOktaIdentityProviderConnectionResponseBody(body *OktaIdentityProvid
 		}
 	}
 	for _, e := range body.VerificationReasons {
-		if !(e == "missing_scope" || e == "dpop_not_bound" || e == "key_not_fetched" || e == "read_failed:okta.apps.read" || e == "read_failed:okta.users.read" || e == "read_failed:okta.groups.read") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.verification_reasons[*]", e, []any{"missing_scope", "dpop_not_bound", "key_not_fetched", "read_failed:okta.apps.read", "read_failed:okta.users.read", "read_failed:okta.groups.read"}))
+		if !(e == "missing_scope" || e == "missing_role" || e == "dpop_not_bound" || e == "key_not_fetched" || e == "read_failed:okta.apps.read" || e == "read_failed:okta.users.read" || e == "read_failed:okta.groups.read") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.verification_reasons[*]", e, []any{"missing_scope", "missing_role", "dpop_not_bound", "key_not_fetched", "read_failed:okta.apps.read", "read_failed:okta.users.read", "read_failed:okta.groups.read"}))
 		}
 	}
 	if body.LastVerifiedAt != nil {
