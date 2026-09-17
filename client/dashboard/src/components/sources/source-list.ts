@@ -51,10 +51,12 @@ export function useProjectSources(): {
   sources: SourceOption[];
   isLoading: boolean;
   isError: boolean;
+  /** The file facts (format, dates) have not arrived yet. */
+  assetsLoading: boolean;
   /**
-   * The file facts (format, dates) could not be read. Sources still list,
-   * but anything keyed on those facts should say they are unknown rather
-   * than treat them as absent.
+   * The file facts could not be read. Sources still list, but anything
+   * keyed on those facts should say they are unknown rather than treat them
+   * as absent.
    */
   assetsUnavailable: boolean;
 } {
@@ -62,11 +64,11 @@ export function useProjectSources(): {
   // Loading is keyed to the deployment alone: the assets only add dates and a
   // format, and the list is usable before they land — or without them, so a
   // failed read is not thrown to the page's error boundary.
-  const { data: assetsResult, isError: assetsError } = useListAssets(
-    undefined,
-    undefined,
-    { throwOnError: false },
-  );
+  const {
+    data: assetsResult,
+    isLoading: assetsLoading,
+    isError: assetsError,
+  } = useListAssets(undefined, undefined, { throwOnError: false });
   const deployment = deploymentResult?.deployment;
 
   const sources = useMemo(() => {
@@ -98,6 +100,7 @@ export function useProjectSources(): {
     sources,
     isLoading,
     isError,
+    assetsLoading,
     assetsUnavailable: assetsError && !assetsResult,
   };
 }

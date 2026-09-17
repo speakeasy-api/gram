@@ -56,17 +56,18 @@ function toolSourceId(tool: Tool): string | undefined {
 export default function Sources(): JSX.Element {
   const routes = useRoutes();
   const project = useProject();
-  const { sources, isLoading, assetsUnavailable } = useProjectSources();
+  const { sources, isLoading, assetsLoading, assetsUnavailable } =
+    useProjectSources();
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useViewMode();
   const filters = useFilterState(SOURCE_FILTERS);
   // Format comes from the file facts. Without them a format filter would
   // hide every OpenAPI document as "unknown", so it is held clear until the
-  // facts load.
+  // facts arrive, and for good if they never do.
+  const formatUnknown = assetsLoading || assetsUnavailable;
   const filterValues = useMemo(
-    () =>
-      assetsUnavailable ? { ...filters.values, format: [] } : filters.values,
-    [assetsUnavailable, filters.values],
+    () => (formatUnknown ? { ...filters.values, format: [] } : filters.values),
+    [formatUnknown, filters.values],
   );
   const [removing, setRemoving] = useState<RemovableSource | null>(null);
   const actionsFor = useSourceListActions({ onRemove: setRemoving });

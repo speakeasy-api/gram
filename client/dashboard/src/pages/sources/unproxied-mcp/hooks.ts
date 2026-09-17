@@ -139,6 +139,8 @@ export function useDeleteUnproxiedMcpSource(): UseMutationResult<
           refetchType: "none",
         }),
         invalidateAllMcpServers(queryClient, { refetchType: "none" }),
+        // Each deleted wrapper took its unowned issuer with it.
+        invalidateAllUserSessionIssuers(queryClient, { refetchType: "none" }),
       ]);
     },
     onError: async () => {
