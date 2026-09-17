@@ -331,17 +331,26 @@ async def _register_receivers(
         )
 
     if role in ("all", "enforcement") and enforce_handler is not None:
-        # Enforcement gets roughly one handler per scan slot, floored at two
-        # so a reply write can overlap a scan; excess waits at the broker.
         if scan_workers > 0:
             enforce_slots = scan_workers
         else:
             enforce_slots = max_scan_concurrency or 2
+        if role == "enforcement":
+            # Dedicated fleet: enforcement owns its scan pool, so mirror the
+            # analysis sizing at 2 handlers per slot. That overlaps a reply
+            # write with the next scan and keeps the pool fed; excess waits at
+            # the broker.
+            enforce_max = max(4, 2 * enforce_slots)
+        else:
+            # Shared pool (role=all): cap at roughly one handler per slot,
+            # floored at two so a reply write can overlap a scan, so
+            # enforcement does not starve batch analysis on the shared pool.
+            enforce_max = max(2, enforce_slots)
         await receivers.receive(
             presidio_enforcement_pb2.PresidioEnforcement,
             presidio_enforcer_pb2.PresidioEnforcer,
             enforce_handler.handle,
-            max_concurrency=max(2, enforce_slots),
+            max_concurrency=enforce_max,
         )
 
 
