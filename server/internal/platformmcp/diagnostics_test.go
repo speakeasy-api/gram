@@ -140,8 +140,8 @@ func TestOrganizationProjectIDsReportsPermissionFilteredScopeAsPartial(t *testin
 	t.Parallel()
 
 	service := &DiagnosticsService{reader: diagnosticsProjectReader{output: ListProjectsOutput{
-		Projects: []Project{{ID: "visible-project"}},
-		Filtered: true,
+		Projects:              []Project{{ID: "visible-project"}},
+		authorizationFiltered: true,
 	}}}
 
 	ids, partial, err := service.organizationProjectIDs(t.Context(), Principal{})
