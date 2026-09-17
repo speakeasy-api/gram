@@ -1,0 +1,27 @@
+pystreams/src/pystreams/cmd/flags_enforce.py
+  s_3cda4261683d61::t_862862803ae47b 9-11
+pystreams/src/pystreams/cmd/flags_role.py
+  s_3cda4261683d61::t_ac2a6366396e46 1-15
+pystreams/tests/test_multi.py
+  s_3cda4261683d61::t_ac2a6366396e46 2,4,64,84-100,105,114-116,120-124,127,138-145,149-151,153-175
+  s_3cda4261683d61::t_862862803ae47b 3,6,10-12,101-104,106-113,117-119,125-126,128-137,146-148,152
+pystreams/src/pystreams/cmd/multi.py
+  s_3cda4261683d61::t_ac2a6366396e46 46-53,71,92-93,123-130,167-171,190-192,215,244-248,284-293,299-345
+  s_3cda4261683d61::t_725fb2cf3419c5 346-347
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "761768c2cc924c1a1111082926c3a447c06f3ea8",
+  "prompts": {},
+  "sessions": {
+    "s_3cda4261683d61": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0b047-42f1-7363-b64b-e76170ac6c7a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
