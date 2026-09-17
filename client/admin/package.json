@@ -11,7 +11,7 @@
     "lint:fix": "oxlint --type-aware --fix --ignore-pattern 'src/sdk/**'",
     "lint:format": "aube exec oxfmt -- --check .",
     "lint:no-barrels": "! grep -rEn '^export \\*' src --include='*.ts' --include='*.tsx' --exclude-dir=sdk || (echo 'Barrel re-exports (export *) are not allowed. Re-export named symbols instead.' && exit 1)",
-    "lint:module-paths": "mise run lint:module-paths --dir client/admin/src",
+    "lint:module-paths": "mise run lint:module-paths client/admin/src",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
