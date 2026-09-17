@@ -233,9 +233,7 @@ func TestOnboardingMixedClientEvidenceIsNotClaudeAuthentication(t *testing.T) {
 		require.True(t, state.ConnectionReady)
 		require.Empty(t, state.ReauthorizationReason)
 	}
-	t.Run("other client authorized and only Claude install intent", func(t *testing.T) {
-		assertOtherClientEvidence(t)
-	})
+	assertOtherClientEvidence(t)
 
 	// A second synthetic connection represents Claude by fixture provenance,
 	// not by its self-declared OAuth client display name.
@@ -267,9 +265,11 @@ func TestOnboardingMixedClientEvidenceIsNotClaudeAuthentication(t *testing.T) {
 	both, err := service.Get(ctx, other.OrganizationID, other.UserID)
 	require.NoError(t, err)
 	require.Len(t, both.Connections, 2)
-	_, err = conn.Exec(ctx, `UPDATE platform_mcp_connections SET revoked_at = now() WHERE organization_id = $1 AND id = $2`, other.OrganizationID, claudeID)
-	require.NoError(t, err)
-	t.Run("Claude revoked while other client remains active", func(t *testing.T) {
-		assertOtherClientEvidence(t)
+	_, err = q.RevokePlatformMCPConnection(ctx, platformrepo.RevokePlatformMCPConnectionParams{
+		RevokedAt:      timestamp(time.Now().UTC()),
+		ID:             claudeID,
+		OrganizationID: other.OrganizationID,
 	})
+	require.NoError(t, err)
+	assertOtherClientEvidence(t)
 }
