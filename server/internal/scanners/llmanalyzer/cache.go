@@ -64,18 +64,21 @@ type VerdictCache interface {
 	Set(ctx context.Context, key string, v CachedVerdict) error
 }
 
-// VerdictCacheKey derives the cache key of one model call. The served model
-// name is part of the hash so that a redeploy under a new name never serves
-// verdicts produced by its predecessor. The prompts are hashed rather than
-// stored, so message content never lands in Redis key space.
-func VerdictCacheKey(model, systemPrompt, userPrompt string) string {
-	h := sha256.New()
-	h.Write([]byte(model))
-	h.Write([]byte{0})
-	h.Write([]byte(systemPrompt))
-	h.Write([]byte{0})
-	h.Write([]byte(userPrompt))
-	return verdictCacheKeyPrefix + hex.EncodeToString(h.Sum(nil))
+// VerdictCacheKey derives the cache key of one model call. The organization
+// scopes the entry so one tenant's verdict is never replayed, or overwritten,
+// for another. The served model name is part of the hash so that a redeploy
+// under a new name never serves verdicts produced by its predecessor. The
+// tuple is JSON-encoded before hashing so no delimiter inside a field can
+// alias another tuple, and the prompts are hashed rather than stored, so
+// message content never lands in Redis key space.
+func VerdictCacheKey(orgID, model, systemPrompt, userPrompt string) string {
+	payload, err := json.Marshal([4]string{orgID, model, systemPrompt, userPrompt})
+	if err != nil {
+		// Encoding a fixed-size string array cannot fail.
+		panic(fmt.Sprintf("encode risk llm verdict cache key: %v", err))
+	}
+	sum := sha256.Sum256(payload)
+	return verdictCacheKeyPrefix + hex.EncodeToString(sum[:])
 }
 
 // RedisVerdictCache is the production VerdictCache: one JSON string per key

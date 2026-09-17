@@ -223,6 +223,7 @@ func (m *analyzerMetrics) RecordCacheLookup(ctx context.Context, info CallInfo, 
 	}
 	m.cacheLookups.Add(ctx, 1, metric.WithAttributes(
 		attr.OrganizationID(info.OrgID),
+		attr.OrganizationSlug(info.OrgSlug),
 		attr.RiskLane(info.Lane),
 		attr.RiskLLMCacheResult(result),
 	))

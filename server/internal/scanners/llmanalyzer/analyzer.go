@@ -204,7 +204,7 @@ func (a *Analyzer) Analyze(ctx context.Context, req Request) Analysis {
 
 	messages := BuildMessages(in)
 	userPrompt := messages[len(messages)-1].Content
-	cacheKey := VerdictCacheKey(a.completer.ModelName(), messages[0].Content, userPrompt)
+	cacheKey := VerdictCacheKey(req.OrgID, a.completer.ModelName(), messages[0].Content, userPrompt)
 
 	completion, verdict, cached := a.lookupVerdict(ctx, info, cacheKey)
 	span.SetAttributes(attribute.Bool("gram.risk.llm.cached", cached))
