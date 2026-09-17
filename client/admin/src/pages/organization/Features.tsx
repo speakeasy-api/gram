@@ -24,6 +24,7 @@ import {
 } from "@/lib/gramAdminApi";
 import type { ProductFeatures } from "@gram/admin-client/models/components/productfeatures";
 import type { FeatureName } from "@gram/admin-client/models/components/setorganizationfeaturerequestbody";
+import { Onboarding } from "./Onboarding";
 
 type EnabledProductFeatureKey = Extract<
   keyof ProductFeatures,
@@ -164,6 +165,7 @@ export function Features({ org }: { org: AdminOrganization }): JSX.Element {
   return (
     <div className="space-y-6">
       <ProductFeatures org={org} />
+      <Onboarding organizationId={org.id} />
       <ChatAnalysis org={org} />
     </div>
   );
@@ -249,8 +251,8 @@ function ProductFeatures({ org }: { org: AdminOrganization }): JSX.Element {
         </p>
       )}
       <section className="border-border overflow-hidden rounded-md border">
-        <div className="border-border bg-muted/20 border-b px-4 py-3">
-          <h5 className="text-sm font-medium">Product features</h5>
+        <div className="border-border bg-muted/50 space-y-2 border-b p-4">
+          <h5 className="text-base font-semibold">Product features</h5>
           <p className="text-muted-foreground text-sm">
             Org-level entitlements. Changes apply immediately to every member of
             the organization.
