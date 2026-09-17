@@ -291,13 +291,17 @@ func networkIngressLifecycleDeliveryReady(reconcileQueue, temporalQueue string, 
 	if reconcileQueue == "" {
 		return false, nil
 	}
-	if reconcileQueue == temporalQueue {
-		return true, nil
-	}
-	if devSingleProcess {
+	if devSingleProcess && reconcileQueue != temporalQueue {
 		return false, fmt.Errorf("dev-single-process requires private ingress reconciliation task queue %q to match Temporal task queue %q", reconcileQueue, temporalQueue)
 	}
-	return false, nil
+	return true, nil
+}
+
+// networkIngressAdmissionReady verifies that lifecycle requests have a
+// configured consumer path. A separate queue is owned by the dedicated worker;
+// a shared queue becomes ready only after this process registers the reconciler.
+func networkIngressAdmissionReady(reconcileQueue, temporalQueue string, lifecycleReady, temporalConfigured bool) bool {
+	return lifecycleReady && temporalConfigured && reconcileQueue != temporalQueue
 }
 
 // probeDrainTimeout bounds the wait for automatic remote-session verifications
@@ -1113,7 +1117,12 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
-			networkIngressReconcilerReady := networkIngressConfig.MutationReady() && networkIngressLifecycleReady && k8sClient.Clientset != nil && k8sClient.DynamicClient != nil
+			networkIngressReconcilerReady := networkIngressAdmissionReady(
+				networkIngressConfig.ReconcileTaskQueue,
+				c.String("temporal-task-queue"),
+				networkIngressLifecycleReady,
+				temporalEnv != nil,
+			)
 			networkIngressEnabled := c.Bool("network-ingress-enabled")
 			networkIngressAdmission := networkingress.NewExpansionAdmission(productFeatures, featureFlags, orgRepo.New(db), networkIngressReconcilerReady, networkIngressEnabled)
 			mcpMetadataService := mcpmetadata.NewService(logger, tracerProvider, meterProvider, db, sessionManager, serverURL, siteURL, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger, networkIngressAdmission.CheckExpansion)
@@ -1897,6 +1906,8 @@ func newStartCommand() *cli.Command {
 						return
 					}
 					temporalWorker.RegisterNetworkIngress(executor, networkIngressConfig.ReconcileTaskQueue)
+					networkIngressAdmission.SetReconcilerReady(true)
+					defer networkIngressAdmission.SetReconcilerReady(false)
 					if err := temporalWorker.Run(workerInterruptCh); err != nil {
 						logger.ErrorContext(ctx, "temporal worker failed", attr.SlogError(err))
 					}
