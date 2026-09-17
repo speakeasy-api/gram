@@ -206,7 +206,7 @@ func (q *Queries) CreateJsonWebKey(ctx context.Context, arg CreateJsonWebKeyPara
 const createJsonWebKeySet = `-- name: CreateJsonWebKeySet :one
 INSERT INTO json_web_key_sets (organization_id, external_key_id, name)
 VALUES ($1, $2, $3)
-RETURNING id, organization_id, project_id, external_key_id, name, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, external_key_id, name, identity_provider_connection_id, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateJsonWebKeySetParams struct {
@@ -224,6 +224,7 @@ func (q *Queries) CreateJsonWebKeySet(ctx context.Context, arg CreateJsonWebKeyS
 		&i.ProjectID,
 		&i.ExternalKeyID,
 		&i.Name,
+		&i.IdentityProviderConnectionID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -272,7 +273,7 @@ func (q *Queries) GetActiveJsonWebKey(ctx context.Context, arg GetActiveJsonWebK
 
 const getExternalKeyForMint = `-- name: GetExternalKeyForMint :one
 SELECT
-  ek.id, ek.organization_id, ek.project_id, ek.external_credential_id, ek.provider, ek.algorithm, ek.name, ek.customer_grant_reference, ek.created_at, ek.updated_at, ek.deleted_at, ek.deleted,
+  ek.id, ek.organization_id, ek.project_id, ek.external_credential_id, ek.provider, ek.algorithm, ek.name, ek.customer_grant_reference, ek.identity_provider_connection_id, ek.created_at, ek.updated_at, ek.deleted_at, ek.deleted,
   gcp.resource_name,
   ec.id AS credential_id,
   gic.impersonate_service_account,
@@ -338,6 +339,7 @@ func (q *Queries) GetExternalKeyForMint(ctx context.Context, arg GetExternalKeyF
 		&i.ExternalKey.Algorithm,
 		&i.ExternalKey.Name,
 		&i.ExternalKey.CustomerGrantReference,
+		&i.ExternalKey.IdentityProviderConnectionID,
 		&i.ExternalKey.CreatedAt,
 		&i.ExternalKey.UpdatedAt,
 		&i.ExternalKey.DeletedAt,
@@ -391,7 +393,7 @@ func (q *Queries) GetJsonWebKey(ctx context.Context, arg GetJsonWebKeyParams) (J
 }
 
 const getJsonWebKeySet = `-- name: GetJsonWebKeySet :one
-SELECT id, organization_id, project_id, external_key_id, name, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, external_key_id, name, identity_provider_connection_id, created_at, updated_at, deleted_at, deleted
 FROM json_web_key_sets
 WHERE id = $1
   AND organization_id = $2
@@ -413,6 +415,7 @@ func (q *Queries) GetJsonWebKeySet(ctx context.Context, arg GetJsonWebKeySetPara
 		&i.ProjectID,
 		&i.ExternalKeyID,
 		&i.Name,
+		&i.IdentityProviderConnectionID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -452,7 +455,7 @@ func (q *Queries) JsonWebKeyKidExistsInSet(ctx context.Context, arg JsonWebKeyKi
 }
 
 const listJsonWebKeySets = `-- name: ListJsonWebKeySets :many
-SELECT id, organization_id, project_id, external_key_id, name, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, external_key_id, name, identity_provider_connection_id, created_at, updated_at, deleted_at, deleted
 FROM json_web_key_sets
 WHERE organization_id = $1
   AND project_id IS NULL
@@ -475,6 +478,7 @@ func (q *Queries) ListJsonWebKeySets(ctx context.Context, organizationID string)
 			&i.ProjectID,
 			&i.ExternalKeyID,
 			&i.Name,
+			&i.IdentityProviderConnectionID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -594,7 +598,7 @@ func (q *Queries) LockExternalKeyForJwksWrite(ctx context.Context, arg LockExter
 }
 
 const lockJsonWebKeySetForKeyWrite = `-- name: LockJsonWebKeySetForKeyWrite :one
-SELECT id, organization_id, project_id, external_key_id, name, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, external_key_id, name, identity_provider_connection_id, created_at, updated_at, deleted_at, deleted
 FROM json_web_key_sets
 WHERE id = $1
   AND organization_id = $2
@@ -625,6 +629,7 @@ func (q *Queries) LockJsonWebKeySetForKeyWrite(ctx context.Context, arg LockJson
 		&i.ProjectID,
 		&i.ExternalKeyID,
 		&i.Name,
+		&i.IdentityProviderConnectionID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -775,7 +780,7 @@ WHERE id = $1
   AND organization_id = $2
   AND project_id IS NULL
   AND deleted IS FALSE
-RETURNING id, organization_id, project_id, external_key_id, name, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, external_key_id, name, identity_provider_connection_id, created_at, updated_at, deleted_at, deleted
 `
 
 type SoftDeleteJsonWebKeySetParams struct {
@@ -792,6 +797,7 @@ func (q *Queries) SoftDeleteJsonWebKeySet(ctx context.Context, arg SoftDeleteJso
 		&i.ProjectID,
 		&i.ExternalKeyID,
 		&i.Name,
+		&i.IdentityProviderConnectionID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -850,7 +856,7 @@ WHERE id = $3
   AND organization_id = $4
   AND project_id IS NULL
   AND deleted IS FALSE
-RETURNING id, organization_id, project_id, external_key_id, name, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, external_key_id, name, identity_provider_connection_id, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateJsonWebKeySetParams struct {
@@ -874,6 +880,7 @@ func (q *Queries) UpdateJsonWebKeySet(ctx context.Context, arg UpdateJsonWebKeyS
 		&i.ProjectID,
 		&i.ExternalKeyID,
 		&i.Name,
+		&i.IdentityProviderConnectionID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
