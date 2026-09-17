@@ -55,7 +55,7 @@ message MeterReading {
 
   option (gcp.pubsub.v1.topic) = {
     retention_hint: {
-      seconds: 2678400 /* 31 days */
+      seconds: 345600 /* 4 days */
     }
   };
 }

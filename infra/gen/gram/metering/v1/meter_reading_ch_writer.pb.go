@@ -68,8 +68,8 @@ var File_gram_metering_v1_meter_reading_ch_writer_proto protoreflect.FileDescrip
 
 const file_gram_metering_v1_meter_reading_ch_writer_proto_rawDesc = "" +
 	"\n" +
-	".gram/metering/v1/meter_reading_ch_writer.proto\x12\x10gram.metering.v1\x1a\x1bgcp/pubsub/v1/options.proto\"W\n" +
-	"\x14MeterReadingCHWriter:?\x92\xb5\x18;\x12\x05\b\x80\xbd\xa3\x01\x18\x01\"\x02\b<2\t\n" +
+	".gram/metering/v1/meter_reading_ch_writer.proto\x12\x10gram.metering.v1\x1a\x1bgcp/pubsub/v1/options.proto\"V\n" +
+	"\x14MeterReadingCHWriter:>\x92\xb5\x18:\x12\x04\b\x80\x8c\x15\x18\x01\"\x02\b<2\t\n" +
 	"\x02\b\n" +
 	"\x12\x03\b\xd8\x04J\x02\x10\n" +
 	"R\x1dgram.metering.v1.MeterReadingBEZCgithub.com/speakeasy-api/gram/infra/gen/gram/metering/v1;meteringv1b\beditionsp\xe9\a"
