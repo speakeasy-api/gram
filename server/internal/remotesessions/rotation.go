@@ -68,6 +68,10 @@ var (
 	// re-register the client.
 	ErrIssuerHasNoRegistrationEndpoint = errors.New("remotesessions: issuer publishes no registration endpoint to re-register at")
 
+	// ErrIssuerConfigurationChanged reports that the client moved to another
+	// issuer before rotation stabilized the endpoint and transport snapshot.
+	ErrIssuerConfigurationChanged = errors.New("remotesessions: issuer configuration changed during client rotation")
+
 	// ErrClientNotRotatable reports a client whose registration is not the
 	// kind a dynamic registration produces: a CIMD-mode client, whose client_id
 	// is the metadata document URL, or a private_key_jwt client, whose
@@ -78,6 +82,12 @@ var (
 	// authenticates the stored client, so the rejection that prompted the
 	// rotation did not mean the registration was lost.
 	ErrClientStillRecognized = errors.New("remotesessions: issuer still recognizes the client")
+
+	// ErrClientRegistrationIneligibleForIdentityProviderLogin reports that a
+	// replacement registration would invalidate an existing trusted-login
+	// reference. The transaction is rolled back, leaving the prior client in
+	// place.
+	ErrClientRegistrationIneligibleForIdentityProviderLogin = errors.New("remotesessions: replacement client is ineligible for identity-provider login")
 )
 
 // clientRotationLeaseTTL bounds the single-flight lease around one
@@ -187,15 +197,20 @@ func NewClientRotator(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Cli
 // registration this call obtained is abandoned at the issuer.
 //
 // The lease, the probe, and the registration POST all happen outside a
-// database transaction; the persisting write compares the client_id read at
-// the start so a concurrent rotation is detected rather than blocked behind a
-// row lock held across two outbound calls.
+// database transaction. A session-scoped issuer advisory lock keeps the
+// endpoint and transport snapshot stable across those calls, while the
+// persisting write compares the client_id read at the start so a concurrent
+// client update is detected.
 func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrationParams) (repo.RemoteSessionClient, error) {
 	var zero repo.RemoteSessionClient
 
 	leaseKey := clientRotationLeaseKey(params.ClientID)
-	leaseAcquiredAt := time.Now()
-	held, err := r.locks.Add(ctx, leaseKey, clientRotationLeaseTTL)
+	leaseOwner := uuid.NewString()
+	leaseLocks, ok := r.locks.(cache.RenewableLeaseCache)
+	if !ok {
+		return zero, errors.New("client rotation requires an ownership-aware renewable lease cache")
+	}
+	held, err := leaseLocks.AcquireLease(ctx, leaseKey, leaseOwner, clientRotationLeaseTTL)
 	if err != nil {
 		return zero, fmt.Errorf("acquire client rotation lease: %w", err)
 	}
@@ -203,24 +218,84 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 		return zero, ErrClientRotationInProgress
 	}
 	defer o11y.LogDefer(ctx, r.logger, "failed to release client rotation lease", func() error {
-		// Past the TTL the key may already be a new holder's lease; deleting it
-		// would let a third caller in beside them. Leave it to expire.
-		if time.Since(leaseAcquiredAt) >= clientRotationLeaseTTL {
-			r.logger.WarnContext(ctx, "client rotation outlived its lease; leaving release to TTL",
-				attr.SlogRemoteSessionClientID(params.ClientID.String()),
-				attr.SlogCacheKey(leaseKey),
-			)
-			return nil
-		}
 		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), refreshReleaseTimeout)
 		defer cancel()
-		return r.locks.Delete(releaseCtx, leaseKey)
+		_, releaseErr := leaseLocks.ReleaseLeaseIfOwner(releaseCtx, leaseKey, leaseOwner)
+		if releaseErr != nil {
+			return fmt.Errorf("release client rotation lease: %w", releaseErr)
+		}
+		return nil
 	})
 
-	q := repo.New(r.db)
-	row, err := q.GetRemoteSessionClientForRotation(ctx, params.ClientID)
+	initial, err := repo.New(r.db).GetRemoteSessionClientForRotation(ctx, params.ClientID)
 	if err != nil {
 		return zero, fmt.Errorf("load remote session client for rotation: %w", err)
+	}
+
+	issuerLockConn, err := r.db.Acquire(ctx)
+	if err != nil {
+		return zero, fmt.Errorf("acquire issuer rotation lock connection: %w", err)
+	}
+	issuerLockRepo := repo.New(issuerLockConn)
+	lockedIssuerID := initial.RemoteSessionClient.RemoteSessionIssuerID
+	if err := issuerLockRepo.LockRemoteSessionIssuerForClientBindingSession(ctx, lockedIssuerID); err != nil {
+		// Cancellation can race PostgreSQL granting a session lock. Remove the
+		// connection from the pool and close it so an ambiguous acquisition can
+		// never return a lock-owning session for unrelated work.
+		rawConn := issuerLockConn.Hijack()
+		closeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), refreshReleaseTimeout)
+		closeErr := rawConn.Close(closeCtx)
+		cancel()
+		if closeErr != nil {
+			return zero, fmt.Errorf("lock issuer configuration for client rotation: %w", errors.Join(err, fmt.Errorf("discard ambiguous lock connection: %w", closeErr)))
+		}
+		return zero, fmt.Errorf("lock issuer configuration for client rotation: %w", err)
+	}
+	issuerLockReleased := false
+	releaseIssuerLock := func() error {
+		if issuerLockReleased {
+			return nil
+		}
+		issuerLockReleased = true
+
+		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), refreshReleaseTimeout)
+		_, unlockErr := issuerLockRepo.UnlockRemoteSessionIssuerForClientBindingSession(releaseCtx, lockedIssuerID)
+		cancel()
+		if unlockErr == nil {
+			issuerLockConn.Release()
+			return nil
+		}
+
+		// A failed unlock leaves the session's lock state ambiguous. Discard the
+		// connection instead of returning a potentially lock-owning session to
+		// the pool for unrelated work.
+		rawConn := issuerLockConn.Hijack()
+		closeCtx, closeCancel := context.WithTimeout(context.WithoutCancel(ctx), refreshReleaseTimeout)
+		closeErr := rawConn.Close(closeCtx)
+		closeCancel()
+		if closeErr != nil {
+			return errors.Join(
+				fmt.Errorf("unlock issuer configuration: %w", unlockErr),
+				fmt.Errorf("discard issuer lock connection: %w", closeErr),
+			)
+		}
+		return fmt.Errorf("unlock issuer configuration: %w", unlockErr)
+	}
+	defer o11y.LogDefer(ctx, r.logger, "failed to unlock issuer configuration after client rotation", releaseIssuerLock)
+	renewed, err := leaseLocks.RenewLease(ctx, leaseKey, leaseOwner, clientRotationLeaseTTL)
+	if err != nil {
+		return zero, fmt.Errorf("renew client rotation lease after issuer lock wait: %w", err)
+	}
+	if !renewed {
+		return zero, ErrClientRotationInProgress
+	}
+
+	row, err := issuerLockRepo.GetRemoteSessionClientForRotation(ctx, params.ClientID)
+	if err != nil {
+		return zero, fmt.Errorf("reload remote session client under issuer rotation lock: %w", err)
+	}
+	if row.RemoteSessionClient.RemoteSessionIssuerID != lockedIssuerID {
+		return zero, ErrIssuerConfigurationChanged
 	}
 	current := row.RemoteSessionClient
 
@@ -266,7 +341,7 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 			return zero, fmt.Errorf("probe issuer for client registration: %w", err)
 		}
 		if recognized {
-			if _, err := q.ClearRemoteSessionClientUpstreamRejected(ctx, repo.ClearRemoteSessionClientUpstreamRejectedParams{ID: current.ID, ClientID: current.ClientID}); err != nil {
+			if _, err := issuerLockRepo.ClearRemoteSessionClientUpstreamRejected(ctx, repo.ClearRemoteSessionClientUpstreamRejectedParams{ID: current.ID, ClientID: current.ClientID}); err != nil {
 				logger.WarnContext(ctx, "failed to clear the upstream rejection marker on a client the issuer still recognizes", attr.SlogError(err))
 			}
 			logger.WarnContext(ctx, "issuer still recognizes the client registration; rotation skipped and rejection marker cleared")
@@ -287,6 +362,13 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 	})
 	if err != nil {
 		return zero, fmt.Errorf("re-register client with issuer: %w", err)
+	}
+	renewed, err = leaseLocks.RenewLease(ctx, leaseKey, leaseOwner, clientRotationLeaseTTL)
+	if err != nil {
+		return zero, fmt.Errorf("renew client rotation lease after registration: %w", err)
+	}
+	if !renewed {
+		return zero, ErrClientRotationInProgress
 	}
 
 	var secretCiphertext pgtype.Text
@@ -311,12 +393,20 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 		secretExpiresAt = pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
 	}
 
-	dbtx, err := r.db.Begin(ctx)
+	dbtx, err := issuerLockConn.Begin(ctx)
 	if err != nil {
 		return zero, fmt.Errorf("begin client rotation transaction: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 	txRepo := repo.New(dbtx)
+
+	// Trusted-login links take this issuer advisory lock before sharing the
+	// client row. Rotation follows the same order before its compare-and-swap,
+	// so a link either validates the replacement or is visible to the
+	// resulting-state validation below.
+	if err := txRepo.LockRemoteSessionIssuerForClientBinding(ctx, current.RemoteSessionIssuerID); err != nil {
+		return zero, fmt.Errorf("lock remote session issuer for client rotation: %w", err)
+	}
 
 	issuerIDs, err := txRepo.ListUserSessionIssuerIDsForRemoteSessionClient(ctx, current.ID)
 	if err != nil {
@@ -336,12 +426,13 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 		ID:                      current.ID,
 		ExpectedClientID:        current.ClientID,
 		ExpectedUpdatedAt:       current.UpdatedAt,
+		ExpectedIssuerID:        current.RemoteSessionIssuerID,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		// The row moved under us: another rotation, an administrator's update,
 		// or a deletion. Report whatever it carries now and abandon the
 		// registration this call obtained.
-		moved, readErr := q.GetRemoteSessionClientForRotation(ctx, current.ID)
+		moved, readErr := txRepo.GetRemoteSessionClientForRotation(ctx, current.ID)
 		if readErr != nil {
 			return zero, fmt.Errorf("re-read remote session client after lost rotation race: %w", readErr)
 		}
@@ -350,6 +441,27 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 	}
 	if err != nil {
 		return zero, fmt.Errorf("persist re-registered client: %w", err)
+	}
+
+	trustedReferenceCount, err := txRepo.CountTrustedUserSessionIssuersByRemoteSessionClientID(ctx, updated.ID)
+	if err != nil {
+		return zero, fmt.Errorf("count identity-provider login references after client rotation: %w", err)
+	}
+	if trustedReferenceCount > 0 {
+		pair, pairErr := txRepo.LockTrustedRemoteSessionClientForOrganization(ctx, repo.LockTrustedRemoteSessionClientForOrganizationParams{
+			ClientID:       updated.ID,
+			IssuerID:       updated.RemoteSessionIssuerID,
+			OrganizationID: updated.OrganizationID.String,
+		})
+		if errors.Is(pairErr, pgx.ErrNoRows) {
+			return zero, fmt.Errorf("%w: linked client no longer forms an eligible organization issuer/client pair", ErrClientRegistrationIneligibleForIdentityProviderLogin)
+		}
+		if pairErr != nil {
+			return zero, fmt.Errorf("load identity-provider login pair after client rotation: %w", pairErr)
+		}
+		if validationErr := ValidateTrustedIdentityProviderClient(pair.RemoteSessionClient, pair.RemoteSessionIssuer); validationErr != nil {
+			return zero, fmt.Errorf("%w: %w", ErrClientRegistrationIneligibleForIdentityProviderLogin, validationErr)
+		}
 	}
 
 	cascaded, err := txRepo.SoftDeleteRemoteSessionsByClientID(ctx, updated.ID)
@@ -383,6 +495,11 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 	if err := dbtx.Commit(ctx); err != nil {
 		return zero, fmt.Errorf("commit client rotation: %w", err)
 	}
+
+	// Detached revocation workers read client metadata from the pool. Release
+	// the dedicated advisory-lock connection first so a constrained pool cannot
+	// deadlock waiting for the connection this rotation still owns.
+	_ = o11y.LogDefer(ctx, r.logger, "failed to unlock issuer configuration after client rotation", releaseIssuerLock)
 
 	// The revoked sessions' tokens are dropped at the issuer on the same
 	// best-effort terms as a delete: post-commit, bounded, never surfaced.

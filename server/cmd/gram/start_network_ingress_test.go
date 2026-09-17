@@ -28,9 +28,10 @@ func TestNetworkIngressLifecycleDeliveryReady(t *testing.T) {
 			wantReady:      true,
 		},
 		{
-			name:           "different queue outside single process",
+			name:           "dedicated worker queue",
 			reconcileQueue: "network-ingress",
 			temporalQueue:  "main",
+			wantReady:      true,
 		},
 		{
 			name:             "different queue in single process",
@@ -52,6 +53,34 @@ func TestNetworkIngressLifecycleDeliveryReady(t *testing.T) {
 				return
 			}
 			require.EqualError(t, err, tt.wantErr)
+		})
+	}
+}
+
+func TestNetworkIngressAdmissionReady(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name               string
+		reconcileQueue     string
+		temporalQueue      string
+		lifecycleReady     bool
+		temporalConfigured bool
+		want               bool
+	}{
+		{name: "dedicated worker", reconcileQueue: "network-ingress", temporalQueue: "main", lifecycleReady: true, temporalConfigured: true, want: true},
+		{name: "shared queue starts fail closed", reconcileQueue: "main", temporalQueue: "main", lifecycleReady: true, temporalConfigured: true, want: false},
+		{name: "missing temporal", reconcileQueue: "network-ingress", temporalQueue: "main", lifecycleReady: true},
+		{name: "lifecycle disabled", reconcileQueue: "network-ingress", temporalQueue: "main", temporalConfigured: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.want, networkIngressAdmissionReady(
+				tt.reconcileQueue,
+				tt.temporalQueue,
+				tt.lifecycleReady,
+				tt.temporalConfigured,
+			))
 		})
 	}
 }

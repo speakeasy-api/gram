@@ -14,6 +14,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 )
 
 type recordingAssertionSigner struct {
@@ -85,7 +87,7 @@ func TestNewTokenEndpointRequest_PrivateKeyJWT(t *testing.T) {
 	firstForm, err := url.ParseQuery(mustReadBody(t, first))
 	require.NoError(t, err)
 	require.Equal(t, "oauth-client", firstForm.Get("client_id"))
-	require.Equal(t, clientAssertionType, firstForm.Get("client_assertion_type"))
+	require.Equal(t, oauthwire.ClientAssertionTypeJWTBearer, firstForm.Get("client_assertion_type"))
 	require.Equal(t, "assertion-1", firstForm.Get("client_assertion"))
 	require.Empty(t, firstForm.Get("client_secret"))
 	_, _, basic := first.BasicAuth()

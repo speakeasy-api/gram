@@ -126,7 +126,11 @@ func (s *Service) GetIngress(ctx context.Context, _ *gen.GetIngressPayload) (*ge
 	// Reading existing desired state remains available after entitlement or
 	// rollout removal so operators can see what is still enforced and recover it
 	// safely. Expansion mutations continue to use requireExpansion.
-	ingress, err := repo.New(s.db).GetNetworkIngressByOrganization(ctx, authCtx.ActiveOrganizationID)
+	queries := repo.New(s.db)
+	ingress, err := queries.GetNetworkIngressByOrganization(ctx, authCtx.ActiveOrganizationID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		ingress, err = queries.GetPendingDeletedNetworkIngressByOrganization(ctx, authCtx.ActiveOrganizationID)
+	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		return &gen.NetworkIngressResult{Ingress: nil}, nil
 	}

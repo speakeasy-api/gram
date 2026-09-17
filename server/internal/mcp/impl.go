@@ -66,6 +66,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	metadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/netingress"
@@ -108,6 +109,7 @@ type Service struct {
 	networkIngressTelemetry   *networkingress.Telemetry
 	identityCoverage          *mcptoolexecution.IdentityCoverageCheckpoint
 	hostedToolsCallCheckpoint *mcptoolexecution.HostedCheckpoint
+	scanEvaluator             mcpriskscan.Evaluator
 	guardianPolicy            *guardian.Policy
 	db                        *pgxpool.Pool
 	authRepo                  *auth_repo.Queries
@@ -326,6 +328,13 @@ type mcpInputs struct {
 	wrapperIsPublic *bool
 	// metaMcpServerID is the gateway the call was dispatched through; attribution only.
 	metaMcpServerID string
+	// clientInfoScope overrides the key the session client-info record is
+	// stored and loaded under. The hosted path leaves it empty and keys by
+	// toolset slug. The gateway sets it to its own scope, because a gateway
+	// handshakes once for the whole session while each member dispatch carries
+	// a different member's toolset slug — keying by slug would never find the
+	// record the handshake wrote.
+	clientInfoScope string
 	// tags is the parsed ?tags= filter. When non-empty, tools/list and
 	// tools/call expose only tools whose variation row carries one of these
 	// tags. Empty means no filtering.
@@ -391,6 +400,7 @@ func NewService(
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
 	logger = logger.With(attr.SlogComponent("mcp"))
 	metrics := mcpmetrics.NewMetrics(meter, logger)
+	scanEvaluator := mcpriskscan.NewNoop(tracerProvider, meterProvider, logger)
 	hostedToolsCallCheckpoint, err := mcptoolexecution.NewHostedCheckpoint(db, meterProvider, logger, metrics)
 	if err != nil {
 		return nil, fmt.Errorf("initialize hosted MCP kill-switch checkpoint: %w", err)
@@ -418,6 +428,7 @@ func NewService(
 		networkIngressTelemetry:   networkingress.NewTelemetry(logger, meterProvider),
 		identityCoverage:          mcptoolexecution.NewIdentityCoverageCheckpoint(db, metrics),
 		hostedToolsCallCheckpoint: hostedToolsCallCheckpoint,
+		scanEvaluator:             scanEvaluator,
 		guardianPolicy:            guardianPolicy,
 		db:                        db,
 		authRepo:                  auth_repo.New(db),
@@ -1270,6 +1281,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		wrapperRBACResourceID:    wrapperRBACResourceID,
 		wrapperIsPublic:          wrapperIsPublic,
 		metaMcpServerID:          "",
+		clientInfoScope:          "",
 		skipProxyTools:           false,
 		tags:                     tags,
 		protocolVersion:          protocolVersion,
@@ -1636,17 +1648,17 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 		return handleToolsList(ctx, s.logger, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.shadowMCPClient, s.platformExtras, s.sessionClientInfo)
 	case "tools/call":
 		recordToolsCallIdentityCoverage(ctx, s.identityCoverage, payload.organizationID, payload)
-		return handleToolsCall(ctx, s.logger, s.metrics, s.identityCoverage, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.vectorToolStore, s.mcpMetadataRepo, s.auditLogger, s.platformExtras, s.sessionClientInfo)
+		return handleToolsCall(ctx, s.logger, s.metrics, s.identityCoverage, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.vectorToolStore, s.mcpMetadataRepo, s.auditLogger, s.platformExtras, s.sessionClientInfo, s.scanEvaluator)
 	case "prompts/list":
 		return handlePromptsList(ctx, s.logger, s.db, payload, req, &s.toolsetCache, s.platformExtras)
 	case "prompts/get":
-		return handlePromptsGet(ctx, s.logger, s.db, payload, req)
+		return handlePromptsGet(ctx, s.logger, s.db, payload, req, s.scanEvaluator)
 	case "resources/list":
 		return handleResourcesList(ctx, s.logger, s.db, payload, req, &s.toolsetCache, s.platformExtras)
 	case "resources/templates/list":
 		return handleResourcesTemplatesList(ctx, s.logger, req)
 	case "resources/read":
-		return handleResourcesRead(ctx, s.logger, s.db, payload, req, s.toolProxy, s.env, s.billingTracker, s.billingRepository, s.telemLogger, s.platformExtras)
+		return handleResourcesRead(ctx, s.logger, s.db, payload, req, s.toolProxy, s.env, s.billingTracker, s.billingRepository, s.telemLogger, s.platformExtras, s.scanEvaluator)
 	default:
 		return nil, oops.E(oops.CodeNotImplemented, nil, "%s: %s", req.Method, oops.MCPCodeMethodNotFound.Message())
 	}
@@ -1903,6 +1915,7 @@ func (s *Service) HandleToolsCall(
 		s.auditLogger,
 		s.platformExtras,
 		s.sessionClientInfo,
+		s.scanEvaluator,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("handle tool call: %w", err)

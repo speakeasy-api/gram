@@ -1106,4 +1106,6 @@ var _ = Service("admin", func() {
 		Meta("openapi:operationId", "adminGetMeterUsage")
 	})
 
+	supportMatrixMethods()
+
 })
