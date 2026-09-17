@@ -42,7 +42,7 @@ vi.mock("../add-existing-mcp-servers", () => ({
         data-testid="existing-mcp-follow-up"
         data-project={currentProjectSlug}
       >
-        Add existing MCP servers: {followUp.status}
+        Import existing MCP servers in Claude: {followUp.status}
       </div>
     ),
 }));

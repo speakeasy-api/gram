@@ -53,10 +53,14 @@ describe("AddExistingMCPServers", () => {
   it("offers an optional remote-only follow-up and installation guidance", () => {
     render(<AddExistingMCPServers currentProjectSlug="example-project" />);
     expect(
-      screen.getByRole("region", { name: "Add existing MCP servers" }),
+      screen.getByRole("region", {
+        name: "Import existing MCP servers in Claude",
+      }),
     ).toBeTruthy();
     expect(
-      screen.getByRole("heading", { name: "Add existing MCP servers" }),
+      screen.getByRole("heading", {
+        name: "Import existing MCP servers in Claude",
+      }),
     ).toBeTruthy();
     expect(screen.getByText("Optional")).toBeTruthy();
     expect(

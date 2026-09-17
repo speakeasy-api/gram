@@ -47,7 +47,7 @@ export function AddExistingMCPServers({
     <StepSection
       index={2}
       slug="add-existing-mcp-servers"
-      title="Add existing MCP servers"
+      title="Import existing MCP servers in Claude"
       badge="Optional"
     >
       <div className="space-y-4">

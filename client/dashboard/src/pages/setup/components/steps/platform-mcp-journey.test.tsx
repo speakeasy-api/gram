@@ -79,12 +79,14 @@ describe("Platform MCP numbered journey", () => {
     ).toHaveLength(1);
     expect(screen.queryByRole("button", { name: "Copy prompt" })).toBeNull();
     fireEvent.keyDown(
-      within(rail).getByRole("button", { name: /Add existing MCP servers/ }),
+      within(rail).getByRole("button", {
+        name: /Import existing MCP servers in Claude/,
+      }),
       { key: "Enter" },
     );
     expect(
       within(screen.getByRole("main")).getAllByRole("heading", {
-        name: "Add existing MCP servers",
+        name: "Import existing MCP servers in Claude",
       }),
     ).toHaveLength(1);
     expect(screen.getByRole("button", { name: "Copy prompt" })).toBeTruthy();
@@ -121,7 +123,7 @@ describe("Platform MCP numbered journey", () => {
     setup("?step=add-existing-mcp-servers");
     expect(
       within(screen.getByRole("main")).getByRole("heading", {
-        name: "Add existing MCP servers",
+        name: "Import existing MCP servers in Claude",
       }),
     ).toBeTruthy();
     expect(
@@ -138,7 +140,9 @@ describe("Platform MCP numbered journey", () => {
         name: "Set up Platform MCP",
       }),
     ).toBeTruthy();
-    expect(screen.queryByText("Add existing MCP servers")).toBeNull();
+    expect(
+      screen.queryByText("Import existing MCP servers in Claude"),
+    ).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Mark done" }));
     expect(onComplete).toHaveBeenCalledOnce();
   });
