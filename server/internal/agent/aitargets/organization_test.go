@@ -158,11 +158,11 @@ func TestBothChatGPTBuildsAreDetectableInstalledAndRunning(t *testing.T) {
 }
 
 // A decision about one product must not reach another. Both ChatGPT builds
-// authorize through chatgpt.com and present the same documents, so the gateway
-// sees "a ChatGPT client" and can never say which build it is. The matchers
-// therefore belong to the general app alone: registering them on Classic as
-// well would make blocking Classic refuse everyone on the current app and on
-// chatgpt.com.
+// authorize through chatgpt.com and present the same documents, so the
+// identity a caller proves is "a ChatGPT client" and goes no finer. The
+// matchers therefore belong to the general app alone: registering them on
+// Classic as well would make blocking Classic refuse everyone on the current
+// app and on chatgpt.com.
 func TestOnlyTheGeneralChatGPTTargetIsEnforceable(t *testing.T) {
 	t.Parallel()
 

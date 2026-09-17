@@ -207,13 +207,15 @@ var registry = []Product{
 	// current app rather than over it, and it is a scan target only.
 	//
 	// It deliberately carries no gateway matchers. Both builds authorize
-	// through chatgpt.com and present the documents registered above, so a
-	// caller cannot be attributed to one build or the other: the gateway sees
-	// "a ChatGPT client" and nothing finer. Registering those documents here
-	// too would make blocking Classic refuse everyone on the current app and
-	// on chatgpt.com, which is the reach a Product is defined to prevent.
-	// Classic is therefore visible on the device and decided about, at the
-	// gateway, as ChatGPT.
+	// through chatgpt.com and present the documents registered above, so the
+	// identity a caller proves is "a ChatGPT client" and nothing finer. The
+	// builds do differ in their HTTP User-Agent, but that is self-reported
+	// and trivially set by anything, so it can separate them for counting and
+	// never for admitting. Registering those documents here too would make
+	// blocking Classic refuse everyone on the current app and on chatgpt.com,
+	// which is the reach a Product is defined to prevent. Classic is
+	// therefore visible on the device and decided about, at the gateway, as
+	// ChatGPT.
 	{
 		ID:          "chatgpt-classic",
 		VendorKey:   "openai",
