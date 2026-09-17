@@ -236,14 +236,14 @@ func (c *NonceCache) Current() string {
 
 // IsUseNonceChallenge reports whether a response demands a nonce: it must
 // carry NonceHeaderName and name ErrorCodeUseNonce either as the error
-// parameter of a WWW-Authenticate challenge (RFC 9449 §7.1, §9) or as the
-// error member of the JSON error body (RFC 9449 §8).
+// parameter of a DPoP WWW-Authenticate challenge (RFC 9449 §7.1, §9) or as
+// the error member of the JSON error body (RFC 9449 §8).
 func IsUseNonceChallenge(header http.Header, body []byte) bool {
 	if header.Get(NonceHeaderName) == "" {
 		return false
 	}
-	for _, challenge := range header.Values("WWW-Authenticate") {
-		if challengeError(challenge) == ErrorCodeUseNonce {
+	for _, field := range header.Values("WWW-Authenticate") {
+		if challengeError(field) == ErrorCodeUseNonce {
 			return true
 		}
 	}
@@ -253,19 +253,71 @@ func IsUseNonceChallenge(header http.Header, body []byte) bool {
 	return json.Unmarshal(body, &parsed) == nil && parsed.Error == ErrorCodeUseNonce
 }
 
-// challengeError extracts the error auth-param (RFC 6750 §3, quoted-string or
-// token per RFC 9110 §11.2) from one WWW-Authenticate field value.
-func challengeError(challenge string) string {
-	for part := range strings.SplitSeq(challenge, ",") {
-		part = strings.TrimSpace(part)
-		if i := strings.LastIndex(part, " "); i >= 0 {
-			part = strings.TrimSpace(part[i+1:])
-		}
-		name, value, ok := strings.Cut(part, "=")
-		if !ok || !strings.EqualFold(strings.TrimSpace(name), "error") {
+// challengeError extracts the error auth-param (RFC 6750 §3) of the DPoP
+// challenge in one WWW-Authenticate field value, or "" when there is none.
+// A field is a comma-separated list of challenges, each an auth-scheme
+// followed by SP and auth-params (RFC 9110 §11.6.1), so a list item that is
+// not "name=value" starts a new challenge (RFC 9449 §7.1, §9).
+func challengeError(field string) string {
+	scheme := ""
+	for _, item := range splitChallengeList(field) {
+		item = strings.TrimSpace(item)
+		if item == "" {
 			continue
 		}
-		return strings.Trim(strings.TrimSpace(value), `"`)
+		name, value, ok := cutAuthParam(item)
+		if !ok {
+			// RFC 9110 §11.6.1: auth-scheme, then optional token68 or first auth-param.
+			var rest string
+			scheme, rest = item, ""
+			if i := strings.IndexAny(item, " \t"); i >= 0 {
+				scheme, rest = item[:i], strings.TrimSpace(item[i:])
+			}
+			name, value, ok = cutAuthParam(rest)
+		}
+		// RFC 9110 §11.1: auth-scheme and auth-param names are case-insensitive.
+		if ok && strings.EqualFold(scheme, TokenType) && strings.EqualFold(name, "error") {
+			return value
+		}
 	}
 	return ""
+}
+
+// cutAuthParam splits "name = value" with OWS around "=" (RFC 9110 §11.2),
+// unquoting a quoted-string value. ok is false when item is not an auth-param.
+func cutAuthParam(item string) (name, value string, ok bool) {
+	name, value, ok = strings.Cut(item, "=")
+	if !ok {
+		return "", "", false
+	}
+	name = strings.TrimSpace(name)
+	// RFC 9110 §5.6.2: a token has no whitespace; "scheme token68=" is not an auth-param.
+	if name == "" || strings.ContainsAny(name, " \t") {
+		return "", "", false
+	}
+	value = strings.TrimSpace(value)
+	if len(value) >= 2 && value[0] == '"' && value[len(value)-1] == '"' {
+		// RFC 9110 §5.6.4: quoted-pair escapes inside a quoted-string.
+		value = strings.NewReplacer(`\"`, `"`, `\\`, `\`).Replace(value[1 : len(value)-1])
+	}
+	return name, value, true
+}
+
+// splitChallengeList splits a list field value on commas outside
+// quoted-strings (RFC 9110 §5.6.1, §5.6.4).
+func splitChallengeList(field string) []string {
+	var items []string
+	start, quoted := 0, false
+	for i := 0; i < len(field); i++ {
+		switch {
+		case quoted && field[i] == '\\' && i+1 < len(field):
+			i++
+		case field[i] == '"':
+			quoted = !quoted
+		case field[i] == ',' && !quoted:
+			items = append(items, field[start:i])
+			start = i + 1
+		}
+	}
+	return append(items, field[start:])
 }
