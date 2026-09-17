@@ -76,10 +76,10 @@ func TestIngestOTLPLogs_RequiresProjectAuth(t *testing.T) {
 func TestHooksSinkAcceptsServiceName(t *testing.T) {
 	t.Parallel()
 
-	for _, name := range []string{"claude-code", "Claude Code", "claudecode", "cowork", "claude-code-desktop", "codex", "codex_cli_rs", "codex-app-server"} {
+	for _, name := range []string{"claude-code", "Claude Code", "claudecode", "cowork", "claude-code-desktop", "claude-tag", "codex", "codex_cli_rs", "codex-app-server"} {
 		require.True(t, hooksSinkAcceptsServiceName(name), name)
 	}
-	for _, name := range []string{"", "producer", "cursor", "litellm", "my-gateway"} {
+	for _, name := range []string{"", "claude", "my-claude-exporter", "producer", "cursor", "litellm", "my-gateway"} {
 		require.False(t, hooksSinkAcceptsServiceName(name), name)
 	}
 }
@@ -98,12 +98,12 @@ func TestHooksSinkLogsPayloadDropsUnknownProducers(t *testing.T) {
 
 	mixed := &gen.LogsPayload{ResourceLogs: append(
 		unknown.ResourceLogs,
-		claudeLogsPayload([]*gen.OTELResourceAttribute{resourceStrAttr("service.name", "Claude Code")}, nil, record).ResourceLogs...,
+		claudeLogsPayload([]*gen.OTELResourceAttribute{resourceStrAttr("service.name", "claude-code-desktop")}, nil, record).ResourceLogs...,
 	)}
 	kept := hooksSinkLogsPayload(mixed)
 	require.NotNil(t, kept)
 	require.Len(t, kept.ResourceLogs, 1)
-	require.Equal(t, "Claude Code", extractResourceAttribute(kept.ResourceLogs[0].Resource, "service.name"))
+	require.Equal(t, "claude-code-desktop", extractResourceAttribute(kept.ResourceLogs[0].Resource, "service.name"))
 }
 
 // The shapes protojson produces for a Claude Code metrics export: enum-name
@@ -119,7 +119,7 @@ func TestIngestOTLPMetrics_PersistsClaudeUsageFromProtoJSONShapes(t *testing.T) 
 	name := "claude_code.token.usage"
 	ti.service.IngestOTLPMetrics(ctx, &gen.MetricsPayload{
 		ResourceMetrics: []*gen.OTELResourceMetrics{{
-			Resource: &gen.OTELResource{Attributes: []*gen.OTELResourceAttribute{resourceStrAttr("service.name", "Claude Code")}},
+			Resource: &gen.OTELResource{Attributes: []*gen.OTELResourceAttribute{resourceStrAttr("service.name", "claude-code-desktop")}},
 			ScopeMetrics: []*gen.OTELScopeMetrics{{
 				Metrics: []*gen.OTELMetric{{
 					Name: &name,

@@ -6,11 +6,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math"
 
 	collectorlogsv1 "go.opentelemetry.io/proto/otlp/collector/logs/v1"
 	collectormetricsv1 "go.opentelemetry.io/proto/otlp/collector/metrics/v1"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 
 	hooksgen "github.com/speakeasy-api/gram/server/gen/hooks"
 	hookssrv "github.com/speakeasy-api/gram/server/gen/http/hooks/server"
@@ -104,7 +106,12 @@ func hooksMetricsPayload(export *collectormetricsv1.ExportMetricsServiceRequest)
 	return hookssrv.NewMetricsPayload(&body, nil, nil), nil
 }
 
+// transcodeToRequestBody renders the export as OTLP/JSON and decodes it with
+// the hooks request-body types. protojson writes non-finite doubles as the
+// strings "NaN" and "Infinity", which those types cannot decode; such values
+// are cleared first so one bad datapoint does not drop the whole export.
 func transcodeToRequestBody(export proto.Message, body any) error {
+	clearNonFiniteFloats(export.ProtoReflect())
 	raw, err := protojson.Marshal(export)
 	if err != nil {
 		return fmt.Errorf("encode OTLP export as JSON: %w", err)
@@ -125,4 +132,56 @@ func base64IDToHex(raw *string) *string {
 	}
 	encoded := hex.EncodeToString(decoded)
 	return &encoded
+}
+
+func clearNonFiniteFloats(message protoreflect.Message) {
+	if !message.IsValid() {
+		return
+	}
+	message.Range(func(field protoreflect.FieldDescriptor, value protoreflect.Value) bool {
+		switch {
+		case field.IsMap():
+			if isProtobufMessage(field.MapValue().Kind()) {
+				value.Map().Range(func(_ protoreflect.MapKey, item protoreflect.Value) bool {
+					clearNonFiniteFloats(item.Message())
+					return true
+				})
+			}
+		case field.IsList():
+			switch {
+			case isProtobufMessage(field.Kind()):
+				items := value.List()
+				for i := range items.Len() {
+					clearNonFiniteFloats(items.Get(i).Message())
+				}
+			case isProtobufFloat(field.Kind()):
+				dropNonFiniteFloats(value.List())
+			}
+		case isProtobufMessage(field.Kind()):
+			clearNonFiniteFloats(value.Message())
+		case isProtobufFloat(field.Kind()) && !isFinite(value.Float()):
+			message.Clear(field)
+		}
+		return true
+	})
+}
+
+func dropNonFiniteFloats(list protoreflect.List) {
+	kept := 0
+	for i := range list.Len() {
+		item := list.Get(i)
+		if isFinite(item.Float()) {
+			list.Set(kept, item)
+			kept++
+		}
+	}
+	list.Truncate(kept)
+}
+
+func isProtobufFloat(kind protoreflect.Kind) bool {
+	return kind == protoreflect.DoubleKind || kind == protoreflect.FloatKind
+}
+
+func isFinite(f float64) bool {
+	return !math.IsNaN(f) && !math.IsInf(f, 0)
 }

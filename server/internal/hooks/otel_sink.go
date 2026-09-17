@@ -62,15 +62,18 @@ func (s *Service) IngestOTLPMetrics(ctx context.Context, payload *gen.MetricsPay
 }
 
 // hooksSinkAcceptsServiceName reports whether a resource's service.name
-// identifies a producer the hooks writers know how to attribute: Codex, or
-// the Claude family ("claude-code", "Claude Code", "cowork", ...). Anything
-// else, including an unset name, stays event-feed only.
+// identifies a producer the hooks writers know how to attribute: Codex, or a
+// Claude surface the writers label ("claude-code", "claude-code-desktop",
+// "cowork", "claude-tag"). Managed Claude Code installs set
+// OTEL_SERVICE_NAME to "Claude Code", so spaces are folded before matching.
+// Anything else, including an unset name or an unrelated producer that
+// merely mentions Claude, stays event-feed only.
 func hooksSinkAcceptsServiceName(name string) bool {
 	if isCodexServiceName(name) {
 		return true
 	}
-	n := strings.ToLower(strings.TrimSpace(name))
-	return strings.Contains(n, "claude") || strings.Contains(n, "cowork")
+	folded := strings.ReplaceAll(strings.TrimSpace(name), " ", "")
+	return claudeSurfaceFromServiceName(folded) != ""
 }
 
 func hooksSinkLogsPayload(payload *gen.LogsPayload) *gen.LogsPayload {

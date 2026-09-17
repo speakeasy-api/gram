@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"math"
 	"testing"
 
 	"github.com/google/uuid"
@@ -26,17 +27,53 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
+// sinkEventLog records publish settlements and sink calls in the order they
+// happen, so tests can assert the sink runs only once every publish is durable.
+type sinkEventLog struct {
+	events []string
+}
+
 type recordingHooksSink struct {
+	events  *sinkEventLog
 	logs    []*hooksgen.LogsPayload
 	metrics []*hooksgen.MetricsPayload
 }
 
 func (r *recordingHooksSink) IngestOTLPLogs(_ context.Context, payload *hooksgen.LogsPayload) {
+	r.events.events = append(r.events.events, "sink")
 	r.logs = append(r.logs, payload)
 }
 
 func (r *recordingHooksSink) IngestOTLPMetrics(_ context.Context, payload *hooksgen.MetricsPayload) {
+	r.events.events = append(r.events.events, "sink")
 	r.metrics = append(r.metrics, payload)
+}
+
+// settledPublishResult reports success only once Get is called, recording
+// that settlement so the test can order it against the sink call.
+type settledPublishResult struct {
+	events *sinkEventLog
+}
+
+func (r *settledPublishResult) Ready() <-chan struct{} {
+	ch := make(chan struct{})
+	close(ch)
+	return ch
+}
+
+func (r *settledPublishResult) Get(_ context.Context) (string, error) {
+	r.events.events = append(r.events.events, "publish.get")
+	return "settled", nil
+}
+
+func requireSinkAfterEveryPublish(t *testing.T, events *sinkEventLog, publishes int) {
+	t.Helper()
+	expected := make([]string, 0, publishes+1)
+	for range publishes {
+		expected = append(expected, "publish.get")
+	}
+	expected = append(expected, "sink")
+	require.Equal(t, expected, events.events)
 }
 
 func claudeSinkTestExport() *collectorlogsv1.ExportLogsServiceRequest {
@@ -72,9 +109,10 @@ func TestLogsForwardsExportToHooksSinkAfterPublish(t *testing.T) {
 	body, err := proto.Marshal(claudeSinkTestExport())
 	require.NoError(t, err)
 
+	events := &sinkEventLog{events: nil}
 	publisher := gcp.NewMockPublisher[*otelv1.InboundLogRecord]()
-	publisher.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult()).Once()
-	sink := &recordingHooksSink{logs: nil, metrics: nil}
+	publisher.On("Publish", mock.Anything, mock.Anything).Return(&settledPublishResult{events: events}).Once()
+	sink := &recordingHooksSink{events: events, logs: nil, metrics: nil}
 	service := &Service{
 		logger:          testenv.NewLogger(t),
 		tracer:          testenv.NewTracerProvider(t).Tracer("test"),
@@ -92,6 +130,7 @@ func TestLogsForwardsExportToHooksSinkAfterPublish(t *testing.T) {
 	err = service.Logs(ctx, &gen.LogsPayload{ApikeyToken: nil, ProjectSlugInput: nil, ContentEncoding: nil}, io.NopCloser(bytes.NewReader(body)))
 	require.NoError(t, err)
 	publisher.AssertExpectations(t)
+	requireSinkAfterEveryPublish(t, events, 1)
 
 	require.Len(t, sink.logs, 1)
 	payload := sink.logs[0]
@@ -129,7 +168,7 @@ func TestLogsDoesNotForwardToHooksSinkWhenPublishFails(t *testing.T) {
 
 	publisher := gcp.NewMockPublisher[*otelv1.InboundLogRecord]()
 	publisher.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewErrPublishResult(errors.New("pubsub unavailable"))).Once()
-	sink := &recordingHooksSink{logs: nil, metrics: nil}
+	sink := &recordingHooksSink{events: &sinkEventLog{events: nil}, logs: nil, metrics: nil}
 	service := &Service{
 		logger:          testenv.NewLogger(t),
 		tracer:          testenv.NewTracerProvider(t).Tracer("test"),
@@ -146,6 +185,7 @@ func TestLogsDoesNotForwardToHooksSinkWhenPublishFails(t *testing.T) {
 
 	err = service.Logs(ctx, &gen.LogsPayload{ApikeyToken: nil, ProjectSlugInput: nil, ContentEncoding: nil}, io.NopCloser(bytes.NewReader(body)))
 	require.Error(t, err)
+	publisher.AssertExpectations(t)
 	require.Empty(t, sink.logs, "a failed publish is retried by the exporter; forwarding it would double-write telemetry")
 }
 
@@ -183,9 +223,10 @@ func TestMetricsForwardsExportToHooksSinkAfterPublish(t *testing.T) {
 	body, err := proto.Marshal(request)
 	require.NoError(t, err)
 
+	events := &sinkEventLog{events: nil}
 	publisher := gcp.NewMockPublisher[*otelv1.InboundMetric]()
-	publisher.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult())
-	sink := &recordingHooksSink{logs: nil, metrics: nil}
+	publisher.On("Publish", mock.Anything, mock.Anything).Return(&settledPublishResult{events: events}).Once()
+	sink := &recordingHooksSink{events: events, logs: nil, metrics: nil}
 	service := &Service{
 		logger:          testenv.NewLogger(t),
 		tracer:          testenv.NewTracerProvider(t).Tracer("test"),
@@ -202,6 +243,8 @@ func TestMetricsForwardsExportToHooksSinkAfterPublish(t *testing.T) {
 
 	err = service.Metrics(ctx, &gen.MetricsPayload{ApikeyToken: nil, ProjectSlugInput: nil, ContentEncoding: nil}, io.NopCloser(bytes.NewReader(body)))
 	require.NoError(t, err)
+	publisher.AssertExpectations(t)
+	requireSinkAfterEveryPublish(t, events, 1)
 
 	require.Len(t, sink.metrics, 1)
 	payload := sink.metrics[0]
@@ -247,7 +290,7 @@ func TestHooksMetricsPayloadRendersClaudeUsageShapes(t *testing.T) {
 		ResourceMetrics: []*metricsv1.ResourceMetrics{{
 			Resource: &resourcev1.Resource{Attributes: []*commonv1.KeyValue{{
 				Key:   "service.name",
-				Value: &commonv1.AnyValue{Value: &commonv1.AnyValue_StringValue{StringValue: "Claude Code"}},
+				Value: &commonv1.AnyValue{Value: &commonv1.AnyValue_StringValue{StringValue: "claude-code"}},
 			}}},
 			ScopeMetrics: []*metricsv1.ScopeMetrics{{
 				Metrics: []*metricsv1.Metric{{
@@ -287,8 +330,8 @@ func TestMetricsDoesNotForwardToHooksSinkWhenPublishFails(t *testing.T) {
 	require.NoError(t, err)
 
 	publisher := gcp.NewMockPublisher[*otelv1.InboundMetric]()
-	publisher.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewErrPublishResult(errors.New("pubsub unavailable")))
-	sink := &recordingHooksSink{logs: nil, metrics: nil}
+	publisher.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewErrPublishResult(errors.New("pubsub unavailable"))).Once()
+	sink := &recordingHooksSink{events: &sinkEventLog{events: nil}, logs: nil, metrics: nil}
 	service := &Service{
 		logger:          testenv.NewLogger(t),
 		tracer:          testenv.NewTracerProvider(t).Tracer("test"),
@@ -305,5 +348,75 @@ func TestMetricsDoesNotForwardToHooksSinkWhenPublishFails(t *testing.T) {
 
 	err = service.Metrics(ctx, &gen.MetricsPayload{ApikeyToken: nil, ProjectSlugInput: nil, ContentEncoding: nil}, io.NopCloser(bytes.NewReader(body)))
 	require.Error(t, err)
+	publisher.AssertExpectations(t)
 	require.Empty(t, sink.metrics)
+}
+
+func TestHooksPayloadsClearNonFiniteDoubles(t *testing.T) {
+	t.Parallel()
+
+	logs := claudeSinkTestExport()
+	logs.ResourceLogs[0].ScopeLogs[0].LogRecords[0].Attributes = append(
+		logs.ResourceLogs[0].ScopeLogs[0].LogRecords[0].Attributes,
+		&commonv1.KeyValue{Key: "ratio", Value: &commonv1.AnyValue{Value: &commonv1.AnyValue_DoubleValue{DoubleValue: math.Inf(1)}}},
+	)
+	logsPayload, err := hooksLogsPayload(logs)
+	require.NoError(t, err)
+	attrs := logsPayload.ResourceLogs[0].ScopeLogs[0].LogRecords[0].Attributes
+	require.Len(t, attrs, 5)
+	require.InDelta(t, 0.5, *attrs[3].Value.DoubleValue, 0)
+	require.Equal(t, "ratio", attrs[4].Key)
+	require.Nil(t, attrs[4].Value.DoubleValue)
+
+	metrics := &collectormetricsv1.ExportMetricsServiceRequest{
+		ResourceMetrics: []*metricsv1.ResourceMetrics{{
+			Resource: &resourcev1.Resource{Attributes: []*commonv1.KeyValue{{
+				Key:   "service.name",
+				Value: &commonv1.AnyValue{Value: &commonv1.AnyValue_StringValue{StringValue: "claude-code"}},
+			}}},
+			ScopeMetrics: []*metricsv1.ScopeMetrics{{
+				Metrics: []*metricsv1.Metric{
+					{
+						Name: "claude_code.cost.usage",
+						Data: &metricsv1.Metric_Sum{Sum: &metricsv1.Sum{
+							AggregationTemporality: metricsv1.AggregationTemporality_AGGREGATION_TEMPORALITY_DELTA,
+							DataPoints: []*metricsv1.NumberDataPoint{
+								{TimeUnixNano: 1, Value: &metricsv1.NumberDataPoint_AsDouble{AsDouble: math.NaN()}},
+								{TimeUnixNano: 2, Value: &metricsv1.NumberDataPoint_AsDouble{AsDouble: 0.25}},
+							},
+						}},
+					},
+					{
+						Name: "claude_code.latency",
+						Data: &metricsv1.Metric_Histogram{Histogram: &metricsv1.Histogram{
+							AggregationTemporality: metricsv1.AggregationTemporality_AGGREGATION_TEMPORALITY_DELTA,
+							DataPoints: []*metricsv1.HistogramDataPoint{{
+								TimeUnixNano:   3,
+								Count:          2,
+								Sum:            new(math.Inf(-1)),
+								BucketCounts:   []uint64{1, 1},
+								ExplicitBounds: []float64{1, math.Inf(1)},
+							}},
+						}},
+					},
+				},
+			}},
+		}},
+	}
+	metricsPayload, err := hooksMetricsPayload(metrics)
+	require.NoError(t, err)
+	got := metricsPayload.ResourceMetrics[0].ScopeMetrics[0].Metrics
+	require.Len(t, got, 2)
+	require.Len(t, got[0].Sum.DataPoints, 2)
+	require.Nil(t, got[0].Sum.DataPoints[0].AsDouble)
+	require.InDelta(t, 0.25, *got[0].Sum.DataPoints[1].AsDouble, 0)
+	histogram, ok := got[1].Histogram.(map[string]any)
+	require.True(t, ok)
+	points, ok := histogram["dataPoints"].([]any)
+	require.True(t, ok)
+	require.Len(t, points, 1)
+	point, ok := points[0].(map[string]any)
+	require.True(t, ok)
+	require.NotContains(t, point, "sum")
+	require.Equal(t, []any{float64(1)}, point["explicitBounds"])
 }
