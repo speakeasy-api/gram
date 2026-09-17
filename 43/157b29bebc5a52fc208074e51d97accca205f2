@@ -1,0 +1,26 @@
+server/internal/k8s/tailscale_network_ingress_provisioner_test.go
+  h_9630b74bdac540 577-579,581,590-591
+  h_9630b74bdac540 580,582-589
+server/internal/k8s/tailscale_network_ingress_provisioner.go
+  h_9630b74bdac540 344
+client/dashboard/src/hooks/usePrivateMcpServerUrls.test.ts
+  h_9630b74bdac540 3,101-106,108-117,119-123,125-133,137,139-143,145-149,152-169,182,189,191
+  h_9630b74bdac540 118,138,144,150-151,170,188,190
+client/dashboard/src/hooks/usePrivateMcpServerUrls.ts
+  h_9630b74bdac540 48-77
+  h_9630b74bdac540 100,115
+client/dashboard/src/components/mcp-server-x-sidebar-nav.tsx
+  h_9630b74bdac540 16-17,114-118,383,385,393
+  h_9630b74bdac540 15,18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "43157b29bebc5a52fc208074e51d97accca205f2",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
