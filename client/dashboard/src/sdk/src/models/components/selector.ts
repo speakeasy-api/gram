@@ -35,6 +35,7 @@ export const ResourceKind = {
   RiskPolicy: "risk_policy",
   Chat: "chat",
   Agent: "agent",
+  Logs: "logs",
   Wildcard: "*",
 } as const;
 /**
@@ -46,6 +47,18 @@ export type ResourceKind = ClosedEnum<typeof ResourceKind>;
  * A constraint that narrows which resources a grant applies to.
  */
 export type Selector = {
+  /**
+   * Directory department of the people whose activity this grant covers (logs scopes only).
+   */
+  actorDepartment?: string | undefined;
+  /**
+   * Directory group name of the people whose activity this grant covers (logs scopes only).
+   */
+  actorGroup?: string | undefined;
+  /**
+   * Identity-provider role slug of the people whose activity this grant covers (logs scopes only).
+   */
+  actorRole?: string | undefined;
   /**
    * Tool disposition filter (MCP scopes only).
    */
@@ -89,6 +102,9 @@ export const ResourceKind$outboundSchema: z.ZodMiniEnum<typeof ResourceKind> =
 /** @internal */
 export const Selector$inboundSchema: z.ZodMiniType<Selector, unknown> = z.pipe(
   z.object({
+    actor_department: z.optional(z.string()),
+    actor_group: z.optional(z.string()),
+    actor_role: z.optional(z.string()),
     disposition: z.optional(Disposition$inboundSchema),
     project_id: z.optional(z.string()),
     resource_id: z.string(),
@@ -98,6 +114,9 @@ export const Selector$inboundSchema: z.ZodMiniType<Selector, unknown> = z.pipe(
   }),
   z.transform((v) => {
     return remap$(v, {
+      "actor_department": "actorDepartment",
+      "actor_group": "actorGroup",
+      "actor_role": "actorRole",
       "project_id": "projectId",
       "resource_id": "resourceId",
       "resource_kind": "resourceKind",
@@ -107,6 +126,9 @@ export const Selector$inboundSchema: z.ZodMiniType<Selector, unknown> = z.pipe(
 );
 /** @internal */
 export type Selector$Outbound = {
+  actor_department?: string | undefined;
+  actor_group?: string | undefined;
+  actor_role?: string | undefined;
   disposition?: string | undefined;
   project_id?: string | undefined;
   resource_id: string;
@@ -121,6 +143,9 @@ export const Selector$outboundSchema: z.ZodMiniType<
   Selector
 > = z.pipe(
   z.object({
+    actorDepartment: z.optional(z.string()),
+    actorGroup: z.optional(z.string()),
+    actorRole: z.optional(z.string()),
     disposition: z.optional(Disposition$outboundSchema),
     projectId: z.optional(z.string()),
     resourceId: z.string(),
@@ -130,6 +155,9 @@ export const Selector$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      actorDepartment: "actor_department",
+      actorGroup: "actor_group",
+      actorRole: "actor_role",
       projectId: "project_id",
       resourceId: "resource_id",
       resourceKind: "resource_kind",

@@ -42,6 +42,13 @@ const scopeDefinitions = [
     agentEligible: true,
     exclusionScope: "skill:blocked_write",
   },
+  {
+    slug: "logs:read",
+    description: "Read observability logs, traces, and sessions.",
+    resourceType: "logs",
+    visibility: "user_visible",
+    agentEligible: false,
+  },
 ] satisfies ScopeDefinition[];
 
 function role(grants: Role["grants"]): Role {
@@ -276,5 +283,91 @@ describe("applyRemoveRule", () => {
     expect(next).not.toBeNull();
     expect(next!.rules).toHaveLength(1);
     expect(next!.rules[0]!.effect).toBe("allow");
+  });
+});
+
+describe("actor-narrowed logs grants", () => {
+  it("survives a round-trip instead of collapsing to unrestricted", () => {
+    // The editor cannot author an actor narrowing yet, so the round-trip is
+    // the only thing standing between an administrator opening a scoped role
+    // and saving it back as organization-wide log access.
+    const r = role([
+      {
+        scope: "logs:read",
+        selectors: [
+          {
+            resourceKind: "logs",
+            resourceId: "*",
+            actorDepartment: "Engineering",
+          },
+        ],
+      },
+    ]);
+
+    const grants = grantsFromRole(r, scopeDefinitions);
+    expect(grants["logs:read"]!.rules[0]!.selectors).toEqual([
+      { resourceKind: "logs", resourceId: "*", actorDepartment: "Engineering" },
+    ]);
+
+    const sdkGrants = sdkGrantsFromForm(grants, scopeDefinitions);
+    expect(sdkGrants).toEqual([
+      {
+        scope: "logs:read",
+        selectors: [
+          {
+            resourceKind: "logs",
+            resourceId: "*",
+            actorDepartment: "Engineering",
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("does not report a diff when nothing changed", () => {
+    const before = [
+      {
+        scope: "logs:read" as const,
+        selectors: [
+          {
+            resourceKind: "logs",
+            resourceId: "*",
+            actorGroup: "platform-leads",
+          },
+        ],
+      },
+    ];
+
+    expect(diffGrants(before, before)).toEqual({
+      addGrants: [],
+      removeGrants: [],
+    });
+  });
+
+  it("reports a diff when the narrowing changes", () => {
+    const before = [
+      {
+        scope: "logs:read" as const,
+        selectors: [
+          { resourceKind: "logs", resourceId: "*", actorDepartment: "Sales" },
+        ],
+      },
+    ];
+    const after = [
+      {
+        scope: "logs:read" as const,
+        selectors: [
+          {
+            resourceKind: "logs",
+            resourceId: "*",
+            actorDepartment: "Engineering",
+          },
+        ],
+      },
+    ];
+
+    const diff = diffGrants(before, after);
+    expect(diff.addGrants).toEqual(after);
+    expect(diff.removeGrants).toEqual(before);
   });
 });

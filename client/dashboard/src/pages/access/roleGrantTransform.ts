@@ -12,7 +12,7 @@ import type {
   RoleGrant,
   ScopeRule,
 } from "./types";
-import { DISPOSITION_TO_ANNOTATION } from "./types";
+import { actorSelectorConstraints, DISPOSITION_TO_ANNOTATION } from "./types";
 
 function blocklistScopeByScope(scopes: ScopeDefinition[]): Map<Scope, Scope> {
   const result = new Map<Scope, Scope>();
@@ -40,9 +40,14 @@ function groupSelectorsByLevel(selectors: Selector[]): Selector[][] {
   const servers: Selector[] = [];
   const tools: Selector[] = [];
   const annotations: Selector[] = [];
+  const actors: Selector[] = [];
 
   for (const s of selectors) {
-    if (s.disposition) annotations.push(s);
+    // An actor-narrowed selector restricts whose activity the grant covers
+    // rather than which resource it applies to, so it forms its own rule
+    // instead of being read as a whole-resource grant.
+    if (actorSelectorConstraints(s).length > 0) actors.push(s);
+    else if (s.disposition) annotations.push(s);
     else if (s.tool) tools.push(s);
     else if (s.projectId) projects.push(s);
     else servers.push(s);
@@ -53,6 +58,7 @@ function groupSelectorsByLevel(selectors: Selector[]): Selector[][] {
   if (servers.length) groups.push(servers);
   if (tools.length) groups.push(tools);
   if (annotations.length) groups.push(annotations);
+  if (actors.length) groups.push(actors);
   return groups;
 }
 
@@ -70,7 +76,8 @@ function isUnrestrictedSelectorList(selectors: Selector[]): boolean {
     s.disposition == null &&
     s.tool == null &&
     s.projectId == null &&
-    s.serverUrl == null
+    s.serverUrl == null &&
+    actorSelectorConstraints(s).length === 0
   );
 }
 
@@ -184,6 +191,9 @@ type GrantIdentity = {
 function selectorKey(selector: Selector | undefined): string {
   if (!selector) return "*";
   return JSON.stringify({
+    actorDepartment: selector.actorDepartment ?? "",
+    actorGroup: selector.actorGroup ?? "",
+    actorRole: selector.actorRole ?? "",
     disposition: selector.disposition ?? "",
     projectId: selector.projectId ?? "",
     resourceId: selector.resourceId,

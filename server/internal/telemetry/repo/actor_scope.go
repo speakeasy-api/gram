@@ -2,6 +2,7 @@ package repo
 
 import (
 	"errors"
+	"fmt"
 	"slices"
 
 	"github.com/Masterminds/squirrel"
@@ -120,7 +121,7 @@ func withActorScopeHaving(sb squirrel.SelectBuilder, scope *ActorScope, emailCol
 	}
 	inner, args, err := pred.ToSql()
 	if err != nil {
-		return sb, err
+		return sb, fmt.Errorf("build actor scope predicate: %w", err)
 	}
 	return sb.Having(squirrel.Expr("countIf("+inner+") > 0", args...)), nil
 }

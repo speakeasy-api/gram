@@ -385,10 +385,15 @@ func TestQuery_SkillVersionRejectsRangesBeyondRawRetention(t *testing.T) {
 	ctx, ti := newTestLogsService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeOrgRead,
-		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
-	})
+	ctx = authztest.WithExactGrants(t, ctx,
+		authz.Grant{
+			Scope:    authz.ScopeOrgRead,
+			Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+		},
+		// Unrestricted logs:read: these assertions cover organization-wide
+		// totals, which a narrowed or absent grant deliberately scopes down.
+		authz.NewGrant(authz.ScopeLogsRead, authz.WildcardResource),
+	)
 
 	now := time.Now().UTC()
 	from := now.Add(-91 * 24 * time.Hour).Format(time.RFC3339)
@@ -427,10 +432,15 @@ func TestQuery_SkillVersionRejectsPerRowGroupDimensions(t *testing.T) {
 	ctx, ti := newTestLogsService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeOrgRead,
-		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
-	})
+	ctx = authztest.WithExactGrants(t, ctx,
+		authz.Grant{
+			Scope:    authz.ScopeOrgRead,
+			Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+		},
+		// Unrestricted logs:read: these assertions cover organization-wide
+		// totals, which a narrowed or absent grant deliberately scopes down.
+		authz.NewGrant(authz.ScopeLogsRead, authz.WildcardResource),
+	)
 
 	now := time.Now().UTC()
 	for _, dimension := range []string{"model", "query_source", "skill_name", "agent_name", "mcp_server_name", "mcp_tool_name"} {
@@ -457,10 +467,15 @@ func TestQuery_GroupByDimensionsAndDrilldown(t *testing.T) {
 	projectID := authCtx.ProjectID.String()
 
 	// Org-scoped read grant for telemetry.query.
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeOrgRead,
-		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
-	})
+	ctx = authztest.WithExactGrants(t, ctx,
+		authz.Grant{
+			Scope:    authz.ScopeOrgRead,
+			Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+		},
+		// Unrestricted logs:read: these assertions cover organization-wide
+		// totals, which a narrowed or absent grant deliberately scopes down.
+		authz.NewGrant(authz.ScopeLogsRead, authz.WildcardResource),
+	)
 
 	now := time.Date(2026, time.July, 14, 1, 0, 0, 0, time.UTC)
 	ts := now.Add(-10 * time.Minute)
@@ -587,10 +602,15 @@ func TestQuery_SkillVersionAttributesFullSessionsWithoutDuplicateMappings(t *tes
 	ctx, ti := newTestLogsService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeOrgRead,
-		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
-	})
+	ctx = authztest.WithExactGrants(t, ctx,
+		authz.Grant{
+			Scope:    authz.ScopeOrgRead,
+			Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+		},
+		// Unrestricted logs:read: these assertions cover organization-wide
+		// totals, which a narrowed or absent grant deliberately scopes down.
+		authz.NewGrant(authz.ScopeLogsRead, authz.WildcardResource),
+	)
 
 	projectID := uuid.MustParse(ti.projectID)
 	foreignProjectID := uuid.New()
@@ -780,10 +800,15 @@ func TestQuery_EmailFallsBackToHostname(t *testing.T) {
 	require.True(t, ok)
 	projectID := authCtx.ProjectID.String()
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeOrgRead,
-		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
-	})
+	ctx = authztest.WithExactGrants(t, ctx,
+		authz.Grant{
+			Scope:    authz.ScopeOrgRead,
+			Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+		},
+		// Unrestricted logs:read: these assertions cover organization-wide
+		// totals, which a narrowed or absent grant deliberately scopes down.
+		authz.NewGrant(authz.ScopeLogsRead, authz.WildcardResource),
+	)
 
 	now := time.Date(2026, time.July, 14, 1, 0, 0, 0, time.UTC)
 	ts := now.Add(-10 * time.Minute)
@@ -858,10 +883,15 @@ func TestQuery_DefaultSortByAndTopN(t *testing.T) {
 	require.True(t, ok)
 	projectID := authCtx.ProjectID.String()
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeOrgRead,
-		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
-	})
+	ctx = authztest.WithExactGrants(t, ctx,
+		authz.Grant{
+			Scope:    authz.ScopeOrgRead,
+			Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+		},
+		// Unrestricted logs:read: these assertions cover organization-wide
+		// totals, which a narrowed or absent grant deliberately scopes down.
+		authz.NewGrant(authz.ScopeLogsRead, authz.WildcardResource),
+	)
 
 	now := time.Date(2026, time.July, 14, 1, 0, 0, 0, time.UTC)
 	ts := now.Add(-10 * time.Minute)
@@ -906,10 +936,15 @@ func TestQuery_SortByLLMTokens(t *testing.T) {
 	require.True(t, ok)
 	projectID := authCtx.ProjectID.String()
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeOrgRead,
-		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
-	})
+	ctx = authztest.WithExactGrants(t, ctx,
+		authz.Grant{
+			Scope:    authz.ScopeOrgRead,
+			Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+		},
+		// Unrestricted logs:read: these assertions cover organization-wide
+		// totals, which a narrowed or absent grant deliberately scopes down.
+		authz.NewGrant(authz.ScopeLogsRead, authz.WildcardResource),
+	)
 
 	now := time.Date(2026, time.July, 14, 1, 0, 0, 0, time.UTC)
 	ts := now.Add(-10 * time.Minute)
@@ -955,10 +990,15 @@ func TestQuery_CountsToolCalls(t *testing.T) {
 	require.True(t, ok)
 	projectID := authCtx.ProjectID.String()
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeOrgRead,
-		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
-	})
+	ctx = authztest.WithExactGrants(t, ctx,
+		authz.Grant{
+			Scope:    authz.ScopeOrgRead,
+			Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+		},
+		// Unrestricted logs:read: these assertions cover organization-wide
+		// totals, which a narrowed or absent grant deliberately scopes down.
+		authz.NewGrant(authz.ScopeLogsRead, authz.WildcardResource),
+	)
 
 	now := time.Date(2026, time.July, 14, 1, 0, 0, 0, time.UTC)
 	ts := now.Add(-10 * time.Minute)
@@ -1026,10 +1066,15 @@ func TestQuery_FallsBackToRowCountedToolCalls(t *testing.T) {
 	require.True(t, ok)
 	projectID := authCtx.ProjectID.String()
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeOrgRead,
-		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
-	})
+	ctx = authztest.WithExactGrants(t, ctx,
+		authz.Grant{
+			Scope:    authz.ScopeOrgRead,
+			Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+		},
+		// Unrestricted logs:read: these assertions cover organization-wide
+		// totals, which a narrowed or absent grant deliberately scopes down.
+		authz.NewGrant(authz.ScopeLogsRead, authz.WildcardResource),
+	)
 
 	now := time.Date(2026, time.July, 14, 1, 0, 0, 0, time.UTC)
 	insertAttributePreDedupSummaryRow(t, ctx, projectID, now.Add(-1*time.Hour), 3, 0.75)
@@ -1069,10 +1114,15 @@ func TestQuery_ExcludesAssistantChatCompletions(t *testing.T) {
 	require.True(t, ok)
 	projectID := authCtx.ProjectID.String()
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeOrgRead,
-		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
-	})
+	ctx = authztest.WithExactGrants(t, ctx,
+		authz.Grant{
+			Scope:    authz.ScopeOrgRead,
+			Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+		},
+		// Unrestricted logs:read: these assertions cover organization-wide
+		// totals, which a narrowed or absent grant deliberately scopes down.
+		authz.NewGrant(authz.ScopeLogsRead, authz.WildcardResource),
+	)
 
 	now := time.Date(2026, time.July, 14, 1, 0, 0, 0, time.UTC)
 	ts := now.Add(-10 * time.Minute)
@@ -1112,10 +1162,15 @@ func TestQuery_IncludesOnlyCanonicalLiteLLMModelSpans(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	projectID := authCtx.ProjectID.String()
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeOrgRead,
-		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
-	})
+	ctx = authztest.WithExactGrants(t, ctx,
+		authz.Grant{
+			Scope:    authz.ScopeOrgRead,
+			Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+		},
+		// Unrestricted logs:read: these assertions cover organization-wide
+		// totals, which a narrowed or absent grant deliberately scopes down.
+		authz.NewGrant(authz.ScopeLogsRead, authz.WildcardResource),
+	)
 
 	now := time.Date(2026, time.July, 14, 1, 0, 0, 0, time.UTC)
 	base := liteLLMSpanParams{
@@ -1183,10 +1238,15 @@ func TestQuery_AttributesClaudeAPIRequestByMCPAndSkill(t *testing.T) {
 	require.True(t, ok)
 	projectID := authCtx.ProjectID.String()
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeOrgRead,
-		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
-	})
+	ctx = authztest.WithExactGrants(t, ctx,
+		authz.Grant{
+			Scope:    authz.ScopeOrgRead,
+			Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+		},
+		// Unrestricted logs:read: these assertions cover organization-wide
+		// totals, which a narrowed or absent grant deliberately scopes down.
+		authz.NewGrant(authz.ScopeLogsRead, authz.WildcardResource),
+	)
 
 	now := time.Date(2026, time.July, 14, 1, 0, 0, 0, time.UTC)
 	ts := now.Add(-10 * time.Minute)
@@ -1246,10 +1306,15 @@ func TestQuery_TopNRollupIntoOther(t *testing.T) {
 	require.True(t, ok)
 	projectID := authCtx.ProjectID.String()
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeOrgRead,
-		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
-	})
+	ctx = authztest.WithExactGrants(t, ctx,
+		authz.Grant{
+			Scope:    authz.ScopeOrgRead,
+			Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+		},
+		// Unrestricted logs:read: these assertions cover organization-wide
+		// totals, which a narrowed or absent grant deliberately scopes down.
+		authz.NewGrant(authz.ScopeLogsRead, authz.WildcardResource),
+	)
 
 	now := time.Date(2026, time.July, 14, 1, 0, 0, 0, time.UTC)
 	ts := now.Add(-10 * time.Minute)
@@ -1363,10 +1428,15 @@ func TestQueryTumDetails_CountsOnlyObservedTraffic(t *testing.T) {
 	require.True(t, ok)
 	projectID := authCtx.ProjectID.String()
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeOrgRead,
-		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
-	})
+	ctx = authztest.WithExactGrants(t, ctx,
+		authz.Grant{
+			Scope:    authz.ScopeOrgRead,
+			Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+		},
+		// Unrestricted logs:read: these assertions cover organization-wide
+		// totals, which a narrowed or absent grant deliberately scopes down.
+		authz.NewGrant(authz.ScopeLogsRead, authz.WildcardResource),
+	)
 
 	now := time.Date(2026, time.July, 14, 1, 0, 0, 0, time.UTC)
 	ts := now.Add(-10 * time.Minute)
@@ -1449,10 +1519,15 @@ func TestQueryTumDetails_IncludesDeletedProjects(t *testing.T) {
 	require.True(t, ok)
 	projectID := authCtx.ProjectID.String()
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeOrgRead,
-		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
-	})
+	ctx = authztest.WithExactGrants(t, ctx,
+		authz.Grant{
+			Scope:    authz.ScopeOrgRead,
+			Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+		},
+		// Unrestricted logs:read: these assertions cover organization-wide
+		// totals, which a narrowed or absent grant deliberately scopes down.
+		authz.NewGrant(authz.ScopeLogsRead, authz.WildcardResource),
+	)
 
 	// A second project that gets soft-deleted after recording usage: the
 	// tokens were consumed while it was live, so billing — the card AND the

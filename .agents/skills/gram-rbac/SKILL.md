@@ -29,7 +29,9 @@ Gram's RBAC is a scope-and-selector model. The server ships with a fixed set of 
 
 **Principal.** Who holds a grant — a `urn.Principal` with a type (user, role, service account) and an id.
 
-**Dimensions.** Optional narrowing keys on a `Check` beyond `resource_id`. Today: `tool` and `disposition` for MCP scopes (see [server/internal/authz/checks.go](server/internal/authz/checks.go) and `MCPToolCallCheck`). Allowed keys per scope family are enforced by `ValidateSelector`; new dimensions must be added to `allowedSelectorKeys` in `selector.go`.
+**Dimensions.** Optional narrowing keys on a `Check` beyond `resource_id`. Today: `tool` and `disposition` for MCP scopes (see [server/internal/authz/checks.go](server/internal/authz/checks.go) and `MCPToolCallCheck`), and `actor_department` / `actor_group` / `actor_role` for the `logs` family. Allowed keys per scope family are enforced by `ValidateSelector`; new dimensions must be added to `allowedSelectorKeys` in `selector.go`.
+
+**Actor dimensions.** The `logs` family's dimensions (`authz.ActorSelectorKeys`) narrow _whose_ data may be read rather than _which_ resource. A handler proves the scope with a dimensionless `Require` — which a narrowed grant satisfies — then calls `Engine.ScopeConstraints` to learn the narrowing and applies it to the rows it returns. A handler that cannot filter by actor uses `Check.WithStrictSelectorMatch()` instead, which a narrowed grant fails, so it refuses rather than over-serving. `server/internal/telemetry/actor_scope.go` is the reference consumer: it resolves the dimensions against directory profiles and role assignments and hands the query layer a `repo.ActorScope`.
 
 **Disposition.** A snake_case bucket derived from MCP tool annotation hints — `read_only`, `destructive`, `idempotent`, `open_world`. Constants live in `authz/selector.go`; `conv.DispositionFromAnnotations(annotations)` is the canonical conversion from `*types.ToolAnnotations`.
 
@@ -51,7 +53,7 @@ Scope vocabulary, grant types, and enforcement logic are defined here. `authz`'s
 
 **System role grants.** `SystemRoleGrants` in `server/internal/authz/grants.go` — admin and member defaults. Adding a scope usually means adding it to admin, and optionally to member if end users should get it by default. `SeedSystemRoleGrants` upserts the full set; `SyncGrants` upserts grants for a single role slug.
 
-**`authz.Engine`.** The central enforcer. Methods: `PrepareContext`, `Require(ctx, checks...)`, `RequireAny(ctx, checks...)`, `Filter(ctx, scope, ids)`, `ShouldEnforce`, `InvalidateRoleCache`, `InvalidateAllRoleCaches`, `GetScopeOverrides`. Constructed in `server/cmd/gram/start.go` via `authz.NewEngine(logger, db, chDB, challengeLogging, membership, opts...)` and injected into every service that gates on RBAC. RBAC is always enforced for eligible authenticated requests; the `MembershipFetcher` is the WorkOS client used for role-slug lookups.
+**`authz.Engine`.** The central enforcer. Methods: `PrepareContext`, `Require(ctx, checks...)`, `RequireAny(ctx, checks...)`, `Evaluate(ctx, checks...)`, `Filter(ctx, scope, ids)`, `FindMatched(ctx, checks)`, `ScopeConstraints(ctx, check, keys...)`, `ShouldEnforce`, `InvalidateRoleCache`, `InvalidateAllRoleCaches`, `GetScopeOverrides`. Constructed in `server/cmd/gram/start.go` via `authz.NewEngine(logger, db, chDB, challengeLogging, membership, opts...)` and injected into every service that gates on RBAC. RBAC is always enforced for eligible authenticated requests; the `MembershipFetcher` is the WorkOS client used for role-slug lookups.
 
 **Organization provisioning.** `authz.Provisioner` seeds both built-in roles and their grants for every organization created through Gram. `ProvisionOrganizationAdmin` performs that seed and assigns the first user to `SystemRoleAdmin` in one transaction. The `identity` leaf package never imports `authz`. WorkOS organization event reconciliation calls `SeedSystemRoleGrantsTx` for organizations discovered through WorkOS.
 
@@ -86,6 +88,7 @@ Scope vocabulary, grant types, and enforcement logic are defined here. `authz`'s
 | `server/design/access/design.go`       | Goa design for the `access` service. Regenerates `server/gen/access/` and `server/gen/http/access/` via `mise run gen:goa-server`.                        |
 | `server/internal/authz/access.go`      | The `Check` type and its expansion logic.                                                                                                                 |
 | `server/internal/authz/checks.go`      | Pre-built `Check` builders for multi-dimensional checks (e.g. `MCPToolCallCheck`, `MCPToolCallDimensions`).                                               |
+| `server/internal/authz/constraints.go` | `ScopeConstraints` — the dimension narrowing a caller's grants place on a scope, for handlers that scope their results instead of rejecting the request.  |
 | `server/internal/authz/context.go`     | Request-context helpers for grants (`GrantsToContext`, `GrantsFromContext`).                                                                              |
 | `server/internal/authz/engine.go`      | The `Engine` type — central RBAC enforcer, role-slug caching, and override resolution.                                                                    |
 | `server/internal/authz/errors.go`      | Package sentinel errors and typed errors.                                                                                                                 |
@@ -255,7 +258,7 @@ Dashboard code should never hand-roll scope checks — use the shared primitives
 
 ## Role hierarchy at a glance
 
-- `admin` — every scope. Write implies read via `scopeExpansions`, so admins can exercise every read operation transitively.
+- `admin` — every scope, including unrestricted `logs:read`. Write implies read via `scopeExpansions`, so admins can exercise every read operation transitively.
 - `member` — the read-and-connect subset.
 - Resource scoping — a grant's selector either names a specific resource (`{"resource_kind":"project","resource_id":"proj_123"}`) or wildcards it (`{"resource_kind":"*","resource_id":"*"}` via `authz.WildcardResource`). A grant value of `*` matches anything for that selector key.
 - `root` (`authz.ScopeRoot`) — held only by service-internal overrides; satisfies every check.

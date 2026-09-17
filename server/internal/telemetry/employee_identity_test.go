@@ -157,10 +157,15 @@ func TestCostAnalytics_FoldsLinkedAccountEmailFilters(t *testing.T) {
 
 	ctx, ti := newTestLogsService(t)
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeOrgRead,
-		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
-	})
+	ctx = authztest.WithExactGrants(t, ctx,
+		authz.Grant{
+			Scope:    authz.ScopeOrgRead,
+			Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+		},
+		// Unrestricted logs:read: these assertions cover organization-wide
+		// totals, which a narrowed or absent grant deliberately scopes down.
+		authz.NewGrant(authz.ScopeLogsRead, authz.WildcardResource),
+	)
 
 	projectID := authCtx.ProjectID.String()
 	employeeID, employeeEmail := seedConnectedOrgUser(t, ctx, ti, "employee")
@@ -222,10 +227,15 @@ func TestCostAnalytics_DoesNotExpandAmbiguousAccountEmail(t *testing.T) {
 
 	ctx, ti := newTestLogsService(t)
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeOrgRead,
-		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
-	})
+	ctx = authztest.WithExactGrants(t, ctx,
+		authz.Grant{
+			Scope:    authz.ScopeOrgRead,
+			Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+		},
+		// Unrestricted logs:read: these assertions cover organization-wide
+		// totals, which a narrowed or absent grant deliberately scopes down.
+		authz.NewGrant(authz.ScopeLogsRead, authz.WildcardResource),
+	)
 
 	firstID, firstEmail := seedConnectedOrgUser(t, ctx, ti, "first")
 	secondID, secondEmail := seedConnectedOrgUser(t, ctx, ti, "second")

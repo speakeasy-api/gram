@@ -124,6 +124,8 @@ func insertActorTelemetryLog(t *testing.T, ctx context.Context, projectID, email
 }
 
 type actorScopeFixture struct {
+	//nolint:containedctx // the request context is part of the fixture: every
+	// case re-derives a grant set from it.
 	ctx             context.Context
 	ti              *testInstance
 	callerEmail     string

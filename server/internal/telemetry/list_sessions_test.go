@@ -27,10 +27,15 @@ func TestListSessions_OrgScopedFiltersAndAggregates(t *testing.T) {
 	require.True(t, ok)
 	projectID := authCtx.ProjectID.String()
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeOrgRead,
-		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
-	})
+	ctx = authztest.WithExactGrants(t, ctx,
+		authz.Grant{
+			Scope:    authz.ScopeOrgRead,
+			Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+		},
+		// Unrestricted logs:read: these assertions cover organization-wide
+		// totals, which a narrowed or absent grant deliberately scopes down.
+		authz.NewGrant(authz.ScopeLogsRead, authz.WildcardResource),
+	)
 
 	otherProject, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
 		Name:           "sessions-" + uuid.NewString()[:8],
@@ -244,10 +249,15 @@ func TestListSessions_CrossRowDirectoryAndHookFilters(t *testing.T) {
 	require.True(t, ok)
 	projectID := authCtx.ProjectID.String()
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeOrgRead,
-		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
-	})
+	ctx = authztest.WithExactGrants(t, ctx,
+		authz.Grant{
+			Scope:    authz.ScopeOrgRead,
+			Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+		},
+		// Unrestricted logs:read: these assertions cover organization-wide
+		// totals, which a narrowed or absent grant deliberately scopes down.
+		authz.NewGrant(authz.ScopeLogsRead, authz.WildcardResource),
+	)
 
 	now := time.Now().UTC()
 	chatID := uuid.NewString()
@@ -320,10 +330,15 @@ func TestListSessions_CoLocatesAttributionFilters(t *testing.T) {
 	require.True(t, ok)
 	projectID := authCtx.ProjectID.String()
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeOrgRead,
-		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
-	})
+	ctx = authztest.WithExactGrants(t, ctx,
+		authz.Grant{
+			Scope:    authz.ScopeOrgRead,
+			Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+		},
+		// Unrestricted logs:read: these assertions cover organization-wide
+		// totals, which a narrowed or absent grant deliberately scopes down.
+		authz.NewGrant(authz.ScopeLogsRead, authz.WildcardResource),
+	)
 
 	now := time.Now().UTC()
 	matchingChatID := uuid.NewString()
@@ -413,10 +428,15 @@ func TestListSessions_ExcludesAssistantChatCompletions(t *testing.T) {
 	require.True(t, ok)
 	projectID := authCtx.ProjectID.String()
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeOrgRead,
-		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
-	})
+	ctx = authztest.WithExactGrants(t, ctx,
+		authz.Grant{
+			Scope:    authz.ScopeOrgRead,
+			Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+		},
+		// Unrestricted logs:read: these assertions cover organization-wide
+		// totals, which a narrowed or absent grant deliberately scopes down.
+		authz.NewGrant(authz.ScopeLogsRead, authz.WildcardResource),
+	)
 
 	now := time.Now().UTC()
 	assistantChatID := uuid.NewString()
@@ -476,10 +496,15 @@ func TestListSessions_CursorPagination(t *testing.T) {
 	require.True(t, ok)
 	projectID := authCtx.ProjectID.String()
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeOrgRead,
-		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
-	})
+	ctx = authztest.WithExactGrants(t, ctx,
+		authz.Grant{
+			Scope:    authz.ScopeOrgRead,
+			Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+		},
+		// Unrestricted logs:read: these assertions cover organization-wide
+		// totals, which a narrowed or absent grant deliberately scopes down.
+		authz.NewGrant(authz.ScopeLogsRead, authz.WildcardResource),
+	)
 
 	now := time.Now().UTC()
 	chatIDs := []string{uuid.NewString(), uuid.NewString(), uuid.NewString()}

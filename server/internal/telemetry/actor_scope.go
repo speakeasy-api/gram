@@ -85,7 +85,9 @@ func (s *Service) resolveActorScope(ctx context.Context, authCtx *contextvalues.
 
 	constraints, err := s.authz.ScopeConstraints(ctx, logsReadCheck(authCtx.ActiveOrganizationID), authz.ActorSelectorKeys...)
 	if err != nil {
-		return nil, err
+		// Already an oops error from the engine; returning it as-is keeps the
+		// handler's response code.
+		return nil, err //nolint:wrapcheck // engine errors are already shareable
 	}
 	if constraints.Unrestricted {
 		return nil, nil

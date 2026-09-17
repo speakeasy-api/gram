@@ -43,6 +43,7 @@ export const ResourceType = {
   RiskPolicy: "risk_policy",
   Chat: "chat",
   Agent: "agent",
+  Logs: "logs",
 } as const;
 /**
  * The type of resource this scope applies to.
@@ -80,6 +81,7 @@ export const Slug = {
   RiskPolicyBlock: "risk_policy:block",
   ChatRead: "chat:read",
   ChatWrite: "chat:write",
+  LogsRead: "logs:read",
   AgentRead: "agent:read",
   AgentWrite: "agent:write",
   AgentAuthorize: "agent:authorize",

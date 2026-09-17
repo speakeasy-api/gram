@@ -27,16 +27,18 @@ export type ResourceType =
   | "skill"
   | "risk_policy"
   | "chat"
-  | "agent";
+  | "agent"
+  | "logs";
 
 export function isUnrestrictedResourceType(
   resourceType: ResourceType,
-): resourceType is "org" | "environment" | "chat" | "agent" {
+): resourceType is "org" | "environment" | "chat" | "agent" | "logs" {
   return (
     resourceType === "org" ||
     resourceType === "environment" ||
     resourceType === "chat" ||
-    resourceType === "agent"
+    resourceType === "agent" ||
+    resourceType === "logs"
   );
 }
 
@@ -44,7 +46,52 @@ export function unrestrictedResourceLabel(resourceType: ResourceType): string {
   if (resourceType === "environment") return "All in project";
   if (resourceType === "chat") return "All sessions";
   if (resourceType === "agent") return "All agents";
+  if (resourceType === "logs") return "All activity";
   return "All";
+}
+
+/**
+ * The selector keys that narrow a logs permission to the people whose activity
+ * the holder may read. Mirrors the actor_* keys in authz/selector.go.
+ */
+export const ACTOR_SELECTOR_LABELS = {
+  actorDepartment: "department",
+  actorGroup: "group",
+  actorRole: "role",
+} as const;
+
+export type ActorSelectorKey = keyof typeof ACTOR_SELECTOR_LABELS;
+
+export function actorSelectorConstraints(
+  selector: Selector,
+): { key: ActorSelectorKey; value: string }[] {
+  const constraints: { key: ActorSelectorKey; value: string }[] = [];
+  for (const key of Object.keys(ACTOR_SELECTOR_LABELS) as ActorSelectorKey[]) {
+    const value = selector[key];
+    if (value) constraints.push({ key, value });
+  }
+  return constraints;
+}
+
+/**
+ * Describes how a logs permission is narrowed, for the read-only summary the
+ * role editor shows. Narrowing is authored through the access API today, so the
+ * editor has to be able to state a restriction it cannot itself change —
+ * showing nothing would read as unrestricted access.
+ */
+export function actorScopeSummaries(selectors: Selector[] | null): string[] {
+  if (!selectors) return [];
+  const summaries: string[] = [];
+  for (const selector of selectors) {
+    const constraints = actorSelectorConstraints(selector);
+    if (constraints.length === 0) continue;
+    summaries.push(
+      constraints
+        .map(({ key, value }) => `${ACTOR_SELECTOR_LABELS[key]} ${value}`)
+        .join(" and "),
+    );
+  }
+  return summaries;
 }
 
 export function isProjectSelectableResourceType(
