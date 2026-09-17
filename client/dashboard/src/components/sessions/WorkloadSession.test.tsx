@@ -26,7 +26,9 @@ function renderBadge(props: { workload: UserSessionWorkload }) {
   );
 }
 
-const revokeMutate = vi.fn();
+// vi.hoisted creates the spy ahead of the hoisted vi.mock below, rather than
+// relying on the factory running late enough to see a const declared here.
+const { revokeMutate } = vi.hoisted(() => ({ revokeMutate: vi.fn() }));
 
 vi.mock("@gram/client/react-query/revokeUserSession.js", () => ({
   useRevokeUserSessionMutation: () => ({
