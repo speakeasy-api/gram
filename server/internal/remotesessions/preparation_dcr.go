@@ -141,7 +141,7 @@ func (s *Service) finishPreparationDCR(ctx context.Context, conn *pgxpool.Conn, 
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "persist preparation registration")
 	}
-	if b.Generation != claim.Generation || b.ClaimID != claim.ClaimID || b.State != "in_progress" {
+	if b.Generation != claim.Generation || b.ClaimID != claim.ClaimID || preparationBindingState(b.State) != "in_progress" {
 		return preparationResult(b, currentIssuer, emptyClient, "configuration_required"), nil
 	}
 	if currentIssuer.Issuer != issuer.Issuer || currentIssuer.RegistrationEndpoint != issuer.RegistrationEndpoint || PreparationEligibility(currentIssuer.AuthorizationGrantProfilesSupported, currentIssuer.GrantTypesSupported) != "eligible" {
@@ -164,7 +164,7 @@ func (s *Service) finishPreparationDCR(ctx context.Context, conn *pgxpool.Conn, 
 		if response.ClientSecretExpiresAt > 0 {
 			expires = conv.ToPGTimestamptz(time.Unix(response.ClientSecretExpiresAt, 0))
 		}
-		client, err = q.CreateRemoteSessionClient(saveCtx, repo.CreateRemoteSessionClientParams{Audience: conv.ToPGTextEmpty(""), LegacyCallbackUrl: false, ProjectID: conv.ToNullUUID(b.ProjectID), OrganizationID: conv.ToPGText(b.OrganizationID), RemoteSessionIssuerID: issuer.ID, ClientID: response.ClientID, ClientSecretEncrypted: conv.ToPGText(ciphertext), TokenEndpointAuthMethod: conv.ToPGText(method), Scope: scopes, ClientIDIssuedAt: issued, ClientSecretExpiresAt: expires})
+		client, err = q.CreateRemoteSessionClient(saveCtx, repo.CreateRemoteSessionClientParams{TokenEndpointAuthAudienceFormat: conv.ToPGTextEmpty(""), Audience: conv.ToPGTextEmpty(""), LegacyCallbackUrl: false, ProjectID: conv.ToNullUUID(b.ProjectID), OrganizationID: conv.ToPGText(b.OrganizationID), RemoteSessionIssuerID: issuer.ID, ClientID: response.ClientID, ClientSecretEncrypted: conv.ToPGText(ciphertext), TokenEndpointAuthMethod: conv.ToPGText(method), Scope: scopes, ClientIDIssuedAt: issued, ClientSecretExpiresAt: expires})
 		if err != nil {
 			return preparationResult(b, currentIssuer, client, "indeterminate"), err
 		}
@@ -185,7 +185,7 @@ func (s *Service) finishPreparationDCR(ctx context.Context, conn *pgxpool.Conn, 
 		}
 		b.RemoteSessionClientID = conv.ToNullUUID(client.ID)
 		b.RequestedScopes = scopes
-		b.GrantSource = "provider_returned"
+		b.GrantSource = conv.ToPGText("provider_returned")
 		b.ClaimID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 		b.ClaimedAt = pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
 		// A confirmed registration must be retained even when it is not usable.
@@ -197,7 +197,7 @@ func (s *Service) finishPreparationDCR(ctx context.Context, conn *pgxpool.Conn, 
 			state = "manual_setup_required"
 		}
 	}
-	b.State = state
+	b.State = conv.ToPGText(state)
 	b, err = setPreparationBinding(saveCtx, q, b, b.Generation)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "persist preparation registration")

@@ -3727,8 +3727,8 @@ WHERE id = @id
   AND deleted IS FALSE;
 
 -- name: EnsureEMABinding :exec
-INSERT INTO remote_session_ema_bindings (project_id, organization_id, user_session_issuer_id, remote_session_issuer_id, resource)
-SELECT @project_id, @organization_id, @user_session_issuer_id, @remote_session_issuer_id, @resource
+INSERT INTO remote_session_ema_bindings (project_id, organization_id, user_session_issuer_id, remote_session_issuer_id, resource, state, grant_source)
+SELECT @project_id, @organization_id, @user_session_issuer_id, @remote_session_issuer_id, @resource, 'configuration_required', 'unknown'
 WHERE EXISTS (SELECT 1 FROM projects p WHERE p.id = @project_id AND p.organization_id = @organization_id AND p.deleted IS FALSE)
 AND EXISTS (SELECT 1 FROM user_session_issuers u WHERE u.id = @user_session_issuer_id AND u.deleted IS FALSE AND (u.project_id = @project_id OR (u.project_id IS NULL AND u.organization_id = @organization_id)))
 AND EXISTS (SELECT 1 FROM remote_session_issuers i WHERE i.id = @remote_session_issuer_id AND i.deleted IS FALSE AND (i.project_id = @project_id OR (i.project_id IS NULL AND (i.organization_id = @organization_id OR i.organization_id IS NULL))))
@@ -3750,7 +3750,7 @@ UPDATE remote_session_ema_bindings b SET remote_session_client_id = CASE WHEN @s
  claim_id = sqlc.narg('claim_id'), claimed_at = sqlc.narg('claimed_at'), updated_at = clock_timestamp()
 WHERE b.id = @id AND b.project_id = @project_id AND b.organization_id = @organization_id AND b.generation = @expected_generation
 AND @generation::bigint >= b.generation
-AND ((b.state = 'unlinked') = (@state::text = 'unlinked') OR @generation::bigint = b.generation + 1)
+AND ((b.state IS NOT DISTINCT FROM 'unlinked') = (@state::text = 'unlinked') OR @generation::bigint = b.generation + 1)
 AND (@state::text = 'unlinked' OR (
  EXISTS (SELECT 1 FROM projects p WHERE p.id = b.project_id AND p.organization_id = b.organization_id AND p.deleted IS FALSE)
  AND EXISTS (SELECT 1 FROM user_session_issuers u WHERE u.id = b.user_session_issuer_id AND u.deleted IS FALSE AND (u.project_id = b.project_id OR (u.project_id IS NULL AND u.organization_id = b.organization_id)))
@@ -3784,15 +3784,15 @@ AND ((remote_session_clients.project_id = @project_id AND EXISTS (
 )) OR (remote_session_clients.project_id IS NULL AND remote_session_clients.organization_id = sqlc.narg('organization_id'))) RETURNING *;
 
 -- name: CountActiveEMABindingsForClient :one
-SELECT count(*) FROM remote_session_ema_bindings WHERE remote_session_client_id = @client_id AND state <> 'unlinked'
+SELECT count(*) FROM remote_session_ema_bindings WHERE remote_session_client_id = @client_id AND state IS DISTINCT FROM 'unlinked'
 AND (@organization_id::text = '' OR organization_id = @organization_id) AND (@project_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR project_id = @project_id);
 
 -- name: CountActiveEMABindingsForIssuer :one
-SELECT count(*) FROM remote_session_ema_bindings WHERE remote_session_issuer_id = @issuer_id AND state <> 'unlinked'
+SELECT count(*) FROM remote_session_ema_bindings WHERE remote_session_issuer_id = @issuer_id AND state IS DISTINCT FROM 'unlinked'
 AND (@organization_id::text = '' OR organization_id = @organization_id) AND (@project_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR project_id = @project_id);
 
 -- name: CountActiveEMABindingsForUserIssuer :one
-SELECT count(*) FROM remote_session_ema_bindings WHERE user_session_issuer_id = @issuer_id AND state <> 'unlinked'
+SELECT count(*) FROM remote_session_ema_bindings WHERE user_session_issuer_id = @issuer_id AND state IS DISTINCT FROM 'unlinked'
 AND (@organization_id::text = '' OR organization_id = @organization_id) AND (@project_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR project_id = @project_id);
 
 -- name: LockEMAUserIssuer :one
@@ -4005,3 +4005,8 @@ SELECT id FROM remote_session_issuers
 WHERE id = @id AND project_id IS NOT DISTINCT FROM sqlc.narg('project_id')::uuid
 AND organization_id IS NOT DISTINCT FROM sqlc.narg('organization_id')::text
 AND deleted IS FALSE FOR UPDATE;
+
+-- name: ClearPreparationFixtureState :exec
+-- Test fixture: represent a binding created without application lifecycle defaults.
+UPDATE remote_session_ema_bindings SET state = NULL, grant_source = NULL
+WHERE id = @id AND project_id = @project_id AND organization_id = @organization_id;

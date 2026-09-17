@@ -33,7 +33,7 @@ func TestProjectsService_DeleteProjectActiveEMABindingConflict(t *testing.T) {
 	require.NoError(t, err, "failed deletion must preserve the project")
 	binding, err := q.GetEMABinding(ctx, remoterepo.GetEMABindingParams{ProjectID: project.ID, OrganizationID: auth.ActiveOrganizationID, UserSessionIssuerID: user.ID, RemoteSessionIssuerID: remote.ID, Resource: "https://resource.example.com/"})
 	require.NoError(t, err)
-	_, err = q.SetEMABinding(ctx, remoterepo.SetEMABindingParams{ID: binding.ID, ProjectID: project.ID, OrganizationID: auth.ActiveOrganizationID, ExpectedGeneration: binding.Generation, Generation: binding.Generation + 1, State: "unlinked", GrantSource: "unknown", RequestedScopes: []string{}})
+	_, err = q.SetEMABinding(ctx, remoterepo.SetEMABindingParams{ID: binding.ID, ProjectID: project.ID, OrganizationID: auth.ActiveOrganizationID, ExpectedGeneration: binding.Generation, Generation: binding.Generation + 1, State: conv.ToPGText("unlinked"), GrantSource: conv.ToPGText("unknown"), RequestedScopes: []string{}})
 	require.NoError(t, err)
 	require.NoError(t, ti.service.DeleteProject(ctx, &gen.DeleteProjectPayload{ID: project.ID.String()}))
 	_, err = projectsrepo.New(ti.conn).GetProjectByID(ctx, project.ID)

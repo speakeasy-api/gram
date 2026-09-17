@@ -50,7 +50,7 @@ func TestPreparationFixtureRegistrationScopesJoinedClient(t *testing.T) {
 	require.NoError(t, err)
 	other := createProject(t, ctx, ti.conn, "fixture-other")
 	foreign := seedProjectRemoteClientNoOrg(t, ctx, ti.conn, other, in.RemoteSessionIssuerID, "foreign-client")
-	_, err = q.SetEMABinding(ctx, repo.SetEMABindingParams{ID: prepared.BindingID, ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, ExpectedGeneration: prepared.Generation, Generation: prepared.Generation + 1, State: "unknown_grants", GrantSource: "unknown", RemoteSessionClientID: conv.ToNullUUID(foreign), RequestedScopes: in.Scopes})
+	_, err = q.SetEMABinding(ctx, repo.SetEMABindingParams{ID: prepared.BindingID, ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, ExpectedGeneration: prepared.Generation, Generation: prepared.Generation + 1, State: conv.ToPGText("unknown_grants"), GrantSource: conv.ToPGText("unknown"), RemoteSessionClientID: conv.ToNullUUID(foreign), RequestedScopes: in.Scopes})
 	require.ErrorIs(t, err, pgx.ErrNoRows, "explicit conditional write rejects the foreign reference")
 	registration, err := q.GetPreparationFixtureRegistration(ctx, params)
 	require.NoError(t, err)

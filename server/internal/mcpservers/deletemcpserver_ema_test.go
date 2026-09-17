@@ -40,7 +40,7 @@ func TestDeleteMcpServer_LastOwnerPreservesActiveEMABinding(t *testing.T) {
 	require.NoError(t, err)
 	binding, err := q.GetEMABinding(ctx, key)
 	require.NoError(t, err)
-	_, err = q.SetEMABinding(ctx, remoterepo.SetEMABindingParams{ID: binding.ID, ProjectID: binding.ProjectID, OrganizationID: binding.OrganizationID, Generation: binding.Generation + 1, ExpectedGeneration: binding.Generation, State: "unlinked", GrantSource: "unknown", RequestedScopes: []string{}})
+	_, err = q.SetEMABinding(ctx, remoterepo.SetEMABindingParams{ID: binding.ID, ProjectID: binding.ProjectID, OrganizationID: binding.OrganizationID, Generation: binding.Generation + 1, ExpectedGeneration: binding.Generation, State: conv.ToPGText("unlinked"), GrantSource: conv.ToPGText("unknown"), RequestedScopes: []string{}})
 	require.NoError(t, err)
 	require.NoError(t, ti.service.DeleteMcpServer(ctx, &gen.DeleteMcpServerPayload{ID: server.ID}))
 	_, err = usersessionsrepo.New(ti.conn).GetUserSessionIssuerByID(ctx, usersessionsrepo.GetUserSessionIssuerByIDParams{ID: userID, ProjectID: *auth.ProjectID})

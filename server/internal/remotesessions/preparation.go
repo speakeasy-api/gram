@@ -112,13 +112,30 @@ func preparationDiagnostic(state string) *PreparationResult {
 	}
 	return r
 }
+
+// Legacy bindings can have NULL preparation fields. Missing state must not
+// imply readiness, and missing provenance must not imply verified grants.
+func preparationBindingState(state pgtype.Text) string {
+	if !state.Valid {
+		return "configuration_required"
+	}
+	return state.String
+}
+
+func preparationBindingGrantSource(source pgtype.Text) string {
+	if !source.Valid {
+		return "unknown"
+	}
+	return source.String
+}
+
 func preparationResult(b repo.RemoteSessionEmaBinding, issuer repo.RemoteSessionIssuer, client repo.RemoteSessionClient, state string) *PreparationResult {
 	r := preparationDiagnostic(state)
 	r.BindingID = b.ID
 	r.Generation = b.Generation
 	r.Resource = b.Resource
 	r.Issuer = issuer.Issuer
-	r.GrantSource = b.GrantSource
+	r.GrantSource = preparationBindingGrantSource(b.GrantSource)
 	r.Scopes = b.RequestedScopes
 	if b.RemoteSessionClientID.Valid && client.ID == b.RemoteSessionClientID.UUID {
 		r.ClientID = b.RemoteSessionClientID.UUID
@@ -185,7 +202,7 @@ func (s *Service) preparationTenant(ctx context.Context, write bool) (uuid.UUID,
 	return *a.ProjectID, a.ActiveOrganizationID, nil
 }
 func setPreparationBinding(ctx context.Context, q *repo.Queries, b repo.RemoteSessionEmaBinding, previous int64) (repo.RemoteSessionEmaBinding, error) {
-	result, err := q.SetEMABinding(ctx, repo.SetEMABindingParams{ID: b.ID, ProjectID: b.ProjectID, OrganizationID: b.OrganizationID, RemoteSessionClientID: b.RemoteSessionClientID, Generation: b.Generation, ExpectedGeneration: previous, State: b.State, GrantSource: b.GrantSource, RequestedScopes: b.RequestedScopes, ClaimID: b.ClaimID, ClaimedAt: b.ClaimedAt})
+	result, err := q.SetEMABinding(ctx, repo.SetEMABindingParams{ID: b.ID, ProjectID: b.ProjectID, OrganizationID: b.OrganizationID, RemoteSessionClientID: b.RemoteSessionClientID, Generation: b.Generation, ExpectedGeneration: previous, State: conv.ToPGText(preparationBindingState(b.State)), GrantSource: conv.ToPGText(preparationBindingGrantSource(b.GrantSource)), RequestedScopes: b.RequestedScopes, ClaimID: b.ClaimID, ClaimedAt: b.ClaimedAt})
 	if err != nil {
 		return result, oops.E(oops.CodeUnexpected, err, "persist preparation binding")
 	}
@@ -322,11 +339,11 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 			return preparationResult(b, issuer, client, "configuration_required"), oops.E(oops.CodeConflict, nil, "binding generation changed; read current preparation before unlinking")
 		}
 		b.Generation++
-		b.State = "unlinked"
+		b.State = conv.ToPGText("unlinked")
 		b.RemoteSessionClientID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 		b.ClaimID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 		b.ClaimedAt = pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
-		b.GrantSource = "unknown"
+		b.GrantSource = conv.ToPGText("unknown")
 		b.RequestedScopes = []string{}
 		b, err = setPreparationBinding(ctx, q, b, previous)
 		if err != nil {
@@ -335,13 +352,13 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 		if err = tx.Commit(ctx); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "prepare identity chaining")
 		}
-		return preparationResult(b, issuer, emptyClient, b.State), nil
+		return preparationResult(b, issuer, emptyClient, preparationBindingState(b.State)), nil
 	}
-	if b.ClaimID.Valid && in.ClientID == uuid.Nil && (read || b.State != "provider_rejection" || in.ExpectedGeneration != b.Generation) {
-		state := b.State
+	if b.ClaimID.Valid && in.ClientID == uuid.Nil && (read || preparationBindingState(b.State) != "provider_rejection" || in.ExpectedGeneration != b.Generation) {
+		state := preparationBindingState(b.State)
 		if state == "in_progress" && (!b.ClaimedAt.Valid || time.Since(b.ClaimedAt.Time) > time.Minute) {
 			state = "indeterminate"
-			b.State = state
+			b.State = conv.ToPGText(state)
 			b, err = setPreparationBinding(ctx, q, b, previous)
 			if err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "prepare identity chaining")
@@ -359,7 +376,7 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 	if preparationMetadataTransient(issuer) {
 		return preparationResult(b, issuer, client, "transient_failure"), nil
 	}
-	if (read || in.Mechanism == "dcr") && (b.State == "ready" || b.State == "published_acceptance_unverified") {
+	if (read || in.Mechanism == "dcr") && (preparationBindingState(b.State) == "ready" || preparationBindingState(b.State) == "published_acceptance_unverified") {
 		if !preparationClientConfigurationValid(ctx, q, client, issuer, org) {
 			return preparationResult(b, issuer, client, "manual_setup_required"), nil
 		}
@@ -368,16 +385,16 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 		}
 	}
 	if read {
-		return preparationResult(b, issuer, client, b.State), nil
+		return preparationResult(b, issuer, client, preparationBindingState(b.State)), nil
 	}
 	// A completed DCR claim is a durable result, including scope narrowing.
 	// Repeating the original preparation request must neither register again
 	// nor overwrite the provider's effective scope with the requested scope.
-	if in.Mechanism == "dcr" && in.ClientID == uuid.Nil && b.RemoteSessionClientID.Valid && b.GrantSource == "provider_returned" {
-		return preparationResult(b, issuer, client, b.State), nil
+	if in.Mechanism == "dcr" && in.ClientID == uuid.Nil && b.RemoteSessionClientID.Valid && preparationBindingGrantSource(b.GrantSource) == "provider_returned" {
+		return preparationResult(b, issuer, client, preparationBindingState(b.State)), nil
 	}
-	changed := b.State == "provider_rejection" || selected != b.RemoteSessionClientID.UUID || b.State == "unlinked" || !slices.Equal(b.RequestedScopes, in.Scopes) || (in.ConfirmGrants != nil && (!samePreparationGrants(in.ConfirmGrants, client.GrantTypes) || b.GrantSource != "administrator_declared")) || (in.Mechanism == "cimd" && (!slices.Contains(client.GrantTypes, PreparationJWTBearerGrant) || b.GrantSource != "cimd_published"))
-	if changed && (b.RemoteSessionClientID.Valid || b.ClaimID.Valid || b.State == "unlinked") && in.ExpectedGeneration != b.Generation {
+	changed := preparationBindingState(b.State) == "provider_rejection" || selected != b.RemoteSessionClientID.UUID || preparationBindingState(b.State) == "unlinked" || !slices.Equal(b.RequestedScopes, in.Scopes) || (in.ConfirmGrants != nil && (!samePreparationGrants(in.ConfirmGrants, client.GrantTypes) || preparationBindingGrantSource(b.GrantSource) != "administrator_declared")) || (in.Mechanism == "cimd" && (!slices.Contains(client.GrantTypes, PreparationJWTBearerGrant) || preparationBindingGrantSource(b.GrantSource) != "cimd_published"))
+	if changed && (b.RemoteSessionClientID.Valid || b.ClaimID.Valid || preparationBindingState(b.State) == "unlinked") && in.ExpectedGeneration != b.Generation {
 		return preparationResult(b, issuer, client, "configuration_required"), nil
 	}
 	if selected == uuid.Nil {
@@ -396,10 +413,10 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 			b.Generation++
 		}
 		b.RequestedScopes = in.Scopes
-		b.State = "in_progress"
+		b.State = conv.ToPGText("in_progress")
 		b.ClaimID = conv.ToNullUUID(uuid.New())
 		b.ClaimedAt = conv.ToPGTimestamptz(time.Now())
-		b.GrantSource = "unknown"
+		b.GrantSource = conv.ToPGText("unknown")
 		b, err = setPreparationBinding(ctx, q, b, previous)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "prepare identity chaining")
@@ -414,7 +431,7 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 		return preparationResult(b, issuer, client, "configuration_required"), nil
 	}
 	grants := client.GrantTypes
-	source := b.GrantSource
+	source := preparationBindingGrantSource(b.GrantSource)
 	if selected != b.RemoteSessionClientID.UUID {
 		source = "administrator_declared"
 	}
@@ -467,7 +484,7 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 			return nil, oops.E(oops.CodeUnexpected, countErr, "count client bindings")
 		}
 		allowed := int64(0)
-		if b.RemoteSessionClientID.Valid && b.RemoteSessionClientID.UUID == client.ID && b.State != "unlinked" {
+		if b.RemoteSessionClientID.Valid && b.RemoteSessionClientID.UUID == client.ID && preparationBindingState(b.State) != "unlinked" {
 			allowed = 1
 		}
 		if count > allowed {
@@ -495,8 +512,8 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 	}
 	b.RequestedScopes = in.Scopes
 	b.RemoteSessionClientID = conv.ToNullUUID(client.ID)
-	b.State = state
-	b.GrantSource = source
+	b.State = conv.ToPGText(state)
+	b.GrantSource = conv.ToPGText(source)
 	b.ClaimID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 	b.ClaimedAt = pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
 	b, err = setPreparationBinding(ctx, q, b, previous)

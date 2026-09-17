@@ -33,7 +33,7 @@ func TestIssuerReview_RotationAdoptsEMABoundReplacement(t *testing.T) {
 	require.Equal(t, "ready", prepared.State)
 
 	// Adoption and refusals occur before any upstream or credential work.
-	rotator := remotesessions.NewClientRotator(testenv.NewLogger(t), ti.conn, nil, nil, ti.redisCache, nil, nil, nil)
+	rotator := remotesessions.NewClientRotator(testenv.NewLogger(t), ti.conn, nil, nil, nil, ti.redisCache, nil, nil, nil)
 	var params remotesessions.RotateClientRegistrationParams
 	params.ClientID = in.ClientID
 	params.ExpectedClientID = "superseded-registration"
@@ -92,7 +92,7 @@ func TestIssuerReview_ProjectUserIssuerMutationHidesSiblingBindings(t *testing.T
 	require.NoError(t, err)
 	service := usersessions.NewService(logger, tracer, testenv.NewMeterProvider(t), ti.conn, ti.sessionManager, nil,
 		authz.NewEngine(logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
-		audit.NewLogger(), policy, testenv.NewEncryptionClient(t), nil, "", nil)
+		audit.NewLogger(), policy, nil, testenv.NewEncryptionClient(t), nil, "", nil)
 	auth, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	sibling := createProject(t, ctx, ti.conn, "issuer-review-sibling")

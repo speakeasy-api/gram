@@ -100,7 +100,7 @@ func TestPreparationScope_DetachInheritedClientIgnoresSiblingEMABinding(t *testi
 	require.NoError(t, q.EnsureEMABinding(ctx, repo.EnsureEMABindingParams{ProjectID: sibling, OrganizationID: auth.ActiveOrganizationID, UserSessionIssuerID: user, RemoteSessionIssuerID: issuer, Resource: in.Resource}))
 	binding, err := q.GetEMABinding(ctx, repo.GetEMABindingParams{ProjectID: sibling, OrganizationID: auth.ActiveOrganizationID, UserSessionIssuerID: user, RemoteSessionIssuerID: issuer, Resource: in.Resource})
 	require.NoError(t, err)
-	_, err = q.SetEMABinding(ctx, repo.SetEMABindingParams{ID: binding.ID, ProjectID: sibling, OrganizationID: auth.ActiveOrganizationID, Generation: binding.Generation + 1, ExpectedGeneration: binding.Generation, State: "unknown_grants", GrantSource: "unknown", RemoteSessionClientID: conv.ToNullUUID(client), RequestedScopes: []string{}})
+	_, err = q.SetEMABinding(ctx, repo.SetEMABindingParams{ID: binding.ID, ProjectID: sibling, OrganizationID: auth.ActiveOrganizationID, Generation: binding.Generation + 1, ExpectedGeneration: binding.Generation, State: conv.ToPGText("unknown_grants"), GrantSource: conv.ToPGText("unknown"), RemoteSessionClientID: conv.ToNullUUID(client), RequestedScopes: []string{}})
 	require.NoError(t, err)
 	_, err = ti.service.DetachUserSessionIssuer(ctx, &clientsgen.DetachUserSessionIssuerPayload{ID: client.String(), UserSessionIssuerID: in.UserSessionIssuerID.String()})
 	require.NoError(t, err, "project-local join mutation must not be blocked by another project's inherited EMA binding")

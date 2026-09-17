@@ -374,6 +374,23 @@ func (q *Queries) ClaimDueRemoteSessionRefreshCandidates(ctx context.Context, ar
 	return items, nil
 }
 
+const clearPreparationFixtureState = `-- name: ClearPreparationFixtureState :exec
+UPDATE remote_session_ema_bindings SET state = NULL, grant_source = NULL
+WHERE id = $1 AND project_id = $2 AND organization_id = $3
+`
+
+type ClearPreparationFixtureStateParams struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+// Test fixture: represent a binding created without application lifecycle defaults.
+func (q *Queries) ClearPreparationFixtureState(ctx context.Context, arg ClearPreparationFixtureStateParams) error {
+	_, err := q.db.Exec(ctx, clearPreparationFixtureState, arg.ID, arg.ProjectID, arg.OrganizationID)
+	return err
+}
+
 const clearRemoteSessionClientUpstreamRejected = `-- name: ClearRemoteSessionClientUpstreamRejected :execrows
 UPDATE remote_session_clients
 SET upstream_rejected_at = NULL,
@@ -506,7 +523,7 @@ func (q *Queries) ClearRemoteSessionRefreshTokenAfterInvalidGrant(ctx context.Co
 }
 
 const countActiveEMABindingsForClient = `-- name: CountActiveEMABindingsForClient :one
-SELECT count(*) FROM remote_session_ema_bindings WHERE remote_session_client_id = $1 AND state <> 'unlinked'
+SELECT count(*) FROM remote_session_ema_bindings WHERE remote_session_client_id = $1 AND state IS DISTINCT FROM 'unlinked'
 AND ($2::text = '' OR organization_id = $2) AND ($3::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR project_id = $3)
 `
 
@@ -524,7 +541,7 @@ func (q *Queries) CountActiveEMABindingsForClient(ctx context.Context, arg Count
 }
 
 const countActiveEMABindingsForIssuer = `-- name: CountActiveEMABindingsForIssuer :one
-SELECT count(*) FROM remote_session_ema_bindings WHERE remote_session_issuer_id = $1 AND state <> 'unlinked'
+SELECT count(*) FROM remote_session_ema_bindings WHERE remote_session_issuer_id = $1 AND state IS DISTINCT FROM 'unlinked'
 AND ($2::text = '' OR organization_id = $2) AND ($3::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR project_id = $3)
 `
 
@@ -542,7 +559,7 @@ func (q *Queries) CountActiveEMABindingsForIssuer(ctx context.Context, arg Count
 }
 
 const countActiveEMABindingsForUserIssuer = `-- name: CountActiveEMABindingsForUserIssuer :one
-SELECT count(*) FROM remote_session_ema_bindings WHERE user_session_issuer_id = $1 AND state <> 'unlinked'
+SELECT count(*) FROM remote_session_ema_bindings WHERE user_session_issuer_id = $1 AND state IS DISTINCT FROM 'unlinked'
 AND ($2::text = '' OR organization_id = $2) AND ($3::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR project_id = $3)
 `
 
@@ -2273,8 +2290,8 @@ func (q *Queries) EnablePreparationFixtureCIMD(ctx context.Context, arg EnablePr
 }
 
 const ensureEMABinding = `-- name: EnsureEMABinding :exec
-INSERT INTO remote_session_ema_bindings (project_id, organization_id, user_session_issuer_id, remote_session_issuer_id, resource)
-SELECT $1, $2, $3, $4, $5
+INSERT INTO remote_session_ema_bindings (project_id, organization_id, user_session_issuer_id, remote_session_issuer_id, resource, state, grant_source)
+SELECT $1, $2, $3, $4, $5, 'configuration_required', 'unknown'
 WHERE EXISTS (SELECT 1 FROM projects p WHERE p.id = $1 AND p.organization_id = $2 AND p.deleted IS FALSE)
 AND EXISTS (SELECT 1 FROM user_session_issuers u WHERE u.id = $3 AND u.deleted IS FALSE AND (u.project_id = $1 OR (u.project_id IS NULL AND u.organization_id = $2)))
 AND EXISTS (SELECT 1 FROM remote_session_issuers i WHERE i.id = $4 AND i.deleted IS FALSE AND (i.project_id = $1 OR (i.project_id IS NULL AND (i.organization_id = $2 OR i.organization_id IS NULL))))
@@ -8885,7 +8902,7 @@ UPDATE remote_session_ema_bindings b SET remote_session_client_id = CASE WHEN $1
  claim_id = $6, claimed_at = $7, updated_at = clock_timestamp()
 WHERE b.id = $8 AND b.project_id = $9 AND b.organization_id = $10 AND b.generation = $11
 AND $3::bigint >= b.generation
-AND ((b.state = 'unlinked') = ($1::text = 'unlinked') OR $3::bigint = b.generation + 1)
+AND ((b.state IS NOT DISTINCT FROM 'unlinked') = ($1::text = 'unlinked') OR $3::bigint = b.generation + 1)
 AND ($1::text = 'unlinked' OR (
  EXISTS (SELECT 1 FROM projects p WHERE p.id = b.project_id AND p.organization_id = b.organization_id AND p.deleted IS FALSE)
  AND EXISTS (SELECT 1 FROM user_session_issuers u WHERE u.id = b.user_session_issuer_id AND u.deleted IS FALSE AND (u.project_id = b.project_id OR (u.project_id IS NULL AND u.organization_id = b.organization_id)))

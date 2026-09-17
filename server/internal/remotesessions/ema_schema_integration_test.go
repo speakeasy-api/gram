@@ -52,7 +52,7 @@ func TestEMABindingSQLGenerationTransitions(t *testing.T) {
 	require.NoError(t, err)
 	auth, _ := contextvalues.GetAuthContext(ctx)
 	q := repo.New(ti.conn)
-	p := repo.SetEMABindingParams{ID: prepared.BindingID, ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, ExpectedGeneration: prepared.Generation, Generation: prepared.Generation, State: "unlinked", GrantSource: "unknown", RemoteSessionClientID: conv.ToNullUUID(in.ClientID), RequestedScopes: []string{}}
+	p := repo.SetEMABindingParams{ID: prepared.BindingID, ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, ExpectedGeneration: prepared.Generation, Generation: prepared.Generation, State: conv.ToPGText("unlinked"), GrantSource: conv.ToPGText("unknown"), RemoteSessionClientID: conv.ToNullUUID(in.ClientID), RequestedScopes: []string{}}
 	_, err = q.SetEMABinding(ctx, p)
 	require.ErrorIs(t, err, pgx.ErrNoRows, "unlink must increment the incarnation")
 	p.Generation++
@@ -60,7 +60,7 @@ func TestEMABindingSQLGenerationTransitions(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, b.RemoteSessionClientID.Valid, "unlink clears even an explicitly supplied reference")
 	p.ExpectedGeneration = b.Generation
-	p.State = "unknown_grants"
+	p.State = conv.ToPGText("unknown_grants")
 	_, err = q.SetEMABinding(ctx, p)
 	require.ErrorIs(t, err, pgx.ErrNoRows, "revival must increment the incarnation")
 	p.Generation++
@@ -79,4 +79,35 @@ func TestPreparationArchitecture_NoLifecycleTriggers(t *testing.T) {
 	count, err := repo.New(ti.conn).CountPreparationFixtureLifecycleTriggers(ctx)
 	require.NoError(t, err)
 	require.Zero(t, count, "run preparation regressions against the trigger-free base; application guards must stand alone")
+}
+
+func TestEMABindingNullableLifecycleState(t *testing.T) {
+	t.Parallel()
+	ctx, ti, in := preparationFixture(t)
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	q := repo.New(ti.conn)
+	err := q.EnsureEMABinding(ctx, repo.EnsureEMABindingParams{
+		ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID,
+		UserSessionIssuerID: in.UserSessionIssuerID, RemoteSessionIssuerID: in.RemoteSessionIssuerID, Resource: in.Resource,
+	})
+	require.NoError(t, err)
+	b, err := q.GetEMABinding(ctx, repo.GetEMABindingParams{
+		ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID,
+		UserSessionIssuerID: in.UserSessionIssuerID, RemoteSessionIssuerID: in.RemoteSessionIssuerID, Resource: in.Resource,
+	})
+	require.NoError(t, err)
+	require.Equal(t, conv.ToPGText("configuration_required"), b.State)
+	require.Equal(t, conv.ToPGText("unknown"), b.GrantSource)
+	err = q.ClearPreparationFixtureState(ctx, repo.ClearPreparationFixtureStateParams{ID: b.ID, ProjectID: b.ProjectID, OrganizationID: b.OrganizationID})
+	require.NoError(t, err)
+	count, err := q.CountActiveEMABindingsForIssuer(ctx, repo.CountActiveEMABindingsForIssuerParams{IssuerID: in.RemoteSessionIssuerID, OrganizationID: b.OrganizationID, ProjectID: b.ProjectID})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, count, "NULL state is not an explicit unlink")
+	b, err = q.SetEMABinding(ctx, repo.SetEMABindingParams{
+		ID: b.ID, ProjectID: b.ProjectID, OrganizationID: b.OrganizationID,
+		ExpectedGeneration: b.Generation, Generation: b.Generation,
+		State: conv.ToPGText("configuration_required"), GrantSource: conv.ToPGText("unknown"), RequestedScopes: []string{},
+	})
+	require.NoError(t, err, "initializing a NULL state preserves the binding incarnation")
+	require.Equal(t, conv.ToPGText("configuration_required"), b.State)
 }

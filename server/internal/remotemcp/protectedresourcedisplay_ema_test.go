@@ -25,7 +25,7 @@ func TestUpdateServer_EMABindingBlocksResourceIdentityChange(t *testing.T) {
 	require.NoError(t, q.EnsureEMABinding(ctx, remoterepo.EnsureEMABindingParams(key)))
 	b, err := q.GetEMABinding(ctx, key)
 	require.NoError(t, err)
-	b, err = q.SetEMABinding(ctx, remoterepo.SetEMABindingParams{ID: b.ID, ProjectID: b.ProjectID, OrganizationID: b.OrganizationID, ExpectedGeneration: b.Generation, Generation: b.Generation, RemoteSessionClientID: conv.ToNullUUID(attached.client.ID), State: "unknown_grants", GrantSource: "unknown", RequestedScopes: []string{}})
+	b, err = q.SetEMABinding(ctx, remoterepo.SetEMABindingParams{ID: b.ID, ProjectID: b.ProjectID, OrganizationID: b.OrganizationID, ExpectedGeneration: b.Generation, Generation: b.Generation, RemoteSessionClientID: conv.ToNullUUID(attached.client.ID), State: conv.ToPGText("unknown_grants"), GrantSource: conv.ToPGText("unknown"), RequestedScopes: []string{}})
 	require.NoError(t, err)
 	_, err = ti.service.UpdateServer(ctx, &gen.UpdateServerPayload{ID: server.ID.String(), URL: conv.PtrEmpty(upstream.URL)})
 	var shared *oops.ShareableError
@@ -35,7 +35,7 @@ func TestUpdateServer_EMABindingBlocksResourceIdentityChange(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, server.Url, stored.Url)
 	require.Equal(t, server.Url, loadClient(t, ctx, ti, attached.client).ResourceIdentifier.String)
-	_, err = q.SetEMABinding(ctx, remoterepo.SetEMABindingParams{ID: b.ID, ProjectID: b.ProjectID, OrganizationID: b.OrganizationID, ExpectedGeneration: b.Generation, Generation: b.Generation + 1, State: "unlinked", GrantSource: "unknown", RequestedScopes: []string{}})
+	_, err = q.SetEMABinding(ctx, remoterepo.SetEMABindingParams{ID: b.ID, ProjectID: b.ProjectID, OrganizationID: b.OrganizationID, ExpectedGeneration: b.Generation, Generation: b.Generation + 1, State: conv.ToPGText("unlinked"), GrantSource: conv.ToPGText("unknown"), RequestedScopes: []string{}})
 	require.NoError(t, err)
 	updateServerURL(t, ctx, ti, server, upstream.URL)
 	require.Equal(t, upstream.URL, loadClient(t, ctx, ti, attached.client).ResourceIdentifier.String)

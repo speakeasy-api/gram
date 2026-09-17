@@ -43,7 +43,7 @@ func restartPreparationService(t *testing.T, ti *testInstance) *remotesessions.S
 	origin, err := url.Parse(testServerURL)
 	require.NoError(t, err)
 	enc := testenv.NewEncryptionClient(t)
-	return remotesessions.NewService(logger, tracer, meter, ti.conn, ti.sessionManager, authz.NewEngine(logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), enc, ti.envEntries, policy, audit.NewLogger(), origin, remotesessions.NewRefreshService(logger, meter, ti.conn, enc, policy, ti.redisCache), ti.features)
+	return remotesessions.NewService(logger, tracer, meter, ti.conn, ti.sessionManager, authz.NewEngine(logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), enc, ti.envEntries, policy, nil, audit.NewLogger(), origin, remotesessions.NewRefreshService(logger, meter, ti.conn, enc, policy, nil, ti.redisCache), ti.features)
 }
 func preparationDCRFixture(t *testing.T, endpoint string) (context.Context, *testInstance, remotesessions.PreparationInput, uuid.UUID) {
 	t.Helper()

@@ -5,6 +5,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	orggen "github.com/speakeasy-api/gram/server/gen/organization_user_session_issuers"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	remoterepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/stretchr/testify/require"
@@ -31,7 +32,7 @@ func TestOrganizationIssuerPreflightActiveEMABindings(t *testing.T) {
 	require.Equal(t, oops.CodeConflict, shared.Code)
 	binding, err := q.GetEMABinding(ctx, remoterepo.GetEMABindingParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, UserSessionIssuerID: user, RemoteSessionIssuerID: remote, Resource: "https://resource.example.com/"})
 	require.NoError(t, err)
-	_, err = q.SetEMABinding(ctx, remoterepo.SetEMABindingParams{ID: binding.ID, ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, ExpectedGeneration: binding.Generation, Generation: binding.Generation + 1, State: "unlinked", GrantSource: "unknown", RequestedScopes: []string{}})
+	_, err = q.SetEMABinding(ctx, remoterepo.SetEMABindingParams{ID: binding.ID, ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, ExpectedGeneration: binding.Generation, Generation: binding.Generation + 1, State: conv.ToPGText("unlinked"), GrantSource: conv.ToPGText("unknown"), RequestedScopes: []string{}})
 	require.NoError(t, err)
 	preflight, err = ti.service.GetIssuerDeletePreflight(ctx, &orggen.GetIssuerDeletePreflightPayload{ID: user.String()})
 	require.NoError(t, err)

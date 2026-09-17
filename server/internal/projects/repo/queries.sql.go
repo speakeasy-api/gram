@@ -13,7 +13,7 @@ import (
 )
 
 const countActiveProjectEMABindings = `-- name: CountActiveProjectEMABindings :one
-SELECT count(*) FROM remote_session_ema_bindings WHERE project_id = $1 AND organization_id = $2 AND state <> 'unlinked'
+SELECT count(*) FROM remote_session_ema_bindings WHERE project_id = $1 AND organization_id = $2 AND state IS DISTINCT FROM 'unlinked'
 `
 
 type CountActiveProjectEMABindingsParams struct {

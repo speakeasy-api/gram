@@ -80,7 +80,7 @@ func TestPreparationRefresh_EndpointChangesRequireUnlinkButEvidenceDoesNot(t *te
 			require.Equal(t, stored.TokenEndpoint, loadIssuerByID(t, ctx, ti, issuer.ID).TokenEndpoint)
 			binding, err := q.GetEMABinding(ctx, key)
 			require.NoError(t, err)
-			_, err = q.SetEMABinding(ctx, repo.SetEMABindingParams{ID: binding.ID, ProjectID: key.ProjectID, OrganizationID: key.OrganizationID, ExpectedGeneration: binding.Generation, Generation: binding.Generation + 1, State: "unlinked", GrantSource: "unknown", RequestedScopes: []string{}, RemoteSessionClientID: uuid.NullUUID{}})
+			_, err = q.SetEMABinding(ctx, repo.SetEMABindingParams{ID: binding.ID, ProjectID: key.ProjectID, OrganizationID: key.OrganizationID, ExpectedGeneration: binding.Generation, Generation: binding.Generation + 1, State: conv.ToPGText("unlinked"), GrantSource: conv.ToPGText("unknown"), RequestedScopes: []string{}, RemoteSessionClientID: uuid.NullUUID{}})
 			require.NoError(t, err)
 			require.NoError(t, refresh(), "explicit unlink releases the endpoint configuration")
 			require.Equal(t, upstream.URL+"/new-token", loadIssuerByID(t, ctx, ti, issuer.ID).TokenEndpoint.String)
