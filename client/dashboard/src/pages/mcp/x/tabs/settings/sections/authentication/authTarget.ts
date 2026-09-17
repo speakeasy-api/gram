@@ -20,8 +20,12 @@ import { useMemo } from "react";
 export type AuthTarget = {
   /** Seeds auto-derived issuer slugs on first add. */
   slug: string;
-  /** Project owning the target; scopes permission gates to it. */
+  /** Project owning the target. */
   projectId: string;
+  /** Resource identifier used by the target's mcp:write check. */
+  permissionResourceId: string;
+  /** Whether the target backend accepts organization-owned issuers. */
+  supportsOrganizationIssuers: boolean;
   /** Current issuer link; null when the target has none yet. */
   userSessionIssuerId: string | null;
   /**
@@ -46,21 +50,24 @@ export function useMcpServerAuthTarget(mcpServer: McpServer): AuthTarget {
     () => ({
       slug: mcpServer.slug ?? "mcp",
       projectId: mcpServer.projectId,
+      permissionResourceId: mcpServer.id,
+      supportsOrganizationIssuers: true,
       userSessionIssuerId: mcpServer.userSessionIssuerId ?? null,
       remoteMcpServerId: mcpServer.remoteMcpServerId,
       linkUserSessionIssuer: async (userSessionIssuerId: string) => {
+        const latest = await client.mcpServers.get({ id: mcpServer.id });
         await client.mcpServers.update({
           updateMcpServerForm: {
-            id: mcpServer.id,
-            environmentId: mcpServer.environmentId,
-            networkAccessMode: mcpServer.networkAccessMode,
-            remoteMcpServerId: mcpServer.remoteMcpServerId,
-            tunneledMcpServerId: mcpServer.tunneledMcpServerId,
-            toolsetId: mcpServer.toolsetId,
-            unproxiedMcpServerId: mcpServer.unproxiedMcpServerId,
-            toolVariationsGroupId: mcpServer.toolVariationsGroupId,
+            id: latest.id,
+            environmentId: latest.environmentId,
+            networkAccessMode: latest.networkAccessMode,
+            remoteMcpServerId: latest.remoteMcpServerId,
+            tunneledMcpServerId: latest.tunneledMcpServerId,
+            toolsetId: latest.toolsetId,
+            unproxiedMcpServerId: latest.unproxiedMcpServerId,
+            toolVariationsGroupId: latest.toolVariationsGroupId,
             userSessionIssuerId,
-            visibility: mcpServer.visibility,
+            visibility: latest.visibility,
           },
         });
       },
@@ -82,6 +89,8 @@ export function useToolsetAuthTarget(toolset: Toolset): AuthTarget {
     () => ({
       slug: toolset.slug,
       projectId: toolset.projectId,
+      permissionResourceId: toolset.id,
+      supportsOrganizationIssuers: true,
       userSessionIssuerId: toolset.userSessionIssuerId ?? null,
       linkUserSessionIssuer: async (userSessionIssuerId: string) => {
         // Toolsets are already live, so linking only flips auth gating —
@@ -112,6 +121,8 @@ export function useMetaMcpAuthTarget(
     () => ({
       slug: slugSeed,
       projectId: metaMcpServer.projectId,
+      permissionResourceId: metaMcpServer.projectId,
+      supportsOrganizationIssuers: false,
       userSessionIssuerId: metaMcpServer.userSessionIssuerId ?? null,
       multipleProviders: true,
       linkUserSessionIssuer: async (userSessionIssuerId: string) => {

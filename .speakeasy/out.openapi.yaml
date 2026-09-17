@@ -72688,7 +72688,7 @@ components:
           format: uri
         user_session_issuer_id:
           type: string
-          description: For createServerAndMcpServer, the ID of an existing project- or organization-owned user session issuer to attach to the linked MCP server. Omit to mint a project issuer. The source-only createServer method ignores this field.
+          description: For createServerAndMcpServer, the ID of an existing project- or organization-owned user session issuer to attach to the linked MCP server. Omit to mint a project issuer. The source-only createServer method rejects this field.
           format: uuid
       description: Form for creating a new remote MCP server
       required:

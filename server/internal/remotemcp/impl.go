@@ -106,6 +106,9 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
+	if payload.UserSessionIssuerID != nil {
+		return nil, oops.E(oops.CodeBadRequest, nil, "user_session_issuer_id is only supported when creating a linked MCP server").LogError(ctx, s.logger)
+	}
 
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 

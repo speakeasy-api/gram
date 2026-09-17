@@ -67,7 +67,7 @@ export function UserSessionDurationField({
     const split = splitIntoUnit(userSessionIssuer.sessionDurationHours);
     setDurationNumber(split.number);
     setDurationUnit(split.unit);
-  }, [userSessionIssuer.sessionDurationHours]);
+  }, [userSessionIssuer.id, userSessionIssuer.sessionDurationHours]);
 
   const update = useUpdateUserSessionIssuerMutation({
     onSuccess: async () => {

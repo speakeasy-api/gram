@@ -8,10 +8,12 @@ const {
   useProtectedResourceMetadata,
   useAllRemoteSessionClients,
   useUserSessionIssuer,
+  useEffectiveUserSessionIssuers,
 } = vi.hoisted(() => ({
   useProtectedResourceMetadata: vi.fn(),
   useAllRemoteSessionClients: vi.fn(),
   useUserSessionIssuer: vi.fn(),
+  useEffectiveUserSessionIssuers: vi.fn(),
 }));
 
 vi.mock("@gram/client/react-query/userSessionIssuer.js", () => ({
@@ -26,16 +28,13 @@ vi.mock("@gram/client/react-query/remoteSessionIssuers.js", () => ({
 }));
 
 vi.mock("@/hooks/useEffectiveUserSessionIssuers", () => ({
-  useEffectiveUserSessionIssuers: () => ({
-    issuers: [],
-    organizationIssuers: [],
-    isLoading: false,
-    isError: false,
-  }),
+  useEffectiveUserSessionIssuers: () => useEffectiveUserSessionIssuers(),
 }));
 
 vi.mock("./UserSessionIssuerField", () => ({
-  UserSessionIssuerField: () => null,
+  UserSessionIssuerField: ({ issuers }: { issuers: Array<{ id: string }> }) => (
+    <output>issuers-{issuers.map(({ id }) => id).join(",")}</output>
+  ),
 }));
 
 vi.mock("./authTarget", () => ({
@@ -142,6 +141,12 @@ vi.mock("./CimdCustomClientsField", () => ({
 }));
 
 beforeEach(() => {
+  useEffectiveUserSessionIssuers.mockReturnValue({
+    issuers: [],
+    organizationIssuers: [],
+    isLoading: false,
+    isError: false,
+  });
   useUserSessionIssuer.mockReturnValue({
     data: {
       id: "user-session-issuer",
@@ -292,6 +297,39 @@ describe("AuthenticationSectionBody", () => {
     expect(screen.queryByText("cimd-custom-clients")).toBeNull();
   });
 
+  it("excludes organization issuers for targets whose backend cannot bind them", () => {
+    useUserSessionIssuer.mockReturnValue({
+      data: null,
+      isLoading: false,
+      isError: false,
+    });
+    useEffectiveUserSessionIssuers.mockReturnValue({
+      issuers: [
+        { id: "project-issuer", projectId: "project-1" },
+        { id: "organization-issuer", projectId: "" },
+      ],
+      organizationIssuers: [{ id: "organization-issuer", projectId: "" }],
+      isLoading: false,
+      isError: false,
+    });
+    useAllRemoteSessionClients.mockReturnValue({ items: [], isLoading: false });
+    useProtectedResourceMetadata.mockReturnValue({
+      status: "idle",
+      metadata: null,
+    });
+
+    render(
+      <AuthenticationSectionBody
+        target={{
+          ...remoteTargetWithoutSessionIssuer,
+          supportsOrganizationIssuers: false,
+        }}
+      />,
+    );
+
+    expect(screen.getByText("issuers-project-issuer")).toBeDefined();
+  });
+
   it.each(["presets", "reporting"])(
     "shows the custom CIMD client list in %s mode",
     (mode) => {
@@ -406,6 +444,8 @@ describe("AuthenticationSectionBody", () => {
 const remoteTargetWithSessionIssuer: AuthTarget = {
   slug: "remote-server",
   projectId: "project-1",
+  permissionResourceId: "mcp-server-1",
+  supportsOrganizationIssuers: true,
   userSessionIssuerId: "user-session-issuer",
   remoteMcpServerId: "remote-mcp-server",
   invalidate: vi.fn(),

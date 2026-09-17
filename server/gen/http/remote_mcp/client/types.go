@@ -25,7 +25,7 @@ type CreateServerRequestBody struct {
 	TransportType string `form:"transport_type" json:"transport_type" xml:"transport_type"`
 	// For createServerAndMcpServer, the ID of an existing project- or
 	// organization-owned user session issuer to attach to the linked MCP server.
-	// Omit to mint a project issuer. The source-only createServer method ignores
+	// Omit to mint a project issuer. The source-only createServer method rejects
 	// this field.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 }
@@ -42,7 +42,7 @@ type CreateServerAndMcpServerRequestBody struct {
 	TransportType string `form:"transport_type" json:"transport_type" xml:"transport_type"`
 	// For createServerAndMcpServer, the ID of an existing project- or
 	// organization-owned user session issuer to attach to the linked MCP server.
-	// Omit to mint a project issuer. The source-only createServer method ignores
+	// Omit to mint a project issuer. The source-only createServer method rejects
 	// this field.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 }

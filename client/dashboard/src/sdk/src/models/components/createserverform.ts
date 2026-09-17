@@ -22,7 +22,7 @@ export type CreateServerForm = {
    */
   url: string;
   /**
-   * For createServerAndMcpServer, the ID of an existing project- or organization-owned user session issuer to attach to the linked MCP server. Omit to mint a project issuer. The source-only createServer method ignores this field.
+   * For createServerAndMcpServer, the ID of an existing project- or organization-owned user session issuer to attach to the linked MCP server. Omit to mint a project issuer. The source-only createServer method rejects this field.
    */
   userSessionIssuerId?: string | undefined;
 };

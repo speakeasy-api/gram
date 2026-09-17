@@ -92,7 +92,7 @@ type CreateServerAndMcpServerPayload struct {
 	TransportType string
 	// For createServerAndMcpServer, the ID of an existing project- or
 	// organization-owned user session issuer to attach to the linked MCP server.
-	// Omit to mint a project issuer. The source-only createServer method ignores
+	// Omit to mint a project issuer. The source-only createServer method rejects
 	// this field.
 	UserSessionIssuerID *string
 }
@@ -143,7 +143,7 @@ type CreateServerPayload struct {
 	TransportType string
 	// For createServerAndMcpServer, the ID of an existing project- or
 	// organization-owned user session issuer to attach to the linked MCP server.
-	// Omit to mint a project issuer. The source-only createServer method ignores
+	// Omit to mint a project issuer. The source-only createServer method rejects
 	// this field.
 	UserSessionIssuerID *string
 }

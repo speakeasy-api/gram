@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/user_session_issuers"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -74,6 +75,25 @@ func TestListUserSessionIssuers_RBACForbidden(t *testing.T) {
 		Limit:            nil,
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestListUserSessionIssuers_AllowsMCPWrite(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	ctx = withExactAuthzGrants(
+		t,
+		ctx,
+		ti.conn,
+		authz.NewGrant(authz.ScopeMCPWrite, authCtx.ProjectID.String()),
+	)
+
+	got, err := ti.service.ListUserSessionIssuers(ctx, &gen.ListUserSessionIssuersPayload{})
+	require.NoError(t, err)
+	require.Empty(t, got.Items)
 }
 
 func TestListUserSessionIssuers_ExcludesSiblingProject(t *testing.T) {

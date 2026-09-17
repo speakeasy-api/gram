@@ -6,13 +6,18 @@ import {
   useDrainedPages,
 } from "@/components/sessions/useDrainedPages";
 
-export function useEffectiveUserSessionIssuers(): {
+export function useEffectiveUserSessionIssuers({
+  projectSlug,
+}: { projectSlug?: string } = {}): {
   issuers: UserSessionIssuer[];
   organizationIssuers: UserSessionIssuer[];
   isLoading: boolean;
   isError: boolean;
 } {
-  const query = useUserSessionIssuersInfinite({ limit: PAGE_FETCH_LIMIT });
+  const query = useUserSessionIssuersInfinite({
+    limit: PAGE_FETCH_LIMIT,
+    gramProject: projectSlug,
+  });
   const { fetchNextPage, hasNextPage, isFetchingNextPage } = query;
   const { isTruncated } = useDrainedPages({
     pageCount: query.data?.pages.length ?? 0,
@@ -46,6 +51,7 @@ export function useEffectiveUserSessionIssuers(): {
     organizationIssuers,
     isLoading:
       !query.isError &&
+      !isTruncated &&
       (query.isLoading || !!hasNextPage || isFetchingNextPage),
     isError: query.isError || isTruncated,
   };

@@ -105,7 +105,7 @@ export function UserSessionIssuerField({
       <RowSave visible={dirty}>
         <RequireScope
           scope="mcp:write"
-          resourceId={target.projectId}
+          resourceId={target.permissionResourceId}
           level="component"
         >
           {({ disabled }) => (

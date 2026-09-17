@@ -19,7 +19,10 @@ var ErrNotFound = errors.New("user session issuer not found")
 // owner-binding key. The second read closes the race with organization issuer
 // deletion, which uses the same advisory lock before checking active owners.
 func ValidateAndLock(ctx context.Context, tx pgx.Tx, issuerID, projectID uuid.UUID, organizationID string) (repo.UserSessionIssuer, error) {
-	if tx == nil || issuerID == uuid.Nil || projectID == uuid.Nil || organizationID == "" {
+	if issuerID == uuid.Nil {
+		return repo.UserSessionIssuer{}, ErrNotFound
+	}
+	if tx == nil || projectID == uuid.Nil || organizationID == "" {
 		return repo.UserSessionIssuer{}, fmt.Errorf("invalid user session issuer binding input")
 	}
 

@@ -110,16 +110,25 @@ export function AuthenticationSectionBody({
     enabled: issuerConfigured,
   });
   const effectiveUserSessionIssuers = useMemo(() => {
+    const supportedIssuers = target.supportsOrganizationIssuers
+      ? effectiveIssuersQuery.issuers
+      : effectiveIssuersQuery.issuers.filter(
+          (issuer) => issuer.projectId !== "",
+        );
     if (
       !userSessionIssuer ||
-      effectiveIssuersQuery.issuers.some(
-        (issuer) => issuer.id === userSessionIssuer.id,
-      )
+      (!target.supportsOrganizationIssuers &&
+        userSessionIssuer.projectId === "") ||
+      supportedIssuers.some((issuer) => issuer.id === userSessionIssuer.id)
     ) {
-      return effectiveIssuersQuery.issuers;
+      return supportedIssuers;
     }
-    return [userSessionIssuer, ...effectiveIssuersQuery.issuers];
-  }, [effectiveIssuersQuery.issuers, userSessionIssuer]);
+    return [userSessionIssuer, ...supportedIssuers];
+  }, [
+    effectiveIssuersQuery.issuers,
+    target.supportsOrganizationIssuers,
+    userSessionIssuer,
+  ]);
 
   // listRemoteSessionIssuers returns this project's own issuers, inherited
   // organization-level ones (same org), and inherited platform issuers from the

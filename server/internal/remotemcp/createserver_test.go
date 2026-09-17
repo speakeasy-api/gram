@@ -289,6 +289,19 @@ func TestCreateServer(t *testing.T) {
 	require.Equal(t, beforeCount+1, afterCount)
 }
 
+func TestCreateServer_RejectsUserSessionIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	issuerID := uuid.NewString()
+	_, err := ti.service.CreateServer(ctx, &gen.CreateServerPayload{
+		URL:                 "https://mcp.example.com",
+		TransportType:       "streamable-http",
+		UserSessionIssuerID: &issuerID,
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
 // requireCreateServerInvalidURL asserts that creating a remote MCP server
 // with the given URL fails with [oops.CodeBadRequest], and returns the error
 // so the caller can make additional assertions on the error chain.
