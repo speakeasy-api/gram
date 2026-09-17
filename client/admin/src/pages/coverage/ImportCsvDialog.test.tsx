@@ -38,6 +38,7 @@ describe("ImportCsvDialog", () => {
     );
     render(
       <ImportCsvDialog
+        revision="revision-1"
         catalog={catalog}
         draft={{ mappings: {}, references: {} }}
         onImport={onImport}
@@ -78,6 +79,40 @@ describe("ImportCsvDialog", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 
+  it("rejects a small import when the merged matrix exceeds the save limit", async () => {
+    const onImport = vi.fn();
+    const references = Object.fromEntries(
+      Array.from({ length: 105 }, (_, index) => [
+        `method-${index}`,
+        {
+          session: {
+            status: "supported" as const,
+            note: "a".repeat(10000),
+            verify: false,
+          },
+        },
+      ]),
+    );
+    render(
+      <ImportCsvDialog
+        revision="revision-1"
+        catalog={catalog}
+        draft={{ mappings: {}, references }}
+        onImport={onImport}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Import CSV" }));
+    await upload(validCsv);
+    expect(screen.getByRole("alert").textContent).toContain("1 MB save limit");
+    expect(screen.queryByText(/Ready to import/)).toBeNull();
+    expect(
+      within(screen.getByRole("dialog"))
+        .getByRole("button", { name: "Import CSV" })
+        .hasAttribute("disabled"),
+    ).toBe(true);
+    expect(onImport).not.toHaveBeenCalled();
+  });
+
   it("keeps invalid uploads and save failures in the dialog without reporting success", async () => {
     const onImport = vi
       .fn()
@@ -86,6 +121,7 @@ describe("ImportCsvDialog", () => {
       );
     render(
       <ImportCsvDialog
+        revision="revision-1"
         catalog={catalog}
         draft={{ mappings: {}, references: {} }}
         onImport={onImport}

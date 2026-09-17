@@ -20,15 +20,18 @@ import {
   type ImportCatalog,
 } from "./importCsv";
 import type { Draft } from "./model";
+import { serializeSupportMatrixUpdate } from "./request";
 
 export function ImportCsvDialog({
   catalog,
   draft,
+  revision,
   onImport,
   disabled = false,
 }: {
   catalog: ImportCatalog;
   draft: Draft;
+  revision: string;
   onImport: (draft: Draft) => Promise<void>;
   disabled?: boolean;
 }): JSX.Element {
@@ -43,7 +46,9 @@ export function ImportCsvDialog({
   let validationError = "";
   if (csv !== null) {
     try {
-      parsed = parseMatrixImport(csv, catalog, draft);
+      const candidate = parseMatrixImport(csv, catalog, draft);
+      serializeSupportMatrixUpdate(revision, candidate.draft);
+      parsed = candidate;
     } catch (err) {
       validationError = errorMessage(err);
     }
@@ -165,7 +170,8 @@ export function ImportCsvDialog({
             />
             <p className="text-muted-foreground text-xs">
               Imported entries overwrite matching values. Entries omitted from
-              the file stay unchanged. Maximum file size: 2 MB.
+              the file stay unchanged. Maximum file size: 2 MB. The complete
+              matrix must also fit within the 1 MB save limit.
             </p>
             {reading && (
               <p role="status" className="text-sm">

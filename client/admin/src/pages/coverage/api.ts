@@ -1,5 +1,6 @@
 import { gramAdminFetch, gramAdminMutation } from "@/lib/gramAdminApi";
 import { snapshotSchema, type Draft, type Snapshot } from "./model";
+import { serializeSupportMatrixUpdate } from "./request";
 
 export const supportMatrixQuery = {
   queryKey: ["support-matrix"],
@@ -20,7 +21,7 @@ export async function saveSupportMatrix(
     await gramAdminMutation<unknown>("/admin/supportMatrix.update", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ revision, draft }),
+      body: serializeSupportMatrixUpdate(revision, draft),
     }),
   );
 }

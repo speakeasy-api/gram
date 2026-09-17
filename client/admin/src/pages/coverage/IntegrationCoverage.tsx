@@ -143,6 +143,7 @@ function SupportMatrixPage({ snapshot }: { snapshot: Snapshot }): JSX.Element {
               : "Saved in the shared database"}
           </p>
           <ImportCsvDialog
+            revision={snapshot.revision}
             catalog={snapshot}
             draft={draft}
             disabled={mutation.isPending}
