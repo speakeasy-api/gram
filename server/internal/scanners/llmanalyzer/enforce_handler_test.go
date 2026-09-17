@@ -142,6 +142,7 @@ func TestEnforceHandler_ClassifiesUpstreamAndParseFailures(t *testing.T) {
 		reply, _ := popReply(t, client, "replica-"+tc.name)
 		require.Equal(t, riskv1.EnforcementStatus_ENFORCEMENT_STATUS_ERROR, reply.GetStatus(), tc.name)
 		require.True(t, strings.HasPrefix(reply.GetReason(), tc.reason+": "), "%s: %s", tc.name, reply.GetReason())
+		require.NotContains(t, reply.GetReason(), "slow down", "%s: the upstream body is log-only and never travels in the reply", tc.name)
 	}
 }
 

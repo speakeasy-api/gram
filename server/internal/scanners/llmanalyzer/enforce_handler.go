@@ -174,9 +174,7 @@ func (h *EnforceHandler) Handle(ctx context.Context, m *riskv1.LLMEnforcement, m
 		})
 		if analysis.Err != nil {
 			status = riskv1.EnforcementStatus_ENFORCEMENT_STATUS_ERROR
-			// The classification leads so the dispatcher can act on it without
-			// parsing free text; the error text follows for operators.
-			reason = DeadLetterReason(analysis.Err) + ": " + analysis.Err.Error()
+			reason = replyReason(analysis.Err)
 		} else {
 			findings = analysis.Result.Findings
 		}
@@ -300,6 +298,18 @@ func enforcementMessage(m *riskv1.LLMEnforcement) (judgemessage.Message, []strin
 		return msg, []string{m.GetToolCallId()}
 	}
 	return msg, nil
+}
+
+// replyReason renders an analyzer failure for EnforcementReply.reason. The
+// classification leads so the dispatcher can act on it without parsing free
+// text; the error text follows for operators. An upstream body snippet is
+// upstream-controlled and log-only, so it never travels in the reply.
+func replyReason(err error) string {
+	text := err.Error()
+	if upstream, ok := errors.AsType[*UpstreamError](err); ok && upstream.Body != "" {
+		text = (&UpstreamError{Status: upstream.Status, Body: ""}).Error()
+	}
+	return DeadLetterReason(err) + ": " + text
 }
 
 func enforceOutcome(status riskv1.EnforcementStatus) o11y.Outcome {

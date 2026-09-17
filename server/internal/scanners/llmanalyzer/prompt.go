@@ -202,14 +202,21 @@ func jsonString(s string) string {
 }
 
 func capToolCalls(calls []judgemessage.ToolCall) ([]judgemessage.ToolCall, bool) {
-	if len(calls) <= maxToolCalls {
-		return calls, false
+	return capHeadTail(calls)
+}
+
+// capHeadTail keeps the head and tail of items once they exceed maxToolCalls,
+// so anything aligned index for index with the rendered tool calls (their
+// harness ids, for one) is capped the same way.
+func capHeadTail[T any](items []T) ([]T, bool) {
+	if len(items) <= maxToolCalls {
+		return items, false
 	}
 	head := maxToolCalls / 2
 	tail := maxToolCalls - head
-	capped := make([]judgemessage.ToolCall, 0, maxToolCalls)
-	capped = append(capped, calls[:head]...)
-	capped = append(capped, calls[len(calls)-tail:]...)
+	capped := make([]T, 0, maxToolCalls)
+	capped = append(capped, items[:head]...)
+	capped = append(capped, items[len(items)-tail:]...)
 	return capped, true
 }
 
