@@ -24,9 +24,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/speakeasy-api/gram/server/internal/dpop"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 )
 
 const (
@@ -64,6 +66,9 @@ type stubSigner struct {
 	jtis     []string
 	replay   bool
 	last     string
+
+	// assertions holds every assertion returned, including replays.
+	assertions []string
 }
 
 func (s *stubSigner) SignClientAssertion(_ context.Context, req remotesessions.ClientAssertionRequest) (string, error) {
@@ -72,6 +77,7 @@ func (s *stubSigner) SignClientAssertion(_ context.Context, req remotesessions.C
 	s.calls++
 	s.requests = append(s.requests, req)
 	if s.replay && s.last != "" {
+		s.assertions = append(s.assertions, s.last)
 		return s.last, nil
 	}
 
@@ -95,6 +101,7 @@ func (s *stubSigner) SignClientAssertion(_ context.Context, req remotesessions.C
 	}
 	s.jtis = append(s.jtis, jti)
 	s.last = assertion
+	s.assertions = append(s.assertions, assertion)
 	return assertion, nil
 }
 
@@ -114,6 +121,12 @@ func (s *stubSigner) Last() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.last
+}
+
+func (s *stubSigner) Assertions() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.assertions)
 }
 
 func (s *stubSigner) setReplay(replay bool) {
@@ -155,63 +168,72 @@ type stubOkta struct {
 	requireResourceNonce bool
 	resourceNonce        string
 	grantedScopes        []string
-	proofJTIs            map[string]bool
-	assertionJTIs        map[string]bool
-	tokens               map[string]string
-	tokenCount           int
-	tokenRequests        int
-	assertionsSeen       int
-	proofs               []proofRecord
-	apps                 []appJSON
-	appUsers             map[string][]appUserJSON
-	appGroups            map[string][]appGroupJSON
-	groups               []groupJSON
-	pageSize             int
-	pending429           int
-	rateLimitLimit       int
-	rateLimitRemaining   int
-	rateLimitReset       int64
-	tokenType            string
-	tokenRedirect        string
-	tokenPending429      int
-	overrides            map[string]http.HandlerFunc
+	scopeErrorCode       string
+
+	tokenRateLimitLimit     int
+	tokenRateLimitRemaining int
+	tokenRateLimitReset     int64
+	proofJTIs               map[string]bool
+	assertionJTIs           map[string]bool
+	tokens                  map[string]string
+	tokenCount              int
+	tokenRequests           int
+	assertionsSeen          int
+	proofs                  []proofRecord
+	apps                    []appJSON
+	appUsers                map[string][]appUserJSON
+	appGroups               map[string][]appGroupJSON
+	groups                  []groupJSON
+	pageSize                int
+	pending429              int
+	rateLimitLimit          int
+	rateLimitRemaining      int
+	rateLimitReset          int64
+	tokenType               string
+	tokenRedirect           string
+	tokenPending429         int
+	overrides               map[string]http.HandlerFunc
 }
 
 func newStubOkta(t *testing.T, clock *fakeClock) *stubOkta {
 	t.Helper()
 	s := &stubOkta{
-		t:                    t,
-		srv:                  nil,
-		clock:                clock,
-		mu:                   sync.Mutex{},
-		requireTokenNonce:    true,
-		rotateTokenNonce:     false,
-		tokenNonce:           "nonce-1",
-		lastAppsQuery:        nil,
-		emitResourceNonce:    "",
-		requireResourceNonce: false,
-		resourceNonce:        "",
-		grantedScopes:        strings.Fields(stubScopes),
-		proofJTIs:            map[string]bool{},
-		assertionJTIs:        map[string]bool{},
-		tokens:               map[string]string{},
-		tokenCount:           0,
-		tokenRequests:        0,
-		assertionsSeen:       0,
-		proofs:               nil,
-		apps:                 nil,
-		appUsers:             map[string][]appUserJSON{},
-		appGroups:            map[string][]appGroupJSON{},
-		groups:               nil,
-		pageSize:             0,
-		pending429:           0,
-		rateLimitLimit:       0,
-		rateLimitRemaining:   0,
-		rateLimitReset:       0,
-		tokenType:            "DPoP",
-		tokenRedirect:        "",
-		tokenPending429:      0,
-		overrides:            map[string]http.HandlerFunc{},
+		t:                       t,
+		srv:                     nil,
+		clock:                   clock,
+		mu:                      sync.Mutex{},
+		requireTokenNonce:       true,
+		rotateTokenNonce:        false,
+		tokenNonce:              "nonce-1",
+		lastAppsQuery:           nil,
+		emitResourceNonce:       "",
+		requireResourceNonce:    false,
+		resourceNonce:           "",
+		grantedScopes:           strings.Fields(stubScopes),
+		scopeErrorCode:          "invalid_scope",
+		tokenRateLimitLimit:     0,
+		tokenRateLimitRemaining: 0,
+		tokenRateLimitReset:     0,
+		proofJTIs:               map[string]bool{},
+		assertionJTIs:           map[string]bool{},
+		tokens:                  map[string]string{},
+		tokenCount:              0,
+		tokenRequests:           0,
+		assertionsSeen:          0,
+		proofs:                  nil,
+		apps:                    nil,
+		appUsers:                map[string][]appUserJSON{},
+		appGroups:               map[string][]appGroupJSON{},
+		groups:                  nil,
+		pageSize:                0,
+		pending429:              0,
+		rateLimitLimit:          0,
+		rateLimitRemaining:      0,
+		rateLimitReset:          0,
+		tokenType:               "DPoP",
+		tokenRedirect:           "",
+		tokenPending429:         0,
+		overrides:               map[string]http.HandlerFunc{},
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /oauth2/v1/token", s.handleToken)
@@ -270,6 +292,13 @@ func (s *stubOkta) setRateLimit(limit, remaining int, reset int64) {
 	s.rateLimitReset = reset
 }
 
+// setTokenRateLimit reports quota headers on every token response, not only 429s.
+func (s *stubOkta) setTokenRateLimit(limit, remaining int, reset int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.tokenRateLimitLimit, s.tokenRateLimitRemaining, s.tokenRateLimitReset = limit, remaining, reset
+}
+
 func (s *stubOkta) setTokenType(tokenType string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -322,6 +351,14 @@ func (s *stubOkta) setEmitResourceNonce(nonce string) {
 	s.emitResourceNonce = nonce
 }
 
+// setScopeErrorCode picks the OAuth error for an all-ungranted scope request;
+// Okta returns invalid_scope or consent_required depending on the org.
+func (s *stubOkta) setScopeErrorCode(code string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.scopeErrorCode = code
+}
+
 func (s *stubOkta) setGrantedScopes(scopes []string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -364,7 +401,7 @@ func (s *stubOkta) verifyProof(w http.ResponseWriter, r *http.Request, accessTok
 		return s.rejectProof(w, http.StatusBadRequest, err.Error())
 	}
 	header := parsed.Signatures[0].Header
-	if typ, _ := header.ExtraHeaders[jose.HeaderType].(string); typ != dpopProofType {
+	if typ, _ := header.ExtraHeaders[jose.HeaderType].(string); typ != dpop.ProofType {
 		return s.rejectProof(w, http.StatusBadRequest, "wrong typ")
 	}
 	if header.JSONWebKey == nil {
@@ -394,11 +431,16 @@ func (s *stubOkta) verifyProof(w http.ResponseWriter, r *http.Request, accessTok
 	}
 	thumbprint := base64.RawURLEncoding.EncodeToString(thumb)
 
-	expectedHTU := s.srv.URL + r.URL.Path
+	// EscapedPath keeps the wire form so escaped ids compare against the signed htu.
+	expectedHTU := s.srv.URL + r.URL.EscapedPath()
 	if claims.HTM != r.Method || claims.HTU != expectedHTU {
 		return s.rejectProof(w, http.StatusBadRequest, "htm/htu mismatch")
 	}
-	if accessToken != "" {
+	if accessToken == "" {
+		if claims.ATH != "" {
+			return s.rejectProof(w, http.StatusBadRequest, "unexpected ath")
+		}
+	} else {
 		sum := sha256.Sum256([]byte(accessToken))
 		if claims.ATH != base64.RawURLEncoding.EncodeToString(sum[:]) {
 			return s.rejectProof(w, http.StatusUnauthorized, "ath mismatch")
@@ -433,6 +475,11 @@ func (s *stubOkta) handleToken(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Rate-Limit-Remaining", strconv.Itoa(s.rateLimitRemaining))
 		w.Header().Set("X-Rate-Limit-Reset", strconv.FormatInt(s.rateLimitReset, 10))
 	}
+	if s.tokenRateLimitLimit > 0 {
+		w.Header().Set("X-Rate-Limit-Limit", strconv.Itoa(s.tokenRateLimitLimit))
+		w.Header().Set("X-Rate-Limit-Remaining", strconv.Itoa(s.tokenRateLimitRemaining))
+		w.Header().Set("X-Rate-Limit-Reset", strconv.FormatInt(s.tokenRateLimitReset, 10))
+	}
 	s.mu.Unlock()
 	if redirect != "" {
 		http.Redirect(w, r, redirect, http.StatusTemporaryRedirect)
@@ -458,7 +505,7 @@ func (s *stubOkta) handleToken(w http.ResponseWriter, r *http.Request) {
 		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_client", "error_description": "missing client assertion"})
 		return
 	}
-	if r.Form.Get("client_assertion_type") != clientAssertionType {
+	if r.Form.Get("client_assertion_type") != oauthwire.ClientAssertionTypeJWTBearer {
 		s.writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid_client", "error_description": "bad assertion type"})
 		return
 	}
@@ -484,6 +531,10 @@ func (s *stubOkta) handleToken(w http.ResponseWriter, r *http.Request) {
 		s.writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid_client", "error_description": "assertion claims mismatch"})
 		return
 	}
+	if claims.ID == "" {
+		s.writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid_client", "error_description": "client assertion missing jti"})
+		return
+	}
 	s.mu.Lock()
 	replay := s.assertionJTIs[claims.ID]
 	s.assertionJTIs[claims.ID] = true
@@ -494,7 +545,7 @@ func (s *stubOkta) handleToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.mu.Lock()
-	requireNonce, nonce, granted, tokenType := s.requireTokenNonce, s.tokenNonce, s.grantedScopes, s.tokenType
+	requireNonce, nonce, granted, tokenType, scopeErr := s.requireTokenNonce, s.tokenNonce, s.grantedScopes, s.tokenType, s.scopeErrorCode
 	if s.rotateTokenNonce {
 		s.tokenNonce = "rotated-" + uuid.NewString()
 	}
@@ -505,7 +556,7 @@ func (s *stubOkta) handleToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Ungranted scopes are trimmed; this stub models the invalid_scope variant.
+	// Ungranted scopes are trimmed; an all-ungranted request fails with scopeErrorCode.
 	scope := granted
 	if requested := strings.Fields(r.Form.Get("scope")); len(requested) > 0 {
 		scope = make([]string, 0, len(requested))
@@ -515,7 +566,7 @@ func (s *stubOkta) handleToken(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if len(scope) == 0 {
-			s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_scope", "error_description": "One or more scopes are not configured for the authorization server resource."})
+			s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": scopeErr, "error_description": "One or more scopes are not configured for the authorization server resource."})
 			return
 		}
 	}
@@ -724,9 +775,7 @@ type testClient struct {
 }
 
 func (tc testClient) currentNonce() string {
-	tc.client.mu.Lock()
-	defer tc.client.mu.Unlock()
-	return tc.client.nonce
+	return tc.client.nonce.Current()
 }
 
 func (tc testClient) clearSlowdown() {

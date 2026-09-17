@@ -14,19 +14,21 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/dpop"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 )
 
 const (
-	codeConsentRequired = "consent_required" // Okta reports this when none of the requested scopes are granted.
-	clientAssertionType = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
+	codeConsentRequired = "consent_required" // OIDC Core code Okta reports at the token endpoint when no requested scope is granted.
 	tokenEndpointPath   = "/oauth2/v1/token" //nolint:gosec // G101 false positive: a URL path, not a credential.
 
 	maxResponseBytes        = 1 << 20
@@ -84,7 +86,7 @@ type httpClient struct {
 	cfg        Config
 	httpClient *guardian.HTTPClient
 	signer     remotesessions.TokenEndpointAssertionSigner
-	key        *dpopKey
+	key        *dpop.Key
 	orgURL     *url.URL
 	tokenURL   *url.URL
 	audience   string
@@ -96,9 +98,12 @@ type httpClient struct {
 	// mintAdmission serializes handshakes while allowing waiters to cancel.
 	mintAdmission chan struct{}
 
+	// nonce is shared by the token endpoint and the Management API because
+	// both live on the org host and Okta issues one nonce for both (RFC 9449 §9).
+	nonce dpop.NonceCache
+
 	mu        sync.Mutex
 	cached    cachedToken
-	nonce     string
 	slowUntil time.Time
 }
 
@@ -126,7 +131,7 @@ func NewClient(logger *slog.Logger, client *guardian.HTTPClient, signer remotese
 		return nil, fmt.Errorf("okta: resolve client assertion audience: %w", err)
 	}
 
-	key, err := newDPoPKey()
+	key, err := dpop.NewKey()
 	if err != nil {
 		return nil, fmt.Errorf("okta: %w", err)
 	}
@@ -154,9 +159,9 @@ func NewClient(logger *slog.Logger, client *guardian.HTTPClient, signer remotese
 		sleep:         sleepContext,
 		jitter:        rateLimitJitter,
 		mintAdmission: make(chan struct{}, 1),
+		nonce:         dpop.NonceCache{},
 		mu:            sync.Mutex{},
 		cached:        noToken,
-		nonce:         "",
 		slowUntil:     time.Time{},
 	}, nil
 }
@@ -164,12 +169,19 @@ func NewClient(logger *slog.Logger, client *guardian.HTTPClient, signer remotese
 // parseOrgURL accepts an https origin, or an http origin on a loopback host
 // for local stubs, with no path, query, fragment, or userinfo.
 func parseOrgURL(raw string) (*url.URL, error) {
-	orgURL, err := url.Parse(strings.TrimRight(raw, "/"))
-	if err != nil || orgURL.Host == "" || orgURL.Opaque != "" {
+	orgURL, err := url.Parse(raw)
+	if err != nil || orgURL.Hostname() == "" || orgURL.Opaque != "" {
 		return nil, fmt.Errorf("okta: invalid org url %q", raw)
 	}
-	if orgURL.Path != "" || orgURL.RawQuery != "" || orgURL.Fragment != "" || orgURL.User != nil {
+	// Validate before trimming: an empty query or fragment ("?", "#") only shows in the raw string.
+	if strings.TrimRight(orgURL.Path, "/") != "" || strings.ContainsAny(raw, "?#") || orgURL.User != nil {
 		return nil, fmt.Errorf("okta: org url %q must be an origin without path, query, fragment, or userinfo", raw)
+	}
+	// Non-ASCII hosts fold differently across URL, DNS, and TLS; require the punycoded form.
+	for _, r := range orgURL.Hostname() {
+		if r > unicode.MaxASCII {
+			return nil, fmt.Errorf("okta: org url %q host must be ascii", raw)
+		}
 	}
 	switch orgURL.Scheme {
 	case "https":
@@ -180,7 +192,20 @@ func parseOrgURL(raw string) (*url.URL, error) {
 	default:
 		return nil, fmt.Errorf("okta: org url %q must use https", raw)
 	}
+	orgURL.Path, orgURL.RawPath = "", ""
 	return orgURL, nil
+}
+
+// validateAppID rejects ids that would not stay a single opaque path segment.
+func validateAppID(appID string) error {
+	switch {
+	case appID == "":
+		return errors.New("okta: app id is required")
+	case appID == "." || appID == ".." || strings.ContainsAny(appID, `/\`):
+		return fmt.Errorf("okta: invalid app id %q", appID)
+	default:
+		return nil
+	}
 }
 
 func isLoopbackHost(host string) bool {
@@ -223,10 +248,10 @@ func (c *httpClient) ListApps(ctx context.Context, req ListAppsRequest) ([]App, 
 }
 
 func (c *httpClient) GetApp(ctx context.Context, appID string) (*App, error) {
-	if appID == "" {
-		return nil, errors.New("okta: app id is required")
+	if err := validateAppID(appID); err != nil {
+		return nil, err
 	}
-	raw, _, err := getJSON[appJSON](ctx, c, c.apiURL("/api/v1/apps", appID, nil))
+	raw, _, err := getJSON[appJSON](ctx, c, c.apiURL("/api/v1/apps", url.PathEscape(appID), nil))
 	if err != nil {
 		return nil, err
 	}
@@ -235,8 +260,8 @@ func (c *httpClient) GetApp(ctx context.Context, appID string) (*App, error) {
 }
 
 func (c *httpClient) ListAppUsers(ctx context.Context, req ListAppUsersRequest) ([]AppUser, error) {
-	if req.AppID == "" {
-		return nil, errors.New("okta: app id is required")
+	if err := validateAppID(req.AppID); err != nil {
+		return nil, err
 	}
 	q := url.Values{}
 	setLimit(q, req.Limit)
@@ -260,8 +285,8 @@ func (c *httpClient) ListAppUsers(ctx context.Context, req ListAppUsersRequest) 
 }
 
 func (c *httpClient) ListAppGroups(ctx context.Context, req ListAppGroupsRequest) ([]AppGroup, error) {
-	if req.AppID == "" {
-		return nil, errors.New("okta: app id is required")
+	if err := validateAppID(req.AppID); err != nil {
+		return nil, err
 	}
 	q := url.Values{}
 	setLimit(q, req.Limit)
@@ -310,6 +335,9 @@ func (c *httpClient) VerifyScopes(ctx context.Context, required []string) (*Scop
 		return nil, err
 	}
 	defer c.releaseMint()
+	if err := c.waitForSlowdown(ctx); err != nil {
+		return nil, err
+	}
 	c.evictToken()
 
 	tok, err := c.mint(ctx, required)
@@ -341,7 +369,7 @@ func (c *httpClient) VerifyScopes(ctx context.Context, required []string) (*Scop
 	return &ScopeVerification{
 		Granted:   granted,
 		Missing:   missing,
-		DPoPBound: strings.EqualFold(tok.tokenType, "DPoP"),
+		DPoPBound: strings.EqualFold(tok.tokenType, dpop.TokenType),
 		ExpiresAt: tok.expiresAt,
 	}, nil
 }
@@ -358,6 +386,7 @@ func setLimit(q url.Values, limit int) {
 	}
 }
 
+// apiURL joins base and an already path-escaped id under the org origin.
 func (c *httpClient) apiURL(base, id string, q url.Values) *url.URL {
 	target := c.orgURL.JoinPath(base)
 	if id != "" {
@@ -396,11 +425,11 @@ func getJSON[T any](ctx context.Context, c *httpClient, target *url.URL) (T, *ur
 		return out, nil, err
 	}
 	if err := json.Unmarshal(body, &out); err != nil {
-		return out, nil, fmt.Errorf("decode okta %s response: %w", target.Path, err)
+		return out, nil, fmt.Errorf("decode okta %s response: %w", target.EscapedPath(), err)
 	}
 	next, err := nextLink(header, target)
 	if err != nil {
-		return out, nil, fmt.Errorf("parse okta %s next link: %w", target.Path, err)
+		return out, nil, fmt.Errorf("parse okta %s next link: %w", target.EscapedPath(), err)
 	}
 	return out, next, nil
 }
@@ -420,14 +449,15 @@ func (c *httpClient) do(ctx context.Context, method string, target *url.URL) ([]
 		if err != nil {
 			return nil, nil, err
 		}
-
-		c.mu.Lock()
-		nonce := c.nonce
-		c.mu.Unlock()
-
-		proof, err := c.key.proof(method, target, nonce, tok.accessToken, c.now())
-		if err != nil {
+		// A token response can start a slowdown, so recheck before the resource call.
+		if err := c.waitForSlowdown(ctx); err != nil {
 			return nil, nil, err
+		}
+
+		// RFC 9449 §7.3, §11.1: every attempt, including retries, signs a fresh proof with a new jti and iat.
+		proof, err := c.key.Proof(method, target, dpop.ProofOptions{AccessToken: tok.accessToken, Nonce: c.nonce.Current(), IssuedAt: c.now()})
+		if err != nil {
+			return nil, nil, fmt.Errorf("okta resource proof: %w", err)
 		}
 
 		req, err := http.NewRequestWithContext(ctx, method, target.String(), nil)
@@ -435,14 +465,17 @@ func (c *httpClient) do(ctx context.Context, method string, target *url.URL) ([]
 			return nil, nil, fmt.Errorf("build okta request: %w", err)
 		}
 		req.Header.Set("Accept", "application/json")
-		req.Header.Set("Authorization", "DPoP "+tok.accessToken)
-		req.Header.Set("DPoP", proof)
+		// RFC 9449 §7.1: the DPoP-bound token uses the DPoP authorization scheme.
+		req.Header.Set("Authorization", dpop.TokenType+" "+tok.accessToken)
+		// RFC 9449 §4.1, §7: exactly one DPoP header carrying a proof with ath.
+		req.Header.Set(dpop.HeaderName, proof)
 
 		status, header, body, err := c.send(req)
 		if err != nil {
-			return nil, nil, fmt.Errorf("okta %s %s: %w", method, target.Path, err)
+			return nil, nil, fmt.Errorf("okta %s %s: %w", method, target.EscapedPath(), err)
 		}
-		c.rememberNonce(header)
+		// RFC 9449 §8.2, §9: a DPoP-Nonce on any response, success included, replaces the cached nonce.
+		c.nonce.Remember(header)
 		if status != http.StatusTooManyRequests {
 			c.observeRateLimit(header)
 		}
@@ -456,7 +489,7 @@ func (c *httpClient) do(ctx context.Context, method string, target *url.URL) ([]
 			wait := c.rateLimitWait(header)
 			c.logger.WarnContext(ctx, "okta rate limited, backing off",
 				attr.SlogHTTPRequestMethod(method),
-				attr.SlogHTTPRoute(target.Path),
+				attr.SlogHTTPRoute(target.EscapedPath()),
 				attr.SlogHTTPResponseStatusCode(status),
 			)
 			if err := c.sleep(ctx, wait); err != nil {
@@ -465,22 +498,23 @@ func (c *httpClient) do(ctx context.Context, method string, target *url.URL) ([]
 			continue
 
 		case status == http.StatusUnauthorized:
-			if isUseDPoPNonce(header, body) {
+			// RFC 9449 §9: a 401 with WWW-Authenticate error="use_dpop_nonce" and DPoP-Nonce is retried once with that nonce.
+			if dpop.IsUseNonceChallenge(header, body) {
 				if nonceRetried {
-					return nil, nil, newAPIError(method, target.Path, status, body)
+					return nil, nil, newAPIError(method, target.EscapedPath(), status, body)
 				}
 				nonceRetried = true
 				continue
 			}
 			if tokenRetried {
-				return nil, nil, newAPIError(method, target.Path, status, body)
+				return nil, nil, newAPIError(method, target.EscapedPath(), status, body)
 			}
 			tokenRetried = true
 			c.evictRejectedToken(tok.accessToken)
 			continue
 
 		default:
-			return nil, nil, newAPIError(method, target.Path, status, body)
+			return nil, nil, newAPIError(method, target.EscapedPath(), status, body)
 		}
 	}
 }
@@ -567,7 +601,8 @@ func (c *httpClient) token(ctx context.Context) (cachedToken, error) {
 	if err != nil {
 		return cachedToken{}, err
 	}
-	if !strings.EqualFold(tok.tokenType, "DPoP") {
+	// RFC 9449 §5: a token_type other than DPoP means the token is not sender-constrained, so discard it.
+	if !strings.EqualFold(tok.tokenType, dpop.TokenType) {
 		return cachedToken{}, fmt.Errorf("okta token response type %q is not DPoP", tok.tokenType)
 	}
 
@@ -581,10 +616,7 @@ func (c *httpClient) token(ctx context.Context) (cachedToken, error) {
 // up to maxRateLimitRetries times for 429. Every attempt signs a fresh
 // assertion because Okta burns the jti on first use.
 func (c *httpClient) mint(ctx context.Context, scopes []string) (cachedToken, error) {
-	c.mu.Lock()
-	nonce := c.nonce
-	c.mu.Unlock()
-
+	nonce := c.nonce.Current()
 	nonceRetried := false
 	rateLimitRetries := 0
 	for {
@@ -592,7 +624,8 @@ func (c *httpClient) mint(ctx context.Context, scopes []string) (cachedToken, er
 		if err != nil {
 			return cachedToken{}, err
 		}
-		if nextNonce := header.Get("DPoP-Nonce"); nextNonce != "" {
+		// RFC 9449 §8.2: use the nonce the server most recently supplied on every later token request.
+		if nextNonce := header.Get(dpop.NonceHeaderName); nextNonce != "" {
 			nonce = nextNonce
 		}
 
@@ -612,7 +645,8 @@ func (c *httpClient) mint(ctx context.Context, scopes []string) (cachedToken, er
 			}
 			continue
 
-		case status == http.StatusBadRequest && isUseDPoPNonce(header, body):
+		// RFC 9449 §8: a 400 use_dpop_nonce with DPoP-Nonce is retried once with that nonce.
+		case status == http.StatusBadRequest && dpop.IsUseNonceChallenge(header, body):
 			if nonceRetried {
 				return cachedToken{}, errors.New("okta token endpoint rejected dpop nonce twice")
 			}
@@ -644,16 +678,6 @@ func parseTokenResponse(body []byte, now time.Time) (cachedToken, error) {
 	}, nil
 }
 
-func (c *httpClient) rememberNonce(header http.Header) {
-	nonce := header.Get("DPoP-Nonce")
-	if nonce == "" {
-		return
-	}
-	c.mu.Lock()
-	c.nonce = nonce
-	c.mu.Unlock()
-}
-
 // requestToken signs one assertion and posts it to the token endpoint,
 // returning the raw response for mint to interpret.
 func (c *httpClient) requestToken(ctx context.Context, nonce string, scopes []string) (int, http.Header, []byte, error) {
@@ -668,15 +692,16 @@ func (c *httpClient) requestToken(ctx context.Context, nonce string, scopes []st
 		return 0, nil, nil, fmt.Errorf("sign okta client assertion: %w", err)
 	}
 
-	proof, err := c.key.proof(http.MethodPost, c.tokenURL, nonce, "", c.now())
+	// RFC 9449 §5: the token request carries a fresh proof for POST on the token endpoint, without ath.
+	proof, err := c.key.Proof(http.MethodPost, c.tokenURL, dpop.ProofOptions{AccessToken: "", Nonce: nonce, IssuedAt: c.now()})
 	if err != nil {
-		return 0, nil, nil, err
+		return 0, nil, nil, fmt.Errorf("okta token proof: %w", err)
 	}
 
 	form := url.Values{
-		"grant_type":            {"client_credentials"},
+		"grant_type":            {oauthwire.GrantTypeClientCredentials},
 		"client_id":             {c.cfg.ClientID},
-		"client_assertion_type": {clientAssertionType},
+		"client_assertion_type": {oauthwire.ClientAssertionTypeJWTBearer},
 		"client_assertion":      {assertion},
 	}
 	if len(scopes) > 0 {
@@ -689,30 +714,18 @@ func (c *httpClient) requestToken(ctx context.Context, nonce string, scopes []st
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("DPoP", proof)
+	req.Header.Set(dpop.HeaderName, proof)
 
 	status, header, body, err := c.send(req)
 	if err != nil {
 		return 0, nil, nil, fmt.Errorf("okta token request: %w", err)
 	}
-	c.rememberNonce(header)
+	// RFC 9449 §8.2: a DPoP-Nonce on any token response replaces the cached nonce.
+	c.nonce.Remember(header)
 	if status != http.StatusTooManyRequests {
 		c.observeRateLimit(header)
 	}
 	return status, header, body, nil
-}
-
-func isUseDPoPNonce(header http.Header, body []byte) bool {
-	if header.Get("DPoP-Nonce") == "" {
-		return false
-	}
-	if strings.Contains(header.Get("WWW-Authenticate"), oautherr.CodeUseDPoPNonce) {
-		return true
-	}
-	var parsed struct {
-		Error string `json:"error"`
-	}
-	return json.Unmarshal(body, &parsed) == nil && parsed.Error == oautherr.CodeUseDPoPNonce
 }
 
 // observeRateLimit pauses until reset once fewer than rateLimitSlowdownRatio of quota remains.

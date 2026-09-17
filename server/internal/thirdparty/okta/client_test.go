@@ -391,6 +391,47 @@ func TestClient_SlowsDownBelowTwentyPercentRemaining(t *testing.T) {
 	require.Len(t, tc.sleeper.Waits(), 1)
 }
 
+func TestClient_TokenResponseSlowdownDelaysFirstResourceCall(t *testing.T) {
+	t.Parallel()
+	tc := newDefaultTestClient(t)
+	tc.stub.setApps(stubApps(1))
+	tc.stub.setTokenRateLimit(100, 19, tc.clock.Now().Add(11*time.Second).Unix())
+
+	listApps(t, tc)
+	require.Equal(t, []time.Duration{11 * time.Second}, tc.sleeper.Waits())
+	require.Equal(t, 1, tc.stub.counts().issuedTokens)
+}
+
+func TestClient_VerifyScopes_HonorsSlowdown(t *testing.T) {
+	t.Parallel()
+	tc := newDefaultTestClient(t)
+	tc.stub.setApps(stubApps(1))
+	tc.stub.setRateLimit(100, 19, tc.clock.Now().Add(11*time.Second).Unix())
+
+	listApps(t, tc)
+	require.Empty(t, tc.sleeper.Waits())
+
+	v, err := tc.client.VerifyScopes(t.Context(), []string{"okta.apps.read"})
+	require.NoError(t, err)
+	require.True(t, v.OK())
+	require.Equal(t, []time.Duration{11 * time.Second}, tc.sleeper.Waits())
+}
+
+func TestClient_APIErrorPathIsEscaped(t *testing.T) {
+	t.Parallel()
+	tc := newDefaultTestClient(t)
+
+	_, err := tc.client.GetApp(t.Context(), "0oa 1?x")
+	var apiErr *APIError
+	require.ErrorAs(t, err, &apiErr)
+	require.Equal(t, "/api/v1/apps/0oa%201%3Fx", apiErr.Path)
+
+	fake := NewFake(Fixtures{Apps: nil, AppUsers: nil, AppGroups: nil, Groups: nil, GrantedScopes: nil})
+	_, err = fake.GetApp(t.Context(), "0oa 1?x")
+	require.ErrorAs(t, err, &apiErr)
+	require.Equal(t, "/api/v1/apps/0oa%201%3Fx", apiErr.Path)
+}
+
 func TestClient_SlowdownCapsAtMaxWaitAndResets(t *testing.T) {
 	t.Parallel()
 	tc := newDefaultTestClient(t)
@@ -477,7 +518,11 @@ func TestClient_NeverLogsOrTracesCredentials(t *testing.T) {
 	for _, tok := range tc.stub.issuedTokens() {
 		require.NotContains(t, output, tok)
 	}
-	require.NotContains(t, output, tc.signer.Last())
+	assertions := tc.signer.Assertions()
+	require.Len(t, assertions, 2)
+	for _, assertion := range assertions {
+		require.NotContains(t, output, assertion)
+	}
 	require.NotContains(t, output, "nonce-1")
 	require.NotContains(t, output, "authorization")
 	require.NotContains(t, output, "Authorization")
@@ -528,6 +573,21 @@ func TestClient_VerifyScopes_AllUngrantedIsMissingNotError(t *testing.T) {
 	require.Equal(t, []string{"okta.users.read"}, v.Missing)
 	require.False(t, v.DPoPBound)
 	require.True(t, v.ExpiresAt.IsZero())
+}
+
+func TestClient_VerifyScopes_ConsentRequiredIsMissingNotError(t *testing.T) {
+	t.Parallel()
+	tc := newDefaultTestClient(t)
+	tc.stub.setScopeErrorCode("consent_required")
+
+	v, err := tc.client.VerifyScopes(t.Context(), []string{"okta.users.read"})
+	require.NoError(t, err)
+	require.Equal(t, []string{}, v.Granted)
+	require.Equal(t, []string{"okta.users.read"}, v.Missing)
+	require.False(t, v.DPoPBound)
+	require.True(t, v.ExpiresAt.IsZero())
+	_, cached := tc.client.cachedToken()
+	require.False(t, cached)
 }
 
 func TestClient_VerifyScopes_EvictsCachedTokenAndDoesNotCacheVerification(t *testing.T) {
@@ -638,7 +698,13 @@ func TestNewClient_OrgURLRequiresHTTPSExceptLoopback(t *testing.T) {
 		"https://example.okta.com/oauth2",
 		"https://example.okta.com/?x=1",
 		"https://example.okta.com/#frag",
+		"https://example.okta.com?///",
+		"https://example.okta.com#///",
+		"https://example.okta.com?",
+		"https://example.okta.com#",
 		"https://user:pw@example.okta.com",
+		"https://:443",
+		"https://bücher.example",
 	} {
 		cfg.OrgURL = raw
 		cfg.RemoteSessionClientID = uuid.New()
@@ -804,6 +870,70 @@ func TestFake_RequiresAppID(t *testing.T) {
 	require.EqualError(t, err, "okta: app id is required")
 	_, err = fake.ListAppGroups(t.Context(), ListAppGroupsRequest{AppID: "", Limit: 0})
 	require.EqualError(t, err, "okta: app id is required")
+	_, err = fake.GetApp(t.Context(), "..")
+	require.EqualError(t, err, `okta: invalid app id ".."`)
+}
+
+func TestFake_ListAppsFiltersStatus(t *testing.T) {
+	t.Parallel()
+	fake := NewFake(Fixtures{
+		Apps: []App{
+			{ID: "0oa1", Label: "Gram", Name: "oidc_client", SignOnMode: "OPENID_CONNECT", Status: "ACTIVE", Features: nil, Created: time.Time{}, LastUpdated: time.Time{}},
+			{ID: "0oa2", Label: "Old", Name: "oidc_client", SignOnMode: "OPENID_CONNECT", Status: "INACTIVE", Features: nil, Created: time.Time{}, LastUpdated: time.Time{}},
+		},
+		AppUsers: nil, AppGroups: nil, Groups: nil, GrantedScopes: nil,
+	})
+
+	apps, err := fake.ListApps(t.Context(), ListAppsRequest{Query: "", Status: "INACTIVE", Limit: 0})
+	require.NoError(t, err)
+	require.Len(t, apps, 1)
+	require.Equal(t, "0oa2", apps[0].ID)
+
+	apps, err = fake.ListApps(t.Context(), ListAppsRequest{Query: "", Status: "", Limit: 0})
+	require.NoError(t, err)
+	require.Len(t, apps, 2)
+}
+
+func TestClient_AppIDRejectsPathTraversalWithoutRequest(t *testing.T) {
+	t.Parallel()
+	tc := newDefaultTestClient(t)
+
+	for _, id := range []string{".", "..", "../users", "0oa1/users", `0oa1\users`} {
+		_, err := tc.client.GetApp(t.Context(), id)
+		require.EqualError(t, err, fmt.Sprintf("okta: invalid app id %q", id), id)
+		_, err = tc.client.ListAppUsers(t.Context(), ListAppUsersRequest{AppID: id, Limit: 0})
+		require.EqualError(t, err, fmt.Sprintf("okta: invalid app id %q", id), id)
+		_, err = tc.client.ListAppGroups(t.Context(), ListAppGroupsRequest{AppID: id, Limit: 0})
+		require.EqualError(t, err, fmt.Sprintf("okta: invalid app id %q", id), id)
+	}
+	require.Equal(t, stubCounts{tokenRequests: 0, assertionsSeen: 0, issuedTokens: 0}, tc.stub.counts())
+}
+
+func TestClient_AppIDIsEscapedAndProofMatchesWirePath(t *testing.T) {
+	t.Parallel()
+	tc := newDefaultTestClient(t)
+	apps := stubApps(1)
+	apps[0].ID = "0oa 1?x"
+	tc.stub.setApps(apps)
+	tc.stub.setAppUsers("0oa 1?x", []appUserJSON{{ID: "00u1", Scope: "USER", Status: "PROVISIONED", Created: time.Time{}, LastUpdated: time.Time{}, Credentials: struct {
+		UserName string `json:"userName"`
+	}{UserName: "ada@example.com"}}})
+
+	app, err := tc.client.GetApp(t.Context(), "0oa 1?x")
+	require.NoError(t, err)
+	require.Equal(t, "0oa 1?x", app.ID)
+
+	users, err := tc.client.ListAppUsers(t.Context(), ListAppUsersRequest{AppID: "0oa 1?x", Limit: 0})
+	require.NoError(t, err)
+	require.Len(t, users, 1)
+
+	var htus []string
+	for _, p := range tc.stub.recordedProofs() {
+		if p.method == http.MethodGet {
+			htus = append(htus, p.htu)
+		}
+	}
+	require.Equal(t, []string{tc.stub.srv.URL + "/api/v1/apps/0oa%201%3Fx", tc.stub.srv.URL + "/api/v1/apps/0oa%201%3Fx/users"}, htus)
 }
 
 func TestFake_VerifyScopesMirrorsOkta(t *testing.T) {
@@ -929,18 +1059,6 @@ func TestNextLink_ParsesRelParams(t *testing.T) {
 	next, err = nextLink(header, base)
 	require.NoError(t, err)
 	require.Nil(t, next)
-}
-
-func TestDPoPKey_ThumbprintDiffersPerInstance(t *testing.T) {
-	t.Parallel()
-	a, err := newDPoPKey()
-	require.NoError(t, err)
-	b, err := newDPoPKey()
-	require.NoError(t, err)
-	require.NotEqual(t, a.thumbprint, b.thumbprint)
-
-	target := mustParseURL(t, "https://example.okta.com/api/v1/apps?limit=1#frag")
-	require.Equal(t, "https://example.okta.com/api/v1/apps", dpopHTU(target))
 }
 
 func TestFake_Fixtures(t *testing.T) {
@@ -1235,4 +1353,24 @@ func TestClient_RateLimitJitterWaitCancellation(t *testing.T) {
 			require.Equal(t, []time.Duration{7*time.Second + maxRateLimitJitter/2}, waits)
 		})
 	}
+}
+
+// RFC 9449 §7.3: a resource retry after a transient 429 signs a fresh proof.
+func TestClient_Resource429RetrySignsFreshProof(t *testing.T) {
+	t.Parallel()
+	tc := newDefaultTestClient(t)
+	tc.stub.setApps(stubApps(1))
+	tc.stub.setPending429(1)
+
+	listApps(t, tc)
+
+	var resourceProofs []proofRecord
+	for _, p := range tc.stub.recordedProofs() {
+		if p.method == http.MethodGet {
+			resourceProofs = append(resourceProofs, p)
+		}
+	}
+	require.Len(t, resourceProofs, 2)
+	require.NotEqual(t, resourceProofs[0].jti, resourceProofs[1].jti)
+	require.Equal(t, resourceProofs[0].ath, resourceProofs[1].ath)
 }
