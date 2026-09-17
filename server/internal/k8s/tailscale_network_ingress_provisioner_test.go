@@ -335,7 +335,7 @@ func TestTailscaleNetworkIngressProvisionerRefusesUnownedResources(t *testing.T)
 
 	err = provisioner.Delete(t.Context(), desired.Resources)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "refuse to delete unowned namespace")
+	require.Contains(t, err.Error(), "refuse to delete namespace with invalid ownership")
 	_, err = typed.CoreV1().Namespaces().Get(t.Context(), desired.Resources.Namespace, metav1.GetOptions{})
 	require.NoError(t, err)
 }
