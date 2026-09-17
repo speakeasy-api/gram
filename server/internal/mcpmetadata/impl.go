@@ -1113,6 +1113,9 @@ func (s *Service) resolvePrivateInstallContext(ctx context.Context, mcpSlug, org
 
 	var org organizations_repo.OrganizationMetadatum
 	if result.MetaServer != nil {
+		if err := s.requireMetaInstallAdmission(ctx, result.Mode, result.MetaServer.OrganizationID); err != nil {
+			return nil, err
+		}
 		org, err = s.orgsRepo.GetOrganizationMetadata(ctx, result.MetaServer.OrganizationID)
 	} else {
 		org, err = s.lookupInstallOrganization(ctx, bridgeToolset, result.Server)
@@ -1145,15 +1148,8 @@ func (s *Service) resolveInstallContext(ctx context.Context, mcpSlug string) (*i
 		if err != nil {
 			return nil, fmt.Errorf("%w: invalid network access mode", errToolsetNotFound)
 		}
-		// Existing public-network gateways remain available independently of
-		// private ingress rollout. Non-public modes require rollout admission.
-		if !mode.IsPublicOnly() {
-			if s.metaInstallAdmission == nil {
-				return nil, fmt.Errorf("%w: meta install page is unavailable", errToolsetNotFound)
-			}
-			if err := s.metaInstallAdmission(ctx, metaServer.OrganizationID); err != nil {
-				return nil, fmt.Errorf("%w: meta install page is unavailable", errToolsetNotFound)
-			}
+		if err := s.requireMetaInstallAdmission(ctx, mode, metaServer.OrganizationID); err != nil {
+			return nil, err
 		}
 		org, err := s.orgsRepo.GetOrganizationMetadata(ctx, metaServer.OrganizationID)
 		if err != nil {
@@ -1214,6 +1210,22 @@ func (s *Service) resolveInstallContext(ctx context.Context, mcpSlug string) (*i
 		organization:   org,
 		mcpURLOverride: "",
 	}, nil
+}
+
+// requireMetaInstallAdmission keeps existing public-only gateways independent
+// of the private-ingress rollout while applying one fail-closed admission gate
+// to every non-public Meta MCP install surface.
+func (s *Service) requireMetaInstallAdmission(ctx context.Context, mode networkaccess.Mode, organizationID string) error {
+	if mode.IsPublicOnly() {
+		return nil
+	}
+	if s.metaInstallAdmission == nil {
+		return fmt.Errorf("%w: meta install page is unavailable", errToolsetNotFound)
+	}
+	if err := s.metaInstallAdmission(ctx, organizationID); err != nil {
+		return fmt.Errorf("%w: meta install page is unavailable", errToolsetNotFound)
+	}
+	return nil
 }
 
 // lookupInstallOrganization resolves the organization metadata that owns the

@@ -18,6 +18,11 @@ const hookState = vi.hoisted(() => ({
   isError: false,
 }));
 
+vi.mock("@/lib/utils", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/utils")>()),
+  getServerURL: () => "https://api.example.com",
+}));
+
 vi.mock("@/hooks/useNetworkIngressRollout", () => ({
   useNetworkIngressRollout: () => ({
     rolloutEnabled: hookState.rolloutEnabled,
@@ -102,13 +107,8 @@ describe("privateMcpEndpointUrls", () => {
 describe("privateMcpInstallPageUrls", () => {
   it("hosts private install pages on Gram instead of the tailnet", () => {
     expect(privateMcpInstallPageUrls(onlineIngress, endpoints)).toEqual([
-      expect.stringMatching(
-        /\/mcp\/platform-server\/install\?network=private$/,
-      ),
+      "https://api.example.com/mcp/platform-server/install?network=private",
     ]);
-    expect(
-      privateMcpInstallPageUrls(onlineIngress, endpoints)[0],
-    ).not.toContain("private.example.ts.net");
   });
 
   it.each([
@@ -189,9 +189,7 @@ describe("usePrivateMcpServerUrls", () => {
         "https://private.example.ts.net/mcp/platform-server",
       ]);
       expect(result.current.privateInstallPageUrls).toEqual([
-        expect.stringMatching(
-          /\/mcp\/platform-server\/install\?network=private$/,
-        ),
+        "https://api.example.com/mcp/platform-server/install?network=private",
       ]);
       expect(result.current.canReadPrivateUrls).toBe(true);
     },
@@ -228,6 +226,7 @@ describe("usePrivateMcpServerUrls", () => {
     );
 
     expect(result.current.privateMcpUrls).toEqual([]);
+    expect(result.current.privateInstallPageUrls).toEqual([]);
     expect(result.current.isError).toBe(true);
   });
 
@@ -237,6 +236,7 @@ describe("usePrivateMcpServerUrls", () => {
     );
 
     expect(result.current.privateMcpUrls).toEqual([]);
+    expect(result.current.privateInstallPageUrls).toEqual([]);
     expect(result.current.isLoading).toBe(false);
   });
 });

@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/metamcp/visibility"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	networkingress_repo "github.com/speakeasy-api/gram/server/internal/networkingress/repo"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizations_repo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
@@ -2016,7 +2017,10 @@ func TestServeInstallPage_PrivateNetworkUsesControlPlanePage(t *testing.T) {
 	forbidden := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install?network=private", nil)
 	forbidden = forbidden.WithContext(context.WithValue(nonAdmin, chi.RouteCtxKey, rctx))
 	forbiddenResult := httptest.NewRecorder()
-	require.Error(t, ti.service.ServeInstallPage(forbiddenResult, forbidden))
+	forbiddenErr := ti.service.ServeInstallPage(forbiddenResult, forbidden)
+	var shareableErr *oops.ShareableError
+	require.ErrorAs(t, forbiddenErr, &shareableErr)
+	require.Equal(t, oops.CodeForbidden, shareableErr.Code)
 
 	domain, err := customdomains_repo.New(ti.conn).CreateCustomDomain(ctx, customdomains_repo.CreateCustomDomainParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
@@ -2037,7 +2041,7 @@ func TestServeInstallPage_PrivateNetworkUsesControlPlanePage(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, wrongNamespaceResult.Code)
 
 	_, err = networkingress_repo.New(ti.conn).UpdateNetworkIngressSettings(ctx, networkingress_repo.UpdateNetworkIngressSettingsParams{
-		UpdateHostname: true, Hostname: ingress.Hostname, UpdateEnabled: false, Enabled: true,
+		UpdateHostname: true, Hostname: ingress.Hostname,
 		UpdateIdentityRequired: false, IdentityRequired: ingress.IdentityRequired, OrganizationID: authCtx.ActiveOrganizationID,
 	})
 	require.NoError(t, err)
@@ -2142,8 +2146,13 @@ func seedMetaBackedEndpoint(t *testing.T, ctx context.Context, ti *testInstance,
 // request context and returns the recorded response.
 func serveMetaInstallPage(t *testing.T, reqCtx context.Context, ti *testInstance, mcpSlug string) *httptest.ResponseRecorder {
 	t.Helper()
+	return serveMetaInstallPageURL(t, reqCtx, ti, "/mcp/"+mcpSlug+"/install", mcpSlug)
+}
 
-	req := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install", nil)
+func serveMetaInstallPageURL(t *testing.T, reqCtx context.Context, ti *testInstance, requestURL, mcpSlug string) *httptest.ResponseRecorder {
+	t.Helper()
+
+	req := httptest.NewRequest("GET", requestURL, nil)
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("mcpSlug", mcpSlug)
 	req = req.WithContext(context.WithValue(reqCtx, chi.RouteCtxKey, rctx))
@@ -2220,6 +2229,66 @@ func TestServeInstallPage_MetaBackedEndpoint_NetworkIngressAdmission(t *testing.
 				}
 			})
 		}
+	}
+}
+
+// TestServeInstallPage_PrivateMetaBackedEndpoint_NetworkIngressAdmission verifies
+// that private Meta MCP installs use the same fail-closed rollout admission gate.
+func TestServeInstallPage_PrivateMetaBackedEndpoint_NetworkIngressAdmission(t *testing.T) {
+	t.Parallel()
+
+	for _, admissionState := range []string{"unavailable", "denied", "allowed"} {
+		t.Run(admissionState, func(t *testing.T) {
+			t.Parallel()
+			var admittedOrg string
+			var admission func(context.Context, string) error
+			if admissionState != "unavailable" {
+				admission = func(_ context.Context, orgID string) error {
+					admittedOrg = orgID
+					if admissionState == "denied" {
+						return fmt.Errorf("rollout unavailable")
+					}
+					return nil
+				}
+			}
+
+			ctx, ti := newTestMCPMetadataServiceWithAdmission(t, admission)
+			authCtx, ok := contextvalues.GetAuthContext(ctx)
+			require.True(t, ok)
+			slug := "private-meta-admission-" + uuid.New().String()[:8]
+			meta := seedMetaBackedEndpoint(t, ctx, ti, slug, metaEndpointFixtureOptions{
+				networkAccessMode: networkaccess.ModePrivateOnly,
+			})
+
+			ingressID := uuid.New()
+			ingress, err := networkingress_repo.New(ti.conn).CreateNetworkIngress(ctx, networkingress_repo.CreateNetworkIngressParams{
+				ID: ingressID, OrganizationID: authCtx.ActiveOrganizationID, Provider: "tailscale", Hostname: "private-meta-test",
+				EndpointNamespaceKind: "platform", CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				Enabled: true, IdentityRequired: false, CredentialsEncrypted: conv.ToPGText("ciphertext"),
+				AttestorNamespace: "private-meta-test", AttestorServiceAccount: "private-meta-test", ProviderResources: []byte(`{}`),
+			})
+			require.NoError(t, err)
+			_, err = networkingress_repo.New(ti.conn).RecordNetworkIngressObservation(ctx, networkingress_repo.RecordNetworkIngressObservationParams{
+				ID: ingressID, OrganizationID: authCtx.ActiveOrganizationID, ExpectedUpdatedAt: ingress.UpdatedAt,
+				Status: "online", DnsName: conv.ToPGText("private-meta.example.ts.net"), LastError: pgtype.Text{},
+			})
+			require.NoError(t, err)
+
+			rr := serveMetaInstallPageURL(t, ctx, ti, "/mcp/"+slug+"/install?network=private", slug)
+			if admissionState == "allowed" {
+				require.Equal(t, http.StatusOK, rr.Code)
+				require.Contains(t, rr.Body.String(), "Install Page Gateway")
+			} else {
+				require.Equal(t, http.StatusNotFound, rr.Code)
+				require.NotContains(t, rr.Body.String(), "Install Page Gateway")
+			}
+			require.NotContains(t, rr.Body.String(), "Legacy Same-Slug Toolset")
+			if admissionState == "unavailable" {
+				require.Empty(t, admittedOrg)
+			} else {
+				require.Equal(t, meta.OrganizationID, admittedOrg)
+			}
+		})
 	}
 }
 
