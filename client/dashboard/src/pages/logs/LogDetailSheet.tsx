@@ -190,6 +190,14 @@ function LogDetailContent({
     : Number.NaN;
   const failed =
     Boolean(toolError) || (Number.isFinite(statusCode) && statusCode >= 400);
+  // A span with no status, no error and no result has not finished — the same
+  // definition the rows use. Calling that "Success" tells the reader the call
+  // returned when nothing ever came back.
+  const pending =
+    !failed &&
+    !blockReason &&
+    !Number.isFinite(statusCode) &&
+    !getNestedValue(attrs ?? {}, "gen_ai.tool.call.result");
 
   return (
     <div className="flex flex-col gap-6 px-5 pt-6 pb-6">
@@ -208,7 +216,9 @@ function LogDetailContent({
                   ? "bg-amber-500"
                   : failed
                     ? "bg-rose-500"
-                    : "bg-emerald-500",
+                    : pending
+                      ? "bg-muted-foreground/30"
+                      : "bg-emerald-500",
               )}
             />
             <span
@@ -221,7 +231,13 @@ function LogDetailContent({
                     : "text-muted-foreground",
               )}
             >
-              {blockReason ? "Blocked" : failed ? "Error" : "Success"}
+              {blockReason
+                ? "Blocked"
+                : failed
+                  ? "Error"
+                  : pending
+                    ? "Pending"
+                    : "Success"}
             </span>
             <span className="text-muted-foreground font-mono text-xs">
               {formatNanoTimestamp(log.timeUnixNano)}

@@ -80,7 +80,9 @@ export function MetricSpark({
     tone === "destructive"
       ? "var(--color-destructive)"
       : tone === "success"
-        ? "var(--color-success)"
+        ? // The foreground token, not the fill: --success is a pale tint meant to
+          // sit behind text, and a 1.5px line in it is invisible on a light card.
+          "var(--color-success-foreground)"
         : "var(--color-muted-foreground)";
 
   const points = sparkPoints(series);

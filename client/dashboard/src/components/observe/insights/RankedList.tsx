@@ -55,6 +55,16 @@ export function RankedList({
   const [shown, setShown] = useState(maxRows);
   const listRef = useRef<HTMLUListElement>(null);
 
+  // A new filter or range answers a different question, so the expansion the
+  // reader asked of the old answer does not carry over — otherwise a card
+  // narrowed to three servers still opens scrolled to row twenty of nothing.
+  const rowsKey = rows.map((row) => row.id).join("\u0000");
+  const lastRowsKey = useRef(rowsKey);
+  if (lastRowsKey.current !== rowsKey) {
+    lastRowsKey.current = rowsKey;
+    if (shown !== maxRows) setShown(maxRows);
+  }
+
   // The revealed rows scroll inside the card rather than growing it: these
   // cards sit in a grid row, so one card growing would stretch its neighbours
   // into tall empty boxes. Follow the new rows down so "show more" visibly

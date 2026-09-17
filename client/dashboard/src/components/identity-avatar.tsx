@@ -8,13 +8,16 @@ import { cn } from "@/lib/utils";
  * give a column of identical marks.
  */
 function initialsFor(label: string): string {
-  const local = label.split("@")[0] ?? label;
+  const local = label.trim().split("@")[0] ?? label.trim();
   const words = local.split(/[.\-_+\s]+/).filter(Boolean);
   const letters =
     words.length > 1
       ? `${words[0]?.[0] ?? ""}${words[1]?.[0] ?? ""}`
       : local.slice(0, 2);
-  return letters.replace(/[^a-zA-Z0-9]/g, "").toUpperCase() || "?";
+  // Any letter or digit, not just ASCII: a name written in another script has
+  // initials too, and stripping them leaves a column of identical "?" marks —
+  // exactly the sameness the avatar exists to break up.
+  return letters.replace(/[^\p{L}\p{N}]/gu, "").toLocaleUpperCase() || "?";
 }
 
 /**

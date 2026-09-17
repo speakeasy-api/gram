@@ -7,16 +7,41 @@ import {
 
 const LOGS = "/org/project/logs";
 
+// Written out rather than read from OBSERVE_FILTER_PARAMS: a test that builds
+// both its fixture and its expectation from the constant passes just as
+// happily when a param is deleted from it, which is the regression that
+// silently drops a filter on the way between the two pages.
+const REQUIRED_SHARED_PARAMS = [
+  "server",
+  "user",
+  "source",
+  "role",
+  "hookTypes",
+  "status",
+  "account_type",
+  "client",
+  "range",
+  "from",
+  "to",
+  "label",
+];
+
 describe("carryObserveParams", () => {
   it("carries every shared filter param", () => {
     const current = new URLSearchParams();
-    for (const key of OBSERVE_FILTER_PARAMS) current.set(key, `v-${key}`);
+    for (const key of REQUIRED_SHARED_PARAMS) current.set(key, `v-${key}`);
 
     const carried = carryObserveParams(current);
 
-    for (const key of OBSERVE_FILTER_PARAMS) {
+    for (const key of REQUIRED_SHARED_PARAMS) {
       expect(carried.get(key)).toBe(`v-${key}`);
     }
+  });
+
+  it("keeps the shared param list and this test in step", () => {
+    expect([...OBSERVE_FILTER_PARAMS].sort()).toEqual(
+      [...REQUIRED_SHARED_PARAMS].sort(),
+    );
   });
 
   it("leaves page-local search behind", () => {

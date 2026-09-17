@@ -81,7 +81,14 @@ export function StackedTimeBarChart({
   );
 
   if (labels.length === 0) {
-    return <ChartNoData />;
+    // Inside the caller's height: the compact strip is 76-88px and ChartNoData
+    // is a fixed 96, so letting it size itself makes the panel jump taller the
+    // moment a filter empties it.
+    return (
+      <div className="flex items-center justify-center" style={{ height }}>
+        <ChartNoData />
+      </div>
+    );
   }
 
   const options: ChartOptions<"bar"> = {

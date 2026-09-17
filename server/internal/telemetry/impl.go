@@ -3375,9 +3375,6 @@ type toolUsageFilters struct {
 	Filters  []*telem_gen.LogFilter
 }
 
-// resolveToolUsageParams authorizes the caller, verifies logging is enabled, and
-// builds the ClickHouse query parameters shared by the tool usage summary aggregate
-// and its per-panel endpoints. All returned errors are already oops-wrapped.
 // toolUsageStatusStrings flattens the generated status enum to the strings the
 // repo predicates switch on. Every summary endpoint takes the same filter, so
 // the conversion lives once rather than in each handler.
@@ -3392,6 +3389,9 @@ func toolUsageStatusStrings(statuses []telem_gen.ToolUsageStatus) []string {
 	return out
 }
 
+// resolveToolUsageParams authorizes the caller, verifies logging is enabled, and
+// builds the ClickHouse query parameters shared by the tool usage summary aggregate
+// and its per-panel endpoints. All returned errors are already oops-wrapped.
 func (s *Service) resolveToolUsageParams(ctx context.Context, f toolUsageFilters) (repo.GetToolUsageSummaryParams, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {

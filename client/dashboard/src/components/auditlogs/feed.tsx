@@ -25,7 +25,10 @@ export function DateGroupHeader({
   mode: TimestampMode;
 }): React.JSX.Element {
   return (
-    <div className="bg-background flex items-center gap-3 px-4 py-2">
+    // bg-inherit, not bg-background: the header has to be opaque so pinned
+    // rows do not show through it, but the audit feeds render it on a card and
+    // the page ground would stripe every group.
+    <div className="flex items-center gap-3 bg-inherit px-4 py-2">
       {/* Short leading stub so the rule reads as one line the date sits on,
           rather than a label with a tail hanging off its right. */}
       <div className="bg-border h-px w-2.5 shrink-0" />

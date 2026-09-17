@@ -156,7 +156,10 @@ function FacetSection({
             </span>
           )}
         </button>
-        {selectedCount > 0 && (
+        {/* appliedCount, not selectedCount: a group still at its default has
+            nothing to reset to, and offering the action anyway makes Reset
+            look broken the one time it is pressed. */}
+        {appliedCount > 0 && (
           <button
             type="button"
             onClick={() => onClearGroup(group.id)}
@@ -265,7 +268,7 @@ function FacetSection({
           )}
           {/* Only where the list was long enough to have been cut: a group
               that always fitted has nothing to collapse back to. */}
-          {showAll && group.values.length > COLLAPSED_FACET_VALUES && (
+          {showAll && matching.length > COLLAPSED_FACET_VALUES && (
             <li>
               <button
                 type="button"

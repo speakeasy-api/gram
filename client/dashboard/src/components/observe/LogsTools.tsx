@@ -18,6 +18,7 @@ import {
   encodeGatewayServerFilter,
   encodeHostedServerFilter,
   encodeShadowServerFilter,
+  parseTargetFilter,
   isDefaultToolUsageTypeSelection,
   selectedHookSources,
   selectedTargetValues,
@@ -330,24 +331,64 @@ export function LogsTools(): JSX.Element {
       })),
     ].sort((a, b) => (b.count ?? 0) - (a.count ?? 0));
 
+    // The filter-options endpoint only knows what happened in the window, so a
+    // deep link carrying a server, client or user with no events here would
+    // apply a filter the rail cannot show — and therefore cannot clear. Add
+    // the selection back with a zero count and its raw id as the label.
+    const withSelected = (
+      values: FacetValue[],
+      selected: string[],
+      label: (value: string) => string = (value) => value,
+    ): FacetValue[] => {
+      const present = new Set(values.map((value) => value.value));
+      return [
+        ...values,
+        ...selected
+          .filter((value) => !present.has(value))
+          .map((value) => ({
+            value,
+            label: label(value),
+            count: 0,
+            selected: true,
+          })),
+      ];
+    };
+
     return [
-      { id: "server", label: "MCP server", values: serverValues },
+      {
+        id: "server",
+        label: "MCP server",
+        values: withSelected(
+          serverValues,
+          selectedServerValues,
+          (value) => parseTargetFilter(value).id,
+        ),
+      },
       {
         id: "client",
         label: "Client",
-        values: (filterOptionsData?.clients ?? []).map((client) => ({
-          value: client.clientKey,
-          label: client.clientLabel,
-          count: Number(client.eventCount),
-          icon: hasAgentProviderIcon(client.clientLabel) ? (
-            <AgentProviderIcon source={client.clientLabel} className="size-4" />
-          ) : undefined,
-          selected: selectedClientKeys.includes(client.clientKey),
-        })),
+        values: withSelected(
+          (filterOptionsData?.clients ?? []).map((client) => ({
+            value: client.clientKey,
+            label: client.clientLabel,
+            count: Number(client.eventCount),
+            icon: hasAgentProviderIcon(client.clientLabel) ? (
+              <AgentProviderIcon
+                source={client.clientLabel}
+                className="size-4"
+              />
+            ) : undefined,
+            selected: selectedClientKeys.includes(client.clientKey),
+          })),
+          selectedClientKeys,
+        ),
       },
       {
         id: "status",
         label: "Status",
+        // Severity order, not alphabetical: "Blocked, Error, Pending, Success"
+        // scrambles a scale the reader already knows how to read.
+        keepValueOrder: true,
         values: TOOL_USAGE_STATUS_OPTIONS.map((option) => ({
           value: option.value,
           label: option.label,
@@ -359,6 +400,9 @@ export function LogsTools(): JSX.Element {
         id: "type",
         label: "Type",
         isDefaultSelection: isDefaultToolUsageTypeSelection(selectedHookTypes),
+        // Declared order groups the MCP surfaces together and leaves local
+        // tools and skills at the end, which alphabetising breaks apart.
+        keepValueOrder: true,
         values: TOOL_USAGE_TYPE_OPTIONS.map((option) => ({
           value: option.value,
           label: option.label,
@@ -406,15 +450,20 @@ export function LogsTools(): JSX.Element {
         // The URL and the payload carry emails; an agent or an external id
         // sent as an email filter matches nothing, so those identities are not
         // offered here rather than offered and broken.
-        values: (filterOptionsData?.users ?? [])
-          .filter((user) => user.userKind === "email")
-          .map((user) => ({
-            value: user.userKey,
-            label: user.userLabel,
-            count: Number(user.eventCount),
-            icon: <IdentityAvatar label={user.userLabel} className="size-5" />,
-            selected: selectedEmails.includes(user.userKey),
-          })),
+        values: withSelected(
+          (filterOptionsData?.users ?? [])
+            .filter((user) => user.userKind === "email")
+            .map((user) => ({
+              value: user.userKey,
+              label: user.userLabel,
+              count: Number(user.eventCount),
+              icon: (
+                <IdentityAvatar label={user.userLabel} className="size-5" />
+              ),
+              selected: selectedEmails.includes(user.userKey),
+            })),
+          selectedEmails,
+        ),
       },
     ];
   }, [
@@ -864,7 +913,7 @@ function railWidthCeiling(): number {
  * applied literally: a 340px rail chosen on an external display would squeeze
  * the table's tool names to ellipses back on the laptop.
  */
-function useRailWidth(): [number, (width: number) => void] {
+function useRailWidth(): [number, (width: number, persist?: boolean) => void] {
   const [preferred, setPreferred] = useState(() => {
     try {
       const raw = Number(localStorage.getItem(RAIL_WIDTH_STORAGE_KEY));
@@ -882,10 +931,15 @@ function useRailWidth(): [number, (width: number) => void] {
     return () => window.removeEventListener("resize", update);
   }, []);
 
+  // persist defaults to true for the discrete moves (keyboard, a finished
+  // drag). A drag in flight passes false: it fires on every pointermove, and
+  // a synchronous localStorage write per frame is hundreds of writes for one
+  // gesture, which is felt as the handle lagging the pointer.
   const commit = useCallback(
-    (next: number) => {
+    (next: number, persist = true) => {
       const clamped = Math.min(Math.max(next, RAIL_WIDTH_MIN), ceiling);
       setPreferred(clamped);
+      if (!persist) return;
       try {
         localStorage.setItem(RAIL_WIDTH_STORAGE_KEY, String(clamped));
       } catch {
@@ -1283,9 +1337,13 @@ function LogsToolsContent({
                     event.preventDefault();
                     const startX = event.clientX;
                     const startWidth = railWidth;
-                    const onMove = (move: PointerEvent) =>
-                      setRailWidth(startWidth + move.clientX - startX);
+                    let latest = startWidth;
+                    const onMove = (move: PointerEvent) => {
+                      latest = startWidth + move.clientX - startX;
+                      setRailWidth(latest, false);
+                    };
                     const onUp = () => {
+                      setRailWidth(latest);
                       window.removeEventListener("pointermove", onMove);
                       window.removeEventListener("pointerup", onUp);
                     };

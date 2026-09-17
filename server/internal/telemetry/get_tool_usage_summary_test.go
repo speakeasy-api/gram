@@ -996,13 +996,9 @@ func TestGetToolUsageTotals_NarrowsByStatus(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		all, err := ti.service.GetToolUsageTotals(ctx, &gen.GetToolUsageTotalsPayload{From: from, To: to})
-		if !assert.NoError(c, err) {
-			return
-		}
-		assert.Equal(c, int64(3), all.Totals.EventCount)
-	}, 10*time.Second, 200*time.Millisecond)
+	all, err := ti.service.GetToolUsageTotals(ctx, &gen.GetToolUsageTotalsPayload{From: from, To: to})
+	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.Equal(t, int64(3), all.Totals.EventCount)
 
 	errorsOnly, err := ti.service.GetToolUsageTotals(ctx, &gen.GetToolUsageTotalsPayload{
 		From:     from,
@@ -1055,15 +1051,11 @@ func TestGetToolUsageTotals_NarrowsByQueryOnTheRawPath(t *testing.T) {
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 	query := "charge"
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.GetToolUsageTotals(ctx, &gen.GetToolUsageTotalsPayload{
-			From:  from,
-			To:    to,
-			Query: &query,
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		assert.Equal(c, int64(1), res.Totals.EventCount)
-	}, 10*time.Second, 200*time.Millisecond)
+	res, err := ti.service.GetToolUsageTotals(ctx, &gen.GetToolUsageTotalsPayload{
+		From:  from,
+		To:    to,
+		Query: &query,
+	})
+	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.Equal(t, int64(1), res.Totals.EventCount)
 }
