@@ -49,23 +49,81 @@ const EMPTY_PROJECTS: ProjectEntry[] = [];
 const EMPTY_DESTINATIONS: OtelDataExportDestination[] = [];
 const EMPTY_ROUTES: DataExportRoute[] = [];
 
-const DATA_SOURCE_OPTIONS: Array<{
+type DataSourceOption = {
   value: DataSourceValue;
   label: string;
-  description: string;
-}> = [
+};
+
+type DataSourceDescription = {
+  value: DataSourceValue;
+  description: ReactNode;
+};
+
+type DataSourcePresentation = DataSourceOption & DataSourceDescription;
+
+const DATA_SOURCE_OPTIONS: DataSourceOption[] = [
   {
     value: DataSource.ProductTelemetry,
     label: "Product telemetry",
-    description:
-      "OTLP traces, logs, and metrics your agent sessions send to Speakeasy's /otel/v1 endpoints — the same records the Event Feed shows. Tool call logs that are recorded for hosted or proxied MCP servers are not part of this stream.",
   },
   {
     value: DataSource.RiskFindings,
     label: "Risk findings",
-    description: "OTLP logs for findings detected by risk policies.",
   },
 ];
+
+function renderDataSourceDescription(
+  dataSource: DataSourceValue,
+  links: { eventFeed?: string; riskPolicies?: string } = {},
+): ReactNode {
+  if (dataSource === DataSource.ProductTelemetry) {
+    return (
+      <>
+        OTLP traces, logs, and metrics your agent sessions send to
+        Speakeasy&apos;s /otel/v1 endpoints — the same records the{" "}
+        {links.eventFeed ? (
+          <Link
+            to={links.eventFeed}
+            className="pointer-events-auto relative z-30 text-link-primary"
+          >
+            Event Feed
+          </Link>
+        ) : (
+          "Event Feed"
+        )}{" "}
+        shows. Tool call logs that are recorded for hosted or proxied MCP
+        servers are not part of this stream.
+      </>
+    );
+  }
+
+  if (dataSource === DataSource.RiskFindings) {
+    return (
+      <>
+        OTLP logs for findings detected by{" "}
+        {links.riskPolicies ? (
+          <Link
+            to={links.riskPolicies}
+            className="pointer-events-auto relative z-30 text-link-primary"
+          >
+            risk policies
+          </Link>
+        ) : (
+          "risk policies"
+        )}
+        .
+      </>
+    );
+  }
+
+  return "OTLP data";
+}
+
+const UNLINKED_DATA_SOURCE_OPTIONS: DataSourcePresentation[] =
+  DATA_SOURCE_OPTIONS.map((source) => ({
+    ...source,
+    description: renderDataSourceDescription(source.value),
+  }));
 
 type ExportRow = {
   route: DataExportRoute;
@@ -106,7 +164,7 @@ type VisualSource = {
 
 function visualSource(
   { route }: ProjectExportRow,
-  dataSources: Array<{ value: DataSourceValue; description: ReactNode }>,
+  dataSources: DataSourceDescription[],
 ): VisualSource {
   return {
     key: route.id,
@@ -142,10 +200,7 @@ function sourceLabel(dataSource: string): string {
 
 function sourceDescription(
   dataSource: string,
-  dataSources: Array<{
-    value: DataSourceValue;
-    description: ReactNode;
-  }> = DATA_SOURCE_OPTIONS,
+  dataSources: DataSourceDescription[] = UNLINKED_DATA_SOURCE_OPTIONS,
 ): ReactNode {
   return (
     dataSources.find((option) => option.value === dataSource)?.description ??
@@ -261,51 +316,15 @@ function DataExportsInner(): JSX.Element {
   );
   const defaultProject =
     projects.find((project) => project.slug === "default") ?? projects[0];
-  const linkedDataSourceOptions = DATA_SOURCE_OPTIONS.map((source) => {
-    if (source.value === DataSource.ProductTelemetry) {
-      return {
-        ...source,
-        description: (
-          <>
-            OTLP traces, logs, and metrics your agent sessions send to
-            Speakeasy&apos;s /otel/v1 endpoints — the same records the{" "}
-            <Link
-              to={`/${organization.slug}/data/event-feed`}
-              className="pointer-events-auto relative z-30 text-link-primary"
-            >
-              Event Feed
-            </Link>{" "}
-            shows. Tool call logs that are recorded for hosted or proxied MCP
-            servers are not part of this stream.
-          </>
-        ),
-      };
-    }
-
-    if (source.value !== DataSource.RiskFindings) {
-      return source;
-    }
-
-    return {
-      ...source,
-      description: (
-        <>
-          OTLP logs for findings detected by{" "}
-          {defaultProject ? (
-            <Link
-              to={`/${organization.slug}/projects/${defaultProject.slug}/risk-policies?tab=policies`}
-              className="pointer-events-auto relative z-30 text-link-primary"
-            >
-              risk policies
-            </Link>
-          ) : (
-            "risk policies"
-          )}
-          .
-        </>
-      ),
-    };
-  });
+  const linkedDataSourceOptions = DATA_SOURCE_OPTIONS.map((source) => ({
+    ...source,
+    description: renderDataSourceDescription(source.value, {
+      eventFeed: `/${organization.slug}/data/event-feed`,
+      riskPolicies: defaultProject
+        ? `/${organization.slug}/projects/${defaultProject.slug}/risk-policies?tab=policies`
+        : undefined,
+    }),
+  }));
   const configureDataSources = configureRoute
     ? linkedDataSourceOptions.filter(
         (source) => source.value === configureRoute.dataSource,
@@ -684,10 +703,7 @@ function groupExportsByDestination(
 
 type ExportMapProps = {
   exports: ProjectExportRow[];
-  dataSources?: Array<{
-    value: DataSourceValue;
-    description: ReactNode;
-  }>;
+  dataSources?: DataSourceDescription[];
   mutating: boolean;
   onConfigure: (project: ProjectEntry, route: DataExportRoute) => void;
   onConfigureDestination: (
@@ -704,7 +720,7 @@ type ExportMapProps = {
 
 export function ExportMap({
   exports,
-  dataSources = DATA_SOURCE_OPTIONS,
+  dataSources = UNLINKED_DATA_SOURCE_OPTIONS,
   mutating,
   onConfigure,
   onConfigureDestination,
