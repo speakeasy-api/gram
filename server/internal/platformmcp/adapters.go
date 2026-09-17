@@ -419,36 +419,64 @@ func (r *PostgresReader) setInventoryCursorKey(keyMaterial string) {
 	}
 }
 
+const (
+	projectCandidatePageSize = 100
+	maxProjectCandidates     = 1000
+)
+
 func (r *PostgresReader) ListProjects(ctx context.Context, principal Principal, input ListProjectsInput) (ListProjectsOutput, error) {
 	if r.reader == nil || r.authz == nil {
 		return ListProjectsOutput{}, ErrUnavailable
 	}
-	rows, err := r.reader.ListProjects(ctx, principal.OrganizationID)
-	if err != nil {
-		return ListProjectsOutput{}, fmt.Errorf("list platform mcp projects: %w", err)
-	}
-	checks := make([]authz.Check, 0, len(rows))
-	for _, row := range rows {
-		checks = append(checks, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: row.ID.String(), Dimensions: nil})
-	}
-	allowed, err := r.authz.FindMatched(ctx, checks)
-	if err != nil {
-		return ListProjectsOutput{}, fmt.Errorf("filter platform mcp projects: %w", err)
-	}
 	limit := boundedLimit(input.Limit)
-	projects := make([]Project, 0, min(limit+1, len(rows)))
+	projects := make([]Project, 0, limit+1)
 	filtered := false
-	for i, row := range rows {
-		if !allowed[i] {
-			filtered = true
-			continue
+	exhausted := false
+	afterID := uuid.Nil
+	candidatesRead := 0
+
+	for len(projects) <= limit && candidatesRead < maxProjectCandidates {
+		pageLimit := min(projectCandidatePageSize, maxProjectCandidates-candidatesRead)
+		rows, err := r.reader.ListProjectsPage(ctx, principal.OrganizationID, afterID, int32(pageLimit)) // #nosec G115 -- both constants fit in int32.
+		if err != nil {
+			return ListProjectsOutput{}, fmt.Errorf("list platform mcp project page: %w", err)
 		}
-		if len(projects) <= limit {
-			projects = append(projects, Project{ID: row.ID.String(), Name: row.Name, Slug: row.Slug})
+		if len(rows) == 0 {
+			exhausted = true
+			break
+		}
+		candidatesRead += len(rows)
+		afterID = rows[len(rows)-1].ID
+
+		checks := make([]authz.Check, 0, len(rows))
+		for _, row := range rows {
+			checks = append(checks, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: row.ID.String(), Dimensions: nil})
+		}
+		allowed, err := r.authz.FindMatched(ctx, checks)
+		if err != nil {
+			return ListProjectsOutput{}, fmt.Errorf("filter platform mcp project page: %w", err)
+		}
+		for i, row := range rows {
+			if !allowed[i] {
+				filtered = true
+				continue
+			}
+			if len(projects) <= limit {
+				projects = append(projects, Project{ID: row.ID.String(), Name: row.Name, Slug: row.Slug})
+			}
+		}
+		if len(rows) < pageLimit {
+			exhausted = true
+			break
 		}
 	}
-	projects, truncated := boundedRows(projects, limit)
-	return ListProjectsOutput{Projects: projects, Truncated: truncated, Filtered: filtered}, nil
+
+	projects, visibleTruncated := boundedRows(projects, limit)
+	return ListProjectsOutput{
+		Projects:  projects,
+		Truncated: visibleTruncated || !exhausted,
+		Filtered:  filtered,
+	}, nil
 }
 
 func (r *PostgresReader) FindMCP(ctx context.Context, principal Principal, input FindMCPInput) (FindMCPOutput, error) {
