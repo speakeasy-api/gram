@@ -37,6 +37,7 @@ import (
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 )
 
 // metadataCacheMaxAgeSeconds is the Cache-Control max-age for public well-known
@@ -67,15 +68,16 @@ type oauthProtectedResourceMetadata struct {
 // the legacy package's wellknown.OAuthServerMetadata for the same reason as
 // above.
 type oauthAuthorizationServerMetadata struct {
-	Issuer                            string   `json:"issuer"`
-	AuthorizationEndpoint             string   `json:"authorization_endpoint"`
-	TokenEndpoint                     string   `json:"token_endpoint"`
-	RegistrationEndpoint              string   `json:"registration_endpoint"`
-	RevocationEndpoint                string   `json:"revocation_endpoint"`
-	ScopesSupported                   []string `json:"scopes_supported,omitempty"`
-	ResponseTypesSupported            []string `json:"response_types_supported"`
-	GrantTypesSupported               []string `json:"grant_types_supported"`
-	TokenEndpointAuthMethodsSupported []string `json:"token_endpoint_auth_methods_supported"`
+	Issuer                              string   `json:"issuer"`
+	AuthorizationEndpoint               string   `json:"authorization_endpoint"`
+	TokenEndpoint                       string   `json:"token_endpoint"`
+	RegistrationEndpoint                string   `json:"registration_endpoint"`
+	RevocationEndpoint                  string   `json:"revocation_endpoint"`
+	ScopesSupported                     []string `json:"scopes_supported,omitempty"`
+	ResponseTypesSupported              []string `json:"response_types_supported"`
+	GrantTypesSupported                 []string `json:"grant_types_supported"`
+	AuthorizationGrantProfilesSupported []string `json:"authorization_grant_profiles_supported,omitempty"`
+	TokenEndpointAuthMethodsSupported   []string `json:"token_endpoint_auth_methods_supported"`
 	// TokenEndpointAuthSigningAlgValuesSupported is RFC 8414 §2's list of the
 	// JWS algorithms accepted on a private_key_jwt client assertion. It is the
 	// one part of assertion negotiation a client can discover: which of the
@@ -461,12 +463,22 @@ func (s *Service) ServeGetAuthorizationServer(w http.ResponseWriter, r *http.Req
 	if mode != admission.ModeDisabled {
 		cimdSupported = conv.PtrEmpty(true)
 	}
+	grantTypes := []string{
+		oauthwire.GrantTypeAuthorizationCode,
+		oauthwire.GrantTypeRefreshToken,
+	}
+	var grantProfiles []string
+	if endpoint.idJAGConfigured {
+		grantTypes = append(grantTypes, oauthwire.GrantTypeJWTBearer)
+		grantProfiles = []string{oauthwire.GrantProfileIDJAG}
+	}
 	return writeJSONMetadata(ctx, w, r, s.logger, oauthAuthorizationServerMetadata{
 		AuthorizationEndpoint:                      urls.Authorize,
+		AuthorizationGrantProfilesSupported:        grantProfiles,
 		AuthorizationResponseIssParameterSupported: true,
 		ClientIDMetadataDocumentSupported:          cimdSupported,
 		CodeChallengeMethodsSupported:              usersessions.SupportedCodeChallengeMethods,
-		GrantTypesSupported:                        usersessions.SupportedGrantTypes,
+		GrantTypesSupported:                        grantTypes,
 		Issuer:                                     urls.Issuer,
 		RefreshTokenExpirationTypesSupported: []string{
 			"authorization",

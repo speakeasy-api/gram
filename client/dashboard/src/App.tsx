@@ -318,7 +318,7 @@ const RouteProvider = () => {
               route.title &&
               // Mirror the sidebar's per-page scope gating so the palette never
               // offers (nor navigates to) pages the user can't access.
-              hasAnyScope(scope, resourceId),
+              (scope.length === 0 || hasAnyScope(scope, resourceId)),
           )
           .map(({ route }) =>
             routeToNavAction(route, "Pages", `nav-page-${route.url || "home"}`),

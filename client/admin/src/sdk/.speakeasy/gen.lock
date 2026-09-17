@@ -8,6 +8,7 @@ management:
 features:
   typescript:
     additionalDependencies: 0.1.0
+    bigint: 0.0.3
     core: 3.31.6
     defaultEnabledRetries: 0.1.0
     devContainers: 2.90.1
@@ -45,6 +46,7 @@ trackedFiles:
   src/funcs/adminGetGlobalIssuerMigratePreflight.ts: {}
   src/funcs/adminGetInferenceKeys.ts: {}
   src/funcs/adminGetInferenceSpendHistory.ts: {}
+  src/funcs/adminGetMeterUsage.ts: {}
   src/funcs/adminGetOrganization.ts: {}
   src/funcs/adminGetOrganizationChatAnalysisSettings.ts: {}
   src/funcs/adminGetOrganizationFeatures.ts: {}
@@ -103,6 +105,8 @@ trackedFiles:
   src/models/components/adminlistorganizationmembersresult.ts: {}
   src/models/components/adminlistorganizationprojectsresult.ts: {}
   src/models/components/adminlistorganizationsresult.ts: {}
+  src/models/components/adminmeterusagebucket.ts: {}
+  src/models/components/adminmeterusageresponse.ts: {}
   src/models/components/adminorganization.ts: {}
   src/models/components/adminorganizationmember.ts: {}
   src/models/components/adminorganizationstats.ts: {}
@@ -131,6 +135,7 @@ trackedFiles:
   src/models/components/listissuerconvergencecandidatesresult.ts: {}
   src/models/components/markenterprisetrialconvertedrequestbody.ts: {}
   src/models/components/markenterprisetrialconvertedresult.ts: {}
+  src/models/components/meterusagewindow.ts: {}
   src/models/components/migrateremotesessionissuerrequestbody.ts: {}
   src/models/components/migrateremotesessionissuerresult.ts: {}
   src/models/components/productfeatures.ts: {}
@@ -163,6 +168,7 @@ trackedFiles:
   src/models/operations/admingetglobalissuermigratepreflight.ts: {}
   src/models/operations/admingetinferencekeys.ts: {}
   src/models/operations/admingetinferencespendhistory.ts: {}
+  src/models/operations/admingetmeterusage.ts: {}
   src/models/operations/admingetorganization.ts: {}
   src/models/operations/admingetorganizationchatanalysissettings.ts: {}
   src/models/operations/admingetorganizationfeatures.ts: {}
@@ -199,6 +205,8 @@ trackedFiles:
   src/react-query/adminGetInferenceKeys.ts: {}
   src/react-query/adminGetInferenceSpendHistory.core.ts: {}
   src/react-query/adminGetInferenceSpendHistory.ts: {}
+  src/react-query/adminGetMeterUsage.core.ts: {}
+  src/react-query/adminGetMeterUsage.ts: {}
   src/react-query/adminGetOrganization.core.ts: {}
   src/react-query/adminGetOrganization.ts: {}
   src/react-query/adminGetOrganizationChatAnalysisSettings.core.ts: {}
@@ -492,6 +500,19 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  adminGetMeterUsage:
+    speakeasy-default-admin-get-meter-usage:
+      parameters:
+        query:
+          organization_id: "<id>"
+          family: "risk_content_scans"
+      responses:
+        "200":
+          application/json: {"billing_cycles": [{"from": "2026-11-06T21:54:22.129Z", "to": "2026-05-26T01:37:44.928Z"}], "buckets": [], "family": "risk_content_scans", "measurement_method": "<value>", "queried_at": "2025-05-13T00:31:54.030Z", "total": "<value>", "unit": "stokens", "window": {"from": "2024-02-22T22:35:50.206Z", "to": "2026-06-10T01:34:38.820Z"}}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   adminGetOrganization:
     speakeasy-default-admin-get-organization:
       parameters:

@@ -95,7 +95,7 @@ With GitHub env vars set:
 
 1. Create one or more plugins with at least one MCP server each
 2. Click **Publish to GitHub** in the dashboard
-3. Optionally enter a GitHub username to add as a collaborator
+3. Optionally enter a GitHub username to add as a collaborator (granted `admin` on the repo)
 4. The server will:
    - Mint a `consumer`-scoped API key (prefix `gsk_`) and a `hooks`-scoped key
    - Generate all plugin ZIPs + marketplace.json files

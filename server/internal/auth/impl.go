@@ -370,17 +370,6 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		trace.SpanFromContext(ctx).SetAttributes(attr.AuthImpersonatorEmail(ie))
 	}
 
-	upsertResult, err := s.identity.UpsertUserFromIDPWithResult(ctx, idpUser)
-	if err != nil {
-		return redirectWithError(authErrInit, err)
-	}
-	userID := upsertResult.UserID
-
-	userInfo, _, err := s.identity.GetUserInfo(ctx, userID)
-	if err != nil {
-		return redirectWithError(authErrInit, err)
-	}
-
 	// Only a server-issued handoff may establish trusted support state. Legacy
 	// browser-controlled override cookies and headers have no authority.
 	supportOrgID := ""
@@ -388,19 +377,14 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		supportOrgID = supportLogin.OrganizationID
 	}
 
-	if supportOrgID == "" && idpUser.Sub != "" {
-		syncMemberships := s.identity.SyncMembershipsFromWorkOS
-		if upsertResult.Reactivated {
-			syncMemberships = s.identity.SyncMembershipsFromWorkOSPreservingExisting
-		}
-		if err := syncMemberships(ctx, userID, idpUser.Sub); err != nil {
-			return redirectWithError(authErrInit, err)
-		}
-		userInfo, _, err = s.identity.GetUserInfo(ctx, userID)
-		if err != nil {
-			return redirectWithError(authErrInit, err)
-		}
+	login, err := s.identity.CompleteIDPLogin(ctx, idpUser, identity.IDPLoginOptions{
+		SkipMembershipSync: supportOrgID != "",
+	})
+	if err != nil {
+		return redirectWithError(authErrInit, err)
 	}
+	userID := login.UserID
+	userInfo := login.UserInfo
 
 	sessionID, err := sessions.NewSessionID()
 	if err != nil {
@@ -525,7 +509,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		return redirectWithError(authErrInit, errors.New("this organization is disabled, please reach out to support@speakeasy.com for more information"))
 	}
 
-	if upsertResult.Reactivated && intent != nil && intent.OrgName != "" {
+	if login.Reactivated && intent != nil && intent.OrgName != "" {
 		activeOrgID, orgMetadata, err = s.applySignupWhitelist(ctx, userInfo.Organizations, activeOrgID, orgMetadata)
 		if err != nil {
 			return s.redirectSignupError(ctx, payload, err)

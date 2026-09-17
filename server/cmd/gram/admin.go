@@ -43,8 +43,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usage"
 )
 
-const adminBillingTelemetryEnabledFlag = "admin-billing-telemetry-enabled"
-
 func newAdminStripeClient(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -287,14 +285,10 @@ func newAdminCommand() *cli.Command {
 			EnvVars:  []string{"LOOPS_API_KEY"},
 			Required: false,
 		},
-		&cli.BoolFlag{
-			Name:    adminBillingTelemetryEnabledFlag,
-			Usage:   "Enable PAYG billing telemetry from ClickHouse",
-			EnvVars: []string{"GRAM_ADMIN_BILLING_TELEMETRY_ENABLED"},
-		},
 	}
 	flags = append(flags, stripeFlags()...)
 	flags = append(flags, clickHouseFlags()...)
+	flags = append(flags, clickHouseReadFlags()...)
 
 	return &cli.Command{
 		Name:  "admin",
@@ -387,16 +381,18 @@ func newAdminCommand() *cli.Command {
 			}
 
 			stripeClient := newAdminStripeClient(ctx, logger, guardianPolicy, c)
-			var billingTelemetry *telemetryrepo.Queries
-			if c.Bool(adminBillingTelemetryEnabledFlag) {
-				chDB, chShutdown, err := newClickhouseClient(ctx, logger, c)
-				if err != nil {
-					logger.WarnContext(ctx, "billing usage telemetry unavailable; continuing without ClickHouse", attr.SlogError(err))
-				} else {
-					defer o11y.LogDefer(ctx, logger, "failed to shut down clickhouse client", func() error { return chShutdown(ctx) })
-					billingTelemetry = telemetryrepo.New(chDB)
-				}
+			chDB, chShutdown, err := newClickhouseClient(ctx, logger, c)
+			if err != nil {
+				return fmt.Errorf("connect to clickhouse database: %w", err)
 			}
+			defer o11y.LogDefer(ctx, logger, "failed to shut down clickhouse client", func() error { return chShutdown(ctx) })
+			billingTelemetry := telemetryrepo.New(chDB)
+
+			meterReadConn, meterReadShutdown, err := newClickhouseReadClient(ctx, logger, c)
+			if err != nil {
+				return fmt.Errorf("connect to clickhouse read replica: %w", err)
+			}
+			defer o11y.LogDefer(ctx, logger, "failed to shut down clickhouse read client", func() error { return meterReadShutdown(ctx) })
 
 			adminEncryption, err := encryption.New(c.String("admin-encryption-key"))
 			if err != nil {
@@ -449,7 +445,7 @@ func newAdminCommand() *cli.Command {
 			loopsWorkflowClient := loops.NewWorkflowClient(ctx, logger, guardianPolicy, c.String("loops-api-key"))
 			trialNotifier := trialemails.NewService(db, loopsWorkflowClient, logger, c.String("site-url"))
 
-			billingOperations := usage.NewBillingOperations(logger, db, stripeClient, billingTelemetry, audit.NewLogger())
+			billingOperations := usage.NewBillingOperations(logger, db, stripeClient, billingTelemetry, audit.NewLogger(), meterReadConn)
 			adminService := admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminOpenRouter, trialNotifier, productFeatures, chatAnalysisSignaler, openRouterSpendCap, billingOperations, siteURL)
 			applicationEncryption, err := newAdminIssuerEncryption(c.String("encryption-key"))
 			if err != nil {

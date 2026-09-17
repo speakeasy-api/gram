@@ -537,7 +537,7 @@ func BuildListOrganizationActivityPayload(adminListOrganizationActivityOrganizat
 
 // BuildListOrganizationsPayload builds the payload for the admin
 // listOrganizations endpoint from CLI flags.
-func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrganizationsAccountType string, adminListOrganizationsAccountTypes string, adminListOrganizationsTrialStates string, adminListOrganizationsDisabledStates string, adminListOrganizationsIncludeDisabled string, adminListOrganizationsCursor string, adminListOrganizationsLimit string, adminListOrganizationsSort string, adminListOrganizationsDirection string, adminListOrganizationsPage string, adminListOrganizationsAdminSessionToken string) (*admin.ListOrganizationsPayload, error) {
+func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrganizationsAccountType string, adminListOrganizationsAccountTypes string, adminListOrganizationsTrialStates string, adminListOrganizationsDisabledStatus string, adminListOrganizationsMinMembers string, adminListOrganizationsMaxMembers string, adminListOrganizationsCreatedFrom string, adminListOrganizationsCreatedTo string, adminListOrganizationsCursor string, adminListOrganizationsLimit string, adminListOrganizationsSort string, adminListOrganizationsDirection string, adminListOrganizationsPage string, adminListOrganizationsAdminSessionToken string) (*admin.ListOrganizationsPayload, error) {
 	var err error
 	var q *string
 	{
@@ -569,24 +569,60 @@ func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrga
 			}
 		}
 	}
-	var disabledStates []string
+	var disabledStatus *string
 	{
-		if adminListOrganizationsDisabledStates != "" {
-			err = json.Unmarshal([]byte(adminListOrganizationsDisabledStates), &disabledStates)
+		if adminListOrganizationsDisabledStatus != "" {
+			disabledStatus = &adminListOrganizationsDisabledStatus
+			if !(*disabledStatus == "all" || *disabledStatus == "active" || *disabledStatus == "disabled") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("disabled_status", *disabledStatus, []any{"all", "active", "disabled"}))
+			}
 			if err != nil {
-				return nil, fmt.Errorf("invalid JSON for disabledStates, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"abc123\"\n   ]'")
+				return nil, err
 			}
 		}
 	}
-	var includeDisabled *bool
+	var minMembers *int64
 	{
-		if adminListOrganizationsIncludeDisabled != "" {
-			var val bool
-			val, err = strconv.ParseBool(adminListOrganizationsIncludeDisabled)
-			includeDisabled = &val
+		if adminListOrganizationsMinMembers != "" {
+			val, err := strconv.ParseInt(adminListOrganizationsMinMembers, 10, 64)
+			minMembers = &val
 			if err != nil {
-				return nil, fmt.Errorf("invalid value for includeDisabled, must be BOOL")
+				return nil, fmt.Errorf("invalid value for minMembers, must be INT64")
 			}
+			if *minMembers < 0 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("min_members", *minMembers, 0, true))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var maxMembers *int64
+	{
+		if adminListOrganizationsMaxMembers != "" {
+			val, err := strconv.ParseInt(adminListOrganizationsMaxMembers, 10, 64)
+			maxMembers = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for maxMembers, must be INT64")
+			}
+			if *maxMembers < 0 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("max_members", *maxMembers, 0, true))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var createdFrom *string
+	{
+		if adminListOrganizationsCreatedFrom != "" {
+			createdFrom = &adminListOrganizationsCreatedFrom
+		}
+	}
+	var createdTo *string
+	{
+		if adminListOrganizationsCreatedTo != "" {
+			createdTo = &adminListOrganizationsCreatedTo
 		}
 	}
 	var cursor *string
@@ -642,8 +678,11 @@ func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrga
 	v.AccountType = accountType
 	v.AccountTypes = accountTypes
 	v.TrialStates = trialStates
-	v.DisabledStates = disabledStates
-	v.IncludeDisabled = includeDisabled
+	v.DisabledStatus = disabledStatus
+	v.MinMembers = minMembers
+	v.MaxMembers = maxMembers
+	v.CreatedFrom = createdFrom
+	v.CreatedTo = createdTo
 	v.Cursor = cursor
 	v.Limit = limit
 	v.Sort = sort
@@ -1627,6 +1666,60 @@ func BuildChangeTrialEndDatePayload(adminChangeTrialEndDateBody string, adminCha
 		ID:     body.ID,
 		EndsAt: body.EndsAt,
 	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildGetMeterUsagePayload builds the payload for the admin getMeterUsage
+// endpoint from CLI flags.
+func BuildGetMeterUsagePayload(adminGetMeterUsageOrganizationID string, adminGetMeterUsageFamily string, adminGetMeterUsageFrom string, adminGetMeterUsageTo string, adminGetMeterUsageAdminSessionToken string) (*admin.GetMeterUsagePayload, error) {
+	var err error
+	var organizationID string
+	{
+		organizationID = adminGetMeterUsageOrganizationID
+	}
+	var family string
+	{
+		family = adminGetMeterUsageFamily
+		if !(family == "agent_session_storage" || family == "mcp_bandwidth" || family == "risk_content_scans") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("family", family, []any{"agent_session_storage", "mcp_bandwidth", "risk_content_scans"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var from *string
+	{
+		if adminGetMeterUsageFrom != "" {
+			from = &adminGetMeterUsageFrom
+			err = goa.MergeErrors(err, goa.ValidateFormat("from", *from, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var to *string
+	{
+		if adminGetMeterUsageTo != "" {
+			to = &adminGetMeterUsageTo
+			err = goa.MergeErrors(err, goa.ValidateFormat("to", *to, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminGetMeterUsageAdminSessionToken != "" {
+			adminSessionToken = &adminGetMeterUsageAdminSessionToken
+		}
+	}
+	v := &admin.GetMeterUsagePayload{}
+	v.OrganizationID = organizationID
+	v.Family = family
+	v.From = from
+	v.To = to
 	v.AdminSessionToken = adminSessionToken
 
 	return v, nil

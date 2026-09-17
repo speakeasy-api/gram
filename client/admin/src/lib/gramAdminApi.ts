@@ -48,8 +48,7 @@ export type QueryParams = Record<
   string | number | boolean | string[] | undefined
 >;
 
-// Values the admin API reads as unset. Every boolean it takes is an opt-in
-// flag, so `false` is the same request as no flag at all.
+// Values the admin API reads as unset. Boolean flags are opt-in.
 //
 // A cache key runs through this too, so the key and the request agree on what
 // "unset" means. Without that, `{type: []}` and `{}` send one request and cache
@@ -314,14 +313,8 @@ export type ListOrganizationsResult = {
   next_cursor?: string;
 };
 
-// Each filter is a repeated parameter the server reads as a set, and an absent
-// one means no filter of that kind: no account_types is every type, no
-// trial_states is every state, no disabled_states is active organizations only.
-//
-// The scalar `account_type` and the `include_disabled` flag these replaced are
-// still accepted by the server, so its half of this change can merge first.
-// Nothing here sends them, and nothing should: two ways to say the same filter
-// is how the browser and the server end up disagreeing about what is on.
+// Set filters match any supplied value; omitted filters are unrestricted.
+// Status is strict even for exact ID searches.
 export type ListOrganizationsParams = {
   sort?: string;
   direction?: "asc" | "desc";
@@ -329,7 +322,15 @@ export type ListOrganizationsParams = {
   q?: string;
   account_types?: string[];
   trial_states?: string[];
-  disabled_states?: string[];
+  disabled_status?: "all" | "active" | "disabled";
+  /** Nonnegative int64. Use decimal strings above Number.MAX_SAFE_INTEGER. */
+  min_members?: number | string;
+  /** Nonnegative int64. Unsafe numeric values are rejected before sending. */
+  max_members?: number | string;
+  /** Inclusive UTC calendar date, strictly YYYY-MM-DD (not a timestamp). */
+  created_from?: string;
+  /** Inclusive UTC calendar date, strictly YYYY-MM-DD (not a timestamp). */
+  created_to?: string;
   cursor?: string;
   limit?: number;
 };
@@ -337,6 +338,32 @@ export type ListOrganizationsParams = {
 export function listOrganizations(
   params: ListOrganizationsParams = {},
 ): Promise<ListOrganizationsResult> {
+  for (const key of ["min_members", "max_members"] as const) {
+    const value = params[key];
+    if (value === undefined) continue;
+    // Never convert a decimal string through Number: int64 exceeds JS precision.
+    if (
+      (typeof value === "number" && !Number.isSafeInteger(value)) ||
+      !/^[0-9]+$/.test(String(value)) ||
+      BigInt(value) > 9223372036854775807n
+    ) {
+      throw new RangeError(
+        `${key} must be a nonnegative int64; use a decimal string for large values`,
+      );
+    }
+  }
+  for (const key of ["created_from", "created_to"] as const) {
+    const value = params[key];
+    if (value === undefined) continue;
+    const date = new Date(`${value}T00:00:00.000Z`);
+    if (
+      !/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(value) ||
+      !Number.isFinite(date.getTime()) ||
+      date.toISOString().slice(0, 10) !== value
+    ) {
+      throw new RangeError(`${key} must be a valid YYYY-MM-DD UTC date`);
+    }
+  }
   const qs = toSearchParams(params).toString();
   return gramAdminFetch<ListOrganizationsResult>(
     `/admin/organizations.list${qs ? `?${qs}` : ""}`,

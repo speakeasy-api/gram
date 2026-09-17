@@ -1,7 +1,15 @@
 import { CheckIcon, ChevronsUpDownIcon } from "lucide-react";
 import { useId, useRef, useState, type JSX, type Ref } from "react";
 
+import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Command,
   CommandEmpty,
@@ -25,15 +33,25 @@ import {
 } from "@/components/ui/sheet";
 import {
   FILTER_GROUPS,
+  memberRange,
+  memberRangeErrors,
   filterSummary,
   NO_FILTERS,
   optionsFor,
   toggleFilter,
   type FilterGroup,
-  type FilterGroupKey,
+  type FilterControlKey,
   type FilterOption,
   type FilterSelection,
 } from "@/lib/organizationFilters";
+import {
+  CREATED_PRESETS,
+  createdPresetRange,
+  createdRange,
+  createdRangeErrors,
+  selectedCreatedPreset,
+  type CreatedPreset,
+} from "@/lib/createdRange";
 import { cn } from "@/lib/utils";
 
 /**
@@ -55,7 +73,7 @@ export function FilterSheet({
   // Which group the operator asked for, and null when the sheet is closed. The
   // sheet opens with that group's picker focused, so the trigger they pressed
   // is the control they land on.
-  openGroup: FilterGroupKey | null;
+  openGroup: FilterControlKey | null;
   onOpenChange: (open: boolean) => void;
   onApply: (next: FilterSelection) => void;
   // Called instead of Radix's own restore, which returns the keyboard to
@@ -63,25 +81,52 @@ export function FilterSheet({
   // every browser, so that is not reliably the trigger.
   onReturnFocus: () => void;
 }): JSX.Element {
+  const disabledId = useId();
+  const membersId = useId();
+  const createdId = useId();
+  const [createdPreset, setCreatedPreset] = useState<CreatedPreset>(() =>
+    selectedCreatedPreset(value),
+  );
+  const focusCustom = useRef(false);
   const open = openGroup !== null;
   const [draft, setDraft] = useState(value);
   const [lastOpened, setLastOpened] = useState(openGroup);
+  const signature = JSON.stringify(value);
+  const [lastValue, setLastValue] = useState(signature);
 
-  // Seeded while rendering rather than in an effect, so a picker never paints
-  // the previous edit for a frame. Opening is the only moment the draft follows
-  // the URL: while the sheet is open the draft belongs to the operator, and a
-  // navigation landing underneath must not move it.
-  if (openGroup !== lastOpened) {
+  // Rehydrate on opening and on URL navigation, including Back/Forward.
+  if (openGroup !== lastOpened || signature !== lastValue) {
+    setLastValue(signature);
     setLastOpened(openGroup);
-    if (open) setDraft(value);
+    if (open) {
+      setDraft(value);
+      setCreatedPreset(selectedCreatedPreset(value));
+    }
   }
 
-  const pickers = useRef<Partial<Record<FilterGroupKey, HTMLButtonElement>>>(
-    {},
-  );
+  const pickers = useRef<
+    Partial<Record<FilterControlKey, HTMLButtonElement | HTMLInputElement>>
+  >({});
 
-  const apply = (next: FilterSelection): void => {
-    onApply(next);
+  const errors = {
+    ...memberRangeErrors(draft),
+    ...(createdPreset === "custom" ? createdRangeErrors(draft) : {}),
+  };
+  const invalid = Object.keys(errors).length > 0;
+
+  const apply = (next: FilterSelection, preset = createdPreset): void => {
+    if (Object.keys(memberRangeErrors(next)).length > 0) return;
+    if (preset === "custom" && Object.keys(createdRangeErrors(next)).length > 0)
+      return;
+    const dates =
+      preset === "custom" ? createdRange(next) : createdPresetRange(preset);
+    onApply({
+      ...next,
+      ...memberRange(next),
+      ...dates,
+      createdPreset:
+        preset === "all" || preset === "custom" ? undefined : preset,
+    });
     onOpenChange(false);
   };
 
@@ -101,41 +146,224 @@ export function FilterSheet({
           onReturnFocus();
         }}
       >
-        <SheetHeader>
+        <SheetHeader className="shrink-0">
           <SheetTitle>Filters</SheetTitle>
           <SheetDescription>
             Nothing in the table changes until you apply.
           </SheetDescription>
         </SheetHeader>
 
-        <div className="grid gap-4 p-4">
-          {FILTER_GROUPS.map((group) => (
-            <FilterPicker
-              key={group.key}
-              group={group}
-              chosen={draft[group.key]}
-              // Taken from the value the sheet opened on, not from the draft:
-              // an unrecognised type unchecked mid-edit has to stay on screen,
-              // or the operator cannot change their mind.
-              options={optionsFor(group, value[group.key])}
-              onChange={(next) =>
-                setDraft((previous) => ({ ...previous, [group.key]: next }))
-              }
-              ref={(node) => {
-                if (node) pickers.current[group.key] = node;
+        <div className="grid min-h-0 flex-1 content-start gap-4 overflow-y-auto p-4">
+          {FILTER_GROUPS.map((group) =>
+            group.key === "disabled" ? (
+              <div key={group.key} className="space-y-2">
+                <label htmlFor={disabledId} className="text-sm font-medium">
+                  Organization Status
+                </label>
+                <Select
+                  value={
+                    draft.disabled.length === 1 ? draft.disabled[0] : "all"
+                  }
+                  onValueChange={(status) =>
+                    setDraft((previous) => ({
+                      ...previous,
+                      disabled:
+                        status === "active" || status === "disabled"
+                          ? [status]
+                          : [],
+                    }))
+                  }
+                >
+                  <SelectTrigger
+                    id={disabledId}
+                    className="w-full"
+                    ref={(node) => {
+                      if (node) pickers.current.disabled = node;
+                    }}
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="disabled">Disabled</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : (
+              <FilterPicker
+                key={group.key}
+                group={group}
+                chosen={draft[group.key]}
+                // Taken from the value the sheet opened on, not from the draft:
+                // an unrecognised type unchecked mid-edit has to stay on screen,
+                // or the operator cannot change their mind.
+                options={optionsFor(group, value[group.key])}
+                onChange={(next) =>
+                  setDraft((previous) => ({ ...previous, [group.key]: next }))
+                }
+                ref={(node) => {
+                  if (node) pickers.current[group.key] = node;
+                }}
+              />
+            ),
+          )}
+          <fieldset className="grid gap-2">
+            <legend className="mb-2 text-sm font-medium">
+              Created date (UTC)
+            </legend>
+            <Select
+              value={createdPreset}
+              onValueChange={(value) => {
+                const preset = CREATED_PRESETS.find(
+                  (option) => option.value === value,
+                )?.value;
+                if (!preset) return;
+                if (preset === "custom" && createdPreset !== "custom") {
+                  setDraft((previous) => ({
+                    ...previous,
+                    ...createdPresetRange(createdPreset),
+                  }));
+                  focusCustom.current = true;
+                } else if (preset === "all") {
+                  setDraft((previous) => ({
+                    ...previous,
+                    ...createdPresetRange("all"),
+                  }));
+                }
+                setCreatedPreset(preset);
               }}
-            />
-          ))}
+            >
+              <SelectTrigger
+                id={createdId}
+                aria-label="Created date (UTC)"
+                className="w-full"
+                ref={(node) => {
+                  if (node) pickers.current.created = node;
+                }}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent
+                onCloseAutoFocus={(event) => {
+                  if (focusCustom.current) {
+                    event.preventDefault();
+                    pickers.current.createdFrom?.focus();
+                    focusCustom.current = false;
+                  }
+                }}
+              >
+                {CREATED_PRESETS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {createdPreset === "custom" && (
+              <div className="grid grid-cols-2 gap-3">
+                {(["createdFrom", "createdTo"] as const).map((key) => (
+                  <div key={key} className="grid content-start gap-1.5">
+                    <label
+                      htmlFor={`${createdId}-${key}`}
+                      className="text-sm font-medium"
+                    >
+                      {key === "createdFrom" ? "From (UTC)" : "To (UTC)"}
+                    </label>
+                    {/* Native date inputs erase malformed/incomplete values to an
+                    empty string, indistinguishable from an unrestricted bound. */}
+                    <Input
+                      id={`${createdId}-${key}`}
+                      type="text"
+                      placeholder="YYYY-MM-DD"
+                      autoComplete="off"
+                      value={draft[key] ?? ""}
+                      aria-invalid={Boolean(errors[key])}
+                      aria-describedby={
+                        errors[key] ? `${createdId}-${key}-error` : undefined
+                      }
+                      onChange={(event) =>
+                        setDraft((previous) => ({
+                          ...previous,
+                          [key]: event.target.value,
+                        }))
+                      }
+                      ref={(node) => {
+                        if (node) pickers.current[key] = node;
+                      }}
+                    />
+                    {errors[key] && (
+                      <p
+                        id={`${createdId}-${key}-error`}
+                        role="alert"
+                        className="text-destructive text-sm"
+                      >
+                        {errors[key]}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </fieldset>
+          <fieldset className="grid gap-2">
+            <legend className="mb-2 text-sm font-medium">Member count</legend>
+            <div className="grid grid-cols-2 gap-3">
+              {(["minMembers", "maxMembers"] as const).map((key) => (
+                <div key={key} className="grid content-start gap-1.5">
+                  <label
+                    htmlFor={`${membersId}-${key}`}
+                    className="text-sm font-medium"
+                  >
+                    {key === "minMembers" ? "Min" : "Max"}
+                  </label>
+                  <Input
+                    id={`${membersId}-${key}`}
+                    type="text"
+                    inputMode="numeric"
+                    value={draft[key] ?? ""}
+                    aria-invalid={Boolean(errors[key])}
+                    aria-describedby={
+                      errors[key] ? `${membersId}-${key}-error` : undefined
+                    }
+                    onChange={(event) =>
+                      setDraft((previous) => ({
+                        ...previous,
+                        [key]: event.target.value,
+                      }))
+                    }
+                    ref={(node) => {
+                      if (node) pickers.current[key] = node;
+                    }}
+                  />
+                  {errors[key] && (
+                    <p
+                      id={`${membersId}-${key}-error`}
+                      role="alert"
+                      className="text-destructive text-sm"
+                    >
+                      {errors[key]}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </fieldset>
         </div>
 
-        <SheetFooter className="flex-row justify-end">
+        <SheetFooter className="shrink-0 flex-row justify-end">
           {/* Clears the filters and nothing else. The search term is not a
               filter this sheet holds, and an operator who reset the filters has
               not asked to type their term again. */}
-          <Button variant="ghost" onClick={() => apply(NO_FILTERS)}>
+          <Button variant="ghost" onClick={() => apply(NO_FILTERS, "all")}>
             Clear all
           </Button>
-          <Button onClick={() => apply(draft)}>Apply</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button disabled={invalid} onClick={() => apply(draft)}>
+            Apply
+          </Button>
         </SheetFooter>
       </SheetContent>
     </Sheet>

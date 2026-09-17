@@ -39,6 +39,7 @@ export function identityHasAccount(employee: Employee): boolean {
 
 /** The URN the resolver expects for a row, by what the row actually holds. */
 export function identityUrnForEmployee(employee: Employee): string {
+  if (employee.registeredAgentId) return `agent:${employee.registeredAgentId}`;
   if (!isUnattributedEmployee(employee)) return `user:${employee.id}`;
   const usageId = employee.id.slice("usage:".length);
   return employee.email ? `email:${employee.email}` : `external:${usageId}`;
