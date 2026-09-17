@@ -165,6 +165,25 @@ func TestMemberResourceDiscoveryUsesLiveRBAC(t *testing.T) {
 		require.NoError(t, grantErr)
 	}
 	grant(authz.ScopeProjectRead, authz.NewSelector(authz.ScopeProjectRead, allowedProject.ID.String()))
+	// Put more than one internal page of hidden projects before a second visible
+	// project. list_projects must keep scanning after the first 100 candidates,
+	// without letting hidden rows consume the caller-visible response limit.
+	for i := 1; i <= projectCandidatePageSize+1; i++ {
+		_, err := testrepo.New(conn).CreateProjectFixture(ctx, testrepo.CreateProjectFixtureParams{
+			ID:             uuid.MustParse(fmt.Sprintf("00000000-0000-4000-8000-%012x", i)),
+			Name:           fmt.Sprintf("Hidden project %03d", i),
+			Slug:           fmt.Sprintf("hidden-project-%03d", i),
+			OrganizationID: principal.OrganizationID,
+		})
+		require.NoError(t, err)
+	}
+	lateVisibleID := uuid.MustParse("ffffffff-ffff-4fff-bfff-fffffffffffe")
+	_, err = testrepo.New(conn).CreateProjectFixture(ctx, testrepo.CreateProjectFixtureParams{
+		ID: lateVisibleID, Name: "Late visible project", Slug: "late-visible-project", OrganizationID: principal.OrganizationID,
+	})
+	require.NoError(t, err)
+	grant(authz.ScopeProjectRead, authz.NewSelector(authz.ScopeProjectRead, lateVisibleID.String()))
+
 	mcpSelector := authz.NewSelector(authz.ScopeMCPRead, allowedMCPID.String())
 	mcpSelector[authz.SelectorKeyProjectID] = allowedProject.ID.String()
 	grant(authz.ScopeMCPRead, mcpSelector)
@@ -175,10 +194,20 @@ func TestMemberResourceDiscoveryUsesLiveRBAC(t *testing.T) {
 	reader := NewPostgresReader(testenv.NewLogger(t), conn).WithAuthorization(engine)
 	reader.setInventoryCursorKey("member-discovery-key")
 
-	projects, err := reader.ListProjects(prepared, principal, ListProjectsInput{})
+	projects, err := reader.ListProjects(prepared, principal, ListProjectsInput{Limit: 1})
 	require.NoError(t, err)
 	require.Equal(t, []Project{{ID: allowedProject.ID.String(), Name: allowedProject.Name, Slug: allowedProject.Slug}}, projects.Projects)
 	require.True(t, projects.Filtered)
+	require.True(t, projects.Truncated)
+
+	projects, err = reader.ListProjects(prepared, principal, ListProjectsInput{Limit: 2})
+	require.NoError(t, err)
+	require.Equal(t, []Project{
+		{ID: allowedProject.ID.String(), Name: allowedProject.Name, Slug: allowedProject.Slug},
+		{ID: lateVisibleID.String(), Name: "Late visible project", Slug: "late-visible-project"},
+	}, projects.Projects)
+	require.True(t, projects.Filtered)
+	require.False(t, projects.Truncated)
 
 	inventory, err := reader.FindMCP(prepared, principal, FindMCPInput{Query: "cohort"})
 	require.NoError(t, err)
