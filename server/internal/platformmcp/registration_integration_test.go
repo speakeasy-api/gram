@@ -212,8 +212,11 @@ func TestMemberResourceDiscoveryUsesLiveRBAC(t *testing.T) {
 	projects, err := reader.ListProjects(prepared, principal, ListProjectsInput{Limit: 1})
 	require.NoError(t, err)
 	require.Equal(t, []Project{{ID: allowedProject.ID.String(), Name: allowedProject.Name, Slug: allowedProject.Slug}}, projects.Projects)
-	require.True(t, projects.Filtered)
+	require.True(t, projects.authorizationFiltered)
 	require.True(t, projects.Truncated)
+	encodedProjects, err := json.Marshal(projects)
+	require.NoError(t, err)
+	require.NotContains(t, string(encodedProjects), "filtered", "member responses must not disclose hidden projects")
 
 	projects, err = reader.ListProjects(prepared, principal, ListProjectsInput{Limit: 2})
 	require.NoError(t, err)
@@ -221,7 +224,7 @@ func TestMemberResourceDiscoveryUsesLiveRBAC(t *testing.T) {
 		{ID: allowedProject.ID.String(), Name: allowedProject.Name, Slug: allowedProject.Slug},
 		{ID: lateVisibleID.String(), Name: "Late visible project", Slug: "late-visible-project"},
 	}, projects.Projects)
-	require.True(t, projects.Filtered)
+	require.True(t, projects.authorizationFiltered)
 	require.False(t, projects.Truncated)
 
 	inventory, err := reader.FindMCP(prepared, principal, FindMCPInput{Query: "cohort"})

@@ -73,7 +73,11 @@ type Project struct {
 type ListProjectsOutput struct {
 	Projects  []Project `json:"projects"`
 	Truncated bool      `json:"truncated"`
-	Filtered  bool      `json:"filtered"`
+
+	// authorizationFiltered is retained for internal diagnostics only. Exposing
+	// it would reveal that the organization contains projects the caller cannot
+	// access.
+	authorizationFiltered bool
 }
 
 type FindMCPInput struct {

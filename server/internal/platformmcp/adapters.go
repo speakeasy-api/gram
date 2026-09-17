@@ -446,9 +446,9 @@ func (r *PostgresReader) ListProjects(ctx context.Context, principal Principal, 
 
 	projects, visibleTruncated := boundedRows(projects, limit)
 	return ListProjectsOutput{
-		Projects:  projects,
-		Truncated: visibleTruncated || !exhausted,
-		Filtered:  filtered,
+		Projects:              projects,
+		Truncated:             visibleTruncated || !exhausted,
+		authorizationFiltered: filtered,
 	}, nil
 }
 
