@@ -63,9 +63,9 @@ func TestToolProxy_RiskScanHTTPPreservesUpstreamResponse(t *testing.T) {
 		RequestContentType: NullString{Value: "application/json", Valid: true}, ResponseFilter: nil,
 	})
 	body := json.RawMessage(`{"body":{"selection":"unchanged"}}`)
-	route := CallRoute{Source: ToolCallSourceMCP, ServerID: uuid.NewString(), ToolsetID: uuid.NewString(), Payload: body}
+	route := CallRoute{Source: ToolCallSourceMCP, ServerID: uuid.NewString(), ToolsetID: uuid.NewString()}
 	recorder := httptest.NewRecorder()
-	err = proxy.Do(t.Context(), recorder, iotest.OneByteReader(bytes.NewReader(body)), toolconfig.ToolCallEnv{
+	err = proxy.CallTool(t.Context(), recorder, iotest.OneByteReader(bytes.NewReader(body)), body, toolconfig.ToolCallEnv{
 		SystemEnv: toolconfig.NewCaseInsensitiveEnv(), UserConfig: toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "", GramEmail: "", GramChatID: "", MCPClient: toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: ""},
 	}, plan, tm.HTTPLogAttributes{}, route)
@@ -155,13 +155,33 @@ func TestToolProxy_RiskScanAllowsStreamWithoutPayload(t *testing.T) {
 	plan := newPromptToolCallPlanForTest("mustache")
 	body := iotest.OneByteReader(strings.NewReader(`{"arguments":{"topic":"streamed"}}`))
 	recorder := httptest.NewRecorder()
-	err := proxy.Do(t.Context(), recorder, body, toolconfig.ToolCallEnv{
+	err := proxy.CallTool(t.Context(), recorder, body, nil, toolconfig.ToolCallEnv{
 		SystemEnv: toolconfig.NewCaseInsensitiveEnv(), UserConfig: toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "", GramEmail: "", GramChatID: "", MCPClient: toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: ""},
-	}, plan, tm.HTTPLogAttributes{}, CallRoute{Source: ToolCallSourceMCP, ServerID: "", ToolsetID: "", Payload: nil})
+	}, plan, tm.HTTPLogAttributes{}, CallRoute{Source: ToolCallSourceMCP, ServerID: "", ToolsetID: ""})
 
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, recorder.Code)
 	require.Equal(t, "Summarize streamed", recorder.Body.String())
 	require.Equal(t, [][]byte{nil}, scan.payloads, "stream-only callers must not materialize a scan payload")
+}
+
+func TestToolProxy_DoExecutesWithoutObservation(t *testing.T) {
+	t.Parallel()
+
+	tracerProvider := testenv.NewTracerProvider(t)
+	scan := &captureRiskScan{t: t, events: nil, payloads: nil}
+	proxy := NewToolProxy(testenv.NewLogger(t), tracerProvider, testenv.NewMeterProvider(t), ToolCallSourceMCP, nil, nil, nil, nil, nil, scan)
+	plan := newPromptToolCallPlanForTest("mustache")
+	body := iotest.OneByteReader(strings.NewReader(`{"arguments":{"topic":"execution-only"}}`))
+	recorder := httptest.NewRecorder()
+	err := proxy.Do(t.Context(), recorder, body, toolconfig.ToolCallEnv{
+		SystemEnv: toolconfig.NewCaseInsensitiveEnv(), UserConfig: toolconfig.NewCaseInsensitiveEnv(),
+		OAuthToken: "", GramEmail: "", GramChatID: "", MCPClient: toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: ""},
+	}, plan, tm.HTTPLogAttributes{})
+
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, "Summarize execution-only", recorder.Body.String())
+	require.Empty(t, scan.events, "execution primitives must not observe calls")
 }

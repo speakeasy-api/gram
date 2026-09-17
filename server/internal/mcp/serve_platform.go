@@ -476,8 +476,8 @@ func (s *Service) callPlatformToolsetTool(
 		})
 	}()
 
-	if err := s.toolProxy.Do(ctx, rw, bytes.NewReader(requestBodyBytes), toolCallEnv, plan, logAttrs, gateway.CallRoute{
-		Source: gateway.ToolCallSourcePlatformMCP, ServerID: "", ToolsetID: "", Payload: requestBodyBytes,
+	if err := s.toolProxy.CallTool(ctx, rw, bytes.NewReader(requestBodyBytes), requestBodyBytes, toolCallEnv, plan, logAttrs, gateway.CallRoute{
+		Source: gateway.ToolCallSourcePlatformMCP, ServerID: "", ToolsetID: "",
 	}); err != nil {
 		failure := platformToolCallError(ctx, logger, err, attr.SlogToolName(params.Name))
 		recordToolCallErrorStatus(ctx, rw, failure)

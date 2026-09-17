@@ -35,7 +35,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/serialization"
@@ -121,35 +120,6 @@ type PlatformResult struct {
 	Body        []byte
 }
 
-// ScanEvaluator observes calls without changing their execution or results.
-type ScanEvaluator interface {
-	// Scan deliberately returns no error during observation; organization-wide
-	// failure semantics are an AIS-688 contract. The payload reader is independent
-	// of execution and may be nil.
-	Scan(context.Context, io.Reader, mcpriskscan.Event)
-}
-
-// CallRoute identifies the entry route independently of the execution plan.
-// Server and toolset membership belong to the route: the same plan can execute
-// through multiple servers and toolsets, so neither can be derived from it.
-type CallRoute struct {
-	// Source overrides the proxy's default route source when nonempty.
-	// Execution logs retain the proxy's configured source.
-	Source ToolCallSource
-
-	// ServerID identifies the server through which the call was routed.
-	ServerID string
-
-	// ToolsetID identifies the toolset through which the call was routed.
-	ToolsetID string
-
-	// Payload optionally borrows already-materialized request bytes for observation
-	// during Do. When present, it must represent requestBody and remain unchanged
-	// until Do returns. Leave nil for stream-only callers and resource reads;
-	// never materialize a stream solely to populate it.
-	Payload []byte
-}
-
 type ToolProxy struct {
 	source        ToolCallSource
 	logger        *slog.Logger
@@ -192,23 +162,7 @@ func NewToolProxy(
 	}
 }
 
-func (tp *ToolProxy) scanSurface(route CallRoute) string {
-	source := route.Source
-	if source == "" {
-		source = tp.source
-	}
-	switch source {
-	case ToolCallSourceDirect:
-		return mcpriskscan.SurfaceInstances
-	case ToolCallSourceMCP:
-		return mcpriskscan.SurfaceHostedMCP
-	case ToolCallSourcePlatformMCP:
-		return mcpriskscan.SurfacePlatformMCP
-	default:
-		return ""
-	}
-}
-
+// Do executes an already-planned tool call without observation.
 func (tp *ToolProxy) Do(
 	ctx context.Context,
 	w http.ResponseWriter,
@@ -216,7 +170,6 @@ func (tp *ToolProxy) Do(
 	env toolconfig.ToolCallEnv,
 	plan *ToolCallPlan,
 	attrs tm.HTTPLogAttributes,
-	route CallRoute,
 ) (err error) {
 	ctx, span := tp.tracer.Start(ctx, "gateway.toolCall", trace.WithAttributes(
 		attr.ToolName(plan.Descriptor.Name),
@@ -247,28 +200,6 @@ func (tp *ToolProxy) Do(
 		attr.SlogToolName(plan.Descriptor.Name),
 		attr.SlogToolCallSource(string(tp.source)),
 	)
-
-	toolName := plan.Descriptor.Name
-	if plan.Kind == ToolKindExternalMCP {
-		toolName = plan.Descriptor.URN.Name
-	}
-
-	var payload io.Reader
-	if route.Payload != nil {
-		payload = bytes.NewReader(route.Payload)
-	}
-	tp.scanEvaluator.Scan(ctx, payload, mcpriskscan.Event{
-		Surface:        tp.scanSurface(route),
-		Method:         mcpriskscan.MethodToolsCall,
-		OrganizationID: plan.Descriptor.OrganizationID,
-		ProjectID:      plan.Descriptor.ProjectID,
-		ServerID:       route.ServerID,
-		ToolsetID:      route.ToolsetID,
-		ToolName:       toolName,
-		ResourceURI:    "",
-		PromptName:     "",
-		Phase:          mcpriskscan.PhaseBeforeExecution,
-	})
 
 	switch plan.Kind {
 	case "":

@@ -436,11 +436,11 @@ func handleToolsCall(
 		telemLogger.Log(ctx, params)
 	}()
 
-	route := gateway.CallRoute{Source: gateway.ToolCallSourceMCP, ServerID: "", ToolsetID: toolset.ID, Payload: params.Arguments}
+	route := gateway.CallRoute{Source: gateway.ToolCallSourceMCP, ServerID: "", ToolsetID: toolset.ID}
 	if payload.mcpServerID != nil {
 		route.ServerID = payload.mcpServerID.String()
 	}
-	err = toolProxy.Do(ctx, rw, bytes.NewReader(params.Arguments), toolCallEnv, plan, logAttrs, route)
+	err = toolProxy.CallTool(ctx, rw, bytes.NewReader(params.Arguments), params.Arguments, toolCallEnv, plan, logAttrs, route)
 	if err != nil {
 		if rejected, ok := toolCallRejection(ctx, logger, err, attr.SlogToolName(params.Name)); ok {
 			recordToolCallErrorStatus(ctx, rw, rejected)

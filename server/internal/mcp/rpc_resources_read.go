@@ -202,11 +202,11 @@ func handleResourcesRead(
 		telemLogger.Log(ctx, params)
 	}()
 
-	route := gateway.CallRoute{Source: gateway.ToolCallSourceMCP, ServerID: "", ToolsetID: toolset.ID, Payload: nil}
+	route := gateway.CallRoute{Source: gateway.ToolCallSourceMCP, ServerID: "", ToolsetID: toolset.ID}
 	if payload.mcpServerID != nil {
 		route.ServerID = payload.mcpServerID.String()
 	}
-	err = toolProxy.ReadResource(ctx, rw, strings.NewReader("{}"), toolconfig.ToolCallEnv{
+	err = toolProxy.CallResource(ctx, rw, strings.NewReader("{}"), toolconfig.ToolCallEnv{
 		UserConfig: userConfig,
 		SystemEnv:  systemConfig,
 		OAuthToken: "", // Resources do not support OAuth tokens for external MCP

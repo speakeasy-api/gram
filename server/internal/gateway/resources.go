@@ -13,7 +13,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/functions"
-	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
@@ -21,6 +20,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
+// ReadResource executes an already-planned resource read without observation.
 func (tp *ToolProxy) ReadResource(
 	ctx context.Context,
 	w http.ResponseWriter,
@@ -28,7 +28,6 @@ func (tp *ToolProxy) ReadResource(
 	env toolconfig.ToolCallEnv,
 	plan *ResourceCallPlan,
 	attrRecorder tm.HTTPLogAttributes,
-	route CallRoute,
 ) (err error) {
 	ctx, span := tp.tracer.Start(ctx, "gateway.readResource", trace.WithAttributes(
 		attr.ResourceName(plan.Descriptor.Name),
@@ -51,20 +50,6 @@ func (tp *ToolProxy) ReadResource(
 		attr.SlogResourceName(plan.Descriptor.Name),
 		attr.SlogToolCallSource(string(tp.source)),
 	)
-
-	// resources/read supplies a synthetic "{}" body, not caller arguments.
-	tp.scanEvaluator.Scan(ctx, nil, mcpriskscan.Event{
-		Surface:        tp.scanSurface(route),
-		Method:         mcpriskscan.MethodResourcesRead,
-		OrganizationID: plan.Descriptor.OrganizationID,
-		ProjectID:      plan.Descriptor.ProjectID,
-		ServerID:       route.ServerID,
-		ToolsetID:      route.ToolsetID,
-		ToolName:       "",
-		ResourceURI:    plan.Descriptor.URI,
-		PromptName:     "",
-		Phase:          mcpriskscan.PhaseBeforeRead,
-	})
 
 	switch plan.Kind {
 	case "":

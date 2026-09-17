@@ -74,14 +74,14 @@ func callFunctionToolWithClient(t *testing.T, client toolconfig.MCPClientIdentit
 	})
 	require.NoError(t, err)
 
-	err = proxy.Do(t.Context(), httptest.NewRecorder(), bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
+	err = proxy.CallTool(t.Context(), httptest.NewRecorder(), bytes.NewReader(bodyBytes), bodyBytes, toolconfig.ToolCallEnv{
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "",
 		GramEmail:  "",
 		GramChatID: "",
 		MCPClient:  client,
-	}, toolCallPlan, tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: "", Payload: bodyBytes})
+	}, toolCallPlan, tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: ""})
 	require.NoError(t, err)
 
 	return captured
