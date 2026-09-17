@@ -18,10 +18,11 @@ vi.mock("@/hooks/useRBAC", () => ({
 // The route helper resolves :orgSlug from the URL; stubbing it keeps the
 // expected href readable without standing up the org route tree.
 vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({
+  useRoutes: () => ({
     remoteIdentityProviders: {
       issuerDetail: {
-        href: (id: string) => `/org-slug/remote-identity-providers/${id}`,
+        href: (id: string) =>
+          `/org-slug/projects/project-slug/remote-identity-providers/${id}`,
       },
     },
   }),
@@ -98,7 +99,9 @@ describe("RemoteIdentityProvidersField", () => {
 
     expect(
       screen.getByRole("link", { name: "Acme Identity" }).getAttribute("href"),
-    ).toBe("/org-slug/remote-identity-providers/issuer-1");
+    ).toBe(
+      "/org-slug/projects/project-slug/remote-identity-providers/issuer-1",
+    );
   });
 
   // Inherited organization and platform providers resolve through the same
@@ -111,7 +114,9 @@ describe("RemoteIdentityProvidersField", () => {
 
     expect(
       screen.getByRole("link", { name: "Acme Identity" }).getAttribute("href"),
-    ).toBe("/org-slug/remote-identity-providers/issuer-1");
+    ).toBe(
+      "/org-slug/projects/project-slug/remote-identity-providers/issuer-1",
+    );
   });
 
   // The detail page requires org:read/org:admin, so without them the name has

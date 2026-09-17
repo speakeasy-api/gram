@@ -1,3 +1,5 @@
+import { useOrganization } from "@/contexts/Auth";
+import { useRBAC } from "@/hooks/useRBAC";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { useDateRangeFilter } from "@/components/observe/useDateRangeFilter";
 import { Page } from "@/components/page-layout";
@@ -18,8 +20,11 @@ import { encodeIdentityUrn } from "@/lib/identity-urn";
 import { isBadRequestError, isNotFoundError } from "@/lib/route-errors";
 import { useRoutes } from "@/routes";
 import type { IdentityModel } from "@gram/client/models/components/identitymodel.js";
-import { useIdentity } from "@gram/client/react-query/identity.js";
-import { Navigate, Outlet, useLocation, useParams } from "react-router";
+import { AgentIdentityProfile } from "./AgentIdentityProfile";
+import { useIdentitySubject } from "./useIdentitySubject";
+import { registeredAgentHref } from "./identityRoster";
+import { Button } from "@/components/ui/Button";
+import { Link, Navigate, Outlet, useLocation, useParams } from "react-router";
 import type { IdentityOutletContext } from "./identityRoute";
 import { useIdentityIsKnown } from "./useIdentityQueries";
 
@@ -57,6 +62,27 @@ function hasNoLinkedAccount(identity: IdentityModel): boolean {
 }
 
 export default function IdentityDetailRoot(): JSX.Element {
+  const { identityUrn: urn = "" } = useParams<{ identityUrn: string }>();
+  const organization = useOrganization();
+  const { hasScope, isLoading } = useRBAC();
+  const routes = useRoutes();
+  // Agent ownership grants management access independently of org:read.
+  if (
+    !isLoading &&
+    urn.startsWith("agent:") &&
+    !hasScope("org:read", organization.id)
+  ) {
+    return (
+      <Navigate
+        to={registeredAgentHref(
+          routes.agents.href(),
+          "",
+          urn.slice("agent:".length),
+        )}
+        replace
+      />
+    );
+  }
   return (
     // org:read, matching the server gate on identity.resolve — which is what
     // this page opens with, so a project:read-only reader would otherwise get
@@ -78,10 +104,7 @@ function IdentityDetailContent(): JSX.Element {
   const routes = useRoutes();
   const location = useLocation();
 
-  const identityQuery = useIdentity({ urn }, undefined, {
-    throwOnError: false,
-    enabled: !!urn,
-  });
+  const identityQuery = useIdentitySubject(urn);
   // Without this the recents entry is the sub-page segment ("overview"), since
   // the URN is neither an id nor long enough for the label heuristic to reject.
   useRecentLabelOverride(location.pathname, identityQuery.data?.displayName);
@@ -171,7 +194,18 @@ function IdentityDetailContent(): JSX.Element {
             className="border-border -mx-2 shrink-0 flex-row overflow-x-auto border-b px-2 pb-1 lg:sticky lg:top-8 lg:mx-0 lg:w-44 lg:flex-col lg:self-start lg:overflow-visible lg:border-b-0 lg:px-0 lg:pb-0"
           />
           <div className="min-w-0 flex-1">
-            <Outlet context={context} />
+            {identity.agent ? (
+              <AgentIdentityProfile
+                key={identity.agent.id}
+                agent={identity.agent}
+                section={
+                  location.pathname.split("/").filter(Boolean).at(-1) ??
+                  "overview"
+                }
+              />
+            ) : (
+              <Outlet context={context} />
+            )}
           </div>
         </div>
       </Page.Body>
@@ -193,6 +227,8 @@ function IdentityHeader({
     clearCustomRange,
   } = useDateRangeFilter();
 
+  const routes = useRoutes();
+  const location = useLocation();
   const primaryEmail = identity.emails[0];
   // Tobias is for names. When the only name we have is the address itself, the
   // display face loses the punctuation that makes it readable, and repeating it
@@ -243,6 +279,19 @@ function IdentityHeader({
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          {identity.kind === "agent" && (
+            <Button asChild variant="primary">
+              <Link
+                to={registeredAgentHref(
+                  routes.agents.href(),
+                  location.search,
+                  identity.canonicalUrn.slice("agent:".length),
+                )}
+              >
+                Edit Agent Identity
+              </Link>
+            </Button>
+          )}
           <TimeRangePicker
             preset={customRange ? null : dateRange}
             customRange={customRange}

@@ -156,22 +156,23 @@ describe("buildToolUsageTimeSeries", () => {
 });
 
 describe("InsightsTools chart zoom wiring", () => {
-  it("passes range-selection controls to the Skill Usage chart", () => {
+  it("passes range selection from the insights grid into the chart", () => {
     const source = readFileSync(
-      "src/components/observe/InsightsTools.tsx",
+      "src/components/observe/insights/InsightsGrid.tsx",
       "utf8",
     );
 
-    const callsite = source.match(/<SkillUsageTimeSeries\b[\s\S]*?\/>/)?.[0];
+    // Dragging the chart sets the window, so the grid has to hand its range
+    // handler down. Without it the chart zooms visually and the page keeps
+    // showing the old range's data.
+    const callsite = source.match(/<StackedTimeBarChart\b[\s\S]*?\/>/)?.[0];
 
     expect(callsite).toContain("onRangeSelect={onRangeSelect}");
-    expect(callsite).toContain("isZoomed={isZoomed}");
-    expect(callsite).toContain("onResetZoom={onResetZoom}");
   });
 
   it("filters zero-value series out of the stacked bar tooltip", () => {
     const source = readFileSync(
-      "src/components/observe/InsightsTools.tsx",
+      "src/components/chart/StackedTimeBarChart.tsx",
       "utf8",
     );
 

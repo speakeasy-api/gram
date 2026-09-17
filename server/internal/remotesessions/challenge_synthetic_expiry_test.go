@@ -238,12 +238,18 @@ type syntheticLoginOptions struct {
 	// the metadata refresher — so a tunnel-bound issuer cannot be reported
 	// working by a component that quietly stayed on direct egress.
 	tunnels *tunnelrouting.HTTPClient
+	// maxDBConns constrains the fixture pool for connection-ownership tests.
+	maxDBConns int32
 }
 
 type syntheticLoginOption func(*syntheticLoginOptions)
 
 func withTunnels(tunnels *tunnelrouting.HTTPClient) syntheticLoginOption {
 	return func(o *syntheticLoginOptions) { o.tunnels = tunnels }
+}
+
+func withMaxDBConns(maxConns int32) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.maxDBConns = maxConns }
 }
 
 func withIssuerScopes(scopes ...string) syntheticLoginOption {
@@ -360,7 +366,7 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		opt(&options)
 	}
 
-	ctx, ti := newTestService(t)
+	ctx, ti := newTestServiceWithConfig(t, testServiceConfig{maxDBConns: options.maxDBConns})
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)

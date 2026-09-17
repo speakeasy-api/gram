@@ -156,7 +156,7 @@ var UserSession = Type("UserSession", func() {
 	Attribute("user_session_issuer_id", String, "The issuing user_session_issuer id.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("subject_urn", String, "The session's subject URN (user:<id> | apikey:<uuid> | anonymous:<mcp-session-id>).")
+	Attribute("subject_urn", String, "The session's subject URN (user:<id> | apikey:<uuid> | anonymous:<mcp-session-id> | workload:<issuer-id>:<external-subject>).")
 	Attribute("jti", String, "Current access-token JTI; used by the revocation path.")
 	Attribute("refresh_expires_at", String, "Next refresh deadline.", func() {
 		Format(FormatDateTime)
@@ -180,7 +180,7 @@ var UserSession = Type("UserSession", func() {
 		Enum("public", "secret", "key", "misconfigured")
 	})
 	Attribute("client_token_endpoint_auth_method", String, "The raw RFC 7591 token_endpoint_auth_method the client declared, for debugging against the spec. Null both for a session with no bound client and for a client registered before the value was recorded; client_credential_kind separates those cases and is what should be displayed.")
-	Attribute("subject_type", String, "Subject kind: 'user', 'apikey', or 'anonymous'.")
+	Attribute("subject_type", String, "Subject kind: 'user', 'apikey', 'anonymous', or 'workload'.")
 	Attribute("subject_display_name", String, "Resolved human-readable name of the subject, if known.")
 	Attribute("subject_photo_url", String, "Avatar URL for the subject when it resolves to a Gram user with one. Null for API key and anonymous subjects, and for users who have no photo.")
 	Attribute("revoked_at", String, "When the session was revoked, if it has been.", func() {

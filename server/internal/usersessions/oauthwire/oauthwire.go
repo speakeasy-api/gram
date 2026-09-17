@@ -1,6 +1,7 @@
 // Package oauthwire holds the pieces of the issuer-gated OAuth surface that
-// both the usersessions management API and its cimd subpackages need: the
-// wire-error shape and the redirect-URI scheme rules.
+// both the usersessions management API and its cimd subpackages need:
+// standardized wire identifiers, the wire-error shape, and redirect-URI
+// scheme rules.
 //
 // It exists to be a leaf. The cimd resolver has to construct OAuth errors
 // and validate redirect URIs, and the management API has to read the CIMD
@@ -16,12 +17,8 @@ import (
 	"strings"
 )
 
-// Client authentication methods as they appear on the wire: the
-// token_endpoint_auth_method values of RFC 7591 §2 and the RFC 8414
-// token_endpoint_auth_methods_supported list. Every authorization server in
-// this codebase builds its accepted set from these rather than from literals,
-// so the string that is validated at registration, persisted on the client
-// row, and matched at the token endpoint is one identifier in three places.
+// OAuth identifiers as they appear in requests and authorization-server
+// metadata.
 const (
 	// AuthMethodClientSecretBasic presents the client secret as HTTP Basic
 	// credentials (RFC 6749 §2.3.1).
@@ -40,6 +37,29 @@ const (
 	// only method here that proves possession of something never sent to
 	// the server.
 	AuthMethodPrivateKeyJWT = "private_key_jwt"
+
+	// CodeChallengeMethodS256 is the SHA-256 PKCE transformation method
+	// (RFC 7636 §4.2).
+	CodeChallengeMethodS256 = "S256"
+
+	// GrantProfileIDJAG identifies support for identity assertion JWT
+	// authorization grants in authorization-server metadata.
+	GrantProfileIDJAG = "urn:ietf:params:oauth:grant-profile:id-jag"
+
+	// GrantTypeAuthorizationCode exchanges an authorization code at the token
+	// endpoint (RFC 6749 §4.1.3).
+	GrantTypeAuthorizationCode = "authorization_code"
+
+	// GrantTypeJWTBearer is RFC 7523's JWT authorization grant identifier.
+	GrantTypeJWTBearer = "urn:ietf:params:oauth:grant-type:jwt-bearer" //nolint:gosec // standardized public grant identifier, not a credential
+
+	// GrantTypeRefreshToken exchanges a refresh token at the token endpoint
+	// (RFC 6749 §6).
+	GrantTypeRefreshToken = "refresh_token"
+
+	// ResponseTypeCode requests an authorization code from the authorization
+	// endpoint (RFC 6749 §4.1.1).
+	ResponseTypeCode = "code"
 )
 
 // Error carries an OAuth wire error: the shared shape used across the

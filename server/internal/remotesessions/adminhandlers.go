@@ -374,7 +374,12 @@ func (s *Service) UpdateGlobalIssuer(ctx context.Context, payload *adminrsgen.Up
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	updated, err := repo.New(dbtx).UpdateGlobalRemoteSessionIssuer(ctx, repo.UpdateGlobalRemoteSessionIssuerParams{
+	txRepo := repo.New(dbtx)
+	if err := txRepo.LockRemoteSessionIssuerForClientBinding(ctx, issuerID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock global remote session issuer configuration").LogError(ctx, logger)
+	}
+
+	updated, err := txRepo.UpdateGlobalRemoteSessionIssuer(ctx, repo.UpdateGlobalRemoteSessionIssuerParams{
 		// Trimmed so the stored slug/issuer match what the emptiness validation
 		// above saw; whitespace-only never reaches here, so the trimmed-empty →
 		// NULL (keep) behavior of PtrToPGTextTrimmed cannot trigger.
@@ -418,6 +423,12 @@ func (s *Service) UpdateGlobalIssuer(ctx context.Context, payload *adminrsgen.Up
 			return nil, oops.E(oops.CodeNotFound, err, "global remote session issuer not found").LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "update global remote session issuer").LogError(ctx, logger)
+	}
+	if err := validateTrustedIdentityProviderIssuerClients(ctx, txRepo, updated); err != nil {
+		if errors.Is(err, errTrustedIdentityProviderClientIneligible) {
+			return nil, oops.E(oops.CodeBadRequest, err, "update would make a client ineligible for identity-provider login: %v", err).LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "validate clients that trust global remote session issuer").LogError(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
@@ -599,6 +610,9 @@ func (s *Service) RefreshGlobalIssuerMetadata(ctx context.Context, payload *admi
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := repo.New(dbtx)
+	if err := txRepo.LockRemoteSessionIssuerForClientBinding(ctx, issuerID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock global remote session issuer configuration").LogError(ctx, logger)
+	}
 	locked, err := txRepo.GetGlobalRemoteSessionIssuerByIDForUpdate(ctx, issuerID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -616,6 +630,12 @@ func (s *Service) RefreshGlobalIssuerMetadata(ctx context.Context, payload *admi
 			return nil, oops.E(oops.CodeConflict, err, "%s", refreshConflictMessage).LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "update global remote session issuer discovered metadata").LogError(ctx, logger)
+	}
+	if err := validateTrustedIdentityProviderIssuerClients(ctx, txRepo, updated); err != nil {
+		if errors.Is(err, errTrustedIdentityProviderClientIneligible) {
+			return nil, oops.E(oops.CodeBadRequest, err, "refreshed metadata would make a client ineligible for identity-provider login: %v", err).LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "validate clients after refreshing global remote session issuer").LogError(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {

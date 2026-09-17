@@ -71,6 +71,12 @@ type ResolvedMcpEndpoint struct {
 	// HandleAuthorize's anonymous-vs-IDP path selection.
 	IsPublic bool
 
+	// idJAGConfigured reports whether this endpoint's organization-level user
+	// session issuer has an explicit trusted remote issuer link. It controls
+	// capability discovery only; the token exchange validates the live linked
+	// issuer and its JWKS configuration independently.
+	idJAGConfigured bool
+
 	// McpServerID is populated when the endpoint resolves through an
 	// mcp_endpoints → mcp_servers pair. Zero (Valid=false) for the
 	// toolset-keyed resolution. Used for telemetry / log attribution.
@@ -411,6 +417,7 @@ func NewResolvedMcpEndpointFromMcpServer(
 		CIMDAdmissionModeRaw: pgtype.Text{String: "", Valid: false},
 		CustomDomainID:       mcpEndpoint.CustomDomainID,
 		IsPublic:             mcpServer.Visibility == mcpservers.VisibilityPublic,
+		idJAGConfigured:      false,
 		McpServerID:          uuid.NullUUID{UUID: mcpServer.ID, Valid: true},
 		MetaMcpServerID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		OrganizationID:       organizationID,
@@ -423,11 +430,14 @@ func NewResolvedMcpEndpointFromMcpServer(
 	}
 }
 
-// connectResourceID is the mcp:connect resource id: the wrapper's id when one
-// fronts the endpoint, else the toolset id.
+// connectResourceID is the mcp:connect resource id: the server or meta-server
+// fronting the endpoint, else the directly addressed toolset.
 func (e *ResolvedMcpEndpoint) connectResourceID() uuid.UUID {
 	if e.McpServerID.Valid {
 		return e.McpServerID.UUID
+	}
+	if e.MetaMcpServerID.Valid {
+		return e.MetaMcpServerID.UUID
 	}
 	return e.ToolsetID.UUID
 }
@@ -462,6 +472,7 @@ func NewResolvedMcpEndpointFromMetaMcpServer(
 		CIMDAdmissionModeRaw: pgtype.Text{String: "", Valid: false},
 		CustomDomainID:       mcpEndpoint.CustomDomainID,
 		IsPublic:             false,
+		idJAGConfigured:      false,
 		McpServerID:          uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		MetaMcpServerID:      uuid.NullUUID{UUID: metaServer.ID, Valid: true},
 		OrganizationID:       organizationID,
@@ -488,6 +499,7 @@ func newResolvedMcpEndpointFromToolset(toolset *toolsets_repo.Toolset, routeBase
 		CIMDAdmissionModeRaw: pgtype.Text{String: "", Valid: false},
 		CustomDomainID:       toolset.CustomDomainID,
 		IsPublic:             toolset.McpIsPublic,
+		idJAGConfigured:      false,
 		McpServerID:          uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		MetaMcpServerID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		OrganizationID:       toolset.OrganizationID,
