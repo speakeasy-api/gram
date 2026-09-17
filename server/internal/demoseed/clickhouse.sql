@@ -603,11 +603,15 @@ FROM (
     concat(substring(h, 1, 8), '-', substring(h, 9, 4), '-5', substring(h, 14, 3), '-8',
            substring(h, 18, 3), '-', substring(h, 21, 12)) AS chat_id,
     toUUID('dec0de00-0000-4000-a000-000000000001') AS proj,
-    -- Billing and part-time roles, i.e. the people a policy is written for.
-    arrayElement(['hana@demo.getgram.ai', 'lucas@demo.getgram.ai', 'mateo@demo.getgram.ai'],
-                 1 + toUInt32(cityHash64('blku', number) % 3)) AS email,
-    arrayElement(['hana-mbp.local', 'lucas-mbp.local', 'mateo-mbp.local'],
-                 1 + toUInt32(cityHash64('blku', number) % 3)) AS hostname,
+    -- The chat's own owner, by the same formula every other block uses. Drawing
+    -- the person independently would file the block under a conversation
+    -- somebody else was having.
+    arrayElement([3, 3, 3, 3, 3, 1, 1, 1, 1, 4, 4, 4, 2, 2, 5, 6],
+                 1 + reinterpretAsUInt8(unhex(substring(h, 13, 2))) % 16) AS uidx,
+    arrayElement(['amara@demo.getgram.ai', 'jonas@demo.getgram.ai', 'priya@demo.getgram.ai',
+                  'mateo@demo.getgram.ai', 'hana@demo.getgram.ai', 'lucas@demo.getgram.ai'], uidx) AS email,
+    arrayElement(['amara-mbp.local', 'jonas-mbp.local', 'priya-mbp.local',
+                  'mateo-mbp.local', 'hana-mbp.local', 'lucas-mbp.local'], uidx) AS hostname,
     if((number + 1) % 2 = 1, 'claude-code', 'cursor') AS hook,
     arrayElement(['process_refund', 'process_refund', 'query_db', 'restart_service', 'run_payroll'],
                  1 + toUInt32(cityHash64('blkt', number) % 5)) AS tool_name,
@@ -624,7 +628,12 @@ FROM (
       - toIntervalDay(day_off) + toIntervalHour(hour_off)
       + toIntervalMinute(cityHash64('blkm', number) % 60) AS ts0,
     toUnixTimestamp64Nano(if(ts0 > now64(9) - toIntervalMinute(30), ts0 - toIntervalDay(1), ts0)) AS nano
-  FROM numbers(46)
+  FROM numbers(150)
+  -- Billing and part-time roles, i.e. the people a policy is written for:
+  -- mateo, hana, lucas. Selecting the chats they own keeps the denial and the
+  -- conversation it happened in agreeing about who was there. Roughly a third
+  -- of chats qualify, so 150 candidates yield ~46 denials.
+  WHERE uidx IN (4, 5, 6)
 );
 
 -- Cursor provenance (even chats): one cursor:usage:metrics row per chat.
@@ -1544,10 +1553,15 @@ FROM (
     lower(hex(MD5('gram-demo-metamcp-1'))) AS gh,
     concat(substring(gh, 1, 8), '-', substring(gh, 9, 4), '-5', substring(gh, 14, 3), '-8',
            substring(gh, 18, 3), '-', substring(gh, 21, 12)) AS gateway,
-    -- Same client mix as the member dispatches: one gateway session walks the
-    -- catalog and then calls, so discovery and calls must agree on who did it.
+    arrayElement(['amara@demo.getgram.ai', 'jonas@demo.getgram.ai', 'priya@demo.getgram.ai',
+                  'mateo@demo.getgram.ai', 'hana@demo.getgram.ai', 'lucas@demo.getgram.ai'],
+                 1 + (cityHash64('gwu', number) % 6)) AS email,
+    -- Keyed on the person, not the row: one gateway session walks the catalog
+    -- and then calls, so discovery and dispatch have to agree on who did it.
+    -- An independent per-row draw would have the same session change client
+    -- between listing a server and calling it.
     arrayElement([1, 1, 1, 1, 2, 2, 2, 3, 3, 5, 1, 2, 1, 3, 2, 4],
-                 1 + (cityHash64('gwdcli', number) % 16)) AS cidx,
+                 1 + (cityHash64('gwcli', email) % 16)) AS cidx,
     arrayElement(['Claude Code', 'Cursor', 'Visual Studio Code', 'mcp-inspector', 'claude-ai'], cidx) AS client_name,
     arrayElement(multiIf(
       cidx = 1, ['2.4.1', '2.4.1', '2.3.8'],
@@ -1555,13 +1569,10 @@ FROM (
       cidx = 3, ['1.104.2', '1.103.1', '1.103.1'],
       cidx = 4, ['0.16.2', '0.16.2', '0.15.0'],
       ['1.0.0', '1.0.0', '1.0.0']),
-      1 + (cityHash64('gwdcliv', number) % 3)) AS client_version,
-    cityHash64('gwdcliseen', number) % 9 > 0 AS client_seen,
+      1 + (cityHash64('gwcliv', email) % 3)) AS client_version,
+    cityHash64('gwcliseen', email) % 9 > 0 AS client_seen,
     -- Funnel shape: every walk lists, most describe a server, fewer pull schemas.
     multiIf(number % 10 < 5, 'list_servers', number % 10 < 8, 'describe_server', 'describe_tools') AS tool_name,
-    arrayElement(['amara@demo.getgram.ai', 'jonas@demo.getgram.ai', 'priya@demo.getgram.ai',
-                  'mateo@demo.getgram.ai', 'hana@demo.getgram.ai', 'lucas@demo.getgram.ai'],
-                 1 + (cityHash64('gwu', number) % 6)) AS email,
     toDateTime64(toStartOfDay(now()), 9)
       - toIntervalDay(number % 12) + toIntervalHour(8 + (cityHash64('gwh', number) % 11))
       + toIntervalMinute(cityHash64('gwm', number) % 60) AS ts0,
@@ -1635,10 +1646,14 @@ FROM (
       arrayElement(['send_message', 'list_channels'], 1 + (cityHash64('gwt', number) % 2))) AS tool_name,
     if(toolset_slug != '', concat('tools:http:acme:', tool_name), concat('tools:externalmcp:', remote, ':', tool_name)) AS tool_urn,
     if((mkey = 'ops' AND cityHash64('gwerr', number) % 5 = 0) OR cityHash64('gwbg', number) % 40 = 0, 500, 200) AS status,
+    arrayElement(['amara@demo.getgram.ai', 'jonas@demo.getgram.ai', 'priya@demo.getgram.ai',
+                  'mateo@demo.getgram.ai', 'hana@demo.getgram.ai', 'lucas@demo.getgram.ai'],
+                 1 + (cityHash64('gwu2', number) % 6)) AS email,
     -- Gateway endpoints see more kinds of client than a hosted server does:
-    -- agent harnesses plus the MCP Inspector someone left open.
+    -- agent harnesses plus the MCP Inspector someone left open. Keyed on the
+    -- person so a caller presents the same client here as in discovery.
     arrayElement([1, 1, 1, 1, 2, 2, 2, 3, 3, 5, 1, 2, 1, 3, 2, 4],
-                 1 + (cityHash64('gwcli', number) % 16)) AS cidx,
+                 1 + (cityHash64('gwcli', email) % 16)) AS cidx,
     arrayElement(['Claude Code', 'Cursor', 'Visual Studio Code', 'mcp-inspector', 'claude-ai'], cidx) AS client_name,
     arrayElement(multiIf(
       cidx = 1, ['2.4.1', '2.4.1', '2.3.8'],
@@ -1646,11 +1661,8 @@ FROM (
       cidx = 3, ['1.104.2', '1.103.1', '1.103.1'],
       cidx = 4, ['0.16.2', '0.16.2', '0.15.0'],
       ['1.0.0', '1.0.0', '1.0.0']),
-      1 + (cityHash64('gwcliv', number) % 3)) AS client_version,
-    cityHash64('gwcliseen', number) % 9 > 0 AS client_seen,
-    arrayElement(['amara@demo.getgram.ai', 'jonas@demo.getgram.ai', 'priya@demo.getgram.ai',
-                  'mateo@demo.getgram.ai', 'hana@demo.getgram.ai', 'lucas@demo.getgram.ai'],
-                 1 + (cityHash64('gwu2', number) % 6)) AS email,
+      1 + (cityHash64('gwcliv', email) % 3)) AS client_version,
+    cityHash64('gwcliseen', email) % 9 > 0 AS client_seen,
     toDateTime64(toStartOfDay(now()), 9)
       - toIntervalDay(number % 12) + toIntervalHour(8 + (cityHash64('gwh2', number) % 11))
       + toIntervalMinute(cityHash64('gwm2', number) % 60) AS ts0,

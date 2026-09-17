@@ -24,16 +24,6 @@ type sessionClientInfoStore interface {
 	Load(ctx context.Context, projectID uuid.UUID, toolsetSlug, sessionID string, nowMillis int64) (sessionclientinfo.Info, error)
 }
 
-// storeSessionClientInfo records what a client reported about itself at
-// initialize. A client that reports neither a name nor a protocol version
-// leaves no record, and a write failure is logged rather than surfaced: losing
-// this must never fail the handshake.
-//
-// Either field alone is enough to be worth recording. A client that omits
-// clientInfo.name but sends protocolVersion is still attributable to a protocol
-// generation for the rest of its session, which is the more useful of the two
-// for diagnosing version-specific behaviour. Admitting those records does not
-// affect how much can be stored: the per-server record cap is what bounds that.
 // internalClientInfoScope is the scope for callers that never handshake —
 // agent workflows dispatching through the hosted path. Nothing is ever stored
 // under it, so resolution always misses and those calls stay unattributed.
@@ -57,6 +47,16 @@ func sessionClientInfoScope(payload *mcpInputs) string {
 	return payload.toolset
 }
 
+// storeSessionClientInfo records what a client reported about itself at
+// initialize. A client that reports neither a name nor a protocol version
+// leaves no record, and a write failure is logged rather than surfaced: losing
+// this must never fail the handshake.
+//
+// Either field alone is enough to be worth recording. A client that omits
+// clientInfo.name but sends protocolVersion is still attributable to a protocol
+// generation for the rest of its session, which is the more useful of the two
+// for diagnosing version-specific behaviour. Admitting those records does not
+// affect how much can be stored: the per-server record cap is what bounds that.
 func storeSessionClientInfo(ctx context.Context, logger *slog.Logger, store sessionClientInfoStore, payload *mcpInputs, name, version, protocolVersion string) {
 	name = mcprequests.SanitizeClientInfoField(name)
 	protocolVersion = mcpversions.Sanitize(protocolVersion)

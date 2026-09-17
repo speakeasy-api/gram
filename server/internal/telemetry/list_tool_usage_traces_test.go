@@ -930,7 +930,10 @@ func TestListToolUsageTraces_CarriesClientOnBothQueryPaths(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 	limit := 100
-	rawPathQuery := "charge"
+	// ":" appears in every seeded gram_urn, so it forces the raw path without
+	// narrowing the result set — both rows reach both paths and the same
+	// assertions run against each.
+	rawPathQuery := ":"
 
 	// A free-text query drops the listing off trace_summaries onto a raw
 	// telemetry_logs scan. The two paths derive the client separately, so they
@@ -962,9 +965,8 @@ func TestListToolUsageTraces_CarriesClientOnBothQueryPaths(t *testing.T) {
 			require.NotNil(t, charge.ClientVersion)
 			require.Equal(t, "2.4.1", *charge.ClientVersion)
 
-			if tc.query != nil {
-				return
-			}
+			// The unattributed case is derived separately on each path too: a
+			// version leaking through on one of them would otherwise go unseen.
 			refund := byTool["refund"]
 			require.NotNil(t, refund)
 			require.Equal(t, "unattributed", refund.ClientKey)
