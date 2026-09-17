@@ -3878,6 +3878,158 @@ paths:
                                 $ref: '#/components/schemas/Error'
             security:
                 - admin_auth_header_Authorization: []
+    /admin/supportMatrix.get:
+        get:
+            description: Read the shared support catalog and product coverage.
+            operationId: adminGetSupportMatrix
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SupportMatrix'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: getSupportMatrix admin
+            tags:
+                - admin
+            x-speakeasy-name-override: getSupportMatrix
+            x-speakeasy-react-hook:
+                name: AdminGetSupportMatrix
+    /admin/supportMatrix.update:
+        post:
+            description: Save coverage against the last read revision; rejects concurrent changes.
+            operationId: adminUpdateSupportMatrix
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateSupportMatrixRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SupportMatrix'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: updateSupportMatrix admin
+            tags:
+                - admin
+            x-speakeasy-name-override: updateSupportMatrix
+            x-speakeasy-react-hook:
+                name: AdminUpdateSupportMatrix
     /admin/trial.changeEndDate:
         post:
             tags:
@@ -95235,6 +95387,141 @@ components:
                 - summary
                 - impact
                 - cached
+        SupportCapability:
+            type: object
+            properties:
+                group:
+                    type: string
+                id:
+                    type: string
+                name:
+                    type: string
+            required:
+                - id
+                - name
+                - group
+        SupportDraft:
+            type: object
+            properties:
+                mappings:
+                    type: object
+                    additionalProperties:
+                        $ref: '#/components/schemas/SupportMapping'
+                references:
+                    type: object
+                    additionalProperties:
+                        type: object
+                        additionalProperties:
+                            $ref: '#/components/schemas/SupportFact'
+            required:
+                - mappings
+                - references
+        SupportFact:
+            type: object
+            properties:
+                note:
+                    type: string
+                    maxLength: 10000
+                status:
+                    type: string
+                    enum:
+                        - supported
+                        - partial
+                        - unimplemented
+                        - impossible
+                        - na
+                        - unknown
+                verify:
+                    type: boolean
+            required:
+                - status
+                - note
+                - verify
+        SupportMapping:
+            type: object
+            properties:
+                applicability:
+                    type: string
+                    enum:
+                        - unknown
+                        - applicable
+                        - na
+                conditions:
+                    type: string
+                    maxLength: 10000
+                facts:
+                    type: object
+                    additionalProperties:
+                        $ref: '#/components/schemas/SupportFact'
+            required:
+                - applicability
+                - conditions
+                - facts
+        SupportMatrix:
+            type: object
+            properties:
+                capabilities:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SupportCapability'
+                draft:
+                    $ref: '#/components/schemas/SupportDraft'
+                methods:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SupportMethod'
+                products:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SupportPlatform'
+                revision:
+                    type: string
+            required:
+                - methods
+                - products
+                - capabilities
+                - draft
+                - revision
+        SupportMethod:
+            type: object
+            properties:
+                facts:
+                    type: object
+                    additionalProperties:
+                        $ref: '#/components/schemas/SupportFact'
+                id:
+                    type: string
+                name:
+                    type: string
+                plans:
+                    type: string
+                vendor:
+                    type: string
+            required:
+                - id
+                - name
+                - vendor
+                - plans
+                - facts
+        SupportPlatform:
+            type: object
+            properties:
+                family:
+                    type: string
+                id:
+                    type: string
+                name:
+                    type: string
+                surface:
+                    type: string
+                vendor:
+                    type: string
+            required:
+                - id
+                - name
+                - vendor
+                - family
+                - surface
         SyncedAgentUser:
             type: object
             properties:
@@ -99299,6 +99586,18 @@ components:
                         - monthly
             required:
                 - id
+        UpdateSupportMatrixRequestBody:
+            type: object
+            properties:
+                draft:
+                    $ref: '#/components/schemas/SupportDraft'
+                revision:
+                    type: string
+                    minLength: 64
+                    maxLength: 64
+            required:
+                - revision
+                - draft
         UpdateToolsetForm:
             type: object
             properties:
