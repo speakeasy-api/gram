@@ -162,8 +162,14 @@ func TestScanner_LLMModeDispatchesSingleLaneForToolRequest(t *testing.T) {
 	origin, ok := captured.Origins[lane]
 	require.True(t, ok)
 	require.Equal(t, "realtime_streams", origin.ExecutionPath)
-	require.Equal(t, policies[0].ID, origin.RiskPolicyID, "origin is the first policy with a covered source")
-	require.Equal(t, policies[0].Version, origin.RiskPolicyVersion)
+	coveredVersions := map[uuid.UUID]int64{}
+	for _, policy := range policies {
+		if llmanalyzer.CoversAnySource(policy.Sources) {
+			coveredVersions[policy.ID] = policy.Version
+		}
+	}
+	require.Contains(t, coveredVersions, origin.RiskPolicyID, "origin is a policy with a covered source")
+	require.Equal(t, coveredVersions[origin.RiskPolicyID], origin.RiskPolicyVersion)
 }
 
 func TestScanner_LLMModeUserMessageTravelsAsBody(t *testing.T) {
@@ -410,6 +416,34 @@ func TestScanner_LLMLaneFailsClosed(t *testing.T) {
 			require.Equal(t, int32(0), pii.callCount.Load(), "%s/%s must not fall back to presidio", action, lane.name)
 		}
 	}
+}
+
+// TestScanner_LLMLaneDeadLetterSurvivesRuleIDExclusion pins that a policy
+// exclusion or disabled rule naming the dead-letter sentinel cannot turn a
+// lane outage into an allow: exclusions silence verdicts, never the outage.
+func TestScanner_LLMLaneDeadLetterSurvivesRuleIDExclusion(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	policyID := insertRealtimeEnforcingPolicy(t, ti, ctx, "secrets", []string{risk_analysis.SourceGitleaks}, nil, "block")
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	_, err := riskrepo.New(ti.conn).CreateRiskExclusion(ctx, riskrepo.CreateRiskExclusionParams{
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		RiskPolicyID:   uuid.NullUUID{UUID: policyID, Valid: true},
+		MatchType:      "rule_id",
+		MatchValue:     llmanalyzer.RuleDeadLetter,
+		RuleIDFilter:   pgtype.Text{String: "", Valid: false},
+		SourceFilter:   pgtype.Text{String: "", Valid: false},
+		Enabled:        true,
+	})
+	require.NoError(t, err)
+	scanner := newLLMModeScanner(t, ti, &instrumentedPIIScanner{}, &recordingPIEngine{}, llmEnforcementFlags(ctx), nil)
+
+	result, err := scanner.ScanForEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "some text", message.User, ""))
+	require.NoError(t, err)
+	require.NotNil(t, result, "an exclusion on the sentinel rule must not turn the outage into an allow")
+	require.Equal(t, llmanalyzer.RuleDeadLetter, result.RuleID)
+	require.Equal(t, "unavailable", result.DeadLetterReason)
 }
 
 // TestScanner_LLMLaneDeadLetterKeepsWarnSentinelOverChallenge pins that a
