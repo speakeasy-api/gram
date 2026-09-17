@@ -4556,10 +4556,10 @@ CREATE TABLE IF NOT EXISTS principal_remote_session_bindings (
   CONSTRAINT principal_remote_session_bindings_pkey PRIMARY KEY (id),
   CONSTRAINT principal_remote_session_bindings_project_tenant_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE,
   CONSTRAINT principal_remote_session_bindings_principal_tenant_fkey FOREIGN KEY (organization_id, principal_id) REFERENCES agents (organization_id, id) ON DELETE CASCADE,
-  CONSTRAINT principal_remote_session_bindings_issuer_scope_fkey FOREIGN KEY (user_session_issuer_id, issuer_attachment_scope) REFERENCES user_session_issuers (id, attachment_scope) ON DELETE CASCADE,
+  CONSTRAINT principal_remote_session_bindings_issuer_scope_fkey FOREIGN KEY (user_session_issuer_id, issuer_attachment_scope) REFERENCES user_session_issuers (id, attachment_scope) ON UPDATE CASCADE ON DELETE CASCADE,
   CONSTRAINT principal_remote_session_bindings_client_scope_fkey FOREIGN KEY (remote_session_client_id, client_attachment_scope) REFERENCES remote_session_clients (id, attachment_scope) ON DELETE CASCADE,
   CONSTRAINT principal_remote_session_bindings_client_issuer_fkey FOREIGN KEY (remote_session_client_id, user_session_issuer_id) REFERENCES remote_session_client_user_session_issuers (remote_session_client_id, user_session_issuer_id) ON DELETE CASCADE,
-  CONSTRAINT principal_remote_session_bindings_session_fkey FOREIGN KEY (remote_session_client_id, user_session_issuer_id, remote_session_id) REFERENCES remote_sessions (remote_session_client_id, user_session_issuer_id, id) ON DELETE CASCADE,
+  CONSTRAINT principal_remote_session_bindings_session_fkey FOREIGN KEY (remote_session_client_id, user_session_issuer_id, remote_session_id) REFERENCES remote_sessions (remote_session_client_id, user_session_issuer_id, id) ON UPDATE CASCADE ON DELETE CASCADE,
   -- Scope checks bind the copied FK keys to this attachment's tenant. The
   -- client may be platform-global, but its issuer must belong to this tenant.
   CONSTRAINT principal_remote_session_bindings_issuer_scope_check CHECK (
@@ -5754,7 +5754,6 @@ CREATE TABLE IF NOT EXISTS meta_mcp_servers (
 
   CONSTRAINT meta_mcp_servers_pkey PRIMARY KEY (id),
   CONSTRAINT meta_mcp_servers_organization_id_project_id_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE,
-  CONSTRAINT meta_mcp_servers_project_id_user_session_issuer_id_fkey FOREIGN KEY (project_id, user_session_issuer_id) REFERENCES user_session_issuers (project_id, id) ON DELETE RESTRICT,
   CONSTRAINT meta_mcp_servers_organization_id_user_session_issuer_id_fkey FOREIGN KEY (organization_id, user_session_issuer_id) REFERENCES user_session_issuers (organization_id, id) ON DELETE RESTRICT
 );
 
@@ -8117,8 +8116,6 @@ CREATE TABLE IF NOT EXISTS platform_mcp_catalog_registrations (
   -- registration so this composite FK preserves the project ownership boundary.
   CONSTRAINT platform_mcp_catalog_registrations_remote_server_fkey
     FOREIGN KEY (project_id, remote_mcp_server_id) REFERENCES remote_mcp_servers (project_id, id) ON DELETE NO ACTION,
-  CONSTRAINT platform_mcp_catalog_registrations_session_issuer_fkey
-    FOREIGN KEY (project_id, user_session_issuer_id) REFERENCES user_session_issuers (project_id, id) ON DELETE NO ACTION,
   CONSTRAINT platform_mcp_catalog_registrations_org_session_issuer_fkey
     FOREIGN KEY (organization_id, user_session_issuer_id) REFERENCES user_session_issuers (organization_id, id) ON DELETE NO ACTION,
   CONSTRAINT platform_mcp_catalog_registrations_mcp_server_fkey
