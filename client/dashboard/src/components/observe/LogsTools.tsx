@@ -847,7 +847,10 @@ function railWidthCeiling(): number {
   if (typeof window === "undefined") return RAIL_WIDTH_MAX;
   return Math.max(
     RAIL_WIDTH_MIN,
-    Math.min(RAIL_WIDTH_MAX, Math.round(window.innerWidth * RAIL_WIDTH_VIEWPORT_SHARE)),
+    Math.min(
+      RAIL_WIDTH_MAX,
+      Math.round(window.innerWidth * RAIL_WIDTH_VIEWPORT_SHARE),
+    ),
   );
 }
 
@@ -883,7 +886,7 @@ function useRailWidth(): [number, (width: number) => void] {
     (next: number) => {
       const clamped = Math.min(Math.max(next, RAIL_WIDTH_MIN), ceiling);
       setPreferred(clamped);
-    try {
+      try {
         localStorage.setItem(RAIL_WIDTH_STORAGE_KEY, String(clamped));
       } catch {
         // A browser that refuses storage still resizes for this session.
