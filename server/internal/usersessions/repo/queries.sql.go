@@ -2441,11 +2441,16 @@ LEFT JOIN workload_issuers AS wi
   AND wi.organization_id = $3::text
   AND (wi.project_id = $4::uuid OR wi.project_id IS NULL)
   AND wi.deleted IS FALSE
+LEFT JOIN workload_issuers AS live
+  ON live.id = w.workload_issuer_id
+  AND live.organization_id = $3::text
+  AND live.deleted IS FALSE
 LEFT JOIN workload_agent_assignments AS wa
   ON wa.organization_id = $3::text
   AND wa.workload_issuer_id = w.workload_issuer_id
   AND wa.subject = w.subject
   AND wa.deleted IS FALSE
+  AND live.id IS NOT NULL
 LEFT JOIN agents AS a
   ON a.organization_id = wa.organization_id
   AND a.id = wa.agent_id
@@ -2481,6 +2486,12 @@ type ListWorkloadSessionLabelsRow struct {
 // The issuer is read at the caller's own tiers only, so a project-tier issuer
 // belonging to a sibling project stays unnamed. The assignment and agent are
 // organization-scoped, like the workload principal they describe.
+//
+// Liveness is a second lookup rather than the named one above: an issuer this
+// caller may not name can still be live, and deleting an issuer withdraws the
+// authority of every workload it vouched for. Matching ResolveWorkloadAgentAssignment,
+// an assignment under a deleted issuer resolves to no agent, so the row cannot
+// advertise authority the workload has already lost.
 func (q *Queries) ListWorkloadSessionLabels(ctx context.Context, arg ListWorkloadSessionLabelsParams) ([]ListWorkloadSessionLabelsRow, error) {
 	rows, err := q.db.Query(ctx, listWorkloadSessionLabels,
 		arg.WorkloadIssuerIds,

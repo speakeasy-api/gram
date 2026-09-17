@@ -208,7 +208,9 @@ var UserSessionWorkload = Type("UserSessionWorkload", func() {
 	})
 	Attribute("external_subject", String, "The sub claim the workload issuer asserted, exactly as minted. Together with workload_issuer_id this is the workload's identity.")
 	Attribute("workload_issuer_name", String, "The operator-chosen name of the workload issuer. Null when the issuer has been deleted or belongs to another project.")
-	Attribute("workload_issuer_url", String, "The workload issuer's issuer identifier (its iss). Null under the same conditions as workload_issuer_name.")
+	Attribute("workload_issuer_url", String, "The workload issuer's issuer identifier (its iss). Null under the same conditions as workload_issuer_name.", func() {
+		Format(FormatURI)
+	})
 	Attribute("agent_id", String, "The agent this workload is assigned to, whose policy it inherits. Null when the workload has no live assignment.", func() {
 		Format(FormatUUID)
 	})

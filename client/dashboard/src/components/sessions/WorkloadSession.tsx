@@ -94,34 +94,63 @@ function withdrawAdmissionEffect(workload: UserSessionWorkload): string {
   }
 }
 
-function ladderSteps(workload: UserSessionWorkload): LadderStep[] {
-  const agent = workload.agentName ?? "the agent";
-  return [
-    {
-      title: "Revoke the session",
-      effect:
-        "Ends this token now. The workload has no refresh token, so it exchanges a fresh platform token and is back within minutes.",
-      stopsReconnect: false,
-      available: true,
-    },
-    {
-      title: "Unassign the agent from the workload",
-      effect:
-        "The workload still authenticates, but every request it makes is refused.",
-      stopsReconnect: false,
-      available: false,
-    },
-    {
-      title: `Suspend or revoke ${agent}`,
-      effect:
-        "Refuses requests from every workload assigned to that agent, not just this one.",
-      stopsReconnect: false,
-      available: false,
-    },
+/**
+ * Revoking ends the tokens in hand. Whether the workload comes back depends on
+ * whether anything still admits it: with no admission left there is nothing to
+ * exchange a fresh platform token against.
+ */
+function revokeStep(
+  workload: UserSessionWorkload,
+  sessionCount: number,
+): LadderStep {
+  const subject =
+    sessionCount > 1 ? `these ${sessionCount} sessions` : "the session";
+  const tokens = sessionCount > 1 ? "those tokens" : "this token";
+  const admitted = workload.admissions.length > 0;
+  return {
+    title: `Revoke ${subject}`,
+    effect: admitted
+      ? `Ends ${tokens} now. The workload has no refresh token, so it exchanges a fresh platform token and is back within minutes.`
+      : `Ends ${tokens} now. Nothing admits this workload, so it has no way back until an admission is added.`,
+    stopsReconnect: !admitted,
+    available: true,
+  };
+}
+
+function ladderSteps(
+  workload: UserSessionWorkload,
+  sessionCount: number,
+): LadderStep[] {
+  const steps = [revokeStep(workload, sessionCount)];
+
+  // The agent steps describe authority this workload actually holds. With no
+  // assignment there is nothing to unassign or suspend, and listing them would
+  // send an operator after a control that changes nothing.
+  if (workload.agentId) {
+    const agent = workload.agentName ?? "the agent";
+    steps.push(
+      {
+        title: `Unassign ${agent} from the workload`,
+        effect:
+          "The workload still authenticates, but every request it makes is refused.",
+        stopsReconnect: false,
+        available: false,
+      },
+      {
+        title: `Suspend or revoke ${agent}`,
+        effect:
+          "Refuses requests from every workload assigned to that agent, not just this one.",
+        stopsReconnect: false,
+        available: false,
+      },
+    );
+  }
+
+  steps.push(
     {
       title: "Withdraw the admission",
       effect: withdrawAdmissionEffect(workload),
-      stopsReconnect: true,
+      stopsReconnect: workload.admissions.length > 0,
       available: false,
     },
     {
@@ -130,7 +159,9 @@ function ladderSteps(workload: UserSessionWorkload): LadderStep[] {
       stopsReconnect: true,
       available: false,
     },
-  ];
+  );
+
+  return steps;
 }
 
 /**
@@ -140,14 +171,17 @@ function ladderSteps(workload: UserSessionWorkload): LadderStep[] {
  */
 export function WorkloadRevocationLadder({
   workload,
+  sessionCount = 1,
 }: {
   workload: UserSessionWorkload;
+  /** How many sessions the dialog is about, so the copy names what it ends. */
+  sessionCount?: number;
 }): JSX.Element {
   return (
     <div className="space-y-2">
       <p className="text-eyebrow">Stopping a workload, narrowest first</p>
       <ol className="border-border divide-border divide-y border">
-        {ladderSteps(workload).map((step, index) => (
+        {ladderSteps(workload, sessionCount).map((step, index) => (
           <li key={step.title} className="flex gap-3 px-3 py-2 text-xs">
             <span className="text-muted-foreground tabular-nums">
               {index + 1}

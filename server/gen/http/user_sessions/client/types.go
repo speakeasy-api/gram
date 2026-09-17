@@ -2803,6 +2803,9 @@ func ValidateUserSessionWorkloadResponseBody(body *UserSessionWorkloadResponseBo
 	if body.WorkloadIssuerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.workload_issuer_id", *body.WorkloadIssuerID, goa.FormatUUID))
 	}
+	if body.WorkloadIssuerURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.workload_issuer_url", *body.WorkloadIssuerURL, goa.FormatURI))
+	}
 	if body.AgentID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
 	}

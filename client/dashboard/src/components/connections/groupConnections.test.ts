@@ -64,14 +64,18 @@ describe("groupConnections", () => {
           id: "w-1",
           subjectUrn,
           subjectType: "workload",
-          subjectDisplayName: workload.externalSubject,
+          // No display name, so the assertion below exercises the workload
+          // label branch rather than passing through subjectDisplayName.
+          subjectDisplayName: undefined,
           workload,
         }),
         session({
           id: "w-2",
           subjectUrn,
           subjectType: "workload",
-          subjectDisplayName: workload.externalSubject,
+          // No display name, so the assertion below exercises the workload
+          // label branch rather than passing through subjectDisplayName.
+          subjectDisplayName: undefined,
           workload,
         }),
         session({ id: "u-1" }),

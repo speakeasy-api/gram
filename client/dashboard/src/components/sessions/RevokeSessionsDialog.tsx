@@ -81,7 +81,9 @@ export function RevokeSessionsDialog({
             creates or lifts a killswitch.
           </Dialog.Description>
         </Dialog.Header>
-        {workload ? <WorkloadRevocationLadder workload={workload} /> : null}
+        {workload ? (
+          <WorkloadRevocationLadder workload={workload} sessionCount={count} />
+        ) : null}
         {newKillswitchHref && (
           <div className="space-y-1">
             <Button variant="secondary" size="sm" asChild>

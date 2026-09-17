@@ -99920,6 +99920,7 @@ components:
                 workload_issuer_url:
                     type: string
                     description: The workload issuer's issuer identifier (its iss). Null under the same conditions as workload_issuer_name.
+                    format: uri
             description: The workload behind a workload session.
             required:
                 - workload_issuer_id

@@ -1,4 +1,5 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { UserSession } from "@gram/client/models/components/usersession.js";
@@ -10,13 +11,34 @@ import {
   workloadAgentLabel,
   workloadIssuerLabel,
 } from "@/lib/workload-session";
-import { WorkloadRevocationLadder } from "./WorkloadSession";
+import {
+  WorkloadRevocationLadder,
+  WorkloadSessionBadge,
+} from "./WorkloadSession";
+import { TooltipProvider } from "@/components/ui/Tooltip";
+
+// The badge's tooltip reads a provider that App.tsx installs once at the root.
+function renderBadge(props: { workload: UserSessionWorkload }) {
+  return render(
+    <TooltipProvider>
+      <WorkloadSessionBadge {...props} />
+    </TooltipProvider>,
+  );
+}
+
+const revokeMutate = vi.fn();
 
 vi.mock("@gram/client/react-query/revokeUserSession.js", () => ({
-  useRevokeUserSessionMutation: () => ({ mutate: vi.fn(), isPending: false }),
+  useRevokeUserSessionMutation: () => ({
+    mutate: revokeMutate,
+    isPending: false,
+  }),
 }));
 
-afterEach(cleanup);
+afterEach(() => {
+  revokeMutate.mockReset();
+  cleanup();
+});
 
 const workload: UserSessionWorkload = {
   workloadIssuerId: "11111111-1111-4111-8111-111111111111",
@@ -101,7 +123,7 @@ describe("WorkloadRevocationLadder", () => {
     const steps = screen.getAllByRole("listitem");
     expect(steps.map((step) => step.textContent)).toEqual([
       expect.stringContaining("Revoke the session"),
-      expect.stringContaining("Unassign the agent from the workload"),
+      expect.stringContaining("Unassign Deploy bot from the workload"),
       expect.stringContaining("Suspend or revoke Deploy bot"),
       expect.stringContaining("Withdraw the admission"),
       expect.stringContaining("Delete the issuer GitHub Actions"),
@@ -129,23 +151,95 @@ describe("WorkloadRevocationLadder", () => {
   });
 });
 
+describe("WorkloadRevocationLadder branches", () => {
+  it("drops the agent steps when no agent is assigned", () => {
+    render(
+      <WorkloadRevocationLadder
+        workload={{
+          ...workload,
+          agentId: undefined,
+          agentName: undefined,
+          agentStatus: undefined,
+        }}
+      />,
+    );
+
+    const steps = screen.getAllByRole("listitem");
+    expect(steps.map((step) => step.textContent)).toEqual([
+      expect.stringContaining("Revoke the session"),
+      expect.stringContaining("Withdraw the admission"),
+      expect.stringContaining("Delete the issuer"),
+    ]);
+  });
+
+  it("says revoking stops a workload nothing admits", () => {
+    render(
+      <WorkloadRevocationLadder workload={{ ...workload, admissions: [] }} />,
+    );
+
+    const revoke = screen.getAllByRole("listitem")[0]!;
+    expect(within(revoke).getByText("Stops reconnecting")).not.toBeNull();
+    expect(revoke.textContent).toContain(
+      "no way back until an admission is added",
+    );
+  });
+
+  it("names the number of sessions a group revoke ends", () => {
+    render(<WorkloadRevocationLadder workload={workload} sessionCount={3} />);
+
+    const revoke = screen.getAllByRole("listitem")[0]!;
+    expect(revoke.textContent).toContain("Revoke these 3 sessions");
+    expect(revoke.textContent).toContain("Ends those tokens now");
+  });
+});
+
+describe("WorkloadSessionBadge", () => {
+  it("names the issuer and the agent beside the badge", () => {
+    renderBadge({ workload });
+
+    expect(screen.getByText("Workload")).not.toBeNull();
+    expect(
+      screen.getByText("GitHub Actions · Agent Deploy bot"),
+    ).not.toBeNull();
+  });
+
+  it("falls back to the issuer id and says when no agent is assigned", () => {
+    renderBadge({
+      workload: {
+        ...workload,
+        workloadIssuerName: undefined,
+        workloadIssuerUrl: undefined,
+        agentId: undefined,
+        agentName: undefined,
+        agentStatus: undefined,
+      },
+    });
+
+    expect(
+      screen.getByText(
+        `Issuer ${workload.workloadIssuerId} · No agent assigned`,
+      ),
+    ).not.toBeNull();
+  });
+});
+
+const workloadSession = {
+  id: "session-1",
+  userSessionIssuerId: "issuer-1",
+  subjectUrn: `workload:${workload.workloadIssuerId}:${workload.externalSubject}`,
+  subjectType: "workload",
+  subjectDisplayName: workload.externalSubject,
+  jti: "jti-1",
+  issuerSlug: "the-server",
+  upstreams: [],
+  workload,
+} as unknown as UserSession;
+
 describe("RevokeSessionDialog", () => {
   it("warns that revoking a workload session does not keep it out", () => {
-    const session = {
-      id: "session-1",
-      userSessionIssuerId: "issuer-1",
-      subjectUrn: `workload:${workload.workloadIssuerId}:${workload.externalSubject}`,
-      subjectType: "workload",
-      subjectDisplayName: workload.externalSubject,
-      jti: "jti-1",
-      issuerSlug: "the-server",
-      upstreams: [],
-      workload,
-    } as unknown as UserSession;
-
     render(
       <RevokeSessionDialog
-        session={session}
+        session={workloadSession}
         open
         onOpenChange={() => {}}
         onRevoked={() => {}}
@@ -156,5 +250,53 @@ describe("RevokeSessionDialog", () => {
       screen.getByText(/can exchange a new token and reconnect/i),
     ).not.toBeNull();
     expect(screen.getByText("Withdraw the admission")).not.toBeNull();
+  });
+
+  it("revokes the session and reports it", async () => {
+    const onRevoked = vi.fn<() => void>();
+    const onOpenChange = vi.fn<(open: boolean) => void>();
+    revokeMutate.mockImplementation((_vars, opts) => opts?.onSuccess?.());
+
+    render(
+      <RevokeSessionDialog
+        session={workloadSession}
+        open
+        onOpenChange={onOpenChange}
+        onRevoked={onRevoked}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Revoke" }));
+
+    expect(revokeMutate).toHaveBeenCalledTimes(1);
+    expect(revokeMutate.mock.calls[0]?.[0]).toEqual({
+      request: { id: workloadSession.id },
+    });
+    expect(onRevoked).toHaveBeenCalledTimes(1);
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("keeps the re-authenticate copy for a human session", () => {
+    const humanSession = {
+      ...workloadSession,
+      subjectUrn: "user:someone",
+      subjectType: "user",
+      subjectDisplayName: "Ada Lovelace",
+      workload: undefined,
+    } as unknown as UserSession;
+
+    render(
+      <RevokeSessionDialog
+        session={humanSession}
+        open
+        onOpenChange={() => {}}
+        onRevoked={() => {}}
+      />,
+    );
+
+    expect(
+      screen.getByText(/The client will need to re-authenticate\./),
+    ).not.toBeNull();
+    expect(screen.queryByText("Withdraw the admission")).toBeNull();
   });
 });

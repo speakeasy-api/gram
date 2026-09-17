@@ -317,6 +317,36 @@ func TestListUserSessions_AdmissionsUnderDeletedIssuerAreNotListed(t *testing.T)
 	require.Empty(t, got.Admissions, "a deleted issuer admits nothing")
 }
 
+// Deleting an issuer withdraws the authority of every workload it vouched for,
+// so the row must not keep advertising an agent the workload can no longer act
+// through.
+func TestListUserSessions_DeletedIssuerDropsTheAssignedAgent(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	issuerID := seedIssuer(t, ctx, ti, "workload-deleted-issuer-agent")
+	workloadIssuerID := seedWorkloadIssuer(t, ctx, ti.conn, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, "Doomed issuer")
+	agent := seedWorkloadAgent(t, ctx, ti.conn, "Orphaned bot")
+	seedWorkloadAssignment(t, ctx, ti.conn, workloadIssuerID, workloadTestSubject, agent.ID)
+
+	session, err := seedUserSession(t, ctx, ti.conn, issuerID, urn.NewWorkloadSubject(workloadIssuerID, workloadTestSubject))
+	require.NoError(t, err)
+
+	live := sessionByID(t, listAllSessions(t, ctx, ti, nil), session.ID).Workload
+	require.NotNil(t, live.AgentID, "the assignment resolves while the issuer is live")
+
+	_, err = ti.conn.Exec( //nolint:glint // notestingrawsql: no delete query exists yet; writes belong to the management API milestone
+		ctx, `UPDATE workload_issuers SET deleted_at = clock_timestamp() WHERE id = $1`, workloadIssuerID)
+	require.NoError(t, err)
+
+	got := sessionByID(t, listAllSessions(t, ctx, ti, nil), session.ID).Workload
+	require.NotNil(t, got)
+	require.Nil(t, got.AgentID, "a deleted issuer withdraws the workload's authority")
+	require.Nil(t, got.AgentName)
+	require.Nil(t, got.AgentStatus)
+}
+
 func TestRevokeUserSession_WorkloadSession(t *testing.T) {
 	t.Parallel()
 
