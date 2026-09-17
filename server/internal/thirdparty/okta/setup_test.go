@@ -66,6 +66,9 @@ type stubSigner struct {
 	jtis     []string
 	replay   bool
 	last     string
+
+	// assertions holds every assertion returned, including replays.
+	assertions []string
 }
 
 func (s *stubSigner) SignClientAssertion(_ context.Context, req remotesessions.ClientAssertionRequest) (string, error) {
@@ -74,6 +77,7 @@ func (s *stubSigner) SignClientAssertion(_ context.Context, req remotesessions.C
 	s.calls++
 	s.requests = append(s.requests, req)
 	if s.replay && s.last != "" {
+		s.assertions = append(s.assertions, s.last)
 		return s.last, nil
 	}
 
@@ -97,6 +101,7 @@ func (s *stubSigner) SignClientAssertion(_ context.Context, req remotesessions.C
 	}
 	s.jtis = append(s.jtis, jti)
 	s.last = assertion
+	s.assertions = append(s.assertions, assertion)
 	return assertion, nil
 }
 
@@ -116,6 +121,12 @@ func (s *stubSigner) Last() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.last
+}
+
+func (s *stubSigner) Assertions() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.assertions)
 }
 
 func (s *stubSigner) setReplay(replay bool) {
@@ -157,6 +168,7 @@ type stubOkta struct {
 	requireResourceNonce bool
 	resourceNonce        string
 	grantedScopes        []string
+	scopeErrorCode       string
 	proofJTIs            map[string]bool
 	assertionJTIs        map[string]bool
 	tokens               map[string]string
@@ -194,6 +206,7 @@ func newStubOkta(t *testing.T, clock *fakeClock) *stubOkta {
 		requireResourceNonce: false,
 		resourceNonce:        "",
 		grantedScopes:        strings.Fields(stubScopes),
+		scopeErrorCode:       "invalid_scope",
 		proofJTIs:            map[string]bool{},
 		assertionJTIs:        map[string]bool{},
 		tokens:               map[string]string{},
@@ -324,6 +337,14 @@ func (s *stubOkta) setEmitResourceNonce(nonce string) {
 	s.emitResourceNonce = nonce
 }
 
+// setScopeErrorCode picks the OAuth error for an all-ungranted scope request;
+// Okta returns invalid_scope or consent_required depending on the org.
+func (s *stubOkta) setScopeErrorCode(code string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.scopeErrorCode = code
+}
+
 func (s *stubOkta) setGrantedScopes(scopes []string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -396,11 +417,16 @@ func (s *stubOkta) verifyProof(w http.ResponseWriter, r *http.Request, accessTok
 	}
 	thumbprint := base64.RawURLEncoding.EncodeToString(thumb)
 
-	expectedHTU := s.srv.URL + r.URL.Path
+	// EscapedPath keeps the wire form so escaped ids compare against the signed htu.
+	expectedHTU := s.srv.URL + r.URL.EscapedPath()
 	if claims.HTM != r.Method || claims.HTU != expectedHTU {
 		return s.rejectProof(w, http.StatusBadRequest, "htm/htu mismatch")
 	}
-	if accessToken != "" {
+	if accessToken == "" {
+		if claims.ATH != "" {
+			return s.rejectProof(w, http.StatusBadRequest, "unexpected ath")
+		}
+	} else {
 		sum := sha256.Sum256([]byte(accessToken))
 		if claims.ATH != base64.RawURLEncoding.EncodeToString(sum[:]) {
 			return s.rejectProof(w, http.StatusUnauthorized, "ath mismatch")
@@ -486,6 +512,10 @@ func (s *stubOkta) handleToken(w http.ResponseWriter, r *http.Request) {
 		s.writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid_client", "error_description": "assertion claims mismatch"})
 		return
 	}
+	if claims.ID == "" {
+		s.writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid_client", "error_description": "client assertion missing jti"})
+		return
+	}
 	s.mu.Lock()
 	replay := s.assertionJTIs[claims.ID]
 	s.assertionJTIs[claims.ID] = true
@@ -496,7 +526,7 @@ func (s *stubOkta) handleToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.mu.Lock()
-	requireNonce, nonce, granted, tokenType := s.requireTokenNonce, s.tokenNonce, s.grantedScopes, s.tokenType
+	requireNonce, nonce, granted, tokenType, scopeErr := s.requireTokenNonce, s.tokenNonce, s.grantedScopes, s.tokenType, s.scopeErrorCode
 	if s.rotateTokenNonce {
 		s.tokenNonce = "rotated-" + uuid.NewString()
 	}
@@ -507,7 +537,7 @@ func (s *stubOkta) handleToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Ungranted scopes are trimmed; this stub models the invalid_scope variant.
+	// Ungranted scopes are trimmed; an all-ungranted request fails with scopeErrorCode.
 	scope := granted
 	if requested := strings.Fields(r.Form.Get("scope")); len(requested) > 0 {
 		scope = make([]string, 0, len(requested))
@@ -517,7 +547,7 @@ func (s *stubOkta) handleToken(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if len(scope) == 0 {
-			s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_scope", "error_description": "One or more scopes are not configured for the authorization server resource."})
+			s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": scopeErr, "error_description": "One or more scopes are not configured for the authorization server resource."})
 			return
 		}
 	}

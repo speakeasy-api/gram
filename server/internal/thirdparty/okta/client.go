@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/google/uuid"
 
@@ -168,12 +169,19 @@ func NewClient(logger *slog.Logger, client *guardian.HTTPClient, signer remotese
 // parseOrgURL accepts an https origin, or an http origin on a loopback host
 // for local stubs, with no path, query, fragment, or userinfo.
 func parseOrgURL(raw string) (*url.URL, error) {
-	orgURL, err := url.Parse(strings.TrimRight(raw, "/"))
-	if err != nil || orgURL.Host == "" || orgURL.Opaque != "" {
+	orgURL, err := url.Parse(raw)
+	if err != nil || orgURL.Hostname() == "" || orgURL.Opaque != "" {
 		return nil, fmt.Errorf("okta: invalid org url %q", raw)
 	}
-	if orgURL.Path != "" || orgURL.RawQuery != "" || orgURL.Fragment != "" || orgURL.User != nil {
+	// Validate before trimming: an empty query or fragment ("?", "#") only shows in the raw string.
+	if strings.TrimRight(orgURL.Path, "/") != "" || strings.ContainsAny(raw, "?#") || orgURL.User != nil {
 		return nil, fmt.Errorf("okta: org url %q must be an origin without path, query, fragment, or userinfo", raw)
+	}
+	// Non-ASCII hosts fold differently across URL, DNS, and TLS; require the punycoded form.
+	for _, r := range orgURL.Hostname() {
+		if r > unicode.MaxASCII {
+			return nil, fmt.Errorf("okta: org url %q host must be ascii", raw)
+		}
 	}
 	switch orgURL.Scheme {
 	case "https":
@@ -184,7 +192,20 @@ func parseOrgURL(raw string) (*url.URL, error) {
 	default:
 		return nil, fmt.Errorf("okta: org url %q must use https", raw)
 	}
+	orgURL.Path, orgURL.RawPath = "", ""
 	return orgURL, nil
+}
+
+// validateAppID rejects ids that would not stay a single opaque path segment.
+func validateAppID(appID string) error {
+	switch {
+	case appID == "":
+		return errors.New("okta: app id is required")
+	case appID == "." || appID == ".." || strings.ContainsAny(appID, `/\`):
+		return fmt.Errorf("okta: invalid app id %q", appID)
+	default:
+		return nil
+	}
 }
 
 func isLoopbackHost(host string) bool {
@@ -227,10 +248,10 @@ func (c *httpClient) ListApps(ctx context.Context, req ListAppsRequest) ([]App, 
 }
 
 func (c *httpClient) GetApp(ctx context.Context, appID string) (*App, error) {
-	if appID == "" {
-		return nil, errors.New("okta: app id is required")
+	if err := validateAppID(appID); err != nil {
+		return nil, err
 	}
-	raw, _, err := getJSON[appJSON](ctx, c, c.apiURL("/api/v1/apps", appID, nil))
+	raw, _, err := getJSON[appJSON](ctx, c, c.apiURL("/api/v1/apps", url.PathEscape(appID), nil))
 	if err != nil {
 		return nil, err
 	}
@@ -239,8 +260,8 @@ func (c *httpClient) GetApp(ctx context.Context, appID string) (*App, error) {
 }
 
 func (c *httpClient) ListAppUsers(ctx context.Context, req ListAppUsersRequest) ([]AppUser, error) {
-	if req.AppID == "" {
-		return nil, errors.New("okta: app id is required")
+	if err := validateAppID(req.AppID); err != nil {
+		return nil, err
 	}
 	q := url.Values{}
 	setLimit(q, req.Limit)
@@ -264,8 +285,8 @@ func (c *httpClient) ListAppUsers(ctx context.Context, req ListAppUsersRequest) 
 }
 
 func (c *httpClient) ListAppGroups(ctx context.Context, req ListAppGroupsRequest) ([]AppGroup, error) {
-	if req.AppID == "" {
-		return nil, errors.New("okta: app id is required")
+	if err := validateAppID(req.AppID); err != nil {
+		return nil, err
 	}
 	q := url.Values{}
 	setLimit(q, req.Limit)
@@ -362,6 +383,7 @@ func setLimit(q url.Values, limit int) {
 	}
 }
 
+// apiURL joins base and an already path-escaped id under the org origin.
 func (c *httpClient) apiURL(base, id string, q url.Values) *url.URL {
 	target := c.orgURL.JoinPath(base)
 	if id != "" {

@@ -2,7 +2,6 @@ package okta
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"slices"
@@ -30,7 +29,7 @@ type Fixtures struct {
 }
 
 // Fake is an in-memory Client for tests and local development. It matches
-// on Query and Search only; ListAppsRequest.Status is ignored.
+// on Query, Status, and Search only.
 type Fake struct {
 	mu       sync.Mutex
 	fixtures Fixtures
@@ -79,6 +78,9 @@ func (f *Fake) ListApps(_ context.Context, req ListAppsRequest) ([]App, error) {
 	defer f.mu.Unlock()
 	out := make([]App, 0, len(f.fixtures.Apps))
 	for _, app := range f.fixtures.Apps {
+		if req.Status != "" && app.Status != req.Status {
+			continue
+		}
 		if req.Query != "" && !strings.HasPrefix(strings.ToLower(app.Label), strings.ToLower(req.Query)) && !strings.HasPrefix(strings.ToLower(app.Name), strings.ToLower(req.Query)) {
 			continue
 		}
@@ -91,8 +93,8 @@ func (f *Fake) GetApp(_ context.Context, appID string) (*App, error) {
 	if err := f.record("GetApp"); err != nil {
 		return nil, err
 	}
-	if appID == "" {
-		return nil, errors.New("okta: app id is required")
+	if err := validateAppID(appID); err != nil {
+		return nil, err
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -115,8 +117,8 @@ func (f *Fake) ListAppUsers(_ context.Context, req ListAppUsersRequest) ([]AppUs
 	if err := f.record("ListAppUsers"); err != nil {
 		return nil, err
 	}
-	if req.AppID == "" {
-		return nil, errors.New("okta: app id is required")
+	if err := validateAppID(req.AppID); err != nil {
+		return nil, err
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -127,8 +129,8 @@ func (f *Fake) ListAppGroups(_ context.Context, req ListAppGroupsRequest) ([]App
 	if err := f.record("ListAppGroups"); err != nil {
 		return nil, err
 	}
-	if req.AppID == "" {
-		return nil, errors.New("okta: app id is required")
+	if err := validateAppID(req.AppID); err != nil {
+		return nil, err
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
