@@ -67,7 +67,7 @@ export function riskResultAnchorId(result: RiskResult): string | undefined {
 /** Whether one finding flags a literal secret or personal datum: the scanner
  * sources by construction, and the LLM analyzer when its rule id lands in the
  * secret or PII category (its other rules describe behavior, not values). */
-export function resultIsSensitive(result: RiskResult): boolean {
+function resultIsSensitive(result: RiskResult): boolean {
   if (result.source === "gitleaks" || result.source === "presidio") return true;
   if (!isLlmAnalyzerSource(result.source)) return false;
   const ruleId = result.ruleId ?? "";

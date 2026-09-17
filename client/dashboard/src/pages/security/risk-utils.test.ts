@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  evidenceShowsRuleTitle,
   getCategoryCodeForFinding,
   getCategoryForFinding,
+  hasOnlyRationaleSources,
   isJudgeSource,
   isLlmAnalyzerSource,
   isRationaleSource,
@@ -55,5 +57,33 @@ describe("source predicates", () => {
     expect(isRationaleSource("prompt_injection")).toBe(true);
     expect(isRationaleSource("gitleaks")).toBe(false);
     expect(isRationaleSource(undefined)).toBe(false);
+  });
+
+  it("hides the reveal-all toggle only for signals backed solely by rationale sources", () => {
+    expect(hasOnlyRationaleSources(["llm_analyzer"])).toBe(true);
+    expect(hasOnlyRationaleSources(["llm_judge", "llm_analyzer"])).toBe(true);
+    expect(hasOnlyRationaleSources(["gitleaks"])).toBe(false);
+    expect(hasOnlyRationaleSources(["llm_analyzer", "presidio"])).toBe(false);
+    expect(hasOnlyRationaleSources([])).toBe(false);
+  });
+});
+
+describe("evidenceShowsRuleTitle", () => {
+  it("names the rule for scanner findings", () => {
+    expect(evidenceShowsRuleTitle("gitleaks", "secret.aws_access_token")).toBe(
+      true,
+    );
+  });
+
+  it("omits the rule for judge and analyzer category findings", () => {
+    expect(evidenceShowsRuleTitle("llm_judge", "llm_judge")).toBe(false);
+    expect(evidenceShowsRuleTitle("llm_analyzer", "secret.llm")).toBe(false);
+    expect(evidenceShowsRuleTitle("llm_analyzer", "pii.llm")).toBe(false);
+  });
+
+  it("keeps the dead-letter sentinel's title, the only hint the analysis never ran", () => {
+    expect(
+      evidenceShowsRuleTitle("llm_analyzer", "llm_analyzer.dead_letter"),
+    ).toBe(true);
   });
 });

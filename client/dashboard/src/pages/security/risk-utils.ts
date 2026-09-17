@@ -87,6 +87,29 @@ export function hasJudgeSource(sources: readonly string[]): boolean {
   return sources.some(isJudgeSource);
 }
 
+// A signal whose every detection source reports a rationale rather than a
+// match renders all its evidence through the rationale path, so the
+// panel-wide reveal-all toggle (which only drives MaskedMatch rows) would
+// have nothing to act on. Empty sources are not "only rationale": the
+// evidence surface then keeps its default redacted rendering.
+export function hasOnlyRationaleSources(sources: readonly string[]): boolean {
+  return sources.length > 0 && sources.every(isRationaleSource);
+}
+
+// Whether an evidence row names the rule beside its category code. Judge and
+// LLM analyzer category rules restate the category ("secret.llm" under
+// SECRETS), so only the code shows for them — except the analyzer's
+// dead-letter sentinel, which classifies to `custom` and would otherwise
+// leave no hint that the analysis never ran. Scanner rules always show.
+export function evidenceShowsRuleTitle(
+  source: string | undefined,
+  ruleId: string | undefined,
+): boolean {
+  return (
+    !isRationaleSource(source) || ruleId === LLM_ANALYZER_DEAD_LETTER_RULE_ID
+  );
+}
+
 const ruleIdToCategory = new Map<string, RuleCategory>();
 const ruleIdToTitle = new Map<string, string>();
 

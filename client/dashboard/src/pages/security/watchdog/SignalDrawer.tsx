@@ -28,9 +28,11 @@ import {
   RevealAllToggle,
 } from "../risk-ui";
 import {
+  evidenceShowsRuleTitle,
   getCategoryCodeForFinding,
   getRuleTitleFallback,
   hasJudgeSource,
+  hasOnlyRationaleSources,
   isJudgeSource,
   isRationaleSource,
   scoreToRating,
@@ -131,10 +133,13 @@ function EvidenceRow({
   //
   // LLM analyzer findings sit in between: their evidence is the model's
   // rationale (no match to redact), and their single rule per category
-  // restates the category code, so the footer names the category alone — but
-  // a rule exclusion silences just that category, so they keep the menu.
+  // restates the category code, so the footer names the category alone
+  // (except the dead-letter sentinel, whose title is the only hint that the
+  // analysis never ran) — but a rule exclusion silences just that category,
+  // so they keep the menu.
   const judge = isJudgeSource(result.source);
   const rationale = isRationaleSource(result.source);
+  const showRuleTitle = evidenceShowsRuleTitle(result.source, result.ruleId);
   return (
     <div className="border-border overflow-hidden rounded-md border">
       <div className="flex items-center justify-between gap-2 px-3 py-2">
@@ -168,10 +173,11 @@ function EvidenceRow({
       <div className="flex items-center justify-between gap-2 px-3 py-2">
         <Text small muted className="truncate font-mono">
           {/* Category code, never the raw scanner source — and no rule title
-              for judge or LLM analyzer findings, whose single rule restates
-              the category. */}
+              for judge or LLM analyzer category findings, whose single rule
+              restates the category. */}
           Triggered: {getCategoryCodeForFinding(result.source, result.ruleId)}
-          {!rationale && ` · ${getRuleTitleFallback(result.ruleId)}`} (conf{" "}
+          {showRuleTitle &&
+            ` · ${getRuleTitleFallback(result.ruleId)}`} (conf{" "}
           {(result.confidence ?? 0).toFixed(2)})
         </Text>
         <span className="flex shrink-0 gap-1">
@@ -271,6 +277,12 @@ export function SignalDrawer({
   // action, scoped to this signal's rule.
   const judgeSignal =
     signal !== null && hasJudgeSource(signal.detectionSources);
+  // Judge and LLM analyzer evidence shows rationales, not redacted matches,
+  // so for a signal backed only by such sources the "redacted" label and the
+  // reveal-all toggle (which only drives MaskedMatch rows) would both
+  // mislead.
+  const rationaleSignal =
+    signal !== null && hasOnlyRationaleSources(signal.detectionSources);
 
   // The signal lives in the URL, so back/forward can swap it mid-collection;
   // bumping the token makes an in-flight collection drop its result instead
@@ -539,15 +551,11 @@ export function SignalDrawer({
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
                           <Text small muted className="font-medium uppercase">
-                            {/* Judge evidence shows rationales, not redacted
-                                matches, so the label and the reveal-all
-                                toggle (which only drives MaskedMatch rows)
-                                would both mislead there. */}
-                            {judgeSignal
+                            {rationaleSignal
                               ? "Latest evidence"
                               : "Latest evidence · redacted"}
                           </Text>
-                          {!judgeSignal && <RevealAllToggle />}
+                          {!rationaleSignal && <RevealAllToggle />}
                         </div>
                         {evidenceQuery.isLoading && (
                           <Text small muted>
