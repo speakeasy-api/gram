@@ -1,6 +1,6 @@
--- Verified connections whose snapshot is older than their interval. Due-ness
--- is evaluated on the database clock; excluded ids are the ones this
--- coordinator pass already attempted.
+-- Verified connections whose snapshot is stale or was requested after the
+-- last run started. Due-ness is evaluated on the database clock; excluded
+-- ids are the ones this coordinator pass already attempted.
 -- name: ListSyncCandidates :many
 SELECT
     c.id AS connection_id
@@ -18,6 +18,7 @@ WHERE c.provider = 'okta'
   AND c.status = 'verified'
   AND (
     o.applications_synced_at IS NULL
+    OR o.applications_sync_requested_at > o.applications_synced_at
     OR o.applications_synced_at + make_interval(secs => o.applications_sync_interval_seconds) <= clock_timestamp()
   )
   AND NOT (c.id = ANY (@exclude_connection_ids::uuid[]))
@@ -49,16 +50,34 @@ WHERE c.id = @connection_id
   AND c.provider = 'okta'
   AND c.deleted IS FALSE;
 
--- name: MarkApplicationsSynced :exec
+-- Serializes applies with each other and with revoke, which locks the same
+-- row; a revoked or unverified connection yields no row.
+-- name: LockSyncConnection :one
+SELECT
+    c.id
+  , o.applications_synced_at
+FROM identity_provider_connections AS c
+JOIN okta_identity_provider_connections AS o
+  ON o.identity_provider_connection_id = c.id
+ AND o.organization_id = c.organization_id
+ AND o.deleted IS FALSE
+WHERE c.id = @connection_id
+  AND c.organization_id = @organization_id
+  AND c.provider = 'okta'
+  AND c.deleted IS FALSE
+  AND c.status = 'verified'
+FOR UPDATE OF c;
+
+-- name: MarkApplicationsSynced :execrows
 UPDATE okta_identity_provider_connections
-SET applications_synced_at = clock_timestamp(),
+SET applications_synced_at = @synced_at::timestamptz,
     updated_at = clock_timestamp()
 WHERE identity_provider_connection_id = @identity_provider_connection_id
   AND organization_id = @organization_id
   AND deleted IS FALSE;
 
 -- A run that never finished (worker died) is closed before a new one opens.
--- name: FailInterruptedReconcileRuns :exec
+-- name: FailInterruptedReconcileRuns :execrows
 UPDATE okta_application_reconcile_runs
 SET status = 'failed',
     finished_at = clock_timestamp(),
@@ -67,6 +86,12 @@ SET status = 'failed',
 WHERE organization_id = @organization_id
   AND identity_provider_connection_id = @identity_provider_connection_id
   AND status = 'running';
+
+-- name: PruneReconcileRuns :execrows
+DELETE FROM okta_application_reconcile_runs
+WHERE organization_id = @organization_id
+  AND identity_provider_connection_id = @identity_provider_connection_id
+  AND started_at < @before::timestamptz;
 
 -- name: CreateReconcileRun :one
 INSERT INTO okta_application_reconcile_runs (
@@ -103,6 +128,18 @@ WHERE organization_id = @organization_id
 ORDER BY started_at DESC, id DESC
 LIMIT 1;
 
+-- Revocation deletes the snapshot outright: it is tenant-wide directory
+-- data. Assignments cascade from the application rows.
+-- name: DeleteApplicationsForConnection :execrows
+DELETE FROM okta_applications
+WHERE organization_id = @organization_id
+  AND identity_provider_connection_id = @identity_provider_connection_id;
+
+-- name: DeleteReconcileRunsForConnection :execrows
+DELETE FROM okta_application_reconcile_runs
+WHERE organization_id = @organization_id
+  AND identity_provider_connection_id = @identity_provider_connection_id;
+
 -- name: ListLiveApplicationIDs :many
 SELECT okta_app_id
 FROM okta_applications
@@ -117,9 +154,9 @@ WHERE organization_id = @organization_id
   AND identity_provider_connection_id = @identity_provider_connection_id
   AND removed_at IS NULL;
 
--- Upsert one page of applications. last_seen_at always advances; updated_at
--- moves only when the recorded attributes changed, so an unchanged snapshot
--- leaves it alone.
+-- Upsert one chunk of applications. last_seen_at always advances; updated_at
+-- moves only when the recorded attributes changed. features travels as a
+-- comma-joined string per row because sqlc cannot type a text[][] parameter.
 -- name: UpsertApplications :exec
 INSERT INTO okta_applications (
   organization_id,
@@ -170,8 +207,8 @@ SET label = EXCLUDED.label,
     removed_at = NULL,
     updated_at = CASE
       WHEN okta_applications.removed_at IS NOT NULL
-        OR (okta_applications.label, okta_applications.name, okta_applications.sign_on_mode, okta_applications.status, okta_applications.features, okta_applications.okta_last_updated_at)
-           IS DISTINCT FROM (EXCLUDED.label, EXCLUDED.name, EXCLUDED.sign_on_mode, EXCLUDED.status, EXCLUDED.features, EXCLUDED.okta_last_updated_at)
+        OR (okta_applications.label, okta_applications.name, okta_applications.sign_on_mode, okta_applications.status, okta_applications.features, okta_applications.okta_created_at, okta_applications.okta_last_updated_at)
+           IS DISTINCT FROM (EXCLUDED.label, EXCLUDED.name, EXCLUDED.sign_on_mode, EXCLUDED.status, EXCLUDED.features, EXCLUDED.okta_created_at, EXCLUDED.okta_last_updated_at)
       THEN clock_timestamp()
       ELSE okta_applications.updated_at
     END;
@@ -238,6 +275,7 @@ WHERE a.organization_id = @organization_id
   AND a.principal_kind = s.principal_kind
   AND a.okta_principal_id = s.okta_principal_id;
 
+-- Live rows sort first so the cap never hides them behind removed ones.
 -- name: ListApplications :many
 SELECT
     a.*
@@ -257,5 +295,37 @@ FROM okta_applications AS a
 WHERE a.organization_id = @organization_id
   AND a.identity_provider_connection_id = @identity_provider_connection_id
   AND (a.removed_at IS NULL OR @include_removed::boolean)
-ORDER BY a.label ASC, a.okta_app_id ASC
+ORDER BY (a.removed_at IS NULL) DESC, a.label ASC, a.okta_app_id ASC
 LIMIT @limit_count;
+
+-- name: CountApplicationsForConnection :one
+SELECT COUNT(*)
+FROM okta_applications
+WHERE organization_id = @organization_id
+  AND identity_provider_connection_id = @identity_provider_connection_id;
+
+-- name: CountAssignmentsForConnection :one
+SELECT COUNT(*)
+FROM okta_application_assignments
+WHERE organization_id = @organization_id
+  AND identity_provider_connection_id = @identity_provider_connection_id;
+
+-- name: CountReconcileRunsForConnection :one
+SELECT COUNT(*)
+FROM okta_application_reconcile_runs
+WHERE organization_id = @organization_id
+  AND identity_provider_connection_id = @identity_provider_connection_id;
+
+-- name: GetReconcileRun :one
+SELECT *
+FROM okta_application_reconcile_runs
+WHERE id = @id
+  AND organization_id = @organization_id;
+
+-- Test fixture: ages or closes a run so interruption and pruning can be observed.
+-- name: BackdateReconcileRun :exec
+UPDATE okta_application_reconcile_runs
+SET status = @status,
+    started_at = @started_at::timestamptz
+WHERE id = @id
+  AND organization_id = @organization_id;

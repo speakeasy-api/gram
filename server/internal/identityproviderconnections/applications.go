@@ -2,10 +2,10 @@ package identityproviderconnections
 
 import (
 	"context"
-	"errors"
+	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 
 	gen "github.com/speakeasy-api/gram/server/gen/identity_provider_connections"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -13,12 +13,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oktaapplications"
 	apprepo "github.com/speakeasy-api/gram/server/internal/oktaapplications/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
-// SyncApplications clears the snapshot watermark so the coordinator's next
-// pass runs the connection, and nudges the coordinator.
+// SyncApplications records a sync request so the coordinator's next pass runs
+// the connection, and nudges the coordinator.
 func (s *Service) SyncApplications(ctx context.Context, payload *gen.SyncApplicationsPayload) (*gen.OktaIdentityProviderConnection, error) {
 	authCtx, logger, err := s.authorize(ctx, authz.ScopeOrgAdmin, true)
 	if err != nil {
@@ -48,12 +49,12 @@ func (s *Service) SyncApplications(ctx context.Context, payload *gen.SyncApplica
 	if err := s.allow(ctx, logger, s.syncLimiter, authCtx.ActiveOrganizationID, "applications sync rate limit exceeded, try again shortly"); err != nil {
 		return nil, err
 	}
-	oktaRow, err := q.MarkOktaApplicationsSyncDue(ctx, repo.MarkOktaApplicationsSyncDueParams{
+	oktaRow, err := q.RequestOktaApplicationsSync(ctx, repo.RequestOktaApplicationsSyncParams{
 		IdentityProviderConnectionID: id,
 		OrganizationID:               authCtx.ActiveOrganizationID,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "mark applications sync due").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "record applications sync request").LogError(ctx, logger)
 	}
 	after := connectionRows{Connection: before.Connection, Okta: oktaRow, Managed: before.Managed}
 	if err := s.audit.LogIdentityProviderConnectionSyncApplications(ctx, dbtx, s.auditEvent(authCtx, id, snapshot(*before), snapshot(after))); err != nil {
@@ -63,14 +64,26 @@ func (s *Service) SyncApplications(ctx context.Context, payload *gen.SyncApplica
 		return nil, oops.E(oops.CodeUnexpected, err, "commit applications sync request").LogError(ctx, logger)
 	}
 
-	// The coordinator's schedule picks the connection up within its interval
-	// even when the nudge fails.
+	s.kickApplicationSync(ctx, logger)
+	return buildConnectionView(after), nil
+}
+
+// kickApplicationSync nudges the coordinator off the request path; the
+// schedule picks the connection up within its interval even when the nudge
+// fails or is not configured.
+func (s *Service) kickApplicationSync(ctx context.Context, logger *slog.Logger) {
 	if s.syncTrigger == nil {
 		logger.WarnContext(ctx, "applications sync trigger not configured; waiting for the scheduled pass")
-	} else if err := s.syncTrigger.TriggerApplicationSync(ctx); err != nil {
-		logger.WarnContext(ctx, "applications sync trigger failed; waiting for the scheduled pass", attr.SlogError(err))
+		return
 	}
-	return buildConnectionView(after), nil
+	detached := context.WithoutCancel(ctx)
+	go func() {
+		triggerCtx, cancel := context.WithTimeout(detached, 10*time.Second)
+		defer cancel()
+		if err := s.syncTrigger.TriggerApplicationSync(triggerCtx); err != nil {
+			logger.WarnContext(triggerCtx, "applications sync trigger failed; waiting for the scheduled pass", attr.SlogError(err))
+		}
+	}()
 }
 
 // ListApplications returns the snapshot with live assignment counts and the last run.
@@ -89,14 +102,11 @@ func (s *Service) ListApplications(ctx context.Context, payload *gen.ListApplica
 	if err != nil {
 		return nil, err
 	}
+	if rows.Connection.Status != StatusVerified {
+		return nil, oops.E(oops.CodeFailedPrecondition, nil, "the connection is not verified; the snapshot is only served for verified connections")
+	}
 
-	q := apprepo.New(s.db)
-	apps, err := q.ListApplications(ctx, apprepo.ListApplicationsParams{
-		OrganizationID:               authCtx.ActiveOrganizationID,
-		IdentityProviderConnectionID: id,
-		IncludeRemoved:               payload.IncludeRemoved,
-		LimitCount:                   listApplicationsLimit,
-	})
+	apps, err := oktaapplications.ListSnapshot(ctx, s.db, authCtx.ActiveOrganizationID, id, payload.IncludeRemoved, listApplicationsLimit)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list applications snapshot").LogError(ctx, logger)
 	}
@@ -105,17 +115,13 @@ func (s *Service) ListApplications(ctx context.Context, payload *gen.ListApplica
 		items = append(items, buildApplicationView(app))
 	}
 
-	var lastRun *gen.IdentityProviderConnectionReconcileRun
-	run, err := q.GetLatestReconcileRun(ctx, apprepo.GetLatestReconcileRunParams{
-		OrganizationID:               authCtx.ActiveOrganizationID,
-		IdentityProviderConnectionID: id,
-	})
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-	case err != nil:
+	run, err := oktaapplications.LatestRun(ctx, s.db, authCtx.ActiveOrganizationID, id)
+	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load last reconcile run").LogError(ctx, logger)
-	default:
-		lastRun = buildReconcileRunView(run)
+	}
+	var lastRun *gen.IdentityProviderConnectionReconcileRun
+	if run != nil {
+		lastRun = buildReconcileRunView(*run)
 	}
 
 	return &gen.ListIdentityProviderConnectionApplicationsResult{

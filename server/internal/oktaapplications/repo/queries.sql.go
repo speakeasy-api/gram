@@ -12,6 +12,89 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const backdateReconcileRun = `-- name: BackdateReconcileRun :exec
+UPDATE okta_application_reconcile_runs
+SET status = $1,
+    started_at = $2::timestamptz
+WHERE id = $3
+  AND organization_id = $4
+`
+
+type BackdateReconcileRunParams struct {
+	Status         string
+	StartedAt      pgtype.Timestamptz
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+// Test fixture: ages or closes a run so interruption and pruning can be observed.
+func (q *Queries) BackdateReconcileRun(ctx context.Context, arg BackdateReconcileRunParams) error {
+	_, err := q.db.Exec(ctx, backdateReconcileRun,
+		arg.Status,
+		arg.StartedAt,
+		arg.ID,
+		arg.OrganizationID,
+	)
+	return err
+}
+
+const countApplicationsForConnection = `-- name: CountApplicationsForConnection :one
+SELECT COUNT(*)
+FROM okta_applications
+WHERE organization_id = $1
+  AND identity_provider_connection_id = $2
+`
+
+type CountApplicationsForConnectionParams struct {
+	OrganizationID               string
+	IdentityProviderConnectionID uuid.UUID
+}
+
+func (q *Queries) CountApplicationsForConnection(ctx context.Context, arg CountApplicationsForConnectionParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countApplicationsForConnection, arg.OrganizationID, arg.IdentityProviderConnectionID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countAssignmentsForConnection = `-- name: CountAssignmentsForConnection :one
+SELECT COUNT(*)
+FROM okta_application_assignments
+WHERE organization_id = $1
+  AND identity_provider_connection_id = $2
+`
+
+type CountAssignmentsForConnectionParams struct {
+	OrganizationID               string
+	IdentityProviderConnectionID uuid.UUID
+}
+
+func (q *Queries) CountAssignmentsForConnection(ctx context.Context, arg CountAssignmentsForConnectionParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countAssignmentsForConnection, arg.OrganizationID, arg.IdentityProviderConnectionID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countReconcileRunsForConnection = `-- name: CountReconcileRunsForConnection :one
+SELECT COUNT(*)
+FROM okta_application_reconcile_runs
+WHERE organization_id = $1
+  AND identity_provider_connection_id = $2
+`
+
+type CountReconcileRunsForConnectionParams struct {
+	OrganizationID               string
+	IdentityProviderConnectionID uuid.UUID
+}
+
+func (q *Queries) CountReconcileRunsForConnection(ctx context.Context, arg CountReconcileRunsForConnectionParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countReconcileRunsForConnection, arg.OrganizationID, arg.IdentityProviderConnectionID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createReconcileRun = `-- name: CreateReconcileRun :one
 INSERT INTO okta_application_reconcile_runs (
   organization_id,
@@ -52,7 +135,47 @@ func (q *Queries) CreateReconcileRun(ctx context.Context, arg CreateReconcileRun
 	return i, err
 }
 
-const failInterruptedReconcileRuns = `-- name: FailInterruptedReconcileRuns :exec
+const deleteApplicationsForConnection = `-- name: DeleteApplicationsForConnection :execrows
+DELETE FROM okta_applications
+WHERE organization_id = $1
+  AND identity_provider_connection_id = $2
+`
+
+type DeleteApplicationsForConnectionParams struct {
+	OrganizationID               string
+	IdentityProviderConnectionID uuid.UUID
+}
+
+// Revocation deletes the snapshot outright: it is tenant-wide directory
+// data. Assignments cascade from the application rows.
+func (q *Queries) DeleteApplicationsForConnection(ctx context.Context, arg DeleteApplicationsForConnectionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteApplicationsForConnection, arg.OrganizationID, arg.IdentityProviderConnectionID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteReconcileRunsForConnection = `-- name: DeleteReconcileRunsForConnection :execrows
+DELETE FROM okta_application_reconcile_runs
+WHERE organization_id = $1
+  AND identity_provider_connection_id = $2
+`
+
+type DeleteReconcileRunsForConnectionParams struct {
+	OrganizationID               string
+	IdentityProviderConnectionID uuid.UUID
+}
+
+func (q *Queries) DeleteReconcileRunsForConnection(ctx context.Context, arg DeleteReconcileRunsForConnectionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteReconcileRunsForConnection, arg.OrganizationID, arg.IdentityProviderConnectionID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const failInterruptedReconcileRuns = `-- name: FailInterruptedReconcileRuns :execrows
 UPDATE okta_application_reconcile_runs
 SET status = 'failed',
     finished_at = clock_timestamp(),
@@ -69,9 +192,12 @@ type FailInterruptedReconcileRunsParams struct {
 }
 
 // A run that never finished (worker died) is closed before a new one opens.
-func (q *Queries) FailInterruptedReconcileRuns(ctx context.Context, arg FailInterruptedReconcileRunsParams) error {
-	_, err := q.db.Exec(ctx, failInterruptedReconcileRuns, arg.OrganizationID, arg.IdentityProviderConnectionID)
-	return err
+func (q *Queries) FailInterruptedReconcileRuns(ctx context.Context, arg FailInterruptedReconcileRunsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, failInterruptedReconcileRuns, arg.OrganizationID, arg.IdentityProviderConnectionID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const finishReconcileRun = `-- name: FinishReconcileRun :one
@@ -180,6 +306,42 @@ func (q *Queries) GetLatestReconcileRun(ctx context.Context, arg GetLatestReconc
 	return i, err
 }
 
+const getReconcileRun = `-- name: GetReconcileRun :one
+SELECT id, organization_id, identity_provider_connection_id, status, started_at, finished_at, applications_seen, applications_added, applications_removed, assignments_added, assignments_removed, skipped_app_ids, truncated, error, created_at, updated_at
+FROM okta_application_reconcile_runs
+WHERE id = $1
+  AND organization_id = $2
+`
+
+type GetReconcileRunParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) GetReconcileRun(ctx context.Context, arg GetReconcileRunParams) (OktaApplicationReconcileRun, error) {
+	row := q.db.QueryRow(ctx, getReconcileRun, arg.ID, arg.OrganizationID)
+	var i OktaApplicationReconcileRun
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.IdentityProviderConnectionID,
+		&i.Status,
+		&i.StartedAt,
+		&i.FinishedAt,
+		&i.ApplicationsSeen,
+		&i.ApplicationsAdded,
+		&i.ApplicationsRemoved,
+		&i.AssignmentsAdded,
+		&i.AssignmentsRemoved,
+		&i.SkippedAppIds,
+		&i.Truncated,
+		&i.Error,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getSyncTarget = `-- name: GetSyncTarget :one
 SELECT
     c.id AS connection_id
@@ -250,7 +412,7 @@ FROM okta_applications AS a
 WHERE a.organization_id = $1
   AND a.identity_provider_connection_id = $2
   AND (a.removed_at IS NULL OR $3::boolean)
-ORDER BY a.label ASC, a.okta_app_id ASC
+ORDER BY (a.removed_at IS NULL) DESC, a.label ASC, a.okta_app_id ASC
 LIMIT $4
 `
 
@@ -282,6 +444,7 @@ type ListApplicationsRow struct {
 	GroupAssignments             int32
 }
 
+// Live rows sort first so the cap never hides them behind removed ones.
 func (q *Queries) ListApplications(ctx context.Context, arg ListApplicationsParams) ([]ListApplicationsRow, error) {
 	rows, err := q.db.Query(ctx, listApplications,
 		arg.OrganizationID,
@@ -415,6 +578,7 @@ WHERE c.provider = 'okta'
   AND c.status = 'verified'
   AND (
     o.applications_synced_at IS NULL
+    OR o.applications_sync_requested_at > o.applications_synced_at
     OR o.applications_synced_at + make_interval(secs => o.applications_sync_interval_seconds) <= clock_timestamp()
   )
   AND NOT (c.id = ANY ($1::uuid[]))
@@ -433,9 +597,9 @@ type ListSyncCandidatesRow struct {
 	OrganizationSlug string
 }
 
-// Verified connections whose snapshot is older than their interval. Due-ness
-// is evaluated on the database clock; excluded ids are the ones this
-// coordinator pass already attempted.
+// Verified connections whose snapshot is stale or was requested after the
+// last run started. Due-ness is evaluated on the database clock; excluded
+// ids are the ones this coordinator pass already attempted.
 func (q *Queries) ListSyncCandidates(ctx context.Context, arg ListSyncCandidatesParams) ([]ListSyncCandidatesRow, error) {
 	rows, err := q.db.Query(ctx, listSyncCandidates, arg.ExcludeConnectionIds, arg.LimitCount)
 	if err != nil {
@@ -456,23 +620,84 @@ func (q *Queries) ListSyncCandidates(ctx context.Context, arg ListSyncCandidates
 	return items, nil
 }
 
-const markApplicationsSynced = `-- name: MarkApplicationsSynced :exec
+const lockSyncConnection = `-- name: LockSyncConnection :one
+SELECT
+    c.id
+  , o.applications_synced_at
+FROM identity_provider_connections AS c
+JOIN okta_identity_provider_connections AS o
+  ON o.identity_provider_connection_id = c.id
+ AND o.organization_id = c.organization_id
+ AND o.deleted IS FALSE
+WHERE c.id = $1
+  AND c.organization_id = $2
+  AND c.provider = 'okta'
+  AND c.deleted IS FALSE
+  AND c.status = 'verified'
+FOR UPDATE OF c
+`
+
+type LockSyncConnectionParams struct {
+	ConnectionID   uuid.UUID
+	OrganizationID string
+}
+
+type LockSyncConnectionRow struct {
+	ID                   uuid.UUID
+	ApplicationsSyncedAt pgtype.Timestamptz
+}
+
+// Serializes applies with each other and with revoke, which locks the same
+// row; a revoked or unverified connection yields no row.
+func (q *Queries) LockSyncConnection(ctx context.Context, arg LockSyncConnectionParams) (LockSyncConnectionRow, error) {
+	row := q.db.QueryRow(ctx, lockSyncConnection, arg.ConnectionID, arg.OrganizationID)
+	var i LockSyncConnectionRow
+	err := row.Scan(&i.ID, &i.ApplicationsSyncedAt)
+	return i, err
+}
+
+const markApplicationsSynced = `-- name: MarkApplicationsSynced :execrows
 UPDATE okta_identity_provider_connections
-SET applications_synced_at = clock_timestamp(),
+SET applications_synced_at = $1::timestamptz,
     updated_at = clock_timestamp()
-WHERE identity_provider_connection_id = $1
-  AND organization_id = $2
+WHERE identity_provider_connection_id = $2
+  AND organization_id = $3
   AND deleted IS FALSE
 `
 
 type MarkApplicationsSyncedParams struct {
+	SyncedAt                     pgtype.Timestamptz
 	IdentityProviderConnectionID uuid.UUID
 	OrganizationID               string
 }
 
-func (q *Queries) MarkApplicationsSynced(ctx context.Context, arg MarkApplicationsSyncedParams) error {
-	_, err := q.db.Exec(ctx, markApplicationsSynced, arg.IdentityProviderConnectionID, arg.OrganizationID)
-	return err
+func (q *Queries) MarkApplicationsSynced(ctx context.Context, arg MarkApplicationsSyncedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markApplicationsSynced, arg.SyncedAt, arg.IdentityProviderConnectionID, arg.OrganizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const pruneReconcileRuns = `-- name: PruneReconcileRuns :execrows
+DELETE FROM okta_application_reconcile_runs
+WHERE organization_id = $1
+  AND identity_provider_connection_id = $2
+  AND started_at < $3::timestamptz
+`
+
+type PruneReconcileRunsParams struct {
+	OrganizationID               string
+	IdentityProviderConnectionID uuid.UUID
+	Before                       pgtype.Timestamptz
+}
+
+func (q *Queries) PruneReconcileRuns(ctx context.Context, arg PruneReconcileRunsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, pruneReconcileRuns, arg.OrganizationID, arg.IdentityProviderConnectionID, arg.Before)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const removeApplications = `-- name: RemoveApplications :exec
@@ -590,8 +815,8 @@ SET label = EXCLUDED.label,
     removed_at = NULL,
     updated_at = CASE
       WHEN okta_applications.removed_at IS NOT NULL
-        OR (okta_applications.label, okta_applications.name, okta_applications.sign_on_mode, okta_applications.status, okta_applications.features, okta_applications.okta_last_updated_at)
-           IS DISTINCT FROM (EXCLUDED.label, EXCLUDED.name, EXCLUDED.sign_on_mode, EXCLUDED.status, EXCLUDED.features, EXCLUDED.okta_last_updated_at)
+        OR (okta_applications.label, okta_applications.name, okta_applications.sign_on_mode, okta_applications.status, okta_applications.features, okta_applications.okta_created_at, okta_applications.okta_last_updated_at)
+           IS DISTINCT FROM (EXCLUDED.label, EXCLUDED.name, EXCLUDED.sign_on_mode, EXCLUDED.status, EXCLUDED.features, EXCLUDED.okta_created_at, EXCLUDED.okta_last_updated_at)
       THEN clock_timestamp()
       ELSE okta_applications.updated_at
     END
@@ -611,9 +836,9 @@ type UpsertApplicationsParams struct {
 	OktaLastUpdatedAts           []pgtype.Timestamptz
 }
 
-// Upsert one page of applications. last_seen_at always advances; updated_at
-// moves only when the recorded attributes changed, so an unchanged snapshot
-// leaves it alone.
+// Upsert one chunk of applications. last_seen_at always advances; updated_at
+// moves only when the recorded attributes changed. features travels as a
+// comma-joined string per row because sqlc cannot type a text[][] parameter.
 func (q *Queries) UpsertApplications(ctx context.Context, arg UpsertApplicationsParams) error {
 	_, err := q.db.Exec(ctx, upsertApplications,
 		arg.OrganizationID,

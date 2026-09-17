@@ -11,6 +11,7 @@ package oktaapplications
 
 import (
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -54,6 +55,7 @@ func (a Assignment) key() AssignmentKey {
 }
 
 // Snapshot is what one run observed in Okta after skipping internal apps.
+// Applications and Assignments carry no duplicate keys.
 type Snapshot struct {
 	Applications []Application
 	Assignments  []Assignment
@@ -65,14 +67,27 @@ type Snapshot struct {
 	// applications missing from a truncated listing are not removed.
 	ApplicationsTruncated bool
 
-	// IncompleteAssignments holds application ids whose assignment listing
-	// hit a cap; their missing assignments are not removed.
-	IncompleteAssignments map[string]bool
+	// IncompleteUsers and IncompleteGroups hold application ids whose user
+	// or group assignment listing hit a cap; their missing assignments of
+	// that kind are not removed.
+	IncompleteUsers  map[string]bool
+	IncompleteGroups map[string]bool
 }
 
 // Truncated reports whether any listing in the snapshot hit a cap.
 func (s Snapshot) Truncated() bool {
-	return s.ApplicationsTruncated || len(s.IncompleteAssignments) > 0
+	return s.ApplicationsTruncated || len(s.IncompleteUsers) > 0 || len(s.IncompleteGroups) > 0
+}
+
+func (s Snapshot) incomplete(appID, kind string) bool {
+	switch kind {
+	case PrincipalKindUser:
+		return s.IncompleteUsers[appID]
+	case PrincipalKindGroup:
+		return s.IncompleteGroups[appID]
+	default:
+		return false
+	}
 }
 
 // Diff is the change a snapshot implies against the live rows.
@@ -85,8 +100,8 @@ type Diff struct {
 
 // Reconcile computes the diff between the live rows and a snapshot. Apps
 // absent from a truncated application listing stay live; assignments absent
-// from an incomplete per-app listing stay live; assignments of a removed app
-// are removed with it.
+// from an incomplete per-app listing of their kind stay live; assignments of
+// a removed app are removed with it.
 func Reconcile(liveApps []string, liveAssignments []AssignmentKey, snap Snapshot) Diff {
 	seenApps := make(map[string]bool, len(snap.Applications))
 	for _, app := range snap.Applications {
@@ -97,7 +112,7 @@ func Reconcile(liveApps []string, liveAssignments []AssignmentKey, snap Snapshot
 		live[id] = true
 	}
 
-	var diff Diff
+	diff := Diff{AddedApplications: nil, RemovedApplications: nil, AddedAssignments: nil, RemovedAssignments: nil}
 	for _, app := range snap.Applications {
 		if !live[app.ID] {
 			diff.AddedApplications = append(diff.AddedApplications, app.ID)
@@ -133,7 +148,7 @@ func Reconcile(liveApps []string, liveAssignments []AssignmentKey, snap Snapshot
 		switch {
 		case removedApps[k.AppID]:
 			diff.RemovedAssignments = append(diff.RemovedAssignments, k)
-		case seenApps[k.AppID] && !snap.IncompleteAssignments[k.AppID]:
+		case seenApps[k.AppID] && !snap.incomplete(k.AppID, k.Kind):
 			diff.RemovedAssignments = append(diff.RemovedAssignments, k)
 		}
 	}
@@ -146,50 +161,39 @@ func Reconcile(liveApps []string, liveAssignments []AssignmentKey, snap Snapshot
 }
 
 func compareAssignmentKeys(a, b AssignmentKey) int {
-	if c := compareStrings(a.AppID, b.AppID); c != 0 {
+	if c := strings.Compare(a.AppID, b.AppID); c != 0 {
 		return c
 	}
-	if c := compareStrings(a.Kind, b.Kind); c != 0 {
+	if c := strings.Compare(a.Kind, b.Kind); c != 0 {
 		return c
 	}
-	return compareStrings(a.PrincipalID, b.PrincipalID)
-}
-
-func compareStrings(a, b string) int {
-	switch {
-	case a < b:
-		return -1
-	case a > b:
-		return 1
-	default:
-		return 0
-	}
+	return strings.Compare(a.PrincipalID, b.PrincipalID)
 }
 
 // internalApplication is an Okta-managed application excluded from the
 // snapshot, matched on the exact template name (labels are admin-editable)
-// and, when set, the sign-on mode.
+// and sign-on mode.
 type internalApplication struct {
 	Name       string
 	SignOnMode string
 }
 
-// InternalApplications are the Okta-managed apps every org carries.
+// InternalApplications are the Okta-managed apps every org carries: the
+// end-user dashboard, the browser plugin, the admin console, and Workflows.
+// Both fields must match, so an admin-created app reusing one of these
+// template names with another sign-on mode is kept.
 var InternalApplications = []internalApplication{
-	{Name: "okta_enduser", SignOnMode: ""},
-	{Name: "okta_browser_plugin", SignOnMode: ""},
-	{Name: "saasure", SignOnMode: ""},
-	{Name: "okta_admin_console", SignOnMode: ""},
-	{Name: "okta_flow_sso", SignOnMode: ""},
+	{Name: "okta_enduser", SignOnMode: "OPENID_CONNECT"},
+	{Name: "okta_browser_plugin", SignOnMode: "OPENID_CONNECT"},
+	{Name: "saasure", SignOnMode: "OPENID_CONNECT"},
+	{Name: "okta_admin_console", SignOnMode: "OPENID_CONNECT"},
+	{Name: "okta_flow_sso", SignOnMode: "OPENID_CONNECT"},
 }
 
 // IsInternalApplication reports whether an app is Okta-managed and skipped.
 func IsInternalApplication(name, signOnMode string) bool {
 	for _, rule := range InternalApplications {
-		if rule.Name != name {
-			continue
-		}
-		if rule.SignOnMode == "" || rule.SignOnMode == signOnMode {
+		if rule.Name == name && rule.SignOnMode == signOnMode {
 			return true
 		}
 	}

@@ -65,15 +65,15 @@ func TestReconcile(t *testing.T) {
 			want:            Diff{},
 		},
 		{
-			name:            "incomplete assignment listing keeps that app's assignments",
+			name:            "incomplete user listing keeps that app's users but still removes its groups",
 			liveApps:        []string{"a", "b"},
-			liveAssignments: []AssignmentKey{key(user("a", "u1")), key(user("b", "u2"))},
+			liveAssignments: []AssignmentKey{key(user("a", "u1")), key(group("a", "g1")), key(user("b", "u2"))},
 			snap: Snapshot{
-				Applications:          []Application{app("a"), app("b")},
-				Assignments:           nil,
-				IncompleteAssignments: map[string]bool{"a": true},
+				Applications:    []Application{app("a"), app("b")},
+				Assignments:     nil,
+				IncompleteUsers: map[string]bool{"a": true},
 			},
-			want: Diff{RemovedAssignments: []AssignmentKey{key(user("b", "u2"))}},
+			want: Diff{RemovedAssignments: []AssignmentKey{key(group("a", "g1")), key(user("b", "u2"))}},
 		},
 		{
 			name:            "revived app is an add",
@@ -100,8 +100,10 @@ func TestIsInternalApplication(t *testing.T) {
 	t.Parallel()
 
 	require.True(t, IsInternalApplication("okta_enduser", "OPENID_CONNECT"))
-	require.True(t, IsInternalApplication("saasure", ""))
+	require.True(t, IsInternalApplication("saasure", "OPENID_CONNECT"))
 	require.False(t, IsInternalApplication("oidc_client", "OPENID_CONNECT"))
+	// Both the template name and the sign-on mode must match.
+	require.False(t, IsInternalApplication("okta_enduser", "SAML_2_0"))
 	// Labels never match; only template names do.
 	require.False(t, IsInternalApplication("Okta Dashboard", "OPENID_CONNECT"))
 	require.False(t, IsInternalApplication("okta_enduser_custom", "OPENID_CONNECT"))
@@ -112,5 +114,6 @@ func TestSnapshotTruncated(t *testing.T) {
 
 	require.False(t, Snapshot{}.Truncated())
 	require.True(t, Snapshot{ApplicationsTruncated: true}.Truncated())
-	require.True(t, Snapshot{IncompleteAssignments: map[string]bool{"a": true}}.Truncated())
+	require.True(t, Snapshot{IncompleteUsers: map[string]bool{"a": true}}.Truncated())
+	require.True(t, Snapshot{IncompleteGroups: map[string]bool{"a": true}}.Truncated())
 }

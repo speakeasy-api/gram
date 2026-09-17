@@ -22,7 +22,7 @@ import {
 
 export type ListIdentityProviderConnectionApplicationsResult = {
   /**
-   * Applications ordered by label.
+   * Applications ordered by label, live rows first. Capped at 2000 rows, the same cap a run applies.
    */
   applications: Array<IdentityProviderConnectionApplication>;
   /**

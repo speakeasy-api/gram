@@ -15879,8 +15879,8 @@ func identityProviderConnectionsUsage() {
 	fmt.Fprintln(os.Stderr, `    get: Get a connection by ID, or the organization's live Okta connection when no ID is given. Session only; requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    record-agent: Record the Okta AI agent ID and the application it is bound to, for display. Okta does not expose these through its API. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    revoke: Revoke the connection: withdraw every signing key from the JWKS, disable the key material, and tombstone the connection so a new one can be created. Idempotent. Requires org:admin.`)
-	fmt.Fprintln(os.Stderr, `    sync-applications: Run the applications snapshot now instead of at the next scheduled interval. The connection must be verified. Rate limited per organization. Requires org:admin.`)
-	fmt.Fprintln(os.Stderr, `    list-applications: List the applications snapshot for the connection with live assignment counts and the last reconcile run. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    sync-applications: Run the applications snapshot on the next coordinator pass, within minutes, instead of at the next scheduled interval. The connection must be verified. Rate limited per organization. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    list-applications: List the applications snapshot for the connection with live assignment counts and the last reconcile run. The connection must be verified. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s identity-provider-connections COMMAND --help\n", os.Args[0])
@@ -16014,7 +16014,7 @@ func identityProviderConnectionsSyncApplicationsUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Run the applications snapshot now instead of at the next scheduled interval. The connection must be verified. Rate limited per organization. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `Run the applications snapshot on the next coordinator pass, within minutes, instead of at the next scheduled interval. The connection must be verified. Rate limited per organization. Requires org:admin.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -16035,7 +16035,7 @@ func identityProviderConnectionsListApplicationsUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List the applications snapshot for the connection with live assignment counts and the last reconcile run. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `List the applications snapshot for the connection with live assignment counts and the last reconcile run. The connection must be verified. Requires org:admin.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -id STRING: `)

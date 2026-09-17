@@ -17,7 +17,11 @@ export type IdentityProviderConnectionApplicationsSync = {
    */
   intervalSeconds: number;
   /**
-   * ISO 8601 timestamp of the last completed run. Omitted until the first run, and cleared by syncApplications so the next coordinator pass runs immediately.
+   * ISO 8601 timestamp of the last syncApplications call; a request newer than synced_at runs on the next coordinator pass.
+   */
+  requestedAt?: Date | undefined;
+  /**
+   * ISO 8601 timestamp when the last completed run started. Omitted until the first run.
    */
   syncedAt?: Date | undefined;
 };
@@ -27,6 +31,9 @@ export const IdentityProviderConnectionApplicationsSync$inboundSchema:
   z.ZodMiniType<IdentityProviderConnectionApplicationsSync, unknown> = z.pipe(
     z.object({
       interval_seconds: z.int(),
+      requested_at: z.optional(
+        z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+      ),
       synced_at: z.optional(
         z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
       ),
@@ -34,6 +41,7 @@ export const IdentityProviderConnectionApplicationsSync$inboundSchema:
     z.transform((v) => {
       return remap$(v, {
         "interval_seconds": "intervalSeconds",
+        "requested_at": "requestedAt",
         "synced_at": "syncedAt",
       });
     }),

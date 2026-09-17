@@ -40,6 +40,7 @@ import (
 	jwksrepo "github.com/speakeasy-api/gram/server/internal/jsonwebkeysets/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oktaapplications"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -1062,17 +1063,8 @@ func (s *Service) Revoke(ctx context.Context, payload *gen.RevokePayload) (*gen.
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "tombstone okta connection details").LogError(ctx, logger)
 	}
-	if _, err := q.DeleteOktaApplicationsForConnection(ctx, repo.DeleteOktaApplicationsForConnectionParams{
-		OrganizationID:               authCtx.ActiveOrganizationID,
-		IdentityProviderConnectionID: id,
-	}); err != nil {
+	if err := oktaapplications.DeleteConnectionSnapshot(ctx, dbtx, authCtx.ActiveOrganizationID, id); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "delete applications snapshot").LogError(ctx, logger)
-	}
-	if _, err := q.DeleteOktaApplicationReconcileRunsForConnection(ctx, repo.DeleteOktaApplicationReconcileRunsForConnectionParams{
-		OrganizationID:               authCtx.ActiveOrganizationID,
-		IdentityProviderConnectionID: id,
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "delete applications reconcile runs").LogError(ctx, logger)
 	}
 	after := connectionRows{Connection: connection, Okta: oktaRow, Managed: before.Managed}
 	if err := s.audit.LogIdentityProviderConnectionRevoke(ctx, dbtx, s.auditEvent(authCtx, id, snapshot(*before), snapshot(after))); err != nil {

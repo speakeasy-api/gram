@@ -10,18 +10,18 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * Typed reason when the run failed.
+ * Typed reason when the run failed. rate_limited and okta_unreachable are retried before being recorded; superseded means a newer run applied first; interrupted means the worker died.
  */
 export const ErrorT = {
   RateLimited: "rate_limited",
   CredentialRejected: "credential_rejected",
   OktaUnreachable: "okta_unreachable",
-  TooManyApplications: "too_many_applications",
   ClientUnavailable: "client_unavailable",
+  Superseded: "superseded",
   Interrupted: "interrupted",
 } as const;
 /**
- * Typed reason when the run failed.
+ * Typed reason when the run failed. rate_limited and okta_unreachable are retried before being recorded; superseded means a newer run applied first; interrupted means the worker died.
  */
 export type ErrorT = ClosedEnum<typeof ErrorT>;
 
@@ -53,7 +53,7 @@ export type IdentityProviderConnectionReconcileRun = {
   assignmentsAdded: number;
   assignmentsRemoved: number;
   /**
-   * Typed reason when the run failed.
+   * Typed reason when the run failed. rate_limited and okta_unreachable are retried before being recorded; superseded means a newer run applied first; interrupted means the worker died.
    */
   error?: ErrorT | undefined;
   /**

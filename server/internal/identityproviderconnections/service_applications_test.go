@@ -4,8 +4,11 @@ import (
 	"context"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/identity_provider_connections"
@@ -41,8 +44,13 @@ func newSyncer(t *testing.T, si *serviceInstance) *oktaapplications.Syncer {
 	return oktaapplications.NewSyncer(testenv.NewLogger(t), testenv.NewMeterProvider(t), si.conn.conn, si.oktaFakes)
 }
 
+func runSync(t *testing.T, ctx context.Context, syncer *oktaapplications.Syncer, id uuid.UUID) {
+	t.Helper()
+	require.NoError(t, syncer.Run(ctx, id, false))
+}
+
 func fixtureApp(id, label, name string) okta.App {
-	return okta.App{ID: id, Label: label, Name: name, SignOnMode: "OPENID_CONNECT", Status: "ACTIVE", Features: []string{"IMPORT_NEW_USERS"}, Created: testTime(), LastUpdated: testTime()}
+	return okta.App{ID: id, Label: label, Name: name, SignOnMode: "OPENID_CONNECT", Status: "ACTIVE", Features: []string{"PUSH_NEW_USERS", "IMPORT_NEW_USERS"}, Created: testTime(), LastUpdated: testTime()}
 }
 
 func setFixtures(si *serviceInstance, apps []okta.App, users map[string][]okta.AppUser, groups map[string][]okta.AppGroup) {
@@ -65,9 +73,34 @@ func listApplications(t *testing.T, ctx context.Context, si *serviceInstance, id
 
 func latestRun(t *testing.T, ctx context.Context, si *serviceInstance, id uuid.UUID) apprepo.OktaApplicationReconcileRun {
 	t.Helper()
-	run, err := apprepo.New(si.conn.conn).GetLatestReconcileRun(ctx, apprepo.GetLatestReconcileRunParams{OrganizationID: si.orgID, IdentityProviderConnectionID: id})
+	run, err := oktaapplications.LatestRun(ctx, si.conn.conn, si.orgID, id)
 	require.NoError(t, err)
-	return run
+	require.NotNil(t, run)
+	return *run
+}
+
+func mustParseTime(t *testing.T, raw string) time.Time {
+	t.Helper()
+	parsed, err := time.Parse(time.RFC3339Nano, raw)
+	require.NoError(t, err)
+	return parsed
+}
+
+func countRows(t *testing.T, ctx context.Context, si *serviceInstance, table string, id uuid.UUID) int64 {
+	t.Helper()
+	q := apprepo.New(si.conn.conn)
+	var n int64
+	var err error
+	switch table {
+	case "okta_applications":
+		n, err = q.CountApplicationsForConnection(ctx, apprepo.CountApplicationsForConnectionParams{OrganizationID: si.orgID, IdentityProviderConnectionID: id})
+	case "okta_application_assignments":
+		n, err = q.CountAssignmentsForConnection(ctx, apprepo.CountAssignmentsForConnectionParams{OrganizationID: si.orgID, IdentityProviderConnectionID: id})
+	default:
+		n, err = q.CountReconcileRunsForConnection(ctx, apprepo.CountReconcileRunsForConnectionParams{OrganizationID: si.orgID, IdentityProviderConnectionID: id})
+	}
+	require.NoError(t, err)
+	return n
 }
 
 func TestApplicationsSync_AddRemoveReassign(t *testing.T) {
@@ -79,18 +112,18 @@ func TestApplicationsSync_AddRemoveReassign(t *testing.T) {
 
 	setFixtures(si,
 		[]okta.App{fixtureApp(appA, "Notion", "oidc_client"), fixtureApp(appB, "Linear", "oidc_client"), fixtureApp("0oadash0000000000000", "Okta Dashboard", "okta_enduser")},
-		map[string][]okta.AppUser{appA: {{ID: "00uone", Scope: "USER", Status: "PROVISIONED"}}},
+		map[string][]okta.AppUser{appA: {{ID: "00uone", Scope: "USER", Status: "PROVISIONED"}, {ID: "00uone", Scope: "USER", Status: "PROVISIONED"}}},
 		map[string][]okta.AppGroup{appB: {{ID: "00gone", Priority: 0}}},
 	)
-	require.NoError(t, syncer.Run(ctx, id))
+	runSync(t, ctx, syncer, id)
 
 	res := listApplications(t, ctx, si, verified.ID, false)
 	require.Len(t, res.Applications, 2)
 	require.Equal(t, "Linear", res.Applications[0].Label)
 	require.Equal(t, 1, res.Applications[0].GroupAssignments)
 	require.Equal(t, "Notion", res.Applications[1].Label)
-	require.Equal(t, 1, res.Applications[1].UserAssignments)
-	require.Equal(t, []string{"IMPORT_NEW_USERS"}, res.Applications[1].Features)
+	require.Equal(t, 1, res.Applications[1].UserAssignments, "a duplicated assignment in the listing is one row")
+	require.Equal(t, []string{"IMPORT_NEW_USERS", "PUSH_NEW_USERS"}, res.Applications[1].Features, "features are stored sorted")
 	require.NotNil(t, res.LastRun)
 	require.Equal(t, "succeeded", res.LastRun.Status)
 	require.Equal(t, 2, res.LastRun.ApplicationsSeen)
@@ -99,6 +132,7 @@ func TestApplicationsSync_AddRemoveReassign(t *testing.T) {
 	require.Equal(t, []string{"0oadash0000000000000"}, res.LastRun.SkippedAppIds)
 	require.False(t, res.LastRun.Truncated)
 	require.NotNil(t, res.Sync.SyncedAt)
+	require.Equal(t, res.LastRun.StartedAt, *res.Sync.SyncedAt, "the watermark is the run's start")
 
 	// App B disappears, app C appears, app A's user becomes a group.
 	setFixtures(si,
@@ -106,7 +140,7 @@ func TestApplicationsSync_AddRemoveReassign(t *testing.T) {
 		nil,
 		map[string][]okta.AppGroup{appA: {{ID: "00gtwo", Priority: 0}}},
 	)
-	require.NoError(t, syncer.Run(ctx, id))
+	runSync(t, ctx, syncer, id)
 
 	res = listApplications(t, ctx, si, verified.ID, false)
 	require.Len(t, res.Applications, 2)
@@ -121,25 +155,19 @@ func TestApplicationsSync_AddRemoveReassign(t *testing.T) {
 
 	removed := listApplications(t, ctx, si, verified.ID, true)
 	require.Len(t, removed.Applications, 3)
-	var sawB bool
-	for _, app := range removed.Applications {
-		if app.OktaAppID == appB {
-			sawB = true
-			require.NotNil(t, app.RemovedAt)
-		}
-	}
-	require.True(t, sawB)
+	require.Equal(t, appB, removed.Applications[2].OktaAppID, "removed rows sort last")
+	require.NotNil(t, removed.Applications[2].RemovedAt)
 
 	// App B comes back: revived, not duplicated.
 	setFixtures(si, []okta.App{fixtureApp(appA, "Notion", "oidc_client"), fixtureApp(appB, "Linear", "oidc_client"), fixtureApp(appC, "Slack", "oidc_client")}, nil, nil)
-	require.NoError(t, syncer.Run(ctx, id))
+	runSync(t, ctx, syncer, id)
 	res = listApplications(t, ctx, si, verified.ID, false)
 	require.Len(t, res.Applications, 3)
 	require.Equal(t, 1, res.LastRun.ApplicationsAdded)
 	require.Equal(t, 1, res.LastRun.AssignmentsRemoved)
 }
 
-func TestApplicationsSync_UnchangedRunTouchesNoRows(t *testing.T) {
+func TestApplicationsSync_UnchangedRunLeavesUpdatedAtAlone(t *testing.T) {
 	t.Parallel()
 	ctx, si := newTestService(t)
 	verified := verifiedConnection(t, ctx, si)
@@ -147,13 +175,13 @@ func TestApplicationsSync_UnchangedRunTouchesNoRows(t *testing.T) {
 	syncer := newSyncer(t, si)
 
 	setFixtures(si, []okta.App{fixtureApp(appA, "Notion", "oidc_client")}, map[string][]okta.AppUser{appA: {{ID: "00uone", Scope: "USER"}}}, nil)
-	require.NoError(t, syncer.Run(ctx, id))
-	first, err := apprepo.New(si.conn.conn).ListApplications(ctx, apprepo.ListApplicationsParams{OrganizationID: si.orgID, IdentityProviderConnectionID: id, IncludeRemoved: false, LimitCount: 10})
+	runSync(t, ctx, syncer, id)
+	first, err := oktaapplications.ListSnapshot(ctx, si.conn.conn, si.orgID, id, false, 10)
 	require.NoError(t, err)
 	require.Len(t, first, 1)
 
-	require.NoError(t, syncer.Run(ctx, id))
-	second, err := apprepo.New(si.conn.conn).ListApplications(ctx, apprepo.ListApplicationsParams{OrganizationID: si.orgID, IdentityProviderConnectionID: id, IncludeRemoved: false, LimitCount: 10})
+	runSync(t, ctx, syncer, id)
+	second, err := oktaapplications.ListSnapshot(ctx, si.conn.conn, si.orgID, id, false, 10)
 	require.NoError(t, err)
 	require.Len(t, second, 1)
 	require.Equal(t, first[0].UpdatedAt.Time, second[0].UpdatedAt.Time, "unchanged content leaves updated_at alone")
@@ -166,9 +194,57 @@ func TestApplicationsSync_UnchangedRunTouchesNoRows(t *testing.T) {
 	require.Zero(t, run.AssignmentsAdded)
 	require.Zero(t, run.AssignmentsRemoved)
 	require.Equal(t, int32(1), run.ApplicationsSeen)
+
+	// A changed attribute moves updated_at.
+	setFixtures(si, []okta.App{{ID: appA, Label: "Notion (renamed)", Name: "oidc_client", SignOnMode: "OPENID_CONNECT", Status: "ACTIVE", Features: nil, Created: testTime(), LastUpdated: testTime()}}, map[string][]okta.AppUser{appA: {{ID: "00uone", Scope: "USER"}}}, nil)
+	runSync(t, ctx, syncer, id)
+	third, err := oktaapplications.ListSnapshot(ctx, si.conn.conn, si.orgID, id, false, 10)
+	require.NoError(t, err)
+	require.True(t, third[0].UpdatedAt.Time.After(second[0].UpdatedAt.Time))
+	require.Equal(t, "Notion (renamed)", third[0].Label)
 }
 
-func TestApplicationsSync_PageCapTruncatesWithoutRemoving(t *testing.T) {
+func TestApplicationsSync_PageCapKeepsPartialPagesAndRemovesNothingMissing(t *testing.T) {
+	t.Parallel()
+	ctx, si := newTestService(t)
+	verified := verifiedConnection(t, ctx, si)
+	id := mustParseUUID(t, verified.ID)
+	syncer := newSyncer(t, si)
+	fake := si.oktaFakes.Fake(fullOrgURL)
+
+	setFixtures(si, []okta.App{fixtureApp(appA, "Notion", "oidc_client"), fixtureApp(appB, "Linear", "oidc_client")},
+		map[string][]okta.AppUser{appA: {{ID: "00uone", Scope: "USER"}}, appB: {{ID: "00utwo", Scope: "USER"}}},
+		map[string][]okta.AppGroup{appA: {{ID: "00gone", Priority: 0}}})
+	runSync(t, ctx, syncer, id)
+
+	// The application listing blows its page cap: the run is truncated and
+	// nothing missing from it is removed.
+	fake.SetMethodError("ListApps", okta.ErrTooManyPages)
+	runSync(t, ctx, syncer, id)
+	run := latestRun(t, ctx, si, id)
+	require.Equal(t, "succeeded", run.Status)
+	require.True(t, run.Truncated)
+	require.Zero(t, run.ApplicationsRemoved)
+	require.Len(t, listApplications(t, ctx, si, verified.ID, false).Applications, 2)
+
+	// Only app A's user listing blows its cap: A's users stay, A's groups
+	// still reconcile (its group is gone), B's users still reconcile.
+	fake.SetMethodError("ListApps", nil)
+	fake.SetAppError("ListAppUsers", appA, okta.ErrTooManyPages)
+	setFixtures(si, []okta.App{fixtureApp(appA, "Notion", "oidc_client"), fixtureApp(appB, "Linear", "oidc_client")}, nil, nil)
+	runSync(t, ctx, syncer, id)
+	run = latestRun(t, ctx, si, id)
+	require.Equal(t, "succeeded", run.Status)
+	require.True(t, run.Truncated)
+	require.Equal(t, int32(2), run.AssignmentsRemoved, "A's group and B's user")
+	res := listApplications(t, ctx, si, verified.ID, false)
+	require.Equal(t, 0, res.Applications[0].UserAssignments, "Linear's users were listed and are gone")
+	require.Equal(t, 0, res.Applications[0].GroupAssignments)
+	require.Equal(t, 1, res.Applications[1].UserAssignments, "Notion keeps its user because that listing was incomplete")
+	require.Equal(t, 0, res.Applications[1].GroupAssignments)
+}
+
+func TestApplicationsSync_RateLimitIsRetriedThenRecorded(t *testing.T) {
 	t.Parallel()
 	ctx, si := newTestService(t)
 	verified := verifiedConnection(t, ctx, si)
@@ -178,33 +254,45 @@ func TestApplicationsSync_PageCapTruncatesWithoutRemoving(t *testing.T) {
 
 	setFixtures(si, []okta.App{fixtureApp(appA, "Notion", "oidc_client"), fixtureApp(appB, "Linear", "oidc_client")},
 		map[string][]okta.AppUser{appA: {{ID: "00uone", Scope: "USER"}}, appB: {{ID: "00utwo", Scope: "USER"}}}, nil)
-	require.NoError(t, syncer.Run(ctx, id))
+	runSync(t, ctx, syncer, id)
 
-	// The application listing blows its page cap: recorded, nothing removed.
-	fake.SetMethodError("ListApps", okta.ErrTooManyPages)
-	require.NoError(t, syncer.Run(ctx, id))
+	// 429 mid-run, on the second app's assignments: nothing partial lands.
+	fake.SetAppError("ListAppUsers", appB, &okta.APIError{Method: http.MethodGet, Path: "/api/v1/apps/x/users", StatusCode: http.StatusTooManyRequests, ErrorCode: "E0000047", Summary: "API call exceeded rate limit"})
+	setFixtures(si, []okta.App{fixtureApp(appA, "Notion", "oidc_client"), fixtureApp(appB, "Linear", "oidc_client")},
+		map[string][]okta.AppUser{appA: {{ID: "00uthree", Scope: "USER"}}, appB: {{ID: "00utwo", Scope: "USER"}}}, nil)
+	err := syncer.Run(ctx, id, false)
+	require.Error(t, err)
+	require.True(t, oktaapplications.IsRetryable(err))
 	run := latestRun(t, ctx, si, id)
 	require.Equal(t, "failed", run.Status)
-	require.Equal(t, "too_many_applications", run.Error.String)
-	require.Len(t, listApplications(t, ctx, si, verified.ID, false).Applications, 2)
+	require.Equal(t, "rate_limited", run.Error.String)
+	require.Equal(t, 1, listApplications(t, ctx, si, verified.ID, false).Applications[1].UserAssignments)
 
-	// One app's assignment listing blows its cap: the app stays, its
-	// assignments stay, the run is marked truncated, the other app's
-	// assignments still reconcile.
-	fake.SetMethodError("ListApps", nil)
-	fake.SetMethodError("ListAppUsers", okta.ErrTooManyPages)
-	setFixtures(si, []okta.App{fixtureApp(appA, "Notion", "oidc_client"), fixtureApp(appB, "Linear", "oidc_client")}, nil, nil)
-	require.NoError(t, syncer.Run(ctx, id))
+	// The watermark did not move, so Temporal's retry is what runs next.
+	beforeRetry := listApplications(t, ctx, si, verified.ID, false).Sync.SyncedAt
+	require.NotNil(t, beforeRetry)
+	require.True(t, run.StartedAt.Time.After(mustParseTime(t, *beforeRetry)))
+
+	// The last attempt records the failure and advances the watermark.
+	require.NoError(t, syncer.Run(ctx, id, true))
 	run = latestRun(t, ctx, si, id)
-	require.Equal(t, "succeeded", run.Status)
-	require.True(t, run.Truncated)
-	require.Zero(t, run.AssignmentsRemoved)
+	require.Equal(t, "failed", run.Status)
+	require.Equal(t, "rate_limited", run.Error.String)
+	afterFinal := listApplications(t, ctx, si, verified.ID, false).Sync.SyncedAt
+	require.NotNil(t, afterFinal)
+	require.Equal(t, run.StartedAt.Time.UTC().Format(time.RFC3339), mustParseTime(t, *afterFinal).UTC().Format(time.RFC3339))
+
+	// The next scheduled run re-runs from scratch and applies the change.
+	fake.SetAppError("ListAppUsers", appB, nil)
+	runSync(t, ctx, syncer, id)
+	require.Equal(t, "succeeded", latestRun(t, ctx, si, id).Status)
 	res := listApplications(t, ctx, si, verified.ID, false)
-	require.Equal(t, 1, res.Applications[0].UserAssignments)
 	require.Equal(t, 1, res.Applications[1].UserAssignments)
+	require.Equal(t, 1, res.LastRun.AssignmentsAdded)
+	require.Equal(t, 1, res.LastRun.AssignmentsRemoved)
 }
 
-func TestApplicationsSync_RateLimitIsRetryable(t *testing.T) {
+func TestApplicationsSync_OktaOutageIsRetried(t *testing.T) {
 	t.Parallel()
 	ctx, si := newTestService(t)
 	verified := verifiedConnection(t, ctx, si)
@@ -212,27 +300,13 @@ func TestApplicationsSync_RateLimitIsRetryable(t *testing.T) {
 	syncer := newSyncer(t, si)
 	fake := si.oktaFakes.Fake(fullOrgURL)
 
-	fake.SetMethodError("ListApps", &okta.APIError{Method: http.MethodGet, Path: "/api/v1/apps", StatusCode: http.StatusTooManyRequests, ErrorCode: "E0000047", Summary: "API call exceeded rate limit"})
-	err := syncer.Run(ctx, id)
-	require.Error(t, err)
+	fake.SetMethodError("ListApps", &okta.APIError{Method: http.MethodGet, Path: "/api/v1/apps", StatusCode: http.StatusBadGateway, ErrorCode: "", Summary: "upstream unavailable"})
+	err := syncer.Run(ctx, id, false)
 	require.True(t, oktaapplications.IsRetryable(err))
-	run := latestRun(t, ctx, si, id)
-	require.Equal(t, "failed", run.Status)
-	require.Equal(t, "rate_limited", run.Error.String)
-
-	// The watermark did not move: the connection is still due.
+	require.Equal(t, "okta_unreachable", latestRun(t, ctx, si, id).Error.String)
 	candidates, err := syncer.ListCandidates(ctx, 10, nil)
 	require.NoError(t, err)
-	require.Len(t, candidates, 1)
-	require.Equal(t, id, candidates[0].ConnectionID)
-
-	// The retry resumes and completes.
-	fake.SetMethodError("ListApps", nil)
-	require.NoError(t, syncer.Run(ctx, id))
-	require.Equal(t, "succeeded", latestRun(t, ctx, si, id).Status)
-	candidates, err = syncer.ListCandidates(ctx, 10, nil)
-	require.NoError(t, err)
-	require.Empty(t, candidates)
+	require.Len(t, candidates, 1, "a transient failure keeps the connection due")
 }
 
 func TestApplicationsSync_CredentialRejectedAdvancesWatermark(t *testing.T) {
@@ -244,7 +318,7 @@ func TestApplicationsSync_CredentialRejectedAdvancesWatermark(t *testing.T) {
 	fake := si.oktaFakes.Fake(fullOrgURL)
 
 	fake.SetMethodError("ListApps", &okta.APIError{Method: http.MethodGet, Path: "/api/v1/apps", StatusCode: http.StatusUnauthorized, ErrorCode: "E0000011", Summary: "Invalid token provided"})
-	require.NoError(t, syncer.Run(ctx, id))
+	runSync(t, ctx, syncer, id)
 	run := latestRun(t, ctx, si, id)
 	require.Equal(t, "failed", run.Status)
 	require.Equal(t, "credential_rejected", run.Error.String)
@@ -257,6 +331,57 @@ func TestApplicationsSync_CredentialRejectedAdvancesWatermark(t *testing.T) {
 	fetched, err := si.svc.Get(ctx, &gen.GetPayload{SessionToken: nil, ID: &verified.ID})
 	require.NoError(t, err)
 	require.Equal(t, identityproviderconnections.StatusVerified, fetched.Connection.Status)
+}
+
+func TestApplicationsSync_SupersededRunIsDiscarded(t *testing.T) {
+	t.Parallel()
+	ctx, si := newTestService(t)
+	verified := verifiedConnection(t, ctx, si)
+	id := mustParseUUID(t, verified.ID)
+	syncer := newSyncer(t, si)
+
+	// A later run already applied: model it by pushing the watermark past
+	// any run this test starts.
+	_, err := apprepo.New(si.conn.conn).MarkApplicationsSynced(ctx, apprepo.MarkApplicationsSyncedParams{
+		SyncedAt:                     pgtype.Timestamptz{Time: time.Now().Add(time.Hour).UTC(), Valid: true, InfinityModifier: pgtype.Finite},
+		IdentityProviderConnectionID: id,
+		OrganizationID:               si.orgID,
+	})
+	require.NoError(t, err)
+	setFixtures(si, []okta.App{fixtureApp(appA, "Notion", "oidc_client")}, nil, nil)
+	runSync(t, ctx, syncer, id)
+	run := latestRun(t, ctx, si, id)
+	require.Equal(t, "failed", run.Status)
+	require.Equal(t, "superseded", run.Error.String)
+	require.Zero(t, countRows(t, ctx, si, "okta_applications", id))
+}
+
+func TestApplicationsSync_InterruptedRunIsClosedByTheNext(t *testing.T) {
+	t.Parallel()
+	ctx, si := newTestService(t)
+	verified := verifiedConnection(t, ctx, si)
+	id := mustParseUUID(t, verified.ID)
+	syncer := newSyncer(t, si)
+
+	q := apprepo.New(si.conn.conn)
+	stale, err := q.CreateReconcileRun(ctx, apprepo.CreateReconcileRunParams{OrganizationID: si.orgID, IdentityProviderConnectionID: id})
+	require.NoError(t, err)
+	old, err := q.CreateReconcileRun(ctx, apprepo.CreateReconcileRunParams{OrganizationID: si.orgID, IdentityProviderConnectionID: id})
+	require.NoError(t, err)
+	require.NoError(t, q.BackdateReconcileRun(ctx, apprepo.BackdateReconcileRunParams{
+		Status:         "succeeded",
+		StartedAt:      pgtype.Timestamptz{Time: time.Now().Add(-40 * 24 * time.Hour).UTC(), Valid: true, InfinityModifier: pgtype.Finite},
+		ID:             old.ID,
+		OrganizationID: si.orgID,
+	}))
+
+	runSync(t, ctx, syncer, id)
+
+	closed, err := q.GetReconcileRun(ctx, apprepo.GetReconcileRunParams{ID: stale.ID, OrganizationID: si.orgID})
+	require.NoError(t, err)
+	require.Equal(t, "failed", closed.Status)
+	require.Equal(t, "interrupted", closed.Error.String)
+	require.EqualValues(t, 2, countRows(t, ctx, si, "okta_application_reconcile_runs", id), "the 40-day-old run is pruned")
 }
 
 func TestApplicationsSync_CandidatesOnlyVerifiedAndDue(t *testing.T) {
@@ -284,16 +409,21 @@ func TestApplicationsSync_CandidatesOnlyVerifiedAndDue(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, candidates, "attempted ids are excluded")
 
-	require.NoError(t, syncer.Run(ctx, id))
+	runSync(t, ctx, syncer, id)
 	candidates, err = syncer.ListCandidates(ctx, 10, nil)
 	require.NoError(t, err)
 	require.Empty(t, candidates, "a fresh snapshot is not due")
 
+	// A request made after the last run started keeps the connection due.
 	_, err = si.svc.SyncApplications(ctx, &gen.SyncApplicationsPayload{SessionToken: nil, ID: created.ID})
 	require.NoError(t, err)
 	candidates, err = syncer.ListCandidates(ctx, 10, nil)
 	require.NoError(t, err)
 	require.Len(t, candidates, 1, "a manual sync makes it due again")
+	runSync(t, ctx, syncer, id)
+	candidates, err = syncer.ListCandidates(ctx, 10, nil)
+	require.NoError(t, err)
+	require.Empty(t, candidates)
 
 	// A revoked connection is gone from candidates and its run is a no-op.
 	_, err = si.svc.Revoke(ctx, &gen.RevokePayload{SessionToken: nil, ID: created.ID})
@@ -301,7 +431,7 @@ func TestApplicationsSync_CandidatesOnlyVerifiedAndDue(t *testing.T) {
 	candidates, err = syncer.ListCandidates(ctx, 10, nil)
 	require.NoError(t, err)
 	require.Empty(t, candidates)
-	require.NoError(t, syncer.Run(ctx, id))
+	runSync(t, ctx, syncer, id)
 }
 
 func TestSyncApplications_RPC(t *testing.T) {
@@ -311,16 +441,19 @@ func TestSyncApplications_RPC(t *testing.T) {
 	created := createConnection(t, ctx, si, fullOrgURL)
 	_, err := si.svc.SyncApplications(ctx, &gen.SyncApplicationsPayload{SessionToken: nil, ID: created.ID})
 	requireOopsCode(t, err, oops.CodeFailedPrecondition)
+	_, err = si.svc.ListApplications(ctx, &gen.ListApplicationsPayload{SessionToken: nil, ID: created.ID, IncludeRemoved: false})
+	requireOopsCode(t, err, oops.CodeFailedPrecondition)
 	require.Zero(t, si.syncTrigger.Calls())
 
 	submitClientID(t, ctx, si, created.ID)
 	_, err = si.svc.Verify(ctx, &gen.VerifyPayload{SessionToken: nil, ID: created.ID})
 	require.NoError(t, err)
 	id := mustParseUUID(t, created.ID)
-	require.NoError(t, newSyncer(t, si).Run(ctx, id))
+	runSync(t, ctx, newSyncer(t, si), id)
 	fetched, err := si.svc.Get(ctx, &gen.GetPayload{SessionToken: nil, ID: &created.ID})
 	require.NoError(t, err)
 	require.NotNil(t, fetched.Connection.ApplicationsSync.SyncedAt)
+	require.Nil(t, fetched.Connection.ApplicationsSync.RequestedAt)
 	require.Equal(t, 21600, fetched.Connection.ApplicationsSync.IntervalSeconds)
 
 	before, err := audittest.AuditLogCountByAction(ctx, si.conn.conn, audit.ActionIdentityProviderConnectionSyncApplications)
@@ -328,8 +461,11 @@ func TestSyncApplications_RPC(t *testing.T) {
 
 	synced, err := si.svc.SyncApplications(ctx, &gen.SyncApplicationsPayload{SessionToken: nil, ID: created.ID})
 	require.NoError(t, err)
-	require.Nil(t, synced.ApplicationsSync.SyncedAt, "the watermark is cleared")
-	require.Equal(t, 1, si.syncTrigger.Calls())
+	require.NotNil(t, synced.ApplicationsSync.SyncedAt, "the watermark is kept")
+	require.NotNil(t, synced.ApplicationsSync.RequestedAt)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Equal(c, 1, si.syncTrigger.Calls())
+	}, 2*time.Second, 10*time.Millisecond)
 
 	after, err := audittest.AuditLogCountByAction(ctx, si.conn.conn, audit.ActionIdentityProviderConnectionSyncApplications)
 	require.NoError(t, err)
@@ -358,19 +494,15 @@ func TestRevoke_DeletesApplicationsSnapshot(t *testing.T) {
 	id := mustParseUUID(t, verified.ID)
 
 	setFixtures(si, []okta.App{fixtureApp(appA, "Notion", "oidc_client")}, map[string][]okta.AppUser{appA: {{ID: "00uone", Scope: "USER"}}}, nil)
-	require.NoError(t, newSyncer(t, si).Run(ctx, id))
-	require.Len(t, listApplications(t, ctx, si, verified.ID, true).Applications, 1)
+	runSync(t, ctx, newSyncer(t, si), id)
+	require.EqualValues(t, 1, countRows(t, ctx, si, "okta_applications", id))
+	require.EqualValues(t, 1, countRows(t, ctx, si, "okta_application_assignments", id))
+	require.EqualValues(t, 1, countRows(t, ctx, si, "okta_application_reconcile_runs", id))
 
 	_, err := si.svc.Revoke(ctx, &gen.RevokePayload{SessionToken: nil, ID: verified.ID})
 	require.NoError(t, err)
 
-	q := apprepo.New(si.conn.conn)
-	apps, err := q.ListApplications(ctx, apprepo.ListApplicationsParams{OrganizationID: si.orgID, IdentityProviderConnectionID: id, IncludeRemoved: true, LimitCount: 10})
-	require.NoError(t, err)
-	require.Empty(t, apps)
-	keys, err := q.ListLiveAssignmentKeys(ctx, apprepo.ListLiveAssignmentKeysParams{OrganizationID: si.orgID, IdentityProviderConnectionID: id})
-	require.NoError(t, err)
-	require.Empty(t, keys)
-	_, err = q.GetLatestReconcileRun(ctx, apprepo.GetLatestReconcileRunParams{OrganizationID: si.orgID, IdentityProviderConnectionID: id})
-	require.Error(t, err)
+	require.Zero(t, countRows(t, ctx, si, "okta_applications", id))
+	require.Zero(t, countRows(t, ctx, si, "okta_application_assignments", id))
+	require.Zero(t, countRows(t, ctx, si, "okta_application_reconcile_runs", id))
 }

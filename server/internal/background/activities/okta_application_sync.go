@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/temporal"
 
 	"github.com/speakeasy-api/gram/server/internal/oktaapplications"
 )
@@ -46,7 +47,7 @@ func NewRunOktaApplicationSync(syncer *oktaapplications.Syncer) *RunOktaApplicat
 func (r *RunOktaApplicationSync) Do(ctx context.Context, connectionID string) error {
 	id, err := uuid.Parse(connectionID)
 	if err != nil {
-		return fmt.Errorf("parse identity provider connection id: %w", err)
+		return temporal.NewNonRetryableApplicationError("parse identity provider connection id", "invalid_connection_id", err)
 	}
 
 	stop := make(chan struct{})
@@ -66,7 +67,8 @@ func (r *RunOktaApplicationSync) Do(ctx context.Context, connectionID string) er
 		}
 	}()
 
-	if err := r.syncer.Run(ctx, id); err != nil {
+	final := activity.GetInfo(ctx).Attempt >= oktaapplications.MaxAttempts
+	if err := r.syncer.Run(ctx, id, final); err != nil {
 		return fmt.Errorf("run okta application sync: %w", err)
 	}
 	return nil

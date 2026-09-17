@@ -2145,6 +2145,7 @@ func unmarshalIdentityProviderConnectionApplicationsSyncResponseBodyToIdentitypr
 	res := &identityproviderconnections.IdentityProviderConnectionApplicationsSync{
 		IntervalSeconds: *v.IntervalSeconds,
 		SyncedAt:        v.SyncedAt,
+		RequestedAt:     v.RequestedAt,
 	}
 
 	return res

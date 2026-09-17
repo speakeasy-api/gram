@@ -91,7 +91,7 @@ export class IdentityProviderConnections extends ClientSDK {
    * listApplications identityProviderConnections
    *
    * @remarks
-   * List the applications snapshot for the connection with live assignment counts and the last reconcile run. Requires org:admin.
+   * List the applications snapshot for the connection with live assignment counts and the last reconcile run. The connection must be verified. Requires org:admin.
    */
   async listApplications(
     request: ListIdentityProviderConnectionApplicationsRequest,
@@ -167,7 +167,7 @@ export class IdentityProviderConnections extends ClientSDK {
    * syncApplications identityProviderConnections
    *
    * @remarks
-   * Run the applications snapshot now instead of at the next scheduled interval. The connection must be verified. Rate limited per organization. Requires org:admin.
+   * Run the applications snapshot on the next coordinator pass, within minutes, instead of at the next scheduled interval. The connection must be verified. Rate limited per organization. Requires org:admin.
    */
   async syncApplications(
     request: SyncIdentityProviderConnectionApplicationsRequest,

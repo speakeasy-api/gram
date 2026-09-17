@@ -149,5 +149,6 @@ func buildApplicationsSyncView(o repo.OktaIdentityProviderConnection) *gen.Ident
 	return &gen.IdentityProviderConnectionApplicationsSync{
 		IntervalSeconds: int(o.ApplicationsSyncIntervalSeconds),
 		SyncedAt:        conv.PtrEmpty(conv.FromPGTimestamptz(o.ApplicationsSyncedAt)),
+		RequestedAt:     conv.PtrEmpty(conv.FromPGTimestamptz(o.ApplicationsSyncRequestedAt)),
 	}
 }

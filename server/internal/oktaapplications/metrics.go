@@ -12,16 +12,17 @@ import (
 
 const meterReconcileOutcome = "gram.okta_applications.reconcile.outcome"
 
-// Run outcomes; a failed run records its typed reason as the outcome.
+// Run outcomes; a failed run records its typed reason as the outcome. The
+// reason strings also appear in the API design enum.
 const (
 	outcomeSucceeded = "succeeded"
 
-	reasonRateLimited         = "rate_limited"
-	reasonCredentialRejected  = "credential_rejected" //nolint:gosec // G101 false positive: a reason label.
-	reasonOktaUnreachable     = "okta_unreachable"
-	reasonTooManyApplications = "too_many_applications"
-	reasonClientUnavailable   = "client_unavailable"
-	reasonInterrupted         = "interrupted"
+	reasonRateLimited        = "rate_limited"
+	reasonCredentialRejected = "credential_rejected" //nolint:gosec // G101 false positive: a reason label.
+	reasonOktaUnreachable    = "okta_unreachable"
+	reasonClientUnavailable  = "client_unavailable"
+	reasonSuperseded         = "superseded"
+	reasonInterrupted        = "interrupted"
 )
 
 type syncMetrics struct {

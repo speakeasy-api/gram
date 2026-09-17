@@ -417,7 +417,8 @@ type SyncApplicationsResponseBody struct {
 // "identityProviderConnections" service "listApplications" endpoint HTTP
 // response body.
 type ListApplicationsResponseBody struct {
-	// Applications ordered by label.
+	// Applications ordered by label, live rows first. Capped at 2000 rows, the
+	// same cap a run applies.
 	Applications []*IdentityProviderConnectionApplicationResponseBody    `form:"applications" json:"applications" xml:"applications"`
 	Sync         *IdentityProviderConnectionApplicationsSyncResponseBody `form:"sync" json:"sync" xml:"sync"`
 	// Omitted before the first run.
@@ -2216,10 +2217,12 @@ type IdentityProviderConnectionChecklistItemResponseBody struct {
 type IdentityProviderConnectionApplicationsSyncResponseBody struct {
 	// How often the snapshot is reconciled, in seconds.
 	IntervalSeconds int `form:"interval_seconds" json:"interval_seconds" xml:"interval_seconds"`
-	// ISO 8601 timestamp of the last completed run. Omitted until the first run,
-	// and cleared by syncApplications so the next coordinator pass runs
-	// immediately.
+	// ISO 8601 timestamp when the last completed run started. Omitted until the
+	// first run.
 	SyncedAt *string `form:"synced_at,omitempty" json:"synced_at,omitempty" xml:"synced_at,omitempty"`
+	// ISO 8601 timestamp of the last syncApplications call; a request newer than
+	// synced_at runs on the next coordinator pass.
+	RequestedAt *string `form:"requested_at,omitempty" json:"requested_at,omitempty" xml:"requested_at,omitempty"`
 }
 
 // OktaIdentityProviderConnectionResponseBody is used to define fields on
@@ -2324,7 +2327,9 @@ type IdentityProviderConnectionReconcileRunResponseBody struct {
 	// Whether a listing hit the page or application cap; nothing missing from a
 	// truncated listing is removed.
 	Truncated bool `form:"truncated" json:"truncated" xml:"truncated"`
-	// Typed reason when the run failed.
+	// Typed reason when the run failed. rate_limited and okta_unreachable are
+	// retried before being recorded; superseded means a newer run applied first;
+	// interrupted means the worker died.
 	Error *string `form:"error,omitempty" json:"error,omitempty" xml:"error,omitempty"`
 }
 

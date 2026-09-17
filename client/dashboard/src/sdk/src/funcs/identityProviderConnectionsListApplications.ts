@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * listApplications identityProviderConnections
  *
  * @remarks
- * List the applications snapshot for the connection with live assignment counts and the last reconcile run. Requires org:admin.
+ * List the applications snapshot for the connection with live assignment counts and the last reconcile run. The connection must be verified. Requires org:admin.
  */
 export function identityProviderConnectionsListApplications(
   client: GramCore,

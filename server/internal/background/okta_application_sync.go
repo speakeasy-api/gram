@@ -37,11 +37,15 @@ const (
 	// the coordinator waits for a batch before selecting the next.
 	oktaApplicationSyncChildConcurrency = 5
 
+	// oktaApplicationSyncMaxBatchesPerPass bounds one coordinator run so a
+	// backlog never outlives the run timeout; the next tick continues.
+	oktaApplicationSyncMaxBatchesPerPass = 4
+
 	oktaApplicationSyncCoordinatorActivityTimeout = 30 * time.Second
 
 	oktaApplicationSyncActivityTimeout                = 30 * time.Minute
 	oktaApplicationSyncActivityScheduleToCloseTimeout = 2 * time.Hour
-	oktaApplicationSyncActivityMaxAttempts            = 3
+	oktaApplicationSyncActivityMaxAttempts            = oktaapplications.MaxAttempts
 	oktaApplicationSyncActivityRetryInitialInterval   = time.Minute
 	oktaApplicationSyncActivityRetryMaximumInterval   = 15 * time.Minute
 )
@@ -64,7 +68,7 @@ func OktaApplicationSyncCoordinatorWorkflow(ctx workflow.Context) error {
 	attempted := map[uuid.UUID]bool{}
 	var attemptedIDs []uuid.UUID
 
-	for {
+	for range oktaApplicationSyncMaxBatchesPerPass {
 		var candidates []oktaapplications.SyncCandidate
 		if err := workflow.ExecuteActivity(activityCtx, a.GetOktaApplicationSyncCandidates, activities.GetOktaApplicationSyncCandidatesInput{
 			Limit:                oktaApplicationSyncChildConcurrency,
@@ -88,10 +92,8 @@ func OktaApplicationSyncCoordinatorWorkflow(ctx workflow.Context) error {
 			attempted[candidate.ConnectionID] = true
 			attemptedIDs = append(attemptedIDs, candidate.ConnectionID)
 			childCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
-				WorkflowID: buildOktaApplicationSyncWorkflowID(candidate.OrganizationSlug, candidate.ConnectionID),
-				// A closed run's id is reused by the next scheduled run; a
-				// still-running one rejects the start, which is the guard
-				// against stacking a manual sync on a scheduled one.
+				WorkflowID: buildOktaApplicationSyncWorkflowID(candidate.ConnectionID),
+				// A running child rejects a second start for the same connection.
 				WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 				ParentClosePolicy:     enums.PARENT_CLOSE_POLICY_ABANDON,
 				WaitForCancellation:   true,
@@ -118,6 +120,7 @@ func OktaApplicationSyncCoordinatorWorkflow(ctx workflow.Context) error {
 			selector.Select(ctx)
 		}
 	}
+	return nil
 }
 
 func OktaApplicationSyncWorkflow(ctx workflow.Context, connectionID string) error {
@@ -140,8 +143,8 @@ func OktaApplicationSyncWorkflow(ctx workflow.Context, connectionID string) erro
 	return nil
 }
 
-func buildOktaApplicationSyncWorkflowID(organizationSlug string, connectionID uuid.UUID) string {
-	return fmt.Sprintf("v1:okta-application-sync:%s:%s", organizationSlug, connectionID.String())
+func buildOktaApplicationSyncWorkflowID(connectionID uuid.UUID) string {
+	return fmt.Sprintf("v1:okta-application-sync:%s", connectionID.String())
 }
 
 func AddOktaApplicationSyncCoordinatorSchedule(ctx context.Context, temporalEnv *tenv.Environment) error {
@@ -151,6 +154,26 @@ func AddOktaApplicationSyncCoordinatorSchedule(ctx context.Context, temporalEnv 
 	_, err := scheduleClient.Create(ctx, options)
 	if err != nil && !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 		return fmt.Errorf("create okta application sync schedule: %w", err)
+	}
+
+	// Queue-scoped, so the update only touches this deployment's own copy
+	// and cadence changes land without a manual delete.
+	if err := scheduleClient.GetHandle(ctx, options.ID).Update(ctx, client.ScheduleUpdateOptions{
+		DoUpdate: func(input client.ScheduleUpdateInput) (*client.ScheduleUpdate, error) {
+			schedule := input.Description.Schedule
+			schedule.Spec = &options.Spec
+			schedule.Action = options.Action
+			if schedule.Policy == nil {
+				schedule.Policy = &client.SchedulePolicies{
+					Overlap:        enums.SCHEDULE_OVERLAP_POLICY_SKIP,
+					CatchupWindow:  0,
+					PauseOnFailure: false,
+				}
+			}
+			return &client.ScheduleUpdate{Schedule: &schedule, TypedSearchAttributes: nil}, nil
+		},
+	}); err != nil {
+		return fmt.Errorf("update okta application sync schedule: %w", err)
 	}
 	return nil
 }
@@ -164,7 +187,7 @@ func buildOktaApplicationSyncScheduleOptions(temporalEnv *tenv.Environment) clie
 			Intervals: []client.ScheduleIntervalSpec{{Every: oktaApplicationSyncCoordinatorInterval}},
 		},
 		Action: &client.ScheduleWorkflowAction{
-			ID:                 oktaApplicationSyncCoordinatorWorkflowID,
+			ID:                 fmt.Sprintf("%s:%s", oktaApplicationSyncCoordinatorWorkflowID, queue),
 			Workflow:           OktaApplicationSyncCoordinatorWorkflow,
 			TaskQueue:          queue,
 			WorkflowRunTimeout: oktaApplicationSyncCoordinatorRunTimeout,

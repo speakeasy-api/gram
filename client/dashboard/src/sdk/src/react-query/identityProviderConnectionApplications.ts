@@ -59,7 +59,7 @@ export type IdentityProviderConnectionApplicationsQueryError =
  * listApplications identityProviderConnections
  *
  * @remarks
- * List the applications snapshot for the connection with live assignment counts and the last reconcile run. Requires org:admin.
+ * List the applications snapshot for the connection with live assignment counts and the last reconcile run. The connection must be verified. Requires org:admin.
  */
 export function useIdentityProviderConnectionApplications(
   request: ListIdentityProviderConnectionApplicationsRequest,
@@ -88,7 +88,7 @@ export function useIdentityProviderConnectionApplications(
  * listApplications identityProviderConnections
  *
  * @remarks
- * List the applications snapshot for the connection with live assignment counts and the last reconcile run. Requires org:admin.
+ * List the applications snapshot for the connection with live assignment counts and the last reconcile run. The connection must be verified. Requires org:admin.
  */
 export function useIdentityProviderConnectionApplicationsSuspense(
   request: ListIdentityProviderConnectionApplicationsRequest,

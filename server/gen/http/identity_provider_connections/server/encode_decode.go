@@ -1953,6 +1953,7 @@ func marshalIdentityproviderconnectionsIdentityProviderConnectionApplicationsSyn
 	res := &IdentityProviderConnectionApplicationsSyncResponseBody{
 		IntervalSeconds: v.IntervalSeconds,
 		SyncedAt:        v.SyncedAt,
+		RequestedAt:     v.RequestedAt,
 	}
 
 	return res

@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * syncApplications identityProviderConnections
  *
  * @remarks
- * Run the applications snapshot now instead of at the next scheduled interval. The connection must be verified. Rate limited per organization. Requires org:admin.
+ * Run the applications snapshot on the next coordinator pass, within minutes, instead of at the next scheduled interval. The connection must be verified. Rate limited per organization. Requires org:admin.
  */
 export function identityProviderConnectionsSyncApplications(
   client: GramCore,

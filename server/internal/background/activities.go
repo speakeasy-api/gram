@@ -402,7 +402,7 @@ func NewActivities(
 	// The Okta client needs the assertion signer to mint tokens; workers
 	// without one record every applications sync as failed.
 	var oktaClients okta.ClientFactory
-	if guardianPolicy != nil {
+	if guardianPolicy != nil && remoteSessionAssertionSigner != nil {
 		oktaClients = okta.NewClientFactory(logger, guardianPolicy, remoteSessionAssertionSigner)
 	}
 	oktaApplicationSyncer := oktaapplications.NewSyncer(logger, meterProvider, db, oktaClients)

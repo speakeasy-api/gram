@@ -32,7 +32,10 @@ var ApplicationsSync = Type("IdentityProviderConnectionApplicationsSync", func()
 	Description("Cadence and watermark of the scheduled applications snapshot.")
 	Required("interval_seconds")
 	Attribute("interval_seconds", Int, "How often the snapshot is reconciled, in seconds.")
-	Attribute("synced_at", String, "ISO 8601 timestamp of the last completed run. Omitted until the first run, and cleared by syncApplications so the next coordinator pass runs immediately.", func() {
+	Attribute("synced_at", String, "ISO 8601 timestamp when the last completed run started. Omitted until the first run.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("requested_at", String, "ISO 8601 timestamp of the last syncApplications call; a request newer than synced_at runs on the next coordinator pass.", func() {
 		Format(FormatDateTime)
 	})
 })
@@ -59,8 +62,8 @@ var ReconcileRun = Type("IdentityProviderConnectionReconcileRun", func() {
 	Attribute("assignments_removed", Int)
 	Attribute("skipped_app_ids", ArrayOf(String), "Okta-internal application ids left out of the snapshot.")
 	Attribute("truncated", Boolean, "Whether a listing hit the page or application cap; nothing missing from a truncated listing is removed.")
-	Attribute("error", String, "Typed reason when the run failed.", func() {
-		Enum("rate_limited", "credential_rejected", "okta_unreachable", "too_many_applications", "client_unavailable", "interrupted")
+	Attribute("error", String, "Typed reason when the run failed. rate_limited and okta_unreachable are retried before being recorded; superseded means a newer run applied first; interrupted means the worker died.", func() {
+		Enum("rate_limited", "credential_rejected", "okta_unreachable", "client_unavailable", "superseded", "interrupted")
 	})
 })
 
@@ -88,7 +91,7 @@ var Application = Type("IdentityProviderConnectionApplication", func() {
 
 var ListApplicationsResult = Type("ListIdentityProviderConnectionApplicationsResult", func() {
 	Required("applications", "sync")
-	Attribute("applications", ArrayOf(Application), "Applications ordered by label.")
+	Attribute("applications", ArrayOf(Application), "Applications ordered by label, live rows first. Capped at 2000 rows, the same cap a run applies.")
 	Attribute("sync", ApplicationsSync)
 	Attribute("last_run", ReconcileRun, "Omitted before the first run.")
 })
@@ -352,7 +355,7 @@ var _ = Service("identityProviderConnections", func() {
 	})
 
 	Method("syncApplications", func() {
-		Description("Run the applications snapshot now instead of at the next scheduled interval. The connection must be verified. Rate limited per organization. Requires org:admin.")
+		Description("Run the applications snapshot on the next coordinator pass, within minutes, instead of at the next scheduled interval. The connection must be verified. Rate limited per organization. Requires org:admin.")
 
 		Security(security.Session)
 
@@ -379,7 +382,7 @@ var _ = Service("identityProviderConnections", func() {
 	})
 
 	Method("listApplications", func() {
-		Description("List the applications snapshot for the connection with live assignment counts and the last reconcile run. Requires org:admin.")
+		Description("List the applications snapshot for the connection with live assignment counts and the last reconcile run. The connection must be verified. Requires org:admin.")
 
 		Security(security.Session)
 

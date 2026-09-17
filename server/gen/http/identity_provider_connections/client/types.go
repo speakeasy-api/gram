@@ -417,7 +417,8 @@ type SyncApplicationsResponseBody struct {
 // "identityProviderConnections" service "listApplications" endpoint HTTP
 // response body.
 type ListApplicationsResponseBody struct {
-	// Applications ordered by label.
+	// Applications ordered by label, live rows first. Capped at 2000 rows, the
+	// same cap a run applies.
 	Applications []*IdentityProviderConnectionApplicationResponseBody    `form:"applications,omitempty" json:"applications,omitempty" xml:"applications,omitempty"`
 	Sync         *IdentityProviderConnectionApplicationsSyncResponseBody `form:"sync,omitempty" json:"sync,omitempty" xml:"sync,omitempty"`
 	// Omitted before the first run.
@@ -2216,10 +2217,12 @@ type IdentityProviderConnectionChecklistItemResponseBody struct {
 type IdentityProviderConnectionApplicationsSyncResponseBody struct {
 	// How often the snapshot is reconciled, in seconds.
 	IntervalSeconds *int `form:"interval_seconds,omitempty" json:"interval_seconds,omitempty" xml:"interval_seconds,omitempty"`
-	// ISO 8601 timestamp of the last completed run. Omitted until the first run,
-	// and cleared by syncApplications so the next coordinator pass runs
-	// immediately.
+	// ISO 8601 timestamp when the last completed run started. Omitted until the
+	// first run.
 	SyncedAt *string `form:"synced_at,omitempty" json:"synced_at,omitempty" xml:"synced_at,omitempty"`
+	// ISO 8601 timestamp of the last syncApplications call; a request newer than
+	// synced_at runs on the next coordinator pass.
+	RequestedAt *string `form:"requested_at,omitempty" json:"requested_at,omitempty" xml:"requested_at,omitempty"`
 }
 
 // OktaIdentityProviderConnectionResponseBody is used to define fields on
@@ -2324,7 +2327,9 @@ type IdentityProviderConnectionReconcileRunResponseBody struct {
 	// Whether a listing hit the page or application cap; nothing missing from a
 	// truncated listing is removed.
 	Truncated *bool `form:"truncated,omitempty" json:"truncated,omitempty" xml:"truncated,omitempty"`
-	// Typed reason when the run failed.
+	// Typed reason when the run failed. rate_limited and okta_unreachable are
+	// retried before being recorded; superseded means a newer run applied first;
+	// interrupted means the worker died.
 	Error *string `form:"error,omitempty" json:"error,omitempty" xml:"error,omitempty"`
 }
 
@@ -7182,6 +7187,9 @@ func ValidateIdentityProviderConnectionApplicationsSyncResponseBody(body *Identi
 	if body.SyncedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.synced_at", *body.SyncedAt, goa.FormatDateTime))
 	}
+	if body.RequestedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.requested_at", *body.RequestedAt, goa.FormatDateTime))
+	}
 	return
 }
 
@@ -7392,8 +7400,8 @@ func ValidateIdentityProviderConnectionReconcileRunResponseBody(body *IdentityPr
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.finished_at", *body.FinishedAt, goa.FormatDateTime))
 	}
 	if body.Error != nil {
-		if !(*body.Error == "rate_limited" || *body.Error == "credential_rejected" || *body.Error == "okta_unreachable" || *body.Error == "too_many_applications" || *body.Error == "client_unavailable" || *body.Error == "interrupted") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.error", *body.Error, []any{"rate_limited", "credential_rejected", "okta_unreachable", "too_many_applications", "client_unavailable", "interrupted"}))
+		if !(*body.Error == "rate_limited" || *body.Error == "credential_rejected" || *body.Error == "okta_unreachable" || *body.Error == "client_unavailable" || *body.Error == "superseded" || *body.Error == "interrupted") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.error", *body.Error, []any{"rate_limited", "credential_rejected", "okta_unreachable", "client_unavailable", "superseded", "interrupted"}))
 		}
 	}
 	return

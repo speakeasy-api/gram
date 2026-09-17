@@ -40,12 +40,13 @@ type Service interface {
 	// key material, and tombstone the connection so a new one can be created.
 	// Idempotent. Requires org:admin.
 	Revoke(context.Context, *RevokePayload) (res *OktaIdentityProviderConnection, err error)
-	// Run the applications snapshot now instead of at the next scheduled interval.
-	// The connection must be verified. Rate limited per organization. Requires
-	// org:admin.
+	// Run the applications snapshot on the next coordinator pass, within minutes,
+	// instead of at the next scheduled interval. The connection must be verified.
+	// Rate limited per organization. Requires org:admin.
 	SyncApplications(context.Context, *SyncApplicationsPayload) (res *OktaIdentityProviderConnection, err error)
 	// List the applications snapshot for the connection with live assignment
-	// counts and the last reconcile run. Requires org:admin.
+	// counts and the last reconcile run. The connection must be verified. Requires
+	// org:admin.
 	ListApplications(context.Context, *ListApplicationsPayload) (res *ListIdentityProviderConnectionApplicationsResult, err error)
 }
 
@@ -135,10 +136,12 @@ type IdentityProviderConnectionApplication struct {
 type IdentityProviderConnectionApplicationsSync struct {
 	// How often the snapshot is reconciled, in seconds.
 	IntervalSeconds int
-	// ISO 8601 timestamp of the last completed run. Omitted until the first run,
-	// and cleared by syncApplications so the next coordinator pass runs
-	// immediately.
+	// ISO 8601 timestamp when the last completed run started. Omitted until the
+	// first run.
 	SyncedAt *string
+	// ISO 8601 timestamp of the last syncApplications call; a request newer than
+	// synced_at runs on the next coordinator pass.
+	RequestedAt *string
 }
 
 // One step the organization administrator completes in the identity provider's
@@ -172,7 +175,9 @@ type IdentityProviderConnectionReconcileRun struct {
 	// Whether a listing hit the page or application cap; nothing missing from a
 	// truncated listing is removed.
 	Truncated bool
-	// Typed reason when the run failed.
+	// Typed reason when the run failed. rate_limited and okta_unreachable are
+	// retried before being recorded; superseded means a newer run applied first;
+	// interrupted means the worker died.
 	Error *string
 }
 
@@ -189,7 +194,8 @@ type ListApplicationsPayload struct {
 // ListIdentityProviderConnectionApplicationsResult is the result type of the
 // identityProviderConnections service listApplications method.
 type ListIdentityProviderConnectionApplicationsResult struct {
-	// Applications ordered by label.
+	// Applications ordered by label, live rows first. Capped at 2000 rows, the
+	// same cap a run applies.
 	Applications []*IdentityProviderConnectionApplication
 	Sync         *IdentityProviderConnectionApplicationsSync
 	// Omitted before the first run.

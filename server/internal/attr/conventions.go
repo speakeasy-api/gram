@@ -515,6 +515,7 @@ const (
 	OktaAssignmentsAddedKey           = attribute.Key("gram.okta_applications.assignments_added")
 	OktaAssignmentsRemovedKey         = attribute.Key("gram.okta_applications.assignments_removed")
 	OktaApplicationsTruncatedKey      = attribute.Key("gram.okta_applications.truncated")
+	OktaReconcileRunIDKey             = attribute.Key("gram.okta_applications.run_id")
 	GCPImpersonateServiceAccountKey   = attribute.Key("gram.gcp.impersonate_service_account")
 	WorkOSDirectoryGroupIDKey         = attribute.Key("gram.workos.directory_group_id")
 	OutcomeKey                        = attribute.Key("gram.outcome")
@@ -2020,6 +2021,9 @@ func SlogOktaAssignmentsRemoved(v int) slog.Attr {
 }
 func SlogOktaApplicationsTruncated(v bool) slog.Attr {
 	return slog.Bool(string(OktaApplicationsTruncatedKey), v)
+}
+func SlogOktaReconcileRunID(v string) slog.Attr {
+	return slog.String(string(OktaReconcileRunIDKey), v)
 }
 
 func ExternalCredentialID(v string) attribute.KeyValue { return ExternalCredentialIDKey.String(v) }

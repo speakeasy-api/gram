@@ -30,8 +30,10 @@ func TestOktaApplicationSyncCoordinatorRunsEachCandidateOnceInBoundedBatches(t *
 	env := suite.NewTestWorkflowEnvironment()
 	env.RegisterWorkflow(OktaApplicationSyncWorkflow)
 
-	// Seven candidates across two passes: the coordinator asks for at most
-	// the batch size and excludes what it already attempted.
+	// Seven candidates: the coordinator asks for at most the batch size and
+	// passes the ids it already attempted. The mock ignores that exclusion
+	// list on the second call so the coordinator's own dedupe is what keeps
+	// the first batch from running twice.
 	all := []oktaapplications.SyncCandidate{
 		oktaSyncCandidate("11111111-1111-1111-1111-111111111111", "org-a"),
 		oktaSyncCandidate("22222222-2222-2222-2222-222222222222", "org-b"),
@@ -47,20 +49,16 @@ func TestOktaApplicationSyncCoordinatorRunsEachCandidateOnceInBoundedBatches(t *
 		func(_ context.Context, input activities.GetOktaApplicationSyncCandidatesInput) ([]oktaapplications.SyncCandidate, error) {
 			listCalls++
 			require.Equal(t, int32(oktaApplicationSyncChildConcurrency), input.Limit)
-			excluded := map[uuid.UUID]bool{}
-			for _, id := range input.ExcludeConnectionIDs {
-				excluded[id] = true
+			switch listCalls {
+			case 1:
+				require.Empty(t, input.ExcludeConnectionIDs)
+				return all[:5], nil
+			case 2:
+				require.Len(t, input.ExcludeConnectionIDs, 5)
+				return all[3:], nil
+			default:
+				return nil, nil
 			}
-			var out []oktaapplications.SyncCandidate
-			for _, c := range all {
-				if !excluded[c.ConnectionID] {
-					out = append(out, c)
-				}
-				if len(out) == int(input.Limit) {
-					break
-				}
-			}
-			return out, nil
 		},
 		activity.RegisterOptions{Name: "GetOktaApplicationSyncCandidates"},
 	)
@@ -90,6 +88,49 @@ func TestOktaApplicationSyncCoordinatorRunsEachCandidateOnceInBoundedBatches(t *
 		require.False(t, seen[id], "candidate %s ran twice", id)
 		seen[id] = true
 	}
+}
+
+func TestOktaApplicationSyncCoordinatorBoundsBatchesPerPass(t *testing.T) {
+	t.Parallel()
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	env.RegisterWorkflow(OktaApplicationSyncWorkflow)
+
+	// An endless supply of fresh candidates: the pass stops after its batch
+	// budget and leaves the rest for the next tick.
+	listCalls := 0
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ activities.GetOktaApplicationSyncCandidatesInput) ([]oktaapplications.SyncCandidate, error) {
+			listCalls++
+			out := make([]oktaapplications.SyncCandidate, 0, oktaApplicationSyncChildConcurrency)
+			for range oktaApplicationSyncChildConcurrency {
+				out = append(out, oktaapplications.SyncCandidate{ConnectionID: uuid.New(), OrganizationID: "org_x", OrganizationSlug: "x"})
+			}
+			return out, nil
+		},
+		activity.RegisterOptions{Name: "GetOktaApplicationSyncCandidates"},
+	)
+	runs := 0
+	var runsMu sync.Mutex
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ string) error {
+			runsMu.Lock()
+			defer runsMu.Unlock()
+			runs++
+			return nil
+		},
+		activity.RegisterOptions{Name: "RunOktaApplicationSync"},
+	)
+
+	env.ExecuteWorkflow(OktaApplicationSyncCoordinatorWorkflow)
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
+	require.Equal(t, oktaApplicationSyncMaxBatchesPerPass, listCalls)
+	runsMu.Lock()
+	defer runsMu.Unlock()
+	require.Equal(t, oktaApplicationSyncMaxBatchesPerPass*oktaApplicationSyncChildConcurrency, runs)
 }
 
 func TestOktaApplicationSyncCoordinatorContinuesAfterChildFailure(t *testing.T) {
@@ -162,8 +203,9 @@ func TestOktaApplicationSyncWorkflowPassesConnectionID(t *testing.T) {
 	require.Equal(t, "11111111-1111-1111-1111-111111111111", got)
 }
 
-func TestOktaApplicationSyncScheduleIDIsQueueScoped(t *testing.T) {
+func TestOktaApplicationSyncIDsAreQueueScoped(t *testing.T) {
 	t.Parallel()
 
 	require.NotEqual(t, oktaApplicationSyncCoordinatorScheduleID("a"), oktaApplicationSyncCoordinatorScheduleID("b"))
+	require.Equal(t, "v1:okta-application-sync:11111111-1111-1111-1111-111111111111", buildOktaApplicationSyncWorkflowID(uuid.MustParse("11111111-1111-1111-1111-111111111111")))
 }
