@@ -1,4 +1,4 @@
-h1:0wVfhchWd4I/h+zArk4HAt6ELMRXa4il+M6kLzGfVi0=
+h1:5vITSxMepQsHFRa9bV+wNd5JkKUWz2OH0Lnfu6YxAcU=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -415,3 +415,4 @@ h1:0wVfhchWd4I/h+zArk4HAt6ELMRXa4il+M6kLzGfVi0=
 20260916152055_identity_chaining_capability_and_ema_bindings.sql h1:xXSFD14l25z7pQEq38SNd2LB65uZ76u7OHfgCPuQ07M=
 20260916202749_identity_provider_connections.sql h1:wshacda6yD6/QI8tHex8ra5emoBkEZ5Vw5NGyo8NUIg=
 20260916213112_okta_connection_remote_scope.sql h1:tjJZBxPzOmonjYYnWAHMRKsQ2miveLnANjsdZaAL0QY=
+20260917190009_okta_verified_issuer_claim.sql h1:YlnzS2AotkomY7ZD3tLyZy7b2wEgrRgEW3EnYrylvvE=
