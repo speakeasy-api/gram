@@ -100,7 +100,9 @@ export function AuthenticationSectionBody({
 }): JSX.Element {
   const userSessionIssuerId = target.userSessionIssuerId ?? undefined;
   const issuerConfigured = !!userSessionIssuerId;
-  const effectiveIssuersQuery = useEffectiveUserSessionIssuers();
+  const effectiveIssuersQuery = useEffectiveUserSessionIssuers({
+    mcpResourceId: target.permissionResourceId,
+  });
 
   const {
     data: userSessionIssuer,

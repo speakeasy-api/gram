@@ -8,7 +8,8 @@ import {
 
 export function useEffectiveUserSessionIssuers({
   projectSlug,
-}: { projectSlug?: string } = {}): {
+  mcpResourceId,
+}: { projectSlug?: string; mcpResourceId?: string } = {}): {
   issuers: UserSessionIssuer[];
   organizationIssuers: UserSessionIssuer[];
   isLoading: boolean;
@@ -17,6 +18,7 @@ export function useEffectiveUserSessionIssuers({
   const query = useUserSessionIssuersInfinite({
     limit: PAGE_FETCH_LIMIT,
     gramProject: projectSlug,
+    mcpResourceId,
   });
   const { fetchNextPage, hasNextPage, isFetchingNextPage } = query;
   const { isTruncated } = useDrainedPages({

@@ -83,8 +83,18 @@ describe("useEffectiveUserSessionIssuers", () => {
       isError: false,
     } as never);
 
-    const { result } = renderHook(() => useEffectiveUserSessionIssuers());
+    const { result } = renderHook(() =>
+      useEffectiveUserSessionIssuers({
+        projectSlug: "project-slug",
+        mcpResourceId: "mcp-resource-id",
+      }),
+    );
 
+    expect(useIssuersMock).toHaveBeenCalledWith({
+      limit: 100,
+      gramProject: "project-slug",
+      mcpResourceId: "mcp-resource-id",
+    });
     expect(result.current.issuers).toEqual([organizationIssuer, projectIssuer]);
     expect(result.current.organizationIssuers).toEqual([organizationIssuer]);
     expect(result.current.isLoading).toBe(false);

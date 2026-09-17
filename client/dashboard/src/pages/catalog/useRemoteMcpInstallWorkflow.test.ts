@@ -414,7 +414,7 @@ describe("useRemoteMcpInstallWorkflow", () => {
 
   it("uses an organization issuer for noninteractive catalog installs", async () => {
     mockUseEffectiveUserSessionIssuers.mockReturnValue({
-      issuers: [{ id: "organization-issuer" }],
+      issuers: [{ id: "project-issuer" }, { id: "organization-issuer" }],
       organizationIssuers: [{ id: "organization-issuer" }],
       isLoading: false,
       isError: false,

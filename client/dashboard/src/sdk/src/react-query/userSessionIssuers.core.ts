@@ -83,6 +83,7 @@ export function buildUserSessionIssuersQuery(
     queryKey: queryKeyUserSessionIssuers({
       cursor: request?.cursor,
       limit: request?.limit,
+      mcpResourceId: request?.mcpResourceId,
       gramSession: request?.gramSession,
       gramKey: request?.gramKey,
       gramProject: request?.gramProject,
@@ -126,6 +127,7 @@ export function buildUserSessionIssuersInfiniteQuery(
     queryKey: queryKeyUserSessionIssuersInfinite({
       cursor: request?.cursor,
       limit: request?.limit,
+      mcpResourceId: request?.mcpResourceId,
       gramSession: request?.gramSession,
       gramKey: request?.gramKey,
       gramProject: request?.gramProject,
@@ -166,6 +168,7 @@ export function queryKeyUserSessionIssuers(
   parameters: {
     cursor?: string | undefined;
     limit?: number | undefined;
+    mcpResourceId?: string | undefined;
     gramSession?: string | undefined;
     gramKey?: string | undefined;
     gramProject?: string | undefined;
@@ -178,6 +181,7 @@ export function queryKeyUserSessionIssuersInfinite(
   parameters: {
     cursor?: string | undefined;
     limit?: number | undefined;
+    mcpResourceId?: string | undefined;
     gramSession?: string | undefined;
     gramKey?: string | undefined;
     gramProject?: string | undefined;

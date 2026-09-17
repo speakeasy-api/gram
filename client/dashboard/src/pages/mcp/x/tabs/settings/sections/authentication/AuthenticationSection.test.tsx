@@ -28,7 +28,8 @@ vi.mock("@gram/client/react-query/remoteSessionIssuers.js", () => ({
 }));
 
 vi.mock("@/hooks/useEffectiveUserSessionIssuers", () => ({
-  useEffectiveUserSessionIssuers: () => useEffectiveUserSessionIssuers(),
+  useEffectiveUserSessionIssuers: (...args: unknown[]) =>
+    useEffectiveUserSessionIssuers(...args),
 }));
 
 vi.mock("./UserSessionIssuerField", () => ({
@@ -180,6 +181,9 @@ describe("AuthenticationSectionBody", () => {
       <AuthenticationSectionBody target={remoteTargetWithSessionIssuer} />,
     );
 
+    expect(useEffectiveUserSessionIssuers).toHaveBeenCalledWith({
+      mcpResourceId: "mcp-server-1",
+    });
     expect(useProtectedResourceMetadata).toHaveBeenCalledWith(
       "remote-mcp-server",
       true,

@@ -50,7 +50,7 @@ export function useMcpServerAuthTarget(mcpServer: McpServer): AuthTarget {
     () => ({
       slug: mcpServer.slug ?? "mcp",
       projectId: mcpServer.projectId,
-      permissionResourceId: mcpServer.id,
+      permissionResourceId: mcpServer.toolsetId ?? mcpServer.id,
       supportsOrganizationIssuers: true,
       userSessionIssuerId: mcpServer.userSessionIssuerId ?? null,
       remoteMcpServerId: mcpServer.remoteMcpServerId,

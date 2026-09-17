@@ -69841,6 +69841,14 @@ paths:
                     format: int64
                     type: integer
                 - allowEmptyValue: true
+                  description: Optional MCP server or toolset resource ID used to authorize callers with resource-scoped mcp:write access. The resource must belong to the selected project.
+                  in: query
+                  name: mcp_resource_id
+                  schema:
+                    description: Optional MCP server or toolset resource ID used to authorize callers with resource-scoped mcp:write access. The resource must belong to the selected project.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
                   description: Session header
                   in: header
                   name: Gram-Session

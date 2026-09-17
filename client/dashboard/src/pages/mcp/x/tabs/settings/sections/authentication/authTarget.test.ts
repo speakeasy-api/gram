@@ -53,4 +53,20 @@ describe("useMcpServerAuthTarget", () => {
       }),
     });
   });
+
+  it("uses the backing toolset as the permission resource", () => {
+    const server: McpServer = {
+      createdAt: new Date(0),
+      id: "mcp-server-id",
+      networkAccessMode: "public_only",
+      projectId: "project-id",
+      toolsetId: "toolset-id",
+      updatedAt: new Date(0),
+      visibility: "private",
+    };
+
+    const { result } = renderHook(() => useMcpServerAuthTarget(server));
+
+    expect(result.current.permissionResourceId).toBe("toolset-id");
+  });
 });
