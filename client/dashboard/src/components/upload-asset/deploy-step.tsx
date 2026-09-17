@@ -10,7 +10,14 @@ import { slugify } from "@/lib/constants";
 import { useRoutes } from "@/routes";
 import { Deployment } from "@gram/client/models/components/deployment.js";
 import { DeploymentLogEvent } from "@gram/client/models/components/deploymentlogevent.js";
+import { invalidateAllActiveDeployment } from "@gram/client/react-query/activeDeployment.js";
 import { useDeploymentLogs } from "@gram/client/react-query/deploymentLogs.js";
+import { invalidateAllLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
+import { invalidateAllListAssets } from "@gram/client/react-query/listAssets.js";
+import { invalidateAllListDeployments } from "@gram/client/react-query/listDeployments.js";
+import { invalidateAllListTools } from "@gram/client/react-query/listTools.js";
+import { invalidateAllListToolsets } from "@gram/client/react-query/listToolsets.js";
+import { useQueryClient } from "@tanstack/react-query";
 import { Alert } from "@/components/ui/Alert";
 import { Stack } from "@/components/ui/Stack";
 import { ChevronDownIcon, ExternalLinkIcon } from "lucide-react";
@@ -43,7 +50,8 @@ export default function DeployStep(): React.JSX.Element | null {
       return { toolCount: 0, toolUrns: [] as string[] };
     }
 
-    const sourceSlug = slugify(assetName);
+    const sourceSlug =
+      stepper.meta.current.existingDocument?.slug ?? slugify(assetName);
     const documentId =
       deployment.openapiv3Assets.find((doc) => doc.slug === sourceSlug)?.id ??
       deployment.openapiv3Assets.find(
@@ -66,10 +74,13 @@ export default function DeployStep(): React.JSX.Element | null {
   React.useEffect(() => {
     // Only run when step processing is done (completed or failed) and we have tools
     const stepDone = step.state === "completed" || step.state === "failed";
+    // A new version of an existing document already has servers carrying
+    // its tools; minting another toolset for it would only add a duplicate.
     if (
       !stepDone ||
       toolsetCreationAttempted.current ||
-      toolUrns.length === 0
+      toolUrns.length === 0 ||
+      stepper.meta.current.existingDocument
     ) {
       return;
     }
@@ -298,22 +309,25 @@ function DeploymentDetailsCollapsible({
 const useCreateDeployment = (): (() => Promise<Deployment>) => {
   const stepper = useStepper();
   const client = useSdkClient();
+  const queryClient = useQueryClient();
 
   const _do = React.useCallback(async () => {
-    const { uploadResult, assetName } = stepper.meta.current;
+    const { uploadResult, assetName, existingDocument } = stepper.meta.current;
 
     if (!uploadResult || !assetName) {
       throw new Error("Asset or file not found");
     }
 
+    // The upsert is keyed by slug: a new version keeps the existing
+    // document's slug so it replaces that document rather than adding one.
     const result = await client.deployments.evolveDeployment({
       evolveForm: {
         nonBlocking: true,
         upsertOpenapiv3Assets: [
           {
             assetId: uploadResult.asset.id,
-            name: assetName,
-            slug: slugify(assetName),
+            name: existingDocument?.name ?? assetName,
+            slug: existingDocument?.slug ?? slugify(assetName),
           },
         ],
       },
@@ -343,8 +357,20 @@ const useCreateDeployment = (): (() => Promise<Deployment>) => {
       })) as Deployment;
     }
 
+    // The sources shelf and every source page read these from the cache;
+    // without this they keep showing the version just replaced.
+    await Promise.all([
+      invalidateAllActiveDeployment(queryClient),
+      invalidateAllLatestDeployment(queryClient),
+      invalidateAllListDeployments(queryClient),
+      invalidateAllListAssets(queryClient),
+      invalidateAllListTools(queryClient),
+      // MCP usage on the shelf and source pages is read from the toolsets.
+      invalidateAllListToolsets(queryClient),
+    ]);
+
     return deployment;
-  }, [client.deployments, stepper.meta]);
+  }, [client.deployments, queryClient, stepper.meta]);
 
   return _do;
 };
