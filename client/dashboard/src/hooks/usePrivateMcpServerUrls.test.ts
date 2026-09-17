@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  mcpServerInstallPageLinks,
   privateMcpEndpointUrls,
   usePrivateMcpServerUrls,
 } from "./usePrivateMcpServerUrls";
@@ -97,19 +98,75 @@ describe("privateMcpEndpointUrls", () => {
   });
 });
 
+describe("mcpServerInstallPageLinks", () => {
+  const publicInstallPageUrl = "https://public.example.com/mcp/server/install";
+  const privateInstallPageUrls = [
+    "https://private.example.ts.net/mcp/server/install",
+    "https://private.example.ts.net/mcp/additional/install",
+  ];
+
+  it("labels public and private links explicitly in dual mode", () => {
+    expect(
+      mcpServerInstallPageLinks(
+        "dual",
+        publicInstallPageUrl,
+        privateInstallPageUrls,
+      ),
+    ).toEqual([
+      { url: publicInstallPageUrl, label: "Public install page" },
+      { url: privateInstallPageUrls[0], label: "Private install page" },
+      {
+        url: privateInstallPageUrls[1],
+        label: "Private install page 2",
+      },
+    ]);
+  });
+
+  it("does not mislabel private links when dual mode has no public link", () => {
+    expect(
+      mcpServerInstallPageLinks("dual", undefined, privateInstallPageUrls),
+    ).toEqual([
+      { url: privateInstallPageUrls[0], label: "Private install page" },
+      {
+        url: privateInstallPageUrls[1],
+        label: "Private install page 2",
+      },
+    ]);
+  });
+
+  it("omits the public link in private-only mode", () => {
+    expect(
+      mcpServerInstallPageLinks(
+        "private_only",
+        publicInstallPageUrl,
+        privateInstallPageUrls,
+      ),
+    ).toEqual([
+      { url: privateInstallPageUrls[0], label: "Private install page" },
+      {
+        url: privateInstallPageUrls[1],
+        label: "Private install page 2",
+      },
+    ]);
+  });
+});
+
 describe("usePrivateMcpServerUrls", () => {
   const privateServer = { networkAccessMode: "private_only" as const };
 
-  it("returns online private URLs for an authorized viewer", () => {
-    const { result } = renderHook(() =>
-      usePrivateMcpServerUrls(privateServer, endpoints),
-    );
+  it.each(["dual", "private_only"] as const)(
+    "returns online private URLs for an authorized %s server",
+    (networkAccessMode) => {
+      const { result } = renderHook(() =>
+        usePrivateMcpServerUrls({ networkAccessMode }, endpoints),
+      );
 
-    expect(result.current.privateMcpUrls).toEqual([
-      "https://private.example.ts.net/mcp/platform-server",
-    ]);
-    expect(result.current.canReadPrivateUrls).toBe(true);
-  });
+      expect(result.current.privateMcpUrls).toEqual([
+        "https://private.example.ts.net/mcp/platform-server",
+      ]);
+      expect(result.current.canReadPrivateUrls).toBe(true);
+    },
+  );
 
   it("discards cached ingress data after admin access is revoked", () => {
     hookState.canManageIngress = false;
@@ -122,14 +179,16 @@ describe("usePrivateMcpServerUrls", () => {
     expect(result.current.canReadPrivateUrls).toBe(false);
   });
 
-  it("suppresses cached private URLs while ingress state refetches", () => {
+  it("preserves cached private URLs while ingress state refetches", () => {
     hookState.isFetching = true;
     const { result } = renderHook(() =>
       usePrivateMcpServerUrls(privateServer, endpoints),
     );
 
-    expect(result.current.privateMcpUrls).toEqual([]);
-    expect(result.current.isLoading).toBe(true);
+    expect(result.current.privateMcpUrls).toEqual([
+      "https://private.example.ts.net/mcp/platform-server",
+    ]);
+    expect(result.current.isLoading).toBe(false);
   });
 
   it("discards cached private URLs when the query fails", () => {

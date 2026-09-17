@@ -574,16 +574,21 @@ func TestTailscaleNetworkIngressDeletePreservesUnownedNamespace(t *testing.T) {
 
 func TestTailscaleNetworkIngressDeleteRejectsInvalidNamespaceOwnership(t *testing.T) {
 	t.Parallel()
-	provisioner, typed, dynamicClient, desired := newTestTailscaleProvisioner(t)
-	_, err := typed.CoreV1().Namespaces().Create(t.Context(), &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: desired.Resources.Namespace, Labels: map[string]string{managedByLabelKey: networkIngressManagedBy}}}, metav1.CreateOptions{})
-	require.NoError(t, err)
-	_, err = dynamicClient.Resource(tailnetGVR).Create(t.Context(), tailnetObject(desired), metav1.CreateOptions{})
-	require.NoError(t, err)
+	for _, ownerID := range []string{"", uuid.Nil.String()} {
+		t.Run(ownerID, func(t *testing.T) {
+			t.Parallel()
+			provisioner, typed, dynamicClient, desired := newTestTailscaleProvisioner(t)
+			_, err := typed.CoreV1().Namespaces().Create(t.Context(), &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: desired.Resources.Namespace, Labels: map[string]string{managedByLabelKey: networkIngressManagedBy, networkIngressIDLabel: ownerID}}}, metav1.CreateOptions{})
+			require.NoError(t, err)
+			_, err = dynamicClient.Resource(tailnetGVR).Create(t.Context(), tailnetObject(desired), metav1.CreateOptions{})
+			require.NoError(t, err)
 
-	err = provisioner.Delete(t.Context(), desired.Resources)
-	require.ErrorContains(t, err, "refuse to delete namespace with invalid ownership")
-	_, err = dynamicClient.Resource(tailnetGVR).Get(t.Context(), desired.Resources.Tailnet, metav1.GetOptions{})
-	require.NoError(t, err)
+			err = provisioner.Delete(t.Context(), desired.Resources)
+			require.ErrorContains(t, err, "refuse to delete namespace with invalid ownership")
+			_, err = dynamicClient.Resource(tailnetGVR).Get(t.Context(), desired.Resources.Tailnet, metav1.GetOptions{})
+			require.NoError(t, err)
+		})
+	}
 }
 
 func TestTailscaleNetworkIngressDeleteChecksNamespaceAbsence(t *testing.T) {

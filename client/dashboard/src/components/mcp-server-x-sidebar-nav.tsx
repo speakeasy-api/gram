@@ -12,7 +12,10 @@ import { SetupGuideCard } from "@/components/setup-guide/SetupGuideCard";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Text } from "@/components/ui/Text";
 import { getMcpServerArgs } from "@/lib/sources";
-import { usePrivateMcpServerUrls } from "@/hooks/usePrivateMcpServerUrls";
+import {
+  mcpServerInstallPageLinks,
+  usePrivateMcpServerUrls,
+} from "@/hooks/usePrivateMcpServerUrls";
 import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
 import { useRBAC } from "@/hooks/useRBAC";
 import { MCPServerStatusDropdown } from "@/pages/mcp/x/MCPServerDetails";
@@ -108,12 +111,11 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
   const privateRoutesEnabled =
     mcpServer?.networkAccessMode === McpServerNetworkAccessMode.Dual ||
     mcpServer?.networkAccessMode === McpServerNetworkAccessMode.PrivateOnly;
-  const effectiveInstallPageUrls =
-    mcpServer?.networkAccessMode === McpServerNetworkAccessMode.PrivateOnly
-      ? privateInstallPageUrls
-      : installPageUrl
-        ? [installPageUrl]
-        : [];
+  const effectiveInstallPageLinks = mcpServerInstallPageLinks(
+    mcpServer?.networkAccessMode,
+    installPageUrl,
+    privateInstallPageUrls,
+  );
   const privateUrlAssessable =
     canReadPrivateUrls && !isLoadingPrivateUrls && !privateUrlsError;
   const serverUrlReady =
@@ -378,9 +380,9 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
           flex-1 the rule sat at the container's midpoint, which the longer
           label crowded while the shorter one left slack. */}
       <div className="border-border flex items-stretch justify-center gap-3 border-t pt-3">
-        {effectiveInstallPageUrls.length > 0 ? (
+        {effectiveInstallPageLinks.length > 0 ? (
           <div className="flex flex-col items-center gap-1">
-            {effectiveInstallPageUrls.map((url, index) => (
+            {effectiveInstallPageLinks.map(({ url, label }) => (
               <a
                 key={url}
                 href={url}
@@ -388,7 +390,7 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
                 rel="noopener noreferrer"
                 className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs font-semibold transition-colors hover:no-underline"
               >
-                {index === 0 ? "Install page" : `Install page ${index + 1}`}
+                {label}
                 <ExternalLink className="h-3 w-3" />
               </a>
             ))}

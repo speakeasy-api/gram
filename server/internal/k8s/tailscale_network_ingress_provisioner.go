@@ -341,6 +341,7 @@ func (p *TailscaleNetworkIngressProvisioner) Delete(ctx context.Context, resourc
 		foreignOwner :=
 			namespace.Labels[managedByLabelKey] == networkIngressManagedBy &&
 				parseErr == nil &&
+				parsedOwner != uuid.Nil &&
 				parsedOwner.String() == actualOwner &&
 				actualOwner != ownerID
 		if !foreignOwner {

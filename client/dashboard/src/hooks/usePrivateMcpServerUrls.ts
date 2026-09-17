@@ -45,6 +45,36 @@ export function privateMcpEndpointUrls(
   );
 }
 
+export function mcpServerInstallPageLinks(
+  networkAccessMode: McpServer["networkAccessMode"] | undefined,
+  publicInstallPageUrl: string | undefined,
+  privateInstallPageUrls: string[],
+): Array<{ url: string; label: string }> {
+  const publicRoutesEnabled =
+    networkAccessMode !== McpServerNetworkAccessMode.PrivateOnly;
+  const privateRoutesEnabled =
+    networkAccessMode === McpServerNetworkAccessMode.Dual ||
+    networkAccessMode === McpServerNetworkAccessMode.PrivateOnly;
+  const links: Array<{ url: string; label: string }> = [];
+
+  if (publicRoutesEnabled && publicInstallPageUrl) {
+    links.push({ url: publicInstallPageUrl, label: "Public install page" });
+  }
+  if (privateRoutesEnabled) {
+    links.push(
+      ...privateInstallPageUrls.map((url, index) => ({
+        url,
+        label:
+          index === 0
+            ? "Private install page"
+            : `Private install page ${index + 1}`,
+      })),
+    );
+  }
+
+  return links;
+}
+
 export function usePrivateMcpServerUrls(
   mcpServer: Pick<McpServer, "networkAccessMode"> | undefined,
   endpoints: McpEndpoint[],
@@ -67,13 +97,12 @@ export function usePrivateMcpServerUrls(
   });
   const privateMcpUrls = useMemo(
     () =>
-      queryEnabled && ingressResult.isSuccess && !ingressResult.isFetching
+      queryEnabled && ingressResult.isSuccess
         ? privateMcpEndpointUrls(ingressResult.data?.ingress, endpoints)
         : [],
     [
       endpoints,
       ingressResult.data?.ingress,
-      ingressResult.isFetching,
       ingressResult.isSuccess,
       queryEnabled,
     ],
@@ -83,8 +112,7 @@ export function usePrivateMcpServerUrls(
     privateMcpUrls,
     privateInstallPageUrls: privateMcpUrls.map((url) => `${url}/install`),
     canReadPrivateUrls: rolloutEnabled && canManageIngress,
-    isLoading:
-      queryEnabled && (ingressResult.isPending || ingressResult.isFetching),
+    isLoading: queryEnabled && ingressResult.isPending,
     isError: queryEnabled && ingressResult.isError,
   };
 }
