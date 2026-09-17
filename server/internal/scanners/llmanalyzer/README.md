@@ -16,7 +16,12 @@ package and its call sites, not the plan.
 | `presidio`         | `personal_data_leak`    | `pii.llm`              | `pii`              |
 | `prompt_injection` | `prompt_injection`      | `prompt_injection.llm` | `prompt_injection` |
 | `destructive_tool` | `destructive_tool_call` | `destructive_tool.llm` | `destructive_tool` |
-| `cli_destructive`  | `destructive_tool_call` | `destructive_tool.llm` | `destructive_tool` |
+| `cli_destructive`  | `destructive_tool_call` | `cli_destructive.llm`  | `cli_destructive`  |
+
+One model call scores each risk key once; fan-out (`FindingsForSources`)
+re-labels the finding per policy source, so a single `destructive_tool_call`
+verdict yields `destructive_tool.llm` for a `destructive_tool` policy and
+`cli_destructive.llm` for a `cli_destructive` policy.
 
 Findings carry `Source = "llm_analyzer"`, `Description` = model reasoning
 (capped at 500 runes), an empty `Match`, no offsets (`surface = none`),
