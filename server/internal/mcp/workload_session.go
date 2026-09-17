@@ -19,6 +19,11 @@ import (
 // presenting a bad credential.
 var errWorkloadSessionCredentialLoad = errors.New("load workload session credential")
 
+// errWorkloadSessionAdmissionLoad marks an admission that could not reach a
+// decision, such as a failed policy read, so it is not reported as the
+// workload's token having been withdrawn.
+var errWorkloadSessionAdmissionLoad = errors.New("load workload session admission")
+
 // workloadSessionCredential is the immutable ceiling a workload session was
 // minted with. It carries no authorizer: a workload records no approving human,
 // which is where it differs from an agent credential.
@@ -106,6 +111,11 @@ func (s *Service) admitWorkloadSession(ctx context.Context, endpoint *ResolvedMc
 	}
 	ctx, err = s.authz.PrepareContext(ctx)
 	if err != nil {
+		// Admission refuses with a shareable error; anything else means no
+		// decision was reached.
+		if _, refused := errors.AsType[*oops.ShareableError](err); !refused {
+			err = fmt.Errorf("%w: %w", errWorkloadSessionAdmissionLoad, err)
+		}
 		return ctx, fmt.Errorf("prepare workload session authorization: %w", err)
 	}
 	return s.requireWorkloadSessionAuthorization(ctx, endpoint)

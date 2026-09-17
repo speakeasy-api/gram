@@ -118,12 +118,17 @@ func workloadSessionEndpoint(fx agentConsentFixture) *mcp.ResolvedMcpEndpoint {
 
 func mintWorkloadBearer(t *testing.T, ti *testInstance, fx agentConsentFixture, session usersessionsrepo.UserSession) string {
 	t.Helper()
+	return mintSessionBearerExpiringAt(t, ti, fx, session, session.ExpiresAt.Time)
+}
+
+func mintSessionBearerExpiringAt(t *testing.T, ti *testInstance, fx agentConsentFixture, session usersessionsrepo.UserSession, expiresAt time.Time) string {
+	t.Helper()
 
 	token, _, err := sessiontokens.NewSigner("test-jwt-secret").Mint(sessiontokens.MintParams{
 		Subject:   session.SubjectUrn,
 		Audience:  urn.NewToolset(fx.toolset.ID).String(),
 		Issuer:    ti.serverURL.JoinPath("mcp", fx.toolset.McpSlug.String).String(),
-		ExpiresAt: &session.ExpiresAt.Time,
+		ExpiresAt: &expiresAt,
 		ClientID:  fx.client.ClientID,
 		JTI:       session.Jti,
 	})

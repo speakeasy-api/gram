@@ -219,6 +219,33 @@ func validSuppliedJTI(jti string) bool {
 // expiry validation so clients can revoke an expired token, but a valid Gram
 // signature is required before the caller can affect the revocation cache.
 func (s *Signer) VerifiedJTI(token string) (string, error) {
+	claims, err := s.signatureVerifiedClaims(token)
+	if err != nil {
+		return "", err
+	}
+	if claims.ID == "" {
+		return "", errors.New("token missing jti claim")
+	}
+	return claims.ID, nil
+}
+
+// VerifiedSubject extracts the session subject after verifying the token's
+// signature, skipping expiry and audience validation. It says who a token was
+// minted for, never that the token is usable: callers use it to shape a
+// rejection, not to admit a request.
+func (s *Signer) VerifiedSubject(token string) (urn.SessionSubject, error) {
+	claims, err := s.signatureVerifiedClaims(token)
+	if err != nil {
+		return urn.SessionSubject{}, err
+	}
+	subject, err := urn.ParseSessionSubject(claims.Subject)
+	if err != nil {
+		return urn.SessionSubject{}, fmt.Errorf("parse session subject: %w", err)
+	}
+	return subject, nil
+}
+
+func (s *Signer) signatureVerifiedClaims(token string) (*SessionClaims, error) {
 	claims := SessionClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    "",
@@ -238,10 +265,7 @@ func (s *Signer) VerifiedJTI(token string) (string, error) {
 		return s.key, nil
 	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}), jwt.WithoutClaimsValidation())
 	if err != nil {
-		return "", fmt.Errorf("parse token: %w", err)
+		return nil, fmt.Errorf("parse token: %w", err)
 	}
-	if claims.ID == "" {
-		return "", errors.New("token missing jti claim")
-	}
-	return claims.ID, nil
+	return &claims, nil
 }

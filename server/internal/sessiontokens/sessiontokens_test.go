@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
@@ -142,6 +143,28 @@ func TestSigner_VerifiedJTI(t *testing.T) {
 	verifiedJTI, err := signer.VerifiedJTI(token)
 	require.NoError(t, err)
 	require.Equal(t, jti, verifiedJTI)
+}
+
+// VerifiedSubject reads the subject of a token that no longer validates, but
+// only when Gram signed it.
+func TestSigner_VerifiedSubjectToleratesExpiryButNotForgery(t *testing.T) {
+	t.Parallel()
+
+	signer := sessiontokens.NewSigner("test-jwt-secret")
+	subject := urn.NewWorkloadSubject(uuid.New(), "repo:acme/payments-api:ref:refs/heads/main")
+	expiresAt := time.Now().Add(-time.Minute)
+	token, _, err := signer.Mint(sessiontokens.MintParams{Subject: subject, Audience: "platform-mcp", Issuer: "https://example.test", ExpiresAt: &expiresAt})
+	require.NoError(t, err)
+
+	_, err = signer.ValidateBearer(t.Context(), token, "platform-mcp", neverRevoked{})
+	require.Error(t, err)
+
+	verified, err := signer.VerifiedSubject(token)
+	require.NoError(t, err)
+	require.Equal(t, subject.String(), verified.String())
+
+	_, err = sessiontokens.NewSigner("other-secret").VerifiedSubject(token)
+	require.Error(t, err)
 }
 
 func TestSigner_ValidateExactAudienceRejectsAdditionalAudience(t *testing.T) {
