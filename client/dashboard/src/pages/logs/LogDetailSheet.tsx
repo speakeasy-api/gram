@@ -434,7 +434,15 @@ function tokenStyle(token: CodeToken): React.CSSProperties {
 }
 
 function CodeBlock({ content }: { content: string }) {
-  const [lines, setLines] = useState<CodeLine[] | null>(null);
+  // Keyed by the content it was produced from. Highlighting is async, so
+  // holding bare lines leaves the previous record's payload on screen while
+  // the new one tokenizes — the reader sees another call's arguments under
+  // this call's heading.
+  const [highlighted, setHighlighted] = useState<{
+    content: string;
+    lines: CodeLine[];
+  } | null>(null);
+  const lines = highlighted?.content === content ? highlighted.lines : null;
 
   // Not every payload is JSON: a hook message body is plain text, and asking
   // the JSON grammar to tokenize it produces a wall of error scopes. Plain
@@ -448,12 +456,12 @@ function CodeBlock({ content }: { content: string }) {
 
   useEffect(() => {
     if (!isJson) {
-      setLines(null);
+      setHighlighted(null);
       return;
     }
     let cancelled = false;
-    void highlightCode(content, "json", DARK_THEME).then((highlighted) => {
-      if (!cancelled) setLines(highlighted.lines);
+    void highlightCode(content, "json", DARK_THEME).then((result) => {
+      if (!cancelled) setHighlighted({ content, lines: result.lines });
     });
     return () => {
       cancelled = true;
