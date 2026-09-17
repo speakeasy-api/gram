@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
@@ -36,6 +37,28 @@ func ValidateRemoteMCPURL(ctx context.Context, policy *guardian.Policy, rawURL s
 		return nil, fmt.Errorf("validate remote MCP URL: %w", err)
 	}
 	return validated, nil
+}
+
+// CrossOriginBodyReplay reports whether following req would carry the request
+// body to an origin other than configuredOrigin. Only 307 and 308 preserve the
+// method and body; net/http converts the other redirect codes to GET, so those
+// carry nothing but the URL.
+//
+// The hosted proxy and the URL probe both apply this, so a redirect path the
+// probe approves is one the proxy will actually follow, and neither replays an
+// MCP request body to a host the upstream picked.
+func CrossOriginBodyReplay(configuredOrigin *url.URL, req *http.Request) bool {
+	// net/http populates Response only on a redirected request, so this is
+	// the redirect's own status rather than an inference from the method.
+	if req.Response == nil {
+		return false
+	}
+	switch req.Response.StatusCode {
+	case http.StatusTemporaryRedirect, http.StatusPermanentRedirect:
+		return !sameRemoteMCPOrigin(configuredOrigin, req.URL)
+	default:
+		return false
+	}
 }
 
 // sameRemoteMCPOrigin reports whether two URLs address the same origin:

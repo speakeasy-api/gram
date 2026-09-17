@@ -87,18 +87,15 @@ func probeRemoteMcpURL(ctx context.Context, policy *guardian.Policy, rawURL stri
 			return fmt.Errorf("validate redirect url: %w", err)
 		}
 
-		original := via[0]
-		body, err := original.GetBody()
-		if err != nil {
-			return fmt.Errorf("restore probe request body: %w", err)
+		// Redirect semantics match the hosted proxy, so the probe cannot
+		// approve a path the proxy will not follow. 301, 302 and 303 are left
+		// to net/http, which converts them to GET exactly as the runtime
+		// does — an endpoint reachable only over POST therefore fails the
+		// probe rather than passing it and failing at initialize. A 307 or
+		// 308 keeps method and body, which must not leave the origin.
+		if proxy.CrossOriginBodyReplay(via[0].URL, req) {
+			return fmt.Errorf("probe redirect to %s: %w", req.URL.Host, proxy.ErrCrossOriginRemoteMCPRedirect)
 		}
-		req.Method = original.Method
-		req.Header = make(http.Header) //nolint:gosec // The probe restores only negotiation headers.
-		req.Header.Set("Accept", original.Header.Get("Accept"))
-		req.Header.Set("Content-Type", original.Header.Get("Content-Type"))
-		req.Body = body
-		req.GetBody = original.GetBody
-		req.ContentLength = original.ContentLength
 		return nil
 	}
 

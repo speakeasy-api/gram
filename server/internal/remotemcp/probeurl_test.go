@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -390,20 +391,23 @@ func TestProbeRemoteMcpURL_TLSFailure(t *testing.T) {
 	require.Equal(t, remotemcp.ProbeReasonTLSError, requireValue(t, result.Reason))
 }
 
-func TestProbeRemoteMcpURL_PreservesInitializeAcrossRedirects(t *testing.T) {
+func TestProbeRemoteMcpURL_FollowsSeeOtherRedirectsAsGETLikeTheProxy(t *testing.T) {
 	t.Parallel()
 	var requests atomic.Int32
+	// The probe no longer forces POST back onto a 302 hop, because the
+	// runtime proxy does not either. Anything the probe approves here has to
+	// be something the proxy can reproduce.
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requests.Add(1)
-		body, err := io.ReadAll(r.Body)
-		assert.NoError(t, err)
-		assert.Equal(t, http.MethodPost, r.Method)
-		assert.Contains(t, string(body), `"method":"initialize"`)
+		hop := requests.Add(1)
 		if r.URL.Path != "/3" {
-			w.Header().Set("Location", fmt.Sprintf("/%d", requests.Load()))
+			w.Header().Set("Location", fmt.Sprintf("/%d", hop))
 			w.WriteHeader(http.StatusFound)
 			return
 		}
+		body, err := io.ReadAll(r.Body)
+		assert.NoError(t, err)
+		assert.Equal(t, http.MethodGet, r.Method, "net/http converts 302 to GET and the probe leaves that alone")
+		assert.Empty(t, string(body))
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{}}`))
 	}))
@@ -412,6 +416,113 @@ func TestProbeRemoteMcpURL_PreservesInitializeAcrossRedirects(t *testing.T) {
 	result := remotemcp.ProbeRemoteMcpURL(t.Context(), newPermissivePolicy(t), upstream.URL+"/0")
 	require.Equal(t, remotemcp.ProbeOutcomeMCPAvailable, result.Outcome)
 	require.Equal(t, int32(4), requests.Load())
+}
+
+func TestProbeRemoteMcpURL_RedirectMethodMatrixMatchesProxy(t *testing.T) {
+	t.Parallel()
+	for name, tc := range map[string]struct {
+		status     int
+		wantMethod string
+		wantBody   bool
+	}{
+		"moved permanently converts to GET": {status: http.StatusMovedPermanently, wantMethod: http.MethodGet, wantBody: false},
+		"found converts to GET":             {status: http.StatusFound, wantMethod: http.MethodGet, wantBody: false},
+		"see other converts to GET":         {status: http.StatusSeeOther, wantMethod: http.MethodGet, wantBody: false},
+		"temporary keeps POST on-origin":    {status: http.StatusTemporaryRedirect, wantMethod: http.MethodPost, wantBody: true},
+		"permanent keeps POST on-origin":    {status: http.StatusPermanentRedirect, wantMethod: http.MethodPost, wantBody: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/moved" {
+					http.Redirect(w, r, "/moved", tc.status)
+					return
+				}
+				body, err := io.ReadAll(r.Body)
+				assert.NoError(t, err)
+				assert.Equal(t, tc.wantMethod, r.Method)
+				if tc.wantBody {
+					assert.Contains(t, string(body), `"method":"initialize"`)
+				} else {
+					assert.Empty(t, string(body))
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{}}`))
+			}))
+			t.Cleanup(upstream.Close)
+
+			result := remotemcp.ProbeRemoteMcpURL(t.Context(), newPermissivePolicy(t), upstream.URL)
+			require.Equal(t, remotemcp.ProbeOutcomeMCPAvailable, result.Outcome)
+		})
+	}
+}
+
+func TestProbeRemoteMcpURL_RejectsCrossOriginBodyReplayingRedirect(t *testing.T) {
+	t.Parallel()
+	for name, status := range map[string]int{
+		"temporary": http.StatusTemporaryRedirect,
+		"permanent": http.StatusPermanentRedirect,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			var targetHits atomic.Int32
+			target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				targetHits.Add(1)
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{}}`))
+			}))
+			t.Cleanup(target.Close)
+
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				http.Redirect(w, r, target.URL, status)
+			}))
+			t.Cleanup(upstream.Close)
+
+			result := remotemcp.ProbeRemoteMcpURL(t.Context(), newPermissivePolicy(t), upstream.URL)
+			require.Equal(t, remotemcp.ProbeOutcomeUnreachable, result.Outcome)
+			require.Equal(t, int32(0), targetHits.Load(), "the initialize body must not reach an upstream-chosen host")
+		})
+	}
+}
+
+func TestProbeRemoteMcpURL_ApprovedRedirectPathInitializesThroughTheProxy(t *testing.T) {
+	t.Parallel()
+	// The point of aligning the two: whatever the probe calls available at
+	// setup time, the runtime proxy must be able to initialize through.
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/canonical" {
+			http.Redirect(w, r, "/canonical", http.StatusFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18"}}`))
+	}))
+	t.Cleanup(upstream.Close)
+
+	policy := newPermissivePolicy(t)
+	result := remotemcp.ProbeRemoteMcpURL(t.Context(), policy, upstream.URL)
+	require.Equal(t, remotemcp.ProbeOutcomeMCPAvailable, result.Outcome)
+
+	p := &remotemcpproxy.Proxy{
+		GuardianPolicy:       policy,
+		Logger:               testenv.NewLogger(t),
+		Tracer:               testenv.NewTracerProvider(t).Tracer("probe-alignment-test"),
+		NonStreamingTimeout:  5 * time.Second,
+		StreamingTimeout:     5 * time.Second,
+		MaxBufferedBodyBytes: remotemcpproxy.DefaultMaxBufferedBodyBytes,
+		RemoteURL:            upstream.URL,
+		Identity:             remotemcpproxy.ServerIdentity{RemoteMCPServerID: "probe-alignment"},
+	}
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id",
+		strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, p.Post(rr, req), "a probe-approved redirect path must initialize through the proxy")
+	require.Equal(t, http.StatusOK, rr.Code)
+	require.Contains(t, rr.Body.String(), `"protocolVersion":"2025-06-18"`)
 }
 
 func TestProbeRemoteMcpURL_RejectsFourthRedirect(t *testing.T) {
