@@ -475,6 +475,14 @@ type GetToolUsageClientToolBreakdownPayload struct {
 	ClientKeys []string
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string
+	// Trace outcomes to include (error, success, blocked, pending). Empty means
+	// all.
+	Statuses []ToolUsageStatus
+	// Free-text attribute search string from the q URL param, applied as the trace
+	// listing applies it.
+	Query *string
+	// Arbitrary attribute filter conditions from the af URL param
+	Filters []*LogFilter
 }
 
 // GetToolUsageClientToolBreakdownResult is the result type of the telemetry
@@ -513,6 +521,14 @@ type GetToolUsageClientsPayload struct {
 	ClientKeys []string
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string
+	// Trace outcomes to include (error, success, blocked, pending). Empty means
+	// all.
+	Statuses []ToolUsageStatus
+	// Free-text attribute search string from the q URL param, applied as the trace
+	// listing applies it.
+	Query *string
+	// Arbitrary attribute filter conditions from the af URL param
+	Filters []*LogFilter
 }
 
 // GetToolUsageClientsResult is the result type of the telemetry service
@@ -580,6 +596,14 @@ type GetToolUsageSummaryPayload struct {
 	ClientKeys []string
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string
+	// Trace outcomes to include (error, success, blocked, pending). Empty means
+	// all.
+	Statuses []ToolUsageStatus
+	// Free-text attribute search string from the q URL param, applied as the trace
+	// listing applies it.
+	Query *string
+	// Arbitrary attribute filter conditions from the af URL param
+	Filters []*LogFilter
 }
 
 // GetToolUsageSummaryResult is the result type of the telemetry service
@@ -634,6 +658,14 @@ type GetToolUsageTargetTimeSeriesPayload struct {
 	ClientKeys []string
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string
+	// Trace outcomes to include (error, success, blocked, pending). Empty means
+	// all.
+	Statuses []ToolUsageStatus
+	// Free-text attribute search string from the q URL param, applied as the trace
+	// listing applies it.
+	Query *string
+	// Arbitrary attribute filter conditions from the af URL param
+	Filters []*LogFilter
 }
 
 // GetToolUsageTargetTimeSeriesResult is the result type of the telemetry
@@ -672,6 +704,14 @@ type GetToolUsageTargetToolBreakdownPayload struct {
 	ClientKeys []string
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string
+	// Trace outcomes to include (error, success, blocked, pending). Empty means
+	// all.
+	Statuses []ToolUsageStatus
+	// Free-text attribute search string from the q URL param, applied as the trace
+	// listing applies it.
+	Query *string
+	// Arbitrary attribute filter conditions from the af URL param
+	Filters []*LogFilter
 }
 
 // GetToolUsageTargetToolBreakdownResult is the result type of the telemetry
@@ -710,6 +750,14 @@ type GetToolUsageTargetsPayload struct {
 	ClientKeys []string
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string
+	// Trace outcomes to include (error, success, blocked, pending). Empty means
+	// all.
+	Statuses []ToolUsageStatus
+	// Free-text attribute search string from the q URL param, applied as the trace
+	// listing applies it.
+	Query *string
+	// Arbitrary attribute filter conditions from the af URL param
+	Filters []*LogFilter
 }
 
 // GetToolUsageTargetsResult is the result type of the telemetry service
@@ -748,6 +796,14 @@ type GetToolUsageTotalsPayload struct {
 	ClientKeys []string
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string
+	// Trace outcomes to include (error, success, blocked, pending). Empty means
+	// all.
+	Statuses []ToolUsageStatus
+	// Free-text attribute search string from the q URL param, applied as the trace
+	// listing applies it.
+	Query *string
+	// Arbitrary attribute filter conditions from the af URL param
+	Filters []*LogFilter
 }
 
 // GetToolUsageTotalsResult is the result type of the telemetry service
@@ -786,6 +842,14 @@ type GetToolUsageUserTimeSeriesPayload struct {
 	ClientKeys []string
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string
+	// Trace outcomes to include (error, success, blocked, pending). Empty means
+	// all.
+	Statuses []ToolUsageStatus
+	// Free-text attribute search string from the q URL param, applied as the trace
+	// listing applies it.
+	Query *string
+	// Arbitrary attribute filter conditions from the af URL param
+	Filters []*LogFilter
 }
 
 // GetToolUsageUserTimeSeriesResult is the result type of the telemetry service
@@ -824,6 +888,14 @@ type GetToolUsageUsersByTargetPayload struct {
 	ClientKeys []string
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string
+	// Trace outcomes to include (error, success, blocked, pending). Empty means
+	// all.
+	Statuses []ToolUsageStatus
+	// Free-text attribute search string from the q URL param, applied as the trace
+	// listing applies it.
+	Query *string
+	// Arbitrary attribute filter conditions from the af URL param
+	Filters []*LogFilter
 }
 
 // GetToolUsageUsersByTargetResult is the result type of the telemetry service
@@ -862,6 +934,14 @@ type GetToolUsageUsersPayload struct {
 	ClientKeys []string
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string
+	// Trace outcomes to include (error, success, blocked, pending). Empty means
+	// all.
+	Statuses []ToolUsageStatus
+	// Free-text attribute search string from the q URL param, applied as the trace
+	// listing applies it.
+	Query *string
+	// Arbitrary attribute filter conditions from the af URL param
+	Filters []*LogFilter
 }
 
 // GetToolUsageUsersResult is the result type of the telemetry service
@@ -2118,6 +2198,11 @@ type ToolUsageTargetTimeSeriesPoint struct {
 	EventCount int64
 	// Number of failed tool usage events in the bucket
 	FailureCount int64
+	// Number of tool usage events denied by a hook in the bucket
+	BlockedCount int64
+	// Number of tool usage events observed starting but never finishing in the
+	// bucket
+	PendingCount int64
 }
 
 // Aggregated tool usage metrics for one target and tool

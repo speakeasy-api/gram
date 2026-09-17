@@ -968,3 +968,102 @@ func TestGetToolUsageClients_FoldsCaseAndUnattributed(t *testing.T) {
 		}
 	})
 }
+
+// The cards and the timeline must narrow by outcome the same way the rows do:
+// a page that filters to errors and then reports the whole window's totals is
+// telling two different stories at once.
+func TestGetToolUsageTotals_NarrowsByStatus(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	now := time.Now().UTC()
+
+	for _, status := range []int{200, 200, 500} {
+		insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{
+			projectID:   projectID,
+			timestamp:   now.Add(-10 * time.Minute),
+			toolsetSlug: "payments",
+			toolName:    "charge",
+			userEmail:   "alice@example.com",
+			statusCode:  status,
+		})
+	}
+
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		all, err := ti.service.GetToolUsageTotals(ctx, &gen.GetToolUsageTotalsPayload{From: from, To: to})
+		if !assert.NoError(c, err) {
+			return
+		}
+		assert.Equal(c, int64(3), all.Totals.EventCount)
+	}, 10*time.Second, 200*time.Millisecond)
+
+	errorsOnly, err := ti.service.GetToolUsageTotals(ctx, &gen.GetToolUsageTotalsPayload{
+		From:     from,
+		To:       to,
+		Statuses: []gen.ToolUsageStatus{"error"},
+	})
+	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.Equal(t, int64(1), errorsOnly.Totals.EventCount)
+
+	successOnly, err := ti.service.GetToolUsageTotals(ctx, &gen.GetToolUsageTotalsPayload{
+		From:     from,
+		To:       to,
+		Statuses: []gen.ToolUsageStatus{"success"},
+	})
+	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.Equal(t, int64(2), successOnly.Totals.EventCount)
+}
+
+// A free-text query has no column on the pre-aggregated view, so the summary
+// drops onto the same raw scan the trace listing uses. The two paths must
+// still agree about what they counted.
+func TestGetToolUsageTotals_NarrowsByQueryOnTheRawPath(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	now := time.Now().UTC()
+
+	insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{
+		projectID:   projectID,
+		timestamp:   now.Add(-10 * time.Minute),
+		toolsetSlug: "payments",
+		toolName:    "charge",
+		userEmail:   "alice@example.com",
+		statusCode:  200,
+	})
+	insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{
+		projectID:   projectID,
+		timestamp:   now.Add(-9 * time.Minute),
+		toolsetSlug: "shipping",
+		toolName:    "quote",
+		userEmail:   "bob@example.com",
+		statusCode:  200,
+	})
+
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+	query := "charge"
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.GetToolUsageTotals(ctx, &gen.GetToolUsageTotalsPayload{
+			From:  from,
+			To:    to,
+			Query: &query,
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		assert.Equal(c, int64(1), res.Totals.EventCount)
+	}, 10*time.Second, 200*time.Millisecond)
+}

@@ -9299,6 +9299,8 @@ func marshalTelemetryToolUsageTargetTimeSeriesPointToToolUsageTargetTimeSeriesPo
 		TargetLabel:   v.TargetLabel,
 		EventCount:    v.EventCount,
 		FailureCount:  v.FailureCount,
+		BlockedCount:  v.BlockedCount,
+		PendingCount:  v.PendingCount,
 	}
 
 	return res

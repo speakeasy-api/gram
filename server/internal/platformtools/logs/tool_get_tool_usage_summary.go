@@ -88,6 +88,11 @@ func (s *GetToolUsageSummary) Call(ctx context.Context, _ toolconfig.ToolCallEnv
 		AccountType:        nil,
 		HookSources:        input.HookSources,
 		ClientKeys:         input.ClientKeys,
+		// The MCP tool exposes no status, search or attribute filter, so the
+		// summary it returns covers the whole window it was asked for.
+		Statuses: nil,
+		Query:    nil,
+		Filters:  nil,
 	})
 	if err != nil {
 		if errors.Is(err, telemetryerrs.ErrLogsDisabled) {
