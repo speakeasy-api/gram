@@ -1,0 +1,21 @@
+server/internal/risk/scanner_pubsub_degradation_test.go
+  s_a9f30837f96a6a::t_5b10e7018fcf5a 1-114
+server/internal/risk/scanner.go
+  s_a9f30837f96a6a::t_5b10e7018fcf5a 1016-1017
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "f7685aa30296a8c8cd49142696ef571bcb7ef929",
+  "prompts": {},
+  "sessions": {
+    "s_a9f30837f96a6a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0afbb-bf9d-7d63-a73e-d4b97b0cff05",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
