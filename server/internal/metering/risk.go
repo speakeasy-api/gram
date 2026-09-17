@@ -112,9 +112,7 @@ func PrepareRiskReading(definition Definition, provenance RiskProvenance, stoken
 	if stokens == 0 {
 		return nil, nil
 	}
-	switch definition {
-	case RiskGitleaks(), RiskPresidio(), RiskPromptInjection(), RiskPromptPolicy(), RiskCustomRules(), RiskCLIDestructive(), RiskLLMAnalyzer():
-	default:
+	if !definition.IsRiskScanner() {
 		return nil, fmt.Errorf("meter is not a registered risk scanner")
 	}
 	if provenance.RiskPolicyID == uuid.Nil {

@@ -132,6 +132,15 @@ func RiskLLMAnalyzer() Definition {
 	return riskDefinition(MeterRiskLLMAnalyzer)
 }
 
+// riskMeterPrefix scopes every risk scanner meter id.
+const riskMeterPrefix = "gram.risk.scan."
+
+// IsRiskScanner reports whether the definition is a registered risk scanner
+// meter. It is the single predicate every risk-only path validates against.
+func (d Definition) IsRiskScanner() bool {
+	return strings.HasPrefix(string(d.id), riskMeterPrefix) && validateDefinition(d)
+}
+
 func riskDefinition(id MeterID) Definition {
 	return Definition{
 		id:                id,
