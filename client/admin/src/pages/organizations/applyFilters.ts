@@ -1,8 +1,9 @@
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import { createContext, useCallback, useContext } from "react";
 
 import {
   filtersToSearch,
+  statusSelection,
   type FilterSelection,
 } from "@/lib/organizationFilters";
 import type { OrganizationsSearch } from "@/routes/organizations.index";
@@ -35,12 +36,25 @@ export function useApplyFilters(): (
 ) => void {
   const navigate = useNavigate({ from: ROUTE_ID });
   const onApplied = useContext(FiltersApplied);
+  const search = useSearch({ from: ROUTE_ID });
 
   return useCallback(
     (next: FilterSelection, options: ApplyOptions = {}): void => {
-      // Page 1. The rows on a later page were counted under the
-      // filters that minted it.
-      onApplied(options);
+      const { createdPreset: nextPreset, ...nextFilters } =
+        filtersToSearch(next);
+      const { createdPreset: currentPreset, ...currentFilters } =
+        filtersToSearch({
+          ...search,
+          type: search.type ?? [],
+          trial: search.trial ?? [],
+          disabled: statusSelection(search),
+        });
+      // A preset label is not a request filter. Only that metadata changing
+      // preserves the page; an unchanged Apply still intentionally resets it.
+      const metadataOnly =
+        nextPreset !== currentPreset &&
+        JSON.stringify(nextFilters) === JSON.stringify(currentFilters);
+      if (!metadataOnly || options.clearSearch) onApplied(options);
       void navigate({
         search: (prev: OrganizationsSearch) => ({
           ...prev,
@@ -49,6 +63,6 @@ export function useApplyFilters(): (
         }),
       });
     },
-    [navigate, onApplied],
+    [navigate, onApplied, search],
   );
 }

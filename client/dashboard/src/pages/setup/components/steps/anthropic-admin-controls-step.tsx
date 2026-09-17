@@ -8,6 +8,7 @@ import { MarketplaceSection } from "../marketplace-section";
 import { isMarketplacePublished } from "../marketplace-status";
 import { ConfirmTrafficSection } from "../confirm-traffic-section";
 import { isAnthropicOrCursorSource } from "../hook-event-sources";
+import { usePlatformApiKeys } from "../platform-setup-values";
 import { PlatformSetupFlow } from "../platform-setup-flow";
 import { platformStatusBadge } from "../platform-status-badge";
 import type { PlatformSetupStatus } from "../../types";
@@ -19,6 +20,7 @@ interface AnthropicAdminControlsStepProps {
 export function AnthropicAdminControlsStep({
   onComplete,
 }: AnthropicAdminControlsStepProps): JSX.Element {
+  const apiKeys = usePlatformApiKeys({ shareAnthropicKey: true });
   const [platformStatus, setPlatformStatus] = useState<
     Record<string, PlatformSetupStatus>
   >({});
@@ -66,6 +68,11 @@ export function AnthropicAdminControlsStep({
           publishedHint="Select this repo when Claude.ai asks which repository to sync."
         />
 
+        <p className="text-muted-foreground text-sm">
+          One Hooks API key is generated automatically and used for both Claude
+          Code and Cowork.
+        </p>
+
         <StepSection
           index={3}
           slug="connect-cowork"
@@ -75,6 +82,7 @@ export function AnthropicAdminControlsStep({
           aside={platformStatusBadge(statusOf("claude-cowork"))}
         >
           <PlatformSetupFlow
+            apiKeys={apiKeys}
             platformId="claude-cowork"
             status={statusOf("claude-cowork")}
             onStatusChange={(next) => setStatus("claude-cowork", next)}
@@ -91,6 +99,7 @@ export function AnthropicAdminControlsStep({
           aside={platformStatusBadge(statusOf("claude"))}
         >
           <PlatformSetupFlow
+            apiKeys={apiKeys}
             platformId="claude"
             status={statusOf("claude")}
             onStatusChange={(next) => setStatus("claude", next)}

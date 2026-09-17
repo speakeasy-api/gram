@@ -2,6 +2,19 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AnthropicAdminControlsStep } from "./anthropic-admin-controls-step";
 
+const keyMocks = vi.hoisted(() => ({
+  usePlatformApiKeys: vi.fn(() => ({
+    keys: {},
+    pending: {},
+    errors: {},
+    ensure: vi.fn(),
+  })),
+  flow: vi.fn(),
+}));
+vi.mock("../platform-setup-values", () => ({
+  usePlatformApiKeys: keyMocks.usePlatformApiKeys,
+}));
+
 const publishStatus = vi.hoisted(() => ({
   current: {
     data: { connected: false } as Record<string, unknown>,
@@ -38,23 +51,29 @@ vi.mock("../platform-setup-flow", () => ({
     platformId,
     heldBack,
     onStatusChange,
+    apiKeys,
   }: {
+    apiKeys?: unknown;
     platformId: string;
     heldBack?: string;
     onStatusChange: (status: string) => void;
-  }) => (
-    <div>
-      <p>{heldBack ?? `Steps for ${platformId}`}</p>
-      <button onClick={() => onStatusChange("complete")}>
-        Connect {platformId}
-      </button>
-    </div>
-  ),
+  }) => {
+    keyMocks.flow(platformId, apiKeys);
+    return (
+      <div>
+        <p>{heldBack ?? `Steps for ${platformId}`}</p>
+        <button onClick={() => onStatusChange("complete")}>
+          Connect {platformId}
+        </button>
+      </div>
+    );
+  },
 }));
 
 afterEach(cleanup);
 
 beforeEach(() => {
+  keyMocks.flow.mockClear();
   publishStatus.current = { data: { connected: false }, isLoading: false };
 });
 
@@ -75,6 +94,18 @@ describe("AnthropicAdminControlsStep", () => {
 
     renderStep();
 
+    expect(keyMocks.usePlatformApiKeys).toHaveBeenCalledWith({
+      shareAnthropicKey: true,
+    });
+    const flows = keyMocks.flow.mock.calls;
+    expect(flows.find(([id]) => id === "claude")![1]).toBe(
+      flows.find(([id]) => id === "claude-cowork")![1],
+    );
+    expect(flows.find(([id]) => id === "claude")![1]).toBeDefined();
+    expect(flows.find(([id]) => id === "cursor")![1]).toBeUndefined();
+    expect(
+      screen.getByText(/One Hooks API key is generated automatically/),
+    ).toBeTruthy();
     expect(screen.getByText("Set up Anthropic admin controls")).toBeTruthy();
     expect(screen.getByText("Enable logging section")).toBeTruthy();
     expect(screen.getByText("Marketplace section")).toBeTruthy();

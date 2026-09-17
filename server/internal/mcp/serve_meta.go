@@ -184,6 +184,14 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 		}
 	}
 
+	// Hand back the session the handshake was recorded under, as the hosted
+	// surface does. Without it a client that sent no Mcp-Session-Id gets a
+	// freshly minted id on every request, and nothing it does later can be
+	// tied back to the identity it reported at initialize.
+	if req.Method == "initialize" {
+		w.Header().Set("Mcp-Session-Id", gate.sessionID)
+	}
+
 	body, err := s.handleMetaMCPRequest(ctx, logger, mcpEndpoint, metaServer, gate, &req, r.Header.Get(mcpversions.HTTPHeader))
 
 	switch {
@@ -224,7 +232,7 @@ func (s *Service) handleMetaMCPRequest(
 	case "ping":
 		return handlePing(ctx, logger, req.ID, serverInfoMetaServer)
 	case "initialize":
-		return s.handleMetaInitialize(ctx, logger, metaServer, req, gate.protocolVersion.InEffect)
+		return s.handleMetaInitialize(ctx, logger, metaServer, gate, req, gate.protocolVersion.InEffect)
 	case "server/discover":
 		return s.handleMetaServerDiscover(ctx, logger, metaServer, req)
 	case "notifications/initialized", "notifications/cancelled":
@@ -329,6 +337,7 @@ func (s *Service) handleMetaInitialize(
 	ctx context.Context,
 	logger *slog.Logger,
 	metaServer *metamcprepo.MetaMcpServer,
+	gate *metaGateContext,
 	req *rawRequest,
 	negotiated string,
 ) (json.RawMessage, error) {
@@ -338,6 +347,15 @@ func (s *Service) handleMetaInitialize(
 	if err != nil {
 		logger.WarnContext(ctx, "failed to parse meta mcp initialize params", attr.SlogError(err))
 	}
+
+	// Record who handshaked so every member dispatch in this session can
+	// attribute its tool calls to a client. Scoped to the gateway, not to a
+	// toolset: members each carry their own slug.
+	storeSessionClientInfo(ctx, logger, s.sessionClientInfo, &mcpInputs{ //nolint:exhaustruct // only the record's identity fields matter here
+		projectID:       gate.projectID,
+		sessionID:       gate.sessionID,
+		clientInfoScope: metaClientInfoScope(gate.metaServerID),
+	}, params.ClientInfo.Name, params.ClientInfo.Version, params.ProtocolVersion)
 
 	recordMCPProtocolVersionSpan(ctx, params.ProtocolVersion, negotiated)
 	s.metrics.RecordMCPInitialize(ctx, params.ProtocolVersion, negotiated)

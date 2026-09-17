@@ -475,6 +475,7 @@ func newTemporalClient(logger *slog.Logger, meterProvider metric.MeterProvider, 
 
 	tracingInterceptor, err := opentelemetry.NewTracingInterceptor(opentelemetry.TracerOptions{
 		TextMapPropagator: otel.GetTextMapPropagator(),
+		SpanStarter:       temporal.StartTracingSpan,
 	})
 	if err != nil {
 		return nil, nilShutdownFunc, fmt.Errorf("failed to create temporal tracing interceptor: %w", err)

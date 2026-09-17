@@ -59,14 +59,32 @@ var ListOrganizationMcpServersResult = Type("ListOrganizationMcpServersResult", 
 	Required("items")
 })
 
+// TrustedClientUserSessionIssuerReference identifies an organization-owned
+// user-session issuer that uses a client for identity-provider login.
+var TrustedClientUserSessionIssuerReference = Type("TrustedClientUserSessionIssuerReference", func() {
+	Description("An organization-owned user-session issuer that uses this client for identity-provider login.")
+
+	Attribute("id", String, "The user_session_issuer id.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("slug", String, "The user_session_issuer slug.")
+
+	Required("id", "slug")
+})
+
 // OrganizationClientDeletePreflight describes the impact of deleting a client.
 var OrganizationClientDeletePreflight = Type("OrganizationClientDeletePreflight", func() {
-	Description("Authoritative impact summary for deleting a remote_session_client: how many sessions it holds and the names of the MCP servers it is attached to.")
+	Description("Authoritative impact summary for deleting a remote_session_client, including identity-provider login references that block deletion.")
 
 	Attribute("session_count", Int, "Number of non-deleted remote_sessions minted against this client.")
 	Attribute("mcp_server_names", ArrayOf(String), "Display names of MCP servers this client is attached to.")
+	Attribute("trusted_user_session_issuers", ArrayOf(TrustedClientUserSessionIssuerReference), "Organization-owned user-session issuers that use this client for identity-provider login and block deletion.")
+	Attribute("can_delete", Boolean, "Whether the client can be deleted now.")
+	Attribute("blocking_reason", String, "Stable reason deletion is blocked. Present when can_delete is false.", func() {
+		Enum("identity_provider_login")
+	})
 
-	Required("session_count", "mcp_server_names")
+	Required("session_count", "mcp_server_names", "trusted_user_session_issuers", "can_delete")
 })
 
 // CreateOrganizationRemoteSessionClientForm registers a standalone
