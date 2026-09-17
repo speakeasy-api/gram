@@ -167,7 +167,8 @@ func NewClient(logger *slog.Logger, client *guardian.HTTPClient, signer remotese
 }
 
 // parseOrgURL accepts an https origin, or an http origin on a loopback host
-// for local stubs, with no path, query, fragment, or userinfo.
+// for local stubs, with no path, query, fragment, or userinfo, and returns
+// it in RFC 3986 canonical form.
 func parseOrgURL(raw string) (*url.URL, error) {
 	orgURL, err := url.Parse(raw)
 	if err != nil || orgURL.Hostname() == "" || orgURL.Opaque != "" {
@@ -186,14 +187,19 @@ func parseOrgURL(raw string) (*url.URL, error) {
 	switch orgURL.Scheme {
 	case "https":
 	case "http":
-		if !isLoopbackHost(orgURL.Hostname()) {
+		if !isLoopbackHost(strings.ToLower(orgURL.Hostname())) {
 			return nil, fmt.Errorf("okta: org url %q must use https", raw)
 		}
 	default:
 		return nil, fmt.Errorf("okta: org url %q must use https", raw)
 	}
-	orgURL.Path, orgURL.RawPath = "", ""
-	return orgURL, nil
+	// RFC 9449 §4.2, §4.3: canonicalize the origin once so every wire URI is byte-identical to its proof htu.
+	canonical, err := url.Parse(dpop.HTU(orgURL))
+	if err != nil {
+		return nil, fmt.Errorf("okta: invalid org url %q", raw)
+	}
+	canonical.Path, canonical.RawPath = "", ""
+	return canonical, nil
 }
 
 // validateAppID rejects ids that would not stay a single opaque path segment.
@@ -328,8 +334,10 @@ func (c *httpClient) ListGroups(ctx context.Context, req ListGroupsRequest) ([]G
 	return out, nil
 }
 
-// VerifyScopes always mints a fresh token for the required scopes; the
-// verification token is never cached because it may lack default scopes.
+// VerifyScopes always mints a fresh token for the required scopes. The
+// verification token replaces the cached one only when its grant covers the
+// default scopes, so the reads that follow a verify reuse it instead of
+// minting again; otherwise the cache stays evicted.
 func (c *httpClient) VerifyScopes(ctx context.Context, required []string) (*ScopeVerification, error) {
 	if err := c.acquireMint(ctx); err != nil {
 		return nil, err
@@ -366,12 +374,26 @@ func (c *httpClient) VerifyScopes(ctx context.Context, required []string) (*Scop
 			missing = append(missing, s)
 		}
 	}
+	if strings.EqualFold(tok.tokenType, dpop.TokenType) && coversScopes(have, defaultScopes) {
+		c.mu.Lock()
+		c.cached = tok
+		c.mu.Unlock()
+	}
 	return &ScopeVerification{
 		Granted:   granted,
 		Missing:   missing,
 		DPoPBound: strings.EqualFold(tok.tokenType, dpop.TokenType),
 		ExpiresAt: tok.expiresAt,
 	}, nil
+}
+
+func coversScopes(have map[string]struct{}, scopes []string) bool {
+	for _, s := range scopes {
+		if _, ok := have[s]; !ok {
+			return false
+		}
+	}
+	return true
 }
 
 func setQuery(q url.Values, key, value string) {
