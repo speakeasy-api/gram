@@ -38,6 +38,24 @@ export function SourcesRoot(): JSX.Element {
   return <Outlet />;
 }
 
+// One line for whatever could not be read, so the list says once what it
+// cannot vouch for.
+function unavailableNote(
+  assetsUnavailable: boolean,
+  usageUnavailable: boolean,
+): string | null {
+  if (assetsUnavailable && usageUnavailable) {
+    return "File details and MCP usage could not be loaded, so format, dates and usage are unknown for now.";
+  }
+  if (assetsUnavailable) {
+    return "File details could not be loaded, so format and dates are unknown for now.";
+  }
+  if (usageUnavailable) {
+    return "MCP usage could not be loaded, so which sources a server carries is unknown for now.";
+  }
+  return null;
+}
+
 /** The deployment-asset id a tool was generated from, if it has one. */
 function toolSourceId(tool: Tool): string | undefined {
   if (tool.type === "http") return tool.openapiv3DocumentId;
@@ -65,19 +83,27 @@ export default function Sources(): JSX.Element {
   // hide every OpenAPI document as "unknown", so it is held clear until the
   // facts arrive, and for good if they never do.
   const formatUnknown = assetsLoading || assetsUnavailable;
-  const filterValues = useMemo(
-    () => (formatUnknown ? { ...filters.values, format: [] } : filters.values),
-    [formatUnknown, filters.values],
-  );
   const [removing, setRemoving] = useState<RemovableSource | null>(null);
   const actionsFor = useSourceListActions({ onRemove: setRemoving });
 
   // Usage runs through tool URNs: a hosted server is a toolset, and a
   // toolset names its tools under the source's prefix. A failed server list
-  // reads as "not used" rather than taking the shelf down.
-  const { data: toolsetsResult } = useListToolsets(undefined, undefined, {
-    throwOnError: false,
-  });
+  // is reported below rather than taking the shelf down.
+  const {
+    data: toolsetsResult,
+    isLoading: toolsetsLoading,
+    isError: toolsetsError,
+  } = useListToolsets(undefined, undefined, { throwOnError: false });
+  const toolsetsUnavailable = toolsetsError && !toolsetsResult;
+  // Without the toolsets every source would read as unused, so the usage
+  // filter is held clear the same way the format filter is.
+  const usageUnknown = toolsetsLoading || toolsetsUnavailable;
+  const filterValues = useMemo(() => {
+    const values = { ...filters.values };
+    if (formatUnknown) values.format = [];
+    if (usageUnknown) values.usedInMcp = null;
+    return values;
+  }, [formatUnknown, usageUnknown, filters.values]);
   const toolsetToolUrns = useMemo(
     () =>
       (toolsetsResult?.toolsets ?? []).flatMap(
@@ -120,6 +146,8 @@ export default function Sources(): JSX.Element {
   // is fine gets no id and no mark.
   const failureFor = (source: (typeof sources)[number]) =>
     failingKeys.has(sourceFailureKey(source)) ? failedDeploymentId : undefined;
+
+  const unavailable = unavailableNote(assetsUnavailable, toolsetsUnavailable);
 
   return (
     <ResourceListPage
@@ -170,10 +198,9 @@ export default function Sources(): JSX.Element {
         ),
       }}
     >
-      {assetsUnavailable ? (
+      {unavailable ? (
         <Text muted small>
-          File details could not be loaded, so format and dates are unknown for
-          now.
+          {unavailable}
         </Text>
       ) : null}
       {filtered.length === 0 ? (

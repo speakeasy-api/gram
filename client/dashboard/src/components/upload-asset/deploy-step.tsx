@@ -16,6 +16,7 @@ import { invalidateAllLatestDeployment } from "@gram/client/react-query/latestDe
 import { invalidateAllListAssets } from "@gram/client/react-query/listAssets.js";
 import { invalidateAllListDeployments } from "@gram/client/react-query/listDeployments.js";
 import { invalidateAllListTools } from "@gram/client/react-query/listTools.js";
+import { invalidateAllListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { Alert } from "@/components/ui/Alert";
 import { Stack } from "@/components/ui/Stack";
@@ -364,6 +365,8 @@ const useCreateDeployment = (): (() => Promise<Deployment>) => {
       invalidateAllListDeployments(queryClient),
       invalidateAllListAssets(queryClient),
       invalidateAllListTools(queryClient),
+      // MCP usage on the shelf and source pages is read from the toolsets.
+      invalidateAllListToolsets(queryClient),
     ]);
 
     return deployment;

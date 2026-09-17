@@ -97,8 +97,11 @@ export function RedirectToSourceDetail(): JSX.Element {
     throwOnError: false,
   });
 
-  // isLoading is false for disabled queries, so only the lookups this kind
-  // enabled hold the redirect.
+  // isFetching is false for disabled queries, so only the lookups this kind
+  // enabled hold the redirect. It covers a refetch as well as the first load:
+  // query keys are not project-aware, so right after a project switch the
+  // cache still holds the previous project's answer, and a redirect fires
+  // once rather than re-rendering when the fresh one lands.
   const resolving = [
     deploymentQuery,
     mcpServersQuery,
@@ -106,7 +109,7 @@ export function RedirectToSourceDetail(): JSX.Element {
     tunneledQuery,
     unproxiedQuery,
     toolsetsQuery,
-  ].some((query) => query.isLoading);
+  ].some((query) => query.isFetching);
 
   if (resolving) {
     return (

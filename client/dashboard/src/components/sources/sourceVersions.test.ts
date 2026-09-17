@@ -1,3 +1,4 @@
+import type { Deployment } from "@gram/client/models/components/deployment.js";
 import type { DeploymentSummary } from "@gram/client/models/components/deploymentsummary.js";
 import { describe, expect, it } from "vitest";
 import {
@@ -39,6 +40,24 @@ describe("deploymentCountsForSourceKind", () => {
       toolCount: 4,
     });
   });
+
+  it("counts function assets from the full deployment when it is the same one", () => {
+    // The summary counts by tools, so a resource-only function reads as zero.
+    const summary = { ...deployment, functionsAssetCount: 0 };
+    const full = {
+      id: "dep_1",
+      functionsAssets: [{ id: "fn_1" }],
+    } as Deployment;
+    expect(
+      deploymentCountsForSourceKind("function", summary, full).assetCount,
+    ).toBe(1);
+    expect(
+      deploymentCountsForSourceKind("function", summary, {
+        ...full,
+        id: "dep_2",
+      }).assetCount,
+    ).toBe(0);
+  });
 });
 
 describe("deploymentStatusBadge", () => {
@@ -55,13 +74,14 @@ describe("deploymentStatusBadge", () => {
 
   it("reads failed and in-flight statuses by tone", () => {
     expect(deploymentStatusBadge("failed", false).variant).toBe("destructive");
-    expect(deploymentStatusBadge("building", false)).toEqual({
+    expect(deploymentStatusBadge("pending", false)).toEqual({
       variant: "warning",
-      label: "Building",
+      label: "Pending",
     });
-    expect(deploymentStatusBadge("queued", false)).toEqual({
+    // "created" is the initial status; it has no label of its own.
+    expect(deploymentStatusBadge("created", false)).toEqual({
       variant: "warning",
-      label: "queued",
+      label: "created",
     });
   });
 });

@@ -19,4 +19,10 @@ describe("sectionIdForHash", () => {
     expect(sectionIdForHash("#")).toBeNull();
     expect(sectionIdForHash("#nope")).toBeNull();
   });
+
+  it("ignores hashes named after inherited object properties", () => {
+    expect(sectionIdForHash("#constructor")).toBeNull();
+    expect(sectionIdForHash("#toString")).toBeNull();
+    expect(sectionIdForHash("#__proto__")).toBeNull();
+  });
 });

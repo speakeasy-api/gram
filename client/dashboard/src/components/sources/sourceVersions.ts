@@ -1,4 +1,5 @@
 import type { BadgeVariant } from "@/components/ui/lib/types";
+import type { Deployment } from "@gram/client/models/components/deployment.js";
 import type { DeploymentSummary } from "@gram/client/models/components/deploymentsummary.js";
 
 export type SourceKind = "openapi" | "function";
@@ -23,16 +24,22 @@ export interface DeploymentKindCounts {
 }
 
 // A deployment carries every source in the project, but on a source's own
-// page only the counts for its kind say anything about it.
+// page only the counts for its kind say anything about it. The summary counts
+// function assets by their tools, so a function that only declares resources
+// reads as zero there; the full deployment, when it is the one in hand, lists
+// the assets themselves.
 export function deploymentCountsForSourceKind(
   sourceKind: SourceKind,
   deployment: DeploymentSummary,
+  full?: Deployment,
 ): DeploymentKindCounts {
+  const assets = full?.id === deployment.id ? full : undefined;
   switch (sourceKind) {
     case "function":
       return {
         assetLabel: "Functions",
-        assetCount: deployment.functionsAssetCount,
+        assetCount:
+          assets?.functionsAssets?.length ?? deployment.functionsAssetCount,
         toolCount: deployment.functionsToolCount,
       };
     case "openapi":

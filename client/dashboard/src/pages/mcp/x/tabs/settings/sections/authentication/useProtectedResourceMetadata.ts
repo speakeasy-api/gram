@@ -5,12 +5,14 @@ import { useQuery, type QueryClient } from "@tanstack/react-query";
 const PROTECTED_RESOURCE_METADATA_QUERY_KEY = "protected-resource-metadata";
 
 // The probe is keyed by remote id but answers for whatever URL the remote had
-// when it ran, so a URL change must drop it or Authentication keeps showing
-// the old upstream's discovery for the rest of the stale window.
-export function invalidateAllProtectedResourceMetadata(
+// when it ran, so a URL change must drop it. A reset rather than an
+// invalidation: the hook below only reports isLoading, so a cached answer
+// left in place during the refetch would keep "Use discovered" armed with the
+// old upstream's authorization server until the new probe lands.
+export function resetAllProtectedResourceMetadata(
   queryClient: QueryClient,
 ): Promise<void> {
-  return queryClient.invalidateQueries({
+  return queryClient.resetQueries({
     queryKey: [PROTECTED_RESOURCE_METADATA_QUERY_KEY],
   });
 }

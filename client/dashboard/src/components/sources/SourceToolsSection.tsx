@@ -24,7 +24,8 @@ import type { SourceTool } from "./useSourceQueries";
 type HttpTool = Extract<SourceTool, { type: "http" }>;
 type FunctionTool = Extract<SourceTool, { type: "function" }>;
 
-const HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const;
+// Every method the OpenAPI extractor generates tools for, in reading order.
+const HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"] as const;
 
 function facetOf(tool: SourceTool): string {
   switch (tool.type) {
@@ -233,10 +234,18 @@ export function SourceToolsSection({
       const key = facetOf(tool);
       counts.set(key, (counts.get(key) ?? 0) + 1);
     }
-    // Methods keep their conventional order; runtimes read alphabetically.
+    // Methods keep their conventional order, with any the list doesn't
+    // know trailing so no tool is left unfilterable; runtimes read
+    // alphabetically.
+    const known: readonly string[] = HTTP_METHODS;
     const ordered =
       sourceKind === "openapi"
-        ? HTTP_METHODS.filter((method) => counts.has(method))
+        ? [
+            ...known.filter((method) => counts.has(method)),
+            ...Array.from(counts.keys())
+              .filter((method) => !known.includes(method))
+              .sort(),
+          ]
         : Array.from(counts.keys()).sort();
     return ordered.map((label) => ({ label, count: counts.get(label) ?? 0 }));
   }, [tools, sourceKind]);

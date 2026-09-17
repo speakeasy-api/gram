@@ -20,7 +20,6 @@ import {
   invalidateAllMcpServers,
   useMcpServers,
 } from "@gram/client/react-query/mcpServers.js";
-import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSessionIssuers.js";
 import { useUpdateMcpServerMutation } from "@gram/client/react-query/updateMcpServer.js";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
@@ -38,6 +37,7 @@ import {
   serversBackedBySameSource,
   type SourceBackedDeleteTarget,
 } from "./sourceDelete";
+import { invalidateWrapperDeleteAuthViews } from "./sourceInvalidation";
 
 function mcpServerVisibilityUpdateForm(
   mcpServer: McpServer,
@@ -303,6 +303,29 @@ export function DangerZoneSection({
                 </RequireScope>
               </ServerControlRow>
             </div>
+            {linkedQuery.isError && (
+              // The delete stays disabled until the sibling list loads, since
+              // the dialog must show what the cascade removes; say why, and
+              // offer a way out other than reloading the page.
+              <Alert variant="error" dismissible={false}>
+                <Stack gap={2}>
+                  <Text small>
+                    Could not load the other servers backed by this source, so
+                    deletion is unavailable.
+                  </Text>
+                  <div>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={linkedQuery.isFetching}
+                      onClick={() => void linkedQuery.refetch()}
+                    >
+                      <Button.Text>Retry</Button.Text>
+                    </Button>
+                  </div>
+                </Stack>
+              </Alert>
+            )}
             {updateVisibility.isError && (
               <Alert variant="error" dismissible={false}>
                 {updateVisibility.error.message}
@@ -415,7 +438,7 @@ function DeleteMcpServerDialogContent({
       await Promise.all([
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
         invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
-        invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
+        invalidateWrapperDeleteAuthViews(queryClient, { refetchType: "all" }),
       ]);
       toast.success("MCP server deleted");
       onSuccess();

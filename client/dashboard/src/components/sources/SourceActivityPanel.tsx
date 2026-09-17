@@ -123,7 +123,7 @@ export function SourceActivityPanel({
   return (
     <Card.Dashboard
       title="Activity"
-      tooltip={`Calls to this source's tools that rank among the project's ${TOP_TOOLS} most-called tools, across every MCP server that carries them.`}
+      tooltip={`Project-wide calls to this source's tools, however they were invoked, for the tools that rank among the project's ${TOP_TOOLS} most-called.`}
       action={
         <Text muted className="text-xs">
           Last {WINDOW_DAYS} days · project top {TOP_TOOLS}
@@ -185,7 +185,7 @@ function SourceActivityBody({
   if (!summary) {
     return (
       <WidgetEmptyState
-        message={`No invocation data yet. Activity appears once tools from this source are among the project's ${TOP_TOOLS} most-called through an MCP server.`}
+        message={`No invocation data yet. Activity appears once tools from this source are among the project's ${TOP_TOOLS} most-called, counting every call in the project.`}
       />
     );
   }

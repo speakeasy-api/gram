@@ -90,6 +90,7 @@ export default function UploadFileStep(): JSX.Element {
         // A new version can also arrive from the CLI; the input shows those
         // commands when it knows the slug.
         documentSlug={stepper.meta.current.existingDocument?.slug}
+        documentName={stepper.meta.current.existingDocument?.name}
         isLoading={isUploading}
       />
     );

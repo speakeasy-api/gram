@@ -147,10 +147,16 @@ export function TunneledMcpConnectionsPanel({
     );
 
   const connections = data?.connections ?? [];
-  const status = connectionStatusPresentation(source?.connectionStatus);
-  const lastSeen = source?.lastSeenAt
-    ? relative(new Date(source.lastSeenAt))
-    : "never";
+  // Without the source row (still loading, or its poll failed) there is no
+  // history to report; "never" would claim the agent has never connected.
+  let status: StatusPresentation = { label: "Unavailable", variant: "neutral" };
+  let lastSeen = "unavailable";
+  if (source) {
+    status = connectionStatusPresentation(source.connectionStatus);
+    lastSeen = source.lastSeenAt
+      ? relative(new Date(source.lastSeenAt))
+      : "never";
+  }
 
   let body = (
     <Table
@@ -161,8 +167,9 @@ export function TunneledMcpConnectionsPanel({
   );
   if (isLoading) {
     body = <SkeletonTable />;
-  } else if (isError && !data) {
-    // A failed poll with nothing loaded yet is not "no connections".
+  } else if (isError && connections.length === 0) {
+    // A failed poll is not "no connections", whether nothing has loaded yet
+    // or an earlier poll legitimately returned an empty list.
     body = (
       <div className="flex flex-col items-start gap-2 py-6">
         <Text muted>Failed to load tunnel connections.</Text>

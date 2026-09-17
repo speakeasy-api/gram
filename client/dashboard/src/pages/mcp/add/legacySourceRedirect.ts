@@ -152,10 +152,13 @@ export function resolveLegacySourceRedirect(
       // (`tools:externalmcp:<slug>:<toolName>`); only the no-tools fallback
       // uses `:proxy`. The source-scoped prefix matches both shapes.
       const prefix = attachmentToURNPrefix("externalmcp", sourceSlug);
-      const toolset = lookup.toolsets.find((candidate) =>
+      const toolsets = lookup.toolsets.filter((candidate) =>
         candidate.toolUrns.some((urn) => urn.startsWith(prefix)),
       );
-      return toolset
+      // Several servers can carry the same external MCP; picking one would
+      // land on an arbitrary server, so the list is the honest target.
+      const [toolset] = toolsets;
+      return toolset && toolsets.length === 1
         ? { kind: "toolset", slug: toolset.slug }
         : { kind: "mcp-list" };
     }

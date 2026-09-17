@@ -36,7 +36,13 @@ export function useSourceTools(
   isError: boolean;
   refetch: () => void;
 } {
-  const { data, isLoading, isError, refetch } = useListTools();
+  // A failed read is reported inline (retry state) rather than thrown to the
+  // route boundary, which would replace the whole source page.
+  const { data, isLoading, isError, refetch } = useListTools(
+    undefined,
+    undefined,
+    { throwOnError: false },
+  );
 
   const tools = useMemo(
     () =>

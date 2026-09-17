@@ -10,7 +10,6 @@ import { useProject } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import { useActiveDeployment } from "@/hooks/toolTypes";
 import { dateTimeFormatters } from "@/lib/dates";
-import { getServerURL } from "@/lib/utils";
 import { useListAssets } from "@gram/client/react-query/listAssets.js";
 import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { useRoutes } from "@/routes";
@@ -18,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { Download, Loader2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { downloadSourceFile, sourceDownloadFilename } from "./sourceDownload";
 import { useSourceTools } from "./useSourceQueries";
 
 // Sizes are shown to give a sense of scale, not for accounting, so a single
@@ -44,68 +44,6 @@ function formatMemory(mib: number): string {
 // the per-source value is NULL.
 const DEFAULT_FUNCTION_MEMORY_MIB = 1024;
 const DEFAULT_FUNCTION_SCALE = 2;
-
-// The serve endpoints stream the raw file rather than JSON, so they sit
-// outside the generated SDK: fetch them by hand and hand the blob to an
-// anchor. A plain <a download> can't do it — the request needs the session
-// cookie and the `gram-project` header.
-async function downloadSource({
-  assetId,
-  projectId,
-  projectSlug,
-  isOpenAPI,
-  filename,
-}: {
-  assetId: string;
-  projectId: string;
-  projectSlug: string | undefined;
-  isOpenAPI: boolean;
-  filename: string;
-}): Promise<void> {
-  const url = new URL(
-    isOpenAPI ? "/rpc/assets.serveOpenAPIv3" : "/rpc/assets.serveFunction",
-    getServerURL(),
-  );
-  url.searchParams.set("id", assetId);
-  url.searchParams.set("project_id", projectId);
-
-  const request = new Request(url.toString(), {
-    method: "GET",
-    credentials: "include",
-  });
-  if (projectSlug) request.headers.set("gram-project", projectSlug);
-
-  const response = await fetch(request);
-  if (!response.ok) {
-    throw new Error(`${response.status} ${response.statusText}`);
-  }
-
-  const blob = await response.blob();
-  const objectUrl = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = objectUrl;
-  anchor.download = filename;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  // Revoked a task later: browsers that start the download asynchronously
-  // read the URL after click() returns, and pulling it out from under them
-  // saves an empty file.
-  setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
-}
-
-// The file the user gets back should be named like the thing they picked, and
-// carry the extension its content actually has: a function bundle is a zip,
-// and an OpenAPI document is whichever of YAML/JSON was uploaded.
-function downloadFilename(
-  isOpenAPI: boolean,
-  name: string | undefined,
-  contentType: string | undefined,
-): string {
-  const base = (name ?? "source").replace(/\.(zip|ya?ml|json)$/i, "");
-  if (!isOpenAPI) return `${base}.zip`;
-  return `${base}.${contentType?.includes("json") ? "json" : "yaml"}`;
-}
 
 /** One labelled fact: label left, value right, in both surfaces. */
 /**
@@ -549,12 +487,20 @@ export function SourceDownloadButton({
   const handleDownload = async () => {
     setIsDownloading(true);
     try {
-      await downloadSource({
+      await downloadSourceFile({
         assetId: asset.assetId,
         projectId: project.id,
         projectSlug,
         isOpenAPI,
-        filename: downloadFilename(isOpenAPI, asset.name, file?.contentType),
+        filename: (blob) =>
+          sourceDownloadFilename(
+            {
+              kind: sourceKind,
+              name: asset.name,
+              contentType: file?.contentType,
+            },
+            blob,
+          ),
       });
     } catch (error) {
       toast.error(

@@ -3,6 +3,7 @@ import {
   deleteSourceCascade,
   fetchLinkedMcpServers,
 } from "@/pages/mcp/x/tabs/settings/sections/sourceDelete";
+import { invalidateWrapperDeleteAuthViews } from "@/pages/mcp/x/tabs/settings/sections/sourceInvalidation";
 import { formatTunneledMcpDisplay } from "@/lib/sources";
 import {
   createDefaultMcpEndpoint,
@@ -185,19 +186,20 @@ export function useDeleteTunneledMcpSource(): UseMutationResult<
         }),
         invalidateAllMcpServers(queryClient, { refetchType: "none" }),
         invalidateAllMcpEndpoints(queryClient, { refetchType: "none" }),
-        invalidateAllUserSessionIssuers(queryClient, { refetchType: "none" }),
+        invalidateWrapperDeleteAuthViews(queryClient, { refetchType: "none" }),
       ]);
     },
     onError: async () => {
       // A partial run left some wrappers gone and the source in place. Refetch
-      // so the open dialog lists what remains before the user retries.
+      // so the open dialog lists what remains before the user retries, and so
+      // the still-mounted Authentication section drops the issuer and client
+      // bindings the deleted wrappers took with them.
       await Promise.all([
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
         invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
         invalidateAllGetTunneledMcpServer(queryClient, { refetchType: "all" }),
         invalidateAllTunneledMcpServers(queryClient, { refetchType: "all" }),
-        // A deleted wrapper takes its unowned issuer with it.
-        invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
+        invalidateWrapperDeleteAuthViews(queryClient, { refetchType: "all" }),
       ]);
     },
   });

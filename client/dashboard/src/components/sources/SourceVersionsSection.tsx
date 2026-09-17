@@ -12,6 +12,7 @@ import { dateTimeFormatters } from "@/lib/dates";
 import { handleError, toError } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
+import type { Deployment } from "@gram/client/models/components/deployment.js";
 import type { DeploymentSummary } from "@gram/client/models/components/deploymentsummary.js";
 import { useListDeployments } from "@gram/client/react-query/listDeployments.js";
 import { QueryErrorResetBoundary } from "@tanstack/react-query";
@@ -142,15 +143,22 @@ function VersionLogs({
 
 function VersionDetail({
   deployment,
+  activeDeployment,
   isActive,
   sourceKind,
 }: {
   deployment: DeploymentSummary;
+  /** The one deployment read in full; counts prefer it when it is this one. */
+  activeDeployment: Deployment | undefined;
   isActive: boolean;
   sourceKind: SourceKind;
 }): JSX.Element {
   const routes = useRoutes();
-  const counts = deploymentCountsForSourceKind(sourceKind, deployment);
+  const counts = deploymentCountsForSourceKind(
+    sourceKind,
+    deployment,
+    activeDeployment,
+  );
 
   return (
     <div className="flex min-w-0 flex-col gap-6 p-6">
@@ -251,6 +259,7 @@ export function SourceVersionsSection({
             <VersionDetail
               key={selected.id}
               deployment={selected}
+              activeDeployment={activeResult?.deployment}
               isActive={selected.id === activeId}
               sourceKind={sourceKind}
             />

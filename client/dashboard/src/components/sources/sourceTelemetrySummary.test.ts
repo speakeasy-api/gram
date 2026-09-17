@@ -84,5 +84,9 @@ describe("toolNameFromUrn", () => {
   it("takes the trailing segment and falls back to the urn", () => {
     expect(toolNameFromUrn("tools:http:petstore:list_pets")).toBe("list_pets");
     expect(toolNameFromUrn("list_pets")).toBe("list_pets");
+    // A trailing delimiter leaves an empty last segment, which is no name.
+    expect(toolNameFromUrn("tools:http:petstore:")).toBe(
+      "tools:http:petstore:",
+    );
   });
 });

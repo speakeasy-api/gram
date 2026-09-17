@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
 import { Text } from "@/components/ui/Text";
+import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { Loader2 } from "lucide-react";
@@ -42,12 +43,28 @@ function endpointSummary(
   return `${slugs.length} ${noun}: ${slugs.join(", ")}`;
 }
 
-function LinkedMcpServerRow({ server }: { server: McpServer }) {
-  const { data, isError, isLoading } = useMcpEndpoints({
-    mcpServerId: server.id,
-  });
-  const slugs = (data?.mcpEndpoints ?? []).map((endpoint) => endpoint.slug);
+// Endpoint slugs per MCP server, from one project-wide list rather than one
+// filtered request per row.
+function endpointSlugsByMcpServer(
+  endpoints: readonly McpEndpoint[],
+): Map<string, string[]> {
+  const byServer = new Map<string, string[]>();
+  for (const endpoint of endpoints) {
+    if (!endpoint.mcpServerId) continue;
+    const slugs = byServer.get(endpoint.mcpServerId) ?? [];
+    slugs.push(endpoint.slug);
+    byServer.set(endpoint.mcpServerId, slugs);
+  }
+  return byServer;
+}
 
+function LinkedMcpServerRow({
+  server,
+  summary,
+}: {
+  server: McpServer;
+  summary: string;
+}) {
   return (
     <li className="flex flex-col gap-1 px-3 py-2">
       <div className="flex items-center gap-2">
@@ -59,7 +76,7 @@ function LinkedMcpServerRow({ server }: { server: McpServer }) {
         </Badge>
       </div>
       <Text small muted>
-        {endpointSummary(isLoading, isError, slugs)}
+        {summary}
       </Text>
     </li>
   );
@@ -86,6 +103,16 @@ export function RemoveMcpSourceDialogContent({
 }: RemoveMcpSourceDialogContentProps): JSX.Element {
   const [confirmation, setConfirmation] = useState("");
   const inputMatches = confirmation === confirmValue;
+  const {
+    data: endpointsData,
+    isError: endpointsError,
+    isLoading: endpointsLoading,
+  } = useMcpEndpoints(undefined, undefined, {
+    enabled: linkedMcpServers.length > 0,
+  });
+  const slugsByServer = endpointSlugsByMcpServer(
+    endpointsData?.mcpEndpoints ?? [],
+  );
 
   const handleConfirm = async () => {
     try {
@@ -113,9 +140,19 @@ export function RemoveMcpSourceDialogContent({
           <Text small muted>
             The following will also be removed:
           </Text>
-          <ul className="divide-border divide-y border">
+          {/* Bounded so a source with many servers cannot push the
+              confirmation controls below the fold. */}
+          <ul className="divide-border max-h-64 divide-y overflow-y-auto border">
             {linkedMcpServers.map((server) => (
-              <LinkedMcpServerRow key={server.id} server={server} />
+              <LinkedMcpServerRow
+                key={server.id}
+                server={server}
+                summary={endpointSummary(
+                  endpointsLoading,
+                  endpointsError,
+                  slugsByServer.get(server.id) ?? [],
+                )}
+              />
             ))}
           </ul>
         </div>
@@ -130,6 +167,7 @@ export function RemoveMcpSourceDialogContent({
           onChange={setConfirmation}
           placeholder={confirmValue}
           disabled={isPending}
+          aria-label={`Type ${confirmLabel} to confirm`}
         />
       </div>
 

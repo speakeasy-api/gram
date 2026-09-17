@@ -52,13 +52,17 @@ export function AnnotationsFields({
   hints: AnnotationHints;
   onChange: (hints: AnnotationHints) => void;
 }): JSX.Element {
+  const titleId = useId();
   const set = (patch: Partial<AnnotationHints>) =>
     onChange({ ...hints, ...patch });
   return (
     <Stack gap={4}>
       <div className="space-y-2">
-        <Label className="text-sm font-medium">Title</Label>
+        <Label htmlFor={titleId} className="text-sm font-medium">
+          Title
+        </Label>
         <Input
+          id={titleId}
           value={hints.title}
           onChange={(title) => set({ title })}
           placeholder="Display name override"

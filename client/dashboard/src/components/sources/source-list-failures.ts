@@ -36,7 +36,12 @@ export function useSourceFailures(): SourceFailures {
             }),
           ),
       ),
-      failedDeploymentId: hasFailures ? deployment?.id : undefined,
+      // A failed push is linked even before (or without) its logs naming a
+      // source: the errors page is where the reason lives.
+      failedDeploymentId:
+        hasFailures || deployment?.status === "failed"
+          ? deployment?.id
+          : undefined,
     }),
     [hasFailures, failedSources, deployment],
   );

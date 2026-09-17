@@ -13,7 +13,7 @@ import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { useGetRemoteMcpServer } from "@gram/client/react-query/getRemoteMcpServer.js";
 import { useGetTunneledMcpServer } from "@gram/client/react-query/getTunneledMcpServer.js";
 import { useGetUnproxiedMcpServer } from "@gram/client/react-query/getUnproxiedMcpServer.js";
-import { useEffect } from "react";
+import { Fragment, useEffect } from "react";
 import { useLocation } from "react-router";
 import {
   AgentSetupSection,
@@ -93,10 +93,10 @@ export function SettingsTab({
   isLoadingEndpoints: boolean;
 }): JSX.Element {
   const isUnproxied = !!mcpServer.unproxiedMcpServerId;
-  const isSourceBacked =
-    !!mcpServer.remoteMcpServerId ||
-    !!mcpServer.tunneledMcpServerId ||
-    isUnproxied;
+  // Only remote and tunneled sources add sections to the page; the unproxied
+  // row feeds the danger zone alone, so a deep link never waits on it.
+  const hasSourceSections =
+    !!mcpServer.remoteMcpServerId || !!mcpServer.tunneledMcpServerId;
 
   // The source rows behind this server. Each section edits the source
   // directly, so they are fetched once here rather than per section.
@@ -121,11 +121,11 @@ export function SettingsTab({
   const sourceUnavailable =
     remoteQuery.isError || tunneledQuery.isError || unproxiedQuery.isError;
   const sourceSettled =
-    !isSourceBacked ||
-    sourceUnavailable ||
+    !hasSourceSections ||
+    remoteQuery.isError ||
+    tunneledQuery.isError ||
     !!remoteMcpServer ||
-    !!tunneledMcpServer ||
-    !!unproxiedMcpServer;
+    !!tunneledMcpServer;
 
   useScrollToSettingsHash(sourceSettled);
 
@@ -138,17 +138,24 @@ export function SettingsTab({
     deleteTarget = { kind: "unproxied", source: unproxiedMcpServer };
   }
 
+  // The source-backed sections are keyed by the source row so their drafts
+  // remount when the route moves to a server backed by a different source;
+  // this tree stays mounted across that navigation, and a draft or late save
+  // result from the previous source must not land on the next one.
   return (
     <div className="mx-auto w-full max-w-[1270px] space-y-10 px-8 py-8">
       <BrandingSection mcpServer={mcpServer} />
       {remoteMcpServer ? (
-        <>
+        <Fragment key={remoteMcpServer.id}>
           <RemoteSourceNameSection remoteMcpServer={remoteMcpServer} />
           <UpstreamUrlSection remoteMcpServer={remoteMcpServer} />
-        </>
+        </Fragment>
       ) : null}
       {tunneledMcpServer ? (
-        <TunneledSourceNameSection tunneledMcpServer={tunneledMcpServer} />
+        <TunneledSourceNameSection
+          key={tunneledMcpServer.id}
+          tunneledMcpServer={tunneledMcpServer}
+        />
       ) : null}
       {isUnproxied ? null : (
         <>
@@ -169,7 +176,7 @@ export function SettingsTab({
         />
       ) : null}
       {tunneledMcpServer ? (
-        <>
+        <Fragment key={tunneledMcpServer.id}>
           <ResourceIdentifierSection tunneledMcpServer={tunneledMcpServer} />
           <PublicAccessSection tunneledMcpServer={tunneledMcpServer} />
           <PublicRateLimitsSection
@@ -178,7 +185,7 @@ export function SettingsTab({
           />
           <TunnelKeySection tunneledMcpServer={tunneledMcpServer} />
           <AgentSetupSection tunneledMcpServer={tunneledMcpServer} />
-        </>
+        </Fragment>
       ) : null}
       {isUnproxied ? null : <ToolFilteringSection mcpServer={mcpServer} />}
       <DangerZoneSection

@@ -39,7 +39,9 @@ function useScrollToSectionHash(ready: boolean): void {
         ?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
     return () => window.cancelAnimationFrame(animationFrame);
-  }, [ready, location.hash]);
+    // The path is a dependency too: two sources linked with the same hash
+    // would otherwise keep the first one's scroll position.
+  }, [ready, location.hash, location.pathname]);
 }
 
 function contentLabel(kind: SourceOption["kind"]): string {
@@ -147,6 +149,8 @@ export default function SourceDetailRoute(): JSX.Element {
           label: `Tools (${tools.length})`,
           content: (
             <SourceToolsSection
+              // Facet and search belong to one source; a new one starts clean.
+              key={assetId}
               sourceKind={kind}
               tools={tools}
               isLoading={isToolsLoading}

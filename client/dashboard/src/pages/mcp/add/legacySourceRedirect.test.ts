@@ -163,6 +163,21 @@ describe("resolveLegacySourceRedirect", () => {
     ).toEqual({ kind: "mcp-list" });
   });
 
+  it("falls back to the MCP list when several toolsets carry the source", () => {
+    expect(
+      resolveLegacySourceRedirect("externalmcp", "notion", {
+        ...lookup,
+        toolsets: [
+          ...lookup.toolsets,
+          {
+            slug: "notion-copy",
+            toolUrns: ["tools:externalmcp:notion:search"],
+          } as ToolsetEntry,
+        ],
+      }),
+    ).toEqual({ kind: "mcp-list" });
+  });
+
   it("does not let a slug prefix match a longer slug", () => {
     expect(resolveLegacySourceRedirect("externalmcp", "notio", lookup)).toEqual(
       { kind: "mcp-list" },

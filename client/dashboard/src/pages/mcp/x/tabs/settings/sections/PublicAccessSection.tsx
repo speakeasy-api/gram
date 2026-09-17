@@ -42,6 +42,10 @@ export function PublicAccessSection({
   const queryClient = useQueryClient();
   const [pending, setPending] = useState<PendingChange>(null);
   const [confirmPhrase, setConfirmPhrase] = useState("");
+  // Spans the request and the refetch after it, which update.isPending does
+  // not: the dialog must stay locked until the source row reflects the change,
+  // or a second toggle could be submitted against the stale value.
+  const [applying, setApplying] = useState(false);
 
   const allowPublic = tunneledMcpServer.allowPublic;
 
@@ -51,7 +55,15 @@ export function PublicAccessSection({
     update.reset();
   };
 
+  // Escape, the backdrop, and the built-in X all arrive here. Closing while
+  // the request is in flight would only reset client state; the server update
+  // would still complete unseen.
+  const handleOpenChange = (open: boolean) => {
+    if (!open && !applying) closeDialog();
+  };
+
   const applyAllowPublic = async (next: boolean) => {
+    setApplying(true);
     try {
       await update.mutateAsync({
         request: {
@@ -76,6 +88,8 @@ export function PublicAccessSection({
           ? error.message
           : "Failed to update public access";
       toast.error(message);
+    } finally {
+      setApplying(false);
     }
   };
 
@@ -123,7 +137,7 @@ export function PublicAccessSection({
               <Button
                 variant="secondary"
                 size="md"
-                disabled={update.isPending}
+                disabled={applying}
                 onClick={() => setPending(allowPublic ? "disable" : "enable")}
               >
                 <Button.Text>
@@ -137,12 +151,7 @@ export function PublicAccessSection({
         </SettingsSection.Footer>
       </SettingsSection.Panel>
 
-      <Dialog
-        open={pending === "enable"}
-        onOpenChange={(open) => {
-          if (!open) closeDialog();
-        }}
-      >
+      <Dialog open={pending === "enable"} onOpenChange={handleOpenChange}>
         <Dialog.Content className="max-w-xl!">
           <Dialog.Header>
             <Dialog.Title>Enable public anonymous access?</Dialog.Title>
@@ -168,6 +177,8 @@ export function PublicAccessSection({
               value={confirmPhrase}
               onChange={(value) => setConfirmPhrase(value)}
               placeholder={PUBLIC_ACCESS_CONFIRM_PHRASE}
+              disabled={applying}
+              aria-label={`Type ${PUBLIC_ACCESS_CONFIRM_PHRASE} to confirm`}
             />
             {update.isError && (
               <Alert variant="error" dismissible={false}>
@@ -179,30 +190,25 @@ export function PublicAccessSection({
             <Button
               variant="secondary"
               onClick={closeDialog}
-              disabled={update.isPending}
+              disabled={applying}
             >
               <Button.Text>Cancel</Button.Text>
             </Button>
             <Button
               variant="destructive-primary"
-              disabled={!enableArmed || update.isPending}
+              disabled={!enableArmed || applying}
               onClick={() => void applyAllowPublic(true)}
             >
-              <PendingIcon pending={update.isPending} />
+              <PendingIcon pending={applying} />
               <Button.Text>
-                {update.isPending ? "Enabling" : "Enable public access"}
+                {applying ? "Enabling" : "Enable public access"}
               </Button.Text>
             </Button>
           </Dialog.Footer>
         </Dialog.Content>
       </Dialog>
 
-      <Dialog
-        open={pending === "disable"}
-        onOpenChange={(open) => {
-          if (!open) closeDialog();
-        }}
-      >
+      <Dialog open={pending === "disable"} onOpenChange={handleOpenChange}>
         <Dialog.Content className="max-w-md">
           <Dialog.Header>
             <Dialog.Title>Disable public access?</Dialog.Title>
@@ -220,18 +226,18 @@ export function PublicAccessSection({
             <Button
               variant="secondary"
               onClick={closeDialog}
-              disabled={update.isPending}
+              disabled={applying}
             >
               <Button.Text>Cancel</Button.Text>
             </Button>
             <Button
               variant="primary"
-              disabled={update.isPending}
+              disabled={applying}
               onClick={() => void applyAllowPublic(false)}
             >
-              <PendingIcon pending={update.isPending} />
+              <PendingIcon pending={applying} />
               <Button.Text>
-                {update.isPending ? "Disabling" : "Disable public access"}
+                {applying ? "Disabling" : "Disable public access"}
               </Button.Text>
             </Button>
           </Dialog.Footer>
