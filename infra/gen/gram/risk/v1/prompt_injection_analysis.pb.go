@@ -1050,7 +1050,7 @@ var File_gram_risk_v1_prompt_injection_analysis_proto protoreflect.FileDescripto
 
 const file_gram_risk_v1_prompt_injection_analysis_proto_rawDesc = "" +
 	"\n" +
-	",gram/risk/v1/prompt_injection_analysis.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xac\t\n" +
+	",gram/risk/v1/prompt_injection_analysis.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xa6\t\n" +
 	"\x17PromptInjectionAnalysis\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12&\n" +
@@ -1089,8 +1089,7 @@ const file_gram_risk_v1_prompt_injection_analysis_proto_rawDesc = "" +
 	"\x18recent_untrusted_content\x18\x11 \x01(\tR\x16recentUntrustedContent\x1a<\n" +
 	"\bToolCall\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1c\n" +
-	"\targuments\x18\x02 \x01(\tR\targuments:\n" +
-	"\x8a\xb5\x18\x06\x12\x04\b\x80\xf5$B=Z;github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1b\beditionsp\xe9\a"
+	"\targuments\x18\x02 \x01(\tR\targuments:\x04\x8a\xb5\x18\x00B=Z;github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1b\beditionsp\xe9\a"
 
 var file_gram_risk_v1_prompt_injection_analysis_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
 var file_gram_risk_v1_prompt_injection_analysis_proto_goTypes = []any{

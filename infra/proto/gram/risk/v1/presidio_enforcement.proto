@@ -44,7 +44,8 @@ message PresidioEnforcement {
   string external_conversation_id = 26;
   bool content_truncated = 27;
 
-  option (gcp.pubsub.v1.topic) = {
-    retention_hint: {seconds: 600}
-  };
+  // No retention_hint: topic retention only backfills newly created
+  // subscriptions, and these payloads carry raw content that should not be
+  // stored at the topic level.
+  option (gcp.pubsub.v1.topic) = {};
 }

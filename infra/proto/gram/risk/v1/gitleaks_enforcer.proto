@@ -10,7 +10,10 @@ message GitleaksEnforcer {
   // The handler ACKs scanner and reply-write failures because redelivery cannot
   // rescue an inline scan. The dead-letter topic therefore only receives
   // undecodable or malformed requests. Those payloads contain raw content and
-  // require restricted access and retention.
+  // require restricted access and retention. Retention therefore stays at the
+  // 10-minute minimum instead of the analyzers' multi-day window: an
+  // enforcement request is only useful while its caller is still waiting on
+  // the reply.
   option (gcp.pubsub.v1.subscription) = {
     topic: "gram.risk.v1.GitleaksEnforcement"
     ack_deadline: {seconds: 10}

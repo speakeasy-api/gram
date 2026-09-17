@@ -822,7 +822,7 @@ var File_gram_risk_v1_gitleaks_enforcement_proto protoreflect.FileDescriptor
 
 const file_gram_risk_v1_gitleaks_enforcement_proto_rawDesc = "" +
 	"\n" +
-	"'gram/risk/v1/gitleaks_enforcement.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xb2\a\n" +
+	"'gram/risk/v1/gitleaks_enforcement.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xad\a\n" +
 	"\x13GitleaksEnforcement\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12&\n" +
@@ -852,7 +852,7 @@ const file_gram_risk_v1_gitleaks_enforcement_proto_rawDesc = "" +
 	"\fmessage_type\x18\x15 \x01(\tR\vmessageType\x12,\n" +
 	"\x12policy_link_reason\x18\x16 \x01(\tR\x10policyLinkReason\x128\n" +
 	"\x18external_conversation_id\x18\x17 \x01(\tR\x16externalConversationId\x12+\n" +
-	"\x11content_truncated\x18\x18 \x01(\bR\x10contentTruncated:\t\x8a\xb5\x18\x05\x12\x03\b\xd8\x04J\x04\b\b\x10\tB=Z;github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1b\beditionsp\xe9\a"
+	"\x11content_truncated\x18\x18 \x01(\bR\x10contentTruncated:\x04\x8a\xb5\x18\x00J\x04\b\b\x10\tB=Z;github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1b\beditionsp\xe9\a"
 
 var file_gram_risk_v1_gitleaks_enforcement_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_gram_risk_v1_gitleaks_enforcement_proto_goTypes = []any{
