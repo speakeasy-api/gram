@@ -83,3 +83,38 @@ LEFT JOIN json_web_keys AS k
 WHERE c.organization_id = @organization_id
   AND c.identity_provider_connection_id = @identity_provider_connection_id
   AND c.deleted IS FALSE;
+
+-- While pending, updated_at records observed publication (there is no published_at column).
+-- A pending key is not timed until its publication commit has been observed.
+-- These managed rows are organization-level (never project-owned).
+-- name: MarkRotationPublicationUnobserved :exec
+UPDATE json_web_keys SET updated_at = 'infinity'
+WHERE id = @id AND organization_id = @organization_id AND state = 'pending' AND deleted IS FALSE;
+
+-- Idempotent even when the publishing caller races a retry or revocation.
+-- name: ObserveRotationPublication :one
+UPDATE json_web_keys
+SET updated_at = CASE WHEN updated_at = 'infinity' THEN clock_timestamp() ELSE updated_at END
+WHERE id = @id AND organization_id = @organization_id AND state = 'pending' AND deleted IS FALSE
+RETURNING updated_at;
+
+-- Use the publication clock, not an application host's potentially skewed clock.
+-- name: RotationPublicationReady :one
+SELECT updated_at <= clock_timestamp() - make_interval(secs => @cache_seconds::integer)
+FROM json_web_keys
+WHERE id = @id AND organization_id = @organization_id AND state = 'pending' AND deleted IS FALSE;
+
+-- Include tombstones: never disable a key that may have been referenced.
+-- name: ManagedKeyResourceExists :one
+SELECT EXISTS (
+ SELECT 1 FROM gcp_kms_keys AS k
+ JOIN external_keys AS e ON e.id = k.external_key_id
+ WHERE e.organization_id = @organization_id AND k.resource_name = @resource_name
+);
+
+-- Test fixture: age a pending publication relative to the database clock.
+-- name: BackdatePendingRotationPublication :exec
+UPDATE json_web_keys
+SET updated_at = clock_timestamp() - make_interval(secs => @age_seconds::integer)
+WHERE json_web_key_set_id = @json_web_key_set_id
+  AND organization_id = @organization_id AND state = 'pending' AND deleted IS FALSE;

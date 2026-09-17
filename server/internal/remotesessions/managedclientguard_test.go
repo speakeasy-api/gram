@@ -12,6 +12,9 @@ import (
 
 	orgclientsgen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_clients"
 	orgissuersgen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_issuers"
+	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections/provisiontest"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -76,6 +79,47 @@ func TestManagedClient_RefusesOrganizationTierMutations(t *testing.T) {
 	require.Equal(t, "private_key_jwt", *after.TokenEndpointAuthMethod)
 	require.NotNil(t, after.JSONWebKeySetID)
 	require.Equal(t, fx.Client.JSONWebKeySetID.String(), *after.JSONWebKeySetID)
+}
+
+func TestManagedKeySet_RefusesOrdinaryClientAttachment(t *testing.T) {
+	t.Parallel()
+
+	for _, surface := range []string{"organization", "project"} {
+		t.Run(surface, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, ti := newTestService(t)
+			organizationID := activeOrganizationID(t, ctx)
+			ti.enableCustomerManagedKeys(t, ctx, organizationID)
+			_, fx := provisionManagedClient(t, ctx, ti, "managed-target-issuer")
+
+			issuerID := createRemoteIssuer(t, ctx, ti, "ordinary-issuer", "")
+			userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "ordinary-user-issuer")
+			clientID := createRemoteClient(t, ctx, ti, issuerID, userIssuerID.String(), "ordinary-client")
+			setID := createJsonWebKeySet(t, ctx, ti.conn, organizationID, "ordinary-set")
+			_, err := ti.service.AttachClientKeySet(ctx, &orgclientsgen.AttachClientKeySetPayload{ID: clientID, JSONWebKeySetID: setID.String()})
+			require.NoError(t, err)
+
+			before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientAttachJsonWebKeySet)
+			require.NoError(t, err)
+			managedSetID := fx.Client.JSONWebKeySetID.String()
+			if surface == "organization" {
+				_, err = ti.service.AttachClientKeySet(ctx, &orgclientsgen.AttachClientKeySetPayload{ID: clientID, JSONWebKeySetID: managedSetID})
+			} else {
+				_, err = ti.service.AttachKeySet(ctx, &clientsgen.AttachKeySetPayload{ID: clientID, JSONWebKeySetID: managedSetID})
+			}
+			requireOopsCode(t, err, oops.CodeConflict)
+			require.ErrorContains(t, err, "managed by an identity provider connection")
+
+			got, err := ti.service.GetClient(ctx, &orgclientsgen.GetClientPayload{ID: clientID})
+			require.NoError(t, err)
+			require.NotNil(t, got.JSONWebKeySetID)
+			require.Equal(t, setID.String(), *got.JSONWebKeySetID)
+			after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientAttachJsonWebKeySet)
+			require.NoError(t, err)
+			require.Equal(t, before, after)
+		})
+	}
 }
 
 // The issuer a managed client sits on is pinned by the connection, so editing

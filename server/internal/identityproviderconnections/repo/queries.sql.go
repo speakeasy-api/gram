@@ -12,6 +12,25 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const backdatePendingRotationPublication = `-- name: BackdatePendingRotationPublication :exec
+UPDATE json_web_keys
+SET updated_at = clock_timestamp() - make_interval(secs => $1::integer)
+WHERE json_web_key_set_id = $2
+  AND organization_id = $3 AND state = 'pending' AND deleted IS FALSE
+`
+
+type BackdatePendingRotationPublicationParams struct {
+	AgeSeconds      int32
+	JsonWebKeySetID uuid.UUID
+	OrganizationID  string
+}
+
+// Test fixture: age a pending publication relative to the database clock.
+func (q *Queries) BackdatePendingRotationPublication(ctx context.Context, arg BackdatePendingRotationPublicationParams) error {
+	_, err := q.db.Exec(ctx, backdatePendingRotationPublication, arg.AgeSeconds, arg.JsonWebKeySetID, arg.OrganizationID)
+	return err
+}
+
 const createIdentityProviderConnection = `-- name: CreateIdentityProviderConnection :one
 
 INSERT INTO identity_provider_connections (organization_id, provider)
@@ -336,6 +355,85 @@ func (q *Queries) LockIdentityProviderConnectionForProvisioning(ctx context.Cont
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const managedKeyResourceExists = `-- name: ManagedKeyResourceExists :one
+SELECT EXISTS (
+ SELECT 1 FROM gcp_kms_keys AS k
+ JOIN external_keys AS e ON e.id = k.external_key_id
+ WHERE e.organization_id = $1 AND k.resource_name = $2
+)
+`
+
+type ManagedKeyResourceExistsParams struct {
+	OrganizationID pgtype.Text
+	ResourceName   string
+}
+
+// Include tombstones: never disable a key that may have been referenced.
+func (q *Queries) ManagedKeyResourceExists(ctx context.Context, arg ManagedKeyResourceExistsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, managedKeyResourceExists, arg.OrganizationID, arg.ResourceName)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const markRotationPublicationUnobserved = `-- name: MarkRotationPublicationUnobserved :exec
+UPDATE json_web_keys SET updated_at = 'infinity'
+WHERE id = $1 AND organization_id = $2 AND state = 'pending' AND deleted IS FALSE
+`
+
+type MarkRotationPublicationUnobservedParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+// While pending, updated_at records observed publication (there is no published_at column).
+// A pending key is not timed until its publication commit has been observed.
+// These managed rows are organization-level (never project-owned).
+func (q *Queries) MarkRotationPublicationUnobserved(ctx context.Context, arg MarkRotationPublicationUnobservedParams) error {
+	_, err := q.db.Exec(ctx, markRotationPublicationUnobserved, arg.ID, arg.OrganizationID)
+	return err
+}
+
+const observeRotationPublication = `-- name: ObserveRotationPublication :one
+UPDATE json_web_keys
+SET updated_at = CASE WHEN updated_at = 'infinity' THEN clock_timestamp() ELSE updated_at END
+WHERE id = $1 AND organization_id = $2 AND state = 'pending' AND deleted IS FALSE
+RETURNING updated_at
+`
+
+type ObserveRotationPublicationParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+// Idempotent even when the publishing caller races a retry or revocation.
+func (q *Queries) ObserveRotationPublication(ctx context.Context, arg ObserveRotationPublicationParams) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, observeRotationPublication, arg.ID, arg.OrganizationID)
+	var updated_at pgtype.Timestamptz
+	err := row.Scan(&updated_at)
+	return updated_at, err
+}
+
+const rotationPublicationReady = `-- name: RotationPublicationReady :one
+SELECT updated_at <= clock_timestamp() - make_interval(secs => $1::integer)
+FROM json_web_keys
+WHERE id = $2 AND organization_id = $3 AND state = 'pending' AND deleted IS FALSE
+`
+
+type RotationPublicationReadyParams struct {
+	CacheSeconds   int32
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+// Use the publication clock, not an application host's potentially skewed clock.
+func (q *Queries) RotationPublicationReady(ctx context.Context, arg RotationPublicationReadyParams) (bool, error) {
+	row := q.db.QueryRow(ctx, rotationPublicationReady, arg.CacheSeconds, arg.ID, arg.OrganizationID)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const softDeleteIdentityProviderConnection = `-- name: SoftDeleteIdentityProviderConnection :one

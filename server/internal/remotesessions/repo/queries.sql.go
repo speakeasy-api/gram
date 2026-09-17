@@ -6382,7 +6382,7 @@ func (q *Queries) ListUserSessionIssuersBoundToProjectClient(ctx context.Context
 }
 
 const lockJsonWebKeySetForClientAttach = `-- name: LockJsonWebKeySetForClientAttach :one
-SELECT id
+SELECT id, identity_provider_connection_id
 FROM json_web_key_sets
 WHERE id = $1
   AND organization_id = $2
@@ -6396,6 +6396,11 @@ type LockJsonWebKeySetForClientAttachParams struct {
 	OrganizationID string
 }
 
+type LockJsonWebKeySetForClientAttachRow struct {
+	ID                           uuid.UUID
+	IdentityProviderConnectionID uuid.NullUUID
+}
+
 // Holds the key set while a client attaches to it, against DeleteSet's
 // FOR UPDATE on the same row. Without it, attach-sees-live-set racing
 // delete-sees-no-references lets both commit and strands a client on a deleted
@@ -6405,11 +6410,11 @@ type LockJsonWebKeySetForClientAttachParams struct {
 //
 // project_id IS NULL matches LockJsonWebKeySetForKeyWrite: sets are
 // organization-tier only.
-func (q *Queries) LockJsonWebKeySetForClientAttach(ctx context.Context, arg LockJsonWebKeySetForClientAttachParams) (uuid.UUID, error) {
+func (q *Queries) LockJsonWebKeySetForClientAttach(ctx context.Context, arg LockJsonWebKeySetForClientAttachParams) (LockJsonWebKeySetForClientAttachRow, error) {
 	row := q.db.QueryRow(ctx, lockJsonWebKeySetForClientAttach, arg.ID, arg.OrganizationID)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
+	var i LockJsonWebKeySetForClientAttachRow
+	err := row.Scan(&i.ID, &i.IdentityProviderConnectionID)
+	return i, err
 }
 
 const lockOrganizationRemoteSessionClientForAuthMethodWrite = `-- name: LockOrganizationRemoteSessionClientForAuthMethodWrite :one

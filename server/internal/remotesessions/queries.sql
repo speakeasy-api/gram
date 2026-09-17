@@ -1084,7 +1084,7 @@ FOR UPDATE OF c;
 -- project_id IS NULL matches LockJsonWebKeySetForKeyWrite: sets are
 -- organization-tier only.
 -- name: LockJsonWebKeySetForClientAttach :one
-SELECT id
+SELECT id, identity_provider_connection_id
 FROM json_web_key_sets
 WHERE id = @id
   AND organization_id = @organization_id

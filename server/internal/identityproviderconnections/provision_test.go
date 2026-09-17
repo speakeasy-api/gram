@@ -3,6 +3,7 @@ package identityproviderconnections_test
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -392,6 +393,33 @@ func TestRotateClient_OverlapsThenRevokes(t *testing.T) {
 
 	rotatingKMS := &hookedKMSClients{inner: provisiontest.NewKMSClients(t)}
 	rotator := provisiontest.NewProvisioner(t, ti.conn, rotatingKMS.Factory, testServerURL, credentialID)
+	params := identityproviderconnections.RotateClientParams{OrganizationID: ti.orgID, ConnectionID: connectionID, Provider: identityproviderconnections.ProviderOkta}
+	_, err = rotator.RotateClient(ctx, params)
+	var pending *identityproviderconnections.RotationPendingError
+	require.ErrorAs(t, err, &pending)
+	docBefore, err := remotesessionsrepo.New(ti.conn).GetRemoteSessionClientJsonWebKeySetDocument(ctx, before.ClientRowID)
+	require.NoError(t, err)
+	require.Len(t, publishedKids(t, docBefore.Document), 2, "pending key is committed and publicly visible")
+	current, err := repo.New(ti.conn).GetManagedClient(ctx, repo.GetManagedClientParams{OrganizationID: conv.ToPGText(ti.orgID), IdentityProviderConnectionID: conv.ToNullUUID(connectionID)})
+	require.NoError(t, err)
+	require.Equal(t, before.ExternalKeyID, current.ExternalKeyID, "publication must not change the signer")
+	// Stay inside the database-clock cache window, then cross its boundary
+	// below without advancing any application clock.
+	err = repo.New(ti.conn).BackdatePendingRotationPublication(ctx, repo.BackdatePendingRotationPublicationParams{
+		JsonWebKeySetID: before.JSONWebKeySetID,
+		OrganizationID:  ti.orgID,
+		AgeSeconds:      int32(identityproviderconnections.ManagedJWKSCacheTTL/time.Second) - 30,
+	})
+	require.NoError(t, err)
+	_, err = rotator.RotateClient(ctx, params)
+	require.ErrorAs(t, err, &pending)
+	require.Len(t, rotatingKMS.Created(), 1, "retry must reuse the published pending key")
+	err = repo.New(ti.conn).BackdatePendingRotationPublication(ctx, repo.BackdatePendingRotationPublicationParams{
+		JsonWebKeySetID: before.JSONWebKeySetID,
+		OrganizationID:  ti.orgID,
+		AgeSeconds:      int32(identityproviderconnections.ManagedJWKSCacheTTL / time.Second),
+	})
+	require.NoError(t, err)
 	after, err := rotator.RotateClient(ctx, identityproviderconnections.RotateClientParams{OrganizationID: ti.orgID, ConnectionID: connectionID, Provider: identityproviderconnections.ProviderOkta})
 	require.NoError(t, err)
 
@@ -406,6 +434,12 @@ func TestRotateClient_OverlapsThenRevokes(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, connectionID, newKey.ExternalKey.IdentityProviderConnectionID.UUID)
 	require.Equal(t, rotatingKMS.Created()[0], newKey.GcpKmsKey.ResourceName)
+	referenced, err := repo.New(ti.conn).ManagedKeyResourceExists(ctx, repo.ManagedKeyResourceExistsParams{OrganizationID: conv.ToPGText(ti.orgID), ResourceName: rotatingKMS.Created()[0]})
+	require.NoError(t, err)
+	require.True(t, referenced, "ambiguous-commit reconciliation must preserve a referenced key")
+	referenced, err = repo.New(ti.conn).ManagedKeyResourceExists(ctx, repo.ManagedKeyResourceExistsParams{OrganizationID: conv.ToPGText(ti.orgID), ResourceName: "missing-key-version"})
+	require.NoError(t, err)
+	require.False(t, referenced)
 
 	doc, err := remotesessionsrepo.New(ti.conn).GetRemoteSessionClientJsonWebKeySetDocument(ctx, after.ClientRowID)
 	require.NoError(t, err)
@@ -576,4 +610,57 @@ func TestProvisionClient_MarksEveryRow(t *testing.T) {
 	managed, err := remotesessionsrepo.New(ti.conn).CountManagedRemoteSessionClientsByIssuerID(ctx, remotesessionsrepo.CountManagedRemoteSessionClientsByIssuerIDParams{RemoteSessionIssuerID: issuerID, OrganizationID: conv.ToPGText(ti.orgID)})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), managed)
+}
+
+// Parallel retries share a single committed pending key, including recovery
+// after a crash between publication commit and recording its observed time.
+func TestRotateClient_ConcurrentRetriesAndRevocation(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestDB(t)
+	issuerID := createIssuer(t, ctx, ti.conn, ti.orgID, noProject, tokenEndpoint)
+	credentialID := provisiontest.CreatePlatformSigningCredential(t, ctx, ti.conn)
+	connectionID := provisiontest.CreateConnection(t, ctx, ti.conn, ti.orgID, identityproviderconnections.ProviderOkta)
+	initial := provisiontest.NewProvisioner(t, ti.conn, provisiontest.NewKMSClients(t).Factory, testServerURL, credentialID)
+	before, err := initial.ProvisionClient(ctx, oktaParams(ti.orgID, connectionID, issuerID))
+	require.NoError(t, err)
+	kms := &hookedKMSClients{inner: provisiontest.NewKMSClients(t)}
+	rotator := provisiontest.NewProvisioner(t, ti.conn, kms.Factory, testServerURL, credentialID)
+	params := identityproviderconnections.RotateClientParams{OrganizationID: ti.orgID, ConnectionID: connectionID, Provider: identityproviderconnections.ProviderOkta}
+	results := make(chan error, 4)
+	for range 4 {
+		go func() { _, err := rotator.RotateClient(ctx, params); results <- err }()
+	}
+	var pending *identityproviderconnections.RotationPendingError
+	var readyAt time.Time
+	for range 4 {
+		require.ErrorAs(t, <-results, &pending)
+		if readyAt.IsZero() {
+			readyAt = pending.ReadyAt
+		}
+		require.Equal(t, readyAt, pending.ReadyAt)
+	}
+	require.Len(t, kms.Created(), 1)
+	require.Empty(t, kms.Disabled())
+	keys, err := jwksrepo.New(ti.conn).ListJsonWebKeys(ctx, jwksrepo.ListJsonWebKeysParams{JsonWebKeySetID: before.JSONWebKeySetID, OrganizationID: ti.orgID, IncludeRevoked: false})
+	require.NoError(t, err)
+	require.Len(t, keys, 2)
+	for _, key := range keys {
+		if key.State == "pending" {
+			require.NoError(t, repo.New(ti.conn).MarkRotationPublicationUnobserved(ctx, repo.MarkRotationPublicationUnobservedParams{ID: key.ID, OrganizationID: ti.orgID}))
+		}
+	}
+	// An unobserved committed publication must start a fresh cache window.
+	_, err = rotator.RotateClient(ctx, params)
+	require.ErrorAs(t, err, &pending)
+	require.False(t, pending.ReadyAt.IsZero())
+	require.Len(t, kms.Created(), 1)
+	revoked, err := rotator.RevokeClient(ctx, ti.orgID, connectionID)
+	require.NoError(t, err)
+	require.Equal(t, 2, revoked)
+	_, err = rotator.RotateClient(ctx, params)
+	require.ErrorIs(t, err, identityproviderconnections.ErrNotProvisioned)
+	require.Len(t, kms.Created(), 1, "a retry must not resurrect revoked keys")
+	doc, err := remotesessionsrepo.New(ti.conn).GetRemoteSessionClientJsonWebKeySetDocument(ctx, before.ClientRowID)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"keys":[]}`, string(doc.Document))
 }

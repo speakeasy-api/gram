@@ -81,7 +81,7 @@ func requireKeySetEligibleClient(ctx context.Context, logger *slog.Logger, clien
 // deleteSet. The set must be live and in the client's organization; anything
 // else reads as not found rather than leaking whether a set exists elsewhere.
 func resolveAttachableKeySet(ctx context.Context, logger *slog.Logger, txRepo *repo.Queries, keySetID uuid.UUID, organizationID string) error {
-	_, err := txRepo.LockJsonWebKeySetForClientAttach(ctx, repo.LockJsonWebKeySetForClientAttachParams{
+	set, err := txRepo.LockJsonWebKeySetForClientAttach(ctx, repo.LockJsonWebKeySetForClientAttachParams{
 		ID:             keySetID,
 		OrganizationID: organizationID,
 	})
@@ -92,7 +92,7 @@ func resolveAttachableKeySet(ctx context.Context, logger *slog.Logger, txRepo *r
 		return oops.E(oops.CodeUnexpected, err, "lock json web key set").LogError(ctx, logger)
 	}
 
-	return nil
+	return managedrows.RequireUnmanaged(set.IdentityProviderConnectionID, "this json web key set")
 }
 
 // AttachKeySet attaches an organization JSON Web Key Set to a project-tier

@@ -22,6 +22,9 @@ const keyGenerationPollInterval = time.Second
 // out on a request-shaped budget.
 const keyGenerationTimeout = 2 * time.Minute
 
+// keyCleanupTimeout bounds reconciliation independently of the failed request.
+const keyCleanupTimeout = 10 * time.Second
+
 // CreateSigningKey creates the key and waits for its first version to leave
 // PENDING_GENERATION. The version name returned is what Gram records; the key
 // name is what IAM bindings attach to.
@@ -71,10 +74,55 @@ func (c *kmsSigningClient) CreateSigningKey(ctx context.Context, params CreateSi
 	versionName := signingKeyVersionName(keyName)
 
 	if err := c.awaitVersionEnabled(ctx, versionName); err != nil {
-		return nil, err
+		// The key already exists even though provisioning failed. Do not use the
+		// request's cancellation/deadline for the compensating operation.
+		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), keyCleanupTimeout)
+		defer cancel()
+		if cleanupErr := c.reconcileFailedKeyGeneration(cleanupCtx, versionName); cleanupErr != nil {
+			// Preserve both resource names for manual reconciliation. Wrapping the
+			// original error keeps cancellation and gRPC status checks working.
+			return nil, fmt.Errorf("created gcp kms key %s, version %s requires reconciliation (%w): %w", keyName, versionName, cleanupErr, err)
+		}
+		return nil, fmt.Errorf("created gcp kms key %s, version %s is unusable after failed provisioning: %w", keyName, versionName, err)
 	}
 
 	return &CreatedSigningKey{KeyName: keyName, KeyVersionName: versionName}, nil
+}
+
+// reconcileFailedKeyGeneration makes the new version unusable. CryptoKey
+// containers cannot be deleted. GCP forbids disabling/destroying a version in
+// PENDING_GENERATION, so wait for generation before attempting a state update.
+// The caller must supply a bounded context independent of the failed request.
+func (c *kmsSigningClient) reconcileFailedKeyGeneration(ctx context.Context, versionName string) error {
+	for {
+		version, err := c.kms.GetCryptoKeyVersion(ctx, &kmspb.GetCryptoKeyVersionRequest{Name: versionName})
+		switch {
+		case ctx.Err() != nil:
+			return fmt.Errorf("reconcile gcp kms version: %w", ctx.Err())
+		case err == nil:
+			switch state := version.GetState(); state {
+			case kmspb.CryptoKeyVersion_ENABLED:
+				return c.DisableKeyVersion(ctx, versionName)
+			case kmspb.CryptoKeyVersion_DISABLED, kmspb.CryptoKeyVersion_DESTROY_SCHEDULED,
+				kmspb.CryptoKeyVersion_DESTROYED, kmspb.CryptoKeyVersion_GENERATION_FAILED:
+				return nil
+			case kmspb.CryptoKeyVersion_PENDING_GENERATION:
+			default:
+				return fmt.Errorf("cannot reconcile gcp kms version in state %s", state)
+			}
+		case isTransientKMSError(err):
+		default:
+			return fmt.Errorf("read gcp kms version for reconciliation: %w", err)
+		}
+
+		timer := time.NewTimer(c.keyGenerationPoll)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return fmt.Errorf("reconcile gcp kms version: %w", ctx.Err())
+		case <-timer.C:
+		}
+	}
 }
 
 // awaitVersionEnabled polls a version until GCP reports it ENABLED. Any other

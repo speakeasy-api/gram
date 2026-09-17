@@ -59,6 +59,17 @@ var (
 	ErrKeyAlreadyPublished        = errors.New("identityproviderconnections: key material was already published into the set")
 )
 
+// ManagedJWKSCacheTTL is the publish-before-sign window advertised by the JWKS endpoint.
+const ManagedJWKSCacheTTL = remotesessions.ManagedClientJSONWebKeySetMaxAgeSeconds * time.Second
+
+// RotationPendingError means publication succeeded but activation must be retried.
+// ReadyAt is the earliest safe activation time; no new key is created on retry.
+type RotationPendingError struct{ ReadyAt time.Time }
+
+func (e *RotationPendingError) Error() string {
+	return "identityproviderconnections: rotation pending until " + e.ReadyAt.Format(time.RFC3339Nano)
+}
+
 // Config carries the deployment settings provisioning needs.
 type Config struct {
 	// KeyRing is the Speakeasy-owned GCP KMS key ring, fully qualified.
@@ -316,8 +327,8 @@ func (p *Provisioner) provisionRows(ctx context.Context, params ProvisionClientP
 		return nil, fmt.Errorf("record managed client creation: %w", err)
 	}
 
-	if err := dbtx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("commit provisioning transaction: %w", err)
+	if err := commitPublication(ctx, dbtx, params.OrganizationID); err != nil {
+		return nil, err
 	}
 
 	return &ManagedClient{
@@ -333,49 +344,23 @@ func (p *Provisioner) provisionRows(ctx context.Context, params ProvisionClientP
 	}, nil
 }
 
-// RotateClient creates a new managed KMS key, publishes it as the set's active
-// key, and retires the previous one. Retired keys stay in the JWKS document.
+// RotateClient first commits a pending key, leaving the current signer unchanged.
+// Retry after RotationPendingError.ReadyAt to activate the same key. Publication
+// and activation never share a transaction and no call waits for the cache TTL.
 func (p *Provisioner) RotateClient(ctx context.Context, params RotateClientParams) (*ManagedClient, error) {
-	logger := p.logger.With(attr.SlogOrganizationID(params.OrganizationID))
-	q := repo.New(p.db)
-
 	if err := validateProvider(params.Provider); err != nil {
 		return nil, err
 	}
-	if err := requireConnection(ctx, q, params.OrganizationID, params.ConnectionID, params.Provider); err != nil {
+	if err := requireConnection(ctx, repo.New(p.db), params.OrganizationID, params.ConnectionID, params.Provider); err != nil {
 		return nil, err
 	}
-	if _, err := p.lookupManagedClient(ctx, q, params.OrganizationID, params.ConnectionID); err != nil {
+	if err := p.rotateRows(ctx, params); err != nil {
 		return nil, err
 	}
-
-	signer, err := p.resolveSigningCredential(ctx, logger, q)
-	if err != nil {
-		return nil, err
-	}
-
-	kms, err := p.openKMSClient(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer o11y.LogDefer(ctx, logger, "failed to close gcp kms client", func() error { return kms.Close() })
-
-	created, err := p.createSigningKey(ctx, logger, kms, params.Provider, params.ConnectionID, signer)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := p.rotateRows(ctx, params, signer, created); err != nil {
-		p.abandonKey(ctx, logger, kms, params.ConnectionID, created.key, err)
-		return nil, err
-	}
-
-	return p.lookupManagedClient(ctx, q, params.OrganizationID, params.ConnectionID)
+	return p.lookupManagedClient(ctx, repo.New(p.db), params.OrganizationID, params.ConnectionID)
 }
 
-// rotateRows publishes the new key and retires the active one in one
-// transaction, in the order the key set lifecycle uses.
-func (p *Provisioner) rotateRows(ctx context.Context, params RotateClientParams, signer *signingCredential, created *createdKey) error {
+func (p *Provisioner) rotateRows(ctx context.Context, params RotateClientParams) error {
 	dbtx, err := p.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin rotation transaction: %w", err)
@@ -411,39 +396,115 @@ func (p *Provisioner) rotateRows(ctx context.Context, params RotateClientParams,
 		return fmt.Errorf("lock managed key set: %w", err)
 	}
 
-	kidExists, err := jq.JsonWebKeyKidExistsInSet(ctx, jwksrepo.JsonWebKeyKidExistsInSetParams{
-		JsonWebKeySetID: set.ID,
-		OrganizationID:  params.OrganizationID,
-		Kid:             created.kid,
-	})
+	// Read under the set lock shared with revocation and every key writer.
+	keys, err := jq.ListJsonWebKeys(ctx, jwksrepo.ListJsonWebKeysParams{JsonWebKeySetID: set.ID, OrganizationID: params.OrganizationID, IncludeRevoked: false})
 	if err != nil {
-		return fmt.Errorf("check managed kid: %w", err)
+		return fmt.Errorf("load rotation keys: %w", err)
 	}
-	if kidExists {
-		return ErrKeyAlreadyPublished
+	var key jwksrepo.JsonWebKey
+	hasActive := false
+	for _, candidate := range keys {
+		if candidate.State == "active" {
+			hasActive = true
+		}
+		if candidate.State == "pending" {
+			key = candidate
+		}
 	}
+	if key.ID == uuid.Nil {
+		// A revoked client must not be resurrected by a delayed rotation request.
+		if !hasActive {
+			return ErrNotProvisioned
+		}
+		logger := p.logger.With(attr.SlogOrganizationID(params.OrganizationID))
+		signer, err := p.resolveSigningCredential(ctx, logger, tq)
+		if err != nil {
+			return err
+		}
+		kms, err := p.openKMSClient(ctx)
+		if err != nil {
+			return err
+		}
+		defer o11y.LogDefer(ctx, logger, "failed to close gcp kms client", func() error { return kms.Close() })
+		created, err := p.createSigningKey(ctx, logger, kms, params.Provider, params.ConnectionID, signer)
+		if err != nil {
+			return err
+		}
+		committed := false
+		publicationErr := errors.New("rotation publication failed")
+		defer func() {
+			if !committed {
+				p.abandonKey(ctx, logger, kms, params.ConnectionID, created.key, publicationErr)
+			}
+		}()
+		kidExists, err := jq.JsonWebKeyKidExistsInSet(ctx, jwksrepo.JsonWebKeyKidExistsInSetParams{
+			JsonWebKeySetID: set.ID,
+			OrganizationID:  params.OrganizationID,
+			Kid:             created.kid,
+		})
+		if err != nil {
+			return fmt.Errorf("check managed kid: %w", err)
+		}
+		if kidExists {
+			return ErrKeyAlreadyPublished
+		}
 
-	connectionName := providerDisplayNames[params.Provider] + " connection " + params.ConnectionID.String()
-	marker := conv.ToNullUUID(params.ConnectionID)
+		connectionName := providerDisplayNames[params.Provider] + " connection " + params.ConnectionID.String()
+		marker := conv.ToNullUUID(params.ConnectionID)
 
-	externalKey, err := p.createManagedExternalKey(ctx, dbtx, params.OrganizationID, marker, signer, connectionName, created)
+		externalKey, err := p.createManagedExternalKey(ctx, dbtx, params.OrganizationID, marker, signer, connectionName, created)
+		if err != nil {
+			return err
+		}
+
+		key, err := jq.CreateJsonWebKey(ctx, jwksrepo.CreateJsonWebKeyParams{
+			OrganizationID:  params.OrganizationID,
+			JsonWebKeySetID: set.ID,
+			ExternalKeyID:   externalKey.ID,
+			State:           "pending",
+			Kid:             created.kid,
+			PublicJwk:       created.publicJWK,
+		})
+		if err != nil {
+			return fmt.Errorf("publish rotated key: %w", err)
+		}
+		if err := p.audit.LogJsonWebKeyPublish(ctx, dbtx, keyEvent(params.OrganizationID, key, nil, nil)); err != nil {
+			return fmt.Errorf("record rotated key publication: %w", err)
+		}
+
+		// Infinity marks publication whose commit has not yet been observed. A
+		// retry after a crash starts the TTL only after seeing the committed key.
+		if err := tq.MarkRotationPublicationUnobserved(ctx, repo.MarkRotationPublicationUnobservedParams{ID: key.ID, OrganizationID: params.OrganizationID}); err != nil {
+			return fmt.Errorf("mark unobserved key publication: %w", err)
+		}
+		if err := commitPublication(ctx, dbtx, params.OrganizationID); err != nil {
+			publicationErr = err
+			return publicationErr
+		}
+		committed = true
+		published, err := repo.New(p.db).ObserveRotationPublication(ctx, repo.ObserveRotationPublicationParams{ID: key.ID, OrganizationID: params.OrganizationID})
+		if err != nil {
+			return fmt.Errorf("observe committed key publication: %w", err)
+		}
+		return &RotationPendingError{ReadyAt: published.Time.Add(ManagedJWKSCacheTTL)}
+	}
+	if key.UpdatedAt.InfinityModifier != pgtype.Finite {
+		if err := dbtx.Rollback(ctx); err != nil {
+			return fmt.Errorf("release rotation locks: %w", err)
+		}
+		published, err := repo.New(p.db).ObserveRotationPublication(ctx, repo.ObserveRotationPublicationParams{ID: key.ID, OrganizationID: params.OrganizationID})
+		if err != nil {
+			return fmt.Errorf("observe recovered key publication: %w", err)
+		}
+		return &RotationPendingError{ReadyAt: published.Time.Add(ManagedJWKSCacheTTL)}
+	}
+	readyAt := key.UpdatedAt.Time.Add(ManagedJWKSCacheTTL)
+	ready, err := tq.RotationPublicationReady(ctx, repo.RotationPublicationReadyParams{ID: key.ID, OrganizationID: params.OrganizationID, CacheSeconds: int32(ManagedJWKSCacheTTL / time.Second)})
 	if err != nil {
-		return err
+		return fmt.Errorf("check rotation cache window: %w", err)
 	}
-
-	key, err := jq.CreateJsonWebKey(ctx, jwksrepo.CreateJsonWebKeyParams{
-		OrganizationID:  params.OrganizationID,
-		JsonWebKeySetID: set.ID,
-		ExternalKeyID:   externalKey.ID,
-		State:           "pending",
-		Kid:             created.kid,
-		PublicJwk:       created.publicJWK,
-	})
-	if err != nil {
-		return fmt.Errorf("publish rotated key: %w", err)
-	}
-	if err := p.audit.LogJsonWebKeyPublish(ctx, dbtx, keyEvent(params.OrganizationID, key, nil, nil)); err != nil {
-		return fmt.Errorf("record rotated key publication: %w", err)
+	if !ready {
+		return &RotationPendingError{ReadyAt: readyAt}
 	}
 
 	previous, err := jq.RetireActiveJsonWebKey(ctx, jwksrepo.RetireActiveJsonWebKeyParams{
@@ -476,7 +537,7 @@ func (p *Provisioner) rotateRows(ctx context.Context, params RotateClientParams,
 
 	updated, err := jq.UpdateJsonWebKeySet(ctx, jwksrepo.UpdateJsonWebKeySetParams{
 		Name:           set.Name,
-		ExternalKeyID:  externalKey.ID,
+		ExternalKeyID:  key.ExternalKeyID,
 		ID:             set.ID,
 		OrganizationID: params.OrganizationID,
 	})
@@ -802,6 +863,52 @@ func (p *Provisioner) finishSigningKey(ctx context.Context, client gcpkms.Provis
 	return &createdKey{key: created, kid: kid, publicJWK: doc}, nil
 }
 
+// publicationCommitError must never lead to unconditional KMS cleanup: COMMIT
+// can succeed on the server even if its response is lost.
+type publicationCommitError struct {
+	organizationID string
+	err            error
+}
+
+func (e *publicationCommitError) Error() string { return "commit key publication: " + e.err.Error() }
+func (e *publicationCommitError) Unwrap() error { return e.err }
+
+func commitPublication(ctx context.Context, tx pgx.Tx, organizationID string) error {
+	if err := tx.Commit(ctx); err != nil {
+		return &publicationCommitError{organizationID: organizationID, err: err}
+	}
+	return nil
+}
+
+func reconcilePublication(ctx context.Context, check func(context.Context) (bool, error)) (bool, error) {
+	checkCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), keyCleanupTimeout)
+	defer cancel()
+	absent, err := check(checkCtx)
+	if err != nil {
+		return false, fmt.Errorf("reconcile publication outcome: %w", err)
+	}
+	return absent, nil
+}
+
+func (p *Provisioner) publicationAbsent(ctx context.Context, organizationID string, connectionID uuid.UUID, resourceName string) (bool, error) {
+	tx, err := p.db.Begin(ctx)
+	if err != nil {
+		return false, fmt.Errorf("begin publication reconciliation: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	q := repo.New(tx)
+	// Wait for the original transaction to resolve before interpreting absence.
+	// A missing/deleted connection is inconclusive, so the caller preserves the key.
+	if _, err := q.LockIdentityProviderConnectionForProvisioning(ctx, repo.LockIdentityProviderConnectionForProvisioningParams{ID: connectionID, OrganizationID: organizationID}); err != nil {
+		return false, fmt.Errorf("lock connection for publication reconciliation: %w", err)
+	}
+	referenced, err := q.ManagedKeyResourceExists(ctx, repo.ManagedKeyResourceExistsParams{OrganizationID: conv.ToPGText(organizationID), ResourceName: resourceName})
+	if err != nil {
+		return false, fmt.Errorf("lookup published key resource: %w", err)
+	}
+	return !referenced, nil
+}
+
 // abandonKey logs a key no row will reference and best-effort disables it.
 func (p *Provisioner) abandonKey(ctx context.Context, logger *slog.Logger, client gcpkms.ProvisioningClient, connectionID uuid.UUID, created *gcpkms.CreatedSigningKey, cause error) {
 	attrs := []any{
@@ -809,6 +916,15 @@ func (p *Provisioner) abandonKey(ctx context.Context, logger *slog.Logger, clien
 		attr.SlogIdentityProviderConnectionID(connectionID.String()),
 	}
 
+	if uncertain, ok := errors.AsType[*publicationCommitError](cause); ok {
+		absent, err := reconcilePublication(ctx, func(checkCtx context.Context) (bool, error) {
+			return p.publicationAbsent(checkCtx, uncertain.organizationID, connectionID, created.KeyVersionName)
+		})
+		if err != nil || !absent {
+			logger.ErrorContext(ctx, "preserving kms key after uncertain publication commit; key may be referenced", append(attrs, attr.SlogError(errors.Join(cause, err)))...)
+			return
+		}
+	}
 	if _, ok := errors.AsType[*adoptedError](cause); ok {
 		logger.WarnContext(ctx, "connection was provisioned concurrently; adopting the existing client and disabling the new kms key", attrs...)
 	} else {

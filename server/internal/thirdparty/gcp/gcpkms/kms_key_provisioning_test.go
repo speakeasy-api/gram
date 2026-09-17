@@ -98,6 +98,9 @@ func (f *fakeKeyRing) UpdateCryptoKeyVersion(_ context.Context, req *kmspb.Updat
 	if req.GetCryptoKeyVersion().GetState() != kmspb.CryptoKeyVersion_DISABLED || len(req.GetUpdateMask().GetPaths()) != 1 || req.GetUpdateMask().GetPaths()[0] != "state" {
 		return nil, status.Error(codes.InvalidArgument, "only state=DISABLED updates are faked") //nolint:wrapcheck // the fake speaks gRPC status codes, as GCP does
 	}
+	if f.pendingReads > 0 && f.versionReads <= f.pendingReads {
+		return nil, status.Error(codes.FailedPrecondition, "cannot disable PENDING_GENERATION") //nolint:wrapcheck // fake gRPC response
+	}
 	f.disabled = append(f.disabled, req.GetCryptoKeyVersion().GetName())
 
 	return req.GetCryptoKeyVersion(), nil
@@ -336,6 +339,8 @@ func TestCreateSigningKey_SurfacesPermanentVersionReadErrors(t *testing.T) {
 
 	_, err := client.CreateSigningKey(t.Context(), CreateSigningKeyParams{KeyRing: testKeyRing, KeyID: "okta-denied", Algorithm: jose.RS256})
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
+	require.ErrorContains(t, err, "requires reconciliation")
+	require.ErrorContains(t, err, testKeyRing+"/cryptoKeys/okta-denied/cryptoKeyVersions/1")
 }
 
 // permissionDeniedRing fails every version read with PermissionDenied.
@@ -368,11 +373,15 @@ func TestCreateSigningKey_StopsWaitingOnContextCancel(t *testing.T) {
 		defer fake.mu.Unlock()
 		return fake.versionReads >= 1
 	}, 5*time.Second, 5*time.Millisecond)
+	fake.mu.Lock()
+	fake.transientReads = 0
+	fake.mu.Unlock()
 	cancel()
 
 	select {
 	case err := <-done:
 		require.ErrorIs(t, err, context.Canceled)
+		require.Equal(t, []string{testKeyRing + "/cryptoKeys/okta-cancel/cryptoKeyVersions/1"}, fake.disabledVersions())
 	case <-time.After(5 * time.Second):
 		t.Fatal("create did not return after cancel")
 	}
@@ -445,4 +454,91 @@ func TestLocalSigningClient_CreateSigningKeyNamesItsKey(t *testing.T) {
 
 	_, err = client.CreateSigningKey(t.Context(), CreateSigningKeyParams{KeyRing: "ring", KeyID: "okta-local", Algorithm: jose.RS256})
 	require.ErrorIs(t, err, ErrInvalidKeyRingName)
+}
+
+// The first read fails provisioning; subsequent reads model generation continuing
+// independently in GCP. Cleanup must wait rather than issue an illegal disable.
+type failedGenerationReadRing struct {
+	*fakeKeyRing
+	readOnce  sync.Once
+	cancel    context.CancelFunc
+	updateErr error
+}
+
+func (f *failedGenerationReadRing) GetCryptoKeyVersion(ctx context.Context, req *kmspb.GetCryptoKeyVersionRequest) (*kmspb.CryptoKeyVersion, error) {
+	first := false
+	f.readOnce.Do(func() { first = true })
+	if first {
+		if f.cancel != nil {
+			f.cancel()
+			return nil, status.Error(codes.Canceled, "request cancelled") //nolint:wrapcheck // fake gRPC response
+		}
+		return nil, status.Error(codes.PermissionDenied, "generation read failed") //nolint:wrapcheck // fake gRPC response
+	}
+	return f.fakeKeyRing.GetCryptoKeyVersion(ctx, req)
+}
+
+func (f *failedGenerationReadRing) UpdateCryptoKeyVersion(ctx context.Context, req *kmspb.UpdateCryptoKeyVersionRequest) (*kmspb.CryptoKeyVersion, error) {
+	if f.updateErr != nil {
+		return nil, f.updateErr
+	}
+	return f.fakeKeyRing.UpdateCryptoKeyVersion(ctx, req)
+}
+
+func TestCreateSigningKey_ReconcilesFailedGeneration(t *testing.T) {
+	t.Parallel()
+	for _, cancelRequest := range []bool{false, true} {
+		name := "read failure"
+		if cancelRequest {
+			name = "request cancellation"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			fake := &failedGenerationReadRing{fakeKeyRing: newFakeKeyRing()}
+			if cancelRequest {
+				fake.cancel = cancel
+			}
+			fake.pendingReads = 2
+			client := newFakeProvisioningClient(t, fake, fake.fakeKeyRing)
+			created, err := client.CreateSigningKey(ctx, CreateSigningKeyParams{KeyRing: testKeyRing, KeyID: "cleanup", Algorithm: jose.RS256})
+			require.Nil(t, created)
+			if cancelRequest {
+				require.ErrorIs(t, err, context.Canceled)
+			} else {
+				require.Equal(t, codes.PermissionDenied, status.Code(err))
+			}
+			require.NotContains(t, err.Error(), "requires reconciliation")
+			require.Equal(t, []string{testKeyRing + "/cryptoKeys/cleanup/cryptoKeyVersions/1"}, fake.disabledVersions())
+			require.Equal(t, 3, fake.versionReads)
+		})
+	}
+}
+
+func TestCreateSigningKey_PreservesResourceOnCleanupFailure(t *testing.T) {
+	t.Parallel()
+	fake := &failedGenerationReadRing{
+		fakeKeyRing: newFakeKeyRing(),
+		updateErr:   status.Error(codes.PermissionDenied, "disable denied"),
+	}
+	client := newFakeProvisioningClient(t, fake, fake.fakeKeyRing)
+	_, err := client.CreateSigningKey(t.Context(), CreateSigningKeyParams{KeyRing: testKeyRing, KeyID: "cleanup", Algorithm: jose.RS256})
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+	require.ErrorContains(t, err, "generation read failed")
+	require.ErrorContains(t, err, "disable denied")
+	require.ErrorContains(t, err, "requires reconciliation")
+	require.ErrorContains(t, err, testKeyRing+"/cryptoKeys/cleanup/cryptoKeyVersions/1")
+}
+
+func TestReconcileFailedKeyGeneration_BoundsPendingWait(t *testing.T) {
+	t.Parallel()
+	fake := newFakeKeyRing()
+	fake.pendingReads = 1 << 30
+	client := newFakeProvisioningClient(t, fake, fake)
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Millisecond)
+	defer cancel()
+	err := client.reconcileFailedKeyGeneration(ctx, testKeyRing+"/cryptoKeys/cleanup/cryptoKeyVersions/1")
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.Empty(t, fake.disabledVersions(), "pending versions must not be disabled")
 }

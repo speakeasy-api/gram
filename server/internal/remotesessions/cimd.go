@@ -41,8 +41,9 @@ const (
 	// freshness window.
 	clientJSONWebKeySetMaxAgeSeconds = 3600
 
-	// managedClientJSONWebKeySetMaxAgeSeconds bounds how long a revoked managed key stays cached.
-	managedClientJSONWebKeySetMaxAgeSeconds = 300
+	// ManagedClientJSONWebKeySetMaxAgeSeconds bounds managed JWKS caching and
+	// the publish-before-sign delay required by connection key rotation.
+	ManagedClientJSONWebKeySetMaxAgeSeconds = 300
 )
 
 // cimdClientName is the client_name Gram publishes in every CIMD document. It
@@ -208,7 +209,7 @@ func (m *ChallengeManager) HandleClientJSONWebKeySet(w http.ResponseWriter, r *h
 
 	maxAge := clientJSONWebKeySetMaxAgeSeconds
 	if row.Managed {
-		maxAge = managedClientJSONWebKeySetMaxAgeSeconds
+		maxAge = ManagedClientJSONWebKeySetMaxAgeSeconds
 	}
 
 	return httpcache.WriteCacheableJSON(ctx, w, r, m.logger, "application/jwk-set+json", maxAge, row.Document)
