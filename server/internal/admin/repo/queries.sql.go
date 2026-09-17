@@ -69,6 +69,16 @@ filtered AS (
         END::text AS trial_state
     FROM organization_metadata om
     LEFT JOIN trials t ON t.organization_id = om.id
+    -- Match the list's active-membership definition without multiplying rows.
+    -- Guard access inside the aggregate: generic plans must not scan members
+    -- when both bounds are absent.
+    CROSS JOIN LATERAL (
+        SELECT count(*)::bigint AS member_count
+        FROM organization_user_relationships our
+        WHERE ($3::bigint IS NOT NULL OR $4::bigint IS NOT NULL)
+          AND our.organization_id = om.id
+          AND our.deleted IS FALSE
+    ) members
     CROSS JOIN search
     WHERE
         (
@@ -78,11 +88,16 @@ filtered AS (
             OR lower(om.id) = lower(search.term)
             OR lower(om.workos_id) = lower(search.term)
         )
-        AND (coalesce(cardinality($3::text[]), 0) = 0 OR om.gram_account_type = ANY($3::text[]))
+        AND (coalesce(cardinality($5::text[]), 0) = 0 OR om.gram_account_type = ANY($5::text[]))
+        AND ($3::bigint IS NULL OR members.member_count >= $3::bigint)
+        AND ($4::bigint IS NULL OR members.member_count <= $4::bigint)
+        AND ($6::timestamptz IS NULL OR om.created_at >= $6::timestamptz)
+        AND ($7::timestamptz IS NULL OR om.created_at < $7::timestamptz)
+        -- Status is strict, including exact organization and WorkOS ID searches.
         AND (
-            (CASE WHEN om.disabled_at IS NULL THEN 'active' ELSE 'disabled' END) = ANY($4::text[])
-            OR lower(om.id) = lower(search.term)
-            OR lower(om.workos_id) = lower(search.term)
+            $8::text = 'all'
+            OR ($8::text = 'active' AND om.disabled_at IS NULL)
+            OR ($8::text = 'disabled' AND om.disabled_at IS NOT NULL)
         )
 )
 SELECT count(*)::bigint FROM filtered
@@ -92,8 +107,12 @@ WHERE coalesce(cardinality($1::text[]), 0) = 0 OR trial_state = ANY($1::text[])
 type AdminCountOrganizationsParams struct {
 	TrialStates    []string
 	Q              pgtype.Text
+	MinMembers     pgtype.Int8
+	MaxMembers     pgtype.Int8
 	AccountTypes   []string
-	DisabledStates []string
+	CreatedAtGte   pgtype.Timestamptz
+	CreatedAtLt    pgtype.Timestamptz
+	DisabledStatus string
 }
 
 // The count cannot ride on the page query. That query carries the cursor
@@ -111,8 +130,12 @@ func (q *Queries) AdminCountOrganizations(ctx context.Context, arg AdminCountOrg
 	row := q.db.QueryRow(ctx, adminCountOrganizations,
 		arg.TrialStates,
 		arg.Q,
+		arg.MinMembers,
+		arg.MaxMembers,
 		arg.AccountTypes,
-		arg.DisabledStates,
+		arg.CreatedAtGte,
+		arg.CreatedAtLt,
+		arg.DisabledStatus,
 	)
 	var column_1 int64
 	err := row.Scan(&column_1)
@@ -502,8 +525,8 @@ WITH search AS (
     -- single-character wildcard, so an unescaped pasted id draws incidental
     -- matches out of the name and slug arms.
     SELECT
-        $6::text AS term,
-        '%' || replace(replace(replace($6::text, '\', '\\'), '%', '\%'), '_', '\_') || '%' AS pattern
+        $3::text AS term,
+        '%' || replace(replace(replace($3::text, '\', '\\'), '%', '\%'), '_', '\_') || '%' AS pattern
 ),
 filtered AS (
     SELECT
@@ -528,15 +551,21 @@ filtered AS (
         t.ends_at AS trial_ends_at,
         om.created_at,
         om.updated_at,
-        (
-            SELECT count(*)
-            FROM organization_user_relationships our
-            WHERE our.organization_id = om.id
-              AND our.deleted IS FALSE
-        )::bigint AS member_count
+        members.member_count
     FROM organization_metadata om
     LEFT JOIN trials t ON t.organization_id = om.id
     LEFT JOIN billing_metadata bm ON bm.organization_id = om.id
+    -- Only bounds/member sorting need pre-page counts. Keep the guard inside
+    -- the aggregate so generic plans skip membership access too. NULL marks
+    -- deferred display counts; real zero-member counts remain zero.
+    CROSS JOIN LATERAL (
+        SELECT CASE WHEN ($4::bigint IS NOT NULL OR $5::bigint IS NOT NULL OR $1::text = 'member_count')
+                    THEN count(*) END::bigint AS member_count
+        FROM organization_user_relationships our
+        WHERE ($4::bigint IS NOT NULL OR $5::bigint IS NOT NULL OR $1::text = 'member_count')
+          AND our.organization_id = om.id
+          AND our.deleted IS FALSE
+    ) members
     CROSS JOIN search
     WHERE
         -- The id arms compare exactly because a substring match on an opaque high-cardinality id produces incidental hits an operator cannot explain.
@@ -552,62 +581,98 @@ filtered AS (
         -- coalesce, not a bare cardinality: an absent filter reaches pgx as a nil
         -- slice and encodes to a NULL array, and cardinality(NULL) is NULL, which
         -- would drop every row instead of keeping every row.
-        AND (coalesce(cardinality($7::text[]), 0) = 0 OR om.gram_account_type = ANY($7::text[]))
-        -- No empty arm: the handler resolves an absent filter to {active}.
-        -- The id arms repeat here, and only here, so a pasted id reaches a disabled organization: investigating one is a leading reason to paste an id at all.
-        -- Deliberately not repeated on the account type arm or the cursor, which keep applying to an id match.
+        AND (coalesce(cardinality($6::text[]), 0) = 0 OR om.gram_account_type = ANY($6::text[]))
+        AND ($4::bigint IS NULL OR members.member_count >= $4::bigint)
+        AND ($5::bigint IS NULL OR members.member_count <= $5::bigint)
+        AND ($7::timestamptz IS NULL OR om.created_at >= $7::timestamptz)
+        AND ($8::timestamptz IS NULL OR om.created_at < $8::timestamptz)
+        -- Status is strict, including exact organization and WorkOS ID searches.
         AND (
-            (CASE WHEN om.disabled_at IS NULL THEN 'active' ELSE 'disabled' END) = ANY($8::text[])
-            OR lower(om.id) = lower(search.term)
-            OR lower(om.workos_id) = lower(search.term)
+            $9::text = 'all'
+            OR ($9::text = 'active' AND om.disabled_at IS NULL)
+            OR ($9::text = 'disabled' AND om.disabled_at IS NOT NULL)
         )
         -- Keep ID-shaped cursors compatible, but seek in the default creation
         -- order, not ID order. Resolve the anchor outside the filters so changes
         -- to its account/disabled state do not break an existing cursor. A
         -- deleted or unknown anchor exhausts the walk rather than restarting it.
         AND (
-            $9::text IS NULL
+            $10::text IS NULL
             OR EXISTS (
                 SELECT 1 FROM organization_metadata anchor
-                WHERE anchor.id = $9::text
+                WHERE anchor.id = $10::text
                   AND (om.created_at < anchor.created_at
                        OR (om.created_at = anchor.created_at AND om.id > anchor.id))
             )
         )
-)
+),
+paged AS MATERIALIZED (
 SELECT id, name, slug, account_type, workos_id, stripe_customer_id, stripe_subscription_id, whitelisted, disabled_at, trial_state, trial_ends_at, created_at, updated_at, member_count FROM filtered
-WHERE coalesce(cardinality($1::text[]), 0) = 0 OR trial_state = ANY($1::text[])
+WHERE coalesce(cardinality($11::text[]), 0) = 0 OR trial_state = ANY($11::text[])
 ORDER BY
-    CASE WHEN $2::text = 'name' AND $3::text = 'asc' THEN name END ASC NULLS LAST,
-    CASE WHEN $2::text = 'name' AND $3::text = 'desc' THEN name END DESC NULLS LAST,
-    CASE WHEN $2::text = 'slug' AND $3::text = 'asc' THEN slug END ASC NULLS LAST,
-    CASE WHEN $2::text = 'slug' AND $3::text = 'desc' THEN slug END DESC NULLS LAST,
-    CASE WHEN $2::text = 'account_type' AND $3::text = 'asc' THEN account_type END ASC NULLS LAST,
-    CASE WHEN $2::text = 'account_type' AND $3::text = 'desc' THEN account_type END DESC NULLS LAST,
-    CASE WHEN $2::text = 'member_count' AND $3::text = 'asc' THEN member_count END ASC NULLS LAST,
-    CASE WHEN $2::text = 'member_count' AND $3::text = 'desc' THEN member_count END DESC NULLS LAST,
-    CASE WHEN $2::text = 'created_at' AND $3::text = 'asc' THEN created_at END ASC NULLS LAST,
-    CASE WHEN $2::text = 'created_at' AND $3::text = 'desc' THEN created_at END DESC NULLS LAST,
-    CASE WHEN $2::text = 'disabled_at' AND $3::text = 'asc' THEN disabled_at END ASC NULLS LAST,
-    CASE WHEN $2::text = 'disabled_at' AND $3::text = 'desc' THEN disabled_at END DESC NULLS LAST,
-    CASE WHEN $2::text = 'trial_ends_at' AND $3::text = 'asc' THEN trial_ends_at END ASC NULLS LAST,
-    CASE WHEN $2::text = 'trial_ends_at' AND $3::text = 'desc' THEN trial_ends_at END DESC NULLS LAST,
+    CASE WHEN $1::text = 'name' AND $2::text = 'asc' THEN name END ASC NULLS LAST,
+    CASE WHEN $1::text = 'name' AND $2::text = 'desc' THEN name END DESC NULLS LAST,
+    CASE WHEN $1::text = 'slug' AND $2::text = 'asc' THEN slug END ASC NULLS LAST,
+    CASE WHEN $1::text = 'slug' AND $2::text = 'desc' THEN slug END DESC NULLS LAST,
+    CASE WHEN $1::text = 'account_type' AND $2::text = 'asc' THEN account_type END ASC NULLS LAST,
+    CASE WHEN $1::text = 'account_type' AND $2::text = 'desc' THEN account_type END DESC NULLS LAST,
+    CASE WHEN $1::text = 'member_count' AND $2::text = 'asc' THEN member_count END ASC NULLS LAST,
+    CASE WHEN $1::text = 'member_count' AND $2::text = 'desc' THEN member_count END DESC NULLS LAST,
+    CASE WHEN $1::text = 'created_at' AND $2::text = 'asc' THEN created_at END ASC NULLS LAST,
+    CASE WHEN $1::text = 'created_at' AND $2::text = 'desc' THEN created_at END DESC NULLS LAST,
+    CASE WHEN $1::text = 'disabled_at' AND $2::text = 'asc' THEN disabled_at END ASC NULLS LAST,
+    CASE WHEN $1::text = 'disabled_at' AND $2::text = 'desc' THEN disabled_at END DESC NULLS LAST,
+    CASE WHEN $1::text = 'trial_ends_at' AND $2::text = 'asc' THEN trial_ends_at END ASC NULLS LAST,
+    CASE WHEN $1::text = 'trial_ends_at' AND $2::text = 'desc' THEN trial_ends_at END DESC NULLS LAST,
     -- Without this tiebreaker rows that tie on the sort key can swap between calls, which drops or repeats rows across a page boundary.
     id ASC
-LIMIT $5::int
-OFFSET $4::bigint
+LIMIT $13::int
+OFFSET $12::bigint
+)
+SELECT
+    id, name, slug, account_type, workos_id, stripe_customer_id,
+    stripe_subscription_id, whitelisted, disabled_at, trial_state,
+    trial_ends_at, created_at, updated_at,
+    coalesce(member_count, (
+        SELECT count(*)
+        FROM organization_user_relationships our
+        WHERE our.organization_id = paged.id
+          AND our.deleted IS FALSE
+    ))::bigint AS member_count
+FROM paged
+ORDER BY
+    CASE WHEN $1::text = 'name' AND $2::text = 'asc' THEN name END ASC NULLS LAST,
+    CASE WHEN $1::text = 'name' AND $2::text = 'desc' THEN name END DESC NULLS LAST,
+    CASE WHEN $1::text = 'slug' AND $2::text = 'asc' THEN slug END ASC NULLS LAST,
+    CASE WHEN $1::text = 'slug' AND $2::text = 'desc' THEN slug END DESC NULLS LAST,
+    CASE WHEN $1::text = 'account_type' AND $2::text = 'asc' THEN account_type END ASC NULLS LAST,
+    CASE WHEN $1::text = 'account_type' AND $2::text = 'desc' THEN account_type END DESC NULLS LAST,
+    CASE WHEN $1::text = 'member_count' AND $2::text = 'asc' THEN member_count END ASC NULLS LAST,
+    CASE WHEN $1::text = 'member_count' AND $2::text = 'desc' THEN member_count END DESC NULLS LAST,
+    CASE WHEN $1::text = 'created_at' AND $2::text = 'asc' THEN created_at END ASC NULLS LAST,
+    CASE WHEN $1::text = 'created_at' AND $2::text = 'desc' THEN created_at END DESC NULLS LAST,
+    CASE WHEN $1::text = 'disabled_at' AND $2::text = 'asc' THEN disabled_at END ASC NULLS LAST,
+    CASE WHEN $1::text = 'disabled_at' AND $2::text = 'desc' THEN disabled_at END DESC NULLS LAST,
+    CASE WHEN $1::text = 'trial_ends_at' AND $2::text = 'asc' THEN trial_ends_at END ASC NULLS LAST,
+    CASE WHEN $1::text = 'trial_ends_at' AND $2::text = 'desc' THEN trial_ends_at END DESC NULLS LAST,
+    -- Without this tiebreaker rows that tie on the sort key can swap between calls, which drops or repeats rows across a page boundary.
+    id ASC
 `
 
 type AdminListOrganizationsParams struct {
-	TrialStates    []string
 	SortBy         string
 	SortDir        string
+	Q              pgtype.Text
+	MinMembers     pgtype.Int8
+	MaxMembers     pgtype.Int8
+	AccountTypes   []string
+	CreatedAtGte   pgtype.Timestamptz
+	CreatedAtLt    pgtype.Timestamptz
+	DisabledStatus string
+	AfterID        pgtype.Text
+	TrialStates    []string
 	PageOffset     int64
 	PageLimit      int32
-	Q              pgtype.Text
-	AccountTypes   []string
-	DisabledStates []string
-	AfterID        pgtype.Text
 }
 
 type AdminListOrganizationsRow struct {
@@ -637,17 +702,22 @@ type AdminListOrganizationsRow struct {
 // bottom under DESC, where Postgres would otherwise put them first; on the ASC
 // arms it only spells out the default. Both are written out so the two arms of a
 // column read alike.
+// MATERIALIZED keeps display-only membership access after LIMIT and OFFSET.
 func (q *Queries) AdminListOrganizations(ctx context.Context, arg AdminListOrganizationsParams) ([]AdminListOrganizationsRow, error) {
 	rows, err := q.db.Query(ctx, adminListOrganizations,
-		arg.TrialStates,
 		arg.SortBy,
 		arg.SortDir,
+		arg.Q,
+		arg.MinMembers,
+		arg.MaxMembers,
+		arg.AccountTypes,
+		arg.CreatedAtGte,
+		arg.CreatedAtLt,
+		arg.DisabledStatus,
+		arg.AfterID,
+		arg.TrialStates,
 		arg.PageOffset,
 		arg.PageLimit,
-		arg.Q,
-		arg.AccountTypes,
-		arg.DisabledStates,
-		arg.AfterID,
 	)
 	if err != nil {
 		return nil, err

@@ -155,39 +155,29 @@ var registry = []Product{
 	// coding tool under this vendor key is Codex, which is its own product
 	// below.
 	{
-		ID:          "chatgpt-classic",
+		ID:          "chatgpt",
 		VendorKey:   "openai",
-		DisplayName: "ChatGPT Classic",
+		DisplayName: "ChatGPT",
 		Category:    CategoryAssistant,
-		// Verified 2026-09 against the Homebrew cask (chatgpt-classic
-		// 1.2026.184): Classic kept com.openai.chat, the identifier the
-		// desktop app shipped under originally, while the current ChatGPT app
-		// has moved on to com.openai.codex. So the bundle id is what tells the
-		// two apart, and it is why activity can be attributed to Classic
-		// rather than merely to "ChatGPT".
+		// Verified 2026-09 against the shipping app (ChatGPT 26.903.71938):
+		// its CFBundleIdentifier is com.openai.codex. The desktop app first
+		// shipped as com.openai.chat, and OpenAI left that identifier on
+		// ChatGPT Classic below rather than carrying it forward, so the
+		// bundle id is the only thing that tells the two builds apart.
 		//
-		// The process name is the main executable, which is what an installed
-		// bundle is launched as. Its helpers (ChatGPTHelper,
-		// ChatGPTCodexUpgradeHelper) are unique to Classic too, but they are
-		// implementation detail that a release can rename; the executable
-		// matching the bundle name is the stable running signal.
+		// com.openai.codex names THIS app, not the Codex CLI further down.
+		// The CLI has no bundle to carry an identifier, and folding this into
+		// that entry would file every ChatGPT desktop install as a coding
+		// tool. The shared string is OpenAI's naming, not a mistake to tidy.
 		//
-		// No config dir on purpose, though Classic keeps one at
-		// ~/Library/Application Support/com.openai.chat. That path is the
-		// original desktop app's, which Classic inherited along with the
-		// bundle id, and macOS leaves it behind when an app is removed. So it
-		// reports "has ever run the original ChatGPT app", not "Classic is
-		// installed" — true for a large share of people who have since moved
-		// to the current app, which keeps its own state under
-		// com.openai.codex. The bundle id already detects the install exactly,
-		// and all the config dir would add is the app having been renamed or
-		// moved out of /Applications. That is not worth a false positive
-		// across everyone who used ChatGPT desktop before the split.
+		// No config dir: the bundle id already detects the install exactly,
+		// and a support directory under com.openai.codex survives the app
+		// being removed, so it would report people who no longer run it.
 		Signatures: Signatures{
-			BundleIDs:    []string{"com.openai.chat"},
+			BundleIDs:    []string{"com.openai.codex"},
 			Binaries:     nil,
 			ConfigDirs:   nil,
-			ProcessNames: []string{"ChatGPT Classic"},
+			ProcessNames: []string{"ChatGPT"},
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"ChatGPT", "chatgpt"},
@@ -211,6 +201,56 @@ var registry = []Product{
 				Enabled:     true,
 			},
 		},
+	},
+
+	// ChatGPT Classic is the older desktop build, installed alongside the
+	// current app rather than over it, and it is a scan target only.
+	//
+	// It deliberately carries no gateway matchers. Both builds authorize
+	// through chatgpt.com and present the documents registered above, so the
+	// identity a caller proves is "a ChatGPT client" and nothing finer. The
+	// builds do differ in their HTTP User-Agent, but that is self-reported
+	// and trivially set by anything, so it can separate them for counting and
+	// never for admitting. Registering those documents here too would make
+	// blocking Classic refuse everyone on the current app and on chatgpt.com,
+	// which is the reach a Product is defined to prevent. Classic is
+	// therefore visible on the device and decided about, at the gateway, as
+	// ChatGPT.
+	{
+		ID:          "chatgpt-classic",
+		VendorKey:   "openai",
+		DisplayName: "ChatGPT Classic",
+		Category:    CategoryAssistant,
+		// Verified 2026-09 against the Homebrew cask (chatgpt-classic
+		// 1.2026.184): Classic kept com.openai.chat, the identifier the
+		// desktop app shipped under originally.
+		//
+		// The process name is the main executable, which is what an installed
+		// bundle is launched as. Its helpers (ChatGPTHelper,
+		// ChatGPTCodexUpgradeHelper) are unique to Classic too, but they are
+		// implementation detail that a release can rename; the executable
+		// matching the bundle name is the stable running signal. Process
+		// names are matched exactly, so "ChatGPT" above never fires here.
+		//
+		// No config dir on purpose, though Classic keeps one at
+		// ~/Library/Application Support/com.openai.chat. That path is the
+		// original desktop app's, which Classic inherited along with the
+		// bundle id, and macOS leaves it behind when an app is removed. So it
+		// reports "has ever run the original ChatGPT app", not "Classic is
+		// installed" — true for a large share of people who have since moved
+		// to the current app. The bundle id already detects the install
+		// exactly, and all the config dir would add is the app having been
+		// renamed or moved out of /Applications. That is not worth a false
+		// positive across everyone who used ChatGPT desktop before the split.
+		Signatures: Signatures{
+			BundleIDs:    []string{"com.openai.chat"},
+			Binaries:     nil,
+			ConfigDirs:   nil,
+			ProcessNames: []string{"ChatGPT Classic"},
+		},
+		VersionPlistKey: "",
+		ClientInfoNames: nil,
+		Documents:       nil,
 	},
 	{
 		ID:          "codex",

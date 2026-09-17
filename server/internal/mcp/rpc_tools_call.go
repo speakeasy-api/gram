@@ -419,6 +419,7 @@ func handleToolsCall(
 			logAttrs[attr.MetaMcpServerIDKey] = payload.metaMcpServerID
 		}
 		logAttrs.RecordMCPURL(mcpURL)
+		logAttrs.RecordMCPClient(clientIdentity.Name, clientIdentity.Version)
 		params := tm.LogParams{
 			Timestamp: time.Now(),
 			ToolInfo: tm.ToolInfo{

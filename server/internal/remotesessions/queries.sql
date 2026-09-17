@@ -573,6 +573,26 @@ WHERE trusted_remote_session_issuer_id = @remote_session_issuer_id::uuid
   AND deleted IS FALSE
 ORDER BY id;
 
+-- name: CountTrustedUserSessionIssuersByRemoteSessionClientID :one
+-- Every active user-session issuer that uses this client for identity-provider
+-- login. Delete enforcement is intentionally unscoped so corrupt legacy data
+-- cannot be stranded by deleting a client through a tenant-scoped surface.
+SELECT COUNT(*)
+FROM user_session_issuers
+WHERE trusted_remote_session_client_id = @remote_session_client_id::uuid
+  AND deleted IS FALSE;
+
+-- name: ListOrganizationTrustedUserSessionIssuersByRemoteSessionClientID :many
+-- Tenant-scoped details for the client delete preflight. Mutation enforcement
+-- uses the unscoped count above.
+SELECT id, slug
+FROM user_session_issuers
+WHERE trusted_remote_session_client_id = @remote_session_client_id::uuid
+  AND project_id IS NULL
+  AND organization_id = @organization_id::text
+  AND deleted IS FALSE
+ORDER BY id;
+
 -- name: CountTenantRemoteSessionClientsByIssuerID :one
 -- Non-deleted clients on an issuer that belong to a tenant (a project or an
 -- organization) rather than to the global partition. Subtracting this from
@@ -707,7 +727,8 @@ ORDER BY link.user_session_issuer_id;
 -- rejection marker is cleared because the replacement is known to the issuer.
 -- Compare-and-swap on the client_id and updated_at the caller read: a row
 -- another rotation or an administrator's edit already moved is left alone and
--- reported as no rows. CIMD-mode rows are
+-- reported as no rows. The expected issuer also proves the advisory lock the
+-- caller holds still covers this client. CIMD-mode rows are
 -- excluded: their client_id is the metadata document URL and is never
 -- registered upstream. Managed rows are excluded: their registration belongs
 -- to the identity provider connection.
@@ -723,6 +744,7 @@ SET client_id = @client_id,
 WHERE id = @id
   AND client_id = @expected_client_id
   AND updated_at = @expected_updated_at
+  AND remote_session_issuer_id = @expected_issuer_id
   AND deleted IS FALSE
   AND client_id_metadata_uri IS NULL
   AND identity_provider_connection_id IS NULL
@@ -2740,6 +2762,12 @@ WHERE c.id = @id
   AND (i.organization_id = @organization_id OR c.organization_id = @organization_id)
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE
+  AND NOT EXISTS (
+    SELECT 1
+    FROM user_session_issuers AS usi
+    WHERE usi.trusted_remote_session_client_id = c.id
+      AND usi.deleted IS FALSE
+  )
 RETURNING c.*;
 
 -- name: ListOrganizationMcpServersForClient :many
@@ -2816,6 +2844,17 @@ WHERE m.deleted IS FALSE
 -- migrations cannot deadlock.
 SELECT pg_advisory_xact_lock(hashtextextended((@remote_session_issuer_id::uuid)::text, 0));
 
+-- name: LockRemoteSessionIssuerForClientBindingSession :exec
+-- Session-scoped counterpart used by registration rotation. Rotation must keep
+-- the issuer's endpoint and tunnel snapshot stable across upstream HTTP calls,
+-- but must not hold a database transaction open while making those calls. The
+-- caller owns one dedicated pooled connection until it invokes the matching
+-- unlock query.
+SELECT pg_advisory_lock(hashtextextended((@remote_session_issuer_id::uuid)::text, 0));
+
+-- name: UnlockRemoteSessionIssuerForClientBindingSession :one
+SELECT pg_advisory_unlock(hashtextextended((@remote_session_issuer_id::uuid)::text, 0));
+
 -- name: GetTrustedRemoteSessionIssuerForOrganization :one
 -- A trusted issuer must be either global or organization-owned by the caller.
 -- Project-specific issuers are deliberately excluded, including projects in
@@ -2826,6 +2865,73 @@ WHERE id = @id
   AND project_id IS NULL
   AND (organization_id = @organization_id::text OR organization_id IS NULL)
   AND deleted IS FALSE;
+
+-- name: LockTrustedRemoteSessionIssuerForOrganization :one
+-- Repeats the issuer-only eligibility predicate after the caller has taken the
+-- issuer advisory lock. The row lock prevents a capability or lifecycle write
+-- from invalidating the reference before its transaction commits.
+SELECT *
+FROM remote_session_issuers
+WHERE id = @id
+  AND project_id IS NULL
+  AND (organization_id = @organization_id::text OR organization_id IS NULL)
+  AND deleted IS FALSE
+FOR SHARE;
+
+-- name: GetTrustedRemoteSessionClientForOrganization :one
+-- The exact live issuer/client pair eligible for organization identity-provider
+-- login. Clients must be organization-owned by the caller; project and global
+-- clients are deliberately excluded. The issuer may be organization-owned or
+-- global, but the client must belong to that exact issuer.
+SELECT sqlc.embed(c), sqlc.embed(i)
+FROM remote_session_clients AS c
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+WHERE c.id = @client_id::uuid
+  AND c.remote_session_issuer_id = @issuer_id::uuid
+  AND c.project_id IS NULL
+  AND c.organization_id = @organization_id::text
+  AND c.deleted IS FALSE
+  AND i.id = @issuer_id::uuid
+  AND i.project_id IS NULL
+  AND (i.organization_id = @organization_id::text OR i.organization_id IS NULL)
+  AND i.deleted IS FALSE;
+
+-- name: LockTrustedRemoteSessionClientForOrganization :one
+-- Callers first run the unlocked query above, then take the issuer advisory
+-- lock, then run this query. Repeating the exact eligibility predicate closes
+-- delete and re-scope races without allowing cross-tenant row locks.
+SELECT sqlc.embed(c), sqlc.embed(i)
+FROM remote_session_clients AS c
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+WHERE c.id = @client_id::uuid
+  AND c.remote_session_issuer_id = @issuer_id::uuid
+  AND c.project_id IS NULL
+  AND c.organization_id = @organization_id::text
+  AND c.deleted IS FALSE
+  AND i.id = @issuer_id::uuid
+  AND i.project_id IS NULL
+  AND (i.organization_id = @organization_id::text OR i.organization_id IS NULL)
+  AND i.deleted IS FALSE
+FOR SHARE OF c, i;
+
+-- name: ListTrustedRemoteSessionClientsByIssuerID :many
+-- Every live client actively used with this issuer for identity-provider login.
+-- Issuer capability writers validate these rows before committing so an
+-- existing trusted-login pair cannot be invalidated after it was linked.
+-- Deliberately not tenant-scoped: issuer ids are globally unique, and changing
+-- a global issuer must validate trusted clients in every organization.
+SELECT c.*
+FROM remote_session_clients AS c
+WHERE c.remote_session_issuer_id = @remote_session_issuer_id
+  AND c.deleted IS FALSE
+  AND EXISTS (
+    SELECT 1
+    FROM user_session_issuers AS usi
+    WHERE usi.trusted_remote_session_issuer_id = @remote_session_issuer_id
+      AND usi.trusted_remote_session_client_id = c.id
+      AND usi.deleted IS FALSE
+  )
+ORDER BY c.id;
 
 -- name: CreateTestTrustedIssuerJWKSCache :one
 -- Test fixture for conditional issuer-key cache writes.
@@ -3562,3 +3668,19 @@ SET registration_endpoint = sqlc.narg('registration_endpoint'),
 FROM remote_session_clients AS c
 WHERE c.id = @client_id
   AND i.id = c.remote_session_issuer_id;
+
+-- name: SoftDeleteRemoteSessionClientFixture :execrows
+-- Test fixture: plants a tombstoned client for management-link rejection tests
+-- without coupling those tests to a second service's authorization path.
+UPDATE remote_session_clients
+SET deleted_at = clock_timestamp()
+WHERE id = @id
+  AND deleted IS FALSE;
+
+-- name: SoftDeleteRemoteSessionIssuerFixture :execrows
+-- Test fixture: plants a tombstoned issuer for management-link rejection tests
+-- without coupling those tests to a second service's authorization path.
+UPDATE remote_session_issuers
+SET deleted_at = clock_timestamp()
+WHERE id = @id
+  AND deleted IS FALSE;

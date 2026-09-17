@@ -49,6 +49,7 @@ func newApp() *cli.App {
 			newRenderPlatformMCPCommand(),
 			newStreamsCommand(),
 			newDemoSeedCommand(),
+			newAdminSeedCommand(),
 			newVersionCommand(),
 		},
 		Before: func(c *cli.Context) error {

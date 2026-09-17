@@ -1017,10 +1017,8 @@ type ListOrganizationsPayload struct {
 	AdminSessionToken *string
 	// Search term, trimmed of surrounding whitespace. Matches name and slug as a
 	// case-insensitive substring, with % and _ taken literally, and matches
-	// organization id and WorkOS id exactly, ignoring case. An id match also
-	// returns an organization that disabled_states or include_disabled would
-	// otherwise hide; it still respects account_type, account_types, trial_states
-	// and cursor.
+	// organization id and WorkOS id exactly, ignoring case. All filters apply even
+	// to exact ID matches.
 	Q *string
 	// Filter by a single gram_account_type (e.g. free, pro, payg, enterprise).
 	// Superseded by account_types, which it joins as one more member of the same
@@ -1034,12 +1032,26 @@ type ListOrganizationsPayload struct {
 	// Empty matches every trial state. An unrecognised value matches nothing
 	// rather than failing the request.
 	TrialStates []string
-	// Match any of active or disabled. Empty falls back to include_disabled. An
-	// unrecognised value matches nothing rather than failing the request.
-	DisabledStates []string
-	// Include organizations with disabled_at set. Defaults to false. Superseded by
-	// disabled_states, which overrides it outright when supplied.
-	IncludeDisabled *bool
+	// Organization status: all (default), active (disabled_at IS NULL), or
+	// disabled (disabled_at IS NOT NULL). Applies even to exact ID matches.
+	DisabledStatus *string
+	// Inclusive minimum active member count, from 0 through 9223372036854775807.
+	// The generated TypeScript SDK accepts bigint. The handwritten admin client
+	// accepts safe integers or decimal strings; use decimal strings above
+	// Number.MAX_SAFE_INTEGER.
+	MinMembers *int64
+	// Inclusive maximum active member count, from 0 through 9223372036854775807.
+	// Must be at least min_members. The generated TypeScript SDK accepts bigint.
+	// The handwritten admin client accepts safe integers or decimal strings; use
+	// decimal strings above Number.MAX_SAFE_INTEGER.
+	MaxMembers *int64
+	// Inclusive creation date in strict YYYY-MM-DD UTC calendar format. Each date
+	// bound is optional; must not be after created_to.
+	CreatedFrom *string
+	// Inclusive creation date in strict YYYY-MM-DD UTC calendar format. Includes
+	// the entire UTC day, implemented as an exclusive bound at the following
+	// midnight.
+	CreatedTo *string
 	// Pagination cursor: id of the last item from the previous page in created_at
 	// descending, id ascending order. The anchor is resolved regardless of
 	// filters; a deleted or unknown id returns an empty page. Ignored when sort or
