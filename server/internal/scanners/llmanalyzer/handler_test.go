@@ -147,6 +147,33 @@ func TestHandle_PublishesOneFindingPerFlaggedRisk(t *testing.T) {
 	require.Equal(t, "async", calls[0].Info.Lane)
 }
 
+func TestHandle_FiltersFindingsToRequestSources(t *testing.T) {
+	t.Parallel()
+
+	pub, findings := capturingFindingsPub(t)
+	meterPub, _ := capturingMeterPub(t)
+	stub := &llmanalyzer.StubCompleter{
+		Response: llmanalyzer.VerdictJSON(map[string]int{
+			llmanalyzer.KeySecretsLeak:      1,
+			llmanalyzer.KeyPersonalDataLeak: 1,
+		}, "Plaintext credential next to a home address."),
+		Err:              nil,
+		PromptTokens:     120,
+		CompletionTokens: 40,
+		Model:            "risk-judge-4b",
+		Calls:            nil,
+		ParseFailures:    0,
+	}
+	h := newHandler(t, stub, pub, meterPub)
+
+	analysis := newAnalysis("AKIA0000000000000000 lives at 1 Main St")
+	analysis.SetSources([]string{"gitleaks"})
+	require.NoError(t, h.Handle(t.Context(), analysis, gcp.MessageMetadata{}))
+
+	require.Len(t, *findings, 1)
+	require.Equal(t, llmanalyzer.RuleSecret, (*findings)[0].GetRuleId())
+}
+
 func TestHandle_CleanVerdictPublishesNothingButMeters(t *testing.T) {
 	t.Parallel()
 
@@ -269,6 +296,7 @@ func TestHandle_ToolCallsRenderRealIDsAndNames(t *testing.T) {
 
 	request := newAnalysis("")
 	request.SetMessageType("tool_request")
+	request.SetSources([]string{"destructive_tool"})
 	request.SetToolCalls([]*riskv1.LLMAnalysis_ToolCall{
 		riskv1.LLMAnalysis_ToolCall_builder{
 			Id:        new("call_prod_drop"),
