@@ -967,7 +967,7 @@ var File_gram_risk_v1_finding_proto protoreflect.FileDescriptor
 
 const file_gram_risk_v1_finding_proto_rawDesc = "" +
 	"\n" +
-	"\x1agram/risk/v1/finding.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xf6\x06\n" +
+	"\x1agram/risk/v1/finding.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xf0\x06\n" +
 	"\aFinding\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -1004,8 +1004,7 @@ const file_gram_risk_v1_finding_proto_rawDesc = "" +
 	"\x0fexcluded_reason\x18\x19 \x01(\tR\x0eexcludedReason\x12'\n" +
 	"\x0fexcluded_detail\x18\x1a \x01(\tR\x0eexcludedDetail\x12\x1d\n" +
 	"\n" +
-	"event_kind\x18\x1b \x01(\tR\teventKind:\n" +
-	"\x8a\xb5\x18\x06\x12\x04\b\x80\xf5$B=Z;github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1b\beditionsp\xe9\a"
+	"event_kind\x18\x1b \x01(\tR\teventKind:\x04\x8a\xb5\x18\x00B=Z;github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1b\beditionsp\xe9\a"
 
 var file_gram_risk_v1_finding_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_gram_risk_v1_finding_proto_goTypes = []any{

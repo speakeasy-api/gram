@@ -34,10 +34,7 @@ message GitleaksAnalysis {
   // Raw external conversation ID; independent of the persisted Gram chat_id.
   string external_conversation_id = 23;
 
-  option (gcp.pubsub.v1.topic) = {
-    retention_hint: {
-      seconds: 604800
-      /* 7 days */
-    }
-  };
+  // No retention_hint: topic retention only backfills newly created
+  // subscriptions, and consumers rely on subscription retention instead.
+  option (gcp.pubsub.v1.topic) = {};
 }

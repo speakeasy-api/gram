@@ -12,7 +12,9 @@ message PresidioEnforcer {
   // undecodable or malformed requests; a consumer crash or lost ack lease can
   // also strand a valid request there after max delivery attempts. Either way
   // the payloads contain raw content and require restricted access and
-  // retention.
+  // retention. Retention therefore stays at the 10-minute minimum instead of
+  // the analyzers' multi-day window: an enforcement request is only useful
+  // while its caller is still waiting on the reply.
   option (gcp.pubsub.v1.subscription) = {
     topic: "gram.risk.v1.PresidioEnforcement"
     ack_deadline: {seconds: 10}

@@ -77,9 +77,7 @@ message Finding {
   // excluded_at/false_positive_at is carried and "finding" otherwise.
   string event_kind = 27;
 
-  option (gcp.pubsub.v1.topic) = {
-    retention_hint: {
-      seconds: 604800 /* 7 days */
-    }
-  };
+  // No retention_hint: topic retention only backfills newly created
+  // subscriptions, and consumers rely on subscription retention instead.
+  option (gcp.pubsub.v1.topic) = {};
 }

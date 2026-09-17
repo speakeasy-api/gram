@@ -10,7 +10,7 @@ message FindingOTELRelay {
   option (gcp.pubsub.v1.subscription) = {
     topic: "gram.risk.v1.Finding"
     ack_deadline: {seconds: 60}
-    retention: {seconds: 604800} /* 7 days */
+    retention: {seconds: 345600} /* 4 days, so a weekend outage stays recoverable */
     retain_acked_messages: true
     retry_policy: {
       minimum_backoff: {seconds: 10}

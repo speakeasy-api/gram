@@ -901,7 +901,7 @@ var File_gram_risk_v1_presidio_enforcement_proto protoreflect.FileDescriptor
 
 const file_gram_risk_v1_presidio_enforcement_proto_rawDesc = "" +
 	"\n" +
-	"'gram/risk/v1/presidio_enforcement.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xa7\b\n" +
+	"'gram/risk/v1/presidio_enforcement.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xa2\b\n" +
 	"\x13PresidioEnforcement\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12&\n" +
@@ -934,7 +934,7 @@ const file_gram_risk_v1_presidio_enforcement_proto_rawDesc = "" +
 	"\rmeter_reading\x18\x18 \x01(\fR\fmeterReading\x12,\n" +
 	"\x12policy_link_reason\x18\x19 \x01(\tR\x10policyLinkReason\x128\n" +
 	"\x18external_conversation_id\x18\x1a \x01(\tR\x16externalConversationId\x12+\n" +
-	"\x11content_truncated\x18\x1b \x01(\bR\x10contentTruncated:\t\x8a\xb5\x18\x05\x12\x03\b\xd8\x04J\x04\b\b\x10\tR\treply_urnB=Z;github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1b\beditionsp\xe9\a"
+	"\x11content_truncated\x18\x1b \x01(\bR\x10contentTruncated:\x04\x8a\xb5\x18\x00J\x04\b\b\x10\tR\treply_urnB=Z;github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1b\beditionsp\xe9\a"
 
 var file_gram_risk_v1_presidio_enforcement_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_gram_risk_v1_presidio_enforcement_proto_goTypes = []any{

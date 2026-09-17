@@ -69,7 +69,7 @@ var File_gram_risk_v1_custom_rules_analyzer_proto protoreflect.FileDescriptor
 const file_gram_risk_v1_custom_rules_analyzer_proto_rawDesc = "" +
 	"\n" +
 	"(gram/risk/v1/custom_rules_analyzer.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"T\n" +
-	"\x13CustomRulesAnalyzer:=\x92\xb5\x189\x12\x04\b\x80\xf5$\x18\x01\"\x02\b<2\t\n" +
+	"\x13CustomRulesAnalyzer:=\x92\xb5\x189\x12\x04\b\x80\x8c\x15\x18\x01\"\x02\b<2\t\n" +
 	"\x02\b\n" +
 	"\x12\x03\b\xd8\x04R gram.risk.v1.CustomRulesAnalysisB=Z;github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1b\beditionsp\xe9\a"
 
