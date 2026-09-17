@@ -25,6 +25,19 @@ vi.mock("@gram/client/react-query/remoteSessionIssuers.js", () => ({
   }),
 }));
 
+vi.mock("@/hooks/useEffectiveUserSessionIssuers", () => ({
+  useEffectiveUserSessionIssuers: () => ({
+    issuers: [],
+    organizationIssuers: [],
+    isLoading: false,
+    isError: false,
+  }),
+}));
+
+vi.mock("./UserSessionIssuerField", () => ({
+  UserSessionIssuerField: () => null,
+}));
+
 vi.mock("./authTarget", () => ({
   useMcpServerAuthTarget: vi.fn(),
 }));
@@ -57,8 +70,17 @@ vi.mock("./AttachRemoteIdentityProviderSheet", () => ({
 }));
 
 vi.mock("./RemoteIdentityProvidersField", () => ({
-  RemoteIdentityProvidersField: ({ onAdd }: { onAdd: () => void }) => (
-    <button onClick={onAdd}>Add provider</button>
+  RemoteIdentityProvidersField: ({
+    onAdd,
+    readOnly,
+  }: {
+    onAdd: () => void;
+    readOnly?: boolean;
+  }) => (
+    <>
+      <button onClick={onAdd}>Add provider</button>
+      <output>providers-{readOnly ? "read-only" : "editable"}</output>
+    </>
   ),
 }));
 
@@ -86,19 +108,24 @@ vi.mock("./ModifyRemoteIdentityProviderSheet", () => ({
 }));
 
 vi.mock("./UserSessionDurationField", () => ({
-  UserSessionDurationField: () => null,
+  UserSessionDurationField: ({ readOnly }: { readOnly?: boolean }) => (
+    <output>duration-{readOnly ? "read-only" : "editable"}</output>
+  ),
 }));
 
 vi.mock("./CimdAdmissionModeField", () => ({
   CimdAdmissionModeField: ({
     onDraftModeChange,
     children,
+    readOnly,
   }: {
     onDraftModeChange?: (mode: string) => void;
     children?: ReactNode;
+    readOnly?: boolean;
   }) => (
     <div>
       cimd-admission-mode
+      <output>cimd-{readOnly ? "read-only" : "editable"}</output>
       <button type="button" onClick={() => onDraftModeChange?.("presets")}>
         draft-presets
       </button>
@@ -237,6 +264,32 @@ describe("AuthenticationSectionBody", () => {
       "remote-mcp-server",
       false,
     );
+  });
+
+  it("keeps organization-owned issuer settings read-only", () => {
+    useUserSessionIssuer.mockReturnValue({
+      data: {
+        id: "organization-user-session-issuer",
+        projectId: "",
+        clientIdMetadataAdmissionMode: "reporting",
+      },
+      isLoading: false,
+      isError: false,
+    });
+    useAllRemoteSessionClients.mockReturnValue({ items: [], isLoading: false });
+    useProtectedResourceMetadata.mockReturnValue({
+      status: "idle",
+      metadata: null,
+    });
+
+    render(
+      <AuthenticationSectionBody target={remoteTargetWithSessionIssuer} />,
+    );
+
+    expect(screen.getByText("duration-read-only")).toBeDefined();
+    expect(screen.getByText("cimd-read-only")).toBeDefined();
+    expect(screen.getByText("providers-read-only")).toBeDefined();
+    expect(screen.queryByText("cimd-custom-clients")).toBeNull();
   });
 
   it.each(["presets", "reporting"])(

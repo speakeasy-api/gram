@@ -30,11 +30,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -147,15 +149,28 @@ func (s *Service) CreateServerAndMcpServer(ctx context.Context, payload *gen.Cre
 
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 	result, err := s.provisioning.ProvisionDashboardRemoteMCP(ctx, authCtx, DashboardRemoteMCPProvisioningInput{
-		Name:          payload.Name,
-		URL:           payload.URL,
-		TransportType: payload.TransportType,
+		Name:                payload.Name,
+		URL:                 payload.URL,
+		TransportType:       payload.TransportType,
+		UserSessionIssuerID: payload.UserSessionIssuerID,
 	})
 	if err != nil {
 		if shareableErr, ok := errors.AsType[*oops.ShareableError](err); ok {
 			return nil, shareableErr.LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "provision remote MCP server").LogError(ctx, logger)
+	}
+	if payload.UserSessionIssuerID != nil && result.MCPServer.UserSessionIssuerID.Valid {
+		remotesessions.BestEffortResyncMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{result.MCPServer.UserSessionIssuerID.UUID})
+		refreshed, refreshErr := mcpserversrepo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
+			ID:        result.MCPServer.ID,
+			ProjectID: *authCtx.ProjectID,
+		})
+		if refreshErr != nil {
+			logger.ErrorContext(ctx, "reload MCP server after issuer sync", attr.SlogError(refreshErr))
+		} else {
+			result.MCPServer = refreshed
+		}
 	}
 	return &gen.CreateServerAndMcpServerResult{
 		RemoteMcpServer: mv.BuildRemoteMcpServerView(result.RemoteMCPServer),

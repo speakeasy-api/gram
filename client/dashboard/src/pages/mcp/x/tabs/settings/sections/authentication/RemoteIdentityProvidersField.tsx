@@ -18,6 +18,7 @@ export function RemoteIdentityProvidersField({
   onAdd,
   onEdit,
   onDelete,
+  readOnly = false,
 }: {
   associatedIssuers: RemoteSessionIssuer[];
   isLoading: boolean;
@@ -29,6 +30,7 @@ export function RemoteIdentityProvidersField({
   onAdd: () => void;
   onEdit: (issuer: RemoteSessionIssuer) => void;
   onDelete: (issuer: RemoteSessionIssuer) => void;
+  readOnly?: boolean;
 }): JSX.Element {
   const addButton = (
     <RequireScope scope="mcp:write" resourceId={projectId} level="component">
@@ -51,7 +53,13 @@ export function RemoteIdentityProvidersField({
   } else if (associatedIssuers.length === 0) {
     // The button is the empty state: "None yet." beside it says nothing the
     // absent list does not already say.
-    providerControls = addButton;
+    providerControls = readOnly ? (
+      <Text muted small>
+        No connected services.
+      </Text>
+    ) : (
+      addButton
+    );
   } else {
     providerControls = (
       <div className="space-y-3">
@@ -62,9 +70,10 @@ export function RemoteIdentityProvidersField({
             projectId={projectId}
             onEdit={() => onEdit(issuer)}
             onDelete={() => onDelete(issuer)}
+            readOnly={readOnly}
           />
         ))}
-        {allowAdditionalProviders && addButton}
+        {allowAdditionalProviders && !readOnly && addButton}
       </div>
     );
   }
@@ -103,9 +112,11 @@ function RemoteIdentityProviderRow({
   onEdit,
   onDelete,
   projectId,
+  readOnly,
 }: {
   issuer: RemoteSessionIssuer;
   projectId: string;
+  readOnly: boolean;
   onEdit: () => void;
   onDelete: () => void;
 }) {
@@ -139,29 +150,31 @@ function RemoteIdentityProviderRow({
             {issuer.issuer}
           </Text>
         </div>
-        <RequireScope
-          scope="mcp:write"
-          resourceId={projectId}
-          level="component"
-        >
-          <div className="flex shrink-0 items-center gap-2">
-            {canEdit && (
-              <Button size="md" variant="secondary" onClick={onEdit}>
-                <Button.Text>Edit</Button.Text>
+        {!readOnly ? (
+          <RequireScope
+            scope="mcp:write"
+            resourceId={projectId}
+            level="component"
+          >
+            <div className="flex shrink-0 items-center gap-2">
+              {canEdit && (
+                <Button size="md" variant="secondary" onClick={onEdit}>
+                  <Button.Text>Edit</Button.Text>
+                </Button>
+              )}
+              <Button
+                size="md"
+                variant="destructive-secondary"
+                onClick={onDelete}
+              >
+                <Button.LeftIcon>
+                  <Trash2 className="size-4" />
+                </Button.LeftIcon>
+                <Button.Text>Remove</Button.Text>
               </Button>
-            )}
-            <Button
-              size="md"
-              variant="destructive-secondary"
-              onClick={onDelete}
-            >
-              <Button.LeftIcon>
-                <Trash2 className="size-4" />
-              </Button.LeftIcon>
-              <Button.Text>Remove</Button.Text>
-            </Button>
-          </div>
-        </RequireScope>
+            </div>
+          </RequireScope>
+        ) : null}
       </div>
     </div>
   );

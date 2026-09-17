@@ -29,8 +29,7 @@ export type AuthTarget = {
    * no probeable upstream (tunneled, toolset-backed), leaving the probe idle.
    */
   remoteMcpServerId?: string;
-  /** Link a freshly created issuer to the target (first add). Absent for
-   * targets that always have an issuer (mcp servers). */
+  /** Attach an existing or freshly created issuer to the target. */
   linkUserSessionIssuer?: (userSessionIssuerId: string) => Promise<void>;
   /** True when the target's issuer may bind several upstream providers
    * (gateways front many members). Remote/tunneled servers have exactly one
@@ -41,12 +40,30 @@ export type AuthTarget = {
 };
 
 export function useMcpServerAuthTarget(mcpServer: McpServer): AuthTarget {
+  const client = useSdkClient();
+
   return useMemo(
     () => ({
       slug: mcpServer.slug ?? "mcp",
       projectId: mcpServer.projectId,
       userSessionIssuerId: mcpServer.userSessionIssuerId ?? null,
       remoteMcpServerId: mcpServer.remoteMcpServerId,
+      linkUserSessionIssuer: async (userSessionIssuerId: string) => {
+        await client.mcpServers.update({
+          updateMcpServerForm: {
+            id: mcpServer.id,
+            environmentId: mcpServer.environmentId,
+            networkAccessMode: mcpServer.networkAccessMode,
+            remoteMcpServerId: mcpServer.remoteMcpServerId,
+            tunneledMcpServerId: mcpServer.tunneledMcpServerId,
+            toolsetId: mcpServer.toolsetId,
+            unproxiedMcpServerId: mcpServer.unproxiedMcpServerId,
+            toolVariationsGroupId: mcpServer.toolVariationsGroupId,
+            userSessionIssuerId,
+            visibility: mcpServer.visibility,
+          },
+        });
+      },
       invalidate: async (queryClient: QueryClient) => {
         await Promise.all([
           invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
@@ -54,7 +71,7 @@ export function useMcpServerAuthTarget(mcpServer: McpServer): AuthTarget {
         ]);
       },
     }),
-    [mcpServer],
+    [client, mcpServer],
   );
 }
 

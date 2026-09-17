@@ -15,6 +15,12 @@ import { useCreateRemoteMcpSource } from "./hooks";
 import { useCreateUnproxiedMcpSource } from "../unproxied-mcp/hooks";
 import { useVerifyRemoteMcpUrl } from "./useVerifyRemoteMcpUrl";
 import { VerifyRemoteMcpUrlAlert } from "./VerifyRemoteMcpUrlButton";
+import { UserSessionIssuerSelect } from "@/components/user-session-issuer-select";
+import {
+  PROJECT_SPECIFIC_ISSUER_VALUE,
+  defaultCreationUserSessionIssuerValue,
+} from "@/components/user-session-issuer-select.utils";
+import { useEffectiveUserSessionIssuers } from "@/hooks/useEffectiveUserSessionIssuers";
 
 // Both backends are, to the administrator, the same thing: a server that lives
 // at a URL somewhere else. The only difference is whether Gram sits in the
@@ -31,10 +37,12 @@ function CreateRemoteMcpForm() {
   const isSpeakeasyStaff = useIsSpeakeasyStaff();
   const createRemote = useCreateRemoteMcpSource();
   const createUnproxied = useCreateUnproxiedMcpSource();
+  const issuerQuery = useEffectiveUserSessionIssuers();
 
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
   const [mode, setMode] = useState<ProxyMode>("proxied");
+  const [issuerSelection, setIssuerSelection] = useState<string | null>(null);
   // Track whether the field has been touched so we don't surface "URL is
   // required" the moment the page renders.
   const [touched, setTouched] = useState(false);
@@ -53,6 +61,13 @@ function CreateRemoteMcpForm() {
   // The verify result is cleared whenever the URL changes (see
   // useVerifyRemoteMcpUrl), so this can only be true for the URL on screen.
   const isVerified = verify.result?.verified === true;
+  const defaultIssuerSelection = defaultCreationUserSessionIssuerValue(
+    issuerQuery.organizationIssuers,
+  );
+  const selectedIssuer = issuerSelection ?? defaultIssuerSelection;
+  const issuerSelectionBlocked =
+    mode === "proxied" &&
+    (issuerQuery.isLoading || issuerQuery.isError || selectedIssuer === "");
 
   const handleVerify = () => {
     setTouched(true);
@@ -71,6 +86,7 @@ function CreateRemoteMcpForm() {
       void verify.trigger();
       return;
     }
+    if (issuerSelectionBlocked) return;
 
     const trimmedName = name.trim();
     try {
@@ -87,6 +103,12 @@ function CreateRemoteMcpForm() {
       const { authAutoConfig, mcpServer } = await createRemote.mutateAsync({
         name: trimmedName === "" ? undefined : trimmedName,
         url: url.trim(),
+        userSessionIssuerId:
+          selectedIssuer === PROJECT_SPECIFIC_ISSUER_VALUE
+            ? undefined
+            : selectedIssuer,
+        organizationOwnedUserSessionIssuer:
+          selectedIssuer !== PROJECT_SPECIFIC_ISSUER_VALUE,
       });
       if (authAutoConfig.status === "configured") {
         toast.success("MCP server added and authentication configured");
@@ -206,6 +228,30 @@ function CreateRemoteMcpForm() {
             </Stack>
           )}
 
+          {mode === "proxied" ? (
+            <Stack gap={1}>
+              <label className="text-sm leading-none font-medium">
+                User session issuer
+              </label>
+              <UserSessionIssuerSelect
+                issuers={issuerQuery.organizationIssuers}
+                value={selectedIssuer}
+                onValueChange={setIssuerSelection}
+                includeProjectSpecific
+                disabled={issuerQuery.isLoading || issuerQuery.isError}
+              />
+              <Text muted small>
+                Organization issuers are shared across projects. Creating a
+                project-specific issuer is available for exceptional setups.
+              </Text>
+              {issuerQuery.isError ? (
+                <Alert variant="error" dismissible={false}>
+                  Failed to load organization user session issuers.
+                </Alert>
+              ) : null}
+            </Stack>
+          ) : null}
+
           {isCreateError && createError && (
             <Alert variant="error" dismissible={false}>
               {createError.message}
@@ -220,7 +266,12 @@ function CreateRemoteMcpForm() {
             <Button
               type="submit"
               variant="primary"
-              disabled={!urlUsable || verify.isPending || isPending}
+              disabled={
+                !urlUsable ||
+                verify.isPending ||
+                isPending ||
+                issuerSelectionBlocked
+              }
             >
               {verify.isPending || isPending ? (
                 <Button.LeftIcon>

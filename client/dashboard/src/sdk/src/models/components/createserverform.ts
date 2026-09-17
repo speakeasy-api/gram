@@ -21,6 +21,10 @@ export type CreateServerForm = {
    * The URL of the remote MCP server
    */
   url: string;
+  /**
+   * For createServerAndMcpServer, the ID of an existing project- or organization-owned user session issuer to attach to the linked MCP server. Omit to mint a project issuer. The source-only createServer method ignores this field.
+   */
+  userSessionIssuerId?: string | undefined;
 };
 
 /** @internal */
@@ -28,6 +32,7 @@ export type CreateServerForm$Outbound = {
   name?: string | undefined;
   transport_type: string;
   url: string;
+  user_session_issuer_id?: string | undefined;
 };
 
 /** @internal */
@@ -39,10 +44,12 @@ export const CreateServerForm$outboundSchema: z.ZodMiniType<
     name: z.optional(z.string()),
     transportType: z.string(),
     url: z.string(),
+    userSessionIssuerId: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       transportType: "transport_type",
+      userSessionIssuerId: "user_session_issuer_id",
     });
   }),
 );

@@ -18,6 +18,12 @@ import { toast } from "sonner";
 import { RESOURCE_IDENTIFIER_EXPLAINER } from "./copy";
 import { useCreateTunneledMcpSource } from "./hooks";
 import { TunneledMcpSetupTabs } from "./TunneledMcpSetupTabs";
+import { UserSessionIssuerSelect } from "@/components/user-session-issuer-select";
+import {
+  PROJECT_SPECIFIC_ISSUER_VALUE,
+  defaultCreationUserSessionIssuerValue,
+} from "@/components/user-session-issuer-select.utils";
+import { useEffectiveUserSessionIssuers } from "@/hooks/useEffectiveUserSessionIssuers";
 
 function validateDisplayName(value: string): string | null {
   if (!value.trim()) return "Display name is required";
@@ -51,14 +57,25 @@ export default function CreateTunneledMcp(): JSX.Element | null {
 function CreateTunneledMcpForm() {
   const routes = useRoutes();
   const createSource = useCreateTunneledMcpSource();
+  const issuerQuery = useEffectiveUserSessionIssuers();
   const [name, setName] = useState("");
   const [resourceIdentifier, setResourceIdentifier] = useState("");
   const [touched, setTouched] = useState(false);
   const [created, setCreated] = useState<CreatedState | null>(null);
+  const [issuerSelection, setIssuerSelection] = useState<string | null>(null);
+
+  const defaultIssuerSelection = defaultCreationUserSessionIssuerValue(
+    issuerQuery.organizationIssuers,
+  );
+  const selectedIssuer = issuerSelection ?? defaultIssuerSelection;
 
   const validationError = touched ? validateDisplayName(name) : null;
   const submitDisabled =
-    createSource.isPending || validateDisplayName(name) !== null;
+    createSource.isPending ||
+    validateDisplayName(name) !== null ||
+    issuerQuery.isLoading ||
+    issuerQuery.isError ||
+    selectedIssuer === "";
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -69,6 +86,10 @@ function CreateTunneledMcpForm() {
       const result = await createSource.mutateAsync({
         name: name.trim(),
         resourceIdentifier: resourceIdentifier.trim() || undefined,
+        userSessionIssuerId:
+          selectedIssuer === PROJECT_SPECIFIC_ISSUER_VALUE
+            ? undefined
+            : selectedIssuer,
       });
       setCreated(result);
       toast.success("Tunneled MCP server added");
@@ -210,6 +231,28 @@ function CreateTunneledMcpForm() {
             <Text muted small>
               Outbound tunnel to a normal MCP server
             </Text>
+          </Stack>
+
+          <Stack gap={1}>
+            <label className="text-sm leading-none font-medium">
+              User session issuer
+            </label>
+            <UserSessionIssuerSelect
+              issuers={issuerQuery.organizationIssuers}
+              value={selectedIssuer}
+              onValueChange={setIssuerSelection}
+              includeProjectSpecific
+              disabled={issuerQuery.isLoading || issuerQuery.isError}
+            />
+            <Text muted small>
+              Organization issuers are shared across projects. Creating a
+              project-specific issuer is available for exceptional setups.
+            </Text>
+            {issuerQuery.isError ? (
+              <Alert variant="error" dismissible={false}>
+                Failed to load organization user session issuers.
+              </Alert>
+            ) : null}
           </Stack>
 
           {createSource.isError && (

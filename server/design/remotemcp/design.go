@@ -366,6 +366,9 @@ var CreateServerForm = Type("CreateServerForm", func() {
 		Format(FormatURI)
 	})
 	Attribute("transport_type", String, "The transport type for the remote MCP server (e.g. streamable-http)")
+	Attribute("user_session_issuer_id", String, "For createServerAndMcpServer, the ID of an existing project- or organization-owned user session issuer to attach to the linked MCP server. Omit to mint a project issuer. The source-only createServer method ignores this field.", func() {
+		Format(FormatUUID)
+	})
 
 	Required("url", "transport_type")
 })

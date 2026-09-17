@@ -31,6 +31,10 @@ type CreateMcpServerRequestBody struct {
 	// The ID of the tool variations group enabling MCP tool filtering for this
 	// server. Omit to leave filtering disabled.
 	ToolVariationsGroupID *string `form:"tool_variations_group_id,omitempty" json:"tool_variations_group_id,omitempty" xml:"tool_variations_group_id,omitempty"`
+	// The ID of an existing project- or organization-owned user session issuer to
+	// attach. Omit to preserve the legacy create behavior, which mints an issuer
+	// for remote and tunneled backends.
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The visibility of the server
 	Visibility string `form:"visibility" json:"visibility" xml:"visibility"`
 	// The allowed network surfaces. Omit to default to public_only.
@@ -59,6 +63,9 @@ type UpdateMcpServerRequestBody struct {
 	// server. Omit to disable filtering (cleared to null, consistent with the
 	// full-record replace semantics of the other UUID references).
 	ToolVariationsGroupID *string `form:"tool_variations_group_id,omitempty" json:"tool_variations_group_id,omitempty" xml:"tool_variations_group_id,omitempty"`
+	// The ID of an existing project- or organization-owned user session issuer to
+	// attach. Omit to preserve the current issuer.
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The visibility of the server
 	Visibility string `form:"visibility" json:"visibility" xml:"visibility"`
 	// The allowed network surfaces. Omit to preserve the stored mode.
@@ -2882,6 +2889,7 @@ func NewCreateMcpServerRequestBody(p *mcpservers.CreateMcpServerPayload) *Create
 		ToolsetID:             p.ToolsetID,
 		UnproxiedMcpServerID:  p.UnproxiedMcpServerID,
 		ToolVariationsGroupID: p.ToolVariationsGroupID,
+		UserSessionIssuerID:   p.UserSessionIssuerID,
 		Visibility:            string(p.Visibility),
 	}
 	if p.NetworkAccessMode != nil {
@@ -2903,6 +2911,7 @@ func NewUpdateMcpServerRequestBody(p *mcpservers.UpdateMcpServerPayload) *Update
 		ToolsetID:             p.ToolsetID,
 		UnproxiedMcpServerID:  p.UnproxiedMcpServerID,
 		ToolVariationsGroupID: p.ToolVariationsGroupID,
+		UserSessionIssuerID:   p.UserSessionIssuerID,
 		Visibility:            string(p.Visibility),
 	}
 	if p.NetworkAccessMode != nil {

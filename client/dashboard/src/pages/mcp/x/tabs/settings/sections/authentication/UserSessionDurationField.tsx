@@ -51,8 +51,10 @@ function splitIntoUnit(hours: number): {
 
 export function UserSessionDurationField({
   userSessionIssuer,
+  readOnly = false,
 }: {
   userSessionIssuer: UserSessionIssuer;
+  readOnly?: boolean;
 }): JSX.Element {
   const queryClient = useQueryClient();
   const initialSplit = splitIntoUnit(userSessionIssuer.sessionDurationHours);
@@ -85,7 +87,8 @@ export function UserSessionDurationField({
   });
 
   const draftHours = durationNumber * DURATION_UNIT_HOURS[durationUnit];
-  const dirty = draftHours !== userSessionIssuer.sessionDurationHours;
+  const dirty =
+    !readOnly && draftHours !== userSessionIssuer.sessionDurationHours;
   const valid = draftHours > 0;
 
   const handleSave = () => {
@@ -122,10 +125,12 @@ export function UserSessionDurationField({
             dirty && !valid ? "mcp-auth-session-duration-error" : undefined
           }
           className="w-[90px]"
+          disabled={readOnly}
         />
         <Select
           value={durationUnit}
           onValueChange={(value) => setDurationUnit(value as DurationUnit)}
+          disabled={readOnly}
         >
           <SelectTrigger className="w-[110px]">
             <SelectValue />

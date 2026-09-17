@@ -582,6 +582,8 @@ export function useRemoteMcpInstallWorkflow({
             createMcpServerForm: {
               name: target.name,
               remoteMcpServerId: remoteMcpServer.id,
+              // Catalog installs are noninteractive, so omit issuer selection
+              // and retain the server's project-specific fallback.
               // Private (user-session gated) rather than the sources flow's
               // "disabled": catalog installs promise a usable server, and the
               // pre-staged endpoint must actually serve. Public would expose
