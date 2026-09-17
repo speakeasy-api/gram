@@ -689,9 +689,13 @@ const (
 	TelemetryPublishFailedCountKey = attribute.Key("gram.telemetry.publish_failed_count")
 	TelemetryCHOperationKey        = attribute.Key("gram.telemetry.ch.operation")
 	TelemetryCHRowCountKey         = attribute.Key("gram.telemetry.ch.row_count")
-	OTELSpanEnricherNameKey        = attribute.Key("gram.otel.span_enricher_name")
-	OTELLogEnricherNameKey         = attribute.Key("gram.otel.log_enricher_name")
-	OTELMetricEnricherNameKey      = attribute.Key("gram.otel.metric_enricher_name")
+	// TelemetryLogIDKey carries the telemetry_logs row id on records relayed
+	// to a customer OTLP destination. Delivery is at-least-once, so this is
+	// the key a destination dedupes redeliveries on.
+	TelemetryLogIDKey         = attribute.Key("gram.telemetry.log.id")
+	OTELSpanEnricherNameKey   = attribute.Key("gram.otel.span_enricher_name")
+	OTELLogEnricherNameKey    = attribute.Key("gram.otel.log_enricher_name")
+	OTELMetricEnricherNameKey = attribute.Key("gram.otel.metric_enricher_name")
 
 	// GenAI semantic convention keys (OTel GenAI semconv - experimental)
 	// See: https://opentelemetry.io/docs/specs/semconv/gen-ai/

@@ -63,11 +63,15 @@ const DATA_SOURCE_OPTIONS: DataSourceOption[] = [
     value: DataSource.RiskFindings,
     label: "Risk findings",
   },
+  {
+    value: DataSource.ToolCallLogs,
+    label: "Tool call logs",
+  },
 ];
 
 function renderDataSourceDescription(
   dataSource: DataSourceValue,
-  links: { eventFeed?: string; riskPolicies?: string } = {},
+  links: { eventFeed?: string; riskPolicies?: string; toolLogs?: string } = {},
 ): ReactNode {
   if (dataSource === DataSource.ProductTelemetry) {
     return (
@@ -105,6 +109,27 @@ function renderDataSourceDescription(
           "risk policies"
         )}
         .
+      </>
+    );
+  }
+
+  if (dataSource === DataSource.ToolCallLogs) {
+    return (
+      <>
+        OTLP logs for every tool call Gram runs on your hosted and proxied MCP
+        servers, successes and failures alike. These are the same records the{" "}
+        {links.toolLogs ? (
+          <Link
+            to={links.toolLogs}
+            className="pointer-events-auto relative z-30 text-link-primary"
+          >
+            Tool Logs
+          </Link>
+        ) : (
+          "Tool Logs"
+        )}{" "}
+        pages show. Tool use your agents report through hooks arrives as product
+        telemetry instead.
       </>
     );
   }
@@ -307,6 +332,9 @@ function DataExportsInner(): JSX.Element {
       eventFeed: `/${organization.slug}/data/event-feed`,
       riskPolicies: defaultProject
         ? `/${organization.slug}/projects/${defaultProject.slug}/risk-policies?tab=policies`
+        : undefined,
+      toolLogs: defaultProject
+        ? `/${organization.slug}/projects/${defaultProject.slug}/logs`
         : undefined,
     }),
   }));
