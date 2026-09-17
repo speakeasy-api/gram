@@ -2204,6 +2204,56 @@ func (q *Queries) ListPrincipalGrantsByResourceIDs(ctx context.Context, arg List
 	return items, nil
 }
 
+const listPrincipalsMissingScope = `-- name: ListPrincipalsMissingScope :many
+SELECT DISTINCT held.organization_id, held.principal_urn
+FROM principal_grants AS held
+WHERE COALESCE(held.effect, 'allow') = 'allow'
+  AND held.scope = ANY($1::text[])
+  AND NOT EXISTS (
+    SELECT 1
+    FROM principal_grants AS target
+    WHERE target.organization_id = held.organization_id
+      AND target.principal_urn = held.principal_urn
+      AND target.scope = $2
+      AND COALESCE(target.effect, 'allow') = 'allow'
+  )
+ORDER BY held.organization_id, held.principal_urn
+`
+
+type ListPrincipalsMissingScopeParams struct {
+	HeldScopes  []string
+	TargetScope string
+}
+
+type ListPrincipalsMissingScopeRow struct {
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+}
+
+// Principals that hold at least one of the given scopes but not the target
+// scope. Backs the offline logs:read grant backfill, which hands every
+// principal that can already read observability data an unrestricted grant for
+// the new scope so enforcing it changes nobody's access.
+func (q *Queries) ListPrincipalsMissingScope(ctx context.Context, arg ListPrincipalsMissingScopeParams) ([]ListPrincipalsMissingScopeRow, error) {
+	rows, err := q.db.Query(ctx, listPrincipalsMissingScope, arg.HeldScopes, arg.TargetScope)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPrincipalsMissingScopeRow
+	for rows.Next() {
+		var i ListPrincipalsMissingScopeRow
+		if err := rows.Scan(&i.OrganizationID, &i.PrincipalUrn); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRetainedResolvedChallengeIDs = `-- name: ListRetainedResolvedChallengeIDs :many
 SELECT challenge_id FROM authz_challenge_resolutions
 WHERE organization_id = $1

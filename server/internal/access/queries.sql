@@ -70,6 +70,25 @@ DO UPDATE SET
   updated_at = clock_timestamp()
 WHERE principal_grants.effect IS NOT NULL;
 
+-- name: ListPrincipalsMissingScope :many
+-- Principals that hold at least one of the given scopes but not the target
+-- scope. Backs the offline logs:read grant backfill, which hands every
+-- principal that can already read observability data an unrestricted grant for
+-- the new scope so enforcing it changes nobody's access.
+SELECT DISTINCT held.organization_id, held.principal_urn
+FROM principal_grants AS held
+WHERE COALESCE(held.effect, 'allow') = 'allow'
+  AND held.scope = ANY(@held_scopes::text[])
+  AND NOT EXISTS (
+    SELECT 1
+    FROM principal_grants AS target
+    WHERE target.organization_id = held.organization_id
+      AND target.principal_urn = held.principal_urn
+      AND target.scope = @target_scope
+      AND COALESCE(target.effect, 'allow') = 'allow'
+  )
+ORDER BY held.organization_id, held.principal_urn;
+
 -- name: DeletePrincipalGrant :execrows
 -- Removes a specific grant row by ID, scoped to the organization for safety.
 DELETE FROM principal_grants
