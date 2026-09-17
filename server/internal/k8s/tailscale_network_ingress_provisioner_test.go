@@ -565,7 +565,7 @@ func TestTailscaleNetworkIngressDeleteRefusesUnownedNamespace(t *testing.T) {
 	err = provisioner.Delete(t.Context(), desired.Resources)
 	require.ErrorContains(t, err, "refuse to delete unowned namespace")
 	for _, action := range typed.Actions() {
-		require.False(t, action.GetVerb() == "delete")
+		require.NotEqual(t, "delete", action.GetVerb())
 	}
 }
 
