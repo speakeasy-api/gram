@@ -50,8 +50,11 @@ func handlePromptsGet(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 	if payload.mcpServerID != nil {
 		serverID = payload.mcpServerID.String()
 	}
-	scan.Scan(ctx, mcpriskscan.Event{
-		Surface:        mcpriskscan.SurfacePromptsGet,
+	// Prompt arguments are decoded, not retained as standalone bytes. Leave the
+	// scan payload absent rather than encoding them solely for no-op observation.
+	scan.Scan(ctx, nil, mcpriskscan.Event{
+		Surface:        mcpriskscan.SurfaceHostedMCP,
+		Method:         mcpriskscan.MethodPromptsGet,
 		OrganizationID: payload.organizationID,
 		ProjectID:      payload.projectID.String(),
 		ServerID:       serverID,
@@ -60,7 +63,6 @@ func handlePromptsGet(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 		ResourceURI:    "",
 		PromptName:     params.Name,
 		Phase:          mcpriskscan.PhaseBeforeRender,
-		Payload:        params.Arguments,
 	})
 
 	promptData, err := templates.RenderTemplate(ctx, logger, prompt.Prompt, prompt.Kind.String, prompt.Engine.String, params.Arguments)

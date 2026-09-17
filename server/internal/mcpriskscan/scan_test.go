@@ -1,8 +1,9 @@
 package mcpriskscan_test
 
 import (
+	"bytes"
 	"context"
-	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -30,11 +31,11 @@ func TestNoop_DoesNotPromoteCredentialOwnerToPrincipal(t *testing.T) {
 	event := mcpriskscan.Event{
 		Surface: mcpriskscan.SurfaceHostedMCP, OrganizationID: "", ProjectID: "", ServerID: "",
 		ToolsetID: "", ToolName: "ping", ResourceURI: "", PromptName: "", Phase: mcpriskscan.PhaseBeforeExecution,
-		Payload: nil,
+		Method: mcpriskscan.MethodToolsCall,
 	}
-	evaluator.Scan(ctx, event)
-	evaluator.Scan(mcpidentity.NewValidatorBoundary().StampAPIKey(ctx), event)
-	evaluator.Scan(mcpidentity.NewValidatorBoundary().StampAssistant(ctx), event)
+	evaluator.Scan(ctx, nil, event)
+	evaluator.Scan(mcpidentity.NewValidatorBoundary().StampAPIKey(ctx), nil, event)
+	evaluator.Scan(mcpidentity.NewValidatorBoundary().StampAssistant(ctx), nil, event)
 
 	spans := recorder.Ended()
 	require.Len(t, spans, 3)
@@ -62,23 +63,18 @@ func TestNoop_DoesNotExportRequestPayload(t *testing.T) {
 	event := mcpriskscan.Event{
 		Surface: mcpriskscan.SurfaceHostedMCP, OrganizationID: "", ProjectID: "", ServerID: "",
 		ToolsetID: "", ToolName: "ping", ResourceURI: "", PromptName: "", Phase: mcpriskscan.PhaseBeforeExecution,
-		Payload: nil,
+		Method: mcpriskscan.MethodToolsCall,
 	}
-	evaluator.Scan(t.Context(), event)
-	for _, payload := range []any{
-		json.RawMessage(`{"private_argument":"sensitive-tool-input"}`),
-		map[string]string{"private_argument": "sensitive-prompt-input"},
-	} {
-		event.Payload = payload
-		evaluator.Scan(t.Context(), event)
-	}
+	evaluator.Scan(t.Context(), nil, event)
+	payload := bytes.NewReader([]byte(`{"private_argument":"sensitive-tool-input"}`))
+	unread := payload.Len()
+	evaluator.Scan(t.Context(), payload, event)
+	require.Equal(t, unread, payload.Len(), "the no-op must not consume the payload reader")
 
 	spans := recorder.Ended()
-	require.Len(t, spans, 3)
-	for _, span := range spans[1:] {
-		// Even a serialized or transformed payload must not add or alter attributes.
-		require.ElementsMatch(t, spans[0].Attributes(), span.Attributes())
-	}
+	require.Len(t, spans, 2)
+	// Payload contents must not add or alter attributes.
+	require.Equal(t, spans[0].Attributes(), spans[1].Attributes())
 }
 
 func TestNoop_MetricsCountUnsampledScansWithBoundedDimensions(t *testing.T) {
@@ -92,25 +88,24 @@ func TestNoop_MetricsCountUnsampledScansWithBoundedDimensions(t *testing.T) {
 	})
 	evaluator := mcpriskscan.NewNoop(tracerProvider, meterProvider, testenv.NewLogger(t))
 	wantCounts := make(map[attribute.Set]int64)
-	for _, seam := range []struct{ surface, phase string }{
-		{mcpriskscan.SurfaceHostedMCP, mcpriskscan.PhaseBeforeExecution},
-		{mcpriskscan.SurfaceRemoteMCP, mcpriskscan.PhaseBeforeExecution},
-		{mcpriskscan.SurfaceResourceRead, mcpriskscan.PhaseBeforeRead},
-		{mcpriskscan.SurfacePromptsGet, mcpriskscan.PhaseBeforeRender},
+	for _, seam := range []struct{ surface, method, phase string }{
+		{mcpriskscan.SurfaceHostedMCP, mcpriskscan.MethodToolsCall, mcpriskscan.PhaseBeforeExecution},
+		{mcpriskscan.SurfaceRemoteMCP, mcpriskscan.MethodToolsCall, mcpriskscan.PhaseBeforeExecution},
+		{mcpriskscan.SurfaceHostedMCP, mcpriskscan.MethodResourcesRead, mcpriskscan.PhaseBeforeRead},
+		{mcpriskscan.SurfaceHostedMCP, mcpriskscan.MethodPromptsGet, mcpriskscan.PhaseBeforeRender},
 	} {
 		attrs := attribute.NewSet(
 			attribute.String("gram.mcp.risk.scan.surface", seam.surface),
-			attribute.String("gram.mcp.risk.scan.phase", seam.phase),
+			attribute.String("gram.mcp.risk.scan.method", seam.method),
 		)
 		wantCounts[attrs] = 2
 		ctx := t.Context()
 		for _, suffix := range []string{"first", "second"} {
-			evaluator.Scan(ctx, mcpriskscan.Event{
-				Surface: seam.surface, Phase: seam.phase,
+			evaluator.Scan(ctx, strings.NewReader(suffix), mcpriskscan.Event{
+				Surface: seam.surface, Method: seam.method, Phase: seam.phase,
 				OrganizationID: "org-" + suffix, ProjectID: "project-" + suffix,
 				ServerID: "server-" + suffix, ToolsetID: "toolset-" + suffix,
 				ToolName: "tool-" + suffix, ResourceURI: "resource://" + suffix, PromptName: "prompt-" + suffix,
-				Payload: map[string]string{"private_argument": suffix},
 			})
 			ctx = mcpidentity.NewValidatorBoundary().StampAPIKey(ctx)
 		}
@@ -135,7 +130,7 @@ func TestNoop_MetricsCountUnsampledScansWithBoundedDimensions(t *testing.T) {
 	for _, point := range scans.DataPoints {
 		counts[point.Attributes] = point.Value
 	}
-	require.Equal(t, wantCounts, counts, "identifiers, principal and payload must not create metric series")
+	require.Equal(t, wantCounts, counts, "phase, identifiers, principal and payload must not create metric series")
 
 	duration, ok := collected["mcp.risk.scan.duration"].Data.(metricdata.Histogram[float64])
 	require.True(t, ok, "scan duration must be a seconds histogram")

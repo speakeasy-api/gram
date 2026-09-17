@@ -611,8 +611,9 @@ func (s *Service) executeProxiedMemberTool(
 		return nil, oops.E(oops.CodeUnexpected, err, "dial meta MCP member").LogError(ctx, logger)
 	}
 
-	s.scanEvaluator.Scan(ctx, mcpriskscan.Event{
+	s.scanEvaluator.Scan(ctx, bytes.NewReader(arguments), mcpriskscan.Event{
 		Surface:        mcpriskscan.SurfaceMetaMCP,
+		Method:         mcpriskscan.MethodToolsCall,
 		OrganizationID: gate.organizationID,
 		ProjectID:      gate.projectID.String(),
 		ServerID:       member.serverID.String(),
@@ -621,7 +622,6 @@ func (s *Service) executeProxiedMemberTool(
 		ResourceURI:    "",
 		PromptName:     "",
 		Phase:          mcpriskscan.PhaseBeforeExecution,
-		Payload:        arguments,
 	})
 
 	// The caller's _meta stays on our side of the wire: WireMeta is a lossy

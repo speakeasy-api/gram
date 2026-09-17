@@ -24,7 +24,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
-	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -203,9 +202,9 @@ func handleResourcesRead(
 		telemLogger.Log(ctx, params)
 	}()
 
-	target := mcpriskscan.Target{Surface: mcpriskscan.SurfaceResourceRead, ServerID: "", ToolsetID: toolset.ID}
+	route := gateway.CallRoute{Source: gateway.ToolCallSourceMCP, ServerID: "", ToolsetID: toolset.ID}
 	if payload.mcpServerID != nil {
-		target.ServerID = payload.mcpServerID.String()
+		route.ServerID = payload.mcpServerID.String()
 	}
 	err = toolProxy.ReadResource(ctx, rw, strings.NewReader("{}"), toolconfig.ToolCallEnv{
 		UserConfig: userConfig,
@@ -217,7 +216,7 @@ func handleResourcesRead(
 		// carries no caller identity, and the functions SDK exposes none on a
 		// resource handler.
 		MCPClient: toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: ""},
-	}, plan, logAttrs, target)
+	}, plan, logAttrs, route)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to execute resource call").LogError(ctx, logger)
 	}

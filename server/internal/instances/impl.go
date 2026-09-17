@@ -371,9 +371,9 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 
 	interceptor := newResponseInterceptor(w)
 
-	target := mcpriskscan.Target{Surface: mcpriskscan.SurfaceInstances, ServerID: "", ToolsetID: ""}
+	route := gateway.CallRoute{Source: gateway.ToolCallSourceDirect, ServerID: "", ToolsetID: ""}
 	if toolset != nil {
-		target.ToolsetID = toolset.ID
+		route.ToolsetID = toolset.ID
 	}
 	err = s.toolProxy.Do(ctx, interceptor, requestBodyBytes, toolconfig.ToolCallEnv{
 		SystemEnv:  systemConfig,
@@ -383,7 +383,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		GramChatID: "",
 		// Direct invocation — there is no MCP client on the other end.
 		MCPClient: toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: ""},
-	}, plan, attrRecorder, target)
+	}, plan, attrRecorder, route)
 	if err != nil {
 		return fmt.Errorf("failed to proxy tool call: %w", err)
 	}

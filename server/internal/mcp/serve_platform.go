@@ -23,7 +23,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
-	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -477,8 +476,8 @@ func (s *Service) callPlatformToolsetTool(
 		})
 	}()
 
-	if err := s.toolProxy.Do(ctx, rw, requestBodyBytes, toolCallEnv, plan, logAttrs, mcpriskscan.Target{
-		Surface: mcpriskscan.SurfacePlatformMCP, ServerID: "", ToolsetID: "",
+	if err := s.toolProxy.Do(ctx, rw, requestBodyBytes, toolCallEnv, plan, logAttrs, gateway.CallRoute{
+		Source: gateway.ToolCallSourcePlatformMCP, ServerID: "", ToolsetID: "",
 	}); err != nil {
 		failure := platformToolCallError(ctx, logger, err, attr.SlogToolName(params.Name))
 		recordToolCallErrorStatus(ctx, rw, failure)

@@ -295,7 +295,7 @@ func TestToolProxy_Do_PathParams(t *testing.T) {
 			err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
 				SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 				UserConfig: ciEnv,
-			}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, mcpriskscan.Target{Surface: mcpriskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
+			}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: ""})
 
 			if tt.expectedError {
 				require.Error(t, err)
@@ -426,7 +426,7 @@ func TestToolProxy_Do_HeaderParams(t *testing.T) {
 			err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
 				SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 				UserConfig: ciEnv,
-			}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, mcpriskscan.Target{Surface: mcpriskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
+			}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: ""})
 
 			if tt.expectedError {
 				require.Error(t, err)
@@ -778,7 +778,7 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 			err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
 				SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 				UserConfig: ciEnv,
-			}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, mcpriskscan.Target{Surface: mcpriskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
+			}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: ""})
 			require.NoError(t, err)
 			require.NotNil(t, capturedRequest)
 
@@ -1000,7 +1000,7 @@ func TestToolProxy_Do_Body(t *testing.T) {
 			err = proxy.Do(ctx, recorder, toolCallBodyBytes, toolconfig.ToolCallEnv{
 				SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 				UserConfig: ciEnv,
-			}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, mcpriskscan.Target{Surface: mcpriskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
+			}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: ""})
 			require.NoError(t, err)
 			require.NotNil(t, capturedRequest)
 
@@ -1342,7 +1342,7 @@ func TestToolProxy_Do_StringifiedJSONBody(t *testing.T) {
 			err = proxy.Do(ctx, recorder, []byte(tt.toolCallBody), toolconfig.ToolCallEnv{
 				SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 				UserConfig: ciEnv,
-			}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, mcpriskscan.Target{Surface: mcpriskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
+			}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: ""})
 
 			if tt.expectError {
 				require.Error(t, err)
@@ -1416,7 +1416,7 @@ func TestResourceProxy_ReadResource(t *testing.T) {
 
 	resourcePlan := NewResourceFunctionCallPlan(descriptor, plan)
 	// Mock the functions.ToolCaller to return our mock server URL
-	scan := &captureRiskScan{events: nil}
+	scan := &captureRiskScan{t: t, events: nil, payloads: nil}
 	mockFuncCaller := &mockToolCaller{
 		serverURL: mockServer.URL,
 		onCall: func(invID uuid.UUID) {
@@ -1444,11 +1444,11 @@ func TestResourceProxy_ReadResource(t *testing.T) {
 
 	// Execute the resource read
 	ciEnv := toolconfig.NewCaseInsensitiveEnv()
-	target := mcpriskscan.Target{Surface: mcpriskscan.SurfaceResourceRead, ServerID: uuid.NewString(), ToolsetID: uuid.NewString()}
+	route := CallRoute{Source: ToolCallSourceMCP, ServerID: uuid.NewString(), ToolsetID: uuid.NewString()}
 	err = proxy.ReadResource(ctx, recorder, bytes.NewReader([]byte("{}")), toolconfig.ToolCallEnv{
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: ciEnv,
-	}, resourcePlan, tm.HTTPLogAttributes{}, target)
+	}, resourcePlan, tm.HTTPLogAttributes{}, route)
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedRequest)
@@ -1457,11 +1457,11 @@ func TestResourceProxy_ReadResource(t *testing.T) {
 	require.Equal(t, http.StatusOK, recorder.Code)
 	require.Equal(t, "Test resource content", recorder.Body.String())
 	require.Equal(t, []mcpriskscan.Event{{
-		Surface: mcpriskscan.SurfaceResourceRead, OrganizationID: descriptor.OrganizationID, ProjectID: descriptor.ProjectID,
-		ServerID: target.ServerID, ToolsetID: target.ToolsetID, ToolName: "", ResourceURI: descriptor.URI,
+		Surface: mcpriskscan.SurfaceHostedMCP, Method: mcpriskscan.MethodResourcesRead, OrganizationID: descriptor.OrganizationID, ProjectID: descriptor.ProjectID,
+		ServerID: route.ServerID, ToolsetID: route.ToolsetID, ToolName: "", ResourceURI: descriptor.URI,
 		PromptName: "", Phase: mcpriskscan.PhaseBeforeRead,
-		Payload: nil,
 	}}, scan.events)
+	require.Equal(t, [][]byte{nil}, scan.payloads)
 }
 
 // mockToolCaller is a mock implementation of functions.ToolCaller for testing
@@ -1561,12 +1561,16 @@ func TestToolProxy_Do_FunctionMetricsTrailers(t *testing.T) {
 	}
 	toolCallPlan := NewFunctionToolCallPlan(tool, plan)
 	// Mock the functions.ToolCaller to return our mock server URL
-	scan := &captureRiskScan{events: nil}
+	scan := &captureRiskScan{t: t, events: nil, payloads: nil}
+	var receivedInput json.RawMessage
 	mockFuncCaller := &mockToolCaller{
 		serverURL: mockServer.URL,
 		onCall: func(invID uuid.UUID) {
 			require.Len(t, scan.events, 1, "scan must run before contacting the function runner")
 			invocationID = invID
+		},
+		onRequest: func(req functions.RunnerToolCallRequest) {
+			receivedInput = req.Input
 		},
 	}
 
@@ -1606,17 +1610,18 @@ func TestToolProxy_Do_FunctionMetricsTrailers(t *testing.T) {
 	err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: ciEnv,
-	}, toolCallPlan, tm.HTTPLogAttributes{}, mcpriskscan.Target{Surface: mcpriskscan.SurfaceInstances, ServerID: "", ToolsetID: ""})
+	}, toolCallPlan, tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: ""})
 
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, recorder.Code)
 	require.JSONEq(t, `{"result": "success"}`, recorder.Body.String())
 	require.Equal(t, []mcpriskscan.Event{{
-		Surface: mcpriskscan.SurfaceInstances, OrganizationID: tool.OrganizationID, ProjectID: tool.ProjectID,
+		Surface: mcpriskscan.SurfaceInstances, Method: mcpriskscan.MethodToolsCall, OrganizationID: tool.OrganizationID, ProjectID: tool.ProjectID,
 		ServerID: "", ToolsetID: "", ToolName: tool.Name, ResourceURI: "",
 		PromptName: "", Phase: mcpriskscan.PhaseBeforeExecution,
-		Payload: json.RawMessage(bodyBytes),
 	}}, scan.events)
+	require.Equal(t, [][]byte{bodyBytes}, scan.payloads)
+	require.JSONEq(t, string(bodyBytes), string(receivedInput))
 
 	// Verify trailers were proxied through
 	result := recorder.Result()
@@ -1689,7 +1694,7 @@ func TestToolProxy_Do_PlatformTool_UsesWrappedBodyPayload(t *testing.T) {
 	err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
-	}, toolCallPlan, logAttrs, mcpriskscan.Target{Surface: mcpriskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
+	}, toolCallPlan, logAttrs, CallRoute{Source: "", ServerID: "", ToolsetID: ""})
 	require.NoError(t, err)
 
 	require.JSONEq(t, `{
@@ -1756,7 +1761,7 @@ func TestToolProxy_Do_PlatformTool_PreservesRawBodyFieldPayload(t *testing.T) {
 	err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
-	}, toolCallPlan, tm.HTTPLogAttributes{}, mcpriskscan.Target{Surface: mcpriskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
+	}, toolCallPlan, tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: ""})
 	require.NoError(t, err)
 
 	require.JSONEq(t, string(bodyBytes), string(platformExecutor.requestBody))
@@ -1788,7 +1793,7 @@ func TestToolProxy_Do_PlatformTool_PreservesCallerFaultAttribution(t *testing.T)
 		err: fmt.Errorf("execute platform tool %s: %w", descriptor.URN, &stubCallerFaultError{}),
 	}
 
-	scan := &captureRiskScan{events: nil}
+	scan := &captureRiskScan{t: t, events: nil, payloads: nil}
 	proxy := NewToolProxy(
 		testenv.NewLogger(t),
 		tracerProvider,
@@ -1805,16 +1810,16 @@ func TestToolProxy_Do_PlatformTool_PreservesCallerFaultAttribution(t *testing.T)
 	err = proxy.Do(ctx, httptest.NewRecorder(), []byte(`{}`), toolconfig.ToolCallEnv{
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
-	}, toolCallPlan, tm.HTTPLogAttributes{}, mcpriskscan.Target{Surface: mcpriskscan.SurfacePlatformMCP, ServerID: "", ToolsetID: ""})
+	}, toolCallPlan, tm.HTTPLogAttributes{}, CallRoute{Source: ToolCallSourcePlatformMCP, ServerID: "", ToolsetID: ""})
 	require.Error(t, err)
 	require.True(t, oops.IsClientFault(err))
 	require.ErrorIs(t, err, platformExecutor.err)
 	require.Equal(t, []mcpriskscan.Event{{
-		Surface: mcpriskscan.SurfacePlatformMCP, OrganizationID: descriptor.OrganizationID, ProjectID: descriptor.ProjectID,
+		Surface: mcpriskscan.SurfacePlatformMCP, Method: mcpriskscan.MethodToolsCall, OrganizationID: descriptor.OrganizationID, ProjectID: descriptor.ProjectID,
 		ServerID: "", ToolsetID: "", ToolName: descriptor.Name, ResourceURI: "",
 		PromptName: "", Phase: mcpriskscan.PhaseBeforeExecution,
-		Payload: json.RawMessage(`{}`),
 	}}, scan.events)
+	require.Equal(t, [][]byte{[]byte(`{}`)}, scan.payloads)
 	spans := recorder.Ended()
 	require.Len(t, spans, 1)
 	require.Equal(t, codes.Unset, spans[0].Status().Code, "caller faults must not mark gateway spans as errors")
@@ -1906,7 +1911,7 @@ func TestToolProxy_Do_HTTPTool_UserConfigVariablesSent(t *testing.T) {
 	err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: userConfig,
-	}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, mcpriskscan.Target{Surface: mcpriskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
+	}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: ""})
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedRequest)
@@ -1994,7 +1999,7 @@ func TestToolProxy_Do_HTTPTool_UserConfigNotInPlanNotSent(t *testing.T) {
 	err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: userConfig,
-	}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, mcpriskscan.Target{Surface: mcpriskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
+	}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: ""})
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedRequest)
@@ -2107,7 +2112,7 @@ func TestToolProxy_Do_FunctionTool_UserConfigNotInPlanNotSent(t *testing.T) {
 	err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: userConfig,
-	}, toolCallPlan, tm.HTTPLogAttributes{}, mcpriskscan.Target{Surface: mcpriskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
+	}, toolCallPlan, tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: ""})
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedEnvironment)
@@ -2205,7 +2210,7 @@ func TestToolProxy_Do_HTTPTool_SystemEnvSentWhenInPlan(t *testing.T) {
 		SystemEnv:  systemEnv,
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "",
-	}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, mcpriskscan.Target{Surface: mcpriskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
+	}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: ""})
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedRequest)
@@ -2289,7 +2294,7 @@ func TestToolProxy_Do_HTTPTool_SystemEnvKeysConvertedToHTTPHeaders(t *testing.T)
 		SystemEnv:  systemEnv,
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "",
-	}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, mcpriskscan.Target{Surface: mcpriskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
+	}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: ""})
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedRequest)
@@ -2403,7 +2408,7 @@ func TestToolProxy_Do_FunctionTool_SystemEnvSentWhenInPlan(t *testing.T) {
 		SystemEnv:  systemEnv,
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "",
-	}, toolCallPlan, tm.HTTPLogAttributes{}, mcpriskscan.Target{Surface: mcpriskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
+	}, toolCallPlan, tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: ""})
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedEnvironment)
@@ -2504,7 +2509,7 @@ func TestToolProxy_Do_HTTPTool_UserConfigPrefersOverSystemEnv(t *testing.T) {
 	err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
 		SystemEnv:  systemEnv,
 		UserConfig: userConfig,
-	}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, mcpriskscan.Target{Surface: mcpriskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
+	}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: ""})
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedRequest)
@@ -2619,7 +2624,7 @@ func TestToolProxy_Do_FunctionTool_UserConfigPrefersOverSystemEnv(t *testing.T) 
 	err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
 		SystemEnv:  systemEnv,
 		UserConfig: userConfig,
-	}, toolCallPlan, tm.HTTPLogAttributes{}, mcpriskscan.Target{Surface: mcpriskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
+	}, toolCallPlan, tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: ""})
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedEnvironment)
@@ -2733,7 +2738,7 @@ func TestToolProxy_Do_FunctionTool_AuthInputSentWhenInUserConfig(t *testing.T) {
 	err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: userConfig,
-	}, toolCallPlan, tm.HTTPLogAttributes{}, mcpriskscan.Target{Surface: mcpriskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
+	}, toolCallPlan, tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: ""})
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedEnvironment)
@@ -2846,7 +2851,7 @@ func TestToolProxy_Do_FunctionTool_AuthInputNotSentWhenNotInUserConfig(t *testin
 	err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: userConfig,
-	}, toolCallPlan, tm.HTTPLogAttributes{}, mcpriskscan.Target{Surface: mcpriskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
+	}, toolCallPlan, tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: ""})
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedEnvironment)
@@ -2962,7 +2967,7 @@ func TestToolProxy_Do_FunctionTool_AuthInputPrefersUserConfigOverSystemEnv(t *te
 	err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
 		SystemEnv:  systemEnv,
 		UserConfig: userConfig,
-	}, toolCallPlan, tm.HTTPLogAttributes{}, mcpriskscan.Target{Surface: mcpriskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
+	}, toolCallPlan, tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: ""})
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedEnvironment)
@@ -3080,7 +3085,7 @@ func TestToolProxy_Do_FunctionTool_AuthInputSentWithRegularVariables(t *testing.
 	err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: userConfig,
-	}, toolCallPlan, tm.HTTPLogAttributes{}, mcpriskscan.Target{Surface: mcpriskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
+	}, toolCallPlan, tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: ""})
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedEnvironment)
@@ -3192,7 +3197,7 @@ func TestToolProxy_Do_FunctionTool_AuthInputNilNotSent(t *testing.T) {
 	err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: userConfig,
-	}, toolCallPlan, tm.HTTPLogAttributes{}, mcpriskscan.Target{Surface: mcpriskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
+	}, toolCallPlan, tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: ""})
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedEnvironment)

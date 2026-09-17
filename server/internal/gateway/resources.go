@@ -28,7 +28,7 @@ func (tp *ToolProxy) ReadResource(
 	env toolconfig.ToolCallEnv,
 	plan *ResourceCallPlan,
 	attrRecorder tm.HTTPLogAttributes,
-	target mcpriskscan.Target,
+	route CallRoute,
 ) (err error) {
 	ctx, span := tp.tracer.Start(ctx, "gateway.readResource", trace.WithAttributes(
 		attr.ResourceName(plan.Descriptor.Name),
@@ -52,18 +52,18 @@ func (tp *ToolProxy) ReadResource(
 		attr.SlogToolCallSource(string(tp.source)),
 	)
 
-	tp.scanEvaluator.Scan(ctx, mcpriskscan.Event{
-		Surface:        target.Surface,
+	// resources/read supplies a synthetic "{}" body, not caller arguments.
+	tp.scanEvaluator.Scan(ctx, nil, mcpriskscan.Event{
+		Surface:        tp.scanSurface(route),
+		Method:         mcpriskscan.MethodResourcesRead,
 		OrganizationID: plan.Descriptor.OrganizationID,
 		ProjectID:      plan.Descriptor.ProjectID,
-		ServerID:       target.ServerID,
-		ToolsetID:      target.ToolsetID,
+		ServerID:       route.ServerID,
+		ToolsetID:      route.ToolsetID,
 		ToolName:       "",
 		ResourceURI:    plan.Descriptor.URI,
 		PromptName:     "",
 		Phase:          mcpriskscan.PhaseBeforeRead,
-		// resources/read supplies a synthetic "{}" body, not caller arguments.
-		Payload: nil,
 	})
 
 	switch plan.Kind {

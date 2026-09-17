@@ -47,6 +47,9 @@ const (
 	ToolCallSourceDirect ToolCallSource = "direct"
 	ToolCallSourceMCP    ToolCallSource = "mcp"
 
+	// ToolCallSourcePlatformMCP identifies calls through the shared platform MCP engine.
+	ToolCallSourcePlatformMCP ToolCallSource = "platform_mcp"
+
 	// gramUserEmailEnvVar is the environment variable injected into function
 	// payloads when authInput.gramEmail is enabled and Gram has authenticated
 	// the identity accessing the MCP server.
@@ -118,6 +121,29 @@ type PlatformResult struct {
 	Body        []byte
 }
 
+// ScanEvaluator observes calls without changing their execution or results.
+type ScanEvaluator interface {
+	// Scan deliberately returns no error during observation; organization-wide
+	// failure semantics are an AIS-688 contract. The payload reader is independent
+	// of execution and nil for resource calls.
+	Scan(context.Context, io.Reader, mcpriskscan.Event)
+}
+
+// CallRoute identifies the entry route independently of the execution plan.
+// Server and toolset membership belong to the route: the same plan can execute
+// through multiple servers and toolsets, so neither can be derived from it.
+type CallRoute struct {
+	// Source overrides the proxy's default route source when nonempty.
+	// Execution logs retain the proxy's configured source.
+	Source ToolCallSource
+
+	// ServerID identifies the server through which the call was routed.
+	ServerID string
+
+	// ToolsetID identifies the toolset through which the call was routed.
+	ToolsetID string
+}
+
 type ToolProxy struct {
 	source        ToolCallSource
 	logger        *slog.Logger
@@ -128,7 +154,7 @@ type ToolProxy struct {
 	policy        *guardian.Policy
 	functions     functions.ToolCaller
 	platformTools PlatformExecutor
-	scanEvaluator mcpriskscan.Evaluator
+	scanEvaluator ScanEvaluator
 }
 
 func NewToolProxy(
@@ -141,7 +167,7 @@ func NewToolProxy(
 	policy *guardian.Policy,
 	funcCaller functions.ToolCaller,
 	platformTools PlatformExecutor,
-	scanEvaluator mcpriskscan.Evaluator,
+	scanEvaluator ScanEvaluator,
 ) *ToolProxy {
 	tracer := tracerProivder.Tracer("github.com/speakeasy-api/gram/server/internal/gateway")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/gateway")
@@ -160,6 +186,23 @@ func NewToolProxy(
 	}
 }
 
+func (tp *ToolProxy) scanSurface(route CallRoute) string {
+	source := route.Source
+	if source == "" {
+		source = tp.source
+	}
+	switch source {
+	case ToolCallSourceDirect:
+		return mcpriskscan.SurfaceInstances
+	case ToolCallSourceMCP:
+		return mcpriskscan.SurfaceHostedMCP
+	case ToolCallSourcePlatformMCP:
+		return mcpriskscan.SurfacePlatformMCP
+	default:
+		return ""
+	}
+}
+
 func (tp *ToolProxy) Do(
 	ctx context.Context,
 	w http.ResponseWriter,
@@ -167,7 +210,7 @@ func (tp *ToolProxy) Do(
 	env toolconfig.ToolCallEnv,
 	plan *ToolCallPlan,
 	attrs tm.HTTPLogAttributes,
-	target mcpriskscan.Target,
+	route CallRoute,
 ) (err error) {
 	ctx, span := tp.tracer.Start(ctx, "gateway.toolCall", trace.WithAttributes(
 		attr.ToolName(plan.Descriptor.Name),
@@ -204,17 +247,17 @@ func (tp *ToolProxy) Do(
 		toolName = plan.Descriptor.URN.Name
 	}
 
-	tp.scanEvaluator.Scan(ctx, mcpriskscan.Event{
-		Surface:        target.Surface,
+	tp.scanEvaluator.Scan(ctx, bytes.NewReader(requestBody), mcpriskscan.Event{
+		Surface:        tp.scanSurface(route),
+		Method:         mcpriskscan.MethodToolsCall,
 		OrganizationID: plan.Descriptor.OrganizationID,
 		ProjectID:      plan.Descriptor.ProjectID,
-		ServerID:       target.ServerID,
-		ToolsetID:      target.ToolsetID,
+		ServerID:       route.ServerID,
+		ToolsetID:      route.ToolsetID,
 		ToolName:       toolName,
 		ResourceURI:    "",
 		PromptName:     "",
 		Phase:          mcpriskscan.PhaseBeforeExecution,
-		Payload:        requestBody,
 	})
 
 	body := bytes.NewReader(requestBody)

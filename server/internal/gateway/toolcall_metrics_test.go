@@ -157,7 +157,7 @@ func callToolProxy(t *testing.T, ctx context.Context, proxy *ToolProxy, plan *To
 		GramEmail:  "",
 		GramChatID: "",
 		MCPClient:  toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: ""},
-	}, plan, tm.HTTPLogAttributes{}, mcpriskscan.Target{Surface: mcpriskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
+	}, plan, tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: ""})
 
 	return recorder, err
 }

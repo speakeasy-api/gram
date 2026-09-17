@@ -80,7 +80,7 @@ func callFunctionToolWithClient(t *testing.T, client toolconfig.MCPClientIdentit
 		GramEmail:  "",
 		GramChatID: "",
 		MCPClient:  client,
-	}, toolCallPlan, tm.HTTPLogAttributes{}, mcpriskscan.Target{Surface: mcpriskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
+	}, toolCallPlan, tm.HTTPLogAttributes{}, CallRoute{Source: "", ServerID: "", ToolsetID: ""})
 	require.NoError(t, err)
 
 	return captured

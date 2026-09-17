@@ -59,6 +59,7 @@ func TestRiskScan_ProxiedMetaMember(t *testing.T) {
 	require.Len(t, events, 1)
 	require.Equal(t, memberID.String(), events[0][attr.McpServerIDKey])
 	require.Equal(t, "ping", events[0][attr.ToolNameKey])
+	require.Equal(t, mcpriskscan.MethodToolsCall, events[0]["gram.mcp.risk.scan.method"])
 	require.Equal(t, mcpriskscan.PhaseBeforeExecution, events[0]["gram.mcp.risk.scan.phase"])
 	require.Equal(t, "user_session", events[0]["gram.mcp.risk.scan.principal_kind"])
 	require.Equal(t, subject.ID, events[0][attr.UserIDKey])
@@ -67,6 +68,7 @@ func TestRiskScan_ProxiedMetaMember(t *testing.T) {
 	require.Len(t, remoteEvents, 1)
 	require.Equal(t, memberID.String(), remoteEvents[0][attr.McpServerIDKey])
 	require.Equal(t, "ping", remoteEvents[0][attr.ToolNameKey])
+	require.Equal(t, mcpriskscan.MethodToolsCall, remoteEvents[0]["gram.mcp.risk.scan.method"])
 }
 
 func TestRiskScan_PromptRetrieval(t *testing.T) {
@@ -112,12 +114,12 @@ func TestRiskScan_PromptRetrieval(t *testing.T) {
 	require.Equal(t, "text", result.Messages[0].Content.Type)
 	require.Equal(t, "Hello reader", result.Messages[0].Content.Text)
 
-	events := scanAttributes(recorder, mcpriskscan.SurfacePromptsGet)
+	events := scanAttributes(recorder, mcpriskscan.SurfaceHostedMCP)
 	require.Len(t, events, 1)
 	require.Equal(t, server.ID.String(), events[0][attr.McpServerIDKey])
 	require.Empty(t, events[0][attr.ToolNameKey])
+	require.Equal(t, mcpriskscan.MethodPromptsGet, events[0]["gram.mcp.risk.scan.method"])
 	require.Equal(t, "scan-greeting", events[0]["gram.mcp.risk.scan.prompt_name"])
 	require.Equal(t, mcpriskscan.PhaseBeforeRender, events[0]["gram.mcp.risk.scan.phase"])
 	require.Equal(t, "false", events[0]["gram.mcp.risk.scan.identity_stamped"])
-	require.Empty(t, scanAttributes(recorder, mcpriskscan.SurfaceHostedMCP))
 }

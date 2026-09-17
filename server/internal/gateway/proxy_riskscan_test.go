@@ -19,11 +19,21 @@ import (
 )
 
 type captureRiskScan struct {
-	events []mcpriskscan.Event
+	t        *testing.T
+	events   []mcpriskscan.Event
+	payloads [][]byte
 }
 
-func (s *captureRiskScan) Scan(_ context.Context, event mcpriskscan.Event) {
+func (s *captureRiskScan) Scan(_ context.Context, input io.Reader, event mcpriskscan.Event) {
+	s.t.Helper()
+	var payload []byte
+	if input != nil {
+		var err error
+		payload, err = io.ReadAll(input)
+		require.NoError(s.t, err)
+	}
 	s.events = append(s.events, event)
+	s.payloads = append(s.payloads, payload)
 }
 
 func TestToolProxy_RiskScanHTTPPreservesUpstreamResponse(t *testing.T) {
@@ -40,7 +50,7 @@ func TestToolProxy_RiskScanHTTPPreservesUpstreamResponse(t *testing.T) {
 	tracerProvider := testenv.NewTracerProvider(t)
 	policy, err := guardian.NewUnsafePolicy(tracerProvider, nil)
 	require.NoError(t, err)
-	scan := &captureRiskScan{events: nil}
+	scan := &captureRiskScan{t: t, events: nil, payloads: nil}
 	proxy := NewToolProxy(testenv.NewLogger(t), tracerProvider, testenv.NewMeterProvider(t), ToolCallSourceMCP, testenv.NewEncryptionClient(t), nil, policy, nil, nil, scan)
 	descriptor := newTestToolDescriptor()
 	plan := NewHTTPToolCallPlan(descriptor, &HTTPToolCallPlan{
@@ -49,22 +59,22 @@ func TestToolProxy_RiskScanHTTPPreservesUpstreamResponse(t *testing.T) {
 		HeaderParams: nil, QueryParams: nil, PathParams: nil,
 		RequestContentType: NullString{Value: "application/json", Valid: true}, ResponseFilter: nil,
 	})
-	target := mcpriskscan.Target{Surface: mcpriskscan.SurfaceHostedMCP, ServerID: uuid.NewString(), ToolsetID: uuid.NewString()}
+	route := CallRoute{Source: ToolCallSourceMCP, ServerID: uuid.NewString(), ToolsetID: uuid.NewString()}
 	recorder := httptest.NewRecorder()
 	err = proxy.Do(t.Context(), recorder, json.RawMessage(`{"body":{"selection":"unchanged"}}`), toolconfig.ToolCallEnv{
 		SystemEnv: toolconfig.NewCaseInsensitiveEnv(), UserConfig: toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "", GramEmail: "", GramChatID: "", MCPClient: toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: ""},
-	}, plan, tm.HTTPLogAttributes{}, target)
+	}, plan, tm.HTTPLogAttributes{}, route)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusUnprocessableEntity, recorder.Code)
 	require.JSONEq(t, `{"error":"invalid selection"}`, recorder.Body.String())
 	require.JSONEq(t, `{"selection":"unchanged"}`, string(received))
 	require.Equal(t, []mcpriskscan.Event{{
-		Surface: target.Surface, OrganizationID: descriptor.OrganizationID, ProjectID: descriptor.ProjectID,
-		ServerID: target.ServerID, ToolsetID: target.ToolsetID, ToolName: descriptor.Name,
+		Surface: mcpriskscan.SurfaceHostedMCP, Method: mcpriskscan.MethodToolsCall, OrganizationID: descriptor.OrganizationID, ProjectID: descriptor.ProjectID,
+		ServerID: route.ServerID, ToolsetID: route.ToolsetID, ToolName: descriptor.Name,
 		ResourceURI: "", PromptName: "", Phase: mcpriskscan.PhaseBeforeExecution,
-		Payload: json.RawMessage(`{"body":{"selection":"unchanged"}}`),
 	}}, scan.events)
+	require.Equal(t, [][]byte{[]byte(`{"body":{"selection":"unchanged"}}`)}, scan.payloads)
 }
 
 func TestToolProxy_RiskScanExternalMCPPreservesResult(t *testing.T) {
@@ -74,7 +84,7 @@ func TestToolProxy_RiskScanExternalMCPPreservesResult(t *testing.T) {
 	tracerProvider := testenv.NewTracerProvider(t)
 	policy, err := guardian.NewUnsafePolicy(tracerProvider, nil)
 	require.NoError(t, err)
-	scan := &captureRiskScan{events: nil}
+	scan := &captureRiskScan{t: t, events: nil, payloads: nil}
 	proxy := NewToolProxy(testenv.NewLogger(t), tracerProvider, testenv.NewMeterProvider(t), ToolCallSourceMCP, testenv.NewEncryptionClient(t), nil, policy, nil, nil, scan)
 	descriptor := newExternalMCPToolDescriptor()
 	descriptor.Name = "proxy_placeholder"
@@ -83,11 +93,11 @@ func TestToolProxy_RiskScanExternalMCPPreservesResult(t *testing.T) {
 	require.Equal(t, http.StatusOK, recorder.Code)
 	require.JSONEq(t, `{"content":[{"type":"text","text":"result"}]}`, recorder.Body.String())
 	require.Equal(t, []mcpriskscan.Event{{
-		Surface: mcpriskscan.SurfaceHostedMCP, OrganizationID: descriptor.OrganizationID, ProjectID: descriptor.ProjectID,
+		Surface: mcpriskscan.SurfaceHostedMCP, Method: mcpriskscan.MethodToolsCall, OrganizationID: descriptor.OrganizationID, ProjectID: descriptor.ProjectID,
 		ServerID: "", ToolsetID: "", ToolName: descriptor.URN.Name,
 		ResourceURI: "", PromptName: "", Phase: mcpriskscan.PhaseBeforeExecution,
-		Payload: json.RawMessage(`{}`),
 	}}, scan.events)
+	require.Equal(t, [][]byte{[]byte(`{}`)}, scan.payloads)
 }
 
 func TestToolProxy_RiskScanExternalMCPPreservesToolError(t *testing.T) {
@@ -97,7 +107,7 @@ func TestToolProxy_RiskScanExternalMCPPreservesToolError(t *testing.T) {
 	tracerProvider := testenv.NewTracerProvider(t)
 	policy, err := guardian.NewUnsafePolicy(tracerProvider, nil)
 	require.NoError(t, err)
-	scan := &captureRiskScan{events: nil}
+	scan := &captureRiskScan{t: t, events: nil, payloads: nil}
 	proxy := NewToolProxy(testenv.NewLogger(t), tracerProvider, testenv.NewMeterProvider(t), ToolCallSourceMCP, testenv.NewEncryptionClient(t), nil, policy, nil, nil, scan)
 	descriptor := newExternalMCPToolDescriptor()
 	descriptor.Name = "proxy_placeholder"
@@ -106,18 +116,18 @@ func TestToolProxy_RiskScanExternalMCPPreservesToolError(t *testing.T) {
 	require.Equal(t, http.StatusOK, recorder.Code)
 	require.JSONEq(t, `{"content":[{"type":"text","text":"result"}],"isError":true}`, recorder.Body.String())
 	require.Equal(t, []mcpriskscan.Event{{
-		Surface: mcpriskscan.SurfaceHostedMCP, OrganizationID: descriptor.OrganizationID, ProjectID: descriptor.ProjectID,
+		Surface: mcpriskscan.SurfaceHostedMCP, Method: mcpriskscan.MethodToolsCall, OrganizationID: descriptor.OrganizationID, ProjectID: descriptor.ProjectID,
 		ServerID: "", ToolsetID: "", ToolName: descriptor.URN.Name,
 		ResourceURI: "", PromptName: "", Phase: mcpriskscan.PhaseBeforeExecution,
-		Payload: json.RawMessage(`{}`),
 	}}, scan.events)
+	require.Equal(t, [][]byte{[]byte(`{}`)}, scan.payloads)
 }
 
 func TestToolProxy_RiskScanPromptPreservesRendering(t *testing.T) {
 	t.Parallel()
 
 	tracerProvider := testenv.NewTracerProvider(t)
-	scan := &captureRiskScan{events: nil}
+	scan := &captureRiskScan{t: t, events: nil, payloads: nil}
 	proxy := NewToolProxy(testenv.NewLogger(t), tracerProvider, testenv.NewMeterProvider(t), ToolCallSourceMCP, nil, nil, nil, nil, nil, scan)
 	plan := newPromptToolCallPlanForTest("mustache")
 	recorder, err := callToolProxy(t, t.Context(), proxy, plan, `{"arguments":{"topic":"sample"}}`)
@@ -125,9 +135,9 @@ func TestToolProxy_RiskScanPromptPreservesRendering(t *testing.T) {
 	require.Equal(t, http.StatusOK, recorder.Code)
 	require.Equal(t, "Summarize sample", recorder.Body.String())
 	require.Equal(t, []mcpriskscan.Event{{
-		Surface: mcpriskscan.SurfaceHostedMCP, OrganizationID: plan.Descriptor.OrganizationID, ProjectID: plan.Descriptor.ProjectID,
+		Surface: mcpriskscan.SurfaceHostedMCP, Method: mcpriskscan.MethodToolsCall, OrganizationID: plan.Descriptor.OrganizationID, ProjectID: plan.Descriptor.ProjectID,
 		ServerID: "", ToolsetID: "", ToolName: plan.Descriptor.Name,
 		ResourceURI: "", PromptName: "", Phase: mcpriskscan.PhaseBeforeExecution,
-		Payload: json.RawMessage(`{"arguments":{"topic":"sample"}}`),
 	}}, scan.events)
+	require.Equal(t, [][]byte{[]byte(`{"arguments":{"topic":"sample"}}`)}, scan.payloads)
 }
