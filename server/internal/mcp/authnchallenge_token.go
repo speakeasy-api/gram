@@ -139,7 +139,8 @@ func (r userSessionRefreshReplay) CacheKey() string { return r.Key }
 func (r userSessionRefreshReplay) TTL() time.Duration { return refreshTokenReplayGracePeriod }
 
 // HandleToken implements the OAuth 2.1 token endpoint (RFC 6749 §4.1.3 /
-// §6). Mounted at `POST /mcp/{mcpSlug}/token`. Performs the common upfront
+// §6). Mounted at `POST /mcp/{mcpSlug}/token` on the MCP host and, when one is
+// configured, on the token host (TokenHost). Performs the common upfront
 // work — parse form, load toolset, authenticate the client — then
 // dispatches on grant_type to handleTokenAuthorizationCodeGrant or
 // handleTokenRefreshTokenGrant. Both grant handlers mint and persist the
@@ -179,6 +180,14 @@ func (s *Service) ServeToken(w http.ResponseWriter, r *http.Request, endpoint *R
 	creds := extractClientCredentials(r)
 	presentedAuthMethod := creds.method
 	clientID, reason := resolvePresentedClientID(creds)
+	// The token host admits no JWT bearer grant. The only one served today is
+	// the ID-JAG exchange, whose clients have no reason to use a host kept
+	// apart from MCP traffic, and refusing it here keeps a new grant off that
+	// host until it is admitted deliberately.
+	if _, onTokenHost := tokenHostBaseURL(ctx); onTokenHost && grantType == oauthwire.GrantTypeJWTBearer {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth token request rejected", clientID, presentedAuthMethod, grantType, "unsupported_grant_type")
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "unsupported_grant_type", "unsupported grant_type")
+	}
 	if reason != "" {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, reason)
 		return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "client_id is required")

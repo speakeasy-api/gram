@@ -583,6 +583,11 @@ func serverFlags() []cli.Flag {
 		&cli.StringFlag{Name: "address", Value: ":8080", Usage: "HTTP address to listen on", EnvVars: []string{"GRAM_SERVER_ADDRESS"}},
 		&cli.StringFlag{Name: "ssl-key-file", Usage: "The SSL key file path to use for the server", EnvVars: []string{"GRAM_SSL_KEY_FILE"}},
 		&cli.StringFlag{Name: "ssl-cert-file", Usage: "The SSL certificate file path to use for the server", EnvVars: []string{"GRAM_SSL_CERT_FILE"}},
+		&cli.StringFlag{
+			Name:    "mcp-token-host-url",
+			Usage:   "Base URL of a host that serves only the per-server MCP token endpoint, kept apart from MCP traffic. Empty disables it.",
+			EnvVars: []string{"GRAM_MCP_TOKEN_HOST_URL"},
+		},
 		&cli.StringFlag{Name: "github-evidence-token", Usage: "GitHub API token for MCP evidence repository lookups", EnvVars: []string{"GRAM_GITHUB_EVIDENCE_TOKEN"}},
 		&cli.StringFlag{
 			Name:     "loops-api-key",
@@ -814,6 +819,11 @@ func newStartCommand() *cli.Command {
 			}
 			if err := validateServerURL(serverURL, c.String("environment")); err != nil {
 				return fmt.Errorf("invalid server url: %w", err)
+			}
+
+			mcpTokenHost, err := mcp.NewTokenHost(c.String("mcp-token-host-url"), serverURL, c.String("environment"))
+			if err != nil {
+				return fmt.Errorf("invalid mcp token host url: %w", err)
 			}
 
 			trialEmailNotifier := &background.TemporalTrialEmailNotifier{TemporalEnv: temporalEnv}
@@ -1281,6 +1291,9 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("configure mcp security middleware: %w", err)
 			}
 			mux.Use(mcpSecurity)
+			// Must stay above customdomains.Middleware, which refuses hosts it
+			// does not know and would otherwise reject the token host.
+			mux.Use(mcpTokenHost.Middleware)
 			mux.Use(customdomains.Middleware(logger, db, c.String("environment"), serverURL))
 			// Ordering invariant: recovery and context-enrichment middleware stay
 			// outside bandwidth metering so panics and pre-handler rejections are
@@ -1676,6 +1689,7 @@ func newStartCommand() *cli.Command {
 				return err
 			}
 			mcp.Attach(mux, mcpRuntime.MCP, mcpRuntime.Metadata)
+			mcp.AttachTokenHost(mcpTokenHost, mcpRuntime.MCP)
 
 			chat.Attach(mux, chatService)
 			variations.Attach(mux, variations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))

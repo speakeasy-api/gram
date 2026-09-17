@@ -138,7 +138,7 @@ func (s *Service) verifyClientAssertion(ctx context.Context, logger *slog.Logger
 		return "assertion_key_source_missing"
 	}
 
-	urls, err := endpoint.AuthorizationServerURLs(baseURL)
+	urls, err := requestAuthorizationServerURLs(ctx, endpoint, baseURL)
 	if err != nil {
 		// Cannot compute what aud may name, so nothing can be accepted.
 		logger.ErrorContext(ctx, "cannot derive assertion audiences for endpoint, failing closed", attr.SlogError(err))
