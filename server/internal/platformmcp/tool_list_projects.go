@@ -14,7 +14,7 @@ func registerListProjectsTool(reg *Registrar, reader Reader) {
 		Title:       "List Projects",
 		Description: "List the projects in this organization that the caller may read. A project is where MCP servers and skills are kept. Constraints: results carry only project identifiers, names, and slugs; filtered is true when other organization projects were withheld by RBAC; if truncated is true, stop and use the dashboard to choose from the complete project list.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListProjectsInput) (*mcp.CallToolResult, ListProjectsOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeNone, DiscoveryScopes: discoveryProjectRead}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListProjectsInput) (*mcp.CallToolResult, ListProjectsOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
 			return nil, ListProjectsOutput{}, err

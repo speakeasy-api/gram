@@ -50,14 +50,16 @@ type PlatformContext struct {
 	// names. The manifest can say what one tool does; only something read at
 	// the start of a conversation can say how the pieces relate, which is what
 	// keeps a reply from narrating the machinery instead of the outcome.
-	Overview string `json:"overview"`
+	Overview             string   `json:"overview"`
+	AvailableWorkflows   []string `json:"available_workflows"`
+	RequestableWorkflows []string `json:"requestable_workflows"`
 }
 
 // platformOverview is the one plain-language account of this platform a caller
 // gets. It names the stages in the order a person experiences them and glosses
 // the two words — project and plugin — that have no meaning outside Gram.
-const platformOverview = "This session exposes one shared tool catalogue. Your current organization membership and RBAC grants decide which calls can run and which resources are returned. " +
-	"Use list_projects, find_mcp, and list_skills to discover work you can access. A denied call does not mean the connection failed; it returns the permission required and, when safe, a request-access link. " +
+const platformOverview = "This session exposes a catalogue filtered to workflows supported by your current RBAC grants. Every call still checks its exact project and resource. " +
+	"A workflow missing from the catalogue may be requestable; requestable_workflows names only broad categories and never reveals hidden resources. " +
 	"A project is where MCP servers and skills are kept. A plugin is a bundle administrators share with people. MCP read access, MCP connection access, and skill permissions remain separate."
 
 type ListProjectsInput struct {

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -141,6 +142,7 @@ func NewRuntimeWithRiskMutations(logger *slog.Logger, authenticator Authenticato
 	}
 	server, registrar := newServerWithRiskMutations(reader, catalog, registrations, cursorKeyMaterial, setupResources, feedback, onboarding, distributions, skills, diagnostics, plugins, sessionRecall, riskMutations, candidate, accessReads, accessRoleMutations)
 	registrar.withExternalAuthorizer(authorizer)
+	server.AddReceivingMiddleware(capabilityCatalogueMiddleware(registrar))
 	runtime := &Runtime{
 		authenticator:        authenticator,
 		gate:                 gate,
@@ -169,6 +171,70 @@ func NewRuntimeWithRiskMutations(logger *slog.Logger, authenticator Authenticato
 		})
 	}
 	return runtime
+}
+
+// capabilityCatalogueMiddleware filters tools/list after the request context has
+// been prepared with the caller's current grants. The SDK paginates its shared
+// catalogue before middleware runs, so the first request gathers every internal
+// page and filters once. Callers therefore never receive sparse pages or cursors
+// whose hidden entries would reveal catalogue shape.
+func capabilityCatalogueMiddleware(registrar *Registrar) mcp.Middleware {
+	return func(next mcp.MethodHandler) mcp.MethodHandler {
+		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+			if method != "tools/list" {
+				return next(ctx, method, req)
+			}
+			listReq, ok := req.(*mcp.ListToolsRequest)
+			if !ok {
+				return nil, ErrUnavailable
+			}
+			params := &mcp.ListToolsParams{}
+			if listReq.Params != nil {
+				*params = *listReq.Params
+			}
+			if params.Cursor != "" {
+				return nil, &jsonrpc.Error{Code: jsonrpc.CodeInvalidParams, Message: "tools/list is not paginated for this caller"}
+			}
+
+			result, err := next(ctx, method, req)
+			if err != nil {
+				return nil, err
+			}
+			listed, ok := result.(*mcp.ListToolsResult)
+			if !ok {
+				return result, nil
+			}
+			tools := append([]*mcp.Tool(nil), listed.Tools...)
+			for pages := 1; listed.NextCursor != ""; pages++ {
+				if pages > len(registrar.For(AudienceExternal))+1 {
+					return nil, ErrUnavailable
+				}
+				nextReq := *listReq
+				nextParams := *params
+				nextParams.Cursor = listed.NextCursor
+				nextReq.Params = &nextParams
+				nextResult, nextErr := next(ctx, method, &nextReq)
+				if nextErr != nil {
+					return nil, nextErr
+				}
+				listed, ok = nextResult.(*mcp.ListToolsResult)
+				if !ok {
+					return nil, ErrUnavailable
+				}
+				tools = append(tools, listed.Tools...)
+			}
+			listed.Tools = registrar.FilterExternalTools(ctx, mustPrincipal(ctx), tools)
+			listed.NextCursor = ""
+			listed.TTLMs = 0
+			listed.CacheScope = "private"
+			return listed, nil
+		}
+	}
+}
+
+func mustPrincipal(ctx context.Context) Principal {
+	principal, _ := PrincipalFromContext(ctx)
+	return principal
 }
 
 func (r *Runtime) WithOAuthTelemetry(telemetry OAuthTelemetry) *Runtime {

@@ -5,11 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"reflect"
 	"slices"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/speakeasy-api/gram/server/internal/authz"
 )
 
 // Audience names a surface a tool may be served to.
@@ -68,7 +71,22 @@ type ToolMeta struct {
 	Authorization ExternalAuthorization
 	Audiences     []Audience
 	ProjectScope  ProjectScope
+	// DiscoveryScopes are coarse requirements for tools/list. Any listed scope
+	// makes the tool discoverable somewhere; handlers still enforce the exact
+	// target. An empty list makes a member tool visible to every active member.
+	// Organization-admin tools derive org:admin automatically.
+	DiscoveryScopes []authz.Scope
 }
+
+var (
+	discoveryOrgRead             = []authz.Scope{authz.ScopeOrgRead}
+	discoveryProjectRead         = []authz.Scope{authz.ScopeProjectRead}
+	discoveryMCPRead             = []authz.Scope{authz.ScopeMCPRead}
+	discoveryMCPReadOrConnect    = []authz.Scope{authz.ScopeMCPRead, authz.ScopeMCPConnect}
+	discoveryOrgReadOrMCPConnect = []authz.Scope{authz.ScopeOrgRead, authz.ScopeMCPConnect}
+	discoverySkillRead           = []authz.Scope{authz.ScopeSkillRead}
+	discoverySkillWrite          = []authz.Scope{authz.ScopeSkillWrite}
+)
 
 func (m ToolMeta) servesAudience(audience Audience) bool {
 	return slices.Contains(m.Audiences, audience)
@@ -194,6 +212,82 @@ func (r *Registrar) For(audience Audience) []Descriptor {
 		}
 	}
 	return admitted
+}
+
+// FilterExternalTools applies caller-specific discovery policy to an already
+// composed tools/list result. This is only a discovery filter: exact resource
+// checks remain in each handler and run again when a listed tool is called.
+func (r *Registrar) FilterExternalTools(ctx context.Context, principal Principal, tools []*mcp.Tool) []*mcp.Tool {
+	if r == nil || principal.UserID == "" || principal.OrganizationID == "" {
+		return []*mcp.Tool{}
+	}
+	descriptors := make(map[string]Descriptor, len(r.descriptors))
+	for _, descriptor := range r.descriptors {
+		if descriptor.Meta.servesAudience(AudienceExternal) {
+			descriptors[descriptor.Name] = descriptor
+		}
+	}
+	grants, grantsLoaded := authz.GrantsFromContext(ctx)
+	visible := make([]*mcp.Tool, 0, len(tools))
+	for _, tool := range tools {
+		descriptor, ok := descriptors[tool.Name]
+		if !ok || !externalToolDiscoverable(grants, grantsLoaded, principal, descriptor.Meta) {
+			continue
+		}
+		visible = append(visible, tool)
+	}
+	return visible
+}
+
+func externalToolDiscoverable(grants []authz.Grant, grantsLoaded bool, principal Principal, meta ToolMeta) bool {
+	if !grantsLoaded {
+		return false
+	}
+	scopes := meta.DiscoveryScopes
+	switch meta.Authorization {
+	case ExternalAuthorizationMember:
+		if len(scopes) == 0 {
+			return true
+		}
+	case ExternalAuthorizationOrgAdmin:
+		scopes = []authz.Scope{authz.ScopeOrgAdmin}
+	default:
+		return false
+	}
+	return grantsAuthorizeAnyScope(grants, principal.OrganizationID, scopes)
+}
+
+func grantsAuthorizeAnyScope(grants []authz.Grant, organizationID string, scopes []authz.Scope) bool {
+	for _, scope := range scopes {
+		if grantsAuthorizeAnyResource(grants, organizationID, scope) {
+			return true
+		}
+	}
+	return false
+}
+
+func grantsAuthorizeAnyResource(grants []authz.Grant, organizationID string, scope authz.Scope) bool {
+	for _, grant := range grants {
+		if grant.Scope != authz.ScopeRoot && !slices.Contains(authz.ScopeImplicationClosure(grant.Scope), scope) {
+			continue
+		}
+		resourceID := grant.Selector.ResourceID()
+		if scope.Parts().Resource == "org" {
+			resourceID = organizationID
+		} else if resourceID == "" || resourceID == authz.WildcardResource {
+			resourceID = "platform-mcp-catalogue-probe"
+		}
+		dimensions := maps.Clone(grant.Selector)
+		delete(dimensions, authz.SelectorKeyResourceKind)
+		delete(dimensions, authz.SelectorKeyResourceID)
+		allowed, err := authz.GrantsAuthorize(grants, authz.Check{
+			Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions,
+		})
+		if err == nil && allowed {
+			return true
+		}
+	}
+	return false
 }
 
 // ResourceFor returns one admitted resource by URI. An audience that is not

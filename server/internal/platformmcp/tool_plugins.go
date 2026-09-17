@@ -7,6 +7,8 @@ import (
 	"errors"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/speakeasy-api/gram/server/internal/authz"
 )
 
 type pluginRefusalResult struct {
@@ -46,7 +48,7 @@ func registerPluginTools(reg *Registrar, plugins *PluginsService) {
 		Title:       "List Plugins",
 		Description: "List plugins in an explicit project. Organization administrators see the administrative inventory. Other members see only published plugins currently assigned to their own user, role, directory audiences, email, or everyone; recipient counts and assignment details are withheld.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListPluginsInput) (*mcp.CallToolResult, ListPluginsOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryOrgRead}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListPluginsInput) (*mcp.CallToolResult, ListPluginsOutput, error) {
 		return principalToolCall(ctx, pluginToolResult, func(principal Principal) (ListPluginsOutput, error) {
 			admin, err := plugins.IsOrganizationAdmin(ctx, principal)
 			if err != nil {
@@ -64,7 +66,7 @@ func registerPluginTools(reg *Registrar, plugins *PluginsService) {
 		Title:       "Get One Plugin",
 		Description: "Get one exact plugin in an explicit project. Organization administrators see its administrative inventory and assignment controls. Other members can read only a published plugin assigned to them, with its MCP servers and skills but no recipient identities, counts, assignment references, package location, repository details, or credentials.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetPluginInput) (*mcp.CallToolResult, GetPluginOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryOrgRead}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetPluginInput) (*mcp.CallToolResult, GetPluginOutput, error) {
 		return principalToolCall(ctx, pluginToolResult, func(principal Principal) (GetPluginOutput, error) {
 			admin, err := plugins.IsOrganizationAdmin(ctx, principal)
 			if err != nil {
@@ -82,7 +84,7 @@ func registerPluginTools(reg *Registrar, plugins *PluginsService) {
 		Title:       "Get My Install Instructions",
 		Description: "Get non-secret, client-specific installation guidance for one assigned published plugin or one configured MCP server the caller may connect to. Name exactly one target in an explicit project. Plugin guidance rechecks the caller's current recipient assignments; standalone MCP guidance rechecks mcp:connect. No marketplace token, repository credential, package bytes, API key, or OAuth credential is returned.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMyInstallInstructionsInput) (*mcp.CallToolResult, GetMyInstallInstructionsOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryOrgReadOrMCPConnect}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMyInstallInstructionsInput) (*mcp.CallToolResult, GetMyInstallInstructionsOutput, error) {
 		return principalToolCall(ctx, installInstructionToolResult, func(principal Principal) (GetMyInstallInstructionsOutput, error) {
 			return plugins.GetMyInstallInstructions(ctx, principal, input)
 		})
@@ -93,7 +95,7 @@ func registerPluginTools(reg *Registrar, plugins *PluginsService) {
 		Title:       "Check My MCP Access",
 		Description: "Check only your current read and connection access to one exact MCP server. This evaluates live RBAC without creating an access challenge and never returns roles, grants, other members, or hidden targets. If connection access is missing, it returns the exact required scope and a safe request-access link when available.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMyMCPStatusInput) (*mcp.CallToolResult, GetMyMCPAccessOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryMCPReadOrConnect}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMyMCPStatusInput) (*mcp.CallToolResult, GetMyMCPAccessOutput, error) {
 		return principalToolCall(ctx, memberMCPStatusToolResult, func(principal Principal) (GetMyMCPAccessOutput, error) {
 			return plugins.GetMyMCPAccess(ctx, principal, input)
 		})
@@ -104,7 +106,7 @@ func registerPluginTools(reg *Registrar, plugins *PluginsService) {
 		Title:       "Check My MCP Connection",
 		Description: "Check only your current authorization state for one exact MCP server. Returns a bounded state and the canonical MCP endpoint for reconnecting through the existing client-owned OAuth flow. Never returns tokens, OAuth codes, secrets, account identities, upstream-granted scopes, raw sessions, provider diagnostics, or other users' connections.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMyMCPStatusInput) (*mcp.CallToolResult, GetMyMCPConnectionStatusOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryMCPReadOrConnect}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMyMCPStatusInput) (*mcp.CallToolResult, GetMyMCPConnectionStatusOutput, error) {
 		return principalToolCall(ctx, memberMCPStatusToolResult, func(principal Principal) (GetMyMCPConnectionStatusOutput, error) {
 			return plugins.GetMyMCPConnectionStatus(ctx, principal, input)
 		})
@@ -134,7 +136,16 @@ func registerUnavailablePluginTools(reg *Registrar) {
 		if tool.name == "list_plugins" || tool.name == "get_plugin" || tool.name == "get_my_install_instructions" || tool.name == "get_my_mcp_access" || tool.name == "get_my_mcp_connection_status" {
 			authority = ExternalAuthorizationMember
 		}
-		addTool(reg, manifest, ToolMeta{Authorization: authority, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, unavailableTool("plugins"))
+		var discoveryScopes []authz.Scope
+		switch tool.name {
+		case "list_plugins", "get_plugin":
+			discoveryScopes = discoveryOrgRead
+		case "get_my_install_instructions":
+			discoveryScopes = discoveryOrgReadOrMCPConnect
+		case "get_my_mcp_access", "get_my_mcp_connection_status":
+			discoveryScopes = discoveryMCPReadOrConnect
+		}
+		addTool(reg, manifest, ToolMeta{Authorization: authority, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryScopes}, unavailableTool("plugins"))
 	}
 }
 

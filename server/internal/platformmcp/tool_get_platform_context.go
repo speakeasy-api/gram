@@ -5,6 +5,8 @@ import (
 	"context"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/speakeasy-api/gram/server/internal/authz"
 )
 
 func registerGetPlatformContextTool(reg *Registrar) {
@@ -18,11 +20,45 @@ func registerGetPlatformContextTool(reg *Registrar) {
 		if err != nil {
 			return nil, PlatformContext{}, err
 		}
+		available, requestable := []string{}, []string{}
+		if principal.surface() == SurfacePlatformMCP {
+			grants, ok := authz.GrantsFromContext(ctx)
+			if !ok {
+				return nil, PlatformContext{}, ErrUnavailable
+			}
+			available, requestable = platformWorkflowCategories(grants, principal.OrganizationID)
+		}
 		return nil, PlatformContext{
-			OrganizationID: principal.OrganizationID,
-			ConnectionID:   principal.ConnectionID,
-			ReadOnly:       false,
-			Overview:       platformOverview,
+			OrganizationID:       principal.OrganizationID,
+			ConnectionID:         principal.ConnectionID,
+			ReadOnly:             false,
+			Overview:             platformOverview,
+			AvailableWorkflows:   available,
+			RequestableWorkflows: requestable,
 		}, nil
 	})
+}
+
+func platformWorkflowCategories(grants []authz.Grant, organizationID string) ([]string, []string) {
+	categories := []struct {
+		name   string
+		scopes []authz.Scope
+	}{
+		{name: "project discovery", scopes: discoveryProjectRead},
+		{name: "MCP discovery and connection", scopes: discoveryMCPReadOrConnect},
+		{name: "assigned plugin installation", scopes: discoveryOrgReadOrMCPConnect},
+		{name: "skill reading and feedback", scopes: discoverySkillRead},
+		{name: "skill authoring", scopes: discoverySkillWrite},
+		{name: "organization administration", scopes: []authz.Scope{authz.ScopeOrgAdmin}},
+	}
+	available := []string{"personal session recall"}
+	requestable := make([]string, 0, len(categories))
+	for _, category := range categories {
+		if grantsAuthorizeAnyScope(grants, organizationID, category.scopes) {
+			available = append(available, category.name)
+		} else {
+			requestable = append(requestable, category.name)
+		}
+	}
+	return available, requestable
 }

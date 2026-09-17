@@ -2,6 +2,7 @@ package platformmcp
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	platformoauth "github.com/speakeasy-api/gram/server/internal/platformmcp/oauth"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -149,6 +151,58 @@ func TestRuntimeHandlerRecordsReadyAfterSuccessfulToolsList(t *testing.T) {
 	require.Equal(t, testPrincipal(), recorder.principal)
 }
 
+func TestRuntimeHandlerFiltersToolsListByPreparedGrants(t *testing.T) {
+	t.Parallel()
+
+	authorizer := &testAuthorizer{grants: []authz.Grant{authz.NewGrant(authz.ScopeProjectRead, "project-1")}}
+	handler := NewRuntime(
+		testenv.NewLogger(t),
+		&testAuthenticator{principal: testPrincipal()},
+		testGate{enabled: true},
+		authorizer,
+		"",
+		"test-cursor-key",
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+	).Handler()
+	req := httptest.NewRequest(http.MethodPost, Path, strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
+	req.Header.Set("Authorization", "Bearer access-token")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	res := httptest.NewRecorder()
+
+	handler.ServeHTTP(res, req)
+
+	require.Equal(t, http.StatusOK, res.Code, res.Body.String())
+	var response struct {
+		Result struct {
+			Tools []struct {
+				Name string `json:"name"`
+			} `json:"tools"`
+			NextCursor string `json:"nextCursor"`
+			TTLMs      int    `json:"ttlMs"`
+			CacheScope string `json:"cacheScope"`
+		} `json:"result"`
+	}
+	require.NoError(t, json.Unmarshal(res.Body.Bytes(), &response))
+	names := make([]string, 0, len(response.Result.Tools))
+	for _, tool := range response.Result.Tools {
+		names = append(names, tool.Name)
+	}
+	require.Contains(t, names, "get_platform_context")
+	require.Contains(t, names, "list_projects")
+	require.Contains(t, names, "list_my_sessions")
+	require.NotContains(t, names, "find_mcp")
+	require.NotContains(t, names, "create_skill")
+	require.NotContains(t, names, "distribute_skill")
+	require.Empty(t, response.Result.NextCursor)
+	require.Zero(t, response.Result.TTLMs)
+	require.Equal(t, "private", response.Result.CacheScope)
+}
+
 func TestRuntimeAuthenticateAcceptsCaseInsensitiveBearer(t *testing.T) {
 	t.Parallel()
 
@@ -225,8 +279,9 @@ func (g testGate) Enabled(_ context.Context, _ string) (bool, error) {
 }
 
 type testAuthorizer struct {
-	err   error
-	calls int
+	err    error
+	calls  int
+	grants []authz.Grant
 }
 
 func (a *testAuthorizer) PrepareExternalContext(ctx context.Context, principal Principal) (context.Context, error) {
@@ -234,7 +289,11 @@ func (a *testAuthorizer) PrepareExternalContext(ctx context.Context, principal P
 	if a.err != nil {
 		return ctx, a.err
 	}
-	return contextWithPrincipal(ctx, principal), nil
+	ctx = contextWithPrincipal(ctx, principal)
+	if a.grants != nil {
+		ctx = authz.GrantsToContext(ctx, a.grants)
+	}
+	return ctx, nil
 }
 
 func (a *testAuthorizer) AuthorizeExternalCall(_ context.Context, _ Principal, _ ExternalAuthorization) error {

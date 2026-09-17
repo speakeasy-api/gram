@@ -543,7 +543,7 @@ func newSkillsVerticalFixture(t *testing.T, ctx context.Context, name string, op
 	)
 
 	runtimeAuthorizer := Authorizer(&testAuthorizer{})
-	if options.grantSkillRead || options.grantSkillWrite {
+	if options.grantAdmin || options.grantSkillRead || options.grantSkillWrite {
 		runtimeAuthorizer = NewLiveOrgAdminAuthorizer(conn, authzEngine)
 	}
 	runtime := NewRuntimeWithLifecycle(
