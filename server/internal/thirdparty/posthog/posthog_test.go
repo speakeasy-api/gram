@@ -66,8 +66,9 @@ func TestPosthogEvaluateFlag(t *testing.T) {
 		// A flag deleted between polls is still in the cached definitions, so
 		// the SDK's not-found result is what keeps it indeterminate.
 		{name: "local deleted between polls", localEvaluation: true, definitions: definitions, err: fmt.Errorf("lookup: %w", posthoggo.ErrFlagNotFound), want: feature.EvaluationIndeterminate, wantCalled: true},
-		// Definitions that have not loaded yet defer to the SDK's own fallback.
-		{name: "local definitions unavailable", localEvaluation: true, definitionsErr: errors.New("flags were not successfully fetched yet"), result: &posthoggo.FeatureFlagResult{Enabled: true}, want: feature.EvaluationEnabled, wantCalled: true},
+		// Without definitions the flag cannot be verified, so the evaluation
+		// fails closed instead of trusting the SDK's remote fallback.
+		{name: "local definitions unavailable", localEvaluation: true, definitionsErr: errors.New("flags were not successfully fetched yet"), result: &posthoggo.FeatureFlagResult{Enabled: true}, want: feature.EvaluationIndeterminate, wantCalled: false, isErr: true},
 	}
 
 	for _, test := range tests {

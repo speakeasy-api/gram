@@ -131,13 +131,16 @@ func (p *Posthog) EvaluateFlag(ctx context.Context, flag feature.Flag, distinctI
 		// unavailable rather than explicitly off. The SDK does not make that
 		// distinction: it reports a flag missing from both the cached
 		// definitions and the remote response as false. Checking the cached
-		// definitions here catches the missing case before the SDK call. If the
-		// definitions are unavailable, either because the first fetch has not
-		// finished or because every fetch fails (the SDK logs the latter at
-		// error level on each poll), skip the check and let the SDK evaluate
-		// the flag as usual.
+		// definitions here catches the missing case before the SDK call. When
+		// the definitions are unavailable because every fetch has failed (the
+		// SDK logs each failure at error level), the flag cannot be verified
+		// and the evaluation is indeterminate with an error, so callers fail
+		// closed rather than trusting the SDK's remote fallback.
 		definitions, err := p.client.GetFeatureFlags()
-		if err == nil && !slices.ContainsFunc(definitions, func(definition posthog.FeatureFlag) bool {
+		if err != nil {
+			return feature.EvaluationIndeterminate, fmt.Errorf("load feature flag definitions: %w", err)
+		}
+		if !slices.ContainsFunc(definitions, func(definition posthog.FeatureFlag) bool {
 			return definition.Key == string(flag)
 		}) {
 			return feature.EvaluationIndeterminate, nil
