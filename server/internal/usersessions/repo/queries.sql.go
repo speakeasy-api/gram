@@ -277,10 +277,22 @@ func (q *Queries) CountUserSessionIssuerEMABindingConflicts(ctx context.Context,
 }
 
 const countUserSessionIssuerIncompatibleProjectReferences = `-- name: CountUserSessionIssuerIncompatibleProjectReferences :one
+WITH scoped_issuer AS (
+  SELECT issuer.id
+  FROM user_session_issuers AS issuer
+  LEFT JOIN projects AS project ON project.id = issuer.project_id
+  WHERE issuer.id = $1::uuid
+    AND issuer.deleted IS FALSE
+    AND (
+      (issuer.project_id IS NULL AND issuer.organization_id = $3::text)
+      OR (issuer.project_id IS NOT NULL AND project.organization_id = $3::text AND project.deleted IS FALSE)
+    )
+)
 SELECT COUNT(*)::int
 FROM (
   SELECT client.id
   FROM user_session_clients AS client
+  JOIN scoped_issuer ON scoped_issuer.id = client.user_session_issuer_id
   WHERE client.user_session_issuer_id = $1::uuid
     AND client.deleted IS FALSE
     AND client.project_id IS NOT NULL
@@ -290,6 +302,7 @@ FROM (
 
   SELECT session.id
   FROM user_sessions AS session
+  JOIN scoped_issuer ON scoped_issuer.id = session.user_session_issuer_id
   WHERE session.user_session_issuer_id = $1::uuid
     AND session.deleted IS FALSE
     AND session.project_id IS NOT NULL
@@ -300,6 +313,7 @@ FROM (
   SELECT consent.id
   FROM user_session_consents AS consent
   JOIN user_session_clients AS client ON client.id = consent.user_session_client_id
+  JOIN scoped_issuer ON scoped_issuer.id = client.user_session_issuer_id
   WHERE client.user_session_issuer_id = $1::uuid
     AND consent.deleted IS FALSE
     AND consent.project_id IS NOT NULL
@@ -309,6 +323,7 @@ FROM (
 
   SELECT cimd.id
   FROM user_session_issuer_cimd_clients AS cimd
+  JOIN scoped_issuer ON scoped_issuer.id = cimd.user_session_issuer_id
   WHERE cimd.user_session_issuer_id = $1::uuid
     AND cimd.deleted IS FALSE
     AND cimd.project_id IS NOT NULL

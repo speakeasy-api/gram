@@ -113,20 +113,63 @@ func TestOrganizationUserSessionIssuerMoveBlocksChildInAnotherProject(t *testing
 	issuerID := uuid.MustParse(issuer.ID)
 	client, err := seedUserSessionClient(t, ctx, ti.conn, issuerID, "move-child-blocker-client")
 	require.NoError(t, err)
+	subject := urn.NewUserSubject("move-child-blocker-user")
+	_, err = seedUserSessionForClient(t, ctx, ti.conn, issuerID, client.ID, subject)
+	require.NoError(t, err)
+	_, err = seedUserSessionConsent(t, ctx, ti.conn, client.ID, subject)
+	require.NoError(t, err)
+	_, err = usersessionsrepo.New(ti.conn).CreateOrganizationUserSessionIssuerCimdClient(ctx, usersessionsrepo.CreateOrganizationUserSessionIssuerCimdClientParams{
+		OrganizationID:      authCtx.ActiveOrganizationID,
+		ClientIDMetadataUri: "https://move-child-blocker.example.com/client",
+		UserSessionIssuerID: issuerID,
+	})
+	require.NoError(t, err)
 	siblingProjectID := createSiblingProject(t, ctx, ti.conn, "move-child-blocker-sibling")
 
-	_, err = usersessionsrepo.New(ti.conn).RetierUserSessionClients(ctx, usersessionsrepo.RetierUserSessionClientsParams{
+	repo := usersessionsrepo.New(ti.conn)
+	_, err = repo.RetierUserSessionClients(ctx, usersessionsrepo.RetierUserSessionClientsParams{
+		ProjectID:           uuid.NullUUID{UUID: siblingProjectID, Valid: true},
+		OrganizationID:      authCtx.ActiveOrganizationID,
+		UserSessionIssuerID: issuerID,
+	})
+	require.NoError(t, err)
+	_, err = repo.RetierUserSessions(ctx, usersessionsrepo.RetierUserSessionsParams{
+		ProjectID:           uuid.NullUUID{UUID: siblingProjectID, Valid: true},
+		OrganizationID:      authCtx.ActiveOrganizationID,
+		UserSessionIssuerID: issuerID,
+	})
+	require.NoError(t, err)
+	_, err = repo.RetierUserSessionConsents(ctx, usersessionsrepo.RetierUserSessionConsentsParams{
+		ProjectID:           uuid.NullUUID{UUID: siblingProjectID, Valid: true},
+		OrganizationID:      authCtx.ActiveOrganizationID,
+		UserSessionIssuerID: issuerID,
+	})
+	require.NoError(t, err)
+	_, err = repo.RetierUserSessionIssuerCimdClients(ctx, usersessionsrepo.RetierUserSessionIssuerCimdClientsParams{
 		ProjectID:           uuid.NullUUID{UUID: siblingProjectID, Valid: true},
 		OrganizationID:      authCtx.ActiveOrganizationID,
 		UserSessionIssuerID: issuerID,
 	})
 	require.NoError(t, err)
 
+	queryParams := usersessionsrepo.CountUserSessionIssuerIncompatibleProjectReferencesParams{
+		UserSessionIssuerID: issuerID,
+		TargetProjectID:     *authCtx.ProjectID,
+		OrganizationID:      authCtx.ActiveOrganizationID,
+	}
+	incompatible, err := repo.CountUserSessionIssuerIncompatibleProjectReferences(ctx, queryParams)
+	require.NoError(t, err)
+	require.Equal(t, int32(4), incompatible)
+	queryParams.OrganizationID = "another-organization"
+	incompatible, err = repo.CountUserSessionIssuerIncompatibleProjectReferences(ctx, queryParams)
+	require.NoError(t, err)
+	require.Zero(t, incompatible)
+
 	targetProjectID := authCtx.ProjectID.String()
 	_, err = ti.service.MoveIssuer(ctx, &orggen.MoveIssuerPayload{ID: issuer.ID, ProjectID: &targetProjectID})
 	requireOopsCode(t, err, oops.CodeConflict)
 
-	clientAfter, err := usersessionsrepo.New(ti.conn).GetUserSessionClientByID(ctx, usersessionsrepo.GetUserSessionClientByIDParams{ID: client.ID, ProjectID: siblingProjectID, OrganizationID: authCtx.ActiveOrganizationID})
+	clientAfter, err := repo.GetUserSessionClientByID(ctx, usersessionsrepo.GetUserSessionClientByIDParams{ID: client.ID, ProjectID: siblingProjectID, OrganizationID: authCtx.ActiveOrganizationID})
 	require.NoError(t, err)
 	require.Equal(t, siblingProjectID, clientAfter.ProjectID.UUID)
 }
