@@ -34,7 +34,7 @@ const step = AGENT_PLATFORMS.find(
   ({ id }) => id === "claude-cowork",
 )!.setupSteps.at(-1)!;
 const writeText = vi.fn<(value: string) => Promise<void>>();
-const retry = vi.fn();
+const retry = vi.fn<() => void>();
 function body(
   props: {
     apiKey?: string;
