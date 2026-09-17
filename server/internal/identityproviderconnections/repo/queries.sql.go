@@ -135,9 +135,15 @@ SELECT
   k.kid,
   k.activated_at
 FROM remote_session_clients AS c
+JOIN remote_session_issuers AS i
+  ON i.id = c.remote_session_issuer_id
+ AND i.organization_id = c.organization_id
+ AND i.project_id IS NULL
+ AND i.deleted IS FALSE
 JOIN json_web_key_sets AS s
   ON s.organization_id = c.organization_id
  AND s.id = c.json_web_key_set_id
+ AND s.identity_provider_connection_id = c.identity_provider_connection_id
  AND s.deleted IS FALSE
 LEFT JOIN json_web_keys AS k
   ON k.organization_id = s.organization_id
@@ -145,6 +151,7 @@ LEFT JOIN json_web_keys AS k
  AND k.state = 'active'
  AND k.deleted IS FALSE
 WHERE c.organization_id = $1
+  AND c.project_id IS NULL
   AND c.identity_provider_connection_id = $2
   AND c.deleted IS FALSE
 `
@@ -165,6 +172,8 @@ type GetManagedClientRow struct {
 
 // The managed client, its set, and the set's active key. The key join is LEFT
 // so a revoked connection (live client, live set, no live keys) still resolves.
+// Organization-level only: the client, its issuer, and the set all carry the
+// connection's organization scope, and the set must be marked by the same connection.
 func (q *Queries) GetManagedClient(ctx context.Context, arg GetManagedClientParams) (GetManagedClientRow, error) {
 	row := q.db.QueryRow(ctx, getManagedClient, arg.OrganizationID, arg.IdentityProviderConnectionID)
 	var i GetManagedClientRow
@@ -360,19 +369,14 @@ func (q *Queries) LockIdentityProviderConnectionForProvisioning(ctx context.Cont
 const managedKeyResourceExists = `-- name: ManagedKeyResourceExists :one
 SELECT EXISTS (
  SELECT 1 FROM gcp_kms_keys AS k
- JOIN external_keys AS e ON e.id = k.external_key_id
- WHERE e.organization_id = $1 AND k.resource_name = $2
+ WHERE k.resource_name = $1
 )
 `
 
-type ManagedKeyResourceExistsParams struct {
-	OrganizationID pgtype.Text
-	ResourceName   string
-}
-
-// Include tombstones: never disable a key that may have been referenced.
-func (q *Queries) ManagedKeyResourceExists(ctx context.Context, arg ManagedKeyResourceExistsParams) (bool, error) {
-	row := q.db.QueryRow(ctx, managedKeyResourceExists, arg.OrganizationID, arg.ResourceName)
+// Include tombstones and every organization: resource names are random and
+// global, so a reference anywhere means the key must never be disabled.
+func (q *Queries) ManagedKeyResourceExists(ctx context.Context, resourceName string) (bool, error) {
+	row := q.db.QueryRow(ctx, managedKeyResourceExists, resourceName)
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err

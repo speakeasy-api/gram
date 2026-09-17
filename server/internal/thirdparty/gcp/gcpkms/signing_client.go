@@ -59,6 +59,10 @@ type KeyProvisioner interface {
 	// crypto key, never on the ring. Idempotent.
 	GrantSignerVerifier(ctx context.Context, keyName, serviceAccountEmail string) error
 
+	// RevokeSignerVerifier removes the SignerVerifierRole binding for the
+	// service account on one crypto key. A missing binding is a no-op.
+	RevokeSignerVerifier(ctx context.Context, keyName, serviceAccountEmail string) error
+
 	// DisableKeyVersion disables a key version so it can no longer sign.
 	DisableKeyVersion(ctx context.Context, versionName string) error
 }

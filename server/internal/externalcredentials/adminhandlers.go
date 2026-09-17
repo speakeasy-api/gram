@@ -47,6 +47,20 @@ func logPlatformMutation(ctx context.Context, logger *slog.Logger, authCtx *cont
 // organization handlers always pass a real organization id.
 var platformOrganizationID = pgtype.Text{String: "", Valid: false}
 
+// requireNoLiveManagedKeys refuses a platform credential mutation while
+// managed signing keys (identity provider connections) still sign through it.
+func requireNoLiveManagedKeys(ctx context.Context, logger *slog.Logger, q *repo.Queries, id uuid.UUID) error {
+	count, err := q.CountLiveManagedExternalKeysByCredential(ctx, id)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error counting managed signing keys").LogError(ctx, logger)
+	}
+	if count > 0 {
+		return oops.E(oops.CodeConflict, nil, "credential backs %d managed signing keys; rotate them first", count)
+	}
+
+	return nil
+}
+
 func (s *Service) CreateGcpIamPlatformCredential(ctx context.Context, payload *adminecgen.CreateGcpIamPlatformCredentialPayload) (*adminecgen.GcpIamCredential, error) {
 	authCtx, logger, err := auth.RequirePlatformAdmin(ctx, s.logger)
 	if err != nil {
@@ -157,6 +171,12 @@ func (s *Service) UpdateGcpIamPlatformCredential(ctx context.Context, payload *a
 		return nil, oops.E(oops.CodeNotFound, err, "platform gcp iam credential not found")
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "error loading platform gcp iam credential").LogError(ctx, logger)
+	}
+
+	// The update is a full replace of the identity, so any managed key still
+	// signing through this credential would lose its signer.
+	if err := requireNoLiveManagedKeys(ctx, logger, q, id); err != nil {
+		return nil, err
 	}
 
 	ec, err := q.UpdateExternalCredential(ctx, repo.UpdateExternalCredentialParams{
@@ -314,6 +334,10 @@ func (s *Service) DeleteGcpIamPlatformCredential(ctx context.Context, payload *a
 		return oops.E(oops.CodeUnexpected, err, "error deleting platform external credential").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	if err := requireNoLiveManagedKeys(ctx, logger, repo.New(dbtx), id); err != nil {
+		return err
+	}
 
 	// A missing (or wrong-provider) id is a no-op so deletes stay idempotent.
 	deleted, err := repo.New(dbtx).SoftDeleteExternalCredential(ctx, repo.SoftDeleteExternalCredentialParams{

@@ -6885,6 +6885,7 @@ WHERE id = $6
   AND updated_at = $8
   AND deleted IS FALSE
   AND client_id_metadata_uri IS NULL
+  AND identity_provider_connection_id IS NULL
 RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, created_at, updated_at, deleted_at, deleted
 `
 
@@ -6908,7 +6909,8 @@ type ReplaceRemoteSessionClientRegistrationParams struct {
 // another rotation or an administrator's edit already moved is left alone and
 // reported as no rows. CIMD-mode rows are
 // excluded: their client_id is the metadata document URL and is never
-// registered upstream.
+// registered upstream. Managed rows are excluded: their registration belongs
+// to the identity provider connection.
 func (q *Queries) ReplaceRemoteSessionClientRegistration(ctx context.Context, arg ReplaceRemoteSessionClientRegistrationParams) (RemoteSessionClient, error) {
 	row := q.db.QueryRow(ctx, replaceRemoteSessionClientRegistration,
 		arg.ClientID,

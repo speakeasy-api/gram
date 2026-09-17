@@ -153,6 +153,15 @@ FOR UPDATE;
 -- parameter's type from the column reference alone. The check is a single
 -- EXISTS: sqlc types `EXISTS(...) OR EXISTS(...)` as pgtype.Bool, and an unset
 -- value there would read as "not referenced" and fail this preflight open.
+-- Live managed signing keys (identity provider connections) that a platform
+-- credential backs; mutating the credential would break every one of them.
+-- name: CountLiveManagedExternalKeysByCredential :one
+SELECT count(*)
+FROM external_keys
+WHERE external_credential_id = @external_credential_id::uuid
+  AND identity_provider_connection_id IS NOT NULL
+  AND deleted IS FALSE;
+
 -- name: SoftDeleteExternalCredentialPreflight :one
 SELECT EXISTS (
   SELECT 1

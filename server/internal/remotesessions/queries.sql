@@ -691,7 +691,8 @@ ORDER BY link.user_session_issuer_id;
 -- another rotation or an administrator's edit already moved is left alone and
 -- reported as no rows. CIMD-mode rows are
 -- excluded: their client_id is the metadata document URL and is never
--- registered upstream.
+-- registered upstream. Managed rows are excluded: their registration belongs
+-- to the identity provider connection.
 UPDATE remote_session_clients
 SET client_id = @client_id,
     client_secret_encrypted = @client_secret_encrypted,
@@ -706,6 +707,7 @@ WHERE id = @id
   AND updated_at = @expected_updated_at
   AND deleted IS FALSE
   AND client_id_metadata_uri IS NULL
+  AND identity_provider_connection_id IS NULL
 RETURNING *;
 
 -- name: AttachRemoteSessionClientToUserSessionIssuer :exec

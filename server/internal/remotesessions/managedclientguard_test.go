@@ -3,11 +3,14 @@ package remotesessions_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	orgclientsgen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_clients"
@@ -17,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections/provisiontest"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
 // provisionManagedClient creates an organization-level issuer through the
@@ -187,4 +191,33 @@ func TestHandleClientJSONWebKeySet_ManagedClientShortCacheAndEmptyAfterRevoke(t 
 	require.Equal(t, "public, max-age=300", after.Header().Get("Cache-Control"))
 	require.JSONEq(t, `{"keys":[]}`, after.Body.String())
 	require.NotEqual(t, rec.Header().Get("ETag"), after.Header().Get("ETag"), "a cached copy must not validate against the emptied set")
+}
+
+// The registration swap refuses a managed row even when the compare-and-swap
+// values match, so no rotation path can replace its credentials.
+func TestManagedClient_RegistrationReplaceRefusesManagedRow(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	_, fx := provisionManagedClient(t, ctx, ti, "managed-guard-replace-issuer")
+
+	var currentClientID string
+	var updatedAt pgtype.Timestamptz
+	require.NoError(t, ti.conn.QueryRow(ctx, `SELECT client_id, updated_at FROM remote_session_clients WHERE id = $1`, fx.Client.ClientRowID).Scan(&currentClientID, &updatedAt))
+
+	_, err := repo.New(ti.conn).ReplaceRemoteSessionClientRegistration(ctx, repo.ReplaceRemoteSessionClientRegistrationParams{
+		ClientID:                "rotated-" + uuid.NewString(),
+		ClientSecretEncrypted:   pgtype.Text{String: "", Valid: false},
+		ClientIDIssuedAt:        pgtype.Timestamptz{Time: updatedAt.Time, InfinityModifier: pgtype.Finite, Valid: true},
+		ClientSecretExpiresAt:   pgtype.Timestamptz{Time: updatedAt.Time, InfinityModifier: pgtype.Finite, Valid: false},
+		TokenEndpointAuthMethod: pgtype.Text{String: "client_secret_basic", Valid: true},
+		ID:                      fx.Client.ClientRowID,
+		ExpectedClientID:        currentClientID,
+		ExpectedUpdatedAt:       updatedAt,
+	})
+	require.True(t, errors.Is(err, pgx.ErrNoRows), "managed row must not be replaceable, got %v", err)
+
+	var afterClientID string
+	require.NoError(t, ti.conn.QueryRow(ctx, `SELECT client_id FROM remote_session_clients WHERE id = $1`, fx.Client.ClientRowID).Scan(&afterClientID))
+	require.Equal(t, currentClientID, afterClientID)
 }

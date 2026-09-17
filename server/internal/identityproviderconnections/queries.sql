@@ -62,6 +62,8 @@ WHERE ec.id = @id
 
 -- The managed client, its set, and the set's active key. The key join is LEFT
 -- so a revoked connection (live client, live set, no live keys) still resolves.
+-- Organization-level only: the client, its issuer, and the set all carry the
+-- connection's organization scope, and the set must be marked by the same connection.
 -- name: GetManagedClient :one
 SELECT
   sqlc.embed(c),
@@ -71,9 +73,15 @@ SELECT
   k.kid,
   k.activated_at
 FROM remote_session_clients AS c
+JOIN remote_session_issuers AS i
+  ON i.id = c.remote_session_issuer_id
+ AND i.organization_id = c.organization_id
+ AND i.project_id IS NULL
+ AND i.deleted IS FALSE
 JOIN json_web_key_sets AS s
   ON s.organization_id = c.organization_id
  AND s.id = c.json_web_key_set_id
+ AND s.identity_provider_connection_id = c.identity_provider_connection_id
  AND s.deleted IS FALSE
 LEFT JOIN json_web_keys AS k
   ON k.organization_id = s.organization_id
@@ -81,6 +89,7 @@ LEFT JOIN json_web_keys AS k
  AND k.state = 'active'
  AND k.deleted IS FALSE
 WHERE c.organization_id = @organization_id
+  AND c.project_id IS NULL
   AND c.identity_provider_connection_id = @identity_provider_connection_id
   AND c.deleted IS FALSE;
 
@@ -104,12 +113,12 @@ SELECT updated_at <= clock_timestamp() - make_interval(secs => @cache_seconds::i
 FROM json_web_keys
 WHERE id = @id AND organization_id = @organization_id AND state = 'pending' AND deleted IS FALSE;
 
--- Include tombstones: never disable a key that may have been referenced.
+-- Include tombstones and every organization: resource names are random and
+-- global, so a reference anywhere means the key must never be disabled.
 -- name: ManagedKeyResourceExists :one
 SELECT EXISTS (
  SELECT 1 FROM gcp_kms_keys AS k
- JOIN external_keys AS e ON e.id = k.external_key_id
- WHERE e.organization_id = @organization_id AND k.resource_name = @resource_name
+ WHERE k.resource_name = @resource_name
 );
 
 -- Test fixture: age a pending publication relative to the database clock.

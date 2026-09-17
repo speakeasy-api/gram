@@ -64,6 +64,18 @@ func (c *kmsSigningClient) CreateSigningKey(ctx context.Context, params CreateSi
 		if status.Code(err) == codes.AlreadyExists {
 			return nil, fmt.Errorf("%w: %s in %s", ErrSigningKeyExists, params.KeyID, params.KeyRing)
 		}
+		if isTransientKMSError(err) || ctx.Err() != nil {
+			// GCP may have persisted the key even though the response was lost;
+			// the name is deterministic, so reconcile the version we would own.
+			keyName := params.KeyRing + "/cryptoKeys/" + params.KeyID
+			versionName := signingKeyVersionName(keyName)
+			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), keyCleanupTimeout)
+			defer cancel()
+			if cleanupErr := c.reconcileUncertainCreate(cleanupCtx, versionName); cleanupErr != nil {
+				return nil, fmt.Errorf("gcp kms key %s may exist, version %s requires reconciliation (%w): %w", keyName, versionName, cleanupErr, err)
+			}
+			return nil, fmt.Errorf("gcp kms key %s may exist, version %s was disabled if present: %w", keyName, versionName, err)
+		}
 		return nil, fmt.Errorf("create gcp kms crypto key: %w", err)
 	}
 
@@ -87,6 +99,19 @@ func (c *kmsSigningClient) CreateSigningKey(ctx context.Context, params CreateSi
 	}
 
 	return &CreatedSigningKey{KeyName: keyName, KeyVersionName: versionName}, nil
+}
+
+// reconcileUncertainCreate disables the version of a key whose create response
+// was lost. NotFound means the create never landed and nothing needs doing.
+func (c *kmsSigningClient) reconcileUncertainCreate(ctx context.Context, versionName string) error {
+	_, err := c.kms.GetCryptoKeyVersion(ctx, &kmspb.GetCryptoKeyVersionRequest{Name: versionName})
+	switch {
+	case status.Code(err) == codes.NotFound:
+		return nil
+	case err != nil && !isTransientKMSError(err):
+		return fmt.Errorf("read gcp kms version after uncertain create: %w", err)
+	}
+	return c.reconcileFailedKeyGeneration(ctx, versionName)
 }
 
 // reconcileFailedKeyGeneration makes the new version unusable. CryptoKey
@@ -229,6 +254,35 @@ func (c *kmsSigningClient) GrantSignerVerifier(ctx context.Context, keyName, ser
 	}
 
 	policy.Add(member, SignerVerifierRole)
+	if err := handle.SetPolicy(ctx, policy); err != nil {
+		return fmt.Errorf("set gcp kms key iam policy: %w", err)
+	}
+
+	return nil
+}
+
+// RevokeSignerVerifier removes the SignerVerifierRole binding for the service
+// account on one crypto key. A missing binding is a no-op.
+func (c *kmsSigningClient) RevokeSignerVerifier(ctx context.Context, keyName, serviceAccountEmail string) error {
+	if err := ValidateKeyName(keyName); err != nil {
+		return err
+	}
+	if serviceAccountEmail == "" {
+		return errors.New("revoke gcp kms signer verifier: service account email is required")
+	}
+
+	handle := c.kms.ResourceIAM(keyName)
+	policy, err := handle.Policy(ctx)
+	if err != nil {
+		return fmt.Errorf("read gcp kms key iam policy: %w", err)
+	}
+
+	member := "serviceAccount:" + serviceAccountEmail
+	if !policy.HasRole(member, SignerVerifierRole) {
+		return nil
+	}
+
+	policy.Remove(member, SignerVerifierRole)
 	if err := handle.SetPolicy(ctx, policy); err != nil {
 		return fmt.Errorf("set gcp kms key iam policy: %w", err)
 	}

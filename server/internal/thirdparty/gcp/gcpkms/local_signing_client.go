@@ -277,6 +277,20 @@ func (c *LocalSigningClient) GrantSignerVerifier(ctx context.Context, keyName, s
 }
 
 // DisableKeyVersion validates the name; the in-process key stays usable.
+func (c *LocalSigningClient) RevokeSignerVerifier(ctx context.Context, keyName, serviceAccountEmail string) error {
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("revoke local signer verifier: %w", err)
+	}
+	if err := ValidateKeyName(keyName); err != nil {
+		return err
+	}
+	if serviceAccountEmail == "" {
+		return errors.New("revoke local signer verifier: service account email is required")
+	}
+
+	return nil
+}
+
 func (c *LocalSigningClient) DisableKeyVersion(ctx context.Context, versionName string) error {
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("disable local key version: %w", err)

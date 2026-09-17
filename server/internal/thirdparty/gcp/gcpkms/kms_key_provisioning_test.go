@@ -52,6 +52,9 @@ type fakeKeyRing struct {
 
 	// disabled records the versions DisableKeyVersion was called for.
 	disabled []string
+
+	// createUnavailable persists the key but answers CreateCryptoKey Unavailable.
+	createUnavailable bool
 }
 
 func newFakeKeyRing() *fakeKeyRing {
@@ -66,6 +69,11 @@ func (f *fakeKeyRing) CreateCryptoKey(_ context.Context, req *kmspb.CreateCrypto
 	defer f.mu.Unlock()
 
 	name := req.GetParent() + "/cryptoKeys/" + req.GetCryptoKeyId()
+	if f.createUnavailable {
+		// The key lands but every response is lost, including gapic retries.
+		f.keys[name] = req
+		return nil, status.Error(codes.Unavailable, "response lost") //nolint:wrapcheck // the fake speaks gRPC status codes, as GCP does
+	}
 	if _, exists := f.keys[name]; exists {
 		return nil, status.Error(codes.AlreadyExists, "crypto key exists") //nolint:wrapcheck // the fake speaks gRPC status codes, as GCP does
 	}
@@ -416,6 +424,43 @@ func TestGrantSignerVerifier_BindsRoleOnTheKeyOnly(t *testing.T) {
 
 	require.NoError(t, client.GrantSignerVerifier(t.Context(), keyName, "signer@speakeasy-signing.iam.gserviceaccount.com"))
 	require.Equal(t, 1, fake.setPolicyCalls, "an existing binding is not rewritten")
+}
+
+func TestRevokeSignerVerifier_RemovesBindingAndIgnoresAbsent(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeKeyRing()
+	client := newFakeProvisioningClient(t, fake, fake)
+	keyName := testKeyRing + "/cryptoKeys/okta-revoke"
+	sa := "signer@speakeasy-signing.iam.gserviceaccount.com"
+
+	require.NoError(t, client.RevokeSignerVerifier(t.Context(), keyName, sa))
+	require.Equal(t, 0, fake.setPolicyCalls, "revoking an absent binding writes nothing")
+
+	require.NoError(t, client.GrantSignerVerifier(t.Context(), keyName, sa))
+	require.NoError(t, client.RevokeSignerVerifier(t.Context(), keyName, sa))
+	require.Nil(t, fake.members(keyName, string(SignerVerifierRole)))
+	require.Equal(t, 2, fake.setPolicyCalls)
+
+	require.ErrorIs(t, client.RevokeSignerVerifier(t.Context(), testKeyRing, sa), ErrInvalidResourceName)
+	require.Error(t, client.RevokeSignerVerifier(t.Context(), keyName, ""))
+}
+
+func TestCreateSigningKey_ReconcilesUncertainCreate(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeKeyRing()
+	fake.createUnavailable = true
+	client := newFakeProvisioningClient(t, fake, fake)
+
+	// gapic retries Unavailable; a short deadline exhausts them the way a real outage does.
+	ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
+	defer cancel()
+	_, err := client.CreateSigningKey(ctx, CreateSigningKeyParams{KeyRing: testKeyRing, KeyID: "okta-lost", Algorithm: jose.RS256})
+	require.Error(t, err)
+	require.ErrorContains(t, err, "may exist", "the lost create is reported, not hidden")
+	require.ErrorContains(t, err, testKeyRing+"/cryptoKeys/okta-lost/cryptoKeyVersions/1")
+	require.Equal(t, []string{testKeyRing + "/cryptoKeys/okta-lost/cryptoKeyVersions/1"}, fake.disabledVersions())
 }
 
 func TestGrantSignerVerifier_RejectsRingAndVersionNames(t *testing.T) {

@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	extcredrepo "github.com/speakeasy-api/gram/server/internal/externalcredentials/repo"
 	extkeysrepo "github.com/speakeasy-api/gram/server/internal/externalkeys/repo"
@@ -15,8 +16,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections/provisiontest"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections/repo"
 	jwksrepo "github.com/speakeasy-api/gram/server/internal/jsonwebkeysets/repo"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpauth"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpkms"
 )
 
@@ -205,9 +209,9 @@ func TestProvisionClient_RefusesProviderMismatch(t *testing.T) {
 	require.ErrorIs(t, err, identityproviderconnections.ErrNotProvisioned, "a refused run must leave nothing behind")
 }
 
-// Only the organization's own organization-level issuer can carry a managed
-// client: a project-owned issuer and another organization's issuer both read
-// as absent.
+// Only the organization's own organization-level issuer with an https token
+// endpoint can carry a managed client: a project-owned issuer and another
+// organization's issuer both read as absent.
 func TestProvisionClient_RefusesIneligibleIssuers(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestDB(t)
@@ -224,9 +228,23 @@ func TestProvisionClient_RefusesIneligibleIssuers(t *testing.T) {
 	_, err = provisioner.ProvisionClient(ctx, oktaParams(ti.orgID, connectionID, uuid.New()))
 	require.ErrorIs(t, err, identityproviderconnections.ErrIssuerNotFound)
 
+	project, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           "ineligible-issuer-project",
+		Slug:           "ineligible-" + uuid.NewString()[:8],
+		OrganizationID: ti.orgID,
+	})
+	require.NoError(t, err)
+	projectIssuer := createIssuer(t, ctx, ti.conn, ti.orgID, uuid.NullUUID{UUID: project.ID, Valid: true}, tokenEndpoint)
+	_, err = provisioner.ProvisionClient(ctx, oktaParams(ti.orgID, connectionID, projectIssuer))
+	require.ErrorIs(t, err, identityproviderconnections.ErrIssuerNotFound)
+
 	noTokenEndpoint := createIssuer(t, ctx, ti.conn, ti.orgID, noProject, "")
 	_, err = provisioner.ProvisionClient(ctx, oktaParams(ti.orgID, connectionID, noTokenEndpoint))
 	require.ErrorIs(t, err, identityproviderconnections.ErrIssuerHasNoTokenEndpoint)
+
+	plaintextEndpoint := createIssuer(t, ctx, ti.conn, ti.orgID, noProject, "http://tenant.okta.com/oauth2/v1/token")
+	_, err = provisioner.ProvisionClient(ctx, oktaParams(ti.orgID, connectionID, plaintextEndpoint))
+	require.ErrorIs(t, err, identityproviderconnections.ErrIssuerTokenEndpointNotHTTPS)
 
 	tombstoned := createIssuer(t, ctx, ti.conn, ti.orgID, noProject, tokenEndpoint)
 	_, err = remotesessionsrepo.New(ti.conn).DeleteOrganizationRemoteSessionIssuer(ctx, remotesessionsrepo.DeleteOrganizationRemoteSessionIssuerParams{ID: tombstoned, OrganizationID: conv.ToPGText(ti.orgID)})
@@ -434,10 +452,10 @@ func TestRotateClient_OverlapsThenRevokes(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, connectionID, newKey.ExternalKey.IdentityProviderConnectionID.UUID)
 	require.Equal(t, rotatingKMS.Created()[0], newKey.GcpKmsKey.ResourceName)
-	referenced, err := repo.New(ti.conn).ManagedKeyResourceExists(ctx, repo.ManagedKeyResourceExistsParams{OrganizationID: conv.ToPGText(ti.orgID), ResourceName: rotatingKMS.Created()[0]})
+	referenced, err := repo.New(ti.conn).ManagedKeyResourceExists(ctx, rotatingKMS.Created()[0])
 	require.NoError(t, err)
 	require.True(t, referenced, "ambiguous-commit reconciliation must preserve a referenced key")
-	referenced, err = repo.New(ti.conn).ManagedKeyResourceExists(ctx, repo.ManagedKeyResourceExistsParams{OrganizationID: conv.ToPGText(ti.orgID), ResourceName: "missing-key-version"})
+	referenced, err = repo.New(ti.conn).ManagedKeyResourceExists(ctx, "missing-key-version")
 	require.NoError(t, err)
 	require.False(t, referenced)
 
@@ -612,8 +630,9 @@ func TestProvisionClient_MarksEveryRow(t *testing.T) {
 	require.Equal(t, int64(1), managed)
 }
 
-// Parallel retries share a single committed pending key, including recovery
-// after a crash between publication commit and recording its observed time.
+// Parallel retries converge on a single committed pending key (extra KMS keys
+// are disabled), including recovery after a crash between publication commit
+// and recording its observed time.
 func TestRotateClient_ConcurrentRetriesAndRevocation(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestDB(t)
@@ -639,8 +658,11 @@ func TestRotateClient_ConcurrentRetriesAndRevocation(t *testing.T) {
 		}
 		require.Equal(t, readyAt, pending.ReadyAt)
 	}
-	require.Len(t, kms.Created(), 1)
-	require.Empty(t, kms.Disabled())
+	// Keys are minted before the lock, so losers disable theirs; one survives.
+	require.NotEmpty(t, kms.Created())
+	require.Len(t, kms.Disabled(), len(kms.Created())-1)
+	require.Subset(t, kms.Created(), kms.Disabled())
+	minted := len(kms.Created())
 	keys, err := jwksrepo.New(ti.conn).ListJsonWebKeys(ctx, jwksrepo.ListJsonWebKeysParams{JsonWebKeySetID: before.JSONWebKeySetID, OrganizationID: ti.orgID, IncludeRevoked: false})
 	require.NoError(t, err)
 	require.Len(t, keys, 2)
@@ -653,14 +675,41 @@ func TestRotateClient_ConcurrentRetriesAndRevocation(t *testing.T) {
 	_, err = rotator.RotateClient(ctx, params)
 	require.ErrorAs(t, err, &pending)
 	require.False(t, pending.ReadyAt.IsZero())
-	require.Len(t, kms.Created(), 1)
+	require.Len(t, kms.Created(), minted, "an unobserved publication is reused, not re-minted")
 	revoked, err := rotator.RevokeClient(ctx, ti.orgID, connectionID)
 	require.NoError(t, err)
 	require.Equal(t, 2, revoked)
 	_, err = rotator.RotateClient(ctx, params)
 	require.ErrorIs(t, err, identityproviderconnections.ErrNotProvisioned)
-	require.Len(t, kms.Created(), 1, "a retry must not resurrect revoked keys")
+	require.Len(t, kms.Created(), minted, "a retry must not resurrect revoked keys")
 	doc, err := remotesessionsrepo.New(ti.conn).GetRemoteSessionClientJsonWebKeySetDocument(ctx, before.ClientRowID)
 	require.NoError(t, err)
 	require.JSONEq(t, `{"keys":[]}`, string(doc.Document))
+}
+
+// The advertised JWKS URL must be fetchable over TLS, so a plaintext server
+// URL is refused at construction; loopback http stays allowed for local dev.
+func TestNewProvisioner_RejectsPlaintextServerURL(t *testing.T) {
+	t.Parallel()
+	_, ti := newTestDB(t)
+
+	build := func(serverURL string) error {
+		_, err := identityproviderconnections.NewProvisioner(
+			testenv.NewLogger(t),
+			ti.conn,
+			gcpauth.NewIdentity(gcpauth.NewStubResolver()),
+			provisiontest.NewKMSClients(t).Factory,
+			audit.NewLogger(),
+			identityproviderconnections.Config{
+				KeyRing:             provisiontest.KeyRing,
+				SigningCredentialID: uuid.New(),
+				ServerURL:           mustURL(t, serverURL),
+			},
+		)
+		return err
+	}
+
+	require.Error(t, build("http://app.getgram.ai"))
+	require.NoError(t, build("https://app.getgram.ai"))
+	require.NoError(t, build("http://localhost:8080"))
 }

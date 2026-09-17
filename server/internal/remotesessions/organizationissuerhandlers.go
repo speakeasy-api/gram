@@ -501,6 +501,12 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *orgissuersgen.Updat
 
 	txRepo := repo.New(dbtx)
 
+	// Advisory lock before the row lock, matching client creation's order, so
+	// the managed-client count below cannot race a provisioning insert.
+	if err := txRepo.LockRemoteSessionIssuerForClientBinding(ctx, issuerID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock remote session issuer for client binding").LogError(ctx, logger)
+	}
+
 	// A tenant must never edit a platform issuer: it is shared across every
 	// organization and curated by platform admins.
 	// UpdateOrganizationRemoteSessionIssuer below is org-scoped and would refuse
