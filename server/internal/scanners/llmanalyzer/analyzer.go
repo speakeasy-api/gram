@@ -218,7 +218,7 @@ func (a *Analyzer) fail(ctx context.Context, span trace.Span, info CallInfo, com
 
 // applyToolCallIDs overwrites the synthetic ids on rendered with the real ids
 // when they line up with the source message: one id per Message.ToolCalls
-// entry with no cap applied, or a single id for a message rendered from
+// entry with no cap applied, or exactly one id for a message rendered from
 // ToolName. Empty ids keep their synthetic value.
 func applyToolCallIDs(rendered []ToolCall, m judgemessage.Message, ids []string) {
 	if len(ids) == 0 || len(rendered) == 0 {
@@ -229,7 +229,7 @@ func applyToolCallIDs(rendered []ToolCall, m judgemessage.Message, ids []string)
 		if len(ids) != len(m.ToolCalls) || len(rendered) != len(m.ToolCalls) {
 			return
 		}
-	case len(rendered) != 1:
+	case len(rendered) != 1 || len(ids) != 1:
 		return
 	}
 	for i := range rendered {
