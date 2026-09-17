@@ -80,6 +80,19 @@ func loadWorkloadSessionCredential(
 	}, nil
 }
 
+// isCredentialDenial reports whether an authorization error is the request
+// being refused rather than the decision failing. Only the two durable denial
+// codes qualify: an engine that answers CodeUnexpected has judged nothing, and
+// treating that as a refusal would tell a workload to discard a live token
+// every time the policy store wobbles.
+func isCredentialDenial(err error) bool {
+	shareable, ok := errors.AsType[*oops.ShareableError](err)
+	if !ok {
+		return false
+	}
+	return shareable.Code == oops.CodeForbidden || shareable.Code == oops.CodeUnauthorized
+}
+
 func (s *Service) prepareWorkloadSessionContext(ctx context.Context, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, credential workloadSessionCredential) (context.Context, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || subject.Kind != urn.SessionSubjectKindWorkload {
@@ -87,9 +100,15 @@ func (s *Service) prepareWorkloadSessionContext(ctx context.Context, endpoint *R
 	}
 	// A workload acts through an agent's policy, so it rides the agent
 	// authorization rollout and is hidden the same way while that is off. The
-	// token is untouched by this, so the rejection stays unmarked: a fresh one
+	// token is untouched by either outcome, so both stay unmarked: a fresh one
 	// would meet the same gate.
-	if enabled, _ := s.agentAuthorizationRollout(ctx, s.logger, endpoint); !enabled {
+	enabled, _, rolloutErr := s.agentAuthorizationRollout(ctx, s.logger, endpoint)
+	switch {
+	case rolloutErr != nil:
+		// The rollout state could not be read, so nothing here says the
+		// feature is off for this organization.
+		return ctx, fmt.Errorf("%w: %w", errWorkloadRolloutUnavailable, oops.C(oops.CodeNotFound))
+	case !enabled:
 		return ctx, fmt.Errorf("%w: %w", errWorkloadRolloutDisabled, oops.C(oops.CodeNotFound))
 	}
 	workloadIssuerID, externalSubject, err := subject.Workload()
@@ -113,10 +132,11 @@ func (s *Service) admitWorkloadSession(ctx context.Context, endpoint *ResolvedMc
 	}
 	ctx, err = s.authz.PrepareContext(ctx)
 	if err != nil {
-		// Admission refuses with a shareable error — the workload is no longer
-		// admitted, which its token cannot fix. Anything else means no decision
-		// was reached, so the credential keeps the benefit of the doubt.
-		if _, refused := errors.AsType[*oops.ShareableError](err); refused {
+		// A denial means the workload is no longer admitted, which its token
+		// cannot fix. Anything else — including a shareable error carrying an
+		// internal code — reached no decision, so the credential keeps the
+		// benefit of the doubt.
+		if isCredentialDenial(err) {
 			err = fmt.Errorf("%w: %w", errCredentialRejected, err)
 		} else {
 			err = fmt.Errorf("%w: %w", errWorkloadSessionAdmissionLoad, err)
@@ -134,7 +154,7 @@ func (s *Service) requireWorkloadSessionAuthorization(ctx context.Context, endpo
 	if err := s.authz.Require(ctx, target.connectCheck()); err != nil {
 		// A denial is the assigned agent's authority being gone or withdrawn;
 		// an engine failure reached no decision and stays unmarked.
-		if _, denied := errors.AsType[*oops.ShareableError](err); denied {
+		if isCredentialDenial(err) {
 			return ctx, fmt.Errorf("%w: %w", errCredentialRejected, err)
 		}
 		return ctx, err
