@@ -188,6 +188,21 @@ func TestMemberResourceDiscoveryUsesLiveRBAC(t *testing.T) {
 	mcpSelector[authz.SelectorKeyProjectID] = allowedProject.ID.String()
 	grant(authz.ScopeMCPRead, mcpSelector)
 
+	// A large unrelated catalogue must not expand the live RBAC check set for a
+	// project-scoped lookup or a selective organization-wide search.
+	unrelatedToolsetID := uuid.New()
+	_, err = testrepo.New(conn).CreateToolsetFixture(ctx, testrepo.CreateToolsetFixtureParams{
+		ID: unrelatedToolsetID, OrganizationID: principal.OrganizationID, ProjectID: deniedProject.ID,
+		Name: "Unrelated catalogue toolset", Slug: "unrelated-catalogue-toolset",
+	})
+	require.NoError(t, err)
+	inserted, err := testrepo.New(conn).CreateMCPServerCatalogueFixtures(ctx, testrepo.CreateMCPServerCatalogueFixturesParams{
+		ProjectID: deniedProject.ID, NamePrefix: "Unrelated server ", SlugPrefix: "unrelated-server-",
+		ToolsetID: uuid.NullUUID{UUID: unrelatedToolsetID, Valid: true}, Visibility: "private", ServerCount: maxInventoryAuthorizationCandidates + 1,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, maxInventoryAuthorizationCandidates+1, inserted)
+
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient())
 	prepared, err := NewLiveOrgAdminAuthorizer(conn, engine).PrepareExternalContext(ctx, principal)
 	require.NoError(t, err)
@@ -213,6 +228,9 @@ func TestMemberResourceDiscoveryUsesLiveRBAC(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, inventory.MCPs, 1)
 	require.Equal(t, allowedMCPID.String(), inventory.MCPs[0].ID)
+
+	_, err = reader.FindMCP(prepared, principal, FindMCPInput{Query: "unrelated server"})
+	require.ErrorIs(t, err, ErrUnavailable, "an over-cap candidate set must fail closed")
 
 	for _, query := range []string{"", "cohort"} {
 		for _, selector := range []FindMCPInput{
