@@ -30,7 +30,8 @@ INSERT INTO user_session_issuers (
     authn_challenge_mode,
     session_duration,
     client_id_metadata_admission_mode,
-    trusted_remote_session_issuer_id
+    trusted_remote_session_issuer_id,
+    trusted_remote_session_client_id
 )
 VALUES (
     NULL,
@@ -39,7 +40,8 @@ VALUES (
     @authn_challenge_mode,
     @session_duration,
     'open',
-    sqlc.narg('trusted_remote_session_issuer_id')::uuid
+    sqlc.narg('trusted_remote_session_issuer_id')::uuid,
+    sqlc.narg('trusted_remote_session_client_id')::uuid
 )
 RETURNING *;
 
@@ -123,6 +125,11 @@ SET
         WHEN BTRIM(sqlc.narg('trusted_remote_session_issuer_id')::text) = '' THEN NULL
         ELSE sqlc.narg('trusted_remote_session_issuer_id')::text::uuid
     END,
+    trusted_remote_session_client_id = CASE
+        WHEN sqlc.narg('trusted_remote_session_client_id')::text IS NULL THEN trusted_remote_session_client_id
+        WHEN BTRIM(sqlc.narg('trusted_remote_session_client_id')::text) = '' THEN NULL
+        ELSE sqlc.narg('trusted_remote_session_client_id')::text::uuid
+    END,
     updated_at = clock_timestamp()
 WHERE id = @id
   AND project_id IS NULL
@@ -155,7 +162,7 @@ WHERE id = @id
 FOR NO KEY UPDATE;
 
 -- name: LockOrganizationUserSessionIssuer :one
-SELECT id
+SELECT *
 FROM user_session_issuers
 WHERE id = @id
   AND project_id IS NULL

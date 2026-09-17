@@ -132,7 +132,7 @@ export async function gramAdminFetch<T>(
 
 // A mutation reports its own failure rather than taking the 401 redirect,
 // which would sign the operator back in behind the action they just took.
-async function gramAdminMutation<T>(
+export async function gramAdminMutation<T>(
   path: string,
   init?: RequestInit,
 ): Promise<T> {

@@ -18,18 +18,19 @@ type AwsKmsKey struct {
 }
 
 type ExternalKey struct {
-	ID                     uuid.UUID
-	OrganizationID         pgtype.Text
-	ProjectID              uuid.NullUUID
-	ExternalCredentialID   uuid.UUID
-	Provider               string
-	Algorithm              string
-	Name                   string
-	CustomerGrantReference pgtype.Text
-	CreatedAt              pgtype.Timestamptz
-	UpdatedAt              pgtype.Timestamptz
-	DeletedAt              pgtype.Timestamptz
-	Deleted                bool
+	ID                           uuid.UUID
+	OrganizationID               pgtype.Text
+	ProjectID                    uuid.NullUUID
+	ExternalCredentialID         uuid.UUID
+	Provider                     string
+	Algorithm                    string
+	Name                         string
+	CustomerGrantReference       pgtype.Text
+	IdentityProviderConnectionID uuid.NullUUID
+	CreatedAt                    pgtype.Timestamptz
+	UpdatedAt                    pgtype.Timestamptz
+	DeletedAt                    pgtype.Timestamptz
+	Deleted                      bool
 }
 
 type GcpKmsKey struct {

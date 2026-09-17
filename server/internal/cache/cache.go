@@ -24,6 +24,14 @@ type LeaseCache interface {
 	ReleaseLeaseIfOwner(ctx context.Context, key, owner string) (bool, error)
 }
 
+// RenewableLeaseCache extends ownership-aware leases with an atomic renewal.
+// Callers that can outlive their initial TTL use it to prove they still own a
+// lease before extending the exclusive-work window.
+type RenewableLeaseCache interface {
+	LeaseCache
+	RenewLease(ctx context.Context, key, owner string, ttl time.Duration) (bool, error)
+}
+
 // ConditionalCache is implemented by caches that can atomically preserve the
 // first value published for a key.
 type ConditionalCache interface {

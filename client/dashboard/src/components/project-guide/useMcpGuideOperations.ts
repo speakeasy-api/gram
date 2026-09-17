@@ -1,3 +1,4 @@
+import { shellQuote } from "@/lib/shell";
 import {
   catalogBackedMcpServers,
   hasDefaultPluginServer,
@@ -100,10 +101,6 @@ function curateCatalogServers(
       ),
     )
     .sort(compareCatalogServers);
-}
-
-function shellQuote(value: string): string {
-  return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
 function governedClientName(name: string): string {

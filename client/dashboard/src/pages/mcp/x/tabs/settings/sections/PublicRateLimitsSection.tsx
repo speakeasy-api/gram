@@ -6,26 +6,19 @@ import { getTunneledMcpServerArgs } from "@/lib/sources";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
 import type { TunneledMcpServer } from "@gram/client/models/components/tunneledmcpserver.js";
-import {
-  invalidateAllGetTunneledMcpServer,
-  useGetTunneledMcpServer,
-} from "@gram/client/react-query/getTunneledMcpServer.js";
-import { invalidateAllTunneledMcpServers } from "@gram/client/react-query/tunneledMcpServers.js";
+import { useGetTunneledMcpServer } from "@gram/client/react-query/getTunneledMcpServer.js";
 import { useUpdateTunneledMcpServerMutation } from "@gram/client/react-query/updateTunneledMcpServer.js";
-import { useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router";
 import { toast } from "sonner";
+import { MCP_PUBLIC_ACCESS_SECTION_ID } from "./PublicAccessSection";
+import { invalidateTunneledMcpSourceViews } from "./sourceInvalidation";
 
 // Moved here from the retired tunneled source detail page, which is where this
 // section shipped: the tunnel has no page of its own now, so its public limit
 // is set on the MCP server that fronts it.
-async function invalidateTunneledMcpServerViews(queryClient: QueryClient) {
-  await Promise.all([
-    invalidateAllGetTunneledMcpServer(queryClient, { refetchType: "all" }),
-    invalidateAllTunneledMcpServers(queryClient, { refetchType: "all" }),
-  ]);
-}
 
 type PublicRateLimitField = "publicRequestRatePerSecond" | "publicRequestBurst";
 
@@ -167,7 +160,7 @@ function PublicRateLimits({
           },
         },
       });
-      await invalidateTunneledMcpServerViews(queryClient);
+      await invalidateTunneledMcpSourceViews(queryClient);
       toast.success("Anonymous rate limit updated");
     } catch (err) {
       const message =
@@ -192,9 +185,19 @@ function PublicRateLimits({
         shared by all callers, so it bounds the total load on your server rather
         than fairness between callers. Requests over the limit get HTTP 429 with
         a Retry-After header.
-        {tunneledMcpServer.allowPublic
-          ? null
-          : " Applies once Public Access is enabled."}
+        {tunneledMcpServer.allowPublic ? null : (
+          <>
+            {" "}
+            Applies once{" "}
+            <Link
+              to={`#${MCP_PUBLIC_ACCESS_SECTION_ID}`}
+              className="underline underline-offset-2"
+            >
+              Public Access
+            </Link>{" "}
+            is enabled.
+          </>
+        )}
       </Text>
 
       <dl className="mb-4 grid max-w-xl grid-cols-[auto_1fr] gap-x-6 gap-y-1">

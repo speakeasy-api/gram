@@ -29,6 +29,21 @@ interface FailedSourcesSectionProps {
   generalErrors: DeploymentLogEvent[];
   deployment: Deployment;
   onRemoveSuccess: () => void;
+  /**
+   * Tool counts could not be loaded. A zero is then not "unused", so nothing
+   * is preselected for removal.
+   */
+  toolCountsUnknown?: boolean;
+}
+
+function unusedSourceIds(
+  failedSources: FailedSource[],
+  toolCountsUnknown: boolean,
+): Set<string> {
+  if (toolCountsUnknown) return new Set();
+  return new Set(
+    failedSources.filter((s) => s.toolCount === 0).map((s) => s.id),
+  );
 }
 
 const SOURCE_ICONS = {
@@ -49,13 +64,13 @@ export function FailedSourcesSection({
   generalErrors,
   deployment,
   onRemoveSuccess,
+  toolCountsUnknown = false,
 }: FailedSourcesSectionProps): JSX.Element {
   const client = useSdkClient();
   const routes = useRoutes();
   // Auto-select only sources with no toolset references
-  const [selected, setSelected] = useState<Set<string>>(
-    () =>
-      new Set(failedSources.filter((s) => s.toolCount === 0).map((s) => s.id)),
+  const [selected, setSelected] = useState<Set<string>>(() =>
+    unusedSourceIds(failedSources, toolCountsUnknown),
   );
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [pending, setPending] = useState(false);
@@ -63,12 +78,10 @@ export function FailedSourcesSection({
 
   // Reset selection when sources change
   useEffect(() => {
-    setSelected(
-      new Set(failedSources.filter((s) => s.toolCount === 0).map((s) => s.id)),
-    );
+    setSelected(unusedSourceIds(failedSources, toolCountsUnknown));
     setExpanded(new Set());
     setPending(false);
-  }, [failedSources]);
+  }, [failedSources, toolCountsUnknown]);
 
   const toggleSelected = useCallback((id: string) => {
     setSelected((prev) => {

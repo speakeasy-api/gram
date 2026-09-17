@@ -116,6 +116,14 @@ type Client struct {
 	// getToolUsageUsers endpoint.
 	GetToolUsageUsersDoer goahttp.Doer
 
+	// GetToolUsageClients Doer is the HTTP client used to make requests to the
+	// getToolUsageClients endpoint.
+	GetToolUsageClientsDoer goahttp.Doer
+
+	// GetToolUsageClientToolBreakdown Doer is the HTTP client used to make
+	// requests to the getToolUsageClientToolBreakdown endpoint.
+	GetToolUsageClientToolBreakdownDoer goahttp.Doer
+
 	// GetToolUsageTargetTimeSeries Doer is the HTTP client used to make requests
 	// to the getToolUsageTargetTimeSeries endpoint.
 	GetToolUsageTargetTimeSeriesDoer goahttp.Doer
@@ -193,6 +201,8 @@ func NewClient(
 		GetToolUsageTotalsDoer:               doer,
 		GetToolUsageTargetsDoer:              doer,
 		GetToolUsageUsersDoer:                doer,
+		GetToolUsageClientsDoer:              doer,
+		GetToolUsageClientToolBreakdownDoer:  doer,
 		GetToolUsageTargetTimeSeriesDoer:     doer,
 		GetToolUsageUserTimeSeriesDoer:       doer,
 		GetToolUsageUsersByTargetDoer:        doer,
@@ -804,6 +814,54 @@ func (c *Client) GetToolUsageUsers() goa.Endpoint {
 		resp, err := c.GetToolUsageUsersDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("telemetry", "getToolUsageUsers", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetToolUsageClients returns an endpoint that makes HTTP requests to the
+// telemetry service getToolUsageClients server.
+func (c *Client) GetToolUsageClients() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetToolUsageClientsRequest(c.encoder)
+		decodeResponse = DecodeGetToolUsageClientsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetToolUsageClientsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetToolUsageClientsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("telemetry", "getToolUsageClients", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetToolUsageClientToolBreakdown returns an endpoint that makes HTTP requests
+// to the telemetry service getToolUsageClientToolBreakdown server.
+func (c *Client) GetToolUsageClientToolBreakdown() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetToolUsageClientToolBreakdownRequest(c.encoder)
+		decodeResponse = DecodeGetToolUsageClientToolBreakdownResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetToolUsageClientToolBreakdownRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetToolUsageClientToolBreakdownDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("telemetry", "getToolUsageClientToolBreakdown", err)
 		}
 		return decodeResponse(resp)
 	}

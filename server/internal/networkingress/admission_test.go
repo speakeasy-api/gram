@@ -62,6 +62,16 @@ func TestNetworkModeAdmissionRequiresReconcilerReadiness(t *testing.T) {
 	finalize, err := admission.PrepareNetworkAccess(ctx, networkaccess.EligibilityInput{OrganizationID: ti.orgID, Mode: networkaccess.ModeDual})
 	require.Error(t, err)
 	require.Error(t, finalize.Finalize(ctx, nil))
+
+	admission.SetReconcilerReady(true)
+	finalize, err = admission.PrepareNetworkAccess(ctx, networkaccess.EligibilityInput{OrganizationID: ti.orgID, Mode: networkaccess.ModeDual})
+	require.NoError(t, err)
+	require.NoError(t, finalizeNetworkAccessInTransaction(ctx, ti, finalize))
+
+	admission.SetReconcilerReady(false)
+	finalize, err = admission.PrepareNetworkAccess(ctx, networkaccess.EligibilityInput{OrganizationID: ti.orgID, Mode: networkaccess.ModeDual})
+	require.Error(t, err)
+	require.Error(t, finalize.Finalize(ctx, nil))
 }
 
 func TestNetworkModePublicRecoveryNeedsNoGates(t *testing.T) {

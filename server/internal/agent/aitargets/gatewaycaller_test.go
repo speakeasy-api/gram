@@ -326,15 +326,20 @@ func TestOverlappingVendorDocumentsDoNotCrossAttribute(t *testing.T) {
 	}{
 		{name: "codex stable document", absent: "", clientID: codexStable, want: "codex"},
 		{name: "codex per-server document", absent: "", clientID: codexPerServer, want: "codex"},
-		{name: "chatgpt stable document", absent: "", clientID: chatGPTStable, want: "chatgpt-classic"},
-		{name: "chatgpt connector document", absent: "", clientID: chatGPTConn, want: "chatgpt-classic"},
+		{name: "chatgpt stable document", absent: "", clientID: chatGPTStable, want: "chatgpt"},
+		{name: "chatgpt connector document", absent: "", clientID: chatGPTConn, want: "chatgpt"},
 
 		// One product leaving the inventory must not hand its callers to the
 		// other.
 		{name: "codex absent, stable document", absent: "codex", clientID: codexStable, want: ""},
 		{name: "codex absent, per-server document", absent: "codex", clientID: codexPerServer, want: ""},
-		{name: "chatgpt absent, stable document", absent: "chatgpt-classic", clientID: chatGPTStable, want: ""},
-		{name: "chatgpt absent, codex still resolves", absent: "chatgpt-classic", clientID: codexStable, want: "codex"},
+		{name: "chatgpt absent, stable document", absent: "chatgpt", clientID: chatGPTStable, want: ""},
+		{name: "chatgpt absent, codex still resolves", absent: "chatgpt", clientID: codexStable, want: "codex"},
+
+		// Classic carries no gateway matchers: both desktop builds present
+		// the same documents, so ChatGPT keeps them and a decision about
+		// Classic never reaches a caller.
+		{name: "classic absent, stable document still resolves to chatgpt", absent: "chatgpt-classic", clientID: chatGPTStable, want: "chatgpt"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()

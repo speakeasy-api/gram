@@ -14,21 +14,22 @@ import (
 
 type evaluationClient struct {
 	posthoggo.Client
-	result   *posthoggo.FeatureFlagResult
-	err      error
-	flags    map[string]any
-	payload  posthoggo.FeatureFlagPayload
-	allFlags posthoggo.FeatureFlagPayloadNoKey
+	result         *posthoggo.FeatureFlagResult
+	err            error
+	definitions    []posthoggo.FeatureFlag
+	definitionsErr error
+	called         bool
+	payload        posthoggo.FeatureFlagPayload
 }
 
 func (c *evaluationClient) GetFeatureFlagResult(payload posthoggo.FeatureFlagPayload) (*posthoggo.FeatureFlagResult, error) {
+	c.called = true
 	c.payload = payload
 	return c.result, c.err
 }
 
-func (c *evaluationClient) GetAllFlags(payload posthoggo.FeatureFlagPayloadNoKey) (map[string]any, error) {
-	c.allFlags = payload
-	return c.flags, c.err
+func (c *evaluationClient) GetFeatureFlags() ([]posthoggo.FeatureFlag, error) {
+	return c.definitions, c.definitionsErr
 }
 
 const testFeatureFlag feature.Flag = "test-feature"
@@ -36,32 +37,45 @@ const testFeatureFlag feature.Flag = "test-feature"
 func TestPosthogEvaluateFlag(t *testing.T) {
 	t.Parallel()
 
+	definitions := []posthoggo.FeatureFlag{{Key: string(testFeatureFlag)}}
+
 	tests := []struct {
 		name            string
 		result          *posthoggo.FeatureFlagResult
 		err             error
-		flags           map[string]any
+		definitions     []posthoggo.FeatureFlag
+		definitionsErr  error
 		localEvaluation bool
 		want            feature.Evaluation
+		wantCalled      bool
 		isErr           bool
 	}{
-		{name: "enabled", result: &posthoggo.FeatureFlagResult{Enabled: true}, want: feature.EvaluationEnabled},
-		{name: "disabled", result: &posthoggo.FeatureFlagResult{Enabled: false}, want: feature.EvaluationDisabled},
-		{name: "missing", err: fmt.Errorf("lookup: %w", posthoggo.ErrFlagNotFound), want: feature.EvaluationIndeterminate},
-		{name: "nil result", want: feature.EvaluationIndeterminate},
-		{name: "variant", result: &posthoggo.FeatureFlagResult{Enabled: true, Variant: new("control")}, want: feature.EvaluationIndeterminate},
-		{name: "provider failure", err: errors.New("unavailable"), want: feature.EvaluationIndeterminate, isErr: true},
-		{name: "local enabled", localEvaluation: true, flags: map[string]any{string(testFeatureFlag): true}, want: feature.EvaluationEnabled},
-		{name: "local disabled", localEvaluation: true, flags: map[string]any{string(testFeatureFlag): false}, want: feature.EvaluationDisabled},
-		{name: "local missing", localEvaluation: true, flags: map[string]any{}, want: feature.EvaluationIndeterminate},
-		{name: "local variant", localEvaluation: true, flags: map[string]any{string(testFeatureFlag): "control"}, want: feature.EvaluationIndeterminate},
+		{name: "enabled", result: &posthoggo.FeatureFlagResult{Enabled: true}, want: feature.EvaluationEnabled, wantCalled: true},
+		{name: "disabled", result: &posthoggo.FeatureFlagResult{Enabled: false}, want: feature.EvaluationDisabled, wantCalled: true},
+		{name: "missing", err: fmt.Errorf("lookup: %w", posthoggo.ErrFlagNotFound), want: feature.EvaluationIndeterminate, wantCalled: true},
+		{name: "nil result", want: feature.EvaluationIndeterminate, wantCalled: true},
+		{name: "variant", result: &posthoggo.FeatureFlagResult{Enabled: true, Variant: new("control")}, want: feature.EvaluationIndeterminate, wantCalled: true},
+		{name: "provider failure", err: errors.New("unavailable"), want: feature.EvaluationIndeterminate, wantCalled: true, isErr: true},
+		{name: "local enabled", localEvaluation: true, definitions: definitions, result: &posthoggo.FeatureFlagResult{Enabled: true}, want: feature.EvaluationEnabled, wantCalled: true},
+		{name: "local disabled", localEvaluation: true, definitions: definitions, result: &posthoggo.FeatureFlagResult{Enabled: false}, want: feature.EvaluationDisabled, wantCalled: true},
+		{name: "local variant", localEvaluation: true, definitions: definitions, result: &posthoggo.FeatureFlagResult{Enabled: true, Variant: new("control")}, want: feature.EvaluationIndeterminate, wantCalled: true},
+		// A flag absent from the cached definitions is indeterminate without a
+		// remote round trip, rather than the SDK's coerced false.
+		{name: "local undefined", localEvaluation: true, definitions: nil, result: &posthoggo.FeatureFlagResult{Enabled: false}, want: feature.EvaluationIndeterminate, wantCalled: false},
+		{name: "local undefined among other flags", localEvaluation: true, definitions: []posthoggo.FeatureFlag{{Key: "other-feature"}}, result: &posthoggo.FeatureFlagResult{Enabled: false}, want: feature.EvaluationIndeterminate, wantCalled: false},
+		// A flag deleted between polls is still in the cached definitions, so
+		// the SDK's not-found result is what keeps it indeterminate.
+		{name: "local deleted between polls", localEvaluation: true, definitions: definitions, err: fmt.Errorf("lookup: %w", posthoggo.ErrFlagNotFound), want: feature.EvaluationIndeterminate, wantCalled: true},
+		// Without definitions the flag cannot be verified, so the evaluation
+		// fails closed instead of trusting the SDK's remote fallback.
+		{name: "local definitions unavailable", localEvaluation: true, definitionsErr: errors.New("flags were not successfully fetched yet"), result: &posthoggo.FeatureFlagResult{Enabled: true}, want: feature.EvaluationIndeterminate, wantCalled: false, isErr: true},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			client := &evaluationClient{result: test.result, err: test.err, flags: test.flags}
+			client := &evaluationClient{result: test.result, err: test.err, definitions: test.definitions, definitionsErr: test.definitionsErr}
 			provider := &Posthog{
 				client:          client,
 				localEvaluation: test.localEvaluation,
@@ -81,13 +95,12 @@ func TestPosthogEvaluateFlag(t *testing.T) {
 				require.NoError(t, err)
 			}
 			require.Equal(t, test.want, got)
-			if test.localEvaluation {
-				require.Equal(t, "organization-id", client.allFlags.DistinctId)
-				require.Equal(t, posthoggo.Groups{"organization": "organization-slug"}, client.allFlags.Groups)
-				require.False(t, *client.allFlags.SendFeatureFlagEvents)
-			} else {
+			require.Equal(t, test.wantCalled, client.called)
+			if test.wantCalled {
+				require.Equal(t, string(testFeatureFlag), client.payload.Key)
 				require.Equal(t, "organization-id", client.payload.DistinctId)
 				require.Equal(t, posthoggo.Groups{"organization": "organization-slug"}, client.payload.Groups)
+				require.False(t, *client.payload.SendFeatureFlagEvents)
 			}
 		})
 	}
