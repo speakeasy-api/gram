@@ -16,16 +16,19 @@ import (
 
 // Endpoints wraps the "organizationUserSessionIssuers" service endpoints.
 type Endpoints struct {
-	CreateIssuer             goa.Endpoint
-	ListIssuers              goa.Endpoint
-	GetIssuer                goa.Endpoint
-	UpdateIssuer             goa.Endpoint
-	GetIssuerDeletePreflight goa.Endpoint
-	DeleteIssuer             goa.Endpoint
-	CreateCimdClient         goa.Endpoint
-	ListCimdClients          goa.Endpoint
-	GetCimdClient            goa.Endpoint
-	DeleteCimdClient         goa.Endpoint
+	CreateIssuer              goa.Endpoint
+	ListIssuers               goa.Endpoint
+	GetIssuer                 goa.Endpoint
+	UpdateIssuer              goa.Endpoint
+	GetIssuerDeletePreflight  goa.Endpoint
+	DeleteIssuer              goa.Endpoint
+	MoveIssuer                goa.Endpoint
+	GetIssuerMigratePreflight goa.Endpoint
+	MigrateIssuer             goa.Endpoint
+	CreateCimdClient          goa.Endpoint
+	ListCimdClients           goa.Endpoint
+	GetCimdClient             goa.Endpoint
+	DeleteCimdClient          goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "organizationUserSessionIssuers"
@@ -34,16 +37,19 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		CreateIssuer:             NewCreateIssuerEndpoint(s, a.APIKeyAuth),
-		ListIssuers:              NewListIssuersEndpoint(s, a.APIKeyAuth),
-		GetIssuer:                NewGetIssuerEndpoint(s, a.APIKeyAuth),
-		UpdateIssuer:             NewUpdateIssuerEndpoint(s, a.APIKeyAuth),
-		GetIssuerDeletePreflight: NewGetIssuerDeletePreflightEndpoint(s, a.APIKeyAuth),
-		DeleteIssuer:             NewDeleteIssuerEndpoint(s, a.APIKeyAuth),
-		CreateCimdClient:         NewCreateCimdClientEndpoint(s, a.APIKeyAuth),
-		ListCimdClients:          NewListCimdClientsEndpoint(s, a.APIKeyAuth),
-		GetCimdClient:            NewGetCimdClientEndpoint(s, a.APIKeyAuth),
-		DeleteCimdClient:         NewDeleteCimdClientEndpoint(s, a.APIKeyAuth),
+		CreateIssuer:              NewCreateIssuerEndpoint(s, a.APIKeyAuth),
+		ListIssuers:               NewListIssuersEndpoint(s, a.APIKeyAuth),
+		GetIssuer:                 NewGetIssuerEndpoint(s, a.APIKeyAuth),
+		UpdateIssuer:              NewUpdateIssuerEndpoint(s, a.APIKeyAuth),
+		GetIssuerDeletePreflight:  NewGetIssuerDeletePreflightEndpoint(s, a.APIKeyAuth),
+		DeleteIssuer:              NewDeleteIssuerEndpoint(s, a.APIKeyAuth),
+		MoveIssuer:                NewMoveIssuerEndpoint(s, a.APIKeyAuth),
+		GetIssuerMigratePreflight: NewGetIssuerMigratePreflightEndpoint(s, a.APIKeyAuth),
+		MigrateIssuer:             NewMigrateIssuerEndpoint(s, a.APIKeyAuth),
+		CreateCimdClient:          NewCreateCimdClientEndpoint(s, a.APIKeyAuth),
+		ListCimdClients:           NewListCimdClientsEndpoint(s, a.APIKeyAuth),
+		GetCimdClient:             NewGetCimdClientEndpoint(s, a.APIKeyAuth),
+		DeleteCimdClient:          NewDeleteCimdClientEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -56,6 +62,9 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.UpdateIssuer = m(e.UpdateIssuer)
 	e.GetIssuerDeletePreflight = m(e.GetIssuerDeletePreflight)
 	e.DeleteIssuer = m(e.DeleteIssuer)
+	e.MoveIssuer = m(e.MoveIssuer)
+	e.GetIssuerMigratePreflight = m(e.GetIssuerMigratePreflight)
+	e.MigrateIssuer = m(e.MigrateIssuer)
 	e.CreateCimdClient = m(e.CreateCimdClient)
 	e.ListCimdClients = m(e.ListCimdClients)
 	e.GetCimdClient = m(e.GetCimdClient)
@@ -198,6 +207,76 @@ func NewDeleteIssuerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 			return nil, err
 		}
 		return nil, s.DeleteIssuer(ctx, p)
+	}
+}
+
+// NewMoveIssuerEndpoint returns an endpoint function that calls the method
+// "moveIssuer" of service "organizationUserSessionIssuers".
+func NewMoveIssuerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*MoveIssuerPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.MoveIssuer(ctx, p)
+	}
+}
+
+// NewGetIssuerMigratePreflightEndpoint returns an endpoint function that calls
+// the method "getIssuerMigratePreflight" of service
+// "organizationUserSessionIssuers".
+func NewGetIssuerMigratePreflightEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetIssuerMigratePreflightPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetIssuerMigratePreflight(ctx, p)
+	}
+}
+
+// NewMigrateIssuerEndpoint returns an endpoint function that calls the method
+// "migrateIssuer" of service "organizationUserSessionIssuers".
+func NewMigrateIssuerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*MigrateIssuerPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.MigrateIssuer(ctx, p)
 	}
 }
 

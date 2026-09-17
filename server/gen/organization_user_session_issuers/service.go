@@ -32,6 +32,19 @@ type Service interface {
 	// Soft-delete an organization-owned user_session_issuer. Refuses while a live
 	// MCP server or toolset references it. Requires org:admin.
 	DeleteIssuer(context.Context, *DeleteIssuerPayload) (err error)
+	// Re-scope a user_session_issuer in the caller's organization. Provide a
+	// project_id to make it project-specific, or omit it to make it
+	// organization-owned. Existing clients and sessions move with the issuer.
+	// Requires org:admin.
+	MoveIssuer(context.Context, *MoveIssuerPayload) (res *types.UserSessionIssuer, err error)
+	// Report the impact, blockers, and configuration warnings for consolidating
+	// one user_session_issuer onto another. Requires org:read.
+	GetIssuerMigratePreflight(context.Context, *GetIssuerMigratePreflightPayload) (res *OrganizationUserSessionIssuerMigratePreflight, err error)
+	// Consolidate a source user_session_issuer onto a target issuer, preserving
+	// clients, sessions, attachments, and remote-session credentials before
+	// soft-deleting the source. The target must be in the same project or a
+	// broader organization scope. Requires org:admin.
+	MigrateIssuer(context.Context, *MigrateIssuerPayload) (res *MigrateOrganizationUserSessionIssuerResult, err error)
 	// Allow an additional CIMD document URL on an organization-owned
 	// user_session_issuer. Requires org:admin.
 	CreateCimdClient(context.Context, *CreateCimdClientPayload) (res *CreateUserSessionIssuerCimdClientResult, err error)
@@ -66,7 +79,7 @@ const ServiceName = "organizationUserSessionIssuers"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [10]string{"createIssuer", "listIssuers", "getIssuer", "updateIssuer", "getIssuerDeletePreflight", "deleteIssuer", "createCimdClient", "listCimdClients", "getCimdClient", "deleteCimdClient"}
+var MethodNames = [13]string{"createIssuer", "listIssuers", "getIssuer", "updateIssuer", "getIssuerDeletePreflight", "deleteIssuer", "moveIssuer", "getIssuerMigratePreflight", "migrateIssuer", "createCimdClient", "listCimdClients", "getCimdClient", "deleteCimdClient"}
 
 // CreateCimdClientPayload is the payload type of the
 // organizationUserSessionIssuers service createCimdClient method.
@@ -137,6 +150,16 @@ type GetIssuerDeletePreflightPayload struct {
 	SessionToken *string
 }
 
+// GetIssuerMigratePreflightPayload is the payload type of the
+// organizationUserSessionIssuers service getIssuerMigratePreflight method.
+type GetIssuerMigratePreflightPayload struct {
+	// The user_session_issuer to migrate away from.
+	SourceID string
+	// The user_session_issuer to migrate onto.
+	TargetID     string
+	SessionToken *string
+}
+
 // GetIssuerPayload is the payload type of the organizationUserSessionIssuers
 // service getIssuer method.
 type GetIssuerPayload struct {
@@ -184,6 +207,48 @@ type ListUserSessionIssuerCimdClientsResult struct {
 	NextCursor *string
 }
 
+// MigrateIssuerPayload is the payload type of the
+// organizationUserSessionIssuers service migrateIssuer method.
+type MigrateIssuerPayload struct {
+	// The user_session_issuer to migrate away from; soft-deleted on success.
+	SourceID string
+	// The surviving user_session_issuer.
+	TargetID string
+	// The exact warnings_fingerprint returned by the latest preflight. Required
+	// when that preflight reports warnings.
+	ConfirmedWarningsFingerprint *string
+	SessionToken                 *string
+}
+
+// MigrateOrganizationUserSessionIssuerResult is the result type of the
+// organizationUserSessionIssuers service migrateIssuer method.
+type MigrateOrganizationUserSessionIssuerResult struct {
+	// The surviving target issuer.
+	Issuer *types.UserSessionIssuer
+	// Clients re-pointed to the target.
+	ClientsMigrated int
+	// User sessions re-pointed to the target.
+	SessionsMigrated int
+	// Consents normalized to the target scope.
+	ConsentsMigrated int
+	// CIMD allowlist entries moved or merged.
+	CimdClientsMigrated int
+	// Remote-session credentials whose provenance moved.
+	RemoteSessionsMigrated int
+	// True when the source issuer was soft-deleted.
+	SourceDeleted bool
+}
+
+// MoveIssuerPayload is the payload type of the organizationUserSessionIssuers
+// service moveIssuer method.
+type MoveIssuerPayload struct {
+	// The user_session_issuer id.
+	ID string
+	// Target owning project id. Omit to make the issuer organization-owned.
+	ProjectID    *string
+	SessionToken *string
+}
+
 // OrganizationUserSessionIssuerDeletePreflight is the result type of the
 // organizationUserSessionIssuers service getIssuerDeletePreflight method.
 type OrganizationUserSessionIssuerDeletePreflight struct {
@@ -197,6 +262,41 @@ type OrganizationUserSessionIssuerDeletePreflight struct {
 	Toolsets []*OrganizationUserSessionIssuerReference
 	// True when no live MCP server or toolset references the issuer.
 	CanDelete bool
+}
+
+// OrganizationUserSessionIssuerMigratePreflight is the result type of the
+// organizationUserSessionIssuers service getIssuerMigratePreflight method.
+type OrganizationUserSessionIssuerMigratePreflight struct {
+	// Clients that would move.
+	ClientCount int
+	// User sessions that would move.
+	SessionCount int
+	// User-session consents that would move.
+	ConsentCount int
+	// Custom CIMD allowlist entries that would move or merge.
+	CimdClientCount int
+	// Remote-session credentials whose issuer provenance would move.
+	RemoteSessionCount int
+	// Active OAuth client ids already present on both issuers. Non-empty blocks
+	// migration.
+	ConflictingClientIds []string
+	// Active principal bindings that would violate target uniqueness. Non-zero
+	// blocks migration.
+	PrincipalBindingConflictCount int
+	// Enterprise-managed authorization bindings already present on the target.
+	// Non-zero blocks migration.
+	EmaBindingConflictCount int
+	// Whether a Platform MCP catalog registration owns either issuer. True blocks
+	// migration.
+	PlatformOwned bool
+	// Configuration differences that do not invalidate existing sessions but
+	// change future authorization behavior.
+	Warnings []*UserSessionIssuerFieldMismatch
+	// Stable fingerprint of the current warnings. Empty when there are no
+	// warnings; otherwise pass this exact value to migrateIssuer to confirm them.
+	WarningsFingerprint string
+	// True when no hard blocker is present.
+	CanMigrate bool
 }
 
 // A live project resource that references an organization-owned
@@ -237,6 +337,16 @@ type UpdateIssuerPayload struct {
 	// 'open' admits any spec-valid document; 'disabled' admits none and stops
 	// advertising CIMD support. Omit to leave unchanged.
 	ClientIDMetadataAdmissionMode *string
+}
+
+// One user_session_issuer setting whose source and target values differ.
+type UserSessionIssuerFieldMismatch struct {
+	// The differing field name.
+	Field string
+	// The source issuer's rendered value. Empty when unset.
+	SourceValue string
+	// The target issuer's rendered value. Empty when unset.
+	TargetValue string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.
