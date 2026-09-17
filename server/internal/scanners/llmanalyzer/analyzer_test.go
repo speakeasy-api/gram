@@ -249,6 +249,34 @@ func TestAnalyze_UsesRealToolCallIDForSingleToolRequest(t *testing.T) {
 	require.Contains(t, calls[0].Messages[1].Content, `{"id": "call_xyz", "type": "function", "function": {"name": "Bash"`)
 }
 
+func TestAnalyze_SynthesizesSingleToolCallIDWhenExtraIDs(t *testing.T) {
+	t.Parallel()
+
+	stub := &llmanalyzer.StubCompleter{
+		Response:         llmanalyzer.VerdictJSON(nil, ""),
+		Err:              nil,
+		PromptTokens:     0,
+		CompletionTokens: 0,
+		Model:            "",
+		Calls:            nil,
+		ParseFailures:    0,
+	}
+	req := llmanalyzer.Request{
+		OrgID:       "org-1",
+		OrgSlug:     "acme",
+		ProjectID:   "proj-1",
+		Lane:        "sync",
+		Message:     judgemessage.New(message.ToolRequest, "Bash", `{"command": "ls"}`),
+		ToolCallIDs: []string{"call_first", "call_second"},
+	}
+	newAnalyzer(t, stub).Analyze(t.Context(), req)
+
+	calls := stub.CallsSnapshot()
+	require.Len(t, calls, 1)
+	require.Contains(t, calls[0].Messages[1].Content, `"id": "toolu_0000001"`)
+	require.NotContains(t, calls[0].Messages[1].Content, "call_first")
+}
+
 func TestAnalyze_SynthesizesToolCallIDsWhenMisaligned(t *testing.T) {
 	t.Parallel()
 
