@@ -22,6 +22,7 @@ const (
 	reasonOktaUnreachable    = "okta_unreachable"
 	reasonClientUnavailable  = "client_unavailable"
 	reasonSuperseded         = "superseded"
+	reasonDiscarded          = "discarded"
 	reasonInterrupted        = "interrupted"
 )
 

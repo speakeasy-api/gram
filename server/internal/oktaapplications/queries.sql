@@ -68,9 +68,10 @@ WHERE c.id = @connection_id
   AND c.status = 'verified'
 FOR UPDATE OF c;
 
+-- Monotonic: a late-finishing older run never rewinds a newer watermark.
 -- name: MarkApplicationsSynced :execrows
 UPDATE okta_identity_provider_connections
-SET applications_synced_at = @synced_at::timestamptz,
+SET applications_synced_at = GREATEST(applications_synced_at, @synced_at::timestamptz),
     updated_at = clock_timestamp()
 WHERE identity_provider_connection_id = @identity_provider_connection_id
   AND organization_id = @organization_id

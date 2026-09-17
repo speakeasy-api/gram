@@ -82848,13 +82848,14 @@ components:
                     format: int64
                 error:
                     type: string
-                    description: Typed reason when the run failed. rate_limited and okta_unreachable are retried before being recorded; superseded means a newer run applied first; interrupted means the worker died.
+                    description: Typed reason when the run failed. rate_limited and okta_unreachable are retried before being recorded; superseded means a newer run applied first; discarded means the connection stopped being verified during the run; interrupted means the worker died.
                     enum:
                         - rate_limited
                         - credential_rejected
                         - okta_unreachable
                         - client_unavailable
                         - superseded
+                        - discarded
                         - interrupted
                 finished_at:
                     type: string

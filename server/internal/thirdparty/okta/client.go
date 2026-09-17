@@ -42,6 +42,9 @@ const (
 	defaultRequestsPerMinute = 300
 )
 
+// hardMaxPages bounds any listing whatever the caller asks for.
+const hardMaxPages = 500
+
 // defaultScopes are requested on every normal token mint.
 var defaultScopes = []string{"okta.apps.read", "okta.users.read", "okta.groups.read"}
 
@@ -414,12 +417,14 @@ func (c *httpClient) apiURL(base, id string, q url.Values) *url.URL {
 	return target
 }
 
-// listAll follows Link pages up to maxPages (zero uses the client cap). On
+// listAll follows Link pages up to maxPages (zero uses the client cap; the
+// hard ceiling applies regardless of which caller memoized the client). On
 // ErrTooManyPages it returns the pages it did fetch alongside the error.
 func listAll[T any](ctx context.Context, c *httpClient, path string, q url.Values, maxPages int) ([]T, error) {
-	if maxPages <= 0 || maxPages > c.maxPages {
+	if maxPages <= 0 {
 		maxPages = c.maxPages
 	}
+	maxPages = min(maxPages, hardMaxPages)
 	target := c.apiURL(path, "", q)
 	items := make([]T, 0)
 	pages := 0

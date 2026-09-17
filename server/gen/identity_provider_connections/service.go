@@ -177,6 +177,7 @@ type IdentityProviderConnectionReconcileRun struct {
 	Truncated bool
 	// Typed reason when the run failed. rate_limited and okta_unreachable are
 	// retried before being recorded; superseded means a newer run applied first;
+	// discarded means the connection stopped being verified during the run;
 	// interrupted means the worker died.
 	Error *string
 }

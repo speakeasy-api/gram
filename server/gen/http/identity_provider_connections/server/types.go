@@ -2329,6 +2329,7 @@ type IdentityProviderConnectionReconcileRunResponseBody struct {
 	Truncated bool `form:"truncated" json:"truncated" xml:"truncated"`
 	// Typed reason when the run failed. rate_limited and okta_unreachable are
 	// retried before being recorded; superseded means a newer run applied first;
+	// discarded means the connection stopped being verified during the run;
 	// interrupted means the worker died.
 	Error *string `form:"error,omitempty" json:"error,omitempty" xml:"error,omitempty"`
 }

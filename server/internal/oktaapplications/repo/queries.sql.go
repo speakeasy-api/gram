@@ -658,7 +658,7 @@ func (q *Queries) LockSyncConnection(ctx context.Context, arg LockSyncConnection
 
 const markApplicationsSynced = `-- name: MarkApplicationsSynced :execrows
 UPDATE okta_identity_provider_connections
-SET applications_synced_at = $1::timestamptz,
+SET applications_synced_at = GREATEST(applications_synced_at, $1::timestamptz),
     updated_at = clock_timestamp()
 WHERE identity_provider_connection_id = $2
   AND organization_id = $3
@@ -671,6 +671,7 @@ type MarkApplicationsSyncedParams struct {
 	OrganizationID               string
 }
 
+// Monotonic: a late-finishing older run never rewinds a newer watermark.
 func (q *Queries) MarkApplicationsSynced(ctx context.Context, arg MarkApplicationsSyncedParams) (int64, error) {
 	result, err := q.db.Exec(ctx, markApplicationsSynced, arg.SyncedAt, arg.IdentityProviderConnectionID, arg.OrganizationID)
 	if err != nil {

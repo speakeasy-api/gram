@@ -265,7 +265,11 @@ func (s *Syncer) Run(ctx context.Context, connectionID uuid.UUID, final bool) er
 		logger.InfoContext(ctx, "okta application sync superseded by a later run")
 		return nil
 	case errors.Is(err, errConnectionGone):
-		logger.InfoContext(ctx, "okta application sync discarded: connection revoked during the run")
+		if _, ferr := s.finish(ctx, s.repo, run, snap, emptyDiff(), "failed", reasonDiscarded); ferr != nil {
+			logger.ErrorContext(ctx, "record discarded run", attr.SlogError(ferr))
+		}
+		s.metrics.record(ctx, reasonDiscarded, snap.Truncated())
+		logger.InfoContext(ctx, "okta application sync discarded: connection no longer verified")
 		return nil
 	case err != nil:
 		return retryable(err)
@@ -445,6 +449,10 @@ func fetchSnapshot(ctx context.Context, client okta.Client) (Snapshot, error) {
 			return snap, err
 		}
 		for _, u := range users {
+			if len(snap.Assignments) >= maxAssignmentsPerRun {
+				snap.IncompleteUsers[app.ID] = true
+				break
+			}
 			a := Assignment{AppID: app.ID, Kind: PrincipalKindUser, PrincipalID: u.ID, Scope: u.Scope}
 			if !seenAssignments[a.key()] {
 				seenAssignments[a.key()] = true
@@ -459,6 +467,10 @@ func fetchSnapshot(ctx context.Context, client okta.Client) (Snapshot, error) {
 			return snap, err
 		}
 		for _, g := range groups {
+			if len(snap.Assignments) >= maxAssignmentsPerRun {
+				snap.IncompleteGroups[app.ID] = true
+				break
+			}
 			a := Assignment{AppID: app.ID, Kind: PrincipalKindGroup, PrincipalID: g.ID, Scope: ""}
 			if !seenAssignments[a.key()] {
 				seenAssignments[a.key()] = true

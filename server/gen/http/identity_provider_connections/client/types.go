@@ -2329,6 +2329,7 @@ type IdentityProviderConnectionReconcileRunResponseBody struct {
 	Truncated *bool `form:"truncated,omitempty" json:"truncated,omitempty" xml:"truncated,omitempty"`
 	// Typed reason when the run failed. rate_limited and okta_unreachable are
 	// retried before being recorded; superseded means a newer run applied first;
+	// discarded means the connection stopped being verified during the run;
 	// interrupted means the worker died.
 	Error *string `form:"error,omitempty" json:"error,omitempty" xml:"error,omitempty"`
 }
@@ -7400,8 +7401,8 @@ func ValidateIdentityProviderConnectionReconcileRunResponseBody(body *IdentityPr
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.finished_at", *body.FinishedAt, goa.FormatDateTime))
 	}
 	if body.Error != nil {
-		if !(*body.Error == "rate_limited" || *body.Error == "credential_rejected" || *body.Error == "okta_unreachable" || *body.Error == "client_unavailable" || *body.Error == "superseded" || *body.Error == "interrupted") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.error", *body.Error, []any{"rate_limited", "credential_rejected", "okta_unreachable", "client_unavailable", "superseded", "interrupted"}))
+		if !(*body.Error == "rate_limited" || *body.Error == "credential_rejected" || *body.Error == "okta_unreachable" || *body.Error == "client_unavailable" || *body.Error == "superseded" || *body.Error == "discarded" || *body.Error == "interrupted") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.error", *body.Error, []any{"rate_limited", "credential_rejected", "okta_unreachable", "client_unavailable", "superseded", "discarded", "interrupted"}))
 		}
 	}
 	return

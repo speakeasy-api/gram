@@ -62,8 +62,8 @@ var ReconcileRun = Type("IdentityProviderConnectionReconcileRun", func() {
 	Attribute("assignments_removed", Int)
 	Attribute("skipped_app_ids", ArrayOf(String), "Okta-internal application ids left out of the snapshot.")
 	Attribute("truncated", Boolean, "Whether a listing hit the page or application cap; nothing missing from a truncated listing is removed.")
-	Attribute("error", String, "Typed reason when the run failed. rate_limited and okta_unreachable are retried before being recorded; superseded means a newer run applied first; interrupted means the worker died.", func() {
-		Enum("rate_limited", "credential_rejected", "okta_unreachable", "client_unavailable", "superseded", "interrupted")
+	Attribute("error", String, "Typed reason when the run failed. rate_limited and okta_unreachable are retried before being recorded; superseded means a newer run applied first; discarded means the connection stopped being verified during the run; interrupted means the worker died.", func() {
+		Enum("rate_limited", "credential_rejected", "okta_unreachable", "client_unavailable", "superseded", "discarded", "interrupted")
 	})
 })
 
