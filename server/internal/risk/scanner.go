@@ -877,7 +877,11 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, basePr
 			// The lane already answered for every covered source at once; no
 			// legacy engine runs for this source, not even when the lane is
 			// degraded (its sentinel denies instead).
-			laneFindings := filter(llmanalyzer.FindingsForSource(pubsubFindings[llmanalyzer.Source], source))
+			// The sentinel is taken out before exclusions and disabled rules
+			// apply: those only ever silence real verdicts, never the lane's
+			// own outage signal, or an exclusion would turn a degraded lane
+			// into an allow.
+			laneFindings := llmanalyzer.FindingsForSource(pubsubFindings[llmanalyzer.Source], source)
 			var sentinel *scanners.Finding
 			verdicts := make([]scanners.Finding, 0, len(laneFindings))
 			for i := range laneFindings {
@@ -889,6 +893,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, basePr
 				}
 				verdicts = append(verdicts, laneFindings[i])
 			}
+			verdicts = filter(verdicts)
 			if findings := categoryScope.FilterFindings(view, verdicts); len(findings) > 0 {
 				return &ScanResult{
 					Action:      policy.Action,
