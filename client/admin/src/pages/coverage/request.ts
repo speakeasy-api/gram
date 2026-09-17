@@ -7,6 +7,16 @@ export function serializeSupportMatrixUpdate(
   revision: string,
   draft: Draft,
 ): string {
+  const validateText = (text: string) => {
+    if (text.includes("\0"))
+      throw new Error("Notes and conditions must not contain NUL characters.");
+  };
+  for (const mapping of Object.values(draft.mappings)) {
+    validateText(mapping.conditions);
+    for (const fact of Object.values(mapping.facts)) validateText(fact.note);
+  }
+  for (const facts of Object.values(draft.references))
+    for (const fact of Object.values(facts)) validateText(fact.note);
   const body = JSON.stringify({ revision, draft });
   if (new TextEncoder().encode(body).length > maxRequestBytes)
     throw new Error(

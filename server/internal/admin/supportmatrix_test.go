@@ -87,10 +87,12 @@ func TestSupportMatrixHTTP(t *testing.T) {
 		`{"revision":"` + snapshot.Revision + `","draft":{"mappings":{},"references":{}},"extra":true}`,
 		`{"revision":"` + snapshot.Revision + `","draft":{"mappings":{"bad/platform":{"applicability":"applicable","conditions":"","facts":{}}},"references":{}}}`,
 		`{"revision":"` + snapshot.Revision + `","draft":{"mappings":{},"references":{"device":{"org":{"status":"wrong","note":"","verify":false}}}}}`,
+		`{"revision":"` + snapshot.Revision + `","draft":{"mappings":{},"references":{"device":{"org":{"status":"supported","note":"\u0000","verify":false}}}}}`,
+		`{"revision":"` + snapshot.Revision + `","draft":{"mappings":{"device/claude-code-cli":{"applicability":"applicable","conditions":"\u0000","facts":{}}},"references":{}}}`,
 	} {
 		rec = request(http.MethodPost, "/admin/supportMatrix.update", body)
 		expected := http.StatusBadRequest
-		if index == 1 {
+		if index == 1 || index >= 3 {
 			expected = http.StatusUnprocessableEntity
 		}
 		require.Equal(t, expected, rec.Code, rec.Body.String())
@@ -101,4 +103,25 @@ func TestSupportMatrixHTTP(t *testing.T) {
 	require.True(t, bytes.Contains(rec.Body.Bytes(), []byte("device/claude-code-cli")))
 	rec = request(http.MethodPost, "/admin/supportMatrix.update", string(body))
 	require.Equal(t, http.StatusConflict, rec.Code, rec.Body.String())
+}
+
+func TestValidateSupportDraftUnicodeText(t *testing.T) {
+	t.Parallel()
+	var catalog gen.SupportMatrix
+	require.NoError(t, json.Unmarshal(supportCatalog, &catalog))
+	fact := &gen.SupportFact{Status: "supported", Note: strings.Repeat("🙂", 10000), Verify: false}
+	mapping := &gen.SupportMapping{Applicability: "applicable", Conditions: strings.Repeat("é", 10000), Facts: map[string]*gen.SupportFact{"org": fact}}
+	draft := &gen.SupportDraft{Mappings: map[string]*gen.SupportMapping{"device/claude-code-cli": mapping}, References: map[string]map[string]*gen.SupportFact{"device": {"org": fact}}}
+	require.NoError(t, validateSupportDraft(draft, &catalog))
+	fact.Note += "🙂"
+	require.ErrorContains(t, validateSupportDraft(draft, &catalog), "10000 characters")
+	fact.Note = "valid"
+	mapping.Conditions += "é"
+	require.ErrorContains(t, validateSupportDraft(draft, &catalog), "10000 characters")
+	mapping.Conditions = "valid"
+	fact.Note = "before\x00after"
+	require.ErrorContains(t, validateSupportDraft(draft, &catalog), "NUL")
+	fact.Note = "valid"
+	mapping.Conditions = "before\x00after"
+	require.ErrorContains(t, validateSupportDraft(draft, &catalog), "NUL")
 }

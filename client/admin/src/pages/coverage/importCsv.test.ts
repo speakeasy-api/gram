@@ -146,6 +146,35 @@ describe("matrix CSV import", () => {
     ).toThrow("2 MB");
   });
 
+  it("counts Unicode code points for note and condition limits", () => {
+    const note = "🙂".repeat(10000);
+    const conditions = "é".repeat(10000);
+    expect(() =>
+      parseMatrixImport(
+        csv(
+          `reference,device,,session,supported,${note},false,,`,
+          `mapping,device,claude-code-cli,,,,,applicable,${conditions}`,
+        ),
+        catalog,
+        empty,
+      ),
+    ).not.toThrow();
+    expect(() =>
+      parseMatrixImport(
+        csv(`reference,device,,session,supported,${note}🙂,false,,`),
+        catalog,
+        empty,
+      ),
+    ).toThrow("10000 characters");
+    expect(() =>
+      parseMatrixImport(
+        csv(`mapping,device,claude-code-cli,,,,,applicable,${conditions}é`),
+        catalog,
+        empty,
+      ),
+    ).toThrow("10000 characters");
+  });
+
   it("includes the current catalog and header in the agent prompt", () => {
     const prompt = importPrompt(catalog);
     expect(prompt).toContain(importCsvHeader);

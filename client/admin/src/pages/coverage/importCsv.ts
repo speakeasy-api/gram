@@ -171,8 +171,8 @@ export function parseMatrixImport(
         );
       if (!["applicable", "na", "unknown"].includes(applicability))
         fail("applicability must be applicable, na, or unknown.");
-      if (new TextEncoder().encode(conditions).length > 10000)
-        fail("conditions exceed 10000 bytes.");
+      if (Array.from(conditions).length > 10000)
+        fail("conditions exceed 10000 characters.");
       draft.mappings[mapKey] = {
         ...draft.mappings[mapKey],
         applicability: applicability as Mapping["applicability"],
@@ -196,8 +196,7 @@ export function parseMatrixImport(
       fail("verify must be true or false.");
     if (status === "partial" && !note.trim())
       fail("partial coverage requires a note.");
-    if (new TextEncoder().encode(note).length > 10000)
-      fail("note exceeds 10000 bytes.");
+    if (Array.from(note).length > 10000) fail("note exceeds 10000 characters.");
     const fact: Fact = {
       status: status as Fact["status"],
       note,

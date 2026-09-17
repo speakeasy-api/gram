@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -88,8 +89,11 @@ func validateSupportDraft(draft *gen.SupportDraft, catalog *gen.SupportMatrix) e
 		default:
 			return oops.E(oops.CodeInvalid, nil, "invalid coverage status")
 		}
-		if len(fact.Note) > 10000 || (fact.Status == "partial" && strings.TrimSpace(fact.Note) == "") {
-			return oops.E(oops.CodeInvalid, nil, "partial coverage requires notes; notes must be at most 10000 bytes")
+		if strings.ContainsRune(fact.Note, 0) {
+			return oops.E(oops.CodeInvalid, nil, "notes must not contain NUL characters")
+		}
+		if utf8.RuneCountInString(fact.Note) > 10000 || (fact.Status == "partial" && strings.TrimSpace(fact.Note) == "") {
+			return oops.E(oops.CodeInvalid, nil, "partial coverage requires notes; notes must be at most 10000 characters")
 		}
 		return nil
 	}
@@ -101,8 +105,11 @@ func validateSupportDraft(draft *gen.SupportDraft, catalog *gen.SupportMatrix) e
 		if mapping.Applicability != "unknown" && mapping.Applicability != "applicable" && mapping.Applicability != "na" {
 			return oops.E(oops.CodeInvalid, nil, "invalid applicability")
 		}
-		if len(mapping.Conditions) > 10000 {
-			return oops.E(oops.CodeInvalid, nil, "conditions must be at most 10000 bytes")
+		if strings.ContainsRune(mapping.Conditions, 0) {
+			return oops.E(oops.CodeInvalid, nil, "conditions must not contain NUL characters")
+		}
+		if utf8.RuneCountInString(mapping.Conditions) > 10000 {
+			return oops.E(oops.CodeInvalid, nil, "conditions must be at most 10000 characters")
 		}
 		for id, fact := range mapping.Facts {
 			if err := validateFact(id, fact); err != nil {

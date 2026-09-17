@@ -27,6 +27,35 @@ describe("support matrix request size", () => {
     );
   });
 
+  it("rejects NUL characters in reference notes, coverage notes, and conditions", () => {
+    expect(() =>
+      serializeSupportMatrixUpdate(
+        "revision-1",
+        draftWithNote("before\0after"),
+      ),
+    ).toThrow("NUL");
+    const draft: Draft = {
+      references: {},
+      mappings: {
+        "device/platform": {
+          applicability: "applicable",
+          conditions: "",
+          facts: {
+            session: { status: "supported", note: "\0", verify: false },
+          },
+        },
+      },
+    };
+    expect(() => serializeSupportMatrixUpdate("revision-1", draft)).toThrow(
+      "NUL",
+    );
+    draft.mappings["device/platform"]!.facts = {};
+    draft.mappings["device/platform"]!.conditions = "\0";
+    expect(() => serializeSupportMatrixUpdate("revision-1", draft)).toThrow(
+      "NUL",
+    );
+  });
+
   it.each(["é", "\u0001"])(
     "counts UTF-8 and JSON escaping for %j",
     (character) => {
