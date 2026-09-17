@@ -1,5 +1,5 @@
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { useOrganization } from "@/contexts/Auth";
+import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useRBAC } from "@/hooks/useRBAC";
 
 export function useNetworkIngressRollout(): {
@@ -7,9 +7,14 @@ export function useNetworkIngressRollout(): {
   canManageIngress: boolean;
   adminRolloutEnabled: boolean;
 } {
-  const rollout = useFeatureFlag(FEATURE_FLAGS.networkIngressRollout);
+  const organization = useOrganization();
   const { hasScope } = useRBAC();
-  const rolloutEnabled = rollout.status === "enabled";
+  const features = useProductFeatures(
+    { organizationId: organization.id },
+    undefined,
+    { throwOnError: false },
+  );
+  const rolloutEnabled = features.data?.networkIngressEnabled === true;
   const canManageIngress = hasScope("org:admin");
 
   return {

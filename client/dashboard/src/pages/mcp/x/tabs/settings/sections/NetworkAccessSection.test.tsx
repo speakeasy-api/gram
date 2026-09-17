@@ -6,12 +6,6 @@ import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { NetworkAccessSection } from "./NetworkAccessSection";
 
 const testState = vi.hoisted(() => ({
-  rolloutStatus: "enabled" as
-    | "loading"
-    | "enabled"
-    | "disabled"
-    | "missing"
-    | "error",
   entitled: true,
   featureStatus: "success" as "pending" | "success" | "error",
   featureFetching: false,
@@ -59,10 +53,6 @@ vi.mock("@/components/require-scope", () => ({
 
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org-1" }),
-}));
-
-vi.mock("@/hooks/useFeatureFlag", () => ({
-  useFeatureFlag: () => ({ status: testState.rolloutStatus }),
 }));
 
 vi.mock("@/hooks/useRBAC", () => ({
@@ -194,7 +184,6 @@ const endpoints: McpEndpoint[] = [
 ];
 
 beforeEach(() => {
-  testState.rolloutStatus = "enabled";
   testState.entitled = true;
   testState.featureStatus = "success";
   testState.featureFetching = false;
@@ -215,17 +204,31 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("NetworkAccessSection", () => {
-  it.each(["loading", "disabled", "missing", "error"] as const)(
-    "renders nothing when the rollout flag is %s",
-    (rolloutStatus) => {
-      testState.rolloutStatus = rolloutStatus;
-      const { container } = render(
-        <NetworkAccessSection mcpServer={baseServer} endpoints={endpoints} />,
-      );
+  it("renders nothing when the staff entitlement is disabled", () => {
+    testState.entitled = false;
+    const { container } = render(
+      <NetworkAccessSection mcpServer={baseServer} endpoints={endpoints} />,
+    );
 
-      expect(container.textContent).toBe("");
-    },
-  );
+    expect(container.textContent).toBe("");
+  });
+
+  it("keeps a stored private mode visible when the staff entitlement is disabled", () => {
+    testState.entitled = false;
+    render(
+      <NetworkAccessSection
+        mcpServer={{ ...baseServer, networkAccessMode: "private_only" }}
+        endpoints={endpoints}
+      />,
+    );
+
+    expect(
+      screen.getByRole("combobox", { name: "Network access mode" }).textContent,
+    ).toContain("Private only");
+    expect(
+      screen.getByText("https://private.example.ts.net/mcp/hosted-mcp"),
+    ).toBeTruthy();
+  });
 
   it("does not query ingress for a non-admin and reports unavailable state", () => {
     testState.orgAdmin = false;

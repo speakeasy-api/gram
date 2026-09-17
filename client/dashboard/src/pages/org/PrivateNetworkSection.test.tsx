@@ -4,12 +4,6 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { PrivateNetworkSection } from "./PrivateNetworkSection";
 
 const state = vi.hoisted(() => ({
-  rolloutStatus: "enabled" as
-    | "loading"
-    | "enabled"
-    | "disabled"
-    | "missing"
-    | "error",
   isAdmin: true,
   entitled: true,
   featuresError: false,
@@ -44,10 +38,6 @@ vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org-1" }),
 }));
 
-vi.mock("@/hooks/useFeatureFlag", () => ({
-  useFeatureFlag: () => ({ status: state.rolloutStatus }),
-}));
-
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
     hasScope: () => state.isAdmin,
@@ -63,6 +53,7 @@ vi.mock("@gram/client/react-query/productFeatures.js", () => ({
       : undefined,
     isLoading: false,
     isError: state.featuresError,
+    isSuccess: state.featuresAvailable && !state.featuresError,
   }),
 }));
 
@@ -125,7 +116,6 @@ vi.mock("sonner", () => ({
 }));
 
 beforeEach(() => {
-  state.rolloutStatus = "enabled";
   state.isAdmin = true;
   state.entitled = true;
   state.featuresError = false;
@@ -139,14 +129,11 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("PrivateNetworkSection", () => {
-  it.each(["loading", "disabled", "missing", "error"] as const)(
-    "renders no private controls when rollout is %s",
-    (rolloutStatus) => {
-      state.rolloutStatus = rolloutStatus;
-      const { container } = render(<PrivateNetworkSection />);
-      expect(container.textContent).toBe("");
-    },
-  );
+  it("renders no private controls without the staff entitlement", () => {
+    state.entitled = false;
+    const { container } = render(<PrivateNetworkSection />);
+    expect(container.textContent).toBe("");
+  });
 
   it("renders no private controls for an organization reader", () => {
     state.isAdmin = false;
@@ -258,19 +245,6 @@ describe("PrivateNetworkSection", () => {
     expect(
       screen.queryByText(/Private network settings could not be loaded/),
     ).toBeNull();
-  });
-
-  it("does not show setup without entitlement", () => {
-    state.entitled = false;
-    render(<PrivateNetworkSection />);
-    expect(
-      screen.queryByRole("button", { name: "Connect Tailscale" }),
-    ).toBeNull();
-    expect(
-      screen.getByText(
-        "Private network access is not enabled for this organization.",
-      ),
-    ).toBeTruthy();
   });
 
   it("keeps existing private state visible after entitlement removal", () => {
