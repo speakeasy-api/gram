@@ -2585,12 +2585,14 @@ CREATE TABLE IF NOT EXISTS okta_identity_provider_connections (
   organization_id TEXT NOT NULL,
   attachment_scope TEXT GENERATED ALWAYS AS ('organization:' || organization_id) STORED,
   org_url TEXT NOT NULL,
-  -- Normalized issuer URL from discovery; globally unique across orgs.
+  -- Normalized issuer URL from discovery; unique only after credential proof.
   -- Pinned to the authoritative remote_session_issuers.issuer by the scope FK.
   issuer_url TEXT NOT NULL,
   -- Set only by a platform admin to allow one Okta tenant on more than one
   -- Speakeasy org.
   issuer_url_override_reason TEXT,
+  -- Set only by successful credential proof; pending rows never reserve an issuer.
+  ownership_claimed boolean NOT NULL DEFAULT FALSE,
   remote_session_issuer_id uuid NOT NULL,
   remote_session_client_id uuid NOT NULL,
   dpop_required boolean NOT NULL DEFAULT FALSE,
@@ -2617,11 +2619,11 @@ CREATE TABLE IF NOT EXISTS okta_identity_provider_connections (
   CONSTRAINT okta_identity_provider_connections_client_issuer_scope_fkey FOREIGN KEY (remote_session_client_id, remote_session_issuer_id, attachment_scope) REFERENCES remote_session_clients (id, remote_session_issuer_id, attachment_scope)
 );
 
--- One Okta tenant connects to one Speakeasy org unless a platform admin
--- records an override reason.
+-- Pending connections do not reserve an issuer. Proven claims are exclusive
+-- unless a platform admin records an override reason.
 CREATE UNIQUE INDEX IF NOT EXISTS okta_identity_provider_connections_issuer_url_key
 ON okta_identity_provider_connections (issuer_url)
-WHERE deleted IS FALSE AND issuer_url_override_reason IS NULL;
+WHERE deleted IS FALSE AND ownership_claimed IS TRUE AND issuer_url_override_reason IS NULL;
 
 CREATE INDEX IF NOT EXISTS okta_identity_provider_connections_remote_session_issuer_idx
 ON okta_identity_provider_connections (organization_id, remote_session_issuer_id);
@@ -8916,3 +8918,126 @@ CREATE UNIQUE INDEX IF NOT EXISTS remote_session_ema_bindings_claim_key ON remot
 CREATE INDEX IF NOT EXISTS remote_session_ema_bindings_client_idx ON remote_session_ema_bindings (remote_session_client_id);
 CREATE INDEX IF NOT EXISTS remote_session_ema_bindings_issuer_idx ON remote_session_ema_bindings (remote_session_issuer_id);
 CREATE INDEX IF NOT EXISTS remote_session_ema_bindings_user_issuer_idx ON remote_session_ema_bindings (user_session_issuer_id);
+
+-- Global support matrix: admin catalog data, not project-owned configuration.
+-- Catalog identities are retained by soft deletion; required references prevent
+-- hard deletion while dependent records exist. Writers maintain updated_at.
+
+CREATE TABLE IF NOT EXISTS support_matrix_platforms (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  slug TEXT NOT NULL,
+  name TEXT NOT NULL,
+  vendor TEXT NOT NULL,
+  family TEXT NOT NULL,
+  surface TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  CONSTRAINT support_matrix_platforms_pkey PRIMARY KEY (id)
+);
+COMMENT ON TABLE support_matrix_platforms IS 'Global admin support catalog of upstream product surfaces, independent of customer installations.';
+CREATE UNIQUE INDEX IF NOT EXISTS support_matrix_platforms_slug_key ON support_matrix_platforms (slug);
+
+CREATE TABLE IF NOT EXISTS support_matrix_integration_methods (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  slug TEXT NOT NULL,
+  name TEXT NOT NULL,
+  vendor TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  plan_notes TEXT NOT NULL DEFAULT '',
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  CONSTRAINT support_matrix_integration_methods_pkey PRIMARY KEY (id)
+);
+COMMENT ON TABLE support_matrix_integration_methods IS 'Integration methods available for assessing support; plan_notes preserve method-level eligibility claims.';
+CREATE UNIQUE INDEX IF NOT EXISTS support_matrix_integration_methods_slug_key ON support_matrix_integration_methods (slug);
+
+CREATE TABLE IF NOT EXISTS support_matrix_capabilities (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  slug TEXT NOT NULL,
+  name TEXT NOT NULL,
+  category TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  CONSTRAINT support_matrix_capabilities_pkey PRIMARY KEY (id)
+);
+COMMENT ON TABLE support_matrix_capabilities IS 'Individual capabilities grouped by category; categories are not blanket support claims.';
+CREATE UNIQUE INDEX IF NOT EXISTS support_matrix_capabilities_slug_key ON support_matrix_capabilities (slug);
+
+CREATE TABLE IF NOT EXISTS support_matrix_method_capabilities (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  integration_method_id uuid NOT NULL,
+  capability_id uuid NOT NULL,
+  status TEXT NOT NULL DEFAULT 'unknown',
+  notes TEXT NOT NULL DEFAULT '',
+  needs_verification BOOLEAN NOT NULL DEFAULT true,
+  source_url TEXT,
+  verified_at timestamptz,
+  CONSTRAINT support_matrix_method_capabilities_integration_method_id_fkey FOREIGN KEY (integration_method_id) REFERENCES support_matrix_integration_methods (id) ON DELETE SET NULL,
+  CONSTRAINT support_matrix_method_capabilities_capability_id_fkey FOREIGN KEY (capability_id) REFERENCES support_matrix_capabilities (id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  CONSTRAINT support_matrix_method_capabilities_pkey PRIMARY KEY (id)
+);
+COMMENT ON TABLE support_matrix_method_capabilities IS 'Method-level reference claims. These do not establish support for any specific platform.';
+CREATE UNIQUE INDEX IF NOT EXISTS support_matrix_method_capabilities_method_capability_key ON support_matrix_method_capabilities (integration_method_id, capability_id);
+CREATE INDEX IF NOT EXISTS support_matrix_method_capabilities_capability_id_idx ON support_matrix_method_capabilities (capability_id);
+
+CREATE TABLE IF NOT EXISTS support_matrix_method_platforms (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  integration_method_id uuid NOT NULL,
+  platform_id uuid NOT NULL,
+  applicability TEXT NOT NULL DEFAULT 'unknown',
+  operating_systems TEXT[],
+  plan_types TEXT[],
+  conditions TEXT NOT NULL DEFAULT '',
+  CONSTRAINT support_matrix_method_platforms_integration_method_id_fkey FOREIGN KEY (integration_method_id) REFERENCES support_matrix_integration_methods (id) ON DELETE SET NULL,
+  CONSTRAINT support_matrix_method_platforms_platform_id_fkey FOREIGN KEY (platform_id) REFERENCES support_matrix_platforms (id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  CONSTRAINT support_matrix_method_platforms_pkey PRIMARY KEY (id)
+);
+COMMENT ON TABLE support_matrix_method_platforms IS 'Applicability of a method to a platform, assessed separately from its capability coverage. Missing rows are unknown.';
+CREATE UNIQUE INDEX IF NOT EXISTS support_matrix_method_platforms_method_platform_key ON support_matrix_method_platforms (integration_method_id, platform_id);
+CREATE INDEX IF NOT EXISTS support_matrix_method_platforms_platform_id_idx ON support_matrix_method_platforms (platform_id);
+
+CREATE TABLE IF NOT EXISTS support_matrix_coverage (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  method_platform_id uuid NOT NULL,
+  capability_id uuid NOT NULL,
+  status TEXT NOT NULL DEFAULT 'unknown',
+  notes TEXT NOT NULL DEFAULT '',
+  needs_verification BOOLEAN NOT NULL DEFAULT true,
+  source_url TEXT,
+  verified_at timestamptz,
+  operating_systems TEXT[],
+  plan_types TEXT[],
+  conditions TEXT NOT NULL DEFAULT '',
+  CONSTRAINT support_matrix_coverage_method_platform_id_fkey FOREIGN KEY (method_platform_id) REFERENCES support_matrix_method_platforms (id) ON DELETE SET NULL,
+  CONSTRAINT support_matrix_coverage_capability_id_fkey FOREIGN KEY (capability_id) REFERENCES support_matrix_capabilities (id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  CONSTRAINT support_matrix_coverage_pkey PRIMARY KEY (id)
+);
+COMMENT ON TABLE support_matrix_coverage IS 'Explicit method-platform-capability coverage. Missing rows are unknown; applicability must also be established before claiming support.';
+CREATE UNIQUE INDEX IF NOT EXISTS support_matrix_coverage_mapping_capability_key ON support_matrix_coverage (method_platform_id, capability_id);
+CREATE INDEX IF NOT EXISTS support_matrix_coverage_capability_id_idx ON support_matrix_coverage (capability_id);
+
+COMMENT ON COLUMN support_matrix_method_capabilities.status IS 'Application-validated: supported, partial, unimplemented, impossible, na, unknown. Partial coverage requires explanatory notes.';
+
+COMMENT ON COLUMN support_matrix_coverage.status IS 'Application-validated: supported, partial, unimplemented, impossible, na, unknown. Partial coverage requires explanatory notes.';
+COMMENT ON COLUMN support_matrix_method_platforms.applicability IS 'Application-validated: unknown, applicable, na. Applicability alone never implies capability coverage.';
+COMMENT ON COLUMN support_matrix_method_platforms.operating_systems IS 'NULL means unassessed; an empty array means unrestricted; otherwise lists eligible operating systems. Coverage restrictions supplement mapping restrictions.';
+COMMENT ON COLUMN support_matrix_method_platforms.plan_types IS 'NULL means unassessed; an empty array means unrestricted; otherwise lists eligible plan types. Coverage restrictions supplement mapping restrictions.';
+COMMENT ON COLUMN support_matrix_coverage.operating_systems IS 'NULL means unassessed; an empty array means unrestricted; otherwise lists eligible operating systems. Coverage restrictions supplement mapping restrictions.';
+COMMENT ON COLUMN support_matrix_coverage.plan_types IS 'NULL means unassessed; an empty array means unrestricted; otherwise lists eligible plan types. Coverage restrictions supplement mapping restrictions.';
