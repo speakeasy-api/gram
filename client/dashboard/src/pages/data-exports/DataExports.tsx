@@ -80,7 +80,7 @@ function renderDataSourceDescription(
     return (
       <>
         OTLP traces, logs, and metrics your agent sessions send to
-        Speakeasy&apos;s /otel/v1 endpoints — the same records the{" "}
+        Speakeasy&apos;s /otel/v1 endpoints. These are same records the{" "}
         {links.eventFeed ? (
           <Link
             to={links.eventFeed}
