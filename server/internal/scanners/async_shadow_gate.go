@@ -31,10 +31,12 @@ const (
 )
 
 func (r AsyncShadowGateReason) Engine() string {
-	if r == AsyncShadowGateReasonSampledReal {
+	switch r {
+	case AsyncShadowGateReasonSampledReal, AsyncShadowGateReasonNotGated:
 		return AsyncScanEngineReal
+	default:
+		return AsyncScanEngineStub
 	}
-	return AsyncScanEngineStub
 }
 
 type AsyncShadowGate struct {

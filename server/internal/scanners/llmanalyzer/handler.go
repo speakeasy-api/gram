@@ -111,6 +111,11 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.LLMAnalysis, _ gcp.Messa
 		return nil
 	}
 	result := analysis.Result
+	// The envelope's sources are the policy sources this request stands in
+	// for; only the risks covering them may become findings of that policy.
+	if sources := m.GetSources(); len(sources) > 0 {
+		result.Findings = FindingsForSources(result.Findings, sources)
+	}
 
 	_, _, err := scanners.PublishFindings(ctx, h.logger, h.findingsPub, scanners.FindingMetadata{
 		RequestID:         m.GetRequestId(),
