@@ -90941,6 +90941,14 @@ components:
     ToolUsageTotals:
       type: object
       properties:
+        blocked_count:
+          type: integer
+          description: Number of tool usage events a policy denied
+          format: int64
+        blocked_rate:
+          type: number
+          description: Fraction of all tool usage events a policy denied
+          format: double
         event_count:
           type: integer
           description: Total number of tool usage events
@@ -90975,6 +90983,8 @@ components:
         - success_count
         - failure_count
         - failure_rate
+        - blocked_count
+        - blocked_rate
         - unique_tools
         - unique_users
         - unique_targets

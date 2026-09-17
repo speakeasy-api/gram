@@ -2791,11 +2791,13 @@ var ToolUsageTotals = Type("ToolUsageTotals", func() {
 	Attribute("success_count", Int64, "Number of successful tool usage events")
 	Attribute("failure_count", Int64, "Number of failed tool usage events")
 	Attribute("failure_rate", Float64, "Fraction of completed tool usage events that failed")
+	Attribute("blocked_count", Int64, "Number of tool usage events a policy denied")
+	Attribute("blocked_rate", Float64, "Fraction of all tool usage events a policy denied")
 	Attribute("unique_tools", Int64, "Number of distinct tools observed")
 	Attribute("unique_users", Int64, "Number of distinct user identities observed")
 	Attribute("unique_targets", Int64, "Number of distinct usage targets observed")
 
-	Required("event_count", "success_count", "failure_count", "failure_rate", "unique_tools", "unique_users", "unique_targets")
+	Required("event_count", "success_count", "failure_count", "failure_rate", "blocked_count", "blocked_rate", "unique_tools", "unique_users", "unique_targets")
 })
 
 var ToolUsageTargetSummary = Type("ToolUsageTargetSummary", func() {

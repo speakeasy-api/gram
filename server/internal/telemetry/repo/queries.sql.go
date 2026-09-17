@@ -4215,6 +4215,8 @@ type ToolUsageTotalsRow struct {
 	SuccessCount  uint64  `ch:"success_count"`
 	FailureCount  uint64  `ch:"failure_count"`
 	FailureRate   float64 `ch:"failure_rate"`
+	BlockedCount  uint64  `ch:"blocked_count"`
+	BlockedRate   float64 `ch:"blocked_rate"`
 	UniqueTools   uint64  `ch:"unique_tools"`
 	UniqueUsers   uint64  `ch:"unique_users"`
 	UniqueTargets uint64  `ch:"unique_targets"`
@@ -4596,6 +4598,11 @@ func (q *Queries) GetToolUsageTotals(ctx context.Context, arg GetToolUsageSummar
 		"sum(success) AS success_count",
 		"sum(failure) AS failure_count",
 		"failure_count / greatest(success_count + failure_count, 1) AS failure_rate",
+		"sum(blocked) AS blocked_count",
+		// Over every call, not over the completed ones: a blocked call never
+		// reached the tool, so the failure rate's denominator would exclude
+		// exactly the events this rate is about.
+		"blocked_count / greatest(count(), 1) AS blocked_rate",
 		"uniqExact(tool_name) AS unique_tools",
 		"uniqExact(user_kind || ':' || user_key) AS unique_users",
 		"uniqExact(target_type || ':' || target_kind || ':' || target_id) AS unique_targets",
@@ -4621,6 +4628,8 @@ func (q *Queries) GetToolUsageTotals(ctx context.Context, arg GetToolUsageSummar
 			SuccessCount:  0,
 			FailureCount:  0,
 			FailureRate:   0,
+			BlockedCount:  0,
+			BlockedRate:   0,
 			UniqueTools:   0,
 			UniqueUsers:   0,
 			UniqueTargets: 0,

@@ -2240,6 +2240,10 @@ type ToolUsageTotals struct {
 	FailureCount int64
 	// Fraction of completed tool usage events that failed
 	FailureRate float64
+	// Number of tool usage events a policy denied
+	BlockedCount int64
+	// Fraction of all tool usage events a policy denied
+	BlockedRate float64
 	// Number of distinct tools observed
 	UniqueTools int64
 	// Number of distinct user identities observed

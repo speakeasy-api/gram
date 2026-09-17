@@ -6844,7 +6844,7 @@ examples:
         application/json: {"filters": [{"operator": "eq", "path": "@user.region"}], "from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
       responses:
         "200":
-          application/json: {"client_tool_breakdown": [], "clients": [{"client_key": "<value>", "client_label": "<value>", "event_count": 655679, "failure_count": 908450, "failure_rate": 3743.13, "success_count": 540045, "unique_tools": 728520}], "target_time_series": [], "target_tool_breakdown": [{"event_count": 655679, "failure_count": 908450, "failure_rate": 3743.13, "success_count": 540045, "target_id": "<id>", "target_kind": "skill", "target_label": "<value>", "target_type": "hosted_mcp_server", "tool_name": "<value>"}], "targets": [], "totals": {"event_count": 497777, "failure_count": 36101, "failure_rate": 2345.24, "success_count": 527861, "unique_targets": 37301, "unique_tools": 472763, "unique_users": 968692}, "user_time_series": [], "users": [], "users_by_target": []}
+          application/json: {"client_tool_breakdown": [], "clients": [{"client_key": "<value>", "client_label": "<value>", "event_count": 655679, "failure_count": 908450, "failure_rate": 3743.13, "success_count": 540045, "unique_tools": 728520}], "target_time_series": [], "target_tool_breakdown": [{"event_count": 655679, "failure_count": 908450, "failure_rate": 3743.13, "success_count": 540045, "target_id": "<id>", "target_kind": "skill", "target_label": "<value>", "target_type": "hosted_mcp_server", "tool_name": "<value>"}], "targets": [], "totals": {"blocked_count": 124636, "blocked_rate": 9978.68, "event_count": 497777, "failure_count": 36101, "failure_rate": 2345.24, "success_count": 527861, "unique_targets": 37301, "unique_tools": 472763, "unique_users": 968692}, "user_time_series": [], "users": [], "users_by_target": []}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -6888,7 +6888,7 @@ examples:
         application/json: {"filters": [{"operator": "eq", "path": "@user.region"}], "from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
       responses:
         "200":
-          application/json: {"totals": {"event_count": 279655, "failure_count": 247635, "failure_rate": 7317.76, "success_count": 145330, "unique_targets": 634848, "unique_tools": 940744, "unique_users": 975569}}
+          application/json: {"totals": {"blocked_count": 279655, "blocked_rate": 2476.35, "event_count": 279655, "failure_count": 247635, "failure_rate": 7317.76, "success_count": 145330, "unique_targets": 634848, "unique_tools": 940744, "unique_users": 975569}}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
