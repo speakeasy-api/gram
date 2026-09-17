@@ -3389,7 +3389,7 @@ WHERE ms.project_id = $1
   AND ms.slug = ANY($2::TEXT[])
   AND ms.deleted IS FALSE
 ORDER BY ms.id
-FOR UPDATE OF ms
+FOR NO KEY UPDATE OF ms
 `
 
 type ResolveMcpServersForWriteParams struct {

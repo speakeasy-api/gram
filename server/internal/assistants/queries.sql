@@ -389,7 +389,7 @@ WHERE ms.project_id = @project_id
   AND ms.slug = ANY(@slugs::TEXT[])
   AND ms.deleted IS FALSE
 ORDER BY ms.id
-FOR UPDATE OF ms;
+FOR NO KEY UPDATE OF ms;
 
 -- name: ClearAssistantMcpServers :exec
 DELETE FROM assistant_mcp_servers
