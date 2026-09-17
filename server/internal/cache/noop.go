@@ -11,6 +11,7 @@ var NoopCache = &noopCache{}
 type noopCache struct{}
 
 var _ Cache = (*noopCache)(nil)
+var _ LeaseCache = (*noopCache)(nil)
 
 // Delete implements [Cache].
 func (s *noopCache) Delete(ctx context.Context, key string) error {
@@ -54,11 +55,6 @@ func (s *noopCache) AcquireLease(ctx context.Context, key, owner string, ttl tim
 
 // ReleaseLeaseIfOwner implements [LeaseCache].
 func (s *noopCache) ReleaseLeaseIfOwner(ctx context.Context, key, owner string) (bool, error) {
-	return true, nil
-}
-
-// RenewLease implements [RenewableLeaseCache].
-func (s *noopCache) RenewLease(ctx context.Context, key, owner string, ttl time.Duration) (bool, error) {
 	return true, nil
 }
 

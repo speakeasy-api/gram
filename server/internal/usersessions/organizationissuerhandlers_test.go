@@ -421,21 +421,20 @@ func TestOrganizationUserSessionIssuerUpdateSerializesWithOwnerBinding(t *testin
 	require.NoError(t, usersessionsrepo.New(tx).LockUserSessionIssuerForOwnerBinding(ctx, issuerID))
 
 	mode := "interactive"
-	done := make(chan error, 1)
-	go func() {
-		_, err := ti.service.UpdateIssuer(ctx, &orggen.UpdateIssuerPayload{
-			ID:                 created.ID,
-			AuthnChallengeMode: &mode,
-		})
-		done <- err
-	}()
+	blockedCtx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+	_, err = ti.service.UpdateIssuer(blockedCtx, &orggen.UpdateIssuerPayload{
+		ID:                 created.ID,
+		AuthnChallengeMode: &mode,
+	})
+	cancel()
+	require.ErrorIs(t, err, context.DeadlineExceeded, "update must wait for the owner-binding lock")
 
-	require.Never(t, func() bool { return len(done) > 0 }, 500*time.Millisecond, 25*time.Millisecond,
-		"update completed while another transaction held the owner-binding lock")
 	require.NoError(t, tx.Rollback(ctx))
-	require.Eventually(t, func() bool { return len(done) > 0 }, 30*time.Second, 25*time.Millisecond,
-		"update did not complete after the owner-binding lock was released")
-	require.NoError(t, <-done)
+	_, err = ti.service.UpdateIssuer(ctx, &orggen.UpdateIssuerPayload{
+		ID:                 created.ID,
+		AuthnChallengeMode: &mode,
+	})
+	require.NoError(t, err, "update must complete after the owner-binding lock is released")
 }
 
 func TestProjectIssuerMutationsRejectOrganizationOwnedIssuer(t *testing.T) {
