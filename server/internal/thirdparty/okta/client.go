@@ -23,11 +23,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 )
 
 const (
-	codeConsentRequired = "consent_required" // Okta reports this when none of the requested scopes are granted.
-	clientAssertionType = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
+	codeConsentRequired = "consent_required" // OIDC Core code Okta reports at the token endpoint when no requested scope is granted.
 	tokenEndpointPath   = "/oauth2/v1/token" //nolint:gosec // G101 false positive: a URL path, not a credential.
 
 	maxResponseBytes        = 1 << 20
@@ -659,9 +659,9 @@ func (c *httpClient) requestToken(ctx context.Context, nonce string, scopes []st
 	}
 
 	form := url.Values{
-		"grant_type":            {"client_credentials"},
+		"grant_type":            {oauthwire.GrantTypeClientCredentials},
 		"client_id":             {c.cfg.ClientID},
-		"client_assertion_type": {clientAssertionType},
+		"client_assertion_type": {oauthwire.ClientAssertionTypeJWTBearer},
 		"client_assertion":      {assertion},
 	}
 	if len(scopes) > 0 {

@@ -52,6 +52,7 @@ import (
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urls"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 )
 
 // newTokenEndpointRequest assembles a request and owns client identification:
@@ -107,7 +108,7 @@ func newTokenEndpointRequest(ctx context.Context, endpoint string, form url.Valu
 		}
 		form.Del("client_secret")
 		form.Set("client_id", auth.ClientID)
-		form.Set("client_assertion_type", clientAssertionType)
+		form.Set("client_assertion_type", oauthwire.ClientAssertionTypeJWTBearer)
 		form.Set("client_assertion", assertion)
 	}
 

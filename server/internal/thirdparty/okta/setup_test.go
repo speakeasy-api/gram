@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 )
 
 const (
@@ -459,7 +460,7 @@ func (s *stubOkta) handleToken(w http.ResponseWriter, r *http.Request) {
 		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_client", "error_description": "missing client assertion"})
 		return
 	}
-	if r.Form.Get("client_assertion_type") != clientAssertionType {
+	if r.Form.Get("client_assertion_type") != oauthwire.ClientAssertionTypeJWTBearer {
 		s.writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid_client", "error_description": "bad assertion type"})
 		return
 	}
