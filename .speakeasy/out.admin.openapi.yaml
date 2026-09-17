@@ -2347,17 +2347,127 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       x-speakeasy-name-override: bulkUpdateAccountType
+  /admin/organizations.getMeterUsage:
+    get:
+      tags:
+        - admin
+      summary: getMeterUsage admin
+      description: Returns totals-only ordinary meter usage for an organization over a bounded UTC-day window.
+      operationId: adminGetMeterUsage
+      parameters:
+        - name: organization_id
+          in: query
+          description: Organization ID or canonical slug.
+          allowEmptyValue: true
+          required: true
+          schema:
+            type: string
+            description: Organization ID or canonical slug.
+        - name: family
+          in: query
+          allowEmptyValue: true
+          required: true
+          schema:
+            type: string
+            enum:
+              - agent_session_storage
+              - mcp_bandwidth
+              - risk_content_scans
+        - name: from
+          in: query
+          description: Inclusive UTC midnight reporting boundary. Must be paired with to.
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: Inclusive UTC midnight reporting boundary. Must be paired with to.
+            format: date-time
+        - name: to
+          in: query
+          description: Exclusive UTC midnight reporting boundary. Must be paired with from and no later than three calendar months after from.
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: Exclusive UTC midnight reporting boundary. Must be paired with from and no later than three calendar months after from.
+            format: date-time
+      responses:
+        "200":
+          description: OK response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminMeterUsageResponse'
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'conflict: resource already exists'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "503":
+          description: 'unavailable: service temporarily unavailable'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: getMeterUsage
   /admin/organizations.list:
     get:
       description: Lists organizations for platform admin operations with optional search and filters. Defaults to created_at descending, with id ascending to break ties.
       operationId: adminListOrganizations
       parameters:
         - allowEmptyValue: true
-          description: Search term, trimmed of surrounding whitespace. Matches name and slug as a case-insensitive substring, with % and _ taken literally, and matches organization id and WorkOS id exactly, ignoring case. An id match also returns an organization that disabled_states or include_disabled would otherwise hide; it still respects account_type, account_types, trial_states and cursor.
+          description: Search term, trimmed of surrounding whitespace. Matches name and slug as a case-insensitive substring, with % and _ taken literally, and matches organization id and WorkOS id exactly, ignoring case. All filters apply even to exact ID matches.
           in: query
           name: q
           schema:
-            description: Search term, trimmed of surrounding whitespace. Matches name and slug as a case-insensitive substring, with % and _ taken literally, and matches organization id and WorkOS id exactly, ignoring case. An id match also returns an organization that disabled_states or include_disabled would otherwise hide; it still respects account_type, account_types, trial_states and cursor.
+            description: Search term, trimmed of surrounding whitespace. Matches name and slug as a case-insensitive substring, with % and _ taken literally, and matches organization id and WorkOS id exactly, ignoring case. All filters apply even to exact ID matches.
             type: string
         - allowEmptyValue: true
           description: Filter by a single gram_account_type (e.g. free, pro, payg, enterprise). Superseded by account_types, which it joins as one more member of the same set.
@@ -2385,21 +2495,46 @@ paths:
               type: string
             type: array
         - allowEmptyValue: true
-          description: Match any of active or disabled. Empty falls back to include_disabled. An unrecognised value matches nothing rather than failing the request.
+          description: 'Organization status: all (default), active (disabled_at IS NULL), or disabled (disabled_at IS NOT NULL). Applies even to exact ID matches.'
           in: query
-          name: disabled_states
+          name: disabled_status
           schema:
-            description: Match any of active or disabled. Empty falls back to include_disabled. An unrecognised value matches nothing rather than failing the request.
-            items:
-              type: string
-            type: array
+            description: 'Organization status: all (default), active (disabled_at IS NULL), or disabled (disabled_at IS NOT NULL). Applies even to exact ID matches.'
+            enum:
+              - all
+              - active
+              - disabled
+            type: string
         - allowEmptyValue: true
-          description: Include organizations with disabled_at set. Defaults to false. Superseded by disabled_states, which overrides it outright when supplied.
+          description: Inclusive minimum active member count, from 0 through 9223372036854775807. The generated TypeScript SDK accepts bigint. The handwritten admin client accepts safe integers or decimal strings; use decimal strings above Number.MAX_SAFE_INTEGER.
           in: query
-          name: include_disabled
+          name: min_members
           schema:
-            description: Include organizations with disabled_at set. Defaults to false. Superseded by disabled_states, which overrides it outright when supplied.
-            type: boolean
+            description: Inclusive minimum active member count, from 0 through 9223372036854775807. The generated TypeScript SDK accepts bigint. The handwritten admin client accepts safe integers or decimal strings; use decimal strings above Number.MAX_SAFE_INTEGER.
+            format: bigint
+            type: string
+        - allowEmptyValue: true
+          description: Inclusive maximum active member count, from 0 through 9223372036854775807. Must be at least min_members. The generated TypeScript SDK accepts bigint. The handwritten admin client accepts safe integers or decimal strings; use decimal strings above Number.MAX_SAFE_INTEGER.
+          in: query
+          name: max_members
+          schema:
+            description: Inclusive maximum active member count, from 0 through 9223372036854775807. Must be at least min_members. The generated TypeScript SDK accepts bigint. The handwritten admin client accepts safe integers or decimal strings; use decimal strings above Number.MAX_SAFE_INTEGER.
+            format: bigint
+            type: string
+        - allowEmptyValue: true
+          description: Inclusive creation date in strict YYYY-MM-DD UTC calendar format. Each date bound is optional; must not be after created_to.
+          in: query
+          name: created_from
+          schema:
+            description: Inclusive creation date in strict YYYY-MM-DD UTC calendar format. Each date bound is optional; must not be after created_to.
+            type: string
+        - allowEmptyValue: true
+          description: Inclusive creation date in strict YYYY-MM-DD UTC calendar format. Includes the entire UTC day, implemented as an exclusive bound at the following midnight.
+          in: query
+          name: created_to
+          schema:
+            description: Inclusive creation date in strict YYYY-MM-DD UTC calendar format. Includes the entire UTC day, implemented as an exclusive bound at the following midnight.
+            type: string
         - allowEmptyValue: true
           description: 'Pagination cursor: id of the last item from the previous page in created_at descending, id ascending order. The anchor is resolved regardless of filters; a deleted or unknown id returns an empty page. Ignored when sort or page is supplied.'
           in: query
@@ -3692,6 +3827,81 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       x-speakeasy-name-override: getSession
+  /admin/trial.changeEndDate:
+    post:
+      tags:
+        - admin
+      summary: changeTrialEndDate admin
+      description: Sets a running trial's end date to a future instant, shortening or extending it without restarting the trial.
+      operationId: adminChangeTrialEndDate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangeTrialEndDateRequestBody'
+      responses:
+        "200":
+          description: OK response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOrganization'
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'conflict: resource already exists'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: changeTrialEndDate
   /admin/trial.convert:
     post:
       tags:
@@ -4151,6 +4361,68 @@ components:
       required:
         - organizations
         - total
+    AdminMeterUsageBucket:
+      type: object
+      properties:
+        from:
+          type: string
+          description: Inclusive UTC day boundary
+          format: date-time
+        to:
+          type: string
+          description: Exclusive UTC day boundary
+          format: date-time
+        total:
+          type: string
+          description: Exact integer ordinary usage quantity as a decimal string
+      required:
+        - from
+        - to
+        - total
+    AdminMeterUsageResponse:
+      type: object
+      properties:
+        billing_cycles:
+          type: array
+          items:
+            $ref: '#/components/schemas/MeterUsageWindow'
+          description: Trailing twelve billing-cycle date windows
+        buckets:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminMeterUsageBucket'
+          description: Dense UTC daily ordinary usage buckets
+        family:
+          type: string
+          enum:
+            - agent_session_storage
+            - mcp_bandwidth
+            - risk_content_scans
+        measurement_method:
+          type: string
+        queried_at:
+          type: string
+          description: Retrieval timestamp, not an ingestion watermark
+          format: date-time
+        total:
+          type: string
+          description: Exact integer ordinary usage period total as a decimal string
+        unit:
+          type: string
+          enum:
+            - stokens
+            - bytes
+        window:
+          $ref: '#/components/schemas/MeterUsageWindow'
+      required:
+        - family
+        - window
+        - billing_cycles
+        - unit
+        - total
+        - buckets
+        - queried_at
+        - measurement_method
     AdminOrganization:
       type: object
       properties:
@@ -4614,6 +4886,20 @@ components:
           type: string
       required:
         - organization_id
+    ChangeTrialEndDateRequestBody:
+      type: object
+      properties:
+        ends_at:
+          type: string
+          description: New trial end date in UTC.
+          format: date-time
+        id:
+          type: string
+          description: Organization ID.
+          minLength: 1
+      required:
+        - id
+        - ends_at
     CreateOrganizationRequestBody:
       type: object
       properties:
@@ -4732,6 +5018,10 @@ components:
           items:
             type: string
           description: Token endpoint auth methods advertised by the issuer.
+        tunneled_mcp_server_id:
+          type: string
+          description: Route this issuer's OAuth endpoint calls through an MCP tunnel in the same project. Platform admins only.
+          format: uuid
         userinfo_endpoint:
           type: string
           description: OpenID Connect userinfo endpoint. Discovered from the issuer metadata document; rejected unless an absolute https URL, or http on loopback.
@@ -4992,6 +5282,20 @@ components:
       required:
         - organization_id
         - converted_at
+    MeterUsageWindow:
+      type: object
+      properties:
+        from:
+          type: string
+          description: Inclusive UTC midnight window boundary
+          format: date-time
+        to:
+          type: string
+          description: Exclusive UTC midnight window boundary
+          format: date-time
+      required:
+        - from
+        - to
     MigrateRemoteSessionIssuerRequestBody:
       type: object
       properties:
@@ -5254,6 +5558,10 @@ components:
           type: array
           items:
             type: string
+        tunneled_mcp_server_id:
+          type: string
+          description: When set, calls to this issuer's OAuth endpoints ride this MCP tunnel instead of dialing directly.
+          format: uuid
         updated_at:
           type: string
           format: date-time
@@ -5697,6 +6005,9 @@ components:
           type: array
           items:
             type: string
+        tunneled_mcp_server_id:
+          type: string
+          description: Set or clear this issuer's MCP tunnel binding. Omission keeps the binding; an empty string clears it; any other value must be a tunneled MCP server in the same project. Platform admins only.
         userinfo_endpoint:
           type: string
           description: Set or clear the OpenID Connect userinfo endpoint. An empty string clears it to NULL; any other value must be an absolute https URL, or http on loopback.

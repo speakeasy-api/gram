@@ -1,6 +1,10 @@
 import type { Employee } from "@/components/observe/insightsEmployeesData";
 import { describe, expect, it } from "vitest";
-import { identityHasAccount, identityKindOf } from "./identityKind";
+import {
+  identityHasAccount,
+  identityKindOf,
+  identityUrnForEmployee,
+} from "./identityKind";
 
 const telemetryIdentity: Employee = {
   id: "usage:external_example",
@@ -53,6 +57,7 @@ describe("identityKindOf", () => {
         name: "Automation@example.com",
       };
 
+      expect(identityUrnForEmployee(identity)).toBe("agent:agent_example");
       expect(identityKindOf(identity)).toBe("agent");
       expect(identityHasAccount(identity)).toBe(false);
     },

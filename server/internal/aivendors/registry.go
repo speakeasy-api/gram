@@ -528,6 +528,30 @@ var registry = []Product{
 		Documents:       nil,
 	},
 
+	// Signatures verified 2026-09-16 against pi.dev: the binary is `pi`, with
+	// global configuration under ~/.pi/agent (settings, sessions, extensions,
+	// installed packages) and project-local overrides in a repository's .pi.
+	// ~/.pi is matched rather than the agent dir so a fresh install counts
+	// before anything has populated it. Pi ships no MCP client of its own --
+	// servers reach it only through third-party extensions that register them
+	// as ordinary Pi tools -- so it publishes no CIMD document, and a decision
+	// about it is recorded but not enforceable.
+	{
+		ID:          "pi",
+		VendorKey:   "pi",
+		DisplayName: "Pi",
+		Category:    CategoryHarness,
+		Signatures: Signatures{
+			BundleIDs:    nil,
+			Binaries:     []string{"pi"},
+			ConfigDirs:   []string{"~/.pi"},
+			ProcessNames: []string{"pi"},
+		},
+		VersionPlistKey: "",
+		ClientInfoNames: []string{"pi"},
+		Documents:       nil,
+	},
+
 	// Signatures verified 2026-09-11 against charmbracelet/crush: the binary
 	// is `crush`, config at ~/.config/crush and state at
 	// ~/.local/share/crush. XDG-aware, so both can move; the binary carries

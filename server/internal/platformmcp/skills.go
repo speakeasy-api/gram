@@ -241,8 +241,8 @@ func (s *SkillsService) begin(ctx context.Context, principal Principal, projectS
 		IsAdmin:               false,
 	}, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))
 	// Grants are loaded for the acting user, so a connection reaches exactly the
-	// projects that user's own role reaches — the OAuth org-admin check at the
-	// endpoint says who may connect, not what they may write.
+	// projects that user's own role reaches. OAuth rechecks live membership;
+	// each operation's RBAC policy separately decides what the user may do.
 	ctx, err = s.grants.PrepareContext(ctx)
 	if err != nil {
 		return ctx, ResolvedProject{}, err

@@ -469,6 +469,10 @@ export function InsightsToolsContent(): JSX.Element {
             usersByTarget: usersByTargetQuery.data?.usersByTarget ?? [],
             targetToolBreakdown:
               targetToolBreakdownQuery.data?.targetToolBreakdown ?? [],
+            // The client aggregates are part of the summary contract but no
+            // panel on this page reads them yet, so they are not fetched.
+            clients: [],
+            clientToolBreakdown: [],
           }
         : undefined,
     [

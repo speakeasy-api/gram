@@ -547,6 +547,7 @@ trackedFiles:
   src/funcs/riskRulesTest.ts: {}
   src/funcs/riskSessionQuarantinesListSessionQuarantines.ts: {}
   src/funcs/riskSessionQuarantinesReleaseSessionQuarantine.ts: {}
+  src/funcs/riskSignalsAnalysisStatus.ts: {}
   src/funcs/riskSignalsGet.ts: {}
   src/funcs/skillEfficacyGetSettings.ts: {}
   src/funcs/skillEfficacyQueryInsights.ts: {}
@@ -591,6 +592,8 @@ trackedFiles:
   src/funcs/telemetryGetObservabilityOverview.ts: {}
   src/funcs/telemetryGetProjectMetricsSummary.ts: {}
   src/funcs/telemetryGetProjectOverview.ts: {}
+  src/funcs/telemetryGetToolUsageClientToolBreakdown.ts: {}
+  src/funcs/telemetryGetToolUsageClients.ts: {}
   src/funcs/telemetryGetToolUsageFilterOptions.ts: {}
   src/funcs/telemetryGetToolUsageSummary.ts: {}
   src/funcs/telemetryGetToolUsageTargetTimeSeries.ts: {}
@@ -999,6 +1002,8 @@ trackedFiles:
   src/models/components/getsetupdocsresponsebody.ts: {}
   src/models/components/getsignedasseturlform.ts: {}
   src/models/components/getskillresult.ts: {}
+  src/models/components/gettoolusageclientsresult.ts: {}
+  src/models/components/gettoolusageclienttoolbreakdownresult.ts: {}
   src/models/components/gettoolusagefilteroptionspayload.ts: {}
   src/models/components/gettoolusagefilteroptionsresult.ts: {}
   src/models/components/gettoolusagesummarypayload.ts: {}
@@ -1390,6 +1395,7 @@ trackedFiles:
   src/models/components/retryschedulerequestbody.ts: {}
   src/models/components/revokeallremotesessionsresult.ts: {}
   src/models/components/revokesessionrequestbody.ts: {}
+  src/models/components/riskanalysisstatusresult.ts: {}
   src/models/components/riskblock.ts: {}
   src/models/components/riskcategoriesresult.ts: {}
   src/models/components/riskcategorydefinition.ts: {}
@@ -1571,6 +1577,9 @@ trackedFiles:
   src/models/components/toolsetorigin.ts: {}
   src/models/components/toolsetsummary.ts: {}
   src/models/components/toolusage.ts: {}
+  src/models/components/toolusageclientfilteroption.ts: {}
+  src/models/components/toolusageclientsummary.ts: {}
+  src/models/components/toolusageclienttoolbreakdownrow.ts: {}
   src/models/components/toolusagegatewayfilteroption.ts: {}
   src/models/components/toolusagehostedserverfilteroption.ts: {}
   src/models/components/toolusageshadowserverfilteroption.ts: {}
@@ -1972,6 +1981,7 @@ trackedFiles:
   src/models/operations/getremotesessionclient.ts: {}
   src/models/operations/getremotesessionissuer.ts: {}
   src/models/operations/getremotesessionissuerduplicatepreflight.ts: {}
+  src/models/operations/getriskanalysisstatus.ts: {}
   src/models/operations/getriskblock.ts: {}
   src/models/operations/getriskoverview.ts: {}
   src/models/operations/getriskpolicy.ts: {}
@@ -1993,6 +2003,8 @@ trackedFiles:
   src/models/operations/gettokensundermanagement.ts: {}
   src/models/operations/gettoolset.ts: {}
   src/models/operations/gettoolsetenvironment.ts: {}
+  src/models/operations/gettoolusageclients.ts: {}
+  src/models/operations/gettoolusageclienttoolbreakdown.ts: {}
   src/models/operations/gettoolusagefilteroptions.ts: {}
   src/models/operations/gettoolusagesummary.ts: {}
   src/models/operations/gettoolusagetargets.ts: {}
@@ -2699,6 +2711,10 @@ trackedFiles:
   src/react-query/getStripeSubscription.ts: {}
   src/react-query/getTokensUnderManagement.core.ts: {}
   src/react-query/getTokensUnderManagement.ts: {}
+  src/react-query/getToolUsageClientToolBreakdown.core.ts: {}
+  src/react-query/getToolUsageClientToolBreakdown.ts: {}
+  src/react-query/getToolUsageClients.core.ts: {}
+  src/react-query/getToolUsageClients.ts: {}
   src/react-query/getToolUsageFilterOptions.core.ts: {}
   src/react-query/getToolUsageFilterOptions.ts: {}
   src/react-query/getToolUsageSummary.core.ts: {}
@@ -3063,6 +3079,8 @@ trackedFiles:
   src/react-query/revokeUserSessionClient.ts: {}
   src/react-query/revokeUserSessionConsent.ts: {}
   src/react-query/riskAcknowledgePolicyChallenge.ts: {}
+  src/react-query/riskAnalysisStatus.core.ts: {}
+  src/react-query/riskAnalysisStatus.ts: {}
   src/react-query/riskApprovePolicyBypassRequest.ts: {}
   src/react-query/riskCategories.core.ts: {}
   src/react-query/riskCategories.ts: {}
@@ -5502,7 +5520,7 @@ examples:
         application/json: {"chat_id": "e4912c42-9ca6-46fd-8057-460714cea6b8", "prompt": "<value>"}
       responses:
         "200":
-          application/json: {"chat_id": "99fcfd95-e73a-44bb-932b-3ba233957eb2", "flagged": false, "judged_count": 858712, "total_cost_usd": 8084.19, "total_latency_ms": 17493, "verdicts": [{"completion_tokens": 31617, "confidence": 6257.52, "cost_usd": 4680.52, "latency_ms": 252996, "matched": true, "message_id": "393d54cf-3d9e-45b1-a53f-69257ea013f1", "message_type": "<value>", "prompt_tokens": 448164, "rationale": "<value>", "seq": 140202, "total_tokens": 946723}]}
+          application/json: {"chat_id": "99fcfd95-e73a-44bb-932b-3ba233957eb2", "flagged": false, "in_scope_message_count": 905944, "judged_count": 858712, "message_limit_hit": true, "total_cost_usd": 8084.19, "total_latency_ms": 17493, "verdicts": [{"completion_tokens": 31617, "confidence": 6257.52, "cost_usd": 4680.52, "latency_ms": 252996, "matched": true, "message_id": "393d54cf-3d9e-45b1-a53f-69257ea013f1", "message_type": "<value>", "prompt_tokens": 448164, "rationale": "<value>", "seq": 140202, "total_tokens": 946723}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -6535,6 +6553,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  getRiskAnalysisStatus:
+    speakeasy-default-get-risk-analysis-status:
+      responses:
+        "200":
+          application/json: {"state": "never"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   getRiskBlock:
     speakeasy-default-get-risk-block:
       parameters:
@@ -6778,13 +6805,35 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  getToolUsageClientToolBreakdown:
+    speakeasy-default-get-tool-usage-client-tool-breakdown:
+      requestBody:
+        application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
+      responses:
+        "200":
+          application/json: {"client_tool_breakdown": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  getToolUsageClients:
+    speakeasy-default-get-tool-usage-clients:
+      requestBody:
+        application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
+      responses:
+        "200":
+          application/json: {"clients": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   getToolUsageFilterOptions:
     speakeasy-default-get-tool-usage-filter-options:
       requestBody:
         application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
       responses:
         "200":
-          application/json: {"gateways": [{"event_count": 411092, "meta_mcp_server_id": "<id>", "name": "<value>"}], "hosted_servers": [{"event_count": 411092, "toolset_name": "<value>", "toolset_slug": "<value>"}], "shadow_servers": [], "users": []}
+          application/json: {"clients": [{"client_key": "<value>", "client_label": "<value>", "event_count": 411092}], "gateways": [{"event_count": 411092, "meta_mcp_server_id": "<id>", "name": "<value>"}], "hosted_servers": [{"event_count": 411092, "toolset_name": "<value>", "toolset_slug": "<value>"}], "shadow_servers": [], "users": []}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -6795,7 +6844,7 @@ examples:
         application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
       responses:
         "200":
-          application/json: {"target_time_series": [], "target_tool_breakdown": [{"event_count": 655679, "failure_count": 908450, "failure_rate": 3743.13, "success_count": 540045, "target_id": "<id>", "target_kind": "skill", "target_label": "<value>", "target_type": "hosted_mcp_server", "tool_name": "<value>"}], "targets": [], "totals": {"event_count": 497777, "failure_count": 36101, "failure_rate": 2345.24, "success_count": 527861, "unique_targets": 37301, "unique_tools": 472763, "unique_users": 968692}, "user_time_series": [], "users": [], "users_by_target": []}
+          application/json: {"client_tool_breakdown": [], "clients": [{"client_key": "<value>", "client_label": "<value>", "event_count": 655679, "failure_count": 908450, "failure_rate": 3743.13, "success_count": 540045, "unique_tools": 728520}], "target_time_series": [], "target_tool_breakdown": [{"event_count": 655679, "failure_count": 908450, "failure_rate": 3743.13, "success_count": 540045, "target_id": "<id>", "target_kind": "skill", "target_label": "<value>", "target_type": "hosted_mcp_server", "tool_name": "<value>"}], "targets": [], "totals": {"event_count": 497777, "failure_count": 36101, "failure_rate": 2345.24, "success_count": 527861, "unique_targets": 37301, "unique_tools": 472763, "unique_users": 968692}, "user_time_series": [], "users": [], "users_by_target": []}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -8715,7 +8764,7 @@ examples:
         application/json: {"filters": [{"operator": "eq", "path": "@user.region"}], "from": "2025-12-19T10:00:00Z", "limit": 100, "sort": "desc", "to": "2025-12-19T11:00:00Z"}
       responses:
         "200":
-          application/json: {"traces": [{"event_source": "<value>", "gram_urn": "<value>", "id": "<id>", "log_count": 951087, "log_group": {"kind": "trigger_event_id", "value": "<value>"}, "start_time_unix_nano": "<value>", "target_id": "<id>", "target_kind": "server", "target_label": "<value>", "target_type": "hosted_mcp_server", "tool_name": "<value>", "user_key": "<value>", "user_kind": "email", "user_label": "<value>"}]}
+          application/json: {"traces": [{"client_key": "<value>", "client_label": "<value>", "event_source": "<value>", "gram_urn": "<value>", "id": "<id>", "log_count": 951087, "log_group": {"kind": "trigger_event_id", "value": "<value>"}, "start_time_unix_nano": "<value>", "target_id": "<id>", "target_kind": "server", "target_label": "<value>", "target_type": "hosted_mcp_server", "tool_name": "<value>", "user_key": "<value>", "user_kind": "email", "user_label": "<value>"}]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

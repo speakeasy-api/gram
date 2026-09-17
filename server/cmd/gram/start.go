@@ -126,6 +126,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/resources"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/risk/analysisstatus"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	riskchrepo "github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/enforcereply"
@@ -290,13 +291,17 @@ func networkIngressLifecycleDeliveryReady(reconcileQueue, temporalQueue string, 
 	if reconcileQueue == "" {
 		return false, nil
 	}
-	if reconcileQueue == temporalQueue {
-		return true, nil
-	}
-	if devSingleProcess {
+	if devSingleProcess && reconcileQueue != temporalQueue {
 		return false, fmt.Errorf("dev-single-process requires private ingress reconciliation task queue %q to match Temporal task queue %q", reconcileQueue, temporalQueue)
 	}
-	return false, nil
+	return true, nil
+}
+
+// networkIngressAdmissionReady verifies that lifecycle requests have a
+// configured consumer path. A separate queue is owned by the dedicated worker;
+// a shared queue becomes ready only after this process registers the reconciler.
+func networkIngressAdmissionReady(reconcileQueue, temporalQueue string, lifecycleReady, temporalConfigured bool) bool {
+	return lifecycleReady && temporalConfigured && reconcileQueue != temporalQueue
 }
 
 // probeDrainTimeout bounds the wait for automatic remote-session verifications
@@ -1052,7 +1057,12 @@ func newStartCommand() *cli.Command {
 			}
 			clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
 
-			remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, encryptionClient, guardianPolicy, redisClient, serverURL, auditLogger, clientAssertionSigner)
+			tunnelHTTPClient, err := newTunnelHTTPClient(c, guardianPolicy, redisClient)
+			if err != nil {
+				return err
+			}
+
+			remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, encryptionClient, guardianPolicy, tunnelHTTPClient, redisClient, serverURL, auditLogger, clientAssertionSigner)
 			if err != nil {
 				return err
 			}
@@ -1107,7 +1117,12 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
-			networkIngressReconcilerReady := networkIngressConfig.MutationReady() && networkIngressLifecycleReady && k8sClient.Clientset != nil && k8sClient.DynamicClient != nil
+			networkIngressReconcilerReady := networkIngressAdmissionReady(
+				networkIngressConfig.ReconcileTaskQueue,
+				c.String("temporal-task-queue"),
+				networkIngressLifecycleReady,
+				temporalEnv != nil,
+			)
 			networkIngressEnabled := c.Bool("network-ingress-enabled")
 			networkIngressAdmission := networkingress.NewExpansionAdmission(productFeatures, featureFlags, orgRepo.New(db), networkIngressReconcilerReady, networkIngressEnabled)
 			mcpMetadataService := mcpmetadata.NewService(logger, tracerProvider, meterProvider, db, sessionManager, serverURL, siteURL, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger, networkIngressAdmission.CheckExpansion)
@@ -1336,7 +1351,7 @@ func newStartCommand() *cli.Command {
 			accessService := access.NewService(logger, tracerProvider, db, chDB, sessionManager, roleManager, authzEngine, auditLogger, emailService, siteURL, telemSvc)
 			access.Attach(mux, accessService)
 			agent.Attach(mux, agent.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, productFeatures, serverURL.String(), assetStorage, telemLogger, growthEmitter))
-			upstreamRevoker := remotesessions.NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, encryptionClient, guardianPolicy, clientAssertionSigner)
+			upstreamRevoker := remotesessions.NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, encryptionClient, guardianPolicy, tunnelHTTPClient, clientAssertionSigner)
 			agentmanagement.Attach(mux, agentmanagement.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, featureFlags, chatSessionsManager, upstreamRevoker))
 			assistants.Attach(mux, assistantsSvc)
 			assistantmemories.Attach(mux, assistantmemories.NewService(
@@ -1557,8 +1572,8 @@ func newStartCommand() *cli.Command {
 				WithDistributionAdmission(distributionAdmission))
 			metamcp.Attach(mux, metamcp.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, networkIngressAdmission))
 			remoteSessionsCache := cache.NewRedisCacheAdapter(redisClient)
-			remoteSessionsService := remotesessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, encryptionClient, env, guardianPolicy, auditLogger, serverURL, remotesessions.NewRefreshService(logger, meterProvider, db, encryptionClient, guardianPolicy, remoteSessionsCache, remotesessions.WithRefreshIDTokenVerifier(idTokenVerifier), remotesessions.WithRefreshIssuerMetadataRefresher(issuerMetadataRefresher), remotesessions.WithRefreshSessionEnricher(remoteSessionEnricher), remotesessions.WithRefreshTokenEndpointAssertionSigner(clientAssertionSigner)), productFeatures)
-			usersessions.Attach(mux, usersessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, authzEngine, auditLogger, guardianPolicy, encryptionClient, usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)), serverURL.String(), ratelimit.NewRedisStore(redisClient), clientAssertionSigner))
+			remoteSessionsService := remotesessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, encryptionClient, env, guardianPolicy, tunnelHTTPClient, auditLogger, serverURL, remotesessions.NewRefreshService(logger, meterProvider, db, encryptionClient, guardianPolicy, tunnelHTTPClient, remoteSessionsCache, remotesessions.WithRefreshIDTokenVerifier(idTokenVerifier), remotesessions.WithRefreshIssuerMetadataRefresher(issuerMetadataRefresher), remotesessions.WithRefreshSessionEnricher(remoteSessionEnricher), remotesessions.WithRefreshTokenEndpointAssertionSigner(clientAssertionSigner)), productFeatures)
+			usersessions.Attach(mux, usersessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, authzEngine, auditLogger, guardianPolicy, tunnelHTTPClient, encryptionClient, usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)), serverURL.String(), ratelimit.NewRedisStore(redisClient), clientAssertionSigner))
 			tokenexchange.Attach(mux, tokenexchange.NewService(logger, tracerProvider, db, sessionManager, authzEngine, c.String("environment")))
 			remotesessions.Attach(mux, remoteSessionsService)
 			remotemcp.Attach(mux, remotemcp.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, guardianPolicy, auditLogger, mcpServersService).
@@ -1612,9 +1627,16 @@ func newStartCommand() *cli.Command {
 			externalmcp.Attach(mux, externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient, mcpCatalog, authzEngine, serverURL))
 			riskSignaler := background.NewThrottledSignaler(
 				&background.TemporalRiskAnalysisSignaler{TemporalEnv: temporalEnv, Logger: logger},
-				30*time.Second,
+				analysisstatus.SignalCooldown,
 				logger,
 			)
+			// Without Temporal there is no coordinator to describe, so Platform MCP
+			// serves get_risk_analysis_status as its stub instead of a live service
+			// that would fail on every call.
+			var riskAnalysisDescriber analysisstatus.Describer
+			if temporalEnv != nil {
+				riskAnalysisDescriber = riskSignaler
+			}
 			platformMCPAssistant, err := configurePlatformMCP(ctx, platformMCPConfig{
 				Logger:                  logger,
 				MeterProvider:           meterProvider,
@@ -1646,6 +1668,7 @@ func newStartCommand() *cli.Command {
 				RiskPolicySignaler:      riskSignaler,
 				RiskPolicyCache:         shadowMCPClient,
 				RiskExclusionReconciler: &background.TemporalRiskExclusionReconciler{TemporalEnv: temporalEnv, Logger: logger},
+				RiskAnalysisDescriber:   riskAnalysisDescriber,
 				Telemetry:               telemetryrepo.New(chDB),
 				TelemetryDrilldown:      telemetryrepo.New(chDB),
 				CanonicalIdentity:       telemSvc,
@@ -1829,6 +1852,7 @@ func newStartCommand() *cli.Command {
 
 					temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 						GuardianPolicy:               guardianPolicy,
+						TunnelHTTPClient:             tunnelHTTPClient,
 						DB:                           db,
 						EncryptionClient:             encryptionClient,
 						FeatureProvider:              featureFlags,
@@ -1846,7 +1870,6 @@ func newStartCommand() *cli.Command {
 						BillingTracker:               billingTracker,
 						BillingRepository:            billingRepo,
 						StripeClient:                 stripeClient,
-						TUMMeterStreamingEnabled:     c.Bool(stripeTUMMeterStreamingFlagName),
 						RedisClient:                  redisClient,
 						PosthogClient:                posthogClient,
 						FunctionsDeployer:            functionsOrchestrator,
@@ -1883,6 +1906,8 @@ func newStartCommand() *cli.Command {
 						return
 					}
 					temporalWorker.RegisterNetworkIngress(executor, networkIngressConfig.ReconcileTaskQueue)
+					networkIngressAdmission.SetReconcilerReady(true)
+					defer networkIngressAdmission.SetReconcilerReady(false)
 					if err := temporalWorker.Run(workerInterruptCh); err != nil {
 						logger.ErrorContext(ctx, "temporal worker failed", attr.SlogError(err))
 					}

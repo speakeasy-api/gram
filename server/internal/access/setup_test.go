@@ -2,6 +2,7 @@ package access
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net/url"
 	"os"
@@ -33,21 +34,39 @@ import (
 // recordingEmailSender captures transactional sends so tests can assert on
 // access-request notification emails without a live Loops client.
 type recordingEmailSender struct {
-	mu   sync.Mutex
-	sent []loops.SendTransactionalInput
+	mu        sync.Mutex
+	attempted []loops.SendTransactionalInput
+	sent      []loops.SendTransactionalInput
+	failSend  bool
 }
 
 func (r *recordingEmailSender) SendTransactional(_ context.Context, input loops.SendTransactionalInput) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.attempted = append(r.attempted, input)
+	if r.failSend {
+		return errors.New("recording email sender rejected send")
+	}
 	r.sent = append(r.sent, input)
 	return nil
+}
+
+func (r *recordingEmailSender) FailSends() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.failSend = true
 }
 
 func (r *recordingEmailSender) Sent() []loops.SendTransactionalInput {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return append([]loops.SendTransactionalInput(nil), r.sent...)
+}
+
+func (r *recordingEmailSender) Attempts() []loops.SendTransactionalInput {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]loops.SendTransactionalInput(nil), r.attempted...)
 }
 
 var (
@@ -113,7 +132,7 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	roleManager := NewRoleManager(logger, conn, roles, auditLogger)
-	emailSender := &recordingEmailSender{mu: sync.Mutex{}, sent: nil}
+	emailSender := &recordingEmailSender{mu: sync.Mutex{}, sent: nil, failSend: false}
 	emailService := email.NewService(logger, emailSender, email.NewTemplateIDs(map[string]string{
 		"access_request": "access-request-test-id",
 	}), true)

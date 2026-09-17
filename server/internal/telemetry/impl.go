@@ -3336,6 +3336,7 @@ func (s *Service) GetToolUsageSummary(ctx context.Context, payload *telem_gen.Ge
 		MetaMcpServerIDs:   payload.MetaMcpServerIds,
 		UserFilters:        payload.UserFilters,
 		HookSources:        payload.HookSources,
+		ClientKeys:         payload.ClientKeys,
 		AccountType:        payload.AccountType,
 	})
 	if err != nil {
@@ -3362,6 +3363,7 @@ type toolUsageFilters struct {
 	MetaMcpServerIDs   []string
 	UserFilters        []*telem_gen.ToolUsageUserFilter
 	HookSources        []string
+	ClientKeys         []string
 	AccountType        *string
 }
 
@@ -3437,13 +3439,20 @@ func (s *Service) resolveToolUsageParams(ctx context.Context, f toolUsageFilters
 		MetaMCPServerIDs:   f.MetaMcpServerIDs,
 		UserFilters:        userFilters,
 		HookSources:        f.HookSources,
+		ClientKeys:         f.ClientKeys,
 		AccountType:        conv.PtrValOr(f.AccountType, ""),
-		TargetLimit:        25,
+		// The insights board splits one ranking into several cards — servers,
+		// skills, most errors — and ranks tools across every target, so a
+		// limit sized for a single top-N list truncates before the split and
+		// lets one busy category crowd the others out of view.
+		TargetLimit:        200,
 		UserLimit:          25,
 		UsersByTargetLimit: 100,
-		TargetToolRowLimit: 100,
+		TargetToolRowLimit: 1000,
 		TimeSeriesRowLimit: 10000,
 		UserSeriesRowLimit: 10000,
+		ClientLimit:        25,
+		ClientToolRowLimit: 100,
 	}, nil
 }
 
@@ -3458,6 +3467,7 @@ func (s *Service) GetToolUsageTotals(ctx context.Context, payload *telem_gen.Get
 		MetaMcpServerIDs:   payload.MetaMcpServerIds,
 		UserFilters:        payload.UserFilters,
 		HookSources:        payload.HookSources,
+		ClientKeys:         payload.ClientKeys,
 		AccountType:        payload.AccountType,
 	})
 	if err != nil {
@@ -3483,6 +3493,7 @@ func (s *Service) GetToolUsageTargets(ctx context.Context, payload *telem_gen.Ge
 		MetaMcpServerIDs:   payload.MetaMcpServerIds,
 		UserFilters:        payload.UserFilters,
 		HookSources:        payload.HookSources,
+		ClientKeys:         payload.ClientKeys,
 		AccountType:        payload.AccountType,
 	})
 	if err != nil {
@@ -3508,6 +3519,7 @@ func (s *Service) GetToolUsageUsers(ctx context.Context, payload *telem_gen.GetT
 		MetaMcpServerIDs:   payload.MetaMcpServerIds,
 		UserFilters:        payload.UserFilters,
 		HookSources:        payload.HookSources,
+		ClientKeys:         payload.ClientKeys,
 		AccountType:        payload.AccountType,
 	})
 	if err != nil {
@@ -3522,6 +3534,58 @@ func (s *Service) GetToolUsageUsers(ctx context.Context, payload *telem_gen.GetT
 	return &telem_gen.GetToolUsageUsersResult{Users: toToolUsageUserSummaries(users)}, nil
 }
 
+// GetToolUsageClients returns the MCP clients that called this project's tools.
+func (s *Service) GetToolUsageClients(ctx context.Context, payload *telem_gen.GetToolUsageClientsPayload) (res *telem_gen.GetToolUsageClientsResult, err error) {
+	params, err := s.resolveToolUsageParams(ctx, toolUsageFilters{
+		From:               payload.From,
+		To:                 payload.To,
+		TargetTypes:        payload.TargetTypes,
+		HostedToolsetSlugs: payload.HostedToolsetSlugs,
+		ShadowServerNames:  payload.ShadowServerNames,
+		MetaMcpServerIDs:   payload.MetaMcpServerIds,
+		UserFilters:        payload.UserFilters,
+		HookSources:        payload.HookSources,
+		ClientKeys:         payload.ClientKeys,
+		AccountType:        payload.AccountType,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	clients, err := s.chRepo.GetToolUsageClients(ctx, params)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage clients")
+	}
+
+	return &telem_gen.GetToolUsageClientsResult{Clients: toToolUsageClientSummaries(clients)}, nil
+}
+
+// GetToolUsageClientToolBreakdown returns per-tool usage grouped by MCP client.
+func (s *Service) GetToolUsageClientToolBreakdown(ctx context.Context, payload *telem_gen.GetToolUsageClientToolBreakdownPayload) (res *telem_gen.GetToolUsageClientToolBreakdownResult, err error) {
+	params, err := s.resolveToolUsageParams(ctx, toolUsageFilters{
+		From:               payload.From,
+		To:                 payload.To,
+		TargetTypes:        payload.TargetTypes,
+		HostedToolsetSlugs: payload.HostedToolsetSlugs,
+		ShadowServerNames:  payload.ShadowServerNames,
+		MetaMcpServerIDs:   payload.MetaMcpServerIds,
+		UserFilters:        payload.UserFilters,
+		HookSources:        payload.HookSources,
+		ClientKeys:         payload.ClientKeys,
+		AccountType:        payload.AccountType,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := s.chRepo.GetToolUsageClientToolBreakdown(ctx, params)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage client tool breakdown")
+	}
+
+	return &telem_gen.GetToolUsageClientToolBreakdownResult{ClientToolBreakdown: toToolUsageClientToolBreakdownRows(rows)}, nil
+}
+
 // GetToolUsageTargetTimeSeries returns time-series MCP and tool usage grouped by target.
 func (s *Service) GetToolUsageTargetTimeSeries(ctx context.Context, payload *telem_gen.GetToolUsageTargetTimeSeriesPayload) (res *telem_gen.GetToolUsageTargetTimeSeriesResult, err error) {
 	params, err := s.resolveToolUsageParams(ctx, toolUsageFilters{
@@ -3533,6 +3597,7 @@ func (s *Service) GetToolUsageTargetTimeSeries(ctx context.Context, payload *tel
 		MetaMcpServerIDs:   payload.MetaMcpServerIds,
 		UserFilters:        payload.UserFilters,
 		HookSources:        payload.HookSources,
+		ClientKeys:         payload.ClientKeys,
 		AccountType:        payload.AccountType,
 	})
 	if err != nil {
@@ -3558,6 +3623,7 @@ func (s *Service) GetToolUsageUserTimeSeries(ctx context.Context, payload *telem
 		MetaMcpServerIDs:   payload.MetaMcpServerIds,
 		UserFilters:        payload.UserFilters,
 		HookSources:        payload.HookSources,
+		ClientKeys:         payload.ClientKeys,
 		AccountType:        payload.AccountType,
 	})
 	if err != nil {
@@ -3583,6 +3649,7 @@ func (s *Service) GetToolUsageUsersByTarget(ctx context.Context, payload *telem_
 		MetaMcpServerIDs:   payload.MetaMcpServerIds,
 		UserFilters:        payload.UserFilters,
 		HookSources:        payload.HookSources,
+		ClientKeys:         payload.ClientKeys,
 		AccountType:        payload.AccountType,
 	})
 	if err != nil {
@@ -3608,6 +3675,7 @@ func (s *Service) GetToolUsageTargetToolBreakdown(ctx context.Context, payload *
 		MetaMcpServerIDs:   payload.MetaMcpServerIds,
 		UserFilters:        payload.UserFilters,
 		HookSources:        payload.HookSources,
+		ClientKeys:         payload.ClientKeys,
 		AccountType:        payload.AccountType,
 	})
 	if err != nil {
@@ -3691,6 +3759,7 @@ func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.Li
 		MetaMCPServerIDs:   payload.MetaMcpServerIds,
 		UserFilters:        userFilters,
 		HookSources:        payload.HookSources,
+		ClientKeys:         payload.ClientKeys,
 		AccountType:        conv.PtrValOr(payload.AccountType, ""),
 		Statuses:           statuses,
 		Query:              conv.PtrValOr(payload.Query, ""),
@@ -4074,6 +4143,9 @@ func toToolUsageTracesResult(rows []repo.ToolUsageTraceSummary, nextCursor strin
 			AccountType:          row.AccountType,
 			ViaMetaMcpServerID:   viaGatewayID,
 			ViaMetaMcpServerName: viaGatewayName,
+			ClientKey:            row.ClientKey,
+			ClientLabel:          row.ClientLabel,
+			ClientVersion:        row.ClientVersion,
 		}
 		traces = append(traces, trace)
 	}
@@ -4085,13 +4157,14 @@ func toToolUsageTracesResult(rows []repo.ToolUsageTraceSummary, nextCursor strin
 }
 
 func toToolUsageFilterOptionsResult(options *repo.ToolUsageFilterOptions, hostedMCPMatchers []repo.HostedMCPMatcher, gatewayNames map[string]string, optionTypes []telem_gen.ToolUsageFilterOptionType) *telem_gen.GetToolUsageFilterOptionsResult {
-	includeHostedServers, includeShadowServers, includeGateways, includeUsers := toolUsageFilterOptionTypeSet(optionTypes)
+	includeHostedServers, includeShadowServers, includeGateways, includeUsers, includeClients := toolUsageFilterOptionTypeSet(optionTypes)
 	if options == nil {
 		return &telem_gen.GetToolUsageFilterOptionsResult{
 			HostedServers: []*telem_gen.ToolUsageHostedServerFilterOption{},
 			ShadowServers: []*telem_gen.ToolUsageShadowServerFilterOption{},
 			Gateways:      []*telem_gen.ToolUsageGatewayFilterOption{},
 			Users:         []*telem_gen.ToolUsageUserFilterOption{},
+			Clients:       []*telem_gen.ToolUsageClientFilterOption{},
 		}
 	}
 
@@ -4162,17 +4235,29 @@ func toToolUsageFilterOptionsResult(options *repo.ToolUsageFilterOptions, hosted
 		}
 	}
 
+	clients := make([]*telem_gen.ToolUsageClientFilterOption, 0, len(options.Clients))
+	if includeClients {
+		for _, row := range options.Clients {
+			clients = append(clients, &telem_gen.ToolUsageClientFilterOption{
+				ClientKey:   row.ClientKey,
+				ClientLabel: row.ClientLabel,
+				EventCount:  uint64ToInt64(row.EventCount),
+			})
+		}
+	}
+
 	return &telem_gen.GetToolUsageFilterOptionsResult{
 		HostedServers: hostedServers,
 		ShadowServers: shadowServers,
 		Gateways:      gateways,
 		Users:         users,
+		Clients:       clients,
 	}
 }
 
-func toolUsageFilterOptionTypeSet(optionTypes []telem_gen.ToolUsageFilterOptionType) (includeHostedServers bool, includeShadowServers bool, includeGateways bool, includeUsers bool) {
+func toolUsageFilterOptionTypeSet(optionTypes []telem_gen.ToolUsageFilterOptionType) (includeHostedServers bool, includeShadowServers bool, includeGateways bool, includeUsers bool, includeClients bool) {
 	if len(optionTypes) == 0 {
-		return true, true, true, true
+		return true, true, true, true, true
 	}
 
 	for _, optionType := range optionTypes {
@@ -4185,10 +4270,12 @@ func toolUsageFilterOptionTypeSet(optionTypes []telem_gen.ToolUsageFilterOptionT
 			includeGateways = true
 		case "users":
 			includeUsers = true
+		case "clients":
+			includeClients = true
 		}
 	}
 
-	return includeHostedServers, includeShadowServers, includeGateways, includeUsers
+	return includeHostedServers, includeShadowServers, includeGateways, includeUsers, includeClients
 }
 
 // The toToolUsage* converters below map each repo aggregate row set to its Goa
@@ -4309,6 +4396,38 @@ func toToolUsageTargetToolBreakdownRows(rows []repo.ToolUsageTargetToolBreakdown
 	return out
 }
 
+func toToolUsageClientSummaries(rows []repo.ToolUsageClientSummaryRow) []*telem_gen.ToolUsageClientSummary {
+	out := make([]*telem_gen.ToolUsageClientSummary, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, &telem_gen.ToolUsageClientSummary{
+			ClientKey:    row.ClientKey,
+			ClientLabel:  row.ClientLabel,
+			EventCount:   uint64ToInt64(row.EventCount),
+			UniqueTools:  uint64ToInt64(row.UniqueTools),
+			SuccessCount: uint64ToInt64(row.SuccessCount),
+			FailureCount: uint64ToInt64(row.FailureCount),
+			FailureRate:  row.FailureRate,
+		})
+	}
+	return out
+}
+
+func toToolUsageClientToolBreakdownRows(rows []repo.ToolUsageClientToolBreakdownRow) []*telem_gen.ToolUsageClientToolBreakdownRow {
+	out := make([]*telem_gen.ToolUsageClientToolBreakdownRow, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, &telem_gen.ToolUsageClientToolBreakdownRow{
+			ClientKey:    row.ClientKey,
+			ClientLabel:  row.ClientLabel,
+			ToolName:     row.ToolName,
+			EventCount:   uint64ToInt64(row.EventCount),
+			SuccessCount: uint64ToInt64(row.SuccessCount),
+			FailureCount: uint64ToInt64(row.FailureCount),
+			FailureRate:  row.FailureRate,
+		})
+	}
+	return out
+}
+
 func toToolUsageSummaryResult(summary *repo.ToolUsageSummary) *telem_gen.GetToolUsageSummaryResult {
 	if summary == nil {
 		summary = &repo.ToolUsageSummary{
@@ -4319,6 +4438,8 @@ func toToolUsageSummaryResult(summary *repo.ToolUsageSummary) *telem_gen.GetTool
 			UserTimeSeries:      nil,
 			UsersByTarget:       nil,
 			TargetToolBreakdown: nil,
+			Clients:             nil,
+			ClientToolBreakdown: nil,
 		}
 	}
 
@@ -4330,6 +4451,8 @@ func toToolUsageSummaryResult(summary *repo.ToolUsageSummary) *telem_gen.GetTool
 		UserTimeSeries:      toToolUsageUserTimeSeries(summary.UserTimeSeries),
 		UsersByTarget:       toToolUsageUsersByTargetRows(summary.UsersByTarget),
 		TargetToolBreakdown: toToolUsageTargetToolBreakdownRows(summary.TargetToolBreakdown),
+		Clients:             toToolUsageClientSummaries(summary.Clients),
+		ClientToolBreakdown: toToolUsageClientToolBreakdownRows(summary.ClientToolBreakdown),
 	}
 }
 

@@ -46,6 +46,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/risk/analysisstatus"
 	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
@@ -83,6 +84,10 @@ type platformMCPConfig struct {
 	RiskPolicySignaler      policycore.PolicySignaler
 	RiskPolicyCache         policycore.PolicyCacheInvalidator
 	RiskExclusionReconciler risk.RiskExclusionReconciler
+	// RiskAnalysisDescriber reports the run state of a project's Watchdog
+	// analysis. Nil keeps get_risk_analysis_status visible as a stub rather
+	// than reporting a state nothing observed.
+	RiskAnalysisDescriber analysisstatus.Describer
 	// Telemetry is the Gram-owned ClickHouse read model the diagnostics tools
 	// answer from. Nil disables them rather than serving an empty answer, which
 	// a caller would read as "nothing is wrong".
@@ -152,7 +157,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	}
 
 	gate := platformmcp.NewOrganizationGate(config.ProductFeatures)
-	authorizer := platformmcp.NewLiveOrgAdminAuthorizer(config.DB, config.Authz)
+	authorizer := platformmcp.NewLiveOrgAdminAuthorizer(config.DB, config.Authz).WithDashboardURL(config.DashboardURL)
 	oauthTelemetry := platformmcp.NewOAuthTelemetry(config.Logger, config.MeterProvider)
 	oauthStore := platformmcp.NewPostgresOAuthStore(config.DB).WithTelemetry(oauthTelemetry)
 	oauth, err := platformmcp.NewOAuthHTTP(platformmcp.OAuthHTTPConfig{
@@ -358,7 +363,8 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithDataExports(config.Encryption, config.DashboardURL).
 		WithDataExportMutations(config.AuditLogger, config.DashboardURL).
 		WithRecentToolCalls(config.RecentToolCalls, config.DashboardURL).
-		WithOrganizationEvents(config.EventFeed, config.LogsEnabled, config.DashboardURL)
+		WithOrganizationEvents(config.EventFeed, config.LogsEnabled, config.DashboardURL).
+		WithRiskAnalysisStatus(platformmcp.NewRiskAnalysisStatusService(config.Logger, config.DB, config.RiskAnalysisDescriber, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB)))
 	attachShadowInventory(platformReader, config, budgets.SensitiveDiagnostics)
 	attachShadowAI(platformReader, config, authorizer, budgets.SensitiveDiagnostics)
 	diagnostics := platformmcp.NewDiagnosticsService(config.DB, config.Telemetry, config.SessionCapture, platformReader, readiness, budgets.Diagnostics).
@@ -588,7 +594,7 @@ func loadBrowserPlatformMCPCatalogDescriptors(ctx context.Context, catalog *exte
 
 func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) (AssistantSurface, error) {
 	gate := platformmcp.NewOrganizationGate(config.ProductFeatures)
-	authorizer := platformmcp.NewLiveOrgAdminAuthorizer(config.DB, config.Authz)
+	authorizer := platformmcp.NewLiveOrgAdminAuthorizer(config.DB, config.Authz).WithDashboardURL(config.DashboardURL)
 	oauthTelemetry := platformmcp.NewOAuthTelemetry(config.Logger, config.MeterProvider)
 	oauthStore := platformmcp.NewPostgresOAuthStore(config.DB).WithTelemetry(oauthTelemetry)
 	oauth, err := platformmcp.NewOAuthHTTP(platformmcp.OAuthHTTPConfig{
@@ -762,7 +768,8 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithDataExports(config.Encryption, config.DashboardURL).
 		WithDataExportMutations(config.AuditLogger, config.DashboardURL).
 		WithRecentToolCalls(config.RecentToolCalls, config.DashboardURL).
-		WithOrganizationEvents(config.EventFeed, config.LogsEnabled, config.DashboardURL)
+		WithOrganizationEvents(config.EventFeed, config.LogsEnabled, config.DashboardURL).
+		WithRiskAnalysisStatus(platformmcp.NewRiskAnalysisStatusService(config.Logger, config.DB, config.RiskAnalysisDescriber, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB)))
 	shadowInventory, shadowErr := platformmcp.NewShadowInventoryService(config.ShadowInventory, config.ShadowReview, config.FeatureFlags, organizationSlugs, platformrepo.New(config.DB), budgets.SensitiveDiagnostics, config.JWTSigningKey)
 	if shadowErr != nil {
 		config.Logger.WarnContext(context.Background(), "platform mcp shadow inventory unavailable", attr.SlogError(shadowErr))

@@ -35,6 +35,7 @@ func registerDistributionTools(reg *Registrar, onboarding *OnboardingService, di
 		Title:       "Add an MCP Server to a Plugin",
 		Description: "Give a working MCP server to one plugin — the bundle of MCP servers and skills you share with people — so everyone it is shared with gets it. Constraints: the project must already be selected, the MCP server registered, and freshly confirmed working through the dashboard setup flow. Name the plugin exactly by ID, slug, or name: a name matching nothing is refused as not_found and a name matching more than one plugin as ambiguous_target, and neither falls back to the default plugin. This never creates a plugin.",
 	}, ToolMeta{
+		Authorization: ExternalAuthorizationOrgAdmin,
 		// External-only: distribution rows require a connection, which a
 		// connection-less surface cannot satisfy.
 		Audiences: externalOnly, ProjectScope: ProjectScopeExplicit,
@@ -88,6 +89,7 @@ func registerDistributionTools(reg *Registrar, onboarding *OnboardingService, di
 		Title:       "Remove an MCP Server from a Plugin",
 		Description: "Take an MCP server back out of one plugin, undoing distribute_mcp_to_plugin, so the people it is shared with stop getting it. Constraints: only a membership this flow created is removed; one an administrator made by hand stays. Name the plugin exactly, on the same terms as distribute_mcp_to_plugin.",
 	}, ToolMeta{
+		Authorization: ExternalAuthorizationOrgAdmin,
 		// External-only for the same reason as distribution: the removal is
 		// recorded against the caller's connection.
 		Audiences: externalOnly, ProjectScope: ProjectScopeExplicit,

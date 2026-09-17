@@ -261,6 +261,7 @@ const (
 	pubsubSubscriberContextKey     contextKey = "pubsubSubscriberKey"
 	oauthClientIDContextKey        contextKey = "oauthClientIDKey"
 	actingSurfaceContextKey        contextKey = "actingSurfaceKey"
+	mcpClientInfoContextKey        contextKey = "mcpClientInfoKey"
 )
 
 func SetSessionTokenInContext(ctx context.Context, value string) context.Context {
@@ -355,6 +356,34 @@ func SetOAuthClientID(ctx context.Context, value string) context.Context {
 func GetOAuthClientID(ctx context.Context) (string, bool) {
 	value, ok := ctx.Value(oauthClientIDContextKey).(string)
 	return value, ok && value != ""
+}
+
+// MCPClientInfo is the identity an MCP caller reported for itself at the
+// initialize handshake, or in a per-request hint. Untrusted: attribution only,
+// never authorization.
+type MCPClientInfo struct {
+	Name    string
+	Version string
+}
+
+// SetMCPClientInfo carries the reported MCP client down to emitters that run
+// below the handler which resolved it — the gateway resolves the identity, but
+// the proxy path writes its tool-call log from an interceptor with no access to
+// the gate.
+//
+// It lives outside AuthContext for the same reason SetOAuthClientID does: an
+// anonymous caller on a public server reports a client but never gets an
+// AuthContext.
+func SetMCPClientInfo(ctx context.Context, value MCPClientInfo) context.Context {
+	return context.WithValue(ctx, mcpClientInfoContextKey, value)
+}
+
+// GetMCPClientInfo returns the reported MCP client. The second result is false
+// when nothing reported one: hook-observed traffic, a pre-handshake session, or
+// a client that omitted clientInfo.name.
+func GetMCPClientInfo(ctx context.Context) (MCPClientInfo, bool) {
+	value, ok := ctx.Value(mcpClientInfoContextKey).(MCPClientInfo)
+	return value, ok && value.Name != ""
 }
 
 // SetActingSurface marks the surface a request arrives through, for surfaces

@@ -31,6 +31,16 @@
     <meta property="og:site_name" content="Speakeasy" />
     <meta property="og:locale" content="en_US" />
 
+    <!-- Preview provenance, read by the Gutternote widget below, and
+         substituted by the container entrypoint at container start
+         (41-preview-runtime-values.sh) from the environment the deployment
+         supplies. These default to empty in the image, so any host whose
+         deployment does not set them renders blanks. Under `vite dev` the
+         entrypoint never runs and they stay as literal ${...} text. -->
+    <meta name="gutternote:branch" content="${GRAM_BRANCH}" />
+    <meta name="gutternote:commit" content="${GRAM_COMMIT_SHA}" />
+    <meta name="gutternote:pr" content="${GRAM_PR_NUMBER}" />
+
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -77,5 +87,12 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+
+    <!-- Gutternote feedback widget, on PR previews only. Placed before </body>
+         as its docs require. The container entrypoint composes the whole tag
+         (41-preview-runtime-values.sh), so this expands to nothing at all
+         unless the deployment set both GRAM_IS_PREVIEW=true and a key — prod,
+         shared staging and local dev get no tag. -->
+    ${GRAM_GUTTERNOTE_SCRIPT}
   </body>
 </html>

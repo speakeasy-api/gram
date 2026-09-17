@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -85,6 +86,20 @@ func attachmentTestClients(t *testing.T, conn *pgxpool.Pool, principal Principal
 	return rows
 }
 
+// attachmentTestEnsureIssuer resolves an issuer the way attachLocked does:
+// reuse a stored one when the flow may, otherwise create it.
+func attachmentTestEnsureIssuer(t *testing.T, service *CatalogIdentityProviderAttachmentService, principal Principal, project ResolvedProject, metadata remotesessions.DiscoveredIssuerMetadata) remotesessionsrepo.RemoteSessionIssuer {
+	t.Helper()
+	existing, reuse, err := service.reusableIssuer(t.Context(), principal, project, metadata.Issuer)
+	require.NoError(t, err)
+	if reuse {
+		return existing
+	}
+	issuer, err := service.createIssuer(t.Context(), principal, project, uuid.New(), metadata)
+	require.NoError(t, err)
+	return issuer
+}
+
 // Two resources behind one authorization server share the issuer row, which
 // therefore stays neutral; each resource's name and links live on its own
 // client, so B's card never inherits A's.
@@ -99,10 +114,8 @@ func TestSharedAuthorizationServerDoesNotShareResourceBranding(t *testing.T) {
 	resourceA := attachmentTestResource("https://a.example.test/mcp", "Resource A", "https://a.example.test/policy")
 	resourceB := attachmentTestResource("https://b.example.test/mcp", "Resource B", "https://b.example.test/policy")
 
-	issuerA, err := service.ensureIssuer(ctx, principal, project, uuid.New(), metadata)
-	require.NoError(t, err)
-	issuerB, err := service.ensureIssuer(ctx, principal, project, uuid.New(), metadata)
-	require.NoError(t, err)
+	issuerA := attachmentTestEnsureIssuer(t, service, principal, project, metadata)
+	issuerB := attachmentTestEnsureIssuer(t, service, principal, project, metadata)
 	require.Equal(t, issuerA.ID, issuerB.ID, "one authorization server, one issuer")
 	require.Equal(t, "Remote identity provider", issuerB.Name.String)
 	require.False(t, issuerB.ServiceDocumentation.Valid)
@@ -142,8 +155,7 @@ func TestAttachmentStoresNothingFromMismatchedResourceDocument(t *testing.T) {
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	service := attachmentTestService(conn)
 
-	issuer, err := service.ensureIssuer(ctx, principal, project, uuid.New(), attachmentTestIssuerMetadata("https://auth.example.test"))
-	require.NoError(t, err)
+	issuer := attachmentTestEnsureIssuer(t, service, principal, project, attachmentTestIssuerMetadata("https://auth.example.test"))
 	usi := attachmentTestUserSessionIssuer(t, conn, project.ID)
 	sibling := attachmentTestResource("https://example.test/mcp/a", "Resource A", "https://a.example.test/policy")
 	registered := remotesessions.ProxyRegisterResponse{ClientID: "client-b", ClientSecret: "", ClientSecretExpiresAt: pgtype.Timestamptz{}, TokenEndpointAuthMethod: ""}
@@ -168,8 +180,7 @@ func TestReattachRefreshesResourceDisplayOnExistingClient(t *testing.T) {
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	service := attachmentTestService(conn)
 
-	issuer, err := service.ensureIssuer(ctx, principal, project, uuid.New(), attachmentTestIssuerMetadata("https://auth.example.test"))
-	require.NoError(t, err)
+	issuer := attachmentTestEnsureIssuer(t, service, principal, project, attachmentTestIssuerMetadata("https://auth.example.test"))
 	usi := attachmentTestUserSessionIssuer(t, conn, project.ID)
 	registered := remotesessions.ProxyRegisterResponse{ClientID: "client-a", ClientSecret: "", ClientSecretExpiresAt: pgtype.Timestamptz{}, TokenEndpointAuthMethod: ""}
 	first := attachmentTestResource("https://a.example.test/mcp", "Resource A", "https://a.example.test/policy")
@@ -183,4 +194,40 @@ func TestReattachRefreshesResourceDisplayOnExistingClient(t *testing.T) {
 	require.Len(t, clients, 1)
 	require.Equal(t, "Resource A v2", conv.FromPGTextOrEmpty[string](clients[0].ResourceName))
 	require.False(t, clients[0].ResourcePolicyUri.Valid, "a link the resource stopped advertising clears")
+}
+
+// A stored issuer bound to a tunnel is refused rather than reused: the
+// registration this flow would hang off it goes out over direct egress, while
+// every later refresh and revocation would ride the tunnel.
+func TestAttachmentRefusesTunnelBoundIssuer(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_attachment_tunnel_bound")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	service := attachmentTestService(conn)
+	metadata := attachmentTestIssuerMetadata("https://auth.private.test")
+
+	issuer := attachmentTestEnsureIssuer(t, service, principal, project, metadata)
+	require.False(t, issuer.TunneledMcpServerID.Valid)
+
+	tunnel, err := tunneledmcprepo.New(conn).CreateServer(ctx, tunneledmcprepo.CreateServerParams{
+		ID:                 uuid.New(),
+		ProjectID:          project.ID,
+		Name:               "private idp tunnel " + uuid.NewString(),
+		KeyHash:            "attachment-key-hash-" + uuid.NewString(),
+		KeyPrefix:          "attachment-key-prefix",
+		ResourceIdentifier: pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+	// Every other column keeps its stored value under the query's three-state narg semantics.
+	_, err = remotesessionsrepo.New(conn).UpdateRemoteSessionIssuer(ctx, remotesessionsrepo.UpdateRemoteSessionIssuerParams{
+		ID:                  issuer.ID,
+		ProjectID:           conv.ToNullUUID(project.ID),
+		TunneledMcpServerID: conv.ToPGText(tunnel.ID.String()),
+	})
+	require.NoError(t, err)
+
+	_, _, err = service.reusableIssuer(ctx, principal, project, metadata.Issuer)
+	require.ErrorIs(t, err, ErrIdentityProviderAttachmentConflict)
 }

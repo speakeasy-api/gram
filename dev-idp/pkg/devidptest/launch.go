@@ -12,12 +12,16 @@
 package devidptest
 
 import (
+	"crypto/rand"
 	"crypto/rsa"
+	"crypto/x509"
 	"database/sql"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -47,6 +51,10 @@ const (
 	// GRAM_IDP_CLIENT_ID in local dev. Use it to drive the non-interactive
 	// login flow; any other client_id must register first.
 	LoginClientID = "devidptest-login-client"
+
+	// rotatedKeyBits is the size of a key RotateKey generates, matching the
+	// keystore's own.
+	rotatedKeyBits = 2048
 )
 
 // currentUser slot names persisted on dev-idp's current_users rows.
@@ -63,7 +71,8 @@ const (
 // *repo.Queries handles, and helpers for seeding fixture rows.
 type Instance struct {
 	// Issuer is the externally addressable base URL of the running server,
-	// without any mode prefix (e.g. "http://127.0.0.1:38291").
+	// without any mode prefix (e.g. "http://127.0.0.1:38291", or https with
+	// LaunchOpts.TLS).
 	Issuer string
 
 	// OAuth21URL is the issuer URL of the OAuth 2.1 mode handler
@@ -94,12 +103,14 @@ type Instance struct {
 	// pass DefaultUser.ID as the row's user_id.
 	DefaultUser repo.User
 
-	server *httptest.Server
-	rsaKey *rsa.PrivateKey
+	server      *httptest.Server
+	keystore    *keystore.Keystore
+	requests    *atomic.Int64
+	connections *atomic.Int64
 }
 
 // LaunchOpts configures Launch. The zero value is valid: OAuth 2.1 mounted,
-// WorkOS emulator disabled, shared package-level RSA key.
+// WorkOS emulator disabled, shared package-level RSA key, plain HTTP.
 type LaunchOpts struct {
 	// EnableWorkOS mounts the WorkOS emulator under Instance.WorkOSURL.
 	// Disabled by default — most OAuth flow tests don't need it.
@@ -109,6 +120,11 @@ type LaunchOpts struct {
 	// this for tests that need a distinct signing key (JWKS rotation,
 	// kid-mismatch). Most tests should leave this nil.
 	Key *rsa.PrivateKey
+
+	// TLS serves the instance over HTTPS with a self-signed certificate,
+	// for callers that require https, such as Gram's JWKS resolver. Trust
+	// it with Instance.Client or Instance.RootCAs.
+	TLS bool
 }
 
 // Launch starts a fresh dev-idp HTTP server on a random loopback port. The
@@ -137,7 +153,7 @@ func Launch(t *testing.T, opts LaunchOpts) *Instance {
 	rsaKey := opts.Key
 	var pemBytes []byte
 	if rsaKey == nil {
-		rsaKey, pemBytes = sharedKey(t)
+		_, pemBytes = sharedKey(t)
 	} else {
 		pemBytes, err = encodeRSAPrivateKey(rsaKey)
 		require.NoError(t, err, "encode caller-supplied rsa key")
@@ -146,13 +162,34 @@ func Launch(t *testing.T, opts LaunchOpts) *Instance {
 	ks, err := keystore.New(pemBytes, logger)
 	require.NoError(t, err, "init dev-idp keystore")
 
+	// Counted before routing, so every mode is covered.
+	requests := &atomic.Int64{}
+	outer := http.NewServeMux()
+	counted := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		outer.ServeHTTP(w, r)
+	})
+
 	// Use NewUnstartedServer so we can read the bound listener address
 	// before constructing handlers — the mode handlers stamp the issuer
 	// URL into their JWT claims and discovery documents at construction
 	// time, so they must know the public URL up front.
-	outer := http.NewServeMux()
-	server := httptest.NewUnstartedServer(outer)
-	pubURL := "http://" + server.Listener.Addr().String()
+	server := httptest.NewUnstartedServer(counted)
+
+	// Connections are counted too, including ones that never reach the
+	// handler, such as a failed TLS handshake.
+	connections := &atomic.Int64{}
+	server.Config.ConnState = func(_ net.Conn, state http.ConnState) {
+		if state == http.StateNew {
+			connections.Add(1)
+		}
+	}
+
+	scheme := "http"
+	if opts.TLS {
+		scheme = "https"
+	}
+	pubURL := scheme + "://" + server.Listener.Addr().String()
 
 	oauth21H := oauth21.NewHandler(oauth21.Config{ExternalURL: pubURL, LoginClientID: LoginClientID}, ks, logger, tp, db)
 	outer.Handle(oauth21.Prefix+"/", http.StripPrefix(oauth21.Prefix, oauth21H.Handler()))
@@ -172,7 +209,11 @@ func Launch(t *testing.T, opts LaunchOpts) *Instance {
 		workosURL = pubURL + workosmode.Prefix
 	}
 
-	server.Start()
+	if opts.TLS {
+		server.StartTLS()
+	} else {
+		server.Start()
+	}
 	t.Cleanup(server.Close)
 
 	queries := repo.New(db)
@@ -205,20 +246,69 @@ func Launch(t *testing.T, opts LaunchOpts) *Instance {
 		Repo:        queries,
 		DefaultUser: user,
 		server:      server,
-		rsaKey:      rsaKey,
+		keystore:    ks,
+		requests:    requests,
+		connections: connections,
 	}
 }
 
-// SigningKey returns the RSA private key the dev-idp signs id_tokens with.
-// Tests that need to verify signatures or mint their own JWTs can use this.
-func (i *Instance) SigningKey() *rsa.PrivateKey { return i.rsaKey }
+// SigningKey returns the RSA private key the dev-idp currently signs
+// id_tokens with. Tests that need to verify signatures or mint their own JWTs
+// can use this. After RotateKey it is the new key.
+func (i *Instance) SigningKey() *rsa.PrivateKey { return i.keystore.PrivateKey() }
+
+// KeyID is the kid the dev-idp currently publishes in its JWKS and stamps on
+// what it signs. A test minting its own JWT with SigningKey must put this in
+// the header, or the token names a key the published set does not contain.
+func (i *Instance) KeyID() string { return i.keystore.KID() }
+
+// RotateKey replaces the signing key at the same issuer URL; the JWKS then
+// publishes only the new key. Rotate between requests, not during one.
+func (i *Instance) RotateKey(t *testing.T) {
+	t.Helper()
+
+	key, err := rsa.GenerateKey(rand.Reader, rotatedKeyBits)
+	require.NoError(t, err, "generate rotated dev-idp key")
+	require.NoError(t, i.keystore.Rotate(key), "rotate dev-idp signing key")
+}
+
+// Stop takes the server offline, emulating an issuer outage. Safe to call
+// more than once and alongside Launch's cleanup.
+func (i *Instance) Stop() { i.server.Close() }
+
+// Requests counts HTTP requests the server has read, on every mode. Use
+// Connections to assert that nothing tried to reach the server at all.
+func (i *Instance) Requests() int64 { return i.requests.Load() }
+
+// Connections counts every connection the server has accepted, including ones
+// that carried no request. Compare against a baseline taken after fixture
+// setup.
+func (i *Instance) Connections() int64 { return i.connections.Load() }
+
+// Client returns an HTTP client that reaches this server, trusting its
+// certificate when LaunchOpts.TLS is set.
+func (i *Instance) Client() *http.Client { return i.server.Client() }
+
+// RootCAs is a pool trusting the server's certificate, for a caller that
+// builds its own transport rather than using Client. Nil without
+// LaunchOpts.TLS, where there is no certificate to trust.
+func (i *Instance) RootCAs() *x509.CertPool {
+	cert := i.server.Certificate()
+	if cert == nil {
+		return nil
+	}
+
+	pool := x509.NewCertPool()
+	pool.AddCert(cert)
+	return pool
+}
 
 // OAuth21Metadata fetches the dev-idp's RFC 8414 authorization-server
 // metadata for the oauth2-1 mode. The bytes are suitable for storing in the
 // Gram-side external_oauth_server_metadata table.
 func (i *Instance) OAuth21Metadata(t *testing.T) []byte {
 	t.Helper()
-	return fetchMetadata(t, i.Issuer, oauth21.Prefix)
+	return fetchMetadata(t, i.Client(), i.Issuer, oauth21.Prefix)
 }
 
 // ResourceASURL is the issuer identifier of the resource authorization server
@@ -234,20 +324,20 @@ func (i *Instance) ResourceASURL(slug string) string {
 // one resource authorization server.
 func (i *Instance) ResourceASMetadata(t *testing.T, slug string) []byte {
 	t.Helper()
-	return fetchMetadata(t, i.Issuer, resourceas.Prefix+"/"+slug)
+	return fetchMetadata(t, i.Client(), i.Issuer, resourceas.Prefix+"/"+slug)
 }
 
 // fetchMetadata reads the RFC 8414 authorization-server metadata for an
 // issuer whose URL is host + path. Per RFC 8414 §3, the well-known suffix is
 // appended to the host and the issuer path is appended after that.
-func fetchMetadata(t *testing.T, host, issuerPath string) []byte {
+func fetchMetadata(t *testing.T, client *http.Client, host, issuerPath string) []byte {
 	t.Helper()
 
 	url := strings.TrimRight(host, "/") + "/.well-known/oauth-authorization-server" + issuerPath
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, url, nil)
 	require.NoError(t, err, "build metadata request")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 	require.NoError(t, err, "fetch metadata")
 	defer func() { _ = resp.Body.Close() }()
 

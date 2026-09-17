@@ -112,8 +112,13 @@ export function AuthenticationSectionBody({
   // shared catalog, so the selectable list spans all three tiers. A client can
   // be attached to any of them; only project-owned issuer metadata is editable
   // here.
+  //
+  // Pinned to the maximum page size. The listing spans all three tiers ordered
+  // newest-first, so a large platform catalog fills the page and pushes this
+  // project's own issuers off it, which renders an attached provider as
+  // unconnected below. A stopgap: 100 is the server's ceiling, not headroom.
   const { data: issuersResult, isLoading: isLoadingIssuers } =
-    useRemoteSessionIssuers();
+    useRemoteSessionIssuers({ limit: 100 });
   const allIssuers = useMemo(
     () => issuersResult?.result.items ?? [],
     [issuersResult],

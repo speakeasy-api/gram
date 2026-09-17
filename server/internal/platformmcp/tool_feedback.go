@@ -56,7 +56,8 @@ func registerFeedbackTool(reg *Registrar, feedback *FeedbackService) {
 		Title:       "Send Feedback About This Platform",
 		Description: "Store one short feedback report about this platform for the team to read. Ask the user for consent before submitting. Constraints: never include credentials, URLs, identifiers, payloads, logs, headers, or attachments.",
 	}, ToolMeta{
-		Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, input SendPlatformMCPFeedbackToolInput) (*mcp.CallToolResult, SendPlatformMCPFeedbackToolOutput, error) {
+		Authorization: ExternalAuthorizationOrgAdmin,
+		Audiences:     bothAudiences, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, input SendPlatformMCPFeedbackToolInput) (*mcp.CallToolResult, SendPlatformMCPFeedbackToolOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
 			return nil, SendPlatformMCPFeedbackToolOutput{}, err

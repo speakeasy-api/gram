@@ -2,6 +2,7 @@ package promptpolicy
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"strings"
 
@@ -44,7 +45,7 @@ func (s *Scanner) ScanWithVerdict(ctx context.Context, orgID, projectID, userID,
 		Message:   msg,
 		Config:    cfg,
 	})
-	if err != nil && cfg.FailOpen && s.logger != nil {
+	if err != nil && cfg.FailOpen && s.logger != nil && !errors.Is(err, context.Canceled) {
 		s.logger.WarnContext(ctx, "prompt policy judge failed; returning no findings",
 			attr.SlogError(err),
 			attr.SlogOrganizationID(orgID),

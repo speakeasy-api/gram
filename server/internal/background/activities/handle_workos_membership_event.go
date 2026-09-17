@@ -101,6 +101,10 @@ func handleOrganizationMembershipEvent(ctx context.Context, logger *slog.Logger,
 	}
 	// Membership changes alter which emails resolve in the identity map.
 	none.refreshIdentityMap = true
+	// A cached organization list without this org would keep denying the
+	// member until the TTL ran out; drop it so the next access check sees the
+	// new row. Unknown users have nothing cached.
+	none.invalidateUserInfoCacheUserID = gramUserID
 	return none, nil
 }
 

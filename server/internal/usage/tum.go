@@ -161,17 +161,14 @@ func (s *Service) buildTokensUnderManagement(ctx context.Context, authCtx *conte
 		ids = append(ids, id.String())
 	}
 
-	// Finalized cycle snapshots are the immutable billing record: once a
-	// cycle is sealed (billingCycleFinalizeGrace after it closes), its total
-	// is served from Postgres instead of being recomputed from ClickHouse, so
-	// the reported number always matches what was invoiced — even if the
-	// telemetry aggregates change or expire afterwards. Open and
-	// not-yet-finalized cycles keep computing live.
+	// Finalized cycle snapshots preserve historical usage after telemetry
+	// aggregates change or expire. Open and not-yet-finalized cycles keep
+	// computing live.
 	snapshots, err := s.repo.ListBillingCycleUsage(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to list billing cycle snapshots").LogError(ctx, s.logger)
 	}
-	finalized := make(map[int64]repo.BillingCycleUsage, len(snapshots))
+	finalized := make(map[int64]repo.ListBillingCycleUsageRow, len(snapshots))
 	for _, snap := range snapshots {
 		if snap.FinalizedAt.Valid {
 			finalized[snap.CycleStart.Time.UTC().Unix()] = snap

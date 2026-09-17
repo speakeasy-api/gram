@@ -191,6 +191,12 @@ type Service interface {
 	// counted from now. A running, demoted or converted trial is rejected: those
 	// are extend, re-arm and a contract.
 	StartTrial(context.Context, *StartTrialPayload) (res *AdminOrganization, err error)
+	// Sets a running trial's end date to a future instant, shortening or extending
+	// it without restarting the trial.
+	ChangeTrialEndDate(context.Context, *ChangeTrialEndDatePayload) (res *AdminOrganization, err error)
+	// Returns totals-only ordinary meter usage for an organization over a bounded
+	// UTC-day window.
+	GetMeterUsage(context.Context, *GetMeterUsagePayload) (res *AdminMeterUsageResponse, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -213,7 +219,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [48]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizationActivity", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial"}
+var MethodNames = [50]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizationActivity", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage"}
 
 // AdminBulkUpdateAccountTypeResult is the result type of the admin service
 // bulkUpdateAccountType method.
@@ -311,6 +317,32 @@ type AdminListOrganizationsResult struct {
 	NextCursor *string
 	// Number of organizations matching the filters, before paging.
 	Total int64
+}
+
+type AdminMeterUsageBucket struct {
+	// Inclusive UTC day boundary
+	From string
+	// Exclusive UTC day boundary
+	To string
+	// Exact integer ordinary usage quantity as a decimal string
+	Total string
+}
+
+// AdminMeterUsageResponse is the result type of the admin service
+// getMeterUsage method.
+type AdminMeterUsageResponse struct {
+	Family string
+	Window *MeterUsageWindow
+	// Trailing twelve billing-cycle date windows
+	BillingCycles []*MeterUsageWindow
+	Unit          string
+	// Exact integer ordinary usage period total as a decimal string
+	Total string
+	// Dense UTC daily ordinary usage buckets
+	Buckets []*AdminMeterUsageBucket
+	// Retrieval timestamp, not an ingestion watermark
+	QueriedAt         string
+	MeasurementMethod string
 }
 
 // AdminOrganization is the result type of the admin service updateOrganization
@@ -561,6 +593,16 @@ type CancelStripeSubscriptionPayload struct {
 	OrganizationID    string
 }
 
+// ChangeTrialEndDatePayload is the payload type of the admin service
+// changeTrialEndDate method.
+type ChangeTrialEndDatePayload struct {
+	AdminSessionToken *string
+	// Organization ID.
+	ID string
+	// New trial end date in UTC.
+	EndsAt string
+}
+
 // CreateGlobalIssuerPayload is the payload type of the admin service
 // createGlobalIssuer method.
 type CreateGlobalIssuerPayload struct {
@@ -620,6 +662,9 @@ type CreateGlobalIssuerPayload struct {
 	// (OAuth CIMD draft). Discovered from the issuer metadata document and used to
 	// pre-flight outbound CIMD. Default false.
 	ClientIDMetadataDocumentSupported *bool
+	// Route this issuer's OAuth endpoint calls through an MCP tunnel in the same
+	// project. Platform admins only.
+	TunneledMcpServerID *string
 	// OpenID Connect userinfo endpoint. Discovered from the issuer metadata
 	// document; rejected unless an absolute https URL, or http on loopback.
 	UserinfoEndpoint *string
@@ -744,6 +789,20 @@ type GetInferenceKeysPayload struct {
 type GetInferenceSpendHistoryPayload struct {
 	AdminSessionToken *string
 	OrganizationID    string
+}
+
+// GetMeterUsagePayload is the payload type of the admin service getMeterUsage
+// method.
+type GetMeterUsagePayload struct {
+	AdminSessionToken *string
+	// Organization ID or canonical slug.
+	OrganizationID string
+	Family         string
+	// Inclusive UTC midnight reporting boundary. Must be paired with to.
+	From *string
+	// Exclusive UTC midnight reporting boundary. Must be paired with from and no
+	// later than three calendar months after from.
+	To *string
 }
 
 // GetOrganizationChatAnalysisSettingsPayload is the payload type of the admin
@@ -958,10 +1017,8 @@ type ListOrganizationsPayload struct {
 	AdminSessionToken *string
 	// Search term, trimmed of surrounding whitespace. Matches name and slug as a
 	// case-insensitive substring, with % and _ taken literally, and matches
-	// organization id and WorkOS id exactly, ignoring case. An id match also
-	// returns an organization that disabled_states or include_disabled would
-	// otherwise hide; it still respects account_type, account_types, trial_states
-	// and cursor.
+	// organization id and WorkOS id exactly, ignoring case. All filters apply even
+	// to exact ID matches.
 	Q *string
 	// Filter by a single gram_account_type (e.g. free, pro, payg, enterprise).
 	// Superseded by account_types, which it joins as one more member of the same
@@ -975,12 +1032,26 @@ type ListOrganizationsPayload struct {
 	// Empty matches every trial state. An unrecognised value matches nothing
 	// rather than failing the request.
 	TrialStates []string
-	// Match any of active or disabled. Empty falls back to include_disabled. An
-	// unrecognised value matches nothing rather than failing the request.
-	DisabledStates []string
-	// Include organizations with disabled_at set. Defaults to false. Superseded by
-	// disabled_states, which overrides it outright when supplied.
-	IncludeDisabled *bool
+	// Organization status: all (default), active (disabled_at IS NULL), or
+	// disabled (disabled_at IS NOT NULL). Applies even to exact ID matches.
+	DisabledStatus *string
+	// Inclusive minimum active member count, from 0 through 9223372036854775807.
+	// The generated TypeScript SDK accepts bigint. The handwritten admin client
+	// accepts safe integers or decimal strings; use decimal strings above
+	// Number.MAX_SAFE_INTEGER.
+	MinMembers *int64
+	// Inclusive maximum active member count, from 0 through 9223372036854775807.
+	// Must be at least min_members. The generated TypeScript SDK accepts bigint.
+	// The handwritten admin client accepts safe integers or decimal strings; use
+	// decimal strings above Number.MAX_SAFE_INTEGER.
+	MaxMembers *int64
+	// Inclusive creation date in strict YYYY-MM-DD UTC calendar format. Each date
+	// bound is optional; must not be after created_to.
+	CreatedFrom *string
+	// Inclusive creation date in strict YYYY-MM-DD UTC calendar format. Includes
+	// the entire UTC day, implemented as an exclusive bound at the following
+	// midnight.
+	CreatedTo *string
 	// Pagination cursor: id of the last item from the previous page in created_at
 	// descending, id ascending order. The anchor is resolved regardless of
 	// filters; a deleted or unknown id returns an empty page. Ignored when sort or
@@ -1041,6 +1112,13 @@ type MarkEnterpriseTrialConvertedResult struct {
 	OrganizationID string
 	// The time at which the enterprise trial was recorded as converted.
 	ConvertedAt string
+}
+
+type MeterUsageWindow struct {
+	// Inclusive UTC midnight window boundary
+	From string
+	// Exclusive UTC midnight window boundary
+	To string
 }
 
 // MigrateRemoteSessionIssuerResult is the result type of the admin service
@@ -1277,6 +1355,10 @@ type UpdateGlobalIssuerPayload struct {
 	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
 	// (OAuth CIMD draft).
 	ClientIDMetadataDocumentSupported *bool
+	// Set or clear this issuer's MCP tunnel binding. Omission keeps the binding;
+	// an empty string clears it; any other value must be a tunneled MCP server in
+	// the same project. Platform admins only.
+	TunneledMcpServerID *string
 	// Set or clear the OpenID Connect userinfo endpoint. An empty string clears it
 	// to NULL; any other value must be an absolute https URL, or http on loopback.
 	UserinfoEndpoint *string

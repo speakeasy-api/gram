@@ -44,6 +44,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/openrouterkeys"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -68,7 +69,12 @@ import (
 )
 
 type WorkerOptions struct {
-	GuardianPolicy      *guardian.Policy
+	GuardianPolicy *guardian.Policy
+
+	// TunnelHTTPClient carries back-channel OAuth calls for remote session
+	// clients bound to an MCP tunnel. Nil means tunnel-bound refreshes fail
+	// closed with a configuration error.
+	TunnelHTTPClient    *tunnelrouting.HTTPClient
 	DB                  *pgxpool.Pool
 	EncryptionClient    *encryption.Client
 	FeatureProvider     feature.Provider
@@ -86,36 +92,35 @@ type WorkerOptions struct {
 
 	// GitHubEvidenceToken authenticates the recheck sweep's repository
 	// lookups; empty falls back to GitHub's small unauthenticated budget.
-	GitHubEvidenceToken      string
-	SiteURL                  *url.URL
-	BillingTracker           billing.Tracker
-	BillingRepository        billing.Repository
-	StripeClient             stripeclient.Client
-	TUMMeterStreamingEnabled bool
-	RedisClient              *redis.Client
-	CacheAdapter             cache.Cache
-	EmailService             *email.Service
-	PosthogClient            *posthog.Posthog
-	FunctionsDeployer        functions.Deployer
-	FunctionsVersion         functions.RunnerVersion
-	RagService               *rag.ToolsetVectorStore
-	MCPRegistryClient        *externalmcp.RegistryClient
-	TelemetryLogger          *telemetry.Logger
-	ClickhouseConn           clickhouse.Conn
-	TelemetryRepo            *telemetryrepo.Queries
-	TriggersApp              *bgtriggers.App
-	AssistantsCore           *assistants.ServiceCore
-	TemporalEnv              *tenv.Environment
-	PIIScanner               risk_analysis.PIIScanner
-	PIScanner                *promptinjection.Scanner
-	CustomRuleScanner        *customruleanalyzer.Scanner
-	BuiltinPresets           *presetlib.Library
-	ShadowMCPClient          *shadowmcp.Client
-	AuditLogger              *audit.Logger
-	WorkOSClient             activities.WorkOSClient
-	ProductFeatures          *productfeatures.Client
-	PluginPublisher          *plugins.Service
-	Publishers               *Publishers
+	GitHubEvidenceToken string
+	SiteURL             *url.URL
+	BillingTracker      billing.Tracker
+	BillingRepository   billing.Repository
+	StripeClient        stripeclient.Client
+	RedisClient         *redis.Client
+	CacheAdapter        cache.Cache
+	EmailService        *email.Service
+	PosthogClient       *posthog.Posthog
+	FunctionsDeployer   functions.Deployer
+	FunctionsVersion    functions.RunnerVersion
+	RagService          *rag.ToolsetVectorStore
+	MCPRegistryClient   *externalmcp.RegistryClient
+	TelemetryLogger     *telemetry.Logger
+	ClickhouseConn      clickhouse.Conn
+	TelemetryRepo       *telemetryrepo.Queries
+	TriggersApp         *bgtriggers.App
+	AssistantsCore      *assistants.ServiceCore
+	TemporalEnv         *tenv.Environment
+	PIIScanner          risk_analysis.PIIScanner
+	PIScanner           *promptinjection.Scanner
+	CustomRuleScanner   *customruleanalyzer.Scanner
+	BuiltinPresets      *presetlib.Library
+	ShadowMCPClient     *shadowmcp.Client
+	AuditLogger         *audit.Logger
+	WorkOSClient        activities.WorkOSClient
+	ProductFeatures     *productfeatures.Client
+	PluginPublisher     *plugins.Service
+	Publishers          *Publishers
 
 	// IssuerMetadataRefresher is optional. Share it with every in-process producer;
 	// the constructing caller owns it and must call Wait after those producers stop.
@@ -162,6 +167,7 @@ func ForDeploymentProcessing(
 	return &WorkerOptions{
 		DB:                           db,
 		GuardianPolicy:               guardianPolicy,
+		TunnelHTTPClient:             nil,
 		EncryptionClient:             enc,
 		FeatureProvider:              f,
 		AssetStorage:                 assetStorage,
@@ -183,7 +189,6 @@ func ForDeploymentProcessing(
 		BillingTracker:               nil,
 		BillingRepository:            nil,
 		StripeClient:                 nil,
-		TUMMeterStreamingEnabled:     false,
 		RagService:                   nil,
 		RedisClient:                  nil,
 		PosthogClient:                nil,
@@ -241,6 +246,7 @@ func NewTemporalWorker(
 ) *Workers {
 	opts := &WorkerOptions{
 		GuardianPolicy:               nil,
+		TunnelHTTPClient:             nil,
 		DB:                           nil,
 		EncryptionClient:             nil,
 		FeatureProvider:              nil,
@@ -258,7 +264,6 @@ func NewTemporalWorker(
 		BillingTracker:               nil,
 		BillingRepository:            nil,
 		StripeClient:                 nil,
-		TUMMeterStreamingEnabled:     false,
 		RedisClient:                  nil,
 		PosthogClient:                nil,
 		FunctionsDeployer:            nil,
@@ -293,6 +298,7 @@ func NewTemporalWorker(
 	for _, o := range options {
 		opts = &WorkerOptions{
 			GuardianPolicy:               conv.Default(o.GuardianPolicy, opts.GuardianPolicy),
+			TunnelHTTPClient:             conv.Default(o.TunnelHTTPClient, opts.TunnelHTTPClient),
 			DB:                           conv.Default(o.DB, opts.DB),
 			EncryptionClient:             conv.Default(o.EncryptionClient, opts.EncryptionClient),
 			FeatureProvider:              conv.Default(o.FeatureProvider, opts.FeatureProvider),
@@ -310,7 +316,6 @@ func NewTemporalWorker(
 			BillingTracker:               conv.Default(o.BillingTracker, opts.BillingTracker),
 			BillingRepository:            conv.Default(o.BillingRepository, opts.BillingRepository),
 			StripeClient:                 conv.Default(o.StripeClient, opts.StripeClient),
-			TUMMeterStreamingEnabled:     conv.Default(o.TUMMeterStreamingEnabled, opts.TUMMeterStreamingEnabled),
 			RedisClient:                  conv.Default(o.RedisClient, opts.RedisClient),
 			PosthogClient:                conv.Default(o.PosthogClient, opts.PosthogClient),
 			FunctionsDeployer:            conv.Default(o.FunctionsDeployer, opts.FunctionsDeployer),
@@ -384,7 +389,7 @@ func NewTemporalWorker(
 		} else {
 			idTokenVerifier = remotesessions.NewIDTokenVerifier(idTokenKeys)
 			remoteSessionEnricher = remotesessions.NewSessionEnricher(logger, opts.EncryptionClient, opts.GuardianPolicy, idTokenKeys,
-				ratelimit.New(ratelimit.NewRedisStore(opts.RedisClient), "remote_session_enrichment", remotesessions.EnrichmentRate, ratelimit.WithMetrics(meterProvider)), opts.IssuerMetadataRefresher)
+				ratelimit.New(ratelimit.NewRedisStore(opts.RedisClient), "remote_session_enrichment", remotesessions.EnrichmentRate, ratelimit.WithMetrics(meterProvider)), opts.TunnelHTTPClient, opts.IssuerMetadataRefresher)
 		}
 	}
 
@@ -393,6 +398,7 @@ func NewTemporalWorker(
 		tracerProvider,
 		meterProvider,
 		opts.GuardianPolicy,
+		opts.TunnelHTTPClient,
 		opts.DB,
 		opts.EncryptionClient,
 		opts.FeatureProvider,
@@ -438,7 +444,6 @@ func NewTemporalWorker(
 		opts.GitHubEvidenceToken,
 		opts.RiskFingerprinter,
 		opts.DisableRiskRetroReconcile,
-		opts.TUMMeterStreamingEnabled,
 		idTokenVerifier,
 		opts.IssuerMetadataRefresher,
 		remoteSessionEnricher,
@@ -479,7 +484,6 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.RunDeviceIntegrationSync)
 	temporalWorker.RegisterActivity(activities.RefreshBillingUsage)
 	temporalWorker.RegisterActivity(activities.SnapshotBillingCycleUsage)
-	temporalWorker.RegisterActivity(activities.ReportTUMUsageToStripe)
 	temporalWorker.RegisterActivity(activities.ListWeeklyUsageSummaryTargets)
 	temporalWorker.RegisterActivity(activities.SendWeeklyUsageSummary)
 	temporalWorker.RegisterActivity(activities.ForwardTokenUsageToPostHog)

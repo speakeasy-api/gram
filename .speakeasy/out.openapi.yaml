@@ -2286,7 +2286,7 @@ paths:
         type: mutation
   /rpc/access.resolveChallenge:
     post:
-      description: Record resolutions for one or more denied authz challenges. The caller is responsible for assigning the role first.
+      description: Dismiss one or more denied authz challenges, or atomically add one custom role to the denied user before recording the challenges as resolved.
       operationId: resolveChallenge
       parameters:
         - allowEmptyValue: true
@@ -39660,6 +39660,7 @@ paths:
               - opencode
               - copilot
               - openclaw
+              - pi
             type: string
         - allowEmptyValue: true
           description: Session header
@@ -47063,6 +47064,106 @@ paths:
       x-speakeasy-react-hook:
         name: RiskDenyPolicyBypassRequest
         type: mutation
+  /rpc/risk.getAnalysisStatus:
+    get:
+      description: 'Get the run state of the project''s risk analysis coordinator, which produces the findings behind the Watchdog page. Analysis is signal-driven, not scheduled: the coordinator wakes within about 30 seconds of new chat traffic and never runs on a timer, so a quiet project can legitimately go a long time between runs. The state is never when no run is visible (the project has never been analyzed, or its last run is older than Temporal''s retention window), idle when the latest run has closed and the coordinator is waiting for the next chat write, and running when a run is in flight.'
+      operationId: getRiskAnalysisStatus
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiskAnalysisStatusResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: getRiskAnalysisStatus risk
+      tags:
+        - risk
+      x-speakeasy-group: risk.signals
+      x-speakeasy-name-override: analysisStatus
+      x-speakeasy-react-hook:
+        name: RiskAnalysisStatus
   /rpc/risk.getBlock:
     get:
       description: Get a tool call block by its risk result ID for the durable block page.
@@ -50894,7 +50995,7 @@ paths:
         type: mutation
   /rpc/riskEvals.evaluate:
     post:
-      description: 'Replay a prompt_based guardrail against a single chat session and return the LLM judge''s per-message verdict. The guardrail (prompt + judge config + message-type scope + CEL scope) is passed inline so the policy-eval workbench can evaluate an unsaved draft before a policy exists. This path is read-only: it never writes risk_results, publishes to the outbox, or enforces. It exists purely to tune a guardrail against real transcripts. Judges only the chat''s latest generation; message-type scoping and CEL scope predicates are both applied.'
+      description: 'Replay a prompt_based guardrail against a single chat session and return the LLM judge''s per-message verdict. The guardrail (prompt + judge config + message-type scope + CEL scope) is passed inline so the policy-eval workbench can evaluate an unsaved draft before a policy exists. This path is read-only: it never writes risk_results, publishes to the outbox, or enforces. It exists purely to tune a guardrail against real transcripts. Judges only the chat''s latest generation and at most the first 200 in-scope messages in transcript order; message-type scoping and CEL scope predicates are both applied.'
       operationId: evaluatePromptGuardrail
       parameters:
         - allowEmptyValue: true
@@ -56026,6 +56127,218 @@ paths:
       x-speakeasy-name-override: getProjectOverview
       x-speakeasy-react-hook:
         name: GetProjectOverview
+        type: query
+  /rpc/telemetry.getToolUsageClientToolBreakdown:
+    post:
+      description: Get per-tool MCP and tool usage grouped by MCP client
+      operationId: getToolUsageClientToolBreakdown
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GetToolUsageSummaryPayload'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetToolUsageClientToolBreakdownResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: getToolUsageClientToolBreakdown telemetry
+      tags:
+        - telemetry
+      x-speakeasy-name-override: getToolUsageClientToolBreakdown
+      x-speakeasy-react-hook:
+        name: GetToolUsageClientToolBreakdown
+        type: query
+  /rpc/telemetry.getToolUsageClients:
+    post:
+      description: Get top MCP clients by tool usage
+      operationId: getToolUsageClients
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GetToolUsageSummaryPayload'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetToolUsageClientsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: getToolUsageClients telemetry
+      tags:
+        - telemetry
+      x-speakeasy-name-override: getToolUsageClients
+      x-speakeasy-react-hook:
+        name: GetToolUsageClients
         type: query
   /rpc/telemetry.getToolUsageFilterOptions:
     post:
@@ -69582,6 +69895,11 @@ components:
         scope:
           type: string
           description: Scope that was checked.
+        selector:
+          type: object
+          description: Complete selector captured for the check. Omitted for legacy or malformed challenge data.
+          additionalProperties:
+            type: string
         timestamp:
           type: string
           description: When the authz decision was made.
@@ -71479,6 +71797,10 @@ components:
           items:
             type: string
           description: Token endpoint auth methods advertised by the issuer.
+        tunneled_mcp_server_id:
+          type: string
+          description: Route this issuer's OAuth endpoint calls through an MCP tunnel in the same project. Platform admins only.
+          format: uuid
         userinfo_endpoint:
           type: string
           description: OpenID Connect userinfo endpoint. Discovered from the issuer metadata document; rejected unless an absolute https URL, or http on loopback.
@@ -72074,6 +72396,10 @@ components:
           items:
             type: string
           description: Token endpoint auth methods advertised by the issuer.
+        tunneled_mcp_server_id:
+          type: string
+          description: Route this issuer's OAuth endpoint calls through an MCP tunnel in the same project. Platform admins only.
+          format: uuid
         userinfo_endpoint:
           type: string
           description: OpenID Connect userinfo endpoint. Discovered from the issuer metadata document; rejected unless an absolute https URL, or http on loopback.
@@ -75810,6 +76136,28 @@ components:
         - drift
         - assistant_count
         - prompt_injection_findings
+    GetToolUsageClientToolBreakdownResult:
+      type: object
+      properties:
+        client_tool_breakdown:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolUsageClientToolBreakdownRow'
+          description: Per-tool usage rows grouped by MCP client
+      description: Per-tool MCP and tool usage grouped by MCP client
+      required:
+        - client_tool_breakdown
+    GetToolUsageClientsResult:
+      type: object
+      properties:
+        clients:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolUsageClientSummary'
+          description: Top MCP clients for the selected filters and time range
+      description: Top MCP clients for the selected filters and time range
+      required:
+        - clients
     GetToolUsageFilterOptionsPayload:
       type: object
       properties:
@@ -75828,6 +76176,7 @@ components:
               - shadow_servers
               - gateways
               - users
+              - clients
           description: Filter option types to include. Empty means all option types.
         to:
           type: string
@@ -75841,6 +76190,11 @@ components:
     GetToolUsageFilterOptionsResult:
       type: object
       properties:
+        clients:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolUsageClientFilterOption'
+          description: MCP clients with usage in the selected time range
         gateways:
           type: array
           items:
@@ -75867,12 +76221,18 @@ components:
         - shadow_servers
         - gateways
         - users
+        - clients
     GetToolUsageSummaryPayload:
       type: object
       properties:
         account_type:
           type: string
           description: Optional account type filter ('team' or 'personal').
+        client_keys:
+          type: array
+          items:
+            type: string
+          description: MCP client keys (lowercased self-reported client names; 'unattributed' selects calls Gram never saw an initialize handshake for) to include
         from:
           type: string
           description: Start time in ISO 8601 format
@@ -75928,6 +76288,16 @@ components:
     GetToolUsageSummaryResult:
       type: object
       properties:
+        client_tool_breakdown:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolUsageClientToolBreakdownRow'
+          description: Per-tool usage rows grouped by MCP client
+        clients:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolUsageClientSummary'
+          description: Top MCP clients for the selected filters and time range
         target_time_series:
           type: array
           items:
@@ -75969,6 +76339,8 @@ components:
         - user_time_series
         - users_by_target
         - target_tool_breakdown
+        - clients
+        - client_tool_breakdown
     GetToolUsageTargetTimeSeriesResult:
       type: object
       properties:
@@ -79330,6 +79702,11 @@ components:
         account_type:
           type: string
           description: Optional account type filter ('team' or 'personal'). 'team' includes unclassified traces.
+        client_keys:
+          type: array
+          items:
+            type: string
+          description: MCP client keys (lowercased self-reported client names; 'unattributed' selects calls Gram never saw an initialize handshake for) to include
         cursor:
           type: string
           description: Cursor for pagination
@@ -82898,10 +83275,17 @@ components:
         flagged:
           type: boolean
           description: True when the guardrail flagged at least one in-scope message.
+        in_scope_message_count:
+          type: integer
+          description: Total number of messages matching the guardrail scope before the replay limit.
+          format: int64
         judged_count:
           type: integer
           description: Number of in-scope messages the judge evaluated.
           format: int64
+        message_limit_hit:
+          type: boolean
+          description: True when the replay judged only the first 200 in-scope messages.
         total_cost_usd:
           type: number
           description: Total OpenRouter cost across in-scope judge calls, in USD.
@@ -82920,6 +83304,8 @@ components:
         - chat_id
         - flagged
         - judged_count
+        - in_scope_message_count
+        - message_limit_hit
         - total_cost_usd
         - total_latency_ms
         - verdicts
@@ -83990,6 +84376,10 @@ components:
           type: array
           items:
             type: string
+        tunneled_mcp_server_id:
+          type: string
+          description: When set, calls to this issuer's OAuth endpoints ride this MCP tunnel instead of dialing directly.
+          format: uuid
         updated_at:
           type: string
           format: date-time
@@ -84488,6 +84878,7 @@ components:
           items:
             type: string
           description: IDs of the challenges in ClickHouse to resolve.
+          minItems: 1
         principal_urn:
           type: string
           description: Principal that was denied.
@@ -84503,9 +84894,12 @@ components:
         resource_kind:
           type: string
           description: Resource kind from the challenge.
+        role_assignment_confirmed:
+          type: boolean
+          description: Confirms the administrator reviewed and accepts every permission granted by the complete role. Must be true when resolution_type=role_assigned.
         role_slug:
           type: string
-          description: Role slug to assign (required when resolution_type=role_assigned).
+          description: Custom role slug to add to the denied user before resolving (required when resolution_type=role_assigned).
         scope:
           type: string
           description: Scope that was denied.
@@ -84738,6 +85132,33 @@ components:
       required:
         - agent_id
         - session_id
+    RiskAnalysisStatusResult:
+      type: object
+      properties:
+        last_run_at:
+          type: string
+          description: When the most recent closed run finished; the moment the Watchdog findings were last brought up to date. Set only when state is idle.
+          format: date-time
+        last_run_outcome:
+          type: string
+          description: 'How the most recent closed run ended: completed, failed, canceled, terminated, continued_as_new, timed_out, or unknown. continued_as_new is the normal outcome for a long-lived coordinator that rolled its history over, so treat it like completed. Set only when state is idle.'
+        last_run_started_at:
+          type: string
+          description: When the most recent closed run started. Set only when state is idle.
+          format: date-time
+        running_since:
+          type: string
+          description: When the in-flight run started. Set only when state is running.
+          format: date-time
+        state:
+          type: string
+          description: 'Coarse run state of the project''s risk analysis coordinator. never: no run is visible, either because the project has never been analyzed or because its last run is older than Temporal''s retention window. idle: the latest run has closed and the coordinator is waiting for the next chat write to wake it. running: a run is in flight right now.'
+          enum:
+            - never
+            - idle
+            - running
+      required:
+        - state
     RiskBlock:
       type: object
       properties:
@@ -90186,6 +90607,99 @@ components:
         - count
         - success_count
         - failure_count
+    ToolUsageClientFilterOption:
+      type: object
+      properties:
+        client_key:
+          type: string
+          description: Stable MCP client identity used by filters
+        client_label:
+          type: string
+          description: User-facing label for the MCP client
+        event_count:
+          type: integer
+          description: Number of tool usage events observed for the MCP client
+          format: int64
+      description: MCP client filter option with usage in the selected time window
+      required:
+        - client_key
+        - client_label
+        - event_count
+    ToolUsageClientSummary:
+      type: object
+      properties:
+        client_key:
+          type: string
+          description: Stable MCP client identity used by filters and chart grouping
+        client_label:
+          type: string
+          description: User-facing label for the MCP client
+        event_count:
+          type: integer
+          description: Total number of tool usage events for the MCP client
+          format: int64
+        failure_count:
+          type: integer
+          description: Number of failed tool usage events for the MCP client
+          format: int64
+        failure_rate:
+          type: number
+          description: Fraction of completed tool usage events for the MCP client that failed
+          format: double
+        success_count:
+          type: integer
+          description: Number of successful tool usage events for the MCP client
+          format: int64
+        unique_tools:
+          type: integer
+          description: Number of distinct tools observed for the MCP client
+          format: int64
+      description: Aggregated tool usage metrics for one MCP client
+      required:
+        - client_key
+        - client_label
+        - event_count
+        - unique_tools
+        - success_count
+        - failure_count
+        - failure_rate
+    ToolUsageClientToolBreakdownRow:
+      type: object
+      properties:
+        client_key:
+          type: string
+          description: Stable MCP client identity used by filters and chart grouping
+        client_label:
+          type: string
+          description: User-facing label for the MCP client
+        event_count:
+          type: integer
+          description: Total number of tool usage events for the MCP client and tool
+          format: int64
+        failure_count:
+          type: integer
+          description: Number of failed tool usage events for the MCP client and tool
+          format: int64
+        failure_rate:
+          type: number
+          description: Fraction of completed tool usage events for the MCP client and tool that failed
+          format: double
+        success_count:
+          type: integer
+          description: Number of successful tool usage events for the MCP client and tool
+          format: int64
+        tool_name:
+          type: string
+          description: Observed tool name
+      description: Aggregated tool usage metrics for one MCP client and tool
+      required:
+        - client_key
+        - client_label
+        - tool_name
+        - event_count
+        - success_count
+        - failure_count
+        - failure_rate
     ToolUsageGatewayFilterOption:
       type: object
       properties:
@@ -90462,6 +90976,15 @@ components:
         block_reason:
           type: string
           description: Hook block reason when hook_status is blocked
+        client_key:
+          type: string
+          description: Stable MCP client identity used by filters; 'unattributed' when the caller never reported one
+        client_label:
+          type: string
+          description: User-facing MCP client label as the client reported it
+        client_version:
+          type: string
+          description: MCP client version when the client reported one alongside its name
         event_source:
           type: string
           description: Telemetry event source
@@ -90560,6 +91083,8 @@ components:
         - user_label
         - user_kind
         - event_source
+        - client_key
+        - client_label
     ToolUsageUserFilter:
       type: object
       properties:
@@ -92818,6 +93343,9 @@ components:
           type: array
           items:
             type: string
+        tunneled_mcp_server_id:
+          type: string
+          description: Set or clear this issuer's MCP tunnel binding. Omission keeps the binding; an empty string clears it; any other value must be a tunneled MCP server in the same project. Platform admins only.
         userinfo_endpoint:
           type: string
           description: Set or clear the OpenID Connect userinfo endpoint. An empty string clears it to NULL; any other value must be an absolute https URL, or http on loopback.
@@ -93766,10 +94294,10 @@ components:
           description: Avatar URL for the subject when it resolves to a Gram user with one. Null for API key and anonymous subjects, and for users who have no photo.
         subject_type:
           type: string
-          description: 'Subject kind: ''user'', ''apikey'', or ''anonymous''.'
+          description: 'Subject kind: ''user'', ''apikey'', ''anonymous'', or ''workload''.'
         subject_urn:
           type: string
-          description: The session's subject URN (user:<id> | apikey:<uuid> | anonymous:<mcp-session-id>).
+          description: The session's subject URN (user:<id> | apikey:<uuid> | anonymous:<mcp-session-id> | workload:<issuer-id>:<external-subject>).
         updated_at:
           type: string
           format: date-time

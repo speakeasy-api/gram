@@ -12,6 +12,10 @@ import { SetupGuideCard } from "@/components/setup-guide/SetupGuideCard";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Text } from "@/components/ui/Text";
 import { getMcpServerArgs } from "@/lib/sources";
+import {
+  mcpServerInstallPageLinks,
+  usePrivateMcpServerUrls,
+} from "@/hooks/usePrivateMcpServerUrls";
 import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
 import { useRBAC } from "@/hooks/useRBAC";
 import { MCPServerStatusDropdown } from "@/pages/mcp/x/MCPServerDetails";
@@ -26,6 +30,7 @@ import { useRoutes } from "@/routes";
 import { useGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
 import { useGetRemoteMcpServer } from "@gram/client/react-query/getRemoteMcpServer.js";
 import { useGetUnproxiedMcpServer } from "@gram/client/react-query/getUnproxiedMcpServer.js";
+import { McpServerNetworkAccessMode } from "@gram/client/models/components/mcpserver.js";
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { usePlugins } from "@gram/client/react-query/plugins";
 import { usePublishStatus } from "@gram/client/react-query/publishStatus";
@@ -40,6 +45,37 @@ import {
 } from "lucide-react";
 import * as React from "react";
 import { useLocation, useParams } from "react-router";
+
+function SidebarUrl({
+  label,
+  url,
+  copyTooltip,
+}: {
+  label: string;
+  url: string;
+  copyTooltip: string;
+}): React.JSX.Element {
+  return (
+    <div className="flex flex-col gap-1">
+      <DetailSidebarInfoLabel>{label}</DetailSidebarInfoLabel>
+      <div className="flex items-start gap-1">
+        <Text
+          variant="small"
+          muted
+          className="line-clamp-2 font-mono text-xs break-all"
+        >
+          {url.replace(/^https?:\/\//, "")}
+        </Text>
+        <CopyButton
+          text={url}
+          size="xs"
+          tooltip={copyTooltip}
+          className="mt-[-2px] shrink-0"
+        />
+      </div>
+    </div>
+  );
+}
 
 export function McpServerXSidebarNav(): React.JSX.Element | null {
   const routes = useRoutes();
@@ -63,6 +99,29 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
     endpoints,
     isLoadingEndpoints,
   );
+  const {
+    privateMcpUrls,
+    privateInstallPageUrls,
+    canReadPrivateUrls,
+    isLoading: isLoadingPrivateUrls,
+    isError: privateUrlsError,
+  } = usePrivateMcpServerUrls(mcpServer, endpoints);
+  const publicRoutesEnabled =
+    mcpServer?.networkAccessMode !== McpServerNetworkAccessMode.PrivateOnly;
+  const privateRoutesEnabled =
+    mcpServer?.networkAccessMode === McpServerNetworkAccessMode.Dual ||
+    mcpServer?.networkAccessMode === McpServerNetworkAccessMode.PrivateOnly;
+  const effectiveInstallPageLinks = mcpServerInstallPageLinks(
+    mcpServer?.networkAccessMode,
+    installPageUrl,
+    privateInstallPageUrls,
+  );
+  const privateUrlAssessable =
+    canReadPrivateUrls && !isLoadingPrivateUrls && !privateUrlsError;
+  const serverUrlReady =
+    mcpServer?.networkAccessMode === McpServerNetworkAccessMode.PrivateOnly
+      ? privateMcpUrls.length > 0
+      : !!mcpUrl;
 
   const remoteMcpServerId = mcpServer?.remoteMcpServerId ?? "";
   const { data: remoteMcpServer } = useGetRemoteMcpServer(
@@ -142,10 +201,21 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
           label: "Server URL",
           description: isUnproxied
             ? "Not applicable — unproxied servers have no Speakeasy-hosted endpoint."
-            : mcpUrl
-              ? "Endpoint is live and ready to connect to."
-              : "Add an endpoint so this server has a URL to connect to.",
-          ready: isUnproxied || !!mcpUrl,
+            : mcpServer.networkAccessMode ===
+                  McpServerNetworkAccessMode.PrivateOnly &&
+                !privateUrlAssessable
+              ? !canReadPrivateUrls
+                ? "Private URL visibility requires organization admin access."
+                : isLoadingPrivateUrls
+                  ? "Checking private URL availability."
+                  : "Private URL availability could not be checked."
+              : serverUrlReady
+                ? "Endpoint is live and ready to connect to."
+                : mcpServer.networkAccessMode ===
+                    McpServerNetworkAccessMode.PrivateOnly
+                  ? "Bring private ingress online so this server has a URL to connect to."
+                  : "Add an endpoint so this server has a URL to connect to.",
+          ready: isUnproxied || serverUrlReady,
           href: isUnproxied
             ? undefined
             : `${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_SERVER_URL_SECTION_ID}`,
@@ -265,62 +335,66 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
         <MCPServerStatusDropdown server={mcpServer} />
       </div>
 
-      {mcpUrl && (
+      {publicRoutesEnabled && mcpUrl && (
+        <SidebarUrl
+          label={privateRoutesEnabled ? "Public URL" : "URL"}
+          url={mcpUrl}
+          copyTooltip="Copy public URL"
+        />
+      )}
+
+      {privateRoutesEnabled &&
+        privateMcpUrls.map((url, index) => (
+          <SidebarUrl
+            key={url}
+            label={index === 0 ? "Private URL" : "Private URL (additional)"}
+            url={url}
+            copyTooltip="Copy private URL"
+          />
+        ))}
+
+      {privateRoutesEnabled && privateMcpUrls.length === 0 && (
         <div className="flex flex-col gap-1">
-          <DetailSidebarInfoLabel>URL</DetailSidebarInfoLabel>
-          <div className="flex items-start gap-1">
-            <Text
-              variant="small"
-              muted
-              className="line-clamp-2 font-mono text-xs break-all"
-            >
-              {mcpUrl.replace(/^https?:\/\//, "")}
-            </Text>
-            <CopyButton
-              text={mcpUrl}
-              size="xs"
-              tooltip="Copy URL"
-              className="mt-[-2px] shrink-0"
-            />
-          </div>
+          <DetailSidebarInfoLabel>Private URL</DetailSidebarInfoLabel>
+          <Text variant="small" muted>
+            {isLoadingPrivateUrls
+              ? "Loading private URL…"
+              : !canReadPrivateUrls
+                ? "Available to organization admins while private ingress is online."
+                : privateUrlsError
+                  ? "Private URL could not be loaded."
+                  : "Bring private ingress online to use the private URL."}
+          </Text>
         </div>
       )}
 
       {upstreamUrl && (
-        <div className="flex flex-col gap-1">
-          <DetailSidebarInfoLabel>Upstream URL</DetailSidebarInfoLabel>
-          <div className="flex items-start gap-1">
-            <Text
-              variant="small"
-              muted
-              className="line-clamp-2 font-mono text-xs break-all"
-            >
-              {upstreamUrl.replace(/^https?:\/\//, "")}
-            </Text>
-            <CopyButton
-              text={upstreamUrl}
-              size="xs"
-              tooltip="Copy upstream URL"
-              className="mt-[-2px] shrink-0"
-            />
-          </div>
-        </div>
+        <SidebarUrl
+          label="Upstream URL"
+          url={upstreamUrl}
+          copyTooltip="Copy upstream URL"
+        />
       )}
 
       {/* Content-sized halves with one gutter either side of the rule: at
           flex-1 the rule sat at the container's midpoint, which the longer
           label crowded while the shorter one left slack. */}
       <div className="border-border flex items-stretch justify-center gap-3 border-t pt-3">
-        {installPageUrl ? (
-          <a
-            href={installPageUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs font-semibold transition-colors hover:no-underline"
-          >
-            Install page
-            <ExternalLink className="h-3 w-3" />
-          </a>
+        {effectiveInstallPageLinks.length > 0 ? (
+          <div className="flex flex-col items-center gap-1">
+            {effectiveInstallPageLinks.map(({ url, label }) => (
+              <a
+                key={url}
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs font-semibold transition-colors hover:no-underline"
+              >
+                {label}
+                <ExternalLink className="h-3 w-3" />
+              </a>
+            ))}
+          </div>
         ) : (
           <span className="text-muted-foreground/50 flex cursor-not-allowed items-center gap-1 text-xs font-semibold">
             Install page

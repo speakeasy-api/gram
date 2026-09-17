@@ -583,36 +583,36 @@ url = "https://github.com/temporalio/cli/releases/download/v1.8.2/temporal_cli_1
 url_api = "https://api.github.com/repos/temporalio/cli/releases/assets/496832572"
 
 [[tools.go]]
-version = "1.27.0"
+version = "1.27.1"
 backend = "core:go"
 
 [tools.go."platforms.linux-arm64"]
-checksum = "sha256:51798d2c42d0e1c6ed7fd9f48728b4193abac9e8aad6dbac2fe96a81f5909bda"
-url = "https://dl.google.com/go/go1.27.0.linux-arm64.tar.gz"
+checksum = "sha256:3450b45a3f9ee8568792736a5c5e70a1f2e9b36c35a8f74958c03e51d7d92bec"
+url = "https://dl.google.com/go/go1.27.1.linux-arm64.tar.gz"
 
 [tools.go."platforms.linux-arm64-musl"]
-checksum = "sha256:51798d2c42d0e1c6ed7fd9f48728b4193abac9e8aad6dbac2fe96a81f5909bda"
-url = "https://dl.google.com/go/go1.27.0.linux-arm64.tar.gz"
+checksum = "sha256:3450b45a3f9ee8568792736a5c5e70a1f2e9b36c35a8f74958c03e51d7d92bec"
+url = "https://dl.google.com/go/go1.27.1.linux-arm64.tar.gz"
 
 [tools.go."platforms.linux-x64"]
-checksum = "sha256:675c26c449cbb18fc24b74650de1eabbae6e16f64326fd85a283fb3b58280685"
-url = "https://dl.google.com/go/go1.27.0.linux-amd64.tar.gz"
+checksum = "sha256:63d339f0da5ab53635a56f2490a7984dfe12dfcff22ad749f63edaf590168445"
+url = "https://dl.google.com/go/go1.27.1.linux-amd64.tar.gz"
 
 [tools.go."platforms.linux-x64-musl"]
-checksum = "sha256:675c26c449cbb18fc24b74650de1eabbae6e16f64326fd85a283fb3b58280685"
-url = "https://dl.google.com/go/go1.27.0.linux-amd64.tar.gz"
+checksum = "sha256:63d339f0da5ab53635a56f2490a7984dfe12dfcff22ad749f63edaf590168445"
+url = "https://dl.google.com/go/go1.27.1.linux-amd64.tar.gz"
 
 [tools.go."platforms.macos-arm64"]
-checksum = "sha256:90493b3bbd5e10f91d12153198bf1994fd756399b4fec93b49b0c6e2acdeeb3e"
-url = "https://dl.google.com/go/go1.27.0.darwin-arm64.tar.gz"
+checksum = "sha256:ee215d57e0ec269c60cc9ceca68e6bda321ba9ee5afe24f4b0988703c2d87d12"
+url = "https://dl.google.com/go/go1.27.1.darwin-arm64.tar.gz"
 
 [tools.go."platforms.macos-x64"]
-checksum = "sha256:d3314e25496e4381d71a5c51d2907e7af655d199f6780b549f015bd85fef4986"
-url = "https://dl.google.com/go/go1.27.0.darwin-amd64.tar.gz"
+checksum = "sha256:8f8f52c6649542cf027bbc9b9c68d1ec042f9f34808a40413f0b8b3f66f3caa4"
+url = "https://dl.google.com/go/go1.27.1.darwin-amd64.tar.gz"
 
 [tools.go."platforms.windows-x64"]
-checksum = "sha256:f0c0a0d33ba94f4d2c5dbc887334ce678b21813504ddb3aafcb06e60a5a667c4"
-url = "https://dl.google.com/go/go1.27.0.windows-amd64.zip"
+checksum = "sha256:a3911b5e0e1b1053f25ed0675f4c1c6aad1e2bfcf253df2b9be4caabd2edd95d"
+url = "https://dl.google.com/go/go1.27.1.windows-amd64.zip"
 
 [[tools.golangci-lint]]
 version = "2.13.2"
@@ -996,6 +996,45 @@ checksum = "sha256:f37898d133acba7df8cbd130abc3b58b98243d7f3ab751087193dde888795
 url = "https://github.com/astral-sh/ruff/releases/download/0.16.1/ruff-x86_64-pc-windows-msvc.zip"
 url_api = "https://api.github.com/repos/astral-sh/ruff/releases/assets/495779128"
 provenance = "github-attestations"
+
+[[tools.stripe]]
+version = "1.50.11"
+backend = "aqua:stripe/stripe-cli"
+
+[tools.stripe."platforms.linux-arm64"]
+checksum = "sha256:816023515eead49134c165e949d21d56fd61050f689a53f0fd77d07ca41ec1c6"
+url = "https://github.com/stripe/stripe-cli/releases/download/v1.50.11/stripe_1.50.11_linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/stripe/stripe-cli/releases/assets/555449214"
+
+[tools.stripe."platforms.linux-arm64-musl"]
+checksum = "sha256:816023515eead49134c165e949d21d56fd61050f689a53f0fd77d07ca41ec1c6"
+url = "https://github.com/stripe/stripe-cli/releases/download/v1.50.11/stripe_1.50.11_linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/stripe/stripe-cli/releases/assets/555449214"
+
+[tools.stripe."platforms.linux-x64"]
+checksum = "sha256:a99c81b67ca7c322958fc19b46b5f906b15d22e9934a644b09038c29f53cd8b2"
+url = "https://github.com/stripe/stripe-cli/releases/download/v1.50.11/stripe_1.50.11_linux_x86_64.tar.gz"
+url_api = "https://api.github.com/repos/stripe/stripe-cli/releases/assets/555449213"
+
+[tools.stripe."platforms.linux-x64-musl"]
+checksum = "sha256:a99c81b67ca7c322958fc19b46b5f906b15d22e9934a644b09038c29f53cd8b2"
+url = "https://github.com/stripe/stripe-cli/releases/download/v1.50.11/stripe_1.50.11_linux_x86_64.tar.gz"
+url_api = "https://api.github.com/repos/stripe/stripe-cli/releases/assets/555449213"
+
+[tools.stripe."platforms.macos-arm64"]
+checksum = "sha256:4de3a0e34e513f1ff728dbb9136874814a0fe0039fa3246a190016cacd4f4792"
+url = "https://github.com/stripe/stripe-cli/releases/download/v1.50.11/stripe_1.50.11_mac-os_arm64.tar.gz"
+url_api = "https://api.github.com/repos/stripe/stripe-cli/releases/assets/555448491"
+
+[tools.stripe."platforms.macos-x64"]
+checksum = "sha256:b534ae1cde5c4b3b67874e5b8cdade3ce52b3af56d653fae37684f480a0427f8"
+url = "https://github.com/stripe/stripe-cli/releases/download/v1.50.11/stripe_1.50.11_mac-os_x86_64.tar.gz"
+url_api = "https://api.github.com/repos/stripe/stripe-cli/releases/assets/555448492"
+
+[tools.stripe."platforms.windows-x64"]
+checksum = "sha256:bf73139afde22682029c611185834ca6b51c7407b1fbc3afdfdb28c9fa92004a"
+url = "https://github.com/stripe/stripe-cli/releases/download/v1.50.11/stripe_1.50.11_windows_x86_64.zip"
+url_api = "https://api.github.com/repos/stripe/stripe-cli/releases/assets/555449017"
 
 [[tools.uv]]
 version = "0.12.1"
