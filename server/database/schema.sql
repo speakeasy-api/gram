@@ -2636,6 +2636,10 @@ ON okta_identity_provider_connections (organization_id, remote_session_issuer_id
 CREATE INDEX IF NOT EXISTS okta_identity_provider_connections_remote_session_client_idx
 ON okta_identity_provider_connections (organization_id, remote_session_client_id);
 
+-- Composite FK target so snapshot rows pin to the Okta subtype and its org.
+CREATE UNIQUE INDEX IF NOT EXISTS okta_identity_provider_connections_org_connection_key
+ON okta_identity_provider_connections (organization_id, identity_provider_connection_id);
+
 -- Serves the applications sync coordinator's due-connection scan.
 CREATE INDEX IF NOT EXISTS okta_identity_provider_connections_applications_synced_at_idx
 ON okta_identity_provider_connections (applications_synced_at)
@@ -2667,7 +2671,7 @@ CREATE TABLE IF NOT EXISTS okta_applications (
   CONSTRAINT okta_applications_okta_app_id_check CHECK (okta_app_id <> ''),
   CONSTRAINT okta_applications_organization_id_connection_id_okta_app_id_key UNIQUE (organization_id, identity_provider_connection_id, okta_app_id),
   CONSTRAINT okta_applications_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT okta_applications_connection_tenant_fkey FOREIGN KEY (organization_id, identity_provider_connection_id) REFERENCES identity_provider_connections (organization_id, id) ON DELETE CASCADE
+  CONSTRAINT okta_applications_connection_tenant_fkey FOREIGN KEY (organization_id, identity_provider_connection_id) REFERENCES okta_identity_provider_connections (organization_id, identity_provider_connection_id) ON DELETE CASCADE
 );
 
 -- User and group assignments observed on each snapshotted application.
@@ -2693,6 +2697,7 @@ CREATE TABLE IF NOT EXISTS okta_application_assignments (
   CONSTRAINT okta_application_assignments_okta_principal_id_check CHECK (okta_principal_id <> ''),
   CONSTRAINT okta_application_assignments_principal_key UNIQUE (organization_id, identity_provider_connection_id, okta_app_id, principal_kind, okta_principal_id),
   CONSTRAINT okta_application_assignments_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT okta_application_assignments_connection_tenant_fkey FOREIGN KEY (organization_id, identity_provider_connection_id) REFERENCES okta_identity_provider_connections (organization_id, identity_provider_connection_id) ON DELETE CASCADE,
   CONSTRAINT okta_application_assignments_application_fkey FOREIGN KEY (organization_id, identity_provider_connection_id, okta_app_id) REFERENCES okta_applications (organization_id, identity_provider_connection_id, okta_app_id) ON DELETE CASCADE
 );
 
@@ -2720,7 +2725,7 @@ CREATE TABLE IF NOT EXISTS okta_application_reconcile_runs (
   CONSTRAINT okta_application_reconcile_runs_pkey PRIMARY KEY (id),
   CONSTRAINT okta_application_reconcile_runs_status_check CHECK (status IN ('running', 'succeeded', 'failed')),
   CONSTRAINT okta_application_reconcile_runs_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT okta_application_reconcile_runs_connection_tenant_fkey FOREIGN KEY (organization_id, identity_provider_connection_id) REFERENCES identity_provider_connections (organization_id, id) ON DELETE CASCADE
+  CONSTRAINT okta_application_reconcile_runs_connection_tenant_fkey FOREIGN KEY (organization_id, identity_provider_connection_id) REFERENCES okta_identity_provider_connections (organization_id, identity_provider_connection_id) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS okta_application_reconcile_runs_connection_started_at_idx
