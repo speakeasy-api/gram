@@ -1,0 +1,30 @@
+server/internal/gateway/proxy.go
+  h_e404c1a6a54184 128,145-150,215,256-260,277,279,281,283,285
+server/internal/gateway/proxy_calleridentity_test.go
+  h_e404c1a6a54184 4,77,84
+server/internal/gateway/proxy_riskscan_test.go
+  h_e404c1a6a54184 4,10,12,65-66,68,148-167
+server/internal/gateway/proxy_test.go
+  h_e404c1a6a54184 12,296,299,427,430,779,782,1001,1004,1343,1346,1448,1611,1614,1695,1698,1762,1765,1811,1814,1912,1915,2000,2003,2113,2116,2210,2214,2294,2298,2408,2412,2510,2513,2625,2628,2739,2742,2852,2855,2968,2971,3086,3089,3198,3201
+server/internal/gateway/toolcall_metrics_test.go
+  h_e404c1a6a54184 7,154,161
+server/internal/instances/impl.go
+  h_e404c1a6a54184 374,378
+server/internal/mcp/rpc_resources_read.go
+  h_e404c1a6a54184 205
+server/internal/mcp/rpc_tools_call.go
+  h_e404c1a6a54184 439,443
+server/internal/mcp/serve_platform.go
+  h_e404c1a6a54184 479-480
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "2e510e5ce588ad7bdede659b29c534e901a5ec71",
+  "prompts": {},
+  "humans": {
+    "h_e404c1a6a54184": {
+      "author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
