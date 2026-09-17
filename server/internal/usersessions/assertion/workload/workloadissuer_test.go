@@ -227,3 +227,44 @@ func TestWorkloadIssuer_ReplayedAssertionIsRejected(t *testing.T) {
 	_, err = verifier.Verify(t.Context(), assertion, expectation)
 	requireRejected(t, err, workload.ReasonReplayed)
 }
+
+// A WIMSE Workload Identity Token is proof-of-possession only, so it is
+// refused as a bearer grant. The issuer is stopped first: the refusal must not
+// depend on fetching its key set.
+func TestWorkloadIssuer_WorkloadIdentityTokenIsRefusedWithoutAKeyFetch(t *testing.T) {
+	t.Parallel()
+
+	issuer, jwksURI := launchWorkloadIssuer(t)
+	assertion := oauthtest.MintTypedWorkloadAssertion(t, issuer, "application/wit+jwt", oauthtest.WorkloadClaims(issuer, testExternalSubject, testAudience))
+
+	issuer.Stop()
+
+	_, err := newLiveVerifier(t, issuer).Verify(t.Context(), assertion, liveExpectationFor(t, issuer, jwksURI))
+
+	requireRejected(t, err, workload.ReasonTypeNotBearer)
+}
+
+// An access token from another authorization server is not a grant.
+func TestWorkloadIssuer_AccessTokenIsRefused(t *testing.T) {
+	t.Parallel()
+
+	issuer, jwksURI := launchWorkloadIssuer(t)
+	assertion := oauthtest.MintTypedWorkloadAssertion(t, issuer, "at+jwt", oauthtest.WorkloadClaims(issuer, testExternalSubject, testAudience))
+
+	_, err := newLiveVerifier(t, issuer).Verify(t.Context(), assertion, liveExpectationFor(t, issuer, jwksURI))
+
+	requireRejected(t, err, workload.ReasonTypeNotBearer)
+}
+
+// The typing the WIMSE practices draft recommends for grant assertions still
+// verifies.
+func TestWorkloadIssuer_AuthorizationGrantTypeVerifies(t *testing.T) {
+	t.Parallel()
+
+	issuer, jwksURI := launchWorkloadIssuer(t)
+	assertion := oauthtest.MintTypedWorkloadAssertion(t, issuer, "authorization-grant+jwt", oauthtest.WorkloadClaims(issuer, testExternalSubject, testAudience))
+
+	_, err := newLiveVerifier(t, issuer).Verify(t.Context(), assertion, liveExpectationFor(t, issuer, jwksURI))
+
+	require.NoError(t, err)
+}
