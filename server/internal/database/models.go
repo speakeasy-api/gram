@@ -1556,6 +1556,59 @@ type OauthProxyServer struct {
 	Deleted   bool
 }
 
+type OktaApplication struct {
+	ID                           uuid.UUID
+	OrganizationID               string
+	IdentityProviderConnectionID uuid.UUID
+	OktaAppID                    string
+	Label                        string
+	Name                         string
+	SignOnMode                   string
+	Status                       string
+	Features                     []string
+	OktaCreatedAt                pgtype.Timestamptz
+	OktaLastUpdatedAt            pgtype.Timestamptz
+	FirstSeenAt                  pgtype.Timestamptz
+	LastSeenAt                   pgtype.Timestamptz
+	RemovedAt                    pgtype.Timestamptz
+	CreatedAt                    pgtype.Timestamptz
+	UpdatedAt                    pgtype.Timestamptz
+}
+
+type OktaApplicationAssignment struct {
+	ID                           uuid.UUID
+	OrganizationID               string
+	IdentityProviderConnectionID uuid.UUID
+	OktaAppID                    string
+	PrincipalKind                string
+	OktaPrincipalID              string
+	AssignmentScope              string
+	FirstSeenAt                  pgtype.Timestamptz
+	LastSeenAt                   pgtype.Timestamptz
+	RemovedAt                    pgtype.Timestamptz
+	CreatedAt                    pgtype.Timestamptz
+	UpdatedAt                    pgtype.Timestamptz
+}
+
+type OktaApplicationReconcileRun struct {
+	ID                           uuid.UUID
+	OrganizationID               string
+	IdentityProviderConnectionID uuid.UUID
+	Status                       string
+	StartedAt                    pgtype.Timestamptz
+	FinishedAt                   pgtype.Timestamptz
+	ApplicationsSeen             int32
+	ApplicationsAdded            int32
+	ApplicationsRemoved          int32
+	AssignmentsAdded             int32
+	AssignmentsRemoved           int32
+	SkippedAppIds                []string
+	Truncated                    bool
+	Error                        pgtype.Text
+	CreatedAt                    pgtype.Timestamptz
+	UpdatedAt                    pgtype.Timestamptz
+}
+
 type OktaIdentityProviderConnection struct {
 	IdentityProviderConnectionID        uuid.UUID
 	IdentityProviderConnectionsProvider string
@@ -1573,6 +1626,8 @@ type OktaIdentityProviderConnection struct {
 	ListingMode                         string
 	AgentID                             pgtype.Text
 	AgentAppID                          pgtype.Text
+	ApplicationsSyncIntervalSeconds     int32
+	ApplicationsSyncedAt                pgtype.Timestamptz
 	CreatedAt                           pgtype.Timestamptz
 	UpdatedAt                           pgtype.Timestamptz
 	DeletedAt                           pgtype.Timestamptz

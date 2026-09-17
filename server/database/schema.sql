@@ -2603,11 +2603,16 @@ CREATE TABLE IF NOT EXISTS okta_identity_provider_connections (
   -- exchange-side client id comes exclusively from remote_session_clients.client_id.
   agent_id TEXT,
   agent_app_id TEXT,
+  -- Applications snapshot cadence; the coordinator picks verified connections
+  -- whose applications_synced_at is older than the interval.
+  applications_sync_interval_seconds integer NOT NULL DEFAULT 21600,
+  applications_synced_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
   CONSTRAINT okta_identity_provider_connections_pkey PRIMARY KEY (identity_provider_connection_id),
+  CONSTRAINT okta_identity_provider_connections_sync_interval_check CHECK (applications_sync_interval_seconds >= 300),
   CONSTRAINT okta_identity_provider_connections_provider_check CHECK (identity_provider_connections_provider = 'okta'),
   CONSTRAINT okta_identity_provider_connections_listing_mode_check CHECK (listing_mode IN ('custom_app', 'oin')),
   CONSTRAINT okta_identity_provider_connections_override_reason_check CHECK (
@@ -2630,6 +2635,96 @@ ON okta_identity_provider_connections (organization_id, remote_session_issuer_id
 
 CREATE INDEX IF NOT EXISTS okta_identity_provider_connections_remote_session_client_idx
 ON okta_identity_provider_connections (organization_id, remote_session_client_id);
+
+-- Serves the applications sync coordinator's due-connection scan.
+CREATE INDEX IF NOT EXISTS okta_identity_provider_connections_applications_synced_at_idx
+ON okta_identity_provider_connections (applications_synced_at)
+WHERE deleted IS FALSE;
+
+-- Snapshot of the Okta applications visible to a connection, keyed by the
+-- Okta application id, never by label. Rows are soft-removed (removed_at) when
+-- an app disappears from a run and revived when it reappears; connection
+-- revocation deletes them. Tenant-wide directory data: org:admin reads only,
+-- never joined into telemetry.
+CREATE TABLE IF NOT EXISTS okta_applications (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  identity_provider_connection_id uuid NOT NULL,
+  okta_app_id TEXT NOT NULL,
+  label TEXT NOT NULL,
+  name TEXT NOT NULL,
+  sign_on_mode TEXT NOT NULL,
+  status TEXT NOT NULL,
+  features TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  okta_created_at timestamptz,
+  okta_last_updated_at timestamptz,
+  first_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  last_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  removed_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT okta_applications_pkey PRIMARY KEY (id),
+  CONSTRAINT okta_applications_okta_app_id_check CHECK (okta_app_id <> ''),
+  CONSTRAINT okta_applications_organization_id_connection_id_okta_app_id_key UNIQUE (organization_id, identity_provider_connection_id, okta_app_id),
+  CONSTRAINT okta_applications_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT okta_applications_connection_tenant_fkey FOREIGN KEY (organization_id, identity_provider_connection_id) REFERENCES identity_provider_connections (organization_id, id) ON DELETE CASCADE
+);
+
+-- User and group assignments observed on each snapshotted application.
+-- principal_kind is user or group; okta_principal_id is the Okta user or
+-- group id. Same soft-remove and revocation rules as okta_applications.
+CREATE TABLE IF NOT EXISTS okta_application_assignments (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  identity_provider_connection_id uuid NOT NULL,
+  okta_app_id TEXT NOT NULL,
+  principal_kind TEXT NOT NULL,
+  okta_principal_id TEXT NOT NULL,
+  -- USER for a direct user assignment, GROUP for a group-derived one; empty
+  -- for group assignments.
+  assignment_scope TEXT NOT NULL DEFAULT '',
+  first_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  last_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  removed_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT okta_application_assignments_pkey PRIMARY KEY (id),
+  CONSTRAINT okta_application_assignments_principal_kind_check CHECK (principal_kind IN ('user', 'group')),
+  CONSTRAINT okta_application_assignments_okta_principal_id_check CHECK (okta_principal_id <> ''),
+  CONSTRAINT okta_application_assignments_principal_key UNIQUE (organization_id, identity_provider_connection_id, okta_app_id, principal_kind, okta_principal_id),
+  CONSTRAINT okta_application_assignments_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT okta_application_assignments_application_fkey FOREIGN KEY (organization_id, identity_provider_connection_id, okta_app_id) REFERENCES okta_applications (organization_id, identity_provider_connection_id, okta_app_id) ON DELETE CASCADE
+);
+
+-- One row per reconcile run, including empty runs. Counts are the deltas the
+-- run applied; skipped_app_ids lists Okta-internal apps left out of the
+-- snapshot; truncated marks a run that hit the page or app cap.
+CREATE TABLE IF NOT EXISTS okta_application_reconcile_runs (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  identity_provider_connection_id uuid NOT NULL,
+  status TEXT NOT NULL DEFAULT 'running',
+  started_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  finished_at timestamptz,
+  applications_seen integer NOT NULL DEFAULT 0,
+  applications_added integer NOT NULL DEFAULT 0,
+  applications_removed integer NOT NULL DEFAULT 0,
+  assignments_added integer NOT NULL DEFAULT 0,
+  assignments_removed integer NOT NULL DEFAULT 0,
+  skipped_app_ids TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  truncated boolean NOT NULL DEFAULT FALSE,
+  -- Typed reason, never a raw provider body.
+  error TEXT,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT okta_application_reconcile_runs_pkey PRIMARY KEY (id),
+  CONSTRAINT okta_application_reconcile_runs_status_check CHECK (status IN ('running', 'succeeded', 'failed')),
+  CONSTRAINT okta_application_reconcile_runs_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT okta_application_reconcile_runs_connection_tenant_fkey FOREIGN KEY (organization_id, identity_provider_connection_id) REFERENCES identity_provider_connections (organization_id, id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS okta_application_reconcile_runs_connection_started_at_idx
+ON okta_application_reconcile_runs (organization_id, identity_provider_connection_id, started_at DESC);
 
 -- User Session Issuers house configuration for when Gram acts as an Authorization Server for MCP Clients
 -- See: https://datatracker.ietf.org/doc/html/rfc8414
