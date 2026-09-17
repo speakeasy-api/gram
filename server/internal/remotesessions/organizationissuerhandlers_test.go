@@ -179,6 +179,30 @@ func TestDeleteIssuer_BlockedByTrustedUserSessionIssuer(t *testing.T) {
 	}))
 }
 
+func TestUpdateIssuerRejectsCapabilitiesThatInvalidateTrustedClient(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	issuerID, clientID := seedTrustedIdentityProviderClient(t, ctx, ti.conn, "admin-update-trusted-capabilities")
+	createTrustedClientOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "admin-update-trusted-capabilities-usi", issuerID, clientID)
+
+	_, err := ti.service.UpdateIssuer(ctx, &orgissuersgen.UpdateIssuerPayload{
+		ID:              issuerID.String(),
+		ScopesSupported: []string{"openid", "email"},
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	require.ErrorContains(t, err, "identity-provider login")
+
+	stored, err := repo.New(ti.conn).GetTrustedRemoteSessionIssuerForOrganization(ctx, repo.GetTrustedRemoteSessionIssuerForOrganizationParams{
+		ID:             issuerID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+	require.Contains(t, stored.ScopesSupported, "offline_access")
+}
+
 // TestDeleteIssuer_SerializedAgainstClientBinding is the organization-tier
 // counterpart to TestDeleteRemoteSessionIssuer_SerializedAgainstClientBinding:
 // the org-admin delete must take the same client-binding advisory lock, so a

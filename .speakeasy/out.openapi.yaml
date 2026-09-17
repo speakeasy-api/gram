@@ -32386,7 +32386,7 @@ paths:
         name: OrganizationRemoteSessionClient
   /rpc/organizationRemoteSessionClients.getDeletePreflight:
     get:
-      description: 'Authoritative impact summary for deleting a remote_session_client: associated session count and affected MCP server names. Requires org:read.'
+      description: 'Authoritative impact summary for deleting a remote_session_client: associated session count, affected MCP server names, and trusted identity-provider login references that must be explicitly unlinked before deletion. Requires org:read.'
       operationId: getOrganizationRemoteSessionClientDeletePreflight
       parameters:
         - allowEmptyValue: true

@@ -35,7 +35,7 @@ func seedTrustedRemoteSessionIssuerTarget(t *testing.T, ctx context.Context, ti 
 		Issuer:                            "https://" + slug + ".example.com",
 		AuthorizationEndpoint:             pgtype.Text{String: "https://" + slug + ".example.com/authorize", Valid: true},
 		TokenEndpoint:                     pgtype.Text{String: "https://" + slug + ".example.com/token", Valid: true},
-		ScopesSupported:                   []string{"openid", "email"},
+		ScopesSupported:                   []string{"openid", "email", "offline_access"},
 		GrantTypesSupported:               []string{"authorization_code"},
 		ResponseTypesSupported:            []string{"code"},
 		TokenEndpointAuthMethodsSupported: []string{"client_secret_basic"},
@@ -131,6 +131,39 @@ func TestOrganizationUserSessionIssuerTrustedRemoteSessionIssuer(t *testing.T) {
 	require.Equal(t, globalTargetID, *loaded.TrustedRemoteSessionIssuerID)
 	require.Equal(t, globalClientID, *loaded.TrustedRemoteSessionClientID)
 
+	_, err = ti.service.UpdateIssuer(ctx, &orggen.UpdateIssuerPayload{
+		ID:                           created.ID,
+		TrustedRemoteSessionIssuerID: &organizationTargetID,
+	})
+	requireOopsCode(t, err, oops.CodeNotFound)
+	stillLinked, err := ti.service.GetIssuer(ctx, &orggen.GetIssuerPayload{ID: created.ID})
+	require.NoError(t, err)
+	require.Equal(t, globalTargetID, *stillLinked.TrustedRemoteSessionIssuerID)
+	require.Equal(t, globalClientID, *stillLinked.TrustedRemoteSessionClientID)
+
+	clearValue := ""
+	issuerOnly, err := ti.service.UpdateIssuer(ctx, &orggen.UpdateIssuerPayload{
+		ID:                           created.ID,
+		TrustedRemoteSessionClientID: &clearValue,
+	})
+	require.NoError(t, err)
+	require.Equal(t, globalTargetID, *issuerOnly.TrustedRemoteSessionIssuerID)
+	require.Nil(t, issuerOnly.TrustedRemoteSessionClientID)
+
+	relinked, err := ti.service.UpdateIssuer(ctx, &orggen.UpdateIssuerPayload{
+		ID:                           created.ID,
+		TrustedRemoteSessionClientID: &globalClientID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, globalTargetID, *relinked.TrustedRemoteSessionIssuerID)
+	require.Equal(t, globalClientID, *relinked.TrustedRemoteSessionClientID)
+
+	_, err = ti.service.UpdateIssuer(ctx, &orggen.UpdateIssuerPayload{
+		ID:                           created.ID,
+		TrustedRemoteSessionIssuerID: &clearValue,
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+
 	whitespaceClearValue := "\t\n "
 	clearedWithWhitespace, err := ti.service.UpdateIssuer(ctx, &orggen.UpdateIssuerPayload{
 		ID:                           created.ID,
@@ -148,7 +181,6 @@ func TestOrganizationUserSessionIssuerTrustedRemoteSessionIssuer(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	clearValue := ""
 	cleared, err := ti.service.UpdateIssuer(ctx, &orggen.UpdateIssuerPayload{
 		ID:                           created.ID,
 		TrustedRemoteSessionIssuerID: &clearValue,
@@ -207,13 +239,26 @@ func TestOrganizationUserSessionIssuerTrustedPairValidation(t *testing.T) {
 	remoteIssuerID := seedTrustedRemoteSessionIssuerTarget(t, ctx, ti, "trusted-validation-target", uuid.NullUUID{}, organizationID)
 	remoteIssuerIDString := remoteIssuerID.String()
 
-	_, err := ti.service.CreateIssuer(ctx, &orggen.CreateIssuerPayload{
+	issuerOnly, err := ti.service.CreateIssuer(ctx, &orggen.CreateIssuerPayload{
 		SessionToken:                 nil,
 		Slug:                         "trusted-validation-one-sided",
 		AuthnChallengeMode:           "chain",
 		SessionDurationHours:         24,
 		TrustedRemoteSessionIssuerID: &remoteIssuerIDString,
 		TrustedRemoteSessionClientID: nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, remoteIssuerIDString, *issuerOnly.TrustedRemoteSessionIssuerID)
+	require.Nil(t, issuerOnly.TrustedRemoteSessionClientID)
+
+	eligibleClientID := seedTrustedRemoteSessionClientTarget(t, ctx, ti, remoteIssuerID, "trusted-validation-client-only", uuid.NullUUID{}, organizationID, []string{"openid", "email"}).String()
+	_, err = ti.service.CreateIssuer(ctx, &orggen.CreateIssuerPayload{
+		SessionToken:                 nil,
+		Slug:                         "trusted-validation-client-only",
+		AuthnChallengeMode:           "chain",
+		SessionDurationHours:         24,
+		TrustedRemoteSessionIssuerID: nil,
+		TrustedRemoteSessionClientID: &eligibleClientID,
 	})
 	requireOopsCode(t, err, oops.CodeBadRequest)
 
@@ -227,6 +272,60 @@ func TestOrganizationUserSessionIssuerTrustedPairValidation(t *testing.T) {
 		TrustedRemoteSessionClientID: &missingEmailClientID,
 	})
 	requireOopsCode(t, err, oops.CodeBadRequest)
+
+	wrongIssuerID := seedTrustedRemoteSessionIssuerTarget(t, ctx, ti, "trusted-validation-wrong-issuer", uuid.NullUUID{}, organizationID).String()
+	_, err = ti.service.CreateIssuer(ctx, &orggen.CreateIssuerPayload{
+		SessionToken:                 nil,
+		Slug:                         "trusted-validation-wrong-pair",
+		AuthnChallengeMode:           "chain",
+		SessionDurationHours:         24,
+		TrustedRemoteSessionIssuerID: &wrongIssuerID,
+		TrustedRemoteSessionClientID: &eligibleClientID,
+	})
+	requireOopsCode(t, err, oops.CodeNotFound)
+
+	globalIssuerID := seedTrustedRemoteSessionIssuerTarget(t, ctx, ti, "trusted-validation-global", uuid.NullUUID{}, pgtype.Text{})
+	globalIssuerIDString := globalIssuerID.String()
+	globalClientID := seedTrustedRemoteSessionClientTarget(t, ctx, ti, globalIssuerID, "trusted-validation-global", uuid.NullUUID{}, pgtype.Text{}, []string{"openid", "email"}).String()
+	_, err = ti.service.CreateIssuer(ctx, &orggen.CreateIssuerPayload{
+		SessionToken:                 nil,
+		Slug:                         "trusted-validation-global-client",
+		AuthnChallengeMode:           "chain",
+		SessionDurationHours:         24,
+		TrustedRemoteSessionIssuerID: &globalIssuerIDString,
+		TrustedRemoteSessionClientID: &globalClientID,
+	})
+	requireOopsCode(t, err, oops.CodeNotFound)
+
+	deletedClientID := seedTrustedRemoteSessionClientTarget(t, ctx, ti, remoteIssuerID, "trusted-validation-deleted-client", uuid.NullUUID{}, organizationID, []string{"openid", "email"})
+	deletedClientRows, err := remotesessionsrepo.New(ti.conn).SoftDeleteRemoteSessionClientFixture(ctx, deletedClientID)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, deletedClientRows)
+	deletedClientIDString := deletedClientID.String()
+	_, err = ti.service.CreateIssuer(ctx, &orggen.CreateIssuerPayload{
+		SessionToken:                 nil,
+		Slug:                         "trusted-validation-deleted-client",
+		AuthnChallengeMode:           "chain",
+		SessionDurationHours:         24,
+		TrustedRemoteSessionIssuerID: &remoteIssuerIDString,
+		TrustedRemoteSessionClientID: &deletedClientIDString,
+	})
+	requireOopsCode(t, err, oops.CodeNotFound)
+
+	deletedIssuerID := seedTrustedRemoteSessionIssuerTarget(t, ctx, ti, "trusted-validation-deleted-issuer", uuid.NullUUID{}, organizationID)
+	deletedIssuerRows, err := remotesessionsrepo.New(ti.conn).SoftDeleteRemoteSessionIssuerFixture(ctx, deletedIssuerID)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, deletedIssuerRows)
+	deletedIssuerIDString := deletedIssuerID.String()
+	_, err = ti.service.CreateIssuer(ctx, &orggen.CreateIssuerPayload{
+		SessionToken:                 nil,
+		Slug:                         "trusted-validation-deleted-issuer",
+		AuthnChallengeMode:           "chain",
+		SessionDurationHours:         24,
+		TrustedRemoteSessionIssuerID: &deletedIssuerIDString,
+		TrustedRemoteSessionClientID: nil,
+	})
+	requireOopsCode(t, err, oops.CodeNotFound)
 }
 
 func TestOrganizationUserSessionIssuersCRUDAndListIsolation(t *testing.T) {

@@ -68,6 +68,10 @@ var (
 	// re-register the client.
 	ErrIssuerHasNoRegistrationEndpoint = errors.New("remotesessions: issuer publishes no registration endpoint to re-register at")
 
+	// ErrIssuerConfigurationChanged reports that the client moved to another
+	// issuer before rotation stabilized the endpoint and transport snapshot.
+	ErrIssuerConfigurationChanged = errors.New("remotesessions: issuer configuration changed during client rotation")
+
 	// ErrClientNotRotatable reports a client whose registration is not the
 	// kind a dynamic registration produces: a CIMD-mode client, whose client_id
 	// is the metadata document URL, or a private_key_jwt client, whose
@@ -193,9 +197,10 @@ func NewClientRotator(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Cli
 // registration this call obtained is abandoned at the issuer.
 //
 // The lease, the probe, and the registration POST all happen outside a
-// database transaction; the persisting write compares the client_id read at
-// the start so a concurrent rotation is detected rather than blocked behind a
-// row lock held across two outbound calls.
+// database transaction. A session-scoped issuer advisory lock keeps the
+// endpoint and transport snapshot stable across those calls, while the
+// persisting write compares the client_id read at the start so a concurrent
+// client update is detected.
 func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrationParams) (repo.RemoteSessionClient, error) {
 	var zero repo.RemoteSessionClient
 
@@ -224,9 +229,37 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 	})
 
 	q := repo.New(r.db)
-	row, err := q.GetRemoteSessionClientForRotation(ctx, params.ClientID)
+	initial, err := q.GetRemoteSessionClientForRotation(ctx, params.ClientID)
 	if err != nil {
 		return zero, fmt.Errorf("load remote session client for rotation: %w", err)
+	}
+
+	issuerLockConn, err := r.db.Acquire(ctx)
+	if err != nil {
+		return zero, fmt.Errorf("acquire issuer rotation lock connection: %w", err)
+	}
+	defer issuerLockConn.Release()
+	issuerLockRepo := repo.New(issuerLockConn)
+	lockedIssuerID := initial.RemoteSessionClient.RemoteSessionIssuerID
+	if err := issuerLockRepo.LockRemoteSessionIssuerForClientBindingSession(ctx, lockedIssuerID); err != nil {
+		return zero, fmt.Errorf("lock issuer configuration for client rotation: %w", err)
+	}
+	defer o11y.LogDefer(ctx, r.logger, "failed to unlock issuer configuration after client rotation", func() error {
+		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), refreshReleaseTimeout)
+		defer cancel()
+		_, unlockErr := issuerLockRepo.UnlockRemoteSessionIssuerForClientBindingSession(releaseCtx, lockedIssuerID)
+		if unlockErr != nil {
+			return fmt.Errorf("unlock issuer configuration: %w", unlockErr)
+		}
+		return nil
+	})
+
+	row, err := issuerLockRepo.GetRemoteSessionClientForRotation(ctx, params.ClientID)
+	if err != nil {
+		return zero, fmt.Errorf("reload remote session client under issuer rotation lock: %w", err)
+	}
+	if row.RemoteSessionClient.RemoteSessionIssuerID != lockedIssuerID {
+		return zero, ErrIssuerConfigurationChanged
 	}
 	current := row.RemoteSessionClient
 
@@ -317,7 +350,7 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 		secretExpiresAt = pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
 	}
 
-	dbtx, err := r.db.Begin(ctx)
+	dbtx, err := issuerLockConn.Begin(ctx)
 	if err != nil {
 		return zero, fmt.Errorf("begin client rotation transaction: %w", err)
 	}
@@ -372,7 +405,7 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 		return zero, fmt.Errorf("count identity-provider login references after client rotation: %w", err)
 	}
 	if trustedReferenceCount > 0 {
-		pair, pairErr := txRepo.GetTrustedRemoteSessionClientForOrganization(ctx, repo.GetTrustedRemoteSessionClientForOrganizationParams{
+		pair, pairErr := txRepo.LockTrustedRemoteSessionClientForOrganization(ctx, repo.LockTrustedRemoteSessionClientForOrganizationParams{
 			ClientID:       updated.ID,
 			IssuerID:       updated.RemoteSessionIssuerID,
 			OrganizationID: updated.OrganizationID.String,

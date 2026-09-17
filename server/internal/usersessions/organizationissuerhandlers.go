@@ -45,9 +45,29 @@ func (s *Service) requireOrganizationIssuerScope(ctx context.Context, scope auth
 
 var errTrustedRemoteSessionClientConfiguration = errors.New("invalid trusted remote session client configuration")
 
+func lockTrustedRemoteSessionIssuer(ctx context.Context, q *remotesessionsrepo.Queries, issuerID uuid.UUID, organizationID string) error {
+	getParams := remotesessionsrepo.GetTrustedRemoteSessionIssuerForOrganizationParams{
+		ID:             issuerID,
+		OrganizationID: organizationID,
+	}
+	if _, err := q.GetTrustedRemoteSessionIssuerForOrganization(ctx, getParams); err != nil {
+		return fmt.Errorf("get trusted remote session issuer before lock: %w", err)
+	}
+	if err := q.LockRemoteSessionIssuerForClientBinding(ctx, issuerID); err != nil {
+		return fmt.Errorf("lock trusted remote session issuer: %w", err)
+	}
+	if _, err := q.LockTrustedRemoteSessionIssuerForOrganization(ctx, remotesessionsrepo.LockTrustedRemoteSessionIssuerForOrganizationParams{
+		ID:             issuerID,
+		OrganizationID: organizationID,
+	}); err != nil {
+		return fmt.Errorf("lock trusted remote session issuer row: %w", err)
+	}
+	return nil
+}
+
 // lockTrustedRemoteSessionPair uses one eligibility predicate before and after
 // locking. The global order is an existing user-session issuer row first, then
-// the remote issuer advisory lock, then the remote client row lock.
+// the remote issuer advisory lock, then the remote issuer and client row locks.
 func lockTrustedRemoteSessionPair(ctx context.Context, q *remotesessionsrepo.Queries, issuerID, clientID uuid.UUID, organizationID string) error {
 	getParams := remotesessionsrepo.GetTrustedRemoteSessionClientForOrganizationParams{
 		ClientID:       clientID,
@@ -139,8 +159,8 @@ func (s *Service) CreateIssuer(ctx context.Context, payload *orggen.CreateIssuer
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "%v", err).LogError(ctx, logger)
 	}
-	if trustedIssuerID.Valid != trustedClientID.Valid {
-		return nil, oops.E(oops.CodeBadRequest, nil, "trusted_remote_session_issuer_id and trusted_remote_session_client_id must be configured together").LogError(ctx, logger)
+	if trustedClientID.Valid && !trustedIssuerID.Valid {
+		return nil, oops.E(oops.CodeBadRequest, nil, "trusted_remote_session_client_id requires trusted_remote_session_issuer_id").LogError(ctx, logger)
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -150,14 +170,20 @@ func (s *Service) CreateIssuer(ctx context.Context, payload *orggen.CreateIssuer
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	if trustedIssuerID.Valid {
-		if err := lockTrustedRemoteSessionPair(ctx, remotesessionsrepo.New(dbtx), trustedIssuerID.UUID, trustedClientID.UUID, authCtx.ActiveOrganizationID); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return nil, oops.E(oops.CodeNotFound, err, "trusted remote session issuer and client pair not found").LogError(ctx, logger)
+		var trustErr error
+		if trustedClientID.Valid {
+			trustErr = lockTrustedRemoteSessionPair(ctx, remotesessionsrepo.New(dbtx), trustedIssuerID.UUID, trustedClientID.UUID, authCtx.ActiveOrganizationID)
+		} else {
+			trustErr = lockTrustedRemoteSessionIssuer(ctx, remotesessionsrepo.New(dbtx), trustedIssuerID.UUID, authCtx.ActiveOrganizationID)
+		}
+		if trustErr != nil {
+			if errors.Is(trustErr, pgx.ErrNoRows) {
+				return nil, oops.E(oops.CodeNotFound, trustErr, "trusted remote session issuer or issuer/client pair not found").LogError(ctx, logger)
 			}
-			if errors.Is(err, errTrustedRemoteSessionClientConfiguration) {
-				return nil, oops.E(oops.CodeBadRequest, err, "trusted remote session client is not eligible for identity-provider login: %v", err).LogError(ctx, logger)
+			if errors.Is(trustErr, errTrustedRemoteSessionClientConfiguration) {
+				return nil, oops.E(oops.CodeBadRequest, trustErr, "trusted remote session client is not eligible for identity-provider login: %v", trustErr).LogError(ctx, logger)
 			}
-			return nil, oops.E(oops.CodeUnexpected, err, "validate trusted remote session issuer and client pair").LogError(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, trustErr, "validate trusted remote session issuer or issuer/client pair").LogError(ctx, logger)
 		}
 	}
 
@@ -311,18 +337,24 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *orggen.UpdateIssuer
 	if payload.TrustedRemoteSessionClientID != nil {
 		resultingTrustedClientID = trustedClientID
 	}
-	if resultingTrustedIssuerID.Valid != resultingTrustedClientID.Valid {
-		return nil, oops.E(oops.CodeBadRequest, nil, "trusted_remote_session_issuer_id and trusted_remote_session_client_id must be configured or cleared together").LogError(ctx, logger)
+	if resultingTrustedClientID.Valid && !resultingTrustedIssuerID.Valid {
+		return nil, oops.E(oops.CodeBadRequest, nil, "trusted_remote_session_client_id requires trusted_remote_session_issuer_id").LogError(ctx, logger)
 	}
 	if resultingTrustedIssuerID.Valid {
-		if err := lockTrustedRemoteSessionPair(ctx, remotesessionsrepo.New(dbtx), resultingTrustedIssuerID.UUID, resultingTrustedClientID.UUID, authCtx.ActiveOrganizationID); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return nil, oops.E(oops.CodeNotFound, err, "trusted remote session issuer and client pair not found").LogError(ctx, logger)
+		var trustErr error
+		if resultingTrustedClientID.Valid {
+			trustErr = lockTrustedRemoteSessionPair(ctx, remotesessionsrepo.New(dbtx), resultingTrustedIssuerID.UUID, resultingTrustedClientID.UUID, authCtx.ActiveOrganizationID)
+		} else {
+			trustErr = lockTrustedRemoteSessionIssuer(ctx, remotesessionsrepo.New(dbtx), resultingTrustedIssuerID.UUID, authCtx.ActiveOrganizationID)
+		}
+		if trustErr != nil {
+			if errors.Is(trustErr, pgx.ErrNoRows) {
+				return nil, oops.E(oops.CodeNotFound, trustErr, "trusted remote session issuer or issuer/client pair not found").LogError(ctx, logger)
 			}
-			if errors.Is(err, errTrustedRemoteSessionClientConfiguration) {
-				return nil, oops.E(oops.CodeBadRequest, err, "trusted remote session client is not eligible for identity-provider login: %v", err).LogError(ctx, logger)
+			if errors.Is(trustErr, errTrustedRemoteSessionClientConfiguration) {
+				return nil, oops.E(oops.CodeBadRequest, trustErr, "trusted remote session client is not eligible for identity-provider login: %v", trustErr).LogError(ctx, logger)
 			}
-			return nil, oops.E(oops.CodeUnexpected, err, "validate trusted remote session issuer and client pair").LogError(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, trustErr, "validate trusted remote session issuer or issuer/client pair").LogError(ctx, logger)
 		}
 	}
 	var trustedIssuerIDParam pgtype.Text

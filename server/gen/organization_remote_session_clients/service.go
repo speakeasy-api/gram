@@ -27,7 +27,9 @@ type Service interface {
 	// org:read.
 	GetClient(context.Context, *GetClientPayload) (res *types.RemoteSessionClient, err error)
 	// Authoritative impact summary for deleting a remote_session_client:
-	// associated session count and affected MCP server names. Requires org:read.
+	// associated session count, affected MCP server names, and trusted
+	// identity-provider login references that must be explicitly unlinked before
+	// deletion. Requires org:read.
 	GetClientDeletePreflight(context.Context, *GetClientDeletePreflightPayload) (res *OrganizationClientDeletePreflight, err error)
 	// List the MCP servers a remote_session_client is attached to (resolved
 	// through user_session_issuers) in the caller's organization. Requires

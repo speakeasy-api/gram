@@ -6418,6 +6418,72 @@ func (q *Queries) ListTenantRemoteSessionIssuersByIssuerURL(ctx context.Context,
 	return items, nil
 }
 
+const listTrustedRemoteSessionClientsByIssuerID = `-- name: ListTrustedRemoteSessionClientsByIssuerID :many
+SELECT c.id, c.project_id, c.organization_id, c.attachment_scope, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.grant_types, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.resource_identifier, c.resource_name, c.resource_documentation, c.resource_policy_uri, c.resource_tos_uri, c.upstream_rejected_at, c.created_at, c.updated_at, c.deleted_at, c.deleted
+FROM remote_session_clients AS c
+WHERE c.remote_session_issuer_id = $1
+  AND c.deleted IS FALSE
+  AND EXISTS (
+    SELECT 1
+    FROM user_session_issuers AS usi
+    WHERE usi.trusted_remote_session_issuer_id = $1
+      AND usi.trusted_remote_session_client_id = c.id
+      AND usi.deleted IS FALSE
+  )
+ORDER BY c.id
+`
+
+// Every live client actively used with this issuer for identity-provider login.
+// Issuer capability writers validate these rows before committing so an
+// existing trusted-login pair cannot be invalidated after it was linked.
+func (q *Queries) ListTrustedRemoteSessionClientsByIssuerID(ctx context.Context, remoteSessionIssuerID uuid.UUID) ([]RemoteSessionClient, error) {
+	rows, err := q.db.Query(ctx, listTrustedRemoteSessionClientsByIssuerID, remoteSessionIssuerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RemoteSessionClient
+	for rows.Next() {
+		var i RemoteSessionClient
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.OrganizationID,
+			&i.AttachmentScope,
+			&i.RemoteSessionIssuerID,
+			&i.ClientID,
+			&i.ClientSecretEncrypted,
+			&i.ClientIDIssuedAt,
+			&i.ClientSecretExpiresAt,
+			&i.TokenEndpointAuthMethod,
+			&i.JsonWebKeySetID,
+			&i.Scope,
+			&i.GrantTypes,
+			&i.Audience,
+			&i.TokenEndpointAuthAudienceFormat,
+			&i.ClientIDMetadataUri,
+			&i.LegacyCallbackUrl,
+			&i.ResourceIdentifier,
+			&i.ResourceName,
+			&i.ResourceDocumentation,
+			&i.ResourcePolicyUri,
+			&i.ResourceTosUri,
+			&i.UpstreamRejectedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUserSessionIssuerIDsForRemoteSessionClient = `-- name: ListUserSessionIssuerIDsForRemoteSessionClient :many
 SELECT link.user_session_issuer_id
 FROM remote_session_client_user_session_issuers AS link
@@ -6713,6 +6779,20 @@ func (q *Queries) LockRemoteSessionIssuerForClientBinding(ctx context.Context, r
 	return err
 }
 
+const lockRemoteSessionIssuerForClientBindingSession = `-- name: LockRemoteSessionIssuerForClientBindingSession :exec
+SELECT pg_advisory_lock(hashtextextended(($1::uuid)::text, 0))
+`
+
+// Session-scoped counterpart used by registration rotation. Rotation must keep
+// the issuer's endpoint and tunnel snapshot stable across upstream HTTP calls,
+// but must not hold a database transaction open while making those calls. The
+// caller owns one dedicated pooled connection until it invokes the matching
+// unlock query.
+func (q *Queries) LockRemoteSessionIssuerForClientBindingSession(ctx context.Context, remoteSessionIssuerID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, lockRemoteSessionIssuerForClientBindingSession, remoteSessionIssuerID)
+	return err
+}
+
 const lockRemoteSessionIssuerForMetadataRefresh = `-- name: LockRemoteSessionIssuerForMetadataRefresh :one
 SELECT id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, jwks, jwks_fetched_at, jwks_last_error, jwks_last_error_at, jwks_cache_expires_at, jwks_etag, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, authorization_grant_profiles_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, userinfo_endpoint, introspection_endpoint, introspection_endpoint_auth_methods_supported, id_token_signing_alg_values_supported, claims_supported, backchannel_logout_supported, authorization_response_iss_parameter_supported, scope_override, resource_indicator_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, metadata_last_error_url, created_at, updated_at, deleted_at, deleted
 FROM remote_session_issuers
@@ -6808,7 +6888,7 @@ WHERE c.id = $1::uuid
   AND i.project_id IS NULL
   AND (i.organization_id = $3::text OR i.organization_id IS NULL)
   AND i.deleted IS FALSE
-FOR SHARE OF c
+FOR SHARE OF c, i
 `
 
 type LockTrustedRemoteSessionClientForOrganizationParams struct {
@@ -6906,6 +6986,82 @@ func (q *Queries) LockTrustedRemoteSessionClientForOrganization(ctx context.Cont
 		&i.RemoteSessionIssuer.UpdatedAt,
 		&i.RemoteSessionIssuer.DeletedAt,
 		&i.RemoteSessionIssuer.Deleted,
+	)
+	return i, err
+}
+
+const lockTrustedRemoteSessionIssuerForOrganization = `-- name: LockTrustedRemoteSessionIssuerForOrganization :one
+SELECT id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, jwks, jwks_fetched_at, jwks_last_error, jwks_last_error_at, jwks_cache_expires_at, jwks_etag, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, authorization_grant_profiles_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, userinfo_endpoint, introspection_endpoint, introspection_endpoint_auth_methods_supported, id_token_signing_alg_values_supported, claims_supported, backchannel_logout_supported, authorization_response_iss_parameter_supported, scope_override, resource_indicator_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, metadata_last_error_url, created_at, updated_at, deleted_at, deleted
+FROM remote_session_issuers
+WHERE id = $1
+  AND project_id IS NULL
+  AND (organization_id = $2::text OR organization_id IS NULL)
+  AND deleted IS FALSE
+FOR SHARE
+`
+
+type LockTrustedRemoteSessionIssuerForOrganizationParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+// Repeats the issuer-only eligibility predicate after the caller has taken the
+// issuer advisory lock. The row lock prevents a capability or lifecycle write
+// from invalidating the reference before its transaction commits.
+func (q *Queries) LockTrustedRemoteSessionIssuerForOrganization(ctx context.Context, arg LockTrustedRemoteSessionIssuerForOrganizationParams) (RemoteSessionIssuer, error) {
+	row := q.db.QueryRow(ctx, lockTrustedRemoteSessionIssuerForOrganization, arg.ID, arg.OrganizationID)
+	var i RemoteSessionIssuer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.Slug,
+		&i.Issuer,
+		&i.AuthorizationEndpoint,
+		&i.TokenEndpoint,
+		&i.RevocationEndpoint,
+		&i.RegistrationEndpoint,
+		&i.JwksUri,
+		&i.Jwks,
+		&i.JwksFetchedAt,
+		&i.JwksLastError,
+		&i.JwksLastErrorAt,
+		&i.JwksCacheExpiresAt,
+		&i.JwksEtag,
+		&i.ServiceDocumentation,
+		&i.OpPolicyUri,
+		&i.OpTosUri,
+		&i.ScopesSupported,
+		&i.GrantTypesSupported,
+		&i.AuthorizationGrantProfilesSupported,
+		&i.ResponseTypesSupported,
+		&i.TokenEndpointAuthMethodsSupported,
+		&i.CodeChallengeMethodsSupported,
+		&i.ClientIDMetadataDocumentSupported,
+		&i.UserinfoEndpoint,
+		&i.IntrospectionEndpoint,
+		&i.IntrospectionEndpointAuthMethodsSupported,
+		&i.IDTokenSigningAlgValuesSupported,
+		&i.ClaimsSupported,
+		&i.BackchannelLogoutSupported,
+		&i.AuthorizationResponseIssParameterSupported,
+		&i.ScopeOverride,
+		&i.ResourceIndicatorSupported,
+		&i.Oidc,
+		&i.Passthrough,
+		&i.TunneledMcpServerID,
+		&i.Name,
+		&i.LogoAssetID,
+		&i.ClientSetupDocumentationUrl,
+		&i.Metadata,
+		&i.MetadataFetchedAt,
+		&i.MetadataLastError,
+		&i.MetadataLastErrorAt,
+		&i.MetadataLastErrorUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
 	)
 	return i, err
 }
@@ -8065,6 +8221,40 @@ func (q *Queries) SoftDeleteRemoteSessionBySubjectAndClient(ctx context.Context,
 	return items, nil
 }
 
+const softDeleteRemoteSessionClientFixture = `-- name: SoftDeleteRemoteSessionClientFixture :execrows
+UPDATE remote_session_clients
+SET deleted_at = clock_timestamp()
+WHERE id = $1
+  AND deleted IS FALSE
+`
+
+// Test fixture: plants a tombstoned client for management-link rejection tests
+// without coupling those tests to a second service's authorization path.
+func (q *Queries) SoftDeleteRemoteSessionClientFixture(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, softDeleteRemoteSessionClientFixture, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const softDeleteRemoteSessionIssuerFixture = `-- name: SoftDeleteRemoteSessionIssuerFixture :execrows
+UPDATE remote_session_issuers
+SET deleted_at = clock_timestamp()
+WHERE id = $1
+  AND deleted IS FALSE
+`
+
+// Test fixture: plants a tombstoned issuer for management-link rejection tests
+// without coupling those tests to a second service's authorization path.
+func (q *Queries) SoftDeleteRemoteSessionIssuerFixture(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, softDeleteRemoteSessionIssuerFixture, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const softDeleteRemoteSessionsByClientID = `-- name: SoftDeleteRemoteSessionsByClientID :many
 UPDATE remote_sessions
 SET deleted_at = clock_timestamp(),
@@ -8285,6 +8475,17 @@ func (q *Queries) TouchRemoteSessionLastUsed(ctx context.Context, arg TouchRemot
 		arg.UsedCutoff,
 	)
 	return err
+}
+
+const unlockRemoteSessionIssuerForClientBindingSession = `-- name: UnlockRemoteSessionIssuerForClientBindingSession :one
+SELECT pg_advisory_unlock(hashtextextended(($1::uuid)::text, 0))
+`
+
+func (q *Queries) UnlockRemoteSessionIssuerForClientBindingSession(ctx context.Context, remoteSessionIssuerID uuid.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, unlockRemoteSessionIssuerForClientBindingSession, remoteSessionIssuerID)
+	var pg_advisory_unlock bool
+	err := row.Scan(&pg_advisory_unlock)
+	return pg_advisory_unlock, err
 }
 
 const updateGlobalRemoteSessionClient = `-- name: UpdateGlobalRemoteSessionClient :one

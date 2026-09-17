@@ -290,6 +290,9 @@ func (s *Service) RefreshRemoteSessionIssuerMetadata(ctx context.Context, payloa
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := repo.New(dbtx)
+	if err := txRepo.LockRemoteSessionIssuerForClientBinding(ctx, issuerID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock remote session issuer configuration").LogError(ctx, logger)
+	}
 
 	// Re-read under a row lock rather than reusing the pre-discovery read: an
 	// updateIssuer that committed while discovery ran would otherwise land in
@@ -607,6 +610,9 @@ func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.Up
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := repo.New(dbtx)
+	if err := txRepo.LockRemoteSessionIssuerForClientBinding(ctx, issuerID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock remote session issuer configuration").LogError(ctx, logger)
+	}
 
 	// Keep the pre-update lookup strictly project-scoped: organization-level
 	// issuers are edited via the organizationRemoteSessionIssuers service,

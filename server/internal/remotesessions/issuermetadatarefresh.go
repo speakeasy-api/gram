@@ -548,6 +548,9 @@ func (r *IssuerMetadataRefresher) apply(ctx context.Context, logger *slog.Logger
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := repo.New(dbtx)
+	if err := txRepo.LockRemoteSessionIssuerForClientBinding(ctx, existing.ID); err != nil {
+		return remotesessionmetrics.IssuerMetadataRefreshOutcomeInternalError, fmt.Errorf("lock remote session issuer configuration: %w", err)
+	}
 
 	locked, err := txRepo.LockRemoteSessionIssuerForMetadataRefresh(ctx, repo.LockRemoteSessionIssuerForMetadataRefreshParams{
 		ID:             existing.ID,
@@ -574,6 +577,9 @@ func (r *IssuerMetadataRefresher) apply(ctx context.Context, logger *slog.Logger
 			return remotesessionmetrics.IssuerMetadataRefreshOutcomeConflict, nil
 		}
 		return remotesessionmetrics.IssuerMetadataRefreshOutcomeInternalError, fmt.Errorf("write remote session issuer metadata: %w", err)
+	}
+	if err := validateTrustedIdentityProviderIssuerClients(ctx, txRepo, updated); err != nil {
+		return remotesessionmetrics.IssuerMetadataRefreshOutcomeInternalError, fmt.Errorf("refreshed metadata would invalidate identity-provider login: %w", err)
 	}
 
 	// Only a row with neither scope column is global; a legacy project row resolves its organization through the project.

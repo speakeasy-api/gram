@@ -1,6 +1,7 @@
 package remotesessions
 
 import (
+	"context"
 	"fmt"
 	"slices"
 
@@ -14,13 +15,21 @@ var requiredIdentityProviderScopes = [...]string{"openid", "email"}
 // validates the client's explicit upstream scope allowlist, not the downstream
 // scopes requested by an MCP server.
 func ValidateTrustedIdentityProviderClient(client repo.RemoteSessionClient, issuer repo.RemoteSessionIssuer) error {
+	effectiveScopes := client.Scope
+	if len(issuer.ScopeOverride) > 0 {
+		effectiveScopes = issuer.ScopeOverride
+	}
+
 	for _, required := range requiredIdentityProviderScopes {
-		if !slices.Contains(client.Scope, required) {
-			return fmt.Errorf("client scope must include %q", required)
+		if !slices.Contains(effectiveScopes, required) {
+			return fmt.Errorf("effective client scope must include %q", required)
 		}
 		if len(issuer.ScopesSupported) > 0 && !slices.Contains(issuer.ScopesSupported, required) {
 			return fmt.Errorf("issuer metadata does not advertise required scope %q", required)
 		}
+	}
+	if slices.Contains(effectiveScopes, "offline_access") && len(issuer.ScopesSupported) > 0 && !slices.Contains(issuer.ScopesSupported, "offline_access") {
+		return fmt.Errorf("issuer metadata does not advertise requested scope %q", "offline_access")
 	}
 
 	secret := ""
@@ -31,6 +40,9 @@ func ValidateTrustedIdentityProviderClient(client repo.RemoteSessionClient, issu
 	if err != nil {
 		return fmt.Errorf("invalid token endpoint authentication: %w", err)
 	}
+	if method == TokenEndpointAuthMethodNone {
+		return fmt.Errorf("token endpoint authentication method %q is not eligible for trusted identity-provider login", method)
+	}
 	if method == TokenEndpointAuthMethodPrivateKeyJWT && !client.JsonWebKeySetID.Valid {
 		return fmt.Errorf("private_key_jwt requires an attached JSON Web Key Set")
 	}
@@ -38,5 +50,18 @@ func ValidateTrustedIdentityProviderClient(client repo.RemoteSessionClient, issu
 		return fmt.Errorf("issuer metadata does not advertise token endpoint authentication method %q", method)
 	}
 
+	return nil
+}
+
+func validateTrustedIdentityProviderIssuerClients(ctx context.Context, q *repo.Queries, issuer repo.RemoteSessionIssuer) error {
+	clients, err := q.ListTrustedRemoteSessionClientsByIssuerID(ctx, issuer.ID)
+	if err != nil {
+		return fmt.Errorf("list trusted identity-provider clients: %w", err)
+	}
+	for _, client := range clients {
+		if err := ValidateTrustedIdentityProviderClient(client, issuer); err != nil {
+			return fmt.Errorf("client %s is no longer eligible: %w", client.ID, err)
+		}
+	}
 	return nil
 }

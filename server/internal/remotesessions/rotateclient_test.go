@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	orgclientsgen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_clients"
+	issuersgen "github.com/speakeasy-api/gram/server/gen/remote_session_issuers"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -65,11 +66,66 @@ func TestRotateClientRejectsIneligibleIdentityProviderLoginReplacement(t *testin
 		ApikeyToken:  nil,
 	})
 	requireOopsCode(t, err, oops.CodeBadRequest)
+	require.ErrorContains(t, err, "identity-provider login")
 	require.EqualValues(t, 1, registrations.Load())
 
 	stored, err := repo.New(ti.conn).GetRemoteSessionClientForRotation(ctx, clientID)
 	require.NoError(t, err)
 	require.Equal(t, "rotate-trusted-client-client", stored.RemoteSessionClient.ClientID, "the invalid replacement must roll back")
+}
+
+func TestRotateClientSerializesIssuerConfigurationUpdate(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	registrationStarted := make(chan struct{}, 1)
+	allowRegistration := make(chan struct{})
+	registration := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/register" || r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		registrationStarted <- struct{}{}
+		select {
+		case <-allowRegistration:
+		case <-ctx.Done():
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"client_id":"rotated-cid","client_secret":"rotated-secret","token_endpoint_auth_method":"client_secret_basic"}`))
+	}))
+	t.Cleanup(registration.Close)
+
+	issuerID := createRemoteIssuer(t, ctx, ti, "rotate-issuer-snapshot", registration.URL+"/register")
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "rotate-issuer-snapshot-usi")
+	clientID := createRemoteClient(t, ctx, ti, issuerID, userIssuerID.String(), "rotate-issuer-snapshot-client")
+
+	rotationDone := make(chan error, 1)
+	go func() {
+		_, err := ti.service.RotateClient(ctx, &orgclientsgen.RotateClientPayload{ID: clientID})
+		rotationDone <- err
+	}()
+	require.Eventually(t, func() bool { return len(registrationStarted) > 0 }, 30*time.Second, 25*time.Millisecond)
+	<-registrationStarted
+
+	replacementEndpoint := registration.URL + "/replacement"
+	updateDone := make(chan error, 1)
+	go func() {
+		_, err := ti.service.UpdateRemoteSessionIssuer(ctx, &issuersgen.UpdateRemoteSessionIssuerPayload{
+			ID:                   issuerID,
+			RegistrationEndpoint: &replacementEndpoint,
+		})
+		updateDone <- err
+	}()
+	require.Never(t, func() bool { return len(updateDone) > 0 }, 500*time.Millisecond, 25*time.Millisecond,
+		"issuer configuration update completed while rotation was using its endpoint snapshot")
+
+	close(allowRegistration)
+	require.Eventually(t, func() bool { return len(rotationDone) > 0 }, 30*time.Second, 25*time.Millisecond)
+	require.NoError(t, <-rotationDone)
+	require.Eventually(t, func() bool { return len(updateDone) > 0 }, 30*time.Second, 25*time.Millisecond)
+	require.NoError(t, <-updateDone)
 }
 
 // An administrator's rotation needs no upstream confirmation: the client is

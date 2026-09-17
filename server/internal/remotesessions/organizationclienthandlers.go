@@ -645,7 +645,7 @@ func (s *Service) UpdateClient(ctx context.Context, payload *orgclientsgen.Updat
 		return nil, oops.E(oops.CodeUnexpected, err, "count identity-provider login references for client").LogError(ctx, logger)
 	}
 	if trustedReferenceCount > 0 {
-		pair, pairErr := txRepo.GetTrustedRemoteSessionClientForOrganization(ctx, repo.GetTrustedRemoteSessionClientForOrganizationParams{
+		pair, pairErr := txRepo.LockTrustedRemoteSessionClientForOrganization(ctx, repo.LockTrustedRemoteSessionClientForOrganizationParams{
 			ClientID:       updated.ID,
 			IssuerID:       updated.RemoteSessionIssuerID,
 			OrganizationID: authCtx.ActiveOrganizationID,
@@ -739,6 +739,8 @@ func (s *Service) RotateClient(ctx context.Context, payload *orgclientsgen.Rotat
 			return nil, oops.E(oops.CodeBadRequest, err, "the identity provider publishes no registration endpoint to re-register the client at").LogWarn(ctx, logger)
 		case errors.Is(err, ErrClientRotationInProgress):
 			return nil, oops.E(oops.CodeConflict, err, "the client is already being rotated; reload to see the result").LogWarn(ctx, logger)
+		case errors.Is(err, ErrIssuerConfigurationChanged):
+			return nil, oops.E(oops.CodeConflict, err, "the identity provider configuration changed during rotation; reload and retry").LogWarn(ctx, logger)
 		case errors.Is(err, ErrClientRegistrationIneligibleForIdentityProviderLogin):
 			return nil, oops.E(oops.CodeBadRequest, err, "the identity provider returned a replacement client that is not eligible for identity-provider login").LogWarn(ctx, logger)
 		case errors.Is(err, ErrInvalidDynamicClientRegistrationEndpoint):

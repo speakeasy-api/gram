@@ -364,7 +364,7 @@ func clearTrustedRemoteSessionIssuer(t *testing.T, ctx context.Context, conn *pg
 		SessionDuration:               pgtype.Interval{},
 		ClientIDMetadataAdmissionMode: pgtype.Text{},
 		TrustedRemoteSessionIssuerID:  conv.PtrToPGText(&empty),
-		TrustedRemoteSessionClientID:  pgtype.Text{},
+		TrustedRemoteSessionClientID:  conv.PtrToPGText(&empty),
 		ID:                            issuerID,
 		OrganizationID:                authCtx.ActiveOrganizationID,
 	})
@@ -578,7 +578,7 @@ func seedTrustedIdentityProviderClient(t *testing.T, ctx context.Context, conn *
 		Issuer:                            "https://" + slug + ".example.com",
 		AuthorizationEndpoint:             conv.ToPGText("https://" + slug + ".example.com/authorize"),
 		TokenEndpoint:                     conv.ToPGText("https://" + slug + ".example.com/token"),
-		ScopesSupported:                   []string{"openid", "email"},
+		ScopesSupported:                   []string{"openid", "email", "offline_access"},
 		GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
 		ResponseTypesSupported:            []string{"code"},
 		TokenEndpointAuthMethodsSupported: []string{"client_secret_basic"},

@@ -2809,6 +2809,17 @@ WHERE m.deleted IS FALSE
 -- migrations cannot deadlock.
 SELECT pg_advisory_xact_lock(hashtextextended((@remote_session_issuer_id::uuid)::text, 0));
 
+-- name: LockRemoteSessionIssuerForClientBindingSession :exec
+-- Session-scoped counterpart used by registration rotation. Rotation must keep
+-- the issuer's endpoint and tunnel snapshot stable across upstream HTTP calls,
+-- but must not hold a database transaction open while making those calls. The
+-- caller owns one dedicated pooled connection until it invokes the matching
+-- unlock query.
+SELECT pg_advisory_lock(hashtextextended((@remote_session_issuer_id::uuid)::text, 0));
+
+-- name: UnlockRemoteSessionIssuerForClientBindingSession :one
+SELECT pg_advisory_unlock(hashtextextended((@remote_session_issuer_id::uuid)::text, 0));
+
 -- name: GetTrustedRemoteSessionIssuerForOrganization :one
 -- A trusted issuer must be either global or organization-owned by the caller.
 -- Project-specific issuers are deliberately excluded, including projects in
@@ -2819,6 +2830,18 @@ WHERE id = @id
   AND project_id IS NULL
   AND (organization_id = @organization_id::text OR organization_id IS NULL)
   AND deleted IS FALSE;
+
+-- name: LockTrustedRemoteSessionIssuerForOrganization :one
+-- Repeats the issuer-only eligibility predicate after the caller has taken the
+-- issuer advisory lock. The row lock prevents a capability or lifecycle write
+-- from invalidating the reference before its transaction commits.
+SELECT *
+FROM remote_session_issuers
+WHERE id = @id
+  AND project_id IS NULL
+  AND (organization_id = @organization_id::text OR organization_id IS NULL)
+  AND deleted IS FALSE
+FOR SHARE;
 
 -- name: GetTrustedRemoteSessionClientForOrganization :one
 -- The exact live issuer/client pair eligible for organization identity-provider
@@ -2854,7 +2877,24 @@ WHERE c.id = @client_id::uuid
   AND i.project_id IS NULL
   AND (i.organization_id = @organization_id::text OR i.organization_id IS NULL)
   AND i.deleted IS FALSE
-FOR SHARE OF c;
+FOR SHARE OF c, i;
+
+-- name: ListTrustedRemoteSessionClientsByIssuerID :many
+-- Every live client actively used with this issuer for identity-provider login.
+-- Issuer capability writers validate these rows before committing so an
+-- existing trusted-login pair cannot be invalidated after it was linked.
+SELECT c.*
+FROM remote_session_clients AS c
+WHERE c.remote_session_issuer_id = @remote_session_issuer_id
+  AND c.deleted IS FALSE
+  AND EXISTS (
+    SELECT 1
+    FROM user_session_issuers AS usi
+    WHERE usi.trusted_remote_session_issuer_id = @remote_session_issuer_id
+      AND usi.trusted_remote_session_client_id = c.id
+      AND usi.deleted IS FALSE
+  )
+ORDER BY c.id;
 
 -- name: CreateTestTrustedIssuerJWKSCache :one
 -- Test fixture for conditional issuer-key cache writes.
@@ -3591,3 +3631,19 @@ SET registration_endpoint = sqlc.narg('registration_endpoint'),
 FROM remote_session_clients AS c
 WHERE c.id = @client_id
   AND i.id = c.remote_session_issuer_id;
+
+-- name: SoftDeleteRemoteSessionClientFixture :execrows
+-- Test fixture: plants a tombstoned client for management-link rejection tests
+-- without coupling those tests to a second service's authorization path.
+UPDATE remote_session_clients
+SET deleted_at = clock_timestamp()
+WHERE id = @id
+  AND deleted IS FALSE;
+
+-- name: SoftDeleteRemoteSessionIssuerFixture :execrows
+-- Test fixture: plants a tombstoned issuer for management-link rejection tests
+-- without coupling those tests to a second service's authorization path.
+UPDATE remote_session_issuers
+SET deleted_at = clock_timestamp()
+WHERE id = @id
+  AND deleted IS FALSE;
