@@ -36,6 +36,12 @@ const testState = vi.hoisted(() => ({
     | undefined,
 }));
 
+vi.mock("@/components/ui/CopyButton", () => ({
+  CopyButton: ({ text }: { text: string }) => (
+    <button type="button" aria-label={`Copy ${text}`} />
+  ),
+}));
+
 vi.mock("@/components/require-scope", () => ({
   RequireScope: ({
     children,

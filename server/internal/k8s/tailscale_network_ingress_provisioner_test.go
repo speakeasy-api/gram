@@ -542,7 +542,9 @@ func TestTailscaleNetworkIngressDeleteRefusesUnownedTerminatingResource(t *testi
 	t.Parallel()
 	provisioner, typed, _, desired := newTestTailscaleProvisioner(t)
 	now := metav1.Now()
-	_, err := typed.NetworkingV1().Ingresses(desired.Resources.Namespace).Create(t.Context(), &networkingv1.Ingress{ObjectMeta: metav1.ObjectMeta{Name: desired.Resources.Ingress, DeletionTimestamp: &now}}, metav1.CreateOptions{})
+	_, err := typed.CoreV1().Namespaces().Create(t.Context(), &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: desired.Resources.Namespace, Labels: ingressLabels(desired)}}, metav1.CreateOptions{})
+	require.NoError(t, err)
+	_, err = typed.NetworkingV1().Ingresses(desired.Resources.Namespace).Create(t.Context(), &networkingv1.Ingress{ObjectMeta: metav1.ObjectMeta{Name: desired.Resources.Ingress, DeletionTimestamp: &now}}, metav1.CreateOptions{})
 	require.NoError(t, err)
 	typed.ClearActions()
 	err = provisioner.Delete(t.Context(), desired.Resources)
@@ -550,6 +552,20 @@ func TestTailscaleNetworkIngressDeleteRefusesUnownedTerminatingResource(t *testi
 	require.NotErrorIs(t, err, ErrNetworkIngressDeletionPending)
 	for _, action := range typed.Actions() {
 		require.NotEqual(t, "delete", action.GetVerb())
+	}
+}
+
+func TestTailscaleNetworkIngressDeleteRefusesUnownedNamespace(t *testing.T) {
+	t.Parallel()
+	provisioner, typed, _, desired := newTestTailscaleProvisioner(t)
+	_, err := typed.CoreV1().Namespaces().Create(t.Context(), &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: desired.Resources.Namespace, Labels: map[string]string{networkIngressIDLabel: uuid.NewString()}}}, metav1.CreateOptions{})
+	require.NoError(t, err)
+	typed.ClearActions()
+
+	err = provisioner.Delete(t.Context(), desired.Resources)
+	require.ErrorContains(t, err, "refuse to delete unowned namespace")
+	for _, action := range typed.Actions() {
+		require.False(t, action.GetVerb() == "delete")
 	}
 }
 
@@ -561,7 +577,14 @@ func TestTailscaleNetworkIngressDeleteChecksNamespaceAbsence(t *testing.T) {
 	require.NoError(t, err)
 	require.ErrorIs(t, provisioner.Delete(t.Context(), desired.Resources), ErrNetworkIngressDeletionPending)
 	require.NoError(t, typed.Tracker().Delete(corev1.SchemeGroupVersion.WithResource("namespaces"), "", desired.Resources.Namespace))
+	typed.ClearActions()
+	typed.PrependReactor("get", "ingresses", func(ktesting.Action) (bool, runtime.Object, error) {
+		return true, nil, k8serrors.NewForbidden(networkingv1.Resource("ingresses"), desired.Resources.Ingress, errors.New("per-ingress RoleBinding was deleted with namespace"))
+	})
 	require.NoError(t, provisioner.Delete(t.Context(), desired.Resources))
+	for _, action := range typed.Actions() {
+		require.False(t, action.GetVerb() == "get" && action.GetResource().Resource == "ingresses")
+	}
 }
 
 func TestTailscaleNetworkIngressCleanupWithoutApplyConfiguration(t *testing.T) {

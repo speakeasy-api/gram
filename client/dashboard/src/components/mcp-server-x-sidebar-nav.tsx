@@ -12,6 +12,7 @@ import { SetupGuideCard } from "@/components/setup-guide/SetupGuideCard";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Text } from "@/components/ui/Text";
 import { getMcpServerArgs } from "@/lib/sources";
+import { usePrivateMcpServerUrls } from "@/hooks/usePrivateMcpServerUrls";
 import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
 import { useRBAC } from "@/hooks/useRBAC";
 import { MCPServerStatusDropdown } from "@/pages/mcp/x/MCPServerDetails";
@@ -26,6 +27,7 @@ import { useRoutes } from "@/routes";
 import { useGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
 import { useGetRemoteMcpServer } from "@gram/client/react-query/getRemoteMcpServer.js";
 import { useGetUnproxiedMcpServer } from "@gram/client/react-query/getUnproxiedMcpServer.js";
+import { McpServerNetworkAccessMode } from "@gram/client/models/components/mcpserver.js";
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { usePlugins } from "@gram/client/react-query/plugins";
 import { usePublishStatus } from "@gram/client/react-query/publishStatus";
@@ -40,6 +42,37 @@ import {
 } from "lucide-react";
 import * as React from "react";
 import { useLocation, useParams } from "react-router";
+
+function SidebarUrl({
+  label,
+  url,
+  copyTooltip,
+}: {
+  label: string;
+  url: string;
+  copyTooltip: string;
+}): React.JSX.Element {
+  return (
+    <div className="flex flex-col gap-1">
+      <DetailSidebarInfoLabel>{label}</DetailSidebarInfoLabel>
+      <div className="flex items-start gap-1">
+        <Text
+          variant="small"
+          muted
+          className="line-clamp-2 font-mono text-xs break-all"
+        >
+          {url.replace(/^https?:\/\//, "")}
+        </Text>
+        <CopyButton
+          text={url}
+          size="xs"
+          tooltip={copyTooltip}
+          className="mt-[-2px] shrink-0"
+        />
+      </div>
+    </div>
+  );
+}
 
 export function McpServerXSidebarNav(): React.JSX.Element | null {
   const routes = useRoutes();
@@ -63,6 +96,20 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
     endpoints,
     isLoadingEndpoints,
   );
+  const { privateMcpUrls, privateInstallPageUrls } = usePrivateMcpServerUrls(
+    mcpServer,
+    endpoints,
+  );
+  const privateMcpUrl = privateMcpUrls[0];
+  const publicRoutesEnabled =
+    mcpServer?.networkAccessMode !== McpServerNetworkAccessMode.PrivateOnly;
+  const privateRoutesEnabled =
+    mcpServer?.networkAccessMode === McpServerNetworkAccessMode.Dual ||
+    mcpServer?.networkAccessMode === McpServerNetworkAccessMode.PrivateOnly;
+  const effectiveInstallPageUrl =
+    mcpServer?.networkAccessMode === McpServerNetworkAccessMode.PrivateOnly
+      ? privateInstallPageUrls[0]
+      : installPageUrl;
 
   const remoteMcpServerId = mcpServer?.remoteMcpServerId ?? "";
   const { data: remoteMcpServer } = useGetRemoteMcpServer(
@@ -265,55 +312,46 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
         <MCPServerStatusDropdown server={mcpServer} />
       </div>
 
-      {mcpUrl && (
+      {publicRoutesEnabled && mcpUrl && (
+        <SidebarUrl
+          label={privateRoutesEnabled ? "Public URL" : "URL"}
+          url={mcpUrl}
+          copyTooltip="Copy public URL"
+        />
+      )}
+
+      {privateRoutesEnabled && privateMcpUrl && (
+        <SidebarUrl
+          label="Private URL"
+          url={privateMcpUrl}
+          copyTooltip="Copy private URL"
+        />
+      )}
+
+      {privateRoutesEnabled && !privateMcpUrl && (
         <div className="flex flex-col gap-1">
-          <DetailSidebarInfoLabel>URL</DetailSidebarInfoLabel>
-          <div className="flex items-start gap-1">
-            <Text
-              variant="small"
-              muted
-              className="line-clamp-2 font-mono text-xs break-all"
-            >
-              {mcpUrl.replace(/^https?:\/\//, "")}
-            </Text>
-            <CopyButton
-              text={mcpUrl}
-              size="xs"
-              tooltip="Copy URL"
-              className="mt-[-2px] shrink-0"
-            />
-          </div>
+          <DetailSidebarInfoLabel>Private URL</DetailSidebarInfoLabel>
+          <Text variant="small" muted>
+            Available to organization admins while private ingress is online.
+          </Text>
         </div>
       )}
 
       {upstreamUrl && (
-        <div className="flex flex-col gap-1">
-          <DetailSidebarInfoLabel>Upstream URL</DetailSidebarInfoLabel>
-          <div className="flex items-start gap-1">
-            <Text
-              variant="small"
-              muted
-              className="line-clamp-2 font-mono text-xs break-all"
-            >
-              {upstreamUrl.replace(/^https?:\/\//, "")}
-            </Text>
-            <CopyButton
-              text={upstreamUrl}
-              size="xs"
-              tooltip="Copy upstream URL"
-              className="mt-[-2px] shrink-0"
-            />
-          </div>
-        </div>
+        <SidebarUrl
+          label="Upstream URL"
+          url={upstreamUrl}
+          copyTooltip="Copy upstream URL"
+        />
       )}
 
       {/* Content-sized halves with one gutter either side of the rule: at
           flex-1 the rule sat at the container's midpoint, which the longer
           label crowded while the shorter one left slack. */}
       <div className="border-border flex items-stretch justify-center gap-3 border-t pt-3">
-        {installPageUrl ? (
+        {effectiveInstallPageUrl ? (
           <a
-            href={installPageUrl}
+            href={effectiveInstallPageUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs font-semibold transition-colors hover:no-underline"

@@ -1,0 +1,76 @@
+import { useNetworkIngressRollout } from "@/hooks/useNetworkIngressRollout";
+import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
+import type { NetworkIngress } from "@gram/client/models/components/networkingress.js";
+import {
+  McpServerNetworkAccessMode,
+  type McpServer,
+} from "@gram/client/models/components/mcpserver.js";
+import { useNetworkIngress } from "@gram/client/react-query/networkIngress.js";
+import { useMemo } from "react";
+
+export function endpointUsesPrivateIngress(
+  endpoint: McpEndpoint,
+  ingress: Pick<NetworkIngress, "endpointNamespaceKind" | "customDomainId">,
+): boolean {
+  if (ingress.endpointNamespaceKind === "platform") {
+    return !endpoint.customDomainId;
+  }
+
+  return endpoint.customDomainId === ingress.customDomainId;
+}
+
+export function privateMcpEndpointUrls(
+  ingress:
+    | Pick<
+        NetworkIngress,
+        | "dnsName"
+        | "endpointNamespaceKind"
+        | "customDomainId"
+        | "enabled"
+        | "status"
+      >
+    | undefined,
+  endpoints: McpEndpoint[],
+): string[] {
+  if (!ingress?.dnsName || !ingress.enabled || ingress.status !== "online") {
+    return [];
+  }
+
+  return Array.from(
+    new Set(
+      endpoints
+        .filter((endpoint) => endpointUsesPrivateIngress(endpoint, ingress))
+        .map((endpoint) => `https://${ingress.dnsName}/mcp/${endpoint.slug}`),
+    ),
+  );
+}
+
+export function usePrivateMcpServerUrls(
+  mcpServer: Pick<McpServer, "networkAccessMode"> | undefined,
+  endpoints: McpEndpoint[],
+): {
+  privateMcpUrls: string[];
+  privateInstallPageUrls: string[];
+  isLoading: boolean;
+} {
+  const { rolloutEnabled, canManageIngress } = useNetworkIngressRollout();
+  const privateMode =
+    mcpServer?.networkAccessMode === McpServerNetworkAccessMode.Dual ||
+    mcpServer?.networkAccessMode === McpServerNetworkAccessMode.PrivateOnly;
+  const queryEnabled = rolloutEnabled && canManageIngress && privateMode;
+  const ingressResult = useNetworkIngress(undefined, undefined, {
+    enabled: queryEnabled,
+    retry: false,
+    throwOnError: false,
+  });
+  const privateMcpUrls = useMemo(
+    () => privateMcpEndpointUrls(ingressResult.data?.ingress, endpoints),
+    [endpoints, ingressResult.data?.ingress],
+  );
+
+  return {
+    privateMcpUrls,
+    privateInstallPageUrls: privateMcpUrls.map((url) => `${url}/install`),
+    isLoading: queryEnabled && ingressResult.isPending,
+  };
+}
