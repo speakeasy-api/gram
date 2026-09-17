@@ -18,7 +18,14 @@ type connectionRows struct {
 }
 
 func (r connectionRows) clientIDSubmitted() bool {
-	return r.Managed.ClientID != PlaceholderClientID(r.Connection.Provider, r.Connection.ID)
+	return r.Managed != nil && r.Managed.ClientID != PlaceholderClientID(r.Connection.Provider, r.Connection.ID)
+}
+
+func (r connectionRows) jwksURL() string {
+	if r.Managed == nil {
+		return ""
+	}
+	return r.Managed.JSONWebKeySetURL
 }
 
 func (r connectionRows) reasons() []string {
@@ -63,7 +70,7 @@ func buildConnectionView(r connectionRows) *gen.OktaIdentityProviderConnection {
 	}
 
 	var activeKey *gen.IdentityProviderConnectionActiveKey
-	if r.Managed.ActiveKeyID.Valid {
+	if r.Managed != nil && r.Managed.ActiveKeyID.Valid {
 		activeKey = &gen.IdentityProviderConnectionActiveKey{
 			ID:          r.Managed.ActiveKeyID.UUID.String(),
 			Kid:         r.Managed.ActiveKid,
@@ -80,7 +87,7 @@ func buildConnectionView(r connectionRows) *gen.OktaIdentityProviderConnection {
 		missing = missingScopes(granted)
 	}
 
-	checklist := OktaChecklist(r.Okta.ListingMode, r.Managed.JSONWebKeySetURL)
+	checklist := OktaChecklist(r.Okta.ListingMode, r.jwksURL())
 	items := make([]*gen.IdentityProviderConnectionChecklistItem, 0, len(checklist))
 	for _, item := range checklist {
 		items = append(items, &gen.IdentityProviderConnectionChecklistItem{Key: item.Key, Title: item.Title, Description: item.Description})
@@ -94,7 +101,7 @@ func buildConnectionView(r connectionRows) *gen.OktaIdentityProviderConnection {
 		OrgURL:              r.Okta.OrgUrl,
 		IssuerURL:           r.Okta.IssuerUrl,
 		ListingMode:         r.Okta.ListingMode,
-		JwksURL:             r.Managed.JSONWebKeySetURL,
+		JwksURL:             r.jwksURL(),
 		ClientID:            clientID,
 		ClientIDSubmitted:   r.clientIDSubmitted(),
 		DpopRequired:        r.Okta.DpopRequired,
