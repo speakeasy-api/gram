@@ -1,0 +1,5 @@
+---
+"server": patch
+---
+
+Request logs for the device-agent endpoints (`agent.getPlugins`, `agent.reportAIScan`, `agent.reportSessionMoved`, `agent.createSessionHandoff`) now identify the machine as well as the credential. The `Gram-Device-Serial`, `Gram-Device-Hostname`, and `Gram-Device-Environment` headers an agent reports land on the request's wide event as `gram.agent.device.serial`, `gram.agent.device.hostname`, and `gram.agent.device.environment`, so devices in a fleet sharing one organization install key can be counted and told apart without joining ingress logs for client IPs. The serial is recorded as reported rather than hashed — it authorizes nothing and is the key MDM inventory uses — and is normalized exactly as the stored per-device heartbeat is, so placeholder serials from white-box hardware are dropped instead of collapsing a fleet into one device. A value the agent does not report yields no attribute at all. Agents predating these headers report none of them and stay unidentified in the logs until they upgrade.
