@@ -123,9 +123,9 @@ type rfc8414Document struct {
 type discoveryResult struct {
 	doc      rfc8414Document
 	warnings []string
-	// unreadable is the well-known URL of a candidate that failed transiently,
-	// so a refresh keeps the stored document's members for it instead of
-	// withdrawing them; "" when every candidate answered definitively.
+	// unreadable identifies a transiently failed well-known candidate for
+	// incomplete-discovery diagnostics; "" when every candidate answered
+	// definitively. Refresh persists only fresh discovery evidence.
 	unreadable string
 	// unreadableErr retains the upstream status and cause for refresh failures.
 	unreadableErr *discoveryError
@@ -644,10 +644,6 @@ func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.Up
 
 	beforeView := mv.BuildRemoteSessionIssuerView(existing)
 
-	if err := guardEMABindingsForIssuer(ctx, txRepo, authCtx.ActiveOrganizationID, *authCtx.ProjectID, issuerID); err != nil {
-		return nil, err
-	}
-
 	updated, err := txRepo.UpdateRemoteSessionIssuer(ctx, repo.UpdateRemoteSessionIssuerParams{
 		Slug:                                conv.PtrToPGText(payload.Slug),
 		Issuer:                              conv.PtrToPGText(payload.Issuer),
@@ -689,6 +685,12 @@ func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.Up
 			return nil, oops.E(oops.CodeNotFound, err, "remote session issuer not found").LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "update remote session issuer").LogError(ctx, logger)
+	}
+
+	if issuerBindingConfigurationChanged(existing, updated) {
+		if err := guardEMABindingsForIssuer(ctx, txRepo, authCtx.ActiveOrganizationID, *authCtx.ProjectID, issuerID); err != nil {
+			return nil, err
+		}
 	}
 
 	afterView := mv.BuildRemoteSessionIssuerView(updated)
@@ -1279,12 +1281,12 @@ func discoverIssuerMetadataWithDoer(ctx context.Context, client httpDoer, issuer
 		}
 
 		// Discovery location is not issuer identity. Even an origin fallback
-		// must name the exact requested issuer (including its trailing slash).
+		// must name the requested issuer (ignoring trailing slashes).
 		if doc.Issuer == "" {
 			untrustedErr = &untrustedDocumentError{reason: fmt.Sprintf("metadata document at %s advertises no issuer", issuerURL)}
 			continue
 		}
-		if doc.Issuer != issuerURL {
+		if !issuerURLsEqual(doc.Issuer, issuerURL) {
 			untrustedErr = &untrustedDocumentError{reason: fmt.Sprintf("metadata document advertises issuer %q, but the requested issuer is %q; refusing to adopt another authorization server's metadata", truncateForMessage(doc.Issuer), issuerURL)}
 			continue
 		}
@@ -1516,6 +1518,12 @@ func attemptIssuerProbe(ctx context.Context, client httpDoer, wellKnown string) 
 // loopback exception for endpoints is measured against. A stored document is
 // re-projected the same way, without a fetch.
 func decodeIssuerDocument(body []byte, requested *url.URL) (rfc8414Document, error) {
+	return decodeIssuerDocumentWithLegacyNulls(body, requested, false)
+}
+
+// Stored documents captured before strict array validation may contain null
+// arrays. Treat those as absent during reprojection, without relaxing discovery.
+func decodeIssuerDocumentWithLegacyNulls(body []byte, requested *url.URL, legacyNulls bool) (rfc8414Document, error) {
 	// JSON null is accepted by Go's []string decoder, even as an element.
 	// Metadata arrays must actually be arrays containing only strings.
 	var members map[string]json.RawMessage
@@ -1524,7 +1532,7 @@ func decodeIssuerDocument(body []byte, requested *url.URL) (rfc8414Document, err
 	}
 	for _, name := range []string{"scopes_supported", "grant_types_supported", "authorization_grant_profiles_supported", "response_types_supported", "token_endpoint_auth_methods_supported", "code_challenge_methods_supported", "introspection_endpoint_auth_methods_supported", "id_token_signing_alg_values_supported", "claims_supported"} {
 		raw, present := members[name]
-		if !present {
+		if !present || (legacyNulls && bytes.Equal(bytes.TrimSpace(raw), []byte("null"))) {
 			continue
 		}
 		var values []json.RawMessage
@@ -1802,4 +1810,20 @@ func parseCursor(cursor *string) (uuid.NullUUID, error) {
 		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, fmt.Errorf("parse cursor: %w", err)
 	}
 	return uuid.NullUUID{UUID: id, Valid: true}, nil
+}
+
+// issuerBindingConfigurationChanged compares the effective persisted values, so
+// omitted fields, no-op patches, and presentation-only edits do not require an
+// unlink. Callers keep the issuer advisory lock through update, guard and commit;
+// a rejected configuration update is rolled back with the transaction.
+func issuerBindingConfigurationChanged(before, after repo.RemoteSessionIssuer) bool {
+	return before.Issuer != after.Issuer ||
+		before.AuthorizationEndpoint.String != after.AuthorizationEndpoint.String ||
+		before.TokenEndpoint.String != after.TokenEndpoint.String ||
+		before.RevocationEndpoint.String != after.RevocationEndpoint.String ||
+		before.RegistrationEndpoint.String != after.RegistrationEndpoint.String ||
+		before.JwksUri.String != after.JwksUri.String ||
+		before.UserinfoEndpoint.String != after.UserinfoEndpoint.String ||
+		before.IntrospectionEndpoint.String != after.IntrospectionEndpoint.String ||
+		before.TunneledMcpServerID != after.TunneledMcpServerID
 }

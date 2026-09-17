@@ -792,7 +792,13 @@ func (s *Service) DetachUserSessionIssuer(ctx context.Context, payload *gen.Deta
 	}
 	if removed > 0 {
 		// A conflict rolls back the tentative removal with the transaction.
-		if err := guardEMABindingsForClientUserIssuer(ctx, txRepo, authCtx.ActiveOrganizationID, *authCtx.ProjectID, clientID, userIssuerID); err != nil {
+		projectID := *authCtx.ProjectID
+		if !locked.ProjectID.Valid {
+			// An organization client can have a shared organization issuer link.
+			// Protect every project using that association, not only the caller.
+			projectID = uuid.Nil
+		}
+		if err := guardEMABindingsForClientUserIssuer(ctx, txRepo, authCtx.ActiveOrganizationID, projectID, clientID, userIssuerID); err != nil {
 			return nil, err
 		}
 	}

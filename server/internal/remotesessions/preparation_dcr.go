@@ -36,6 +36,10 @@ type preparationDCRResponse struct {
 // Every failure after submission that does not prove rejection is indeterminate.
 // No response body, client secret or management token becomes a diagnostic.
 func (s *Service) submitPreparationDCR(ctx context.Context, in PreparationInput, endpoint, method string) (preparationDCRResponse, string) {
+	return s.submitPreparationDCRWithTunnel(ctx, in, endpoint, method, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+}
+
+func (s *Service) submitPreparationDCRWithTunnel(ctx context.Context, in PreparationInput, endpoint, method string, tunnelID uuid.NullUUID) (preparationDCRResponse, string) {
 	var result preparationDCRResponse
 	if (method != "client_secret_basic" && method != "client_secret_post") || !urls.IsAbsoluteHTTPSOrLoopback(endpoint) {
 		return result, "manual_setup_required"
@@ -59,7 +63,11 @@ func (s *Service) submitPreparationDCR(ctx context.Context, in PreparationInput,
 	request.Header.Set("Accept", "application/json")
 	client := s.policy.Client()
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	response, err := client.Do(request)
+	doer, err := upstreamHTTPDoer(client, s.tunnels, tunnelID)
+	if err != nil {
+		return result, "indeterminate"
+	}
+	response, err := doer.Do(request)
 	if err != nil {
 		return result, "indeterminate"
 	}
@@ -82,10 +90,21 @@ func (s *Service) submitPreparationDCR(ctx context.Context, in PreparationInput,
 		var empty preparationDCRResponse
 		return empty, "indeterminate"
 	}
+	// RFC 7591 section 2 defaults an omitted authentication method to
+	// client_secret_basic, not to the method requested by the caller. Explicit
+	// empty/null values are not defaults and must still fail validation.
+	if result.TokenEndpointAuthMethod == "" {
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal(data, &fields); err == nil {
+			if _, present := fields["token_endpoint_auth_method"]; !present {
+				result.TokenEndpointAuthMethod = "client_secret_basic"
+			}
+		}
+	}
 	return result, validatePreparationDCR(result, in.Scopes, method)
 }
 func validatePreparationDCR(result preparationDCRResponse, requested []string, method string) string {
-	if (method != "client_secret_basic" && method != "client_secret_post") || strings.TrimSpace(result.ClientID) == "" || result.ClientSecret == "" || result.TokenEndpointAuthMethod != method || result.ClientIDIssuedAt < 0 || result.ClientSecretExpiresAt < 0 {
+	if (method != "client_secret_basic" && method != "client_secret_post") || strings.TrimSpace(result.ClientID) == "" || result.ClientSecret == "" || (result.TokenEndpointAuthMethod != "client_secret_basic" && result.TokenEndpointAuthMethod != "client_secret_post") || result.ClientIDIssuedAt < 0 || result.ClientSecretExpiresAt < 0 {
 		return "indeterminate"
 	}
 	// A provider response can narrow scope, never broaden the requested set.
@@ -112,7 +131,7 @@ func validatePreparationDCR(result preparationDCRResponse, requested []string, m
 func (s *Service) finishPreparationDCR(ctx context.Context, conn *pgxpool.Conn, in PreparationInput, claim repo.RemoteSessionEmaBinding, issuer repo.RemoteSessionIssuer, method string) (*PreparationResult, error) {
 	var emptyClient repo.RemoteSessionClient
 	// The caller holds the connection-scoped binding lock, not a transaction.
-	response, state := s.submitPreparationDCR(ctx, in, issuer.RegistrationEndpoint.String, method)
+	response, state := s.submitPreparationDCRWithTunnel(ctx, in, issuer.RegistrationEndpoint.String, method, issuer.TunneledMcpServerID)
 	// Persist an outcome even if the requesting connection has gone away. If this
 	// process dies before commit, the durable claim becomes indeterminate on read.
 	saveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
@@ -144,7 +163,10 @@ func (s *Service) finishPreparationDCR(ctx context.Context, conn *pgxpool.Conn, 
 	if b.Generation != claim.Generation || b.ClaimID != claim.ClaimID || preparationBindingState(b.State) != "in_progress" {
 		return preparationResult(b, currentIssuer, emptyClient, "configuration_required"), nil
 	}
-	if currentIssuer.Issuer != issuer.Issuer || currentIssuer.RegistrationEndpoint != issuer.RegistrationEndpoint || PreparationEligibility(currentIssuer.AuthorizationGrantProfilesSupported, currentIssuer.GrantTypesSupported) != "eligible" {
+	// Capability-only refreshes can commit during the POST. Retain confirmed
+	// credentials and project their current usability below; identity and
+	// registration endpoint changes still invalidate the response's provenance.
+	if currentIssuer.Issuer != issuer.Issuer || currentIssuer.RegistrationEndpoint != issuer.RegistrationEndpoint {
 		state = "indeterminate"
 	}
 	var client repo.RemoteSessionClient
@@ -164,7 +186,7 @@ func (s *Service) finishPreparationDCR(ctx context.Context, conn *pgxpool.Conn, 
 		if response.ClientSecretExpiresAt > 0 {
 			expires = conv.ToPGTimestamptz(time.Unix(response.ClientSecretExpiresAt, 0))
 		}
-		client, err = q.CreateRemoteSessionClient(saveCtx, repo.CreateRemoteSessionClientParams{TokenEndpointAuthAudienceFormat: conv.ToPGTextEmpty(""), Audience: conv.ToPGTextEmpty(""), LegacyCallbackUrl: false, ProjectID: conv.ToNullUUID(b.ProjectID), OrganizationID: conv.ToPGText(b.OrganizationID), RemoteSessionIssuerID: issuer.ID, ClientID: response.ClientID, ClientSecretEncrypted: conv.ToPGText(ciphertext), TokenEndpointAuthMethod: conv.ToPGText(method), Scope: scopes, ClientIDIssuedAt: issued, ClientSecretExpiresAt: expires})
+		client, err = q.CreateRemoteSessionClient(saveCtx, repo.CreateRemoteSessionClientParams{TokenEndpointAuthAudienceFormat: conv.ToPGTextEmpty(""), Audience: conv.ToPGTextEmpty(""), LegacyCallbackUrl: false, ProjectID: conv.ToNullUUID(b.ProjectID), OrganizationID: conv.ToPGText(b.OrganizationID), RemoteSessionIssuerID: issuer.ID, ClientID: response.ClientID, ClientSecretEncrypted: conv.ToPGText(ciphertext), TokenEndpointAuthMethod: conv.ToPGText(response.TokenEndpointAuthMethod), Scope: scopes, ClientIDIssuedAt: issued, ClientSecretExpiresAt: expires})
 		if err != nil {
 			return preparationResult(b, currentIssuer, client, "indeterminate"), err
 		}

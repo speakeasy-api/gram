@@ -65,6 +65,7 @@ func TestPreparationRefresh_EndpointChangesRequireUnlinkButEvidenceDoesNot(t *te
 				return nil
 			}
 			require.NoError(t, refresh())
+			require.Contains(t, loadIssuerByID(t, ctx, ti, issuer.ID).AuthorizationGrantProfilesSupported, "urn:ietf:params:oauth:grant-profile:id-jag", "initial refresh must persist capability before removal")
 			key := repo.GetEMABindingParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, UserSessionIssuerID: in.UserSessionIssuerID, RemoteSessionIssuerID: issuer.ID, Resource: in.Resource}
 			require.NoError(t, q.EnsureEMABinding(ctx, repo.EnsureEMABindingParams(key)))
 			removedCapability.Store(true)
@@ -76,7 +77,7 @@ func TestPreparationRefresh_EndpointChangesRequireUnlinkButEvidenceDoesNot(t *te
 			refresher, _ := newIssuerMetadataRefresher(t, ti)
 			outcome, err := refresher.Refresh(ctx, refreshCandidate(t, ctx, ti, issuer.ID))
 			require.NoError(t, err)
-			require.Equal(t, remotesessionmetrics.IssuerMetadataRefreshOutcomeConflict, outcome, "background refresh shares the reconfiguration policy")
+			require.Equal(t, remotesessionmetrics.IssuerMetadataRefreshOutcomeDefinitiveFailure, outcome, "background refresh shares the reconfiguration policy")
 			require.Equal(t, stored.TokenEndpoint, loadIssuerByID(t, ctx, ti, issuer.ID).TokenEndpoint)
 			binding, err := q.GetEMABinding(ctx, key)
 			require.NoError(t, err)
@@ -84,6 +85,61 @@ func TestPreparationRefresh_EndpointChangesRequireUnlinkButEvidenceDoesNot(t *te
 			require.NoError(t, err)
 			require.NoError(t, refresh(), "explicit unlink releases the endpoint configuration")
 			require.Equal(t, upstream.URL+"/new-token", loadIssuerByID(t, ctx, ti, issuer.ID).TokenEndpoint.String)
+		})
+	}
+}
+
+func TestIssuerUpdate_ActiveBindingAllowsPresentationAndNoopEdits(t *testing.T) {
+	t.Parallel()
+	for _, tier := range []string{"project", "organization", "global"} {
+		t.Run(tier, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti, in := preparationFixture(t)
+			ctx = withAdmin(t, ctx)
+			auth, _ := contextvalues.GetAuthContext(ctx)
+			q := repo.New(ti.conn)
+			params := repo.CreateRemoteSessionIssuerParams{Slug: "update-bound-" + tier, Issuer: "https://issuer.example.com", TokenEndpoint: conv.ToPGText("https://issuer.example.com/token"), ScopesSupported: []string{}, GrantTypesSupported: []string{}, ResponseTypesSupported: []string{}, TokenEndpointAuthMethodsSupported: []string{}}
+			if tier != "global" {
+				params.OrganizationID = conv.ToPGText(auth.ActiveOrganizationID)
+			}
+			if tier == "project" {
+				params.ProjectID = conv.ToNullUUID(*auth.ProjectID)
+			}
+			issuer, err := q.CreateRemoteSessionIssuer(ctx, params)
+			require.NoError(t, err)
+			require.NoError(t, q.EnsureEMABinding(ctx, repo.EnsureEMABindingParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, UserSessionIssuerID: in.UserSessionIssuerID, RemoteSessionIssuerID: issuer.ID, Resource: in.Resource}))
+			update := func(name, token, identity, jwks *string) error {
+				var err error
+				switch tier {
+				case "project":
+					_, err = ti.service.UpdateRemoteSessionIssuer(ctx, &issuersgen.UpdateRemoteSessionIssuerPayload{ID: issuer.ID.String(), Name: name, TokenEndpoint: token, Issuer: identity, JwksURI: jwks, LogoAssetID: new(""), ClientSetupDocumentationURL: new("https://docs.example.com/setup"), ServiceDocumentation: new("https://docs.example.com/service")})
+				case "organization":
+					_, err = ti.service.UpdateIssuer(ctx, &orgissuersgen.UpdateIssuerPayload{ID: issuer.ID.String(), Name: name, TokenEndpoint: token, Issuer: identity, JwksURI: jwks, LogoAssetID: new(""), ClientSetupDocumentationURL: new("https://docs.example.com/setup"), ServiceDocumentation: new("https://docs.example.com/service")})
+				case "global":
+					_, err = ti.service.UpdateGlobalIssuer(ctx, &adminrsgen.UpdateGlobalIssuerPayload{ID: issuer.ID.String(), Name: name, TokenEndpoint: token, Issuer: identity, JwksURI: jwks, LogoAssetID: new(""), ClientSetupDocumentationURL: new("https://docs.example.com/setup"), ServiceDocumentation: new("https://docs.example.com/service")})
+
+				}
+				if err != nil {
+					return fmt.Errorf("update issuer fixture: %w", err)
+				}
+				return nil
+			}
+			require.NoError(t, update(new("Renamed provider"), nil, nil, nil))
+			require.NoError(t, update(nil, new(issuer.TokenEndpoint.String), new(issuer.Issuer), new("")), "effective no-op configuration edits must succeed")
+			stored := loadIssuerByID(t, ctx, ti, issuer.ID)
+			require.Equal(t, "Renamed provider", stored.Name.String)
+			require.False(t, stored.LogoAssetID.Valid)
+			require.Equal(t, "https://docs.example.com/setup", stored.ClientSetupDocumentationUrl.String)
+			require.Equal(t, "https://docs.example.com/service", stored.ServiceDocumentation.String)
+			requireOopsCode(t, update(new("Must roll back"), new("https://issuer.example.com/new-token"), nil, nil), oops.CodeConflict)
+			requireOopsCode(t, update(nil, new(""), nil, nil), oops.CodeConflict)
+			requireOopsCode(t, update(nil, nil, new("https://other.example.com"), nil), oops.CodeConflict)
+			requireOopsCode(t, update(nil, nil, nil, new("https://issuer.example.com/jwks")), oops.CodeConflict)
+			after := loadIssuerByID(t, ctx, ti, issuer.ID)
+			require.Equal(t, stored.Name, after.Name)
+			require.Equal(t, stored.TokenEndpoint, after.TokenEndpoint)
+			require.Equal(t, stored.Issuer, after.Issuer)
+			require.Equal(t, stored.JwksUri, after.JwksUri)
 		})
 	}
 }

@@ -14,15 +14,20 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urls"
 )
 
-const PreparationIDJAGProfile = "urn:ietf:params:oauth:grant-profile:id-jag"
+// PreparationIDJAGProfile is the identity-chaining eligibility profile, not a grant type.
+const PreparationIDJAGProfile = oauthwire.GrantProfileIDJAG
 
 // #nosec G101 -- Public OAuth grant identifier, not a credential.
-const PreparationJWTBearerGrant = "urn:ietf:params:oauth:grant-type:jwt-bearer"
+const PreparationJWTBearerGrant = oauthwire.GrantTypeJWTBearer
+
+// Identity-chaining preparation records downstream client registration readiness.
+// It is distinct from issuer management and interactive OAuth authorization.
 
 // PreparationResourceMetadata contains optional caller-declared consistency hints
 // for project-write-authorized configuration, not provider-verified RFC 9728 evidence.
@@ -31,6 +36,9 @@ type PreparationResourceMetadata struct {
 	Resource             string
 	AuthorizationServers []string
 }
+
+// PreparationInput configures identity-chaining readiness for one resource binding.
+// It does not configure an interactive OAuth authorization request.
 type PreparationInput struct {
 	UserSessionIssuerID     uuid.UUID
 	RemoteSessionIssuerID   uuid.UUID
@@ -44,7 +52,8 @@ type PreparationInput struct {
 	ResourceMetadata        *PreparationResourceMetadata
 }
 
-// PreparationResult never carries credentials. Ready means registration recorded,
+// PreparationResult reports identity-chaining readiness and never carries credentials.
+// Ready means registration recorded,
 // not successful token exchange or authorization for any human.
 type PreparationResult struct {
 	State            string
@@ -218,7 +227,7 @@ func (s *Service) UnlinkIdentityChaining(ctx context.Context, in PreparationInpu
 	return s.prepareIdentityChaining(ctx, in, true, false)
 }
 func (s *Service) ReadIdentityChaining(ctx context.Context, in PreparationInput) (*PreparationResult, error) {
-	return s.prepareIdentityChaining(ctx, in, false, true)
+	return s.readIdentityChaining(ctx, in)
 }
 
 func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInput, unlink, read bool) (*PreparationResult, error) {
@@ -401,7 +410,7 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 			return preparationResult(b, issuer, client, "configuration_required"), nil
 		}
 		method := in.TokenEndpointAuthMethod
-		if !issuer.RegistrationEndpoint.Valid || (method != "client_secret_basic" && method != "client_secret_post") || !slices.Contains(issuer.TokenEndpointAuthMethodsSupported, method) {
+		if !issuer.RegistrationEndpoint.Valid || (method != oauthwire.AuthMethodClientSecretBasic && method != oauthwire.AuthMethodClientSecretPost) || !slices.Contains(issuer.TokenEndpointAuthMethodsSupported, method) {
 			return preparationResult(b, issuer, client, "manual_setup_required"), nil
 		}
 		if !urls.IsAbsoluteHTTPSOrLoopback(issuer.RegistrationEndpoint.String) {
@@ -527,14 +536,14 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 
 // A completed provider registration can recover as discovery or credentials
 // change, but only current grant evidence can make it ready.
-func preparationRegistrationReadiness(ctx context.Context, q *repo.Queries, client repo.RemoteSessionClient, issuer repo.RemoteSessionIssuer, org string) string {
+func preparationRegistrationReadiness(ctx context.Context, q *repo.Queries, client repo.RemoteSessionClient, issuer repo.RemoteSessionIssuer, org string, readOnly ...bool) string {
 	if eligibility := PreparationEligibility(issuer.AuthorizationGrantProfilesSupported, issuer.GrantTypesSupported); eligibility != "eligible" {
 		return eligibility
 	}
 	if preparationMetadataTransient(issuer) {
 		return "transient_failure"
 	}
-	if !preparationClientConfigurationValid(ctx, q, client, issuer, org) {
+	if !preparationClientConfigurationValid(ctx, q, client, issuer, org, readOnly...) {
 		return "manual_setup_required"
 	}
 	if !slices.Contains(client.GrantTypes, PreparationJWTBearerGrant) {
@@ -545,17 +554,23 @@ func preparationRegistrationReadiness(ctx context.Context, q *repo.Queries, clie
 
 // Readiness is a current local configuration check, never a provider acceptance
 // claim. Reads and idempotent DCR lookups must not keep expired credentials ready.
-func preparationClientConfigurationValid(ctx context.Context, q *repo.Queries, client repo.RemoteSessionClient, issuer repo.RemoteSessionIssuer, org string) bool {
+func preparationClientConfigurationValid(ctx context.Context, q *repo.Queries, client repo.RemoteSessionClient, issuer repo.RemoteSessionIssuer, org string, readOnly ...bool) bool {
 	method := client.TokenEndpointAuthMethod.String
 	if client.ClientSecretExpiresAt.Valid && !client.ClientSecretExpiresAt.Time.After(time.Now()) {
 		return false
 	}
-	authMethodSupported := slices.Contains(issuer.TokenEndpointAuthMethodsSupported, method) || (method == "none" && len(issuer.TokenEndpointAuthMethodsSupported) == 0)
-	if method == "" || !authMethodSupported || ((method == "client_secret_basic" || method == "client_secret_post") && !client.ClientSecretEncrypted.Valid) || (method == "private_key_jwt" && !client.JsonWebKeySetID.Valid) {
+	authMethodSupported := slices.Contains(issuer.TokenEndpointAuthMethodsSupported, method)
+	if method == "" || !authMethodSupported || ((method == oauthwire.AuthMethodClientSecretBasic || method == oauthwire.AuthMethodClientSecretPost) && !client.ClientSecretEncrypted.Valid) || (method == oauthwire.AuthMethodPrivateKeyJWT && !client.JsonWebKeySetID.Valid) {
 		return false
 	}
-	if method == "private_key_jwt" && client.JsonWebKeySetID.Valid {
-		if _, err := q.LockJsonWebKeySetForClientAttach(ctx, repo.LockJsonWebKeySetForClientAttachParams{ID: client.JsonWebKeySetID.UUID, OrganizationID: org}); err != nil {
+	if method == oauthwire.AuthMethodPrivateKeyJWT && client.JsonWebKeySetID.Valid {
+		var err error
+		if len(readOnly) > 0 && readOnly[0] {
+			_, err = q.ReadEMAJsonWebKeySet(ctx, repo.ReadEMAJsonWebKeySetParams{ID: client.JsonWebKeySetID.UUID, OrganizationID: org})
+		} else {
+			_, err = q.LockJsonWebKeySetForClientAttach(ctx, repo.LockJsonWebKeySetForClientAttachParams{ID: client.JsonWebKeySetID.UUID, OrganizationID: org})
+		}
+		if err != nil {
 			return false
 		}
 	}
@@ -582,4 +597,90 @@ func preparationMetadataTransient(issuer repo.RemoteSessionIssuer) bool {
 		MetadataFetchedAt: issuer.MetadataFetchedAt, MetadataLastErrorAt: issuer.MetadataLastErrorAt, MetadataLastErrorUrl: issuer.MetadataLastErrorUrl, NeedsReprojection: false,
 	})
 	return transient
+}
+
+// Reads use one non-locking snapshot. A stale claim is projected as indeterminate;
+// only the write path persists lifecycle transitions.
+func (s *Service) readIdentityChaining(ctx context.Context, in PreparationInput) (*PreparationResult, error) {
+	project, org, err := s.preparationTenant(ctx, false)
+	if err != nil {
+		return nil, err
+	}
+	in, err = normalizePreparationInput(in)
+	if err != nil {
+		return nil, err
+	}
+	tx, err := s.db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly, DeferrableMode: "", BeginQuery: "", CommitQuery: ""})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "read preparation")
+	}
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	q := repo.New(tx)
+	if _, err = q.ReadEMAProject(ctx, repo.ReadEMAProjectParams{ProjectID: project, OrganizationID: org}); err != nil {
+		return nil, preparationLookupError(err, "project not found")
+	}
+	if _, err = q.ReadEMAUserIssuer(ctx, repo.ReadEMAUserIssuerParams{ID: in.UserSessionIssuerID, ProjectID: conv.ToNullUUID(project), OrganizationID: conv.ToPGText(org)}); err != nil {
+		return nil, preparationLookupError(err, "user issuer not found")
+	}
+	issuer, err := q.ReadEMAIssuer(ctx, repo.ReadEMAIssuerParams{ID: in.RemoteSessionIssuerID, ProjectID: conv.ToNullUUID(project), OrganizationID: conv.ToPGText(org)})
+	if err != nil {
+		return nil, preparationLookupError(err, "remote issuer not found")
+	}
+	if m := in.ResourceMetadata; m != nil && (m.Resource != in.Resource || !slices.Contains(m.AuthorizationServers, issuer.Issuer)) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "resource authorization server association mismatch")
+	}
+	b, err := q.GetEMABinding(ctx, repo.GetEMABindingParams{ProjectID: project, OrganizationID: org, UserSessionIssuerID: in.UserSessionIssuerID, RemoteSessionIssuerID: in.RemoteSessionIssuerID, Resource: in.Resource})
+	if errors.Is(err, pgx.ErrNoRows) {
+		state := "configuration_required"
+		if eligibility := PreparationEligibility(issuer.AuthorizationGrantProfilesSupported, issuer.GrantTypesSupported); eligibility != "eligible" {
+			state = eligibility
+		} else if preparationMetadataTransient(issuer) {
+			state = "transient_failure"
+		}
+		r := preparationDiagnostic(state)
+		r.Resource = in.Resource
+		r.Issuer = issuer.Issuer
+		return r, nil
+	}
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "read preparation")
+	}
+	var client repo.RemoteSessionClient
+	if b.RemoteSessionClientID.Valid {
+		client, err = q.ReadEMAClient(ctx, repo.ReadEMAClientParams{ID: b.RemoteSessionClientID.UUID, ProjectID: conv.ToNullUUID(project), OrganizationID: conv.ToPGText(org)})
+		if err != nil {
+			return nil, preparationLookupError(err, "selected client not found")
+		}
+		if client.RemoteSessionIssuerID != issuer.ID {
+			return nil, oops.E(oops.CodeBadRequest, nil, "selected client belongs to another issuer")
+		}
+	}
+	if b.ClaimID.Valid {
+		state := preparationBindingState(b.State)
+		if state == "in_progress" && (!b.ClaimedAt.Valid || time.Since(b.ClaimedAt.Time) > time.Minute) {
+			state = "indeterminate"
+		}
+		return preparationResult(b, issuer, client, state), nil
+	}
+	// Registration evidence is durable; readiness is not. Recompute completed
+	// provider registrations without replaying DCR or replacing effective scopes.
+	if b.RemoteSessionClientID.Valid && preparationBindingGrantSource(b.GrantSource) == "provider_returned" {
+		return preparationResult(b, issuer, client, preparationRegistrationReadiness(ctx, q, client, issuer, org, true)), nil
+	}
+	eligibility := PreparationEligibility(issuer.AuthorizationGrantProfilesSupported, issuer.GrantTypesSupported)
+	if eligibility != "eligible" {
+		return preparationResult(b, issuer, client, eligibility), nil
+	}
+	if preparationMetadataTransient(issuer) {
+		return preparationResult(b, issuer, client, "transient_failure"), nil
+	}
+	if preparationBindingState(b.State) == "ready" || preparationBindingState(b.State) == "published_acceptance_unverified" {
+		if !preparationClientConfigurationValid(ctx, q, client, issuer, org, true) {
+			return preparationResult(b, issuer, client, "manual_setup_required"), nil
+		}
+		if !slices.Contains(client.GrantTypes, PreparationJWTBearerGrant) {
+			return preparationResult(b, issuer, client, preparationMissingGrantsState(client.GrantTypes)), nil
+		}
+	}
+	return preparationResult(b, issuer, client, preparationBindingState(b.State)), nil
 }

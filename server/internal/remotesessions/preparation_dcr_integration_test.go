@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -24,7 +25,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
-	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/stretchr/testify/assert"
@@ -49,13 +49,13 @@ func preparationDCRFixture(t *testing.T, endpoint string) (context.Context, *tes
 	t.Helper()
 	ctx, ti, in := preparationFixture(t)
 	auth, _ := contextvalues.GetAuthContext(ctx)
-	err := repo.New(ti.conn).SetPreparationFixtureDCREndpoint(ctx, repo.SetPreparationFixtureDCREndpointParams{Endpoint: conv.ToPGText(endpoint), ID: in.RemoteSessionIssuerID, ProjectID: conv.ToNullUUID(*auth.ProjectID)})
+	err := testrepo.New(ti.conn).SetPreparationFixtureDCREndpoint(ctx, testrepo.SetPreparationFixtureDCREndpointParams{Endpoint: conv.ToPGText(endpoint), ID: in.RemoteSessionIssuerID, ProjectID: conv.ToNullUUID(*auth.ProjectID)})
 	require.NoError(t, err)
 	// The existing interactive attachment and credentials are deliberately distinct.
 	interactive := in.ClientID
-	err = repo.New(ti.conn).SetPreparationFixtureInteractiveClient(ctx, repo.SetPreparationFixtureInteractiveClientParams{ID: interactive, ProjectID: conv.ToNullUUID(*auth.ProjectID)})
+	err = testrepo.New(ti.conn).SetPreparationFixtureInteractiveClient(ctx, testrepo.SetPreparationFixtureInteractiveClientParams{ID: interactive, ProjectID: conv.ToNullUUID(*auth.ProjectID)})
 	require.NoError(t, err)
-	err = repo.New(ti.conn).AttachPreparationFixtureInteractiveClient(ctx, repo.AttachPreparationFixtureInteractiveClientParams{ID: interactive, UserID: in.UserSessionIssuerID, ProjectID: conv.ToNullUUID(*auth.ProjectID)})
+	err = testrepo.New(ti.conn).AttachPreparationFixtureInteractiveClient(ctx, testrepo.AttachPreparationFixtureInteractiveClientParams{ID: interactive, UserID: in.UserSessionIssuerID, ProjectID: conv.ToNullUUID(*auth.ProjectID)})
 	require.NoError(t, err)
 	in.ClientID = uuid.Nil
 	in.Mechanism = "dcr"
@@ -66,7 +66,7 @@ func preparationDCRFixture(t *testing.T, endpoint string) (context.Context, *tes
 func assertPreparationInteractiveUntouched(t *testing.T, ctx context.Context, ti *testInstance, id, user uuid.UUID) {
 	t.Helper()
 	auth, _ := contextvalues.GetAuthContext(ctx)
-	record, err := repo.New(ti.conn).GetPreparationFixtureInteractiveClient(ctx, repo.GetPreparationFixtureInteractiveClientParams{ID: id, ProjectID: conv.ToNullUUID(*auth.ProjectID)})
+	record, err := testrepo.New(ti.conn).GetPreparationFixtureInteractiveClient(ctx, testrepo.GetPreparationFixtureInteractiveClientParams{ID: id, ProjectID: conv.ToNullUUID(*auth.ProjectID)})
 	require.NoError(t, err)
 	external := record.ClientID
 	secret := record.ClientSecretEncrypted.String
@@ -76,7 +76,7 @@ func assertPreparationInteractiveUntouched(t *testing.T, ctx context.Context, ti
 	require.Equal(t, "interactive-ciphertext", secret)
 	require.Equal(t, []string{"authorization_code", "refresh_token"}, grants)
 	require.Equal(t, []string{"openid"}, scopes)
-	attached, err := repo.New(ti.conn).CountPreparationFixtureAttachments(ctx, repo.CountPreparationFixtureAttachmentsParams{ProjectID: conv.ToNullUUID(*auth.ProjectID), ID: id, UserID: user})
+	attached, err := testrepo.New(ti.conn).CountPreparationFixtureAttachments(ctx, testrepo.CountPreparationFixtureAttachmentsParams{ProjectID: conv.ToNullUUID(*auth.ProjectID), ID: id, UserID: user})
 	require.NoError(t, err)
 	require.EqualValues(t, 1, attached)
 }
@@ -87,8 +87,10 @@ func TestPreparationDCRIntegration_TimeoutRestartDoesNotReplay(t *testing.T) {
 	// Explicit release keeps fixture shutdown independent of that behavior.
 	release := make(chan struct{})
 	defer close(release)
+	entered := make(chan struct{}, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		posts.Add(1)
+		entered <- struct{}{}
 		select {
 		case <-r.Context().Done():
 		case <-release:
@@ -96,8 +98,17 @@ func TestPreparationDCRIntegration_TimeoutRestartDoesNotReplay(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 	ctx, ti, in, interactive := preparationDCRFixture(t, server.URL)
-	timed, cancel := context.WithTimeout(ctx, 2*time.Second)
+	timed, cancel := context.WithCancel(ctx)
 	defer cancel()
+	// Cancel only after the registration POST reaches HTTP, not while database
+	// claim/setup work is still running on a busy test host.
+	go func() {
+		select {
+		case <-entered:
+			cancel()
+		case <-timed.Done():
+		}
+	}()
 	result, err := ti.service.PrepareIdentityChaining(timed, in)
 	require.NoError(t, err)
 	require.Equal(t, "indeterminate", result.State)
@@ -117,11 +128,11 @@ func TestPreparationDCRIntegration_TimeoutRestartDoesNotReplay(t *testing.T) {
 	require.Equal(t, int32(1), posts.Load())
 	assertPreparationInteractiveUntouched(t, ctx, ti, interactive, in.UserSessionIssuerID)
 	auth, _ := contextvalues.GetAuthContext(ctx)
-	count, err := repo.New(ti.conn).CountPreparationFixtureIssuerClients(ctx, repo.CountPreparationFixtureIssuerClientsParams{ProjectID: conv.ToNullUUID(*auth.ProjectID), IssuerID: in.RemoteSessionIssuerID})
+	count, err := testrepo.New(ti.conn).CountPreparationFixtureIssuerClients(ctx, testrepo.CountPreparationFixtureIssuerClientsParams{ProjectID: conv.ToNullUUID(*auth.ProjectID), IssuerID: in.RemoteSessionIssuerID})
 	require.NoError(t, err)
 	require.EqualValues(t, 1, count)
 	// Simulate a process dying after the claim commit but before result commit.
-	err = repo.New(ti.conn).AgePreparationFixtureClaim(ctx, repo.AgePreparationFixtureClaimParams{ID: result.BindingID, ProjectID: *auth.ProjectID})
+	err = testrepo.New(ti.conn).AgePreparationFixtureClaim(ctx, testrepo.AgePreparationFixtureClaimParams{ID: result.BindingID, ProjectID: *auth.ProjectID})
 	require.NoError(t, err)
 	afterCrash, err := restartPreparationService(t, ti).PrepareIdentityChaining(ctx, in)
 	require.NoError(t, err)
@@ -169,7 +180,7 @@ func TestPreparationDCRIntegration_EffectiveGrantsAndNarrowedScopePersist(t *tes
 			require.NoError(t, err)
 			require.NotContains(t, string(wire), "downstream-secret")
 			auth, _ := contextvalues.GetAuthContext(ctx)
-			record, err := repo.New(ti.conn).GetPreparationFixtureRegistration(ctx, repo.GetPreparationFixtureRegistrationParams{ID: result.BindingID, ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID})
+			record, err := testrepo.New(ti.conn).GetPreparationFixtureRegistration(ctx, testrepo.GetPreparationFixtureRegistrationParams{ID: result.BindingID, ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID})
 			require.NoError(t, err)
 			selected := record.RemoteSessionClientID.UUID
 			scopes := record.RequestedScopes
@@ -240,7 +251,7 @@ func TestPreparationDCRIntegration_UnlinkedTombstoneCleanupOnIssuerDelete(t *tes
 	require.NoError(t, err)
 	require.NoError(t, ti.service.DeleteRemoteSessionClient(ctx, &clientsgen.DeleteRemoteSessionClientPayload{ID: in.ClientID.String()}))
 	require.NoError(t, ti.service.DeleteRemoteSessionIssuer(ctx, &issuersgen.DeleteRemoteSessionIssuerPayload{ID: in.RemoteSessionIssuerID.String()}))
-	count, err := repo.New(ti.conn).CountPreparationFixtureBindingByID(ctx, repo.CountPreparationFixtureBindingByIDParams{ID: result.BindingID, ProjectID: *auth.ProjectID})
+	count, err := testrepo.New(ti.conn).CountPreparationFixtureBindingByID(ctx, testrepo.CountPreparationFixtureBindingByIDParams{ID: result.BindingID, ProjectID: *auth.ProjectID})
 	require.NoError(t, err)
 	require.Zero(t, count)
 }
@@ -248,7 +259,7 @@ func TestPreparationDCRIntegration_StaleRebindIdentityAndConfirmationRetry(t *te
 	t.Parallel()
 	ctx, ti, in := preparationFixture(t)
 	auth, _ := contextvalues.GetAuthContext(ctx)
-	err := repo.New(ti.conn).SetPreparationFixtureTestClientSecret(ctx, repo.SetPreparationFixtureTestClientSecretParams{ID: in.ClientID, ProjectID: conv.ToNullUUID(*auth.ProjectID)})
+	err := testrepo.New(ti.conn).SetPreparationFixtureTestClientSecret(ctx, testrepo.SetPreparationFixtureTestClientSecretParams{ID: in.ClientID, ProjectID: conv.ToNullUUID(*auth.ProjectID)})
 	require.NoError(t, err)
 	in.ConfirmGrants = []string{preparationJWTGrant, "refresh_token"}
 	first, err := ti.service.PrepareIdentityChaining(ctx, in)
@@ -325,7 +336,7 @@ func TestPreparationDCRIntegration_CompletionRevalidatesReadiness(t *testing.T) 
 			tx := testenv.BeginTx(t, ctx, ti.conn)
 			defer func() { _ = tx.Rollback(context.Background()) }()
 			// Hold the row required by completion, after the durable claim and POST.
-			_, err := repo.New(tx).LockPreparationFixtureIssuer(ctx, repo.LockPreparationFixtureIssuerParams{ID: in.RemoteSessionIssuerID, ProjectID: conv.ToNullUUID(*auth.ProjectID)})
+			_, err := testrepo.New(tx).LockPreparationFixtureIssuer(ctx, testrepo.LockPreparationFixtureIssuerParams{ID: in.RemoteSessionIssuerID, ProjectID: conv.ToNullUUID(*auth.ProjectID)})
 			require.NoError(t, err)
 			switch tc.name {
 			case "expired response":
@@ -333,9 +344,9 @@ func TestPreparationDCRIntegration_CompletionRevalidatesReadiness(t *testing.T) 
 			case "expires during lock wait":
 				expires.Store(time.Now().Add(2 * time.Second).Unix())
 			case "authentication method removed":
-				err = repo.New(tx).SetPreparationFixtureIssuerPostAuth(ctx, repo.SetPreparationFixtureIssuerPostAuthParams{ID: in.RemoteSessionIssuerID, ProjectID: conv.ToNullUUID(*auth.ProjectID)})
+				err = testrepo.New(tx).SetPreparationFixtureIssuerPostAuth(ctx, testrepo.SetPreparationFixtureIssuerPostAuthParams{ID: in.RemoteSessionIssuerID, ProjectID: conv.ToNullUUID(*auth.ProjectID)})
 			case "discovery failed":
-				err = repo.New(tx).FailPreparationFixtureIssuerMetadata(ctx, repo.FailPreparationFixtureIssuerMetadataParams{ID: in.RemoteSessionIssuerID, ProjectID: conv.ToNullUUID(*auth.ProjectID)})
+				err = testrepo.New(tx).FailPreparationFixtureIssuerMetadata(ctx, testrepo.FailPreparationFixtureIssuerMetadataParams{ID: in.RemoteSessionIssuerID, ProjectID: conv.ToNullUUID(*auth.ProjectID)})
 			}
 			require.NoError(t, err)
 			close(respond)
@@ -408,9 +419,9 @@ func TestPreparationDCRIntegration_CIMDProvenanceRequiresGeneration(t *testing.T
 	t.Parallel()
 	ctx, ti, in := preparationFixture(t)
 	auth, _ := contextvalues.GetAuthContext(ctx)
-	err := repo.New(ti.conn).EnablePreparationFixtureCIMD(ctx, repo.EnablePreparationFixtureCIMDParams{ID: in.RemoteSessionIssuerID, ProjectID: conv.ToNullUUID(*auth.ProjectID)})
+	err := testrepo.New(ti.conn).EnablePreparationFixtureCIMD(ctx, testrepo.EnablePreparationFixtureCIMDParams{ID: in.RemoteSessionIssuerID, ProjectID: conv.ToNullUUID(*auth.ProjectID)})
 	require.NoError(t, err)
-	err = repo.New(ti.conn).SetPreparationFixtureCIMDURI(ctx, repo.SetPreparationFixtureCIMDURIParams{ID: in.ClientID, ProjectID: conv.ToNullUUID(*auth.ProjectID)})
+	err = testrepo.New(ti.conn).SetPreparationFixtureCIMDURI(ctx, testrepo.SetPreparationFixtureCIMDURIParams{ID: in.ClientID, ProjectID: conv.ToNullUUID(*auth.ProjectID)})
 	require.NoError(t, err)
 	in.ConfirmGrants = []string{preparationJWTGrant}
 	manual, err := ti.service.PrepareIdentityChaining(ctx, in)
@@ -474,7 +485,7 @@ func TestPreparationDCRIntegration_UnlinkWaitsForDurableSubmission(t *testing.T)
 	require.Equal(t, completed.result.Generation+1, unlinked.Generation)
 	// The successful registration remains available for explicit reconciliation.
 	auth, _ := contextvalues.GetAuthContext(ctx)
-	count, err := repo.New(ti.conn).CountPreparationFixtureIssuerClients(ctx, repo.CountPreparationFixtureIssuerClientsParams{ProjectID: conv.ToNullUUID(*auth.ProjectID), IssuerID: in.RemoteSessionIssuerID})
+	count, err := testrepo.New(ti.conn).CountPreparationFixtureIssuerClients(ctx, testrepo.CountPreparationFixtureIssuerClientsParams{ProjectID: conv.ToNullUUID(*auth.ProjectID), IssuerID: in.RemoteSessionIssuerID})
 	require.NoError(t, err)
 	require.EqualValues(t, 2, count)
 }

@@ -2226,8 +2226,8 @@ func TestFetchRemoteSessionIssuerMetadata_WarnsAboutDroppedPlaintextUserinfoEndp
 	require.NotNil(t, draft.JwksURI, "the rest of the OpenID document still merges")
 }
 
-// A trailing slash changes the issuer identifier and must not be merged.
-func TestFetchRemoteSessionIssuerMetadata_RejectsTrailingSlashIssuerMismatch(t *testing.T) {
+// Preserve the existing trailing-slash compatibility for issuer metadata.
+func TestFetchRemoteSessionIssuerMetadata_AcceptsTrailingSlashIssuer(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -2236,18 +2236,18 @@ func TestFetchRemoteSessionIssuerMetadata_RejectsTrailingSlashIssuerMismatch(t *
 		doc["issuer"] = server.URL + "/"
 	}})
 
-	_, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{
+	draft, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{
 		Issuer:           server.URL,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 	})
-	requireOopsCode(t, err, oops.CodeInvalid)
+	require.NoError(t, err)
+	require.NotNil(t, draft.JwksURI)
 }
 
-// Isolate the OIDC mismatch: an exact OAuth document remains usable, while
-// absent OAuth metadata leaves no acceptable candidate. Neither admits OIDC fields.
-func TestFetchRemoteSessionIssuerMetadata_IsolatesOIDCTrailingSlashMismatch(t *testing.T) {
+// Slash-compatible OIDC metadata contributes fields or stands alone.
+func TestFetchRemoteSessionIssuerMetadata_MergesOIDCTrailingSlashIssuer(t *testing.T) {
 	t.Parallel()
 	for _, status := range []int{http.StatusOK, http.StatusNotFound} {
 		t.Run(http.StatusText(status), func(t *testing.T) {
@@ -2261,19 +2261,12 @@ func TestFetchRemoteSessionIssuerMetadata_IsolatesOIDCTrailingSlashMismatch(t *t
 				mutateOIDC:  func(doc map[string]any) { doc["issuer"] = server.URL + "/" },
 			})
 			draft, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{Issuer: server.URL})
-			if status == http.StatusNotFound {
-				requireOopsCode(t, err, oops.CodeInvalid)
-				require.Nil(t, draft, "the mismatched OIDC candidate cannot stand alone")
-				return
-			}
 			require.NoError(t, err)
 			require.Equal(t, server.URL+"/authorize", *draft.AuthorizationEndpoint)
 			require.Equal(t, server.URL+"/token", *draft.TokenEndpoint)
-			require.Equal(t, []string{"read", "write"}, draft.ScopesSupported)
-			require.Nil(t, draft.JwksURI)
-			require.Nil(t, draft.UserinfoEndpoint)
-			require.Empty(t, draft.ClaimsSupported)
-			require.False(t, draft.BackchannelLogoutSupported, "OIDC mismatch cannot contribute capabilities to an exact OAuth candidate")
+			require.NotNil(t, draft.JwksURI)
+			require.NotNil(t, draft.UserinfoEndpoint)
+			require.NotEmpty(t, draft.ClaimsSupported)
 		})
 	}
 }

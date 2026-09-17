@@ -71,9 +71,9 @@ func TestPreparationScope_DetachRevalidatesOwnershipAfterLockWait(t *testing.T) 
 				return err == nil && blocked
 			}, 5*time.Second, 10*time.Millisecond, "detach must reach the lifecycle lock before ownership changes")
 			if kind == "client" {
-				_, err = tq.MovePreparationFixtureClientProject(ctx, repo.MovePreparationFixtureClientProjectParams{ID: in.ClientID, ProjectID: conv.ToNullUUID(*auth.ProjectID), TargetProjectID: conv.ToNullUUID(sibling)})
+				_, err = testrepo.New(tx).MovePreparationFixtureClientProject(ctx, testrepo.MovePreparationFixtureClientProjectParams{ID: in.ClientID, ProjectID: conv.ToNullUUID(*auth.ProjectID), TargetProjectID: conv.ToNullUUID(sibling)})
 			} else {
-				_, err = tq.MovePreparationFixtureUserIssuerProject(ctx, repo.MovePreparationFixtureUserIssuerProjectParams{ID: in.UserSessionIssuerID, ProjectID: conv.ToNullUUID(*auth.ProjectID), TargetProjectID: conv.ToNullUUID(sibling)})
+				_, err = testrepo.New(tx).MovePreparationFixtureUserIssuerProject(ctx, testrepo.MovePreparationFixtureUserIssuerProjectParams{ID: in.UserSessionIssuerID, ProjectID: conv.ToNullUUID(*auth.ProjectID), TargetProjectID: conv.ToNullUUID(sibling)})
 			}
 			require.NoError(t, err)
 			require.NoError(t, tx.Commit(ctx))
@@ -150,11 +150,11 @@ func TestPreparationScope_LocksRevalidateProjectAfterWait(t *testing.T) {
 			}, 5*time.Second, 10*time.Millisecond)
 			switch kind {
 			case "client":
-				_, err = tq.MovePreparationFixtureClientProject(ctx, repo.MovePreparationFixtureClientProjectParams{ID: in.ClientID, ProjectID: conv.ToNullUUID(*auth.ProjectID), TargetProjectID: conv.ToNullUUID(sibling)})
+				_, err = testrepo.New(tx).MovePreparationFixtureClientProject(ctx, testrepo.MovePreparationFixtureClientProjectParams{ID: in.ClientID, ProjectID: conv.ToNullUUID(*auth.ProjectID), TargetProjectID: conv.ToNullUUID(sibling)})
 			case "remote issuer":
-				_, err = tq.MovePreparationFixtureRemoteIssuerProject(ctx, repo.MovePreparationFixtureRemoteIssuerProjectParams{ID: in.RemoteSessionIssuerID, ProjectID: conv.ToNullUUID(*auth.ProjectID), TargetProjectID: conv.ToNullUUID(sibling)})
+				_, err = testrepo.New(tx).MovePreparationFixtureRemoteIssuerProject(ctx, testrepo.MovePreparationFixtureRemoteIssuerProjectParams{ID: in.RemoteSessionIssuerID, ProjectID: conv.ToNullUUID(*auth.ProjectID), TargetProjectID: conv.ToNullUUID(sibling)})
 			case "user issuer":
-				_, err = tq.MovePreparationFixtureUserIssuerProject(ctx, repo.MovePreparationFixtureUserIssuerProjectParams{ID: in.UserSessionIssuerID, ProjectID: conv.ToNullUUID(*auth.ProjectID), TargetProjectID: conv.ToNullUUID(sibling)})
+				_, err = testrepo.New(tx).MovePreparationFixtureUserIssuerProject(ctx, testrepo.MovePreparationFixtureUserIssuerProjectParams{ID: in.UserSessionIssuerID, ProjectID: conv.ToNullUUID(*auth.ProjectID), TargetProjectID: conv.ToNullUUID(sibling)})
 			}
 			require.NoError(t, err)
 			require.NoError(t, tx.Commit(ctx))
@@ -196,7 +196,7 @@ func TestPreparationScope_FirstBindingWaitsForProjectDeletion(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("preparation did not revalidate deleted project")
 	}
-	count, err := repo.New(ti.conn).CountPreparationFixtureBindings(ctx, *auth.ProjectID)
+	count, err := testrepo.New(ti.conn).CountPreparationFixtureBindings(ctx, *auth.ProjectID)
 	require.NoError(t, err)
 	require.Zero(t, count)
 }

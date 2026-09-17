@@ -1,6 +1,7 @@
 package remotesessions_test
 
 import (
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"testing"
 
 	"github.com/google/uuid"
@@ -45,18 +46,18 @@ func TestPreparationFixtureRegistrationScopesJoinedClient(t *testing.T) {
 	require.NoError(t, err)
 	auth, _ := contextvalues.GetAuthContext(ctx)
 	q := repo.New(ti.conn)
-	params := repo.GetPreparationFixtureRegistrationParams{ID: prepared.BindingID, ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID}
-	_, err = q.GetPreparationFixtureRegistration(ctx, params)
+	params := testrepo.GetPreparationFixtureRegistrationParams{ID: prepared.BindingID, ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID}
+	_, err = testrepo.New(ti.conn).GetPreparationFixtureRegistration(ctx, params)
 	require.NoError(t, err)
 	other := createProject(t, ctx, ti.conn, "fixture-other")
 	foreign := seedProjectRemoteClientNoOrg(t, ctx, ti.conn, other, in.RemoteSessionIssuerID, "foreign-client")
 	_, err = q.SetEMABinding(ctx, repo.SetEMABindingParams{ID: prepared.BindingID, ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, ExpectedGeneration: prepared.Generation, Generation: prepared.Generation + 1, State: conv.ToPGText("unknown_grants"), GrantSource: conv.ToPGText("unknown"), RemoteSessionClientID: conv.ToNullUUID(foreign), RequestedScopes: in.Scopes})
 	require.ErrorIs(t, err, pgx.ErrNoRows, "explicit conditional write rejects the foreign reference")
-	registration, err := q.GetPreparationFixtureRegistration(ctx, params)
+	registration, err := testrepo.New(ti.conn).GetPreparationFixtureRegistration(ctx, params)
 	require.NoError(t, err)
 	require.Equal(t, in.ClientID, registration.RemoteSessionClientID.UUID, "rejected writes preserve the authorized registration")
 	params.ProjectID = uuid.New()
-	_, err = q.GetPreparationFixtureRegistration(ctx, params)
+	_, err = testrepo.New(ti.conn).GetPreparationFixtureRegistration(ctx, params)
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
 

@@ -9,6 +9,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	remoterepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	userrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -38,7 +39,7 @@ func TestProjectsService_DeleteProjectActiveEMABindingConflict(t *testing.T) {
 	require.NoError(t, ti.service.DeleteProject(ctx, &gen.DeleteProjectPayload{ID: project.ID.String()}))
 	_, err = projectsrepo.New(ti.conn).GetProjectByID(ctx, project.ID)
 	require.ErrorIs(t, err, pgx.ErrNoRows, "successful deletion must hide the project")
-	count, err := q.CountPreparationFixtureBindingByID(ctx, remoterepo.CountPreparationFixtureBindingByIDParams{ID: binding.ID, ProjectID: project.ID})
+	count, err := testrepo.New(ti.conn).CountPreparationFixtureBindingByID(ctx, testrepo.CountPreparationFixtureBindingByIDParams{ID: binding.ID, ProjectID: project.ID})
 	require.NoError(t, err)
 	require.Zero(t, count, "project deletion explicitly removes unlinked claims")
 }

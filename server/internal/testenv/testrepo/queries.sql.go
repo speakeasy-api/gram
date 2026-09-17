@@ -13,6 +13,52 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+const agePreparationFixtureClaim = `-- name: AgePreparationFixtureClaim :exec
+UPDATE remote_session_ema_bindings SET state='in_progress', claimed_at=clock_timestamp()-interval '2 minutes' WHERE id = $1 AND project_id = $2
+`
+
+type AgePreparationFixtureClaimParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) AgePreparationFixtureClaim(ctx context.Context, arg AgePreparationFixtureClaimParams) error {
+	_, err := q.db.Exec(ctx, agePreparationFixtureClaim, arg.ID, arg.ProjectID)
+	return err
+}
+
+const attachPreparationFixtureInteractiveClient = `-- name: AttachPreparationFixtureInteractiveClient :exec
+INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id,user_session_issuer_id) SELECT id,$1 FROM remote_session_clients WHERE id = $2 AND project_id = $3
+`
+
+type AttachPreparationFixtureInteractiveClientParams struct {
+	UserID    uuid.UUID
+	ID        uuid.UUID
+	ProjectID uuid.NullUUID
+}
+
+func (q *Queries) AttachPreparationFixtureInteractiveClient(ctx context.Context, arg AttachPreparationFixtureInteractiveClientParams) error {
+	_, err := q.db.Exec(ctx, attachPreparationFixtureInteractiveClient, arg.UserID, arg.ID, arg.ProjectID)
+	return err
+}
+
+const clearPreparationFixtureState = `-- name: ClearPreparationFixtureState :exec
+UPDATE remote_session_ema_bindings SET state = NULL, grant_source = NULL
+WHERE id = $1 AND project_id = $2 AND organization_id = $3
+`
+
+type ClearPreparationFixtureStateParams struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+// Test fixture: represent a binding created without application lifecycle defaults.
+func (q *Queries) ClearPreparationFixtureState(ctx context.Context, arg ClearPreparationFixtureStateParams) error {
+	_, err := q.db.Exec(ctx, clearPreparationFixtureState, arg.ID, arg.ProjectID, arg.OrganizationID)
+	return err
+}
+
 const clearRemoteSessionClientKeySetFixture = `-- name: ClearRemoteSessionClientKeySetFixture :execrows
 UPDATE remote_session_clients
 SET json_web_key_set_id = NULL
@@ -175,6 +221,81 @@ func (q *Queries) CountPlatformMCPSetupMilestoneFixture(ctx context.Context, arg
 		arg.AttemptID,
 		arg.Milestone,
 	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countPreparationFixtureAttachments = `-- name: CountPreparationFixtureAttachments :one
+SELECT count(*) FROM remote_session_client_user_session_issuers l JOIN remote_session_clients c ON c.id=l.remote_session_client_id WHERE c.project_id = $1 AND l.remote_session_client_id = $2 AND l.user_session_issuer_id = $3
+`
+
+type CountPreparationFixtureAttachmentsParams struct {
+	ProjectID uuid.NullUUID
+	ID        uuid.UUID
+	UserID    uuid.UUID
+}
+
+func (q *Queries) CountPreparationFixtureAttachments(ctx context.Context, arg CountPreparationFixtureAttachmentsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countPreparationFixtureAttachments, arg.ProjectID, arg.ID, arg.UserID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countPreparationFixtureBindingByID = `-- name: CountPreparationFixtureBindingByID :one
+SELECT count(*) FROM remote_session_ema_bindings WHERE id = $1 AND project_id = $2
+`
+
+type CountPreparationFixtureBindingByIDParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) CountPreparationFixtureBindingByID(ctx context.Context, arg CountPreparationFixtureBindingByIDParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countPreparationFixtureBindingByID, arg.ID, arg.ProjectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countPreparationFixtureBindings = `-- name: CountPreparationFixtureBindings :one
+SELECT count(*) FROM remote_session_ema_bindings WHERE project_id = $1
+`
+
+func (q *Queries) CountPreparationFixtureBindings(ctx context.Context, projectID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countPreparationFixtureBindings, projectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countPreparationFixtureIssuerClients = `-- name: CountPreparationFixtureIssuerClients :one
+SELECT count(*) FROM remote_session_clients WHERE project_id = $1 AND remote_session_issuer_id = $2
+`
+
+type CountPreparationFixtureIssuerClientsParams struct {
+	ProjectID uuid.NullUUID
+	IssuerID  uuid.UUID
+}
+
+func (q *Queries) CountPreparationFixtureIssuerClients(ctx context.Context, arg CountPreparationFixtureIssuerClientsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countPreparationFixtureIssuerClients, arg.ProjectID, arg.IssuerID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countPreparationFixtureLifecycleTriggers = `-- name: CountPreparationFixtureLifecycleTriggers :one
+SELECT count(*) FROM pg_catalog.pg_trigger t
+JOIN pg_catalog.pg_proc p ON p.oid = t.tgfoid
+JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+WHERE n.nspname = current_schema()
+AND p.proname IN ('validate_remote_session_ema_binding_scope', 'guard_remote_session_ema_lifecycle')
+`
+
+func (q *Queries) CountPreparationFixtureLifecycleTriggers(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countPreparationFixtureLifecycleTriggers)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -504,6 +625,27 @@ func (q *Queries) DeleteOrganizationUserRelationshipFixture(ctx context.Context,
 	return err
 }
 
+const detachRemoteSessionClientFromUserSessionIssuer = `-- name: DetachRemoteSessionClientFromUserSessionIssuer :execrows
+DELETE FROM remote_session_client_user_session_issuers
+WHERE remote_session_client_id = $1
+  AND user_session_issuer_id = $2
+`
+
+type DetachRemoteSessionClientFromUserSessionIssuerParams struct {
+	RemoteSessionClientID uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+}
+
+// Test fixture: remove a client binding to exercise detached shared grants.
+// Returns the number of bindings removed.
+func (q *Queries) DetachRemoteSessionClientFromUserSessionIssuer(ctx context.Context, arg DetachRemoteSessionClientFromUserSessionIssuerParams) (int64, error) {
+	result, err := q.db.Exec(ctx, detachRemoteSessionClientFromUserSessionIssuer, arg.RemoteSessionClientID, arg.UserSessionIssuerID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const disableDeviceIntegrationSchedulesFixture = `-- name: DisableDeviceIntegrationSchedulesFixture :exec
 UPDATE device_integration_schedules
 SET disabled_at = clock_timestamp()
@@ -534,6 +676,20 @@ EXECUTE FUNCTION fail_admin_key_audit()
 
 func (q *Queries) EnableOpenRouterAdminDisableAuditFailureFixture(ctx context.Context) error {
 	_, err := q.db.Exec(ctx, enableOpenRouterAdminDisableAuditFailureFixture)
+	return err
+}
+
+const enablePreparationFixtureCIMD = `-- name: EnablePreparationFixtureCIMD :exec
+UPDATE remote_session_issuers SET client_id_metadata_document_supported = true, token_endpoint_auth_methods_supported = array_append(token_endpoint_auth_methods_supported, 'none') WHERE id = $1 AND project_id = $2
+`
+
+type EnablePreparationFixtureCIMDParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.NullUUID
+}
+
+func (q *Queries) EnablePreparationFixtureCIMD(ctx context.Context, arg EnablePreparationFixtureCIMDParams) error {
+	_, err := q.db.Exec(ctx, enablePreparationFixtureCIMD, arg.ID, arg.ProjectID)
 	return err
 }
 
@@ -582,6 +738,165 @@ type FailDeviceIntegrationSyncsFixtureParams struct {
 func (q *Queries) FailDeviceIntegrationSyncsFixture(ctx context.Context, arg FailDeviceIntegrationSyncsFixtureParams) error {
 	_, err := q.db.Exec(ctx, failDeviceIntegrationSyncsFixture, arg.ErrorMessage, arg.LastPushDigest, arg.DeviceIntegrationConfigID)
 	return err
+}
+
+const failPreparationFixtureIssuerMetadata = `-- name: FailPreparationFixtureIssuerMetadata :exec
+UPDATE remote_session_issuers SET metadata_last_error='discovery unavailable', metadata_last_error_at=clock_timestamp(), metadata_last_error_url='https://issuer.example.com/metadata' WHERE id = $1 AND project_id = $2
+`
+
+type FailPreparationFixtureIssuerMetadataParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.NullUUID
+}
+
+func (q *Queries) FailPreparationFixtureIssuerMetadata(ctx context.Context, arg FailPreparationFixtureIssuerMetadataParams) error {
+	_, err := q.db.Exec(ctx, failPreparationFixtureIssuerMetadata, arg.ID, arg.ProjectID)
+	return err
+}
+
+const forceRemoteSessionClientAuthMethodFixture = `-- name: ForceRemoteSessionClientAuthMethodFixture :execrows
+UPDATE remote_session_clients
+SET token_endpoint_auth_method = $1
+WHERE id = $2
+  AND project_id = $3
+`
+
+type ForceRemoteSessionClientAuthMethodFixtureParams struct {
+	TokenEndpointAuthMethod pgtype.Text
+	ID                      uuid.UUID
+	ProjectID               uuid.NullUUID
+}
+
+// TEST FIXTURE ONLY. Writes a token_endpoint_auth_method the Goa enum does not
+// accept, which no production path can produce. private_key_jwt arrives with
+// AIM-156; until then planting the value directly is the only way to exercise
+// requireDetachableKeySet and requirePrivateKeyJWTKeySet, the rules that guard
+// it.
+func (q *Queries) ForceRemoteSessionClientAuthMethodFixture(ctx context.Context, arg ForceRemoteSessionClientAuthMethodFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, forceRemoteSessionClientAuthMethodFixture, arg.TokenEndpointAuthMethod, arg.ID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const forceRemoteSessionClientRegistrationFixture = `-- name: ForceRemoteSessionClientRegistrationFixture :execrows
+UPDATE remote_session_clients
+SET client_secret_expires_at = $1,
+    upstream_rejected_at = $2,
+    updated_at = clock_timestamp()
+WHERE id = $3
+  AND deleted IS FALSE
+`
+
+type ForceRemoteSessionClientRegistrationFixtureParams struct {
+	ClientSecretExpiresAt pgtype.Timestamptz
+	UpstreamRejectedAt    pgtype.Timestamptz
+	ID                    uuid.UUID
+}
+
+// Test fixture: stamps the lifecycle columns a rotation reads, so a test can
+// stage a client whose issuer has rejected it or whose secret has expired.
+func (q *Queries) ForceRemoteSessionClientRegistrationFixture(ctx context.Context, arg ForceRemoteSessionClientRegistrationFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, forceRemoteSessionClientRegistrationFixture, arg.ClientSecretExpiresAt, arg.UpstreamRejectedAt, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const forceRemoteSessionIssuerEnrichmentEndpointsFixture = `-- name: ForceRemoteSessionIssuerEnrichmentEndpointsFixture :execrows
+UPDATE remote_session_issuers AS i
+SET userinfo_endpoint = $1::text,
+    introspection_endpoint = $2::text,
+    jwks_uri = COALESCE($3::text, i.jwks_uri)
+FROM remote_session_clients AS c
+WHERE c.id = $4
+  AND i.id = c.remote_session_issuer_id
+  AND (c.project_id = $5::uuid OR (c.project_id IS NULL AND c.organization_id = $6::text))
+`
+
+type ForceRemoteSessionIssuerEnrichmentEndpointsFixtureParams struct {
+	UserinfoEndpoint      pgtype.Text
+	IntrospectionEndpoint pgtype.Text
+	JwksUri               pgtype.Text
+	RemoteSessionClientID uuid.UUID
+	ProjectID             uuid.UUID
+	OrganizationID        string
+}
+
+// TEST FIXTURE ONLY. Points a client's issuer at fake userinfo and
+// introspection endpoints so the consent page's Verify can be exercised
+// against an authorization server the test controls.
+func (q *Queries) ForceRemoteSessionIssuerEnrichmentEndpointsFixture(ctx context.Context, arg ForceRemoteSessionIssuerEnrichmentEndpointsFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, forceRemoteSessionIssuerEnrichmentEndpointsFixture,
+		arg.UserinfoEndpoint,
+		arg.IntrospectionEndpoint,
+		arg.JwksUri,
+		arg.RemoteSessionClientID,
+		arg.ProjectID,
+		arg.OrganizationID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const forceRemoteSessionIssuerRegistrationEndpointFixture = `-- name: ForceRemoteSessionIssuerRegistrationEndpointFixture :execrows
+UPDATE remote_session_issuers AS i
+SET registration_endpoint = $1,
+    updated_at = clock_timestamp()
+FROM remote_session_clients AS c
+WHERE c.id = $2
+  AND i.id = c.remote_session_issuer_id
+`
+
+type ForceRemoteSessionIssuerRegistrationEndpointFixtureParams struct {
+	RegistrationEndpoint pgtype.Text
+	ClientID             uuid.UUID
+}
+
+// Test fixture: sets the registration endpoint on a client's issuer, which is
+// where a rotation re-registers the client. NULL stages an issuer that
+// publishes none.
+func (q *Queries) ForceRemoteSessionIssuerRegistrationEndpointFixture(ctx context.Context, arg ForceRemoteSessionIssuerRegistrationEndpointFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, forceRemoteSessionIssuerRegistrationEndpointFixture, arg.RegistrationEndpoint, arg.ClientID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const forceRemoteSessionIssuerTokenEndpointFixture = `-- name: ForceRemoteSessionIssuerTokenEndpointFixture :execrows
+UPDATE remote_session_issuers AS i
+SET token_endpoint = $1
+FROM remote_session_clients AS c
+WHERE c.id = $2
+  AND i.id = c.remote_session_issuer_id
+  AND (c.project_id = $3::uuid OR (c.project_id IS NULL AND c.organization_id = $4::text))
+`
+
+type ForceRemoteSessionIssuerTokenEndpointFixtureParams struct {
+	TokenEndpoint         pgtype.Text
+	RemoteSessionClientID uuid.UUID
+	ProjectID             uuid.UUID
+	OrganizationID        string
+}
+
+// TEST FIXTURE ONLY. Redirects the issuer behind a tenant-owned client to a
+// local token endpoint so refresh behavior can be exercised without raw SQL.
+func (q *Queries) ForceRemoteSessionIssuerTokenEndpointFixture(ctx context.Context, arg ForceRemoteSessionIssuerTokenEndpointFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, forceRemoteSessionIssuerTokenEndpointFixture,
+		arg.TokenEndpoint,
+		arg.RemoteSessionClientID,
+		arg.ProjectID,
+		arg.OrganizationID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const forceSoftDeleteChat = `-- name: ForceSoftDeleteChat :exec
@@ -966,6 +1281,79 @@ func (q *Queries) GetPlatformMCPSetupHandoffHashFixture(ctx context.Context, id 
 	var handoff_hash string
 	err := row.Scan(&handoff_hash)
 	return handoff_hash, err
+}
+
+const getPreparationFixtureClientGrants = `-- name: GetPreparationFixtureClientGrants :one
+SELECT grant_types FROM remote_session_clients WHERE id = $1 AND project_id = $2
+`
+
+type GetPreparationFixtureClientGrantsParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.NullUUID
+}
+
+func (q *Queries) GetPreparationFixtureClientGrants(ctx context.Context, arg GetPreparationFixtureClientGrantsParams) ([]string, error) {
+	row := q.db.QueryRow(ctx, getPreparationFixtureClientGrants, arg.ID, arg.ProjectID)
+	var grant_types []string
+	err := row.Scan(&grant_types)
+	return grant_types, err
+}
+
+const getPreparationFixtureInteractiveClient = `-- name: GetPreparationFixtureInteractiveClient :one
+SELECT client_id,client_secret_encrypted,grant_types,scope FROM remote_session_clients WHERE id = $1 AND project_id = $2
+`
+
+type GetPreparationFixtureInteractiveClientParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.NullUUID
+}
+
+type GetPreparationFixtureInteractiveClientRow struct {
+	ClientID              string
+	ClientSecretEncrypted pgtype.Text
+	GrantTypes            []string
+	Scope                 []string
+}
+
+func (q *Queries) GetPreparationFixtureInteractiveClient(ctx context.Context, arg GetPreparationFixtureInteractiveClientParams) (GetPreparationFixtureInteractiveClientRow, error) {
+	row := q.db.QueryRow(ctx, getPreparationFixtureInteractiveClient, arg.ID, arg.ProjectID)
+	var i GetPreparationFixtureInteractiveClientRow
+	err := row.Scan(
+		&i.ClientID,
+		&i.ClientSecretEncrypted,
+		&i.GrantTypes,
+		&i.Scope,
+	)
+	return i, err
+}
+
+const getPreparationFixtureRegistration = `-- name: GetPreparationFixtureRegistration :one
+SELECT b.remote_session_client_id,b.requested_scopes,c.grant_types,c.client_secret_encrypted FROM remote_session_ema_bindings b JOIN remote_session_clients c ON c.id=b.remote_session_client_id AND (c.project_id = b.project_id OR (c.project_id IS NULL AND c.organization_id = b.organization_id)) WHERE b.id = $1 AND b.project_id = $2 AND b.organization_id = $3
+`
+
+type GetPreparationFixtureRegistrationParams struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+type GetPreparationFixtureRegistrationRow struct {
+	RemoteSessionClientID uuid.NullUUID
+	RequestedScopes       []string
+	GrantTypes            []string
+	ClientSecretEncrypted pgtype.Text
+}
+
+func (q *Queries) GetPreparationFixtureRegistration(ctx context.Context, arg GetPreparationFixtureRegistrationParams) (GetPreparationFixtureRegistrationRow, error) {
+	row := q.db.QueryRow(ctx, getPreparationFixtureRegistration, arg.ID, arg.ProjectID, arg.OrganizationID)
+	var i GetPreparationFixtureRegistrationRow
+	err := row.Scan(
+		&i.RemoteSessionClientID,
+		&i.RequestedScopes,
+		&i.GrantTypes,
+		&i.ClientSecretEncrypted,
+	)
+	return i, err
 }
 
 const getPrincipalGrantEffectFixture = `-- name: GetPrincipalGrantEffectFixture :one
@@ -2071,6 +2459,79 @@ func (q *Queries) LockOrganizationMetadataForUpdateNowaitFixture(ctx context.Con
 	return id, err
 }
 
+const lockPreparationFixtureIssuer = `-- name: LockPreparationFixtureIssuer :one
+SELECT id FROM remote_session_issuers WHERE id = $1 AND project_id = $2 FOR UPDATE
+`
+
+type LockPreparationFixtureIssuerParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.NullUUID
+}
+
+func (q *Queries) LockPreparationFixtureIssuer(ctx context.Context, arg LockPreparationFixtureIssuerParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockPreparationFixtureIssuer, arg.ID, arg.ProjectID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const movePreparationFixtureClientProject = `-- name: MovePreparationFixtureClientProject :execrows
+UPDATE remote_session_clients SET project_id = $1
+WHERE id = $2 AND project_id = $3
+`
+
+type MovePreparationFixtureClientProjectParams struct {
+	TargetProjectID uuid.NullUUID
+	ID              uuid.UUID
+	ProjectID       uuid.NullUUID
+}
+
+func (q *Queries) MovePreparationFixtureClientProject(ctx context.Context, arg MovePreparationFixtureClientProjectParams) (int64, error) {
+	result, err := q.db.Exec(ctx, movePreparationFixtureClientProject, arg.TargetProjectID, arg.ID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const movePreparationFixtureRemoteIssuerProject = `-- name: MovePreparationFixtureRemoteIssuerProject :execrows
+UPDATE remote_session_issuers SET project_id = $1
+WHERE id = $2 AND project_id = $3
+`
+
+type MovePreparationFixtureRemoteIssuerProjectParams struct {
+	TargetProjectID uuid.NullUUID
+	ID              uuid.UUID
+	ProjectID       uuid.NullUUID
+}
+
+func (q *Queries) MovePreparationFixtureRemoteIssuerProject(ctx context.Context, arg MovePreparationFixtureRemoteIssuerProjectParams) (int64, error) {
+	result, err := q.db.Exec(ctx, movePreparationFixtureRemoteIssuerProject, arg.TargetProjectID, arg.ID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const movePreparationFixtureUserIssuerProject = `-- name: MovePreparationFixtureUserIssuerProject :execrows
+UPDATE user_session_issuers SET project_id = $1
+WHERE id = $2 AND project_id = $3
+`
+
+type MovePreparationFixtureUserIssuerProjectParams struct {
+	TargetProjectID uuid.NullUUID
+	ID              uuid.UUID
+	ProjectID       uuid.NullUUID
+}
+
+func (q *Queries) MovePreparationFixtureUserIssuerProject(ctx context.Context, arg MovePreparationFixtureUserIssuerProjectParams) (int64, error) {
+	result, err := q.db.Exec(ctx, movePreparationFixtureUserIssuerProject, arg.TargetProjectID, arg.ID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const pauseDeviceIntegrationSyncsFixture = `-- name: PauseDeviceIntegrationSyncsFixture :exec
 UPDATE device_integration_syncs s
 SET auto_paused_at = clock_timestamp(),
@@ -2965,6 +3426,158 @@ func (q *Queries) SetOrgWebhookConfig(ctx context.Context, arg SetOrgWebhookConf
 	return err
 }
 
+const setPreparationFixtureCIMDURI = `-- name: SetPreparationFixtureCIMDURI :exec
+UPDATE remote_session_clients SET client_id_metadata_uri = 'https://gram.example.com/client.json', client_id = 'https://gram.example.com/client.json', client_secret_encrypted = NULL, token_endpoint_auth_method = 'none' WHERE id = $1 AND project_id = $2
+`
+
+type SetPreparationFixtureCIMDURIParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.NullUUID
+}
+
+func (q *Queries) SetPreparationFixtureCIMDURI(ctx context.Context, arg SetPreparationFixtureCIMDURIParams) error {
+	_, err := q.db.Exec(ctx, setPreparationFixtureCIMDURI, arg.ID, arg.ProjectID)
+	return err
+}
+
+const setPreparationFixtureClientGrants = `-- name: SetPreparationFixtureClientGrants :exec
+UPDATE remote_session_clients SET grant_types = $1::text[]
+WHERE id = $2 AND project_id = $3
+`
+
+type SetPreparationFixtureClientGrantsParams struct {
+	GrantTypes []string
+	ID         uuid.UUID
+	ProjectID  uuid.NullUUID
+}
+
+func (q *Queries) SetPreparationFixtureClientGrants(ctx context.Context, arg SetPreparationFixtureClientGrantsParams) error {
+	_, err := q.db.Exec(ctx, setPreparationFixtureClientGrants, arg.GrantTypes, arg.ID, arg.ProjectID)
+	return err
+}
+
+const setPreparationFixtureClientSecret = `-- name: SetPreparationFixtureClientSecret :exec
+UPDATE remote_session_clients SET token_endpoint_auth_method = 'client_secret_basic', client_secret_encrypted = $1
+WHERE id = $2 AND project_id = $3
+`
+
+type SetPreparationFixtureClientSecretParams struct {
+	Secret    pgtype.Text
+	ID        uuid.UUID
+	ProjectID uuid.NullUUID
+}
+
+func (q *Queries) SetPreparationFixtureClientSecret(ctx context.Context, arg SetPreparationFixtureClientSecretParams) error {
+	_, err := q.db.Exec(ctx, setPreparationFixtureClientSecret, arg.Secret, arg.ID, arg.ProjectID)
+	return err
+}
+
+const setPreparationFixtureClientSecretExpiry = `-- name: SetPreparationFixtureClientSecretExpiry :exec
+UPDATE remote_session_clients SET client_secret_expires_at = $1
+WHERE id = $2 AND project_id = $3
+`
+
+type SetPreparationFixtureClientSecretExpiryParams struct {
+	ExpiresAt pgtype.Timestamptz
+	ID        uuid.UUID
+	ProjectID uuid.NullUUID
+}
+
+func (q *Queries) SetPreparationFixtureClientSecretExpiry(ctx context.Context, arg SetPreparationFixtureClientSecretExpiryParams) error {
+	_, err := q.db.Exec(ctx, setPreparationFixtureClientSecretExpiry, arg.ExpiresAt, arg.ID, arg.ProjectID)
+	return err
+}
+
+const setPreparationFixtureDCREndpoint = `-- name: SetPreparationFixtureDCREndpoint :exec
+UPDATE remote_session_issuers SET registration_endpoint = $1, token_endpoint_auth_methods_supported=ARRAY['client_secret_basic'] WHERE id = $2 AND project_id = $3
+`
+
+type SetPreparationFixtureDCREndpointParams struct {
+	Endpoint  pgtype.Text
+	ID        uuid.UUID
+	ProjectID uuid.NullUUID
+}
+
+// Scoped fixtures for DCR preparation and lifecycle integration tests.
+func (q *Queries) SetPreparationFixtureDCREndpoint(ctx context.Context, arg SetPreparationFixtureDCREndpointParams) error {
+	_, err := q.db.Exec(ctx, setPreparationFixtureDCREndpoint, arg.Endpoint, arg.ID, arg.ProjectID)
+	return err
+}
+
+const setPreparationFixtureInteractiveClient = `-- name: SetPreparationFixtureInteractiveClient :exec
+UPDATE remote_session_clients SET client_secret_encrypted='interactive-ciphertext', token_endpoint_auth_method='client_secret_basic', grant_types=ARRAY['authorization_code','refresh_token'], scope=ARRAY['openid'] WHERE id = $1 AND project_id = $2
+`
+
+type SetPreparationFixtureInteractiveClientParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.NullUUID
+}
+
+func (q *Queries) SetPreparationFixtureInteractiveClient(ctx context.Context, arg SetPreparationFixtureInteractiveClientParams) error {
+	_, err := q.db.Exec(ctx, setPreparationFixtureInteractiveClient, arg.ID, arg.ProjectID)
+	return err
+}
+
+const setPreparationFixtureIssuerCapability = `-- name: SetPreparationFixtureIssuerCapability :exec
+UPDATE remote_session_issuers
+SET authorization_grant_profiles_supported = ARRAY['urn:ietf:params:oauth:grant-profile:id-jag'],
+    grant_types_supported = ARRAY['authorization_code','refresh_token','urn:ietf:params:oauth:grant-type:jwt-bearer']
+WHERE id = $1 AND project_id = $2
+`
+
+type SetPreparationFixtureIssuerCapabilityParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.NullUUID
+}
+
+func (q *Queries) SetPreparationFixtureIssuerCapability(ctx context.Context, arg SetPreparationFixtureIssuerCapabilityParams) error {
+	_, err := q.db.Exec(ctx, setPreparationFixtureIssuerCapability, arg.ID, arg.ProjectID)
+	return err
+}
+
+const setPreparationFixtureIssuerPostAuth = `-- name: SetPreparationFixtureIssuerPostAuth :exec
+UPDATE remote_session_issuers SET token_endpoint_auth_methods_supported=ARRAY['client_secret_post'] WHERE id = $1 AND project_id = $2
+`
+
+type SetPreparationFixtureIssuerPostAuthParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.NullUUID
+}
+
+func (q *Queries) SetPreparationFixtureIssuerPostAuth(ctx context.Context, arg SetPreparationFixtureIssuerPostAuthParams) error {
+	_, err := q.db.Exec(ctx, setPreparationFixtureIssuerPostAuth, arg.ID, arg.ProjectID)
+	return err
+}
+
+const setPreparationFixtureTestClientSecret = `-- name: SetPreparationFixtureTestClientSecret :exec
+UPDATE remote_session_clients SET token_endpoint_auth_method='client_secret_basic',client_secret_encrypted='test-ciphertext' WHERE id = $1 AND project_id = $2
+`
+
+type SetPreparationFixtureTestClientSecretParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.NullUUID
+}
+
+func (q *Queries) SetPreparationFixtureTestClientSecret(ctx context.Context, arg SetPreparationFixtureTestClientSecretParams) error {
+	_, err := q.db.Exec(ctx, setPreparationFixtureTestClientSecret, arg.ID, arg.ProjectID)
+	return err
+}
+
+const setPreparationFixtureTrust = `-- name: SetPreparationFixtureTrust :exec
+UPDATE user_session_issuers SET trusted_remote_session_issuer_id = $1 WHERE id = $2 AND project_id = $3
+`
+
+type SetPreparationFixtureTrustParams struct {
+	IssuerID  uuid.NullUUID
+	ID        uuid.UUID
+	ProjectID uuid.NullUUID
+}
+
+func (q *Queries) SetPreparationFixtureTrust(ctx context.Context, arg SetPreparationFixtureTrustParams) error {
+	_, err := q.db.Exec(ctx, setPreparationFixtureTrust, arg.IssuerID, arg.ID, arg.ProjectID)
+	return err
+}
+
 const setProjectSlugFixture = `-- name: SetProjectSlugFixture :exec
 UPDATE projects
 SET slug = $1
@@ -2997,6 +3610,38 @@ type SetRemoteSessionResourceFixtureParams struct {
 // Test-only fixture stamping a stored RFC 8707 resource binding on a row.
 func (q *Queries) SetRemoteSessionResourceFixture(ctx context.Context, arg SetRemoteSessionResourceFixtureParams) error {
 	_, err := q.db.Exec(ctx, setRemoteSessionResourceFixture, arg.Resource, arg.SubjectUrn, arg.RemoteSessionClientID)
+	return err
+}
+
+const setRemoteSessionValidationTrackingFixture = `-- name: SetRemoteSessionValidationTrackingFixture :exec
+UPDATE remote_sessions s
+SET last_validated_at = $1::timestamptz,
+    last_refresh_attempt_at = $2::timestamptz,
+    created_at = COALESCE($3::timestamptz, s.created_at)
+FROM remote_session_clients c
+WHERE s.id = $4
+  AND s.remote_session_client_id = c.id
+  AND c.project_id = $5
+`
+
+type SetRemoteSessionValidationTrackingFixtureParams struct {
+	LastValidatedAt      pgtype.Timestamptz
+	LastRefreshAttemptAt pgtype.Timestamptz
+	CreatedAt            pgtype.Timestamptz
+	ID                   uuid.UUID
+	ProjectID            uuid.NullUUID
+}
+
+// Test helper for ageing a grant into the keepalive re-check window without
+// waiting for it. Scoped through the owning remote_session_client's project.
+func (q *Queries) SetRemoteSessionValidationTrackingFixture(ctx context.Context, arg SetRemoteSessionValidationTrackingFixtureParams) error {
+	_, err := q.db.Exec(ctx, setRemoteSessionValidationTrackingFixture,
+		arg.LastValidatedAt,
+		arg.LastRefreshAttemptAt,
+		arg.CreatedAt,
+		arg.ID,
+		arg.ProjectID,
+	)
 	return err
 }
 
@@ -3120,6 +3765,23 @@ func (q *Queries) SoftDeleteOpenRouterAPIKeyFixture(ctx context.Context, arg Sof
 	return err
 }
 
+const softDeleteRemoteSessionClientFixture = `-- name: SoftDeleteRemoteSessionClientFixture :execrows
+UPDATE remote_session_clients
+SET deleted_at = clock_timestamp()
+WHERE id = $1
+  AND deleted IS FALSE
+`
+
+// Test fixture: plants a tombstoned client for management-link rejection tests
+// without coupling those tests to a second service's authorization path.
+func (q *Queries) SoftDeleteRemoteSessionClientFixture(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, softDeleteRemoteSessionClientFixture, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const softDeleteRemoteSessionClientsForKeySetFixture = `-- name: SoftDeleteRemoteSessionClientsForKeySetFixture :execrows
 UPDATE remote_session_clients
 SET deleted_at = clock_timestamp()
@@ -3131,6 +3793,23 @@ WHERE json_web_key_set_id = $1
 // shown to ignore them.
 func (q *Queries) SoftDeleteRemoteSessionClientsForKeySetFixture(ctx context.Context, jsonWebKeySetID uuid.NullUUID) (int64, error) {
 	result, err := q.db.Exec(ctx, softDeleteRemoteSessionClientsForKeySetFixture, jsonWebKeySetID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const softDeleteRemoteSessionIssuerFixture = `-- name: SoftDeleteRemoteSessionIssuerFixture :execrows
+UPDATE remote_session_issuers
+SET deleted_at = clock_timestamp()
+WHERE id = $1
+  AND deleted IS FALSE
+`
+
+// Test fixture: plants a tombstoned issuer for management-link rejection tests
+// without coupling those tests to a second service's authorization path.
+func (q *Queries) SoftDeleteRemoteSessionIssuerFixture(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, softDeleteRemoteSessionIssuerFixture, id)
 	if err != nil {
 		return 0, err
 	}

@@ -2,6 +2,7 @@ package remotesessions_test
 
 import (
 	"context"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -74,7 +75,7 @@ func TestRotationSnapshot_RejectsChangesDuringHTTP(t *testing.T) {
 				q := repo.New(ti.conn)
 				_, err := q.UpdateRemoteSessionIssuer(ctx, repo.UpdateRemoteSessionIssuerParams{ID: in.RemoteSessionIssuerID, ProjectID: conv.ToNullUUID(*auth.ProjectID), TokenEndpoint: conv.ToPGText(upstream.URL + "/token"), RegistrationEndpoint: conv.ToPGText(upstream.URL + "/register")})
 				require.NoError(t, err)
-				_, err = q.ForceRemoteSessionClientRegistrationFixture(ctx, repo.ForceRemoteSessionClientRegistrationFixtureParams{ID: in.ClientID, UpstreamRejectedAt: conv.ToPGTimestamptz(time.Now())})
+				_, err = testrepo.New(ti.conn).ForceRemoteSessionClientRegistrationFixture(ctx, testrepo.ForceRemoteSessionClientRegistrationFixtureParams{ID: in.ClientID, UpstreamRejectedAt: conv.ToPGTimestamptz(time.Now())})
 				require.NoError(t, err)
 				before, err := q.GetRemoteSessionClientForRotation(ctx, in.ClientID)
 				require.NoError(t, err)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -87,13 +88,13 @@ const invalidClientBody = `{"error":"invalid_client","error_description":"Client
 func stageRegistration(t *testing.T, env syntheticExpiryEnv, registrationEndpoint string, rejectedAt, secretExpiresAt *time.Time) {
 	t.Helper()
 	ctx := t.Context()
-	n, err := env.q.ForceRemoteSessionIssuerRegistrationEndpointFixture(ctx, repo.ForceRemoteSessionIssuerRegistrationEndpointFixtureParams{
+	n, err := testrepo.New(env.db).ForceRemoteSessionIssuerRegistrationEndpointFixture(ctx, testrepo.ForceRemoteSessionIssuerRegistrationEndpointFixtureParams{
 		RegistrationEndpoint: conv.ToPGTextEmpty(registrationEndpoint),
 		ClientID:             env.clientID,
 	})
 	require.NoError(t, err)
 	require.EqualValues(t, 1, n)
-	n, err = env.q.ForceRemoteSessionClientRegistrationFixture(ctx, repo.ForceRemoteSessionClientRegistrationFixtureParams{
+	n, err = testrepo.New(env.db).ForceRemoteSessionClientRegistrationFixture(ctx, testrepo.ForceRemoteSessionClientRegistrationFixtureParams{
 		ClientSecretExpiresAt: conv.PtrToPGTimestamptz(secretExpiresAt),
 		UpstreamRejectedAt:    conv.PtrToPGTimestamptz(rejectedAt),
 		ID:                    env.clientID,
@@ -565,7 +566,7 @@ func TestBuildAuthorizationUrl_AdoptsConcurrentReplacementWhenIssuerLostRegistra
 
 	stale := listClient(t, env)
 	require.NoError(t, replaceAsWinner(ctx, env, loadClient(t, env)))
-	n, err := env.q.ForceRemoteSessionIssuerRegistrationEndpointFixture(ctx, repo.ForceRemoteSessionIssuerRegistrationEndpointFixtureParams{
+	n, err := testrepo.New(env.db).ForceRemoteSessionIssuerRegistrationEndpointFixture(ctx, testrepo.ForceRemoteSessionIssuerRegistrationEndpointFixtureParams{
 		RegistrationEndpoint: pgtype.Text{String: "", Valid: false},
 		ClientID:             env.clientID,
 	})

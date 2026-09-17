@@ -769,8 +769,9 @@ func timestampPtr(ts pgtype.Timestamptz) *time.Time {
 	return &t
 }
 
-// Issuer and client versions are independent: the client CAS alone cannot see
-// discovery or an administrator changing the authorization server endpoints.
+// The client CAS alone cannot see changes to issuer configuration. Compare the
+// issuer's registration inputs, not its timestamp: discovery also advances that
+// timestamp when refreshing unrelated metadata or restating unchanged endpoints.
 func revalidateRotationSnapshot(ctx context.Context, q *repo.Queries, expected repo.GetRemoteSessionClientForRotationRow) error {
 	current, err := q.GetRemoteSessionClientForRotation(ctx, expected.RemoteSessionClient.ID)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -789,7 +790,7 @@ func revalidateRotationSnapshot(ctx context.Context, q *repo.Queries, expected r
 		current.IssuerUrl != expected.IssuerUrl ||
 		current.IssuerTokenEndpoint != expected.IssuerTokenEndpoint ||
 		current.IssuerRegistrationEndpoint != expected.IssuerRegistrationEndpoint ||
-		!sameTimestamp(current.IssuerUpdatedAt, expected.IssuerUpdatedAt) {
+		current.IssuerTunneledMcpServerID != expected.IssuerTunneledMcpServerID {
 		return ErrRotationSnapshotChanged
 	}
 	return nil

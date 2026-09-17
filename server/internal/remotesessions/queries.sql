@@ -1109,7 +1109,6 @@ WHERE c.id = @id
   AND i.deleted IS FALSE
 FOR UPDATE OF c;
 
-
 -- Holds the key set while a client attaches to it, against DeleteSet's
 -- FOR UPDATE on the same row. Without it, attach-sees-live-set racing
 -- delete-sees-no-references lets both commit and strands a client on a deleted
@@ -1597,18 +1596,6 @@ WHERE s.id = @id
   AND s.remote_session_client_id = c.id
   AND c.project_id = @project_id;
 
--- name: SetRemoteSessionValidationTrackingFixture :exec
--- Test helper for ageing a grant into the keepalive re-check window without
--- waiting for it. Scoped through the owning remote_session_client's project.
-UPDATE remote_sessions s
-SET last_validated_at = sqlc.narg('last_validated_at')::timestamptz,
-    last_refresh_attempt_at = sqlc.narg('last_refresh_attempt_at')::timestamptz,
-    created_at = COALESCE(sqlc.narg('created_at')::timestamptz, s.created_at)
-FROM remote_session_clients c
-WHERE s.id = @id
-  AND s.remote_session_client_id = c.id
-  AND c.project_id = @project_id;
-
 -- name: GetRemoteSessionClientWithIssuerByID :one
 -- Joined client + issuer view scoped to a single client_id. Used by
 -- the runtime token resolver to find the upstream token endpoint when
@@ -1663,9 +1650,8 @@ SELECT
         OR i.backchannel_logout_supported IS NULL
         OR i.authorization_response_iss_parameter_supported IS NULL
         OR i.code_challenge_methods_supported IS NULL
-        OR ((i.metadata ? 'authorization_grant_profiles_supported' AND
-          jsonb_typeof(i.metadata->'authorization_grant_profiles_supported') IS DISTINCT FROM 'array')
-          OR COALESCE(i.metadata->'authorization_grant_profiles_supported', '[]'::jsonb) IS DISTINCT FROM to_jsonb(i.authorization_grant_profiles_supported)
+        OR (jsonb_typeof(COALESCE(NULLIF(i.metadata->'authorization_grant_profiles_supported', 'null'::jsonb), '[]'::jsonb)) IS DISTINCT FROM 'array'
+          OR COALESCE(NULLIF(i.metadata->'authorization_grant_profiles_supported', 'null'::jsonb), '[]'::jsonb) IS DISTINCT FROM to_jsonb(i.authorization_grant_profiles_supported)
         )
       )
     )::boolean                             AS metadata_needs_reprojection
@@ -1779,9 +1765,8 @@ SELECT
         OR i.backchannel_logout_supported IS NULL
         OR i.authorization_response_iss_parameter_supported IS NULL
         OR i.code_challenge_methods_supported IS NULL
-        OR ((i.metadata ? 'authorization_grant_profiles_supported' AND
-          jsonb_typeof(i.metadata->'authorization_grant_profiles_supported') IS DISTINCT FROM 'array')
-          OR COALESCE(i.metadata->'authorization_grant_profiles_supported', '[]'::jsonb) IS DISTINCT FROM to_jsonb(i.authorization_grant_profiles_supported)
+        OR (jsonb_typeof(COALESCE(NULLIF(i.metadata->'authorization_grant_profiles_supported', 'null'::jsonb), '[]'::jsonb)) IS DISTINCT FROM 'array'
+          OR COALESCE(NULLIF(i.metadata->'authorization_grant_profiles_supported', 'null'::jsonb), '[]'::jsonb) IS DISTINCT FROM to_jsonb(i.authorization_grant_profiles_supported)
         )
       )
     )::boolean                             AS metadata_needs_reprojection
@@ -3075,16 +3060,6 @@ SET remote_session_issuer_id = @target_issuer_id,
 WHERE remote_session_issuer_id = @source_issuer_id
   AND deleted IS FALSE;
 
--- name: DetachRemoteSessionClientFromUserSessionIssuer :execrows
--- Remove the join-table binding between a remote_session_client and a
--- user_session_issuer. Used by the org-admin "remove client from MCP server"
--- action, where the user_session_issuer is the one the MCP server uses. Returns
--- the number of rows removed (0 means the client was not bound to that issuer).
--- Callers establish org ownership of the client upstream.
-DELETE FROM remote_session_client_user_session_issuers
-WHERE remote_session_client_id = @remote_session_client_id
-  AND user_session_issuer_id = @user_session_issuer_id;
-
 -- name: ListOrganizationRemoteSessionsByClientID :many
 -- Sessions minted against a client. See the ORG REACHABILITY note on
 -- ListOrganizationRemoteSessionClientsByIssuerID.
@@ -3561,41 +3536,6 @@ WHERE link.remote_session_client_id = @remote_session_client_id
   AND c.project_id = @project_id
 ORDER BY link.user_session_issuer_id;
 
--- TEST FIXTURE ONLY. Redirects the issuer behind a tenant-owned client to a
--- local token endpoint so refresh behavior can be exercised without raw SQL.
--- name: ForceRemoteSessionIssuerTokenEndpointFixture :execrows
-UPDATE remote_session_issuers AS i
-SET token_endpoint = @token_endpoint
-FROM remote_session_clients AS c
-WHERE c.id = @remote_session_client_id
-  AND i.id = c.remote_session_issuer_id
-  AND (c.project_id = @project_id::uuid OR (c.project_id IS NULL AND c.organization_id = @organization_id::text));
-
--- TEST FIXTURE ONLY. Points a client's issuer at fake userinfo and
--- introspection endpoints so the consent page's Verify can be exercised
--- against an authorization server the test controls.
--- name: ForceRemoteSessionIssuerEnrichmentEndpointsFixture :execrows
-UPDATE remote_session_issuers AS i
-SET userinfo_endpoint = sqlc.narg('userinfo_endpoint')::text,
-    introspection_endpoint = sqlc.narg('introspection_endpoint')::text,
-    jwks_uri = COALESCE(sqlc.narg('jwks_uri')::text, i.jwks_uri)
-FROM remote_session_clients AS c
-WHERE c.id = @remote_session_client_id
-  AND i.id = c.remote_session_issuer_id
-  AND (c.project_id = @project_id::uuid OR (c.project_id IS NULL AND c.organization_id = @organization_id::text));
-
--- TEST FIXTURE ONLY. Writes a token_endpoint_auth_method the Goa enum does not
--- accept, which no production path can produce. private_key_jwt arrives with
--- AIM-156; until then planting the value directly is the only way to exercise
--- requireDetachableKeySet and requirePrivateKeyJWTKeySet, the rules that guard
--- it. Lives beside the invariant it bypasses rather than in shared testenv,
--- because only this package's tests construct the impossible state.
--- name: ForceRemoteSessionClientAuthMethodFixture :execrows
-UPDATE remote_session_clients
-SET token_endpoint_auth_method = @token_endpoint_auth_method
-WHERE id = @id
-  AND project_id = @project_id;
-
 -- name: GetRemoteSessionIssuerForMetadataRefresh :one
 -- Tier-agnostic read for the on-use refresh, scoped by the listed identity so a moved row matches nothing.
 SELECT *
@@ -3689,43 +3629,6 @@ WHERE id = @id
   AND organization_id IS NOT DISTINCT FROM sqlc.narg('organization_id')::text
   AND deleted IS FALSE;
 
--- name: ForceRemoteSessionClientRegistrationFixture :execrows
--- Test fixture: stamps the lifecycle columns a rotation reads, so a test can
--- stage a client whose issuer has rejected it or whose secret has expired.
-UPDATE remote_session_clients
-SET client_secret_expires_at = sqlc.narg('client_secret_expires_at'),
-    upstream_rejected_at = sqlc.narg('upstream_rejected_at'),
-    updated_at = clock_timestamp()
-WHERE id = @id
-  AND deleted IS FALSE;
-
--- name: ForceRemoteSessionIssuerRegistrationEndpointFixture :execrows
--- Test fixture: sets the registration endpoint on a client's issuer, which is
--- where a rotation re-registers the client. NULL stages an issuer that
--- publishes none.
-UPDATE remote_session_issuers AS i
-SET registration_endpoint = sqlc.narg('registration_endpoint'),
-    updated_at = clock_timestamp()
-FROM remote_session_clients AS c
-WHERE c.id = @client_id
-  AND i.id = c.remote_session_issuer_id;
-
--- name: SoftDeleteRemoteSessionClientFixture :execrows
--- Test fixture: plants a tombstoned client for management-link rejection tests
--- without coupling those tests to a second service's authorization path.
-UPDATE remote_session_clients
-SET deleted_at = clock_timestamp()
-WHERE id = @id
-  AND deleted IS FALSE;
-
--- name: SoftDeleteRemoteSessionIssuerFixture :execrows
--- Test fixture: plants a tombstoned issuer for management-link rejection tests
--- without coupling those tests to a second service's authorization path.
-UPDATE remote_session_issuers
-SET deleted_at = clock_timestamp()
-WHERE id = @id
-  AND deleted IS FALSE;
-
 -- name: EnsureEMABinding :exec
 INSERT INTO remote_session_ema_bindings (project_id, organization_id, user_session_issuer_id, remote_session_issuer_id, resource, state, grant_source)
 SELECT @project_id, @organization_id, @user_session_issuer_id, @remote_session_issuer_id, @resource, 'configuration_required', 'unknown'
@@ -3808,103 +3711,6 @@ AND ((user_session_issuers.project_id = @project_id AND EXISTS (
     AND p.organization_id = sqlc.narg('organization_id') AND p.deleted IS FALSE FOR SHARE
 )) OR (user_session_issuers.project_id IS NULL AND user_session_issuers.organization_id = sqlc.narg('organization_id'))) FOR UPDATE;
 
--- name: SetPreparationFixtureIssuerCapability :exec
-UPDATE remote_session_issuers
-SET authorization_grant_profiles_supported = ARRAY['urn:ietf:params:oauth:grant-profile:id-jag'],
-    grant_types_supported = ARRAY['authorization_code','refresh_token','urn:ietf:params:oauth:grant-type:jwt-bearer']
-WHERE id = @id AND project_id = @project_id;
-
--- name: SetPreparationFixtureClientGrants :exec
-UPDATE remote_session_clients SET grant_types = @grant_types::text[]
-WHERE id = @id AND project_id = @project_id;
-
--- name: GetPreparationFixtureClientGrants :one
-SELECT grant_types FROM remote_session_clients WHERE id = @id AND project_id = @project_id;
-
--- name: CountPreparationFixtureBindings :one
-SELECT count(*) FROM remote_session_ema_bindings WHERE project_id = @project_id;
-
--- name: SetPreparationFixtureClientSecret :exec
-UPDATE remote_session_clients SET token_endpoint_auth_method = 'client_secret_basic', client_secret_encrypted = @secret
-WHERE id = @id AND project_id = @project_id;
-
--- name: SetPreparationFixtureClientSecretExpiry :exec
-UPDATE remote_session_clients SET client_secret_expires_at = @expires_at
-WHERE id = @id AND project_id = @project_id;
-
--- Scoped fixtures for DCR preparation and lifecycle integration tests.
--- name: SetPreparationFixtureDCREndpoint :exec
-UPDATE remote_session_issuers SET registration_endpoint = @endpoint, token_endpoint_auth_methods_supported=ARRAY['client_secret_basic'] WHERE id = @id AND project_id = @project_id;
-
--- name: SetPreparationFixtureInteractiveClient :exec
-UPDATE remote_session_clients SET client_secret_encrypted='interactive-ciphertext', token_endpoint_auth_method='client_secret_basic', grant_types=ARRAY['authorization_code','refresh_token'], scope=ARRAY['openid'] WHERE id = @id AND project_id = @project_id;
-
--- name: AttachPreparationFixtureInteractiveClient :exec
-INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id,user_session_issuer_id) SELECT id,@user_id FROM remote_session_clients WHERE id = @id AND project_id = @project_id;
-
--- name: GetPreparationFixtureInteractiveClient :one
-SELECT client_id,client_secret_encrypted,grant_types,scope FROM remote_session_clients WHERE id = @id AND project_id = @project_id;
-
--- name: CountPreparationFixtureAttachments :one
-SELECT count(*) FROM remote_session_client_user_session_issuers l JOIN remote_session_clients c ON c.id=l.remote_session_client_id WHERE c.project_id = @project_id AND l.remote_session_client_id = @id AND l.user_session_issuer_id = @user_id;
-
--- name: CountPreparationFixtureIssuerClients :one
-SELECT count(*) FROM remote_session_clients WHERE project_id = @project_id AND remote_session_issuer_id = @issuer_id;
-
--- name: AgePreparationFixtureClaim :exec
-UPDATE remote_session_ema_bindings SET state='in_progress', claimed_at=clock_timestamp()-interval '2 minutes' WHERE id = @id AND project_id = @project_id;
-
--- name: GetPreparationFixtureRegistration :one
-SELECT b.remote_session_client_id,b.requested_scopes,c.grant_types,c.client_secret_encrypted FROM remote_session_ema_bindings b JOIN remote_session_clients c ON c.id=b.remote_session_client_id AND (c.project_id = b.project_id OR (c.project_id IS NULL AND c.organization_id = b.organization_id)) WHERE b.id = @id AND b.project_id = @project_id AND b.organization_id = @organization_id;
-
--- name: SetPreparationFixtureTrust :exec
-UPDATE user_session_issuers SET trusted_remote_session_issuer_id = @issuer_id WHERE id = @id AND project_id = @project_id;
-
--- name: MovePreparationFixtureIssuerTier :execrows
-UPDATE remote_session_issuers SET project_id=NULL WHERE id = @id AND project_id = @project_id;
-
--- name: ChangePreparationFixtureIssuerIdentity :execrows
-UPDATE remote_session_issuers SET issuer='https://replacement.example.com' WHERE id = @id AND project_id = @project_id;
-
--- name: DisconnectPreparationFixtureTrust :execrows
-UPDATE user_session_issuers SET trusted_remote_session_issuer_id=NULL WHERE id = @id AND project_id = @project_id;
-
--- name: SoftDeletePreparationFixtureUserIssuer :execrows
-UPDATE user_session_issuers SET deleted_at=clock_timestamp() WHERE id = @id AND project_id = @project_id;
-
--- name: SoftDeletePreparationFixtureClient :execrows
-UPDATE remote_session_clients SET deleted_at=clock_timestamp() WHERE id = @id AND project_id = @project_id;
-
--- name: DeletePreparationFixtureClient :exec
-DELETE FROM remote_session_clients WHERE id = @id AND project_id = @project_id;
-
--- name: CountPreparationFixtureBindingByID :one
-SELECT count(*) FROM remote_session_ema_bindings WHERE id = @id AND project_id = @project_id;
-
--- name: SetPreparationFixtureTestClientSecret :exec
-UPDATE remote_session_clients SET token_endpoint_auth_method='client_secret_basic',client_secret_encrypted='test-ciphertext' WHERE id = @id AND project_id = @project_id;
-
--- name: LockPreparationFixtureIssuer :one
-SELECT id FROM remote_session_issuers WHERE id = @id AND project_id = @project_id FOR UPDATE;
-
--- name: SetPreparationFixtureIssuerPostAuth :exec
-UPDATE remote_session_issuers SET token_endpoint_auth_methods_supported=ARRAY['client_secret_post'] WHERE id = @id AND project_id = @project_id;
-
--- name: FailPreparationFixtureIssuerMetadata :exec
-UPDATE remote_session_issuers SET metadata_last_error='discovery unavailable', metadata_last_error_at=clock_timestamp(), metadata_last_error_url='https://issuer.example.com/metadata' WHERE id = @id AND project_id = @project_id;
-
--- name: EnablePreparationFixtureCIMD :exec
-UPDATE remote_session_issuers SET client_id_metadata_document_supported = true, token_endpoint_auth_methods_supported = array_append(token_endpoint_auth_methods_supported, 'none') WHERE id = @id AND project_id = @project_id;
-
--- name: SetPreparationFixtureCIMDURI :exec
-UPDATE remote_session_clients SET client_id_metadata_uri = 'https://gram.example.com/client.json', client_id = 'https://gram.example.com/client.json', client_secret_encrypted = NULL, token_endpoint_auth_method = 'none' WHERE id = @id AND project_id = @project_id;
-
--- name: DeletePreparationFixtureIssuer :exec
-DELETE FROM remote_session_issuers WHERE id = @id AND project_id = @project_id;
-
--- name: DeletePreparationFixtureUserIssuer :exec
-DELETE FROM user_session_issuers WHERE id = @id AND project_id = @project_id;
-
 -- Lifecycle mutations target an exact ownership tier, not inherited objects.
 -- A NULL organization on a legacy project-owned row is resolved via projects.
 -- name: LockEMAClientForLifecycle :one
@@ -3931,8 +3737,8 @@ SELECT organization_id FROM projects WHERE id = @project_id AND deleted IS FALSE
 
 -- name: LockProjectUserIssuerForDetach :one
 SELECT id FROM user_session_issuers u WHERE u.id = @id AND u.deleted IS FALSE
-AND u.project_id = @project_id::uuid AND EXISTS (
-    SELECT 1 FROM projects p WHERE p.id = u.project_id
+AND (u.project_id = @project_id::uuid OR (u.project_id IS NULL AND u.organization_id = @organization_id::text)) AND EXISTS (
+    SELECT 1 FROM projects p WHERE p.id = @project_id::uuid
     AND p.organization_id = @organization_id::text AND p.deleted IS FALSE FOR SHARE
 ) FOR UPDATE;
 
@@ -3943,21 +3749,9 @@ WHERE link.remote_session_client_id = @remote_session_client_id
 AND link.user_session_issuer_id = @user_session_issuer_id
 AND c.id = link.remote_session_client_id AND c.deleted IS FALSE
 AND u.id = link.user_session_issuer_id AND u.deleted IS FALSE
-AND u.project_id = @project_id::uuid
-AND p.id = u.project_id AND p.organization_id = @organization_id::text AND p.deleted IS FALSE
+AND (u.project_id = @project_id::uuid OR (u.project_id IS NULL AND u.organization_id = @organization_id::text))
+AND p.id = @project_id::uuid AND p.organization_id = @organization_id::text AND p.deleted IS FALSE
 AND (c.project_id = p.id OR (c.project_id IS NULL AND c.organization_id = p.organization_id));
-
--- name: MovePreparationFixtureClientProject :execrows
-UPDATE remote_session_clients SET project_id = @target_project_id
-WHERE id = @id AND project_id = @project_id;
-
--- name: MovePreparationFixtureUserIssuerProject :execrows
-UPDATE user_session_issuers SET project_id = @target_project_id
-WHERE id = @id AND project_id = @project_id;
-
--- name: MovePreparationFixtureRemoteIssuerProject :execrows
-UPDATE remote_session_issuers SET project_id = @target_project_id
-WHERE id = @id AND project_id = @project_id;
 
 -- name: LockPreparationSubmission :exec
 -- Session-scoped: caller must unlock on the same reserved connection.
@@ -3997,13 +3791,6 @@ AND ((u.project_id IS NULL AND u.organization_id = @organization_id::text) OR EX
 -- name: LockEMAProject :one
 SELECT id FROM projects WHERE id = @project_id AND organization_id = @organization_id AND deleted IS FALSE FOR SHARE;
 
--- name: CountPreparationFixtureLifecycleTriggers :one
-SELECT count(*) FROM pg_catalog.pg_trigger t
-JOIN pg_catalog.pg_proc p ON p.oid = t.tgfoid
-JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
-WHERE n.nspname = current_schema()
-AND p.proname IN ('validate_remote_session_ema_binding_scope', 'guard_remote_session_ema_lifecycle');
-
 -- name: LockRotationIssuerSnapshot :one
 -- Lock only the exact pre-HTTP issuer identity and tenant. The client is locked
 -- next; publication rechecks both versions while these locks are held.
@@ -4012,7 +3799,34 @@ WHERE id = @id AND project_id IS NOT DISTINCT FROM sqlc.narg('project_id')::uuid
 AND organization_id IS NOT DISTINCT FROM sqlc.narg('organization_id')::text
 AND deleted IS FALSE FOR UPDATE;
 
--- name: ClearPreparationFixtureState :exec
--- Test fixture: represent a binding created without application lifecycle defaults.
-UPDATE remote_session_ema_bindings SET state = NULL, grant_source = NULL
-WHERE id = @id AND project_id = @project_id AND organization_id = @organization_id;
+-- name: ReadEMAProject :one
+SELECT id FROM projects WHERE id = @project_id AND organization_id = @organization_id AND deleted IS FALSE;
+
+-- name: ReadEMAUserIssuer :one
+SELECT user_session_issuers.id FROM user_session_issuers WHERE user_session_issuers.id = @id AND user_session_issuers.deleted IS FALSE
+AND ((user_session_issuers.project_id = @project_id AND EXISTS (
+    SELECT 1 FROM projects p WHERE p.id = user_session_issuers.project_id
+    AND p.organization_id = sqlc.narg('organization_id') AND p.deleted IS FALSE
+)) OR (user_session_issuers.project_id IS NULL AND user_session_issuers.organization_id = sqlc.narg('organization_id')));
+
+-- name: ReadEMAIssuer :one
+SELECT * FROM remote_session_issuers WHERE remote_session_issuers.id = @id AND remote_session_issuers.deleted IS FALSE
+AND ((remote_session_issuers.project_id = @project_id AND EXISTS (
+    SELECT 1 FROM projects p WHERE p.id = remote_session_issuers.project_id
+    AND p.organization_id = sqlc.narg('organization_id') AND p.deleted IS FALSE
+)) OR (remote_session_issuers.project_id IS NULL AND (remote_session_issuers.organization_id = sqlc.narg('organization_id') OR remote_session_issuers.organization_id IS NULL)));
+
+-- name: ReadEMAClient :one
+SELECT * FROM remote_session_clients WHERE remote_session_clients.id = @id AND remote_session_clients.deleted IS FALSE
+AND ((remote_session_clients.project_id = @project_id AND EXISTS (
+    SELECT 1 FROM projects p WHERE p.id = remote_session_clients.project_id
+    AND p.organization_id = sqlc.narg('organization_id') AND p.deleted IS FALSE
+)) OR (remote_session_clients.project_id IS NULL AND remote_session_clients.organization_id = sqlc.narg('organization_id')));
+
+-- name: ReadEMAJsonWebKeySet :one
+SELECT id
+FROM json_web_key_sets
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND project_id IS NULL
+  AND deleted IS FALSE;

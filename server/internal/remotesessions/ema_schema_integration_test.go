@@ -1,6 +1,7 @@
 package remotesessions_test
 
 import (
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"testing"
 
 	"github.com/google/uuid"
@@ -20,7 +21,7 @@ func TestEMASchema_ProjectTenantConstraint(t *testing.T) {
 		RemoteSessionIssuerID: in.RemoteSessionIssuerID, Resource: in.Resource,
 	})
 	require.NoError(t, err)
-	count, err := repo.New(ti.conn).CountPreparationFixtureBindings(ctx, *auth.ProjectID)
+	count, err := testrepo.New(ti.conn).CountPreparationFixtureBindings(ctx, *auth.ProjectID)
 	require.NoError(t, err)
 	require.Zero(t, count)
 }
@@ -76,7 +77,7 @@ func TestEMABindingSQLGenerationTransitions(t *testing.T) {
 func TestPreparationArchitecture_NoLifecycleTriggers(t *testing.T) {
 	t.Parallel()
 	ctx, ti, _ := preparationFixture(t)
-	count, err := repo.New(ti.conn).CountPreparationFixtureLifecycleTriggers(ctx)
+	count, err := testrepo.New(ti.conn).CountPreparationFixtureLifecycleTriggers(ctx)
 	require.NoError(t, err)
 	require.Zero(t, count, "run preparation regressions against the trigger-free base; application guards must stand alone")
 }
@@ -98,16 +99,18 @@ func TestEMABindingNullableLifecycleState(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, conv.ToPGText("configuration_required"), b.State)
 	require.Equal(t, conv.ToPGText("unknown"), b.GrantSource)
-	err = q.ClearPreparationFixtureState(ctx, repo.ClearPreparationFixtureStateParams{ID: b.ID, ProjectID: b.ProjectID, OrganizationID: b.OrganizationID})
+	err = testrepo.New(ti.conn).ClearPreparationFixtureState(ctx, testrepo.ClearPreparationFixtureStateParams{ID: b.ID, ProjectID: b.ProjectID, OrganizationID: b.OrganizationID})
 	require.NoError(t, err)
 	count, err := q.CountActiveEMABindingsForIssuer(ctx, repo.CountActiveEMABindingsForIssuerParams{IssuerID: in.RemoteSessionIssuerID, OrganizationID: b.OrganizationID, ProjectID: b.ProjectID})
 	require.NoError(t, err)
 	require.EqualValues(t, 1, count, "NULL state is not an explicit unlink")
+	generation := b.Generation
 	b, err = q.SetEMABinding(ctx, repo.SetEMABindingParams{
 		ID: b.ID, ProjectID: b.ProjectID, OrganizationID: b.OrganizationID,
 		ExpectedGeneration: b.Generation, Generation: b.Generation,
 		State: conv.ToPGText("configuration_required"), GrantSource: conv.ToPGText("unknown"), RequestedScopes: []string{},
 	})
 	require.NoError(t, err, "initializing a NULL state preserves the binding incarnation")
+	require.Equal(t, generation, b.Generation)
 	require.Equal(t, conv.ToPGText("configuration_required"), b.State)
 }

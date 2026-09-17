@@ -378,19 +378,19 @@ func TestIssuerMetadataRefresh_Refresh_PartialReadKeepsTheRetryURL(t *testing.T)
 
 	outcome, err := refresher.Refresh(ctx, refreshCandidate(t, ctx, ti, id))
 	require.NoError(t, err)
-	require.Equal(t, remotesessionmetrics.IssuerMetadataRefreshOutcomeTransientFailure, outcome)
+	require.Equal(t, remotesessionmetrics.IssuerMetadataRefreshOutcomeRefreshedPartial, outcome)
 
 	after := loadIssuerByID(t, ctx, ti, id)
 	require.True(t, after.AuthorizationEndpoint.Valid)
-	require.Equal(t, "https://stale.example.com/authorize", after.AuthorizationEndpoint.String, "the stored endpoints stand")
-	require.Contains(t, after.MetadataLastError.String, "503")
-	require.False(t, after.MetadataFetchedAt.Valid)
+	require.Equal(t, upstream.URL+"/authorize", after.AuthorizationEndpoint.String, "fresh primary endpoints win")
+	require.NotEmpty(t, after.MetadataLastError.String)
+	require.True(t, after.MetadataFetchedAt.Valid)
 	require.Contains(t, after.MetadataLastErrorUrl.String, upstream.URL+"/.well-known/oauth-authorization-server")
 	require.WithinDuration(t, now, after.MetadataLastErrorAt.Time, time.Minute)
 	require.False(t, fetchDue(t, ctx, ti, id, now))
-	require.True(t, fetchDue(t, ctx, ti, id, now.Add(61*time.Minute)), "an incomplete read joins the hourly retry track")
+	require.False(t, fetchDue(t, ctx, ti, id, now.Add(61*time.Minute)), "partial success keeps the daily cadence")
 	require.True(t, fetchDue(t, ctx, ti, id, now.Add(25*time.Hour)), "the next fetch waits for the daily cadence")
-	require.Equal(t, int64(1), outcomeCounts(t, reader)[remotesessionmetrics.IssuerMetadataRefreshOutcomeTransientFailure])
+	require.Equal(t, int64(1), outcomeCounts(t, reader)[remotesessionmetrics.IssuerMetadataRefreshOutcomeRefreshedPartial])
 }
 
 func TestIssuerMetadataRefresh_Refresh_TransientFailureRetriesWithinTheHour(t *testing.T) {
@@ -1352,9 +1352,16 @@ func TestIssuerMetadataRefresh_FlowRowReprojectionFlagMatchesTheStoredRow(t *tes
 	require.NoError(t, err)
 	require.False(t, flow.MetadataNeedsReprojection, "a refreshed row has every capability column set")
 	require.True(t, flow.MetadataFetchedAt.Valid)
+	// Legacy null profiles represent an absent capability, not malformed metadata.
+	legacyNull := strings.TrimSuffix(document, "}") + `,"authorization_grant_profiles_supported":null}`
+	setIssuerMetadataTracking(t, ctx, ti, issuerID, metadataTracking{document: legacyNull})
+	flow, err = repo.New(ti.conn).GetRemoteSessionClientWithIssuerByID(ctx, clientRowID)
+	require.NoError(t, err)
+	require.False(t, flow.MetadataNeedsReprojection)
+	require.False(t, remotesessions.IssuerMetadataUseFromRow(loadIssuerByID(t, ctx, ti, issuerID)).NeedsReprojection)
 	// With every other capability projected, malformed profiles alone must
 	// trigger reprojection in both SQL read surfaces and the Go planner.
-	malformed := strings.TrimSuffix(document, "}") + `,"authorization_grant_profiles_supported":null}`
+	malformed := strings.TrimSuffix(document, "}") + `,"authorization_grant_profiles_supported":true}`
 	setIssuerMetadataTracking(t, ctx, ti, issuerID, metadataTracking{document: malformed})
 	flow, err = repo.New(ti.conn).GetRemoteSessionClientWithIssuerByID(ctx, clientRowID)
 	require.NoError(t, err)
@@ -1384,4 +1391,43 @@ func TestIssuerMetadataRefresh_Reproject_KeepsExplicitEmptyOperatorProfiles(t *t
 	require.Equal(t, []string{}, after.AuthorizationGrantProfilesSupported)
 	require.Equal(t, fetchedAt, after.MetadataFetchedAt.Time, "operator edits must not claim a fresh discovery")
 	require.False(t, reprojectDue(t, ctx, ti, id, time.Now()))
+}
+
+func TestIssuerMetadataRefresh_Reproject_LegacyNullArrays(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	refresher, _ := newIssuerMetadataRefresher(t, ti)
+	upstream := statusServer(t, http.StatusServiceUnavailable)
+	id := createProjectIssuer(t, ctx, ti, "legacy-null-arrays", upstream.URL)
+	document := `{"issuer":"` + upstream.URL + `/","authorization_endpoint":"` + upstream.URL + `/authorize","token_endpoint":"` + upstream.URL + `/token","authorization_grant_profiles_supported":null,"claims_supported":null,"code_challenge_methods_supported":null}`
+	fetchedAt := time.Now().Add(-2 * time.Hour)
+	setIssuerMetadataTracking(t, ctx, ti, id, metadataTracking{document: document, fetchedAt: &fetchedAt})
+	require.True(t, reprojectDue(t, ctx, ti, id, time.Now()))
+	outcome, err := refresher.Reproject(ctx, refreshCandidate(t, ctx, ti, id))
+	require.NoError(t, err)
+	require.Equal(t, remotesessionmetrics.IssuerMetadataRefreshOutcomeReprojected, outcome)
+	require.False(t, reprojectDue(t, ctx, ti, id, time.Now()), "legacy null profiles must not requeue forever")
+}
+
+func TestIssuerMetadataRefresh_Refresh_GuardedEndpointFailureIsVisibleAndPaced(t *testing.T) {
+	t.Parallel()
+	ctx, ti, in := preparationFixture(t)
+	refresher, _ := newIssuerMetadataRefresher(t, ti)
+	upstream := fakeIssuerServer(t, nil)
+	id := createProjectIssuer(t, ctx, ti, "guarded-refresh", upstream.URL)
+	existing := loadIssuerByID(t, ctx, ti, id)
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	q := repo.New(ti.conn)
+	require.NoError(t, q.EnsureEMABinding(ctx, repo.EnsureEMABindingParams{
+		ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID,
+		UserSessionIssuerID: in.UserSessionIssuerID, RemoteSessionIssuerID: id, Resource: in.Resource,
+	}))
+	outcome, err := refresher.Refresh(ctx, refreshCandidate(t, ctx, ti, id))
+	require.NoError(t, err)
+	require.Equal(t, remotesessionmetrics.IssuerMetadataRefreshOutcomeDefinitiveFailure, outcome)
+	after := loadIssuerByID(t, ctx, ti, id)
+	require.Equal(t, existing.TokenEndpoint, after.TokenEndpoint)
+	require.Contains(t, after.MetadataLastError.String, "blocked by an active client binding")
+	require.True(t, after.MetadataLastErrorAt.Valid)
+	require.False(t, fetchDue(t, ctx, ti, id, time.Now()), "guard rejection must not immediately requeue the issuer")
 }

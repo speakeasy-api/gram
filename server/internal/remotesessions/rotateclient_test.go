@@ -1,6 +1,7 @@
 package remotesessions_test
 
 import (
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -53,7 +54,7 @@ func TestRotateClientRejectsIneligibleIdentityProviderLoginReplacement(t *testin
 	issuerID, clientID := seedTrustedIdentityProviderClient(t, ctx, ti.conn, "rotate-trusted-client")
 	createTrustedClientOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "rotate-trusted-usi", issuerID, clientID)
 
-	n, err := repo.New(ti.conn).ForceRemoteSessionIssuerRegistrationEndpointFixture(ctx, repo.ForceRemoteSessionIssuerRegistrationEndpointFixtureParams{
+	n, err := testrepo.New(ti.conn).ForceRemoteSessionIssuerRegistrationEndpointFixture(ctx, testrepo.ForceRemoteSessionIssuerRegistrationEndpointFixtureParams{
 		RegistrationEndpoint: conv.ToPGText(registration.URL + "/register"),
 		ClientID:             clientID,
 	})
@@ -338,7 +339,7 @@ func TestUpdateClient_NewSecretClearsUpstreamRejection(t *testing.T) {
 
 	rejectedAt := time.Now().Add(-time.Hour)
 	expiredAt := time.Now().Add(-time.Minute)
-	n, err := repo.New(ti.conn).ForceRemoteSessionClientRegistrationFixture(ctx, repo.ForceRemoteSessionClientRegistrationFixtureParams{
+	n, err := testrepo.New(ti.conn).ForceRemoteSessionClientRegistrationFixture(ctx, testrepo.ForceRemoteSessionClientRegistrationFixtureParams{
 		ClientSecretExpiresAt: conv.ToPGTimestamptz(expiredAt),
 		UpstreamRejectedAt:    conv.ToPGTimestamptz(rejectedAt),
 		ID:                    clientUUID,

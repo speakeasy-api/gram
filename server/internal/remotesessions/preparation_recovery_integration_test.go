@@ -3,6 +3,7 @@ package remotesessions_test
 import (
 	"context"
 	"encoding/json"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -81,7 +82,7 @@ func TestPreparationDCRIntegration_DiscoveryRecovery(t *testing.T) {
 				t.Fatal(ctx.Err())
 			}
 			// The provider cannot respond until discovery failure has been committed.
-			require.NoError(t, q.FailPreparationFixtureIssuerMetadata(ctx, repo.FailPreparationFixtureIssuerMetadataParams{
+			require.NoError(t, testrepo.New(ti.conn).FailPreparationFixtureIssuerMetadata(ctx, testrepo.FailPreparationFixtureIssuerMetadataParams{
 				ID: issuer.ID, ProjectID: issuer.ProjectID,
 			}))
 			close(respond)
@@ -117,7 +118,7 @@ func TestPreparationDCRIntegration_DiscoveryRecovery(t *testing.T) {
 			}))
 			check(tc.want)
 			check(tc.want)
-			stored, err := q.GetPreparationFixtureRegistration(ctx, repo.GetPreparationFixtureRegistrationParams{
+			stored, err := testrepo.New(ti.conn).GetPreparationFixtureRegistration(ctx, testrepo.GetPreparationFixtureRegistrationParams{
 				ID: out.result.BindingID, ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID,
 			})
 			require.NoError(t, err)

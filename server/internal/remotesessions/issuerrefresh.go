@@ -181,12 +181,11 @@ func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, resolve
 		return zero, nil, err
 	}
 
-	// A partial discovery is not a successful refresh. Keep the entire last
-	// known snapshot and its fetched timestamp until all candidates answer;
-	// otherwise an outage can masquerade as capability withdrawal or freshness.
-	if discovered.unreadableErr != nil {
-		return zero, nil, discovered.unreadableErr
-	}
+	// Persist only evidence read during this discovery. Metadata stores the
+	// merged document, not the individual candidates or member provenance.
+	// Even for the same issuer, filling gaps from it could resurrect a grant,
+	// profile, or endpoint the readable primary has now omitted. An unreadable
+	// candidate is recorded below, but cannot justify borrowing old evidence.
 
 	// The key set rides the issuer's binding like the discovery document that
 	// advertised it. An issuer inside a customer network publishes its
@@ -289,7 +288,7 @@ func vetRefreshedDocument(doc rfc8414Document, issuer repo.RemoteSessionIssuer) 
 		return &untrustedDocumentError{
 			reason: fmt.Sprintf("metadata document at %s advertises no issuer", issuer.Issuer),
 		}
-	case doc.Issuer != issuer.Issuer:
+	case !issuerURLsEqual(doc.Issuer, issuer.Issuer):
 		return &untrustedDocumentError{
 			reason: fmt.Sprintf("metadata document advertises issuer %q, but this identity provider is configured as %q; refusing to adopt another authorization server's metadata", truncateForMessage(doc.Issuer), issuer.Issuer),
 		}
@@ -360,8 +359,8 @@ func discoveredMetadataParams(doc rfc8414Document, unreadable string, keySet ref
 		AuthorizationResponseIssParameterSupported: doc.AuthorizationResponseIssParameterSupported,
 		Metadata: string(retainableDocument(doc.raw)),
 
-		// Recorded so the next refresh, and anyone reading the row, can tell
-		// which members were kept from the stored document rather than read.
+		// Record incomplete discovery without claiming that omitted members
+		// were definitively withdrawn by the unreadable candidate.
 		MetadataLastError:    unreadableCandidateMessage(unreadable),
 		MetadataLastErrorUrl: unreadable,
 

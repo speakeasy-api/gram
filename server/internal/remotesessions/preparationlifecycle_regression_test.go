@@ -3,6 +3,7 @@ package remotesessions_test
 import (
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"testing"
 
 	adminrsgen "github.com/speakeasy-api/gram/server/gen/admin_remote_sessions"
@@ -87,7 +88,7 @@ func TestPreparationLifecycle_DeletePreflightsReportLiveEMABindings(t *testing.T
 	auth, _ := contextvalues.GetAuthContext(ctx)
 	upstream := seedRemoteIssuerWithURL(t, ctx, ti.conn, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, conv.ToPGText(auth.ActiveOrganizationID), "preflight-upstream-idp", "https://upstream.example.com")
 	require.NotEqual(t, upstream, in.RemoteSessionIssuerID)
-	require.NoError(t, repo.New(ti.conn).SetPreparationFixtureTrust(ctx, repo.SetPreparationFixtureTrustParams{ID: in.UserSessionIssuerID, IssuerID: conv.ToNullUUID(upstream), ProjectID: conv.ToNullUUID(*auth.ProjectID)}))
+	require.NoError(t, testrepo.New(ti.conn).SetPreparationFixtureTrust(ctx, testrepo.SetPreparationFixtureTrustParams{ID: in.UserSessionIssuerID, IssuerID: conv.ToNullUUID(upstream), ProjectID: conv.ToNullUUID(*auth.ProjectID)}))
 	preparationRecordGrants(t, ctx, ti, in.ClientID, []string{preparationJWTGrant})
 	prepared, err := ti.service.PrepareIdentityChaining(ctx, in)
 	require.NoError(t, err)

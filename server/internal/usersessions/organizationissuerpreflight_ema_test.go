@@ -8,6 +8,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	remoterepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/stretchr/testify/require"
 	"testing"
 )
@@ -39,7 +40,7 @@ func TestOrganizationIssuerPreflightActiveEMABindings(t *testing.T) {
 	require.Zero(t, preflight.EmaBindingCount)
 	require.True(t, preflight.CanDelete)
 	require.NoError(t, ti.service.DeleteIssuer(ctx, &orggen.DeleteIssuerPayload{ID: user.String()}))
-	count, err := q.CountPreparationFixtureBindingByID(ctx, remoterepo.CountPreparationFixtureBindingByIDParams{ID: binding.ID, ProjectID: *auth.ProjectID})
+	count, err := testrepo.New(ti.conn).CountPreparationFixtureBindingByID(ctx, testrepo.CountPreparationFixtureBindingByIDParams{ID: binding.ID, ProjectID: *auth.ProjectID})
 	require.NoError(t, err)
 	require.Zero(t, count, "user issuer deletion explicitly removes unlinked claims")
 }

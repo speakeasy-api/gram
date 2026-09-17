@@ -381,15 +381,12 @@ func (s *Service) UpdateGlobalIssuer(ctx context.Context, payload *adminrsgen.Up
 	}
 
 	// Resolve and lock only the global partition before inspecting EMA bindings.
-	if _, err := repo.New(dbtx).GetGlobalRemoteSessionIssuerByIDForUpdate(ctx, issuerID); err != nil {
+	existing, err := txRepo.GetGlobalRemoteSessionIssuerByIDForUpdate(ctx, issuerID)
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "global remote session issuer not found").LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "lock global remote session issuer").LogError(ctx, logger)
-	}
-
-	if err := guardEMABindingsForIssuer(ctx, repo.New(dbtx), "", uuid.Nil, issuerID); err != nil {
-		return nil, err
 	}
 
 	updated, err := txRepo.UpdateGlobalRemoteSessionIssuer(ctx, repo.UpdateGlobalRemoteSessionIssuerParams{
@@ -438,6 +435,12 @@ func (s *Service) UpdateGlobalIssuer(ctx context.Context, payload *adminrsgen.Up
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "update global remote session issuer").LogError(ctx, logger)
 	}
+	if issuerBindingConfigurationChanged(existing, updated) {
+		if err := guardEMABindingsForIssuer(ctx, repo.New(dbtx), "", uuid.Nil, issuerID); err != nil {
+			return nil, err
+		}
+	}
+
 	if err := validateTrustedIdentityProviderIssuerClients(ctx, txRepo, updated); err != nil {
 		if errors.Is(err, errTrustedIdentityProviderClientIneligible) {
 			return nil, oops.E(oops.CodeBadRequest, err, "update would make a client ineligible for identity-provider login: %v", err).LogError(ctx, logger)

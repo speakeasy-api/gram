@@ -215,12 +215,19 @@ func TestPreparationPublicClientOmittedAuthMethods(t *testing.T) {
 	t.Parallel()
 	client := repo.RemoteSessionClient{TokenEndpointAuthMethod: pgtype.Text{String: "none", Valid: true}}
 	for _, tc := range []struct {
+		name    string
 		methods []string
 		want    bool
 	}{
-		{nil, true}, {[]string{}, true}, {[]string{"none"}, true}, {[]string{"client_secret_basic"}, false},
+		{"omitted", nil, false},
+		{"empty", []string{}, false},
+		{"explicit public support", []string{"none"}, true},
+		{"confidential only", []string{"client_secret_basic"}, false},
 	} {
-		require.Equal(t, tc.want, preparationClientConfigurationValid(t.Context(), nil, client, repo.RemoteSessionIssuer{TokenEndpointAuthMethodsSupported: tc.methods}, ""))
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, preparationClientConfigurationValid(t.Context(), nil, client, repo.RemoteSessionIssuer{TokenEndpointAuthMethodsSupported: tc.methods}, ""))
+		})
 	}
 }
 

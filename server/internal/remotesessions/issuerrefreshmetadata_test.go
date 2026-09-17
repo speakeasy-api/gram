@@ -330,11 +330,10 @@ func TestRefreshRemoteSessionIssuerMetadata_CapturesEnrichmentCapabilities(t *te
 	require.Contains(t, members, "claims_supported")
 }
 
-// When a same-origin candidate fails transiently after the primary document
-// was read, the fields only it advertises are not treated as withdrawn: the
-// entire snapshot stands and the failure is recorded. A definitive miss on the next
-// refresh clears them.
-func TestRefreshRemoteSessionIssuerMetadata_UnreadableCandidateKeepsCapturedFields(t *testing.T) {
+// A transient secondary failure still captures the primary. The stored union
+// cannot establish which source supplied missing members, so it is not reused.
+// A subsequent definitive miss clears the incomplete-discovery diagnostic.
+func TestRefreshRemoteSessionIssuerMetadata_UnreadableCandidateKeepsFreshFields(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -354,17 +353,19 @@ func TestRefreshRemoteSessionIssuerMetadata_UnreadableCandidateKeepsCapturedFiel
 	require.Equal(t, []string{"sub", "email", "email_verified"}, complete.Issuer.ClaimsSupported)
 
 	oidcStatus.Store(http.StatusServiceUnavailable)
-	before := loadIssuerRow(t, ctx, ti, created)
-	_, err = ti.service.RefreshRemoteSessionIssuerMetadata(ctx, &gen.RefreshRemoteSessionIssuerMetadataPayload{ID: created.ID})
-	requireOopsCode(t, err, oops.CodeGatewayError)
+	partial := refreshIssuer(t, ctx, ti, created.ID)
 	kept := loadIssuerRow(t, ctx, ti, created)
-	require.Equal(t, before.Metadata, kept.Metadata)
-	require.Equal(t, before.MetadataFetchedAt, kept.MetadataFetchedAt)
-	require.Equal(t, before.AuthorizationGrantProfilesSupported, kept.AuthorizationGrantProfilesSupported)
-	require.Equal(t, before.JwksUri, kept.JwksUri)
-	require.Equal(t, before.AuthorizationEndpoint, kept.AuthorizationEndpoint)
+	require.True(t, kept.MetadataFetchedAt.Valid)
 	require.True(t, kept.MetadataLastErrorAt.Valid)
 	require.True(t, kept.MetadataLastErrorUrl.Valid)
+	require.True(t, slices.ContainsFunc(partial.DiscoveryWarnings, func(w string) bool {
+		return strings.Contains(w, "was unreadable")
+	}))
+	require.Equal(t, upstream.URL+"/authorize", *partial.Issuer.AuthorizationEndpoint)
+	require.Empty(t, partial.Issuer.AuthorizationGrantProfilesSupported)
+	require.Nil(t, partial.Issuer.JwksURI)
+	require.Empty(t, partial.Issuer.ClaimsSupported)
+	require.NotContains(t, string(kept.Metadata), "jwks_uri")
 
 	oidcStatus.Store(http.StatusNotFound)
 	withdrawn := refreshIssuer(t, ctx, ti, created.ID)
@@ -378,10 +379,65 @@ func TestRefreshRemoteSessionIssuerMetadata_UnreadableCandidateKeepsCapturedFiel
 	}), "a 404 is definitive and raises no unreadable warning: %v", withdrawn.DiscoveryWarnings)
 }
 
+// A stored union cannot distinguish secondary-only evidence from primary
+// capabilities that have since been withdrawn. Neither omission nor explicit
+// empty values may bring back the old grant/profile during a partial refresh.
+func TestRefreshRemoteSessionIssuerMetadata_UnreadableCandidateDoesNotResurrectPrimaryCapabilities(t *testing.T) {
+	t.Parallel()
+	for _, explicitEmpty := range []bool{false, true} {
+		t.Run(fmt.Sprintf("explicit_empty=%t", explicitEmpty), func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestService(t)
+			var changed atomic.Bool
+			var oidcStatus atomic.Int32
+			oidcStatus.Store(http.StatusOK)
+			upstream := metadataServer(t, metadataServerOptions{
+				oidcStatus: &oidcStatus,
+				mutateOAuth: func(doc map[string]any) {
+					doc["grant_types_supported"] = []string{"urn:ietf:params:oauth:grant-type:jwt-bearer"}
+					doc["authorization_grant_profiles_supported"] = []string{"urn:ietf:params:oauth:grant-profile:id-jag"}
+					if changed.Load() {
+						issuer, ok := doc["issuer"].(string)
+						if !ok {
+							t.Error("fixture issuer must be a string")
+							return
+						}
+						doc["authorization_endpoint"] = issuer + "/authorize-new"
+						for _, member := range []string{"grant_types_supported", "authorization_grant_profiles_supported"} {
+							delete(doc, member)
+							if explicitEmpty {
+								doc[member] = []string{}
+							}
+						}
+					}
+				},
+			})
+			created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayloadForURL("idp-refresh-withdrawn-primary", upstream.URL))
+			require.NoError(t, err)
+			complete := refreshIssuer(t, ctx, ti, created.ID)
+			require.NotEmpty(t, complete.Issuer.GrantTypesSupported)
+			require.NotEmpty(t, complete.Issuer.AuthorizationGrantProfilesSupported)
+			changed.Store(true)
+			oidcStatus.Store(http.StatusServiceUnavailable)
+			for range 2 {
+				partial := refreshIssuer(t, ctx, ti, created.ID)
+				require.Equal(t, upstream.URL+"/authorize-new", *partial.Issuer.AuthorizationEndpoint)
+				require.Empty(t, partial.Issuer.GrantTypesSupported)
+				require.Empty(t, partial.Issuer.AuthorizationGrantProfilesSupported)
+				stored := loadIssuerRow(t, ctx, ti, created)
+				require.True(t, stored.MetadataLastErrorAt.Valid)
+				require.Equal(t, upstream.URL+"/.well-known/openid-configuration", stored.MetadataLastErrorUrl.String)
+				require.NotContains(t, string(stored.Metadata), "jwt-bearer")
+				require.NotContains(t, string(stored.Metadata), "id-jag")
+			}
+		})
+	}
+}
+
 // The unreadable candidate may come first: when the RFC 8414 document is
-// down and the OpenID one becomes the primary, the members only the RFC 8414
-// document carries are kept from the stored row rather than withdrawn.
-func TestRefreshRemoteSessionIssuerMetadata_UnreadableFirstCandidateKeepsCapturedFields(t *testing.T) {
+// down and the OpenID one becomes the primary, its fresh evidence is captured
+// without borrowing unsupported members from the previously merged document.
+func TestRefreshRemoteSessionIssuerMetadata_UnreadableFirstCandidateKeepsFreshFields(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -397,17 +453,19 @@ func TestRefreshRemoteSessionIssuerMetadata_UnreadableFirstCandidateKeepsCapture
 	require.Equal(t, upstream.URL+"/jwks", *complete.Issuer.JwksURI)
 
 	oauthStatus.Store(http.StatusServiceUnavailable)
-	before := loadIssuerRow(t, ctx, ti, created)
-	_, err = ti.service.RefreshRemoteSessionIssuerMetadata(ctx, &gen.RefreshRemoteSessionIssuerMetadataPayload{ID: created.ID})
-	requireOopsCode(t, err, oops.CodeGatewayError)
+	partial := refreshIssuer(t, ctx, ti, created.ID)
 	kept := loadIssuerRow(t, ctx, ti, created)
-	require.Equal(t, before.Metadata, kept.Metadata)
-	require.Equal(t, before.MetadataFetchedAt, kept.MetadataFetchedAt)
-	require.Equal(t, before.AuthorizationGrantProfilesSupported, kept.AuthorizationGrantProfilesSupported)
-	require.Equal(t, before.JwksUri, kept.JwksUri)
-	require.Equal(t, before.AuthorizationEndpoint, kept.AuthorizationEndpoint)
+	require.True(t, kept.MetadataFetchedAt.Valid)
 	require.True(t, kept.MetadataLastErrorAt.Valid)
 	require.True(t, kept.MetadataLastErrorUrl.Valid)
+	require.True(t, slices.ContainsFunc(partial.DiscoveryWarnings, func(w string) bool {
+		return strings.Contains(w, "was unreadable")
+	}))
+	require.Equal(t, upstream.URL+"/jwks", *partial.Issuer.JwksURI)
+	require.Equal(t, []string{"sub", "email", "email_verified"}, partial.Issuer.ClaimsSupported)
+	require.Nil(t, partial.Issuer.RegistrationEndpoint)
+	require.Empty(t, partial.Issuer.GrantTypesSupported)
+	require.NotContains(t, string(kept.Metadata), "registration_endpoint")
 
 	oauthStatus.Store(http.StatusNotFound)
 	withdrawn := refreshIssuer(t, ctx, ti, created.ID)
@@ -463,17 +521,20 @@ func TestRefreshRemoteSessionIssuerMetadata_UnreadableCandidateDoesNotFillFromPr
 	})
 	require.NoError(t, err)
 
-	before := loadIssuerRow(t, ctx, ti, created)
-	_, err = ti.service.RefreshRemoteSessionIssuerMetadata(ctx, &gen.RefreshRemoteSessionIssuerMetadataPayload{ID: created.ID})
-	requireOopsCode(t, err, oops.CodeGatewayError)
+	partial := refreshIssuer(t, ctx, ti, created.ID)
 	kept := loadIssuerRow(t, ctx, ti, created)
-	require.Equal(t, before.Metadata, kept.Metadata)
-	require.Equal(t, before.MetadataFetchedAt, kept.MetadataFetchedAt)
-	require.Equal(t, before.AuthorizationGrantProfilesSupported, kept.AuthorizationGrantProfilesSupported)
-	require.Equal(t, before.JwksUri, kept.JwksUri)
-	require.Equal(t, before.AuthorizationEndpoint, kept.AuthorizationEndpoint)
+	require.True(t, kept.MetadataFetchedAt.Valid)
 	require.True(t, kept.MetadataLastErrorAt.Valid)
 	require.True(t, kept.MetadataLastErrorUrl.Valid)
+	require.True(t, slices.ContainsFunc(partial.DiscoveryWarnings, func(w string) bool {
+		return strings.Contains(w, "was unreadable")
+	}))
+	require.Equal(t, current.URL+"/authorize", *partial.Issuer.AuthorizationEndpoint)
+	require.Equal(t, current.URL+"/token", *partial.Issuer.TokenEndpoint)
+	require.Nil(t, partial.Issuer.JwksURI)
+	require.Empty(t, partial.Issuer.ClaimsSupported)
+	require.NotContains(t, string(kept.Metadata), previous.URL)
+	require.Contains(t, string(kept.Metadata), current.URL)
 
 }
 

@@ -95,9 +95,9 @@ func TestPreparationOrganizationDetachRevalidatesScopeAfterWait(t *testing.T) {
 				return err == nil && blocked
 			}, 5*time.Second, 10*time.Millisecond)
 			if kind == "client" {
-				_, err = tq.MovePreparationFixtureClientProject(ctx, repo.MovePreparationFixtureClientProjectParams{ID: client, ProjectID: conv.ToNullUUID(server.ProjectID), TargetProjectID: conv.ToNullUUID(foreign.ProjectID)})
+				_, err = testrepo.New(tx).MovePreparationFixtureClientProject(ctx, testrepo.MovePreparationFixtureClientProjectParams{ID: client, ProjectID: conv.ToNullUUID(server.ProjectID), TargetProjectID: conv.ToNullUUID(foreign.ProjectID)})
 			} else {
-				_, err = tq.MovePreparationFixtureUserIssuerProject(ctx, repo.MovePreparationFixtureUserIssuerProjectParams{ID: server.UserSessionIssuerID.UUID, ProjectID: conv.ToNullUUID(server.ProjectID), TargetProjectID: conv.ToNullUUID(foreign.ProjectID)})
+				_, err = testrepo.New(tx).MovePreparationFixtureUserIssuerProject(ctx, testrepo.MovePreparationFixtureUserIssuerProjectParams{ID: server.UserSessionIssuerID.UUID, ProjectID: conv.ToNullUUID(server.ProjectID), TargetProjectID: conv.ToNullUUID(foreign.ProjectID)})
 			}
 			require.NoError(t, err)
 			require.NoError(t, tx.Commit(ctx))
@@ -130,7 +130,7 @@ func TestPreparationSerializesWithInteractiveRotation(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 	q := repo.New(ti.conn)
-	require.NoError(t, q.SetPreparationFixtureDCREndpoint(ctx, repo.SetPreparationFixtureDCREndpointParams{ID: in.RemoteSessionIssuerID, ProjectID: conv.ToNullUUID(*auth.ProjectID), Endpoint: conv.ToPGText(server.URL)}))
+	require.NoError(t, testrepo.New(ti.conn).SetPreparationFixtureDCREndpoint(ctx, testrepo.SetPreparationFixtureDCREndpointParams{ID: in.RemoteSessionIssuerID, ProjectID: conv.ToNullUUID(*auth.ProjectID), Endpoint: conv.ToPGText(server.URL)}))
 	preparationRecordGrants(t, ctx, ti, in.ClientID, []string{preparationJWTGrant})
 	rotated := make(chan error, 1)
 	go func() {

@@ -547,10 +547,6 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *orgissuersgen.Updat
 
 	beforeView := mv.BuildRemoteSessionIssuerView(existing)
 
-	if err := guardEMABindingsForIssuer(ctx, txRepo, authCtx.ActiveOrganizationID, existing.ProjectID.UUID, issuerID); err != nil {
-		return nil, err
-	}
-
 	updated, err := txRepo.UpdateOrganizationRemoteSessionIssuer(ctx, repo.UpdateOrganizationRemoteSessionIssuerParams{
 		Slug:                                conv.PtrToPGText(payload.Slug),
 		Issuer:                              conv.PtrToPGText(payload.Issuer),
@@ -593,6 +589,12 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *orgissuersgen.Updat
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "update organization admin remote session issuer").LogError(ctx, logger)
 	}
+	if issuerBindingConfigurationChanged(existing, updated) {
+		if err := guardEMABindingsForIssuer(ctx, txRepo, authCtx.ActiveOrganizationID, existing.ProjectID.UUID, issuerID); err != nil {
+			return nil, err
+		}
+	}
+
 	if err := validateTrustedIdentityProviderIssuerClients(ctx, txRepo, updated); err != nil {
 		if errors.Is(err, errTrustedIdentityProviderClientIneligible) {
 			return nil, oops.E(oops.CodeBadRequest, err, "update would make a client ineligible for identity-provider login: %v", err).LogError(ctx, logger)

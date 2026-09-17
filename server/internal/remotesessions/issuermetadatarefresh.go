@@ -449,6 +449,10 @@ func (r *IssuerMetadataRefresher) refresh(ctx context.Context, existing repo.Rem
 		}
 		return q.UpdateRemoteSessionIssuerDiscoveredMetadata(ctx, params)
 	}, success)
+	if shared, ok := errors.AsType[*oops.ShareableError](err); ok && shared.Code == oops.CodeConflict {
+		logger.WarnContext(ctx, "refreshed issuer endpoints are blocked by an active client binding", attr.SlogError(err))
+		outcome, err = r.recordFailure(ctx, existing, "issuer metadata endpoint changes are blocked by an active client binding; remove the binding before refreshing", "", remotesessionmetrics.IssuerMetadataRefreshOutcomeDefinitiveFailure)
+	}
 	if errors.Is(err, errTrustedIdentityProviderClientIneligible) {
 		logger.WarnContext(ctx, "refreshed issuer metadata is incompatible with identity-provider login", attr.SlogError(err))
 		outcome, err = r.recordFailure(ctx, existing, trustedClientMetadataIncompatibility, "", remotesessionmetrics.IssuerMetadataRefreshOutcomeDefinitiveFailure)
@@ -501,7 +505,7 @@ func decodeStoredIssuerDocument(existing repo.RemoteSessionIssuer) (rfc8414Docum
 	if len(existing.Metadata) == 0 {
 		return rfc8414Document{}, errors.New("no stored metadata document")
 	}
-	doc, err := decodeIssuerDocument(existing.Metadata, requested)
+	doc, err := decodeIssuerDocumentWithLegacyNulls(existing.Metadata, requested, true)
 	if err != nil {
 		return rfc8414Document{}, err
 	}
@@ -594,7 +598,9 @@ func (r *IssuerMetadataRefresher) apply(ctx context.Context, logger *slog.Logger
 	updated, err := write(txRepo)
 	if err != nil {
 		if shared, ok := errors.AsType[*oops.ShareableError](err); ok && shared.Code == oops.CodeConflict {
-			return remotesessionmetrics.IssuerMetadataRefreshOutcomeConflict, nil
+			// Policy rejection is not a concurrent snapshot conflict. Let the
+			// caller persist a visible failure after this transaction rolls back.
+			return remotesessionmetrics.IssuerMetadataRefreshOutcomeDefinitiveFailure, err
 		}
 		if errors.Is(err, pgx.ErrNoRows) {
 			return remotesessionmetrics.IssuerMetadataRefreshOutcomeConflict, nil
@@ -678,7 +684,7 @@ func issuerProfilesNeedReprojection(row repo.RemoteSessionIssuer) bool {
 		return len(row.AuthorizationGrantProfilesSupported) != 0
 	}
 	var profiles []string
-	if err := json.Unmarshal(raw, &profiles); err != nil || profiles == nil {
+	if err := json.Unmarshal(raw, &profiles); err != nil {
 		return true
 	}
 	return !slices.Equal(row.AuthorizationGrantProfilesSupported, profiles)

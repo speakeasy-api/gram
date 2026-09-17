@@ -77,10 +77,30 @@ func TestAIM63DiscoveryEvidence(t *testing.T) {
 	}
 }
 
+// Discovery retains the trailing-slash tolerance used by token validation.
+func TestAIM63DiscoveryToleratesTrailingSlash(t *testing.T) {
+	t.Parallel()
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		assert.NoError(t, json.NewEncoder(w).Encode(map[string]any{
+			"issuer":                                 server.URL + "/",
+			"authorization_endpoint":                 server.URL + "/authorize",
+			"token_endpoint":                         server.URL + "/token",
+			"authorization_grant_profiles_supported": []string{"urn:ietf:params:oauth:grant-profile:id-jag"},
+		}))
+	}))
+	defer server.Close()
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+	require.NoError(t, err)
+	doc, err := DiscoverIssuerMetadata(t.Context(), policy, server.URL)
+	require.NoError(t, err)
+	require.Equal(t, []string{"urn:ietf:params:oauth:grant-profile:id-jag"}, doc.AuthorizationGrantProfilesSupported)
+}
+
 func TestAIM63DiscoveryRejectsUnsafeEvidence(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct{ name, contentType, suffix, raw string }{
-		{"trailing_slash", "application/json", "/", ""},
 		{"sibling_issuer", "application/json", "/sibling", ""},
 		{"html", "text/html", "", "<html>error</html>"},
 		{"json_as_html", "text/html", "", ""},
@@ -145,7 +165,8 @@ func TestAIM63ProfilesNeedReprojection(t *testing.T) {
 		{"capture", `{"authorization_grant_profiles_supported":["id-jag"]}`, []string{}, true},
 		{"captured", `{"authorization_grant_profiles_supported":["id-jag"]}`, []string{"id-jag"}, false},
 		{"withdrawn", `{}`, []string{"id-jag"}, true},
-		{"null", `{"authorization_grant_profiles_supported":null}`, []string{}, true},
+		{"null", `{"authorization_grant_profiles_supported":null}`, []string{}, false},
+		{"null withdraws profiles", `{"authorization_grant_profiles_supported":null}`, []string{"id-jag"}, true},
 		{"malformed", `{"authorization_grant_profiles_supported":true}`, []string{}, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
