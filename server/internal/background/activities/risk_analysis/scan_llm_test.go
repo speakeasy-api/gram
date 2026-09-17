@@ -210,6 +210,8 @@ func TestAnalyzeBatch_LLMAnalyzer_FlagOnRoutesCoveredSources(t *testing.T) {
 	}
 	assert.Equal(t, "nothing to see here", byMessage[second.String()].GetBody())
 	assert.Equal(t, "nothing to see here", byMessage[second.String()].GetContent())
+	assert.Contains(t, byMessage[first.String()].GetBody(), "ASIAZ2XY3WNBQR5TUVWX", "the covered-source text reaches the LLM lane")
+	assert.Contains(t, byMessage[first.String()].GetContent(), "ASIAZ2XY3WNBQR5TUVWX")
 
 	rows, err := riskrepo.New(conn).ListRiskResultsByProjectAndPolicy(t.Context(), riskrepo.ListRiskResultsByProjectAndPolicyParams{
 		ProjectID:    td.projectID,
