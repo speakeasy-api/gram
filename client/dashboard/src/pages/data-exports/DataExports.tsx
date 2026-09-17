@@ -54,13 +54,6 @@ type DataSourceOption = {
   label: string;
 };
 
-type DataSourceDescription = {
-  value: DataSourceValue;
-  description: ReactNode;
-};
-
-type DataSourcePresentation = DataSourceOption & DataSourceDescription;
-
 const DATA_SOURCE_OPTIONS: DataSourceOption[] = [
   {
     value: DataSource.ProductTelemetry,
@@ -80,7 +73,7 @@ function renderDataSourceDescription(
     return (
       <>
         OTLP traces, logs, and metrics your agent sessions send to
-        Speakeasy&apos;s /otel/v1 endpoints. These are same records the{" "}
+        Speakeasy&apos;s /otel/v1 endpoints. These are the same records the{" "}
         {links.eventFeed ? (
           <Link
             to={links.eventFeed}
@@ -119,12 +112,6 @@ function renderDataSourceDescription(
   return "OTLP data";
 }
 
-const UNLINKED_DATA_SOURCE_OPTIONS: DataSourcePresentation[] =
-  DATA_SOURCE_OPTIONS.map((source) => ({
-    ...source,
-    description: renderDataSourceDescription(source.value),
-  }));
-
 type ExportRow = {
   route: DataExportRoute;
   destination?: OtelDataExportDestination;
@@ -162,14 +149,22 @@ type VisualSource = {
   detail: ReactNode;
 };
 
+type ExportMapDescriptionLinks = {
+  eventFeed: string;
+  riskPolicies: (project: ProjectEntry) => string;
+};
+
 function visualSource(
-  { route }: ProjectExportRow,
-  dataSources: DataSourceDescription[],
+  { project, route }: ProjectExportRow,
+  links?: ExportMapDescriptionLinks,
 ): VisualSource {
   return {
     key: route.id,
     name: sourceLabel(route.dataSource),
-    detail: sourceDescription(route.dataSource, dataSources),
+    detail: renderDataSourceDescription(route.dataSource, {
+      eventFeed: links?.eventFeed,
+      riskPolicies: links?.riskPolicies(project),
+    }),
   };
 }
 
@@ -195,16 +190,6 @@ function sourceLabel(dataSource: string): string {
   return (
     DATA_SOURCE_OPTIONS.find((option) => option.value === dataSource)?.label ??
     dataSource.replaceAll("_", " ")
-  );
-}
-
-function sourceDescription(
-  dataSource: string,
-  dataSources: DataSourceDescription[] = UNLINKED_DATA_SOURCE_OPTIONS,
-): ReactNode {
-  return (
-    dataSources.find((option) => option.value === dataSource)?.description ??
-    "OTLP data"
   );
 }
 
@@ -555,7 +540,11 @@ function DataExportsInner(): JSX.Element {
         <ExportAnimationStyles />
         <ExportMap
           exports={configuredExports}
-          dataSources={linkedDataSourceOptions}
+          descriptionLinks={{
+            eventFeed: `/${organization.slug}/data/event-feed`,
+            riskPolicies: (project) =>
+              `/${organization.slug}/projects/${project.slug}/risk-policies?tab=policies`,
+          }}
           mutating={mutating}
           onConfigure={(project, route) =>
             setConfigureTarget({
@@ -703,7 +692,7 @@ function groupExportsByDestination(
 
 type ExportMapProps = {
   exports: ProjectExportRow[];
-  dataSources?: DataSourceDescription[];
+  descriptionLinks?: ExportMapDescriptionLinks;
   mutating: boolean;
   onConfigure: (project: ProjectEntry, route: DataExportRoute) => void;
   onConfigureDestination: (
@@ -720,7 +709,7 @@ type ExportMapProps = {
 
 export function ExportMap({
   exports,
-  dataSources = UNLINKED_DATA_SOURCE_OPTIONS,
+  descriptionLinks,
   mutating,
   onConfigure,
   onConfigureDestination,
@@ -751,7 +740,7 @@ export function ExportMap({
                 <ExportSourceNode
                   key={exportRow.route.id}
                   exportRow={exportRow}
-                  dataSources={dataSources}
+                  descriptionLinks={descriptionLinks}
                   row={rowIndex + 1}
                   mutating={mutating}
                   onConfigure={onConfigure}
@@ -781,7 +770,7 @@ export function ExportMap({
 
 function ExportSourceNode({
   exportRow,
-  dataSources,
+  descriptionLinks,
   row,
   mutating,
   onConfigure,
@@ -789,7 +778,7 @@ function ExportSourceNode({
   onDelete,
 }: {
   exportRow: ProjectExportRow;
-  dataSources: NonNullable<ExportMapProps["dataSources"]>;
+  descriptionLinks?: ExportMapDescriptionLinks;
   row: number;
   mutating: boolean;
   onConfigure: ExportMapProps["onConfigure"];
@@ -797,7 +786,7 @@ function ExportSourceNode({
   onDelete: ExportMapProps["onDelete"];
 }): JSX.Element {
   const { project, route } = exportRow;
-  const source = visualSource(exportRow, dataSources);
+  const source = visualSource(exportRow, descriptionLinks);
 
   return (
     <div
