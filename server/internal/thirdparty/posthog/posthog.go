@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/posthog/posthog-go"
@@ -45,19 +46,9 @@ func New(ctx context.Context, logger *slog.Logger, posthogAPIKey string, posthog
 		}
 	}
 
-	phConfig := posthog.Config{
-		Endpoint: posthogEndpoint,
-	}
-
-	// Having a personal (private) API key allow posthog to maintain its own state of feature flags via polling
-	if posthogPersonalAPIKey != "" {
-		phConfig.PersonalApiKey = posthogPersonalAPIKey
-		phConfig.DefaultFeatureFlagsPollingInterval = 1 * time.Minute
-	}
-
 	client, err := posthog.NewWithConfig(
 		posthogAPIKey,
-		phConfig,
+		newSDKConfig(logger, posthogEndpoint, posthogPersonalAPIKey),
 	)
 	if err != nil {
 		logger.ErrorContext(ctx, "failed to instantiate posthog client", attr.SlogError(err))
@@ -75,6 +66,22 @@ func New(ctx context.Context, logger *slog.Logger, posthogAPIKey string, posthog
 		localEvaluation: posthogPersonalAPIKey != "",
 		logger:          logger,
 	}
+}
+
+// newSDKConfig builds the PostHog client configuration. SDK diagnostics are
+// routed through logger so they carry its attributes. A personal API key
+// turns on local flag evaluation, with the SDK polling flag definitions every
+// minute.
+func newSDKConfig(logger *slog.Logger, endpoint string, personalAPIKey string) posthog.Config {
+	config := posthog.Config{
+		Endpoint: endpoint,
+		Logger:   &sdkLogger{logger: logger},
+	}
+	if personalAPIKey != "" {
+		config.PersonalApiKey = personalAPIKey
+		config.DefaultFeatureFlagsPollingInterval = 1 * time.Minute
+	}
+	return config
 }
 
 func (p *Posthog) IsFlagEnabled(ctx context.Context, flag feature.Flag, distinctID string, groups map[string]string) (bool, error) {
@@ -114,19 +121,45 @@ func (p *Posthog) IsFlagEnabled(ctx context.Context, flag feature.Flag, distinct
 	return string(j) == "true", nil
 }
 
+// EvaluateFlag resolves a boolean flag to an authoritative enabled/disabled
+// result, or indeterminate when PostHog cannot decide. With a personal API key
+// the SDK evaluates against its cached definitions first and only falls back
+// to a remote request for flags it cannot decide locally.
 func (p *Posthog) EvaluateFlag(ctx context.Context, flag feature.Flag, distinctID string, groups map[string]string) (feature.Evaluation, error) {
 	if p == nil || p.disabled || p.client == nil {
 		return feature.EvaluationIndeterminate, nil
 	}
 
 	if p.localEvaluation {
-		return p.evaluateLocalFlag(flag, distinctID, groups)
+		// A flag that does not exist (deleted or misspelled) must resolve to
+		// indeterminate, not disabled, so that fail-closed callers treat it as
+		// unavailable rather than explicitly off. The SDK does not make that
+		// distinction: it reports a flag missing from both the cached
+		// definitions and the remote response as false. Checking the cached
+		// definitions here catches the missing case before the SDK call. When
+		// the definitions are unavailable because every fetch has failed (the
+		// SDK logs each failure at error level), the flag cannot be verified
+		// and the evaluation is indeterminate with an error, so callers fail
+		// closed rather than trusting the SDK's remote fallback.
+		definitions, err := p.client.GetFeatureFlags()
+		if err != nil {
+			return feature.EvaluationIndeterminate, fmt.Errorf("load feature flag definitions: %w", err)
+		}
+		if !slices.ContainsFunc(definitions, func(definition posthog.FeatureFlag) bool {
+			return definition.Key == string(flag)
+		}) {
+			return feature.EvaluationIndeterminate, nil
+		}
 	}
 
+	// Server-side rollout gates sit on request paths; the per-user
+	// $feature_flag_called event is dashboard analytics noise here.
+	sendFeatureFlagEvents := false
 	result, err := p.client.GetFeatureFlagResult(posthog.FeatureFlagPayload{
-		Key:        string(flag),
-		DistinctId: distinctID,
-		Groups:     posthogGroups(groups),
+		Key:                   string(flag),
+		DistinctId:            distinctID,
+		Groups:                posthogGroups(groups),
+		SendFeatureFlagEvents: &sendFeatureFlagEvents,
 	})
 	if errors.Is(err, posthog.ErrFlagNotFound) {
 		return feature.EvaluationIndeterminate, nil
@@ -171,31 +204,6 @@ func (p *Posthog) FlagVariant(ctx context.Context, flag feature.Flag, distinctID
 	}
 
 	return feature.Variant(*result.Variant), nil
-}
-
-func (p *Posthog) evaluateLocalFlag(flag feature.Flag, distinctID string, groups map[string]string) (feature.Evaluation, error) {
-	sendFeatureFlagEvents := false
-	flags, err := p.client.GetAllFlags(posthog.FeatureFlagPayloadNoKey{
-		DistinctId:            distinctID,
-		Groups:                posthogGroups(groups),
-		OnlyEvaluateLocally:   false,
-		SendFeatureFlagEvents: &sendFeatureFlagEvents,
-	})
-	if err != nil {
-		return feature.EvaluationIndeterminate, fmt.Errorf("evaluate local feature flags: %w", err)
-	}
-
-	value, ok := flags[string(flag)]
-	if !ok {
-		return feature.EvaluationIndeterminate, nil
-	}
-	if enabled, ok := value.(bool); ok {
-		if enabled {
-			return feature.EvaluationEnabled, nil
-		}
-		return feature.EvaluationDisabled, nil
-	}
-	return feature.EvaluationIndeterminate, nil
 }
 
 func (p *Posthog) IsFlagEnabledLocal(ctx context.Context, flag feature.Flag, distinctID string, groups, personProperties map[string]string) (bool, error) {

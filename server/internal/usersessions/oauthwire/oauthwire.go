@@ -38,6 +38,10 @@ const (
 	// the server.
 	AuthMethodPrivateKeyJWT = "private_key_jwt"
 
+	// ClientAssertionTypeJWTBearer is RFC 7523 §2.2's client_assertion_type
+	// for JWT client authentication.
+	ClientAssertionTypeJWTBearer = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer" //nolint:gosec // standardized public assertion type identifier, not a credential
+
 	// CodeChallengeMethodS256 is the SHA-256 PKCE transformation method
 	// (RFC 7636 §4.2).
 	CodeChallengeMethodS256 = "S256"
@@ -49,6 +53,10 @@ const (
 	// GrantTypeAuthorizationCode exchanges an authorization code at the token
 	// endpoint (RFC 6749 §4.1.3).
 	GrantTypeAuthorizationCode = "authorization_code"
+
+	// GrantTypeClientCredentials mints a token for the client itself at the
+	// token endpoint (RFC 6749 §4.4.2).
+	GrantTypeClientCredentials = "client_credentials"
 
 	// GrantTypeJWTBearer is RFC 7523's JWT authorization grant identifier.
 	GrantTypeJWTBearer = "urn:ietf:params:oauth:grant-type:jwt-bearer" //nolint:gosec // standardized public grant identifier, not a credential
