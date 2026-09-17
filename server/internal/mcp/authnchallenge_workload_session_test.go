@@ -116,11 +116,6 @@ func workloadSessionEndpoint(fx agentConsentFixture) *mcp.ResolvedMcpEndpoint {
 	}
 }
 
-func mintWorkloadBearer(t *testing.T, ti *testInstance, fx agentConsentFixture, session usersessionsrepo.UserSession) string {
-	t.Helper()
-	return mintSessionBearerExpiringAt(t, ti, fx, session, session.ExpiresAt.Time)
-}
-
 func mintSessionBearerExpiringAt(t *testing.T, ti *testInstance, fx agentConsentFixture, session usersessionsrepo.UserSession, expiresAt time.Time) string {
 	t.Helper()
 
@@ -157,7 +152,7 @@ func TestApplyIssuerGate_WorkloadSessionActsThroughItsAssignedAgent(t *testing.T
 	endpoint := workloadSessionEndpoint(fx)
 
 	w := httptest.NewRecorder()
-	admittedCtx, _, _, err := ti.service.ApplyIssuerGate(t.Context(), w, mintWorkloadBearer(t, ti, fx, session), ti.serverURL.String(), endpoint)
+	admittedCtx, _, _, err := ti.service.ApplyIssuerGate(t.Context(), w, mintSessionBearerExpiringAt(t, ti, fx, session, session.ExpiresAt.Time), ti.serverURL.String(), endpoint)
 	require.NoError(t, err)
 
 	actor, ok := contextvalues.AuthenticatedActor(admittedCtx)
@@ -192,7 +187,7 @@ func TestApplyIssuerGate_WorkloadSessionWithNoAssignedAgentIsRefused(t *testing.
 	subject := urn.NewWorkloadSubject(issuerID, workloadSessionSubject)
 	session := seedWorkloadSession(t, ctx, ti, fx, subject)
 	endpoint := workloadSessionEndpoint(fx)
-	token := mintWorkloadBearer(t, ti, fx, session)
+	token := mintSessionBearerExpiringAt(t, ti, fx, session, session.ExpiresAt.Time)
 
 	w := httptest.NewRecorder()
 	_, _, _, err := ti.service.ApplyIssuerGate(t.Context(), w, token, ti.serverURL.String(), endpoint)
@@ -232,7 +227,7 @@ func TestApplyIssuerGate_WorkloadSessionRefusedWhenItsIssuerIsDeleted(t *testing
 	subject := urn.NewWorkloadSubject(issuerID, workloadSessionSubject)
 	session := seedWorkloadSession(t, ctx, ti, fx, subject)
 	endpoint := workloadSessionEndpoint(fx)
-	token := mintWorkloadBearer(t, ti, fx, session)
+	token := mintSessionBearerExpiringAt(t, ti, fx, session, session.ExpiresAt.Time)
 
 	w := httptest.NewRecorder()
 	_, _, _, err := ti.service.ApplyIssuerGate(t.Context(), w, token, ti.serverURL.String(), endpoint)
@@ -265,7 +260,7 @@ func TestApplyIssuerGate_WorkloadSessionHiddenWhenAgentRolloutDisabled(t *testin
 	subject := urn.NewWorkloadSubject(issuerID, workloadSessionSubject)
 	session := seedWorkloadSession(t, ctx, ti, fx, subject)
 	endpoint := workloadSessionEndpoint(fx)
-	token := mintWorkloadBearer(t, ti, fx, session)
+	token := mintSessionBearerExpiringAt(t, ti, fx, session, session.ExpiresAt.Time)
 
 	w := httptest.NewRecorder()
 	_, _, _, err := ti.service.ApplyIssuerGate(t.Context(), w, token, ti.serverURL.String(), endpoint)
@@ -297,7 +292,7 @@ func TestApplyIssuerGate_WorkloadSessionRefusedWhenItsAgentIsSuspended(t *testin
 	subject := urn.NewWorkloadSubject(issuerID, workloadSessionSubject)
 	session := seedWorkloadSession(t, ctx, ti, fx, subject)
 	endpoint := workloadSessionEndpoint(fx)
-	token := mintWorkloadBearer(t, ti, fx, session)
+	token := mintSessionBearerExpiringAt(t, ti, fx, session, session.ExpiresAt.Time)
 
 	w := httptest.NewRecorder()
 	_, _, _, err := ti.service.ApplyIssuerGate(t.Context(), w, token, ti.serverURL.String(), endpoint)
@@ -334,7 +329,7 @@ func TestApplyIssuerGate_WorkloadSessionDoesNotInheritAnUnassignedAgentsPolicy(t
 	subject := urn.NewWorkloadSubject(issuerID, workloadSessionSubject)
 	session := seedWorkloadSession(t, ctx, ti, fx, subject)
 	endpoint := workloadSessionEndpoint(fx)
-	token := mintWorkloadBearer(t, ti, fx, session)
+	token := mintSessionBearerExpiringAt(t, ti, fx, session, session.ExpiresAt.Time)
 
 	w := httptest.NewRecorder()
 	_, _, _, err := ti.service.ApplyIssuerGate(t.Context(), w, token, ti.serverURL.String(), endpoint)

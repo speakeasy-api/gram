@@ -189,6 +189,17 @@ func (s *Signer) ValidateExactAudienceBearer(ctx context.Context, token, expecte
 	return validatedBearerFromClaims(ctx, claims, revocation)
 }
 
+// ErrRevocationUnavailable marks a revocation check that could not be
+// completed, such as an unreachable revocation store. The request still fails
+// closed, but the credential itself was never judged: callers that tell a
+// client to discard its token must not do so on this error, or an outage turns
+// every live token into a re-authentication.
+var ErrRevocationUnavailable = errors.New("revocation check unavailable")
+
+// ErrTokenRevoked marks a token whose jti the revocation store recognises. The
+// credential is genuinely dead, so a client holding it should discard it.
+var ErrTokenRevoked = errors.New("token is revoked")
+
 func validatedBearerFromClaims(ctx context.Context, claims *SessionClaims, revocation RevocationChecker) (ValidatedSession, error) {
 	if claims.ID == "" {
 		return ValidatedSession{}, errors.New("validate token: missing jti claim")
@@ -196,10 +207,10 @@ func validatedBearerFromClaims(ctx context.Context, claims *SessionClaims, revoc
 
 	revoked, err := revocation.IsTokenRevoked(ctx, claims.ID)
 	if err != nil {
-		return ValidatedSession{}, fmt.Errorf("check revocation: %w", err)
+		return ValidatedSession{}, fmt.Errorf("%w: %w", ErrRevocationUnavailable, err)
 	}
 	if revoked {
-		return ValidatedSession{}, errors.New("token is revoked")
+		return ValidatedSession{}, ErrTokenRevoked
 	}
 
 	subject, err := urn.ParseSessionSubject(claims.Subject)

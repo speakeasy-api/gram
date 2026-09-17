@@ -86,9 +86,11 @@ func (s *Service) prepareWorkloadSessionContext(ctx context.Context, endpoint *R
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
 	// A workload acts through an agent's policy, so it rides the agent
-	// authorization rollout and is hidden the same way while that is off.
+	// authorization rollout and is hidden the same way while that is off. The
+	// token is untouched by this, so the rejection stays unmarked: a fresh one
+	// would meet the same gate.
 	if enabled, _ := s.agentAuthorizationRollout(ctx, s.logger, endpoint); !enabled {
-		return ctx, oops.C(oops.CodeNotFound)
+		return ctx, fmt.Errorf("%w: %w", errWorkloadRolloutDisabled, oops.C(oops.CodeNotFound))
 	}
 	workloadIssuerID, externalSubject, err := subject.Workload()
 	if err != nil {
@@ -111,9 +113,12 @@ func (s *Service) admitWorkloadSession(ctx context.Context, endpoint *ResolvedMc
 	}
 	ctx, err = s.authz.PrepareContext(ctx)
 	if err != nil {
-		// Admission refuses with a shareable error; anything else means no
-		// decision was reached.
-		if _, refused := errors.AsType[*oops.ShareableError](err); !refused {
+		// Admission refuses with a shareable error — the workload is no longer
+		// admitted, which its token cannot fix. Anything else means no decision
+		// was reached, so the credential keeps the benefit of the doubt.
+		if _, refused := errors.AsType[*oops.ShareableError](err); refused {
+			err = fmt.Errorf("%w: %w", errCredentialRejected, err)
+		} else {
 			err = fmt.Errorf("%w: %w", errWorkloadSessionAdmissionLoad, err)
 		}
 		return ctx, fmt.Errorf("prepare workload session authorization: %w", err)
@@ -127,6 +132,11 @@ func (s *Service) requireWorkloadSessionAuthorization(ctx context.Context, endpo
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
 	if err := s.authz.Require(ctx, target.connectCheck()); err != nil {
+		// A denial is the assigned agent's authority being gone or withdrawn;
+		// an engine failure reached no decision and stays unmarked.
+		if _, denied := errors.AsType[*oops.ShareableError](err); denied {
+			return ctx, fmt.Errorf("%w: %w", errCredentialRejected, err)
+		}
 		return ctx, err
 	}
 	return ctx, nil
