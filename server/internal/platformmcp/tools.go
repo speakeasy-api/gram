@@ -58,8 +58,8 @@ type PlatformContext struct {
 // platformOverview is the one plain-language account of this platform a caller
 // gets. It names the stages in the order a person experiences them and glosses
 // the two words — project and plugin — that have no meaning outside Gram.
-const platformOverview = "This session exposes a catalogue filtered to workflows supported by your current RBAC grants. Every call still checks its exact project and resource. " +
-	"A workflow missing from the catalogue may be requestable; requestable_workflows names only broad categories and never reveals hidden resources. " +
+const platformOverview = "This session exposes a catalogue filtered to workflows supported by your current RBAC grants. Where a call targets a project or resource, authorization still checks the exact target. " +
+	"A workflow missing from the catalogue may be requestable; requestable_workflows names only broad categories and never reveals hidden resources. A denied admin-gated call names the required permission and, when safe, offers a request-access link; member reads may instead hide inaccessible resources or return a generic denial. " +
 	"A project is where MCP servers and skills are kept. A plugin is a bundle administrators share with people. MCP read access, MCP connection access, and skill permissions remain separate."
 
 type ListProjectsInput struct {
