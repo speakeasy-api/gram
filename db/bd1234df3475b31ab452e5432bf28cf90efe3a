@@ -1,0 +1,24 @@
+server/clickhouse/local/golang_migrate/20260918165856_mcp-risk-finding-attribution.down.sql
+  h_e404c1a6a54184 1-14
+server/clickhouse/local/golang_migrate/20260918165856_mcp-risk-finding-attribution.up.sql
+  h_e404c1a6a54184 1-16
+server/clickhouse/local/golang_migrate/atlas.sum
+  h_e404c1a6a54184 1,115
+server/clickhouse/migrations/20260918165852_mcp-risk-finding-attribution.sql
+  h_e404c1a6a54184 1-16
+server/clickhouse/migrations/atlas.sum
+  h_e404c1a6a54184 1,120
+server/clickhouse/schema.sql
+  h_e404c1a6a54184 1728-1743,1759
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "dbbd1234df3475b31ab452e5432bf28cf90efe3a",
+  "prompts": {},
+  "humans": {
+    "h_e404c1a6a54184": {
+      "author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
