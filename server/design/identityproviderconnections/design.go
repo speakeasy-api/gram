@@ -356,6 +356,8 @@ var _ = Service("identityProviderConnections", func() {
 
 	Method("syncApplications", func() {
 		Description("Run the applications snapshot on the next coordinator pass, within minutes, instead of at the next scheduled interval. The connection must be verified. Rate limited per organization. Requires org:admin.")
+		Error(string(oops.CodeFailedPrecondition), func() { Description(oops.CodeFailedPrecondition.UserMessage()) })
+		Error(string(oops.CodeRateLimitExceeded), func() { Description(oops.CodeRateLimitExceeded.UserMessage()) })
 
 		Security(security.Session)
 
@@ -374,6 +376,12 @@ var _ = Service("identityProviderConnections", func() {
 			POST("/rpc/identityProviderConnections.syncApplications")
 			security.SessionHeader()
 			Response(StatusOK)
+			Response(string(oops.CodeFailedPrecondition), StatusPreconditionFailed, func() {
+				ContentType("application/json")
+			})
+			Response(string(oops.CodeRateLimitExceeded), StatusTooManyRequests, func() {
+				ContentType("application/json")
+			})
 		})
 
 		Meta("openapi:operationId", "syncIdentityProviderConnectionApplications")
@@ -383,6 +391,7 @@ var _ = Service("identityProviderConnections", func() {
 
 	Method("listApplications", func() {
 		Description("List the applications snapshot for the connection with live assignment counts and the last reconcile run. The connection must be verified. Requires org:admin.")
+		Error(string(oops.CodeFailedPrecondition), func() { Description(oops.CodeFailedPrecondition.UserMessage()) })
 
 		Security(security.Session)
 
@@ -405,6 +414,9 @@ var _ = Service("identityProviderConnections", func() {
 			Param("id")
 			Param("include_removed")
 			Response(StatusOK)
+			Response(string(oops.CodeFailedPrecondition), StatusPreconditionFailed, func() {
+				ContentType("application/json")
+			})
 		})
 
 		Meta("openapi:operationId", "listIdentityProviderConnectionApplications")

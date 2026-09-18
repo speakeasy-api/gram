@@ -1646,6 +1646,8 @@ func EncodeSyncApplicationsRequest(encoder func(*http.Request) goahttp.Encoder) 
 // the identityProviderConnections syncApplications endpoint. restoreBody
 // controls whether the response body should be restored after having been read.
 // DecodeSyncApplicationsResponse may return the following errors:
+//   - "failed_precondition" (type *goa.ServiceError): http.StatusPreconditionFailed
+//   - "rate_limit_exceeded" (type *goa.ServiceError): http.StatusTooManyRequests
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -1688,6 +1690,34 @@ func DecodeSyncApplicationsResponse(decoder func(*http.Response) goahttp.Decoder
 			}
 			res := NewSyncApplicationsOktaIdentityProviderConnectionOK(&body)
 			return res, nil
+		case http.StatusPreconditionFailed:
+			var (
+				body SyncApplicationsFailedPreconditionResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "syncApplications", err)
+			}
+			err = ValidateSyncApplicationsFailedPreconditionResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "syncApplications", err)
+			}
+			return nil, NewSyncApplicationsFailedPrecondition(&body)
+		case http.StatusTooManyRequests:
+			var (
+				body SyncApplicationsRateLimitExceededResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "syncApplications", err)
+			}
+			err = ValidateSyncApplicationsRateLimitExceededResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "syncApplications", err)
+			}
+			return nil, NewSyncApplicationsRateLimitExceeded(&body)
 		case http.StatusUnauthorized:
 			var (
 				body SyncApplicationsUnauthorizedResponseBody
@@ -1896,6 +1926,7 @@ func EncodeListApplicationsRequest(encoder func(*http.Request) goahttp.Encoder) 
 // the identityProviderConnections listApplications endpoint. restoreBody
 // controls whether the response body should be restored after having been read.
 // DecodeListApplicationsResponse may return the following errors:
+//   - "failed_precondition" (type *goa.ServiceError): http.StatusPreconditionFailed
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -1938,6 +1969,20 @@ func DecodeListApplicationsResponse(decoder func(*http.Response) goahttp.Decoder
 			}
 			res := NewListApplicationsListIdentityProviderConnectionApplicationsResultOK(&body)
 			return res, nil
+		case http.StatusPreconditionFailed:
+			var (
+				body ListApplicationsFailedPreconditionResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "listApplications", err)
+			}
+			err = ValidateListApplicationsFailedPreconditionResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "listApplications", err)
+			}
+			return nil, NewListApplicationsFailedPrecondition(&body)
 		case http.StatusUnauthorized:
 			var (
 				body ListApplicationsUnauthorizedResponseBody

@@ -188,6 +188,7 @@ var InternalApplications = []internalApplication{
 	{Name: "saasure", SignOnMode: "OPENID_CONNECT"},
 	{Name: "okta_admin_console", SignOnMode: "OPENID_CONNECT"},
 	{Name: "okta_flow_sso", SignOnMode: "OPENID_CONNECT"},
+	{Name: "flow", SignOnMode: "OPENID_CONNECT"},
 }
 
 // IsInternalApplication reports whether an app is Okta-managed and skipped.

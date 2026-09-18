@@ -195,7 +195,10 @@ async function $do(
     | SDKValidationError
   >(
     M.json(200, ListIdentityProviderConnectionApplicationsResult$inboundSchema),
-    M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
+    M.jsonErr(
+      [400, 401, 403, 404, 409, 412, 415, 422],
+      ServiceError$inboundSchema,
+    ),
     M.jsonErr([500, 502, 503], ServiceError$inboundSchema),
     M.fail("4XX"),
     M.fail("5XX"),

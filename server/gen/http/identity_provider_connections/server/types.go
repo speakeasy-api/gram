@@ -1772,6 +1772,44 @@ type RevokeUnavailableResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// SyncApplicationsFailedPreconditionResponseBody is the type of the
+// "identityProviderConnections" service "syncApplications" endpoint HTTP
+// response body for the "failed_precondition" error.
+type SyncApplicationsFailedPreconditionResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SyncApplicationsRateLimitExceededResponseBody is the type of the
+// "identityProviderConnections" service "syncApplications" endpoint HTTP
+// response body for the "rate_limit_exceeded" error.
+type SyncApplicationsRateLimitExceededResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // SyncApplicationsUnauthorizedResponseBody is the type of the
 // "identityProviderConnections" service "syncApplications" endpoint HTTP
 // response body for the "unauthorized" error.
@@ -1966,6 +2004,25 @@ type SyncApplicationsGatewayErrorResponseBody struct {
 // "identityProviderConnections" service "syncApplications" endpoint HTTP
 // response body for the "unavailable" error.
 type SyncApplicationsUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListApplicationsFailedPreconditionResponseBody is the type of the
+// "identityProviderConnections" service "listApplications" endpoint HTTP
+// response body for the "failed_precondition" error.
+type ListApplicationsFailedPreconditionResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3861,6 +3918,36 @@ func NewRevokeUnavailableResponseBody(res *goa.ServiceError) *RevokeUnavailableR
 	return body
 }
 
+// NewSyncApplicationsFailedPreconditionResponseBody builds the HTTP response
+// body from the result of the "syncApplications" endpoint of the
+// "identityProviderConnections" service.
+func NewSyncApplicationsFailedPreconditionResponseBody(res *goa.ServiceError) *SyncApplicationsFailedPreconditionResponseBody {
+	body := &SyncApplicationsFailedPreconditionResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSyncApplicationsRateLimitExceededResponseBody builds the HTTP response
+// body from the result of the "syncApplications" endpoint of the
+// "identityProviderConnections" service.
+func NewSyncApplicationsRateLimitExceededResponseBody(res *goa.ServiceError) *SyncApplicationsRateLimitExceededResponseBody {
+	body := &SyncApplicationsRateLimitExceededResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewSyncApplicationsUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "syncApplications" endpoint of the
 // "identityProviderConnections" service.
@@ -4016,6 +4103,21 @@ func NewSyncApplicationsGatewayErrorResponseBody(res *goa.ServiceError) *SyncApp
 // "identityProviderConnections" service.
 func NewSyncApplicationsUnavailableResponseBody(res *goa.ServiceError) *SyncApplicationsUnavailableResponseBody {
 	body := &SyncApplicationsUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListApplicationsFailedPreconditionResponseBody builds the HTTP response
+// body from the result of the "listApplications" endpoint of the
+// "identityProviderConnections" service.
+func NewListApplicationsFailedPreconditionResponseBody(res *goa.ServiceError) *ListApplicationsFailedPreconditionResponseBody {
+	body := &ListApplicationsFailedPreconditionResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,

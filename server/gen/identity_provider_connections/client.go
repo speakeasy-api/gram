@@ -192,6 +192,8 @@ func (c *Client) Revoke(ctx context.Context, p *RevokePayload) (res *OktaIdentit
 // SyncApplications calls the "syncApplications" endpoint of the
 // "identityProviderConnections" service.
 // SyncApplications may return the following errors:
+//   - "failed_precondition" (type *goa.ServiceError): resource is not in a valid state for this operation
+//   - "rate_limit_exceeded" (type *goa.ServiceError): rate limit exceeded
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -216,6 +218,7 @@ func (c *Client) SyncApplications(ctx context.Context, p *SyncApplicationsPayloa
 // ListApplications calls the "listApplications" endpoint of the
 // "identityProviderConnections" service.
 // ListApplications may return the following errors:
+//   - "failed_precondition" (type *goa.ServiceError): resource is not in a valid state for this operation
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid

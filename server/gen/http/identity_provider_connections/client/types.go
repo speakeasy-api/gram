@@ -1772,6 +1772,44 @@ type RevokeUnavailableResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// SyncApplicationsFailedPreconditionResponseBody is the type of the
+// "identityProviderConnections" service "syncApplications" endpoint HTTP
+// response body for the "failed_precondition" error.
+type SyncApplicationsFailedPreconditionResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SyncApplicationsRateLimitExceededResponseBody is the type of the
+// "identityProviderConnections" service "syncApplications" endpoint HTTP
+// response body for the "rate_limit_exceeded" error.
+type SyncApplicationsRateLimitExceededResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // SyncApplicationsUnauthorizedResponseBody is the type of the
 // "identityProviderConnections" service "syncApplications" endpoint HTTP
 // response body for the "unauthorized" error.
@@ -1966,6 +2004,25 @@ type SyncApplicationsGatewayErrorResponseBody struct {
 // "identityProviderConnections" service "syncApplications" endpoint HTTP
 // response body for the "unavailable" error.
 type SyncApplicationsUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListApplicationsFailedPreconditionResponseBody is the type of the
+// "identityProviderConnections" service "listApplications" endpoint HTTP
+// response body for the "failed_precondition" error.
+type ListApplicationsFailedPreconditionResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3816,6 +3873,36 @@ func NewSyncApplicationsOktaIdentityProviderConnectionOK(body *SyncApplicationsR
 	return v
 }
 
+// NewSyncApplicationsFailedPrecondition builds a identityProviderConnections
+// service syncApplications endpoint failed_precondition error.
+func NewSyncApplicationsFailedPrecondition(body *SyncApplicationsFailedPreconditionResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSyncApplicationsRateLimitExceeded builds a identityProviderConnections
+// service syncApplications endpoint rate_limit_exceeded error.
+func NewSyncApplicationsRateLimitExceeded(body *SyncApplicationsRateLimitExceededResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewSyncApplicationsUnauthorized builds a identityProviderConnections service
 // syncApplications endpoint unauthorized error.
 func NewSyncApplicationsUnauthorized(body *SyncApplicationsUnauthorizedResponseBody) *goa.ServiceError {
@@ -3997,6 +4084,21 @@ func NewListApplicationsListIdentityProviderConnectionApplicationsResultOK(body 
 	v.Sync = unmarshalIdentityProviderConnectionApplicationsSyncResponseBodyToIdentityproviderconnectionsIdentityProviderConnectionApplicationsSync(body.Sync)
 	if body.LastRun != nil {
 		v.LastRun = unmarshalIdentityProviderConnectionReconcileRunResponseBodyToIdentityproviderconnectionsIdentityProviderConnectionReconcileRun(body.LastRun)
+	}
+
+	return v
+}
+
+// NewListApplicationsFailedPrecondition builds a identityProviderConnections
+// service listApplications endpoint failed_precondition error.
+func NewListApplicationsFailedPrecondition(body *ListApplicationsFailedPreconditionResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
 	}
 
 	return v
@@ -6615,6 +6717,54 @@ func ValidateRevokeUnavailableResponseBody(body *RevokeUnavailableResponseBody) 
 	return
 }
 
+// ValidateSyncApplicationsFailedPreconditionResponseBody runs the validations
+// defined on syncApplications_failed_precondition_response_body
+func ValidateSyncApplicationsFailedPreconditionResponseBody(body *SyncApplicationsFailedPreconditionResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSyncApplicationsRateLimitExceededResponseBody runs the validations
+// defined on syncApplications_rate_limit_exceeded_response_body
+func ValidateSyncApplicationsRateLimitExceededResponseBody(body *SyncApplicationsRateLimitExceededResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateSyncApplicationsUnauthorizedResponseBody runs the validations
 // defined on syncApplications_unauthorized_response_body
 func ValidateSyncApplicationsUnauthorizedResponseBody(body *SyncApplicationsUnauthorizedResponseBody) (err error) {
@@ -6858,6 +7008,30 @@ func ValidateSyncApplicationsGatewayErrorResponseBody(body *SyncApplicationsGate
 // ValidateSyncApplicationsUnavailableResponseBody runs the validations defined
 // on syncApplications_unavailable_response_body
 func ValidateSyncApplicationsUnavailableResponseBody(body *SyncApplicationsUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListApplicationsFailedPreconditionResponseBody runs the validations
+// defined on listApplications_failed_precondition_response_body
+func ValidateListApplicationsFailedPreconditionResponseBody(body *ListApplicationsFailedPreconditionResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
