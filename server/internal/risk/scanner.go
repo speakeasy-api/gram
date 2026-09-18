@@ -910,6 +910,12 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, basePr
 					DeadLetterReason: "",
 				}, nil
 			}
+		case ra.SourceCustom:
+			// Custom rules were evaluated above.
+		default:
+			// Unsupported sources must not establish a clean checkpoint. Keep
+			// the legacy fail-open disposition and evaluate remaining sources.
+			incomplete.Store(true)
 		}
 	}
 	// Custom findings pass the category scope like every other source, so a

@@ -175,6 +175,7 @@ func TestPostgresCheckpointInvalidation(t *testing.T) {
 	var expected []byte
 	for _, cp := range []acceptedCheckpoint{
 		{Version: checkpointVersion + 1, Hashes: transcriptHashes(frame.Messages)},
+		{Version: checkpointVersion - 1, Hashes: transcriptHashes(frame.Messages)},
 		{Version: checkpointVersion, PolicyRevision: "old-policy-version", Hashes: transcriptHashes(frame.Messages)},
 		{Version: checkpointVersion, UserID: "previous-actor", Hashes: transcriptHashes(frame.Messages)},
 	} {

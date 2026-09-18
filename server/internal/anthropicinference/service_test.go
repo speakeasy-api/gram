@@ -19,6 +19,7 @@ type memoryStore struct {
 	saved    []Frame
 	userID   string
 	err      error
+	loadErr  error
 }
 
 func (s *memoryStore) ResolveActor(_ context.Context, _ Config, _ Frame) (string, error) {
@@ -36,7 +37,9 @@ func (s *memoryStore) Begin(context.Context, Config, Frame, string) (checkpointS
 
 type memoryCheckpoint struct{ store *memoryStore }
 
-func (s *memoryCheckpoint) Load(context.Context) ([][]byte, error) { return s.store.accepted, nil }
+func (s *memoryCheckpoint) Load(context.Context) ([][]byte, error) {
+	return s.store.accepted, s.store.loadErr
+}
 func (s *memoryCheckpoint) Accept(ctx context.Context, hashes [][]byte) error {
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("checkpoint context: %w", err)
@@ -46,16 +49,18 @@ func (s *memoryCheckpoint) Accept(ctx context.Context, hashes [][]byte) error {
 }
 
 type recordingScanner struct {
-	inputs     []policyInput
-	userIDs    []string
-	result     *risk.ScanResult
-	incomplete bool
-	err        error
+	operationIDs []string
+	inputs       []policyInput
+	userIDs      []string
+	result       *risk.ScanResult
+	incomplete   bool
+	err          error
 }
 
 func (s *recordingScanner) ScanForInferenceEnforcement(_ context.Context, request risk.RealtimeScanRequest) (*risk.InferenceScanOutcome, error) {
 	s.inputs = append(s.inputs, policyInput{kind: request.MessageType, tool: request.ToolName, text: request.Text, toolCallID: request.Provenance.ToolCallID})
 	s.userIDs = append(s.userIDs, request.Provenance.UserID)
+	s.operationIDs = append(s.operationIDs, request.Provenance.OperationID)
 	return &risk.InferenceScanOutcome{Result: s.result, Complete: !s.incomplete && s.err == nil}, s.err
 }
 

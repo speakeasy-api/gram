@@ -63,6 +63,10 @@ func (s *Service) Process(ctx context.Context, config Config, frame Frame) (Verd
 	if _, err := policyInputs(messages); err != nil {
 		return Verdict{}, fmt.Errorf("decode inference transcript: %w", err)
 	}
+	_, err = s.store.Save(ctx, config, frame, userID)
+	if err != nil {
+		return Verdict{}, fmt.Errorf("store inference transcript: %w", err)
+	}
 	session, err := s.store.Begin(ctx, config, frame, userID)
 	if err != nil {
 		return Verdict{}, fmt.Errorf("begin inference checkpoint: %w", err)
@@ -71,20 +75,20 @@ func (s *Service) Process(ctx context.Context, config Config, frame Frame) (Verd
 	if err != nil {
 		return Verdict{}, fmt.Errorf("load inference checkpoint: %w", err)
 	}
-	_, err = s.store.Save(ctx, config, frame, userID)
-	if err != nil {
-		return Verdict{}, fmt.Errorf("store inference transcript: %w", err)
-	}
 	hashes := transcriptHashes(messages)
 	scanStart := min(acceptedPrefix(accepted, hashes), currentTurnStart(messages))
 	inputs, err := policyInputs(messages[scanStart:])
 	if err != nil {
 		return Verdict{}, fmt.Errorf("decode inference transcript: %w", err)
 	}
+	priorInputs, err := policyInputs(messages[:scanStart])
+	if err != nil {
+		return Verdict{}, fmt.Errorf("decode inference transcript: %w", err)
+	}
 	verdict := Verdict{Action: "allow", DenyReason: "", ReferenceID: ""}
 	complete := true
 	for offset, input := range inputs {
-		index := scanStart + offset
+		index := len(priorInputs) + offset
 		if err := ctx.Err(); err != nil {
 			return Verdict{}, fmt.Errorf("inference policy deadline: %w", err)
 		}

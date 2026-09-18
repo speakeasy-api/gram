@@ -1878,7 +1878,7 @@ FROM chat_messages
 WHERE chat_id = @chat_id AND project_id = @project_id
   AND origin = 'anthropic-inference' AND external_message_id IS NOT NULL
   AND external_message_id NOT LIKE '%/block:%'
-ORDER BY created_at DESC, id DESC
+ORDER BY created_at DESC, seq DESC
 LIMIT @row_limit;
 
 -- name: CountInferenceMessages :one

@@ -70,10 +70,10 @@ func TestScanner_InferencePromptInjectionCompleteness(t *testing.T) {
 func TestScanner_InferencePromptPolicyCompleteness(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name                                          string
-		verdict                                       *promptpolicy.Verdict
-		err                                           error
-		unavailable, disabled, incomplete, failClosed bool
+		name                                                   string
+		verdict                                                *promptpolicy.Verdict
+		err                                                    error
+		unavailable, disabled, incomplete, failClosed, blocked bool
 	}{
 		{name: "judge error", err: errors.New("judge unavailable"), incomplete: true},
 		{name: "inner deadline", err: context.DeadlineExceeded, incomplete: true},
@@ -81,8 +81,8 @@ func TestScanner_InferencePromptPolicyCompleteness(t *testing.T) {
 		{name: "incomplete verdict", verdict: &promptpolicy.Verdict{}, incomplete: true},
 		{name: "missing judge", unavailable: true, incomplete: true},
 		{name: "disabled judge", disabled: true, incomplete: true},
-		{name: "fail-closed judge error", err: errors.New("judge unavailable"), incomplete: true, failClosed: true},
-		{name: "completed match", verdict: matchedJudgeVerdict(1, "unsafe operation")},
+		{name: "fail-closed judge error", err: errors.New("judge unavailable"), incomplete: true, failClosed: true, blocked: true},
+		{name: "completed match", verdict: matchedJudgeVerdict(1, "unsafe operation"), blocked: true},
 		{name: "completed clean", verdict: &promptpolicy.Verdict{Completed: true}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -108,7 +108,7 @@ func TestScanner_InferencePromptPolicyCompleteness(t *testing.T) {
 			req := realtimeScanRequest(auth.ActiveOrganizationID, *auth.ProjectID, auth.UserID, "read a file", message.ToolRequest, "read_file")
 			result, err := scanner.ScanForEnforcement(ctx, req)
 			require.NoError(t, err)
-			if tc.failClosed || tc.name == "completed match" {
+			if tc.blocked {
 				require.NotNil(t, result)
 			} else {
 				require.Nil(t, result)
@@ -240,6 +240,44 @@ func TestScanner_InferenceCustomRuleFailurePreservesBuiltinDisposition(t *testin
 				require.NotNil(t, outcome.Result)
 				require.Equal(t, "gitleaks", outcome.Result.Source)
 			}
+		})
+	}
+}
+
+func TestScanner_InferenceUnsupportedSourceCompleteness(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name       string
+		source     string
+		outOfScope bool
+	}{
+		{name: "shadow MCP", source: "shadow_mcp"},
+		{name: "unknown source", source: "unknown_detector"},
+		{name: "out of scope shadow MCP", source: "shadow_mcp", outOfScope: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestRiskService(t)
+			var config []byte
+			if tc.outOfScope {
+				var err error
+				config, err = risk_analysis.WithDetectionScopes(nil, []risk_analysis.DetectionScopeConfig{
+					{Category: "shadow_mcp", ScopeInclude: `kind == "tool_response"`},
+				})
+				require.NoError(t, err)
+			}
+			insertRealtimeBlockPolicy(t, ti, ctx, "unsupported inference source", []string{tc.source}, config)
+			scanner := newScannerWithDispatcher(t, ti, nil, &feature.InMemory{}, nil)
+			auth, _ := contextvalues.GetAuthContext(ctx)
+			req := realtimeScanRequest(auth.ActiveOrganizationID, *auth.ProjectID, auth.UserID, "read a file", message.ToolRequest, "read_file")
+			result, err := scanner.ScanForEnforcement(ctx, req)
+			require.NoError(t, err)
+			require.Nil(t, result, "preserve legacy fail-open delivery")
+			outcome, err := scanner.ScanForInferenceEnforcement(ctx, req)
+			require.NoError(t, err)
+			require.NotNil(t, outcome)
+			require.Equal(t, tc.outOfScope, outcome.Complete)
+			require.Nil(t, outcome.Result, "incompleteness only suppresses checkpoint acceptance")
 		})
 	}
 }

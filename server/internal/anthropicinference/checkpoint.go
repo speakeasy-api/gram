@@ -20,7 +20,7 @@ import (
 )
 
 // Bump this when enforcement input extraction or checkpoint semantics change.
-const checkpointVersion = 1
+const checkpointVersion = 2
 
 var errCheckpointConflict = errors.New("inference checkpoint changed during evaluation")
 

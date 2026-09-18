@@ -86,11 +86,16 @@ to Anthropic inference. The ingestion origin remains `anthropic-inference`.
   never advance the marker. No applicable policies and out-of-scope content
   are complete. An in-scope prompt policy intentionally disabled by its feature
   flag still allows, but does not establish acceptance: flag state is not part
-  of the durable fingerprint, so enabling the flag must rescan that content. Bump the checkpoint format when built-in
-  enforcement input or scanner semantics change.
+  of the durable fingerprint, so content not previously accepted is rescanned
+  after enabling it. Previously accepted content remains valid across a
+  disable/re-enable cycle when the enforcement context is otherwise unchanged.
+  Bump the checkpoint format when built-in enforcement input or scanner
+  semantics change.
 - A matching accepted prefix, including a uniquely aligned retained tail after
-  compaction, can be skipped. A mismatch starts scanning at that message; a later
-  matching anchor never hides earlier edits. Ambiguous repeated anchors and
+  compaction without a new leading summary, can be skipped. A new leading
+  summary causes the whole frame to be scanned; retained-tail alignment beyond
+  that summary is archival-only. A mismatch starts scanning at that message;
+  a later matching anchor never hides earlier edits. Ambiguous repeated anchors and
   newly introduced compaction summaries are conservatively rescanned. The
   current turn (messages after the last assistant reply) is always scanned.
 - Each block keeps its native scope: user, assistant, tool request, tool response,

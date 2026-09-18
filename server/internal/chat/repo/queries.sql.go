@@ -2755,7 +2755,7 @@ FROM chat_messages
 WHERE chat_id = $1 AND project_id = $2
   AND origin = 'anthropic-inference' AND external_message_id IS NOT NULL
   AND external_message_id NOT LIKE '%/block:%'
-ORDER BY created_at DESC, id DESC
+ORDER BY created_at DESC, seq DESC
 LIMIT $3
 `
 
