@@ -106,10 +106,11 @@ func AddTrustedDelegationCleanupSchedule(ctx context.Context, temporalEnv *tenv.
 				// Preserve operator pause state and other settings while migrating limits.
 				action.WorkflowRunTimeout = trustedDelegationCleanupRunTimeout()
 				if schedule.Policy == nil {
-					schedule.Policy = &client.SchedulePolicies{}
+					var policy client.SchedulePolicies
+					schedule.Policy = &policy
 				}
 				schedule.Policy.CatchupWindow = options.CatchupWindow
-				return &client.ScheduleUpdate{Schedule: &schedule}, nil
+				return &client.ScheduleUpdate{Schedule: &schedule, TypedSearchAttributes: nil}, nil
 			},
 		})
 		if err != nil {

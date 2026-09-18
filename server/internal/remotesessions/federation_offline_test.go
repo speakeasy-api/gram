@@ -25,6 +25,7 @@ func TestFederatedOfflinePolicy(t *testing.T) {
 		{"minimal login", []string{"offline_access"}, true, false, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			p := federatedFixture(t)
 			p.metadata.ScopesSupported = tc.advertised
 			if !tc.optedIn {
@@ -110,6 +111,7 @@ func TestFederatedDelegationConfigurationHash(t *testing.T) {
 		{"scope", func(p *FederatedProvider) { p.client.Scope = append(p.client.Scope, "extra") }},
 	} {
 		t.Run(change.name, func(t *testing.T) {
+			t.Parallel()
 			changed := *p
 			changed.client.Scope = append([]string(nil), p.client.Scope...)
 			change.mutate(&changed)
@@ -146,6 +148,7 @@ func TestFederatedOfflinePolicyDiscoveryPresence(t *testing.T) {
 		{"advertised", `{"scopes_supported":["offline_access"]}`, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			p := federatedFixture(t)
 			p.client.Scope = []string{"openid", "email", "offline_access"}
 			p.metadata.ScopesSupported = nil

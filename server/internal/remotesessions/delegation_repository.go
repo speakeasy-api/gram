@@ -3,6 +3,7 @@ package remotesessions
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -16,7 +17,7 @@ type delegationRepository struct{ db *pgxpool.Pool }
 
 func delegationText(v string) pgtype.Text { return pgtype.Text{String: v, Valid: v != ""} }
 func delegationTime(v time.Time) pgtype.Timestamptz {
-	return pgtype.Timestamptz{Time: v, Valid: !v.IsZero()}
+	return pgtype.Timestamptz{InfinityModifier: pgtype.Finite, Time: v, Valid: !v.IsZero()}
 }
 func credentialFromRow(row repo.TrustedIssuerSession) delegationCredential {
 	generation := int64(1)
@@ -44,7 +45,7 @@ func credentialFromRow(row repo.TrustedIssuerSession) delegationCredential {
 func (r *delegationRepository) load(ctx context.Context, b DelegationBinding) (delegationCredential, error) {
 	row, err := repo.New(r.db).GetTrustedDelegationCredential(ctx, repo.GetTrustedDelegationCredentialParams{OrganizationID: b.OrganizationID, ClientID: b.ClientID, IssuerID: b.IssuerID, SubjectUrn: urn.NewUserSubject(b.HumanID).String()})
 	if err != nil {
-		return delegationCredential{}, err
+		return delegationCredential{}, fmt.Errorf("load delegation credential: %w", err)
 	}
 	return credentialFromRow(row), nil
 }
@@ -69,7 +70,10 @@ func (r *delegationRepository) save(ctx context.Context, b DelegationBinding, ex
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}
-	return err == nil, err
+	if err != nil {
+		return false, fmt.Errorf("update delegation credential: %w", err)
+	}
+	return true, nil
 }
 func (r *delegationRepository) claim(ctx context.Context, b DelegationBinding, generation int64, claim uuid.UUID, _ time.Time) (bool, error) {
 	_, err := repo.New(r.db).ClaimTrustedDelegationRefresh(ctx, repo.ClaimTrustedDelegationRefreshParams{
@@ -78,7 +82,10 @@ func (r *delegationRepository) claim(ctx context.Context, b DelegationBinding, g
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}
-	return err == nil, err
+	if err != nil {
+		return false, fmt.Errorf("update delegation credential: %w", err)
+	}
+	return true, nil
 }
 func (r *delegationRepository) finish(ctx context.Context, b DelegationBinding, generation int64, claim uuid.UUID, c delegationCredential) (bool, error) {
 	_, err := repo.New(r.db).CompleteTrustedDelegationRefresh(ctx, repo.CompleteTrustedDelegationRefreshParams{
@@ -101,11 +108,17 @@ func (r *delegationRepository) finish(ctx context.Context, b DelegationBinding, 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}
-	return err == nil, err
+	if err != nil {
+		return false, fmt.Errorf("update delegation credential: %w", err)
+	}
+	return true, nil
 }
 func (r *delegationRepository) clearExpired(ctx context.Context, b DelegationBinding, _ time.Time) error {
 	_, err := repo.New(r.db).ClearExpiredTrustedDelegationAssertion(ctx, repo.ClearExpiredTrustedDelegationAssertionParams{OrganizationID: b.OrganizationID, ClientID: b.ClientID, IssuerID: b.IssuerID, SubjectUrn: urn.NewUserSubject(b.HumanID).String()})
-	return err
+	if err != nil {
+		return fmt.Errorf("clear delegation credential: %w", err)
+	}
+	return nil
 }
 
 // revoke deliberately bypasses live trust checks: authorized erasure must still
@@ -114,12 +127,18 @@ func (r *delegationRepository) revoke(ctx context.Context, b DelegationBinding) 
 	_, err := repo.New(r.db).RevokeTrustedDelegationCredential(ctx, repo.RevokeTrustedDelegationCredentialParams{
 		OrganizationID: b.OrganizationID, ClientID: b.ClientID, IssuerID: b.IssuerID, SubjectUrn: urn.NewUserSubject(b.HumanID).String(),
 	})
-	return err
+	if err != nil {
+		return fmt.Errorf("clear delegation credential: %w", err)
+	}
+	return nil
 }
 
 func (r *delegationRepository) markRefreshAttempt(ctx context.Context, b DelegationBinding, generation int64, claim uuid.UUID, _ time.Time) (bool, error) {
 	count, err := repo.New(r.db).MarkTrustedDelegationRefreshAttempt(ctx, repo.MarkTrustedDelegationRefreshAttemptParams{
 		OrganizationID: b.OrganizationID, ClientID: b.ClientID, IssuerID: b.IssuerID, SubjectUrn: urn.NewUserSubject(b.HumanID).String(), ExpectedGeneration: generation, RefreshClaimID: claim,
 	})
-	return count == 1, err
+	if err != nil {
+		return false, fmt.Errorf("mark delegation refresh attempt: %w", err)
+	}
+	return count == 1, nil
 }

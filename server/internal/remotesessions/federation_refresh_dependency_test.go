@@ -41,6 +41,7 @@ func TestFederatedRefreshVerificationDependencies(t *testing.T) {
 		{name: "unknown signing key", unknownKey: true, want: FederatedRefreshInvalidIdentity},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			s, store, p, b, allow := newDelegationUnitFixture(t)
 			require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "old-id", "submitted-refresh", 30*time.Second), true))
 			before, err := store.load(t.Context(), b)
@@ -106,14 +107,14 @@ func TestFederatedRefreshVerificationDependencies(t *testing.T) {
 				var failure *FederatedRefreshError
 				require.ErrorAs(t, mapped, &failure)
 				require.Equal(t, tc.want, failure.Kind)
-				require.Nil(t, errors.Unwrap(mapped))
+				require.NoError(t, errors.Unwrap(mapped))
 				require.NotContains(t, fmt.Sprintf("%v %+v %#v", mapped, mapped, mapped), "secret-")
 				return nil, mapped
 			}
 			assertion, err := s.Resolve(t.Context(), b, allow)
 			require.Empty(t, assertion.Value())
 			require.Equal(t, 1, posts)
-			require.Greater(t, fetches, 0)
+			require.Positive(t, fetches)
 			after, loadErr := store.load(t.Context(), b)
 			require.NoError(t, loadErr)
 			if tc.want == FederatedRefreshAmbiguous {

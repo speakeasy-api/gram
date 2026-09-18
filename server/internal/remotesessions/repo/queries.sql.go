@@ -4791,6 +4791,42 @@ func (q *Queries) GetUserSessionIssuerForProject(ctx context.Context, arg GetUse
 	return id, err
 }
 
+const insertTrustedDelegationObservationFixture = `-- name: InsertTrustedDelegationObservationFixture :exec
+INSERT INTO trusted_issuer_sessions (
+    organization_id, remote_session_client_id, subject_urn, credential_config_hash,
+    observation_status, observed_at, credential_obtained_at, last_refresh_succeeded_at,
+    refresh_token_encrypted
+) VALUES (
+    $1, $2, $3, $4,
+    'durable_credential_present', $5, $6, $7,
+    'must-not-decrypt'
+)
+`
+
+type InsertTrustedDelegationObservationFixtureParams struct {
+	OrganizationID pgtype.Text
+	ClientID       uuid.NullUUID
+	SubjectUrn     string
+	ConfigHash     pgtype.Text
+	ObservedAt     pgtype.Timestamptz
+	ObtainedAt     pgtype.Timestamptz
+	RefreshedAt    pgtype.Timestamptz
+}
+
+// Test-only observation with deliberately invalid ciphertext: status must never decrypt it.
+func (q *Queries) InsertTrustedDelegationObservationFixture(ctx context.Context, arg InsertTrustedDelegationObservationFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertTrustedDelegationObservationFixture,
+		arg.OrganizationID,
+		arg.ClientID,
+		arg.SubjectUrn,
+		arg.ConfigHash,
+		arg.ObservedAt,
+		arg.ObtainedAt,
+		arg.RefreshedAt,
+	)
+	return err
+}
+
 const listConflictingClientBindingsForIssuerMigration = `-- name: ListConflictingClientBindingsForIssuerMigration :many
 SELECT DISTINCT
     link_source.user_session_issuer_id AS user_session_issuer_id,
@@ -8644,6 +8680,22 @@ func (q *Queries) SetRemoteSessionIssuerMetadataTracking(ctx context.Context, ar
 		arg.ProjectID,
 		arg.OrganizationID,
 	)
+	return err
+}
+
+const setRemoteSessionIssuerOrganizationFixture = `-- name: SetRemoteSessionIssuerOrganizationFixture :exec
+UPDATE remote_session_issuers SET organization_id = $1
+WHERE id = $2
+`
+
+type SetRemoteSessionIssuerOrganizationFixtureParams struct {
+	OrganizationID pgtype.Text
+	ID             uuid.UUID
+}
+
+// Test-only fixture for a platform issuer subsequently owned by a tenant.
+func (q *Queries) SetRemoteSessionIssuerOrganizationFixture(ctx context.Context, arg SetRemoteSessionIssuerOrganizationFixtureParams) error {
+	_, err := q.db.Exec(ctx, setRemoteSessionIssuerOrganizationFixture, arg.OrganizationID, arg.ID)
 	return err
 }
 

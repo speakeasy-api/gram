@@ -54,6 +54,7 @@ func TestTrustedDelegationCleanupWorkflow(t *testing.T) {
 func TestCleanupTrustedDelegationBatches(t *testing.T) {
 	t.Parallel()
 	t.Run("drains partial batch", func(t *testing.T) {
+		t.Parallel()
 		calls := 0
 		err := cleanupTrustedDelegationBatches(t.Context(), func(_ context.Context, limit int32) (int64, error) {
 			require.Equal(t, int32(500), limit)
@@ -67,6 +68,7 @@ func TestCleanupTrustedDelegationBatches(t *testing.T) {
 		require.Equal(t, 2, calls)
 	})
 	t.Run("per-attempt saturation", func(t *testing.T) {
+		t.Parallel()
 		calls := 0
 		err := cleanupTrustedDelegationBatches(t.Context(), func(_ context.Context, limit int32) (int64, error) {
 			calls++
@@ -76,6 +78,7 @@ func TestCleanupTrustedDelegationBatches(t *testing.T) {
 		require.Equal(t, 100, calls)
 	})
 	t.Run("database failure", func(t *testing.T) {
+		t.Parallel()
 		failure := errors.New("database unavailable")
 		calls := 0
 		err := cleanupTrustedDelegationBatches(t.Context(), func(context.Context, int32) (int64, error) {
@@ -133,6 +136,7 @@ func TestTrustedDelegationCleanupSchedule(t *testing.T) {
 		{name: "update failure", createErr: temporal.ErrScheduleAlreadyRunning, updateErr: failure},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			c := &temporalmocks.Client{}
 			sc := &temporalmocks.ScheduleClient{}
 			handle := &temporalmocks.ScheduleHandle{}
@@ -143,7 +147,8 @@ func TestTrustedDelegationCleanupSchedule(t *testing.T) {
 				require.Equal(t, id, options.ID)
 				require.Equal(t, time.Hour-time.Second, options.CatchupWindow)
 				require.Equal(t, time.Hour, options.Spec.Intervals[0].Every)
-				action := options.Action.(*client.ScheduleWorkflowAction)
+				action, ok := options.Action.(*client.ScheduleWorkflowAction)
+				require.True(t, ok)
 				require.Equal(t, 40*time.Minute, action.WorkflowRunTimeout)
 				require.Equal(t, "cleanup-test", action.TaskQueue)
 				return true
@@ -158,7 +163,9 @@ func TestTrustedDelegationCleanupSchedule(t *testing.T) {
 						Policy: &client.SchedulePolicies{CatchupWindow: 24 * time.Hour}, State: state, Spec: spec,
 					}}})
 					require.NoError(t, err)
-					require.Equal(t, 40*time.Minute, update.Schedule.Action.(*client.ScheduleWorkflowAction).WorkflowRunTimeout)
+					action, ok := update.Schedule.Action.(*client.ScheduleWorkflowAction)
+					require.True(t, ok)
+					require.Equal(t, 40*time.Minute, action.WorkflowRunTimeout)
 					require.Equal(t, time.Hour-time.Second, update.Schedule.Policy.CatchupWindow)
 					require.Equal(t, state, update.Schedule.State)
 					require.Equal(t, spec, update.Schedule.Spec)
@@ -178,7 +185,7 @@ func TestTrustedDelegationCleanupSchedule(t *testing.T) {
 				})).Return(tc.updateErr).Once()
 			}
 			err := AddTrustedDelegationCleanupSchedule(t.Context(), env)
-			if tc.createErr == failure || tc.updateErr == failure {
+			if errors.Is(tc.createErr, failure) || errors.Is(tc.updateErr, failure) {
 				require.ErrorIs(t, err, failure)
 			} else {
 				require.NoError(t, err)

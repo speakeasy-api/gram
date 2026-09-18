@@ -165,7 +165,7 @@ func newFederatedProvider(organizationID string, issuer repo.RemoteSessionIssuer
 		return nil, ErrFederatedConfiguration
 	}
 	digest := sha256.Sum256(encoded)
-	return &FederatedProvider{organizationID: organizationID, client: client, issuer: issuer, metadata: doc, fingerprint: hex.EncodeToString(digest[:])}, nil
+	return &FederatedProvider{organizationID: organizationID, client: client, issuer: issuer, metadata: doc, fingerprint: hex.EncodeToString(digest[:]), signingKeyRevision: ""}, nil
 }
 
 func (p *FederatedProvider) BuildAuthorizationURL(callbackURL, state, nonce, verifier string) (*url.URL, error) {
@@ -241,12 +241,12 @@ func validFederatedVerifier(verifier string) bool {
 // absent distinct from false so shared provisioned-human policy can decide.
 // There is intentionally no exported token accessor or credential JSON field.
 type FederatedIdentity struct {
-	ExpiresAt     time.Time
-	Nonce         string
-	Issuer        string
-	Subject       string
-	Email         string
-	EmailVerified *bool
+	ExpiresAt     time.Time `json:"ExpiresAt"`
+	Nonce         string    `json:"Nonce"`
+	Issuer        string    `json:"Issuer"`
+	Subject       string    `json:"Subject"`
+	Email         string    `json:"Email"`
+	EmailVerified *bool     `json:"EmailVerified"`
 	credentials   *EphemeralFederatedCredentials
 }
 

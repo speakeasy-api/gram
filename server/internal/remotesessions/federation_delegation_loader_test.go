@@ -63,6 +63,7 @@ func TestFederatedDelegationLoaderDatabaseOnly(t *testing.T) {
 		{"foreign client", org, otherIssuer, otherClient},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			provider, err := manager.LoadFederatedDelegationProvider(ctx, tc.organization, tc.issuer, tc.client)
 			require.Nil(t, provider)
 			require.ErrorIs(t, err, ErrFederatedConfiguration)

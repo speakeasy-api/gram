@@ -63,6 +63,7 @@ func TestDelegationRefreshLifetimeWithoutRotation(t *testing.T) {
 		{name: "rotated omitted", rotate: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			s, store, p, b, allow := newDelegationUnitFixture(t)
 			original := s.now().Add(2 * time.Hour)
 			login := delegationLogin(p, s.now(), "old-id", "old-refresh", 30*time.Second)

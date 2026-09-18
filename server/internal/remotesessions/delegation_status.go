@@ -24,7 +24,7 @@ func (s *Service) GetClientDelegationStatus(ctx context.Context, payload *orgcli
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceID: authCtx.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{ResourceKind: "", Dimensions: nil, Scope: authz.ScopeOrgAdmin, ResourceID: authCtx.ActiveOrganizationID}); err != nil {
 		return nil, err
 	}
 	clientID, err := uuid.Parse(payload.ID)
@@ -66,7 +66,7 @@ func (s *Service) GetClientDelegationStatus(ctx context.Context, payload *orgcli
 	if hash == "" {
 		return result, nil
 	}
-	counts, err := q.CountTrustedDelegationObservations(ctx, repo.CountTrustedDelegationObservationsParams{OrganizationID: authCtx.ActiveOrganizationID, ClientID: clientID, ConfigHash: hash, ObservedSince: pgtype.Timestamptz{Time: since, Valid: true}})
+	counts, err := q.CountTrustedDelegationObservations(ctx, repo.CountTrustedDelegationObservationsParams{OrganizationID: authCtx.ActiveOrganizationID, ClientID: clientID, ConfigHash: hash, ObservedSince: pgtype.Timestamptz{InfinityModifier: pgtype.Finite, Time: since, Valid: true}})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "count delegation observations")
 	}

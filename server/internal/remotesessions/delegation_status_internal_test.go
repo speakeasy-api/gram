@@ -2,6 +2,8 @@ package remotesessions
 
 import (
 	"encoding/json"
+	orgclientshttp "github.com/speakeasy-api/gram/server/gen/http/organization_remote_session_clients/server"
+	orgclientsgen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_clients"
 	"testing"
 	"time"
 
@@ -24,7 +26,7 @@ func TestDelegationStatusCountsSanitized(t *testing.T) {
 	require.Equal(t, "assertion_only", got[0].Status)
 	require.Equal(t, int64(3), got[0].Count)
 	require.Equal(t, "refused", got[1].Status)
-	wire, err := json.Marshal(got)
+	wire, err := json.Marshal(orgclientshttp.NewGetClientDelegationStatusResponseBody(&orgclientsgen.OrganizationClientDelegationStatus{Observations: got}))
 	require.NoError(t, err)
 	require.NotContains(t, string(wire), "raw upstream")
 	require.NotNil(t, delegationStatusCounts(nil))

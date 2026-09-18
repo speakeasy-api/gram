@@ -109,7 +109,7 @@ func (s *Service) prepareBoundFederatedLogin(ctx context.Context, endpoint *Reso
 	if err != nil {
 		return nil, err
 	}
-	state.Federation = &FederatedChallenge{OrganizationID: endpoint.OrganizationID, IssuerID: issuerID, ClientID: clientID, Configuration: version, CallbackURL: callback, Nonce: nonce, Verifier: verifier, BrowserHash: "", ExplicitRetry: retryHuman != "", ValidatedUserID: retryHuman}
+	state.Federation = &FederatedChallenge{OfflineRequested: false, ConfigurationHash: "", ValidatedIdentity: nil, OrganizationID: endpoint.OrganizationID, IssuerID: issuerID, ClientID: clientID, Configuration: version, CallbackURL: callback, Nonce: nonce, Verifier: verifier, BrowserHash: "", ExplicitRetry: retryHuman != "", ValidatedUserID: retryHuman}
 	if err := s.authnChallengeCache.Store(ctx, *state); err != nil {
 		return nil, fmt.Errorf("store federated login challenge: %w", err)
 	}
@@ -327,7 +327,7 @@ func (c *federatedDelegationConsumer) ShouldRequestFederatedOffline(ctx context.
 	}
 	status, err := c.service.OfflineStatus(ctx, request.Provider, request.UserID)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("read federated offline status: %w", err)
 	}
 	return !status.UsableRefresh && (!status.Refused || request.ExplicitRetry), nil
 }
@@ -340,9 +340,15 @@ func (c *federatedDelegationConsumer) ConsumeFederatedLogin(ctx context.Context,
 		if !login.OfflineRequested || login.Identity != nil {
 			return remotesessions.ErrFederatedIdentity
 		}
-		return c.service.RecordOfflineRefusal(ctx, login.Provider, login.UserID)
+		if err := c.service.RecordOfflineRefusal(ctx, login.Provider, login.UserID); err != nil {
+			return fmt.Errorf("record federated offline refusal: %w", err)
+		}
+		return nil
 	}
-	return c.service.RetainVerifiedLogin(ctx, login.Provider, login.UserID, login.Identity, login.OfflineRequested)
+	if err := c.service.RetainVerifiedLogin(ctx, login.Provider, login.UserID, login.Identity, login.OfflineRequested); err != nil {
+		return fmt.Errorf("retain verified federated login: %w", err)
+	}
+	return nil
 }
 
 // retryFederatedDelegation starts a fresh minimal login, not an offline prompt.

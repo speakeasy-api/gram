@@ -221,7 +221,8 @@ func TestTrustedDelegationCredentialCASAndCleanup(t *testing.T) {
 	err = conn.QueryRow(ctx, `SELECT identity_assertion_encrypted IS NOT NULL OR refresh_token_encrypted IS NOT NULL OR upstream_subject_encrypted IS NOT NULL OR nonce_encrypted IS NOT NULL FROM trusted_issuer_sessions WHERE id=$1`, row.ID).Scan(&hasSecrets)
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 	for _, lifecycle := range []string{"deleted", "orphaned", "secret-free-orphan"} {
-		t.Run(lifecycle, func(t *testing.T) {
+		{
+			t.Logf("cleanup lifecycle: %s", lifecycle)
 			id := uuid.New()
 			_, err := conn.Exec(ctx, `INSERT INTO trusted_issuer_sessions (id,organization_id,remote_session_client_id,subject_urn,identity_assertion_encrypted,refresh_token_encrypted,upstream_subject_encrypted,nonce_encrypted,deleted_at) VALUES ($1,$2,$3,'user:cleanup-test','assertion','refresh','subject','nonce',CASE WHEN $4='deleted' THEN clock_timestamp() ELSE NULL END)`, id, org, client, lifecycle)
 			require.NoError(t, err)
@@ -241,6 +242,6 @@ func TestTrustedDelegationCredentialCASAndCleanup(t *testing.T) {
 			count, err = q.CleanupTrustedDelegationCredentialsBatch(ctx, 1)
 			require.NoError(t, err)
 			require.Zero(t, count)
-		})
+		}
 	}
 }
