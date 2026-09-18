@@ -234,11 +234,12 @@ func (s *Service) load(ctx context.Context, logger *slog.Logger, organizationID 
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "load connection").LogError(ctx, logger)
 	}
-	return s.withManagedClient(ctx, logger, row.IdentityProviderConnection, row.OktaIdentityProviderConnection)
+	return s.withManagedClient(ctx, logger, s.db, row.IdentityProviderConnection, row.OktaIdentityProviderConnection)
 }
 
-func (s *Service) withManagedClient(ctx context.Context, logger *slog.Logger, connection repo.IdentityProviderConnection, oktaRow repo.OktaIdentityProviderConnection) (*connectionRows, error) {
-	managed, err := s.provisioner.GetManagedClient(ctx, connection.OrganizationID, connection.ID)
+// withManagedClient reads on dbtx so a caller holding a transaction never waits on a second pool connection.
+func (s *Service) withManagedClient(ctx context.Context, logger *slog.Logger, dbtx repo.DBTX, connection repo.IdentityProviderConnection, oktaRow repo.OktaIdentityProviderConnection) (*connectionRows, error) {
+	managed, err := s.provisioner.GetManagedClientTx(ctx, dbtx, connection.OrganizationID, connection.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load connection credential").LogError(ctx, logger)
 	}
@@ -246,8 +247,8 @@ func (s *Service) withManagedClient(ctx context.Context, logger *slog.Logger, co
 }
 
 // withRevokedManagedClient tolerates managed rows the organization removed after revocation.
-func (s *Service) withRevokedManagedClient(ctx context.Context, logger *slog.Logger, connection repo.IdentityProviderConnection, oktaRow repo.OktaIdentityProviderConnection) (*connectionRows, error) {
-	managed, err := s.provisioner.GetManagedClient(ctx, connection.OrganizationID, connection.ID)
+func (s *Service) withRevokedManagedClient(ctx context.Context, logger *slog.Logger, dbtx repo.DBTX, connection repo.IdentityProviderConnection, oktaRow repo.OktaIdentityProviderConnection) (*connectionRows, error) {
+	managed, err := s.provisioner.GetManagedClientTx(ctx, dbtx, connection.OrganizationID, connection.ID)
 	switch {
 	case errors.Is(err, ErrNotProvisioned):
 		managed = nil
@@ -257,8 +258,8 @@ func (s *Service) withRevokedManagedClient(ctx context.Context, logger *slog.Log
 	return &connectionRows{Connection: connection, Okta: oktaRow, Managed: managed}, nil
 }
 
-func (s *Service) lock(ctx context.Context, logger *slog.Logger, q *repo.Queries, organizationID string, id uuid.UUID) (*connectionRows, error) {
-	row, err := q.LockOktaIdentityProviderConnection(ctx, repo.LockOktaIdentityProviderConnectionParams{
+func (s *Service) lock(ctx context.Context, logger *slog.Logger, dbtx pgx.Tx, organizationID string, id uuid.UUID) (*connectionRows, error) {
+	row, err := repo.New(dbtx).LockOktaIdentityProviderConnection(ctx, repo.LockOktaIdentityProviderConnectionParams{
 		ID:             id,
 		OrganizationID: organizationID,
 	})
@@ -268,7 +269,7 @@ func (s *Service) lock(ctx context.Context, logger *slog.Logger, q *repo.Queries
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "lock connection").LogError(ctx, logger)
 	}
-	return s.withManagedClient(ctx, logger, row.IdentityProviderConnection, row.OktaIdentityProviderConnection)
+	return s.withManagedClient(ctx, logger, dbtx, row.IdentityProviderConnection, row.OktaIdentityProviderConnection)
 }
 
 func parseConnectionID(raw string) (uuid.UUID, error) {
@@ -676,7 +677,7 @@ func (s *Service) SubmitClientID(ctx context.Context, payload *gen.SubmitClientI
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 	q := repo.New(dbtx)
 
-	before, err := s.lock(ctx, logger, q, authCtx.ActiveOrganizationID, id)
+	before, err := s.lock(ctx, logger, dbtx, authCtx.ActiveOrganizationID, id)
 	if err != nil {
 		return nil, err
 	}
@@ -756,7 +757,7 @@ func (s *Service) Verify(ctx context.Context, payload *gen.VerifyPayload) (*gen.
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 	q := repo.New(dbtx)
 
-	before, err := s.lock(ctx, logger, q, authCtx.ActiveOrganizationID, id)
+	before, err := s.lock(ctx, logger, dbtx, authCtx.ActiveOrganizationID, id)
 	if err != nil {
 		return nil, err
 	}
@@ -957,7 +958,7 @@ func (s *Service) RecordAgent(ctx context.Context, payload *gen.RecordAgentPaylo
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 	q := repo.New(dbtx)
 
-	before, err := s.lock(ctx, logger, q, authCtx.ActiveOrganizationID, id)
+	before, err := s.lock(ctx, logger, dbtx, authCtx.ActiveOrganizationID, id)
 	if err != nil {
 		return nil, err
 	}
@@ -994,7 +995,7 @@ func (s *Service) Revoke(ctx context.Context, payload *gen.RevokePayload) (*gen.
 	}
 	logger = logger.With(attr.SlogIdentityProviderConnectionID(id.String()))
 
-	existing, err := s.loadRevocable(ctx, logger, authCtx.ActiveOrganizationID, id)
+	existing, err := s.loadRevocable(ctx, logger, s.db, authCtx.ActiveOrganizationID, id)
 	if err != nil {
 		return nil, err
 	}
@@ -1008,7 +1009,7 @@ func (s *Service) Revoke(ctx context.Context, payload *gen.RevokePayload) (*gen.
 	s.oktaClients.Forget(existing.OktaIdentityProviderConnection.RemoteSessionClientID)
 
 	if existing.IdentityProviderConnection.Deleted {
-		return s.revokedView(ctx, logger, existing)
+		return s.revokedView(ctx, logger, s.db, existing)
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -1018,17 +1019,17 @@ func (s *Service) Revoke(ctx context.Context, payload *gen.RevokePayload) (*gen.
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 	q := repo.New(dbtx)
 
-	before, err := s.lock(ctx, logger, q, authCtx.ActiveOrganizationID, id)
+	before, err := s.lock(ctx, logger, dbtx, authCtx.ActiveOrganizationID, id)
 	if err != nil {
 		if !isOopsCode(err, oops.CodeNotFound) {
 			return nil, err
 		}
 		// A concurrent revoke won the lock; report its outcome.
-		raced, err := s.loadRevocable(ctx, logger, authCtx.ActiveOrganizationID, id)
+		raced, err := s.loadRevocable(ctx, logger, dbtx, authCtx.ActiveOrganizationID, id)
 		if err != nil {
 			return nil, err
 		}
-		return s.revokedView(ctx, logger, raced)
+		return s.revokedView(ctx, logger, dbtx, raced)
 	}
 	connection, err := q.RevokeIdentityProviderConnection(ctx, repo.RevokeIdentityProviderConnectionParams{
 		ID:             id,
@@ -1053,7 +1054,7 @@ func (s *Service) Revoke(ctx context.Context, payload *gen.RevokePayload) (*gen.
 	}
 
 	// The managed client lookup reflects the revoked key set.
-	rows, err := s.withRevokedManagedClient(ctx, logger, connection, oktaRow)
+	rows, err := s.withRevokedManagedClient(ctx, logger, s.db, connection, oktaRow)
 	if err != nil {
 		return nil, err
 	}
@@ -1061,8 +1062,8 @@ func (s *Service) Revoke(ctx context.Context, payload *gen.RevokePayload) (*gen.
 }
 
 // loadRevocable reads through the tombstone; only a revoked tombstone is visible.
-func (s *Service) loadRevocable(ctx context.Context, logger *slog.Logger, organizationID string, id uuid.UUID) (*repo.GetOktaIdentityProviderConnectionIncludingDeletedRow, error) {
-	existing, err := repo.New(s.db).GetOktaIdentityProviderConnectionIncludingDeleted(ctx, repo.GetOktaIdentityProviderConnectionIncludingDeletedParams{
+func (s *Service) loadRevocable(ctx context.Context, logger *slog.Logger, dbtx repo.DBTX, organizationID string, id uuid.UUID) (*repo.GetOktaIdentityProviderConnectionIncludingDeletedRow, error) {
+	existing, err := repo.New(dbtx).GetOktaIdentityProviderConnectionIncludingDeleted(ctx, repo.GetOktaIdentityProviderConnectionIncludingDeletedParams{
 		ID:             id,
 		OrganizationID: organizationID,
 	})
@@ -1078,8 +1079,8 @@ func (s *Service) loadRevocable(ctx context.Context, logger *slog.Logger, organi
 	return &existing, nil
 }
 
-func (s *Service) revokedView(ctx context.Context, logger *slog.Logger, existing *repo.GetOktaIdentityProviderConnectionIncludingDeletedRow) (*gen.OktaIdentityProviderConnection, error) {
-	rows, err := s.withRevokedManagedClient(ctx, logger, existing.IdentityProviderConnection, existing.OktaIdentityProviderConnection)
+func (s *Service) revokedView(ctx context.Context, logger *slog.Logger, dbtx repo.DBTX, existing *repo.GetOktaIdentityProviderConnectionIncludingDeletedRow) (*gen.OktaIdentityProviderConnection, error) {
+	rows, err := s.withRevokedManagedClient(ctx, logger, dbtx, existing.IdentityProviderConnection, existing.OktaIdentityProviderConnection)
 	if err != nil {
 		return nil, err
 	}

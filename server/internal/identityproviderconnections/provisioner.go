@@ -881,7 +881,12 @@ func (p *Provisioner) ClientJSONWebKeySetURL(ctx context.Context, organizationID
 
 // GetManagedClient returns the connection's managed registration, or ErrNotProvisioned.
 func (p *Provisioner) GetManagedClient(ctx context.Context, organizationID string, connectionID uuid.UUID) (*ManagedClient, error) {
-	return p.lookupManagedClient(ctx, repo.New(p.db), organizationID, connectionID)
+	return p.GetManagedClientTx(ctx, p.db, organizationID, connectionID)
+}
+
+// GetManagedClientTx is GetManagedClient on the caller's connection or transaction.
+func (p *Provisioner) GetManagedClientTx(ctx context.Context, dbtx repo.DBTX, organizationID string, connectionID uuid.UUID) (*ManagedClient, error) {
+	return p.lookupManagedClient(ctx, repo.New(dbtx), organizationID, connectionID)
 }
 
 // adoptedError carries a concurrently provisioned client out of provisionRows.
