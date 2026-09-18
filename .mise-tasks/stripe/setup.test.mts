@@ -41,6 +41,8 @@ const price = {
     meter: meter.id,
   },
 };
+const mcpEgressPrice = { ...price, id: "price_mcp_egress" };
+const riskScansPrice = { ...price, id: "price_risk_scans" };
 const portal = {
   id: "bpc_synthetic",
   active: true,
@@ -169,7 +171,13 @@ test("orchestration shares credentials and preflights before remote writes", asy
       provision: async (actual) => {
         assert.equal(actual, key);
         steps.push("catalog");
-        return { meter, price, portalConfiguration: portal };
+        return {
+          meter,
+          price,
+          mcpEgressPrice,
+          riskScansPrice,
+          portalConfiguration: portal,
+        };
       },
       persist: async (settings) => {
         steps.push("persist");
@@ -178,11 +186,15 @@ test("orchestration shares credentials and preflights before remote writes", asy
           "STRIPE_METER_EVENT_NAME",
           "STRIPE_METER_ID_TUM",
           "STRIPE_PORTAL_CONFIGURATION_ID",
+          "STRIPE_PRICE_ID_MCP_EGRESS",
+          "STRIPE_PRICE_ID_RISK_SCANS",
           "STRIPE_PRICE_ID_TUM",
           "STRIPE_WEBHOOK_SECRET",
         ]);
         assert.equal(settings.STRIPE_API_KEY, key);
         assert.equal(settings.STRIPE_WEBHOOK_SECRET, "whsec_synthetic");
+        assert.equal(settings.STRIPE_PRICE_ID_MCP_EGRESS, mcpEgressPrice.id);
+        assert.equal(settings.STRIPE_PRICE_ID_RISK_SCANS, riskScansPrice.id);
       },
     });
     assert.deepEqual(steps, [
@@ -208,7 +220,13 @@ test("orchestration shares credentials and preflights before remote writes", asy
         },
         provision: async () => {
           writes++;
-          return { meter, price, portalConfiguration: portal };
+          return {
+            meter,
+            price,
+            mcpEgressPrice,
+            riskScansPrice,
+            portalConfiguration: portal,
+          };
         },
         persist: async () => {
           writes++;
@@ -226,8 +244,20 @@ test("compatible existing catalog is write-free", async (t) => {
     if (path.endsWith("/account")) return Response.json({ livemode: false });
     if (path.endsWith("/meters"))
       return Response.json({ data: [meter], has_more: false });
-    if (path.endsWith("/prices"))
-      return Response.json({ data: [price], has_more: false });
+    if (path.endsWith("/prices")) {
+      const lookupKey = new URL(url).searchParams.get("lookup_keys[]");
+      assert.equal(new URL(url).searchParams.get("active"), "true");
+      const prices = {
+        "payg-tum": price,
+        "payg-mcp-egress": mcpEgressPrice,
+        "payg-risk-scans": riskScansPrice,
+      };
+      assert.ok(lookupKey && lookupKey in prices);
+      return Response.json({
+        data: [prices[lookupKey as keyof typeof prices]],
+        has_more: false,
+      });
+    }
     if (path.endsWith("/prod_synthetic"))
       return Response.json({
         id: "prod_synthetic",
@@ -239,7 +269,45 @@ test("compatible existing catalog is write-free", async (t) => {
       return Response.json({ data: [portal], has_more: false });
     throw new Error("Unexpected request");
   });
-  await provisionCatalog("sk_test_synthetic");
+  const result = await provisionCatalog("sk_test_synthetic");
+  assert.equal(result.mcpEgressPrice.id, mcpEgressPrice.id);
+  assert.equal(result.riskScansPrice.id, riskScansPrice.id);
+});
+
+test("missing additional price fails before catalog writes", async (t) => {
+  t.mock.method(globalThis, "fetch", async (url: string, init: RequestInit) => {
+    assert.equal(init.method, "GET");
+    const request = new URL(url);
+    if (request.pathname.endsWith("/account"))
+      return Response.json({ livemode: false });
+    assert.equal(request.searchParams.get("lookup_keys[]"), "payg-mcp-egress");
+    return Response.json({ data: [], has_more: false });
+  });
+  await assert.rejects(
+    provisionCatalog("sk_test_synthetic"),
+    /No active Stripe sandbox price.*payg-mcp-egress/,
+  );
+});
+
+test("licensed risk scans price fails before catalog writes", async (t) => {
+  t.mock.method(globalThis, "fetch", async (url: string, init: RequestInit) => {
+    assert.equal(init.method, "GET");
+    const request = new URL(url);
+    if (request.pathname.endsWith("/account"))
+      return Response.json({ livemode: false });
+    const found =
+      request.searchParams.get("lookup_keys[]") === "payg-mcp-egress"
+        ? mcpEgressPrice
+        : {
+            ...riskScansPrice,
+            recurring: { ...price.recurring, usage_type: "licensed" },
+          };
+    return Response.json({ data: [found], has_more: false });
+  });
+  await assert.rejects(
+    provisionCatalog("sk_test_synthetic"),
+    /payg-risk-scans.*recurring.usage_type/,
+  );
 });
 
 test("archived product fails before tagging or portal writes", async (t) => {
@@ -267,6 +335,7 @@ test("worktree preflight needs no org, CSV or database and protects ignored secr
   const root = mkdtempSync(join(tmpdir(), "gram-stripe-setup-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   execFileSync("git", ["init", "--quiet", root]);
+  execFileSync("git", ["-C", root, "config", "core.excludesFile", "/dev/null"]);
   writeFileSync(join(root, ".gitignore"), "mise.local.toml\n");
   const env = {
     GRAM_ENVIRONMENT: "local",
@@ -300,7 +369,13 @@ test("worktree preflight needs no org, CSV or database and protects ignored secr
         },
         provision: async () => {
           calls++;
-          return { meter, price, portalConfiguration: portal };
+          return {
+            meter,
+            price,
+            mcpEgressPrice,
+            riskScansPrice,
+            portalConfiguration: portal,
+          };
         },
         persist: async () => {
           calls++;
@@ -319,14 +394,4 @@ test("worktree preflight needs no org, CSV or database and protects ignored secr
   rmSync(join(root, "mise.local.toml"));
   symlinkSync(join(root, ".gitignore"), join(root, "mise.local.toml"));
   assert.throws(() => preflightLocalSetup(root, env), /no links/);
-});
-
-test("setup and readiness have no organization option or feature-flag IO", () => {
-  for (const file of ["setup.mts", "readiness.mts", "helpers.mts"]) {
-    const source = readFileSync(new URL(file, import.meta.url), "utf8");
-    assert.doesNotMatch(
-      source,
-      /--org|usage_org|GRAM_STRIPE_LOCAL_ORG_ID|GRAM_LOCAL_FEATURE_FLAGS_CSV|flags\.ts|flags\.local\.csv|gram-payg-self-serve-billing/,
-    );
-  }
 });

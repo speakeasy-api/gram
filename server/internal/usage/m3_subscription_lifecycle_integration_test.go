@@ -93,7 +93,7 @@ func (c *m3StripeWebhookClient) VerifyWebhook([]byte, string) (*stripeclient.Web
 }
 
 func (*m3StripeWebhookClient) Catalog() stripeclient.Catalog {
-	return stripeclient.Catalog{PriceIDTUM: "", PortalConfigurationID: ""}
+	return stripeclient.Catalog{PriceIDMCPEgress: "", PriceIDRiskScans: "", PriceIDTUM: "", PortalConfigurationID: ""}
 }
 
 func TestM3SubscriptionLossRecheckoutAndStaleReplayLifecycle(t *testing.T) {

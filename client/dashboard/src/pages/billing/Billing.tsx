@@ -30,7 +30,6 @@ import {
   PaygPaymentFailedBanner,
 } from "@/components/billing/billing-banners";
 import { InferenceCapsSection } from "@/components/billing/inference-caps-section";
-import { BillingPositionSection } from "@/components/billing/billing-position-section";
 import { PaygPlanSection } from "@/components/billing/payg-plan-section";
 import { PaygPriceList } from "@/components/billing/payg-price-list";
 import { TopUpCTA, UsageProgress } from "@/components/billing/usage-controls";
@@ -68,7 +67,6 @@ function BillingInner() {
   if (productTier === "enterprise" || productTier === "payg") {
     return (
       <>
-        <BillingPositionSection />
         <MeterUsageSection />
         {/* Renders for pay as you go, and for enterprise only during an
             active trial — the section owns that rule. */}

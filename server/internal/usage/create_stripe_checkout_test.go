@@ -246,7 +246,7 @@ func (c *checkoutStripeClient) VerifyWebhook([]byte, string) (*stripeclient.Webh
 }
 
 func (c *checkoutStripeClient) Catalog() stripeclient.Catalog {
-	return stripeclient.Catalog{PriceIDTUM: "price_tum", PortalConfigurationID: "bpc_test"}
+	return stripeclient.Catalog{PriceIDMCPEgress: "", PriceIDRiskScans: "", PriceIDTUM: "price_tum", PortalConfigurationID: "bpc_test"}
 }
 
 func (c *checkoutStripeClient) updates() []stripeclient.UpdateCustomerInput {

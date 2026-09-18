@@ -23,25 +23,10 @@ import { isNotFoundError } from "@/lib/route-errors";
 import type { ReactNode } from "react";
 
 /**
- * The organization's payment relationship, in either of its two states.
- *
- * With no payment method attached — an active product trial, before checkout
- * has run — the section offers the checkout CTA that attaches one. With a
- * payment method attached, it reports what Stripe is doing right now, the way
- * into the customer portal, and the in-product cancel and resume controls.
- * Which state applies also decides the section's description.
- *
- * The rules live here rather than at the call site so the billing page can
- * place the section without re-deriving which payment state the organization
- * is in.
- *
- * During an active product trial there is no Stripe subscription to report on
- * even when the account type already reads as PAYG: checkout hasn't run, so
- * asking for one would answer 404 — which the attached state would render as
- * "billing isn't managed through Stripe" directly beside the checkout button
- * that is about to set it up. The trial lifecycle comes from the same hook
- * the checkout CTA gates on, so the frame and the CTA inside it read one
- * clock.
+ * Offers checkout during an active trial or when PAYG has no Stripe subscription.
+ * Starting checkout converts the local trial before Stripe confirms a subscription,
+ * so abandoning the hosted page must leave a way to finish billing setup.
+ * Attached subscriptions expose their live state and management controls.
  */
 export function PaygPlanSection(): JSX.Element | null {
   const productTier = useProductTier();
@@ -90,18 +75,19 @@ function PaymentSection({
 function PaygPlanBody(): JSX.Element {
   const { data, error, isError, isFetching, refetch } = useStripeSubscription();
 
-  // A 404 is an answer, not an outage: the pay-as-you-go tier predates Stripe,
-  // so an organization can be on it without a Stripe subscription behind it.
-  // That answer is stable, so it outranks a cached subscription and gets no
-  // retry — there is nothing here that trying again would find.
+  // A confirmed absence outranks cached subscription state. It can mean checkout
+  // was abandoned after the local trial converted, so offer billing setup again.
   if (isNotFoundError(error)) {
     return (
-      <Stack gap={1}>
-        <Text className="font-medium">No Stripe subscription</Text>
+      <Stack gap={3}>
+        <Text className="font-medium">Finish setting up billing</Text>
         <Text muted small>
-          This organization's billing isn't managed through Stripe, so there's
-          no payment method or invoice history to manage here.
+          Complete checkout to activate your pay-as-you-go subscription.
         </Text>
+        <StartPaygCheckoutCTA
+          label="Add payment method"
+          eligibility="unsubscribed-payg"
+        />
       </Stack>
     );
   }

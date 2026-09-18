@@ -126,9 +126,6 @@ vi.mock("@gram/client/react-query/setBillingEmail.js", () => ({
     isError: false,
   }),
 }));
-vi.mock("@/components/billing/billing-position-section", () => ({
-  BillingPositionSection: () => <div>billing position</div>,
-}));
 vi.mock("@/components/billing/meter-usage-section", () => ({
   MeterUsageSection: () => <div>meter usage</div>,
 }));
@@ -417,18 +414,6 @@ describe("Billing", () => {
     expect(screen.getByText("meter usage")).toBeTruthy();
     expect(inferenceCapsSection()).toBeNull();
     expect(mocks.inferenceCaps).not.toHaveBeenCalled();
-  });
-
-  it("separates the billing position from meter usage on the payg view", () => {
-    mocks.productTier.mockReturnValue("payg");
-    mocks.session.mockReturnValue({ trial: null });
-
-    renderBilling();
-
-    expect(meterUsageSection()).not.toBeNull();
-    expect(screen.getByText("billing position")).toBeTruthy();
-    expect(polarUsageSection()).toBeNull();
-    expect(mocks.periodUsage).not.toHaveBeenCalled();
   });
 
   it.each<ProductTier>(["base", "base_PAID", "__deprecated__pro"])(

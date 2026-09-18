@@ -147,7 +147,7 @@ func (f *fakeStripeWebhookClient) VerifyWebhook(payload []byte, signature string
 }
 
 func (f *fakeStripeWebhookClient) Catalog() stripeclient.Catalog {
-	return stripeclient.Catalog{PriceIDTUM: "", PortalConfigurationID: ""}
+	return stripeclient.Catalog{PriceIDMCPEgress: "", PriceIDRiskScans: "", PriceIDTUM: "", PortalConfigurationID: ""}
 }
 
 func testStripeWebhookHandler(context.Context, *slog.Logger, pgx.Tx, string, *stripeclient.WebhookEvent, *stripeclient.CheckoutSessionState, *stripeclient.InvoiceState) (stripeWebhookResult, error) {
