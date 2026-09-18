@@ -14,6 +14,18 @@ import (
 // Every tool the deployment registers declares an audience. A tool with none
 // would be unreachable; a tool admitted by accident would reach a surface
 // nobody reviewed it for, which is what the audience model exists to prevent.
+func TestListProjectsDescriptionDoesNotAdvertiseHiddenResourceSignals(t *testing.T) {
+	t.Parallel()
+
+	server := mcp.NewServer(&mcp.Implementation{Name: "list-projects-description-test", Version: "0.0.1"}, nil)
+	registrar := newRegistrar(server)
+	registerListProjectsTool(registrar, nil)
+
+	descriptor := registrar.Descriptors()[0]
+	require.Equal(t, "list_projects", descriptor.Name)
+	require.NotContains(t, descriptor.Description, "filtered")
+}
+
 func TestEveryRegisteredToolDeclaresAnAudience(t *testing.T) {
 	t.Parallel()
 
@@ -208,6 +220,32 @@ func TestExternalResourceRegistrationRequiresAuthorizationPolicy(t *testing.T) {
 			return "", nil
 		})
 	})
+}
+
+func TestEveryExternalToolUsesAKnownAuthorizationPolicy(t *testing.T) {
+	t.Parallel()
+
+	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	byName := map[string]ExternalAuthorization{}
+	for _, descriptor := range registrar.For(AudienceExternal) {
+		require.Contains(t, []ExternalAuthorization{ExternalAuthorizationMember, ExternalAuthorizationOrgAdmin}, descriptor.Meta.Authorization, descriptor.Name)
+		byName[descriptor.Name] = descriptor.Meta.Authorization
+	}
+	for _, name := range []string{
+		"get_platform_context", "list_projects", "find_mcp", "get_mcp",
+		"search_gram_docs", "list_skills", "get_skill", "list_skill_versions",
+		"list_my_sessions", "continue_session",
+	} {
+		require.Equal(t, ExternalAuthorizationMember, byName[name], name)
+	}
+	for _, name := range []string{"create_skill", "add_skill_version", "update_skill_metadata", "distribute_skill"} {
+		require.Equal(t, ExternalAuthorizationOrgAdmin, byName[name], name)
+	}
+	for _, resource := range registrar.resources {
+		if resource.Meta.servesAudience(AudienceExternal) {
+			require.Equal(t, ExternalAuthorizationMember, resource.Meta.Authorization, resource.URI)
+		}
+	}
 }
 
 func TestExternalToolDenialReturnsReadableErrorWithoutCallingHandler(t *testing.T) {

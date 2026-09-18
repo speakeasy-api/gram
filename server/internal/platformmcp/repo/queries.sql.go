@@ -4556,46 +4556,49 @@ LEFT JOIN LATERAL (
     LIMIT 1
 ) AS readiness ON TRUE
 WHERE m.deleted IS FALSE
-  AND ($6::uuid IS NULL OR m.project_id = $6::uuid)
-  AND ($7::uuid IS NULL OR m.id > $7::uuid)
+  AND ($6::boolean OR m.id = ANY($7::uuid[]))
+  AND ($8::uuid IS NULL OR m.project_id = $8::uuid)
+  AND ($9::uuid IS NULL OR m.id > $9::uuid)
   AND (
-      $8::text = ''
-      OR m.id::text ILIKE '%' || $8::text || '%'
-      OR COALESCE(m.name, '') ILIKE '%' || $8::text || '%'
-      OR COALESCE(m.slug, '') ILIKE '%' || $8::text || '%'
+      $10::text = ''
+      OR m.id::text ILIKE '%' || $10::text || '%'
+      OR COALESCE(m.name, '') ILIKE '%' || $10::text || '%'
+      OR COALESCE(m.slug, '') ILIKE '%' || $10::text || '%'
   )
   AND (
-      $9::text IS NULL
+      $11::text IS NULL
       OR COALESCE(
           NULLIF(readiness.state, ''),
           CASE
               WHEN registration.id IS NOT NULL THEN 'unknown'
               ELSE 'unsupported'
           END
-      ) = $9::text
+      ) = $11::text
   )
 ORDER BY
     CASE
-        WHEN $8::text <> ''
-         AND (m.id::text = $8::text OR LOWER(COALESCE(m.name, '')) = LOWER($8::text) OR LOWER(COALESCE(m.slug, '')) = LOWER($8::text))
+        WHEN $10::text <> ''
+         AND (m.id::text = $10::text OR LOWER(COALESCE(m.name, '')) = LOWER($10::text) OR LOWER(COALESCE(m.slug, '')) = LOWER($10::text))
         THEN 0
         ELSE 1
     END,
     m.id ASC
-LIMIT $10
+LIMIT $12
 `
 
 type ListPlatformMCPInventoryParams struct {
-	OrganizationID       string
-	ConnectionID         uuid.NullUUID
-	ConnectionGeneration uuid.NullUUID
-	UserID               pgtype.Text
-	ActingSurface        pgtype.Text
-	ProjectID            uuid.NullUUID
-	AfterMcpID           uuid.NullUUID
-	QueryText            string
-	ReadinessState       pgtype.Text
-	LimitValue           int32
+	OrganizationID          string
+	ConnectionID            uuid.NullUUID
+	ConnectionGeneration    uuid.NullUUID
+	UserID                  pgtype.Text
+	ActingSurface           pgtype.Text
+	SkipAuthorizationFilter bool
+	AllowedMcpIds           []uuid.UUID
+	ProjectID               uuid.NullUUID
+	AfterMcpID              uuid.NullUUID
+	QueryText               string
+	ReadinessState          pgtype.Text
+	LimitValue              int32
 }
 
 type ListPlatformMCPInventoryRow struct {
@@ -4626,8 +4629,11 @@ type ListPlatformMCPInventoryRow struct {
 }
 
 // One bounded, tenant-qualified inventory projection for every Platform MCP
-// read surface. It reads persisted readiness/distribution state only; it never
-// contacts a remote MCP or provider.
+// read surface. Callers supply the live RBAC-filtered MCP IDs so authorization
+// is applied before LIMIT/cursor pagination. It reads persisted readiness and
+// distribution state only; it never contacts a remote MCP or provider.
+// skip_authorization_filter is reserved for trusted internal services whose own
+// authorization boundary is broader than this member-facing read path.
 func (q *Queries) ListPlatformMCPInventory(ctx context.Context, arg ListPlatformMCPInventoryParams) ([]ListPlatformMCPInventoryRow, error) {
 	rows, err := q.db.Query(ctx, listPlatformMCPInventory,
 		arg.OrganizationID,
@@ -4635,6 +4641,8 @@ func (q *Queries) ListPlatformMCPInventory(ctx context.Context, arg ListPlatform
 		arg.ConnectionGeneration,
 		arg.UserID,
 		arg.ActingSurface,
+		arg.SkipAuthorizationFilter,
+		arg.AllowedMcpIds,
 		arg.ProjectID,
 		arg.AfterMcpID,
 		arg.QueryText,
@@ -4674,6 +4682,111 @@ func (q *Queries) ListPlatformMCPInventory(ctx context.Context, arg ListPlatform
 			&i.ReadinessCheckedAt,
 			&i.ReadinessExpiresAt,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPlatformMCPInventoryAuthorizationCandidatePage = `-- name: ListPlatformMCPInventoryAuthorizationCandidatePage :many
+SELECT m.id, m.project_id
+FROM mcp_servers AS m
+JOIN projects AS project
+  ON project.id = m.project_id
+ AND project.organization_id = $1
+ AND project.deleted IS FALSE
+WHERE m.deleted IS FALSE
+  AND ($2::uuid IS NULL OR m.project_id = $2::uuid)
+  AND ($3::uuid IS NULL OR m.id > $3::uuid)
+  AND (
+      $4::text = ''
+      OR m.id::text ILIKE '%' || $4::text || '%'
+      OR COALESCE(m.name, '') ILIKE '%' || $4::text || '%'
+      OR COALESCE(m.slug, '') ILIKE '%' || $4::text || '%'
+  )
+ORDER BY
+    CASE
+        WHEN $4::text <> ''
+         AND (m.id::text = $4::text OR LOWER(COALESCE(m.name, '')) = LOWER($4::text) OR LOWER(COALESCE(m.slug, '')) = LOWER($4::text))
+        THEN 0
+        ELSE 1
+    END,
+    m.id ASC
+LIMIT LEAST(GREATEST($5::integer, 1), 1001)
+`
+
+type ListPlatformMCPInventoryAuthorizationCandidatePageParams struct {
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+	AfterMcpID     uuid.NullUUID
+	QueryText      string
+	LimitValue     int32
+}
+
+type ListPlatformMCPInventoryAuthorizationCandidatePageRow struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Lightweight, bounded candidate selection before live RBAC evaluation. Match
+// the inventory projection's safe project/cursor/query filters and search order
+// so hidden resources do not consume caller-visible result pages.
+func (q *Queries) ListPlatformMCPInventoryAuthorizationCandidatePage(ctx context.Context, arg ListPlatformMCPInventoryAuthorizationCandidatePageParams) ([]ListPlatformMCPInventoryAuthorizationCandidatePageRow, error) {
+	rows, err := q.db.Query(ctx, listPlatformMCPInventoryAuthorizationCandidatePage,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.AfterMcpID,
+		arg.QueryText,
+		arg.LimitValue,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlatformMCPInventoryAuthorizationCandidatePageRow
+	for rows.Next() {
+		var i ListPlatformMCPInventoryAuthorizationCandidatePageRow
+		if err := rows.Scan(&i.ID, &i.ProjectID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPlatformMCPInventoryAuthorizationCandidates = `-- name: ListPlatformMCPInventoryAuthorizationCandidates :many
+SELECT m.id, m.project_id
+FROM mcp_servers AS m
+JOIN projects AS project
+  ON project.id = m.project_id
+ AND project.organization_id = $1
+ AND project.deleted IS FALSE
+WHERE m.deleted IS FALSE
+ORDER BY m.id
+`
+
+type ListPlatformMCPInventoryAuthorizationCandidatesRow struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) ListPlatformMCPInventoryAuthorizationCandidates(ctx context.Context, organizationID string) ([]ListPlatformMCPInventoryAuthorizationCandidatesRow, error) {
+	rows, err := q.db.Query(ctx, listPlatformMCPInventoryAuthorizationCandidates, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlatformMCPInventoryAuthorizationCandidatesRow
+	for rows.Next() {
+		var i ListPlatformMCPInventoryAuthorizationCandidatesRow
+		if err := rows.Scan(&i.ID, &i.ProjectID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

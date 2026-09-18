@@ -748,7 +748,7 @@ func skillsRefusalCode(err error) (string, string, bool) {
 	case oops.CodeConflict:
 		return "conflict", shareable.Error(), true
 	case oops.CodeUnauthorized, oops.CodeForbidden:
-		return "forbidden", "You are not allowed to write or hand out skills in this project.", true
+		return "forbidden", "You do not have the required skill permission in this project.", true
 	case oops.CodeRateLimitExceeded:
 		return "rate_limited", shareable.Error(), true
 	case oops.CodeFailedPrecondition, oops.CodeInvariantViolation:

@@ -101,7 +101,7 @@ func TestGetMCPAccessUsesFrontingServerIDAndStoredToolMetadata(t *testing.T) {
 	// seedRegistrationLifecycle creates a remote cohort server; select it through
 	// the same tenant-qualified inventory query the service uses.
 	rows, err := platformrepo.New(conn).ListPlatformMCPInventory(ctx, platformrepo.ListPlatformMCPInventoryParams{
-		OrganizationID: principal.OrganizationID, ConnectionID: uuid.NullUUID{}, ConnectionGeneration: uuid.NullUUID{},
+		OrganizationID: principal.OrganizationID, ConnectionID: uuid.NullUUID{}, ConnectionGeneration: uuid.NullUUID{}, SkipAuthorizationFilter: true,
 		UserID: inventoryText(principal.UserID), ActingSurface: inventoryText(string(principal.surface())),
 		ProjectID: uuid.NullUUID{UUID: project.ID, Valid: true}, AfterMcpID: uuid.NullUUID{}, QueryText: "", ReadinessState: pgtype.Text{}, LimitValue: 10,
 	})
