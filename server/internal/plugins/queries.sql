@@ -622,60 +622,70 @@ WHERE project_id = @project_id;
 -- crash between commit and enqueue), this sweep picks it up within one tick
 -- instead of leaving it stuck until a human notices. Republishing an
 -- unchanged project is cheap -- SkipIfUnchanged short-circuits on the
--- fingerprint check before any GitHub/key work. Each row carries a real
--- users.id as the publish actor: the creator of the project's newest
--- plugins-mcp API key when that id is a current connected member of the
--- project's organization (users row plus a non-deleted
--- organization_user_relationships row), otherwise the organization's
--- oldest connected member. A former member still in users is skipped so
--- PublishProject's membership check does not reject the publish and skip
--- the fallback. A project with no such actor still appears so pagination
--- can advance; the actor id is empty and PublishProject refuses to mint.
+-- fingerprint check before any GitHub/key work. The publish actor for each
+-- row is resolved separately with ResolvePluginPublishActor.
 -- This is a deliberate cross-project sweep, so unlike the tenant-scoped
--- queries it is not constrained to a single project_id. The after_project_id filter is applied inside each
--- UNION branch rather than the outer query -- sqlc's analyzer can't resolve
--- an outer WHERE referencing the derived table's alias once a LATERAL join
--- follows it ("table alias does not exist").
-SELECT
-  cp.project_id,
-  COALESCE(
-    k.created_by_user_id,
-    (
-      SELECT our.user_id
-      FROM organization_user_relationships our
-      JOIN users u ON u.id = our.user_id
-      WHERE our.organization_id = p.organization_id
-        AND our.deleted IS FALSE
-        AND our.user_id IS NOT NULL
-        AND u.deleted_at IS NULL
-      ORDER BY our.created_at ASC, our.user_id ASC
-      LIMIT 1
-    ),
-    ''
-  ) AS created_by_user_id
+-- queries it is not constrained to a single project_id.
+SELECT cp.project_id, p.organization_id
 FROM (
   SELECT c.project_id FROM plugin_github_connections c WHERE c.project_id > @after_project_id
   UNION
   SELECT dp.project_id FROM plugins dp WHERE dp.is_default IS TRUE AND dp.deleted IS FALSE AND dp.project_id > @after_project_id
 ) cp
 JOIN projects p ON p.id = cp.project_id AND p.deleted IS FALSE
-LEFT JOIN LATERAL (
-  SELECT ak.created_by_user_id
-  FROM api_keys ak
-  JOIN users u ON u.id = ak.created_by_user_id
-  JOIN organization_user_relationships our
-    ON our.user_id = ak.created_by_user_id
-   AND our.organization_id = p.organization_id
-   AND our.deleted IS FALSE
-  WHERE ak.project_id = cp.project_id
-    AND ak.deleted IS FALSE
-    AND ak.name LIKE 'plugins-mcp-%'
-    AND u.deleted_at IS NULL
-  ORDER BY ak.created_at DESC
-  LIMIT 1
-) k ON TRUE
 ORDER BY cp.project_id ASC
 LIMIT @result_limit;
+
+-- name: ResolvePluginPublishActor :one
+-- Picks the users.id that the plugin API keys minted by a publish are
+-- attributed to. GetAPIKeyByKeyHash JOINs users on created_by_user_id, so the
+-- id must belong to a current connected member of the organization (a
+-- non-deleted users row plus a non-deleted organization_user_relationships
+-- row) or the minted keys never authenticate. In order of preference: the
+-- preferred actor (the user who made the change) when they are such a member;
+-- the creator of the project's newest plugins-mcp API key when they still
+-- are, so successive publishes keep one attribution; otherwise the
+-- organization's oldest connected member. Returns '' when the organization has
+-- no member at all.
+SELECT COALESCE(
+  (
+    SELECT our.user_id
+    FROM organization_user_relationships our
+    JOIN users u ON u.id = our.user_id
+    WHERE our.organization_id = @organization_id
+      AND our.user_id = @preferred_user_id::text
+      AND our.deleted IS FALSE
+      AND u.deleted_at IS NULL
+    LIMIT 1
+  ),
+  (
+    SELECT ak.created_by_user_id
+    FROM api_keys ak
+    JOIN users u ON u.id = ak.created_by_user_id
+    JOIN organization_user_relationships our
+      ON our.user_id = ak.created_by_user_id
+     AND our.organization_id = @organization_id
+     AND our.deleted IS FALSE
+    WHERE ak.project_id = @project_id::uuid
+      AND ak.deleted IS FALSE
+      AND ak.name LIKE 'plugins-mcp-%'
+      AND u.deleted_at IS NULL
+    ORDER BY ak.created_at DESC
+    LIMIT 1
+  ),
+  (
+    SELECT our.user_id
+    FROM organization_user_relationships our
+    JOIN users u ON u.id = our.user_id
+    WHERE our.organization_id = @organization_id
+      AND our.deleted IS FALSE
+      AND our.user_id IS NOT NULL
+      AND u.deleted_at IS NULL
+    ORDER BY our.created_at ASC, our.user_id ASC
+    LIMIT 1
+  ),
+  ''
+)::text AS user_id;
 
 -- name: GetGitHubConnectionByMarketplaceToken :one
 -- Resolves a marketplace proxy URL token to the upstream connection. The token

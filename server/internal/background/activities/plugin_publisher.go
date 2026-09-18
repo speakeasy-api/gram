@@ -28,8 +28,8 @@ import (
 const ErrTypeGitHubRepoConflict = "PluginGitHubRepoConflict"
 
 // ErrTypePluginActorNotMember tags the non-retryable Temporal application
-// error returned when the publish actor is not a member of the organization:
-// the actor is fixed for the workflow run, so a retry fails the same way.
+// error returned when the organization has no member the publish could be
+// attributed to: a retry fails the same way.
 const ErrTypePluginActorNotMember = "PluginActorNotMember"
 
 type PluginPublishClient interface {
@@ -89,15 +89,23 @@ func (p *PluginPublisher) ListCandidates(ctx context.Context, input ListPluginPu
 
 	candidates := make([]PluginPublishCandidate, 0, len(rows))
 	for _, row := range rows {
-		if !plugins.UsableAPIKeyCreatorID(row.CreatedByUserID) {
+		actor, err := pluginsrepo.New(p.db).ResolvePluginPublishActor(ctx, pluginsrepo.ResolvePluginPublishActorParams{
+			OrganizationID:  row.OrganizationID,
+			PreferredUserID: "",
+			ProjectID:       row.ProjectID,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("resolve plugin publish actor: %w", err)
+		}
+		if !plugins.UsableAPIKeyCreatorID(actor) {
 			p.logger.WarnContext(ctx, "plugin publish candidate has no real actor",
 				attr.SlogProjectID(row.ProjectID.String()),
-				attr.SlogUserID(row.CreatedByUserID),
+				attr.SlogUserID(actor),
 			)
 		}
 		candidates = append(candidates, PluginPublishCandidate{
 			ProjectID:       row.ProjectID,
-			CreatedByUserID: row.CreatedByUserID,
+			CreatedByUserID: actor,
 		})
 	}
 

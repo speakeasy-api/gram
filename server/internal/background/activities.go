@@ -1038,11 +1038,11 @@ func (a *Activities) RepairOrphanedAPIKeyCreators(ctx context.Context) error {
 }
 
 func (a *Activities) PublishPluginProject(ctx context.Context, input plugins.PublishProjectInput) (*plugins.PublishProjectResult, error) {
-	result, err := a.pluginPublisher.PublishProject(ctx, input)
-	if err != nil {
-		return nil, fmt.Errorf("publish plugin project: %w", err)
-	}
-	return result, nil
+	// Returned unwrapped: the Temporal SDK serializes only a top-level
+	// *ApplicationError's non-retryable flag and type, so any wrapper here would
+	// turn PluginPublisher's permanent rejections back into retried failures
+	// the workflow can no longer match on.
+	return a.pluginPublisher.PublishProject(ctx, input) //nolint:wrapcheck // PluginPublisher already prefixes its errors; see above
 }
 
 func (a *Activities) ListSpendRuleOrgs(ctx context.Context) ([]string, error) {
