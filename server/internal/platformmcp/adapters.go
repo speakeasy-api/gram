@@ -571,6 +571,9 @@ func (r *PostgresReader) GetMCP(ctx context.Context, principal Principal, input 
 		return MCP{}, fmt.Errorf("parse mcp id: %w", err)
 	}
 	if err := r.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, mcpID.String(), projectID.String())); err != nil {
+		if isAuthorizationDenied(err) {
+			return MCP{}, ErrForbidden
+		}
 		return MCP{}, err
 	}
 	connectionID, generation, err := inventoryConnection(principal)
