@@ -135,6 +135,13 @@ describe("ExportMap", () => {
               destinationName: "Clickstack",
               project: secondaryProject,
             }),
+            exportRow({
+              routeID: "route-tool-calls",
+              dataSource: "tool_call_logs",
+              destinationID: "destination-1",
+              destinationName: "Clickstack",
+              project: secondaryProject,
+            }),
           ]}
           descriptionLinks={{
             eventFeed: "/event-feed",
@@ -155,6 +162,10 @@ describe("ExportMap", () => {
     expect(
       screen.getByRole("link", { name: "risk policies" }).getAttribute("href"),
     ).toBe("/projects/secondary/risk-policies?tab=policies");
+    expect(screen.getByText("Tool call logs")).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "Tool Logs" }).getAttribute("href"),
+    ).toBe("/projects/secondary/logs");
     expect(screen.getAllByText("Clickstack")).toHaveLength(1);
     expect(screen.getAllByText("https://clickstack.example.com")).toHaveLength(
       1,
