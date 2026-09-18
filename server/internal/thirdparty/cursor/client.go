@@ -245,7 +245,7 @@ func (c *Client) fetchUsageEventsPage(ctx context.Context, payload filteredUsage
 		return nil, &HTTPError{
 			StatusCode: res.StatusCode,
 			Status:     res.Status,
-			Body:       strings.TrimSpace(string(body)),
+			Body:       strings.TrimSpace(guardian.PrintableBodySnippet(body)),
 		}
 	}
 

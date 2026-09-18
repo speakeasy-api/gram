@@ -282,13 +282,14 @@ func shareablePollError(schedule string, cause error) error {
 		}
 	}
 
-	var anthropicErr *anthropicapi.HTTPError
-	if schedule == aiintegrations.ScheduleAnthropicCompliance && errors.As(cause, &anthropicErr) {
+	if anthropicErr, ok := errors.AsType[*anthropicapi.HTTPError](cause); ok {
 		switch anthropicErr.StatusCode {
 		case 401, 403:
 			return oops.E(oops.CodeUnauthorized, cause, "anthropic compliance rejected the configured api key")
 		case 404:
 			return oops.E(oops.CodeNotFound, cause, "anthropic compliance organization not found or compliance api access not enabled")
+		case 400, 422:
+			return oops.E(oops.CodeInvalid, cause, "anthropic compliance rejected the request (HTTP %d)%s", anthropicErr.StatusCode, providerDetail(anthropicErr.Body))
 		}
 	}
 
@@ -364,12 +365,6 @@ func shareablePollError(schedule string, cause error) error {
 	return oops.E(oops.CodeUnexpected, cause, "%s", message)
 }
 
-// pollRejectedByProvider reports whether the poll failed because the provider
-// rejected the request in a way retrying can't fix: a rejected api key
-// (401/403), or — for the anthropic compliance api — a 404, which is how it
-// reports an unknown organization or one without compliance api access. Those
-// failures are permanent until the user fixes the integration configuration,
-// so retrying them is wasted work.
 // pollRejectedByProvider reports whether the provider answered with a
 // status that no retry of the same request can change: a rejected key, a
 // missing resource, or a request the provider considers malformed for this

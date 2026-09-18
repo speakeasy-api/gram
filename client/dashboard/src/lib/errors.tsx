@@ -93,6 +93,12 @@ export function handleError(
 }
 
 export function handleAPIError(error: unknown, defaultMessage?: string): void {
+  // Keep the SDK error itself so an expected 4xx is logged as such.
+  if (error instanceof GramError) {
+    handleError(error);
+    return;
+  }
+
   let errorMessage = defaultMessage || "An unexpected error occurred";
 
   if (error instanceof Error) {

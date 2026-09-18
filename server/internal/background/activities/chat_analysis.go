@@ -136,10 +136,10 @@ func (s *ChatAnalysisScorer) LoadReservedChatAnalysisEvaluations(ctx context.Con
 // the only activity that calls a model, which is why it runs on the dedicated
 // judged-publication task queue.
 //
-// A model failure never surfaces here: it is charged to its own evaluation's
-// attempt counter inside the publication and reported through the result, and
-// the workflow decides whether to run the pass again. What does surface is
-// infrastructure, and it comes back retryable so Temporal re-runs the pass
+// A model failure or a throttled call never surfaces here: it is recorded on
+// its own evaluation inside the publication and reported through the result,
+// and the workflow decides whether to run the pass again. What does surface
+// is infrastructure, and it comes back retryable so Temporal re-runs the pass
 // against the same reserved rows.
 func (s *ChatAnalysisScorer) PublishChatAnalysisBatch(ctx context.Context, params PublishChatAnalysisBatchParams) (*PublishChatAnalysisBatchResult, error) {
 	// One heartbeat per evaluation: the server's cancellation only reaches a

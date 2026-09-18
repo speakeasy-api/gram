@@ -59,12 +59,14 @@ const (
 	// signal ever arrived for and for reservations whose owner died.
 	chatAnalysisSweepInterval   = 15 * time.Minute
 	chatAnalysisSweepRunTimeout = 60 * time.Minute
-	// chatAnalysisModelFailurePasses bounds how many times one batch is judged
-	// again after a pass reports model failures, and
-	// chatAnalysisModelFailureBackoff is the pause before the first re-run,
-	// doubling each time.
-	chatAnalysisModelFailurePasses  = 3
-	chatAnalysisModelFailureBackoff = 5 * time.Second
+	// chatAnalysisPublishPasses bounds how many passes, the first included,
+	// one reserved batch gets while its evaluations keep reporting model
+	// failures or throttling. It matches the attempts one evaluation may
+	// spend, so a batch is never re-run past the point its rows can change.
+	// chatAnalysisPublishBackoff is the pause before the second pass, doubling
+	// each time.
+	chatAnalysisPublishPasses  = analysis.MaxModelAttempts
+	chatAnalysisPublishBackoff = 5 * time.Second
 )
 
 // ChatAnalysisCoordinatorParams identifies the project this coordinator runs
@@ -196,12 +198,12 @@ func ChatAnalysisCoordinatorWorkflow(ctx workflow.Context, params ChatAnalysisCo
 			break
 		}
 
-		// A model failure is a transient judge problem charged to its own
-		// evaluation, so the pass is run again against the same reserved rows
-		// after a pause. The rows already published are skipped on the re-run.
-		// Doing this here rather than through the activity retry policy keeps a
-		// rate-limited judge from being reported as an activity failure.
-		for attempt := range chatAnalysisModelFailurePasses {
+		// A model failure or a throttled call is a transient judge problem, so
+		// the pass is run again against the same reserved rows after a pause.
+		// The rows already published are skipped on the re-run. Doing this here
+		// rather than through the activity retry policy keeps a rate-limited
+		// judge from being reported as an activity failure.
+		for attempt := range chatAnalysisPublishPasses {
 			var published activities.PublishChatAnalysisBatchResult
 			if err := workflow.ExecuteActivity(publishCtx, a.PublishChatAnalysisBatch, activities.PublishChatAnalysisBatchParams{
 				ProjectID: params.ProjectID,
@@ -209,10 +211,10 @@ func ChatAnalysisCoordinatorWorkflow(ctx workflow.Context, params ChatAnalysisCo
 			}).Get(ctx, &published); err != nil {
 				return fmt.Errorf("publish chat analysis batch: %w", err)
 			}
-			if published.ModelFailures == 0 || attempt == chatAnalysisModelFailurePasses-1 {
+			if published.ModelFailures == 0 && published.Throttled == 0 || attempt == chatAnalysisPublishPasses-1 {
 				break
 			}
-			if err := workflow.Sleep(ctx, chatAnalysisModelFailureBackoff<<attempt); err != nil {
+			if err := workflow.Sleep(ctx, chatAnalysisPublishBackoff<<attempt); err != nil {
 				return fmt.Errorf("wait before retrying chat analysis model failures: %w", err)
 			}
 		}

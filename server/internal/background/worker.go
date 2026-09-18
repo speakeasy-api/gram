@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/netip"
 	"net/url"
+	"sync"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
@@ -915,29 +916,16 @@ type Workers struct {
 	networkIngressQueue string
 }
 
-// Run registers the recurring schedules, starts the dedicated workers, then
-// blocks running the main worker until interruptCh receives.
+// Run registers the recurring schedules, starts every worker, then blocks
+// until interruptCh receives and the workers have stopped.
 func (w *Workers) Run(interruptCh <-chan any) error {
 	w.registerSchedules(context.Background())
 
-	if err := w.riskAnalysis.Start(); err != nil {
-		return fmt.Errorf("start risk analysis worker: %w", err)
+	if err := w.Start(); err != nil {
+		return err
 	}
-	defer w.riskAnalysis.Stop()
-
-	if err := w.aiUsage.Start(); err != nil {
-		return fmt.Errorf("start ai integration usage worker: %w", err)
-	}
-	defer w.aiUsage.Stop()
-
-	if err := w.skillEfficacy.Start(); err != nil {
-		return fmt.Errorf("start skill efficacy worker: %w", err)
-	}
-	defer w.skillEfficacy.Stop()
-
-	if err := w.main.Run(interruptCh); err != nil {
-		return fmt.Errorf("run main worker: %w", err)
-	}
+	<-interruptCh
+	w.Stop()
 	return nil
 }
 
@@ -970,9 +958,13 @@ func (w *Workers) Start() error {
 	return nil
 }
 
+// Stop stops every worker at once. Each stop waits up to workerStopTimeout
+// for its in-flight activities, so stopping them one after another would
+// multiply that wait past the pod's termination budget.
 func (w *Workers) Stop() {
-	w.skillEfficacy.Stop()
-	w.aiUsage.Stop()
-	w.riskAnalysis.Stop()
-	w.main.Stop()
+	var wg sync.WaitGroup
+	for _, stop := range []func(){w.skillEfficacy.Stop, w.aiUsage.Stop, w.riskAnalysis.Stop, w.main.Stop} {
+		wg.Go(stop)
+	}
+	wg.Wait()
 }
