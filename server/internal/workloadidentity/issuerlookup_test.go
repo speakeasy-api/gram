@@ -39,6 +39,53 @@ func TestResolveIssuerByURL_MalformedIssuerNeverReachesTheDatabase(t *testing.T)
 	require.NotErrorIs(t, err, workloadidentity.ErrIssuerNotFound)
 }
 
+// TestResolveIssuerByURL_PlainHTTPIssuerNeverReachesTheDatabase passes a nil
+// handle for the same reason as the malformed case: reaching the store would
+// panic rather than return.
+func TestResolveIssuerByURL_PlainHTTPIssuerNeverReachesTheDatabase(t *testing.T) {
+	t.Parallel()
+
+	_, err := workloadidentity.ResolveIssuerByURL(t.Context(), nil, workloadidentity.ResolveIssuerParams{
+		OrganizationID: "org-anything",
+		ProjectID:      organizationTier(),
+		IssuerURL:      "http://token.actions.githubusercontent.com",
+	})
+
+	require.ErrorIs(t, err, workloadidentity.ErrIssuerURLNotHTTPS)
+	require.ErrorIs(t, err, workloadidentity.ErrIssuerURLInvalid)
+	require.NotErrorIs(t, err, workloadidentity.ErrIssuerNotFound)
+}
+
+// A row carrying a plain-http issuer can be written by hand, since the table
+// does not constrain the scheme, but it never resolves.
+func TestResolveIssuerByURL_PlainHTTPRowNeverResolves(t *testing.T) {
+	t.Parallel()
+
+	conn, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	tenant := newTenant(t, conn)
+
+	const plainIssuer = "http://token.actions.githubusercontent.com"
+	seedIssuer(t, conn, tenant.organizationID, organizationTier(), "plain", plainIssuer, epoch)
+
+	_, err = workloadidentity.ResolveIssuerByURL(t.Context(), conn, workloadidentity.ResolveIssuerParams{
+		OrganizationID: tenant.organizationID,
+		ProjectID:      projectTier(tenant.projectID),
+		IssuerURL:      plainIssuer,
+	})
+	require.ErrorIs(t, err, workloadidentity.ErrIssuerURLNotHTTPS)
+	require.NotErrorIs(t, err, workloadidentity.ErrIssuerNotFound)
+
+	// The https spelling of the same host is a different issuer, so the http
+	// row does not answer for it either.
+	_, err = workloadidentity.ResolveIssuerByURL(t.Context(), conn, workloadidentity.ResolveIssuerParams{
+		OrganizationID: tenant.organizationID,
+		ProjectID:      projectTier(tenant.projectID),
+		IssuerURL:      testIssuerURL,
+	})
+	require.ErrorIs(t, err, workloadidentity.ErrIssuerNotFound)
+}
+
 func TestResolveIssuerByURL_MalformedIsDistinctFromMissing(t *testing.T) {
 	t.Parallel()
 
