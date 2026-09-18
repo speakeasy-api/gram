@@ -8996,11 +8996,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS remote_session_clients_id_issuer_key ON remote
 -- indicator at a remote authorization server). A row exists exactly when the
 -- organization administrator confirmed in the identity provider's console
 -- that the AI agent is connected to that resource; reset deletes it. Who
--- confirmed and when lives in the audit log. The observed columns are the
--- latest exchange outcome, written by the exchange path; they are a read
--- model, not a history. Readiness is derived at read time and nothing here is
--- consulted by the exchange path. Several MCP servers that share an upstream
--- share one row.
+-- confirmed and when lives in the audit log. The audience is the resource
+-- app's XAA issuer URL as typed into the identity provider, which the token
+-- exchange needs and no metadata exposes; the identity provider app id is the
+-- instance the administrator picked, kept for display and drift detection.
+-- The observed columns are the latest exchange outcome, written by the
+-- exchange path: a read model, not a history. Readiness is derived at read
+-- time and nothing here is consulted by the exchange path. Several MCP
+-- servers that share an upstream share one row.
 CREATE TABLE IF NOT EXISTS xaa_resource_readiness (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
@@ -9009,9 +9012,8 @@ CREATE TABLE IF NOT EXISTS xaa_resource_readiness (
   -- The resource indicator entered on the connection: the upstream's RFC 9728
   -- identifier when known, otherwise its URL.
   resource TEXT NOT NULL,
-  -- custom: the admin enabled Cross App Access on the resource app by hand;
-  -- oin: the listing ships with it enabled.
-  resource_source TEXT NOT NULL DEFAULT 'custom',
+  audience TEXT NOT NULL,
+  okta_application_id TEXT,
   -- Written by the exchange path: a typed outcome, never a raw provider body.
   last_exchange_outcome TEXT,
   last_exchange_at timestamptz,
@@ -9021,7 +9023,8 @@ CREATE TABLE IF NOT EXISTS xaa_resource_readiness (
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   CONSTRAINT xaa_resource_readiness_pkey PRIMARY KEY (id),
   CONSTRAINT xaa_resource_readiness_resource_check CHECK (resource <> ''),
-  CONSTRAINT xaa_resource_readiness_resource_source_check CHECK (resource_source IN ('custom', 'oin')),
+  CONSTRAINT xaa_resource_readiness_audience_check CHECK (audience <> ''),
+  CONSTRAINT xaa_resource_readiness_okta_application_id_check CHECK (okta_application_id IS NULL OR okta_application_id <> ''),
   CONSTRAINT xaa_resource_readiness_last_exchange_outcome_check CHECK (last_exchange_outcome IS NULL OR last_exchange_outcome IN ('succeeded', 'broken', 'failed')),
   CONSTRAINT xaa_resource_readiness_resource_key UNIQUE (organization_id, identity_provider_connection_id, remote_session_issuer_id, resource),
   CONSTRAINT xaa_resource_readiness_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,

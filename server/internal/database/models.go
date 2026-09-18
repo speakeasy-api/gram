@@ -3577,15 +3577,11 @@ type WorkosUserSync struct {
 type XaaResourceReadiness struct {
 	ID                           uuid.UUID
 	OrganizationID               string
-	ProjectID                    uuid.UUID
-	McpServerID                  uuid.UUID
 	IdentityProviderConnectionID uuid.UUID
 	RemoteSessionIssuerID        uuid.UUID
-	ResourceSource               string
-	ScopePolicy                  pgtype.Text
-	ConnectionConfirmedAt        pgtype.Timestamptz
-	ConnectionConfirmedBy        pgtype.Text
-	ResourceXaaConfirmedAt       pgtype.Timestamptz
+	Resource                     string
+	Audience                     string
+	OktaApplicationID            pgtype.Text
 	LastExchangeOutcome          pgtype.Text
 	LastExchangeAt               pgtype.Timestamptz
 	VerifiedAt                   pgtype.Timestamptz
