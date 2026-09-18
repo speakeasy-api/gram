@@ -2188,9 +2188,8 @@ func unmarshalIdentityProviderConnectionChecklistItemResponseBodyToIdentityprovi
 // a value of type *IdentityProviderConnectionApplicationsSyncResponseBody.
 func unmarshalIdentityProviderConnectionApplicationsSyncResponseBodyToIdentityproviderconnectionsIdentityProviderConnectionApplicationsSync(v *IdentityProviderConnectionApplicationsSyncResponseBody) *identityproviderconnections.IdentityProviderConnectionApplicationsSync {
 	res := &identityproviderconnections.IdentityProviderConnectionApplicationsSync{
-		IntervalSeconds: *v.IntervalSeconds,
-		SyncedAt:        v.SyncedAt,
-		RequestedAt:     v.RequestedAt,
+		SyncedAt:    v.SyncedAt,
+		RequestedAt: v.RequestedAt,
 	}
 
 	return res

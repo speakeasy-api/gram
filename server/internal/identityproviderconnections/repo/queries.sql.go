@@ -872,7 +872,7 @@ SET applications_sync_requested_at = clock_timestamp(),
 WHERE identity_provider_connection_id = $1
   AND organization_id = $2
   AND deleted IS FALSE
-RETURNING identity_provider_connection_id, identity_provider_connections_provider, organization_id, attachment_scope, org_url, issuer_url, issuer_url_override_reason, ownership_claimed, remote_session_issuer_id, remote_session_client_id, dpop_required, granted_scopes, observed_admin_roles, listing_mode, agent_id, agent_app_id, applications_sync_interval_seconds, applications_synced_at, applications_sync_requested_at, created_at, updated_at, deleted_at, deleted
+RETURNING identity_provider_connection_id, identity_provider_connections_provider, organization_id, attachment_scope, org_url, issuer_url, issuer_url_override_reason, ownership_claimed, remote_session_issuer_id, remote_session_client_id, dpop_required, granted_scopes, observed_admin_roles, listing_mode, agent_id, agent_app_id, applications_synced_at, applications_sync_requested_at, created_at, updated_at, deleted_at, deleted
 `
 
 type RequestOktaApplicationsSyncParams struct {
@@ -902,7 +902,6 @@ func (q *Queries) RequestOktaApplicationsSync(ctx context.Context, arg RequestOk
 		&i.ListingMode,
 		&i.AgentID,
 		&i.AgentAppID,
-		&i.ApplicationsSyncIntervalSeconds,
 		&i.ApplicationsSyncedAt,
 		&i.ApplicationsSyncRequestedAt,
 		&i.CreatedAt,

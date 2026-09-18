@@ -24,6 +24,10 @@ import (
 )
 
 const (
+	// SyncInterval is the platform-wide cadence; a connection is due once its
+	// last run started this long ago or a request arrived after it.
+	SyncInterval = 6 * time.Hour
+
 	// MaxAttempts is how many times Temporal runs one sync before giving up;
 	// the last attempt advances the watermark so a failing tenant waits a
 	// full interval instead of being re-listed every coordinator pass.
@@ -118,6 +122,7 @@ func (s *Syncer) ListCandidates(ctx context.Context, limit int32, exclude []uuid
 		exclude = []uuid.UUID{}
 	}
 	rows, err := s.repo.ListSyncCandidates(ctx, repo.ListSyncCandidatesParams{
+		SyncIntervalSeconds:  int32(SyncInterval.Seconds()),
 		ExcludeConnectionIds: exclude,
 		LimitCount:           limit,
 	})

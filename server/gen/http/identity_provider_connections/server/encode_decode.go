@@ -1993,9 +1993,8 @@ func marshalIdentityproviderconnectionsIdentityProviderConnectionChecklistItemTo
 // *identityproviderconnections.IdentityProviderConnectionApplicationsSync.
 func marshalIdentityproviderconnectionsIdentityProviderConnectionApplicationsSyncToIdentityProviderConnectionApplicationsSyncResponseBody(v *identityproviderconnections.IdentityProviderConnectionApplicationsSync) *IdentityProviderConnectionApplicationsSyncResponseBody {
 	res := &IdentityProviderConnectionApplicationsSyncResponseBody{
-		IntervalSeconds: v.IntervalSeconds,
-		SyncedAt:        v.SyncedAt,
-		RequestedAt:     v.RequestedAt,
+		SyncedAt:    v.SyncedAt,
+		RequestedAt: v.RequestedAt,
 	}
 
 	return res

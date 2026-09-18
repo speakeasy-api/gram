@@ -27,8 +27,8 @@ import (
 const (
 	oktaApplicationSyncCoordinatorWorkflowID = "v1:okta-application-sync-coordinator"
 
-	// oktaApplicationSyncCoordinatorInterval bounds pickup latency; each
-	// connection's own interval (default 6h) decides when it is due.
+	// oktaApplicationSyncCoordinatorInterval bounds pickup latency;
+	// oktaapplications.SyncInterval decides when a connection is due.
 	oktaApplicationSyncCoordinatorInterval = 15 * time.Minute
 
 	oktaApplicationSyncCoordinatorRunTimeout = 8 * time.Hour

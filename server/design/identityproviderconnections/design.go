@@ -29,9 +29,7 @@ var ActiveKey = Type("IdentityProviderConnectionActiveKey", func() {
 })
 
 var ApplicationsSync = Type("IdentityProviderConnectionApplicationsSync", func() {
-	Description("Cadence and watermark of the scheduled applications snapshot.")
-	Required("interval_seconds")
-	Attribute("interval_seconds", Int, "How often the snapshot is reconciled, in seconds.")
+	Description("Watermarks of the scheduled applications snapshot. The snapshot is reconciled on a fixed platform-wide schedule.")
 	Attribute("synced_at", String, "ISO 8601 timestamp when the last completed run started. Omitted until the first run.", func() {
 		Format(FormatDateTime)
 	})

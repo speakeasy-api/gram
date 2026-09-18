@@ -132,10 +132,9 @@ type IdentityProviderConnectionApplication struct {
 	RemovedAt *string
 }
 
-// Cadence and watermark of the scheduled applications snapshot.
+// Watermarks of the scheduled applications snapshot. The snapshot is
+// reconciled on a fixed platform-wide schedule.
 type IdentityProviderConnectionApplicationsSync struct {
-	// How often the snapshot is reconciled, in seconds.
-	IntervalSeconds int
 	// ISO 8601 timestamp when the last completed run started. Omitted until the
 	// first run.
 	SyncedAt *string

@@ -82967,10 +82967,6 @@ components:
         IdentityProviderConnectionApplicationsSync:
             type: object
             properties:
-                interval_seconds:
-                    type: integer
-                    description: How often the snapshot is reconciled, in seconds.
-                    format: int64
                 requested_at:
                     type: string
                     description: ISO 8601 timestamp of the last syncApplications call; a request newer than synced_at runs on the next coordinator pass.
@@ -82979,9 +82975,7 @@ components:
                     type: string
                     description: ISO 8601 timestamp when the last completed run started. Omitted until the first run.
                     format: date-time
-            description: Cadence and watermark of the scheduled applications snapshot.
-            required:
-                - interval_seconds
+            description: Watermarks of the scheduled applications snapshot. The snapshot is reconciled on a fixed platform-wide schedule.
         IdentityProviderConnectionChecklistItem:
             type: object
             properties:
