@@ -38,7 +38,7 @@ func (s *Service) SyncApplications(ctx context.Context, payload *gen.SyncApplica
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 	q := repo.New(dbtx)
 
-	before, err := s.lock(ctx, logger, q, authCtx.ActiveOrganizationID, id)
+	before, err := s.lock(ctx, logger, dbtx, authCtx.ActiveOrganizationID, id)
 	if err != nil {
 		return nil, err
 	}
