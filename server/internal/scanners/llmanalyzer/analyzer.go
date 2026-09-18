@@ -233,7 +233,7 @@ func (a *Analyzer) Analyze(ctx context.Context, req Request) Analysis {
 			a.logger.WarnContext(ctx, "risk llm verdict cache write failed",
 				attr.SlogError(err),
 				attr.SlogOrganizationID(info.OrgID),
-				attr.SlogRiskLane(info.Lane),
+				attr.SlogRiskScanMode(info.ScanMode),
 			)
 		}
 	} else {
@@ -283,7 +283,7 @@ func (a *Analyzer) lookupVerdict(ctx context.Context, info CallInfo, key string)
 		a.logger.WarnContext(ctx, "risk llm verdict cache read failed; calling the model",
 			attr.SlogError(err),
 			attr.SlogOrganizationID(info.OrgID),
-			attr.SlogRiskLane(info.Lane),
+			attr.SlogRiskScanMode(info.ScanMode),
 		)
 		a.metrics.RecordCacheLookup(ctx, info, CacheResultError)
 		return none, Verdict{Risks: nil, Raw: ""}, false
@@ -298,7 +298,7 @@ func (a *Analyzer) lookupVerdict(ctx context.Context, info CallInfo, key string)
 		a.logger.WarnContext(ctx, "risk llm verdict cache entry unparsable; calling the model",
 			attr.SlogError(err),
 			attr.SlogOrganizationID(info.OrgID),
-			attr.SlogRiskLane(info.Lane),
+			attr.SlogRiskScanMode(info.ScanMode),
 		)
 		a.metrics.RecordCacheLookup(ctx, info, CacheResultError)
 		return none, Verdict{Risks: nil, Raw: ""}, false
