@@ -102,6 +102,33 @@ func TestService_SetAIToolDecision_EnforceableForAVerifiedMatcher(t *testing.T) 
 	require.True(t, saved.Access.Enforceable, "a CIMD vendor key is a credential the server verifies")
 }
 
+// TestService_SetAIToolDecision_EnforceableForANameOnlyMatcher: a tool that
+// publishes no client ID metadata document but does report a client name is
+// refused after authentication, at the MCP session. That control is weaker
+// than a verified one and it still enforces, so the decision is stored and the
+// inventory reads blocked rather than unreviewed.
+func TestService_SetAIToolDecision_EnforceableForANameOnlyMatcher(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	ctx, orgID, _ := withUniqueDetectionOrg(t, ctx, ti)
+	seedAIDetection(t, ctx, ti, orgID, "cursor", "serial-1", "alex@example.com", "installed", "harness", "", time.Now().UTC())
+
+	saved, err := ti.service.SetAIToolDecision(ctx, &gen.SetAIToolDecisionPayload{
+		TargetID:     "cursor",
+		Decision:     "blocked",
+		Rationale:    nil,
+		SessionToken: nil,
+	})
+	require.NoError(t, err)
+	require.True(t, saved.Access.Enforceable, "a reported client name is enforced at the MCP session")
+
+	listed, err := ti.service.ListAIDetections(ctx, &gen.ListAIDetectionsPayload{Category: nil, DirectoryGroupID: nil, SessionToken: nil})
+	require.NoError(t, err)
+	require.Len(t, listed.Detections, 1)
+	require.Equal(t, "blocked", listed.Detections[0].Access.State)
+}
+
 // TestService_ListAIDetections_UnenforceableToolReadsUnreviewed: a tool that
 // carries no matcher at all, neither a client ID metadata document nor a
 // reported client name, cannot be recognized at either enforcement layer, so
