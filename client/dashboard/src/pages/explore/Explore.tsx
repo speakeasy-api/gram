@@ -9,7 +9,7 @@ import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import type { AnalyticsDataset } from "@gram/client/models/components/analyticsdataset.js";
 import { useAnalyticsDescribe } from "@gram/client/react-query/analyticsDescribe.js";
 import { useState, type JSX } from "react";
-import { initialSpec, type ExploreSpec } from "./exploreModel";
+import { findDataset, initialSpec, type ExploreSpec } from "./exploreModel";
 import { ExploreResults } from "./ExploreResults";
 import { QueryBuilder } from "./QueryBuilder";
 
@@ -76,7 +76,9 @@ function ExploreCatalog(): JSX.Element {
   const [draft, setDraft] = useState<ExploreSpec | null>(null);
 
   if (describe.isPending) return <BuilderSkeleton />;
-  if (describe.isError) {
+  // A refetch that fails still leaves the cached catalog usable, so the
+  // initial-load error is only the right answer when there is nothing to show.
+  if (describe.isError && describe.data === undefined) {
     return (
       <InlineEmptyState
         icon="triangle-alert"
@@ -114,8 +116,11 @@ function ExploreWorkbench({
   onChange: (spec: ExploreSpec) => void;
 }): JSX.Element {
   // Derived during render: until the user edits something, the builder opens
-  // on the catalog's first dataset.
-  const spec = draft ?? initialSpec(datasets);
+  // on the catalog's first dataset. A draft naming a dataset the catalog has
+  // since dropped is stale, so it opens afresh rather than querying a dataset
+  // that is no longer there.
+  const live = draft && findDataset(datasets, draft.dataset) ? draft : null;
+  const spec = live ?? initialSpec(datasets);
   if (!spec) {
     return (
       <InlineEmptyState

@@ -72,12 +72,21 @@ export function QueryBuilder({
   }));
 
   const patch = (next: Partial<ExploreSpec>) => onChange({ ...spec, ...next });
+  // Order by names a measure alias. A measure edited away or removed would
+  // leave the select holding a value its options no longer offer, so it drops
+  // back to group order with the measure it named.
+  const withMeasures = (measures: MeasureDraft[]): Partial<ExploreSpec> => ({
+    measures,
+    orderBy: completeMeasures(measures).map(measureAlias).includes(spec.orderBy)
+      ? spec.orderBy
+      : "",
+  });
   const changeDataset = (name: string) => {
     const next = findDataset(datasets, name);
     if (next) onChange(specForDataset(next, spec));
   };
   const setMeasure = (index: number, next: MeasureDraft) =>
-    patch({ measures: replaceAt(spec.measures, index, next) });
+    patch(withMeasures(replaceAt(spec.measures, index, next)));
   const setFilter = (index: number, next: FilterDraft) =>
     patch({ filters: replaceAt(spec.filters, index, next) });
   const addMeasure = () =>
@@ -121,7 +130,7 @@ export function QueryBuilder({
               onChange={(next) => setMeasure(index, next)}
               onRemove={
                 spec.measures.length > 1
-                  ? () => patch({ measures: removeAt(spec.measures, index) })
+                  ? () => patch(withMeasures(removeAt(spec.measures, index)))
                   : undefined
               }
               trailing={

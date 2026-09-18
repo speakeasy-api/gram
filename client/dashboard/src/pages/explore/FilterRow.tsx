@@ -116,6 +116,7 @@ function FilterValues({
     <TagInput
       value={filter.values}
       onChange={(values) => onChange({ ...filter, values })}
+      ariaLabel="Filter values"
       placeholder="Type a value, then Enter"
       className="min-w-64 flex-1"
     />

@@ -233,7 +233,12 @@ export function completeMeasures(drafts: MeasureDraft[]): MeasureDraft[] {
  * Drops incomplete filter rows: no field, or no value. `equals` reads one
  * operand; `in` reads every distinct non-empty one.
  */
+/** At most this many values per filter, matching the analytics design. */
+const MAX_FILTER_VALUES = 100;
+
 export function completeFilters(drafts: FilterDraft[]): AnalyticsFilter[] {
+  // The server takes at most this many values per filter and rejects the
+  // whole query past it, so the builder never asks for more.
   const out: AnalyticsFilter[] = [];
   for (const draft of drafts) {
     if (draft.field === "") continue;
@@ -246,7 +251,10 @@ export function completeFilters(drafts: FilterDraft[]): AnalyticsFilter[] {
     out.push({
       field: draft.field,
       operator: draft.operator,
-      values: draft.operator === "equals" ? values.slice(0, 1) : values,
+      values:
+        draft.operator === "equals"
+          ? values.slice(0, 1)
+          : values.slice(0, MAX_FILTER_VALUES),
     });
   }
   return out;
@@ -329,6 +337,12 @@ const compactFormatter = new Intl.NumberFormat("en", {
   maximumFractionDigits: 1,
 });
 
+// Pinned like the others: a bare toLocaleString would follow the host, so
+// the same number read differently on a non-US machine.
+const integerFormatter = new Intl.NumberFormat("en", {
+  maximumFractionDigits: 0,
+});
+
 const percentFormatter = new Intl.NumberFormat("en", {
   style: "percent",
   maximumFractionDigits: 1,
@@ -340,7 +354,7 @@ export function formatMeasureValue(value: number, unit: string): string {
     case "usd":
       return usdFormatter.format(value);
     case "ms":
-      return `${Math.round(value).toLocaleString()} ms`;
+      return `${integerFormatter.format(Math.round(value))} ms`;
     case "s":
       return `${compactFormatter.format(value)} s`;
     case "ratio":
