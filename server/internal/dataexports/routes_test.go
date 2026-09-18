@@ -108,6 +108,7 @@ func TestRouteAllowsOneRoutePerSupportedSource(t *testing.T) {
 	ctx, ti := newTestService(t)
 	productDestination := createDestination(t, ctx, ti, "https://product.example.test", "exclude")
 	riskDestination := createDestination(t, ctx, ti, "https://risk.example.test", "exclude")
+	toolCallDestination := createDestination(t, ctx, ti, "https://tool-calls.example.test", "exclude")
 
 	productRoute, err := ti.service.CreateRoute(ctx, &gen.CreateRoutePayload{
 		SessionToken:      nil,
@@ -129,9 +130,19 @@ func TestRouteAllowsOneRoutePerSupportedSource(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	toolCallRoute, err := ti.service.CreateRoute(ctx, &gen.CreateRoutePayload{
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		DataSource:        "tool_call_logs",
+		Enabled:           true,
+		OtelDestinationID: &toolCallDestination.ID,
+	})
+	require.NoError(t, err)
+
 	listed, err := ti.service.ListRoutes(ctx, &gen.ListRoutesPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	require.NoError(t, err)
-	require.ElementsMatch(t, []*gen.DataExportRoute{productRoute, riskRoute}, listed.Routes)
+	require.ElementsMatch(t, []*gen.DataExportRoute{productRoute, riskRoute, toolCallRoute}, listed.Routes)
 }
 
 func TestDestinationlessRouteReservesSource(t *testing.T) {

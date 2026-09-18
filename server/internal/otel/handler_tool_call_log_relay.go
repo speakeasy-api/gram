@@ -126,62 +126,61 @@ func (h *ToolCallLogRelayHandler) HandleBatchWithResult(
 	relayMessages := make([]toolCallLogRelayMessage, 0, len(messages))
 	dropped := 0
 	for _, message := range messages {
-		relayMessage, ok := newToolCallLogRelayMessage(message.Message, message.Fail)
-		if !ok {
-			if isToolCallLogRecord(message.Message) {
-				dropped++
-			}
-			continue
+		relayMessage, eligibility := newToolCallLogRelayMessage(message.Message, message.Fail)
+		switch eligibility {
+		case toolCallLogEligible:
+			relayMessages = append(relayMessages, relayMessage)
+		case toolCallLogUnroutable:
+			dropped++
+		case toolCallLogOtherSource:
 		}
-		relayMessages = append(relayMessages, relayMessage)
 	}
 	h.recordDropped(ctx, dropped, relayReasonInvalid)
 
 	return h.handleBatch(ctx, relayMessages)
 }
 
-// isToolCallLogRecord reports whether a row is a tool-call row this relay
-// owns, judged only by the writer-stamped event source so a row with
-// unreadable tenancy is still attributed to this relay when counting drops.
-func isToolCallLogRecord(record *telemetryv1.LogRecord) bool {
-	if record == nil {
-		return false
-	}
-	attributes, err := decodeTelemetryLogJSONObject(record.GetAttributesJson())
-	if err != nil {
-		return false
-	}
-	return jsonStringValue(attributes, string(attr.EventSourceKey)) == string(telemetry.EventSourceToolCall)
-}
+// toolCallLogEligibility separates the two reasons a row does not get
+// relayed. Rows from another writer are not this relay's traffic and pass
+// silently; a tool-call row this relay cannot route is a real drop and gets
+// counted.
+type toolCallLogEligibility int
+
+const (
+	toolCallLogOtherSource toolCallLogEligibility = iota
+	toolCallLogUnroutable
+	toolCallLogEligible
+)
 
 // newToolCallLogRelayMessage selects the tool-call rows this relay exports and
 // resolves the route their project's destination is configured on. Tenancy
 // comes from the row's own columns and attributes: the project id column and
 // the organization id the telemetry writer stamps on every row.
-func newToolCallLogRelayMessage(record *telemetryv1.LogRecord, fail func(error)) (toolCallLogRelayMessage, bool) {
+func newToolCallLogRelayMessage(record *telemetryv1.LogRecord, fail func(error)) (toolCallLogRelayMessage, toolCallLogEligibility) {
 	var empty toolCallLogRelayMessage
 	if record == nil {
-		return empty, false
+		return empty, toolCallLogOtherSource
 	}
 	attributes, err := decodeTelemetryLogJSONObject(record.GetAttributesJson())
 	if err != nil {
-		return empty, false
+		return empty, toolCallLogOtherSource
 	}
 	if jsonStringValue(attributes, string(attr.EventSourceKey)) != string(telemetry.EventSourceToolCall) {
-		return empty, false
+		return empty, toolCallLogOtherSource
 	}
+
 	organizationID := jsonStringValue(attributes, string(attr.OrganizationIDKey))
 	if organizationID == "" {
-		return empty, false
+		return empty, toolCallLogUnroutable
 	}
 	projectID, err := uuid.Parse(record.GetGramProjectId())
 	if err != nil {
-		return empty, false
+		return empty, toolCallLogUnroutable
 	}
 	// The row's timestamp becomes an unsigned OTLP timestamp, so a missing or
 	// negative one cannot be represented.
 	if record.GetTimeUnixNano() <= 0 {
-		return empty, false
+		return empty, toolCallLogUnroutable
 	}
 
 	return toolCallLogRelayMessage{
@@ -189,7 +188,7 @@ func newToolCallLogRelayMessage(record *telemetryv1.LogRecord, fail func(error))
 		key:        relayRouteKey{organizationID: organizationID, projectID: projectID},
 		attributes: attributes,
 		fail:       fail,
-	}, true
+	}, toolCallLogEligible
 }
 
 func (h *ToolCallLogRelayHandler) handleBatch(ctx context.Context, messages []toolCallLogRelayMessage) error {

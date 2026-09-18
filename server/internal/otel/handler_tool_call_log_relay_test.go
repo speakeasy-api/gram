@@ -89,7 +89,7 @@ func TestToolCallLogRelayExportsToolCallRow(t *testing.T) {
 	require.Equal(t, "check_health", otlpStringAttribute(attributes, string(attr.ToolNameKey)))
 	require.Equal(t, int64(422), otlpIntAttribute(attributes, string(attr.HTTPResponseStatusCodeKey)))
 	require.InDelta(t, 12.5, otlpDoubleAttribute(attributes, string(attr.HTTPServerRequestDurationKey)), 0.0001)
-	require.Equal(t, `{"zip":"not-a-zip"}`, otlpStringAttribute(attributes, string(attr.GenAIToolCallArgumentsKey)))
+	require.JSONEq(t, `{"zip":"not-a-zip"}`, otlpStringAttribute(attributes, string(attr.GenAIToolCallArgumentsKey)))
 
 	// The row's own columns already carry these; re-sending them as
 	// attributes would only inflate the payload.
@@ -151,28 +151,38 @@ func TestToolCallLogRelaySelectsOnlyToolCallRows(t *testing.T) {
 
 	projectID := uuid.MustParse(testLogProjectID)
 	tests := []struct {
-		name   string
-		mutate func(*telemetryv1.LogRecord)
-		ok     bool
+		name        string
+		mutate      func(*telemetryv1.LogRecord)
+		eligibility toolCallLogEligibility
 	}{
-		{name: "tool call", mutate: func(*telemetryv1.LogRecord) {}, ok: true},
+		{name: "tool call", mutate: func(*telemetryv1.LogRecord) {}, eligibility: toolCallLogEligible},
 		{
 			name: "chat completion",
 			mutate: func(record *telemetryv1.LogRecord) {
 				setToolCallLogRelayAttributes(record, map[string]any{string(attr.EventSourceKey): "chat_completion"})
 			},
+			eligibility: toolCallLogOtherSource,
 		},
 		{
 			name: "agent hook event",
 			mutate: func(record *telemetryv1.LogRecord) {
 				setToolCallLogRelayAttributes(record, map[string]any{string(attr.EventSourceKey): "hook"})
 			},
+			eligibility: toolCallLogOtherSource,
 		},
 		{
 			name: "missing event source",
 			mutate: func(record *telemetryv1.LogRecord) {
 				setToolCallLogRelayAttributes(record, map[string]any{})
 			},
+			eligibility: toolCallLogOtherSource,
+		},
+		{
+			name: "malformed attributes",
+			mutate: func(record *telemetryv1.LogRecord) {
+				record.SetAttributesJson("{")
+			},
+			eligibility: toolCallLogOtherSource,
 		},
 		{
 			name: "missing organization",
@@ -181,24 +191,21 @@ func TestToolCallLogRelaySelectsOnlyToolCallRows(t *testing.T) {
 					string(attr.EventSourceKey): "tool_call",
 				})
 			},
+			eligibility: toolCallLogUnroutable,
 		},
 		{
 			name: "malformed project",
 			mutate: func(record *telemetryv1.LogRecord) {
 				record.SetGramProjectId("not-a-uuid")
 			},
-		},
-		{
-			name: "malformed attributes",
-			mutate: func(record *telemetryv1.LogRecord) {
-				record.SetAttributesJson("{")
-			},
+			eligibility: toolCallLogUnroutable,
 		},
 		{
 			name: "missing timestamp",
 			mutate: func(record *telemetryv1.LogRecord) {
 				record.SetTimeUnixNano(0)
 			},
+			eligibility: toolCallLogUnroutable,
 		},
 	}
 
@@ -207,9 +214,9 @@ func TestToolCallLogRelaySelectsOnlyToolCallRows(t *testing.T) {
 			t.Parallel()
 			record := toolCallLogRelayTestRecord(projectID, nil)
 			tt.mutate(record)
-			message, ok := newToolCallLogRelayMessage(record, nil)
-			require.Equal(t, tt.ok, ok)
-			if ok {
+			message, eligibility := newToolCallLogRelayMessage(record, nil)
+			require.Equal(t, tt.eligibility, eligibility)
+			if eligibility == toolCallLogEligible {
 				require.Equal(t, "org-test", message.key.organizationID)
 				require.Equal(t, projectID, message.key.projectID)
 			}
@@ -230,8 +237,8 @@ func TestToolCallLogRelayGroupsRowsByResource(t *testing.T) {
 
 	messages := make([]toolCallLogRelayMessage, 0, 3)
 	for _, record := range []*telemetryv1.LogRecord{first, second, third} {
-		message, ok := newToolCallLogRelayMessage(record, nil)
-		require.True(t, ok)
+		message, eligibility := newToolCallLogRelayMessage(record, nil)
+		require.Equal(t, toolCallLogEligible, eligibility)
 		messages = append(messages, message)
 	}
 
@@ -257,8 +264,8 @@ func TestToolCallLogRelayBuildsDeterministically(t *testing.T) {
 	record := toolCallLogRelayTestRecord(projectID, map[string]any{
 		"gram.tool_call.headers": map[string]any{"b": "2", "a": "1", "c": "3"},
 	})
-	message, ok := newToolCallLogRelayMessage(record, nil)
-	require.True(t, ok)
+	message, eligibility := newToolCallLogRelayMessage(record, nil)
+	require.Equal(t, toolCallLogEligible, eligibility)
 
 	first, err := buildToolCallLogRelayExport([]toolCallLogRelayMessage{message}, toolCallLogRelayObservedAt, true)
 	require.NoError(t, err)
@@ -283,8 +290,8 @@ func TestToolCallLogRelayRightSizesExports(t *testing.T) {
 			string(attr.GenAIToolCallResultKey): strings.Repeat("x", maxLogRelayExportBytes/2),
 		})
 		record.SetId(uuid.NewString())
-		message, ok := newToolCallLogRelayMessage(record, nil)
-		require.True(t, ok)
+		message, eligibility := newToolCallLogRelayMessage(record, nil)
+		require.Equal(t, toolCallLogEligible, eligibility)
 		messages[i] = message
 	}
 
@@ -361,12 +368,12 @@ func TestToolCallLogRelayIsolatesCollectorFailuresByProject(t *testing.T) {
 	createRelayTestRoute(t, db, "org-test", successProjectID, dataexports.DataSourceToolCallLogs, true, uuid.NullUUID{UUID: successDestination.ID, Valid: true})
 	handler := newToolCallLogRelayTestHandlerFor(t, db, enc, productRelay)
 
-	failing, ok := newToolCallLogRelayMessage(toolCallLogRelayTestRecord(failingProjectID, nil), nil)
-	require.True(t, ok)
+	failing, eligibility := newToolCallLogRelayMessage(toolCallLogRelayTestRecord(failingProjectID, nil), nil)
+	require.Equal(t, toolCallLogEligible, eligibility)
 	successRecord := toolCallLogRelayTestRecord(successProjectID, nil)
 	successRecord.SetId("0199cb4f-4840-70e6-9e1d-5558dc2d7ceb")
-	success, ok := newToolCallLogRelayMessage(successRecord, nil)
-	require.True(t, ok)
+	success, eligibility := newToolCallLogRelayMessage(successRecord, nil)
+	require.Equal(t, toolCallLogEligible, eligibility)
 	failingErrors := make(chan error, 1)
 	successErrors := make(chan error, 1)
 	failing.fail = func(err error) { failingErrors <- err }
@@ -423,8 +430,8 @@ func TestToolCallLogRelayDropsUnusableIDs(t *testing.T) {
 	record := toolCallLogRelayTestRecord(projectID, nil)
 	record.SetTraceId("nothex")
 	record.SetSpanId("0af7651916cd43dd8448eb211c80319c")
-	message, ok := newToolCallLogRelayMessage(record, nil)
-	require.True(t, ok)
+	message, eligibility := newToolCallLogRelayMessage(record, nil)
+	require.Equal(t, toolCallLogEligible, eligibility)
 
 	logRecord := toolCallLogRecord(message, toolCallLogRelayObservedAt)
 	require.Nil(t, logRecord.GetTraceId())
@@ -437,8 +444,8 @@ func TestToolCallLogRelayStampsObservedTimeWhenRowHasNone(t *testing.T) {
 	projectID := uuid.MustParse(testLogProjectID)
 	record := toolCallLogRelayTestRecord(projectID, nil)
 	record.SetObservedTimeUnixNano(0)
-	message, ok := newToolCallLogRelayMessage(record, nil)
-	require.True(t, ok)
+	message, eligibility := newToolCallLogRelayMessage(record, nil)
+	require.Equal(t, toolCallLogEligible, eligibility)
 
 	logRecord := toolCallLogRecord(message, toolCallLogRelayObservedAt)
 	require.Equal(t, uint64(toolCallLogRelayObservedAt.UnixNano()), logRecord.GetObservedTimeUnixNano())
