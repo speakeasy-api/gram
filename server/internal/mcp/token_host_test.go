@@ -185,9 +185,31 @@ func TestTokenHost_ResourceStaysOnMCPHost(t *testing.T) {
 	require.Contains(t, w.Body.String(), "invalid_target")
 }
 
-// The token host admits no JWT bearer grant, and says so before asking for
-// client credentials.
-func TestTokenHost_JWTBearerGrantRefused(t *testing.T) {
+// The token host exists for the clientless assertion grant, so an
+// authenticated ID-JAG exchange is unsupported there.
+func TestTokenHost_IDJAGExchangeRefused(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	harness := newTokenHostHarness(t, ti)
+	slug := toolset.McpSlug.String
+
+	form := url.Values{}
+	form.Set("grant_type", "urn:ietf:params:oauth:grant-type:jwt-bearer")
+	form.Set("assertion", "header.payload.signature")
+	form.Set("client_id", "id-jag-client")
+	form.Set("resource", "http://0.0.0.0/mcp/"+slug)
+	w := harness.serve(t, http.MethodPost, "auth.example.com", "/mcp/"+slug+"/token", form)
+	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+	require.Contains(t, w.Body.String(), "unsupported_grant_type")
+}
+
+// A JWT bearer request presenting no client reaches the clientless branch on
+// the token host rather than being turned away by the host itself. That branch
+// refuses it until the workload grant lands, with the missing-client answer
+// rather than unsupported_grant_type.
+func TestTokenHost_ClientlessAssertionGrantReachesClientlessBranch(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
@@ -200,8 +222,9 @@ func TestTokenHost_JWTBearerGrantRefused(t *testing.T) {
 	form.Set("assertion", "header.payload.signature")
 	form.Set("resource", "http://0.0.0.0/mcp/"+slug)
 	w := harness.serve(t, http.MethodPost, "auth.example.com", "/mcp/"+slug+"/token", form)
-	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
-	require.Contains(t, w.Body.String(), "unsupported_grant_type")
+	require.Equal(t, http.StatusUnauthorized, w.Code, w.Body.String())
+	require.Contains(t, w.Body.String(), "invalid_client")
+	require.NotContains(t, w.Body.String(), "unsupported_grant_type")
 }
 
 // Nothing but the token endpoint answers on the token host.
