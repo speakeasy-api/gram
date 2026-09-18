@@ -115,13 +115,13 @@ In the PostHog condition set, match by the `organization` group type and target 
 
 ### Provider surface
 
-| Call                                                                  | Returns                            | Use when                                                                          |
-| --------------------------------------------------------------------- | ---------------------------------- | --------------------------------------------------------------------------------- |
-| `IsFlagEnabled(ctx, flag, distinctID, groups)`                        | `bool`                             | Plain rollout gate; unavailable reads as off                                      |
-| `feature.EvaluateFlag(ctx, provider, flag, distinctID, groups)`       | Enabled / Disabled / Indeterminate | Gates that fail closed; missing key, disabled provider, or error is Indeterminate |
-| `feature.FlagVariant(ctx, provider, flag, distinctID, groups)`        | variant key or `""`                | Multivariate flags; map `""` to the pre-rollout behaviour                         |
-| `FlagPayload(ctx, flag, distinctID, groups)`                          | JSON or `nil`                      | The flag carries config (e.g. a version pin); `nil` means no clearance            |
-| `IsFlagEnabledLocal(ctx, flag, distinctID, groups, personProperties)` | `bool`                             | Hot paths that must never call PostHog; inconclusive reads as `false`             |
+| Call                                                                  | Returns             | Use when                                                                           |
+| --------------------------------------------------------------------- | ------------------- | ---------------------------------------------------------------------------------- |
+| `IsFlagEnabled(ctx, flag, distinctID, groups)`                        | `bool, error`       | Plain rollout gate; cannot tell unavailable from off, so handle `err`              |
+| `feature.EvaluateFlag(ctx, provider, flag, distinctID, groups)`       | `Evaluation, error` | Gates that fail closed; missing key, disabled provider, or error is Indeterminate  |
+| `feature.FlagVariant(ctx, provider, flag, distinctID, groups)`        | `Variant, error`    | Multivariate flags; map `""` or an error to the pre-rollout behaviour              |
+| `FlagPayload(ctx, flag, distinctID, groups)`                          | `[]byte, error`     | The flag carries config (e.g. a version pin); `nil` or an error means no clearance |
+| `IsFlagEnabledLocal(ctx, flag, distinctID, groups, personProperties)` | `bool, error`       | Hot paths that must never call PostHog; inconclusive reads as `false`              |
 
 Fail closed: treat Indeterminate and errors as "unavailable", never as an explicit off, and never let a flag stand in for RBAC or an entitlement.
 
