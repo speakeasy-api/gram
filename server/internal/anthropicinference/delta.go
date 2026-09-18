@@ -5,16 +5,16 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"slices"
 	"strings"
 )
 
 const (
 	// messageIdentityPrefix namespaces stored inference message identities.
 	messageIdentityPrefix = "anthropic-inference:"
-	// alignmentWindow bounds how much stored history is loaded to align an
-	// incoming transcript. A frame only ever overlaps the newest stored
-	// messages, so the window has to cover one delivery's worth of history,
-	// not the whole conversation.
+	// alignmentWindow is the minimum archive alignment window. Load at least
+	// one full incoming frame as well, so repeated frames longer than this
+	// window cannot be mistaken for an append on identical redelivery.
 	alignmentWindow = 512
 	// alignmentAnchors bounds how many of the newest stored messages are tried
 	// as the alignment anchor. The newest one is missing from a frame only when
@@ -47,11 +47,11 @@ func conversationMessages(messages []Message) []Message {
 }
 
 // currentTurnStart is the index of the first message after the last assistant
-// message: the input the model is about to act on. Everything before it was
-// delivered, and judged, on an earlier frame.
+// message: the input the model is about to act on. Earlier content is not
+// necessarily accepted; only an accepted checkpoint can establish that.
 func currentTurnStart(messages []Message) int {
-	for index := len(messages) - 1; index >= 0; index-- {
-		if messages[index].Role == "assistant" {
+	for index, message := range slices.Backward(messages) {
+		if message.Role == "assistant" {
 			return index + 1
 		}
 	}
@@ -107,7 +107,8 @@ func parseMessageIdentity(externalID string, content []byte) messageIdentity {
 // ("continue", "continue", "continue") apart from a redelivery of the same
 // three. Client-side rewrites of older history — a compaction summary in
 // place of early turns, an edited or truncated block — fall outside the run
-// and are neither stored again nor scanned again.
+// and are not stored again. Enforcement uses acceptedPrefix, never this
+// archival heuristic.
 //
 // When the newest stored message itself was rewritten, the next few older
 // ones are tried as the anchor instead. The result is the index of the first
@@ -120,12 +121,20 @@ func alignTranscript(stored []messageIdentity, frame [][]byte) (start int, prev 
 		if newest.content == nil {
 			continue
 		}
+		// Reverse both sequences: a suffix ending at any frame position is
+		// now a prefix match. Z matching keeps large repeated frames linear.
+		sequence := make([][]byte, 0, len(history)+1+len(frame))
+		for _, h := range slices.Backward(history) {
+			sequence = append(sequence, h.content)
+		}
+		sequence = append(sequence, nil) // separator, never a content hash
+		for _, f := range slices.Backward(frame) {
+			sequence = append(sequence, f)
+		}
+		matches := prefixMatches(sequence)
 		bestRun, bestPos := 0, -1
-		for pos := len(frame) - 1; pos >= 0; pos-- {
-			run := 0
-			for run < len(history) && pos-run >= 0 && bytes.Equal(frame[pos-run], history[len(history)-1-run].content) {
-				run++
-			}
+		for pos := range slices.Backward(frame) {
+			run := matches[len(history)+1+len(frame)-1-pos]
 			if run > 0 && run >= bestRun {
 				bestRun, bestPos = run, pos
 			}
@@ -135,4 +144,23 @@ func alignTranscript(stored []messageIdentity, frame [][]byte) (start int, prev 
 		}
 	}
 	return 0, nil, false
+}
+
+// prefixMatches computes the Z array in linear time. nil is a separator and
+// cannot match a content hash or another nil.
+func prefixMatches(values [][]byte) []int {
+	z := make([]int, len(values))
+	left, right := 0, 0
+	for i := 1; i < len(values); i++ {
+		if i < right {
+			z[i] = min(right-i, z[i-left])
+		}
+		for i+z[i] < len(values) && values[z[i]] != nil && values[i+z[i]] != nil && bytes.Equal(values[z[i]], values[i+z[i]]) {
+			z[i]++
+		}
+		if i+z[i] > right {
+			left, right = i, i+z[i]
+		}
+	}
+	return z
 }

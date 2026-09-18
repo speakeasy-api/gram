@@ -377,10 +377,29 @@ func (s *Scanner) Shutdown(ctx context.Context) error {
 	}
 }
 
-func (s *Scanner) ScanForEnforcement(
+func (s *Scanner) ScanForEnforcement(ctx context.Context, request RealtimeScanRequest) (*ScanResult, error) {
+	return s.scanForEnforcement(ctx, request, false)
+}
+
+// ScanForInferenceEnforcement rejects unavailable or incomplete evaluations.
+// Callers may persist acceptance only after it returns no match and no error.
+// Other callers retain fail-open behavior through ScanForEnforcement.
+func (s *Scanner) ScanForInferenceEnforcement(ctx context.Context, request RealtimeScanRequest) (*ScanResult, error) {
+	return s.scanForEnforcement(ctx, request, true)
+}
+
+func (s *Scanner) scanForEnforcement(
 	ctx context.Context,
 	request RealtimeScanRequest,
+	strict bool,
 ) (result *ScanResult, retErr error) {
+	if strict {
+		defer func() {
+			if retErr == nil && ctx.Err() != nil {
+				result, retErr = nil, ctx.Err()
+			}
+		}()
+	}
 	organizationID := request.Provenance.OrganizationID
 	projectID := request.Provenance.ProjectID
 	userID := request.Provenance.UserID
@@ -457,7 +476,10 @@ func (s *Scanner) ScanForEnforcement(
 
 	var pubsubFindings map[string][]scanners.Finding
 	if len(applicablePolicies) > 0 && s.projectFlagEnabled(ctx, organizationID, projectID, feature.FlagRiskEnforcementPubsub) {
-		pubsubFindings = s.dispatchEnforcement(ctx, request.Provenance, text, applicablePolicies)
+		pubsubFindings, err = s.dispatchEnforcement(ctx, request.Provenance, text, applicablePolicies, strict)
+		if err != nil {
+			return nil, err
+		}
 	}
 	hasQuarantinePolicy := slices.ContainsFunc(applicablePolicies, func(p repo.RiskPolicy) bool {
 		return p.Action == "quarantine"
@@ -477,8 +499,11 @@ func (s *Scanner) ScanForEnforcement(
 	g, gctx := errgroup.WithContext(ctx)
 	for _, p := range applicablePolicies {
 		g.Go(func() error {
-			result, scanErr := s.scanPolicy(gctx, p, request.Provenance, text, messageType, toolName, promptPoliciesOn, pubsubFindings)
+			result, scanErr := s.scanPolicy(gctx, p, request.Provenance, text, messageType, toolName, promptPoliciesOn, pubsubFindings, strict)
 			if scanErr != nil {
+				if strict {
+					return scanErr
+				}
 				if errors.Is(scanErr, context.Canceled) {
 					return nil
 				}
@@ -634,7 +659,7 @@ func (s *Scanner) recordScan(ctx context.Context, projectID string, outcome o11y
 // text per call - its internal worker pool only fans out when n > 1, so
 // per-policy parallelism over sources buys roughly nothing. The
 // across-policies fan-out in ScanForEnforcement is the real win.
-func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, baseProvenance metering.RiskProvenance, text string, messageType message.Type, toolName string, promptPoliciesOn bool, pubsubFindings map[string][]scanners.Finding) (result *ScanResult, retErr error) {
+func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, baseProvenance metering.RiskProvenance, text string, messageType message.Type, toolName string, promptPoliciesOn bool, pubsubFindings map[string][]scanners.Finding, strict bool) (result *ScanResult, retErr error) {
 	// Per-policy child span so an individual gitleaks/presidio/judge span
 	// attributes to the policy that spawned it (the g.Go fan-out threads gctx
 	// here, so this span parents under risk.scanForEnforcement).
@@ -672,7 +697,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, basePr
 		if !categoryScope.SourceInScope(view, promptpolicy.Source) {
 			return nil, nil
 		}
-		return s.scanPromptPolicy(ctx, policy, baseProvenance, text, messageType, toolName, promptPoliciesOn), nil
+		return s.scanPromptPolicy(ctx, policy, baseProvenance, text, messageType, toolName, promptPoliciesOn, strict)
 	}
 
 	disabled := ra.NewDisabledRuleSet(policy.DisabledRules)
@@ -700,6 +725,9 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, basePr
 		customResult, scanErr := s.scanCustomRules(ctx, policy, view)
 		s.recordRealtimeResult(ctx, metering.RiskCustomRules(), provenance, customResult, scanStarted)
 		customFindings, err = customResult.Findings, scanErr
+		if strict && err != nil {
+			return nil, fmt.Errorf("custom rule evaluation incomplete: %w", err)
+		}
 		if err != nil {
 			// A broken custom rule must not disable the built-in detectors (a
 			// fail-open bypass); drop its findings and keep scanning.
@@ -732,6 +760,19 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, basePr
 		if !categoryScope.SourceInScope(view, source) {
 			continue
 		}
+		// Missing remote lanes are not successful empty results. Check after
+		// scope filtering so irrelevant detectors cannot fail this policy.
+		if strict && pubsubFindings != nil && (source == ra.SourceGitleaks || source == ra.SourcePresidio) {
+			findings, ok := pubsubFindings[source]
+			if !ok {
+				return nil, fmt.Errorf("%s enforcement lane incomplete", source)
+			}
+			for _, finding := range findings {
+				if finding.DeadLetterReason != "" {
+					return nil, fmt.Errorf("%s enforcement lane returned a dead letter", source)
+				}
+			}
+		}
 		switch source {
 		case ra.SourceGitleaks:
 			gitleaksFindings := pubsubFindings[ra.SourceGitleaks]
@@ -740,6 +781,9 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, basePr
 				gitleaksResult, scanErr := s.scanGitleaks(ctx, text)
 				s.recordRealtimeResult(ctx, metering.RiskGitleaks(), provenance, gitleaksResult, scanStarted)
 				gitleaksFindings, err = gitleaksResult.Findings, scanErr
+				if strict && !gitleaksResult.Completed && err == nil {
+					err = errors.New("gitleaks evaluation incomplete")
+				}
 				if err != nil {
 					return failWithHeldSentinel(fmt.Errorf("gitleaks scan: %w", err))
 				}
@@ -767,6 +811,9 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, basePr
 				presidioFindings = filterPresidioFindings(pubsubFindings[ra.SourcePresidio], policy)
 			} else {
 				if s.piiScanner == nil {
+					if strict {
+						return nil, errors.New("presidio scanner unavailable")
+					}
 					continue
 				}
 				scanStarted := time.Now()
@@ -780,9 +827,19 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, basePr
 				if analyzeErr != nil {
 					return failWithHeldSentinel(fmt.Errorf("presidio scan: %w", analyzeErr))
 				}
+				if strict && (len(batchResults) != 1 || !batchResults[0].Completed) {
+					return nil, errors.New("presidio evaluation incomplete")
+				}
 				if len(batchResults) > 0 {
 					s.recordRealtimeResult(ctx, metering.RiskPresidio(), provenance, batchResults[0], scanStarted)
 					presidioFindings = batchResults[0].Findings
+				}
+			}
+			if strict {
+				for _, finding := range presidioFindings {
+					if finding.DeadLetterReason != "" {
+						return nil, errors.New("presidio evaluation returned a dead letter")
+					}
 				}
 			}
 			if len(presidioFindings) > 0 {
@@ -828,7 +885,14 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, basePr
 			}
 		case ra.SourcePromptInjection:
 			scanStarted := time.Now()
-			scanResult, verdict, err := s.piScanner.ScanWithVerdict(ctx, text, policy.OrganizationID, policy.ProjectID.String(), baseProvenance.UserID, judgemessage.New(messageType, toolName, text))
+			scan := s.piScanner.ScanWithVerdict
+			if strict {
+				scan = s.piScanner.ScanStrictWithVerdict
+			}
+			scanResult, verdict, err := scan(ctx, text, policy.OrganizationID, policy.ProjectID.String(), baseProvenance.UserID, judgemessage.New(messageType, toolName, text))
+			if strict && !scanResult.Completed && err == nil {
+				err = errors.New("prompt injection evaluation incomplete")
+			}
 			scanProvenance := provenance
 			scanProvenance.Model = verdict.Model
 			scanProvenance.Provider = verdict.Provider
@@ -898,10 +962,13 @@ func realtimeMessageView(text string, messageType message.Type, toolName string)
 // filtered policies to those whose message_types apply to this message, so the
 // judge runs for whatever message types the policy declares. Returns nil when
 // the judge does not match (including fail-open on judge error).
-func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, baseProvenance metering.RiskProvenance, text string, messageType message.Type, toolName string, promptPoliciesOn bool) *ScanResult {
+func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, baseProvenance metering.RiskProvenance, text string, messageType message.Type, toolName string, promptPoliciesOn bool, strict bool) (*ScanResult, error) {
 	cfg := promptpolicy.ParseConfig(policy.ModelConfig)
 	if !promptPoliciesOn {
-		return nil
+		if strict {
+			return nil, errors.New("prompt policy evaluation disabled")
+		}
+		return nil, nil
 	}
 	prompt := ""
 	if policy.Prompt.Valid {
@@ -929,9 +996,12 @@ func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, 
 		provenance.Provider = verdict.Provider
 	}
 	s.recordRealtimeResult(ctx, metering.RiskPromptPolicy(), provenance, scanResult, scanStarted)
+	if strict && !scanResult.Completed {
+		return nil, errors.New("prompt policy evaluation incomplete")
+	}
 	findings := scanResult.Findings
 	if len(findings) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	finding := findings[0]
@@ -949,10 +1019,10 @@ func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, 
 		Entity:           finding.RuleID,
 		CallFingerprint:  "",
 		DeadLetterReason: "",
-	}
+	}, nil
 }
 
-func (s *Scanner) dispatchEnforcement(ctx context.Context, baseProvenance metering.RiskProvenance, text string, policies []repo.RiskPolicy) map[string][]scanners.Finding {
+func (s *Scanner) dispatchEnforcement(ctx context.Context, baseProvenance metering.RiskProvenance, text string, policies []repo.RiskPolicy, strict bool) (map[string][]scanners.Finding, error) {
 	lanes := make([]enforcereply.Lane, 0, 2)
 	origins := make(map[enforcereply.Lane]metering.RiskProvenance, 2)
 	addLane := func(scanner riskv1.EnforcementScanner, source string) {
@@ -975,13 +1045,13 @@ func (s *Scanner) dispatchEnforcement(ctx context.Context, baseProvenance meteri
 	addLane(riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_PRESIDIO, ra.SourcePresidio)
 	findings := make(map[string][]scanners.Finding, len(lanes))
 	if len(lanes) == 0 {
-		return findings
+		return findings, nil
 	}
 	if s.dispatcher == nil {
 		for _, lane := range lanes {
 			s.recordPubsubDegraded(ctx, lane, "unavailable", nil)
 		}
-		return findings
+		return findings, nil
 	}
 
 	presidioThreshold := presidioDispatchThreshold(policies)
@@ -998,9 +1068,12 @@ func (s *Scanner) dispatchEnforcement(ctx context.Context, baseProvenance meteri
 		for _, lane := range lanes {
 			s.recordPubsubDegraded(ctx, lane, "dispatch_error", err)
 		}
-		return findings
+		return findings, nil
 	}
 	if outcome.Truncated {
+		if strict {
+			return nil, errors.New("enforcement input truncated")
+		}
 		// The dispatcher already logs the truncation; only annotate the span here.
 		trace.SpanFromContext(ctx).SetAttributes(attr.RiskEnforcementTruncated(true))
 	}
@@ -1036,7 +1109,7 @@ func (s *Scanner) dispatchEnforcement(ctx context.Context, baseProvenance meteri
 			findings[source] = converted
 		}
 	}
-	return findings
+	return findings, nil
 }
 
 func enforcementFindings(text, source string, in []*riskv1.EnforcementFinding) ([]scanners.Finding, error) {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
@@ -14,9 +15,10 @@ import (
 )
 
 type memoryStore struct {
-	saved  []Frame
-	userID string
-	err    error
+	accepted [][]byte
+	saved    []Frame
+	userID   string
+	err      error
 }
 
 func (s *memoryStore) ResolveActor(_ context.Context, _ Config, _ Frame) (string, error) {
@@ -28,6 +30,21 @@ func (s *memoryStore) Save(_ context.Context, _ Config, frame Frame, _ string) (
 	return 0, s.err
 }
 
+func (s *memoryStore) Begin(context.Context, Config, Frame, string) (checkpointSession, error) {
+	return &memoryCheckpoint{store: s}, nil
+}
+
+type memoryCheckpoint struct{ store *memoryStore }
+
+func (s *memoryCheckpoint) Load(context.Context) ([][]byte, error) { return s.store.accepted, nil }
+func (s *memoryCheckpoint) Accept(ctx context.Context, hashes [][]byte) error {
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("checkpoint context: %w", err)
+	}
+	s.store.accepted = hashes
+	return nil
+}
+
 type recordingScanner struct {
 	inputs  []policyInput
 	userIDs []string
@@ -35,7 +52,7 @@ type recordingScanner struct {
 	err     error
 }
 
-func (s *recordingScanner) ScanForEnforcement(_ context.Context, request risk.RealtimeScanRequest) (*risk.ScanResult, error) {
+func (s *recordingScanner) ScanForInferenceEnforcement(_ context.Context, request risk.RealtimeScanRequest) (*risk.ScanResult, error) {
 	s.inputs = append(s.inputs, policyInput{kind: request.MessageType, tool: request.ToolName, text: request.Text, toolCallID: request.Provenance.ToolCallID})
 	s.userIDs = append(s.userIDs, request.Provenance.UserID)
 	return s.result, s.err
@@ -174,7 +191,7 @@ func TestServiceScansOnlyNewMessagesAndTheCurrentTurn(t *testing.T) {
 		textMessage("user", "new prompt"),
 	}
 	scanner := &recordingScanner{inputs: nil, userIDs: nil, result: nil, err: nil}
-	service := &Service{store: &deltaStore{memoryStore: memoryStore{saved: nil, userID: "", err: nil}, newStart: 4}, scanner: scanner}
+	service := &Service{store: &deltaStore{memoryStore: memoryStore{accepted: transcriptHashes(frame.Messages[:4]), saved: nil, userID: "", err: nil}, newStart: 4}, scanner: scanner}
 	_, err := service.Process(t.Context(), Config{}, frame)
 	require.NoError(t, err)
 	require.Len(t, scanner.inputs, 1)
@@ -183,7 +200,7 @@ func TestServiceScansOnlyNewMessagesAndTheCurrentTurn(t *testing.T) {
 	// A frame that adds an assistant reply and a tool result is judged from the
 	// first new message, which precedes the current turn.
 	scanner.inputs = nil
-	service.store = &deltaStore{memoryStore: memoryStore{saved: nil, userID: "", err: nil}, newStart: 3}
+	service.store = &deltaStore{memoryStore: memoryStore{accepted: transcriptHashes(frame.Messages[:3]), saved: nil, userID: "", err: nil}, newStart: 3}
 	_, err = service.Process(t.Context(), Config{}, frame)
 	require.NoError(t, err)
 	require.Len(t, scanner.inputs, 2)
@@ -199,7 +216,7 @@ func TestServiceStillDeniesRedeliveredCurrentTurn(t *testing.T) {
 	result.Action = "block"
 	scanner := &recordingScanner{inputs: nil, userIDs: nil, result: result, err: nil}
 	// Everything in the frame is already stored, as after a redelivery.
-	service := &Service{store: &deltaStore{memoryStore: memoryStore{saved: nil, userID: "", err: nil}, newStart: 3}, scanner: scanner}
+	service := &Service{store: &deltaStore{memoryStore: memoryStore{accepted: transcriptHashes(frame.Messages[:2]), saved: nil, userID: "", err: nil}, newStart: 3}, scanner: scanner}
 	verdict, err := service.Process(t.Context(), Config{}, frame)
 	require.NoError(t, err)
 	require.Equal(t, "deny", verdict.Action)

@@ -228,7 +228,7 @@ func TestAttachDeadlineIncludesUnresponsiveResolver(t *testing.T) {
 
 type slowScanner struct{ calls int }
 
-func (s *slowScanner) ScanForEnforcement(ctx context.Context, _ risk.RealtimeScanRequest) (*risk.ScanResult, error) {
+func (s *slowScanner) ScanForInferenceEnforcement(ctx context.Context, _ risk.RealtimeScanRequest) (*risk.ScanResult, error) {
 	s.calls++
 	select {
 	case <-ctx.Done():

@@ -672,6 +672,11 @@ func TestScanner_PubsubDegradationFailsOpen(t *testing.T) {
 		{name: "deadline", dispatcher: &fakeEnforcementDispatcher{fn: func(enforcereply.DispatchRequest) (enforcereply.Outcome, error) {
 			return enforcereply.Outcome{ByLane: map[enforcereply.Lane]*riskv1.EnforcementReply{}, Deadline: true}, nil
 		}}},
+		{name: "truncated clean reply", dispatcher: &fakeEnforcementDispatcher{fn: func(request enforcereply.DispatchRequest) (enforcereply.Outcome, error) {
+			lane := request.Lanes[0]
+			reply := riskv1.EnforcementReply_builder{Scanner: new(lane.Scanner), Status: new(riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK)}.Build()
+			return enforcereply.Outcome{ByLane: map[enforcereply.Lane]*riskv1.EnforcementReply{lane: reply}, Complete: true, Truncated: true}, nil
+		}}},
 		{name: "error reply", dispatcher: &fakeEnforcementDispatcher{fn: func(request enforcereply.DispatchRequest) (enforcereply.Outcome, error) {
 			lane := request.Lanes[0]
 			reply := riskv1.EnforcementReply_builder{Scanner: new(lane.Scanner), Status: new(riskv1.EnforcementStatus_ENFORCEMENT_STATUS_ERROR)}.Build()
@@ -701,6 +706,10 @@ func TestScanner_PubsubDegradationFailsOpen(t *testing.T) {
 			result, err := scanner.ScanForEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "alice@example.com", message.User, ""))
 			require.NoError(t, err)
 			require.Nil(t, result)
+			result, err = scanner.ScanForInferenceEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "alice@example.com", message.User, ""))
+			require.Error(t, err, "degraded scans cannot establish accepted inference history")
+			require.Nil(t, result)
+			require.NoError(t, ctx.Err(), "the inner deadline need not expire the outer request")
 			require.Equal(t, int32(0), pii.callCount.Load())
 		})
 	}

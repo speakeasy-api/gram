@@ -1099,6 +1099,23 @@ func (q *Queries) GetChatTitlesByIDs(ctx context.Context, arg GetChatTitlesByIDs
 	return items, nil
 }
 
+const getInferenceAcceptedCheckpoint = `-- name: GetInferenceAcceptedCheckpoint :one
+SELECT inference_accepted_checkpoint FROM chats
+WHERE project_id = $1 AND external_chat_id = $2
+`
+
+type GetInferenceAcceptedCheckpointParams struct {
+	ProjectID      uuid.UUID
+	ExternalChatID pgtype.Text
+}
+
+func (q *Queries) GetInferenceAcceptedCheckpoint(ctx context.Context, arg GetInferenceAcceptedCheckpointParams) ([]byte, error) {
+	row := q.db.QueryRow(ctx, getInferenceAcceptedCheckpoint, arg.ProjectID, arg.ExternalChatID)
+	var inference_accepted_checkpoint []byte
+	err := row.Scan(&inference_accepted_checkpoint)
+	return inference_accepted_checkpoint, err
+}
+
 const getLLMClientBreakdownByMessages = `-- name: GetLLMClientBreakdownByMessages :many
 SELECT
   COALESCE(m.source, 'unknown') as client_name,
@@ -1300,6 +1317,31 @@ func (q *Queries) GetTopUsersByMessages(ctx context.Context, arg GetTopUsersByMe
 		return nil, err
 	}
 	return items, nil
+}
+
+const inferencePolicyRevision = `-- name: InferencePolicyRevision :one
+WITH policies AS (
+  SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, prompt_injection_rules, disabled_rules, custom_rule_ids, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted FROM risk_policies
+  WHERE project_id = $1 AND enabled IS TRUE AND deleted IS FALSE
+    AND action IN ('block', 'warn', 'quarantine')
+)
+SELECT jsonb_build_object(
+    'policies', (SELECT coalesce(jsonb_agg(to_jsonb(p) ORDER BY p.id), '[]'::jsonb) FROM policies p),
+    'exclusions', (SELECT coalesce(jsonb_agg(to_jsonb(e) ORDER BY e.id), '[]'::jsonb)
+      FROM risk_exclusions e WHERE e.project_id = $1 AND e.enabled IS TRUE AND e.deleted IS FALSE),
+    'custom_rules', (SELECT coalesce(jsonb_agg(to_jsonb(r) ORDER BY r.id), '[]'::jsonb)
+      FROM risk_custom_detection_rules r WHERE r.project_id = $1 AND r.deleted IS FALSE)
+  )::text AS revision
+`
+
+// Include mutable exclusions and custom rules, which do not bump policy
+// versions. Strict inference scans cannot accept in-scope prompt-policy
+// content while its feature flag is disabled or its evaluation is incomplete.
+func (q *Queries) InferencePolicyRevision(ctx context.Context, projectID uuid.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, inferencePolicyRevision, projectID)
+	var revision string
+	err := row.Scan(&revision)
+	return revision, err
 }
 
 const insertChatResolution = `-- name: InsertChatResolution :one
@@ -3497,6 +3539,32 @@ type SetChatPinnedParams struct {
 func (q *Queries) SetChatPinned(ctx context.Context, arg SetChatPinnedParams) error {
 	_, err := q.db.Exec(ctx, setChatPinned, arg.Pinned, arg.ID, arg.ProjectID)
 	return err
+}
+
+const setInferenceAcceptedCheckpoint = `-- name: SetInferenceAcceptedCheckpoint :execrows
+UPDATE chats SET inference_accepted_checkpoint = $1
+WHERE project_id = $2 AND external_chat_id = $3
+  AND inference_accepted_checkpoint IS NOT DISTINCT FROM $4::bytea
+`
+
+type SetInferenceAcceptedCheckpointParams struct {
+	Checkpoint         []byte
+	ProjectID          uuid.UUID
+	ExternalChatID     pgtype.Text
+	ExpectedCheckpoint []byte
+}
+
+func (q *Queries) SetInferenceAcceptedCheckpoint(ctx context.Context, arg SetInferenceAcceptedCheckpointParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setInferenceAcceptedCheckpoint,
+		arg.Checkpoint,
+		arg.ProjectID,
+		arg.ExternalChatID,
+		arg.ExpectedCheckpoint,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const softDeleteChat = `-- name: SoftDeleteChat :one

@@ -2,4 +2,4 @@
 "server": patch
 ---
 
-Anthropic inference hooks now store and evaluate only what each delivery adds to the conversation, plus the current turn. Rolling compaction in Claude no longer causes the transcript to be archived again, and long conversations no longer time out and deny requests because every earlier turn was re-scanned on each call.
+Anthropic inference hooks now distinguish archived transcript attempts from successfully evaluated history. Only accepted content can be skipped on later deliveries; denied or interrupted assistant/tool scans are retried, while corrected transcripts can recover. Concurrent deliveries use optimistic checkpoint updates without holding database connections during scans, and repeated transcripts longer than 512 messages no longer append duplicate archive rows. Unknown or ambiguous history is conservatively rescanned within the existing request deadline.

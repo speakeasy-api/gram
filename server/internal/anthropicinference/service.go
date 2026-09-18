@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
+	"slices"
 	"strings"
 	"time"
 
@@ -24,11 +26,12 @@ import (
 )
 
 type scanner interface {
-	ScanForEnforcement(context.Context, risk.RealtimeScanRequest) (*risk.ScanResult, error)
+	ScanForInferenceEnforcement(context.Context, risk.RealtimeScanRequest) (*risk.ScanResult, error)
 }
 
 type transcriptStore interface {
 	ResolveActor(context.Context, Config, Frame) (string, error)
+	Begin(context.Context, Config, Frame, string) (checkpointSession, error)
 	// Save archives the frame's conversation messages that are not yet stored
 	// and returns the index, within conversationMessages(frame.Messages), of
 	// the first message it had not seen before.
@@ -47,15 +50,11 @@ func NewService(db *pgxpool.Pool, writer *chat.ChatMessageWriter, scanner scanne
 	return &Service{store: &postgresStore{db: db, writer: writer}, scanner: scanner}
 }
 
-// Process stores the history the frame adds and returns a verdict for it.
-//
-// Every frame carries the whole transcript the model is about to read, so the
-// content to judge is what this frame adds to stored history plus the current
-// turn: the messages after the last assistant reply. The current turn is
-// always judged, even when a redelivery has already stored it, so a denied
-// frame stays denied when it is sent again. Earlier turns were judged when
-// they first arrived.
+// Process archives attempts independently of enforcement. Only a successfully
+// evaluated checkpoint can exempt historical content from another scan.
 func (s *Service) Process(ctx context.Context, config Config, frame Frame) (Verdict, error) {
+	ctx, cancel := context.WithTimeout(ctx, 9*time.Second)
+	defer cancel()
 	userID, err := s.store.ResolveActor(ctx, config, frame)
 	if err != nil {
 		return Verdict{}, fmt.Errorf("resolve inference hook actor: %w", err)
@@ -64,11 +63,20 @@ func (s *Service) Process(ctx context.Context, config Config, frame Frame) (Verd
 	if _, err := policyInputs(messages); err != nil {
 		return Verdict{}, fmt.Errorf("decode inference transcript: %w", err)
 	}
-	newStart, err := s.store.Save(ctx, config, frame, userID)
+	session, err := s.store.Begin(ctx, config, frame, userID)
+	if err != nil {
+		return Verdict{}, fmt.Errorf("begin inference checkpoint: %w", err)
+	}
+	accepted, err := session.Load(ctx)
+	if err != nil {
+		return Verdict{}, fmt.Errorf("load inference checkpoint: %w", err)
+	}
+	_, err = s.store.Save(ctx, config, frame, userID)
 	if err != nil {
 		return Verdict{}, fmt.Errorf("store inference transcript: %w", err)
 	}
-	scanStart := min(newStart, currentTurnStart(messages))
+	hashes := transcriptHashes(messages)
+	scanStart := min(acceptedPrefix(accepted, hashes), currentTurnStart(messages))
 	inputs, err := policyInputs(messages[scanStart:])
 	if err != nil {
 		return Verdict{}, fmt.Errorf("decode inference transcript: %w", err)
@@ -79,7 +87,7 @@ func (s *Service) Process(ctx context.Context, config Config, frame Frame) (Verd
 		if err := ctx.Err(); err != nil {
 			return Verdict{}, fmt.Errorf("inference policy deadline: %w", err)
 		}
-		result, err := s.scanner.ScanForEnforcement(ctx, risk.RealtimeScanRequest{
+		result, err := s.scanner.ScanForInferenceEnforcement(ctx, risk.RealtimeScanRequest{
 			Provenance: metering.RiskProvenance{
 				OrganizationID:         config.OrganizationID,
 				ProjectID:              config.ProjectID,
@@ -115,6 +123,12 @@ func (s *Service) Process(ctx context.Context, config Config, frame Frame) (Verd
 			verdict.DenyReason = conv.Default(conv.PtrValOr(result.UserMessage, ""), "This request was blocked by your organization's security policy.")
 			return verdict, nil
 		}
+	}
+	if err := ctx.Err(); err != nil {
+		return Verdict{}, fmt.Errorf("inference policy deadline: %w", err)
+	}
+	if err := session.Accept(ctx, hashes); err != nil {
+		return Verdict{}, fmt.Errorf("accept inference checkpoint: %w", err)
 	}
 	return verdict, nil
 }
@@ -363,7 +377,7 @@ func (s *postgresStore) Save(ctx context.Context, config Config, frame Frame, us
 // conversation, so its history is not archived a second time.
 func (s *postgresStore) alignFrame(ctx context.Context, config Config, chatID uuid.UUID, hashes [][]byte) (int, []byte, error) {
 	rows, err := chatrepo.New(s.db).ListInferenceMessageIdentities(ctx, chatrepo.ListInferenceMessageIdentitiesParams{
-		ChatID: chatID, ProjectID: uuid.NullUUID{UUID: config.ProjectID, Valid: true}, RowLimit: alignmentWindow,
+		ChatID: chatID, ProjectID: uuid.NullUUID{UUID: config.ProjectID, Valid: true}, RowLimit: int32(min(math.MaxInt32, max(alignmentWindow, len(hashes)+1))),
 	})
 	if err != nil {
 		return 0, nil, fmt.Errorf("list stored inference messages: %w", err)
@@ -372,8 +386,8 @@ func (s *postgresStore) alignFrame(ctx context.Context, config Config, chatID uu
 		return 0, nil, nil
 	}
 	stored := make([]messageIdentity, 0, len(rows))
-	for index := len(rows) - 1; index >= 0; index-- {
-		identity := parseMessageIdentity(rows[index].ExternalMessageID.String, rows[index].ContentHash)
+	for _, row := range slices.Backward(rows) {
+		identity := parseMessageIdentity(row.ExternalMessageID.String, row.ContentHash)
 		if identity.content != nil {
 			stored = append(stored, identity)
 		}

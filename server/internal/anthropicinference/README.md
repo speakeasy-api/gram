@@ -50,33 +50,63 @@ Claude Chat Web, `claude-code` becomes Claude Code Web, and `claude-design` beco
 Claude Design. Unknown application names are preserved; absent sources fall back
 to Anthropic inference. The ingestion origin remains `anthropic-inference`.
 
-- All supplied user and assistant history is archived, including original content
-  blocks, attachments' extracted text, tool arguments, and tool results. The final
-  assistant response becomes visible when a subsequent inference frame includes
-  it; this pre-inference protocol does not deliver a final-response event.
+- User and assistant conversation history is archived independently of the
+  enforcement verdict, including original content blocks, attachments' extracted
+  text, tool arguments, and tool results. The final assistant response becomes
+  visible when a subsequent frame includes it; this pre-inference protocol does
+  not deliver a final-response event.
 - Conversation identity is scoped to the project, Anthropic tenant, and actor.
   Client-asserted session identifiers cannot join another actor's conversation.
   Missing session identifiers or actor identities fall back to the request identifier.
-- Storage appends what a delivery adds to stored history. Each stored message
-  carries a hash of its role and content, and a delivery is aligned by locating
-  the newest stored message in it: everything after that point is new. Claude's
-  rolling compaction, which replaces early turns with a summary and keeps recent
-  turns verbatim, therefore adds only the genuinely new turn; the summary is not
-  archived. A delivery with the same or fewer messages appends nothing. Existing
-  message contents are immutable; a delivery that rewrites a stored message in
-  place is continued by message count, and edits are not reconciled.
+- Archival deduplication is separate from acceptance. Storage uses message hashes
+  to align a delivery with recent archived history, loading at least a full
+  incoming frame so repeated messages beyond 512 entries remain idempotent.
+  Compaction summaries before an archival anchor are not archived again. The
+  legacy count fallback remains for history without a matching hash; archived
+  rows are immutable and in-place edits are not reconciled. None of these
+  archival decisions exempts content from enforcement.
 - User emails resolve only against connected users in the configured organization.
   If an actor stops resolving, its conversation retains the last known user for
   both enforcement and stored-message attribution. Actors with no known identity
   receive organization-wide policies; another actor's identity is never borrowed.
-- The shared risk scanner evaluates the content a delivery adds plus the
-  current turn — the messages after the last assistant reply — each block with
-  its native scope: user, assistant, tool request, tool response, or prompt
-  attachment. Earlier turns were evaluated when they first arrived; the current
-  turn is always evaluated, so a redelivered frame that was denied stays denied.
-  Block, warn, and quarantine matches deny the current inference. There is no
-  interactive warning acknowledgement in this protocol. Quarantine matches here
-  deny the frame; this receiver does not create a persistent session quarantine.
+- Enforcement skips historical content only when it matches a durable accepted
+  checkpoint. The checkpoint stores the complete accepted frame's role/content
+  hashes, its format version, resolved user, and an enforcement-context fingerprint.
+  The fingerprint includes enforcing policies, current principal grants resolved
+  through the scanner's authorization helpers, exclusions, and custom rules.
+  Audience membership, evaluate/bypass grants, and exclusion edits therefore
+  invalidate acceptance even without a policy-version change. Old archived
+  history without a checkpoint and unknown checkpoint formats are rescanned.
+  Prompt-based policies can reuse accepted history: strict enforcement cannot
+  accept in-scope content while the prompt-policy feature flag is disabled or
+  its evaluation is incomplete. Out-of-scope content remains reusable until
+  its enforcement context changes. Bump the checkpoint format when built-in
+  enforcement input or scanner semantics change.
+- A matching accepted prefix, including a uniquely aligned retained tail after
+  compaction, can be skipped. A mismatch starts scanning at that message; a later
+  matching anchor never hides earlier edits. Ambiguous repeated anchors and
+  newly introduced compaction summaries are conservatively rescanned. The
+  current turn (messages after the last assistant reply) is always scanned.
+- Each block keeps its native scope: user, assistant, tool request, tool response,
+  or prompt attachment. Block, warn, and quarantine matches deny the current
+  inference. There is no interactive warning acknowledgement or persistent
+  session quarantine here. A corrected retry can succeed.
+- Concurrent deliveries use optimistic compare-and-swap (CAS), scoped to the
+  project/actor/session conversation. Loading a checkpoint retains its exact
+  stored bytes, not a pooled connection. Archival and scanning run without a
+  held transaction or advisory lock, allowing them to share even a one-connection
+  pool. Acceptance uses a short transaction to recheck enforcement context and
+  atomically replace only the checkpoint originally loaded. Every acceptance
+  gets a fresh token, including identical-frame retries, so another acceptance
+  cannot silently overwrite an intervening change. A CAS conflict fails closed;
+  retrying reloads the winner's checkpoint and evaluates the remaining content.
+- Attempts archive independently through the shared writer's idempotent message
+  identities. Only after every required strict inference scan succeeds is the
+  checkpoint committed, before returning allow. Denials, incomplete/erroring
+  scans, and canceled evaluation do not advance it. A denied assistant/tool
+  block is therefore scanned again on retry, even when the latest user result
+  is benign. Enforcement-context changes during evaluation fail closed rather
+  than accepting mixed configurations. Transaction cleanup is separately bounded.
 - Tool requests are stored in structured `tool_calls` with JSON arguments, and
   results are stored as tool messages linked by call ID. Mixed text/tool messages
   use separate rows so background policies retain their native scope. Attachments
@@ -90,11 +120,12 @@ to Anthropic inference. The ingestion origin remains `anthropic-inference`.
   expires and cancels remaining work. Operational configuration lookup failures
   also deny; missing and disabled integrations return 404. Anthropic's configured
   failure posture still governs network failures/timeouts.
-- Retries do not duplicate stored messages and are evaluated against current
-  policies. Unknown event types allow after signature and tenant validation;
+- Identical retries do not duplicate stored messages. Their uncertain content
+  and current turn are evaluated against current policies. Unknown event types allow after signature and tenant validation;
   unknown fields, source values, and content block types are tolerated.
 
 Configure a 10-second verdict timeout and select block-on-failure in Anthropic if
-network failures must not allow inference. Every delivery is evaluated against
-current policies; long transcripts that cannot finish evaluation within the
-nine-second budget receive a deny verdict.
+network failures must not allow inference. Long transcripts, concurrent checkpoint conflicts,
+or conservative rescans that cannot complete within the nine-second budget
+receive a deny verdict. A checkpoint reduces repeated scans; it does not remove
+the deadline or guarantee that every transcript fits within it.
