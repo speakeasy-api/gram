@@ -1080,3 +1080,11 @@ WHERE organization_id = @organization_id AND principal_urn LIKE 'agent:%';
 
 -- name: CountDemoSeedAPIKeysFixture :one
 SELECT count(*) FROM api_keys WHERE organization_id = @organization_id;
+
+-- name: CountAssistantAttachments :one
+-- Count stored attachments, including those whose targets are soft-deleted.
+SELECT
+  (SELECT count(*) FROM assistant_toolsets at
+   WHERE at.project_id = @project_id AND at.assistant_id = @assistant_id) AS toolsets,
+  (SELECT count(*) FROM assistant_mcp_servers ams
+   WHERE ams.project_id = @project_id AND ams.assistant_id = @assistant_id) AS mcp_servers;

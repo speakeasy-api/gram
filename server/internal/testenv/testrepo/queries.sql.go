@@ -40,6 +40,32 @@ func (q *Queries) CorruptDeviceIntegrationCredentialsFixture(ctx context.Context
 	return err
 }
 
+const countAssistantAttachments = `-- name: CountAssistantAttachments :one
+SELECT
+  (SELECT count(*) FROM assistant_toolsets at
+   WHERE at.project_id = $1 AND at.assistant_id = $2) AS toolsets,
+  (SELECT count(*) FROM assistant_mcp_servers ams
+   WHERE ams.project_id = $1 AND ams.assistant_id = $2) AS mcp_servers
+`
+
+type CountAssistantAttachmentsParams struct {
+	ProjectID   uuid.UUID
+	AssistantID uuid.UUID
+}
+
+type CountAssistantAttachmentsRow struct {
+	Toolsets   int64
+	McpServers int64
+}
+
+// Count stored attachments, including those whose targets are soft-deleted.
+func (q *Queries) CountAssistantAttachments(ctx context.Context, arg CountAssistantAttachmentsParams) (CountAssistantAttachmentsRow, error) {
+	row := q.db.QueryRow(ctx, countAssistantAttachments, arg.ProjectID, arg.AssistantID)
+	var i CountAssistantAttachmentsRow
+	err := row.Scan(&i.Toolsets, &i.McpServers)
+	return i, err
+}
+
 const countChatSessionLinksByKindFixture = `-- name: CountChatSessionLinksByKindFixture :one
 SELECT COUNT(*)
 FROM chat_session_links

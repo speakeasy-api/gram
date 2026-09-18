@@ -567,6 +567,9 @@ const (
 	RiskStartPosKey                = attribute.Key("gram.risk.start_pos")
 	RiskEndPosKey                  = attribute.Key("gram.risk.end_pos")
 	RiskEnforcementTruncatedKey    = attribute.Key("gram.risk.enforcement_truncated")
+	RiskScanModeKey                = attribute.Key("gram.risk.scan_mode")
+	RiskLLMTokenKindKey            = attribute.Key("gram.risk.llm.token_kind")
+	RiskLLMModelKey                = attribute.Key("gram.risk.llm.model")
 	SecretNameKey                  = attribute.Key("gram.secret.name")
 	SecurityPlacementKey           = attribute.Key("gram.security.placement")
 	SecuritySchemeKey              = attribute.Key("gram.security.scheme")
@@ -2323,6 +2326,21 @@ func SlogRiskStartPos(v int64) slog.Attr      { return slog.Int64(string(RiskSta
 
 func RiskEndPos(v int64) attribute.KeyValue { return RiskEndPosKey.Int64(v) }
 func SlogRiskEndPos(v int64) slog.Attr      { return slog.Int64(string(RiskEndPosKey), v) }
+
+// RiskScanMode is how a risk scan was invoked: "sync" for realtime
+// enforcement, "async" for batch scans. Distinct from the enforcement
+// dispatcher's lane (scanner + policy).
+func RiskScanMode(v string) attribute.KeyValue { return RiskScanModeKey.String(v) }
+func SlogRiskScanMode(v string) slog.Attr      { return slog.String(string(RiskScanModeKey), v) }
+
+// RiskLLMTokenKind distinguishes "input" from "output" tokens on risk model
+// token counters.
+func RiskLLMTokenKind(v string) attribute.KeyValue { return RiskLLMTokenKindKey.String(v) }
+func SlogRiskLLMTokenKind(v string) slog.Attr      { return slog.String(string(RiskLLMTokenKindKey), v) }
+
+// RiskLLMModel is the served model name the risk analyzer called.
+func RiskLLMModel(v string) attribute.KeyValue { return RiskLLMModelKey.String(v) }
+func SlogRiskLLMModel(v string) slog.Attr      { return slog.String(string(RiskLLMModelKey), v) }
 
 func SecretName(v string) attribute.KeyValue { return SecretNameKey.String(v) }
 func SlogSecretName(v string) slog.Attr      { return slog.String(string(SecretNameKey), v) }

@@ -1024,6 +1024,13 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 		return oops.E(oops.CodeUnexpected, err, "delete mcp server").LogError(ctx, logger)
 	}
 
+	if err := txRepo.DeleteAssistantMCPServersByMCPServer(ctx, repo.DeleteAssistantMCPServersByMCPServerParams{
+		McpServerID: deleted.ID,
+		ProjectID:   *authCtx.ProjectID,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to detach assistant mcp servers").LogError(ctx, logger)
+	}
+
 	// The mcp_endpoints.mcp_server_id FK has ON DELETE CASCADE, but that only
 	// fires for hard deletes. Soft-delete endpoints explicitly so callers don't
 	// resolve to a tombstoned mcp server after this commits.
