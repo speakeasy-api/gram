@@ -1635,6 +1635,18 @@ type OktaIdentityProviderConnection struct {
 	Deleted                             bool
 }
 
+type OktaResourceConnection struct {
+	ID                           uuid.UUID
+	OrganizationID               string
+	IdentityProviderConnectionID uuid.UUID
+	RemoteSessionIssuerID        uuid.UUID
+	Resource                     string
+	Audience                     string
+	OktaApplicationID            pgtype.Text
+	CreatedAt                    pgtype.Timestamptz
+	UpdatedAt                    pgtype.Timestamptz
+}
+
 type OpenrouterApiKey struct {
 	OrganizationID string
 	KeyType        string
