@@ -3649,3 +3649,14 @@ UPDATE remote_session_issuers
 SET deleted_at = clock_timestamp()
 WHERE id = @id
   AND deleted IS FALSE;
+
+-- name: SetOrganizationRemoteSessionClientCredentialsFixture :exec
+-- Test fixture: change an organization-level login client during a browser flow.
+UPDATE remote_session_clients
+SET client_id = coalesce(sqlc.narg('client_id')::text, client_id),
+    client_secret_encrypted = coalesce(sqlc.narg('client_secret_encrypted')::text, client_secret_encrypted)
+WHERE id = @id AND organization_id = @organization_id AND project_id IS NULL;
+
+-- name: SoftDeleteOrganizationRemoteSessionClientFixture :exec
+UPDATE remote_session_clients SET deleted_at = clock_timestamp()
+WHERE id = @id AND organization_id = @organization_id AND project_id IS NULL;

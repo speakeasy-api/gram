@@ -134,3 +134,35 @@ UPDATE users
 SET workos_id = @workos_id,
   updated_at = clock_timestamp()
 WHERE id = @id;
+
+-- name: SoftDeleteOrganizationUserFixture :exec
+-- Test fixture: hide a known tenant member from provisioned-human resolution.
+UPDATE users SET deleted_at = clock_timestamp()
+WHERE users.id = @user_id AND EXISTS (
+    SELECT 1 FROM organization_user_relationships m
+    WHERE m.user_id = users.id AND m.organization_id = @organization_id
+);
+
+-- name: SetOrganizationUserEmailFixture :exec
+UPDATE users SET email = @email
+WHERE users.id = @user_id AND EXISTS (
+    SELECT 1 FROM organization_user_relationships m
+    WHERE m.user_id = users.id AND m.organization_id = @organization_id
+);
+
+-- name: DuplicateOrganizationUserEmailFixture :exec
+-- Test fixture: distinct raw emails that collide under case-insensitive lookup.
+INSERT INTO users (id, email, display_name)
+SELECT @duplicate_user_id, upper(u.email), 'Ambiguous test human'
+FROM users u JOIN organization_user_relationships m ON m.user_id = u.id
+WHERE u.id = @user_id AND m.organization_id = @organization_id;
+
+-- name: SnapshotOrganizationUsersFixture :one
+-- Include the fixture's original user even after its membership is removed.
+-- xmin detects writes that leave the visible user values unchanged.
+SELECT coalesce(string_agg(u.id || ':' || u.xmin::text, ',' ORDER BY u.id), '')::text AS snapshot
+FROM users u
+WHERE u.id = @user_id OR EXISTS (
+    SELECT 1 FROM organization_user_relationships m
+    WHERE m.user_id = u.id AND m.organization_id = ANY(@organization_ids::text[])
+);
