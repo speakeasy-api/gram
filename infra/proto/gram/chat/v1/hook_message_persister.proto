@@ -1,0 +1,39 @@
+edition = "2024";
+
+package gram.chat.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/chat/v1;chatv1";
+
+// HookMessagePersister consumes HookMessage and writes the transcript row.
+//
+// The ack deadline is generous relative to the work (one entitlement check, up
+// to one duplicate-check query, and an insert that may take a row lock) because
+// the alternative — redelivering while the first attempt still holds the
+// prompt-correlation lock — puts the second delivery straight into lock wait
+// behind an attempt that is about to succeed.
+//
+// Dead-lettering is on: a row this handler can never write is a row a customer
+// will never see in their transcript, and that should be inspectable rather
+// than retried forever. Redelivery is safe regardless — the handler inserts on
+// the producer-minted id with ON CONFLICT DO NOTHING.
+message HookMessagePersister {
+  option (gcp.pubsub.v1.subscription) = {
+    topic: "gram.chat.v1.HookMessage"
+    ack_deadline: {
+      seconds: 60
+    }
+    retry_policy: {
+      minimum_backoff: {
+        seconds: 5
+      }
+      maximum_backoff: {
+        seconds: 600
+      }
+    }
+    dead_letter: {
+      max_delivery_attempts: 5
+    }
+  };
+}
