@@ -86,6 +86,7 @@ func TestDelegationRefreshLifetimeWithoutRotation(t *testing.T) {
 			require.Equal(t, "new-id", assertion.Value())
 			credential, err := store.load(t.Context(), b)
 			require.NoError(t, err)
+			require.False(t, credential.refreshedAt.IsZero(), "successful renewal must record its timestamp")
 			if tc.reported && tc.seconds == 0 {
 				require.Empty(t, credential.refresh)
 				require.True(t, credential.refreshExpiry.IsZero())

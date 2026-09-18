@@ -48,6 +48,10 @@ func TestFederatedDelegationLoaderDatabaseOnly(t *testing.T) {
 	_, err = db.Exec(ctx, `INSERT INTO remote_session_clients (id,organization_id,remote_session_issuer_id,client_id,scope,token_endpoint_auth_method) VALUES ($1,$2,$3,'loader-client',ARRAY['openid','email'],'client_secret_basic'),($4,$5,$6,'other-client',ARRAY['openid','email'],'client_secret_basic')`, client, org, issuer, otherClient, otherOrg, otherIssuer)
 	require.NoError(t, err)
 
+	orgClientForeignIssuer, foreignClientOrgIssuer := uuid.New(), uuid.New()
+	_, err = db.Exec(ctx, `INSERT INTO remote_session_clients (id,organization_id,remote_session_issuer_id,client_id,scope,token_endpoint_auth_method) VALUES ($1,$2,$3,'cross-issuer',ARRAY['openid'],'client_secret_basic'),($4,$5,$6,'cross-client',ARRAY['openid'],'client_secret_basic')`, orgClientForeignIssuer, org, otherIssuer, foreignClientOrgIssuer, otherOrg, issuer)
+	require.NoError(t, err)
+
 	// This loader supplies registration state only. Authority and credential
 	// repository operations separately enforce live trust and organization state.
 	provider, err := manager.LoadFederatedDelegationProvider(ctx, org, issuer, client)
@@ -61,6 +65,8 @@ func TestFederatedDelegationLoaderDatabaseOnly(t *testing.T) {
 		{"wrong tenant", otherOrg, issuer, client},
 		{"wrong issuer pair", org, otherIssuer, client},
 		{"foreign client", org, otherIssuer, otherClient},
+		{"own client foreign issuer", org, otherIssuer, orgClientForeignIssuer},
+		{"foreign client own issuer", org, issuer, foreignClientOrgIssuer},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

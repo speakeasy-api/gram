@@ -14,7 +14,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/stretchr/testify/require"
@@ -84,14 +83,13 @@ func TestGetClientDelegationStatusCurrentObservationsOnly(t *testing.T) {
 	require.NoError(t, err)
 	createTrustedClientOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "delegation-observations", issuerID, clientID)
 	q := repo.New(ti.conn)
-	row, err := q.GetOrganizationRemoteSessionClientByID(ctx, repo.GetOrganizationRemoteSessionClientByIDParams{ID: clientID, OrganizationID: conv.ToPGText(org)})
+	provider, err := newCIMDChallengeManager(t, ti, "https://gram.example.test").LoadFederatedDelegationProvider(ctx, org, issuerID, clientID)
 	require.NoError(t, err)
-	issuer, err := q.GetOrganizationRemoteSessionIssuerByID(ctx, repo.GetOrganizationRemoteSessionIssuerByIDParams{ID: issuerID, OrganizationID: conv.ToPGText(org), IncludeGlobal: true})
-	require.NoError(t, err)
-	hash := remotesessions.FederatedDelegationConfigurationHash(org, issuer, row.RemoteSessionClient)
+	hash := provider.DelegationConfigurationHash()
 	require.NotEmpty(t, hash)
 	// Invalid ciphertext intentionally proves the status read never decrypts.
-	for i, age := range []int{1, 31, 1} {
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	for i, age := range []int{1, 31, 1, 2, 1, 1, 1} {
 		userID := uuid.NewString()
 		err = testrepo.New(ti.conn).InsertUserFixture(ctx, testrepo.InsertUserFixtureParams{ID: userID, Email: userID + "@example.test", DisplayName: "Test user"})
 		require.NoError(t, err)
@@ -101,21 +99,49 @@ func TestGetClientDelegationStatusCurrentObservationsOnly(t *testing.T) {
 		if i == 2 {
 			config = "old-config"
 		}
-		observed := time.Now().UTC().Add(-time.Duration(age) * 24 * time.Hour)
-		err = q.InsertTrustedDelegationObservationFixture(ctx, repo.InsertTrustedDelegationObservationFixtureParams{OrganizationID: conv.ToPGText(org), ClientID: uuid.NullUUID{UUID: clientID, Valid: true}, SubjectUrn: "user:" + userID, ConfigHash: conv.ToPGText(config), ObservedAt: delegationTestTimestamp(observed), ObtainedAt: delegationTestTimestamp(observed.Add(-time.Hour)), RefreshedAt: delegationTestTimestamp(observed)})
+		observed := now.Add(-time.Duration(age) * 24 * time.Hour)
+		obtained, refreshed := observed.Add(-time.Hour), observed
+		if i == 3 {
+			// Different humans supply the maxima: catches selecting one row instead of max per column.
+			obtained, refreshed = now.Add(-time.Hour), now.Add(-time.Minute)
+		}
+		status := "durable_credential_present"
+		var expiry pgtype.Timestamptz
+		switch i {
+		case 4:
+			expiry = delegationTestTimestamp(now.Add(-time.Hour))
+		case 5:
+			status = "refused"
+		case 6:
+			status = "configuration_failure"
+		}
+		_, err = q.UpsertTrustedDelegationCredential(ctx, repo.UpsertTrustedDelegationCredentialParams{
+			OrganizationID: org, ClientID: clientID, IssuerID: issuerID, SubjectUrn: "user:" + userID,
+			CredentialConfigHash: conv.ToPGText(config), ObservationStatus: conv.ToPGText(status),
+			ObservedAt: delegationTestTimestamp(observed), CredentialObtainedAt: delegationTestTimestamp(obtained),
+			LastRefreshSucceededAt: delegationTestTimestamp(refreshed), RefreshTokenEncrypted: conv.ToPGText("must-not-decrypt"), RefreshExpiresAt: expiry,
+		})
 		require.NoError(t, err)
 	}
 	payload := &orgclientsgen.GetClientDelegationStatusPayload{ID: clientID.String()}
 	got, err := ti.service.GetClientDelegationStatus(ctx, payload)
 	require.NoError(t, err)
 	require.Equal(t, "observed", got.Status)
-	require.Len(t, got.Observations, 1)
-	require.Equal(t, int64(1), got.Observations[0].Count)
-	require.Equal(t, "durable_credential_present", got.Observations[0].Status)
-	require.NotNil(t, got.Observations[0].LastObservedAt)
-	require.NotNil(t, got.Observations[0].LastCredentialObtainedAt)
-	require.NotNil(t, got.Observations[0].LastRefreshSucceededAt)
-	require.NotEqual(t, *got.Observations[0].LastCredentialObtainedAt, *got.Observations[0].LastRefreshSucceededAt)
+	require.Len(t, got.Observations, 4)
+	counts := make(map[string]*orgclientsgen.DelegationStatusCount)
+	for _, observation := range got.Observations {
+		counts[observation.Status] = observation
+	}
+	durable := counts["durable_credential_present"]
+	require.NotNil(t, durable)
+	require.Equal(t, int64(2), durable.Count)
+	require.Equal(t, now.Add(-24*time.Hour).Format(time.RFC3339Nano), *durable.LastObservedAt)
+	require.Equal(t, now.Add(-time.Hour).Format(time.RFC3339Nano), *durable.LastCredentialObtainedAt)
+	require.Equal(t, now.Add(-time.Minute).Format(time.RFC3339Nano), *durable.LastRefreshSucceededAt)
+	for _, status := range []string{"reauthentication_required", "refused", "configuration_failure"} {
+		require.NotNil(t, counts[status], status)
+		require.Equal(t, int64(1), counts[status].Count, status)
+	}
 	wire, err := json.Marshal(orgclientshttp.NewGetClientDelegationStatusResponseBody(got))
 	require.NoError(t, err)
 	require.NotContains(t, string(wire), "must-not-decrypt")
@@ -126,6 +152,15 @@ func TestGetClientDelegationStatusCurrentObservationsOnly(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "unknown", got.Status)
 	require.Empty(t, got.Observations)
+	// A private_key_jwt registration without a signing key is a configuration
+	// failure, not a dependency error and not evidence of a current observation.
+	_, err = q.UpdateOrganizationRemoteSessionClient(ctx, repo.UpdateOrganizationRemoteSessionClientParams{ID: clientID, OrganizationID: conv.ToPGText(org), TokenEndpointAuthMethod: conv.ToPGText("private_key_jwt")})
+	require.NoError(t, err)
+	got, err = ti.service.GetClientDelegationStatus(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, "unknown", got.Status)
+	require.Empty(t, got.Observations)
+
 }
 
 func delegationTestTimestamp(v time.Time) pgtype.Timestamptz {

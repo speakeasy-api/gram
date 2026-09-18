@@ -150,24 +150,28 @@ func TestFederatedRefreshExpiry(t *testing.T) {
 	t.Parallel()
 	now := time.Unix(1700000000, 0)
 	for _, tc := range []struct {
+		name    string
 		body    string
 		seconds int64
 	}{
-		{body: `{"expires_in":3600}`},
-		{body: `{"refresh_expires_in":null}`},
-
-		{body: `{"refresh_expires_in":-1}`},
-		{body: `{"refresh_expires_in":600}`, seconds: 600},
-		{body: `{"refresh_token_timeout":600,"authorization_expires_in":300}`, seconds: 300},
+		{name: "access expiry does not bound refresh", body: `{"expires_in":3600}`},
+		{name: "null refresh expiry", body: `{"refresh_expires_in":null}`},
+		{name: "negative refresh expiry", body: `{"refresh_expires_in":-1}`},
+		{name: "finite refresh expiry", body: `{"refresh_expires_in":600}`, seconds: 600},
+		{name: "shortest provider lifetime", body: `{"refresh_token_timeout":600,"authorization_expires_in":300}`, seconds: 300},
 	} {
-		var tok tokenResponse
-		require.NoError(t, json.Unmarshal([]byte(tc.body), &tok))
-		expiry := federatedRefreshCredentials(tok, now).RefreshExpiresAt()
-		if tc.seconds == 0 {
-			require.Nil(t, expiry)
-		} else {
-			require.Equal(t, now.Add(time.Duration(tc.seconds)*time.Second), *expiry)
-		}
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var tok tokenResponse
+			require.NoError(t, json.Unmarshal([]byte(tc.body), &tok))
+			expiry := federatedRefreshCredentials(tok, now).RefreshExpiresAt()
+			if tc.seconds == 0 {
+				require.Nil(t, expiry)
+			} else {
+				require.NotNil(t, expiry)
+				require.Equal(t, now.Add(time.Duration(tc.seconds)*time.Second), *expiry)
+			}
+		})
 	}
 }
 

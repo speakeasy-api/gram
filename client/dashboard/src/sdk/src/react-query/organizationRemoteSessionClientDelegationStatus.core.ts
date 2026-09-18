@@ -56,7 +56,6 @@ export function buildOrganizationRemoteSessionClientDelegationStatusQuery(
     queryKey: queryKeyOrganizationRemoteSessionClientDelegationStatus({
       id: request.id,
       gramSession: request.gramSession,
-      gramKey: request.gramKey,
     }),
     queryFn:
       async function organizationRemoteSessionClientDelegationStatusQueryFn(
@@ -84,11 +83,7 @@ export function buildOrganizationRemoteSessionClientDelegationStatusQuery(
 }
 
 export function queryKeyOrganizationRemoteSessionClientDelegationStatus(
-  parameters: {
-    id: string;
-    gramSession?: string | undefined;
-    gramKey?: string | undefined;
-  },
+  parameters: { id: string; gramSession?: string | undefined },
 ): QueryKey {
   return [
     "@gram/client",

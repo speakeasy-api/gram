@@ -388,11 +388,10 @@ func (s *DelegationService) Resolve(ctx context.Context, b DelegationBinding, au
 	if err != nil || !acquired {
 		return DelegationAssertion{}, ErrDelegationTemporary
 	}
-	// Re-read after durable ownership. A concurrent callback can supersede us.
-	c, err = s.store.load(ctx, b)
-	if err != nil || c.claim != claim {
-		return DelegationAssertion{}, ErrDelegationTemporary
-	}
+	// Claim acquisition advances the generation. Keep its snapshot independent
+	// of the reread, which may fail or return a superseding callback's row.
+	claimed := c
+	claimed.generation++
 	// Until the POST starts, releasing our own claim cannot replay a spent token.
 	// A callback or revocation that supersedes us is protected by finish's CAS.
 	refreshStarted := false
@@ -400,11 +399,16 @@ func (s *DelegationService) Resolve(ctx context.Context, b DelegationBinding, au
 		if !refreshStarted {
 			releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 			defer cancel()
-			next := eraseExpiredDelegationSecrets(c, s.now())
+			next := eraseExpiredDelegationSecrets(claimed, s.now())
 			next.claim = uuid.Nil
-			_, _ = s.store.finish(releaseCtx, b, c.generation, claim, next)
+			_, _ = s.store.finish(releaseCtx, b, claimed.generation, claim, next)
 		}
 	}()
+	// Re-read after durable ownership. A concurrent callback can supersede us.
+	c, err = s.store.load(ctx, b)
+	if err != nil || c.claim != claim {
+		return DelegationAssertion{}, ErrDelegationTemporary
+	}
 	// Load full discovery and credentials only after obtaining durable ownership.
 	p, err = s.loadProvider(ctx, b.OrganizationID, b.IssuerID, b.ClientID)
 	if err != nil {

@@ -119,13 +119,7 @@ export function useOrganizationRemoteSessionClientDelegationStatusSuspense(
 
 export function setOrganizationRemoteSessionClientDelegationStatusData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      id: string;
-      gramSession?: string | undefined;
-      gramKey?: string | undefined;
-    },
-  ],
+  queryKeyBase: [parameters: { id: string; gramSession?: string | undefined }],
   data: OrganizationRemoteSessionClientDelegationStatusQueryData,
 ): OrganizationRemoteSessionClientDelegationStatusQueryData | undefined {
   const key = queryKeyOrganizationRemoteSessionClientDelegationStatus(
@@ -140,11 +134,7 @@ export function setOrganizationRemoteSessionClientDelegationStatusData(
 export function invalidateOrganizationRemoteSessionClientDelegationStatus(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      id: string;
-      gramSession?: string | undefined;
-      gramKey?: string | undefined;
-    }]
+    [parameters: { id: string; gramSession?: string | undefined }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
