@@ -200,6 +200,32 @@ func (q *Queries) FailInterruptedReconcileRuns(ctx context.Context, arg FailInte
 	return result.RowsAffected(), nil
 }
 
+const finalizeInterruptedReconcileRuns = `-- name: FinalizeInterruptedReconcileRuns :execrows
+UPDATE okta_application_reconcile_runs
+SET status = 'failed', finished_at = clock_timestamp(),
+    error = 'interrupted', updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND identity_provider_connection_id = $2
+  AND started_at <= $3::timestamptz
+  AND status = 'running'
+`
+
+type FinalizeInterruptedReconcileRunsParams struct {
+	OrganizationID               string
+	IdentityProviderConnectionID uuid.UUID
+	Cutoff                       pgtype.Timestamptz
+}
+
+// Close only attempts covered by this terminal activity failure. Retrying this
+// statement cannot rewrite a finished run or touch a subsequently started run.
+func (q *Queries) FinalizeInterruptedReconcileRuns(ctx context.Context, arg FinalizeInterruptedReconcileRunsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, finalizeInterruptedReconcileRuns, arg.OrganizationID, arg.IdentityProviderConnectionID, arg.Cutoff)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const finishReconcileRun = `-- name: FinishReconcileRun :one
 UPDATE okta_application_reconcile_runs
 SET status = $1,
@@ -215,6 +241,7 @@ SET status = $1,
     updated_at = clock_timestamp()
 WHERE id = $10
   AND organization_id = $11
+  AND status = 'running'
 RETURNING id, organization_id, identity_provider_connection_id, status, started_at, finished_at, applications_seen, applications_added, applications_removed, assignments_added, assignments_removed, skipped_app_ids, truncated, error, created_at, updated_at
 `
 
@@ -266,6 +293,28 @@ func (q *Queries) FinishReconcileRun(ctx context.Context, arg FinishReconcileRun
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const getApplicationsSyncedAt = `-- name: GetApplicationsSyncedAt :one
+SELECT applications_synced_at
+FROM okta_identity_provider_connections
+WHERE identity_provider_connection_id = $1
+  AND organization_id = $2
+  AND deleted IS FALSE
+`
+
+type GetApplicationsSyncedAtParams struct {
+	IdentityProviderConnectionID uuid.UUID
+	OrganizationID               string
+}
+
+// Called with the connection lock held, so READ COMMITTED sees the watermark
+// committed by any apply we waited for, without changing revoke's lock order.
+func (q *Queries) GetApplicationsSyncedAt(ctx context.Context, arg GetApplicationsSyncedAtParams) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, getApplicationsSyncedAt, arg.IdentityProviderConnectionID, arg.OrganizationID)
+	var applications_synced_at pgtype.Timestamptz
+	err := row.Scan(&applications_synced_at)
+	return applications_synced_at, err
 }
 
 const getLatestReconcileRun = `-- name: GetLatestReconcileRun :one
@@ -621,14 +670,8 @@ func (q *Queries) ListSyncCandidates(ctx context.Context, arg ListSyncCandidates
 }
 
 const lockSyncConnection = `-- name: LockSyncConnection :one
-SELECT
-    c.id
-  , o.applications_synced_at
+SELECT c.id
 FROM identity_provider_connections AS c
-JOIN okta_identity_provider_connections AS o
-  ON o.identity_provider_connection_id = c.id
- AND o.organization_id = c.organization_id
- AND o.deleted IS FALSE
 WHERE c.id = $1
   AND c.organization_id = $2
   AND c.provider = 'okta'
@@ -642,18 +685,15 @@ type LockSyncConnectionParams struct {
 	OrganizationID string
 }
 
-type LockSyncConnectionRow struct {
-	ID                   uuid.UUID
-	ApplicationsSyncedAt pgtype.Timestamptz
-}
-
 // Serializes applies with each other and with revoke, which locks the same
-// row; a revoked or unverified connection yields no row.
-func (q *Queries) LockSyncConnection(ctx context.Context, arg LockSyncConnectionParams) (LockSyncConnectionRow, error) {
+// row; a revoked or unverified connection yields no row. Read the watermark
+// in a separate statement after this lock: a joined, unlocked subtype row
+// could retain the statement's pre-wait snapshot after another apply commits.
+func (q *Queries) LockSyncConnection(ctx context.Context, arg LockSyncConnectionParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, lockSyncConnection, arg.ConnectionID, arg.OrganizationID)
-	var i LockSyncConnectionRow
-	err := row.Scan(&i.ID, &i.ApplicationsSyncedAt)
-	return i, err
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const markApplicationsSynced = `-- name: MarkApplicationsSynced :execrows

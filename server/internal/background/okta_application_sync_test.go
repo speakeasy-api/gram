@@ -5,6 +5,10 @@ import (
 	"errors"
 	"sync"
 	"testing"
+	"time"
+
+	"go.temporal.io/api/enums/v1"
+	"go.temporal.io/sdk/temporal"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -172,6 +176,8 @@ func TestOktaApplicationSyncCoordinatorContinuesAfterChildFailure(t *testing.T) 
 		activity.RegisterOptions{Name: "RunOktaApplicationSync"},
 	)
 
+	env.RegisterActivityWithOptions(func(context.Context, activities.FinalizeOktaApplicationSyncInput) error { return nil }, activity.RegisterOptions{Name: "FinalizeOktaApplicationSync"})
+
 	env.ExecuteWorkflow(OktaApplicationSyncCoordinatorWorkflow)
 
 	require.True(t, env.IsWorkflowCompleted())
@@ -208,4 +214,54 @@ func TestOktaApplicationSyncIDsAreQueueScoped(t *testing.T) {
 
 	require.NotEqual(t, oktaApplicationSyncCoordinatorScheduleID("a"), oktaApplicationSyncCoordinatorScheduleID("b"))
 	require.Equal(t, "v1:okta-application-sync:11111111-1111-1111-1111-111111111111", buildOktaApplicationSyncWorkflowID(uuid.MustParse("11111111-1111-1111-1111-111111111111")))
+}
+
+func TestOktaApplicationSyncWorkflowFinalizesTerminalTimeout(t *testing.T) {
+	t.Parallel()
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	id := "11111111-1111-1111-1111-111111111111"
+	var attempts, finalized int
+	var cutoff time.Time
+	env.RegisterActivityWithOptions(func(context.Context, string) error {
+		attempts++
+		return temporal.NewTimeoutError(enums.TIMEOUT_TYPE_START_TO_CLOSE, nil)
+	}, activity.RegisterOptions{Name: "RunOktaApplicationSync"})
+	env.RegisterActivityWithOptions(func(ctx context.Context, input activities.FinalizeOktaApplicationSyncInput) error {
+		require.NoError(t, ctx.Err())
+		require.Equal(t, id, input.ConnectionID)
+		require.False(t, input.Cutoff.IsZero())
+		finalized++
+		if finalized == 1 {
+			cutoff = input.Cutoff
+			return errors.New("transient finalization failure")
+		}
+		require.Equal(t, cutoff, input.Cutoff, "retries must not move the finalization fence")
+		return nil
+	}, activity.RegisterOptions{Name: "FinalizeOktaApplicationSync"})
+	env.ExecuteWorkflow(OktaApplicationSyncWorkflow, id)
+	require.True(t, env.IsWorkflowCompleted())
+	require.Error(t, env.GetWorkflowError())
+	require.Equal(t, oktaApplicationSyncActivityMaxAttempts, attempts)
+	require.Equal(t, 2, finalized)
+}
+
+func TestOktaApplicationSyncWorkflowFinalizesCancellation(t *testing.T) {
+	t.Parallel()
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	env.RegisterActivityWithOptions(func(ctx context.Context, _ string) error {
+		<-ctx.Done()
+		return ctx.Err()
+	}, activity.RegisterOptions{Name: "RunOktaApplicationSync"})
+	var finalized bool
+	env.RegisterActivityWithOptions(func(ctx context.Context, _ activities.FinalizeOktaApplicationSyncInput) error {
+		require.NoError(t, ctx.Err())
+		finalized = true
+		return nil
+	}, activity.RegisterOptions{Name: "FinalizeOktaApplicationSync"})
+	env.RegisterDelayedCallback(env.CancelWorkflow, time.Second)
+	env.ExecuteWorkflow(OktaApplicationSyncWorkflow, "11111111-1111-1111-1111-111111111111")
+	require.Error(t, env.GetWorkflowError())
+	require.True(t, finalized)
 }

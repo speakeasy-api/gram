@@ -73,3 +73,17 @@ func (r *RunOktaApplicationSync) Do(ctx context.Context, connectionID string) er
 	}
 	return nil
 }
+
+// FinalizeOktaApplicationSyncInput contains no credentials or upstream errors.
+type FinalizeOktaApplicationSyncInput struct {
+	ConnectionID string
+	Cutoff       time.Time
+}
+
+func (r *RunOktaApplicationSync) Finalize(ctx context.Context, input FinalizeOktaApplicationSyncInput) error {
+	id, err := uuid.Parse(input.ConnectionID)
+	if err != nil {
+		return temporal.NewNonRetryableApplicationError("parse identity provider connection id", "invalid_connection_id", err)
+	}
+	return r.syncer.FinalizeFailure(ctx, id, input.Cutoff)
+}

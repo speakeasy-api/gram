@@ -51,22 +51,27 @@ WHERE c.id = @connection_id
   AND c.deleted IS FALSE;
 
 -- Serializes applies with each other and with revoke, which locks the same
--- row; a revoked or unverified connection yields no row.
+-- row; a revoked or unverified connection yields no row. Read the watermark
+-- in a separate statement after this lock: a joined, unlocked subtype row
+-- could retain the statement's pre-wait snapshot after another apply commits.
 -- name: LockSyncConnection :one
-SELECT
-    c.id
-  , o.applications_synced_at
+SELECT c.id
 FROM identity_provider_connections AS c
-JOIN okta_identity_provider_connections AS o
-  ON o.identity_provider_connection_id = c.id
- AND o.organization_id = c.organization_id
- AND o.deleted IS FALSE
 WHERE c.id = @connection_id
   AND c.organization_id = @organization_id
   AND c.provider = 'okta'
   AND c.deleted IS FALSE
   AND c.status = 'verified'
 FOR UPDATE OF c;
+
+-- Called with the connection lock held, so READ COMMITTED sees the watermark
+-- committed by any apply we waited for, without changing revoke's lock order.
+-- name: GetApplicationsSyncedAt :one
+SELECT applications_synced_at
+FROM okta_identity_provider_connections
+WHERE identity_provider_connection_id = @identity_provider_connection_id
+  AND organization_id = @organization_id
+  AND deleted IS FALSE;
 
 -- Monotonic: a late-finishing older run never rewinds a newer watermark.
 -- name: MarkApplicationsSynced :execrows
@@ -119,6 +124,7 @@ SET status = @status,
     updated_at = clock_timestamp()
 WHERE id = @id
   AND organization_id = @organization_id
+  AND status = 'running'
 RETURNING *;
 
 -- name: GetLatestReconcileRun :one
@@ -330,3 +336,14 @@ SET status = @status,
     started_at = @started_at::timestamptz
 WHERE id = @id
   AND organization_id = @organization_id;
+
+-- Close only attempts covered by this terminal activity failure. Retrying this
+-- statement cannot rewrite a finished run or touch a subsequently started run.
+-- name: FinalizeInterruptedReconcileRuns :execrows
+UPDATE okta_application_reconcile_runs
+SET status = 'failed', finished_at = clock_timestamp(),
+    error = 'interrupted', updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND identity_provider_connection_id = @identity_provider_connection_id
+  AND started_at <= @cutoff::timestamptz
+  AND status = 'running';

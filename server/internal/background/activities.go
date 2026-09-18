@@ -1165,3 +1165,7 @@ func (a *Activities) RecheckMcpApprovalRequest(ctx context.Context, target activ
 	}
 	return nil
 }
+
+func (a *Activities) FinalizeOktaApplicationSync(ctx context.Context, input activities.FinalizeOktaApplicationSyncInput) error {
+	return a.runOktaApplicationSync.Finalize(ctx, input)
+}

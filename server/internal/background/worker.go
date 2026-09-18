@@ -484,6 +484,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.RunDeviceIntegrationSync)
 	temporalWorker.RegisterActivity(activities.GetOktaApplicationSyncCandidates)
 	temporalWorker.RegisterActivity(activities.RunOktaApplicationSync)
+	temporalWorker.RegisterActivity(activities.FinalizeOktaApplicationSync)
 	temporalWorker.RegisterActivity(activities.RefreshBillingUsage)
 	temporalWorker.RegisterActivity(activities.SnapshotBillingCycleUsage)
 	temporalWorker.RegisterActivity(activities.ListWeeklyUsageSummaryTargets)

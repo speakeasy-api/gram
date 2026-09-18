@@ -258,14 +258,15 @@ func (s *Syncer) Run(ctx context.Context, connectionID uuid.UUID, final bool) er
 	diff, err := s.apply(ctx, target, run, snap)
 	switch {
 	case errors.Is(err, errSuperseded):
-		if _, ferr := s.finish(ctx, s.repo, run, snap, emptyDiff(), "failed", reasonSuperseded); ferr != nil {
+		if _, ferr := s.finish(ctx, s.repo, run, snap, emptyDiff(), "failed", reasonSuperseded); ferr != nil && !errors.Is(ferr, pgx.ErrNoRows) {
 			logger.ErrorContext(ctx, "record superseded run", attr.SlogError(ferr))
 		}
 		s.metrics.record(ctx, reasonSuperseded, snap.Truncated())
 		logger.InfoContext(ctx, "okta application sync superseded by a later run")
 		return nil
 	case errors.Is(err, errConnectionGone):
-		if _, ferr := s.finish(ctx, s.repo, run, snap, emptyDiff(), "failed", reasonDiscarded); ferr != nil {
+		// Revoke deletes the run row, so a missing row is the expected case.
+		if _, ferr := s.finish(ctx, s.repo, run, snap, emptyDiff(), "failed", reasonDiscarded); ferr != nil && !errors.Is(ferr, pgx.ErrNoRows) {
 			logger.ErrorContext(ctx, "record discarded run", attr.SlogError(ferr))
 		}
 		s.metrics.record(ctx, reasonDiscarded, snap.Truncated())
@@ -523,7 +524,7 @@ func (s *Syncer) apply(ctx context.Context, target repo.GetSyncTargetRow, run re
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 	q := s.repo.WithTx(tx)
 
-	locked, err := q.LockSyncConnection(ctx, repo.LockSyncConnectionParams{
+	_, err = q.LockSyncConnection(ctx, repo.LockSyncConnectionParams{
 		ConnectionID:   target.ConnectionID,
 		OrganizationID: target.OrganizationID,
 	})
@@ -533,7 +534,17 @@ func (s *Syncer) apply(ctx context.Context, target repo.GetSyncTargetRow, run re
 	if err != nil {
 		return Diff{}, fmt.Errorf("lock connection: %w", err)
 	}
-	if locked.ApplicationsSyncedAt.Valid && locked.ApplicationsSyncedAt.Time.After(run.StartedAt.Time) {
+	syncedAt, err := q.GetApplicationsSyncedAt(ctx, repo.GetApplicationsSyncedAtParams{
+		IdentityProviderConnectionID: target.ConnectionID,
+		OrganizationID:               target.OrganizationID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Diff{}, errConnectionGone
+	}
+	if err != nil {
+		return Diff{}, fmt.Errorf("read applications watermark: %w", err)
+	}
+	if syncedAt.Valid && syncedAt.Time.After(run.StartedAt.Time) {
 		return Diff{}, errSuperseded
 	}
 
@@ -671,4 +682,56 @@ func chunks[T any](items []T, size int) func(yield func([]T) bool) {
 			}
 		}
 	}
+}
+
+// FinalizeFailure fences attempts still executing after Temporal has exhausted
+// retries. cutoff is fixed by the workflow when it observes terminal failure,
+// not by this retryable activity, so retries cannot cover newer attempts.
+func (s *Syncer) FinalizeFailure(ctx context.Context, connectionID uuid.UUID, cutoff time.Time) error {
+	// Match PostgreSQL timestamp precision so a retried payload with nanoseconds
+	// compares equal to the watermark written by its first attempt.
+	cutoff = cutoff.UTC().Truncate(time.Microsecond)
+	target, err := s.repo.GetSyncTarget(ctx, connectionID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("load finalization target: %w", err)
+	}
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin failure finalization: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	q := s.repo.WithTx(tx)
+	_, err = q.LockSyncConnection(ctx, repo.LockSyncConnectionParams{ConnectionID: connectionID, OrganizationID: target.OrganizationID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("lock finalization connection: %w", err)
+	}
+	syncedAt, err := q.GetApplicationsSyncedAt(ctx, repo.GetApplicationsSyncedAtParams{
+		IdentityProviderConnectionID: connectionID, OrganizationID: target.OrganizationID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("read finalization watermark: %w", err)
+	}
+	if syncedAt.Valid && !syncedAt.Time.Before(cutoff) {
+		return nil
+	}
+	if _, err := q.FinalizeInterruptedReconcileRuns(ctx, repo.FinalizeInterruptedReconcileRunsParams{
+		OrganizationID: target.OrganizationID, IdentityProviderConnectionID: connectionID, Cutoff: optionalTime(cutoff),
+	}); err != nil {
+		return fmt.Errorf("close terminal attempts: %w", err)
+	}
+	if _, err := q.MarkApplicationsSynced(ctx, repo.MarkApplicationsSyncedParams{
+		OrganizationID: target.OrganizationID, IdentityProviderConnectionID: connectionID, SyncedAt: optionalTime(cutoff),
+	}); err != nil {
+		return fmt.Errorf("advance terminal watermark: %w", err)
+	}
+	return tx.Commit(ctx)
 }
