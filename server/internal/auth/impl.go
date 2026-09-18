@@ -866,6 +866,9 @@ func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPay
 		Slug:        selected.Slug,
 		WorkosID:    conv.PtrToPGText(selected.WorkosID),
 		Whitelisted: pgtype.Bool{Bool: false, Valid: false},
+		// Switching into an organization says nothing about what created it,
+		// and null leaves whatever was recorded alone.
+		CreationSource: pgtype.Text{String: "", Valid: false},
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error upserting organization metadata").LogError(ctx, s.logger)
 	}
@@ -1149,6 +1152,9 @@ func (s *Service) applySignupWhitelist(ctx context.Context, organizations []sess
 		Slug:        orgMetadata.Slug,
 		WorkosID:    orgMetadata.WorkosID,
 		Whitelisted: pgtype.Bool{Bool: true, Valid: true},
+		// Whitelisting an existing organization is not creating one. Null so
+		// the source the creating flow recorded survives this write.
+		CreationSource: pgtype.Text{String: "", Valid: false},
 	})
 	if err != nil {
 		return "", orgRepo.OrganizationMetadatum{}, fmt.Errorf("whitelist organization for signup: %w", err)

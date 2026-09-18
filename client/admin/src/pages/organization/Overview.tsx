@@ -29,10 +29,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { useOnUnmount } from "@/hooks/useOnUnmount";
 import { ACCOUNT_TYPE_OPTIONS, isAccountType } from "@/lib/accountTypes";
-import {
-  creationSourceLabel,
-  isPlatformAdminCreated,
-} from "@/lib/creationSource";
+import { creationSourceFact } from "@/lib/creationSource";
 import {
   cancelOrganizationFetches,
   invalidateOrganizationActivity,
@@ -329,6 +326,8 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
     });
   };
 
+  const createdVia = creationSourceFact(org.creation_source);
+
   const showTrialPanel =
     org.trial_state === "running" ||
     org.trial_state === "ending_soon" ||
@@ -372,12 +371,12 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
               <span
                 className={cn(
                   "text-sm",
-                  org.creation_source ? undefined : "text-muted-foreground",
+                  createdVia.recorded ? undefined : "text-muted-foreground",
                 )}
               >
-                {creationSourceLabel(org.creation_source)}
+                {createdVia.label}
               </span>
-              {isPlatformAdminCreated(org.creation_source) && (
+              {createdVia.platformAdmin && (
                 <span className="text-muted-foreground rounded-full border px-2 py-0.5 text-[0.6875rem] font-medium tracking-wide">
                   PROSPECT FLOW
                 </span>
