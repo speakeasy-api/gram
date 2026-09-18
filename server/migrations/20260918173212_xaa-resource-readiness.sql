@@ -5,6 +5,7 @@ CREATE TABLE "xaa_resource_readiness" (
   "project_id" uuid NOT NULL,
   "mcp_server_id" uuid NOT NULL,
   "identity_provider_connection_id" uuid NOT NULL,
+  "remote_session_issuer_id" uuid NOT NULL,
   "resource_source" text NOT NULL DEFAULT 'custom',
   "scope_policy" text NULL,
   "connection_confirmed_at" timestamptz NULL,
@@ -22,7 +23,13 @@ CREATE TABLE "xaa_resource_readiness" (
   CONSTRAINT "xaa_resource_readiness_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization_metadata" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
   CONSTRAINT "xaa_resource_readiness_organization_project_fkey" FOREIGN KEY ("organization_id", "project_id") REFERENCES "projects" ("organization_id", "id") ON UPDATE NO ACTION ON DELETE CASCADE,
   CONSTRAINT "xaa_resource_readiness_project_server_fkey" FOREIGN KEY ("project_id", "mcp_server_id") REFERENCES "mcp_servers" ("project_id", "id") ON UPDATE NO ACTION ON DELETE CASCADE,
+  CONSTRAINT "xaa_resource_readiness_remote_session_issuer_id_fkey" FOREIGN KEY ("remote_session_issuer_id") REFERENCES "remote_session_issuers" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
+  CONSTRAINT "xaa_resource_readiness_connection_confirmed_check" CHECK (((connection_confirmed_at IS NULL) = (connection_confirmed_by IS NULL)) AND ((connection_confirmed_by IS NULL) OR (connection_confirmed_by <> ''::text))),
   CONSTRAINT "xaa_resource_readiness_resource_source_check" CHECK (resource_source = ANY (ARRAY['custom'::text, 'oin'::text]))
 );
 -- Create index "xaa_resource_readiness_connection_idx" to table: "xaa_resource_readiness"
 CREATE INDEX "xaa_resource_readiness_connection_idx" ON "xaa_resource_readiness" ("organization_id", "identity_provider_connection_id");
+-- Create index "xaa_resource_readiness_project_server_idx" to table: "xaa_resource_readiness"
+CREATE INDEX "xaa_resource_readiness_project_server_idx" ON "xaa_resource_readiness" ("project_id", "mcp_server_id");
+-- Create index "xaa_resource_readiness_remote_session_issuer_idx" to table: "xaa_resource_readiness"
+CREATE INDEX "xaa_resource_readiness_remote_session_issuer_idx" ON "xaa_resource_readiness" ("remote_session_issuer_id");

@@ -3580,6 +3580,7 @@ type XaaResourceReadiness struct {
 	ProjectID                    uuid.UUID
 	McpServerID                  uuid.UUID
 	IdentityProviderConnectionID uuid.UUID
+	RemoteSessionIssuerID        uuid.UUID
 	ResourceSource               string
 	ScopePolicy                  pgtype.Text
 	ConnectionConfirmedAt        pgtype.Timestamptz

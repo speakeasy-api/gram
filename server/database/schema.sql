@@ -9005,6 +9005,9 @@ CREATE TABLE IF NOT EXISTS xaa_resource_readiness (
   project_id uuid NOT NULL,
   mcp_server_id uuid NOT NULL,
   identity_provider_connection_id uuid NOT NULL,
+  -- The authorization server the confirmation was made against; a server
+  -- rebound to another issuer reads as unconfirmed.
+  remote_session_issuer_id uuid NOT NULL,
   -- custom: the admin enables Cross App Access on the resource app by hand;
   -- oin: the listing ships with it enabled.
   resource_source TEXT NOT NULL DEFAULT 'custom',
@@ -9021,15 +9024,27 @@ CREATE TABLE IF NOT EXISTS xaa_resource_readiness (
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   CONSTRAINT xaa_resource_readiness_pkey PRIMARY KEY (id),
   CONSTRAINT xaa_resource_readiness_resource_source_check CHECK (resource_source IN ('custom', 'oin')),
+  CONSTRAINT xaa_resource_readiness_connection_confirmed_check CHECK (
+    (connection_confirmed_at IS NULL) = (connection_confirmed_by IS NULL)
+    AND (connection_confirmed_by IS NULL OR connection_confirmed_by <> '')
+  ),
   CONSTRAINT xaa_resource_readiness_server_connection_key UNIQUE (organization_id, project_id, mcp_server_id, identity_provider_connection_id),
   CONSTRAINT xaa_resource_readiness_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
   CONSTRAINT xaa_resource_readiness_organization_project_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE,
   CONSTRAINT xaa_resource_readiness_project_server_fkey FOREIGN KEY (project_id, mcp_server_id) REFERENCES mcp_servers (project_id, id) ON DELETE CASCADE,
-  CONSTRAINT xaa_resource_readiness_connection_tenant_fkey FOREIGN KEY (organization_id, identity_provider_connection_id) REFERENCES identity_provider_connections (organization_id, id) ON DELETE CASCADE
+  CONSTRAINT xaa_resource_readiness_connection_tenant_fkey FOREIGN KEY (organization_id, identity_provider_connection_id) REFERENCES identity_provider_connections (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT xaa_resource_readiness_remote_session_issuer_id_fkey FOREIGN KEY (remote_session_issuer_id) REFERENCES remote_session_issuers (id) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS xaa_resource_readiness_connection_idx
 ON xaa_resource_readiness (organization_id, identity_provider_connection_id);
+
+-- Serve the cascades from mcp_servers and remote_session_issuers.
+CREATE INDEX IF NOT EXISTS xaa_resource_readiness_project_server_idx
+ON xaa_resource_readiness (project_id, mcp_server_id);
+
+CREATE INDEX IF NOT EXISTS xaa_resource_readiness_remote_session_issuer_idx
+ON xaa_resource_readiness (remote_session_issuer_id);
 
 CREATE TABLE IF NOT EXISTS remote_session_ema_bindings (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
