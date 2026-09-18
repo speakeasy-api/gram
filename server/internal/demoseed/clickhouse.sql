@@ -1410,10 +1410,10 @@ SELECT
             substring(hmcp, 14, 3), '-8', substring(hmcp, 18, 3), '-',
             substring(hmcp, 21, 12))),
   if(k IN (2, 4, 5, 11), '',
-     if(i % 2 = 0, 'dec0de00-0000-4000-a000-000000005e01',
-                     'dec0de00-0000-4000-a000-000000005e02')),
+     if(i % 5 = 0, 'dec0de00-0000-4000-a000-000000005e02',
+                     'dec0de00-0000-4000-a000-000000005e01')),
   if(k IN (2, 4, 5, 11), '',
-     if(i % 2 = 0, 'lookup_customer', 'check_deployment')),
+     if(i % 5 = 0, 'check_health', 'get_customer')),
   if(k IN (2, 4, 5, 11), '', 'response'),
   if(k IN (2, 4, 5, 11), '', 'hosted_mcp'),
   if(k IN (2, 4, 5, 11), '', 'tools/call'),
@@ -1451,8 +1451,10 @@ FROM (
     lower(hex(MD5(concat('gram-demo-msg-', toString(number + 1), '-',
                          if(k IN (2, 4, 5, 11), '1', '3'))))) AS hmsg,
     lower(hex(MD5(concat('gram-demo-mcp-execution-', toString(number + 1))))) AS hexec,
-    lower(hex(MD5(if(i % 2 = 0, 'gram-demo-mcpserver-support',
-                                   'gram-demo-mcpserver-ops')))) AS hmcp,
+    -- Same chat-to-server rule as telemetry_logs (i % 5 = 0 is Acme Ops),
+    -- so the Risk Events MCP filter agrees with the call details.
+    lower(hex(MD5(if(i % 5 = 0, 'gram-demo-mcpserver-ops',
+                                   'gram-demo-mcpserver-support')))) AS hmcp,
     -- demo.chat_surface(i).
     if(i % 2 = 1, 'claude-code', if(i % 6 = 2, 'codex', 'cursor')) AS surface_slug,
     -- Byte offset of the match inside the message content: the length of the
