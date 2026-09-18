@@ -1,0 +1,19 @@
+.changeset/risk-events-mcp-server-filter.md
+  s_7fdecb48b43fe7::t_1b70bd6c1d5c51 1-5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "fd052f4340d6eb1e31a43afe7ddca6675905c170",
+  "prompts": {},
+  "sessions": {
+    "s_7fdecb48b43fe7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bf058b0c-2e83-40c5-b904-7bbe807d7039",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
