@@ -68,6 +68,21 @@ type CanonicalIdentityGate interface {
 	CanonicalOrgFor(ctx context.Context, orgID string) string
 }
 
+// DiagnosticsProjectReader keeps delegated project authorization explicit
+// without coupling diagnostics to one Reader implementation.
+type DiagnosticsProjectReader interface {
+	ResolveProjectRead(ctx context.Context, principal Principal, input FindMCPInput) (ResolvedProject, error)
+	GetMCPForDiagnostics(ctx context.Context, principal Principal, input GetMCPInput) (MCP, error)
+}
+
+// DiagnosticsReader is the complete read contract diagnostics needs. Keeping the
+// authorization seam explicit avoids silently accepting a Reader implementation
+// that cannot enforce project:read.
+type DiagnosticsReader interface {
+	Reader
+	DiagnosticsProjectReader
+}
+
 // DiagnosticsService answers the two overview-first questions: what is this
 // project doing, and why is this one MCP not working.
 type DiagnosticsService struct {
@@ -80,8 +95,7 @@ type DiagnosticsService struct {
 	auditor         DrilldownAuditor
 	sessions        ProjectOverviewSessionReader
 	sessionCapture  FeatureChecker
-	reader          Reader
-	projectReads    *PostgresReader
+	reader          DiagnosticsReader
 	readiness       *ReadinessService
 	budget          OperationBudget
 	identityGate    CanonicalIdentityGate
@@ -92,7 +106,7 @@ type DiagnosticsService struct {
 // drill-down tools are attached separately by WithDrilldown, so a deployment
 // that cannot mint subject references serves the overview and withholds the
 // row-level reads rather than serving them unbound.
-func NewDiagnosticsService(db *pgxpool.Pool, telemetry DiagnosticsTelemetryReader, sessionCapture FeatureChecker, reader Reader, readiness *ReadinessService, budget OperationBudget) *DiagnosticsService {
+func NewDiagnosticsService(db *pgxpool.Pool, telemetry DiagnosticsTelemetryReader, sessionCapture FeatureChecker, reader DiagnosticsReader, readiness *ReadinessService, budget OperationBudget) *DiagnosticsService {
 	var sessions ProjectOverviewSessionReader
 	if db != nil {
 		sessions = chatrepo.New(db)
@@ -103,7 +117,6 @@ func NewDiagnosticsService(db *pgxpool.Pool, telemetry DiagnosticsTelemetryReade
 		sessions:       sessions,
 		sessionCapture: sessionCapture,
 		reader:         reader,
-		projectReads:   postgresReader(reader),
 		readiness:      readiness,
 		budget:         budget,
 		identityGate:   nil,
@@ -154,12 +167,7 @@ func (s *DiagnosticsService) drilldownValid() bool {
 }
 
 func (s *DiagnosticsService) valid() bool {
-	return s != nil && s.db != nil && s.telemetry != nil && s.sessions != nil && s.sessionCapture != nil && s.reader != nil && s.projectReads != nil && s.budget.valid()
-}
-
-func postgresReader(reader Reader) *PostgresReader {
-	resolved, _ := reader.(*PostgresReader)
-	return resolved
+	return s != nil && s.db != nil && s.telemetry != nil && s.sessions != nil && s.sessionCapture != nil && s.reader != nil && s.budget.valid()
 }
 
 // GetProjectOverviewInput asks for one project's activity. It carries no
@@ -203,9 +211,6 @@ func (s *DiagnosticsService) GetProjectOverview(ctx context.Context, principal P
 	if input.ProjectID == "" {
 		return GetProjectOverviewOutput{}, fmt.Errorf("project_id is required")
 	}
-	if err := s.budget.Allow(ctx, principal); err != nil {
-		return GetProjectOverviewOutput{}, err
-	}
 	now := s.now()
 	window, err := resolveWindow(input.Window, now, overviewWindowSpec)
 	if err != nil {
@@ -215,8 +220,11 @@ func (s *DiagnosticsService) GetProjectOverview(ctx context.Context, principal P
 	if err != nil {
 		return GetProjectOverviewOutput{}, fmt.Errorf("parse project id: %w", err)
 	}
-	if _, err := s.projectReads.ResolveProjectRead(ctx, principal, FindMCPInput{ProjectID: input.ProjectID}); err != nil {
+	if _, err := s.reader.ResolveProjectRead(ctx, principal, FindMCPInput{ProjectID: input.ProjectID}); err != nil {
 		return GetProjectOverviewOutput{}, fmt.Errorf("authorize project overview: %w", err)
+	}
+	if err := s.budget.Allow(ctx, principal); err != nil {
+		return GetProjectOverviewOutput{}, err
 	}
 
 	sessionMode, err := s.sessionCapture(ctx, principal.OrganizationID)
@@ -371,9 +379,6 @@ func (s *DiagnosticsService) GetMCPDiagnostics(ctx context.Context, principal Pr
 	if input.ProjectID == "" || input.MCPID == "" {
 		return GetMCPDiagnosticsOutput{}, fmt.Errorf("project_id and mcp_id are required")
 	}
-	if err := s.budget.Allow(ctx, principal); err != nil {
-		return GetMCPDiagnosticsOutput{}, err
-	}
 	now := s.now()
 	window, err := resolveWindow(input.Window, now, diagnosticsWindowSpec)
 	if err != nil {
@@ -383,9 +388,12 @@ func (s *DiagnosticsService) GetMCPDiagnostics(ctx context.Context, principal Pr
 	// Project read is the authorization boundary for delegated diagnostics. The
 	// inventory row below proves the named MCP belongs to that authorized project
 	// without requiring a separate mcp:read grant.
-	mcp, err := s.projectReads.GetMCPForDiagnostics(ctx, principal, GetMCPInput{ProjectID: input.ProjectID, MCPID: input.MCPID})
+	mcp, err := s.reader.GetMCPForDiagnostics(ctx, principal, GetMCPInput{ProjectID: input.ProjectID, MCPID: input.MCPID})
 	if err != nil {
 		return GetMCPDiagnosticsOutput{}, fmt.Errorf("resolve diagnostics mcp: %w", err)
+	}
+	if err := s.budget.Allow(ctx, principal); err != nil {
+		return GetMCPDiagnosticsOutput{}, err
 	}
 	target, err := s.diagnosticsTarget(ctx, principal.OrganizationID, input.ProjectID, input.MCPID)
 	if err != nil {

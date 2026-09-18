@@ -710,7 +710,7 @@ func (r *PostgresReader) allowedMCPIDs(ctx context.Context, organizationID strin
 // organization and enforces the existing project:read scope before callers read
 // project-operational data.
 func (r *PostgresReader) ResolveProjectRead(ctx context.Context, principal Principal, input FindMCPInput) (ResolvedProject, error) {
-	if r == nil || r.authz == nil {
+	if r == nil || r.reader == nil || r.authz == nil {
 		return ResolvedProject{}, ErrUnavailable
 	}
 	project, err := r.resolveInventoryProject(ctx, principal.OrganizationID, input)

@@ -381,6 +381,7 @@ func TestListRecentToolCallsUsesBoundedSafeSummaryProjection(t *testing.T) {
 		WithRecentToolCalls(telemetry, mustParseURL(t, "https://app.getgram.test"))
 	reader.recentToolCalls.now = func() time.Time { return fixedNow }
 	ctx = contextvalues.WithAuthenticatedActor(ctx, &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID}, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))
+	ctx = contextvalues.SetActingSurface(ctx, contextvalues.ActingSurfacePlatformMCP)
 	ctx = authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeProjectRead, project.ID.String())})
 
 	output, err := reader.ListRecentToolCalls(ctx, principal, ListRecentToolCallsInput{ProjectSlug: project.Slug})
