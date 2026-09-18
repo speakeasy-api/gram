@@ -1,8 +1,9 @@
 import { StackedTimeBarChart } from "@/components/chart/StackedTimeBarChart";
+import { withAlpha } from "@/components/chart/palette";
 import {
-  CARD_COLORS,
-  INSIGHT_OTHER_COLOR,
-  INSIGHT_SERIES_COLORS,
+  useCardColors,
+  useInsightOtherColor,
+  useInsightSeriesColors,
 } from "@/components/observe/insights/insightsPalette";
 import {
   InsightCard,
@@ -99,6 +100,9 @@ export function InsightsGrid({
   onRangeSelect?: (from: Date, to: Date) => void;
 }): JSX.Element {
   const logsLink = useObserveLogsLink();
+  const cardColors = useCardColors();
+  const insightSeriesColors = useInsightSeriesColors();
+  const insightOtherColor = useInsightOtherColor();
   const [highlightedServer, setHighlightedServer] = useState<string | null>(
     null,
   );
@@ -121,10 +125,17 @@ export function InsightsGrid({
         from,
         to,
         undefined,
-        INSIGHT_SERIES_COLORS,
-        INSIGHT_OTHER_COLOR,
+        insightSeriesColors,
+        insightOtherColor,
       ),
-    [timeSeries, from, to, serverNameMappings],
+    [
+      timeSeries,
+      from,
+      to,
+      serverNameMappings,
+      insightSeriesColors,
+      insightOtherColor,
+    ],
   );
 
   // A server keeps one colour everywhere it appears: its stack segment, its
@@ -143,7 +154,7 @@ export function InsightsGrid({
   }, [chartData.datasets]);
 
   const colorForServerRow = (row: RankedRow) =>
-    seriesColors.get(row.label) ?? INSIGHT_OTHER_COLOR;
+    seriesColors.get(row.label) ?? insightOtherColor;
 
   // Hovering a server row isolates it: the others fade rather than disappear,
   // so the bar heights stay put and the eye can still see the share it takes
@@ -152,16 +163,21 @@ export function InsightsGrid({
     () =>
       chartData.datasets.map((dataset) => {
         const color =
-          seriesColors.get(dataset.label ?? "") ?? INSIGHT_OTHER_COLOR;
+          seriesColors.get(dataset.label ?? "") ?? insightOtherColor;
         const dimmed =
           highlightedServer !== null && dataset.label !== highlightedServer;
         return {
           ...dataset,
-          backgroundColor: dimmed ? `${color}1f` : color,
+          // withAlpha, not a hex suffix: the palette mixes `#rrggbb` and
+          // `hsl(...)` forms, and appending "1f" to an hsl string makes a
+          // color the canvas can't parse — it then keeps whatever fill it had
+          // last, so the fold segment stayed pure black while everything else
+          // faded.
+          backgroundColor: dimmed ? withAlpha(color, 0.12) : color,
           hoverBackgroundColor: color,
         };
       }),
-    [chartData.datasets, seriesColors, highlightedServer],
+    [chartData.datasets, seriesColors, highlightedServer, insightOtherColor],
   );
 
   // Hovering a row the chart does not draw — a skill, a local tool, a server
@@ -368,7 +384,7 @@ export function InsightsGrid({
           loading={status.targetToolBreakdown.pending}
           error={status.targetToolBreakdown.error}
         >
-          <RankedList color={CARD_COLORS.tools} rows={toolRows} />
+          <RankedList color={cardColors.tools} rows={toolRows} />
         </InsightCard>
 
         <InsightCard
@@ -378,7 +394,7 @@ export function InsightsGrid({
           error={status.clients.error}
         >
           <RankedList
-            color={CARD_COLORS.clients}
+            color={cardColors.clients}
             rows={clientRows}
             emptyMessage="No client reported a name in this window"
           />
@@ -405,7 +421,7 @@ export function InsightsGrid({
           error={status.targets.error}
         >
           <RankedList
-            color={CARD_COLORS.skills}
+            color={cardColors.skills}
             rows={skillRows}
             emptyMessage="No skills invoked"
           />
@@ -417,7 +433,7 @@ export function InsightsGrid({
           loading={status.users.pending}
           error={status.users.error}
         >
-          <RankedList color={CARD_COLORS.people} rows={userRows} />
+          <RankedList color={cardColors.people} rows={userRows} />
         </InsightCard>
       </div>
     </div>

@@ -7,7 +7,6 @@ import type { ClientFamily } from "@gram/client/models/components/recordinstalli
 import { GramIcon } from "@/components/gram-logo/variants/icon";
 import { ModeSwitchStarfield } from "@/components/mode-switch-starfield";
 import { PlatformMCPOnboardingContent } from "./PlatformMCP";
-import { RequireScope } from "@/components/require-scope";
 import { SourceSurface } from "@gram/client/models/components/startonboardingrequestbody.js";
 import { useOrgRoutes } from "@/routes";
 import { useSearchParams } from "react-router";
@@ -59,13 +58,7 @@ function clientFamilyForAgent(agentID: string): ClientFamily {
  * paints no background of its own.
  */
 export function HeadlessContent(): JSX.Element {
-  // Same gate the standalone Platform MCP page applies: connecting an agent is
-  // an organization-admin action, so members never see the flow offered.
-  return (
-    <RequireScope scope="org:admin" level="page">
-      <HeadlessHero />
-    </RequireScope>
-  );
+  return <HeadlessHero />;
 }
 
 function HeadlessHero(): JSX.Element {
@@ -122,9 +115,9 @@ function HeadlessHero(): JSX.Element {
           className="max-w-md text-base leading-relaxed"
           style={{ color: "var(--text-muted-fixed-light)" }}
         >
-          Administer the control plane from the agent you already work in.
-          Deploy and Manage MCP gateway servers, Review security policies and
-          deep dive your AI usage data.
+          Use the control plane from the agent you already work in. Your role
+          decides which projects, MCP servers, plugins, skills and operational
+          data you can access.
         </p>
 
         <div className="flex flex-col items-center gap-3">

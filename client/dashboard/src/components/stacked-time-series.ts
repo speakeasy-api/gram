@@ -25,4 +25,11 @@ export type TimeSeriesStack = {
    */
   exactSeries?: string[];
   rollup?: boolean;
+  /**
+   * The "unset"/unattributed group. It draws hollow — a box outlined in the
+   * neutral rather than filled — everywhere the series appears (bar segment,
+   * legend swatch, table swatch), because it is the absence of a category
+   * rather than one more category competing for a color.
+   */
+  unset?: boolean;
 };

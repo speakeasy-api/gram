@@ -117,6 +117,9 @@ func buildView(row repo.ListUserSessionsByProjectIDRow) *types.UserSession {
 		// rather than nil: the field is required, and absent upstreams is a
 		// meaningful answer this caller simply is not computing.
 		Upstreams: []*types.UserSessionUpstream{},
+		// Not resolved here: labelling a workload needs the workload issuer and
+		// agent assignment lookups the management API performs.
+		Workload: nil,
 	}
 }
 

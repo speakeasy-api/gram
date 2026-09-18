@@ -123,11 +123,11 @@ export function usePrivateMcpServerUrls(
   isLoading: boolean;
   isError: boolean;
 } {
-  const { rolloutEnabled, canManageIngress } = useNetworkIngressRollout();
+  const { canManageIngress } = useNetworkIngressRollout();
   const privateMode =
     mcpServer?.networkAccessMode === McpServerNetworkAccessMode.Dual ||
     mcpServer?.networkAccessMode === McpServerNetworkAccessMode.PrivateOnly;
-  const queryEnabled = rolloutEnabled && canManageIngress && privateMode;
+  const queryEnabled = canManageIngress && privateMode;
   const ingressResult = useNetworkIngress(undefined, undefined, {
     enabled: queryEnabled,
     retry: false,
@@ -152,7 +152,7 @@ export function usePrivateMcpServerUrls(
       queryEnabled && ingressResult.isSuccess
         ? privateMcpInstallPageUrls(ingressResult.data?.ingress, endpoints)
         : [],
-    canReadPrivateUrls: rolloutEnabled && canManageIngress,
+    canReadPrivateUrls: canManageIngress,
     isLoading: queryEnabled && ingressResult.isPending,
     isError: queryEnabled && ingressResult.isError,
   };

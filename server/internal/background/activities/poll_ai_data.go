@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -256,23 +257,39 @@ func (p *PollAIData) Do(ctx context.Context, input string) (err error) {
 // shareablePollError turns an internal poll failure into the message persisted
 // for organization members. Its ShareableError cause remains available to
 // internal callers, but RecordSchedulePollFailure stores only Error().
+// providerDetail formats a provider's error body for the org-visible poll
+// message. The body is the provider's own explanation of why it refused the
+// request, which is what the user needs to fix the integration.
+func providerDetail(body string) string {
+	body = strings.TrimSpace(body)
+	if body == "" {
+		return ""
+	}
+	return ": " + body
+}
+
 func shareablePollError(schedule string, cause error) error {
 	if contentErr, ok := errors.AsType[*aiintegrations.CodexCostContentError](cause); ok {
 		return oops.E(oops.CodeUnexpected, cause, "%s", contentErr.ShareableMessage())
 	}
 
-	var cursorErr *cursorapi.HTTPError
-	if errors.As(cause, &cursorErr) && cursorErr.StatusCode == 401 {
-		return oops.E(oops.CodeUnauthorized, cause, "cursor rejected the configured api key")
+	if cursorErr, ok := errors.AsType[*cursorapi.HTTPError](cause); ok {
+		switch cursorErr.StatusCode {
+		case 401, 403:
+			return oops.E(oops.CodeUnauthorized, cause, "cursor rejected the configured api key")
+		case 400, 404, 422:
+			return oops.E(oops.CodeInvalid, cause, "cursor rejected the usage request (HTTP %d); check the api key's team access%s", cursorErr.StatusCode, providerDetail(cursorErr.Body))
+		}
 	}
 
-	var anthropicErr *anthropicapi.HTTPError
-	if schedule == aiintegrations.ScheduleAnthropicCompliance && errors.As(cause, &anthropicErr) {
+	if anthropicErr, ok := errors.AsType[*anthropicapi.HTTPError](cause); ok {
 		switch anthropicErr.StatusCode {
 		case 401, 403:
 			return oops.E(oops.CodeUnauthorized, cause, "anthropic compliance rejected the configured api key")
 		case 404:
 			return oops.E(oops.CodeNotFound, cause, "anthropic compliance organization not found or compliance api access not enabled")
+		case 400, 422:
+			return oops.E(oops.CodeInvalid, cause, "anthropic compliance rejected the request (HTTP %d)%s", anthropicErr.StatusCode, providerDetail(anthropicErr.Body))
 		}
 	}
 
@@ -284,6 +301,8 @@ func shareablePollError(schedule string, cause error) error {
 				return oops.E(oops.CodeUnauthorized, cause, "codex compliance rejected the configured api key")
 			case 404:
 				return oops.E(oops.CodeNotFound, cause, "codex compliance organization not found or compliance api access not enabled")
+			case 400, 422:
+				return oops.E(oops.CodeInvalid, cause, "codex compliance rejected the request (HTTP %d)%s", codexErr.StatusCode, providerDetail(codexErr.Body))
 			}
 		case aiintegrations.ScheduleChatGPTCompliance:
 			switch codexErr.StatusCode {
@@ -291,6 +310,8 @@ func shareablePollError(schedule string, cause error) error {
 				return oops.E(oops.CodeUnauthorized, cause, "chatgpt compliance rejected the configured api key")
 			case 404:
 				return oops.E(oops.CodeNotFound, cause, "chatgpt compliance workspace not found or compliance api access not enabled")
+			case 400, 422:
+				return oops.E(oops.CodeInvalid, cause, "chatgpt compliance rejected the request (HTTP %d)%s", codexErr.StatusCode, providerDetail(codexErr.Body))
 			}
 		case aiintegrations.ScheduleCodexCloudSessions:
 			switch codexErr.StatusCode {
@@ -298,6 +319,8 @@ func shareablePollError(schedule string, cause error) error {
 				return oops.E(oops.CodeUnauthorized, cause, "codex cloud import rejected the configured api key")
 			case 404:
 				return oops.E(oops.CodeNotFound, cause, "codex cloud workspace not found or compliance api access not enabled")
+			case 400, 422:
+				return oops.E(oops.CodeInvalid, cause, "codex cloud import rejected the request (HTTP %d)%s", codexErr.StatusCode, providerDetail(codexErr.Body))
 			}
 		}
 	}
@@ -342,23 +365,31 @@ func shareablePollError(schedule string, cause error) error {
 	return oops.E(oops.CodeUnexpected, cause, "%s", message)
 }
 
-// pollRejectedByProvider reports whether the poll failed because the provider
-// rejected the request in a way retrying can't fix: a rejected api key
-// (401/403), or — for the anthropic compliance api — a 404, which is how it
-// reports an unknown organization or one without compliance api access. Those
-// failures are permanent until the user fixes the integration configuration,
-// so retrying them is wasted work.
+// pollRejectedByProvider reports whether the provider answered with a
+// status that no retry of the same request can change: a rejected key, a
+// missing resource, or a request the provider considers malformed for this
+// configuration. Those are configuration problems for the user to fix, so
+// the run stops on the first attempt and the schedule pauses after a few.
 func pollRejectedByProvider(err error) bool {
 	if cursorErr, ok := errors.AsType[*cursorapi.HTTPError](err); ok {
-		return cursorErr.StatusCode == 401
+		return providerRejectedStatus(cursorErr.StatusCode)
 	}
 	if anthropicErr, ok := errors.AsType[*anthropicapi.HTTPError](err); ok {
-		return anthropicErr.StatusCode == 401 || anthropicErr.StatusCode == 403 || anthropicErr.StatusCode == 404
+		return providerRejectedStatus(anthropicErr.StatusCode)
 	}
 	if codexErr, ok := errors.AsType[*codexapi.HTTPError](err); ok {
-		return codexErr.StatusCode == 401 || codexErr.StatusCode == 403 || codexErr.StatusCode == 404
+		return providerRejectedStatus(codexErr.StatusCode)
 	}
 	return false
+}
+
+func providerRejectedStatus(status int) bool {
+	switch status {
+	case http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound, http.StatusUnprocessableEntity:
+		return true
+	default:
+		return false
+	}
 }
 
 // pollProviderUnavailable reports whether the poll failed because the

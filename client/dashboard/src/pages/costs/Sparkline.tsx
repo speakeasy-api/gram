@@ -2,15 +2,15 @@
 // the last month). Coloured by trend: red when rising (cost up is bad), green
 // when falling, neutral grey when there's no clear trend. Pure SVG, no chart lib.
 // The series math + trend logic lives in ./sparkline-math.
+import { useTrendColors } from "@/components/chart/useSeriesColors";
 import {
   DRAW_POINTS,
   movingAverage,
   resample,
   SMOOTH_WINDOW,
   smoothPath,
-  TREND_COLOR,
   trendDirection,
-} from "./sparkline-math";
+} from "@/components/chart/sparkline-math";
 
 export function Sparkline({
   values,
@@ -24,6 +24,7 @@ export function Sparkline({
   // Force a colour (e.g. neutral for usage metrics); omit to colour by trend.
   color?: string;
 }): JSX.Element | null {
+  const trendColors = useTrendColors();
   const usable = values.filter((v) => Number.isFinite(v));
   if (usable.length < 2 || usable.every((v) => v === 0)) {
     return <span className="text-muted-foreground/50 text-xs">—</span>;
@@ -47,7 +48,7 @@ export function Sparkline({
     y: pad + innerH - ((v - min) / span) * innerH,
   }));
 
-  const color = fixedColor ?? TREND_COLOR[trendDirection(usable)];
+  const color = fixedColor ?? trendColors[trendDirection(usable)];
 
   return (
     <svg
