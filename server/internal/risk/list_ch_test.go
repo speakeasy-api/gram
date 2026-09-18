@@ -74,9 +74,30 @@ func TestListRiskResults_MCPServerFilterIncludesUnanchoredAndScopesAllPaths(t *t
 	hiddenPolicy := unanchored
 	hiddenPolicy.ID = uuid.New()
 	hiddenPolicy.RiskPolicyID = disabled.ID
-	require.NoError(t, chrepo.New(ti.chConn).InsertRiskFindings(ctx, []chrepo.RiskFindingRow{
-		unanchored, anchored, otherServer, foreignProject, foreignOrg, hiddenPolicy,
+	// A manual dismissal mirrored from Postgres appends a suppression copy
+	// that carries no execution metadata. It must still outrank the scanner
+	// copy under the server filter, or the dismissed finding resurfaces.
+	dismissedAnchored := anchored
+	dismissedAnchored.ID = uuid.New()
+	dismissedCopy := dismissedAnchored
+	dismissedCopy.MCPServerID = ""
+	dismissedCopy.ExecutionID = ""
+	dismissedCopy.ToolName = ""
+	dismissedCopy.MediationSurface = ""
+	dismissedCopy.MCPMethod = ""
+	dismissedCopy.PrincipalKind = ""
+	dismissedCopy.IdentityStamped = false
+	dismissedCopy.EnforcementOutcome = ""
+	dismissedAt := at.Add(time.Minute)
+	dismissedCopy.ExcludedAt = &dismissedAt
+	dismissedCopy.FalsePositiveAt = &dismissedAt
+	dismissedCopy.ExcludedReason = chrepo.ExcludedReasonManual
+	dismissedCopy.EventKind = chrepo.EventKindSuppression
+	chQueries := chrepo.New(ti.chConn)
+	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{
+		unanchored, anchored, otherServer, foreignProject, foreignOrg, hiddenPolicy, dismissedAnchored,
 	}))
+	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{dismissedCopy}))
 	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	// An MCP filter must use ClickHouse even while the general rollout flag is

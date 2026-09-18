@@ -277,7 +277,7 @@ func (w *FindingCHWriter) ProcessBatch(ctx context.Context, messages []*riskv1.F
 			userID = a.GetUserId()
 			externalUserID = a.GetExternalUserId()
 			assistantID = a.GetAssistantId()
-			chatSource = a.GetChatSource()
+			chatSource = chat.CanonicalSource(a.GetChatSource())
 			team = a.GetTeam()
 			userEmail = a.GetUserEmail()
 			if raw := a.GetMessageCreatedAt(); raw != "" {
