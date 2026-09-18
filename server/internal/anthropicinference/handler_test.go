@@ -238,6 +238,13 @@ func (s *slowScanner) ScanForInferenceEnforcement(ctx context.Context, _ risk.Re
 	}
 }
 
+func (s *slowScanner) HasAcknowledgedChallenge(context.Context, uuid.UUID, string, string, string, string) bool {
+	return false
+}
+
+func (s *slowScanner) RecordPolicyChallenge(context.Context, string, uuid.UUID, string, string, string, string, string, string, string) {
+}
+
 func TestAttachBoundsLongTranscriptScanning(t *testing.T) {
 	t.Parallel()
 	synctest.Test(t, func(t *testing.T) {

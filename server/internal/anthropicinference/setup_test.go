@@ -21,7 +21,7 @@ import (
 var infra *testenv.Environment
 
 func TestMain(m *testing.M) {
-	environment, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true})
+	environment, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true})
 	if err != nil {
 		log.Fatalf("launch test infrastructure: %v", err)
 	}
