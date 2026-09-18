@@ -313,7 +313,7 @@ type PostgresReader struct {
 	metadataVersionKey  []byte
 	riskReads           *RiskReadService
 	riskAnalysisStatus  *RiskAnalysisStatusService
-	riskFindings        *RiskFindingsService
+	riskFindings        riskFindingsLister
 	dataExports         *DataExportReadService
 	dataExportMutations *dataExportMutationService
 	recentToolCalls     *RecentToolCallReadService
@@ -367,10 +367,11 @@ func (r *PostgresReader) WithRiskAnalysisStatus(service *RiskAnalysisStatusServi
 	return r
 }
 
-// WithRiskFindings attaches privacy-safe Watchdog finding reads.
-func (r *PostgresReader) WithRiskFindings(service *RiskFindingsService) *PostgresReader {
+// WithRiskFindings attaches privacy-safe Watchdog finding reads behind a required
+// dedicated budget. A missing budget leaves the tool unavailable.
+func (r *PostgresReader) WithRiskFindings(service *RiskFindingsService, budget OperationBudget) *PostgresReader {
 	if r != nil && service.valid() {
-		r.riskFindings = service
+		r.riskFindings = &budgetedRiskFindings{service: service, budget: budget}
 	}
 	return r
 }

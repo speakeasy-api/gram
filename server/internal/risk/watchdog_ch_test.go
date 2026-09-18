@@ -36,6 +36,7 @@ func TestWatchdogClickHouseFractionalTimestamps(t *testing.T) {
 	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 	p := chrepo.ListRiskFindingsParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: auth.ProjectID.String(), PolicyIDs: []string{policy}, From: &from, To: &to, Limit: 10}
 	t.Run("nanosecond window bounds", func(t *testing.T) {
+		t.Parallel()
 		count, err := q.CountWatchdogFindings(ctx, p)
 		require.NoError(t, err)
 		require.Equal(t, uint64(2), count)
@@ -50,6 +51,7 @@ func TestWatchdogClickHouseFractionalTimestamps(t *testing.T) {
 		require.Equal(t, from, rows[1].MessageCreatedAt.UTC())
 	})
 	t.Run("nanosecond cursor", func(t *testing.T) {
+		t.Parallel()
 		end := base.Add(time.Second)
 		pageParams := p
 		pageParams.From, pageParams.To, pageParams.Limit = &base, &end, 1
@@ -122,6 +124,7 @@ func TestWatchdogClickHouse(t *testing.T) {
 	p := chrepo.ListRiskFindingsParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: auth.ProjectID.String(), PolicyIDs: []string{policy}, From: &from, To: &to, Limit: 1}
 
 	t.Run("pagination and safe metadata", func(t *testing.T) {
+		t.Parallel()
 		pageParams := p
 		var got []chrepo.WatchdogFinding
 		for range 5 {
@@ -162,6 +165,7 @@ func TestWatchdogClickHouse(t *testing.T) {
 	})
 
 	t.Run("explicit policy scope", func(t *testing.T) {
+		t.Parallel()
 		scope := p
 		scope.PolicyIDs = []string{otherPolicy.RiskPolicyID}
 		page, err := q.ListWatchdogFindings(ctx, scope)

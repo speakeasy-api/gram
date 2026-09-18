@@ -8,7 +8,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-func registerRiskFindingsTool(reg *Registrar, service *RiskFindingsService) {
+func registerRiskFindingsTool(reg *Registrar, service riskFindingsLister) {
 	tool := &mcp.Tool{
 		Name: "list_risk_findings", Title: "List Watchdog Findings",
 		Description: "Read privacy-safe Watchdog findings for a digest: defaults to critical findings in the last 24 hours. Returns up to 50 findings, a signed next_cursor, full-window total_count and independent group counts by severity, data_type (stored category), team, app (chat source), or pseudonymous user. Current enabled policy scores define severity, not confidence. Missing attribution remains unknown. Never returns matched content. Requires Watchdog and ClickHouse risk listing enabled. Repeat returned from/to and filters on subsequent pages.",
@@ -22,7 +22,7 @@ func registerRiskFindingsTool(reg *Registrar, service *RiskFindingsService) {
 		}, nil),
 	}
 	meta := ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}
-	if !service.valid() {
+	if service == nil || !service.valid() {
 		tool.Description += " Findings are unavailable in this deployment."
 		addTool(reg, tool, meta, unavailableRiskReadTool(reg, tool.Name))
 		return

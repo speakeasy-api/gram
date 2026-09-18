@@ -30,8 +30,12 @@ type RiskFindingsReader interface {
 	CountWatchdogFindings(context.Context, chrepo.ListRiskFindingsParams) (uint64, error)
 }
 
+// Bound both the metadata lookup and the downstream ClickHouse policy ID filter.
+// One extra row detects overflow; incomplete policy sets must never be queried.
+const riskFindingPolicyLimit = 1000
+
 type findingPolicyReader interface {
-	ListRiskPolicies(context.Context, uuid.UUID) ([]riskrepo.RiskPolicy, error)
+	ListRiskFindingPolicies(context.Context, riskrepo.ListRiskFindingPoliciesParams) ([]riskrepo.ListRiskFindingPoliciesRow, error)
 }
 
 type RiskFindingsService struct {
@@ -143,7 +147,7 @@ func findingWindow(input ListRiskFindingsInput, now time.Time) (time.Time, time.
 // keeps distinct long or normalized labels distinguishable in group counts.
 func findingLabel(value string) string {
 	cleaned := strings.Map(func(r rune) rune {
-		if unicode.IsControl(r) {
+		if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) || unicode.Is(unicode.Zl, r) || unicode.Is(unicode.Zp, r) {
 			return -1
 		}
 		return r
@@ -204,7 +208,7 @@ func (s *RiskFindingsService) List(ctx context.Context, principal Principal, inp
 	defer cancel()
 	project, err := s.projects.Resolve(ctx, principal.OrganizationID, input.ProjectID, input.ProjectSlug)
 	if err != nil {
-		return zero, err
+		return zero, fmt.Errorf("resolve risk findings project: %w", err)
 	}
 	orgSlug, err := s.organizations.OrganizationSlug(ctx, principal.OrganizationID)
 	if err != nil || orgSlug == "" {
@@ -232,9 +236,16 @@ func (s *RiskFindingsService) List(ctx context.Context, principal Principal, inp
 		params.CursorTime = &cursor.CreatedAt
 		params.CursorID = uuid.NullUUID{UUID: cursor.ID, Valid: true}
 	}
-	policies, err := s.policies.ListRiskPolicies(ctx, project.ID)
+	policies, err := s.policies.ListRiskFindingPolicies(ctx, riskrepo.ListRiskFindingPoliciesParams{
+		ProjectID:      project.ID,
+		OrganizationID: principal.OrganizationID,
+		PageLimit:      riskFindingPolicyLimit + 1,
+	})
 	if err != nil {
 		return zero, fmt.Errorf("%w: read finding policies", ErrUnavailable)
+	}
+	if len(policies) > riskFindingPolicyLimit {
+		return zero, fmt.Errorf("%w: finding policy limit exceeded", ErrUnavailable)
 	}
 	severities := map[string]string{}
 	bySeverity := map[string][]string{}

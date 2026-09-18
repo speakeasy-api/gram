@@ -37,6 +37,7 @@ func TestWatchdogWholeWindowQueries(t *testing.T) {
 	p := watchdogTestParams()
 	for dimension, expression := range map[string]string{"severity": "risk_policy_id", "data_type": "category", "team": "team", "app": "chat_source", "user": watchdogIdentitySQL} {
 		t.Run(dimension, func(t *testing.T) {
+			t.Parallel()
 			sb, err := watchdogGroupQuery(p, dimension)
 			require.NoError(t, err)
 			query, args, err := sb.ToSql()

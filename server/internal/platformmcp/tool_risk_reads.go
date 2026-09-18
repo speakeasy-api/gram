@@ -298,6 +298,13 @@ func riskReadToolCall[Out any](ctx context.Context, telemetry RiskTelemetry, too
 		event.Outcome = "succeeded"
 		return nil, output, nil
 	}
+	if errors.Is(err, ErrOperationRateLimited) || errors.Is(err, ErrOperationBudgetUnavailable) {
+		if errors.Is(err, ErrOperationRateLimited) {
+			event.Outcome = "rate_limited"
+		}
+		result, _ := operationBudgetToolResult(err)
+		return result, zero, nil
+	}
 	var refusal featureUnavailableResult
 	switch {
 	case errors.Is(err, ErrRiskReadInvalid), errors.Is(err, ErrRiskCursorInvalid):

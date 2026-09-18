@@ -1,10 +1,10 @@
-//nolint:exhaustruct // Focused fixtures intentionally omit unused fields.
 package platformmcp
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -30,16 +30,19 @@ func (s *findingProjects) Resolve(_ context.Context, org, id, slug string) (Reso
 }
 
 type findingPolicies struct {
-	rows  []riskrepo.RiskPolicy
-	calls int
+	rows   []riskrepo.ListRiskFindingPoliciesRow
+	calls  int
+	params []riskrepo.ListRiskFindingPoliciesParams
 }
 
-func (s *findingPolicies) ListRiskPolicies(_ context.Context, _ uuid.UUID) ([]riskrepo.RiskPolicy, error) {
+func (s *findingPolicies) ListRiskFindingPolicies(_ context.Context, p riskrepo.ListRiskFindingPoliciesParams) ([]riskrepo.ListRiskFindingPoliciesRow, error) {
 	s.calls++
+	s.params = append(s.params, p)
 	return s.rows, nil
 }
 
 type findingReader struct {
+	counts  map[string]uint64
 	rows    []chrepo.WatchdogFinding
 	buckets []chrepo.WatchdogGroup
 	params  []chrepo.ListRiskFindingsParams
@@ -48,11 +51,23 @@ type findingReader struct {
 
 func (s *findingReader) ListWatchdogFindings(_ context.Context, p chrepo.ListRiskFindingsParams) ([]chrepo.WatchdogFinding, error) {
 	s.params = append(s.params, p)
+	if p.CursorID.Valid {
+		for i, row := range s.rows {
+			if row.ID == p.CursorID.UUID {
+				return s.rows[i+1:], s.err
+			}
+		}
+		return nil, s.err
+	}
 	return s.rows, s.err
 }
 func (s *findingReader) CountWatchdogFindings(_ context.Context, p chrepo.ListRiskFindingsParams) (uint64, error) {
 	s.params = append(s.params, p)
-	return 12, s.err
+	var count uint64
+	for _, id := range p.PolicyIDs {
+		count += s.counts[id]
+	}
+	return count, s.err
 }
 func (s *findingReader) GroupWatchdogFindings(_ context.Context, p chrepo.ListRiskFindingsParams, _ string) ([]chrepo.WatchdogGroup, error) {
 	s.params = append(s.params, p)
@@ -62,19 +77,21 @@ func (s *findingReader) GroupWatchdogFindings(_ context.Context, p chrepo.ListRi
 func findingsFixture(t *testing.T) (*RiskFindingsService, *findingReader, *findingPolicies) {
 	t.Helper()
 	project := ResolvedProject{ID: uuid.New(), Slug: "default", Name: "Project"}
-	policies := &findingPolicies{rows: []riskrepo.RiskPolicy{
+	policies := &findingPolicies{rows: []riskrepo.ListRiskFindingPoliciesRow{
 		{ID: uuid.New(), ProjectID: project.ID, OrganizationID: "<ORG_ID>", Enabled: true, Score: 9.5},
 		{ID: uuid.New(), ProjectID: project.ID, OrganizationID: "<ORG_ID>", Enabled: true, Score: 7},
 		{ID: uuid.New(), ProjectID: project.ID, OrganizationID: "<ORG_ID>", Enabled: false, Score: 10},
 		{ID: uuid.New(), ProjectID: uuid.New(), OrganizationID: "other", Enabled: true, Score: 10},
 	}}
-	reader := &findingReader{rows: []chrepo.WatchdogFinding{{ID: uuid.New(), MessageCreatedAt: riskAnalysisTestNow.Add(-time.Hour), PolicyID: policies.rows[0].ID.String(), RuleID: "test-rule", Category: "pii", Team: "engineering", App: "browser", User: "test-user"}}, buckets: []chrepo.WatchdogGroup{{Value: "", Count: 4}, {Value: "test-user", Count: 8}}}
+	reader := &findingReader{counts: map[string]uint64{policies.rows[0].ID.String(): 12, policies.rows[1].ID.String(): 5}, rows: []chrepo.WatchdogFinding{{ID: uuid.New(), MessageCreatedAt: riskAnalysisTestNow.Add(-time.Hour), PolicyID: policies.rows[0].ID.String(), RuleID: "test-rule", Category: "pii", Team: "engineering", App: "browser", User: "test-user"}}, buckets: []chrepo.WatchdogGroup{{Value: "", Count: 4}, {Value: "test-user", Count: 8}}}
 	codec, err := newRiskCursorCodec("test-key")
 	require.NoError(t, err)
 	return &RiskFindingsService{projects: &findingProjects{project: project}, organizations: riskMutationOrganizationResolver{slug: "org"}, flags: &riskMutationFlagProvider{evaluation: feature.EvaluationEnabled}, policies: policies, findings: reader, cursor: codec, now: func() time.Time { return riskAnalysisTestNow }}, reader, policies
 }
 
 func TestRiskFindingsDefaultsAndGroups(t *testing.T) {
+	t.Parallel()
+
 	s, r, p := findingsFixture(t)
 	out, err := s.List(t.Context(), testRiskPrincipal("user"), ListRiskFindingsInput{GroupBy: []string{"severity", "data_type", "team", "app", "user"}})
 	require.NoError(t, err)
@@ -83,6 +100,8 @@ func TestRiskFindingsDefaultsAndGroups(t *testing.T) {
 	require.EqualValues(t, 12, out.TotalCount)
 	require.Len(t, out.Findings, 1)
 	require.Len(t, out.Groups, 5)
+	require.Equal(t, "severity", out.Groups[2].Dimension)
+	require.Equal(t, []RiskFindingGroup{{Value: "critical", Count: 12}}, out.Groups[2].Groups)
 	require.Equal(t, "critical", out.Findings[0].Severity)
 	require.Equal(t, "pii", out.Findings[0].DataType)
 	require.NotEqual(t, "test-user", out.Findings[0].User)
@@ -93,7 +112,9 @@ func TestRiskFindingsDefaultsAndGroups(t *testing.T) {
 		require.Equal(t, p.rows[0].ProjectID.String(), params.ProjectID)
 		require.Equal(t, []string{p.rows[0].ID.String()}, params.PolicyIDs)
 	}
-	require.Equal(t, []riskProjectCall{{organizationID: "<ORG_ID>"}}, s.projects.(*findingProjects).calls)
+	projects, ok := s.projects.(*findingProjects)
+	require.True(t, ok)
+	require.Equal(t, []riskProjectCall{{organizationID: "<ORG_ID>"}}, projects.calls)
 	userGroups := out.Groups[4]
 	require.Equal(t, "user", userGroups.Dimension)
 	require.Equal(t, out.Findings[0].User, userGroups.Groups[0].Value)
@@ -101,11 +122,14 @@ func TestRiskFindingsDefaultsAndGroups(t *testing.T) {
 }
 
 func TestRiskFindingsSeverityFilters(t *testing.T) {
+	t.Parallel()
+
 	for _, tc := range []struct {
 		severity string
 		ids      int
 	}{{"critical", 1}, {"high", 1}, {"medium", 0}, {"low", 0}, {"all", 2}} {
 		t.Run(tc.severity, func(t *testing.T) {
+			t.Parallel()
 			s, r, _ := findingsFixture(t)
 			_, err := s.List(t.Context(), testRiskPrincipal("user"), ListRiskFindingsInput{Severity: tc.severity})
 			require.NoError(t, err)
@@ -120,11 +144,81 @@ func TestRiskFindingsSeverityFilters(t *testing.T) {
 		score float64
 		band  string
 	}{{3.9, "low"}, {4, "medium"}, {6.9, "medium"}, {7, "high"}, {8.9, "high"}, {9, "critical"}} {
-		require.Equal(t, tc.band, findingSeverity(tc.score))
+		t.Run(strconv.FormatFloat(tc.score, 'f', -1, 64), func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.band, findingSeverity(tc.score))
+		})
 	}
 }
 
+func TestRiskFindingsSeverityGroupCounts(t *testing.T) {
+	t.Parallel()
+
+	s, _, _ := findingsFixture(t)
+	out, err := s.List(t.Context(), testRiskPrincipal("user"), ListRiskFindingsInput{Severity: "all", GroupBy: []string{"severity"}})
+	require.NoError(t, err)
+	require.EqualValues(t, 17, out.TotalCount)
+	require.Len(t, out.Groups, 1)
+	require.Equal(t, "severity", out.Groups[0].Dimension)
+	require.False(t, out.Groups[0].Truncated)
+	require.Equal(t, []RiskFindingGroup{{Value: "critical", Count: 12}, {Value: "high", Count: 5}}, out.Groups[0].Groups)
+}
+
+func TestRiskFindingsPolicyLookupBounds(t *testing.T) {
+	t.Parallel()
+
+	for _, count := range []int{1000, 1001} {
+		t.Run(strconv.Itoa(count), func(t *testing.T) {
+			t.Parallel()
+
+			s, reader, policies := findingsFixture(t)
+			policy := policies.rows[0]
+			policies.rows = []riskrepo.ListRiskFindingPoliciesRow{policy}
+			for len(policies.rows) < count {
+				row := policy
+				row.ID = uuid.New()
+				policies.rows = append(policies.rows, row)
+			}
+			out, err := s.List(t.Context(), testRiskPrincipal("user"), ListRiskFindingsInput{GroupBy: []string{"team"}})
+			require.Equal(t, []riskrepo.ListRiskFindingPoliciesParams{{
+				OrganizationID: "<ORG_ID>",
+				ProjectID:      policy.ProjectID,
+				PageLimit:      1001,
+			}}, policies.params)
+			if count == 1001 {
+				require.ErrorIs(t, err, ErrUnavailable)
+				require.Empty(t, reader.params)
+			} else {
+				require.NoError(t, err)
+				require.Len(t, out.Findings, 1)
+				require.NotEmpty(t, reader.params)
+				for _, params := range reader.params {
+					require.Len(t, params.PolicyIDs, 1000)
+				}
+			}
+		})
+	}
+}
+
+func TestRiskFindingsProjectResolverError(t *testing.T) {
+	t.Parallel()
+
+	s, reader, policies := findingsFixture(t)
+	projects, ok := s.projects.(*findingProjects)
+	require.True(t, ok)
+	sentinel := errors.New("project resolver failed")
+	projects.err = sentinel
+	_, err := s.List(t.Context(), testRiskPrincipal("user"), ListRiskFindingsInput{})
+	require.ErrorIs(t, err, sentinel)
+	require.NotSame(t, sentinel, err, "resolver errors must be wrapped with service context")
+	require.Contains(t, err.Error(), "resolve risk findings project")
+	require.Zero(t, policies.calls)
+	require.Empty(t, reader.params)
+}
+
 func TestRiskFindingsValidationAndGates(t *testing.T) {
+	t.Parallel()
+
 	for _, input := range []ListRiskFindingsInput{{From: "invalid"}, {From: riskAnalysisTestNow.Format(time.RFC3339)}, {To: riskAnalysisTestNow.Add(time.Hour).Format(time.RFC3339)}, {From: riskAnalysisTestNow.Add(-32 * 24 * time.Hour).Format(time.RFC3339)}, {Severity: "urgent"}, {GroupBy: []string{"email"}}, {GroupBy: []string{"team", "team"}}, {Cursor: "cursor"}, {ProjectID: uuid.NewString(), ProjectSlug: "default"}} {
 		s, r, p := findingsFixture(t)
 		_, err := s.List(t.Context(), testRiskPrincipal("user"), input)
@@ -141,7 +235,9 @@ func TestRiskFindingsValidationAndGates(t *testing.T) {
 		require.Zero(t, p.calls)
 	}
 	s, r, p := findingsFixture(t)
-	s.projects.(*findingProjects).err = ErrRiskReadNotFound
+	projects, ok := s.projects.(*findingProjects)
+	require.True(t, ok)
+	projects.err = ErrRiskReadNotFound
 	_, err := s.List(t.Context(), testRiskPrincipal("user"), ListRiskFindingsInput{ProjectID: uuid.NewString()})
 	require.ErrorIs(t, err, ErrRiskReadNotFound)
 	require.Zero(t, p.calls)
@@ -154,6 +250,8 @@ func TestRiskFindingsValidationAndGates(t *testing.T) {
 }
 
 func TestRiskFindingsCursorAndGroupBounds(t *testing.T) {
+	t.Parallel()
+
 	principal := testRiskPrincipal("user")
 	s, r, _ := findingsFixture(t)
 	for len(r.rows) < 51 {
@@ -171,10 +269,14 @@ func TestRiskFindingsCursorAndGroupBounds(t *testing.T) {
 	require.Len(t, out.Groups[0].Groups, 200)
 	require.True(t, out.Groups[0].Truncated)
 	input := ListRiskFindingsInput{From: out.From, To: out.To, GroupBy: []string{"team"}, Cursor: out.NextCursor}
-	r.rows = nil
 	r.params = nil
-	_, err = s.List(t.Context(), principal, input)
+	continued, err := s.List(t.Context(), principal, input)
 	require.NoError(t, err)
+	require.Len(t, continued.Findings, 1)
+	require.Equal(t, r.rows[50].ID.String(), continued.Findings[0].ID)
+	require.Empty(t, continued.NextCursor)
+	require.Equal(t, out.TotalCount, continued.TotalCount)
+	require.Equal(t, out.Groups, continued.Groups)
 	require.Equal(t, out.Findings[49].ID, r.params[0].CursorID.UUID.String())
 	for _, principal := range []Principal{testRiskPrincipal("user"), testRiskPrincipal("other-user"), {OrganizationID: "other-org", UserID: "user", ConnectionID: "connection", Generation: "generation"}} {
 		_, err = s.List(t.Context(), principal, input)
@@ -188,12 +290,16 @@ func TestRiskFindingsCursorAndGroupBounds(t *testing.T) {
 	_, err = s.List(t.Context(), principal, input)
 	require.ErrorIs(t, err, ErrRiskCursorInvalid)
 	input.From = out.From
-	s.projects.(*findingProjects).project.ID = uuid.New()
+	projects, ok := s.projects.(*findingProjects)
+	require.True(t, ok)
+	projects.project.ID = uuid.New()
 	_, err = s.List(t.Context(), principal, input)
 	require.ErrorIs(t, err, ErrRiskCursorInvalid)
 }
 
 func TestRiskFindingsMCPInProcess(t *testing.T) {
+	t.Parallel()
+
 	s, reader, _ := findingsFixture(t)
 	server := mcp.NewServer(&mcp.Implementation{Name: "findings-test", Version: "1"}, nil)
 	reg := newRegistrar(server)
@@ -256,6 +362,8 @@ func (f *findingFlagGate) EvaluateFlag(_ context.Context, flag feature.Flag, _ s
 }
 
 func TestRiskFindingsIndependentFeatureGates(t *testing.T) {
+	t.Parallel()
+
 	for _, flag := range []feature.Flag{feature.FlagRiskWatchdog, feature.FlagRiskListFromClickHouse} {
 		s, r, p := findingsFixture(t)
 		s.flags = &findingFlagGate{disabled: flag}
@@ -272,6 +380,8 @@ func TestRiskFindingsIndependentFeatureGates(t *testing.T) {
 }
 
 func TestRiskFindingsWindowAndLabels(t *testing.T) {
+	t.Parallel()
+
 	end := riskAnalysisTestNow.Add(-time.Hour)
 	from, to, err := findingWindow(ListRiskFindingsInput{To: end.Format(time.RFC3339)}, riskAnalysisTestNow)
 	require.NoError(t, err)
@@ -290,6 +400,8 @@ func TestRiskFindingsWindowAndLabels(t *testing.T) {
 }
 
 func TestRiskFindingsStub(t *testing.T) {
+	t.Parallel()
+
 	server := mcp.NewServer(&mcp.Implementation{Name: "findings-stub", Version: "1"}, nil)
 	reg := newRegistrar(server)
 	registerRiskFindingsTool(reg, nil)
