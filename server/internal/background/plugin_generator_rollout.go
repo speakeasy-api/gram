@@ -34,7 +34,11 @@ const (
 	// the "trigger every interval unless one is already running" behaviour
 	// without a separate triggering workflow: a run that outlasts the interval
 	// just defers the next tick.
-	pluginGeneratorRolloutInterval         = 1 * time.Hour
+	pluginGeneratorRolloutInterval = 1 * time.Hour
+
+	// Allow lateness up to one interval minus 1s; skip older missed ticks.
+	pluginGeneratorRolloutCatchupWindow = pluginGeneratorRolloutInterval - time.Second
+
 	pluginGeneratorRolloutDefaultBatchSize = int32(100)
 	pluginGeneratorRolloutConcurrency      = 5
 
@@ -238,10 +242,11 @@ func AddPluginGeneratorRolloutSchedule(ctx context.Context, temporalEnv *tenv.En
 	}
 
 	_, err := sc.Create(ctx, client.ScheduleOptions{
-		ID:      pluginGeneratorRolloutScheduleID,
-		Overlap: enums.SCHEDULE_OVERLAP_POLICY_SKIP,
-		Spec:    spec,
-		Action:  action,
+		CatchupWindow: pluginGeneratorRolloutCatchupWindow,
+		ID:            pluginGeneratorRolloutScheduleID,
+		Overlap:       enums.SCHEDULE_OVERLAP_POLICY_SKIP,
+		Spec:          spec,
+		Action:        action,
 	})
 	switch {
 	case errors.Is(err, temporal.ErrScheduleAlreadyRunning):
@@ -249,6 +254,7 @@ func AddPluginGeneratorRolloutSchedule(ctx context.Context, temporalEnv *tenv.En
 			DoUpdate: func(input client.ScheduleUpdateInput) (*client.ScheduleUpdate, error) {
 				input.Description.Schedule.Spec = &spec
 				input.Description.Schedule.Action = action
+				setScheduleCatchup(&input.Description.Schedule, pluginGeneratorRolloutCatchupWindow)
 				return &client.ScheduleUpdate{
 					Schedule:              &input.Description.Schedule,
 					TypedSearchAttributes: nil,
