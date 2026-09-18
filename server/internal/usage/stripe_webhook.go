@@ -160,10 +160,6 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) er
 		case errors.Is(err, pgx.ErrNoRows):
 		case err != nil:
 			return oops.E(oops.CodeUnexpected, err, "failed to lock enterprise trial lifecycle").LogError(ctx, logger)
-		default:
-			if _, err := trialQueries.MarkTrialConverted(ctx, organizationID); err != nil {
-				return oops.E(oops.CodeUnexpected, err, "failed to mark enterprise trial converted").LogError(ctx, logger)
-			}
 		}
 	}
 
@@ -239,6 +235,11 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) er
 		}
 	}
 
+	if event.Type == "checkout.session.completed" {
+		if err := s.finishPaygCheckout(ctx, organizationID); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to finish committed Stripe Checkout").LogError(ctx, logger)
+		}
+	}
 	return nil
 }
 
@@ -281,6 +282,41 @@ func (s *Service) repairReplayedPaygCheckout(ctx context.Context, logger *slog.L
 		if err != nil {
 			return fmt.Errorf("reconcile replayed PAYG checkout OpenRouter %s key: %w", keyType, err)
 		}
+	}
+	return s.finishPaygCheckout(ctx, organizationID)
+}
+
+// finishPaygCheckout applies external side effects only after activation commits.
+// Receipt replay retries these effects without repeating the business transition.
+func (s *Service) finishPaygCheckout(ctx context.Context, organizationID string) error {
+	metadata, err := repo.New(s.db).GetBillingMetadata(ctx, organizationID)
+	if err != nil {
+		return fmt.Errorf("load committed PAYG billing metadata: %w", err)
+	}
+	if !metadata.StripeSubscriptionID.Valid || !metadata.StripeCustomerID.Valid {
+		return nil
+	}
+	identity, err := s.stripeOrganizationIdentity(ctx, organizationID, metadata)
+	if err != nil {
+		return err
+	}
+	if identity.accountType != "payg" {
+		return nil
+	}
+	if s.trial != nil {
+		if err := s.trial.TrialInactive(ctx, organizationID); err != nil {
+			return fmt.Errorf("stop converted trial notifications: %w", err)
+		}
+	}
+	if err := s.stripeClient.UpdateCustomer(ctx, stripeclient.UpdateCustomerInput{
+		CustomerID:       metadata.StripeCustomerID.String,
+		OrganizationID:   organizationID,
+		OrganizationSlug: identity.slug,
+		OrganizationName: identity.name,
+		Email:            identity.email,
+		AccountType:      identity.accountType,
+	}); err != nil {
+		return fmt.Errorf("refresh converted Stripe customer identity: %w", err)
 	}
 	return nil
 }
@@ -615,6 +651,7 @@ func (s *Service) activatePaygCheckout(ctx context.Context, tx pgx.Tx, organizat
 
 	newlyEnabled := []productfeatures.Feature(nil)
 	convertedDemotedTrial := false
+	convertedActiveTrial := false
 	trial, err := trialsrepo.New(tx).GetTrial(ctx, organizationID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		newlyEnabled, err = productfeatures.SeedEnterpriseAccessEntitlementsTx(ctx, tx, organizationID)
@@ -623,11 +660,22 @@ func (s *Service) activatePaygCheckout(ctx context.Context, tx pgx.Tx, organizat
 		}
 	} else if err != nil {
 		return stripeWebhookResult{}, fmt.Errorf("read trial state for PAYG activation: %w", err)
-	} else if trial.DemotedAt.Valid {
-		if !trial.ConvertedAt.Valid {
-			return stripeWebhookResult{}, errors.New("demoted enterprise trial is not durably converted")
+	} else {
+		convertedActiveTrial, err = s.convertEnterpriseTrialForCheckoutTx(ctx, tx, organizationID, trial)
+		if err != nil {
+			return stripeWebhookResult{}, fmt.Errorf("convert active trial after Stripe Checkout completion: %w", err)
 		}
-		convertedDemotedTrial = true
+		if !trial.ConvertedAt.Valid && !convertedActiveTrial {
+			if _, err := trialsrepo.New(tx).MarkTrialConverted(ctx, organizationID); err != nil {
+				return stripeWebhookResult{}, fmt.Errorf("mark completed Checkout trial converted: %w", err)
+			}
+		}
+		convertedDemotedTrial = trial.DemotedAt.Valid
+	}
+	if convertedActiveTrial {
+		newlyEnabled = append(newlyEnabled, productfeatures.TrialRuntimeFeatures...)
+	}
+	if convertedDemotedTrial {
 		if err := productfeatures.SetTrialRuntimeFeaturesTx(ctx, tx, organizationID, true); err != nil {
 			return stripeWebhookResult{}, fmt.Errorf("restore demoted trial runtime features: %w", err)
 		}
@@ -635,8 +683,10 @@ func (s *Service) activatePaygCheckout(ctx context.Context, tx pgx.Tx, organizat
 	}
 
 	reconcileKeyTypes := []openrouter.KeyType(nil)
-	if convertedDemotedTrial {
+	if convertedActiveTrial || convertedDemotedTrial {
 		reconcileKeyTypes = append(reconcileKeyTypes, openrouter.AllKeyTypes...)
+	}
+	if convertedDemotedTrial {
 		for _, keyType := range openrouter.AllKeyTypes {
 			if err := removeOpenRouterDisableCauseTx(ctx, tx, organizationID, keyType, openrouter.DisableCauseTrialDemotion); err != nil {
 				return stripeWebhookResult{}, fmt.Errorf("replace demoted trial OpenRouter %s key lifecycle: %w", keyType, err)
@@ -647,7 +697,7 @@ func (s *Service) activatePaygCheckout(ctx context.Context, tx pgx.Tx, organizat
 	if err != nil {
 		return stripeWebhookResult{}, fmt.Errorf("recover PAYG OpenRouter chat key billing: %w", err)
 	}
-	if chatStateChanged && !convertedDemotedTrial {
+	if chatStateChanged && !convertedDemotedTrial && !convertedActiveTrial {
 		reconcileKeyTypes = append(reconcileKeyTypes, openrouter.KeyTypeChat)
 	}
 

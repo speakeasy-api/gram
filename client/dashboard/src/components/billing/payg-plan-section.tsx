@@ -24,8 +24,8 @@ import type { ReactNode } from "react";
 
 /**
  * Offers checkout during an active trial or when PAYG has no Stripe subscription.
- * Starting checkout converts the local trial before Stripe confirms a subscription,
- * so abandoning the hosted page must leave a way to finish billing setup.
+ * Starting checkout leaves the trial unchanged until Stripe confirms completion.
+ * Unsubscribed PAYG organizations retain a way to finish billing setup.
  * Attached subscriptions expose their live state and management controls.
  */
 export function PaygPlanSection(): JSX.Element | null {

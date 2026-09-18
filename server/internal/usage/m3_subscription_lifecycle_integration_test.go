@@ -43,7 +43,7 @@ func (*m3StripeWebhookClient) GetCustomer(context.Context, string) (*stripeclien
 }
 
 func (*m3StripeWebhookClient) UpdateCustomer(context.Context, stripeclient.UpdateCustomerInput) error {
-	return errors.New("not implemented")
+	return nil
 }
 
 func (*m3StripeWebhookClient) CreateCheckoutSession(context.Context, stripeclient.CreateCheckoutSessionInput) (*stripeclient.CheckoutSession, error) {
