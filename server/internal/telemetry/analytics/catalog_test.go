@@ -66,6 +66,12 @@ func TestNewCatalogRejectsHalfDeclaredDatasets(t *testing.T) {
 		{name: "it rejects a field named like the time bucket", mutate: func(d *Dataset) { d.Fields[0].Name = timeBucketColumn }, want: "time bucket"},
 		{name: "it rejects a dataset with no source query", mutate: func(d *Dataset) { d.Source = nil }, want: "no source query"},
 		{name: "it rejects an unknown kind", mutate: func(d *Dataset) { d.Kind = "table" }, want: "unknown kind"},
+		{name: "it rejects an empty dataset name", mutate: func(d *Dataset) { d.Name = "" }, want: "empty name"},
+		{name: "it rejects a dataset with no time expression", mutate: func(d *Dataset) { d.TimeExpr = "" }, want: "no time expression"},
+		{name: "it rejects a dataset with no fields", mutate: func(d *Dataset) { d.Fields = nil }, want: "declares no fields"},
+		{name: "it rejects a field with an empty name", mutate: func(d *Dataset) { d.Fields[0].Name = "" }, want: "empty name or expression"},
+		{name: "it rejects a field with an empty expression", mutate: func(d *Dataset) { d.Fields[0].Expr = "" }, want: "empty name or expression"},
+		{name: "it rejects an unknown role", mutate: func(d *Dataset) { d.Fields[0].Role = "axis" }, want: "unknown role"},
 		{name: "it rejects an unknown field type", mutate: func(d *Dataset) { d.Fields[0].Type = "uuid" }, want: "unknown type"},
 		{name: "it rejects an unknown operator", mutate: func(d *Dataset) { d.Fields[0].Operators = []Operator{"like"} }, want: "unknown operator"},
 		{name: "it rejects an unknown aggregation", mutate: func(d *Dataset) {

@@ -38,8 +38,10 @@ var ToolCalls = &Dataset{
 		{Name: "session", Type: TypeString, Role: RoleDimension, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "session_id"},
 		{Name: "user", Type: TypeString, Role: RoleDimension, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "user_email"},
 		{Name: "surface", Type: TypeString, Role: RoleDimension, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "surface"},
-		// status reads outcome: ok or error in agent vocabulary, not a
-		// protocol status code.
+		// status reads outcome in agent vocabulary, not a protocol status
+		// code: ok, error, rejected (a call a decision blocked) or refused (a
+		// model declining). describe does not enumerate values, so this is the
+		// spec of what a status filter may name.
 		{Name: "status", Type: TypeString, Role: RoleDimension, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "status"},
 		{Name: "duration_ms", Type: TypeFloat64, Role: RoleMeasure, Unit: "ms", Operators: nil, Aggregations: []Aggregation{AggregationSum, AggregationAvg, AggregationP95}, Expr: "duration_nano / 1e6"},
 	},

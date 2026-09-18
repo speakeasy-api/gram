@@ -90,6 +90,12 @@ func TestSourceQueriesAgainstClickHouse(t *testing.T) {
 	blocked := agentEventFixture(orgID, "r9", "s1", "t1", "tc2", "tool_decision", base+3)
 	blocked.ToolName = "Write"
 	blocked.Outcome = "rejected"
+	// A record first filed under s2, then re-emitted with its session
+	// withdrawn. The collapse must run before the session predicate, or the
+	// withdrawn copy is filtered away first and the stale one survives.
+	filedUnderS2 := agentEventFixture(orgID, "r10", "s2", "t3", "r10", "api_request", base+12)
+	withdrawn := agentEventFixture(orgID, "r10", "", "", "r10", "api_request", base+12)
+	withdrawn.ObservedAtUnixNano = base + 200
 
 	rows := []chrepo.AgentEventRow{
 		agentEventFixture(orgID, "r1", "s1", "t1", "r1", "api_request", base),
@@ -109,6 +115,9 @@ func TestSourceQueriesAgainstClickHouse(t *testing.T) {
 		agentEventFixture(orgID, "r6", "s1", "t9", "r6", "api_request", base+int64(48*time.Hour)),
 		// No session: not a session row.
 		agentEventFixture(orgID, "r7", "", "", "r7", "api_request", base+11),
+		// Filed under s2, then withdrawn from it: no session may keep it.
+		filedUnderS2,
+		withdrawn,
 	}
 	require.NoError(t, chrepo.New(conn).InsertAgentEvents(t.Context(), rows))
 
@@ -126,7 +135,7 @@ func TestSourceQueriesAgainstClickHouse(t *testing.T) {
 			org, project, id             string
 			startedAt, endedAt           int64
 			user, model, surface, provid string
-			turns, toolCalls             uint64
+			turns, toolCalls             int64
 		}
 		var got []session
 		for result.Next() {
@@ -138,14 +147,14 @@ func TestSourceQueriesAgainstClickHouse(t *testing.T) {
 
 		require.Len(t, got, 2)
 		require.Equal(t, "s1", got[0].id)
-		require.Equal(t, uint64(2), got[0].turns, "t1 and t2, with the redelivered record counted once")
-		require.Equal(t, uint64(2), got[0].toolCalls, "two observations of tc1 are one call, and the blocked tc2 is another")
+		require.Equal(t, int64(2), got[0].turns, "t1 and t2, with the redelivered record counted once")
+		require.Equal(t, int64(2), got[0].toolCalls, "two observations of tc1 are one call, and the blocked tc2 is another")
 		require.Equal(t, base, got[0].startedAt)
 		require.Equal(t, base+4, got[0].endedAt, "the out-of-window row does not stretch the session")
 		require.Equal(t, "dev@example.com", got[0].user)
 		require.Equal(t, "claude-sonnet-4", got[0].model, "the trailing hook row, which states no model, does not blank it")
 		require.Equal(t, "s2", got[1].id)
-		require.Zero(t, got[1].turns, "an empty turn id is not a turn")
+		require.Zero(t, got[1].turns, "an empty turn id is not a turn, and the record withdrawn from s2 brings none with it")
 		require.Zero(t, got[1].toolCalls)
 	})
 

@@ -40,19 +40,25 @@ const toolCallEventTypesSQL = "event_type IN ('tool_call', 'tool_call_result', '
 // happened to read first, so a record re-emitted with a correction could
 // survive as its stale copy. Newest observed wins, which is also the rule
 // every argMax downstream applies.
+//
+// The collapse runs over the complete scoped record, and only then do the
+// dataset's own predicates apply. Filtering first would let a correction
+// that moved a record out of the dataset (a session id withdrawn, an event
+// retyped) be dropped before the collapse, leaving its stale copy to win.
 func dedupedAgentEvents(scope Scope, extra ...squirrel.Sqlizer) squirrel.SelectBuilder {
-	builder := sq.Select("*").
+	scoped := sq.Select("*").
 		From("agent_events").
 		Where(squirrel.Eq{"organization_id": scope.OrganizationID}).
 		Where(squirrel.Eq{"project_id": scope.ProjectID}).
 		Where("occurred_at_unix_nano >= ?", scope.FromUnixNano).
-		Where("occurred_at_unix_nano < ?", scope.ToUnixNano)
+		Where("occurred_at_unix_nano < ?", scope.ToUnixNano).
+		OrderBy("observed_at_unix_nano DESC").
+		Suffix("LIMIT 1 BY organization_id, project_id, record_id")
+	builder := sq.Select("*").FromSelect(scoped, "scoped")
 	for _, condition := range extra {
 		builder = builder.Where(condition)
 	}
-	return builder.
-		OrderBy("observed_at_unix_nano DESC").
-		Suffix("LIMIT 1 BY organization_id, project_id, record_id")
+	return builder
 }
 
 // sessionsSource collapses agent_events to one row per session. Dimensions
@@ -72,8 +78,10 @@ func sessionsSource(scope Scope) squirrel.SelectBuilder {
 		"argMaxIf(model, observed_at_unix_nano, model != '') AS model",
 		"argMaxIf(surface, observed_at_unix_nano, surface != '') AS surface",
 		"argMaxIf(provider, observed_at_unix_nano, provider != '') AS provider",
-		"uniqExactIf(turn_id, turn_id != '') AS turn_count",
-		"uniqExactIf(event_id, "+toolCallEventTypesSQL+") AS tool_call_count",
+		// uniqExact yields UInt64; the catalog declares these Int64, and the
+		// column must be what the contract says it is.
+		"toInt64(uniqExactIf(turn_id, turn_id != '')) AS turn_count",
+		"toInt64(uniqExactIf(event_id, "+toolCallEventTypesSQL+")) AS tool_call_count",
 	).
 		FromSelect(dedupedAgentEvents(scope, squirrel.NotEq{"session_id": ""}), "deduped").
 		GroupBy("organization_id", "project_id", "session_id")
