@@ -9,6 +9,8 @@ import (
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/authz"
 )
 
 // Every tool the deployment registers declares an audience. A tool with none
@@ -246,6 +248,64 @@ func TestEveryExternalToolUsesAKnownAuthorizationPolicy(t *testing.T) {
 			require.Equal(t, ExternalAuthorizationMember, resource.Meta.Authorization, resource.URI)
 		}
 	}
+}
+
+func TestGetPlatformContextPreservesAssistantCallsWithoutExternalGrants(t *testing.T) {
+	t.Parallel()
+
+	registrar := newRegistrar(newTestMCPServer())
+	registerGetPlatformContextTool(registrar)
+	principal := testPrincipal()
+	principal.ConnectionID = ""
+	principal.Generation = ""
+	principal.ClientID = AssistantClientID
+	principal.Surface = SurfaceProjectAssistant
+
+	result, err := descriptorByName(t, registrar, "get_platform_context").Invoke(
+		ContextWithPrincipal(t.Context(), principal),
+		json.RawMessage(`{}`),
+	)
+
+	require.NoError(t, err)
+	contextResult, ok := result.(PlatformContext)
+	require.True(t, ok)
+	require.Equal(t, principal.OrganizationID, contextResult.OrganizationID)
+	require.Empty(t, contextResult.AvailableWorkflows)
+	require.Empty(t, contextResult.RequestableWorkflows)
+}
+
+func TestExternalCatalogueFiltersByLiveCapabilities(t *testing.T) {
+	t.Parallel()
+
+	principal := testPrincipal()
+	registrar := &Registrar{descriptors: []Descriptor{
+		{Name: "context", Meta: ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly}},
+		{Name: "projects", Meta: ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, DiscoveryScopes: discoveryProjectRead}},
+		{Name: "mcps", Meta: ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, DiscoveryScopes: discoveryMCPRead}},
+		{Name: "skill_write", Meta: ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, DiscoveryScopes: discoverySkillWrite}},
+		{Name: "admin", Meta: ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly}},
+	}}
+	tools := []*mcp.Tool{{Name: "context"}, {Name: "projects"}, {Name: "mcps"}, {Name: "skill_write"}, {Name: "admin"}}
+
+	memberCtx := authz.GrantsToContext(t.Context(), []authz.Grant{
+		authz.NewGrant(authz.ScopeProjectRead, "project-1"),
+		authz.NewGrant(authz.ScopeSkillRead, "skill-1"),
+	})
+	require.Equal(t, []string{"context", "projects"}, toolNames(registrar.FilterExternalTools(memberCtx, principal, tools)))
+
+	blockedCtx := authz.GrantsToContext(t.Context(), []authz.Grant{
+		authz.NewGrant(authz.ScopeProjectRead, "project-1"),
+		authz.NewGrant(authz.ScopeProjectBlockedRead, "project-1"),
+	})
+	require.Equal(t, []string{"context"}, toolNames(registrar.FilterExternalTools(blockedCtx, principal, tools)))
+
+	adminCtx := authz.GrantsToContext(t.Context(), []authz.Grant{authz.NewGrant(authz.ScopeOrgAdmin, principal.OrganizationID)})
+	require.Equal(t, []string{"context", "admin"}, toolNames(registrar.FilterExternalTools(adminCtx, principal, tools)))
+
+	rootCtx := authz.GrantsToContext(t.Context(), []authz.Grant{authz.NewGrant(authz.ScopeRoot, authz.WildcardResource)})
+	require.Equal(t, []string{"context", "projects", "mcps", "skill_write", "admin"}, toolNames(registrar.FilterExternalTools(rootCtx, principal, tools)))
+
+	require.Empty(t, registrar.FilterExternalTools(t.Context(), principal, tools), "missing prepared grants fail closed")
 }
 
 func TestExternalToolDenialReturnsReadableErrorWithoutCallingHandler(t *testing.T) {
