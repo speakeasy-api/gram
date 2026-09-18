@@ -57,10 +57,11 @@ func TestClaudeCodeLogEventAccessors(t *testing.T) {
 			subjectKey: "message.uuid", subject: "m2", outcome: OutcomeOK, text: "done",
 		},
 		{
-			name:       "api_request is identified by the request id",
+			// A request records that a call was made, not how it went.
+			name:       "api_request is identified by the request id and states no outcome",
 			record:     accessorTestRecord(claudeScope, "api_request", accessorTestKV("request_id", "req_1"), accessorTestKV("client_request_id", "c1")),
 			eventType:  EventTypeAPIRequest,
-			subjectKey: "request_id", subject: "req_1", outcome: OutcomeOK, text: "",
+			subjectKey: "request_id", subject: "req_1", outcome: "", text: "",
 		},
 		{
 			name:       "api_error falls back to the client request id when the server never answered",
@@ -120,7 +121,7 @@ func TestClaudeCodeLogEventAccessors(t *testing.T) {
 			name:       "legacy body prefix names the event",
 			record:     withBody(accessorTestRecord(claudeScope, ""), "claude_code.api_request"),
 			eventType:  EventTypeAPIRequest,
-			subjectKey: "", subject: "", outcome: OutcomeOK, text: "",
+			subjectKey: "", subject: "", outcome: "", text: "",
 		},
 		{
 			name:       "an unknown event stays unclassified",

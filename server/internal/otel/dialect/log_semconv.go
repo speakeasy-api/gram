@@ -188,8 +188,32 @@ func (SemconvLog) OutcomeMessage(*otelv1.InboundLogRecord) (string, string, erro
 	return "", "", nil
 }
 
-func (SemconvLog) Text(*otelv1.InboundLogRecord) (string, string, error) {
-	return "", "", nil
+// Text is the record in words. Semconv states no text field of its own, but a
+// producer that wrote words into the body meant them, and the row builder only
+// falls back to the body for records nothing classified, so a record semconv
+// classified would lose them.
+//
+// Only for a record semconv itself classified. A record another dialect
+// claimed reaches this through the fallback, and that dialect has already
+// decided what its words are: Claude Code, for one, puts them in attributes
+// and leaves a body this has no business promoting.
+func (SemconvLog) Text(record *otelv1.InboundLogRecord) (string, string, error) {
+	if _, operation := getOneLogAttr(record, "gen_ai.operation.name"); semconvOperationType(operation) == EventTypeUnclassified {
+		return "", "", nil
+	}
+
+	body := record.GetBody()
+	if !body.HasStringValue() {
+		return "", "", nil
+	}
+
+	value := body.GetStringValue()
+	_, name := logRawEventName(record)
+	if value == "" || BodyRepeatsEventName(value, name) {
+		return "", "", nil
+	}
+
+	return "body", value, nil
 }
 
 func (SemconvLog) DurationNano(*otelv1.InboundLogRecord) (string, int64, error) {

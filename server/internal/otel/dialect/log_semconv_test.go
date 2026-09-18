@@ -55,3 +55,29 @@ func TestSemconvLog(t *testing.T) {
 	require.Equal(t, "gen_ai.response.id", key)
 	require.Equal(t, "response-id", value)
 }
+
+// TestSemconvLogKeepsAClassifiedRecordsBody: the row builder only falls back to
+// the body for records nothing classified, so a record semconv did classify
+// would otherwise lose the words its producer wrote there.
+func TestSemconvLogKeepsAClassifiedRecordsBody(t *testing.T) {
+	t.Parallel()
+
+	classified := withBody((&otelv1.InboundLogRecord_builder{
+		Attributes: []*otelv1.InboundLogRecord_KeyValue{
+			logDialectStringAttribute("gen_ai.operation.name", "chat"),
+		},
+	}).Build(), "the model said something worth keeping")
+
+	key, text, err := SemconvLog{}.Text(classified)
+	require.NoError(t, err)
+	require.Equal(t, "body", key)
+	require.Equal(t, "the model said something worth keeping", text)
+
+	// Another dialect owns an unclassified record, and it has already decided
+	// what its words are, so this must not promote the body underneath it.
+	unclassified := withBody((&otelv1.InboundLogRecord_builder{}).Build(), "hello world")
+	key, text, err = SemconvLog{}.Text(unclassified)
+	require.NoError(t, err)
+	require.Empty(t, key)
+	require.Empty(t, text)
+}

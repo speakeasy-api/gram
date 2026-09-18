@@ -210,14 +210,17 @@ func (ClaudeCodeLog) ToolName(record *otelv1.InboundLogRecord) (string, string, 
 	return key, value, nil
 }
 
-// Outcome is implied by the event for API events, stated by success on a
-// tool result and on a compaction, and rejected when a tool decision said
-// no. An accepted decision has no outcome of its own: the result row carries
-// it, and neither does a captured payload: the request it belongs to does.
+// Outcome is implied by the event for a response, an error and a refusal,
+// stated by success on a tool result and on a compaction, and rejected when a
+// tool decision said no. A request is none of these: it records that a call
+// was made, not how it went, so it carries no outcome and must not be given
+// one. An accepted decision has no outcome of its own either: the result row
+// carries it, and neither does a captured payload: the request it belongs to
+// does.
 func (ClaudeCodeLog) Outcome(record *otelv1.InboundLogRecord) (string, string, error) {
 	key, name := claudeCodeEventName(record)
 	switch claudeCodeEventType(name) {
-	case EventTypeAPIRequest, EventTypeAPIResponse:
+	case EventTypeAPIResponse:
 		return key, OutcomeOK, nil
 	case EventTypeAPIError:
 		return key, OutcomeError, nil

@@ -114,7 +114,7 @@ func TestAgentEventRowFromLog(t *testing.T) {
 		require.Equal(t, int64(7), row.CacheWriteTokens)
 		require.InDelta(t, 0.0125, row.CostUSD, 1e-9)
 		require.Equal(t, int64(1_500_000_000), row.DurationNano)
-		require.Equal(t, string(dialect.OutcomeOK), row.Outcome)
+		require.Empty(t, row.Outcome, "a request records that a call was made, not how it went")
 		require.Empty(t, row.Text, "api_request puts everything in attributes")
 		require.Equal(t, "Platform", row.DepartmentName)
 		require.Equal(t, []string{"admin", "member"}, row.Roles)
