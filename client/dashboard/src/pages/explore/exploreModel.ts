@@ -102,12 +102,12 @@ export function autoGrain(window: WindowPreset): Grain {
 }
 
 /** Whether the chart type renders a bucketed timeseries. */
-export function isTimeseries(chartType: ChartType): boolean {
+function isTimeseries(chartType: ChartType): boolean {
   return chartType === "line" || chartType === "area" || chartType === "bar";
 }
 
 /** The grain a spec queries at: buckets for a timeseries, none otherwise. */
-export function grainForSpec(spec: ExploreSpec): Grain {
+function grainForSpec(spec: ExploreSpec): Grain {
   return isTimeseries(spec.chartType) ? autoGrain(spec.window) : "none";
 }
 
@@ -133,7 +133,7 @@ export function dimensionFields(
 }
 
 /** The dataset's numeric quantities. */
-export function measureFields(
+function measureFields(
   dataset: AnalyticsDataset | undefined,
 ): AnalyticsField[] {
   return (dataset?.fields ?? []).filter((field) => field.role === "measure");
