@@ -1538,7 +1538,7 @@ func (s *Scanner) recordLLMPolicyEvaluation(ctx context.Context, policy repo.Ris
 	attrs := metric.WithAttributes(
 		attr.OrganizationID(policy.OrganizationID),
 		attr.RiskPolicyID(policy.ID.String()),
-		attr.RiskLane(llmanalyzer.LaneSync),
+		attr.RiskScanMode(llmanalyzer.ScanModeSync),
 		attr.Outcome(outcome),
 	)
 	if s.metrics.llmPolicyEvaluations != nil {
