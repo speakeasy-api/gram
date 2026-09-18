@@ -164,7 +164,7 @@ func (c *Client) Complete(ctx context.Context, info CallInfo, messages []Message
 	ctx, span := c.tracer.Start(ctx, "risk.llm.complete", trace.WithAttributes(
 		attr.OrganizationID(info.OrgID),
 		attr.OrganizationSlug(info.OrgSlug),
-		attr.RiskLane(info.Lane),
+		attr.RiskScanMode(info.ScanMode),
 		attr.RiskLLMModel(c.cfg.Model),
 	))
 	defer span.End()
@@ -194,7 +194,7 @@ func (c *Client) Complete(ctx context.Context, info CallInfo, messages []Message
 			attr.SlogError(err),
 			attr.SlogOutcome(string(outcome)),
 			attr.SlogOrganizationID(info.OrgID),
-			attr.SlogRiskLane(info.Lane),
+			attr.SlogRiskScanMode(info.ScanMode),
 		)
 		return Completion{
 			Content:          "",

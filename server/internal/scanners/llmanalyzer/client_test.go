@@ -31,7 +31,7 @@ const (
 	testAPIKey = "test-api-key"
 )
 
-var testInfo = llmanalyzer.CallInfo{OrgID: "org-1", OrgSlug: "acme-test", Lane: "sync"}
+var testInfo = llmanalyzer.CallInfo{OrgID: "org-1", OrgSlug: "acme-test", ScanMode: llmanalyzer.ScanModeSync}
 
 // cleanVerdict is a well-formed model reply with nothing flagged.
 const cleanVerdict = `{"secrets_leak": {"score": 0, "reasoning": "none"}, "personal_data_leak": {"score": 0, "reasoning": "none"},` +
@@ -236,7 +236,7 @@ func TestClient_CompleteHappyPath(t *testing.T) {
 	dims := []attribute.KeyValue{
 		attr.OrganizationID(testInfo.OrgID),
 		attr.OrganizationSlug(testInfo.OrgSlug),
-		attr.RiskLane(testInfo.Lane),
+		attr.RiskScanMode(testInfo.ScanMode),
 		attr.RiskLLMModel(testModel),
 	}
 	require.Equal(t, int64(1), counterValue(t, data, "risk.llm.requests", append(dims, attr.Outcome(o11y.OutcomeSuccess))...))
@@ -281,7 +281,7 @@ func TestClient_RetriesServerErrorThenSucceeds(t *testing.T) {
 	require.Equal(t, int32(2), tc.upstream.requests.Load())
 
 	data := tc.collect(t)
-	require.Equal(t, int64(1), counterValue(t, data, "risk.llm.retries", attr.OrganizationID(testInfo.OrgID), attr.RiskLane(testInfo.Lane)))
+	require.Equal(t, int64(1), counterValue(t, data, "risk.llm.retries", attr.OrganizationID(testInfo.OrgID), attr.RiskScanMode(testInfo.ScanMode)))
 	require.Equal(t, int64(1), counterValue(t, data, "risk.llm.requests", attr.Outcome(o11y.OutcomeSuccess)))
 }
 
@@ -483,7 +483,7 @@ func TestClient_RecordParseFailure(t *testing.T) {
 	require.Equal(t, int64(2), counterValue(t, data, "risk.llm.parse_failures",
 		attr.OrganizationID(testInfo.OrgID),
 		attr.OrganizationSlug(testInfo.OrgSlug),
-		attr.RiskLane(testInfo.Lane),
+		attr.RiskScanMode(testInfo.ScanMode),
 		attr.RiskLLMModel(testModel),
 	))
 }

@@ -30,6 +30,15 @@ const (
 	OutcomeRateLimited o11y.Outcome = "rate_limited"
 )
 
+// Scan modes reported on every risk model call: how the scan was invoked,
+// distinct from the enforcement dispatcher's lane (scanner + policy).
+const (
+	// ScanModeSync marks realtime enforcement calls.
+	ScanModeSync = "sync"
+	// ScanModeAsync marks batch scan calls.
+	ScanModeAsync = "async"
+)
+
 // CallInfo carries the metric and span dimensions of one Complete call. The
 // client does not know which organization or lane it serves; the analyzer
 // passes them in.
@@ -40,8 +49,9 @@ type CallInfo struct {
 	// OrgSlug is the organization's slug, for dashboards that slice by name.
 	OrgSlug string
 
-	// Lane is "sync" for realtime enforcement and "async" for batch scans.
-	Lane string
+	// ScanMode is ScanModeSync for realtime enforcement and ScanModeAsync
+	// for batch scans.
+	ScanMode string
 }
 
 type metrics struct {
@@ -120,7 +130,7 @@ func (m *metrics) RecordRequest(ctx context.Context, info CallInfo, model string
 	attrs := metric.WithAttributes(
 		attr.OrganizationID(info.OrgID),
 		attr.OrganizationSlug(info.OrgSlug),
-		attr.RiskLane(info.Lane),
+		attr.RiskScanMode(info.ScanMode),
 		attr.RiskLLMModel(model),
 		attr.Outcome(outcome),
 	)
@@ -141,14 +151,14 @@ func (m *metrics) RecordTokens(ctx context.Context, info CallInfo, model string,
 	m.tokens.Add(ctx, int64(promptTokens), metric.WithAttributes(
 		attr.OrganizationID(info.OrgID),
 		attr.OrganizationSlug(info.OrgSlug),
-		attr.RiskLane(info.Lane),
+		attr.RiskScanMode(info.ScanMode),
 		attr.RiskLLMModel(model),
 		attr.RiskLLMTokenKind(TokenKindInput),
 	))
 	m.tokens.Add(ctx, int64(completionTokens), metric.WithAttributes(
 		attr.OrganizationID(info.OrgID),
 		attr.OrganizationSlug(info.OrgSlug),
-		attr.RiskLane(info.Lane),
+		attr.RiskScanMode(info.ScanMode),
 		attr.RiskLLMModel(model),
 		attr.RiskLLMTokenKind(TokenKindOutput),
 	))
@@ -163,7 +173,7 @@ func (m *metrics) RecordRetries(ctx context.Context, info CallInfo, model string
 	m.retries.Add(ctx, int64(retries), metric.WithAttributes(
 		attr.OrganizationID(info.OrgID),
 		attr.OrganizationSlug(info.OrgSlug),
-		attr.RiskLane(info.Lane),
+		attr.RiskScanMode(info.ScanMode),
 		attr.RiskLLMModel(model),
 	))
 }
@@ -178,7 +188,7 @@ func (m *metrics) RecordParseFailure(ctx context.Context, info CallInfo, model s
 	m.parseFailures.Add(ctx, 1, metric.WithAttributes(
 		attr.OrganizationID(info.OrgID),
 		attr.OrganizationSlug(info.OrgSlug),
-		attr.RiskLane(info.Lane),
+		attr.RiskScanMode(info.ScanMode),
 		attr.RiskLLMModel(model),
 	))
 }
