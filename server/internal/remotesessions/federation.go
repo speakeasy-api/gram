@@ -160,20 +160,25 @@ func (p *FederatedProvider) BuildAuthorizationURL(callbackURL, state, nonce, ver
 	}
 	q := u.Query()
 	// No downstream scopes, provider-specific interceptors, or offline policy.
-	q.Del("prompt")
-	q.Del("access_type")
-	q.Del("resource")
-	q.Del("audience")
-	q.Del("request")
-	q.Del("request_uri")
-	q.Del("id_token_hint")
-	q.Del("login_hint")
-	q.Del("claims")
-	q.Del("acr_values")
-	q.Del("max_age")
-	q.Del("authorization_details")
-	q.Del("include_granted_scopes")
-	q.Del("approval_prompt")
+	removedParameters := []string{
+		"prompt",
+		"access_type",
+		"resource",
+		"audience",
+		"request",
+		"request_uri",
+		"id_token_hint",
+		"login_hint",
+		"claims",
+		"acr_values",
+		"max_age",
+		"authorization_details",
+		"include_granted_scopes",
+		"approval_prompt",
+	}
+	for _, parameter := range removedParameters {
+		q.Del(parameter)
+	}
 	q.Set("response_type", "code")
 	q.Set("response_mode", "query")
 	q.Set("client_id", p.client.ClientID)
