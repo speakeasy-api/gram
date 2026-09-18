@@ -73,19 +73,19 @@ func (m enforceHandlerMetrics) recordRequest(ctx context.Context, outcome o11y.O
 	if m.requests == nil {
 		return
 	}
-	m.requests.Add(ctx, 1, metric.WithAttributes(attr.RiskLane(LaneSync), attr.Outcome(outcome)))
+	m.requests.Add(ctx, 1, metric.WithAttributes(attr.RiskScanMode(ScanModeSync), attr.Outcome(outcome)))
 }
 
 func (m enforceHandlerMetrics) recordStaleDropped(ctx context.Context) {
 	if m.staleDropped == nil {
 		return
 	}
-	m.staleDropped.Add(ctx, 1, metric.WithAttributes(attr.RiskLane(LaneSync)))
+	m.staleDropped.Add(ctx, 1, metric.WithAttributes(attr.RiskScanMode(ScanModeSync)))
 }
 
 func (m enforceHandlerMetrics) recordReplyWriteError(ctx context.Context) {
 	if m.replyWriteErrors == nil {
 		return
 	}
-	m.replyWriteErrors.Add(ctx, 1, metric.WithAttributes(attr.RiskLane(LaneSync)))
+	m.replyWriteErrors.Add(ctx, 1, metric.WithAttributes(attr.RiskScanMode(ScanModeSync)))
 }

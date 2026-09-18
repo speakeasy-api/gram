@@ -27,9 +27,6 @@ import (
 )
 
 const (
-	// LaneSync is the Request.Lane of realtime enforcement requests.
-	LaneSync = "sync"
-
 	// DefaultMaxRequestAge is the maximum useful age of an inline scan request.
 	// It matches the dispatcher's per-lane wait: an older request has already
 	// been given up on, so analyzing it would only spend model budget.
@@ -150,7 +147,7 @@ func (h *EnforceHandler) Handle(ctx context.Context, m *riskv1.LLMEnforcement, m
 		attr.OrganizationID(m.GetOrganizationId()),
 		attr.OrganizationSlug(m.GetOrganizationSlug()),
 		attr.ProjectID(m.GetProjectId()),
-		attr.RiskLane(LaneSync),
+		attr.RiskScanMode(ScanModeSync),
 	))
 	defer span.End()
 
@@ -168,7 +165,7 @@ func (h *EnforceHandler) Handle(ctx context.Context, m *riskv1.LLMEnforcement, m
 			OrgID:       m.GetOrganizationId(),
 			OrgSlug:     m.GetOrganizationSlug(),
 			ProjectID:   m.GetProjectId(),
-			Lane:        LaneSync,
+			ScanMode:    ScanModeSync,
 			Message:     msg,
 			ToolCallIDs: toolCallIDs,
 		})
