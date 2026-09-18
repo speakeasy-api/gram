@@ -99,7 +99,6 @@ SELECT id, organization_id, project_id, enabled, deleted, score
 FROM risk_policies
 WHERE project_id = @project_id
   AND organization_id = @organization_id
-  AND enabled IS TRUE
   AND deleted IS FALSE
 ORDER BY created_at DESC, id DESC
 LIMIT @page_limit;

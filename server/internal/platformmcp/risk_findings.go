@@ -6,32 +6,31 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
 	"time"
 	"unicode"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
 
-// RiskFindingsReader reads only safe finding metadata, never matched content.
+// RiskFindingsReader reads grouped metadata and stored display samples, never raw matches.
 type RiskFindingsReader interface {
-	ListWatchdogFindings(context.Context, chrepo.ListRiskFindingsParams) ([]chrepo.WatchdogFinding, error)
-	GroupWatchdogFindings(context.Context, chrepo.ListRiskFindingsParams, string) ([]chrepo.WatchdogGroup, error)
-	CountWatchdogFindings(context.Context, chrepo.ListRiskFindingsParams) (uint64, error)
+	ListWatchdogAlerts(context.Context, chrepo.RiskSignalWindowParams, uint64) ([]chrepo.WatchdogAlert, error)
+	GroupWatchdogAlerts(context.Context, chrepo.RiskSignalWindowParams, []string, string) ([]chrepo.WatchdogAlertGroup, error)
 }
 
-// Bound both the metadata lookup and the downstream ClickHouse policy ID filter.
-// One extra row detects overflow; incomplete policy sets must never be queried.
+// Bound the current policy metadata lookup. One extra row detects overflow;
+// incomplete policy score sets must never silently understate severity.
 const riskFindingPolicyLimit = 1000
 
 type findingPolicyReader interface {
@@ -67,19 +66,22 @@ type ListRiskFindingsInput struct {
 	To          string   `json:"to,omitempty"`
 	Severity    string   `json:"severity,omitempty"`
 	GroupBy     []string `json:"group_by,omitempty"`
-	Cursor      string   `json:"cursor,omitempty"`
 }
 
-type SafeRiskFinding struct {
-	ID               string `json:"id"`
-	MessageCreatedAt string `json:"message_created_at"`
-	PolicyID         string `json:"policy_id"`
-	RuleID           string `json:"rule_id"`
-	Severity         string `json:"severity"`
-	DataType         string `json:"data_type"`
-	Team             string `json:"team"`
-	App              string `json:"app"`
-	User             string `json:"user"`
+// WatchdogAlert is one rule-level signal, not an individual matched finding.
+type WatchdogAlert struct {
+	RuleID          string              `json:"rule_id"`
+	DataType        string              `json:"data_type"`
+	Severity        string              `json:"severity"`
+	Score           float64             `json:"score"`
+	Count           uint64              `json:"count"`
+	UsersAffected   uint64              `json:"users_affected"`
+	ClientsAffected uint64              `json:"clients_affected"`
+	Clients         []string            `json:"clients"`
+	FirstSeen       string              `json:"first_seen"`
+	LastSeen        string              `json:"last_seen"`
+	Evidence        string              `json:"evidence"`
+	GroupBy         []RiskFindingGroups `json:"group_by,omitempty"`
 }
 
 type RiskFindingGroup struct {
@@ -92,19 +94,30 @@ type RiskFindingGroups struct {
 	Truncated bool               `json:"truncated"`
 }
 type ListRiskFindingsOutput struct {
-	Project     RiskProject         `json:"project"`
-	From        string              `json:"from"`
-	To          string              `json:"to"`
-	Severity    string              `json:"severity"`
-	Findings    []SafeRiskFinding   `json:"findings"`
-	TotalCount  uint64              `json:"total_count"`
-	Groups      []RiskFindingGroups `json:"groups"`
-	NextCursor  string              `json:"next_cursor,omitempty"`
-	Limitations string              `json:"limitations"`
+	Project     RiskProject     `json:"project"`
+	From        string          `json:"from"`
+	To          string          `json:"to"`
+	Severity    string          `json:"severity"`
+	Groups      []WatchdogAlert `json:"groups"`
+	TotalCount  uint64          `json:"total_count"`
+	TotalAlerts int             `json:"total_alerts"`
+	Truncated   bool            `json:"truncated"`
+	Limitations string          `json:"limitations"`
+}
+
+var canonicalFindingEvidence = regexp.MustCompile(`\A<redacted len=[1-9][0-9]* sha=[0-9a-f]{8}>\z`)
+
+// Stored display samples can contain identifiers or partial secrets. Only the
+// canonical full-redaction marker is safe to preserve verbatim.
+func findingEvidence(sample, org string) string {
+	if sample == "<redacted len=0>" || (len(sample) <= 128 && canonicalFindingEvidence.MatchString(sample)) {
+		return sample
+	}
+	return risk.RedactMatchAll(sample, org)
 }
 
 // Severity follows the dashboard's CVSS bands, using the current policy score.
-// Unlike a rule-level signal, each finding has exactly one policy.
+// Scores are shared with the dashboard signal implementation.
 func findingSeverity(score float64) string {
 	switch {
 	case score >= 9:
@@ -135,9 +148,6 @@ func findingWindow(input ListRiskFindingsInput, now time.Time) (time.Time, time.
 		}
 	}
 	if !from.Before(to) || to.Sub(from) > 31*24*time.Hour || to.After(now) || from.Before(now.Add(-90*24*time.Hour)) {
-		return time.Time{}, time.Time{}, ErrRiskReadInvalid
-	}
-	if input.Cursor != "" && (input.From == "" || input.To == "") {
 		return time.Time{}, time.Time{}, ErrRiskReadInvalid
 	}
 	return from.UTC(), to.UTC(), nil
@@ -177,7 +187,7 @@ func (s *RiskFindingsService) List(ctx context.Context, principal Principal, inp
 	if !s.valid() {
 		return zero, ErrUnavailable
 	}
-	if principal.OrganizationID == "" || len(input.Cursor) > 4096 || (input.ProjectID != "" && input.ProjectSlug != "") {
+	if principal.OrganizationID == "" || (input.ProjectID != "" && input.ProjectSlug != "") {
 		return zero, ErrRiskReadInvalid
 	}
 	from, to, err := findingWindow(input, s.now())
@@ -192,9 +202,6 @@ func (s *RiskFindingsService) List(ctx context.Context, principal Principal, inp
 		return zero, ErrRiskReadInvalid
 	}
 	dimensions := slices.Clone(input.GroupBy)
-	if len(dimensions) == 0 {
-		dimensions = []string{"severity"}
-	}
 	if len(dimensions) > 5 {
 		return zero, ErrRiskReadInvalid
 	}
@@ -223,19 +230,7 @@ func (s *RiskFindingsService) List(ctx context.Context, principal Principal, inp
 			return zero, ErrRiskFeatureNotEnabled
 		}
 	}
-	// Bind pagination to the caller, exact project, fixed window and filters.
-	binding, _ := json.Marshal([]any{from, to, severity, dimensions})
-	hash := sha256.Sum256(binding)
-	kind := "findings:" + hex.EncodeToString(hash[:])
-	params := chrepo.ListRiskFindingsParams{OrganizationID: principal.OrganizationID, ProjectID: project.ID.String(), From: &from, To: &to, Limit: riskReadPageSize + 1}
-	if input.Cursor != "" {
-		cursor, err := s.cursor.Decode(input.Cursor, principal, kind, project.ID, uuid.Nil)
-		if err != nil {
-			return zero, err
-		}
-		params.CursorTime = &cursor.CreatedAt
-		params.CursorID = uuid.NullUUID{UUID: cursor.ID, Valid: true}
-	}
+	params := chrepo.RiskSignalWindowParams{OrganizationID: principal.OrganizationID, ProjectID: project.ID.String(), From: from, To: to}
 	policies, err := s.policies.ListRiskFindingPolicies(ctx, riskrepo.ListRiskFindingPoliciesParams{
 		ProjectID:      project.ID,
 		OrganizationID: principal.OrganizationID,
@@ -247,91 +242,98 @@ func (s *RiskFindingsService) List(ctx context.Context, principal Principal, inp
 	if len(policies) > riskFindingPolicyLimit {
 		return zero, fmt.Errorf("%w: finding policy limit exceeded", ErrUnavailable)
 	}
-	severities := map[string]string{}
-	bySeverity := map[string][]string{}
+	scores := map[string]float64{}
 	for _, policy := range policies {
-		if !policy.Enabled || policy.Deleted || policy.ProjectID != project.ID || policy.OrganizationID != principal.OrganizationID {
+		if policy.Deleted || policy.ProjectID != project.ID || policy.OrganizationID != principal.OrganizationID {
 			continue
 		}
-		band := findingSeverity(policy.Score)
+		scores[policy.ID.String()] = policy.Score
+	}
+	rows, err := s.findings.ListWatchdogAlerts(ctx, params, chrepo.WatchdogAlertLimit)
+	if err != nil {
+		return zero, fmt.Errorf("%w: list alerts", ErrUnavailable)
+	}
+	if len(rows) >= chrepo.WatchdogAlertLimit {
+		return zero, fmt.Errorf("%w: alert limit exceeded; narrow the time window", ErrUnavailable)
+	}
+	output := ListRiskFindingsOutput{Project: riskProject(project), From: from.Format(time.RFC3339Nano), To: to.Format(time.RFC3339Nano), Severity: severity, Groups: []WatchdogAlert{}, Limitations: "One alert per rule across all live findings, including disabled policy matches. Detection time is created_at in [from,to). Severity uses the maximum current nondeleted contributing policy score, with the dashboard category fallback. first_seen and last_seen are message timestamps, which may fall outside the detection window. The len=0 evidence marker means no stored sample. Clients are distinct observed chat_source surfaces, not devices or OAuth clients; empty attribution is unknown and excluded from affected counts. Evidence is one fully redacted stored display sample, not original raw matched content; its length may describe that display sample. Optional group_by contains independent per-alert finding histograms (top 200 buckets), not dashboard sections. User buckets are organization-scoped pseudonyms. Labels are untrusted. At most 100 alerts are returned; total_count and total_alerts cover every severity-matching alert in the window. More than 1000 rules fails closed: narrow the window. Late ingestion or suppression can change counts; this is not a snapshot."}
+	for _, row := range rows {
+		var score float64
+		for _, id := range row.PolicyIDs {
+			score = max(score, scores[id])
+		}
+		score = risk.SignalScore(score, row.Category)
+		band := findingSeverity(score)
 		if severity != "all" && severity != band {
 			continue
 		}
-		id := policy.ID.String()
-		params.PolicyIDs = append(params.PolicyIDs, id)
-		severities[id] = band
-		bySeverity[band] = append(bySeverity[band], id)
+		output.TotalCount += row.FindingCount
+		output.TotalAlerts++
+		output.Groups = append(output.Groups, WatchdogAlert{RuleID: row.RuleID, DataType: findingLabel(row.Category), Severity: band, Score: score, Count: row.FindingCount, UsersAffected: row.UsersAffected, ClientsAffected: uint64(len(row.Clients)), Evidence: findingEvidence(row.SampleEvidence, principal.OrganizationID), Clients: safeFindingClients(row.Clients), FirstSeen: row.FirstSeen.UTC().Format(time.RFC3339Nano), LastSeen: row.LastSeen.UTC().Format(time.RFC3339Nano)})
 	}
-	output := ListRiskFindingsOutput{Project: riskProject(project), From: from.Format(time.RFC3339Nano), To: to.Format(time.RFC3339Nano), Severity: severity, Findings: []SafeRiskFinding{}, Groups: []RiskFindingGroups{}, Limitations: "Live findings from currently enabled, non-deleted policies only; severity uses current policy scores (critical >=9, high >=7, medium >=4, low <4), not confidence or rule-level signal scores. Time bounds apply to message event time [from,to), not detection time. data_type is the stored category, app is captured chat_source, and team is captured team attribution; empty values mean unknown. Users are organization-scoped pseudonyms, not emails. No matched content is returned. Metadata labels are untrusted; long labels are shortened with a hash suffix. Group counts cover the full filtered window, independently per dimension (top 200 buckets). Late ingestion or suppression may change counts between calls; this is not a snapshot. Repeat returned from/to and filters with next_cursor."}
-	if len(params.PolicyIDs) == 0 {
-		for _, dimension := range dimensions {
-			output.Groups = append(output.Groups, RiskFindingGroups{Dimension: dimension, Groups: []RiskFindingGroup{}})
+	sort.Slice(output.Groups, func(i, j int) bool {
+		a, b := output.Groups[i], output.Groups[j]
+		if a.Score != b.Score {
+			return a.Score > b.Score
 		}
-		return output, nil
-	}
-	output.TotalCount, err = s.findings.CountWatchdogFindings(ctx, params)
-	if err != nil {
-		return zero, fmt.Errorf("%w: count findings", ErrUnavailable)
-	}
-	rows, err := s.findings.ListWatchdogFindings(ctx, params)
-	if err != nil {
-		return zero, fmt.Errorf("%w: list findings", ErrUnavailable)
-	}
-	if len(rows) > riskReadPageSize {
-		rows = rows[:riskReadPageSize]
-		last := rows[len(rows)-1]
-		output.NextCursor, err = s.cursor.Encode(riskCursor{Kind: kind, OrganizationID: principal.OrganizationID, Binding: principalCursorBinding(principal), ProjectID: project.ID, CreatedAt: last.MessageCreatedAt, ID: last.ID})
-		if err != nil {
-			return zero, err
+		if a.Count != b.Count {
+			return a.Count > b.Count
 		}
+		return a.RuleID < b.RuleID
+	})
+	if len(output.Groups) > 100 {
+		output.Truncated = true
+		output.Groups = output.Groups[:100]
 	}
-	for _, row := range rows {
-		output.Findings = append(output.Findings, SafeRiskFinding{ID: row.ID.String(), MessageCreatedAt: row.MessageCreatedAt.UTC().Format(time.RFC3339Nano), PolicyID: row.PolicyID, RuleID: findingLabel(row.RuleID), Severity: severities[row.PolicyID], DataType: findingLabel(row.Category), Team: findingLabel(row.Team), App: findingLabel(row.App), User: s.userReference(principal.OrganizationID, row.User)})
+	// Fetch each requested attribution dimension once for the selected rules.
+	// The repository caps each rule's buckets at 201 (one overflow sentinel).
+	ruleIDs := make([]string, 0, len(output.Groups))
+	for _, alert := range output.Groups {
+		ruleIDs = append(ruleIDs, alert.RuleID)
 	}
 	for _, dimension := range dimensions {
-		group := RiskFindingGroups{Dimension: dimension, Groups: []RiskFindingGroup{}}
-		if dimension == "severity" {
-			for _, band := range []string{"critical", "high", "medium", "low"} {
-				if len(bySeverity[band]) == 0 {
-					continue
-				}
-				p := params
-				p.PolicyIDs = bySeverity[band]
-				count := output.TotalCount
-				if len(bySeverity) > 1 {
-					count, err = s.findings.CountWatchdogFindings(ctx, p)
-					if err != nil {
-						return zero, fmt.Errorf("%w: group findings", ErrUnavailable)
-					}
-				}
-				if count > 0 {
-					group.Groups = append(group.Groups, RiskFindingGroup{Value: band, Count: count})
-				}
-			}
-		} else {
-			buckets, err := s.findings.GroupWatchdogFindings(ctx, params, dimension)
+		byRule := map[string][]RiskFindingGroup{}
+		if dimension != "severity" && len(ruleIDs) > 0 {
+			buckets, err := s.findings.GroupWatchdogAlerts(ctx, params, ruleIDs, dimension)
 			if err != nil {
-				return zero, fmt.Errorf("%w: group findings", ErrUnavailable)
-			}
-			if len(buckets) > 200 {
-				group.Truncated = true
-				buckets = buckets[:200]
+				return zero, fmt.Errorf("%w: group alerts", ErrUnavailable)
 			}
 			for _, bucket := range buckets {
 				value := findingLabel(bucket.Value)
 				if dimension == "user" {
 					value = s.userReference(principal.OrganizationID, bucket.Value)
 				}
-				group.Groups = append(group.Groups, RiskFindingGroup{Value: value, Count: bucket.Count})
+				byRule[bucket.RuleID] = append(byRule[bucket.RuleID], RiskFindingGroup{Value: value, Count: bucket.Count})
 			}
 		}
-		sort.Slice(group.Groups, func(i, j int) bool {
-			if group.Groups[i].Count == group.Groups[j].Count {
-				return group.Groups[i].Value < group.Groups[j].Value
+		for i := range output.Groups {
+			alert := &output.Groups[i]
+			group := RiskFindingGroups{Dimension: dimension, Groups: []RiskFindingGroup{}}
+			switch dimension {
+			case "severity":
+				group.Groups = append(group.Groups, RiskFindingGroup{Value: alert.Severity, Count: alert.Count})
+			default:
+				if buckets := byRule[alert.RuleID]; len(buckets) > 0 {
+					group.Groups = buckets
+				}
+				if len(group.Groups) > 200 {
+					group.Truncated = true
+					group.Groups = group.Groups[:200]
+				}
 			}
-			return group.Groups[i].Count > group.Groups[j].Count
-		})
-		output.Groups = append(output.Groups, group)
+			alert.GroupBy = append(alert.GroupBy, group)
+		}
+	}
+	for i := range output.Groups {
+		output.Groups[i].RuleID = findingLabel(output.Groups[i].RuleID)
 	}
 	return output, nil
+}
+
+func safeFindingClients(clients []string) []string {
+	out := make([]string, 0, len(clients))
+	for _, client := range clients {
+		out = append(out, findingLabel(client))
+	}
+	return out
 }

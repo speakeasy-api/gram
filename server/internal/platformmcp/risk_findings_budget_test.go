@@ -40,7 +40,7 @@ func TestRiskFindingsBudgetChargesBeforeList(t *testing.T) {
 			connection := &recordingOperationLimiter{result: ratelimit.Result{Allowed: tc.connectionAllowed}, err: tc.connectionErr}
 			organization := &recordingOperationLimiter{result: ratelimit.Result{Allowed: tc.organizationAllowed}, err: tc.organizationErr}
 			principal := Principal{ConnectionID: "connection", OrganizationID: "organization"}
-			input := ListRiskFindingsInput{Cursor: "page-two"}
+			input := ListRiskFindingsInput{Severity: "all"}
 			calls := 0
 			service := &budgetTestFindings{list: func(_ context.Context, got Principal, in ListRiskFindingsInput) (ListRiskFindingsOutput, error) {
 				calls++
@@ -68,7 +68,7 @@ func TestRiskFindingsBudgetChargesBeforeList(t *testing.T) {
 			require.Equal(t, uint64(7), out.TotalCount)
 			_, err = limited.List(t.Context(), principal, input)
 			require.NoError(t, err)
-			require.Equal(t, 2, calls, "each page must charge both budgets")
+			require.Equal(t, 2, calls, "each call must charge both budgets")
 		})
 	}
 }
@@ -99,7 +99,7 @@ func TestRiskFindingsBudgetToolRefusals(t *testing.T) {
 			t.Parallel()
 			recorder := &recordingRiskTelemetry{}
 			ctx := ContextWithPrincipal(t.Context(), Principal{UserID: "user", OrganizationID: "organization"})
-			result, _, err := riskReadToolCall(ctx, recorder, "list_risk_findings", func(Principal) (ListRiskFindingsOutput, error) {
+			result, _, err := riskReadToolCall(ctx, recorder, "list_watchdog_findings", func(Principal) (ListRiskFindingsOutput, error) {
 				return ListRiskFindingsOutput{}, tc.err
 			})
 			require.NoError(t, err)

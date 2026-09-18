@@ -329,7 +329,7 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		"get_risk_policy",
 		"list_risk_exclusions",
 		"get_risk_analysis_status",
-		"list_risk_findings",
+		"list_watchdog_findings",
 		"create_risk_policy",
 		"update_risk_policy",
 		"create_risk_exclusion",

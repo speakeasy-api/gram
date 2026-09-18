@@ -90,7 +90,7 @@ func validRiskToolEvent(event RiskToolEvent) bool {
 
 func validRiskTelemetryTool(tool string) bool {
 	switch tool {
-	case "list_risk_findings", "list_risk_policies", "get_risk_policy", "create_risk_policy", "update_risk_policy", "list_risk_exclusions", "create_risk_exclusion", "update_risk_exclusion":
+	case "list_watchdog_findings", "list_risk_policies", "get_risk_policy", "create_risk_policy", "update_risk_policy", "list_risk_exclusions", "create_risk_exclusion", "update_risk_exclusion":
 		return true
 	default:
 		return false
