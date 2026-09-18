@@ -13,7 +13,7 @@ const (
 // provider. Each call returns independently mutable slices.
 func NewPaygTierLimits() *gen.TierLimits {
 	price := TUMPricePerMillionUSD
-	riskScanPrice := "3.50"
+	riskScanPrice := "0.99"
 	mcpEgressPrice := "20"
 	return &gen.TierLimits{
 		BasePrice:                  0,
