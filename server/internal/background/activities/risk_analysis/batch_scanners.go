@@ -27,10 +27,11 @@ import (
 const (
 	inlineBatchExecutionPath  = "inline_batch"
 	shadowStreamExecutionPath = "shadow_stream"
-	// asyncStreamExecutionPath marks analysis requests whose streams consumer
-	// is the only engine evaluating the policy's sources, as opposed to the
-	// shadow stream that runs alongside an inline scan.
-	asyncStreamExecutionPath = "async_stream"
+	// llmAnalyzerStreamExecutionPath marks analysis requests the fine-tuned
+	// LLM analyzer's streams consumer evaluates as the only engine for the
+	// policy's sources, as opposed to the shadow stream that runs alongside
+	// an inline scan.
+	llmAnalyzerStreamExecutionPath = "llm_analyzer_stream"
 )
 
 // batchOperationID identifies metering for one policy execution and scanned

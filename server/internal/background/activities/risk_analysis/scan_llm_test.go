@@ -194,7 +194,7 @@ func TestAnalyzeBatch_LLMAnalyzer_FlagOnRoutesCoveredSources(t *testing.T) {
 	require.Contains(t, byMessage, second.String())
 	for _, req := range *pubs.llm {
 		assert.Equal(t, []string{risk_analysis.SourceGitleaks, risk_analysis.SourcePresidio}, req.GetSources())
-		assert.Equal(t, "async_stream", req.GetExecutionPath())
+		assert.Equal(t, "llm_analyzer_stream", req.GetExecutionPath())
 		assert.Equal(t, td.orgID, req.GetOrganizationId())
 		assert.Equal(t, td.orgID, req.GetOrganizationSlug())
 		assert.Equal(t, td.projectID.String(), req.GetProjectId())
