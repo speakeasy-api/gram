@@ -83,7 +83,7 @@ Temporal AnalyzeBatch (worker) ─► scanStandardPolicy
    │  flag on and sources ∩ covered ≠ ∅
    ▼
 publishLLMScanRequests: one LLMAnalysis per message ─► topic gram-risk-v1-llm-analysis
-   │  execution_path=async_stream, sources = covered subset; no inline scan, no legacy publishes
+   │  execution_path=llm_analyzer_stream, sources = covered subset; no inline scan, no legacy publishes
    ▼
 streams: llmanalyzer.Handler (sub gram-risk-v1-llm-analyzer, ack 60 s, 7 d retention, no DLQ)
    │  Analyzer.Analyze(lane=async)
