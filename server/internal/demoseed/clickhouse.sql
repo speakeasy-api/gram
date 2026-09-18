@@ -1406,7 +1406,7 @@ SELECT
   if(k IN (2, 4, 5, 11), '', 'response'),
   if(k IN (2, 4, 5, 11), '', 'hosted_mcp'),
   if(k IN (2, 4, 5, 11), '', 'tools/call'),
-  if(k IN (2, 4, 5, 11), '', 'user'),
+  if(k IN (2, 4, 5, 11), '', 'user_session'),
   k NOT IN (2, 4, 5, 11),
   if(k IN (2, 4, 5, 11), '', 'logged')
 FROM (
@@ -2117,7 +2117,7 @@ SELECT throwIf(
      AND mcp_server_id != ''
      AND (execution_id = '' OR toolset_id = '' OR tool_name = ''
           OR phase != 'response' OR mediation_surface != 'hosted_mcp'
-          OR mcp_method != 'tools/call' OR principal_kind != 'user'
+          OR mcp_method != 'tools/call' OR principal_kind != 'user_session'
           OR identity_stamped = false OR enforcement_outcome != 'logged')) > 0
   OR
   (SELECT count() FROM risk_findings
