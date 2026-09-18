@@ -87,8 +87,9 @@ type Request struct {
 	// ProjectID is the project the message belongs to.
 	ProjectID string
 
-	// Lane is "sync" for realtime enforcement and "async" for batch scans.
-	Lane string
+	// ScanMode is ScanModeSync for realtime enforcement and ScanModeAsync
+	// for batch scans.
+	ScanMode string
 
 	// Message is the message under evaluation.
 	Message judgemessage.Message
@@ -130,11 +131,11 @@ func (a *Analyzer) Analyze(ctx context.Context, req Request) Analysis {
 		attr.OrganizationID(req.OrgID),
 		attr.OrganizationSlug(req.OrgSlug),
 		attr.ProjectID(req.ProjectID),
-		attr.RiskLane(req.Lane),
+		attr.RiskScanMode(req.ScanMode),
 	))
 	defer span.End()
 
-	info := CallInfo{OrgID: req.OrgID, OrgSlug: req.OrgSlug, Lane: req.Lane}
+	info := CallInfo{OrgID: req.OrgID, OrgSlug: req.OrgSlug, ScanMode: req.ScanMode}
 
 	if a.completer == nil {
 		return a.fail(ctx, span, info, Completion{
@@ -173,7 +174,7 @@ func (a *Analyzer) Analyze(ctx context.Context, req Request) Analysis {
 		a.logger.WarnContext(ctx, "risk llm stoken count failed",
 			attr.SlogError(countErr),
 			attr.SlogOrganizationID(req.OrgID),
-			attr.SlogRiskLane(req.Lane),
+			attr.SlogRiskScanMode(req.ScanMode),
 		)
 	}
 
@@ -205,7 +206,7 @@ func (a *Analyzer) fail(ctx context.Context, span trace.Span, info CallInfo, com
 	a.logger.WarnContext(ctx, "risk llm analysis failed; returning dead-letter result",
 		attr.SlogError(err),
 		attr.SlogOrganizationID(info.OrgID),
-		attr.SlogRiskLane(info.Lane),
+		attr.SlogRiskScanMode(info.ScanMode),
 	)
 	return Analysis{
 		Result:     DeadLetterResult(reason),

@@ -26,7 +26,7 @@ func userRequest(body string) llmanalyzer.Request {
 		OrgID:       "org-1",
 		OrgSlug:     "acme",
 		ProjectID:   "proj-1",
-		Lane:        "sync",
+		ScanMode:    llmanalyzer.ScanModeSync,
 		Message:     judgemessage.New(message.User, "", body),
 		ToolCallIDs: nil,
 	}
@@ -173,7 +173,7 @@ func TestAnalyze_TrimsContentBeforeRendering(t *testing.T) {
 
 	calls := stub.CallsSnapshot()
 	require.Len(t, calls, 1)
-	require.Equal(t, llmanalyzer.CallInfo{OrgID: "org-1", OrgSlug: "acme", Lane: "sync"}, calls[0].Info)
+	require.Equal(t, llmanalyzer.CallInfo{OrgID: "org-1", OrgSlug: "acme", ScanMode: llmanalyzer.ScanModeSync}, calls[0].Info)
 	require.Len(t, calls[0].Messages, 2)
 	require.Equal(t, "system", calls[0].Messages[0].Role)
 	require.Equal(t, llmanalyzer.SystemPrompt, calls[0].Messages[0].Content)
@@ -201,7 +201,7 @@ func TestAnalyze_UsesRealToolCallIDsWhenAligned(t *testing.T) {
 		OrgID:     "org-1",
 		OrgSlug:   "acme",
 		ProjectID: "proj-1",
-		Lane:      "async",
+		ScanMode:  llmanalyzer.ScanModeAsync,
 		Message: judgemessage.NewForToolCalls([]judgemessage.ToolCall{
 			judgemessage.NewToolCall("Read", `{"path": "README.md"}`),
 			judgemessage.NewToolCall("Bash", `{"command": "ls"}`),
@@ -238,7 +238,7 @@ func TestAnalyze_UsesRealToolCallIDForSingleToolRequest(t *testing.T) {
 		OrgID:       "org-1",
 		OrgSlug:     "acme",
 		ProjectID:   "proj-1",
-		Lane:        "sync",
+		ScanMode:    llmanalyzer.ScanModeSync,
 		Message:     judgemessage.New(message.ToolRequest, "Bash", `{"command": "ls"}`),
 		ToolCallIDs: []string{"call_xyz"},
 	}
@@ -265,7 +265,7 @@ func TestAnalyze_SynthesizesSingleToolCallIDWhenExtraIDs(t *testing.T) {
 		OrgID:       "org-1",
 		OrgSlug:     "acme",
 		ProjectID:   "proj-1",
-		Lane:        "sync",
+		ScanMode:    llmanalyzer.ScanModeSync,
 		Message:     judgemessage.New(message.ToolRequest, "Bash", `{"command": "ls"}`),
 		ToolCallIDs: []string{"call_first", "call_second"},
 	}
@@ -293,7 +293,7 @@ func TestAnalyze_SynthesizesToolCallIDsWhenMisaligned(t *testing.T) {
 		OrgID:     "org-1",
 		OrgSlug:   "acme",
 		ProjectID: "proj-1",
-		Lane:      "sync",
+		ScanMode:  llmanalyzer.ScanModeSync,
 		Message: judgemessage.NewForToolCalls([]judgemessage.ToolCall{
 			judgemessage.NewToolCall("Read", `{}`),
 			judgemessage.NewToolCall("Bash", `{}`),
