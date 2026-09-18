@@ -146,3 +146,24 @@ var CreateCimdOrganizationRemoteSessionClientForm = Type("CreateCimdOrganization
 // in design.go). The two forms were structurally identical, so a dedicated
 // UpdateOrganizationRemoteSessionClientForm only forked the generated SDK
 // request-body component name without any shape difference.
+
+// OrganizationClientDelegationStatus contains aggregates only, never identities or credentials.
+var OrganizationClientDelegationStatus = Type("OrganizationClientDelegationStatus", func() {
+	Description("Latest per-human observations for the current client configuration within 30 days. Unknown when no matching observations exist. Credential presence does not guarantee future renewal.")
+	Attribute("status", String, "Whether any current observations exist.", func() { Enum("unknown", "observed") })
+	Attribute("window_start", String, "Inclusive observation window start.", func() { Format(FormatDateTime) })
+	Attribute("observations", ArrayOf(DelegationStatusCount))
+	Required("status", "window_start", "observations")
+})
+
+var DelegationStatusCount = Type("DelegationStatusCount", func() {
+	Description("Sanitized count of the latest observation per human, not a history of token requests.")
+	Attribute("status", String, "Observed delegation outcome.", func() {
+		Enum("durable_credential_present", "assertion_only", "offline_unsupported", "offline_not_requested", "refused", "reauthentication_required", "temporary_failure", "configuration_failure")
+	})
+	Attribute("count", Int64, "Number of humans with this latest outcome.", func() { Minimum(0) })
+	Attribute("last_observed_at", String, "Most recent matching observation.", func() { Format(FormatDateTime) })
+	Attribute("last_credential_obtained_at", String, "Most recent credential acquisition, distinct from renewal.", func() { Format(FormatDateTime) })
+	Attribute("last_refresh_succeeded_at", String, "Most recent successful assertion renewal.", func() { Format(FormatDateTime) })
+	Required("status", "count")
+})

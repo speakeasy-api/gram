@@ -43,7 +43,7 @@ func federatedIssuerVersion(issuer repo.RemoteSessionIssuer) string {
 func federatedMetadataCacheKey(organizationID string, issuer repo.RemoteSessionIssuer) string {
 	encoded, _ := json.Marshal([]string{organizationID, issuer.ID.String(), issuer.Issuer, federatedIssuerVersion(issuer)})
 	sum := sha256.Sum256(encoded)
-	return "federated-oidc-metadata:v1:" + hex.EncodeToString(sum[:])
+	return "federated-oidc-metadata:v2:" + hex.EncodeToString(sum[:])
 }
 
 // validateFederatedHost applies preflight DNS/IP policy as well as the runtime
