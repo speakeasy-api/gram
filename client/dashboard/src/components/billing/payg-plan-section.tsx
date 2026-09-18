@@ -74,10 +74,25 @@ function PaymentSection({
 // that has no self-serve subscription to report on.
 function PaygPlanBody(): JSX.Element {
   const { data, error, isError, isFetching, refetch } = useStripeSubscription();
+  const { eligible: canStartCheckout } =
+    usePaygCheckoutAccess("unsubscribed-payg");
 
   // A confirmed absence outranks cached subscription state. It can mean checkout
-  // was abandoned after the local trial converted, so offer billing setup again.
+  // was abandoned after the local trial converted, so eligible admins can offer
+  // billing setup again. Everyone else gets the confirmed state without an
+  // impossible setup instruction.
   if (isNotFoundError(error)) {
+    if (!canStartCheckout) {
+      return (
+        <Stack gap={3}>
+          <Text className="font-medium">No active billing subscription</Text>
+          <Text muted small>
+            No self-serve subscription details are available to display.
+          </Text>
+        </Stack>
+      );
+    }
+
     return (
       <Stack gap={3}>
         <Text className="font-medium">Finish setting up billing</Text>

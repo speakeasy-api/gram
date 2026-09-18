@@ -42,14 +42,15 @@ import (
 )
 
 type fakeStripeWebhookClient struct {
-	verify        func([]byte, string) (*stripeclient.WebhookEvent, error)
-	checkout      *stripeclient.CheckoutSessionState
-	checkoutError error
-	invoice       *stripeclient.InvoiceState
-	invoiceError  error
-	checkoutCalls atomic.Int32
-	invoiceCalls  atomic.Int32
-	verifyCalls   atomic.Int32
+	verify         func([]byte, string) (*stripeclient.WebhookEvent, error)
+	checkout       *stripeclient.CheckoutSessionState
+	checkoutError  error
+	invoice        *stripeclient.InvoiceState
+	invoiceError   error
+	updateCustomer func(context.Context, stripeclient.UpdateCustomerInput) error
+	checkoutCalls  atomic.Int32
+	invoiceCalls   atomic.Int32
+	verifyCalls    atomic.Int32
 }
 
 const stripeWebhookOrganizationID = "org_placeholder"
@@ -62,7 +63,10 @@ func (f *fakeStripeWebhookClient) GetCustomer(context.Context, string) (*stripec
 	return nil, errors.New("unexpected Stripe customer lookup")
 }
 
-func (f *fakeStripeWebhookClient) UpdateCustomer(context.Context, stripeclient.UpdateCustomerInput) error {
+func (f *fakeStripeWebhookClient) UpdateCustomer(ctx context.Context, input stripeclient.UpdateCustomerInput) error {
+	if f.updateCustomer != nil {
+		return f.updateCustomer(ctx, input)
+	}
 	return nil
 }
 
@@ -403,6 +407,8 @@ func createDemotedEnterpriseTrialFixture(t *testing.T, db *pgxpool.Pool) {
 		EndsAt:         pgtype.Timestamptz{Time: time.Now().UTC().Add(-time.Hour), Valid: true},
 	}))
 	_, err := trialsrepo.New(db).MarkTrialDemoted(t.Context(), stripeWebhookOrganizationID)
+	require.NoError(t, err)
+	_, err = trialsrepo.New(db).DemoteOrganizationToFree(t.Context(), stripeWebhookOrganizationID)
 	require.NoError(t, err)
 }
 
@@ -1431,7 +1437,7 @@ func TestStripeCheckoutConversionRecoversBillingWithoutAdminLock(t *testing.T) {
 	internal := openRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeInternal)
 	require.Equal(t, []string{"security_hold"}, internal.DisableCauses)
 	require.True(t, internal.Disabled)
-	require.EqualValues(t, 23, internal.MonthlyCredits)
+	require.EqualValues(t, limit, internal.MonthlyCredits)
 }
 
 func TestStripeCheckoutConversionRefreshesCurrentPaygCapWhenBillingCauseIsAbsent(t *testing.T) {
@@ -1456,7 +1462,7 @@ func TestStripeCheckoutConversionRefreshesCurrentPaygCapWhenBillingCauseIsAbsent
 	internal := openRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeInternal)
 	require.Empty(t, internal.DisableCauses)
 	require.False(t, internal.Disabled)
-	require.EqualValues(t, 31, internal.MonthlyCredits)
+	require.EqualValues(t, limit, internal.MonthlyCredits)
 }
 
 func TestStripeCheckoutTrialConversionAuditFailureRollsBackLifecycleSubscriptionAndReceipt(t *testing.T) {
@@ -1788,6 +1794,46 @@ func TestStripeCheckoutTrialConversionAuditTreatsLimitOnlyChangeAsUnchangedAcces
 	require.NotEqual(t, chatBefore["monthly_credits"], chatAfter["monthly_credits"])
 }
 
+func TestStripeCheckoutCompletionAfterTrialExpiryConvertsBothKeys(t *testing.T) {
+	t.Parallel()
+
+	service, db := newStripeWebhookService(t, "customer_placeholder", nil)
+	configurePaygCheckout(t, service, "event_delayed_completion", "subscription_delayed_completion", "active")
+	createActiveEnterpriseTrialFixture(t, db)
+	trial, err := trialsrepo.New(db).GetTrial(t.Context(), stripeWebhookOrganizationID)
+	require.NoError(t, err)
+	// Stripe completed Checkout during the trial; delivery arrives after it ends.
+	service.now = func() time.Time { return trial.EndsAt.Time.Add(time.Hour) }
+	createOpenRouterKeyFixture(t, db, openrouter.KeyTypeChat, 5)
+	createOpenRouterKeyFixture(t, db, openrouter.KeyTypeInternal, 5)
+	setOpenRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeInternal, true, []string{"admin_lock"}, 5)
+
+	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "delayed completion").Code)
+	converted, err := trialsrepo.New(db).GetTrial(t.Context(), stripeWebhookOrganizationID)
+	require.NoError(t, err)
+	require.True(t, converted.ConvertedAt.Valid)
+	floor, ok := openrouter.DefaultCreditLimit(stripeWebhookOrganizationID, "enterprise", false)
+	require.True(t, ok)
+	chat := openRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeChat)
+	internal := openRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeInternal)
+	require.EqualValues(t, floor, chat.MonthlyCredits)
+	require.EqualValues(t, floor, internal.MonthlyCredits)
+	require.True(t, internal.Disabled)
+	require.Equal(t, []string{"admin_lock"}, internal.DisableCauses)
+	record, err := audittest.LatestAuditLogByAction(t.Context(), db, audit.ActionOrganizationEnterpriseTrialConverted)
+	require.NoError(t, err)
+	var before struct {
+		Trial struct {
+			Status string `json:"status"`
+		} `json:"trial"`
+	}
+	require.NoError(t, json.Unmarshal(record.BeforeSnapshot, &before))
+	require.Equal(t, "expired", before.Trial.Status)
+	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "delayed replay").Code)
+	require.Equal(t, internal, openRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeInternal))
+	require.Equal(t, 1, stripeWebhookReceiptCount(t, db))
+}
+
 func TestStripeCheckoutDomainReplayIsNoop(t *testing.T) {
 	t.Parallel()
 
@@ -2021,6 +2067,51 @@ func TestStripeCheckoutExactReplaySkipsCurrentStateRetrieval(t *testing.T) {
 	require.Equal(t, 1, paygSchedulingIntentCount(t, service.db))
 }
 
+func TestStripeCheckoutCleanupReplaySurvivesSubscriptionDeletion(t *testing.T) {
+	t.Parallel()
+
+	service, db := newStripeWebhookService(t, "customer_placeholder", nil)
+	configurePaygCheckout(t, service, "event_cleanup_replay", "subscription_cleanup_replay", "active")
+	createActiveEnterpriseTrialFixture(t, db)
+	notifier := &fakeTrialNotifier{inactive: nil, inactiveErr: errors.New("notification service unavailable")}
+	service.trial = notifier
+	client, ok := service.stripeClient.(*fakeStripeWebhookClient)
+	require.True(t, ok)
+	checkoutEvent := client.verify
+	var customerIdentity stripeclient.UpdateCustomerInput
+	client.updateCustomer = func(_ context.Context, input stripeclient.UpdateCustomerInput) error {
+		customerIdentity = input
+		return nil
+	}
+
+	require.Equal(t, http.StatusInternalServerError, serveStripeWebhook(service, "checkout").Code)
+	trial, err := trialsrepo.New(db).GetTrial(t.Context(), stripeWebhookOrganizationID)
+	require.NoError(t, err)
+	require.True(t, trial.ConvertedAt.Valid)
+	require.Equal(t, 1, stripeWebhookReceiptCount(t, db))
+	require.Empty(t, customerIdentity.CustomerID)
+
+	configurePaygSubscriptionDeletion(t, service, "event_cleanup_deletion", "subscription_cleanup_replay", "subscription_cleanup_replay")
+	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "delete subscription").Code)
+	notifier.inactiveErr = nil
+	client.verify = checkoutEvent
+	client.checkoutError = errors.New("receipt replay must not retrieve Checkout")
+	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "replay checkout").Code)
+
+	require.Equal(t, []string{stripeWebhookOrganizationID, stripeWebhookOrganizationID}, notifier.inactive)
+	require.Equal(t, "customer_placeholder", customerIdentity.CustomerID)
+	require.Equal(t, "free", customerIdentity.AccountType)
+	metadata, err := repo.New(db).GetBillingMetadata(t.Context(), stripeWebhookOrganizationID)
+	require.NoError(t, err)
+	require.False(t, metadata.StripeSubscriptionID.Valid)
+	organization, err := orgrepo.New(db).GetOrganizationMetadata(t.Context(), stripeWebhookOrganizationID)
+	require.NoError(t, err)
+	require.Equal(t, "free", organization.GramAccountType)
+	require.False(t, organization.Whitelisted)
+	require.Equal(t, 2, stripeWebhookReceiptCount(t, db))
+	require.Equal(t, 1, paygSchedulingIntentCount(t, db))
+}
+
 func TestStripeCheckoutConvertedDemotedTrialExactReplayRepairsInternalPostCommitFailure(t *testing.T) {
 	t.Parallel()
 
@@ -2122,7 +2213,7 @@ func TestStripeCheckoutConvertedDemotedTrialExactReplayRepairsInternalPostCommit
 	internal := openRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeInternal)
 	require.Empty(t, internal.DisableCauses)
 	require.False(t, internal.Disabled)
-	require.EqualValues(t, 23, internal.MonthlyCredits)
+	require.EqualValues(t, limit, internal.MonthlyCredits)
 
 	failInternal.Store(false)
 	client, ok := service.stripeClient.(*fakeStripeWebhookClient)
@@ -2144,14 +2235,13 @@ func TestStripeCheckoutConvertedDemotedTrialExactReplayRepairsInternalPostCommit
 	internal = openRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeInternal)
 	require.Empty(t, internal.DisableCauses)
 	require.False(t, internal.Disabled)
-	require.EqualValues(t, 23, internal.MonthlyCredits)
+	require.EqualValues(t, limit, internal.MonthlyCredits)
 
 	internalSecurityUpstream.Lock()
 	defer internalSecurityUpstream.Unlock()
 	require.False(t, internalSecurityUpstream.disabled)
-	require.InDelta(t, 23, internalSecurityUpstream.monthlyLimit, 0)
+	require.InDelta(t, limit, internalSecurityUpstream.monthlyLimit, 0)
 	require.Equal(t, "monthly", internalSecurityUpstream.limitReset)
-	require.NotEqualValues(t, limit, internalSecurityUpstream.monthlyLimit)
 	require.NotEmpty(t, internalSecurityUpstream.patchPaths)
 	for _, path := range internalSecurityUpstream.patchPaths {
 		require.Equal(t, "/v1/keys/hash_placeholder_internal", path)
@@ -2508,8 +2598,12 @@ func TestStripeCheckoutTerminalStateIsDurableNoop(t *testing.T) {
 	service, db := newStripeWebhookService(t, "customer_placeholder", nil)
 	configurePaygCheckout(t, service, "event_terminal", "subscription_terminal", "canceled")
 	createActiveEnterpriseTrialFixture(t, db)
+	notifier := &fakeTrialNotifier{inactive: nil, inactiveErr: nil}
+	service.trial = notifier
 
 	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "terminal").Code)
+	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "terminal replay").Code)
+	require.Empty(t, notifier.inactive)
 	require.Equal(t, 1, stripeWebhookReceiptCount(t, db))
 	require.Zero(t, paygSchedulingIntentCount(t, db))
 	metadata, err := repo.New(db).GetBillingMetadata(t.Context(), stripeWebhookOrganizationID)
@@ -2788,7 +2882,7 @@ func TestConvertedDemotedTrialSubscriptionLossWinsBeforeDelayedActivationReconci
 	internal := openRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeInternal)
 	require.Equal(t, []string{"security_hold"}, internal.DisableCauses)
 	require.True(t, internal.Disabled)
-	require.EqualValues(t, 59, internal.MonthlyCredits)
+	require.EqualValues(t, paygLimit, internal.MonthlyCredits)
 	require.Zero(t, patches.Load(), "delayed activation must not patch over committed subscription loss")
 }
 

@@ -129,6 +129,9 @@ func (c *checkoutStripeClient) CreateCheckoutSession(_ context.Context, input st
 		if !reflect.DeepEqual(result.input, input) {
 			return nil, fmt.Errorf("idempotency key %q reused with different checkout input", input.IdempotencyKey)
 		}
+		if c.afterCheckoutCreate != nil {
+			c.afterCheckoutCreate()
+		}
 		return &stripeclient.CheckoutSession{ID: result.id, URL: result.url}, nil
 	}
 	checkoutID := fmt.Sprintf("cs_%d", len(c.checkoutResults)+1)
@@ -489,6 +492,57 @@ func seedExpiredCheckoutSession(t *testing.T, ti *stripeCheckoutTestInstance, se
 	require.NoError(t, err)
 	require.LessOrEqual(t, prepared.expiresAt, time.Now().UTC())
 	return prepared.stripeCheckoutIntent
+}
+
+func seedLegacyConvertedCheckout(t *testing.T, ti *stripeCheckoutTestInstance, preparedAt, trialEnd time.Time) (stripeclient.CreateCheckoutSessionInput, stripeCheckoutIntent) {
+	t.Helper()
+	require.NoError(t, trialsrepo.New(ti.db).CreateTrial(t.Context(), trialsrepo.CreateTrialParams{
+		OrganizationID: ti.orgID,
+		Tier:           "enterprise",
+		EndsAt:         finiteTimestamptz(trialEnd),
+	}))
+	trial, err := trialsrepo.New(ti.db).GetTrial(t.Context(), ti.orgID)
+	require.NoError(t, err)
+	intent := newStripeCheckoutIntentForTrial(ti.orgID, preparedAt, &trialEnd, newStripeCheckoutTrialFingerprint(trial))
+	prepared, err := ti.service.prepareStripeCheckoutIntent(
+		t.Context(),
+		ti.orgID,
+		"cus_test",
+		preparedAt,
+		intent,
+		pgtype.Text{},
+		pgtype.Text{},
+	)
+	require.NoError(t, err)
+
+	billingURL := ti.service.siteURL.JoinPath(ti.orgSlug, "billing").String()
+	input := stripeclient.CreateCheckoutSessionInput{
+		CustomerID:         prepared.customerID,
+		OrganizationID:     ti.orgID,
+		OrganizationSlug:   ti.orgSlug,
+		SuccessURL:         billingURL,
+		CancelURL:          billingURL,
+		TrialEnd:           prepared.trialEnd,
+		BillingCycleAnchor: prepared.billingCycleAnchor,
+		ExpiresAt:          prepared.expiresAt,
+		IdempotencyKey:     prepared.idempotencyKey,
+	}
+	checkout, err := ti.stripe.CreateCheckoutSession(t.Context(), input)
+	require.NoError(t, err)
+	_, err = repo.New(ti.db).FinalizeStripeCheckoutIntent(t.Context(), repo.FinalizeStripeCheckoutIntentParams{
+		StripeCheckoutSessionID:          checkout.ID,
+		OrganizationID:                   ti.orgID,
+		StripeCustomerID:                 prepared.customerID,
+		StripeCheckoutIdempotencyKey:     prepared.idempotencyKey,
+		StripeCheckoutBillingCycleAnchor: finiteTimestamptz(prepared.billingCycleAnchor),
+		StripeCheckoutTrialEnd:           optionalTimestamptz(prepared.trialEnd),
+		StripeCheckoutExpiresAt:          finiteTimestamptz(prepared.expiresAt),
+	})
+	require.NoError(t, err)
+	converted, err := trialsrepo.New(ti.db).MarkTrialConverted(t.Context(), ti.orgID)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, converted)
+	return input, prepared.stripeCheckoutIntent
 }
 
 func requireOopsCode(t *testing.T, err error, code oops.Code) {
@@ -1096,6 +1150,86 @@ func TestCreateStripeCheckoutStartsImmediatelyWhenTrialConverted(t *testing.T) {
 	_, _, checkouts := ti.stripe.snapshot()
 	require.Len(t, checkouts, 1)
 	require.Nil(t, checkouts[0].TrialEnd)
+}
+
+func TestCreateStripeCheckoutReplaysLegacyConvertedTrialReceiptExactly(t *testing.T) {
+	t.Parallel()
+
+	ti := newStripeCheckoutTestInstance(t)
+	now := time.Now().UTC().Truncate(time.Second)
+	ti.service.now = func() time.Time { return now }
+	originalInput, originalIntent := seedLegacyConvertedCheckout(t, ti, now, now.Add(7*24*time.Hour))
+
+	checkoutURL, err := ti.service.CreateStripeCheckout(ti.adminContext(t), &gen.CreateStripeCheckoutPayload{})
+	require.NoError(t, err)
+	require.Equal(t, "https://checkout.stripe.test/1", checkoutURL)
+	_, _, checkouts := ti.stripe.snapshot()
+	require.Len(t, checkouts, 2)
+	require.Equal(t, originalInput, checkouts[1])
+	require.NotNil(t, checkouts[1].TrialEnd)
+	require.Equal(t, originalIntent.billingCycleAnchor, checkouts[1].BillingCycleAnchor)
+	require.Equal(t, originalIntent.idempotencyKey, checkouts[1].IdempotencyKey)
+
+	stored, err := repo.New(ti.db).GetBillingMetadata(t.Context(), ti.orgID)
+	require.NoError(t, err)
+	require.Equal(t, originalIntent.idempotencyKey, stored.StripeCheckoutIdempotencyKey.String)
+	require.Equal(t, "cs_1", stored.StripeCheckoutSessionID.String)
+}
+
+func TestCreateStripeCheckoutRejectsLegacyReplayAfterTrialLifecycleChange(t *testing.T) {
+	t.Parallel()
+
+	ti := newStripeCheckoutTestInstance(t)
+	now := time.Now().UTC().Truncate(time.Second)
+	ti.service.now = func() time.Time { return now }
+	_, originalIntent := seedLegacyConvertedCheckout(t, ti, now, now.Add(7*24*time.Hour))
+	ti.stripe.afterCheckoutCreate = func() {
+		err := testrepo.New(ti.db).RecreateTrialGenerationFixture(t.Context(), testrepo.RecreateTrialGenerationFixtureParams{
+			Tier:                 "enterprise",
+			CreatedAt:            finiteTimestamptz(now.Add(-time.Hour)),
+			EndsAt:               finiteTimestamptz(now.Add(14 * 24 * time.Hour)),
+			TargetOrganizationID: ti.orgID,
+		})
+		require.NoError(t, err)
+	}
+
+	_, err := ti.service.CreateStripeCheckout(ti.adminContext(t), &gen.CreateStripeCheckoutPayload{})
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeConflict)
+
+	stored, err := repo.New(ti.db).GetBillingMetadata(t.Context(), ti.orgID)
+	require.NoError(t, err)
+	require.Equal(t, originalIntent.idempotencyKey, stored.StripeCheckoutIdempotencyKey.String)
+	require.Equal(t, "cs_1", stored.StripeCheckoutSessionID.String)
+}
+
+func TestCreateStripeCheckoutRotatesExpiredLegacyConvertedTrialReceipt(t *testing.T) {
+	t.Parallel()
+
+	ti := newStripeCheckoutTestInstance(t)
+	preparedAt := time.Now().UTC().Add(-48 * time.Hour).Truncate(time.Second)
+	_, originalIntent := seedLegacyConvertedCheckout(t, ti, preparedAt, preparedAt.Add(7*24*time.Hour))
+	now := originalIntent.expiresAt.Add(time.Second)
+	ti.service.now = func() time.Time { return now }
+	ti.stripe.checkoutState = &stripeclient.CheckoutSessionState{
+		ID:         "cs_1",
+		Status:     "expired",
+		CustomerID: "cus_test",
+	}
+
+	checkoutURL, err := ti.service.CreateStripeCheckout(ti.adminContext(t), &gen.CreateStripeCheckoutPayload{})
+	require.NoError(t, err)
+	require.Equal(t, "https://checkout.stripe.test/2", checkoutURL)
+	_, _, checkouts := ti.stripe.snapshot()
+	require.Len(t, checkouts, 2)
+	require.NotEqual(t, originalIntent.idempotencyKey, checkouts[1].IdempotencyKey)
+	require.Nil(t, checkouts[1].TrialEnd)
+	require.Greater(t, checkouts[1].ExpiresAt, now)
+
+	stored, err := repo.New(ti.db).GetBillingMetadata(t.Context(), ti.orgID)
+	require.NoError(t, err)
+	require.Equal(t, checkouts[1].IdempotencyKey, stored.StripeCheckoutIdempotencyKey.String)
+	require.Equal(t, "cs_2", stored.StripeCheckoutSessionID.String)
 }
 
 func TestCreateStripeCheckoutStartsImmediatelyWhenTrialDemoted(t *testing.T) {

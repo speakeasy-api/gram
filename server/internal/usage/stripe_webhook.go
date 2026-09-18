@@ -293,21 +293,29 @@ func (s *Service) finishPaygCheckout(ctx context.Context, organizationID string)
 	if err != nil {
 		return fmt.Errorf("load committed PAYG billing metadata: %w", err)
 	}
-	if !metadata.StripeSubscriptionID.Valid || !metadata.StripeCustomerID.Valid {
+	if !metadata.StripeCustomerID.Valid {
 		return nil
 	}
 	identity, err := s.stripeOrganizationIdentity(ctx, organizationID, metadata)
 	if err != nil {
 		return err
 	}
-	if identity.accountType != "payg" {
-		return nil
-	}
 	if s.trial != nil {
-		if err := s.trial.TrialInactive(ctx, organizationID); err != nil {
-			return fmt.Errorf("stop converted trial notifications: %w", err)
+		trial, err := trialsrepo.New(s.db).GetTrial(ctx, organizationID)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("read committed trial conversion: %w", err)
+		}
+		// Subscription deletion keeps the customer and converted trial. Pending
+		// notification cleanup must survive it, without stopping an active trial
+		// for a Checkout event that was ignored as ineligible.
+		if trial.ConvertedAt.Valid || (errors.Is(err, pgx.ErrNoRows) && metadata.StripeSubscriptionID.Valid) {
+			if err := s.trial.TrialInactive(ctx, organizationID); err != nil {
+				return fmt.Errorf("stop converted trial notifications: %w", err)
+			}
 		}
 	}
+	// Reflect a subscription deletion already committed before this cleanup in
+	// the retained customer's metadata rather than requiring current PAYG access.
 	if err := s.stripeClient.UpdateCustomer(ctx, stripeclient.UpdateCustomerInput{
 		CustomerID:       metadata.StripeCustomerID.String,
 		OrganizationID:   organizationID,
@@ -651,7 +659,7 @@ func (s *Service) activatePaygCheckout(ctx context.Context, tx pgx.Tx, organizat
 
 	newlyEnabled := []productfeatures.Feature(nil)
 	convertedDemotedTrial := false
-	convertedActiveTrial := false
+	convertedTrial := false
 	trial, err := trialsrepo.New(tx).GetTrial(ctx, organizationID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		newlyEnabled, err = productfeatures.SeedEnterpriseAccessEntitlementsTx(ctx, tx, organizationID)
@@ -661,21 +669,21 @@ func (s *Service) activatePaygCheckout(ctx context.Context, tx pgx.Tx, organizat
 	} else if err != nil {
 		return stripeWebhookResult{}, fmt.Errorf("read trial state for PAYG activation: %w", err)
 	} else {
-		convertedActiveTrial, err = s.convertEnterpriseTrialForCheckoutTx(ctx, tx, organizationID, trial)
+		convertedTrial, err = s.convertEnterpriseTrialForCheckoutTx(ctx, tx, organizationID, trial)
 		if err != nil {
-			return stripeWebhookResult{}, fmt.Errorf("convert active trial after Stripe Checkout completion: %w", err)
+			return stripeWebhookResult{}, fmt.Errorf("convert enterprise trial after Stripe Checkout completion: %w", err)
 		}
-		if !trial.ConvertedAt.Valid && !convertedActiveTrial {
+		if !trial.ConvertedAt.Valid && !convertedTrial {
 			if _, err := trialsrepo.New(tx).MarkTrialConverted(ctx, organizationID); err != nil {
 				return stripeWebhookResult{}, fmt.Errorf("mark completed Checkout trial converted: %w", err)
 			}
 		}
 		convertedDemotedTrial = trial.DemotedAt.Valid
 	}
-	if convertedActiveTrial {
+	if convertedTrial {
 		newlyEnabled = append(newlyEnabled, productfeatures.TrialRuntimeFeatures...)
 	}
-	if convertedDemotedTrial {
+	if convertedDemotedTrial && !convertedTrial {
 		if err := productfeatures.SetTrialRuntimeFeaturesTx(ctx, tx, organizationID, true); err != nil {
 			return stripeWebhookResult{}, fmt.Errorf("restore demoted trial runtime features: %w", err)
 		}
@@ -683,7 +691,7 @@ func (s *Service) activatePaygCheckout(ctx context.Context, tx pgx.Tx, organizat
 	}
 
 	reconcileKeyTypes := []openrouter.KeyType(nil)
-	if convertedActiveTrial || convertedDemotedTrial {
+	if convertedTrial || convertedDemotedTrial {
 		reconcileKeyTypes = append(reconcileKeyTypes, openrouter.AllKeyTypes...)
 	}
 	if convertedDemotedTrial {
@@ -697,7 +705,7 @@ func (s *Service) activatePaygCheckout(ctx context.Context, tx pgx.Tx, organizat
 	if err != nil {
 		return stripeWebhookResult{}, fmt.Errorf("recover PAYG OpenRouter chat key billing: %w", err)
 	}
-	if chatStateChanged && !convertedDemotedTrial && !convertedActiveTrial {
+	if chatStateChanged && !convertedDemotedTrial && !convertedTrial {
 		reconcileKeyTypes = append(reconcileKeyTypes, openrouter.KeyTypeChat)
 	}
 

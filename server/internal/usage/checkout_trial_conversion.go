@@ -16,17 +16,28 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usage/repo"
 )
 
 var errStripeCheckoutTrialLifecycleChanged = errors.New("trial lifecycle changed after Stripe Checkout preparation")
 
 // validateStripeCheckoutTrialTx keeps session creation tied to the prepared trial
-// lifecycle without converting the trial or granting paid access.
-func validateStripeCheckoutTrialTx(ctx context.Context, tx pgx.Tx, organizationID string, expectedTrial *stripeCheckoutTrialFingerprint, preparedTrialFingerprint string) error {
+// lifecycle without converting the trial or granting paid access. A converted
+// legacy trial may replay its attached, unexpired session only while the durable
+// receipt still names the exact stored Checkout intent.
+func validateStripeCheckoutTrialTx(
+	ctx context.Context,
+	tx pgx.Tx,
+	organizationID string,
+	expectedTrial *stripeCheckoutTrialFingerprint,
+	prepared preparedStripeCheckoutIntent,
+	legacyReplay *stripeCheckoutLegacyReplay,
+	now time.Time,
+) error {
 	_, err := trialsrepo.New(tx).LockTrialLifecycle(ctx, organizationID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		if expectedTrial != nil || preparedTrialFingerprint != "none" {
+		if expectedTrial != nil || checkoutIntentTrialFingerprint(prepared.idempotencyKey) != "none" {
 			return errStripeCheckoutTrialLifecycleChanged
 		}
 		return nil
@@ -37,18 +48,49 @@ func validateStripeCheckoutTrialTx(ctx context.Context, tx pgx.Tx, organizationI
 	if err != nil {
 		return fmt.Errorf("read locked trial lifecycle: %w", err)
 	}
-	if !stripeCheckoutTrialMatches(expectedTrial, currentTrial) || preparedTrialFingerprint != stripeCheckoutTrialFingerprintDigest(expectedTrial) {
+	if !stripeCheckoutTrialMatches(expectedTrial, currentTrial) {
+		return errStripeCheckoutTrialLifecycleChanged
+	}
+
+	preparedTrialFingerprint := checkoutIntentTrialFingerprint(prepared.idempotencyKey)
+	if preparedTrialFingerprint == stripeCheckoutTrialFingerprintDigest(expectedTrial) {
+		return nil
+	}
+	if legacyReplay == nil || expectedTrial == nil || expectedTrial.convertedAt == nil || expectedTrial.demotedAt != nil ||
+		!prepared.expiresAt.After(now) || !stripeCheckoutIntentsEqual(prepared.stripeCheckoutIntent, legacyReplay.intent) {
+		return errStripeCheckoutTrialLifecycleChanged
+	}
+
+	metadata, err := repo.New(tx).LockBillingMetadata(ctx, organizationID)
+	if err != nil {
+		return fmt.Errorf("lock legacy Stripe Checkout receipt: %w", err)
+	}
+	storedIntent, err := checkoutIntentFromMetadata(metadata)
+	if err != nil {
+		return fmt.Errorf("read legacy Stripe Checkout receipt: %w", err)
+	}
+	if metadata.StripeSubscriptionID.Valid ||
+		!metadata.StripeCustomerID.Valid || metadata.StripeCustomerID.String != prepared.customerID ||
+		!metadata.StripeCheckoutSessionID.Valid || metadata.StripeCheckoutSessionID.String != legacyReplay.sessionID ||
+		!stripeCheckoutIntentsEqual(storedIntent, legacyReplay.intent) {
 		return errStripeCheckoutTrialLifecycleChanged
 	}
 	return nil
 }
 
-// convertEnterpriseTrialForCheckoutTx applies the active trial conversion only
-// after Stripe confirms Checkout completion. The caller holds the trial, key,
-// and organization locks; provider reconciliation follows the transaction commit.
+func stripeCheckoutIntentsEqual(left, right stripeCheckoutIntent) bool {
+	return left.idempotencyKey == right.idempotencyKey &&
+		left.billingCycleAnchor.Equal(right.billingCycleAnchor) &&
+		checkoutOptionalTimesEqual(left.trialEnd, right.trialEnd) &&
+		left.expiresAt.Equal(right.expiresAt)
+}
+
+// convertEnterpriseTrialForCheckoutTx applies trial conversion only after Stripe
+// confirms Checkout completion, including delivery after expiry or demotion.
+// The caller holds trial, key, and organization locks; provider reconciliation follows commit.
 func (s *Service) convertEnterpriseTrialForCheckoutTx(ctx context.Context, tx pgx.Tx, organizationID string, trial trialsrepo.Trial) (bool, error) {
 	now := s.checkoutNow()
-	if trial.ConvertedAt.Valid || trial.DemotedAt.Valid || trial.Tier != "enterprise" || !trial.EndsAt.Valid || !trial.EndsAt.Time.After(now) {
+	if trial.ConvertedAt.Valid || trial.Tier != "enterprise" {
 		return false, nil
 	}
 	provisioner, ok := s.openRouter.(checkoutTrialProvisioner)

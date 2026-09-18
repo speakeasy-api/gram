@@ -429,9 +429,10 @@ describe("PaygPlanSection", () => {
       queryState({ isError: true, error: notFound() });
     });
 
-    it("offers checkout without subscription management controls", () => {
+    it("gives an eligible admin actionable setup without management controls", () => {
       render(<PaygPlanSection />);
 
+      expect(screen.getByText(/finish setting up billing/i)).toBeTruthy();
       expect(portalButton()).toBeNull();
       expect(checkoutCta()).not.toBeNull();
       expect(cancelTrigger()).toBeNull();
@@ -454,15 +455,21 @@ describe("PaygPlanSection", () => {
       expect(mocks.refetch).not.toHaveBeenCalled();
     });
 
-    it("does not offer checkout to a member", () => {
+    it("shows a member the inactive state without setup instructions", () => {
       mocks.hasAnyScope.mockReturnValue(false);
       render(<PaygPlanSection />);
+
+      expect(screen.getByText(/no active billing subscription/i)).toBeTruthy();
+      expect(screen.queryByText(/finish setting up billing/i)).toBeNull();
       expect(checkoutCta()).toBeNull();
     });
 
-    it("does not offer checkout when self-serve billing is disabled", () => {
+    it("shows the inactive state when self-serve billing is disabled", () => {
       mocks.flagResult.mockReturnValue({ status: "disabled" });
       render(<PaygPlanSection />);
+
+      expect(screen.getByText(/no active billing subscription/i)).toBeTruthy();
+      expect(screen.queryByText(/finish setting up billing/i)).toBeNull();
       expect(checkoutCta()).toBeNull();
     });
 
