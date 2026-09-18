@@ -8992,29 +8992,26 @@ CREATE INDEX IF NOT EXISTS killswitch_operations_expires_at_idx ON killswitch_op
 -- Application transactions retain tombstone generations and reject stale completion.
 CREATE UNIQUE INDEX IF NOT EXISTS remote_session_clients_id_issuer_key ON remote_session_clients (id, remote_session_issuer_id);
 
--- One row per MCP server x identity provider connection recording what the
--- organization administrator confirmed in the identity provider's console and
--- what the exchange path later observed. Readiness is derived at read time;
--- nothing here is consulted by the exchange path and confirmation alone never
--- makes a server verified. mcp_servers is project-scoped, so tenancy is pinned
--- through the (organization_id, project_id) and (project_id, mcp_server_id)
--- composite keys.
+-- One row per identity provider connection x upstream resource (the resource
+-- indicator at a remote authorization server). A row exists exactly when the
+-- organization administrator confirmed in the identity provider's console
+-- that the AI agent is connected to that resource; reset deletes it. Who
+-- confirmed and when lives in the audit log. The observed columns are the
+-- latest exchange outcome, written by the exchange path; they are a read
+-- model, not a history. Readiness is derived at read time and nothing here is
+-- consulted by the exchange path. Several MCP servers that share an upstream
+-- share one row.
 CREATE TABLE IF NOT EXISTS xaa_resource_readiness (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
-  project_id uuid NOT NULL,
-  mcp_server_id uuid NOT NULL,
   identity_provider_connection_id uuid NOT NULL,
-  -- The authorization server the confirmation was made against; a server
-  -- rebound to another issuer reads as unconfirmed.
   remote_session_issuer_id uuid NOT NULL,
-  -- custom: the admin enables Cross App Access on the resource app by hand;
+  -- The resource indicator entered on the connection: the upstream's RFC 9728
+  -- identifier when known, otherwise its URL.
+  resource TEXT NOT NULL,
+  -- custom: the admin enabled Cross App Access on the resource app by hand;
   -- oin: the listing ships with it enabled.
   resource_source TEXT NOT NULL DEFAULT 'custom',
-  scope_policy TEXT,
-  connection_confirmed_at timestamptz,
-  connection_confirmed_by TEXT,
-  resource_xaa_confirmed_at timestamptz,
   -- Written by the exchange path: a typed outcome, never a raw provider body.
   last_exchange_outcome TEXT,
   last_exchange_at timestamptz,
@@ -9023,26 +9020,17 @@ CREATE TABLE IF NOT EXISTS xaa_resource_readiness (
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   CONSTRAINT xaa_resource_readiness_pkey PRIMARY KEY (id),
+  CONSTRAINT xaa_resource_readiness_resource_check CHECK (resource <> ''),
   CONSTRAINT xaa_resource_readiness_resource_source_check CHECK (resource_source IN ('custom', 'oin')),
-  CONSTRAINT xaa_resource_readiness_connection_confirmed_check CHECK (
-    (connection_confirmed_at IS NULL) = (connection_confirmed_by IS NULL)
-    AND (connection_confirmed_by IS NULL OR connection_confirmed_by <> '')
-  ),
-  CONSTRAINT xaa_resource_readiness_server_connection_key UNIQUE (organization_id, project_id, mcp_server_id, identity_provider_connection_id),
+  CONSTRAINT xaa_resource_readiness_last_exchange_outcome_check CHECK (last_exchange_outcome IS NULL OR last_exchange_outcome IN ('succeeded', 'broken', 'failed')),
+  CONSTRAINT xaa_resource_readiness_resource_key UNIQUE (organization_id, identity_provider_connection_id, remote_session_issuer_id, resource),
   CONSTRAINT xaa_resource_readiness_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT xaa_resource_readiness_organization_project_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE,
-  CONSTRAINT xaa_resource_readiness_project_server_fkey FOREIGN KEY (project_id, mcp_server_id) REFERENCES mcp_servers (project_id, id) ON DELETE CASCADE,
   CONSTRAINT xaa_resource_readiness_connection_tenant_fkey FOREIGN KEY (organization_id, identity_provider_connection_id) REFERENCES identity_provider_connections (organization_id, id) ON DELETE CASCADE,
   CONSTRAINT xaa_resource_readiness_remote_session_issuer_id_fkey FOREIGN KEY (remote_session_issuer_id) REFERENCES remote_session_issuers (id) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS xaa_resource_readiness_connection_idx
-ON xaa_resource_readiness (organization_id, identity_provider_connection_id);
-
--- Serve the cascades from mcp_servers and remote_session_issuers.
-CREATE INDEX IF NOT EXISTS xaa_resource_readiness_project_server_idx
-ON xaa_resource_readiness (project_id, mcp_server_id);
-
+-- Serves the cascade from remote_session_issuers; the connection cascade is
+-- served by the unique key.
 CREATE INDEX IF NOT EXISTS xaa_resource_readiness_remote_session_issuer_idx
 ON xaa_resource_readiness (remote_session_issuer_id);
 
