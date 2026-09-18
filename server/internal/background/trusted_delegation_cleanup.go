@@ -16,13 +16,13 @@ import (
 )
 
 const (
-	trustedDelegationCleanupBatchSize          int32 = 500
-	trustedDelegationCleanupMaxBatches               = 100
-	trustedDelegationCleanupActivityTimeout          = 10 * time.Minute
-	trustedDelegationCleanupMaxAttempts              = 3
-	trustedDelegationCleanupRetryInterval            = time.Minute
-	trustedDelegationCleanupBackoffCoefficient       = 2
-	trustedDelegationCleanupSchedulingMargin         = 7 * time.Minute
+	trustedDelegationCleanupBatchSize            int32 = 500
+	trustedDelegationCleanupMaxBatchesPerAttempt       = 100
+	trustedDelegationCleanupActivityTimeout            = 10 * time.Minute
+	trustedDelegationCleanupMaxAttempts                = 3
+	trustedDelegationCleanupRetryInterval              = time.Minute
+	trustedDelegationCleanupBackoffCoefficient         = 2
+	trustedDelegationCleanupSchedulingMargin           = 7 * time.Minute
 )
 
 // TrustedDelegationCleanupWorkflow erases unusable credentials, never renews them.
@@ -30,7 +30,9 @@ const (
 // signals. Temporal actions/month per namespace: ~720 starts + 720 activities
 // = 1,440 normally (2,880 with all three attempts), fixed rather than per user.
 // Each preview task queue adds its own fixed schedule. The activity drains at
-// most 50,000 rows per hour; monitor saturation to keep erasure within 24 hours.
+// most 50,000 rows per activity attempt. Three configured attempts can process
+// up to 150,000 rows in one execution; manual reruns get fresh budgets.
+// Monitor saturation to keep erasure within 24 hours.
 func TrustedDelegationCleanupWorkflow(ctx workflow.Context) error {
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: trustedDelegationCleanupActivityTimeout,
@@ -44,14 +46,15 @@ func TrustedDelegationCleanupWorkflow(ctx workflow.Context) error {
 	return workflow.ExecuteActivity(ctx, a.CleanupTrustedDelegationCredentials).Get(ctx, nil)
 }
 
-// CleanupTrustedDelegationCredentials bounds both transactions and total work.
-// Retries are safe: the SQL only selects rows with secrets still to erase.
+// CleanupTrustedDelegationCredentials bounds transactions and work per attempt.
+// Each retry starts a fresh batch budget; exhaustion remains retryable.
+// SQL only selects rows still eligible for cleanup, making retries idempotent.
 func (a *Activities) CleanupTrustedDelegationCredentials(ctx context.Context) error {
 	return cleanupTrustedDelegationBatches(ctx, repo.New(a.db).CleanupTrustedDelegationCredentialsBatch)
 }
 
 func cleanupTrustedDelegationBatches(ctx context.Context, cleanup func(context.Context, int32) (int64, error)) error {
-	for range trustedDelegationCleanupMaxBatches {
+	for range trustedDelegationCleanupMaxBatchesPerAttempt {
 		n, err := cleanup(ctx, trustedDelegationCleanupBatchSize)
 		if err != nil {
 			return fmt.Errorf("cleanup trusted delegation credentials: %w", err)
@@ -60,7 +63,7 @@ func cleanupTrustedDelegationBatches(ctx context.Context, cleanup func(context.C
 			return nil
 		}
 	}
-	return fmt.Errorf("trusted delegation credential cleanup batch budget exhausted")
+	return fmt.Errorf("trusted delegation credential cleanup per-attempt batch budget exhausted")
 }
 
 // Include every attempt, intervening backoff, and queue/workflow-task headroom.
