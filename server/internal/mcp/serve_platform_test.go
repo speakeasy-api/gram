@@ -468,6 +468,7 @@ func TestServePlatformToolset_PlatformMCPReadListProjectsCall(t *testing.T) {
 	w, err = servePlatformHTTP(t, ti, platformtools.PlatformMCPReadToolsetSlug, body, token)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code, "list_projects call must succeed: %s", w.Body.String())
+	require.NotContains(t, w.Body.String(), `"error"`)
 	require.Contains(t, w.Body.String(), authCtx.ProjectID.String(), "the caller's readable project must appear in the listing")
 
 	events := scanAttributes(recorder, mcpriskscan.SurfacePlatformMCP)
