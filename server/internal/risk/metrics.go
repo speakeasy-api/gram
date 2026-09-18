@@ -95,10 +95,10 @@ func (m *metrics) RecordFindingCHSkipped(ctx context.Context, reason string) {
 }
 
 // RecordFindingCHUnverifiedAttribution records a finding whose carried chat
-// attribution named a chat outside the finding's project and was dropped. The
-// finding itself is still inserted, so this is its own counter rather than a
-// skipped reason. A sustained non-zero rate points at a producer stamping the
-// wrong chat.
+// attribution failed project verification and was dropped. The finding itself
+// is still inserted, so this is its own counter rather than a skipped reason.
+// A sustained non-zero rate points at a producer stamping unverifiable chat
+// attribution.
 func (m *metrics) RecordFindingCHUnverifiedAttribution(ctx context.Context) {
 	if m.chMessagesAttributionDropped == nil {
 		return
