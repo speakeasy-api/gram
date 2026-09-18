@@ -4,11 +4,12 @@ import (
 	"github.com/go-jose/go-jose/v4/jwt"
 
 	assertioncore "github.com/speakeasy-api/gram/server/internal/usersessions/assertion"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 )
 
 // AssertionType is the only client_assertion_type this server accepts
 // (RFC 7523 §2.2).
-const AssertionType = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
+const AssertionType = oauthwire.ClientAssertionTypeJWTBearer
 
 // maxAssertionBytes bounds the assertion before it is parsed. A real client
 // assertion is well under 2 KiB even with an RSA-4096 signature; the cap

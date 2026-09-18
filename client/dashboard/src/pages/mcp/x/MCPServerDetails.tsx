@@ -3,7 +3,7 @@ import { RequireScope } from "@/components/require-scope";
 import { cn } from "@/lib/utils";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useTabScrollReset } from "@/hooks/useTabScrollReset";
-import { getMcpServerArgs } from "@/lib/sources";
+import { getMcpServerArgs, mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import type {
   McpServer,
@@ -27,8 +27,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
 import { useQueryClient } from "@tanstack/react-query";
-import { Check, ChevronDown } from "lucide-react";
-import { Navigate, useLocation, useParams } from "react-router";
+import { ArrowRight, Check, ChevronDown } from "lucide-react";
+import { Link, Navigate, useLocation, useParams } from "react-router";
 import { toast } from "sonner";
 import { MCPTeamAccessTab } from "../MCPTeamAccessTab";
 import {
@@ -39,12 +39,13 @@ import {
   mcpServerTabHref,
   MCP_SERVER_TAB_URLS,
 } from "./MCPServerDetailsRouting";
-import { MCPOverviewTab } from "@/pages/mcp/overview/MCPOverviewTab";
 import { InspectTab } from "./tabs/InspectTab";
+import { OverviewTab } from "./tabs/OverviewTab";
+import { MCP_AGENT_SETUP_SECTION_ID } from "./tabs/settings/sections/AgentSetupSection";
 import { MCP_AUTHENTICATION_SECTION_ID } from "./tabs/settings/sections/authentication/AuthenticationSection";
+import { MCP_PUBLIC_ACCESS_SECTION_ID } from "./tabs/settings/sections/PublicAccessSection";
 import { ClientsAndSessionsTab } from "@/components/sessions/ClientsAndSessionsTab";
 import { SettingsTab } from "./tabs/settings/SettingsTab";
-import { UnproxiedMcpOverviewTab } from "./tabs/UnproxiedMcpOverviewTab";
 
 export default function MCPServerDetails(): JSX.Element {
   const { mcpServerSlug } = useParams<{ mcpServerSlug: string }>();
@@ -124,26 +125,12 @@ export default function MCPServerDetails(): JSX.Element {
     switch (activeTab) {
       case "overview":
         return (
-          mcpServer &&
-          (mcpServer.unproxiedMcpServerId ? (
-            <UnproxiedMcpOverviewTab
-              unproxiedMcpServerId={mcpServer.unproxiedMcpServerId}
-              mcpServerId={mcpServer.id}
-              mcpServerSlug={mcpServer.slug ?? ""}
-              mcpServerName={mcpServer.name ?? "MCP Server"}
+          mcpServer && (
+            <OverviewTab
+              mcpServer={mcpServer}
+              agentSetupHref={`${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_AGENT_SETUP_SECTION_ID}`}
             />
-          ) : (
-            mcpServer.slug && (
-              <MCPOverviewTab
-                server={{
-                  kind: "mcp-server",
-                  id: mcpServer.id,
-                  slug: mcpServer.slug,
-                  name: mcpServer.name ?? "MCP Server",
-                }}
-              />
-            )
-          ))
+          )
         );
       case "inspect":
         return (
@@ -275,6 +262,7 @@ export function MCPServerStatusDropdown({
 }): JSX.Element {
   const { hasScope } = useRBAC();
   const canWrite = hasScope("mcp:write");
+  const routes = useRoutes();
   const queryClient = useQueryClient();
   const update = useUpdateMcpServerMutation({
     onSuccess: async (_data, variables) => {
@@ -349,6 +337,10 @@ export function MCPServerStatusDropdown({
   const currentDotClass =
     options.find((option) => option.value === server.visibility)?.dotClass ??
     "bg-green-400";
+  // Public is gated on the source's consent; the option stays visible but
+  // disabled, and this footer takes the owner to where consent is given.
+  const publicBlocked = isTunneled && !sourceAllowsPublic;
+  const publicAccessHref = `${mcpServerTabHref(routes, mcpServerRouteParam(server), "settings")}#${MCP_PUBLIC_ACCESS_SECTION_ID}`;
 
   // Unproxied servers have no Gram-hosted endpoint for disabled/private to
   // gate — the vendor's own server is reachable regardless of this setting —
@@ -383,16 +375,13 @@ export function MCPServerStatusDropdown({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-[320px] p-1">
         {options.map((option) => {
-          // Public is gated on the source's consent; render it disabled with
-          // a hint rather than hiding it, so owners know the toggle exists.
-          const publicBlocked =
-            option.value === "public" && !sourceAllowsPublic;
+          const optionBlocked = option.value === "public" && publicBlocked;
           return (
             <DropdownMenuItem
               key={option.value}
-              disabled={publicBlocked}
+              disabled={optionBlocked}
               onSelect={() => {
-                if (publicBlocked) return;
+                if (optionBlocked) return;
                 handleSelect(option.value);
               }}
               className="group flex cursor-pointer items-start gap-2.5 p-2 data-[disabled]:cursor-not-allowed data-[disabled]:opacity-60"
@@ -423,7 +412,7 @@ export function MCPServerStatusDropdown({
                   {option.label}
                 </span>
                 <span className="text-muted-foreground text-xs">
-                  {publicBlocked
+                  {optionBlocked
                     ? "Enable public access on the tunnel source first to allow anonymous serving."
                     : option.description}
                 </span>
@@ -431,6 +420,17 @@ export function MCPServerStatusDropdown({
             </DropdownMenuItem>
           );
         })}
+        {publicBlocked && (
+          <DropdownMenuItem asChild className="mt-1 border-t">
+            <Link
+              to={publicAccessHref}
+              className="text-muted-foreground hover:text-foreground flex cursor-pointer items-center gap-1 px-2 py-2 text-xs hover:no-underline"
+            >
+              Enable public access in Settings
+              <ArrowRight className="size-3" />
+            </Link>
+          </DropdownMenuItem>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

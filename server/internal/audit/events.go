@@ -32,6 +32,7 @@ const (
 	subjectTypeEnvironment                 subjectType = "environment"
 	subjectTypeGcpIamCredential            subjectType = "gcp_iam_credential"
 	subjectTypeGcpKmsKey                   subjectType = "gcp_kms_key"
+	subjectTypeIdentityProviderConnection  subjectType = "identity_provider_connection"
 	subjectTypeJsonWebKey                  subjectType = "json_web_key"
 	subjectTypeJsonWebKeySet               subjectType = "json_web_key_set"
 	subjectTypeKillswitchPrescription      subjectType = "killswitch_prescription"

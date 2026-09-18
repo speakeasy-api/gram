@@ -23,6 +23,15 @@ export type AgentProviderIconKind =
   | "catchall"
   | "unknown";
 
+/**
+ * Whether a source resolves to a real provider mark rather than the generic
+ * fallback. Callers that would rather show nothing than a globe use this.
+ */
+export function hasAgentProviderIcon(source?: string): boolean {
+  const kind = agentProviderIconKind(source);
+  return kind !== "unknown" && kind !== "catchall";
+}
+
 export function agentProviderIconKind(source?: string): AgentProviderIconKind {
   const normalizedSource = source
     ?.trim()

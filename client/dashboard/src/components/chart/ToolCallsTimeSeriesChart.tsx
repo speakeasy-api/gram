@@ -14,6 +14,7 @@ import {
 import { useChartZoom } from "@/components/chart/useChartZoom";
 import {
   useIsDarkTheme,
+  useOtherSeriesColor,
   useSeriesColors,
 } from "@/components/chart/useSeriesColors";
 import { WidgetEmptyState } from "@/components/chart/WidgetEmptyState";
@@ -120,6 +121,10 @@ export function ToolCallsTimeSeriesChart({
   }, [timeSeries, resetZoom]);
 
   const seriesColors = useSeriesColors();
+  // The quiet neutral, for the "Successful" bars. It used to be read out of
+  // the categorical ramp's tail slot, which the ramp no longer has — and an
+  // out-of-range slot is undefined, which withAlpha then throws on.
+  const neutralColor = useOtherSeriesColor();
   const chartData = useMemo<{
     labels: string[];
     datasets: Array<
@@ -141,8 +146,8 @@ export function ToolCallsTimeSeriesChart({
       {
         label: "Successful",
         data: successData,
-        // The ramp's neutral tail — quiet on both canvases.
-        backgroundColor: withAlpha(seriesColors[8]!, 0.6),
+        // The shared neutral — quiet on both canvases.
+        backgroundColor: withAlpha(neutralColor, 0.6),
         stack: "stack",
         order: 2,
       },
@@ -170,7 +175,7 @@ export function ToolCallsTimeSeriesChart({
     };
 
     return { labels, datasets: [...barDatasets, trendDataset] };
-  }, [timeSeries, timeRangeMs, seriesColors]);
+  }, [timeSeries, timeRangeMs, seriesColors, neutralColor]);
 
   // Chart.js paints the canvas with static defaults that ignore the CSS
   // theme, so gridlines and tick labels need explicit dark-mode colors.

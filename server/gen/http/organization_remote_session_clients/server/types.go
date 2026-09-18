@@ -189,6 +189,13 @@ type GetClientDeletePreflightResponseBody struct {
 	SessionCount int `form:"session_count" json:"session_count" xml:"session_count"`
 	// Display names of MCP servers this client is attached to.
 	McpServerNames []string `form:"mcp_server_names" json:"mcp_server_names" xml:"mcp_server_names"`
+	// Organization-owned user-session issuers that use this client for
+	// identity-provider login and block deletion.
+	TrustedUserSessionIssuers []*TrustedClientUserSessionIssuerReferenceResponseBody `form:"trusted_user_session_issuers" json:"trusted_user_session_issuers" xml:"trusted_user_session_issuers"`
+	// Whether the client can be deleted now.
+	CanDelete bool `form:"can_delete" json:"can_delete" xml:"can_delete"`
+	// Stable reason deletion is blocked. Present when can_delete is false.
+	BlockingReason *string `form:"blocking_reason,omitempty" json:"blocking_reason,omitempty" xml:"blocking_reason,omitempty"`
 }
 
 // ListClientMcpServersResponseBody is the type of the
@@ -2877,6 +2884,15 @@ type RemoteSessionClientResponseBody struct {
 	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
+// TrustedClientUserSessionIssuerReferenceResponseBody is used to define fields
+// on response body types.
+type TrustedClientUserSessionIssuerReferenceResponseBody struct {
+	// The user_session_issuer id.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The user_session_issuer slug.
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+}
+
 // OrganizationMcpServerResponseBody is used to define fields on response body
 // types.
 type OrganizationMcpServerResponseBody struct {
@@ -2957,7 +2973,9 @@ func NewGetClientResponseBody(res *types.RemoteSessionClient) *GetClientResponse
 // "organizationRemoteSessionClients" service.
 func NewGetClientDeletePreflightResponseBody(res *organizationremotesessionclients.OrganizationClientDeletePreflight) *GetClientDeletePreflightResponseBody {
 	body := &GetClientDeletePreflightResponseBody{
-		SessionCount: res.SessionCount,
+		SessionCount:   res.SessionCount,
+		CanDelete:      res.CanDelete,
+		BlockingReason: res.BlockingReason,
 	}
 	if res.McpServerNames != nil {
 		body.McpServerNames = make([]string, len(res.McpServerNames))
@@ -2966,6 +2984,18 @@ func NewGetClientDeletePreflightResponseBody(res *organizationremotesessionclien
 		}
 	} else {
 		body.McpServerNames = []string{}
+	}
+	if res.TrustedUserSessionIssuers != nil {
+		body.TrustedUserSessionIssuers = make([]*TrustedClientUserSessionIssuerReferenceResponseBody, len(res.TrustedUserSessionIssuers))
+		for i, val := range res.TrustedUserSessionIssuers {
+			if val == nil {
+				body.TrustedUserSessionIssuers[i] = nil
+				continue
+			}
+			body.TrustedUserSessionIssuers[i] = marshalOrganizationremotesessionclientsTrustedClientUserSessionIssuerReferenceToTrustedClientUserSessionIssuerReferenceResponseBody(val)
+		}
+	} else {
+		body.TrustedUserSessionIssuers = []*TrustedClientUserSessionIssuerReferenceResponseBody{}
 	}
 	return body
 }

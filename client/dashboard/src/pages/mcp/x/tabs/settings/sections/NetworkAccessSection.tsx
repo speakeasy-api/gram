@@ -4,6 +4,7 @@ import {
   SettingsSection,
 } from "@/components/detail/settings-section";
 import { Button } from "@/components/ui/Button";
+import { CopyButton } from "@/components/ui/CopyButton";
 import { Dialog } from "@/components/ui/Dialog";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/Field";
 import {
@@ -15,6 +16,10 @@ import {
 } from "@/components/ui/Select";
 import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
+import {
+  endpointUsesPrivateIngress,
+  privateMcpEndpointUrls,
+} from "@/hooks/usePrivateMcpServerUrls";
 import { useNetworkIngressRollout } from "@/hooks/useNetworkIngressRollout";
 import { customDomainMcpEndpointUrl } from "@/hooks/useToolsetUrl";
 
@@ -52,9 +57,12 @@ export function NetworkAccessSection({
   mcpServer: McpServer;
   endpoints: McpEndpoint[];
 }): JSX.Element | null {
-  const { rolloutEnabled, canManageIngress } = useNetworkIngressRollout();
+  const { status: rolloutStatus, canManageIngress } =
+    useNetworkIngressRollout();
+  const hasStoredPrivateMode =
+    mcpServer.networkAccessMode !== McpServerNetworkAccessMode.PublicOnly;
 
-  if (!rolloutEnabled) {
+  if (rolloutStatus === "disabled" && !hasStoredPrivateMode) {
     return null;
   }
 
@@ -114,13 +122,9 @@ function NetworkAccessSectionContent({
     ingress?.enabled === true && ingress.status === "online";
   const eligibleEndpoints = useMemo(
     () =>
-      endpoints.filter((endpoint) => {
-        if (!ingress) return false;
-        if (ingress.endpointNamespaceKind === "platform") {
-          return !endpoint.customDomainId;
-        }
-        return endpoint.customDomainId === ingress.customDomainId;
-      }),
+      endpoints.filter(
+        (endpoint) => ingress && endpointUsesPrivateIngress(endpoint, ingress),
+      ),
     [endpoints, ingress],
   );
   const featureQuerySuccessful = features.isSuccess;
@@ -184,16 +188,13 @@ function NetworkAccessSectionContent({
       ),
     );
   }, [domains, endpoints]);
-  const privateEndpointUrls = useMemo(() => {
-    if (!ingress?.dnsName) return [];
-    return Array.from(
-      new Set(
-        eligibleEndpoints.map(
-          (endpoint) => `https://${ingress.dnsName}/mcp/${endpoint.slug}`,
-        ),
-      ),
-    );
-  }, [eligibleEndpoints, ingress?.dnsName]);
+  const privateEndpointUrls = useMemo(
+    () =>
+      ingressQuerySuccessful && !ingressResult.isFetching
+        ? privateMcpEndpointUrls(ingress, endpoints)
+        : [],
+    [endpoints, ingress, ingressQuerySuccessful, ingressResult.isFetching],
+  );
 
   const update = useUpdateMcpServerMutation({
     onSuccess: async () => {
@@ -313,6 +314,31 @@ function NetworkAccessSectionContent({
               entitled and its private ingress is online.
             </FieldDescription>
           </Field>
+          {mcpServer.networkAccessMode !==
+            McpServerNetworkAccessMode.PublicOnly &&
+            privateEndpointUrls.length > 0 && (
+              <Field>
+                <FieldLabel>Private endpoint URLs</FieldLabel>
+                <ul className="space-y-1">
+                  {privateEndpointUrls.map((url) => (
+                    <li key={url} className="flex items-start gap-1">
+                      <span className="min-w-0 flex-1 break-all font-mono text-sm">
+                        {url}
+                      </span>
+                      <CopyButton
+                        text={url}
+                        size="xs"
+                        tooltip="Copy private endpoint URL"
+                      />
+                    </li>
+                  ))}
+                </ul>
+                <FieldDescription>
+                  Use these addresses from devices connected to the
+                  organization&apos;s tailnet.
+                </FieldDescription>
+              </Field>
+            )}
         </SettingsSection.Body>
         <SettingsSection.Footer>
           <SettingsSection.FooterHint>{footerHint}</SettingsSection.FooterHint>

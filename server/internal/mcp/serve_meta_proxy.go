@@ -602,6 +602,19 @@ func (s *Service) executeProxiedMemberTool(
 	meta *mcprequests.WireMeta,
 ) (json.RawMessage, error) {
 	ctx = s.memberAttributionContext(ctx, logger, gate)
+	// A proxied member's tool-call log is written by the remotemcp interceptor,
+	// which never sees the gate, so carry the caller's identity down to it.
+	clientIdentity, _ := resolveClientIdentity(ctx, logger, s.sessionClientInfo, &mcpInputs{ //nolint:exhaustruct // only the record's identity fields matter here
+		projectID:       gate.projectID,
+		sessionID:       gate.sessionID,
+		clientInfoScope: metaClientInfoScope(gate.metaServerID),
+	}, meta.Sanitize().ClientInfo)
+	if clientIdentity.Name != "" {
+		ctx = contextvalues.SetMCPClientInfo(ctx, contextvalues.MCPClientInfo{
+			Name:    clientIdentity.Name,
+			Version: clientIdentity.Version,
+		})
+	}
 	dial, err := s.dialMetaMember(ctx, logger, *gate, member, gate.callerIdentity())
 	if err != nil {
 		if memberErr, ok := errors.AsType[*metaMemberError](err); ok {

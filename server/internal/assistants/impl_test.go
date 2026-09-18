@@ -435,9 +435,11 @@ func TestAssistantsService_AttachMCPServer_RejectsUnreachable(t *testing.T) {
 		{slug: disabled.Slug.String, wantErr: "is disabled"},
 	} {
 		// The resolver carries the reason; the endpoint maps it to a 400.
-		_, resolveErr := svc.core.resolveMcpServerRefsForWrite(t.Context(), projectID, []*types.AssistantMCPServerRef{
+		tx := testenv.BeginTx(t, t.Context(), conn)
+		_, resolveErr := svc.core.resolveMcpServerRefsForWrite(t.Context(), tx, projectID, []*types.AssistantMCPServerRef{
 			{McpServerSlug: tt.slug, EnvironmentSlug: nil},
 		})
+		require.NoError(t, tx.Rollback(t.Context()))
 		require.ErrorContains(t, resolveErr, tt.wantErr)
 
 		_, err := svc.CreateAssistant(ctx, &gen.CreateAssistantPayload{

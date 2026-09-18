@@ -1024,6 +1024,17 @@ INSERT INTO mcp_servers (id, project_id, toolset_id, visibility)
 VALUES (@id, @project_id, @toolset_id, @visibility)
 RETURNING id;
 
+-- name: CreateMCPServerCatalogueFixtures :execrows
+INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id, visibility)
+SELECT
+    generate_uuidv7(),
+    @project_id,
+    @name_prefix::text || LPAD(series::text, 4, '0'),
+    @slug_prefix::text || LPAD(series::text, 4, '0'),
+    @toolset_id,
+    @visibility
+FROM generate_series(0, GREATEST(sqlc.arg(server_count)::integer - 1, -1)) AS series;
+
 -- name: CreateMCPGatewayFixture :one
 INSERT INTO meta_mcp_servers (id, organization_id, project_id, name)
 VALUES (@id, @organization_id, @project_id, @name)
@@ -1069,3 +1080,11 @@ WHERE organization_id = @organization_id AND principal_urn LIKE 'agent:%';
 
 -- name: CountDemoSeedAPIKeysFixture :one
 SELECT count(*) FROM api_keys WHERE organization_id = @organization_id;
+
+-- name: CountAssistantAttachments :one
+-- Count stored attachments, including those whose targets are soft-deleted.
+SELECT
+  (SELECT count(*) FROM assistant_toolsets at
+   WHERE at.project_id = @project_id AND at.assistant_id = @assistant_id) AS toolsets,
+  (SELECT count(*) FROM assistant_mcp_servers ams
+   WHERE ams.project_id = @project_id AND ams.assistant_id = @assistant_id) AS mcp_servers;

@@ -40,6 +40,10 @@ const (
 	// and retains retired keys, so both sides of the rotation overlap this
 	// freshness window.
 	clientJSONWebKeySetMaxAgeSeconds = 3600
+
+	// ManagedClientJSONWebKeySetMaxAgeSeconds bounds managed JWKS caching and
+	// the publish-before-sign delay required by connection key rotation.
+	ManagedClientJSONWebKeySetMaxAgeSeconds = 300
 )
 
 // cimdClientName is the client_name Gram publishes in every CIMD document. It
@@ -195,7 +199,7 @@ func (m *ChallengeManager) HandleClientJSONWebKeySet(w http.ResponseWriter, r *h
 		return oops.E(oops.CodeNotFound, err, "client JSON Web Key Set not found")
 	}
 
-	body, err := remotesessions_repo.New(m.db).GetRemoteSessionClientJsonWebKeySetDocument(ctx, clientID)
+	row, err := remotesessions_repo.New(m.db).GetRemoteSessionClientJsonWebKeySetDocument(ctx, clientID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return oops.E(oops.CodeNotFound, nil, "client JSON Web Key Set not found")
@@ -203,5 +207,10 @@ func (m *ChallengeManager) HandleClientJSONWebKeySet(w http.ResponseWriter, r *h
 		return oops.E(oops.CodeUnexpected, err, "load client JSON Web Key Set").LogError(ctx, m.logger)
 	}
 
-	return httpcache.WriteCacheableJSON(ctx, w, r, m.logger, "application/jwk-set+json", clientJSONWebKeySetMaxAgeSeconds, body)
+	maxAge := clientJSONWebKeySetMaxAgeSeconds
+	if row.Managed {
+		maxAge = ManagedClientJSONWebKeySetMaxAgeSeconds
+	}
+
+	return httpcache.WriteCacheableJSON(ctx, w, r, m.logger, "application/jwk-set+json", maxAge, row.Document)
 }

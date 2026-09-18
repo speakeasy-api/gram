@@ -4,7 +4,16 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { OrgSidebar } from "./org-sidebar";
 import type { ReactNode } from "react";
 
-const mocks = vi.hoisted(() => ({ active: "agents", isPlatformAdmin: false }));
+const mocks = vi.hoisted(() => ({
+  active: "agents",
+  isPlatformAdmin: false,
+  networkIngressStatus: "disabled" as
+    | "loading"
+    | "enabled"
+    | "disabled"
+    | "error",
+  canManageIngress: false,
+}));
 vi.mock("@/routes", () => ({
   useOrgRoutes: () =>
     new Proxy(
@@ -25,7 +34,10 @@ vi.mock("@/contexts/Auth", () => ({
 vi.mock("@/hooks/useRBAC", () => ({ useRBAC: () => ({ isLoading: false }) }));
 vi.mock("@/hooks/useCanSetUpOrg", () => ({ useCanSetUpOrg: () => false }));
 vi.mock("@/hooks/useNetworkIngressRollout", () => ({
-  useNetworkIngressRollout: () => ({ adminRolloutEnabled: false }),
+  useNetworkIngressRollout: () => ({
+    status: mocks.networkIngressStatus,
+    canManageIngress: mocks.canManageIngress,
+  }),
 }));
 vi.mock("@/contexts/Telemetry", () => ({
   useTelemetry: () => ({ isFeatureEnabled: () => false }),
@@ -75,12 +87,15 @@ vi.mock("@/components/scope-gated-nav-group", () => ({
   ScopeGatedNavGroup: ({
     items,
   }: {
-    items: { item: { title: string; href: () => string } }[];
+    items: {
+      item: { title: string; href: () => string };
+      label?: string;
+    }[];
   }) => (
     <>
-      {items.map(({ item }) => (
-        <a key={item.title} href={item.href()}>
-          {item.title}
+      {items.map(({ item, label }) => (
+        <a key={item.title} href={item.href()} aria-label={item.title}>
+          {label ?? item.title}
         </a>
       ))}
     </>
@@ -90,7 +105,26 @@ vi.mock("./sidebar-footer-action", () => ({ SidebarFooterAction: () => null }));
 vi.mock("./sidebar-user-menu", () => ({ SidebarUserMenu: () => null }));
 vi.mock("./trial-status-card", () => ({ TrialStatusCard: () => null }));
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  mocks.active = "agents";
+  mocks.isPlatformAdmin = false;
+  mocks.networkIngressStatus = "disabled";
+  mocks.canManageIngress = false;
+});
+
+it.each(["loading", "error"] as const)(
+  "keeps Network Access visible while entitlement lookup is %s",
+  (status) => {
+    mocks.networkIngressStatus = status;
+    mocks.canManageIngress = true;
+
+    render(<OrgSidebar />);
+
+    expect(screen.getByText("Network Access")).toBeTruthy();
+  },
+);
+
 it.each([
   ["team", "Team"],
   ["access", "Team"],

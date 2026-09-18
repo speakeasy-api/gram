@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -28,15 +29,15 @@ func TestStoreDeduplicatesGrowingTranscripts(t *testing.T) {
 	userID, err := store.ResolveActor(t.Context(), config, frame)
 	require.NoError(t, err)
 	require.Empty(t, userID)
-	require.NoError(t, store.Save(t.Context(), config, frame, userID))
-	require.NoError(t, store.Save(t.Context(), config, frame, userID))
+	saveFrame(t, store, config, frame, userID)
+	saveFrame(t, store, config, frame, userID)
 	frame.RequestID = "next-request"
 	frame.Messages = append(frame.Messages,
 		Message{Role: "assistant", Content: json.RawMessage(`[{"type":"text","text":"EXAMPLE reply"}]`)},
 		Message{Role: "user", Content: json.RawMessage(`[{"type":"text","text":"EXAMPLE second prompt"}]`)},
 	)
-	require.NoError(t, store.Save(t.Context(), config, frame, userID))
-	require.NoError(t, store.Save(t.Context(), config, frame, userID))
+	saveFrame(t, store, config, frame, userID)
+	saveFrame(t, store, config, frame, userID)
 	messages, err := chatrepo.New(db).ListChatMessages(t.Context(), chatrepo.ListChatMessagesParams{ChatID: conversationID(config, frame), ProjectID: config.ProjectID})
 	require.NoError(t, err)
 	require.Len(t, messages, 3)
@@ -120,7 +121,7 @@ func TestStoreDisplaysActorEmail(t *testing.T) {
 	store, db, config := newTestStore(t)
 	frame := exampleFrame()
 	frame.Actor.EmailAddress = " Person@Example.test "
-	require.NoError(t, store.Save(t.Context(), config, frame, ""))
+	saveFrame(t, store, config, frame, "")
 	queries := chatrepo.New(db)
 	conversation, err := queries.GetChat(t.Context(), chatrepo.GetChatParams{ID: conversationID(config, frame), ProjectID: config.ProjectID})
 	require.NoError(t, err)
@@ -137,7 +138,7 @@ func TestStoreRefreshesActorLabelWithoutDuplicatingConversation(t *testing.T) {
 	frame := exampleFrame()
 	frame.Actor.EmailAddress = ""
 	frame.Source.Application = ""
-	require.NoError(t, store.Save(t.Context(), config, frame, ""))
+	saveFrame(t, store, config, frame, "")
 	queries := chatrepo.New(db)
 	id := conversationID(config, frame)
 	conversation, err := queries.GetChat(t.Context(), chatrepo.GetChatParams{ID: id, ProjectID: config.ProjectID})
@@ -146,7 +147,7 @@ func TestStoreRefreshesActorLabelWithoutDuplicatingConversation(t *testing.T) {
 	frame.Actor.EmailAddress = "person@example.test"
 	frame.Source.Application = "claude-code"
 	require.Equal(t, id, conversationID(config, frame))
-	require.NoError(t, store.Save(t.Context(), config, frame, ""))
+	saveFrame(t, store, config, frame, "")
 	conversation, err = queries.GetChat(t.Context(), chatrepo.GetChatParams{ID: id, ProjectID: config.ProjectID})
 	require.NoError(t, err)
 	require.Equal(t, frame.Actor.EmailAddress, conversation.ExternalUserID.String)
@@ -162,12 +163,12 @@ func TestStorePreservesKnownEmailWhenLaterFrameOmitsIt(t *testing.T) {
 	store, db, config := newTestStore(t)
 	frame := exampleFrame()
 	frame.Actor.EmailAddress = "person@example.test"
-	require.NoError(t, store.Save(t.Context(), config, frame, ""))
+	saveFrame(t, store, config, frame, "")
 	// A later frame for the same conversation omits the actor email.
 	frame.RequestID = "next-request"
 	frame.Actor.EmailAddress = ""
 	frame.Messages = append(frame.Messages, Message{Role: "assistant", Content: json.RawMessage(`[{"type":"text","text":"reply"}]`)})
-	require.NoError(t, store.Save(t.Context(), config, frame, ""))
+	saveFrame(t, store, config, frame, "")
 	queries := chatrepo.New(db)
 	conversation, err := queries.GetChat(t.Context(), chatrepo.GetChatParams{ID: conversationID(config, frame), ProjectID: config.ProjectID})
 	require.NoError(t, err)
@@ -193,7 +194,7 @@ func TestStorePreservesInferenceApplicationSource(t *testing.T) {
 		frame := exampleFrame()
 		frame.Source.Application = tc.application
 		frame.SessionID = "source-test-" + tc.source
-		require.NoError(t, store.Save(t.Context(), config, frame, ""))
+		saveFrame(t, store, config, frame, "")
 		messages, err := chatrepo.New(db).ListChatMessages(t.Context(), chatrepo.ListChatMessagesParams{ChatID: conversationID(config, frame), ProjectID: config.ProjectID})
 		require.NoError(t, err)
 		require.Len(t, messages, 1)
@@ -205,8 +206,8 @@ func TestStorePreservesLastKnownUser(t *testing.T) {
 	t.Parallel()
 	store, db, config := newTestStore(t)
 	frame := exampleFrame()
-	require.NoError(t, store.Save(t.Context(), config, frame, ""))
-	require.NoError(t, store.Save(t.Context(), config, frame, "user-example"))
+	saveFrame(t, store, config, frame, "")
+	saveFrame(t, store, config, frame, "user-example")
 	queries := chatrepo.New(db)
 	messages, err := queries.ListChatMessages(t.Context(), chatrepo.ListChatMessagesParams{ChatID: conversationID(config, frame), ProjectID: config.ProjectID})
 	require.NoError(t, err)
@@ -217,8 +218,8 @@ func TestStorePreservesLastKnownUser(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "user-example", userID)
 	frame.Messages = append(frame.Messages, Message{Role: "user", Content: json.RawMessage(`[{"type":"text","text":"continue"}]`)})
-	require.NoError(t, store.Save(t.Context(), config, frame, userID))
-	require.NoError(t, store.Save(t.Context(), config, frame, ""))
+	saveFrame(t, store, config, frame, userID)
+	saveFrame(t, store, config, frame, "")
 	messages, err = queries.ListChatMessages(t.Context(), chatrepo.ListChatMessagesParams{ChatID: conversationID(config, frame), ProjectID: config.ProjectID})
 	require.NoError(t, err)
 	require.Len(t, messages, 2)
@@ -243,15 +244,15 @@ func TestStoreAppendsOnlyMessagesBeyondStoredCount(t *testing.T) {
 	for range 7 {
 		frame.Messages = append(frame.Messages, Message{Role: "user", Content: json.RawMessage(`[{"type":"text","text":"continue"}]`)})
 	}
-	require.NoError(t, store.Save(t.Context(), config, frame, ""))
+	saveFrame(t, store, config, frame, "")
 	frame.Messages[0].Content = json.RawMessage(`[{"type":"text","text":"edited history"}]`)
 	for range 3 {
 		frame.Messages = append(frame.Messages, Message{Role: "user", Content: json.RawMessage(`[{"type":"text","text":"new continue"}]`)})
 	}
-	require.NoError(t, store.Save(t.Context(), config, frame, ""))
-	require.NoError(t, store.Save(t.Context(), config, frame, ""))
+	saveFrame(t, store, config, frame, "")
+	saveFrame(t, store, config, frame, "")
 	frame.Messages = frame.Messages[5:]
-	require.NoError(t, store.Save(t.Context(), config, frame, ""))
+	saveFrame(t, store, config, frame, "")
 	messages, err := chatrepo.New(db).ListChatMessages(t.Context(), chatrepo.ListChatMessagesParams{ChatID: conversationID(config, frame), ProjectID: config.ProjectID})
 	require.NoError(t, err)
 	require.Len(t, messages, 10)
@@ -269,11 +270,11 @@ func TestStoreKeepsOriginalToolDetails(t *testing.T) {
 	frame := exampleFrame()
 	frame.Messages = []Message{{Role: "assistant", Content: json.RawMessage(`[{"type":"tool_use","id":"example-call","tool_name":"read_file"}]`)}}
 	original := string(frame.Messages[0].Content)
-	require.NoError(t, store.Save(t.Context(), config, frame, ""))
+	saveFrame(t, store, config, frame, "")
 	frame.Messages[0].Content = json.RawMessage(`[{"type":"tool_use","id":"example-call","tool_name":"read_file","input":{"path":"example.txt"}}]`)
-	require.NoError(t, store.Save(t.Context(), config, frame, ""))
+	saveFrame(t, store, config, frame, "")
 	frame.Messages[0].Content = json.RawMessage(original)
-	require.NoError(t, store.Save(t.Context(), config, frame, ""))
+	saveFrame(t, store, config, frame, "")
 	messages, err := chatrepo.New(db).ListChatMessages(t.Context(), chatrepo.ListChatMessagesParams{ChatID: conversationID(config, frame), ProjectID: config.ProjectID})
 	require.NoError(t, err)
 	require.Len(t, messages, 1)
@@ -288,8 +289,8 @@ func TestStorePreservesNativePolicyScopesAndIncomingMessageCount(t *testing.T) {
 		{Role: "assistant", Content: json.RawMessage(`[{"type":"text","text":"Reading the file"},{"type":"tool_use","id":"example-call","tool_name":"read_file","input":{"path":"example.txt"}}]`)},
 		{Role: "user", Content: json.RawMessage(`[{"type":"tool_result","tool_use_id":"example-call","tool_name":"read_file","content":"file output"},{"type":"text","text":"Summarize this"},{"type":"attachment","file_name":"example.txt","text":"attachment contents"}]`)},
 	}
-	require.NoError(t, store.Save(t.Context(), config, frame, ""))
-	require.NoError(t, store.Save(t.Context(), config, frame, ""))
+	saveFrame(t, store, config, frame, "")
+	saveFrame(t, store, config, frame, "")
 	queries := chatrepo.New(db)
 	chatID := conversationID(config, frame)
 	messages, err := queries.ListChatMessages(t.Context(), chatrepo.ListChatMessagesParams{ChatID: chatID, ProjectID: config.ProjectID})
@@ -317,7 +318,7 @@ func TestStorePreservesNativePolicyScopesAndIncomingMessageCount(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, 2, count)
 	frame.Messages = append(frame.Messages, Message{Role: "assistant", Content: json.RawMessage(`[{"type":"text","text":"summary"}]`)})
-	require.NoError(t, store.Save(t.Context(), config, frame, ""))
+	saveFrame(t, store, config, frame, "")
 	messages, err = queries.ListChatMessages(t.Context(), chatrepo.ListChatMessagesParams{ChatID: chatID, ProjectID: config.ProjectID})
 	require.NoError(t, err)
 	require.Len(t, messages, 5)
@@ -328,7 +329,7 @@ func TestExternalContentPartsCommitWithParent(t *testing.T) {
 	t.Parallel()
 	store, db, config := newTestStore(t)
 	frame := exampleFrame()
-	require.NoError(t, store.Save(t.Context(), config, frame, ""))
+	saveFrame(t, store, config, frame, "")
 	chatID := conversationID(config, frame)
 	var write chat.ExternalMessageWrite
 	write.Params.ID = uuid.New()
@@ -366,4 +367,90 @@ func TestExternalContentPartsCommitWithParent(t *testing.T) {
 	saved, err := queries.ListChatContentPartsByChatID(t.Context(), chatrepo.ListChatContentPartsByChatIDParams{ChatID: chatID, ProjectID: config.ProjectID, ParentChatMessageIds: []uuid.UUID{write.Params.ID}})
 	require.NoError(t, err)
 	require.Len(t, saved, 1)
+}
+
+// saveFrame stores a frame and returns the index of its first new message.
+func saveFrame(t *testing.T, store *postgresStore, config Config, frame Frame, userID string) int {
+	t.Helper()
+	start, err := store.Save(t.Context(), config, frame, userID)
+	require.NoError(t, err)
+	return start
+}
+
+func TestStoreAppendsAfterRollingCompaction(t *testing.T) {
+	t.Parallel()
+	store, db, config := newTestStore(t)
+	frame := exampleFrame()
+	frame.Messages = nil
+	for index := range 12 {
+		frame.Messages = append(frame.Messages, textMessage("user", fmt.Sprintf("turn %d", index)))
+	}
+	require.Equal(t, 0, saveFrame(t, store, config, frame, ""))
+	// The client replaced the first eight turns with a summary, kept the last
+	// four verbatim, and appended the new turn.
+	compacted := append([]Message{textMessage("user", "EXAMPLE summary of the first eight turns")}, frame.Messages[8:]...)
+	compacted = append(compacted, textMessage("user", "turn 12"))
+	frame.Messages = compacted
+	require.Equal(t, len(compacted)-1, saveFrame(t, store, config, frame, ""))
+	require.Equal(t, len(compacted), saveFrame(t, store, config, frame, ""))
+	messages, err := chatrepo.New(db).ListChatMessages(t.Context(), chatrepo.ListChatMessagesParams{ChatID: conversationID(config, frame), ProjectID: config.ProjectID})
+	require.NoError(t, err)
+	require.Len(t, messages, 13)
+	for index, msg := range messages {
+		require.Equal(t, fmt.Sprintf("turn %d", index), msg.Content)
+	}
+}
+
+func TestStoreKeepsRepeatedIdenticalMessages(t *testing.T) {
+	t.Parallel()
+	store, db, config := newTestStore(t)
+	frame := exampleFrame()
+	frame.Messages = []Message{textMessage("user", "start"), textMessage("user", "continue"), textMessage("user", "continue")}
+	require.Equal(t, 0, saveFrame(t, store, config, frame, ""))
+	frame.Messages = append(frame.Messages, textMessage("user", "continue"))
+	require.Equal(t, 3, saveFrame(t, store, config, frame, ""))
+	messages, err := chatrepo.New(db).ListChatMessages(t.Context(), chatrepo.ListChatMessagesParams{ChatID: conversationID(config, frame), ProjectID: config.ProjectID})
+	require.NoError(t, err)
+	require.Len(t, messages, 4)
+}
+
+func TestStoreContinuesHistoryStoredByCount(t *testing.T) {
+	t.Parallel()
+	store, db, config := newTestStore(t)
+	frame := exampleFrame()
+	frame.Messages = []Message{textMessage("user", "first"), textMessage("assistant", "second")}
+	chatID := conversationID(config, frame)
+	// Rows written before content hashing carry an ordinal and no hash. A frame
+	// without conversation messages creates the conversation they belong to.
+	require.Equal(t, 0, saveFrame(t, store, config, Frame{
+		Type: frame.Type, RequestID: frame.RequestID, TenantID: frame.TenantID, Actor: frame.Actor,
+		Source: frame.Source, SessionID: frame.SessionID, Model: frame.Model,
+		Messages: []Message{{Role: "system", Content: json.RawMessage(`[]`)}},
+	}, ""))
+	writes := make([]chat.ExternalMessageWrite, 0, len(frame.Messages))
+	for index, msg := range frame.Messages {
+		var write chat.ExternalMessageWrite
+		write.Params.ID = uuid.New()
+		write.Params.ChatID = chatID
+		write.Params.ProjectID = config.ProjectID
+		write.Params.Role = msg.Role
+		write.Params.Content = fmt.Sprintf("legacy %d", index)
+		write.Params.ExternalMessageID = conv.ToPGText(fmt.Sprintf("anthropic-inference:%d", index))
+		write.Params.Origin = conv.ToPGText("anthropic-inference")
+		write.Params.CreatedAt = conv.ToPGTimestamptz(time.Now().Add(time.Duration(index) * time.Microsecond))
+		write.WorkloadSource = metering.WorkloadSourceHook
+		writes = append(writes, write)
+	}
+	_, err := store.writer.WriteExternalWithContentParts(t.Context(), config.ProjectID, writes, nil)
+	require.NoError(t, err)
+	frame.Messages = append(frame.Messages, textMessage("user", "third"))
+	require.Equal(t, 2, saveFrame(t, store, config, frame, ""))
+	require.Equal(t, 3, saveFrame(t, store, config, frame, ""))
+	frame.Messages = append(frame.Messages, textMessage("assistant", "fourth"))
+	require.Equal(t, 3, saveFrame(t, store, config, frame, ""))
+	messages, err := chatrepo.New(db).ListChatMessages(t.Context(), chatrepo.ListChatMessagesParams{ChatID: chatID, ProjectID: config.ProjectID})
+	require.NoError(t, err)
+	require.Len(t, messages, 4)
+	require.Equal(t, "third", messages[2].Content)
+	require.Equal(t, "fourth", messages[3].Content)
 }

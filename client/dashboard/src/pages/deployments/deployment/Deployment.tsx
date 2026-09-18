@@ -156,6 +156,7 @@ function DeploymentLogs(props: { deploymentId: string }) {
             failedSources={failedDeployment.failedSources}
             generalErrors={failedDeployment.generalErrors}
             deployment={failedDeployment.deployment}
+            toolCountsUnknown={failedDeployment.toolCountsUnknown}
             onRemoveSuccess={() => {
               void invalidateAllDeployment(queryClient);
             }}

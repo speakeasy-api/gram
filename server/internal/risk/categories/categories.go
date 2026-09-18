@@ -85,6 +85,7 @@ var Definitions = []Definition{
 		Description: "MCP tool calls whose Gram tool definition is annotated as destructive. Requires Speakeasy hooks and Gram-issued MCP tool metadata.",
 		Icon:        "shield-alert",
 		Source:      "destructive_tool",
+		RuleIDs:     []string{"destructive_tool.llm"},
 	},
 	{
 		Category:    CategoryCLIDestructive,
@@ -92,6 +93,7 @@ var Definitions = []Definition{
 		Description: "Tool calls whose arguments match a curated set of destructive shell, git, database, or cloud CLI patterns (rm -rf, git push --force, DROP TABLE, kubectl delete ns, ...). Applies to native Bash / run_terminal_cmd as well as MCP-routed tools whose arguments carry destructive content.",
 		Icon:        "terminal",
 		Source:      "cli_destructive",
+		RuleIDs:     []string{"cli_destructive.llm"},
 	},
 	{
 		Category:    CategoryAccountIdentity,
@@ -113,6 +115,7 @@ var Definitions = []Definition{
 		Description: "Indirect injection via tool outputs, hidden instructions",
 		Icon:        "syringe",
 		Source:      "prompt_injection",
+		RuleIDs:     []string{"prompt_injection.llm"},
 	},
 	{
 		Category:    CategorySecrets,

@@ -1,4 +1,4 @@
-h1:qpRSSmO3wU3L1c51CJ6DdkeAuRb/P1DphpIs61BgHTU=
+h1:8GaN0yx13zUnigL34v+H1iE8wpj/Jvl3ReggdGNNDRk=
 20251127155815_initial_golang_migrate.up.sql h1:fkATa14aucJEoldFi1VgW7TRT8gyC6NGe1Hq/OzXVuI=
 20251208142630_add-tool-logs-table.up.sql h1:cGJCiWBvLPFwOlpx0jYYLgdPZD21+gKSF/x4mVksBcI=
 20251209104438_add-id-col-to-tool-logs-table.up.sql h1:+Ubsl1ZKfeCZL9dBhohUnkBksKZj6nwdZSXm7WwowaE=
@@ -110,3 +110,5 @@ h1:qpRSSmO3wU3L1c51CJ6DdkeAuRb/P1DphpIs61BgHTU=
 20260914131927_incremental_meter_daily_summaries.up.sql h1:lQoa245f5yMaIfjUYhbK+IIMiM+upHEtkKrEQm7yFOs=
 20260915092407_trusted_agent_attribution.up.sql h1:0xOftgMXC2eJTJzZjuBtixeDd6FOO1hU9WWyEsn2Hkk=
 20260915173520_pi-usage-and-tool-call-rows.up.sql h1:jnoNPbgajRVUjHcf2v0oqbOP3+0EaDKkdK2t3RlDOPc=
+20260916125627_add-mcp-client-attribution.up.sql h1:Ojup7tE1utSWA+EwitoY7MZ9e4kjN4zubtK9G4s3X+c=
+20260917132835_create-agent-events-and-agent-metrics.up.sql h1:DPR5pGqO59arsA3au0vvcgV6TGhPBgJW3cXTi51Xio8=
