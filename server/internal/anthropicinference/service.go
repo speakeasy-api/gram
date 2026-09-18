@@ -26,7 +26,7 @@ import (
 )
 
 type scanner interface {
-	ScanForInferenceEnforcement(context.Context, risk.RealtimeScanRequest) (*risk.ScanResult, error)
+	ScanForInferenceEnforcement(context.Context, risk.RealtimeScanRequest) (*risk.InferenceScanOutcome, error)
 }
 
 type transcriptStore interface {
@@ -82,12 +82,13 @@ func (s *Service) Process(ctx context.Context, config Config, frame Frame) (Verd
 		return Verdict{}, fmt.Errorf("decode inference transcript: %w", err)
 	}
 	verdict := Verdict{Action: "allow", DenyReason: "", ReferenceID: ""}
+	complete := true
 	for offset, input := range inputs {
 		index := scanStart + offset
 		if err := ctx.Err(); err != nil {
 			return Verdict{}, fmt.Errorf("inference policy deadline: %w", err)
 		}
-		result, err := s.scanner.ScanForInferenceEnforcement(ctx, risk.RealtimeScanRequest{
+		outcome, err := s.scanner.ScanForInferenceEnforcement(ctx, risk.RealtimeScanRequest{
 			Provenance: metering.RiskProvenance{
 				OrganizationID:         config.OrganizationID,
 				ProjectID:              config.ProjectID,
@@ -117,6 +118,14 @@ func (s *Service) Process(ctx context.Context, config Config, frame Frame) (Verd
 		if err != nil {
 			return Verdict{}, fmt.Errorf("evaluate inference policy: %w", err)
 		}
+		if err := ctx.Err(); err != nil {
+			return Verdict{}, fmt.Errorf("inference policy deadline: %w", err)
+		}
+		complete = complete && outcome != nil && outcome.Complete
+		var result *risk.ScanResult
+		if outcome != nil {
+			result = outcome.Result
+		}
 		if result != nil && (result.Action == "block" || result.Action == "warn" || result.Action == "quarantine") {
 			// The protocol has no acknowledgement flow; warn policies deny this call.
 			verdict.Action = "deny"
@@ -127,8 +136,17 @@ func (s *Service) Process(ctx context.Context, config Config, frame Frame) (Verd
 	if err := ctx.Err(); err != nil {
 		return Verdict{}, fmt.Errorf("inference policy deadline: %w", err)
 	}
-	if err := session.Accept(ctx, hashes); err != nil {
-		return Verdict{}, fmt.Errorf("accept inference checkpoint: %w", err)
+	if complete {
+		if err := session.Accept(ctx, hashes); err != nil {
+			if contextErr := ctx.Err(); contextErr != nil {
+				return Verdict{}, fmt.Errorf("accept inference checkpoint context: %w", contextErr)
+			}
+			// Another fully scanned delivery won. Keep its marker, without
+			// turning this optimization into an artificial denial.
+			if !errors.Is(err, errCheckpointConflict) {
+				return Verdict{}, fmt.Errorf("accept inference checkpoint: %w", err)
+			}
+		}
 	}
 	return verdict, nil
 }

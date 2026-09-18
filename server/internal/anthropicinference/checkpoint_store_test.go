@@ -68,13 +68,22 @@ func testConcurrentCheckpoints(t *testing.T, singleConnection bool) {
 	first := &Service{store: store, scanner: scan(firstEntered, firstRelease, &firstCalls)}
 	second := NewService(db, store.writer, scan(secondEntered, secondRelease, &secondCalls))
 	firstResult, secondResult := make(chan error, 1), make(chan error, 1)
-	go func() { _, err := first.Process(t.Context(), config, frame); firstResult <- err }()
+	firstVerdict, secondVerdict := make(chan Verdict, 1), make(chan Verdict, 1)
+	go func() {
+		verdict, err := first.Process(t.Context(), config, frame)
+		firstVerdict <- verdict
+		firstResult <- err
+	}()
 	select {
 	case <-firstEntered:
 	case <-time.After(5 * time.Second):
 		t.Fatal("first delivery did not reach scanner")
 	}
-	go func() { _, err := second.Process(t.Context(), config, frame); secondResult <- err }()
+	go func() {
+		verdict, err := second.Process(t.Context(), config, frame)
+		secondVerdict <- verdict
+		secondResult <- err
+	}()
 	select {
 	case <-secondEntered:
 	case <-time.After(5 * time.Second):
@@ -87,17 +96,26 @@ func testConcurrentCheckpoints(t *testing.T, singleConnection bool) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("first delivery did not complete")
 	}
+	require.Equal(t, "allow", (<-firstVerdict).Action)
+	readMarker := func() []byte {
+		marker, err := chatrepo.New(db).GetInferenceAcceptedCheckpoint(t.Context(), chatrepo.GetInferenceAcceptedCheckpointParams{ProjectID: config.ProjectID, ExternalChatID: conv.ToPGText("anthropic-inference:" + conversationID(config, frame).String())})
+		require.NoError(t, err)
+		return marker
+	}
+	winner := readMarker()
 	close(secondRelease)
 	select {
 	case err := <-secondResult:
-		require.ErrorIs(t, err, errCheckpointConflict)
+		require.NoError(t, err)
 	case <-time.After(5 * time.Second):
 		t.Fatal("second delivery did not complete")
 	}
+	require.Equal(t, "allow", (<-secondVerdict).Action)
+	require.Equal(t, winner, readMarker(), "CAS loser must not overwrite winner")
 	require.Equal(t, int32(3), firstCalls.Load())
 	require.Equal(t, int32(3), secondCalls.Load())
-	// The loser does not permanently reject concurrent traffic. Reloading the
-	// winner's checkpoint makes a retry safe and only the current turn is scanned.
+	// Both deliveries allow. A later retry reuses the winning checkpoint
+	// and scans only the current turn.
 	verdict, err := second.Process(t.Context(), config, frame)
 	require.NoError(t, err)
 	require.Equal(t, "allow", verdict.Action)
@@ -257,4 +275,45 @@ func TestCheckpointCASDetectsIdenticalInterveningAcceptance(t *testing.T) {
 	// value must conflict instead of silently overwriting this acceptance.
 	require.NoError(t, first.Accept(t.Context(), hashes))
 	require.ErrorIs(t, second.Accept(t.Context(), hashes), errCheckpointConflict)
+}
+
+func TestPostgresLastKnownGoodPreservesDeniedAttempts(t *testing.T) {
+	t.Parallel()
+	store, db, config := newTestStore(t)
+	frame := exampleFrame()
+	scanned := &recordingScanner{}
+	service := NewService(db, store.writer, scanned)
+	verdict, err := service.Process(t.Context(), config, frame)
+	require.NoError(t, err)
+	require.Equal(t, "allow", verdict.Action)
+	readMarker := func() [][]byte {
+		session, err := store.Begin(t.Context(), config, frame, "")
+		require.NoError(t, err)
+		hashes, err := session.Load(t.Context())
+		require.NoError(t, err)
+		return hashes
+	}
+	markerA := transcriptHashes(frame.Messages)
+	require.Equal(t, markerA, readMarker())
+	frame.Messages = append(frame.Messages, textMessage("assistant", "blocked reply"), textMessage("user", "benign result"))
+	scanned.result = &risk.ScanResult{Action: "block"}
+	for range 2 {
+		verdict, err = service.Process(t.Context(), config, frame)
+		require.NoError(t, err)
+		require.Equal(t, "deny", verdict.Action)
+		require.Equal(t, markerA, readMarker())
+	}
+	frame.Messages[1] = textMessage("assistant", "corrected reply")
+	scanned.result = nil
+	verdict, err = service.Process(t.Context(), config, frame)
+	require.NoError(t, err)
+	require.Equal(t, "allow", verdict.Action)
+	require.Equal(t, transcriptHashes(frame.Messages), readMarker())
+	rows, err := chatrepo.New(db).ListChatMessages(t.Context(), chatrepo.ListChatMessagesParams{ChatID: conversationID(config, frame), ProjectID: config.ProjectID})
+	require.NoError(t, err)
+	var content []string
+	for _, row := range rows {
+		content = append(content, row.Content)
+	}
+	require.Contains(t, content, "blocked reply")
 }

@@ -70,17 +70,23 @@ to Anthropic inference. The ingestion origin remains `anthropic-inference`.
   both enforcement and stored-message attribution. Actors with no known identity
   receive organization-wide policies; another actor's identity is never borrowed.
 - Enforcement skips historical content only when it matches a durable accepted
-  checkpoint. The checkpoint stores the complete accepted frame's role/content
+  checkpoint: `chats.inference_accepted_checkpoint` is a last-known-good marker,
+  not the archive cursor. Attempted messages, including denied and fail-open
+  attempts, are archived independently in `chat_messages` for the UI. The
+  existing archival alignment does not append in-place rewrites of older
+  messages; acceptance alignment still rescans those changes. The checkpoint stores the complete accepted frame's role/content
   hashes, its format version, resolved user, and an enforcement-context fingerprint.
   The fingerprint includes enforcing policies, current principal grants resolved
   through the scanner's authorization helpers, exclusions, and custom rules.
   Audience membership, evaluate/bypass grants, and exclusion edits therefore
   invalidate acceptance even without a policy-version change. Old archived
   history without a checkpoint and unknown checkpoint formats are rescanned.
-  Prompt-based policies can reuse accepted history: strict enforcement cannot
-  accept in-scope content while the prompt-policy feature flag is disabled or
-  its evaluation is incomplete. Out-of-scope content remains reusable until
-  its enforcement context changes. Bump the checkpoint format when built-in
+  Scanner completeness is separate from disposition: analyzer failures keep
+  the existing policy fail-open/fail-closed behavior, but incomplete evaluations
+  never advance the marker. No applicable policies and out-of-scope content
+  are complete. An in-scope prompt policy intentionally disabled by its feature
+  flag still allows, but does not establish acceptance: flag state is not part
+  of the durable fingerprint, so enabling the flag must rescan that content. Bump the checkpoint format when built-in
   enforcement input or scanner semantics change.
 - A matching accepted prefix, including a uniquely aligned retained tail after
   compaction, can be skipped. A mismatch starts scanning at that message; a later
@@ -98,11 +104,12 @@ to Anthropic inference. The ingestion origin remains `anthropic-inference`.
   pool. Acceptance uses a short transaction to recheck enforcement context and
   atomically replace only the checkpoint originally loaded. Every acceptance
   gets a fresh token, including identical-frame retries, so another acceptance
-  cannot silently overwrite an intervening change. A CAS conflict fails closed;
-  retrying reloads the winner's checkpoint and evaluates the remaining content.
+  cannot silently overwrite an intervening change. A CAS conflict leaves the winner's
+  checkpoint untouched and still allows a successfully scanned delivery; it is
+  not a new denial reason. Database errors and cancellation still propagate.
 - Attempts archive independently through the shared writer's idempotent message
-  identities. Only after every required strict inference scan succeeds is the
-  checkpoint committed, before returning allow. Denials, incomplete/erroring
+  identities. Only after every required inference scan is complete and allows is the
+  checkpoint eligible to advance. Denials, incomplete/erroring
   scans, and canceled evaluation do not advance it. A denied assistant/tool
   block is therefore scanned again on retry, even when the latest user result
   is benign. Enforcement-context changes during evaluation fail closed rather
@@ -113,8 +120,9 @@ to Anthropic inference. The ingestion origin remains `anthropic-inference`.
   are stored as `prompt_attachment` content parts, atomically with their parent.
   These rows still count as one incoming message for append-by-count storage.
 - Stored messages also enter the shared writer's analysis pipeline. Transcript
-  capture is synchronous: a storage or policy-scanner error returns a generic
-  HTTP-200 deny verdict, so an outage does not silently permit uninspected input.
+  capture is synchronous: a storage or outer policy-scanner error returns a
+  generic HTTP-200 deny verdict. Suppressed per-policy analyzer failures retain
+  their existing disposition, including fail-open, without advancing acceptance.
   Configuration lookup, body reading, storage, and policy evaluation share a
   nine-second deadline. The endpoint returns a generic HTTP-200 deny when it
   expires and cancels remaining work. Operational configuration lookup failures
@@ -125,7 +133,7 @@ to Anthropic inference. The ingestion origin remains `anthropic-inference`.
   unknown fields, source values, and content block types are tolerated.
 
 Configure a 10-second verdict timeout and select block-on-failure in Anthropic if
-network failures must not allow inference. Long transcripts, concurrent checkpoint conflicts,
+network failures must not allow inference. Long transcripts
 or conservative rescans that cannot complete within the nine-second budget
 receive a deny verdict. A checkpoint reduces repeated scans; it does not remove
 the deadline or guarantee that every transcript fits within it.

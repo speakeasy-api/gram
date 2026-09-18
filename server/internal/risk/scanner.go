@@ -377,29 +377,31 @@ func (s *Scanner) Shutdown(ctx context.Context) error {
 	}
 }
 
-func (s *Scanner) ScanForEnforcement(ctx context.Context, request RealtimeScanRequest) (*ScanResult, error) {
-	return s.scanForEnforcement(ctx, request, false)
+// InferenceScanOutcome separates the legacy enforcement disposition from whether
+// the scan encountered incomplete evaluations. Only a complete, error-free scan
+// with no result establishes a clean verdict under the current configuration.
+type InferenceScanOutcome struct {
+	Result   *ScanResult
+	Complete bool
 }
 
-// ScanForInferenceEnforcement rejects unavailable or incomplete evaluations.
-// Callers may persist acceptance only after it returns no match and no error.
-// Other callers retain fail-open behavior through ScanForEnforcement.
-func (s *Scanner) ScanForInferenceEnforcement(ctx context.Context, request RealtimeScanRequest) (*ScanResult, error) {
-	return s.scanForEnforcement(ctx, request, true)
+func (s *Scanner) ScanForEnforcement(ctx context.Context, request RealtimeScanRequest) (*ScanResult, error) {
+	return s.scanForEnforcement(ctx, request, new(atomic.Bool))
+}
+
+// ScanForInferenceEnforcement preserves ScanForEnforcement's disposition and
+// error behavior while reporting suppressed failures separately. It scans once.
+func (s *Scanner) ScanForInferenceEnforcement(ctx context.Context, request RealtimeScanRequest) (*InferenceScanOutcome, error) {
+	var incomplete atomic.Bool
+	result, err := s.scanForEnforcement(ctx, request, &incomplete)
+	return &InferenceScanOutcome{Result: result, Complete: err == nil && ctx.Err() == nil && !incomplete.Load()}, err
 }
 
 func (s *Scanner) scanForEnforcement(
 	ctx context.Context,
 	request RealtimeScanRequest,
-	strict bool,
+	incomplete *atomic.Bool,
 ) (result *ScanResult, retErr error) {
-	if strict {
-		defer func() {
-			if retErr == nil && ctx.Err() != nil {
-				result, retErr = nil, ctx.Err()
-			}
-		}()
-	}
 	organizationID := request.Provenance.OrganizationID
 	projectID := request.Provenance.ProjectID
 	userID := request.Provenance.UserID
@@ -476,7 +478,7 @@ func (s *Scanner) scanForEnforcement(
 
 	var pubsubFindings map[string][]scanners.Finding
 	if len(applicablePolicies) > 0 && s.projectFlagEnabled(ctx, organizationID, projectID, feature.FlagRiskEnforcementPubsub) {
-		pubsubFindings, err = s.dispatchEnforcement(ctx, request.Provenance, text, applicablePolicies, strict)
+		pubsubFindings, err = s.dispatchEnforcement(ctx, request.Provenance, text, applicablePolicies, incomplete)
 		if err != nil {
 			return nil, err
 		}
@@ -499,11 +501,9 @@ func (s *Scanner) scanForEnforcement(
 	g, gctx := errgroup.WithContext(ctx)
 	for _, p := range applicablePolicies {
 		g.Go(func() error {
-			result, scanErr := s.scanPolicy(gctx, p, request.Provenance, text, messageType, toolName, promptPoliciesOn, pubsubFindings, strict)
+			result, scanErr := s.scanPolicy(gctx, p, request.Provenance, text, messageType, toolName, promptPoliciesOn, pubsubFindings, incomplete)
 			if scanErr != nil {
-				if strict {
-					return scanErr
-				}
+				incomplete.Store(true)
 				if errors.Is(scanErr, context.Canceled) {
 					return nil
 				}
@@ -659,7 +659,7 @@ func (s *Scanner) recordScan(ctx context.Context, projectID string, outcome o11y
 // text per call - its internal worker pool only fans out when n > 1, so
 // per-policy parallelism over sources buys roughly nothing. The
 // across-policies fan-out in ScanForEnforcement is the real win.
-func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, baseProvenance metering.RiskProvenance, text string, messageType message.Type, toolName string, promptPoliciesOn bool, pubsubFindings map[string][]scanners.Finding, strict bool) (result *ScanResult, retErr error) {
+func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, baseProvenance metering.RiskProvenance, text string, messageType message.Type, toolName string, promptPoliciesOn bool, pubsubFindings map[string][]scanners.Finding, incomplete *atomic.Bool) (result *ScanResult, retErr error) {
 	// Per-policy child span so an individual gitleaks/presidio/judge span
 	// attributes to the policy that spawned it (the g.Go fan-out threads gctx
 	// here, so this span parents under risk.scanForEnforcement).
@@ -697,7 +697,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, basePr
 		if !categoryScope.SourceInScope(view, promptpolicy.Source) {
 			return nil, nil
 		}
-		return s.scanPromptPolicy(ctx, policy, baseProvenance, text, messageType, toolName, promptPoliciesOn, strict)
+		return s.scanPromptPolicy(ctx, policy, baseProvenance, text, messageType, toolName, promptPoliciesOn, incomplete)
 	}
 
 	disabled := ra.NewDisabledRuleSet(policy.DisabledRules)
@@ -725,8 +725,8 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, basePr
 		customResult, scanErr := s.scanCustomRules(ctx, policy, view)
 		s.recordRealtimeResult(ctx, metering.RiskCustomRules(), provenance, customResult, scanStarted)
 		customFindings, err = customResult.Findings, scanErr
-		if strict && err != nil {
-			return nil, fmt.Errorf("custom rule evaluation incomplete: %w", err)
+		if err != nil || !customResult.Completed {
+			incomplete.Store(true)
 		}
 		if err != nil {
 			// A broken custom rule must not disable the built-in detectors (a
@@ -746,6 +746,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, basePr
 	// propagate so the fan-out in ScanForEnforcement discards the scan
 	// instead of enforcing a stale sentinel after the request is gone.
 	failWithHeldSentinel := func(err error) (*ScanResult, error) {
+		incomplete.Store(true)
 		if deadLetterResult == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return nil, err
 		}
@@ -762,14 +763,14 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, basePr
 		}
 		// Missing remote lanes are not successful empty results. Check after
 		// scope filtering so irrelevant detectors cannot fail this policy.
-		if strict && pubsubFindings != nil && (source == ra.SourceGitleaks || source == ra.SourcePresidio) {
+		if pubsubFindings != nil && (source == ra.SourceGitleaks || source == ra.SourcePresidio) {
 			findings, ok := pubsubFindings[source]
 			if !ok {
-				return nil, fmt.Errorf("%s enforcement lane incomplete", source)
+				incomplete.Store(true)
 			}
 			for _, finding := range findings {
 				if finding.DeadLetterReason != "" {
-					return nil, fmt.Errorf("%s enforcement lane returned a dead letter", source)
+					incomplete.Store(true)
 				}
 			}
 		}
@@ -781,8 +782,8 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, basePr
 				gitleaksResult, scanErr := s.scanGitleaks(ctx, text)
 				s.recordRealtimeResult(ctx, metering.RiskGitleaks(), provenance, gitleaksResult, scanStarted)
 				gitleaksFindings, err = gitleaksResult.Findings, scanErr
-				if strict && !gitleaksResult.Completed && err == nil {
-					err = errors.New("gitleaks evaluation incomplete")
+				if !gitleaksResult.Completed {
+					incomplete.Store(true)
 				}
 				if err != nil {
 					return failWithHeldSentinel(fmt.Errorf("gitleaks scan: %w", err))
@@ -811,9 +812,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, basePr
 				presidioFindings = filterPresidioFindings(pubsubFindings[ra.SourcePresidio], policy)
 			} else {
 				if s.piiScanner == nil {
-					if strict {
-						return nil, errors.New("presidio scanner unavailable")
-					}
+					incomplete.Store(true)
 					continue
 				}
 				scanStarted := time.Now()
@@ -827,19 +826,17 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, basePr
 				if analyzeErr != nil {
 					return failWithHeldSentinel(fmt.Errorf("presidio scan: %w", analyzeErr))
 				}
-				if strict && (len(batchResults) != 1 || !batchResults[0].Completed) {
-					return nil, errors.New("presidio evaluation incomplete")
+				if len(batchResults) != 1 || !batchResults[0].Completed {
+					incomplete.Store(true)
 				}
 				if len(batchResults) > 0 {
 					s.recordRealtimeResult(ctx, metering.RiskPresidio(), provenance, batchResults[0], scanStarted)
 					presidioFindings = batchResults[0].Findings
 				}
 			}
-			if strict {
-				for _, finding := range presidioFindings {
-					if finding.DeadLetterReason != "" {
-						return nil, errors.New("presidio evaluation returned a dead letter")
-					}
+			for _, finding := range presidioFindings {
+				if finding.DeadLetterReason != "" {
+					incomplete.Store(true)
 				}
 			}
 			if len(presidioFindings) > 0 {
@@ -885,13 +882,9 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, basePr
 			}
 		case ra.SourcePromptInjection:
 			scanStarted := time.Now()
-			scan := s.piScanner.ScanWithVerdict
-			if strict {
-				scan = s.piScanner.ScanStrictWithVerdict
-			}
-			scanResult, verdict, err := scan(ctx, text, policy.OrganizationID, policy.ProjectID.String(), baseProvenance.UserID, judgemessage.New(messageType, toolName, text))
-			if strict && !scanResult.Completed && err == nil {
-				err = errors.New("prompt injection evaluation incomplete")
+			scanResult, verdict, err := s.piScanner.ScanWithVerdict(ctx, text, policy.OrganizationID, policy.ProjectID.String(), baseProvenance.UserID, judgemessage.New(messageType, toolName, text))
+			if !scanResult.Completed {
+				incomplete.Store(true)
 			}
 			scanProvenance := provenance
 			scanProvenance.Model = verdict.Model
@@ -962,12 +955,12 @@ func realtimeMessageView(text string, messageType message.Type, toolName string)
 // filtered policies to those whose message_types apply to this message, so the
 // judge runs for whatever message types the policy declares. Returns nil when
 // the judge does not match (including fail-open on judge error).
-func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, baseProvenance metering.RiskProvenance, text string, messageType message.Type, toolName string, promptPoliciesOn bool, strict bool) (*ScanResult, error) {
+func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, baseProvenance metering.RiskProvenance, text string, messageType message.Type, toolName string, promptPoliciesOn bool, incomplete *atomic.Bool) (*ScanResult, error) {
 	cfg := promptpolicy.ParseConfig(policy.ModelConfig)
 	if !promptPoliciesOn {
-		if strict {
-			return nil, errors.New("prompt policy evaluation disabled")
-		}
+		// Preserve the intentional allow, but do not cache it as evaluated:
+		// feature-flag state is not part of the durable checkpoint fingerprint.
+		incomplete.Store(true)
 		return nil, nil
 	}
 	prompt := ""
@@ -996,8 +989,8 @@ func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, 
 		provenance.Provider = verdict.Provider
 	}
 	s.recordRealtimeResult(ctx, metering.RiskPromptPolicy(), provenance, scanResult, scanStarted)
-	if strict && !scanResult.Completed {
-		return nil, errors.New("prompt policy evaluation incomplete")
+	if !scanResult.Completed {
+		incomplete.Store(true)
 	}
 	findings := scanResult.Findings
 	if len(findings) == 0 {
@@ -1022,7 +1015,7 @@ func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, 
 	}, nil
 }
 
-func (s *Scanner) dispatchEnforcement(ctx context.Context, baseProvenance metering.RiskProvenance, text string, policies []repo.RiskPolicy, strict bool) (map[string][]scanners.Finding, error) {
+func (s *Scanner) dispatchEnforcement(ctx context.Context, baseProvenance metering.RiskProvenance, text string, policies []repo.RiskPolicy, incomplete *atomic.Bool) (map[string][]scanners.Finding, error) {
 	lanes := make([]enforcereply.Lane, 0, 2)
 	origins := make(map[enforcereply.Lane]metering.RiskProvenance, 2)
 	addLane := func(scanner riskv1.EnforcementScanner, source string) {
@@ -1071,9 +1064,7 @@ func (s *Scanner) dispatchEnforcement(ctx context.Context, baseProvenance meteri
 		return findings, nil
 	}
 	if outcome.Truncated {
-		if strict {
-			return nil, errors.New("enforcement input truncated")
-		}
+		incomplete.Store(true)
 		// The dispatcher already logs the truncation; only annotate the span here.
 		trace.SpanFromContext(ctx).SetAttributes(attr.RiskEnforcementTruncated(true))
 	}

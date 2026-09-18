@@ -22,7 +22,7 @@ import (
 // Bump this when enforcement input extraction or checkpoint semantics change.
 const checkpointVersion = 1
 
-var errCheckpointConflict = errors.New("inference checkpoint changed during evaluation; retry delivery")
+var errCheckpointConflict = errors.New("inference checkpoint changed during evaluation")
 
 type acceptedCheckpoint struct {
 	// A fresh token makes every acceptance observable, even for identical frames.
@@ -85,7 +85,7 @@ func (s *postgresCheckpoint) Accept(ctx context.Context, hashes [][]byte) error 
 		return fmt.Errorf("checkpoint context: %w", err)
 	}
 	// Hold a connection only for the final revision check and CAS, never across
-	// archival or scanning. A failed CAS rolls back and asks the caller to retry.
+	// archival or scanning. A failed CAS rolls back without replacing the winning marker.
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin checkpoint acceptance: %w", err)

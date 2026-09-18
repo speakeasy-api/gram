@@ -46,16 +46,17 @@ func (s *memoryCheckpoint) Accept(ctx context.Context, hashes [][]byte) error {
 }
 
 type recordingScanner struct {
-	inputs  []policyInput
-	userIDs []string
-	result  *risk.ScanResult
-	err     error
+	inputs     []policyInput
+	userIDs    []string
+	result     *risk.ScanResult
+	incomplete bool
+	err        error
 }
 
-func (s *recordingScanner) ScanForInferenceEnforcement(_ context.Context, request risk.RealtimeScanRequest) (*risk.ScanResult, error) {
+func (s *recordingScanner) ScanForInferenceEnforcement(_ context.Context, request risk.RealtimeScanRequest) (*risk.InferenceScanOutcome, error) {
 	s.inputs = append(s.inputs, policyInput{kind: request.MessageType, tool: request.ToolName, text: request.Text, toolCallID: request.Provenance.ToolCallID})
 	s.userIDs = append(s.userIDs, request.Provenance.UserID)
-	return s.result, s.err
+	return &risk.InferenceScanOutcome{Result: s.result, Complete: !s.incomplete && s.err == nil}, s.err
 }
 
 func exampleFrame() Frame {
