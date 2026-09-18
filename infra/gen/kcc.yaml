@@ -1339,6 +1339,42 @@ pubsub:
         name: gram-networkingress-v1-reconcile-requested
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-otel-v1-agent-event-log-ch-writer
+      topic_proto_message: gram-otel-v1-log-record
+    name: gram-otel-v1-agent-event-log-ch-writer
+    spec:
+      ackDeadlineSeconds: 60
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-otel-v1-agent-event-log-ch-writer-dlq
+        maxDeliveryAttempts: 10
+      messageRetentionDuration: 604800s
+      retainAckedMessages: true
+      retryPolicy:
+        maximumBackoff: 60s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-otel-v1-log-record
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-otel-v1-agent-event-span-ch-writer
+      topic_proto_message: gram-otel-v1-span
+    name: gram-otel-v1-agent-event-span-ch-writer
+    spec:
+      ackDeadlineSeconds: 60
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-otel-v1-agent-event-span-ch-writer-dlq
+        maxDeliveryAttempts: 10
+      messageRetentionDuration: 604800s
+      retainAckedMessages: true
+      retryPolicy:
+        maximumBackoff: 60s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-otel-v1-span
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-inbound-log-record-transformer
       topic_proto_message: gram-otel-v1-inbound-log-record
     name: gram-otel-v1-inbound-log-record-transformer
@@ -1769,6 +1805,20 @@ pubsub:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-networkingress-v1-reconciler
     name: gram-networkingress-v1-reconciler-dlq
+    spec:
+      messageRetentionDuration: 604800s
+  - labels:
+      dlq_for: gram-otel-v1-agent-event-log-ch-writer
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-otel-v1-agent-event-log-ch-writer
+    name: gram-otel-v1-agent-event-log-ch-writer-dlq
+    spec:
+      messageRetentionDuration: 604800s
+  - labels:
+      dlq_for: gram-otel-v1-agent-event-span-ch-writer
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-otel-v1-agent-event-span-ch-writer
+    name: gram-otel-v1-agent-event-span-ch-writer-dlq
     spec:
       messageRetentionDuration: 604800s
   - labels:

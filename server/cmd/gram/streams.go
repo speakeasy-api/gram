@@ -674,6 +674,12 @@ func newStreamsCommand() *cli.Command {
 				mustReceiveBatch(rg, &otelv1.LogRecord{}, &otelv1.LogEventCHWriter{}, otelsvc.NewLogEventCHWriter(logger, meterProvider, otelchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
 				mustReceiveBatch(rg, &otelv1.Span{}, &otelv1.SpanEventCHWriter{}, otelsvc.NewSpanEventCHWriter(logger, meterProvider, otelchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
 
+				// Agent session tee: project the same normalized OTEL topics into
+				// agent_events, in agent vocabulary, for the semantic query layer.
+				// Its own subscriptions, so it fails independently of the event feed.
+				mustReceiveBatch(rg, &otelv1.LogRecord{}, &otelv1.AgentEventLogCHWriter{}, otelsvc.NewAgentEventLogCHWriter(logger, meterProvider, otelchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
+				mustReceiveBatch(rg, &otelv1.Span{}, &otelv1.AgentEventSpanCHWriter{}, otelsvc.NewAgentEventSpanCHWriter(logger, meterProvider, otelchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
+
 				if enableCHRiskWrites {
 					mustReceiveBatchWithResult(rg, &riskv1.Finding{}, &riskv1.FindingCHWriter{}, risk.NewFindingCHWriter(logger, replicaDB, meterProvider, chrepo.New(chConn), riskFingerprinter), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: 1 * time.Second})
 				}
