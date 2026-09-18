@@ -337,6 +337,8 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	organizationSlugs := platformmcp.NewPostgresOrganizationSlugResolver(config.DB)
 	distributionAdmissionReads := platformmcp.NewShadowDistributionReadService(config.Logger, config.DB, config.DistributionAdmission, organizationSlugs)
 	pluginInventory := platformmcp.NewPluginsService(config.DB, budgets.Plugins, config.JWTSigningKey).
+		WithAuthorization(config.Authz).
+		WithInstallLinks(config.DashboardURL, config.ServerURL).
 		WithAssignmentMutations(config.FeatureFlags, organizationSlugs, config.AuditLogger, pluginAssignmentMutationBudget).
 		WithDistributionAdmission(config.DistributionAdmission).
 		WithDistributionAdmissionReads(distributionAdmissionReads)
@@ -754,6 +756,8 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	organizationSlugs := platformmcp.NewPostgresOrganizationSlugResolver(config.DB)
 	distributionAdmissionReads := platformmcp.NewShadowDistributionReadService(config.Logger, config.DB, config.DistributionAdmission, organizationSlugs)
 	pluginInventory := platformmcp.NewPluginsService(config.DB, budgets.Plugins, config.JWTSigningKey).
+		WithAuthorization(config.Authz).
+		WithInstallLinks(config.DashboardURL, config.ServerURL).
 		WithAssignmentMutations(config.FeatureFlags, organizationSlugs, config.AuditLogger, pluginAssignmentMutationBudget).
 		WithDistributionAdmission(config.DistributionAdmission).
 		WithDistributionAdmissionReads(distributionAdmissionReads)
