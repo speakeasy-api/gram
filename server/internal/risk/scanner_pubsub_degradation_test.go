@@ -23,7 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-const pubsubDegradedLogMessage = "pub/sub enforcement lane failed open"
+const pubsubDegradedLogMessage = "pub/sub enforcement lane degraded"
 
 func TestScanner_PubsubCallerCancellationDoesNotDegrade(t *testing.T) {
 	t.Parallel()

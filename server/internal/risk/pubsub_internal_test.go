@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
+	"github.com/speakeasy-api/gram/server/internal/scanners/llmanalyzer"
 )
 
 func TestFilterPresidioFindingsAppliesEntityBlocklist(t *testing.T) {
@@ -53,4 +54,51 @@ func TestEnforcementFindingsScoreAndDescription(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, wantDescription, converted[0].Description)
 	require.NotEqual(t, gitleaks.AccessKeyIDRuleID, converted[0].Description)
+}
+
+func TestEnforcementFindingsLLMAnalyzerCarriesRationaleWithoutOffsets(t *testing.T) {
+	t.Parallel()
+
+	// The analyzer reports surface "none": offsets are meaningless and must
+	// not be validated against the text, and the rationale is the description.
+	converted, err := enforcementFindings("short", llmanalyzer.Source, []*riskv1.EnforcementFinding{
+		riskv1.EnforcementFinding_builder{
+			RuleId:      new(llmanalyzer.RuleSecret),
+			Category:    new("secrets"),
+			Score:       new(1.0),
+			StartPos:    new(int32(0)),
+			EndPos:      new(int32(1000)),
+			Surface:     new(scanners.SurfaceNone),
+			Description: new("An API token appears in the tool arguments."),
+		}.Build(),
+		riskv1.EnforcementFinding_builder{
+			RuleId:   new(llmanalyzer.RulePII),
+			Category: new("pii"),
+			Score:    new(1.0),
+		}.Build(),
+	})
+	require.NoError(t, err)
+	require.Len(t, converted, 2)
+
+	secret := converted[0]
+	require.Equal(t, llmanalyzer.RuleSecret, secret.RuleID)
+	require.Equal(t, "An API token appears in the tool arguments.", secret.Description)
+	require.Equal(t, []string{"secrets"}, secret.Tags)
+	require.Equal(t, llmanalyzer.Source, secret.Source)
+	require.Empty(t, secret.Match)
+	require.Zero(t, secret.StartPos)
+	require.Zero(t, secret.EndPos)
+	require.InDelta(t, 1.0, secret.Confidence, 1e-9)
+	require.Empty(t, secret.DeadLetterReason)
+
+	// A missing rationale falls back to the rule id so the deny copy is never
+	// empty.
+	require.Equal(t, llmanalyzer.RulePII, converted[1].Description)
+	require.Equal(t, []string{"pii"}, converted[1].Tags)
+
+	// Scores are still validated: the reply is untrusted input.
+	_, err = enforcementFindings("short", llmanalyzer.Source, []*riskv1.EnforcementFinding{
+		riskv1.EnforcementFinding_builder{RuleId: new(llmanalyzer.RuleSecret), Score: new(math.NaN())}.Build(),
+	})
+	require.ErrorContains(t, err, "invalid score")
 }

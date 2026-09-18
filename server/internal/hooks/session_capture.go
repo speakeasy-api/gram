@@ -314,11 +314,11 @@ func (s *Service) handleUserPromptSubmit(ctx context.Context, ev *hookevents.Use
 			// a native [y/n] confirmation at PreToolUse, not at prompt submit.
 			// Never hard-block a warn here — let the prompt through so the
 			// follow-on tool call carrying the match gets challenged instead.
-			if scanResult.Action == "warn" {
+			if scanResult.IsWarnChallenge() {
 				return makeHookResult(ev.RawEventType), nil
 			}
 			auditReason := fmt.Sprintf("Speakeasy blocked this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
+			userReason := renderUserBlockReason(scanResult, auditReason)
 			// ClickHouse always gets the technical reason; the user_message
 			// override only changes what the agent / end user sees.
 			if s.claimBlockedPromptTelemetry(ctx, payload) {
