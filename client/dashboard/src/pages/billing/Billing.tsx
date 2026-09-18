@@ -6,7 +6,6 @@ import { Heading } from "@/components/ui/Heading";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Text } from "@/components/ui/Text";
-import { useIsPlatformAdmin } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { ProductTier, useProductTier } from "@/hooks/useProductTier";
@@ -33,7 +32,6 @@ import { InferenceCapsSection } from "@/components/billing/inference-caps-sectio
 import { PaygPlanSection } from "@/components/billing/payg-plan-section";
 import { PaygPriceList } from "@/components/billing/payg-price-list";
 import { TopUpCTA, UsageProgress } from "@/components/billing/usage-controls";
-import { TumAdminSection } from "@/components/billing/tum-admin-section";
 import { MeterUsageSection } from "@/components/billing/meter-usage-section";
 
 export default function Billing(): JSX.Element {
@@ -60,10 +58,6 @@ export default function Billing(): JSX.Element {
 
 function BillingInner() {
   const productTier = useProductTier();
-  const isPlatformAdmin = useIsPlatformAdmin();
-
-  // Billing estimates and the meter explorer intentionally have independent
-  // data/error boundaries: neither is a source of truth for the other.
   if (productTier === "enterprise" || productTier === "payg") {
     return (
       <>
@@ -79,9 +73,6 @@ function BillingInner() {
         {/* Only pay-as-you-go organizations get product billing notifications;
             enterprise contracts are billed through their contract terms. */}
         {productTier === "payg" && <BillingEmailSection />}
-        {/* Contract settings (allowance, anchor day) are platform-staff
-            controls for enterprise contracts; Stripe owns them on PAYG. */}
-        {isPlatformAdmin && productTier === "enterprise" && <TumAdminSection />}
       </>
     );
   }

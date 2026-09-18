@@ -78,8 +78,8 @@ vi.mock("@gram/client/react-query/getStripeSubscription.js", () => ({
   invalidateAllGetStripeSubscription: vi.fn(),
 }));
 
-// The usage meters and the TUM view own their own data; this test is only
-// about which sections the page reaches for a given tier.
+// Each billing section owns its data; this test covers which sections the
+// page reaches for a given tier.
 vi.mock("@gram/client/react-query/getCreditUsage.js", () => ({
   useGetCreditUsage: () => ({ data: undefined }),
   invalidateAllGetCreditUsage: vi.fn(),
@@ -128,9 +128,6 @@ vi.mock("@gram/client/react-query/setBillingEmail.js", () => ({
 }));
 vi.mock("@/components/billing/meter-usage-section", () => ({
   MeterUsageSection: () => <div>meter usage</div>,
-}));
-vi.mock("@/components/billing/tum-admin-section", () => ({
-  TumAdminSection: () => <div>tum admin</div>,
 }));
 
 // Banner behavior is covered in billing-banners.test.tsx. This page test owns
@@ -281,9 +278,8 @@ describe("Billing", () => {
     expect(screen.getByText("Pay as you go pricing")).toBeTruthy();
   });
 
-  // Trials run on the enterprise tier, which short-circuits into the TUM view
-  // before the self-serve sections — the CTA has to survive that early return.
-  it("offers pay as you go on the enterprise TUM view", () => {
+  // Trials on the enterprise tier must retain the checkout CTA.
+  it("offers pay as you go on the enterprise billing view", () => {
     mocks.productTier.mockReturnValue("enterprise");
 
     renderBilling();
@@ -330,8 +326,7 @@ describe("Billing", () => {
   );
 
   // The inference caps are a pay-as-you-go control. A trialing enterprise org
-  // is on its way onto PAYG, so it gets them locked rather than hidden — and
-  // the TUM early return is the path that org takes.
+  // is on its way onto PAYG, so it gets them locked rather than hidden.
   it.each<ProductTier>(["payg", "enterprise"])(
     "places the inference caps on the %s view",
     (tier) => {
