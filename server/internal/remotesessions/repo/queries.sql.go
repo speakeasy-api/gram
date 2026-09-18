@@ -751,7 +751,9 @@ INSERT INTO remote_session_clients (
     token_endpoint_auth_audience_format,
     scope,
     audience,
-    legacy_callback_url
+    legacy_callback_url,
+    json_web_key_set_id,
+    identity_provider_connection_id
 )
 VALUES (
     $1,
@@ -765,7 +767,9 @@ VALUES (
     $9,
     $10::text[],
     $11,
-    $12
+    $12,
+    $13,
+    $14
 )
 RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, created_at, updated_at, deleted_at, deleted
 `
@@ -783,6 +787,8 @@ type CreateRemoteSessionClientParams struct {
 	Scope                           []string
 	Audience                        pgtype.Text
 	LegacyCallbackUrl               bool
+	JsonWebKeySetID                 uuid.NullUUID
+	IdentityProviderConnectionID    uuid.NullUUID
 }
 
 // Remote session clients — credentials Gram uses when acting as an OAuth
@@ -802,6 +808,8 @@ func (q *Queries) CreateRemoteSessionClient(ctx context.Context, arg CreateRemot
 		arg.Scope,
 		arg.Audience,
 		arg.LegacyCallbackUrl,
+		arg.JsonWebKeySetID,
+		arg.IdentityProviderConnectionID,
 	)
 	var i RemoteSessionClient
 	err := row.Scan(
@@ -3070,7 +3078,8 @@ SELECT jsonb_build_object(
         jsonb_agg(k.public_jwk ORDER BY k.id) FILTER (WHERE k.id IS NOT NULL),
         '[]'::jsonb
     )
-) AS document
+) AS document,
+(c.identity_provider_connection_id IS NOT NULL)::boolean AS managed
 FROM remote_session_clients AS c
 JOIN json_web_key_sets AS s
   ON s.organization_id = c.organization_id
@@ -3083,8 +3092,13 @@ LEFT JOIN json_web_keys AS k
  AND k.deleted IS FALSE
 WHERE c.id = $1
   AND c.deleted IS FALSE
-GROUP BY c.id
+GROUP BY c.id, c.identity_provider_connection_id
 `
+
+type GetRemoteSessionClientJsonWebKeySetDocumentRow struct {
+	Document []byte
+	Managed  bool
+}
 
 // Public client JWKS endpoint lookup. Intentionally NOT project-scoped or
 // entitlement-gated: a counterparty may depend on this unauthenticated URL to
@@ -3098,11 +3112,12 @@ GROUP BY c.id
 // visible for assertions minted before rotation. Revoked keys are always
 // soft-deleted and therefore excluded. Ordering by immutable key id keeps the
 // serialized document and its HTTP ETag stable between lifecycle changes.
-func (q *Queries) GetRemoteSessionClientJsonWebKeySetDocument(ctx context.Context, id uuid.UUID) ([]byte, error) {
+// managed selects the shorter freshness window.
+func (q *Queries) GetRemoteSessionClientJsonWebKeySetDocument(ctx context.Context, id uuid.UUID) (GetRemoteSessionClientJsonWebKeySetDocumentRow, error) {
 	row := q.db.QueryRow(ctx, getRemoteSessionClientJsonWebKeySetDocument, id)
-	var document []byte
-	err := row.Scan(&document)
-	return document, err
+	var i GetRemoteSessionClientJsonWebKeySetDocumentRow
+	err := row.Scan(&i.Document, &i.Managed)
+	return i, err
 }
 
 const getRemoteSessionClientRevocationTargetByID = `-- name: GetRemoteSessionClientRevocationTargetByID :one
@@ -6596,7 +6611,7 @@ func (q *Queries) ListUserSessionIssuersBoundToProjectClient(ctx context.Context
 }
 
 const lockJsonWebKeySetForClientAttach = `-- name: LockJsonWebKeySetForClientAttach :one
-SELECT id
+SELECT id, identity_provider_connection_id
 FROM json_web_key_sets
 WHERE id = $1
   AND organization_id = $2
@@ -6610,6 +6625,11 @@ type LockJsonWebKeySetForClientAttachParams struct {
 	OrganizationID string
 }
 
+type LockJsonWebKeySetForClientAttachRow struct {
+	ID                           uuid.UUID
+	IdentityProviderConnectionID uuid.NullUUID
+}
+
 // Holds the key set while a client attaches to it, against DeleteSet's
 // FOR UPDATE on the same row. Without it, attach-sees-live-set racing
 // delete-sees-no-references lets both commit and strands a client on a deleted
@@ -6619,11 +6639,11 @@ type LockJsonWebKeySetForClientAttachParams struct {
 //
 // project_id IS NULL matches LockJsonWebKeySetForKeyWrite: sets are
 // organization-tier only.
-func (q *Queries) LockJsonWebKeySetForClientAttach(ctx context.Context, arg LockJsonWebKeySetForClientAttachParams) (uuid.UUID, error) {
+func (q *Queries) LockJsonWebKeySetForClientAttach(ctx context.Context, arg LockJsonWebKeySetForClientAttachParams) (LockJsonWebKeySetForClientAttachRow, error) {
 	row := q.db.QueryRow(ctx, lockJsonWebKeySetForClientAttach, arg.ID, arg.OrganizationID)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
+	var i LockJsonWebKeySetForClientAttachRow
+	err := row.Scan(&i.ID, &i.IdentityProviderConnectionID)
+	return i, err
 }
 
 const lockOrganizationRemoteSessionClientForAuthMethodWrite = `-- name: LockOrganizationRemoteSessionClientForAuthMethodWrite :one
@@ -7114,6 +7134,30 @@ func (q *Queries) LockTrustedRemoteSessionIssuerForOrganization(ctx context.Cont
 	return i, err
 }
 
+const managedRemoteSessionClientExistsForIssuer = `-- name: ManagedRemoteSessionClientExistsForIssuer :one
+SELECT EXISTS (
+  SELECT 1
+  FROM remote_session_clients
+  WHERE remote_session_issuer_id = $1
+    AND organization_id = $2
+    AND identity_provider_connection_id IS NOT NULL
+    AND deleted IS FALSE
+)
+`
+
+type ManagedRemoteSessionClientExistsForIssuerParams struct {
+	RemoteSessionIssuerID uuid.UUID
+	OrganizationID        pgtype.Text
+}
+
+// Whether any live managed client sits on the issuer; the issuer mutation guards refuse if so.
+func (q *Queries) ManagedRemoteSessionClientExistsForIssuer(ctx context.Context, arg ManagedRemoteSessionClientExistsForIssuerParams) (bool, error) {
+	row := q.db.QueryRow(ctx, managedRemoteSessionClientExistsForIssuer, arg.RemoteSessionIssuerID, arg.OrganizationID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const markRemoteSessionClientUpstreamRejected = `-- name: MarkRemoteSessionClientUpstreamRejected :execrows
 UPDATE remote_session_clients
 SET upstream_rejected_at = clock_timestamp(),
@@ -7303,6 +7347,7 @@ WHERE id = $6
   AND remote_session_issuer_id = $9
   AND deleted IS FALSE
   AND client_id_metadata_uri IS NULL
+  AND identity_provider_connection_id IS NULL
 RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, created_at, updated_at, deleted_at, deleted
 `
 
@@ -7328,7 +7373,8 @@ type ReplaceRemoteSessionClientRegistrationParams struct {
 // reported as no rows. The expected issuer also proves the advisory lock the
 // caller holds still covers this client. CIMD-mode rows are
 // excluded: their client_id is the metadata document URL and is never
-// registered upstream.
+// registered upstream. Managed rows are excluded: their registration belongs
+// to the identity provider connection.
 func (q *Queries) ReplaceRemoteSessionClientRegistration(ctx context.Context, arg ReplaceRemoteSessionClientRegistrationParams) (RemoteSessionClient, error) {
 	row := q.db.QueryRow(ctx, replaceRemoteSessionClientRegistration,
 		arg.ClientID,

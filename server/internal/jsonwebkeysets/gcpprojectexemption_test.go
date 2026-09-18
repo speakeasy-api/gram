@@ -10,6 +10,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/json_web_key_sets"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	extcredrepo "github.com/speakeasy-api/gram/server/internal/externalcredentials/repo"
+	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections/provisiontest"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -43,7 +44,8 @@ func TestCreateSet_RefusesTargetInGramProject(t *testing.T) {
 // with no request actor, so it has to read the grant from the row: otherwise the
 // credential would save and then fail on every signature it was created for.
 // Both mint sites are covered here, since creating the set mints once and
-// publishing into it mints again.
+// publishing into it mints again. The key is written directly since the key
+// API refuses an exempted credential.
 func TestPublishKey_HonorsStoredProjectVerificationExemption(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
@@ -56,13 +58,13 @@ func TestPublishKey_HonorsStoredProjectVerificationExemption(t *testing.T) {
 		WifProjectNumber:          pgtype.Text{String: "", Valid: false},
 		SkipProjectVerification:   true,
 	})
-	ek := createGcpKmsKey(t, ctx, ti, "behind-exempted-sa", credID)
-	set := createSet(t, ctx, ti, "exempted", ek.ID)
+	ekID := provisiontest.CreateGcpKmsKeyDirect(t, ctx, ti.conn, ti.orgID, "behind-exempted-sa", credID)
+	set := createSet(t, ctx, ti, "exempted", ekID)
 
 	published, err := ti.service.PublishKey(adminCtx(t, ctx), &gen.PublishKeyPayload{
 		SetID:        set.ID,
 		SessionToken: nil,
 	})
 	require.NoError(t, err)
-	require.Equal(t, ek.ID, published.ExternalKeyID)
+	require.Equal(t, ekID, published.ExternalKeyID)
 }

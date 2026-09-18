@@ -517,6 +517,17 @@ SET deleted_at = clock_timestamp()
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
 
+-- name: ManagedRemoteSessionClientExistsForIssuer :one
+-- Whether any live managed client sits on the issuer; the issuer mutation guards refuse if so.
+SELECT EXISTS (
+  SELECT 1
+  FROM remote_session_clients
+  WHERE remote_session_issuer_id = @remote_session_issuer_id
+    AND organization_id = @organization_id
+    AND identity_provider_connection_id IS NOT NULL
+    AND deleted IS FALSE
+);
+
 -- name: CountRemoteSessionClientsByIssuerID :one
 -- Every non-deleted client on an issuer, across every tenancy tier. Delete
 -- guards use this as the fail-safe: a count that ignored rows the caller cannot
@@ -597,7 +608,9 @@ INSERT INTO remote_session_clients (
     token_endpoint_auth_audience_format,
     scope,
     audience,
-    legacy_callback_url
+    legacy_callback_url,
+    json_web_key_set_id,
+    identity_provider_connection_id
 )
 VALUES (
     @project_id,
@@ -611,7 +624,9 @@ VALUES (
     @token_endpoint_auth_audience_format,
     sqlc.narg('scope')::text[],
     @audience,
-    @legacy_callback_url
+    @legacy_callback_url,
+    sqlc.narg('json_web_key_set_id'),
+    sqlc.narg('identity_provider_connection_id')
 )
 RETURNING *;
 
@@ -699,7 +714,8 @@ ORDER BY link.user_session_issuer_id;
 -- reported as no rows. The expected issuer also proves the advisory lock the
 -- caller holds still covers this client. CIMD-mode rows are
 -- excluded: their client_id is the metadata document URL and is never
--- registered upstream.
+-- registered upstream. Managed rows are excluded: their registration belongs
+-- to the identity provider connection.
 UPDATE remote_session_clients
 SET client_id = @client_id,
     client_secret_encrypted = @client_secret_encrypted,
@@ -715,6 +731,7 @@ WHERE id = @id
   AND remote_session_issuer_id = @expected_issuer_id
   AND deleted IS FALSE
   AND client_id_metadata_uri IS NULL
+  AND identity_provider_connection_id IS NULL
 RETURNING *;
 
 -- name: AttachRemoteSessionClientToUserSessionIssuer :exec
@@ -906,13 +923,15 @@ WHERE c.id = @id
 -- visible for assertions minted before rotation. Revoked keys are always
 -- soft-deleted and therefore excluded. Ordering by immutable key id keeps the
 -- serialized document and its HTTP ETag stable between lifecycle changes.
+-- managed selects the shorter freshness window.
 SELECT jsonb_build_object(
     'keys',
     COALESCE(
         jsonb_agg(k.public_jwk ORDER BY k.id) FILTER (WHERE k.id IS NOT NULL),
         '[]'::jsonb
     )
-) AS document
+) AS document,
+(c.identity_provider_connection_id IS NOT NULL)::boolean AS managed
 FROM remote_session_clients AS c
 JOIN json_web_key_sets AS s
   ON s.organization_id = c.organization_id
@@ -925,7 +944,7 @@ LEFT JOIN json_web_keys AS k
  AND k.deleted IS FALSE
 WHERE c.id = @id
   AND c.deleted IS FALSE
-GROUP BY c.id;
+GROUP BY c.id, c.identity_provider_connection_id;
 
 -- name: GetLocalFixtureOrganizationRemoteSessionClient :one
 -- The local Platform MCP fixture owns at most one organization-scoped public
@@ -1091,7 +1110,7 @@ FOR UPDATE OF c;
 -- project_id IS NULL matches LockJsonWebKeySetForKeyWrite: sets are
 -- organization-tier only.
 -- name: LockJsonWebKeySetForClientAttach :one
-SELECT id
+SELECT id, identity_provider_connection_id
 FROM json_web_key_sets
 WHERE id = @id
   AND organization_id = @organization_id
