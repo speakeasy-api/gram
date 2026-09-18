@@ -16,6 +16,15 @@ on:
       - .mise-tasks/park.mts
       - .mise-tasks/ensure-stack.sh
       - .mise-tasks/idle-pause.sh
+      - .mise-tasks/nuke.sh
+      - .mise-tasks/infra/start.sh
+      - .mise-tasks/temporal/**
+      - .mise-tasks/test/temporal.sh
+      - compose.shared.yml
+      - compose.yml
+      - mise.toml
+      - .mise-tasks/zero/remap-ports.mts
+      - .mise-tasks/git/worksync.sh
       - .mise-tasks/git/workboot.sh
       - .mise-tasks/test/wake-stack.sh
       - .config/wt.toml
@@ -116,6 +125,9 @@ jobs:
       # it tests is stopping one and starting it again.
       - name: Boot the stack
         run: ./zero --agent
+
+      - name: Test Temporal lifecycle
+        run: mise run test:temporal
 
       - name: Test
         run: mise run test:wake-stack
