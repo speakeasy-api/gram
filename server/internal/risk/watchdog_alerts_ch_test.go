@@ -83,6 +83,7 @@ func TestWatchdogAlertsClickHouseArrayOverflow(t *testing.T) {
 	from := time.Now().UTC().Add(-time.Hour).Truncate(time.Second)
 	for _, dimension := range []string{"policy", "client"} {
 		t.Run(dimension, func(t *testing.T) {
+			t.Parallel()
 			// Separate rule population/window per subtest, with 201 distinct values.
 			window := from
 			if dimension == "client" {

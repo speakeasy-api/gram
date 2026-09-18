@@ -123,6 +123,7 @@ func TestRiskFindingsSignalScores(t *testing.T) {
 		{"unknown fallback", nil, "future", "medium", 5},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			s, r, p := findingsFixture(t)
 			r.rows[0].Category = tc.category
 			r.rows[0].PolicyIDs = nil
@@ -131,7 +132,7 @@ func TestRiskFindingsSignalScores(t *testing.T) {
 			}
 			out, err := s.List(t.Context(), testRiskPrincipal("user"), ListRiskFindingsInput{Severity: "all"})
 			require.NoError(t, err)
-			require.Equal(t, tc.score, out.Groups[0].Score)
+			require.InDelta(t, tc.score, out.Groups[0].Score, 0.001)
 			require.Equal(t, tc.band, out.Groups[0].Severity)
 			out, err = s.List(t.Context(), testRiskPrincipal("user"), ListRiskFindingsInput{Severity: "low"})
 			require.NoError(t, err)
@@ -143,7 +144,7 @@ func TestRiskFindingsSignalScores(t *testing.T) {
 	p.rows[0].Deleted = true
 	out, err := s.List(t.Context(), testRiskPrincipal("user"), ListRiskFindingsInput{Severity: "all"})
 	require.NoError(t, err)
-	require.Equal(t, 5.5, out.Groups[0].Score)
+	require.InDelta(t, 5.5, out.Groups[0].Score, 0.001)
 	require.Len(t, r.params, 1)
 	p.rows = nil
 	out, err = s.List(t.Context(), testRiskPrincipal("user"), ListRiskFindingsInput{Severity: "all"})
