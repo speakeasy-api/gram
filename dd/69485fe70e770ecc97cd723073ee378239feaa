@@ -1,0 +1,19 @@
+server/internal/risk/metrics.go
+  s_7fdecb48b43fe7::t_592e20dc839b27 98-101
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "dd69485fe70e770ecc97cd723073ee378239feaa",
+  "prompts": {},
+  "sessions": {
+    "s_7fdecb48b43fe7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bf058b0c-2e83-40c5-b904-7bbe807d7039",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
