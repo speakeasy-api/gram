@@ -778,6 +778,8 @@ type ListRiskResultsForAgentPayload struct {
 	PolicyID *string
 	// Optional chat ID to filter by.
 	ChatID *string
+	// Optional concrete MCP server ID to match exactly.
+	McpServerID *string
 	// Optional rule category key to filter by (e.g. secrets, pii, financial).
 	Category *string
 	// Optional rule identifier substring to filter by (case-insensitive, e.g.
@@ -827,6 +829,8 @@ type ListRiskResultsPayload struct {
 	PolicyID *string
 	// Optional chat ID to filter by.
 	ChatID *string
+	// Optional concrete MCP server ID to match exactly.
+	McpServerID *string
 	// Optional rule category key to filter by (e.g. secrets, pii, financial).
 	Category *string
 	// Optional rule identifier substring to filter by (case-insensitive, e.g.

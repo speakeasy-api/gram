@@ -35,6 +35,8 @@ type ListRiskFindingsParams struct {
 	OrganizationID string
 	ProjectID      string
 	PolicyIDs      []string
+	MCPServerID    string
+	ChatID         string
 	From           *time.Time
 	To             *time.Time
 	Category       string
@@ -73,29 +75,51 @@ var riskFindingListColumns = []string{
 	"start_pos",
 	"end_pos",
 	"match_redacted",
+	"execution_id",
+	"mcp_server_id",
+	"meta_mcp_server_id",
+	"toolset_id",
+	"tool_name",
+	"phase",
+	"mediation_surface",
+	"mcp_method",
+	"principal_kind",
+	"identity_stamped",
+	"enforcement_outcome",
 }
 
 // RiskFindingListRow is one listing row served from ClickHouse. The match is
 // only ever the precomputed redacted display string — the raw value never
 // reaches this store.
 type RiskFindingListRow struct {
-	ID                uuid.UUID
-	MessageCreatedAt  time.Time
-	ChatMessageID     string
-	ContentPartID     string
-	ChatID            string
-	ExternalUserID    string
-	AssistantID       string
-	RiskPolicyID      string
-	RiskPolicyVersion int64
-	RuleID            string
-	Description       string
-	Source            string
-	Confidence        float64
-	Tags              []string
-	StartPos          int32
-	EndPos            int32
-	MatchRedacted     string
+	ID                 uuid.UUID
+	MessageCreatedAt   time.Time
+	ChatMessageID      string
+	ContentPartID      string
+	ChatID             string
+	ExternalUserID     string
+	AssistantID        string
+	RiskPolicyID       string
+	RiskPolicyVersion  int64
+	RuleID             string
+	Description        string
+	Source             string
+	Confidence         float64
+	Tags               []string
+	StartPos           int32
+	EndPos             int32
+	MatchRedacted      string
+	ExecutionID        string
+	MCPServerID        string
+	MetaMCPServerID    string
+	ToolsetID          string
+	ToolName           string
+	Phase              string
+	MediationSurface   string
+	MCPMethod          string
+	PrincipalKind      string
+	IdentityStamped    bool
+	EnforcementOutcome string
 }
 
 // scanTargets returns the row's fields in riskFindingListColumns order. It is
@@ -120,6 +144,17 @@ func (r *RiskFindingListRow) scanTargets() []any {
 		&r.StartPos,
 		&r.EndPos,
 		&r.MatchRedacted,
+		&r.ExecutionID,
+		&r.MCPServerID,
+		&r.MetaMCPServerID,
+		&r.ToolsetID,
+		&r.ToolName,
+		&r.Phase,
+		&r.MediationSurface,
+		&r.MCPMethod,
+		&r.PrincipalKind,
+		&r.IdentityStamped,
+		&r.EnforcementOutcome,
 	}
 }
 
@@ -141,6 +176,12 @@ func listRiskFindingsBase(p ListRiskFindingsParams, columns ...string) (squirrel
 		Where("project_id = ?", p.ProjectID).
 		Where("dead_letter_reason = ''").
 		Where(squirrel.Eq{"risk_policy_id": p.PolicyIDs})
+	if p.MCPServerID != "" {
+		sb = sb.Where("mcp_server_id = ?", p.MCPServerID)
+	}
+	if p.ChatID != "" {
+		sb = sb.Where("chat_id = ?", p.ChatID)
+	}
 	return sb, nil
 }
 

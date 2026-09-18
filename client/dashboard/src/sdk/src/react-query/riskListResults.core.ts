@@ -49,6 +49,7 @@ export function buildRiskListResultsQuery(
     queryKey: queryKeyRiskListResults({
       policyId: request?.policyId,
       chatId: request?.chatId,
+      mcpServerId: request?.mcpServerId,
       category: request?.category,
       ruleId: request?.ruleId,
       userId: request?.userId,
@@ -92,6 +93,7 @@ export function queryKeyRiskListResults(
   parameters: {
     policyId?: string | undefined;
     chatId?: string | undefined;
+    mcpServerId?: string | undefined;
     category?: string | undefined;
     ruleId?: string | undefined;
     userId?: string | undefined;

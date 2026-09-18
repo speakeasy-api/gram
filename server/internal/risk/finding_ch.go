@@ -104,13 +104,12 @@ func (w *FindingCHWriter) ProcessBatch(ctx context.Context, messages []*riskv1.F
 	// findings from the same org don't each re-run HKDF.
 	tenantKeyCache := make(map[string][]byte)
 
-	// Batch-resolve the denormalized attribution (chat id, user ids) for every
-	// finding that carries a well-formed anchor — one Postgres query per anchor
-	// kind. Both reads are bounded to the projects present in the batch;
-	// findings whose project id is unparseable contribute nothing, so an
-	// anchor they carry simply resolves no attribution. A query error fails
-	// the batch: attribution is stamped once at ingest, so proceeding through
-	// a transient Postgres blip would persist permanently unattributed rows.
+	// Batch-resolve attribution only for findings without carried attribution
+	// that have a well-formed anchor — one Postgres query per anchor kind.
+	// Both reads are bounded to the projects present in the batch. A query
+	// error fails the batch: fallback attribution is stamped once at ingest,
+	// so a transient Postgres blip must not persist permanently unattributed
+	// legacy rows.
 	projectIDs := findingAnchorIDs(messages, func(message *riskv1.Finding) string {
 		return message.GetProjectId()
 	})
@@ -269,13 +268,29 @@ func (w *FindingCHWriter) ProcessBatch(ctx context.Context, messages []*riskv1.F
 		// pre-column rows.
 		var chatID, userID, externalUserID, assistantID, chatSource, team, userEmail string
 		messageCreatedAt := createdAt.UTC()
-		// Only attribute an anchor that belongs to the finding's own project,
-		// so a wrong or forged anchor id cannot pull another tenant's chat and
-		// user ids into this row. A NULL row project_id (project deleted) or
-		// unparseable finding project id is unverifiable and so gets no
-		// attribution.
+		// Presence is authoritative: a producer may intentionally carry empty
+		// values for a gateway-only finding. Only an absent Attribution falls
+		// back to project-bounded lookup from a durable chat anchor.
 		findingProjectID, findingProjectErr := uuid.Parse(message.GetProjectId())
-		if msgID, err := uuid.Parse(chatMessageID); err == nil {
+		if a := message.GetAttribution(); a != nil {
+			chatID = a.GetChatId()
+			userID = a.GetUserId()
+			externalUserID = a.GetExternalUserId()
+			assistantID = a.GetAssistantId()
+			chatSource = a.GetChatSource()
+			team = a.GetTeam()
+			userEmail = a.GetUserEmail()
+			if raw := a.GetMessageCreatedAt(); raw != "" {
+				t, err := time.Parse(time.RFC3339, raw)
+				if err != nil {
+					logger.ErrorContext(ctx, "finding has invalid attribution timestamp", attr.SlogError(err))
+					w.metrics.RecordFindingCHSkipped(ctx, "invalid_message_created_at")
+					failed[msgIdx] = fmt.Errorf("parse finding attribution message_created_at: %w", err)
+					continue
+				}
+				messageCreatedAt = t.UTC()
+			}
+		} else if msgID, err := uuid.Parse(chatMessageID); err == nil {
 			if a, ok := messageAttribution[msgID]; ok && findingProjectErr == nil && a.ProjectID.Valid && a.ProjectID.UUID == findingProjectID {
 				chatID = a.ChatID.String()
 				userID = a.UserID
@@ -291,8 +306,6 @@ func (w *FindingCHWriter) ProcessBatch(ctx context.Context, messages []*riskv1.F
 				}
 			}
 		} else if partID, err := uuid.Parse(contentPartID); err == nil {
-			// The part attribution query carries no assistant link or message
-			// timestamp, so both keep the fallbacks above.
 			if a, ok := contentPartAttribution[partID]; ok && findingProjectErr == nil && a.ProjectID.Valid && a.ProjectID.UUID == findingProjectID {
 				chatID = a.ChatID.String()
 				userID = a.UserID
@@ -373,6 +386,17 @@ func (w *FindingCHWriter) ProcessBatch(ctx context.Context, messages []*riskv1.F
 			Path:                     message.GetPath(),
 			ToolCallID:               message.GetToolCallId(),
 			EventKind:                eventKind,
+			ExecutionID:              message.GetExecution().GetExecutionId(),
+			MCPServerID:              message.GetExecution().GetMcpServerId(),
+			MetaMCPServerID:          message.GetExecution().GetMetaMcpServerId(),
+			ToolsetID:                message.GetExecution().GetToolsetId(),
+			ToolName:                 message.GetExecution().GetToolName(),
+			Phase:                    message.GetExecution().GetPhase(),
+			MediationSurface:         message.GetExecution().GetMediationSurface(),
+			MCPMethod:                message.GetExecution().GetMethod(),
+			PrincipalKind:            message.GetExecution().GetPrincipalKind(),
+			IdentityStamped:          message.GetExecution().GetIdentityStamped(),
+			EnforcementOutcome:       findingEnforcementOutcome(message.GetEnforcementOutcome()),
 		})
 	}
 
@@ -453,6 +477,9 @@ func findingAnchorIDs(messages []*riskv1.Finding, getRawID func(*riskv1.Finding)
 	ids := make([]uuid.UUID, 0, len(messages))
 	seen := make(map[uuid.UUID]struct{}, len(messages))
 	for _, message := range messages {
+		if message.HasAttribution() {
+			continue
+		}
 		id, err := uuid.Parse(getRawID(message))
 		if err != nil {
 			continue
@@ -467,4 +494,25 @@ func findingAnchorIDs(messages []*riskv1.Finding, getRawID func(*riskv1.Finding)
 		return nil
 	}
 	return ids
+}
+
+func findingEnforcementOutcome(outcome riskv1.Finding_EnforcementOutcome) string {
+	switch outcome {
+	case riskv1.Finding_ENFORCEMENT_OUTCOME_LOGGED:
+		return "logged"
+	case riskv1.Finding_ENFORCEMENT_OUTCOME_DENIED:
+		return "denied"
+	case riskv1.Finding_ENFORCEMENT_OUTCOME_WITHHELD:
+		return "withheld"
+	case riskv1.Finding_ENFORCEMENT_OUTCOME_WARNED_PENDING:
+		return "warned_pending"
+	case riskv1.Finding_ENFORCEMENT_OUTCOME_WARNED_ACKNOWLEDGED:
+		return "warned_acknowledged"
+	case riskv1.Finding_ENFORCEMENT_OUTCOME_WARNED_ABANDONED:
+		return "warned_abandoned"
+	case riskv1.Finding_ENFORCEMENT_OUTCOME_QUARANTINED:
+		return "quarantined"
+	default:
+		return ""
+	}
 }

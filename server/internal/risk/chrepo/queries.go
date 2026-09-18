@@ -148,6 +148,20 @@ type RiskFindingRow struct {
 	// is. Read-time dedup ranks suppression/unsuppression copies above finding
 	// copies for the same id.
 	EventKind string `ch:"event_kind"`
+
+	// Mediated execution metadata. These identifiers are carried by the
+	// finding producer and contain no request or response content.
+	ExecutionID        string `ch:"execution_id"`
+	MCPServerID        string `ch:"mcp_server_id"`
+	MetaMCPServerID    string `ch:"meta_mcp_server_id"`
+	ToolsetID          string `ch:"toolset_id"`
+	ToolName           string `ch:"tool_name"`
+	Phase              string `ch:"phase"`
+	MediationSurface   string `ch:"mediation_surface"`
+	MCPMethod          string `ch:"mcp_method"`
+	PrincipalKind      string `ch:"principal_kind"`
+	IdentityStamped    bool   `ch:"identity_stamped"`
+	EnforcementOutcome string `ch:"enforcement_outcome"`
 }
 
 // chNullable maps a nil pointer to an untyped nil interface so a Nullable
@@ -213,6 +227,17 @@ var riskFindingColumns = []string{
 	"path",
 	"tool_call_id",
 	"event_kind",
+	"execution_id",
+	"mcp_server_id",
+	"meta_mcp_server_id",
+	"toolset_id",
+	"tool_name",
+	"phase",
+	"mediation_surface",
+	"mcp_method",
+	"principal_kind",
+	"identity_stamped",
+	"enforcement_outcome",
 }
 
 // InsertRiskFindings writes findings using a server-side async insert with a
@@ -303,6 +328,17 @@ func (q *Queries) InsertRiskFindings(ctx context.Context, rows []RiskFindingRow)
 			row.Path,
 			row.ToolCallID,
 			row.EventKind,
+			row.ExecutionID,
+			row.MCPServerID,
+			row.MetaMCPServerID,
+			row.ToolsetID,
+			row.ToolName,
+			row.Phase,
+			row.MediationSurface,
+			row.MCPMethod,
+			row.PrincipalKind,
+			row.IdentityStamped,
+			row.EnforcementOutcome,
 		)
 	}
 
