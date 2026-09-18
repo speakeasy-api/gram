@@ -471,8 +471,44 @@ describe("AuthProvider cross-organization links", () => {
     page.unmount();
     resolveSwitch?.();
 
-    await Promise.resolve();
-    expect(replaceSpy).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(replaceSpy).not.toHaveBeenCalled();
+      expect(
+        sessionStorage.getItem("organizationScopeSwitchAttempt"),
+      ).toBeNull();
+    });
+  });
+
+  it("does not let an older rejection clear a newer switch marker", async () => {
+    let rejectSwitch: ((error: Error) => void) | undefined;
+    mocks.switchScopes.mockReturnValue(
+      new Promise<void>((_, reject) => {
+        rejectSwitch = reject;
+      }),
+    );
+    mocks.sessionData.mockReturnValue(
+      gatedSession({
+        organizations: [ORG, OTHER_ORG],
+        whitelisted: true,
+      }),
+    );
+    const oldDestination = "/other-org/projects/other-project/mcp";
+    const newerAttempt = JSON.stringify({
+      organizationId: OTHER_ORG.id,
+      destination: "/other-org/projects/other-project/logs",
+    });
+
+    const page = renderGate(oldDestination);
+    await waitFor(() => expect(mocks.switchScopes).toHaveBeenCalledTimes(1));
+    sessionStorage.setItem("organizationScopeSwitchAttempt", newerAttempt);
+    page.unmount();
+    rejectSwitch?.(new Error("superseded request failed"));
+
+    await waitFor(() => {
+      expect(sessionStorage.getItem("organizationScopeSwitchAttempt")).toBe(
+        newerAttempt,
+      );
+    });
   });
 
   it("shows an error and clears the retry marker when switching fails", async () => {

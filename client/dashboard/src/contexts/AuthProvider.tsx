@@ -119,6 +119,16 @@ function organizationScopeSwitchTarget(
   return undefined;
 }
 
+function clearOrganizationScopeSwitchAttempt(attempt: string): void {
+  try {
+    if (sessionStorage.getItem(ORGANIZATION_SCOPE_SWITCH_KEY) === attempt) {
+      sessionStorage.removeItem(ORGANIZATION_SCOPE_SWITCH_KEY);
+    }
+  } catch {
+    // sessionStorage unavailable
+  }
+}
+
 export const AuthProvider = ({
   children,
 }: {
@@ -426,14 +436,14 @@ function OrganizationScopeSwitch({
 
     void request.promise
       .then(() => {
-        if (!cancelled) window.location.replace(destination);
+        if (cancelled) {
+          clearOrganizationScopeSwitchAttempt(attempt);
+          return;
+        }
+        window.location.replace(destination);
       })
       .catch((switchError: unknown) => {
-        try {
-          sessionStorage.removeItem(ORGANIZATION_SCOPE_SWITCH_KEY);
-        } catch {
-          // sessionStorage unavailable
-        }
+        clearOrganizationScopeSwitchAttempt(attempt);
         if (!cancelled) setError(switchError);
       });
 
