@@ -28,7 +28,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
-	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	platformoauth "github.com/speakeasy-api/gram/server/internal/platformmcp/oauth"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
@@ -257,11 +256,13 @@ func TestMemberResourceDiscoveryUsesLiveRBAC(t *testing.T) {
 		}
 	}
 
-	_, err = reader.GetMCP(prepared, principal, GetMCPInput{ProjectID: deniedProject.ID.String(), MCPID: deniedMCPID.String()})
-	require.Error(t, err)
-	var denied *oops.ShareableError
-	require.ErrorAs(t, err, &denied)
-	require.Equal(t, oops.CodeForbidden, denied.Code)
+	for _, target := range []GetMCPInput{
+		{ProjectID: deniedProject.ID.String(), MCPID: deniedMCPID.String()},
+		{ProjectID: deniedProject.ID.String(), MCPID: uuid.NewString()},
+	} {
+		_, err = reader.GetMCP(prepared, principal, target)
+		require.ErrorIs(t, err, ErrForbidden, "hidden and missing MCPs must return the same error")
+	}
 }
 
 func TestLiveOrganizationSelectorAdmitsMembersWithoutOrgAdmin(t *testing.T) {
