@@ -18,12 +18,12 @@ import { getTrialLifecycleFromDates } from "@/lib/trial-status";
 import { isGramSessionUnauthorizedError } from "@/lib/route-errors";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
-import { useIsPlatformAdminRef } from "@/contexts/Sdk";
+import { useIsPlatformAdminRef, useSdkClient } from "@/contexts/Sdk";
 import {
   capturePreservedStorage,
   setPreservedStorageImpersonating,
 } from "@/lib/logout-storage";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import {
   Navigate,
@@ -55,6 +55,7 @@ import {
 import type { ProjectEntry } from "@gram/client/models/components/projectentry.js";
 
 const PREFERRED_PROJECT_KEY = "preferredProject";
+const ORGANIZATION_SCOPE_SWITCH_KEY = "organizationScopeSwitchAttempt";
 
 const SLUG_EXEMPT_PATHS = [
   "/switch-org",
@@ -91,6 +92,33 @@ function matchesOrgRoutePath(routePath: string, actual: string): boolean {
   );
 }
 
+function organizationScopeSwitchAttempt(
+  organizationId: string,
+  destination: string,
+): string {
+  return JSON.stringify({ organizationId, destination });
+}
+
+function organizationScopeSwitchTarget(
+  value: string | null,
+): string | undefined {
+  if (!value) return undefined;
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      "organizationId" in parsed &&
+      typeof parsed.organizationId === "string"
+    ) {
+      return parsed.organizationId;
+    }
+  } catch {
+    // Invalid or stale marker.
+  }
+  return undefined;
+}
+
 export const AuthProvider = ({
   children,
 }: {
@@ -112,6 +140,20 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   const isPlatformAdminRef = useIsPlatformAdminRef();
 
   const isLoading = status === "pending";
+
+  useEffect(() => {
+    if (!session?.activeOrganizationId) return;
+    try {
+      const attempt = sessionStorage.getItem(ORGANIZATION_SCOPE_SWITCH_KEY);
+      if (
+        organizationScopeSwitchTarget(attempt) === session.activeOrganizationId
+      ) {
+        sessionStorage.removeItem(ORGANIZATION_SCOPE_SWITCH_KEY);
+      }
+    } catch {
+      // sessionStorage unavailable
+    }
+  }, [session?.activeOrganizationId]);
 
   useIdentifyUserForTelemetry(session?.user);
   // Runs above every gate below, including the ones that return before
@@ -269,10 +311,36 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     return <Navigate to={redirectParam} replace />;
   } else if (isSlugExempt) {
     // Fall through to render children
+  } else if (orgSlug && session.organization.slug !== orgSlug) {
+    const requestedOrganization = session.organizations.find(
+      (organization) => organization.slug === orgSlug,
+    );
+    const requestedProjectExists =
+      !projectSlug ||
+      requestedOrganization?.projects.some(
+        (project) => project.slug === projectSlug,
+      );
+    const destination = safeRedirectPath(
+      location.pathname + location.search + location.hash,
+    );
+
+    if (requestedOrganization && requestedProjectExists && destination) {
+      return (
+        <OrganizationScopeSwitch
+          organizationId={requestedOrganization.id}
+          destination={destination}
+          fallbackDestination={`/${session.organization.slug}`}
+        />
+      );
+    }
+
+    // Never combine the active organization with a project slug from an
+    // inaccessible or stale cross-organization link.
+    return <Navigate to={`/${session.organization.slug}`} replace />;
   } else if (session.organization && !projectSlug) {
     // On an org-level page or bare URL with no project context — that's fine,
     // unless we're at the root "/" with no org slug either
-    if (!orgSlug || orgSlug !== session.organization.slug) {
+    if (!orgSlug) {
       // If the user has a preferred project, redirect to it instead of org home
       const preferredSlug = localStorage.getItem(PREFERRED_PROJECT_KEY);
       const preferredProject = preferredSlug
@@ -290,14 +358,6 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
       return <Navigate to={`/${session.organization.slug}`} replace />;
     }
     // Otherwise we're on a valid org-level path, fall through
-  } else if (session.organization.slug !== orgSlug) {
-    // make sure we don't direct to an org we aren't authenticated with
-    return (
-      <Navigate
-        to={`/${session.organization.slug}/projects/${projectSlug}`}
-        replace
-      />
-    );
   }
 
   return (
@@ -306,6 +366,67 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     </SessionContext.Provider>
   );
 };
+
+function OrganizationScopeSwitch({
+  organizationId,
+  destination,
+  fallbackDestination,
+}: {
+  organizationId: string;
+  destination: string;
+  fallbackDestination: string;
+}): JSX.Element {
+  const client = useSdkClient();
+  const started = useRef(false);
+  const attempt = organizationScopeSwitchAttempt(organizationId, destination);
+  const [alreadyAttempted] = useState(() => {
+    try {
+      return sessionStorage.getItem(ORGANIZATION_SCOPE_SWITCH_KEY) === attempt;
+    } catch {
+      return false;
+    }
+  });
+  const [error, setError] = useState<unknown>();
+
+  useEffect(() => {
+    if (alreadyAttempted) {
+      try {
+        sessionStorage.removeItem(ORGANIZATION_SCOPE_SWITCH_KEY);
+      } catch {
+        // sessionStorage unavailable
+      }
+      return;
+    }
+    if (started.current) return;
+    started.current = true;
+
+    try {
+      sessionStorage.setItem(ORGANIZATION_SCOPE_SWITCH_KEY, attempt);
+    } catch {
+      // sessionStorage unavailable; the in-memory guard still prevents duplicates.
+    }
+
+    void client.auth
+      .switchScopes({ organizationId })
+      .then(() => window.location.replace(destination))
+      .catch((switchError: unknown) => {
+        try {
+          sessionStorage.removeItem(ORGANIZATION_SCOPE_SWITCH_KEY);
+        } catch {
+          // sessionStorage unavailable
+        }
+        setError(switchError);
+      });
+  }, [alreadyAttempted, attempt, client, destination, organizationId]);
+
+  if (alreadyAttempted) {
+    return <Navigate to={fallbackDestination} replace />;
+  }
+  if (error) {
+    return <FullPageError error={error} />;
+  }
+  return <AuthPendingScreen />;
+}
 
 export const ProjectProvider = ({
   children,

@@ -1,11 +1,16 @@
-import { GramError } from "@gram/client/models/errors/gramerror.js";
-import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router";
+import { TelemetryStateProvider, nullTelemetry } from "./Telemetry";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
+
+import { AuthProvider } from "./AuthProvider";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
+import { useSession } from "./Auth";
 
 const mocks = vi.hoisted(() => ({
   sessionData: vi.fn(),
   group: vi.fn(),
+  switchScopes: vi.fn(),
 }));
 
 // Slugs derived from the live router location, as the real hook derives them
@@ -24,6 +29,9 @@ vi.mock("@/contexts/Sdk", async () => {
       };
     },
     useIsPlatformAdminRef: () => ({ current: false }),
+    useSdkClient: () => ({
+      auth: { switchScopes: mocks.switchScopes },
+    }),
   };
 });
 
@@ -52,10 +60,6 @@ vi.mock("@/contexts/Auth", async (importOriginal) => ({
   useSessionData: () => mocks.sessionData() as unknown,
 }));
 
-import { useSession } from "./Auth";
-import { AuthProvider } from "./AuthProvider";
-import { nullTelemetry, TelemetryStateProvider } from "./Telemetry";
-
 const DAY = 24 * 60 * 60 * 1000;
 const PROJECT = { id: "project-1", name: "Default", slug: "default" };
 const ORG = {
@@ -64,11 +68,16 @@ const ORG = {
   slug: "test-org",
   projects: [PROJECT],
 };
+const OTHER_PROJECT = {
+  id: "project-2",
+  name: "Other Project",
+  slug: "other-project",
+};
 const OTHER_ORG = {
   id: "org-2",
   name: "Other Org",
   slug: "other-org",
-  projects: [],
+  projects: [OTHER_PROJECT],
 };
 
 const telemetry = { ...nullTelemetry, group: mocks.group };
@@ -305,6 +314,109 @@ describe("AuthProvider legacy project redirects", () => {
     expect(screen.getByTestId("location").textContent).toBe(
       "/test-org/projects/agents",
     );
+  });
+});
+
+describe("AuthProvider cross-organization links", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sessionStorage.clear();
+    mocks.switchScopes.mockResolvedValue({});
+  });
+
+  afterEach(() => {
+    cleanup();
+    sessionStorage.clear();
+  });
+
+  it("switches scope before opening a project link from another organization", async () => {
+    mocks.sessionData.mockReturnValue(
+      gatedSession({
+        organizations: [ORG, OTHER_ORG],
+        whitelisted: true,
+      }),
+    );
+    const replace = vi
+      .spyOn(window.location, "replace")
+      .mockImplementation(() => {});
+    const destination =
+      "/other-org/projects/other-project/mcp/x/server/settings?tab=auth#credentials";
+
+    renderGate(destination);
+
+    await waitFor(() => {
+      expect(mocks.switchScopes).toHaveBeenCalledWith({
+        organizationId: OTHER_ORG.id,
+      });
+      expect(replace).toHaveBeenCalledWith(destination);
+    });
+    expect(screen.queryByTestId("app")).toBeNull();
+    replace.mockRestore();
+  });
+
+  it("does not combine the active organization with a stale foreign project", () => {
+    mocks.sessionData.mockReturnValue(
+      gatedSession({
+        organizations: [ORG, OTHER_ORG],
+        whitelisted: true,
+      }),
+    );
+
+    renderGate("/other-org/projects/missing-project/mcp");
+
+    expect(mocks.switchScopes).not.toHaveBeenCalled();
+    expect(screen.getByTestId("location").textContent).toBe("/test-org");
+  });
+
+  it("rejects a protocol-relative destination before switching scope", () => {
+    mocks.sessionData.mockReturnValue(
+      gatedSession({
+        organizations: [ORG, OTHER_ORG],
+        whitelisted: true,
+      }),
+    );
+
+    renderGate("//other-org/projects/other-project/mcp");
+
+    expect(mocks.switchScopes).not.toHaveBeenCalled();
+    expect(screen.getByTestId("location").textContent).toBe("/test-org");
+  });
+
+  it("falls back instead of repeating a scope switch after reload", () => {
+    const destination = "/other-org/projects/other-project/mcp";
+    sessionStorage.setItem(
+      "organizationScopeSwitchAttempt",
+      JSON.stringify({ organizationId: OTHER_ORG.id, destination }),
+    );
+    mocks.sessionData.mockReturnValue(
+      gatedSession({
+        organizations: [ORG, OTHER_ORG],
+        whitelisted: true,
+      }),
+    );
+
+    renderGate(destination);
+
+    expect(mocks.switchScopes).not.toHaveBeenCalled();
+    expect(screen.getByTestId("location").textContent).toBe("/test-org");
+    expect(sessionStorage.getItem("organizationScopeSwitchAttempt")).toBeNull();
+  });
+
+  it("shows an error and clears the retry marker when switching fails", async () => {
+    mocks.switchScopes.mockRejectedValue(new Error("scope switch unavailable"));
+    mocks.sessionData.mockReturnValue(
+      gatedSession({
+        organizations: [ORG, OTHER_ORG],
+        whitelisted: true,
+      }),
+    );
+
+    renderGate("/other-org/projects/other-project/mcp");
+
+    await waitFor(() => {
+      expect(screen.getByText("Something went wrong")).toBeTruthy();
+    });
+    expect(sessionStorage.getItem("organizationScopeSwitchAttempt")).toBeNull();
   });
 });
 
