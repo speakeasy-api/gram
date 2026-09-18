@@ -2,6 +2,7 @@ package mcp_test
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -66,7 +67,10 @@ func TestFederatedOptionalOfflineConsent(t *testing.T) {
 				req.AddCookie(cookie)
 				rec := httptest.NewRecorder()
 				err := f.ti.service.HandleIDPCallback(rec, req)
-				return rec, err
+				if err != nil {
+					return rec, fmt.Errorf("perform federation request: %w", err)
+				}
+				return rec, nil
 			}
 			first, err := callback(url.Values{"state": {id}, "code": {"minimal"}, "iss": {f.provider.URL}}, cookie)
 			if scenario == "membership_denied" {

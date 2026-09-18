@@ -4250,3 +4250,21 @@ WHERE s.organization_id = @organization_id::text
           AND u.workos_deleted_at IS NULL AND m.deleted IS FALSE)
   )
 GROUP BY 1;
+
+
+-- name: SetRemoteSessionIssuerOrganizationFixture :exec
+-- Test-only fixture for a platform issuer subsequently owned by a tenant.
+UPDATE remote_session_issuers SET organization_id = @organization_id
+WHERE id = @id;
+
+-- name: InsertTrustedDelegationObservationFixture :exec
+-- Test-only observation with deliberately invalid ciphertext: status must never decrypt it.
+INSERT INTO trusted_issuer_sessions (
+    organization_id, remote_session_client_id, subject_urn, credential_config_hash,
+    observation_status, observed_at, credential_obtained_at, last_refresh_succeeded_at,
+    refresh_token_encrypted
+) VALUES (
+    @organization_id, @client_id, @subject_urn, @config_hash,
+    'durable_credential_present', @observed_at, @obtained_at, @refreshed_at,
+    'must-not-decrypt'
+);

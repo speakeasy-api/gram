@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+	orgclientshttp "github.com/speakeasy-api/gram/server/gen/http/organization_remote_session_clients/server"
 	orgclientsgen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_clients"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -14,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/stretchr/testify/require"
 )
 
@@ -63,7 +66,7 @@ func TestGetClientDelegationStatusUnknownAndTenantIsolated(t *testing.T) {
 	// retained delegation data must still require ownership of the client.
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	_, err = ti.conn.Exec(ctx, `UPDATE remote_session_issuers SET organization_id=$2 WHERE id=$1`, platformID, authCtx.ActiveOrganizationID)
+	err = repo.New(ti.conn).SetRemoteSessionIssuerOrganizationFixture(ctx, repo.SetRemoteSessionIssuerOrganizationFixtureParams{ID: platformID, OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID)})
 	require.NoError(t, err)
 	_, err = ti.service.GetClientDelegationStatus(ctx, &orgclientsgen.GetClientDelegationStatusPayload{ID: otherClient.String()})
 	requireOopsCode(t, err, oops.CodeNotFound)
@@ -77,7 +80,7 @@ func TestGetClientDelegationStatusCurrentObservationsOnly(t *testing.T) {
 	org := authCtx.ActiveOrganizationID
 	issuerID := seedGlobalRemoteIssuer(t, ctx, ti.conn, "delegation-observations")
 	clientID := seedOrgLevelRemoteClient(t, ctx, ti.conn, org, issuerID, "delegation-observations")
-	_, err := ti.conn.Exec(ctx, `UPDATE remote_session_clients SET scope=ARRAY['openid','email'] WHERE id=$1`, clientID)
+	_, err := repo.New(ti.conn).UpdateOrganizationRemoteSessionClient(ctx, repo.UpdateOrganizationRemoteSessionClientParams{ID: clientID, OrganizationID: conv.ToPGText(org), Scope: []string{"openid", "email"}})
 	require.NoError(t, err)
 	createTrustedClientOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "delegation-observations", issuerID, clientID)
 	q := repo.New(ti.conn)
@@ -90,16 +93,16 @@ func TestGetClientDelegationStatusCurrentObservationsOnly(t *testing.T) {
 	// Invalid ciphertext intentionally proves the status read never decrypts.
 	for i, age := range []int{1, 31, 1} {
 		userID := uuid.NewString()
-		_, err = ti.conn.Exec(ctx, `INSERT INTO users(id,email,display_name) VALUES($1,$2,'Test user')`, userID, userID+"@example.test")
+		err = testrepo.New(ti.conn).InsertUserFixture(ctx, testrepo.InsertUserFixtureParams{ID: userID, Email: userID + "@example.test", DisplayName: "Test user"})
 		require.NoError(t, err)
-		_, err = ti.conn.Exec(ctx, `INSERT INTO organization_user_relationships(organization_id,user_id) VALUES($1,$2)`, org, userID)
+		err = testrepo.New(ti.conn).CreateOrganizationUserRelationshipFixture(ctx, testrepo.CreateOrganizationUserRelationshipFixtureParams{OrganizationID: org, UserID: conv.ToPGText(userID)})
 		require.NoError(t, err)
 		config := hash
 		if i == 2 {
 			config = "old-config"
 		}
 		observed := time.Now().UTC().Add(-time.Duration(age) * 24 * time.Hour)
-		_, err = ti.conn.Exec(ctx, `INSERT INTO trusted_issuer_sessions(organization_id,remote_session_client_id,subject_urn,credential_config_hash,observation_status,observed_at,credential_obtained_at,last_refresh_succeeded_at,refresh_token_encrypted) VALUES($1,$2,$3,$4,'durable_credential_present',$5,$6,$7,'must-not-decrypt')`, org, clientID, "user:"+userID, config, observed, observed.Add(-time.Hour), observed)
+		err = q.InsertTrustedDelegationObservationFixture(ctx, repo.InsertTrustedDelegationObservationFixtureParams{OrganizationID: conv.ToPGText(org), ClientID: uuid.NullUUID{UUID: clientID, Valid: true}, SubjectUrn: "user:" + userID, ConfigHash: conv.ToPGText(config), ObservedAt: delegationTestTimestamp(observed), ObtainedAt: delegationTestTimestamp(observed.Add(-time.Hour)), RefreshedAt: delegationTestTimestamp(observed)})
 		require.NoError(t, err)
 	}
 	payload := &orgclientsgen.GetClientDelegationStatusPayload{ID: clientID.String()}
@@ -113,14 +116,18 @@ func TestGetClientDelegationStatusCurrentObservationsOnly(t *testing.T) {
 	require.NotNil(t, got.Observations[0].LastCredentialObtainedAt)
 	require.NotNil(t, got.Observations[0].LastRefreshSucceededAt)
 	require.NotEqual(t, *got.Observations[0].LastCredentialObtainedAt, *got.Observations[0].LastRefreshSucceededAt)
-	wire, err := json.Marshal(got)
+	wire, err := json.Marshal(orgclientshttp.NewGetClientDelegationStatusResponseBody(got))
 	require.NoError(t, err)
 	require.NotContains(t, string(wire), "must-not-decrypt")
 	require.NotContains(t, string(wire), "user:")
-	_, err = ti.conn.Exec(ctx, `UPDATE remote_session_clients SET scope=ARRAY['openid','email','offline_access'] WHERE id=$1`, clientID)
+	_, err = repo.New(ti.conn).UpdateOrganizationRemoteSessionClient(ctx, repo.UpdateOrganizationRemoteSessionClientParams{ID: clientID, OrganizationID: conv.ToPGText(org), Scope: []string{"openid", "email", "offline_access"}})
 	require.NoError(t, err)
 	got, err = ti.service.GetClientDelegationStatus(ctx, payload)
 	require.NoError(t, err)
 	require.Equal(t, "unknown", got.Status)
 	require.Empty(t, got.Observations)
+}
+
+func delegationTestTimestamp(v time.Time) pgtype.Timestamptz {
+	return pgtype.Timestamptz{Time: v, Valid: true, InfinityModifier: pgtype.Finite}
 }

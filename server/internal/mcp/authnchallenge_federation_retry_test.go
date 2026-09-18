@@ -2,6 +2,7 @@ package mcp_test
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -40,7 +41,10 @@ func TestFederatedExplicitDelegationRetry(t *testing.T) {
 				req.AddCookie(cookie)
 				response := httptest.NewRecorder()
 				err := f.ti.service.HandleIDPCallback(response, req)
-				return response, err
+				if err != nil {
+					return response, fmt.Errorf("perform federation request: %w", err)
+				}
+				return response, nil
 			}
 			_, id, nonce, challenge, initial, cookie := f.begin(t, ctx, false)
 			f.provider.issueCode(t, "initial", federationToken{nonce: nonce, challenge: challenge, email: mockidp.MockUserEmail, issuer: f.provider.URL, secret: "selected-secret", verified: true})
@@ -95,7 +99,10 @@ func TestFederatedExplicitDelegationRetry(t *testing.T) {
 				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 				response := httptest.NewRecorder()
 				err := f.ti.service.ServeConsentAction(response, req, endpoint)
-				return response, err
+				if err != nil {
+					return response, fmt.Errorf("perform federation request: %w", err)
+				}
+				return response, nil
 			}
 			actionResponse, err := action()
 			switch scenario {

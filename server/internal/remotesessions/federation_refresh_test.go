@@ -41,6 +41,7 @@ func TestFederatedRefreshVerification(t *testing.T) {
 		{name: "not yet valid", claim: "nbf", value: `4102444800`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			claims := federatedClaims(t, p, time.Now())
 			if tc.claim != "" {
 				if tc.value == "" {
@@ -104,6 +105,7 @@ func TestFederatedRefreshResponse(t *testing.T) {
 		{name: "oversized success", status: 200, body: strings.Repeat("x", (64<<10)+1), kind: FederatedRefreshAmbiguous},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			calls := 0
 			doer := federatedHTTPDoerFunc(func(req *http.Request) (*http.Response, error) {
 				calls++

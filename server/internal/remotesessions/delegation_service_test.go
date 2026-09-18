@@ -253,6 +253,7 @@ func TestDelegationServiceAmbiguousNeverReplays(t *testing.T) {
 		{name: "rotation persistence failed", finishFailure: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			s, store, p, b, allow := newDelegationUnitFixture(t)
 			require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "old-id", "old-refresh", 30*time.Second), true))
 			var posts int
@@ -284,6 +285,7 @@ func TestDelegationServiceCallbackWinsRefresh(t *testing.T) {
 	t.Parallel()
 	for _, kind := range []FederatedRefreshFailure{"", FederatedRefreshInvalidGrant, FederatedRefreshInvalidIdentity} {
 		t.Run(string(kind), func(t *testing.T) {
+			t.Parallel()
 			s, store, p, b, allow := newDelegationUnitFixture(t)
 			require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "old-id", "old-refresh", 30*time.Second), true))
 			started, release := make(chan struct{}), make(chan struct{})
@@ -327,6 +329,7 @@ func TestDelegationServiceRefreshRotation(t *testing.T) {
 		{name: "known refresh expiry", id: "new-id", refresh: "new-refresh", wantRefresh: "new-refresh", expiry: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			s, store, p, b, allow := newDelegationUnitFixture(t)
 			require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "old-id", "old-refresh", 30*time.Second), true))
 			posts := 0
@@ -378,6 +381,7 @@ func TestDelegationServiceAssertionSafetyWindow(t *testing.T) {
 		{"usable", time.Minute + time.Second, true}, {"boundary", time.Minute, false}, {"near expiry", time.Second, false}, {"expired", -time.Second, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			s, store, p, b, allow := newDelegationUnitFixture(t)
 			require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "secret-id", "", tc.ttl), false))
 			posts := 0
@@ -408,6 +412,7 @@ func TestDelegationServiceAuthorizationAndTenantIsolation(t *testing.T) {
 	t.Parallel()
 	for _, name := range []string{"nil authority", "denied", "other tenant", "other human", "changed configuration"} {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			s, store, p, b, allow := newDelegationUnitFixture(t)
 			require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "secret-id", "secret-refresh", time.Hour), true))
 			posts := 0
@@ -508,6 +513,7 @@ func TestDelegationServiceRefreshRechecksAuthorityAndConfiguration(t *testing.T)
 	t.Parallel()
 	for _, name := range []string{"authority revoked", "configuration changed", "identity changed"} {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			s, store, p, b, allow := newDelegationUnitFixture(t)
 			require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "old-id", "old-refresh", 30*time.Second), true))
 			revoked := false
@@ -794,6 +800,7 @@ func TestDelegationServicePostRefreshVerification(t *testing.T) {
 		{name: "configuration changed", changed: true, definitive: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			s, store, p, b, _ := newDelegationUnitFixture(t)
 			require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "old-id", "old-refresh", 30*time.Second), true))
 			renewed := false
@@ -851,6 +858,7 @@ func TestDelegationServiceOfflineStatusRejectsNonresolvableCredentials(t *testin
 	t.Parallel()
 	for _, status := range []string{"configuration_failure", "reauthentication_required", "refused", "unknown"} {
 		t.Run(status, func(t *testing.T) {
+			t.Parallel()
 			s, store, p, b, _ := newDelegationUnitFixture(t)
 			require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "id", "refresh", time.Hour), true))
 			c := store.rows[b]
@@ -887,6 +895,7 @@ func TestDelegationServicePrePOSTAttempt(t *testing.T) {
 	t.Parallel()
 	for _, name := range []string{"decrypt failure", "CAS conflict", "database failure", "success"} {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			s, store, p, b, allow := newDelegationUnitFixture(t)
 			require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "id", "refresh", 30*time.Second), true))
 			switch name {
@@ -935,6 +944,7 @@ func TestDelegationServiceLoadsProviderAfterClaim(t *testing.T) {
 	t.Parallel()
 	for _, name := range []string{"fresh provider", "changed registration", "deleted", "invalid", "temporary"} {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			s, store, p, b, allow := newDelegationUnitFixture(t)
 			require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "id", "refresh", 30*time.Second), true))
 			fresh := *p
@@ -980,6 +990,7 @@ func TestDelegationServiceInitialAuthorizationErrors(t *testing.T) {
 	t.Parallel()
 	for _, cause := range []error{ErrDelegationTemporary, errors.New("dependency unavailable"), ErrDelegationConfiguration, ErrDelegationReauthentication} {
 		t.Run(cause.Error(), func(t *testing.T) {
+			t.Parallel()
 			s, store, p, b, _ := newDelegationUnitFixture(t)
 			require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "id", "refresh", time.Hour), true))
 			before := store.rows[b]
@@ -1001,6 +1012,7 @@ func TestDelegationServiceOfflineStatusInvalidPolicy(t *testing.T) {
 	t.Parallel()
 	for _, retained := range []bool{false, true} {
 		t.Run(fmt.Sprint(retained), func(t *testing.T) {
+			t.Parallel()
 			s, _, p, b, _ := newDelegationUnitFixture(t)
 			if retained {
 				require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "id", "refresh", time.Hour), true))
@@ -1034,6 +1046,7 @@ func TestDelegationServiceAttemptFailureReleaseSafety(t *testing.T) {
 	t.Parallel()
 	for _, superseded := range []bool{false, true} {
 		t.Run(fmt.Sprint(superseded), func(t *testing.T) {
+			t.Parallel()
 			s, store, p, b, allow := newDelegationUnitFixture(t)
 			require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "id", "refresh", 30*time.Second), true))
 			ctx, cancel := context.WithCancel(t.Context())

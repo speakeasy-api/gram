@@ -151,7 +151,7 @@ func (s *DelegationService) OfflineStatus(ctx context.Context, p *FederatedProvi
 	}
 	c, err := s.store.load(ctx, b)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return DelegationOfflineStatus{}, nil
+		return DelegationOfflineStatus{UsableRefresh: false, Refused: false}, nil
 	}
 	if err != nil {
 		return DelegationOfflineStatus{}, ErrDelegationTemporary
@@ -224,7 +224,8 @@ func (s *DelegationService) RetainVerifiedLogin(ctx context.Context, p *Federate
 				sameIdentity = true
 			}
 			if !sameIdentity {
-				next = delegationCredential{}
+				var empty delegationCredential
+				next = empty
 			}
 			next.assertion = assertion
 			next.assertionExpiry = identity.ExpiresAt

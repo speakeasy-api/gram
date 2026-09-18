@@ -375,7 +375,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 				// The first login is already retained. Cache identity only, never tokens,
 				// and allow exactly one more authorization round trip for this challenge.
 				federation.ValidatedUserID = gramUserID
-				federation.ValidatedIdentity = &remotesessions.FederatedIdentity{Issuer: federatedIdentity.Issuer, Subject: federatedIdentity.Subject, Email: federatedIdentity.Email, EmailVerified: federatedIdentity.EmailVerified}
+				federation.ValidatedIdentity = &remotesessions.FederatedIdentity{ExpiresAt: time.Time{}, Nonce: "", Issuer: federatedIdentity.Issuer, Subject: federatedIdentity.Subject, Email: federatedIdentity.Email, EmailVerified: federatedIdentity.EmailVerified}
 				federation.OfflineRequested = true
 				federation.ConfigurationHash = policy.ConfigurationHash
 				federation.Nonce, err = generateOpaqueToken()

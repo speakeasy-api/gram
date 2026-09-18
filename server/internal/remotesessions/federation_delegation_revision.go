@@ -34,7 +34,12 @@ func federatedSigningKeyRevision(ctx context.Context, db *pgxpool.Pool, organiza
 	if err != nil {
 		return "", federatedSigningRevisionError(err)
 	}
-	encoded, err := json.Marshal(struct{ ID, ExternalKeyID, Version, KeyID string }{ID: key.ID.String(), ExternalKeyID: key.ExternalKeyID.String(), Version: key.ExternalKeyVersion.String, KeyID: key.Kid})
+	encoded, err := json.Marshal(struct {
+		ID            string `json:"ID"`
+		ExternalKeyID string `json:"ExternalKeyID"`
+		Version       string `json:"Version"`
+		KeyID         string `json:"KeyID"`
+	}{ID: key.ID.String(), ExternalKeyID: key.ExternalKeyID.String(), Version: key.ExternalKeyVersion.String, KeyID: key.Kid})
 	if err != nil {
 		return "", ErrFederatedConfiguration
 	}
@@ -66,7 +71,8 @@ func (m *ChallengeManager) LoadFederatedDelegationProvider(ctx context.Context, 
 		}
 		return nil, fmt.Errorf("read federated delegation registration: %w", err)
 	}
-	p := &FederatedProvider{organizationID: organizationID, issuer: row.RemoteSessionIssuer, client: row.RemoteSessionClient}
+	var metadata rfc8414Document
+	p := &FederatedProvider{metadata: metadata, fingerprint: "", signingKeyRevision: "", organizationID: organizationID, issuer: row.RemoteSessionIssuer, client: row.RemoteSessionClient}
 	p.signingKeyRevision, err = federatedSigningKeyRevision(ctx, m.db, organizationID, p.client)
 	if err != nil {
 		return nil, err

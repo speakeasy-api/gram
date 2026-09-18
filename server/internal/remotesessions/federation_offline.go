@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"slices"
 	"strings"
@@ -18,11 +19,11 @@ func (d *rfc8414Document) UnmarshalJSON(data []byte) error {
 	type document rfc8414Document
 	var decoded document
 	if err := json.Unmarshal(data, &decoded); err != nil {
-		return err
+		return fmt.Errorf("decode federation discovery metadata: %w", err)
 	}
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(data, &fields); err != nil {
-		return err
+		return fmt.Errorf("decode federation discovery metadata: %w", err)
 	}
 	if _, present := fields["scopes_supported"]; present && decoded.ScopesSupported == nil {
 		decoded.ScopesSupported = []string{}
@@ -53,8 +54,12 @@ func (p *FederatedProvider) OfflinePolicy() (FederatedOfflinePolicy, error) {
 	// Do not use the provider fingerprint: discovery order and unrelated metadata
 	// must not reset a human's refusal suppression.
 	encoded, err := json.Marshal(struct {
-		Registration, Authorization, Token, JWKS, OfflineCapability string
-		AuthMethods                                                 []string
+		Registration      string   `json:"Registration"`
+		Authorization     string   `json:"Authorization"`
+		Token             string   `json:"Token"`
+		JWKS              string   `json:"JWKS"`
+		OfflineCapability string   `json:"OfflineCapability"`
+		AuthMethods       []string `json:"AuthMethods"`
 	}{
 		Registration:  p.DelegationConfigurationHash(),
 		Authorization: p.metadata.AuthorizationEndpoint, Token: p.metadata.TokenEndpoint, JWKS: p.metadata.JwksURI,
@@ -145,10 +150,22 @@ func FederatedDelegationConfigurationHash(organizationID string, issuer repo.Rem
 	}
 	secretRevision := sha256.Sum256([]byte(client.ClientSecretEncrypted.String))
 	encoded, err := json.Marshal(struct {
-		Organization, IssuerID, Issuer, ClientID, Client, Method, Audience, Key, CredentialRevision string
-		Authorization, Token, JWKS, Tunnel                                                          string
-		SecretExpiry, SigningRevision                                                               string
-		Scopes                                                                                      []string
+		Organization       string   `json:"Organization"`
+		IssuerID           string   `json:"IssuerID"`
+		Issuer             string   `json:"Issuer"`
+		ClientID           string   `json:"ClientID"`
+		Client             string   `json:"Client"`
+		Method             string   `json:"Method"`
+		Audience           string   `json:"Audience"`
+		Key                string   `json:"Key"`
+		CredentialRevision string   `json:"CredentialRevision"`
+		Authorization      string   `json:"Authorization"`
+		Token              string   `json:"Token"`
+		JWKS               string   `json:"JWKS"`
+		Tunnel             string   `json:"Tunnel"`
+		SecretExpiry       string   `json:"SecretExpiry"`
+		SigningRevision    string   `json:"SigningRevision"`
+		Scopes             []string `json:"Scopes"`
 	}{
 		Organization: organizationID, IssuerID: issuer.ID.String(), Issuer: issuer.Issuer,
 		ClientID: client.ID.String(), Client: client.ClientID,
