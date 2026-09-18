@@ -75,13 +75,22 @@ WHERE id = @id
   AND project_id IS NULL
   AND deleted IS FALSE;
 
+-- Sets left behind by a tombstoned identity provider connection are hidden;
+-- they stay reachable by id so the organization can delete them.
 -- name: ListJsonWebKeySets :many
 SELECT *
-FROM json_web_key_sets
-WHERE organization_id = @organization_id
-  AND project_id IS NULL
-  AND deleted IS FALSE
-ORDER BY id DESC;
+FROM json_web_key_sets AS s
+WHERE s.organization_id = @organization_id
+  AND s.project_id IS NULL
+  AND s.deleted IS FALSE
+  AND NOT EXISTS (
+    SELECT 1
+    FROM identity_provider_connections AS ipc
+    WHERE ipc.id = s.identity_provider_connection_id
+      AND ipc.organization_id = s.organization_id
+      AND ipc.deleted IS TRUE
+  )
+ORDER BY s.id DESC;
 
 -- name: UpdateJsonWebKeySet :one
 UPDATE json_web_key_sets

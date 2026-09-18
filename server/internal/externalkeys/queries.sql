@@ -112,13 +112,22 @@ WHERE ek.id = @id
   AND ek.provider = 'gcp_kms'
   AND ek.deleted IS FALSE;
 
+-- Keys left behind by a tombstoned identity provider connection are hidden;
+-- they stay reachable by id so the organization can delete them.
 -- name: ListExternalKeys :many
 SELECT *
-FROM external_keys
-WHERE organization_id = @organization_id
-  AND deleted IS FALSE
-  AND (sqlc.narg('provider')::text IS NULL OR provider = sqlc.narg('provider')::text)
-ORDER BY id DESC;
+FROM external_keys AS ek
+WHERE ek.organization_id = @organization_id
+  AND ek.deleted IS FALSE
+  AND (sqlc.narg('provider')::text IS NULL OR ek.provider = sqlc.narg('provider')::text)
+  AND NOT EXISTS (
+    SELECT 1
+    FROM identity_provider_connections AS ipc
+    WHERE ipc.id = ek.identity_provider_connection_id
+      AND ipc.organization_id = ek.organization_id
+      AND ipc.deleted IS TRUE
+  )
+ORDER BY ek.id DESC;
 
 -- Updates only the mutable columns. algorithm is absent on purpose, alongside
 -- the subtype identity columns (aws_kms_keys.key_arn, gcp_kms_keys.resource_name)

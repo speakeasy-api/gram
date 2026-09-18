@@ -827,7 +827,7 @@ func (s *Service) DeleteClient(ctx context.Context, payload *orgclientsgen.Delet
 		return oops.E(oops.CodeUnexpected, err, "get organization admin remote session client").LogError(ctx, logger)
 	}
 
-	if err := managedrows.RequireUnmanaged(existing.RemoteSessionClient.IdentityProviderConnectionID, "this remote session client"); err != nil {
+	if err := managedrows.RequireDeletable(ctx, dbtx, authCtx.ActiveOrganizationID, existing.RemoteSessionClient.IdentityProviderConnectionID, "this remote session client"); err != nil {
 		return err
 	}
 

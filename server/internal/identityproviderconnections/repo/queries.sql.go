@@ -31,6 +31,29 @@ func (q *Queries) BackdatePendingRotationPublication(ctx context.Context, arg Ba
 	return err
 }
 
+const countIdentityProviderConnectionsCreatedSince = `-- name: CountIdentityProviderConnectionsCreatedSince :one
+SELECT COUNT(*)
+FROM identity_provider_connections
+WHERE organization_id = $1
+  AND provider = $2
+  AND created_at >= $3
+`
+
+type CountIdentityProviderConnectionsCreatedSinceParams struct {
+	OrganizationID string
+	Provider       string
+	Since          pgtype.Timestamptz
+}
+
+// Durable creation cap: tombstones count, so revoke-and-recreate loops cannot
+// mint unbounded KMS keys.
+func (q *Queries) CountIdentityProviderConnectionsCreatedSince(ctx context.Context, arg CountIdentityProviderConnectionsCreatedSinceParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countIdentityProviderConnectionsCreatedSince, arg.OrganizationID, arg.Provider, arg.Since)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createIdentityProviderConnection = `-- name: CreateIdentityProviderConnection :one
 
 INSERT INTO identity_provider_connections (organization_id, provider)
@@ -61,6 +84,99 @@ func (q *Queries) CreateIdentityProviderConnection(ctx context.Context, arg Crea
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const createOktaIdentityProviderConnection = `-- name: CreateOktaIdentityProviderConnection :one
+INSERT INTO okta_identity_provider_connections (
+  identity_provider_connection_id,
+  organization_id,
+  org_url,
+  issuer_url,
+  ownership_claimed,
+  remote_session_issuer_id,
+  remote_session_client_id,
+  listing_mode
+)
+VALUES (
+  $1,
+  $2,
+  $3,
+  $4,
+  FALSE,
+  $5,
+  $6,
+  $7
+)
+RETURNING identity_provider_connection_id, identity_provider_connections_provider, organization_id, attachment_scope, org_url, issuer_url, issuer_url_override_reason, ownership_claimed, remote_session_issuer_id, remote_session_client_id, dpop_required, granted_scopes, observed_admin_roles, listing_mode, agent_id, agent_app_id, created_at, updated_at, deleted_at, deleted
+`
+
+type CreateOktaIdentityProviderConnectionParams struct {
+	IdentityProviderConnectionID uuid.UUID
+	OrganizationID               string
+	OrgUrl                       string
+	IssuerUrl                    string
+	RemoteSessionIssuerID        uuid.UUID
+	RemoteSessionClientID        uuid.UUID
+	ListingMode                  string
+}
+
+func (q *Queries) CreateOktaIdentityProviderConnection(ctx context.Context, arg CreateOktaIdentityProviderConnectionParams) (OktaIdentityProviderConnection, error) {
+	row := q.db.QueryRow(ctx, createOktaIdentityProviderConnection,
+		arg.IdentityProviderConnectionID,
+		arg.OrganizationID,
+		arg.OrgUrl,
+		arg.IssuerUrl,
+		arg.RemoteSessionIssuerID,
+		arg.RemoteSessionClientID,
+		arg.ListingMode,
+	)
+	var i OktaIdentityProviderConnection
+	err := row.Scan(
+		&i.IdentityProviderConnectionID,
+		&i.IdentityProviderConnectionsProvider,
+		&i.OrganizationID,
+		&i.AttachmentScope,
+		&i.OrgUrl,
+		&i.IssuerUrl,
+		&i.IssuerUrlOverrideReason,
+		&i.OwnershipClaimed,
+		&i.RemoteSessionIssuerID,
+		&i.RemoteSessionClientID,
+		&i.DpopRequired,
+		&i.GrantedScopes,
+		&i.ObservedAdminRoles,
+		&i.ListingMode,
+		&i.AgentID,
+		&i.AgentAppID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getConnectionIssuerBySlug = `-- name: GetConnectionIssuerBySlug :one
+SELECT id
+FROM remote_session_issuers
+WHERE organization_id = $1
+  AND project_id IS NULL
+  AND slug = $2
+  AND deleted IS FALSE
+`
+
+type GetConnectionIssuerBySlugParams struct {
+	OrganizationID pgtype.Text
+	Slug           string
+}
+
+// The issuer a create minted for a connection, found by its deterministic slug
+// when the Okta details were never written.
+func (q *Queries) GetConnectionIssuerBySlug(ctx context.Context, arg GetConnectionIssuerBySlugParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getConnectionIssuerBySlug, arg.OrganizationID, arg.Slug)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const getIdentityProviderConnection = `-- name: GetIdentityProviderConnection :one
@@ -122,6 +238,48 @@ func (q *Queries) GetIdentityProviderConnectionIncludingDeleted(ctx context.Cont
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.Deleted,
+	)
+	return i, err
+}
+
+const getLiveOktaIdentityProviderConnectionForOrganization = `-- name: GetLiveOktaIdentityProviderConnectionForOrganization :one
+
+SELECT
+  c.id, c.organization_id, c.provider, c.status, c.last_verified_at, c.last_error, c.created_at, c.updated_at, c.deleted_at, c.deleted,
+  o.identity_provider_connection_id AS okta_identity_provider_connection_id
+FROM identity_provider_connections AS c
+LEFT JOIN okta_identity_provider_connections AS o
+  ON o.identity_provider_connection_id = c.id
+ AND o.organization_id = c.organization_id
+ AND o.deleted IS FALSE
+WHERE c.organization_id = $1
+  AND c.provider = 'okta'
+  AND c.deleted IS FALSE
+`
+
+type GetLiveOktaIdentityProviderConnectionForOrganizationRow struct {
+	IdentityProviderConnection       IdentityProviderConnection
+	OktaIdentityProviderConnectionID uuid.NullUUID
+}
+
+// Connection management API. Every query below is organization-qualified.
+// The live parent with its Okta details if any; a parent without them is a
+// create that failed midway and can be abandoned.
+func (q *Queries) GetLiveOktaIdentityProviderConnectionForOrganization(ctx context.Context, organizationID string) (GetLiveOktaIdentityProviderConnectionForOrganizationRow, error) {
+	row := q.db.QueryRow(ctx, getLiveOktaIdentityProviderConnectionForOrganization, organizationID)
+	var i GetLiveOktaIdentityProviderConnectionForOrganizationRow
+	err := row.Scan(
+		&i.IdentityProviderConnection.ID,
+		&i.IdentityProviderConnection.OrganizationID,
+		&i.IdentityProviderConnection.Provider,
+		&i.IdentityProviderConnection.Status,
+		&i.IdentityProviderConnection.LastVerifiedAt,
+		&i.IdentityProviderConnection.LastError,
+		&i.IdentityProviderConnection.CreatedAt,
+		&i.IdentityProviderConnection.UpdatedAt,
+		&i.IdentityProviderConnection.DeletedAt,
+		&i.IdentityProviderConnection.Deleted,
+		&i.OktaIdentityProviderConnectionID,
 	)
 	return i, err
 }
@@ -211,6 +369,130 @@ func (q *Queries) GetManagedClient(ctx context.Context, arg GetManagedClientPara
 		&i.JsonWebKeyID,
 		&i.Kid,
 		&i.ActivatedAt,
+	)
+	return i, err
+}
+
+const getOktaIdentityProviderConnection = `-- name: GetOktaIdentityProviderConnection :one
+SELECT c.id, c.organization_id, c.provider, c.status, c.last_verified_at, c.last_error, c.created_at, c.updated_at, c.deleted_at, c.deleted, o.identity_provider_connection_id, o.identity_provider_connections_provider, o.organization_id, o.attachment_scope, o.org_url, o.issuer_url, o.issuer_url_override_reason, o.ownership_claimed, o.remote_session_issuer_id, o.remote_session_client_id, o.dpop_required, o.granted_scopes, o.observed_admin_roles, o.listing_mode, o.agent_id, o.agent_app_id, o.created_at, o.updated_at, o.deleted_at, o.deleted
+FROM identity_provider_connections AS c
+JOIN okta_identity_provider_connections AS o
+  ON o.identity_provider_connection_id = c.id
+ AND o.organization_id = c.organization_id
+ AND o.deleted IS FALSE
+WHERE c.organization_id = $1
+  AND c.provider = 'okta'
+  AND ($2::uuid IS NULL OR c.id = $2::uuid)
+  AND c.deleted IS FALSE
+`
+
+type GetOktaIdentityProviderConnectionParams struct {
+	OrganizationID string
+	ID             uuid.NullUUID
+}
+
+type GetOktaIdentityProviderConnectionRow struct {
+	IdentityProviderConnection     IdentityProviderConnection
+	OktaIdentityProviderConnection OktaIdentityProviderConnection
+}
+
+// Live connection with its Okta details. Without an id, the organization's
+// single live Okta connection.
+func (q *Queries) GetOktaIdentityProviderConnection(ctx context.Context, arg GetOktaIdentityProviderConnectionParams) (GetOktaIdentityProviderConnectionRow, error) {
+	row := q.db.QueryRow(ctx, getOktaIdentityProviderConnection, arg.OrganizationID, arg.ID)
+	var i GetOktaIdentityProviderConnectionRow
+	err := row.Scan(
+		&i.IdentityProviderConnection.ID,
+		&i.IdentityProviderConnection.OrganizationID,
+		&i.IdentityProviderConnection.Provider,
+		&i.IdentityProviderConnection.Status,
+		&i.IdentityProviderConnection.LastVerifiedAt,
+		&i.IdentityProviderConnection.LastError,
+		&i.IdentityProviderConnection.CreatedAt,
+		&i.IdentityProviderConnection.UpdatedAt,
+		&i.IdentityProviderConnection.DeletedAt,
+		&i.IdentityProviderConnection.Deleted,
+		&i.OktaIdentityProviderConnection.IdentityProviderConnectionID,
+		&i.OktaIdentityProviderConnection.IdentityProviderConnectionsProvider,
+		&i.OktaIdentityProviderConnection.OrganizationID,
+		&i.OktaIdentityProviderConnection.AttachmentScope,
+		&i.OktaIdentityProviderConnection.OrgUrl,
+		&i.OktaIdentityProviderConnection.IssuerUrl,
+		&i.OktaIdentityProviderConnection.IssuerUrlOverrideReason,
+		&i.OktaIdentityProviderConnection.OwnershipClaimed,
+		&i.OktaIdentityProviderConnection.RemoteSessionIssuerID,
+		&i.OktaIdentityProviderConnection.RemoteSessionClientID,
+		&i.OktaIdentityProviderConnection.DpopRequired,
+		&i.OktaIdentityProviderConnection.GrantedScopes,
+		&i.OktaIdentityProviderConnection.ObservedAdminRoles,
+		&i.OktaIdentityProviderConnection.ListingMode,
+		&i.OktaIdentityProviderConnection.AgentID,
+		&i.OktaIdentityProviderConnection.AgentAppID,
+		&i.OktaIdentityProviderConnection.CreatedAt,
+		&i.OktaIdentityProviderConnection.UpdatedAt,
+		&i.OktaIdentityProviderConnection.DeletedAt,
+		&i.OktaIdentityProviderConnection.Deleted,
+	)
+	return i, err
+}
+
+const getOktaIdentityProviderConnectionIncludingDeleted = `-- name: GetOktaIdentityProviderConnectionIncludingDeleted :one
+SELECT c.id, c.organization_id, c.provider, c.status, c.last_verified_at, c.last_error, c.created_at, c.updated_at, c.deleted_at, c.deleted, o.identity_provider_connection_id, o.identity_provider_connections_provider, o.organization_id, o.attachment_scope, o.org_url, o.issuer_url, o.issuer_url_override_reason, o.ownership_claimed, o.remote_session_issuer_id, o.remote_session_client_id, o.dpop_required, o.granted_scopes, o.observed_admin_roles, o.listing_mode, o.agent_id, o.agent_app_id, o.created_at, o.updated_at, o.deleted_at, o.deleted
+FROM identity_provider_connections AS c
+JOIN okta_identity_provider_connections AS o
+  ON o.identity_provider_connection_id = c.id
+ AND o.organization_id = c.organization_id
+WHERE c.id = $1
+  AND c.organization_id = $2
+  AND c.provider = 'okta'
+`
+
+type GetOktaIdentityProviderConnectionIncludingDeletedParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+type GetOktaIdentityProviderConnectionIncludingDeletedRow struct {
+	IdentityProviderConnection     IdentityProviderConnection
+	OktaIdentityProviderConnection OktaIdentityProviderConnection
+}
+
+// The revoke path reads through the tombstone so a repeat is a no-op rather
+// than a not-found.
+func (q *Queries) GetOktaIdentityProviderConnectionIncludingDeleted(ctx context.Context, arg GetOktaIdentityProviderConnectionIncludingDeletedParams) (GetOktaIdentityProviderConnectionIncludingDeletedRow, error) {
+	row := q.db.QueryRow(ctx, getOktaIdentityProviderConnectionIncludingDeleted, arg.ID, arg.OrganizationID)
+	var i GetOktaIdentityProviderConnectionIncludingDeletedRow
+	err := row.Scan(
+		&i.IdentityProviderConnection.ID,
+		&i.IdentityProviderConnection.OrganizationID,
+		&i.IdentityProviderConnection.Provider,
+		&i.IdentityProviderConnection.Status,
+		&i.IdentityProviderConnection.LastVerifiedAt,
+		&i.IdentityProviderConnection.LastError,
+		&i.IdentityProviderConnection.CreatedAt,
+		&i.IdentityProviderConnection.UpdatedAt,
+		&i.IdentityProviderConnection.DeletedAt,
+		&i.IdentityProviderConnection.Deleted,
+		&i.OktaIdentityProviderConnection.IdentityProviderConnectionID,
+		&i.OktaIdentityProviderConnection.IdentityProviderConnectionsProvider,
+		&i.OktaIdentityProviderConnection.OrganizationID,
+		&i.OktaIdentityProviderConnection.AttachmentScope,
+		&i.OktaIdentityProviderConnection.OrgUrl,
+		&i.OktaIdentityProviderConnection.IssuerUrl,
+		&i.OktaIdentityProviderConnection.IssuerUrlOverrideReason,
+		&i.OktaIdentityProviderConnection.OwnershipClaimed,
+		&i.OktaIdentityProviderConnection.RemoteSessionIssuerID,
+		&i.OktaIdentityProviderConnection.RemoteSessionClientID,
+		&i.OktaIdentityProviderConnection.DpopRequired,
+		&i.OktaIdentityProviderConnection.GrantedScopes,
+		&i.OktaIdentityProviderConnection.ObservedAdminRoles,
+		&i.OktaIdentityProviderConnection.ListingMode,
+		&i.OktaIdentityProviderConnection.AgentID,
+		&i.OktaIdentityProviderConnection.AgentAppID,
+		&i.OktaIdentityProviderConnection.CreatedAt,
+		&i.OktaIdentityProviderConnection.UpdatedAt,
+		&i.OktaIdentityProviderConnection.DeletedAt,
+		&i.OktaIdentityProviderConnection.Deleted,
 	)
 	return i, err
 }
@@ -333,6 +615,18 @@ func (q *Queries) GetPlatformGcpIamCredentialForProvisioning(ctx context.Context
 	return i, err
 }
 
+const lockIdentityProviderConnectionCreate = `-- name: LockIdentityProviderConnectionCreate :one
+SELECT pg_try_advisory_xact_lock(hashtextextended('identity-provider-create:' || $1::text, 0))
+`
+
+// Serialize the entire create saga, including recovery and external provisioning.
+func (q *Queries) LockIdentityProviderConnectionCreate(ctx context.Context, organizationID string) (bool, error) {
+	row := q.db.QueryRow(ctx, lockIdentityProviderConnectionCreate, organizationID)
+	var pg_try_advisory_xact_lock bool
+	err := row.Scan(&pg_try_advisory_xact_lock)
+	return pg_try_advisory_xact_lock, err
+}
+
 const lockIdentityProviderConnectionForProvisioning = `-- name: LockIdentityProviderConnectionForProvisioning :one
 SELECT id, organization_id, provider, status, last_verified_at, last_error, created_at, updated_at, deleted_at, deleted
 FROM identity_provider_connections
@@ -364,6 +658,102 @@ func (q *Queries) LockIdentityProviderConnectionForProvisioning(ctx context.Cont
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const lockOktaIdentityProviderConnection = `-- name: LockOktaIdentityProviderConnection :one
+SELECT c.id, c.organization_id, c.provider, c.status, c.last_verified_at, c.last_error, c.created_at, c.updated_at, c.deleted_at, c.deleted, o.identity_provider_connection_id, o.identity_provider_connections_provider, o.organization_id, o.attachment_scope, o.org_url, o.issuer_url, o.issuer_url_override_reason, o.ownership_claimed, o.remote_session_issuer_id, o.remote_session_client_id, o.dpop_required, o.granted_scopes, o.observed_admin_roles, o.listing_mode, o.agent_id, o.agent_app_id, o.created_at, o.updated_at, o.deleted_at, o.deleted
+FROM identity_provider_connections AS c
+JOIN okta_identity_provider_connections AS o
+  ON o.identity_provider_connection_id = c.id
+ AND o.organization_id = c.organization_id
+ AND o.deleted IS FALSE
+WHERE c.id = $1
+  AND c.organization_id = $2
+  AND c.provider = 'okta'
+  AND c.deleted IS FALSE
+FOR UPDATE OF c
+`
+
+type LockOktaIdentityProviderConnectionParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+type LockOktaIdentityProviderConnectionRow struct {
+	IdentityProviderConnection     IdentityProviderConnection
+	OktaIdentityProviderConnection OktaIdentityProviderConnection
+}
+
+// Serializes client id submission, verification, and revocation per connection.
+func (q *Queries) LockOktaIdentityProviderConnection(ctx context.Context, arg LockOktaIdentityProviderConnectionParams) (LockOktaIdentityProviderConnectionRow, error) {
+	row := q.db.QueryRow(ctx, lockOktaIdentityProviderConnection, arg.ID, arg.OrganizationID)
+	var i LockOktaIdentityProviderConnectionRow
+	err := row.Scan(
+		&i.IdentityProviderConnection.ID,
+		&i.IdentityProviderConnection.OrganizationID,
+		&i.IdentityProviderConnection.Provider,
+		&i.IdentityProviderConnection.Status,
+		&i.IdentityProviderConnection.LastVerifiedAt,
+		&i.IdentityProviderConnection.LastError,
+		&i.IdentityProviderConnection.CreatedAt,
+		&i.IdentityProviderConnection.UpdatedAt,
+		&i.IdentityProviderConnection.DeletedAt,
+		&i.IdentityProviderConnection.Deleted,
+		&i.OktaIdentityProviderConnection.IdentityProviderConnectionID,
+		&i.OktaIdentityProviderConnection.IdentityProviderConnectionsProvider,
+		&i.OktaIdentityProviderConnection.OrganizationID,
+		&i.OktaIdentityProviderConnection.AttachmentScope,
+		&i.OktaIdentityProviderConnection.OrgUrl,
+		&i.OktaIdentityProviderConnection.IssuerUrl,
+		&i.OktaIdentityProviderConnection.IssuerUrlOverrideReason,
+		&i.OktaIdentityProviderConnection.OwnershipClaimed,
+		&i.OktaIdentityProviderConnection.RemoteSessionIssuerID,
+		&i.OktaIdentityProviderConnection.RemoteSessionClientID,
+		&i.OktaIdentityProviderConnection.DpopRequired,
+		&i.OktaIdentityProviderConnection.GrantedScopes,
+		&i.OktaIdentityProviderConnection.ObservedAdminRoles,
+		&i.OktaIdentityProviderConnection.ListingMode,
+		&i.OktaIdentityProviderConnection.AgentID,
+		&i.OktaIdentityProviderConnection.AgentAppID,
+		&i.OktaIdentityProviderConnection.CreatedAt,
+		&i.OktaIdentityProviderConnection.UpdatedAt,
+		&i.OktaIdentityProviderConnection.DeletedAt,
+		&i.OktaIdentityProviderConnection.Deleted,
+	)
+	return i, err
+}
+
+const managedClientIDInUse = `-- name: ManagedClientIDInUse :one
+SELECT EXISTS (
+  SELECT 1
+  FROM remote_session_clients
+  WHERE remote_session_issuer_id = $1
+    AND organization_id = $2
+    AND client_id = $3
+    AND id <> $4
+    AND deleted IS FALSE
+)
+`
+
+type ManagedClientIDInUseParams struct {
+	RemoteSessionIssuerID uuid.UUID
+	OrganizationID        pgtype.Text
+	ClientID              string
+	ExcludeID             uuid.UUID
+}
+
+// Two live registrations of one client id against one issuer would share a
+// credential; refused in the write path since no index enforces it.
+func (q *Queries) ManagedClientIDInUse(ctx context.Context, arg ManagedClientIDInUseParams) (bool, error) {
+	row := q.db.QueryRow(ctx, managedClientIDInUse,
+		arg.RemoteSessionIssuerID,
+		arg.OrganizationID,
+		arg.ClientID,
+		arg.ExcludeID,
+	)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const managedKeyResourceExists = `-- name: ManagedKeyResourceExists :one
@@ -420,6 +810,90 @@ func (q *Queries) ObserveRotationPublication(ctx context.Context, arg ObserveRot
 	return updated_at, err
 }
 
+const recordIdentityProviderConnectionVerificationFailure = `-- name: RecordIdentityProviderConnectionVerificationFailure :one
+UPDATE identity_provider_connections
+SET status = $1,
+    last_error = $2,
+    updated_at = clock_timestamp()
+WHERE id = $3
+  AND organization_id = $4
+  AND updated_at = $5
+  AND deleted IS FALSE
+RETURNING id, organization_id, provider, status, last_verified_at, last_error, created_at, updated_at, deleted_at, deleted
+`
+
+type RecordIdentityProviderConnectionVerificationFailureParams struct {
+	Status            string
+	LastError         pgtype.Text
+	ID                uuid.UUID
+	OrganizationID    string
+	ExpectedUpdatedAt pgtype.Timestamptz
+}
+
+// A failed verification is written outside the rolled-back attempt; the
+// compare-and-swap on updated_at keeps it from clobbering a concurrent run
+// that committed in between.
+func (q *Queries) RecordIdentityProviderConnectionVerificationFailure(ctx context.Context, arg RecordIdentityProviderConnectionVerificationFailureParams) (IdentityProviderConnection, error) {
+	row := q.db.QueryRow(ctx, recordIdentityProviderConnectionVerificationFailure,
+		arg.Status,
+		arg.LastError,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ExpectedUpdatedAt,
+	)
+	var i IdentityProviderConnection
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Provider,
+		&i.Status,
+		&i.LastVerifiedAt,
+		&i.LastError,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const revokeIdentityProviderConnection = `-- name: RevokeIdentityProviderConnection :one
+UPDATE identity_provider_connections
+SET status = 'revoked',
+    last_error = NULL,
+    deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE id = $1
+  AND organization_id = $2
+  AND deleted IS FALSE
+RETURNING id, organization_id, provider, status, last_verified_at, last_error, created_at, updated_at, deleted_at, deleted
+`
+
+type RevokeIdentityProviderConnectionParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+// Revocation tombstones the connection so the organization can create a new
+// one; the managed client and set stay live serving an empty JWKS.
+func (q *Queries) RevokeIdentityProviderConnection(ctx context.Context, arg RevokeIdentityProviderConnectionParams) (IdentityProviderConnection, error) {
+	row := q.db.QueryRow(ctx, revokeIdentityProviderConnection, arg.ID, arg.OrganizationID)
+	var i IdentityProviderConnection
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Provider,
+		&i.Status,
+		&i.LastVerifiedAt,
+		&i.LastError,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const rotationPublicationReady = `-- name: RotationPublicationReady :one
 SELECT updated_at <= clock_timestamp() - make_interval(secs => $1::integer)
 FROM json_web_keys
@@ -438,6 +912,72 @@ func (q *Queries) RotationPublicationReady(ctx context.Context, arg RotationPubl
 	var column_1 bool
 	err := row.Scan(&column_1)
 	return column_1, err
+}
+
+const setManagedClientID = `-- name: SetManagedClientID :one
+UPDATE remote_session_clients
+SET client_id = $1,
+    upstream_rejected_at = NULL,
+    updated_at = clock_timestamp()
+WHERE id = $2
+  AND organization_id = $3
+  AND project_id IS NULL
+  AND identity_provider_connection_id = $4
+  AND client_id = $5
+  AND deleted IS FALSE
+RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, created_at, updated_at, deleted_at, deleted
+`
+
+type SetManagedClientIDParams struct {
+	ClientID                     string
+	ID                           uuid.UUID
+	OrganizationID               pgtype.Text
+	IdentityProviderConnectionID uuid.NullUUID
+	PlaceholderClientID          string
+}
+
+// Only the provisioner writes a managed client's client_id, and only while the
+// provisioning placeholder is still in place.
+func (q *Queries) SetManagedClientID(ctx context.Context, arg SetManagedClientIDParams) (RemoteSessionClient, error) {
+	row := q.db.QueryRow(ctx, setManagedClientID,
+		arg.ClientID,
+		arg.ID,
+		arg.OrganizationID,
+		arg.IdentityProviderConnectionID,
+		arg.PlaceholderClientID,
+	)
+	var i RemoteSessionClient
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.AttachmentScope,
+		&i.RemoteSessionIssuerID,
+		&i.ClientID,
+		&i.ClientSecretEncrypted,
+		&i.ClientIDIssuedAt,
+		&i.ClientSecretExpiresAt,
+		&i.TokenEndpointAuthMethod,
+		&i.JsonWebKeySetID,
+		&i.Scope,
+		&i.GrantTypes,
+		&i.Audience,
+		&i.TokenEndpointAuthAudienceFormat,
+		&i.ClientIDMetadataUri,
+		&i.LegacyCallbackUrl,
+		&i.ResourceIdentifier,
+		&i.ResourceName,
+		&i.ResourceDocumentation,
+		&i.ResourcePolicyUri,
+		&i.ResourceTosUri,
+		&i.UpstreamRejectedAt,
+		&i.IdentityProviderConnectionID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const softDeleteIdentityProviderConnection = `-- name: SoftDeleteIdentityProviderConnection :one
@@ -465,6 +1005,198 @@ func (q *Queries) SoftDeleteIdentityProviderConnection(ctx context.Context, arg 
 		&i.Status,
 		&i.LastVerifiedAt,
 		&i.LastError,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const softDeleteOktaIdentityProviderConnection = `-- name: SoftDeleteOktaIdentityProviderConnection :one
+UPDATE okta_identity_provider_connections
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE identity_provider_connection_id = $1
+  AND organization_id = $2
+  AND deleted IS FALSE
+RETURNING identity_provider_connection_id, identity_provider_connections_provider, organization_id, attachment_scope, org_url, issuer_url, issuer_url_override_reason, ownership_claimed, remote_session_issuer_id, remote_session_client_id, dpop_required, granted_scopes, observed_admin_roles, listing_mode, agent_id, agent_app_id, created_at, updated_at, deleted_at, deleted
+`
+
+type SoftDeleteOktaIdentityProviderConnectionParams struct {
+	IdentityProviderConnectionID uuid.UUID
+	OrganizationID               string
+}
+
+func (q *Queries) SoftDeleteOktaIdentityProviderConnection(ctx context.Context, arg SoftDeleteOktaIdentityProviderConnectionParams) (OktaIdentityProviderConnection, error) {
+	row := q.db.QueryRow(ctx, softDeleteOktaIdentityProviderConnection, arg.IdentityProviderConnectionID, arg.OrganizationID)
+	var i OktaIdentityProviderConnection
+	err := row.Scan(
+		&i.IdentityProviderConnectionID,
+		&i.IdentityProviderConnectionsProvider,
+		&i.OrganizationID,
+		&i.AttachmentScope,
+		&i.OrgUrl,
+		&i.IssuerUrl,
+		&i.IssuerUrlOverrideReason,
+		&i.OwnershipClaimed,
+		&i.RemoteSessionIssuerID,
+		&i.RemoteSessionClientID,
+		&i.DpopRequired,
+		&i.GrantedScopes,
+		&i.ObservedAdminRoles,
+		&i.ListingMode,
+		&i.AgentID,
+		&i.AgentAppID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const updateIdentityProviderConnectionVerification = `-- name: UpdateIdentityProviderConnectionVerification :one
+UPDATE identity_provider_connections
+SET status = $1,
+    last_verified_at = $2,
+    last_error = $3,
+    updated_at = clock_timestamp()
+WHERE id = $4
+  AND organization_id = $5
+  AND deleted IS FALSE
+RETURNING id, organization_id, provider, status, last_verified_at, last_error, created_at, updated_at, deleted_at, deleted
+`
+
+type UpdateIdentityProviderConnectionVerificationParams struct {
+	Status         string
+	LastVerifiedAt pgtype.Timestamptz
+	LastError      pgtype.Text
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) UpdateIdentityProviderConnectionVerification(ctx context.Context, arg UpdateIdentityProviderConnectionVerificationParams) (IdentityProviderConnection, error) {
+	row := q.db.QueryRow(ctx, updateIdentityProviderConnectionVerification,
+		arg.Status,
+		arg.LastVerifiedAt,
+		arg.LastError,
+		arg.ID,
+		arg.OrganizationID,
+	)
+	var i IdentityProviderConnection
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Provider,
+		&i.Status,
+		&i.LastVerifiedAt,
+		&i.LastError,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const updateOktaIdentityProviderConnectionAgent = `-- name: UpdateOktaIdentityProviderConnectionAgent :one
+UPDATE okta_identity_provider_connections
+SET agent_id = $1,
+    agent_app_id = $2,
+    updated_at = clock_timestamp()
+WHERE identity_provider_connection_id = $3
+  AND organization_id = $4
+  AND deleted IS FALSE
+RETURNING identity_provider_connection_id, identity_provider_connections_provider, organization_id, attachment_scope, org_url, issuer_url, issuer_url_override_reason, ownership_claimed, remote_session_issuer_id, remote_session_client_id, dpop_required, granted_scopes, observed_admin_roles, listing_mode, agent_id, agent_app_id, created_at, updated_at, deleted_at, deleted
+`
+
+type UpdateOktaIdentityProviderConnectionAgentParams struct {
+	AgentID                      pgtype.Text
+	AgentAppID                   pgtype.Text
+	IdentityProviderConnectionID uuid.UUID
+	OrganizationID               string
+}
+
+func (q *Queries) UpdateOktaIdentityProviderConnectionAgent(ctx context.Context, arg UpdateOktaIdentityProviderConnectionAgentParams) (OktaIdentityProviderConnection, error) {
+	row := q.db.QueryRow(ctx, updateOktaIdentityProviderConnectionAgent,
+		arg.AgentID,
+		arg.AgentAppID,
+		arg.IdentityProviderConnectionID,
+		arg.OrganizationID,
+	)
+	var i OktaIdentityProviderConnection
+	err := row.Scan(
+		&i.IdentityProviderConnectionID,
+		&i.IdentityProviderConnectionsProvider,
+		&i.OrganizationID,
+		&i.AttachmentScope,
+		&i.OrgUrl,
+		&i.IssuerUrl,
+		&i.IssuerUrlOverrideReason,
+		&i.OwnershipClaimed,
+		&i.RemoteSessionIssuerID,
+		&i.RemoteSessionClientID,
+		&i.DpopRequired,
+		&i.GrantedScopes,
+		&i.ObservedAdminRoles,
+		&i.ListingMode,
+		&i.AgentID,
+		&i.AgentAppID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const updateOktaIdentityProviderConnectionVerification = `-- name: UpdateOktaIdentityProviderConnectionVerification :one
+UPDATE okta_identity_provider_connections
+SET ownership_claimed = ownership_claimed OR $1::boolean,
+    dpop_required = $2,
+    granted_scopes = $3,
+    updated_at = clock_timestamp()
+WHERE identity_provider_connection_id = $4
+  AND organization_id = $5
+  AND deleted IS FALSE
+RETURNING identity_provider_connection_id, identity_provider_connections_provider, organization_id, attachment_scope, org_url, issuer_url, issuer_url_override_reason, ownership_claimed, remote_session_issuer_id, remote_session_client_id, dpop_required, granted_scopes, observed_admin_roles, listing_mode, agent_id, agent_app_id, created_at, updated_at, deleted_at, deleted
+`
+
+type UpdateOktaIdentityProviderConnectionVerificationParams struct {
+	OwnershipClaimed             bool
+	DpopRequired                 bool
+	GrantedScopes                []string
+	IdentityProviderConnectionID uuid.UUID
+	OrganizationID               string
+}
+
+func (q *Queries) UpdateOktaIdentityProviderConnectionVerification(ctx context.Context, arg UpdateOktaIdentityProviderConnectionVerificationParams) (OktaIdentityProviderConnection, error) {
+	row := q.db.QueryRow(ctx, updateOktaIdentityProviderConnectionVerification,
+		arg.OwnershipClaimed,
+		arg.DpopRequired,
+		arg.GrantedScopes,
+		arg.IdentityProviderConnectionID,
+		arg.OrganizationID,
+	)
+	var i OktaIdentityProviderConnection
+	err := row.Scan(
+		&i.IdentityProviderConnectionID,
+		&i.IdentityProviderConnectionsProvider,
+		&i.OrganizationID,
+		&i.AttachmentScope,
+		&i.OrgUrl,
+		&i.IssuerUrl,
+		&i.IssuerUrlOverrideReason,
+		&i.OwnershipClaimed,
+		&i.RemoteSessionIssuerID,
+		&i.RemoteSessionClientID,
+		&i.DpopRequired,
+		&i.GrantedScopes,
+		&i.ObservedAdminRoles,
+		&i.ListingMode,
+		&i.AgentID,
+		&i.AgentAppID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
