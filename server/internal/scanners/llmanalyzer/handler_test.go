@@ -144,7 +144,7 @@ func TestHandle_PublishesOneFindingPerFlaggedRisk(t *testing.T) {
 	require.Len(t, calls, 1)
 	require.Equal(t, "org-1", calls[0].Info.OrgID)
 	require.Equal(t, "org-slug", calls[0].Info.OrgSlug)
-	require.Equal(t, "async", calls[0].Info.Lane)
+	require.Equal(t, llmanalyzer.ScanModeAsync, calls[0].Info.ScanMode)
 }
 
 func TestHandle_FiltersFindingsToRequestSources(t *testing.T) {

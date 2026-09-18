@@ -23,8 +23,9 @@ import (
 // environments.
 const Provider = "baseten"
 
-// asyncLane is the Request.Lane value of the batch flag lane.
-const asyncLane = "async"
+// asyncExecutionPath is the metering execution path assumed for batch
+// requests that carry none.
+const asyncExecutionPath = "async"
 
 // Handler consumes LLMAnalysis requests from the batch flag lane, evaluates
 // each message with the fine-tuned risk model and publishes one Finding per
@@ -74,7 +75,7 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.LLMAnalysis, _ gcp.Messa
 		attr.MessageID(anchorID),
 		attr.AuthOrganizationID(m.GetOrganizationId()),
 		attr.OrganizationSlug(m.GetOrganizationSlug()),
-		attr.RiskLane(asyncLane),
+		attr.RiskScanMode(ScanModeAsync),
 		attr.RiskScanEngine(scanners.AsyncScanEngineReal),
 	)
 	// message.id carries whichever anchor resolved, so a part-anchored scan also
@@ -97,7 +98,7 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.LLMAnalysis, _ gcp.Messa
 		OrgID:       m.GetOrganizationId(),
 		OrgSlug:     m.GetOrganizationSlug(),
 		ProjectID:   m.GetProjectId(),
-		Lane:        asyncLane,
+		ScanMode:    ScanModeAsync,
 		Message:     msg,
 		ToolCallIDs: toolCallIDs,
 	})
@@ -131,7 +132,7 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.LLMAnalysis, _ gcp.Messa
 	}
 
 	if result.Completed {
-		provenance, provenanceErr := scanners.ParseRiskProvenance(m, m.GetMessageType(), asyncLane)
+		provenance, provenanceErr := scanners.ParseRiskProvenance(m, m.GetMessageType(), asyncExecutionPath)
 		if provenanceErr != nil {
 			h.logger.WarnContext(ctx, "skipping llm analyzer usage with invalid attribution", attr.SlogError(provenanceErr))
 		} else {
