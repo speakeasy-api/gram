@@ -2603,9 +2603,6 @@ CREATE TABLE IF NOT EXISTS okta_identity_provider_connections (
   -- exchange-side client id comes exclusively from remote_session_clients.client_id.
   agent_id TEXT,
   agent_app_id TEXT,
-  -- Applications snapshot cadence; the coordinator picks verified connections
-  -- whose applications_synced_at is older than the interval.
-  applications_sync_interval_seconds integer NOT NULL DEFAULT 21600,
   -- Watermark of the last run (its start time) and the last manual request;
   -- a request newer than the watermark keeps the connection due even when a
   -- run was in flight when it arrived.
@@ -2616,7 +2613,6 @@ CREATE TABLE IF NOT EXISTS okta_identity_provider_connections (
   deleted_at timestamptz,
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
   CONSTRAINT okta_identity_provider_connections_pkey PRIMARY KEY (identity_provider_connection_id),
-  CONSTRAINT okta_identity_provider_connections_sync_interval_check CHECK (applications_sync_interval_seconds >= 300),
   CONSTRAINT okta_identity_provider_connections_provider_check CHECK (identity_provider_connections_provider = 'okta'),
   CONSTRAINT okta_identity_provider_connections_listing_mode_check CHECK (listing_mode IN ('custom_app', 'oin')),
   CONSTRAINT okta_identity_provider_connections_override_reason_check CHECK (
