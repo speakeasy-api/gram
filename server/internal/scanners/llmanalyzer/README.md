@@ -99,18 +99,8 @@ scanners.PublishFindings ─► Finding topic ─► FindingCHWriter ─► Clic
   only when the findings publish fails. A batch whose LLM publish fails fails
   the activity, because nothing else scans those sources for the org.
 - `AnalyzeBatch` runs per policy, so N policies produce N requests per
-  message. The verdict cache below collapses them to about one model call.
-
-### Verdict cache
-
-`RedisVerdictCache` (wired in `streams.go`) stores the raw completion under
-`risk:llm:verdict:<sha256(model, system prompt, user prompt)>` with a 10 minute
-TTL (`DefaultVerdictCacheTTL`), plain `SET … EX`. Only parsed verdicts are
-cached; failures always retry the model. Cache read errors and unparsable
-entries are logged, counted as `error` and treated as misses, so the cache can
-only save a call, never fail an analysis. A hit reports zero tokens and zero
-attempts on the `Analysis`, but `Result.STokens` still counts the rendered
-prompt, so metering measures content scanned rather than model spend.
+  message. Collapsing them with a verdict cache is a planned follow-up
+  (plan §7), not part of v0.
 
 ## Prompt contract
 
@@ -242,7 +232,7 @@ Read by `gram streams` only (`riskLLMFlags` in `server/cmd/gram/flags_risk.go`):
 | `GRAM_RISK_LLM_API_KEY` | `--risk-llm-api-key` | Bearer token. Required when the URL is set.                                                                                                                                                           |
 | `GRAM_RISK_LLM_MODEL`   | `--risk-llm-model`   | Served model name; must equal the deployment's `--served-model-name`. Default `risk-judge-4b`.                                                                                                        |
 
-Timeout (15 s), max tokens (1024), retry policy and cache TTL are code
+Timeout (15 s), max tokens (1024) and retry policy are code
 constants. With an empty URL, streams logs
 `LLM analyzer disabled: GRAM_RISK_LLM_URL empty` once at startup, the sync
 consumer answers every request with `DEAD_LETTER` (flagged orgs are denied
@@ -274,10 +264,9 @@ the dispatcher's `lane`, which is scanner + policy) and
 | ----------------------------------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
 | `risk.llm.requests`                       | counter   | org, slug, mode, model, `gram.outcome` ∈ `success` \| `failure` \| `timeout` \| `rate_limited`                                                                   | streams        |
 | `risk.llm.duration` (s)                   | histogram | same as requests; buckets 0.25, 0.5, 1, 2, 3, 5, 8, 10, 12, 15, 20                                                                                               | streams        |
-| `risk.llm.tokens`                         | counter   | org, slug, mode, model, `gram.risk.llm.token_kind` ∈ `input` \| `output` (successful calls only, not cache hits)                                                 | streams        |
+| `risk.llm.tokens`                         | counter   | org, slug, mode, model, `gram.risk.llm.token_kind` ∈ `input` \| `output` (successful calls only)                                                                 | streams        |
 | `risk.llm.retries`                        | counter   | org, slug, mode, model (recorded only when > 0)                                                                                                                  | streams        |
 | `risk.llm.parse_failures`                 | counter   | org, slug, mode, model                                                                                                                                           | streams        |
-| `risk.llm.cache`                          | counter   | org, slug, mode, `gram.risk.llm.cache_result` ∈ `hit` \| `miss` \| `error`                                                                                       | streams        |
 | `risk.llm.policy_evaluations`             | counter   | org, `gram.risk.policy_id`, mode, `gram.outcome` ∈ `clean` \| `matched` \| `dead_letter` (sync) or `published` (async)                                           | server, worker |
 | `risk.llm.policy_duration` (s)            | histogram | same as policy_evaluations, sync only; includes the wait for the reply                                                                                           | server         |
 | `risk.enforcement.llm.requests`           | counter   | mode=`sync`, `gram.outcome` ∈ `ok` \| `error` \| `dead_letter` (reply status)                                                                                    | streams        |
@@ -296,7 +285,7 @@ rendered user prompt per completed analysis on both lanes, with
 Spans:
 
 - `risk.llm.analyze` (`Analyzer.Analyze`): org, slug, `gram.project.id`,
-  mode, `gram.risk.llm.truncated`, `gram.risk.llm.cached`, model,
+  mode, `gram.risk.llm.truncated`, model,
   `gram.risk.llm.flagged_count`; on failure `RecordError`, `Error` status and
   `gram.risk.llm.dead_letter_reason`.
 - `risk.llm.complete` (`Client.Complete`): org, slug, mode, model,
