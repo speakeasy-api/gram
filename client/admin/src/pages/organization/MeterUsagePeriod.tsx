@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { inclusiveEnd, usageRangeError } from "./billingUsageSearch";
-import { meterDateLabel, type AdminMeterUsage } from "./meterUsage";
+import { meterDateLabel, type AdminMeterUsage } from "./meterUsageUtils";
 
 type Window = AdminMeterUsage["window"];
 
