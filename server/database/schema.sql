@@ -9021,9 +9021,11 @@ CREATE TABLE IF NOT EXISTS okta_resource_connections (
   CONSTRAINT okta_resource_connections_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
   CONSTRAINT okta_resource_connections_connection_tenant_fkey FOREIGN KEY (organization_id, identity_provider_connection_id) REFERENCES okta_identity_provider_connections (organization_id, identity_provider_connection_id) ON DELETE CASCADE,
   CONSTRAINT okta_resource_connections_remote_session_issuer_id_fkey FOREIGN KEY (remote_session_issuer_id) REFERENCES remote_session_issuers (id) ON DELETE CASCADE,
-  -- The app instance must be one the snapshot holds for this connection; a
-  -- row outlives the instance with the reference cleared.
-  CONSTRAINT okta_resource_connections_okta_application_fkey FOREIGN KEY (organization_id, identity_provider_connection_id, okta_application_id) REFERENCES okta_applications (organization_id, identity_provider_connection_id, okta_app_id) ON DELETE SET NULL (okta_application_id)
+  -- The app instance must be one the snapshot holds for this connection.
+  -- Snapshot rows are only hard-deleted when the connection is revoked, which
+  -- deletes these rows too; Atlas cannot express a single-column SET NULL on
+  -- a composite key and the plain form would null the tenant columns.
+  CONSTRAINT okta_resource_connections_okta_application_fkey FOREIGN KEY (organization_id, identity_provider_connection_id, okta_application_id) REFERENCES okta_applications (organization_id, identity_provider_connection_id, okta_app_id) ON DELETE CASCADE
 );
 
 -- Serves the cascade from remote_session_issuers; the connection cascade is
