@@ -410,24 +410,25 @@ type BusinessMemory struct {
 }
 
 type Chat struct {
-	ID                 uuid.UUID
-	ProjectID          uuid.UUID
-	OrganizationID     string
-	UserID             pgtype.Text
-	ExternalUserID     pgtype.Text
-	ExternalChatID     pgtype.Text
-	Title              pgtype.Text
-	TitleManuallySet   bool
-	PinnedAt           pgtype.Timestamptz
-	Summary            pgtype.Text
-	SummaryGeneratedAt pgtype.Timestamptz
-	UserAccountID      uuid.NullUUID
-	LitellmProxied     bool
-	Cwd                pgtype.Text
-	CreatedAt          pgtype.Timestamptz
-	UpdatedAt          pgtype.Timestamptz
-	DeletedAt          pgtype.Timestamptz
-	Deleted            bool
+	ID                          uuid.UUID
+	ProjectID                   uuid.UUID
+	OrganizationID              string
+	UserID                      pgtype.Text
+	ExternalUserID              pgtype.Text
+	ExternalChatID              pgtype.Text
+	Title                       pgtype.Text
+	TitleManuallySet            bool
+	PinnedAt                    pgtype.Timestamptz
+	Summary                     pgtype.Text
+	SummaryGeneratedAt          pgtype.Timestamptz
+	InferenceAcceptedCheckpoint []byte
+	UserAccountID               uuid.NullUUID
+	LitellmProxied              bool
+	Cwd                         pgtype.Text
+	CreatedAt                   pgtype.Timestamptz
+	UpdatedAt                   pgtype.Timestamptz
+	DeletedAt                   pgtype.Timestamptz
+	Deleted                     bool
 }
 
 type ChatAnalysisEvaluation struct {
