@@ -22,7 +22,7 @@
     "@tanstack/react-form": "^1.33.5",
     "@tanstack/react-hotkeys": "^0.10.0",
     "@tanstack/react-query": "catalog:",
-    "@tanstack/react-router": "1.170.33",
+    "@tanstack/react-router": "1.170.35",
     "@tanstack/react-table": "9.2.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -39,7 +39,7 @@
     "zod": "^4"
   },
   "devDependencies": {
-    "@tanstack/router-plugin": "1.168.36",
+    "@tanstack/router-plugin": "1.168.37",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/react": "^16.3.3",
     "@types/node": "^24.13.3",
