@@ -1,4 +1,5 @@
 import { Page } from "@/components/page-layout";
+import { PageEyebrow } from "@/components/page-eyebrow";
 import { ProductTierBadge } from "@/components/product-tier-badge";
 import { productTierColors } from "@/components/product-tier-utils";
 import { Card, Cards, CardSkeleton } from "@/components/ui/Card";
@@ -33,6 +34,10 @@ import { PaygPlanSection } from "@/components/billing/payg-plan-section";
 import { PaygPriceList } from "@/components/billing/payg-price-list";
 import { TopUpCTA, UsageProgress } from "@/components/billing/usage-controls";
 import { MeterUsageSection } from "@/components/billing/meter-usage-section";
+import { usePaygCheckoutAccess } from "@/components/billing/payg-checkout-access";
+import { paygPlanState } from "@/components/billing/payg-plan-state";
+import { useStripeSubscription } from "@/components/billing/use-stripe-subscription";
+import { isNotFoundError } from "@/lib/route-errors";
 
 export default function Billing(): JSX.Element {
   return (
@@ -49,6 +54,7 @@ export default function Billing(): JSX.Element {
       </Page.Banner>
       <Page.Body>
         <RequireScope scope={["org:read", "org:admin"]} level="page">
+          <PageEyebrow className="mt-3 -mb-4" />
           <BillingInner />
         </RequireScope>
       </Page.Body>
@@ -58,39 +64,68 @@ export default function Billing(): JSX.Element {
 
 function BillingInner() {
   const productTier = useProductTier();
+  const { eligible: canStartCheckout, trialLifecycle } = usePaygCheckoutAccess(
+    productTier === "payg" ? "unsubscribed-payg" : "active-trial",
+  );
+  const activeTrial = trialLifecycle === "active";
+  const subscription = useStripeSubscription({
+    enabled: productTier === "payg" && !activeTrial,
+  });
+
+  let paymentRequired = activeTrial && canStartCheckout;
+  if (productTier === "payg" && !activeTrial) {
+    // Confirmed absence outranks stale data. An outage alone is not evidence
+    // that payment is required, but it must not hide a known payment failure.
+    if (isNotFoundError(subscription.error)) {
+      paymentRequired = canStartCheckout;
+    } else if (subscription.data) {
+      paymentRequired =
+        subscription.data.paymentFailed === true ||
+        paygPlanState(subscription.data).kind === "inactive";
+    }
+  }
+
+  const paymentGroup = (activeTrial || productTier === "payg") && (
+    <div
+      key="payment"
+      className={cn(
+        "grid min-w-0 grid-cols-1 gap-x-8",
+        activeTrial && canStartCheckout && "@3xl/main:grid-cols-2",
+      )}
+    >
+      <PaygPlanSection />
+      <PaygPriceList />
+    </div>
+  );
+  const usage = <BillingUsage key="usage" productTier={productTier} />;
+
+  return (
+    <>
+      {paymentRequired ? [paymentGroup, usage] : [usage, paymentGroup]}
+      {/* Enterprise contracts handle notifications through their contract. */}
+      {productTier === "payg" && <BillingEmailSection />}
+    </>
+  );
+}
+
+function BillingUsage({ productTier }: { productTier: ProductTier }) {
   if (productTier === "enterprise" || productTier === "payg") {
     return (
       <>
         <MeterUsageSection />
-        {/* Renders for pay as you go, and for enterprise only during an
-            active trial — the section owns that rule. */}
+        {/* Enterprise inference caps render only during an active trial. */}
         <InferenceCapsSection />
-        {/* Renders only during an active trial — the section owns that rule. */}
-        <PaygPriceList />
-        {/* The checkout CTA during the trial, the subscription controls once
-            it has converted — the section owns that split. */}
-        <PaygPlanSection />
-        {/* Only pay-as-you-go organizations get product billing notifications;
-            enterprise contracts are billed through their contract terms. */}
-        {productTier === "payg" && <BillingEmailSection />}
       </>
     );
   }
 
   return (
     <>
-      {/* The remaining self-serve tiers still meter against Polar period
-          usage, which says nothing about a Stripe invoice. */}
+      {/* Legacy self-serve tiers still meter against Polar period usage. */}
       <UsageSection />
-      {/* The product tiers / self serve billing section is DEPRECATED, and thus only shown to users already on a paid, non-enterprise tier */}
       {(productTier === "base_PAID" || productTier === "__deprecated__pro") && (
         <UsageTiers />
       )}
-      {/* Trials run on the self-serve tiers too: a trialing admin gets the
-          same rates and payment section the shared path shows, and both
-          render nothing outside a trial here. */}
-      <PaygPriceList />
-      <PaygPlanSection />
     </>
   );
 }
@@ -140,7 +175,7 @@ const UsageSection = () => {
 
   return (
     <Page.Section>
-      <Page.Section.Title>Usage</Page.Section.Title>
+      <Page.Section.Title area="">Usage</Page.Section.Title>
       <Page.Section.Description>
         A summary of your organization's usage this period. Please visit the
         billing portal to see complete details or manage your account.

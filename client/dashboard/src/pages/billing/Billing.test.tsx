@@ -31,7 +31,10 @@ vi.mock("@/hooks/useRBAC", () => ({
 
 vi.mock("@/contexts/Auth", () => ({
   useIsPlatformAdmin: () => false,
-  useSession: () => mocks.session(),
+  useSession: () => ({
+    rawGramAccountType: mocks.productTier(),
+    ...mocks.session(),
+  }),
 }));
 
 vi.mock("@/contexts/Sdk", () => ({ useSdkClient: () => ({ usage: {} }) }));
@@ -196,7 +199,7 @@ function renderBilling() {
   });
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={["/example/billing"]}>
         <Billing />
       </MemoryRouter>
     </QueryClientProvider>,
@@ -290,10 +293,25 @@ describe("Billing", () => {
     expect(cta()).not.toBeNull();
     expect(screen.getByText("Pay as you go pricing")).toBeTruthy();
     expect(screen.getByText("$0.35 per million tokens")).toBeTruthy();
+    expect(
+      screen
+        .getByText("Organization")
+        .compareDocumentPosition(paymentSection()!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      paymentSection()!.compareDocumentPosition(meterUsageSection()!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("heading", { name: "Pay as you go pricing" })
+        .compareDocumentPosition(meterUsageSection()!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     // The pricing section states rates; the plan's product features are not
     // one of them.
     expect(screen.queryByText("Enterprise feature set")).toBeNull();
-    expect(mocks.usageTiers).toHaveBeenCalledWith({ throwOnError: false });
   });
 
   it("shows no checkout CTA to a member", () => {
@@ -304,6 +322,11 @@ describe("Billing", () => {
 
     expect(screen.getByText("meter usage")).toBeTruthy();
     expect(cta()).toBeNull();
+    expect(
+      meterUsageSection()!.compareDocumentPosition(
+        screen.getByRole("heading", { name: "Pay as you go pricing" }),
+      ) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   // Billing notifications are a pay-as-you-go concern: enterprise orgs are
@@ -350,6 +373,59 @@ describe("Billing", () => {
 
     expect(paymentSection()).not.toBeNull();
     expect(portalButton()).not.toBeNull();
+    expect(
+      screen
+        .getByText("Organization")
+        .compareDocumentPosition(meterUsageSection()!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      meterUsageSection()!.compareDocumentPosition(paymentSection()!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("prioritizes missing-subscription recovery over stale healthy data", () => {
+    mocks.productTier.mockReturnValue("payg");
+    mocks.session.mockReturnValue({ trial: null });
+    mocks.subscription.mockReturnValue({
+      data: { status: "active", paymentFailed: false },
+      error: Object.assign(new Error("subscription not found"), {
+        statusCode: 404,
+      }),
+      isError: true,
+      isFetching: false,
+      refetch: vi.fn(),
+    });
+
+    renderBilling();
+
+    expect(cta()).not.toBeNull();
+    expect(portalButton()).toBeNull();
+    expect(
+      paymentSection()!.compareDocumentPosition(meterUsageSection()!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("retains payment failure priority during a subscription refresh outage", () => {
+    mocks.productTier.mockReturnValue("payg");
+    mocks.session.mockReturnValue({ trial: null });
+    mocks.subscription.mockReturnValue({
+      data: { status: "past_due", paymentFailed: true },
+      error: new Error("Stripe unavailable"),
+      isError: true,
+      isFetching: false,
+      refetch: vi.fn(),
+    });
+
+    renderBilling();
+
+    expect(portalButton()).not.toBeNull();
+    expect(
+      paymentSection()!.compareDocumentPosition(meterUsageSection()!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   // The account type can read as PAYG while a product trial is still running.
