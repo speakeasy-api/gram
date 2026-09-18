@@ -1,6 +1,10 @@
 package analytics
 
-import "github.com/Masterminds/squirrel"
+import (
+	"strings"
+
+	"github.com/Masterminds/squirrel"
+)
 
 // sq is the squirrel builder pre-configured for ClickHouse (? placeholders).
 var sq = squirrel.StatementBuilder.PlaceholderFormat(squirrel.Question)
@@ -25,10 +29,23 @@ type SourceQuery func(scope Scope) squirrel.SelectBuilder
 // (semantic-convention and Codex producers name it so), its result, and the
 // decision that admitted or blocked it. A blocked call is a decision alone,
 // and it is still a call, so every predicate over tool calls admits all
-// three. The two spellings below must stay in step.
+// three.
 var toolCallEventTypes = []string{"tool_call", "tool_call_result", "tool_decision"}
 
-const toolCallEventTypesSQL = "event_type IN ('tool_call', 'tool_call_result', 'tool_decision')"
+// toolCallEventTypesSQL is the same set as a SQL predicate, for the one place
+// squirrel cannot bind it: a condition inside an aggregate in a select list.
+// Derived from the slice above so the two datasets cannot disagree; the
+// values are those declared constants, never input.
+var toolCallEventTypesSQL = "event_type IN (" + quotedList(toolCallEventTypes) + ")"
+
+// quotedList renders declared string constants as a SQL list.
+func quotedList(values []string) string {
+	quoted := make([]string, len(values))
+	for i, value := range values {
+		quoted[i] = "'" + value + "'"
+	}
+	return strings.Join(quoted, ", ")
+}
 
 // dedupedAgentEvents is the innermost scan every event dataset starts from:
 // the tenancy and window filter, then LIMIT 1 BY record_id so a redelivered

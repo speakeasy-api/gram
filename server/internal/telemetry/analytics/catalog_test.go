@@ -113,3 +113,23 @@ func TestSourceQueriesDeduplicateBeforeAggregating(t *testing.T) {
 		require.Equal(t, []any{"org", "proj", int64(1), int64(2)}, args[:4], ds.Name)
 	}
 }
+
+// TestToolCallPredicatesShareOneVocabulary: the sessions count and the tool
+// call dataset admit the same event types. One is bound by squirrel and the
+// other rendered inside an aggregate, so pin that they say the same thing.
+func TestToolCallPredicatesShareOneVocabulary(t *testing.T) {
+	t.Parallel()
+
+	scope := Scope{OrganizationID: "org", ProjectID: "project", FromUnixNano: 1, ToUnixNano: 2}
+
+	sessions, _, err := sessionsSource(scope).ToSql()
+	require.NoError(t, err)
+	require.Contains(t, sessions, toolCallEventTypesSQL)
+	require.Equal(t, "event_type IN ('tool_call', 'tool_call_result', 'tool_decision')", toolCallEventTypesSQL)
+
+	_, args, err := toolCallsSource(scope).ToSql()
+	require.NoError(t, err)
+	for _, eventType := range toolCallEventTypes {
+		require.Contains(t, args, eventType)
+	}
+}
