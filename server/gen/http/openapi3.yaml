@@ -3878,6 +3878,158 @@ paths:
                                 $ref: '#/components/schemas/Error'
             security:
                 - admin_auth_header_Authorization: []
+    /admin/supportMatrix.get:
+        get:
+            description: Read the shared support catalog and product coverage.
+            operationId: adminGetSupportMatrix
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SupportMatrix'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: getSupportMatrix admin
+            tags:
+                - admin
+            x-speakeasy-name-override: getSupportMatrix
+            x-speakeasy-react-hook:
+                name: AdminGetSupportMatrix
+    /admin/supportMatrix.update:
+        post:
+            description: Save coverage against the last read revision; rejects concurrent changes.
+            operationId: adminUpdateSupportMatrix
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateSupportMatrixRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SupportMatrix'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: updateSupportMatrix admin
+            tags:
+                - admin
+            x-speakeasy-name-override: updateSupportMatrix
+            x-speakeasy-react-hook:
+                name: AdminUpdateSupportMatrix
     /admin/trial.changeEndDate:
         post:
             tags:
@@ -74034,6 +74186,7 @@ components:
                         - api_key
                         - assistant
                         - agent
+                        - workload
                 principal_urn:
                     type: string
                     description: Principal URN e.g. user:<uuid> or api_key:<id>.
@@ -74584,6 +74737,7 @@ components:
                         - api_key
                         - assistant
                         - agent
+                        - workload
                 principal_urn:
                     type: string
                     description: Principal URN e.g. user:<uuid> or api_key:<id>.
@@ -95235,6 +95389,141 @@ components:
                 - summary
                 - impact
                 - cached
+        SupportCapability:
+            type: object
+            properties:
+                group:
+                    type: string
+                id:
+                    type: string
+                name:
+                    type: string
+            required:
+                - id
+                - name
+                - group
+        SupportDraft:
+            type: object
+            properties:
+                mappings:
+                    type: object
+                    additionalProperties:
+                        $ref: '#/components/schemas/SupportMapping'
+                references:
+                    type: object
+                    additionalProperties:
+                        type: object
+                        additionalProperties:
+                            $ref: '#/components/schemas/SupportFact'
+            required:
+                - mappings
+                - references
+        SupportFact:
+            type: object
+            properties:
+                note:
+                    type: string
+                    maxLength: 10000
+                status:
+                    type: string
+                    enum:
+                        - supported
+                        - partial
+                        - unimplemented
+                        - impossible
+                        - na
+                        - unknown
+                verify:
+                    type: boolean
+            required:
+                - status
+                - note
+                - verify
+        SupportMapping:
+            type: object
+            properties:
+                applicability:
+                    type: string
+                    enum:
+                        - unknown
+                        - applicable
+                        - na
+                conditions:
+                    type: string
+                    maxLength: 10000
+                facts:
+                    type: object
+                    additionalProperties:
+                        $ref: '#/components/schemas/SupportFact'
+            required:
+                - applicability
+                - conditions
+                - facts
+        SupportMatrix:
+            type: object
+            properties:
+                capabilities:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SupportCapability'
+                draft:
+                    $ref: '#/components/schemas/SupportDraft'
+                methods:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SupportMethod'
+                products:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SupportPlatform'
+                revision:
+                    type: string
+            required:
+                - methods
+                - products
+                - capabilities
+                - draft
+                - revision
+        SupportMethod:
+            type: object
+            properties:
+                facts:
+                    type: object
+                    additionalProperties:
+                        $ref: '#/components/schemas/SupportFact'
+                id:
+                    type: string
+                name:
+                    type: string
+                plans:
+                    type: string
+                vendor:
+                    type: string
+            required:
+                - id
+                - name
+                - vendor
+                - plans
+                - facts
+        SupportPlatform:
+            type: object
+            properties:
+                family:
+                    type: string
+                id:
+                    type: string
+                name:
+                    type: string
+                surface:
+                    type: string
+                vendor:
+                    type: string
+            required:
+                - id
+                - name
+                - vendor
+                - family
+                - surface
         SyncedAgentUser:
             type: object
             properties:
@@ -99299,6 +99588,18 @@ components:
                         - monthly
             required:
                 - id
+        UpdateSupportMatrixRequestBody:
+            type: object
+            properties:
+                draft:
+                    $ref: '#/components/schemas/SupportDraft'
+                revision:
+                    type: string
+                    minLength: 64
+                    maxLength: 64
+            required:
+                - revision
+                - draft
         UpdateToolsetForm:
             type: object
             properties:
@@ -100019,10 +100320,10 @@ components:
                     description: Avatar URL for the subject when it resolves to a Gram user with one. Null for API key and anonymous subjects, and for users who have no photo.
                 subject_type:
                     type: string
-                    description: 'Subject kind: ''user'', ''apikey'', ''anonymous'', or ''workload''.'
+                    description: 'Subject kind: ''user'', ''apikey'', ''agent'', ''anonymous'', or ''workload''.'
                 subject_urn:
                     type: string
-                    description: The session's subject URN (user:<id> | apikey:<uuid> | anonymous:<mcp-session-id> | workload:<issuer-id>:<external-subject>).
+                    description: The session's subject URN (user:<id> | apikey:<uuid> | agent:<uuid> | anonymous:<mcp-session-id> | workload:<issuer-id>:<external-subject>).
                 updated_at:
                     type: string
                     format: date-time
@@ -100039,6 +100340,8 @@ components:
                     type: string
                     description: The issuing user_session_issuer id.
                     format: uuid
+                workload:
+                    $ref: '#/components/schemas/UserSessionWorkload'
             description: An issued user_session record. refresh_token_hash is never returned.
             required:
                 - id
@@ -100325,6 +100628,67 @@ components:
                 - has_refresh_token
                 - auto_refresh
                 - scopes
+        UserSessionWorkload:
+            type: object
+            properties:
+                admissions:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/UserSessionWorkloadAdmission'
+                    description: Every admission currently letting this workload in, from this project and from the organization. Withdrawing one leaves the others admitting it. Empty when nothing admits the workload any more.
+                agent_id:
+                    type: string
+                    description: The agent this workload is assigned to, whose policy it inherits. Null when the workload has no live assignment.
+                    format: uuid
+                agent_name:
+                    type: string
+                    description: Name of the assigned agent.
+                agent_status:
+                    type: string
+                    description: Lifecycle state of the assigned agent.
+                    enum:
+                        - active
+                        - suspended
+                        - revoked
+                external_subject:
+                    type: string
+                    description: The sub claim the workload issuer asserted, exactly as minted. Together with workload_issuer_id this is the workload's identity.
+                workload_issuer_id:
+                    type: string
+                    description: The workload_issuers row that vouched for the workload.
+                    format: uuid
+                workload_issuer_name:
+                    type: string
+                    description: The operator-chosen name of the workload issuer. Null when the issuer has been deleted or belongs to another project.
+                workload_issuer_url:
+                    type: string
+                    description: The workload issuer's issuer identifier (its iss). Null under the same conditions as workload_issuer_name.
+                    format: uri
+            description: The workload behind a workload session.
+            required:
+                - workload_issuer_id
+                - external_subject
+                - admissions
+        UserSessionWorkloadAdmission:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The workload_identity_admissions row.
+                    format: uuid
+                name:
+                    type: string
+                    description: The operator-chosen label for the admission.
+                tier:
+                    type: string
+                    description: Whether the admission belongs to this project or to the whole organization.
+                    enum:
+                        - project
+                        - organization
+            description: An admission that lets a workload in.
+            required:
+                - id
+                - tier
         UserSummary:
             type: object
             properties:

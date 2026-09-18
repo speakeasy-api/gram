@@ -57,6 +57,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
+	networkingress_repo "github.com/speakeasy-api/gram/server/internal/networkingress/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizations_repo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -208,6 +209,7 @@ type Service struct {
 	orgsRepo             *organizations_repo.Queries
 	domainsRepo          *customdomains_repo.Queries
 	auth                 *auth.Auth
+	authz                *authz.Engine
 	serverURL            *url.URL
 	siteURL              *url.URL
 	toolsetCache         cache.TypedCacheObject[mv.ToolsetBaseContents]
@@ -255,6 +257,7 @@ func NewService(
 		orgsRepo:       organizations_repo.New(db),
 		domainsRepo:    customdomains_repo.New(db),
 		auth:           auth.New(logger, db, sessions, authzEngine),
+		authz:          authzEngine,
 		serverURL:      serverURL,
 		siteURL:        siteURL,
 		toolsetCache:   cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheAdapter, cache.SuffixNone),
@@ -922,11 +925,12 @@ func appendTagsQuery(mcpURL, tag string) string {
 // mcp_endpoints resolution path and supplies the public install URL when the
 // renderer is Remote-MCP-flavored.
 type installContext struct {
-	toolset      *toolsets_repo.Toolset
-	mcpServer    *mcpservers_repo.McpServer
-	metaServer   *metamcp_repo.MetaMcpServer
-	mcpEndpoint  *mcpendpoints_repo.McpEndpoint
-	organization organizations_repo.OrganizationMetadatum
+	toolset        *toolsets_repo.Toolset
+	mcpServer      *mcpservers_repo.McpServer
+	metaServer     *metamcp_repo.MetaMcpServer
+	mcpEndpoint    *mcpendpoints_repo.McpEndpoint
+	organization   organizations_repo.OrganizationMetadatum
+	mcpURLOverride string
 }
 
 // isPublic returns true when the install page is accessible without auth.
@@ -964,11 +968,38 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		RequiredScopes: []string{},
 	})
 
+	network := r.URL.Query().Get("network")
+	if network != "" && network != "private" {
+		return oops.E(oops.CodeBadRequest, nil, "unsupported install page network")
+	}
+	privateNetworkInstall := network == "private"
+
 	// We get the authCtx now, because we need session information in order to look up private servers
 	// but we don't check that auth is ok unless we encounter a private toolset on lookup
 	authCtx, authOk := contextvalues.GetAuthContext(ctx)
 
-	ic, err := s.resolveInstallContext(ctx, mcpSlug)
+	if privateNetworkInstall && (authCtx == nil || authCtx.ActiveOrganizationID == "") {
+		if s.serverURL != nil {
+			loginURL := s.serverURL.JoinPath("login")
+			query := loginURL.Query()
+			query.Set("redirect", r.URL.RequestURI())
+			loginURL.RawQuery = query.Encode()
+			http.Redirect(w, r, loginURL.String(), http.StatusFound)
+			return nil
+		}
+		return s.serveNotFoundPage(w, mcpSlug)
+	}
+
+	var ic *installContext
+	var err error
+	if privateNetworkInstall {
+		if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+			return err
+		}
+		ic, err = s.resolvePrivateInstallContext(ctx, mcpSlug, authCtx.ActiveOrganizationID)
+	} else {
+		ic, err = s.resolveInstallContext(ctx, mcpSlug)
+	}
 	switch {
 	case errors.Is(err, errToolsetNotFound):
 		return s.serveNotFoundPage(w, mcpSlug)
@@ -1008,8 +1039,9 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 			attr.SlogError(metadataErr))
 	}
 
-	// Honour the installation override URL on either backend.
-	if metadataRecord != nil {
+	// Private installs must keep using the authenticated Gram-hosted renderer:
+	// an external override cannot securely derive the live organization ingress.
+	if !privateNetworkInstall && metadataRecord != nil {
 		if overrideURL := conv.FromPGText[string](metadataRecord.InstallationOverrideUrl); overrideURL != nil && *overrideURL != "" {
 			redirectURL, err := url.Parse(*overrideURL)
 			if err != nil {
@@ -1042,6 +1074,66 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 // first, then falls back to the legacy toolsets.mcp_slug lookup only for a
 // plain namespace miss. Policy denials are authoritative 404s and never fall
 // through to an unrelated legacy toolset.
+func (s *Service) resolvePrivateInstallContext(ctx context.Context, mcpSlug, organizationID string) (*installContext, error) {
+	ingress, err := networkingress_repo.New(s.db).GetNetworkIngressByOrganization(ctx, organizationID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, fmt.Errorf("%w: private network ingress is unavailable", errToolsetNotFound)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("load private network ingress: %w", err)
+	}
+	if !ingress.Enabled || ingress.Deleted || ingress.Status != "online" || !ingress.DnsName.Valid || ingress.DnsName.String == "" {
+		return nil, fmt.Errorf("%w: private network ingress is unavailable", errToolsetNotFound)
+	}
+
+	result, err := mcpendpoints.Resolve(ctx, s.db, s.logger, mcpendpoints.ResolutionInput{
+		Slug:                 mcpSlug,
+		NamespaceKind:        mcpendpoints.NamespaceKind(ingress.EndpointNamespaceKind),
+		CustomDomainID:       ingress.CustomDomainID,
+		ExpectedOrganization: organizationID,
+		Surface:              networkaccess.SurfacePrivate,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("resolve private mcp endpoint: %w", err)
+	}
+	if !result.Found || !result.Allowed || result.Endpoint == nil {
+		return nil, fmt.Errorf("%w: endpoint is unavailable on the private network", errToolsetNotFound)
+	}
+
+	var bridgeToolset *toolsets_repo.Toolset
+	if result.Server != nil && result.Server.ToolsetID.Valid {
+		toolset, loadErr := s.toolsetRepo.GetToolsetByIDAndProject(ctx, toolsets_repo.GetToolsetByIDAndProjectParams{ID: result.Server.ToolsetID.UUID, ProjectID: result.Server.ProjectID})
+		if loadErr != nil && !errors.Is(loadErr, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("load toolset for private mcp_server: %w", loadErr)
+		}
+		if loadErr == nil {
+			bridgeToolset = &toolset
+		}
+	}
+
+	var org organizations_repo.OrganizationMetadatum
+	if result.MetaServer != nil {
+		if err := s.requireMetaInstallAdmission(ctx, result.Mode, result.MetaServer.OrganizationID); err != nil {
+			return nil, err
+		}
+		org, err = s.orgsRepo.GetOrganizationMetadata(ctx, result.MetaServer.OrganizationID)
+	} else {
+		org, err = s.lookupInstallOrganization(ctx, bridgeToolset, result.Server)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return &installContext{
+		toolset:        bridgeToolset,
+		mcpServer:      result.Server,
+		metaServer:     result.MetaServer,
+		mcpEndpoint:    result.Endpoint,
+		organization:   org,
+		mcpURLOverride: "https://" + ingress.DnsName.String + "/mcp/" + url.PathEscape(result.Endpoint.Slug),
+	}, nil
+}
+
 func (s *Service) resolveInstallContext(ctx context.Context, mcpSlug string) (*installContext, error) {
 	endpoint, server, metaServer, err := mcpendpoints.BySlugAndCustomDomain(ctx, s.db, s.logger, mcpSlug)
 	switch {
@@ -1056,26 +1148,20 @@ func (s *Service) resolveInstallContext(ctx context.Context, mcpSlug string) (*i
 		if err != nil {
 			return nil, fmt.Errorf("%w: invalid network access mode", errToolsetNotFound)
 		}
-		// Existing public-network gateways remain available independently of
-		// private ingress rollout. Non-public modes require rollout admission.
-		if !mode.IsPublicOnly() {
-			if s.metaInstallAdmission == nil {
-				return nil, fmt.Errorf("%w: meta install page is unavailable", errToolsetNotFound)
-			}
-			if err := s.metaInstallAdmission(ctx, metaServer.OrganizationID); err != nil {
-				return nil, fmt.Errorf("%w: meta install page is unavailable", errToolsetNotFound)
-			}
+		if err := s.requireMetaInstallAdmission(ctx, mode, metaServer.OrganizationID); err != nil {
+			return nil, err
 		}
 		org, err := s.orgsRepo.GetOrganizationMetadata(ctx, metaServer.OrganizationID)
 		if err != nil {
 			return nil, fmt.Errorf("load organization: %w", err)
 		}
 		return &installContext{
-			toolset:      nil,
-			mcpServer:    nil,
-			metaServer:   metaServer,
-			mcpEndpoint:  endpoint,
-			organization: org,
+			toolset:        nil,
+			mcpServer:      nil,
+			metaServer:     metaServer,
+			mcpEndpoint:    endpoint,
+			organization:   org,
+			mcpURLOverride: "",
 		}, nil
 	default:
 		var bridgeToolset *toolsets_repo.Toolset
@@ -1098,11 +1184,12 @@ func (s *Service) resolveInstallContext(ctx context.Context, mcpSlug string) (*i
 			return nil, err
 		}
 		return &installContext{
-			toolset:      bridgeToolset,
-			mcpServer:    server,
-			metaServer:   nil,
-			mcpEndpoint:  endpoint,
-			organization: org,
+			toolset:        bridgeToolset,
+			mcpServer:      server,
+			metaServer:     nil,
+			mcpEndpoint:    endpoint,
+			organization:   org,
+			mcpURLOverride: "",
 		}, nil
 	}
 
@@ -1116,12 +1203,29 @@ func (s *Service) resolveInstallContext(ctx context.Context, mcpSlug string) (*i
 		return nil, fmt.Errorf("load organization: %w", err)
 	}
 	return &installContext{
-		toolset:      toolset,
-		mcpServer:    nil,
-		metaServer:   nil,
-		mcpEndpoint:  nil,
-		organization: org,
+		toolset:        toolset,
+		mcpServer:      nil,
+		metaServer:     nil,
+		mcpEndpoint:    nil,
+		organization:   org,
+		mcpURLOverride: "",
 	}, nil
+}
+
+// requireMetaInstallAdmission keeps existing public-only gateways independent
+// of the private-ingress rollout while applying one fail-closed admission gate
+// to every non-public Meta MCP install surface.
+func (s *Service) requireMetaInstallAdmission(ctx context.Context, mode networkaccess.Mode, organizationID string) error {
+	if mode.IsPublicOnly() {
+		return nil
+	}
+	if s.metaInstallAdmission == nil {
+		return fmt.Errorf("%w: meta install page is unavailable", errToolsetNotFound)
+	}
+	if err := s.metaInstallAdmission(ctx, organizationID); err != nil {
+		return fmt.Errorf("%w: meta install page is unavailable", errToolsetNotFound)
+	}
+	return nil
 }
 
 // lookupInstallOrganization resolves the organization metadata that owns the
@@ -1312,7 +1416,9 @@ func (s *Service) renderToolsetInstallPage(ctx context.Context, w http.ResponseW
 	// own columns. The toolset-derived URL only applies to legacy routing
 	// where no mcp_endpoints row exists.
 	var mcpURL string
-	if ic.mcpEndpoint != nil {
+	if ic.mcpURLOverride != "" {
+		mcpURL = ic.mcpURLOverride
+	} else if ic.mcpEndpoint != nil {
 		mcpURL, err = s.resolveMcpEndpointURL(ctx, ic.mcpEndpoint)
 	} else {
 		mcpURL, err = s.resolveToolsetMCPURL(ctx, *toolset, mcpSlug)
@@ -1376,7 +1482,11 @@ func (s *Service) renderRemoteMcpInstallPage(ctx context.Context, w http.Respons
 		}
 	}
 
-	mcpURL, err := s.resolveMcpEndpointURL(ctx, endpoint)
+	mcpURL := ic.mcpURLOverride
+	var err error
+	if mcpURL == "" {
+		mcpURL, err = s.resolveMcpEndpointURL(ctx, endpoint)
+	}
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "resolve mcp endpoint url").LogError(ctx, s.logger, attr.SlogMcpServerID(mcpServer.ID.String()))
 	}
@@ -1417,7 +1527,11 @@ func (s *Service) renderMetaMcpInstallPage(ctx context.Context, w http.ResponseW
 		return oops.E(oops.CodeUnexpected, nil, "meta mcp install context missing backend or endpoint").LogError(ctx, s.logger)
 	}
 
-	mcpURL, err := s.resolveMcpEndpointURL(ctx, endpoint)
+	mcpURL := ic.mcpURLOverride
+	var err error
+	if mcpURL == "" {
+		mcpURL, err = s.resolveMcpEndpointURL(ctx, endpoint)
+	}
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "resolve mcp endpoint url").LogError(ctx, s.logger, attr.SlogMetaMcpServerID(metaServer.ID.String()))
 	}

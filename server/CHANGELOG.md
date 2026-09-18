@@ -1,5 +1,20 @@
 # server
 
+## 2.8.0
+
+### Minor Changes
+
+- fc270cd: Allow organization administrators to configure the exact remote-session issuer and client pair Gram uses for trusted identity-provider login. The API validates tenant scope, required upstream scopes, and token-endpoint authentication, audits effective link changes, and prevents linked clients from being invalidated or deleted.
+
+### Patch Changes
+
+- 30d5584: Adds storage for organization-scoped Okta identity provider connections.
+- 2c13f85: Caller-canceled enforcement lane failures no longer count as enforcement degradation. Deadline and other lane failures still degrade.
+- bba144d: Show the no-data state on a tool usage timeline whose every bucket is empty, rather than a labelled but blank chart, and stop the log detail sheet from holding the previous record's payload on screen while the next one is highlighted — one call's arguments could appear under another call's heading
+- 249dd28: Add an injectable Okta Management API client (`server/internal/thirdparty/okta`) with private_key_jwt + DPoP authentication, nonce and rate-limit handling, and an in-memory fake for tests. The client is not wired into `deps.go` yet; wiring lands with the first consumer.
+- 2b12f7b: OTLP exports accepted on `/otel/v1/logs` and `/otel/v1/metrics` now also run the hooks telemetry writers, so Claude Code and Codex usage exported to the native ingest endpoint is attributed to users and counted on usage, cost, and identity pages. Previously those exports only reached the Event Feed.
+- dc5fa70: Route PostHog SDK logs through the structured logger and evaluate feature flags individually so local evaluation warnings no longer land as errors on every flag check.
+
 ## 2.7.0
 
 ### Minor Changes

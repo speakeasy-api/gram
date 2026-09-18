@@ -23,7 +23,7 @@ func registerSessionRecallTools(reg *Registrar, svc SessionRecaller) {
 		Title:       "List My Sessions",
 		Description: "List your own captured coding-agent sessions in this organization — titles, summaries, project, working directory, and last activity. Never returns other users' sessions and never returns transcript content; use continue_session to recall one.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListMySessionsInput) (*mcp.CallToolResult, ListMySessionsOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListMySessionsInput) (*mcp.CallToolResult, ListMySessionsOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
 			return nil, ListMySessionsOutput{}, err
@@ -47,7 +47,7 @@ func registerSessionRecallTools(reg *Registrar, svc SessionRecaller) {
 		Name:        "continue_session",
 		Title:       "Continue Session",
 		Description: "Render a redacted handoff digest of one of your own previous sessions so its work can continue here. Sensitive values found by risk scanning appear masked, and tool inputs/outputs are omitted (tool names are retained). Every call records a lineage edge and an entry in the organization's audit log. This is not a transcript or log reader, and it cannot access other users' sessions.",
-	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, input ContinueSessionInput) (*mcp.CallToolResult, ContinueSessionOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, input ContinueSessionInput) (*mcp.CallToolResult, ContinueSessionOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
 			return nil, ContinueSessionOutput{}, err
@@ -100,10 +100,10 @@ func registerUnavailableSessionRecallTools(reg *Registrar) {
 		Title:       "List My Sessions",
 		Description: "List your own captured coding-agent sessions. Session recall is not available in the current rollout.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeNone}, unavailableTool("session_recall"))
+	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeNone}, unavailableTool("session_recall"))
 	addTool(reg, &mcp.Tool{
 		Name:        "continue_session",
 		Title:       "Continue Session",
 		Description: "Recall one of your own previous sessions as a redacted handoff digest. Session recall is not available in the current rollout.",
-	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeNone}, unavailableTool("session_recall"))
+	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeNone}, unavailableTool("session_recall"))
 }

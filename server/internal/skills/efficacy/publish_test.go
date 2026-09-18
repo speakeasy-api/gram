@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/skills/repo"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -877,6 +878,24 @@ func TestPublishRateLimitLeavesEvaluationUntouched(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, StateReserved, row.State)
 	require.Zero(t, row.Attempts, "infrastructure failures charge no attempt")
+	require.Empty(t, h.publishedIDs(t, evaluation))
+}
+
+func TestPublishThrottledJudgeLeavesEvaluationUntouched(t *testing.T) {
+	t.Parallel()
+	h := newPublishHarness(t, "skill_efficacy_publish_throttled")
+
+	evaluation := h.reserve(t, "claude-session-throttled", "claude-code")
+	h.judge.errs[SurfaceDev] = fmt.Errorf("skill efficacy judge call: %w: %w", ErrRetryable, openrouter.ErrRateLimited)
+
+	result, err := h.publisher(t, h.scores).Publish(t.Context(), h.fixture.projectID, evaluation.ClaimToken, []uuid.UUID{evaluation.ID}, nil)
+	require.NoError(t, err)
+	require.Equal(t, PublishResult{Loaded: 1, AlreadyPublished: 0, Scored: 0, ModelFailures: 0, Failed: 0, Retryable: 0, Throttled: 1}, result)
+
+	row, ok := h.reservedByID(t, evaluation.ID, evaluation.ClaimToken)
+	require.True(t, ok)
+	require.Equal(t, StateReserved, row.State)
+	require.Zero(t, row.Attempts, "a throttled call charges no attempt")
 	require.Empty(t, h.publishedIDs(t, evaluation))
 }
 

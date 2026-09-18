@@ -1,20 +1,37 @@
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { useOrganization } from "@/contexts/Auth";
+import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useRBAC } from "@/hooks/useRBAC";
 
+export type NetworkIngressRolloutStatus =
+  | "loading"
+  | "enabled"
+  | "disabled"
+  | "error";
+
 export function useNetworkIngressRollout(): {
+  status: NetworkIngressRolloutStatus;
   rolloutEnabled: boolean;
   canManageIngress: boolean;
-  adminRolloutEnabled: boolean;
 } {
-  const rollout = useFeatureFlag(FEATURE_FLAGS.networkIngressRollout);
+  const organization = useOrganization();
   const { hasScope } = useRBAC();
-  const rolloutEnabled = rollout.status === "enabled";
+  const features = useProductFeatures(
+    { organizationId: organization.id },
+    undefined,
+    { throwOnError: false },
+  );
+  const status: NetworkIngressRolloutStatus = features.isPending
+    ? "loading"
+    : features.isError || !features.data
+      ? "error"
+      : features.data.networkIngressEnabled
+        ? "enabled"
+        : "disabled";
   const canManageIngress = hasScope("org:admin");
 
   return {
-    rolloutEnabled,
+    status,
+    rolloutEnabled: status === "enabled",
     canManageIngress,
-    adminRolloutEnabled: rolloutEnabled && canManageIngress,
   };
 }

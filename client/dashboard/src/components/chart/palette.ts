@@ -18,40 +18,55 @@ export const ACCENT_RED = "hsl(4, 67%, 47%)";
 // "Good": costs trending down, successful outcomes.
 export const GOOD_GREEN = "hsl(107, 24%, 34%)";
 
-// Categorical series ramp: ink first, then the muted brand-rainbow hues from
-// base.css (`--gradient-brand-primary-colors` — go/java/terraform/ruby/php/
-// python/unity), closing on neutrals. Adjacent stacked segments must be
-// tellable apart at a glance, which pure lightness steps couldn't do; the
-// brand hues keep it editorial rather than default-chart-library bright.
+// Categorical series ramp, in fixed slot order — a series takes the slot its
+// rank gives it and keeps that color; the ramp is never cycled or regenerated.
+// Three constraints shaped it:
+//
+//   - No ink and no near-blacks. A near-black bar segment reads as a hole in
+//     the stack rather than as a category, and it takes over every chart it
+//     appears in.
+//   - Muted, in the register of the cost cards above the chart (their spend
+//     meters grade forest green → gray → brick). A saturated ramp made the
+//     same page look like two products; these hues sit a step back, close to
+//     that grading's tone without borrowing its meaning.
+//   - Adjacent slots must stay tellable apart under color-vision deficiency,
+//     not just to full-color readers. The ORDER is what secures that, so it
+//     is not cosmetic: reordering the slots invalidates it. Muting fights
+//     this directly — these values are as desaturated as the gates allow, and
+//     pushing them further makes neighbouring slots merge.
+//
+// Both columns are validated as sets against their own surface (adjacent-pair
+// CVD ΔE ≥ 8, normal-vision ΔE ≥ 15, chroma floor, lightness band). Light
+// passes every gate (worst adjacent 8.9 CVD / 22.1 normal). Dark passes all
+// but the teal↔plum pair, which lands at 6.8 CVD — inside the band that is
+// legal only with a secondary encoding, which this chart always has: a
+// permanent legend, and a table below whose rows carry the same labelled
+// swatches. Re-run the numbers before changing a value or the order.
+//
+// Slot 0 also paints the panel's optional total line, so it stays the
+// strongest, most brand-primary hue.
 export const SERIES: string[] = [
-  "hsl(0, 0%, 7%)", // ink
-  "hsl(215, 71%, 40%)", // brand blue 600 (java, muted a step)
-  "hsl(108, 24%, 41%)", // brand green 500 (terraform)
-  "hsl(23, 96%, 62%)", // brand orange (ruby)
-  "hsl(220, 100%, 12%)", // brand navy (go)
-  "hsl(68, 52%, 72%)", // brand chartreuse (unity)
-  "hsl(334, 54%, 13%)", // brand maroon (php)
-  "hsl(216, 100%, 80%)", // brand ice blue (python)
-  "hsl(0, 0%, 59%)", // neutral tail
+  "#33699f", // blue
+  "#c76b8b", // rose
+  "#2f7038", // forest
+  "#6f86d6", // periwinkle
+  "#a8582f", // terracotta
+  "#1f9a94", // teal
+  "#7f4a8c", // plum
 ];
 
-// Dark-surface counterpart of SERIES, index-aligned so a series keeps its
-// slot (and legend identity) across themes. Only the near-black entries are
-// lifted — ink becomes near-white, navy steps up to brand blue 300, maroon to
-// brand red 300 — because at 7–13% lightness they vanish against a dark
-// canvas. The mid-lightness brand hues (blue 600, green 500, orange,
-// chartreuse, ice blue) already read on dark and stay put; the neutral tail
-// lightens a step.
+// Dark-surface counterpart of SERIES, index-aligned so a series keeps its hue
+// (and legend identity) across themes. These are the same seven hues stepped
+// for the dark canvas and validated as their own set — not an automatic flip
+// of the light column.
 const SERIES_DARK: string[] = [
-  "hsl(0, 0%, 93%)", // ink -> near-white
-  "hsl(215, 71%, 40%)", // brand blue 600 (kept)
-  "hsl(108, 24%, 41%)", // brand green 500 (kept)
-  "hsl(23, 96%, 62%)", // brand orange (kept)
-  "hsl(215, 77%, 65%)", // navy -> brand blue 300
-  "hsl(68, 52%, 72%)", // brand chartreuse (kept)
-  "hsl(14, 74%, 54%)", // maroon -> brand red 300
-  "hsl(216, 100%, 80%)", // brand ice blue (kept)
-  "hsl(0, 0%, 72%)", // neutral tail, a step lighter
+  "#4f86bd", // blue
+  "#c76b8b", // rose
+  "#4a8c52", // forest
+  "#7185d2", // periwinkle
+  "#c06e42", // terracotta
+  "#1f9a94", // teal
+  "#b566c4", // plum
 ];
 
 // The categorical ramp for the resolved theme. Chart.js paints to canvas and
@@ -88,11 +103,28 @@ export const SEVERITY = {
 // (green), no clear direction is neutral. A step darker than the accent reds/
 // greens — trend deltas annotate nearly every stat tile, so at full accent
 // strength they shout.
-export const TREND = {
+export type Trend = { up: string; down: string; flat: string };
+
+export const TREND: Trend = {
   up: "hsl(2, 65%, 39%)", // feedback-red-600
   down: "hsl(107, 24%, 27%)", // feedback-green-700
   flat: "hsl(0, 0%, 59%)",
-} as const;
+};
+
+// Dark-surface counterpart. The light tokens are deliberately a step darker
+// than the accent red/green, which works against paper but sinks into a dark
+// canvas — a trend delta or a graded cost figure has to stay readable, so both
+// poles step up into the accent band. The neutral lightens with them.
+const TREND_DARK: Trend = {
+  up: "hsl(4, 76%, 63%)",
+  down: "hsl(107, 32%, 56%)",
+  flat: "hsl(0, 0%, 66%)",
+};
+
+// The trend trio for the resolved theme, mirroring seriesForTheme.
+export function trendForTheme(isDark: boolean): Trend {
+  return isDark ? TREND_DARK : TREND;
+}
 
 // Chart.js tooltip style: near-black square card (editorial print — no
 // rounded corners). Spread into `plugins.tooltip` alongside callbacks.
