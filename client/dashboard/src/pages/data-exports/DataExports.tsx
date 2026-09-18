@@ -116,8 +116,8 @@ function renderDataSourceDescription(
   if (dataSource === DataSource.ToolCallLogs) {
     return (
       <>
-        OTLP logs for every tool call served for hosted or proxied MCP
-        servers, successes and failures alike. These are the same records the{" "}
+        OTLP logs for every tool call served for hosted or proxied MCP servers,
+        successes and failures alike. These are the same records the{" "}
         {links.toolLogs ? (
           <Link
             to={links.toolLogs}
