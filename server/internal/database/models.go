@@ -1644,10 +1644,6 @@ type OktaResourceConnection struct {
 	Resource                     string
 	Audience                     string
 	OktaApplicationID            pgtype.Text
-	LastExchangeOutcome          pgtype.Text
-	LastExchangeAt               pgtype.Timestamptz
-	VerifiedAt                   pgtype.Timestamptz
-	LastErrorReason              pgtype.Text
 	CreatedAt                    pgtype.Timestamptz
 	UpdatedAt                    pgtype.Timestamptz
 }
