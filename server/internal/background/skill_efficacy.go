@@ -30,6 +30,12 @@ const (
 	// does not finish inside it keeps its cursor and carries on in the next pass
 	// or the next run, so the bound costs progress nothing.
 	skillEfficacyMaxEnqueuePages = 10
+	// skillEfficacyModelFailurePasses bounds how many times one batch is
+	// judged again after a pass reports model failures, and
+	// skillEfficacyModelFailureBackoff is the pause before the first re-run,
+	// doubling each time.
+	skillEfficacyModelFailurePasses  = 3
+	skillEfficacyModelFailureBackoff = 5 * time.Second
 	// skillEfficacyMaxPasses bounds how many reserve-and-publish rounds one run
 	// makes before handing the rest to a fresh run, which keeps the history a
 	// long backlog writes bounded.
@@ -208,13 +214,26 @@ func SkillEfficacyCoordinatorWorkflow(ctx workflow.Context, params SkillEfficacy
 			break
 		}
 
-		var published activities.PublishSkillEfficacyBatchResult
-		if err := workflow.ExecuteActivity(publishCtx, a.PublishSkillEfficacyBatch, activities.PublishSkillEfficacyBatchParams{
-			ProjectID:  params.ProjectID,
-			ClaimToken: batch.ClaimToken,
-			IDs:        batch.IDs,
-		}).Get(ctx, &published); err != nil {
-			return fmt.Errorf("publish skill efficacy batch: %w", err)
+		// A model failure is a transient judge problem charged to its own
+		// evaluation, so the pass is run again against the same reserved rows
+		// after a pause. The rows already published are skipped on the re-run.
+		// Doing this here rather than through the activity retry policy keeps a
+		// rate-limited judge from being reported as an activity failure.
+		for attempt := range skillEfficacyModelFailurePasses {
+			var published activities.PublishSkillEfficacyBatchResult
+			if err := workflow.ExecuteActivity(publishCtx, a.PublishSkillEfficacyBatch, activities.PublishSkillEfficacyBatchParams{
+				ProjectID:  params.ProjectID,
+				ClaimToken: batch.ClaimToken,
+				IDs:        batch.IDs,
+			}).Get(ctx, &published); err != nil {
+				return fmt.Errorf("publish skill efficacy batch: %w", err)
+			}
+			if published.ModelFailures == 0 || attempt == skillEfficacyModelFailurePasses-1 {
+				break
+			}
+			if err := workflow.Sleep(ctx, skillEfficacyModelFailureBackoff<<attempt); err != nil {
+				return fmt.Errorf("wait before retrying skill efficacy model failures: %w", err)
+			}
 		}
 
 		if workflow.GetInfo(ctx).GetContinueAsNewSuggested() {

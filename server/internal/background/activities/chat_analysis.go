@@ -137,9 +137,10 @@ func (s *ChatAnalysisScorer) LoadReservedChatAnalysisEvaluations(ctx context.Con
 // judged-publication task queue.
 //
 // A model failure never surfaces here: it is charged to its own evaluation's
-// attempt counter inside the publication and reported through the result.
-// What does surface is infrastructure, and it comes back retryable so Temporal
-// re-runs the pass against the same reserved rows.
+// attempt counter inside the publication and reported through the result, and
+// the workflow decides whether to run the pass again. What does surface is
+// infrastructure, and it comes back retryable so Temporal re-runs the pass
+// against the same reserved rows.
 func (s *ChatAnalysisScorer) PublishChatAnalysisBatch(ctx context.Context, params PublishChatAnalysisBatchParams) (*PublishChatAnalysisBatchResult, error) {
 	// One heartbeat per evaluation: the server's cancellation only reaches a
 	// worker that heartbeats, and the domain only stops at an evaluation
@@ -154,8 +155,6 @@ func (s *ChatAnalysisScorer) PublishChatAnalysisBatch(ctx context.Context, param
 		return nil, fmt.Errorf("publish chat analysis batch: %w", err)
 	case err != nil:
 		return nil, temporal.NewNonRetryableApplicationError("publish chat analysis batch", "chat_analysis_publish_error", err)
-	case result.ModelFailures > 0:
-		return nil, fmt.Errorf("retry %d chat analysis model failures: %w", result.ModelFailures, analysis.ErrRetryable)
 	}
 
 	return &result, nil

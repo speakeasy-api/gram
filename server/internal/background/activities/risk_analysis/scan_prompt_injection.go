@@ -75,6 +75,21 @@ func (a *AnalyzeBatch) publishPromptInjectionScanRequests(ctx context.Context, a
 		provenance := batchRiskProvenance(args, msg, shadowStreamExecutionPath, requestID.String())
 		chatMessageID, contentPartID := msg.anchorIDStrings()
 		jm := batchJudgeMessage(msg)
+		content, priorUserRequest, recentUntrustedContent := msg.Content, msg.PriorUserRequest, msg.RecentUntrustedContent
+		if textBytes := len(content) + len(priorUserRequest) + len(recentUntrustedContent) + len(jm.Body) + toolCallBytes(jm.ToolCalls); textBytes > maxPromptInjectionPublishBytes {
+			// Pub/Sub refuses a single message above its request limit, and the
+			// refusal fails the whole batch on every attempt. Bound each text
+			// field so the message publishes; the judge reads a prefix of an
+			// oversize message rather than nothing at all.
+			a.logger.WarnContext(ctx, "prompt injection scan payload truncated", attr.SlogValueInt(textBytes))
+			content = truncateAtRuneBoundary(content, maxPromptInjectionFieldBytes)
+			priorUserRequest = truncateAtRuneBoundary(priorUserRequest, maxPromptInjectionFieldBytes)
+			recentUntrustedContent = truncateAtRuneBoundary(recentUntrustedContent, maxPromptInjectionFieldBytes)
+			jm.Body = truncateAtRuneBoundary(jm.Body, maxPromptInjectionFieldBytes)
+			for i := range jm.ToolCalls {
+				jm.ToolCalls[i].Arguments = truncateAtRuneBoundary(jm.ToolCalls[i].Arguments, maxPromptInjectionFieldBytes)
+			}
+		}
 		toolCalls := make([]*riskv1.PromptInjectionAnalysis_ToolCall, 0, len(jm.ToolCalls))
 		for _, call := range jm.ToolCalls {
 			toolCalls = append(toolCalls, riskv1.PromptInjectionAnalysis_ToolCall_builder{
@@ -101,16 +116,35 @@ func (a *AnalyzeBatch) publishPromptInjectionScanRequests(ctx context.Context, a
 			ToolCallId:              &provenance.ToolCallID,
 			HookSource:              &msg.Source,
 
-			Content:                new(msg.Content),
+			Content:                &content,
 			UserId:                 &msg.UserID,
 			L1Enabled:              new(true),
 			MessageType:            new(jm.Type),
 			Body:                   &jm.Body,
 			ToolName:               &jm.ToolName,
 			ToolCalls:              toolCalls,
-			PriorUserRequest:       &msg.PriorUserRequest,
-			RecentUntrustedContent: &msg.RecentUntrustedContent,
+			PriorUserRequest:       &priorUserRequest,
+			RecentUntrustedContent: &recentUntrustedContent,
 		}.Build()))
 	}
 	return drainPublishAcks(ctx, "publish prompt injection scan requests", publishResults)
+}
+
+const (
+	// maxPromptInjectionPublishBytes is the text volume above which one scan
+	// request is cut down before publishing. Pub/Sub rejects a message over
+	// its 10 MiB request limit outright, and the proto carries the message
+	// text several times over (content, judge body, surrounding context).
+	maxPromptInjectionPublishBytes = 2 << 20
+	// maxPromptInjectionFieldBytes bounds each text field of a cut-down
+	// request. Five fields at this size stay well under the publish limit.
+	maxPromptInjectionFieldBytes = 256 << 10
+)
+
+func toolCallBytes(calls []judgemessage.ToolCall) int {
+	n := 0
+	for _, call := range calls {
+		n += len(call.ToolName) + len(call.Arguments)
+	}
+	return n
 }

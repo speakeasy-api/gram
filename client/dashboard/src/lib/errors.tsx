@@ -1,6 +1,7 @@
 import { Text } from "@/components/ui/Text";
 import { Stack } from "@/components/ui/Stack";
 import { toast } from "sonner";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
 
 interface ErrorHandlerOptions {
   title?: string;
@@ -35,6 +36,14 @@ export function isNotFoundError(error: unknown): boolean {
   return "statusCode" in error && error.statusCode === 404;
 }
 
+function isExpectedAPIError(error: unknown): boolean {
+  return (
+    error instanceof GramError &&
+    error.statusCode >= 400 &&
+    error.statusCode < 500
+  );
+}
+
 export function handleError(
   error: unknown,
   options: ErrorHandlerOptions = {},
@@ -49,8 +58,15 @@ export function handleError(
   const errorMessage =
     typeof error === "string" ? error : toError(error).message;
 
-  // Log error for debugging
-  console.error("Error handled:", error);
+  // A 4xx from the API is the server answering a request it understood —
+  // permission denied, not found, conflict — and the toast is the whole
+  // response. Log it below error level so it does not count as a frontend
+  // error in RUM; anything else is still an error worth alerting on.
+  if (isExpectedAPIError(error)) {
+    console.warn("Error handled:", error);
+  } else {
+    console.error("Error handled:", error);
+  }
 
   // Show toast notification unless silent
   if (!silent) {

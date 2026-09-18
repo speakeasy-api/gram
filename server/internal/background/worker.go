@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/netip"
 	"net/url"
+	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -237,6 +238,15 @@ func newWorkerInterceptors() []interceptor.WorkerInterceptor {
 	}
 }
 
+// workerStopTimeout is how long a stopping worker lets in-flight activities
+// finish before cancelling them. A deploy stops every worker pod, and an
+// activity cancelled mid-flight is reported as a failed attempt that the
+// next pod repeats; letting short activities complete keeps a rollout from
+// looking like a failure burst. It must fit inside the pod's termination
+// drain window (60s after the preStop sleep) with room for the Temporal
+// client to respond.
+const workerStopTimeout = 45 * time.Second
+
 func NewTemporalWorker(
 	env *tenv.Environment,
 	logger *slog.Logger,
@@ -351,21 +361,25 @@ func NewTemporalWorker(
 	workerInterceptors := newWorkerInterceptors()
 
 	temporalWorker := worker.New(env.Client(), string(env.Queue()), worker.Options{
-		Interceptors: workerInterceptors,
+		Interceptors:      workerInterceptors,
+		WorkerStopTimeout: workerStopTimeout,
 	})
 
 	riskWorker := worker.New(env.Client(), RiskAnalysisTaskQueue(env.Queue()), worker.Options{
 		Interceptors:                       workerInterceptors,
+		WorkerStopTimeout:                  workerStopTimeout,
 		MaxConcurrentActivityExecutionSize: perPodAnalyzeBatchConcurrency,
 	})
 
 	aiUsageWorker := worker.New(env.Client(), AIUsagePollerTaskQueue(env.Queue()), worker.Options{
 		Interceptors:                       workerInterceptors,
+		WorkerStopTimeout:                  workerStopTimeout,
 		MaxConcurrentActivityExecutionSize: perPodAIUsagePollerConcurrency,
 	})
 
 	skillEfficacyWorker := worker.New(env.Client(), SkillEfficacyTaskQueue(env.Queue()), worker.Options{
 		Interceptors:                       workerInterceptors,
+		WorkerStopTimeout:                  workerStopTimeout,
 		MaxConcurrentActivityExecutionSize: perPodSkillEfficacyPublishConcurrency,
 	})
 
