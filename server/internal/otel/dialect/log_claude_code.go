@@ -398,5 +398,10 @@ func claudeCodeContent(record *otelv1.InboundLogRecord, keys ...string) (string,
 // again, in any spelling a producer uses: bare, or under Claude Code's legacy
 // claude_code. prefix. Such a body says nothing a row does not already carry.
 func BodyRepeatsEventName(body, name string) bool {
-	return body == name || body == claudeCodeLegacyBodyPrefix+name
+	// Either side may carry the prefix, and they need not agree: a record can
+	// name itself claude_code.api_request and repeat the bare api_request in
+	// its body. Strip the name down first, then accept the body in either
+	// spelling.
+	bare := strings.TrimPrefix(name, claudeCodeLegacyBodyPrefix)
+	return body == bare || body == claudeCodeLegacyBodyPrefix+bare
 }

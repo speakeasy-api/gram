@@ -105,3 +105,28 @@ func TestClaudeCodeLogOutcomeMessageLooksPastARedactedError(t *testing.T) {
 	require.Equal(t, "error_type", key)
 	require.Equal(t, "timeout", value)
 }
+
+// TestBodyRepeatsEventNameInEitherSpelling: the name and the body may each
+// carry the legacy prefix or not, independently, and a repeat is a repeat
+// whichever way round they fall.
+func TestBodyRepeatsEventNameInEitherSpelling(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		body, name string
+		repeats    bool
+	}{
+		{body: "api_request", name: "api_request", repeats: true},
+		{body: "claude_code.api_request", name: "api_request", repeats: true},
+		{body: "api_request", name: "claude_code.api_request", repeats: true},
+		{body: "claude_code.api_request", name: "claude_code.api_request", repeats: true},
+		{body: "explain this trace", name: "api_request", repeats: false},
+		{body: "api_response", name: "claude_code.api_request", repeats: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.body+" vs "+tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.repeats, BodyRepeatsEventName(tc.body, tc.name))
+		})
+	}
+}

@@ -115,7 +115,8 @@ func semconvLogAnyValue(value *otelv1.InboundLogRecord_AnyValue) any {
 // semconvOperationType maps gen_ai.operation.name onto the agent vocabulary.
 func semconvOperationType(operation string) string {
 	switch operation {
-	case "chat", "generate_content", "text_completion", "embeddings":
+	case "chat", "generate_content", "text_completion", "embeddings",
+		"image_generation", "create_agent", "invoke_agent":
 		return EventTypeAPIRequest
 	case "execute_tool":
 		return EventTypeToolCall
