@@ -74,11 +74,13 @@ func (s *Service) ReadPlatformRequesterReview(ctx context.Context, input Platfor
 		RequestID: row.ID.String(), TargetKind: row.TargetKind, Target: row.TargetRaw,
 		Status: status, StandingDecision: row.StandingDecision,
 		RequestedAt: conv.FromPGTimestamptz(row.RequestedAt), CreatedAt: conv.FromPGTimestamptz(row.CreatedAt), UpdatedAt: conv.FromPGTimestamptz(row.UpdatedAt),
-		NextAction: platformRequesterNextAction(status, row.StandingDecision),
+		NextAction: PlatformRequesterNextAction(status, row.StandingDecision),
 	}, nil
 }
 
-func platformRequesterNextAction(status, decision string) string {
+// PlatformRequesterNextAction is the closed guidance mapping shared by create
+// and read surfaces so the same request state cannot produce conflicting advice.
+func PlatformRequesterNextAction(status, decision string) string {
 	switch {
 	case status == statusRequested, status == statusSuperseded:
 		return "wait_for_review"

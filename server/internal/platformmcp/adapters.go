@@ -349,6 +349,7 @@ type PostgresReader struct {
 	shadowDecisions     *ShadowDecisionService
 	shadowAI            *ShadowAIService
 	reviewRequests      MCPReviewRequestService
+	reviewRequestBudget OperationBudget
 }
 
 func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
@@ -370,6 +371,7 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		shadowDecisions:     nil,
 		shadowAI:            nil,
 		reviewRequests:      nil,
+		reviewRequestBudget: OperationBudget{Connection: nil, Organization: nil},
 	}
 }
 
@@ -408,9 +410,10 @@ func (r *PostgresReader) ResolveReviewProject(ctx context.Context, principal Pri
 	return ResolvedProject{ID: project.ID, Name: project.Name, Slug: project.Slug}, nil
 }
 
-func (r *PostgresReader) WithReviewRequests(service MCPReviewRequestService) *PostgresReader {
-	if r != nil && service != nil {
+func (r *PostgresReader) WithReviewRequests(service MCPReviewRequestService, budget OperationBudget) *PostgresReader {
+	if r != nil && service != nil && budget.valid() {
 		r.reviewRequests = service
+		r.reviewRequestBudget = budget
 	}
 	return r
 }

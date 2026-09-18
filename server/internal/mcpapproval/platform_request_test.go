@@ -53,6 +53,7 @@ func TestPlatformRequesterNextActionPrioritizesPendingStatus(t *testing.T) {
 		Decision: "denied", DecidedBy: "admin", EvidenceSnapshot: []byte(`{}`), EvidenceVersion: 1, GrantedPrincipalUrns: []string{},
 	})
 	require.NoError(t, err)
+	require.NoError(t, ti.repo.SetApprovalRequestStatus(ctx, repo.SetApprovalRequestStatusParams{Status: "denied", ID: requestID, ProjectID: ti.projectID}))
 	_, err = ti.service.CreatePlatformRequest(ctx, ti.organizationID, ti.projectID, ti.authContext.UserID, "server_url", "https://pending.example.test/mcp", "still needed")
 	require.NoError(t, err)
 
@@ -63,6 +64,19 @@ func TestPlatformRequesterNextActionPrioritizesPendingStatus(t *testing.T) {
 	require.Equal(t, "requested", result.Status)
 	require.Equal(t, "denied", result.StandingDecision)
 	require.Equal(t, "wait_for_review", result.NextAction)
+}
+
+func TestPlatformRequesterNextActionIsSharedAcrossStates(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct{ status, decision, expected string }{
+		{status: "requested", decision: "denied", expected: "wait_for_review"},
+		{status: "superseded", decision: "approved", expected: "wait_for_review"},
+		{status: "approved", decision: "approved", expected: "ask_administrator_to_grant_access"},
+		{status: "denied", decision: "denied", expected: "contact_administrator"},
+	} {
+		require.Equal(t, test.expected, mcpapproval.PlatformRequesterNextAction(test.status, test.decision))
+	}
 }
 
 func TestCreatePlatformRequestUsesExistingAdmissionAndRolloutGate(t *testing.T) {

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -52,7 +53,7 @@ type GetMyMCPReviewRequestOutput struct {
 	mcpapproval.PlatformRequesterReview
 }
 
-func registerReviewRequestTools(reg *Registrar, service MCPReviewRequestService, projects MCPReviewProjectResolver) {
+func registerReviewRequestTools(reg *Registrar, service MCPReviewRequestService, projects MCPReviewProjectResolver, budget OperationBudget) {
 	addTool(reg, &mcp.Tool{
 		Name:        "request_mcp_review",
 		Title:       "Request Review of an MCP Server",
@@ -63,13 +64,16 @@ func registerReviewRequestTools(reg *Registrar, service MCPReviewRequestService,
 			if err != nil {
 				return RequestMCPReviewOutput{}, err
 			}
+			if err := budget.Allow(ctx, principal); err != nil {
+				return RequestMCPReviewOutput{}, err
+			}
 			created, err := service.CreatePlatformRequest(ctx, principal.OrganizationID, projectID, principal.UserID, input.TargetKind, input.Target, input.Justification)
 			if err != nil {
 				return RequestMCPReviewOutput{}, fmt.Errorf("create MCP review request: %w", err)
 			}
 			return RequestMCPReviewOutput{
 				RequestID: created.ID, ProjectID: projectID.String(), TargetKind: created.TargetKind, Target: created.TargetRaw,
-				Status: created.Status, CreatedAt: created.CreatedAt, UpdatedAt: created.UpdatedAt, NextAction: reviewRequestNextAction(created.Status),
+				Status: created.Status, CreatedAt: created.CreatedAt, UpdatedAt: created.UpdatedAt, NextAction: mcpapproval.PlatformRequesterNextAction(created.Status, ""),
 			}, nil
 		})
 	})
@@ -117,6 +121,9 @@ type reviewRequestRefusal struct {
 }
 
 func reviewRequestToolResult(err error) (*mcp.CallToolResult, bool) {
+	if result, ok := operationBudgetToolResult(err); ok {
+		return result, true
+	}
 	var shareable *oops.ShareableError
 	if !errors.As(err, &shareable) {
 		return nil, false
@@ -128,7 +135,11 @@ func reviewRequestToolResult(err error) (*mcp.CallToolResult, bool) {
 	case oops.CodeNotFound:
 		result.Code, result.Message = "not_found", "That project or review request is not available to you."
 	case oops.CodeForbidden:
-		result.Code, result.Message = "forbidden", "You do not have permission to submit or read this MCP review request."
+		if strings.Contains(shareable.Error(), "MCP approval is not enabled") {
+			result.Code, result.Message = unavailableCode, "MCP review requests are not available for this organization."
+		} else {
+			result.Code, result.Message = "forbidden", "You do not have permission to submit or read this MCP review request."
+		}
 	case oops.CodeUnavailable:
 		result.Code, result.Message = unavailableCode, "MCP review requests are temporarily unavailable."
 	default:
@@ -139,19 +150,6 @@ func reviewRequestToolResult(err error) (*mcp.CallToolResult, bool) {
 		return nil, false
 	}
 	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(payload)}}, IsError: true}, true
-}
-
-func reviewRequestNextAction(status string) string {
-	switch status {
-	case "requested", "superseded":
-		return "wait_for_review"
-	case "approved":
-		return "ask_administrator_to_grant_access"
-	case "denied":
-		return "contact_administrator"
-	default:
-		return "contact_administrator"
-	}
 }
 
 func registerUnavailableReviewRequestTools(reg *Registrar) {

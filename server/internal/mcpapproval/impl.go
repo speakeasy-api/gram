@@ -667,7 +667,7 @@ func (s *Service) createRequest(ctx context.Context, projectID uuid.UUID, organi
 	var key string
 	switch targetKind {
 	case targetKindServerURL:
-		canonicalKey, display, err := admittableServerURL(raw)
+		canonicalKey, display, err := admittableSecureServerURL(raw)
 		if err != nil {
 			return nil, err
 		}
@@ -678,6 +678,9 @@ func (s *Service) createRequest(ctx context.Context, projectID uuid.UUID, organi
 		// the server anyway.
 		raw = display
 	case targetKindStdioCommand:
+		if identity.ContainsPlaintextHTTPURL(raw) {
+			return nil, oops.E(oops.CodeBadRequest, nil, "stdio command server URLs must use https")
+		}
 		// The stored reference is the redacted form for the same reason: a
 		// launch command routinely embeds credentials (`--header
 		// "Authorization: Bearer …"`, `--api-key=…`, `TOKEN=… npx …`), and
@@ -774,6 +777,18 @@ func (s *Service) Promote(ctx context.Context, payload *gen.PromotePayload) (*ge
 		actor:           authCtx.UserID,
 		actorEmail:      authCtx.Email,
 	})
+}
+
+func admittableSecureServerURL(raw string) (key string, display string, err error) {
+	key, display, err = admittableServerURL(raw)
+	if err != nil {
+		return "", "", err
+	}
+	parsed, parseErr := url.Parse(display)
+	if parseErr != nil || !strings.EqualFold(parsed.Scheme, "https") {
+		return "", "", oops.E(oops.CodeBadRequest, parseErr, "target must be an https URL")
+	}
+	return key, display, nil
 }
 
 // admittableServerURL validates a server URL reference for intake and returns

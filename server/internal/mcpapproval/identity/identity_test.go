@@ -549,6 +549,24 @@ func TestResolve_CompleteSemverStillPins(t *testing.T) {
 // structure that identifies the server — launcher, package, flags — while
 // every secret-shaped value is removed, and it collapses whitespace so it
 // doubles as a dedupe key.
+func TestContainsPlaintextHTTPURLMatchesCommandURLShapes(t *testing.T) {
+	t.Parallel()
+
+	for _, command := range []string{
+		"npx -y mcp-remote http://mcp.example.com/sse",
+		`npx -y mcp-remote 'http://mcp.example.com/sse'`,
+		`npx -y server --url="http://mcp.example.com/sse"`,
+	} {
+		require.True(t, identity.ContainsPlaintextHTTPURL(command), command)
+	}
+	for _, command := range []string{
+		"npx -y mcp-remote https://mcp.example.com/sse",
+		"npx -y @scope/server",
+	} {
+		require.False(t, identity.ContainsPlaintextHTTPURL(command), command)
+	}
+}
+
 func TestRedactCommand_StripsSecretShapedValues(t *testing.T) {
 	t.Parallel()
 

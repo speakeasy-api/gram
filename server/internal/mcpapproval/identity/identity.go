@@ -224,6 +224,27 @@ var secretMarkers = []string{"token", "secret", "key", "pass", "auth", "cred", "
 // free-standing token: identity resolution reads the redacted form, and a bare
 // `<redacted>` sitting before the package spec would be taken for the package
 // itself, attributing the evidence to the wrong artifact.
+// ContainsPlaintextHTTPURL reports whether a command includes an absolute
+// plaintext HTTP URL in a standalone or flag value. It intentionally uses the
+// same tokenization and quoting rules as RedactCommand so a URL cannot pass
+// admission in a shape evidence gathering later recognizes.
+func ContainsPlaintextHTTPURL(raw string) bool {
+	fields := strings.FieldsSeq(raw)
+	for field := range fields {
+		candidates := []string{unquoted(field)}
+		if _, value, joined := splitFlag(field); joined {
+			candidates = append(candidates, unquoted(value))
+		}
+		for _, candidate := range candidates {
+			u, err := url.Parse(candidate)
+			if err == nil && strings.EqualFold(u.Scheme, "http") && u.Hostname() != "" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func RedactCommand(raw string) string {
 	fields := strings.Fields(raw)
 	out := make([]string, 0, len(fields))

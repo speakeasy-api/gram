@@ -204,7 +204,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		if postgresReader.reviewRequests == nil {
 			registerUnavailableReviewRequestTools(reg)
 		} else {
-			registerReviewRequestTools(reg, postgresReader.reviewRequests, postgresReader)
+			registerReviewRequestTools(reg, postgresReader.reviewRequests, postgresReader, postgresReader.reviewRequestBudget)
 		}
 		registerRiskToolsWithMutations(reg, postgresReader.riskReads, postgresReader.riskAnalysisStatus, riskMutations)
 		if postgresReader.dataExports == nil {
