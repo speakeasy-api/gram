@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat/analysis/repo"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
 func testJudges(t *testing.T, judges ...Judge) *Judges {
@@ -224,6 +225,34 @@ func TestPublish_ModelFailureChargesAttempt(t *testing.T) {
 	again, _, err := Reserve(ctx, fixture.db, roster, fixture.projectID, PendingCursor{}, MaxReservedClaimBatch)
 	require.NoError(t, err)
 	require.Empty(t, again, "the failed evaluation's spend is not returned")
+}
+
+func TestPublish_ThrottledJudgeChargesNoAttempt(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	fixture := newAnalysisFixture(t, "publish_throttled")
+	roster := testJudges(t, stubNamedJudge{name: "work_units", verdict: JudgeResult{}, err: fmt.Errorf("openrouter object completion: %w: %w", ErrRetryable, openrouter.ErrRateLimited)})
+	fixture.enableJudge(t, "work_units", 1)
+
+	fixture.seedChat(t, 2, time.Hour)
+	_, err := EnqueuePage(ctx, fixture.db, roster, fixture.projectID, EnqueueCursor{}, MaxEnqueuePageSize)
+	require.NoError(t, err)
+	reserved, _, err := Reserve(ctx, fixture.db, roster, fixture.projectID, PendingCursor{}, MaxReservedClaimBatch)
+	require.NoError(t, err)
+	require.Len(t, reserved, 1)
+
+	sink := &captureSink{}
+	publisher := NewPublisher(testenv.NewLogger(t), testenv.NewTracerProvider(t), fixture.db, sink, nil, roster)
+
+	result, err := publisher.Publish(ctx, fixture.projectID, []uuid.UUID{reserved[0].ID}, nil)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Throttled)
+	require.Zero(t, result.Retryable)
+	row := fixture.evaluation(t, reserved[0].ID)
+	require.Equal(t, StateReserved, row.State)
+	require.Zero(t, row.Attempts, "a throttled call charges no attempt")
+	require.Empty(t, sink.rows(t))
 }
 
 func TestPublish_AlreadyPublishedSkipsJudge(t *testing.T) {
