@@ -224,11 +224,14 @@ func (s *PluginsService) SetPluginAssignments(ctx context.Context, principal Pri
 			return SetPluginAssignmentsReceiptResult{}, fmt.Errorf("read committed plugin assignment state: %w", err)
 		}
 		inventory := pluginFromInventoryRow(platformrepo.ListPlatformMCPPluginInventoryRow(row))
+		if inventory.Assignments == nil {
+			return SetPluginAssignmentsReceiptResult{}, pluginAssignmentMutationUnavailable(errors.New("plugin assignment summary unavailable"))
+		}
 		return SetPluginAssignmentsReceiptResult{
 			ProjectID: project.ID.String(),
 			Plugin: PluginAssignmentMutationPlugin{
 				ID: inventory.ID, Name: inventory.Name, Slug: inventory.Slug, IsDefault: inventory.IsDefault,
-				Assignments: inventory.Assignments, Publication: inventory.Publication,
+				Assignments: *inventory.Assignments, Publication: inventory.Publication,
 			},
 			AssignmentVersion: pluginAssignmentVersion(s.assignmentVersionKey, project.ID, target.ID, result.PrincipalURNs),
 			Assignments:       summaries,

@@ -17,6 +17,9 @@ const (
 	AsyncScanOutcomeOK           = "ok"
 	AsyncScanOutcomeScanError    = "scan_error"
 	AsyncScanOutcomePublishError = "publish_error"
+	// AsyncScanOutcomeDisabled marks a message acked untouched because the
+	// handler's engine is not configured in this deployment.
+	AsyncScanOutcomeDisabled = "disabled"
 
 	meterAsyncScanHandlerMessages = "risk.async_scan.handler_messages"
 )

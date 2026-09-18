@@ -27,12 +27,17 @@ type LogUserSessionIssuerCreateEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	UserSessionIssuerURN urn.UserSessionIssuer
-	Slug                 string
+	UserSessionIssuerURN           urn.UserSessionIssuer
+	Slug                           string
+	UserSessionIssuerSnapshotAfter *types.UserSessionIssuer
 }
 
 func (l *Logger) LogUserSessionIssuerCreate(ctx context.Context, dbtx repo.DBTX, event LogUserSessionIssuerCreateEvent) error {
 	action := ActionUserSessionIssuerCreate
+	afterSnapshot, err := marshalAuditPayload(event.UserSessionIssuerSnapshotAfter)
+	if err != nil {
+		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
+	}
 	entry := repo.InsertAuditLogParams{
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
@@ -50,7 +55,7 @@ func (l *Logger) LogUserSessionIssuerCreate(ctx context.Context, dbtx repo.DBTX,
 		SubjectSlug:        conv.ToPGTextEmpty(event.Slug),
 
 		BeforeSnapshot: nil,
-		AfterSnapshot:  nil,
+		AfterSnapshot:  afterSnapshot,
 		Metadata:       nil,
 	}
 

@@ -92,6 +92,26 @@ describe("AUDIT_ACTIONS", () => {
     ]);
   });
 
+  it("describes identity provider connection actions with the provider as subject", () => {
+    expect(
+      (
+        [
+          "identity-provider-connection:create",
+          "identity-provider-connection:submit-client-id",
+          "identity-provider-connection:verify",
+          "identity-provider-connection:record-agent",
+          "identity-provider-connection:revoke",
+        ] as const
+      ).map((action) => `${staticActionPhrase(action)} okta`),
+    ).toEqual([
+      "connected identity provider okta",
+      "submitted client ID for identity provider okta",
+      "verified identity provider connection to okta",
+      "recorded agent for identity provider okta",
+      "revoked identity provider connection to okta",
+    ]);
+  });
+
   it("rejects actions it doesn't know", () => {
     expect(isAuditAction("risk_policy:delete")).toBe(true);
     expect(isAuditAction("not_a_resource:not_a_verb")).toBe(false);

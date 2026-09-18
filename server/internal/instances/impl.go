@@ -47,6 +47,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -69,6 +70,7 @@ type Service struct {
 	environmentsRepo  *environments_repo.Queries
 	env               *environments.EnvironmentEntries
 	toolProxy         *gateway.ToolProxy
+	scanEvaluator     mcpriskscan.Evaluator
 	tracking          billing.Tracker
 	toolsetCache      cache.TypedCacheObject[mv.ToolsetBaseContents]
 	featuresClient    *productfeatures.Client
@@ -124,6 +126,7 @@ func NewService(
 			funcCaller,
 			platformTools,
 		),
+		scanEvaluator:     mcpriskscan.NewNoop(traceProvider, meterProvider, logger),
 		toolsetCache:      cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
 		telemLogger:       telemLogger,
 		featuresClient:    featClient,
@@ -367,11 +370,29 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 
 	requestNumBytes := int64(len(requestBodyBytes))
 
-	requestBody = io.NopCloser(bytes.NewBuffer(requestBodyBytes))
-
 	interceptor := newResponseInterceptor(w)
 
-	err = s.toolProxy.Do(ctx, interceptor, requestBody, toolconfig.ToolCallEnv{
+	scanToolsetID := ""
+	if toolset != nil {
+		scanToolsetID = toolset.ID
+	}
+	scanToolName := descriptor.Name
+	if plan.Kind == gateway.ToolKindExternalMCP {
+		scanToolName = descriptor.URN.Name
+	}
+	s.scanEvaluator.Scan(ctx, bytes.NewReader(requestBodyBytes), mcpriskscan.Event{
+		Surface:        mcpriskscan.SurfaceInstances,
+		Method:         mcpriskscan.MethodToolsCall,
+		OrganizationID: descriptor.OrganizationID,
+		ProjectID:      descriptor.ProjectID,
+		ServerID:       "",
+		ToolsetID:      scanToolsetID,
+		ToolName:       scanToolName,
+		ResourceURI:    "",
+		PromptName:     "",
+		Phase:          mcpriskscan.PhaseBeforeExecution,
+	})
+	err = s.toolProxy.Do(ctx, interceptor, bytes.NewReader(requestBodyBytes), toolconfig.ToolCallEnv{
 		SystemEnv:  systemConfig,
 		UserConfig: ciEnv,
 		OAuthToken: "", // Instances do not support OAuth tokens for external MCP

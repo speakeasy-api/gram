@@ -11,7 +11,8 @@
 -- soft-deleted (external_credentials.deleted is a generated column, so a soft
 -- delete never fires the external_keys foreign key). The credential join
 -- predicate spells out every condition a usable credential must meet so a row
--- failing one reads as an absent credential.
+-- failing one reads as an absent credential. A platform-tier credential
+-- (organization_id IS NULL) joins only for managed keys.
 -- name: GetExternalKeyForMint :one
 SELECT
   sqlc.embed(ek),
@@ -26,7 +27,10 @@ FROM external_keys AS ek
 LEFT JOIN gcp_kms_keys AS gcp ON gcp.external_key_id = ek.id
 LEFT JOIN external_credentials AS ec
        ON ec.id = ek.external_credential_id
-      AND ec.organization_id = ek.organization_id
+      AND (
+        ec.organization_id = ek.organization_id
+        OR (ek.identity_provider_connection_id IS NOT NULL AND ec.organization_id IS NULL)
+      )
       AND ec.project_id IS NULL
       AND ec.provider = 'gcp_iam'
       AND ec.deleted IS FALSE
@@ -50,7 +54,7 @@ WHERE ek.id = @id
 -- set reference a project-scoped key would entangle project deletion with
 -- org-level state.
 -- name: LockExternalKeyForJwksWrite :one
-SELECT id, provider, algorithm
+SELECT id, provider, algorithm, identity_provider_connection_id
 FROM external_keys
 WHERE id = @id
   AND organization_id = @organization_id
@@ -59,8 +63,8 @@ WHERE id = @id
 FOR SHARE;
 
 -- name: CreateJsonWebKeySet :one
-INSERT INTO json_web_key_sets (organization_id, external_key_id, name)
-VALUES (@organization_id, @external_key_id, @name)
+INSERT INTO json_web_key_sets (organization_id, external_key_id, name, identity_provider_connection_id)
+VALUES (@organization_id, @external_key_id, @name, sqlc.narg('identity_provider_connection_id'))
 RETURNING *;
 
 -- name: GetJsonWebKeySet :one
@@ -71,13 +75,22 @@ WHERE id = @id
   AND project_id IS NULL
   AND deleted IS FALSE;
 
+-- Sets left behind by a tombstoned identity provider connection are hidden;
+-- they stay reachable by id so the organization can delete them.
 -- name: ListJsonWebKeySets :many
 SELECT *
-FROM json_web_key_sets
-WHERE organization_id = @organization_id
-  AND project_id IS NULL
-  AND deleted IS FALSE
-ORDER BY id DESC;
+FROM json_web_key_sets AS s
+WHERE s.organization_id = @organization_id
+  AND s.project_id IS NULL
+  AND s.deleted IS FALSE
+  AND NOT EXISTS (
+    SELECT 1
+    FROM identity_provider_connections AS ipc
+    WHERE ipc.id = s.identity_provider_connection_id
+      AND ipc.organization_id = s.organization_id
+      AND ipc.deleted IS TRUE
+  )
+ORDER BY s.id DESC;
 
 -- name: UpdateJsonWebKeySet :one
 UPDATE json_web_key_sets

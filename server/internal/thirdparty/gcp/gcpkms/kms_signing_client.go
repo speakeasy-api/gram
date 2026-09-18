@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"hash/crc32"
+	"time"
 
 	kms "cloud.google.com/go/kms/apiv1"
 	kmspb "cloud.google.com/go/kms/apiv1/kmspb"
@@ -24,11 +25,14 @@ func crc32c(data []byte) int64 {
 	return int64(crc32.Checksum(data, castagnoli))
 }
 
-var _ SigningClient = (*kmsSigningClient)(nil)
+var _ ProvisioningClient = (*kmsSigningClient)(nil)
 
 // kmsSigningClient is the SigningClient backed by real GCP Cloud KMS.
 type kmsSigningClient struct {
 	kms *kms.KeyManagementClient
+
+	// keyGenerationPoll is a field so the in-process fake can poll without sleeping.
+	keyGenerationPoll time.Duration
 }
 
 // NewSigningClient opens an authenticated GCP KMS client. The caller owns its
@@ -40,7 +44,18 @@ func NewSigningClient(ctx context.Context, tokenSource oauth2.TokenSource) (Sign
 		return nil, fmt.Errorf("build gcp kms client: %w", err)
 	}
 
-	return &kmsSigningClient{kms: c}, nil
+	return &kmsSigningClient{kms: c, keyGenerationPoll: keyGenerationPollInterval}, nil
+}
+
+// NewProvisioningClient opens an authenticated GCP KMS client that can also
+// provision keys. The caller MUST Close it.
+func NewProvisioningClient(ctx context.Context, tokenSource oauth2.TokenSource) (ProvisioningClient, error) {
+	c, err := kms.NewKeyManagementClient(ctx, option.WithTokenSource(tokenSource))
+	if err != nil {
+		return nil, fmt.Errorf("build gcp kms client: %w", err)
+	}
+
+	return &kmsSigningClient{kms: c, keyGenerationPoll: keyGenerationPollInterval}, nil
 }
 
 // Close releases the underlying gRPC connection. It is not optional: each

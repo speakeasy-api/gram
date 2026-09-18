@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ExportMap } from "./DataExports";
 
@@ -59,25 +60,33 @@ const project = {
   name: "Default",
 } as ExportRow["project"];
 
+const secondaryProject = {
+  id: "project-2",
+  slug: "secondary",
+  name: "Secondary",
+} as ExportRow["project"];
+
 function exportRow({
   routeID,
   dataSource,
   destinationID,
   destinationName,
+  project: rowProject = project,
 }: {
   routeID: string;
   dataSource: string;
   destinationID: string;
   destinationName: string;
+  project?: ExportRow["project"];
 }): ExportRow {
   const timestamp = new Date(0);
 
   return {
-    project,
+    project: rowProject,
     route: {
       createdAt: timestamp,
       id: routeID,
-      projectId: project.id,
+      projectId: rowProject.id,
       dataSource: dataSource as ExportRow["route"]["dataSource"],
       enabled: true,
       otelDestinationId: destinationID,
@@ -86,7 +95,7 @@ function exportRow({
     destination: {
       createdAt: timestamp,
       id: destinationID,
-      projectId: project.id,
+      projectId: rowProject.id,
       destinationType: "otel",
       name: destinationName,
       sensitiveData: "exclude",
@@ -110,27 +119,41 @@ const callbacks = {
 describe("ExportMap", () => {
   it("renders one destination node for routes sharing a destination", () => {
     render(
-      <ExportMap
-        exports={[
-          exportRow({
-            routeID: "route-telemetry",
-            dataSource: "product_telemetry",
-            destinationID: "destination-1",
-            destinationName: "Clickstack",
-          }),
-          exportRow({
-            routeID: "route-risk",
-            dataSource: "risk_findings",
-            destinationID: "destination-1",
-            destinationName: "Clickstack",
-          }),
-        ]}
-        {...callbacks}
-      />,
+      <MemoryRouter>
+        <ExportMap
+          exports={[
+            exportRow({
+              routeID: "route-telemetry",
+              dataSource: "product_telemetry",
+              destinationID: "destination-1",
+              destinationName: "Clickstack",
+            }),
+            exportRow({
+              routeID: "route-risk",
+              dataSource: "risk_findings",
+              destinationID: "destination-1",
+              destinationName: "Clickstack",
+              project: secondaryProject,
+            }),
+          ]}
+          descriptionLinks={{
+            eventFeed: "/event-feed",
+            riskPolicies: (candidate) =>
+              `/projects/${candidate.slug}/risk-policies?tab=policies`,
+          }}
+          {...callbacks}
+        />
+      </MemoryRouter>,
     );
 
     expect(screen.getByText("Product telemetry")).toBeTruthy();
     expect(screen.getByText("Risk findings")).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "Event Feed" }).getAttribute("href"),
+    ).toBe("/event-feed");
+    expect(
+      screen.getByRole("link", { name: "risk policies" }).getAttribute("href"),
+    ).toBe("/projects/secondary/risk-policies?tab=policies");
     expect(screen.getAllByText("Clickstack")).toHaveLength(1);
     expect(screen.getAllByText("https://clickstack.example.com")).toHaveLength(
       1,

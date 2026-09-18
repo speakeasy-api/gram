@@ -4,7 +4,6 @@ import { InsightsAgentsContent } from "@/components/observe/InsightsAgents";
 import { InsightsToolsContent } from "@/components/observe/InsightsTools";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { ObserveTabNav } from "@/components/observe/ObserveTabNav";
 
 export function InsightsRoot(): JSX.Element {
   return (
@@ -17,11 +16,9 @@ export function InsightsRoot(): JSX.Element {
 function ObservePageShell({
   children,
   substitutions,
-  tabsBase,
 }: {
   children: ReactNode;
   substitutions?: Record<string, string | undefined>;
-  tabsBase?: "insights" | "logs";
 }) {
   return (
     <div className="flex h-full flex-col">
@@ -30,7 +27,6 @@ function ObservePageShell({
         <Page.Header>
           <Page.Header.Breadcrumbs fullWidth substitutions={substitutions} />
         </Page.Header>
-        {tabsBase && <ObserveTabNav base={tabsBase} />}
         <Page.Body fullWidth overflowHidden noPadding>
           {children}
         </Page.Body>

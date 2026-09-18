@@ -11,11 +11,12 @@ import { subjectLabel } from "@/lib/user-session-status";
 import type { UserSession } from "@gram/client/models/components/usersession.js";
 import type { UserSessionClient } from "@gram/client/models/components/usersessionclient.js";
 import type { UserSessionUpstream } from "@gram/client/models/components/usersessionupstream.js";
+import type { UserSessionWorkload } from "@gram/client/models/components/usersessionworkload.js";
 
 /**
- * What a row is filed under. "Person" is the default because the question an
- * admin arrives with is almost always about someone — who has access, and what
- * can they reach — rather than about a credential.
+ * What a row is filed under. The subject axis is the default because the
+ * question an admin arrives with is almost always about who holds the access
+ * and what they can reach, rather than about a credential.
  */
 export type ConnectionGrouping = "subject" | "issuer" | "provider" | "client";
 
@@ -23,7 +24,11 @@ export type ConnectionGrouping = "subject" | "issuer" | "provider" | "client";
 // connection is an agent, and that is what it is called everywhere else in the
 // product. `client` stays as the key, which names the protocol record.
 export const CONNECTION_GROUPING_LABELS: Record<ConnectionGrouping, string> = {
-  subject: "Person",
+  // The subject axis files a session under whoever holds it, and that is not
+  // always a person: API keys, agents, anonymous callers and workloads share
+  // this column. A machine under a heading reading "Person" contradicts the
+  // row's own icon and badge.
+  subject: "Identity",
   // The Gram MCP server the session was issued through, which is what the rest
   // of the product means by "MCP server" — distinct from "Provider", the
   // upstream the server holds tokens for.
@@ -60,6 +65,11 @@ export type ConnectionGroup = {
   // `urn` is the subject URN the sessions were filed under, which is also the
   // identity URN the person's page resolves from.
   identity?: { photoUrl?: string; urn?: string };
+  /**
+   * Set when the group heading names a workload rather than a person. Every
+   * session filed under one workload subject describes the same workload.
+   */
+  workload?: UserSessionWorkload;
   /**
    * The registration this group stands for, under client grouping. Carrying the
    * whole record (rather than an id) lets the header offer "revoke
@@ -166,6 +176,7 @@ export function groupConnections(
         lastUsedAt: null,
         inactive: true,
         identity: undefined,
+        workload: undefined,
         client,
         clientId: client.id,
         credentialKind: client.credentialKind,
@@ -197,6 +208,10 @@ export function groupConnections(
                   photoUrl: session.subjectPhotoUrl ?? undefined,
                   urn: session.subjectUrn,
                 }
+              : undefined,
+          workload:
+            grouping === "subject"
+              ? (session.workload ?? undefined)
               : undefined,
           client: undefined,
           // Both read off the session rather than a registration record, which

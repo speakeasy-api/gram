@@ -187,6 +187,13 @@ type GetClientDeletePreflightResponseBody struct {
 	SessionCount *int `form:"session_count,omitempty" json:"session_count,omitempty" xml:"session_count,omitempty"`
 	// Display names of MCP servers this client is attached to.
 	McpServerNames []string `form:"mcp_server_names,omitempty" json:"mcp_server_names,omitempty" xml:"mcp_server_names,omitempty"`
+	// Organization-owned user-session issuers that use this client for
+	// identity-provider login and block deletion.
+	TrustedUserSessionIssuers []*TrustedClientUserSessionIssuerReferenceResponseBody `form:"trusted_user_session_issuers,omitempty" json:"trusted_user_session_issuers,omitempty" xml:"trusted_user_session_issuers,omitempty"`
+	// Whether the client can be deleted now.
+	CanDelete *bool `form:"can_delete,omitempty" json:"can_delete,omitempty" xml:"can_delete,omitempty"`
+	// Stable reason deletion is blocked. Present when can_delete is false.
+	BlockingReason *string `form:"blocking_reason,omitempty" json:"blocking_reason,omitempty" xml:"blocking_reason,omitempty"`
 }
 
 // ListClientMcpServersResponseBody is the type of the
@@ -2875,6 +2882,15 @@ type RemoteSessionClientResponseBody struct {
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
+// TrustedClientUserSessionIssuerReferenceResponseBody is used to define fields
+// on response body types.
+type TrustedClientUserSessionIssuerReferenceResponseBody struct {
+	// The user_session_issuer id.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The user_session_issuer slug.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+}
+
 // OrganizationMcpServerResponseBody is used to define fields on response body
 // types.
 type OrganizationMcpServerResponseBody struct {
@@ -3345,11 +3361,21 @@ func NewGetClientGatewayError(body *GetClientGatewayErrorResponseBody) *goa.Serv
 // endpoint result from a HTTP "OK" response.
 func NewGetClientDeletePreflightOrganizationClientDeletePreflightOK(body *GetClientDeletePreflightResponseBody) *organizationremotesessionclients.OrganizationClientDeletePreflight {
 	v := &organizationremotesessionclients.OrganizationClientDeletePreflight{
-		SessionCount: *body.SessionCount,
+		SessionCount:   *body.SessionCount,
+		CanDelete:      *body.CanDelete,
+		BlockingReason: body.BlockingReason,
 	}
 	v.McpServerNames = make([]string, len(body.McpServerNames))
 	for i, val := range body.McpServerNames {
 		v.McpServerNames[i] = val
+	}
+	v.TrustedUserSessionIssuers = make([]*organizationremotesessionclients.TrustedClientUserSessionIssuerReference, len(body.TrustedUserSessionIssuers))
+	for i, val := range body.TrustedUserSessionIssuers {
+		if val == nil {
+			v.TrustedUserSessionIssuers[i] = nil
+			continue
+		}
+		v.TrustedUserSessionIssuers[i] = unmarshalTrustedClientUserSessionIssuerReferenceResponseBodyToOrganizationremotesessionclientsTrustedClientUserSessionIssuerReference(val)
 	}
 
 	return v
@@ -5237,6 +5263,24 @@ func ValidateGetClientDeletePreflightResponseBody(body *GetClientDeletePreflight
 	}
 	if body.McpServerNames == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_names", "body"))
+	}
+	if body.TrustedUserSessionIssuers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("trusted_user_session_issuers", "body"))
+	}
+	if body.CanDelete == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("can_delete", "body"))
+	}
+	for _, e := range body.TrustedUserSessionIssuers {
+		if e != nil {
+			if err2 := ValidateTrustedClientUserSessionIssuerReferenceResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if body.BlockingReason != nil {
+		if !(*body.BlockingReason == "identity_provider_login") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.blocking_reason", *body.BlockingReason, []any{"identity_provider_login"}))
+		}
 	}
 	return
 }
@@ -8695,6 +8739,21 @@ func ValidateRemoteSessionClientResponseBody(body *RemoteSessionClientResponseBo
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateTrustedClientUserSessionIssuerReferenceResponseBody runs the
+// validations defined on TrustedClientUserSessionIssuerReferenceResponseBody
+func ValidateTrustedClientUserSessionIssuerReferenceResponseBody(body *TrustedClientUserSessionIssuerReferenceResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
 	return
 }

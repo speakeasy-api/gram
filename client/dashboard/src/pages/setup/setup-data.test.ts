@@ -42,6 +42,45 @@ describe("AGENT_PLATFORMS", () => {
     });
   });
 
+  it("ends Cowork setup with authenticated OTEL export instructions", () => {
+    const cowork = AGENT_PLATFORMS.find(({ id }) => id === "claude-cowork");
+    const step = cowork?.setupSteps.at(-1);
+
+    expect(step).toMatchObject({
+      title: "Enable OTEL export",
+      description:
+        "In the Cowork tab of the Claude org settings, scroll to Monitoring and enter the values below.",
+      fields: [
+        {
+          label: "OTLP endpoint",
+          value: "https://app.getgram.ai/rpc/hooks.otel",
+        },
+        { label: "OTLP protocol", value: "http/json" },
+        {
+          label: "OTLP headers",
+          value: "Gram-Project=default,Gram-Key={{GRAM_API_KEY}}",
+          requiresApiKey: true,
+        },
+      ],
+      afterFields: "Save the settings in Claude.",
+      requiresApiKey: true,
+    });
+  });
+
+  it("places the dynamic Cowork plugin identifier inline instead of a copy block", () => {
+    const step = AGENT_PLATFORMS.find(
+      ({ id }) => id === "claude-cowork",
+    )?.setupSteps.find(
+      ({ title }) => title === "Mark the observability plugin as Required",
+    );
+    expect(step?.description).toContainEqual({
+      code: "{{GRAM_CLAUDE_PLUGIN_NAME}}",
+      fallback: "the observability plugin",
+    });
+    expect(step).not.toHaveProperty("code");
+    expect(step).not.toHaveProperty("language");
+  });
+
   it("delegates Codex telemetry configuration to the device agent", () => {
     const codex = AGENT_PLATFORMS.find(({ id }) => id === "codex");
 

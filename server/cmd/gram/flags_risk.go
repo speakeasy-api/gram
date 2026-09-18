@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/urfave/cli/v2"
 
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/scanners/llmanalyzer"
 )
 
 // riskFingerprintPepperFlag carries the keyring every risk host needs: the
@@ -66,4 +68,43 @@ func parseOptionalPepperKeyRing(ctx context.Context, logger *slog.Logger, raw st
 		return fingerprinter, fmt.Errorf("parse risk fingerprint pepper keyring: %w", err)
 	}
 	return fingerprinter, nil
+}
+
+// riskLLMFlags configure the fine-tuned risk model client. The streams
+// process runs both analyzer lanes; the server and worker only read whether a
+// URL is set, so their batch scans fall back to the legacy engines when no
+// analyzer is deployed to evaluate the requests they would publish.
+func riskLLMFlags() []cli.Flag {
+	return []cli.Flag{
+		&cli.StringFlag{
+			Name:    "risk-llm-url",
+			Usage:   "OpenAI-compatible base URL of the fine-tuned risk model, including the /v1 segment. Empty disables the LLM risk analyzer.",
+			EnvVars: []string{"GRAM_RISK_LLM_URL"},
+		},
+		&cli.StringFlag{
+			Name:    "risk-llm-api-key",
+			Usage:   "Bearer token for the fine-tuned risk model endpoint",
+			EnvVars: []string{"GRAM_RISK_LLM_API_KEY"},
+		},
+		&cli.StringFlag{
+			Name:    "risk-llm-model",
+			Usage:   "Served model name of the fine-tuned risk model; must equal the deployment's --served-model-name",
+			EnvVars: []string{"GRAM_RISK_LLM_MODEL"},
+			Value:   llmanalyzer.DefaultModel,
+		},
+	}
+}
+
+// llmAnalyzerConfigFromCLI reads the risk LLM flags into a client config.
+// Timeout and max tokens are code constants, not flags. The URL and key are
+// trimmed because secrets copied from a manager routinely carry a trailing
+// newline, which would otherwise pass validation and break every request.
+func llmAnalyzerConfigFromCLI(c *cli.Context) llmanalyzer.Config {
+	return llmanalyzer.Config{
+		BaseURL:   strings.TrimSpace(c.String("risk-llm-url")),
+		APIKey:    strings.TrimSpace(c.String("risk-llm-api-key")),
+		Model:     c.String("risk-llm-model"),
+		Timeout:   llmanalyzer.DefaultTimeout,
+		MaxTokens: llmanalyzer.DefaultMaxTokens,
+	}
 }

@@ -179,6 +179,30 @@ func TestDeleteIssuer_BlockedByTrustedUserSessionIssuer(t *testing.T) {
 	}))
 }
 
+func TestUpdateIssuerRejectsCapabilitiesThatInvalidateTrustedClient(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	issuerID, clientID := seedTrustedIdentityProviderClient(t, ctx, ti.conn, "admin-update-trusted-capabilities")
+	createTrustedClientOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "admin-update-trusted-capabilities-usi", issuerID, clientID)
+
+	_, err := ti.service.UpdateIssuer(ctx, &orgissuersgen.UpdateIssuerPayload{
+		ID:              issuerID.String(),
+		ScopesSupported: []string{"openid", "email"},
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	require.ErrorContains(t, err, "identity-provider login")
+
+	stored, err := repo.New(ti.conn).GetTrustedRemoteSessionIssuerForOrganization(ctx, repo.GetTrustedRemoteSessionIssuerForOrganizationParams{
+		ID:             issuerID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+	require.Contains(t, stored.ScopesSupported, "offline_access")
+}
+
 // TestDeleteIssuer_SerializedAgainstClientBinding is the organization-tier
 // counterpart to TestDeleteRemoteSessionIssuer_SerializedAgainstClientBinding:
 // the org-admin delete must take the same client-binding advisory lock, so a
@@ -241,6 +265,50 @@ func TestDeleteIssuer_CrossOrgNotFound(t *testing.T) {
 		OrganizationID: conv.ToPGText(otherOrgID),
 	})
 	require.NoError(t, err)
+}
+
+func TestIssuerMutations_CrossOrgIDsDoNotWaitForAdvisoryLock(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	otherOrgID := createOrganization(t, ctx, ti.conn, "admin-foreign-lock-other-org")
+	foreignIssuerID := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, otherOrgID, "admin-foreign-lock-issuer")
+
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, repo.New(tx).LockRemoteSessionIssuerForClientBinding(ctx, foreignIssuerID))
+
+	name := "Foreign issuer"
+	updateDone := make(chan error, 1)
+	go func() {
+		_, err := ti.service.UpdateIssuer(ctx, &orgissuersgen.UpdateIssuerPayload{
+			ID:   foreignIssuerID.String(),
+			Name: &name,
+		})
+		updateDone <- err
+	}()
+
+	select {
+	case err := <-updateDone:
+		requireOopsCode(t, err, oops.CodeNotFound)
+	case <-time.After(2 * time.Second):
+		require.NoError(t, tx.Rollback(ctx))
+		t.Fatal("cross-organization update waited for a foreign issuer's advisory lock")
+	}
+
+	deleteDone := make(chan error, 1)
+	go func() {
+		deleteDone <- ti.service.DeleteIssuer(ctx, &orgissuersgen.DeleteIssuerPayload{ID: foreignIssuerID.String()})
+	}()
+
+	select {
+	case err := <-deleteDone:
+		requireOopsCode(t, err, oops.CodeNotFound)
+	case <-time.After(2 * time.Second):
+		require.NoError(t, tx.Rollback(ctx))
+		t.Fatal("cross-organization delete waited for a foreign issuer's advisory lock")
+	}
+
+	require.NoError(t, tx.Rollback(ctx))
 }
 
 func newCreateIssuerPayload(slug string, projectID *string) *orgissuersgen.CreateIssuerPayload {
