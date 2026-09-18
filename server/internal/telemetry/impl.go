@@ -4191,6 +4191,7 @@ func toToolUsageTracesResult(rows []repo.ToolUsageTraceSummary, nextCursor strin
 			EventSource:          row.EventSource,
 			HTTPStatusCode:       row.HTTPStatusCode,
 			HookStatus:           row.HookStatus,
+			ToolError:            conv.PtrEmpty(row.ToolError == 1),
 			BlockReason:          row.BlockReason,
 			AccountType:          row.AccountType,
 			ViaMetaMcpServerID:   viaGatewayID,

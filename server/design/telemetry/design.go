@@ -2681,6 +2681,7 @@ var ToolUsageTraceSummary = Type("ToolUsageTraceSummary", func() {
 	Attribute("hook_status", String, "Hook execution status when the row came from hook telemetry", func() {
 		Enum("success", "failure", "blocked", "pending")
 	})
+	Attribute("tool_error", Boolean, "Whether the tool ran and reported failure in its own result, which an upstream MCP server does by answering isError. The status code stays 2xx in that case, so this is the only signal separating it from a success.")
 	Attribute("block_reason", String, "Hook block reason when hook_status is blocked")
 	Attribute("account_type", String, "AI account classification ('team' or 'personal'); empty/absent when unclassified")
 	Attribute("via_meta_mcp_server_id", String, "Gateway (meta MCP server) that dispatched this call to the target; absent for direct calls and for calls observed against a gateway itself")
