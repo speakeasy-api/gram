@@ -1,0 +1,25 @@
+server/internal/mcp/tunnel_manager.go
+  s_6018a91b3dbabe::t_43edf7317ce17d 110
+server/internal/mcp/tunnelpublic.go
+  s_6018a91b3dbabe::t_27c65ac902a6cc 443,697
+server/internal/mcp/tunnelrouting/routing.go
+  s_6018a91b3dbabe::t_40127f27182171 114-122,126,130-150
+server/internal/mcp/tunnelrouting/routing_test.go
+  s_6018a91b3dbabe::t_827762432ec366 100,106,116,122-156
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "20bebf9f1b13c7faf1cf7d416e47a94c905ef86e",
+  "prompts": {},
+  "sessions": {
+    "s_6018a91b3dbabe": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "86debe54-fcdf-4bd2-88ea-77c14c25ffc2",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
