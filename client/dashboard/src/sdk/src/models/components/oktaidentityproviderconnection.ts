@@ -104,7 +104,7 @@ export type OktaIdentityProviderConnection = {
    */
   agentId?: string | undefined;
   /**
-   * Cadence and watermark of the scheduled applications snapshot.
+   * Watermarks of the scheduled applications snapshot. The snapshot is reconciled on a fixed platform-wide schedule.
    */
   applicationsSync: IdentityProviderConnectionApplicationsSync;
   /**

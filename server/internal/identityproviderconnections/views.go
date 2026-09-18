@@ -147,8 +147,7 @@ func snapshot(r connectionRows) *audit.IdentityProviderConnectionSnapshot {
 
 func buildApplicationsSyncView(o repo.OktaIdentityProviderConnection) *gen.IdentityProviderConnectionApplicationsSync {
 	return &gen.IdentityProviderConnectionApplicationsSync{
-		IntervalSeconds: int(o.ApplicationsSyncIntervalSeconds),
-		SyncedAt:        conv.PtrEmpty(conv.FromPGTimestamptz(o.ApplicationsSyncedAt)),
-		RequestedAt:     conv.PtrEmpty(conv.FromPGTimestamptz(o.ApplicationsSyncRequestedAt)),
+		SyncedAt:    conv.PtrEmpty(conv.FromPGTimestamptz(o.ApplicationsSyncedAt)),
+		RequestedAt: conv.PtrEmpty(conv.FromPGTimestamptz(o.ApplicationsSyncRequestedAt)),
 	}
 }

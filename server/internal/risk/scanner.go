@@ -1056,8 +1056,13 @@ func (s *Scanner) dispatchEnforcement(ctx context.Context, baseProvenance meteri
 	presidioThreshold := presidioDispatchThreshold(policies)
 	outcome, err := s.dispatcher.Dispatch(ctx, enforcereply.DispatchRequest{
 		OrganizationID:         baseProvenance.OrganizationID,
+		OrganizationSlug:       "",
 		ProjectID:              baseProvenance.ProjectID.String(),
 		Content:                text,
+		Body:                   "",
+		ToolName:               "",
+		MessageType:            "",
+		ToolCalls:              nil,
 		PresidioEntities:       nil,
 		PresidioScoreThreshold: presidioThreshold,
 		Lanes:                  lanes,

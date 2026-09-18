@@ -97,13 +97,13 @@ func TestRetryerSubstreamFailedRetriesSameRouteWithoutUnpublish(t *testing.T) {
 	require.Equal(t, []string{"127.0.0.1:1001"}, candidates)
 }
 
-func TestBusyResponseRejectionMapsPostToGenericAvailabilityError(t *testing.T) {
+func TestGatewayFailureRejectionMapsBusyPostToGenericAvailabilityError(t *testing.T) {
 	t.Parallel()
 
 	resp := tunnelErrorResponseForMethod(wire.TunnelErrorTunnelBusy, http.MethodPost)
 	defer func() { require.NoError(t, resp.Body.Close()) }()
 
-	rejection := BusyResponseRejection(resp)
+	rejection := GatewayFailureRejection(resp)
 	require.NotNil(t, rejection)
 	require.Equal(t, proxy.RejectCodeServerError, rejection.Code)
 	require.Equal(t, "The MCP server is temporarily unavailable. Please retry.", rejection.Message)
@@ -113,13 +113,47 @@ func TestBusyResponseRejectionMapsPostToGenericAvailabilityError(t *testing.T) {
 	}, rejection.Data)
 }
 
-func TestBusyResponseRejectionLeavesGetAsHTTPResponse(t *testing.T) {
+func TestGatewayFailureRejectionLeavesBusyGetAsHTTPResponse(t *testing.T) {
 	t.Parallel()
 
 	resp := tunnelErrorResponseForMethod(wire.TunnelErrorTunnelBusy, http.MethodGet)
 	defer func() { require.NoError(t, resp.Body.Close()) }()
 
-	require.Nil(t, BusyResponseRejection(resp))
+	require.Nil(t, GatewayFailureRejection(resp))
+}
+
+func TestGatewayFailureRejectionMapsSubstreamFailedPostToNonRetryableError(t *testing.T) {
+	t.Parallel()
+
+	resp := tunnelErrorResponseForMethod(wire.TunnelErrorSubstreamFailed, http.MethodPost)
+	defer func() { require.NoError(t, resp.Body.Close()) }()
+
+	rejection := GatewayFailureRejection(resp)
+	require.NotNil(t, rejection)
+	require.Equal(t, proxy.RejectCodeServerError, rejection.Code)
+	require.Equal(t, "The connection to the MCP server was interrupted before it responded. The request may have already run.", rejection.Message)
+	require.Equal(t, map[string]any{
+		"code":      "upstream_disconnected",
+		"retryable": false,
+	}, rejection.Data)
+}
+
+func TestGatewayFailureRejectionLeavesSubstreamFailedGetAsHTTPResponse(t *testing.T) {
+	t.Parallel()
+
+	resp := tunnelErrorResponseForMethod(wire.TunnelErrorSubstreamFailed, http.MethodGet)
+	defer func() { require.NoError(t, resp.Body.Close()) }()
+
+	require.Nil(t, GatewayFailureRejection(resp))
+}
+
+func TestGatewayFailureRejectionIgnoresOtherTunnelErrors(t *testing.T) {
+	t.Parallel()
+
+	resp := tunnelErrorResponseForMethod(wire.TunnelErrorNoLiveSession, http.MethodPost)
+	defer func() { require.NoError(t, resp.Body.Close()) }()
+
+	require.Nil(t, GatewayFailureRejection(resp))
 }
 
 // TestRetryerTunnelBusyFailsOverWithoutUnpublish: tunnel-busy means the

@@ -2508,7 +2508,7 @@ SELECT
   at.environment_id,
   e.slug AS environment_slug
 FROM assistant_toolsets at
-JOIN toolsets t ON t.id = at.toolset_id
+JOIN toolsets t ON t.id = at.toolset_id AND t.deleted IS FALSE
 LEFT JOIN environments e ON e.id = at.environment_id
 WHERE at.assistant_id = ANY($1::UUID[])
   AND at.project_id = $2
@@ -3388,6 +3388,8 @@ FROM mcp_servers ms
 WHERE ms.project_id = $1
   AND ms.slug = ANY($2::TEXT[])
   AND ms.deleted IS FALSE
+ORDER BY ms.id
+FOR NO KEY UPDATE OF ms
 `
 
 type ResolveMcpServersForWriteParams struct {
@@ -3484,6 +3486,8 @@ FROM toolsets
 WHERE project_id = $1
   AND slug = ANY($2::TEXT[])
   AND deleted IS FALSE
+ORDER BY id
+FOR NO KEY UPDATE
 `
 
 type ResolveToolsetsForWriteParams struct {
@@ -3496,6 +3500,8 @@ type ResolveToolsetsForWriteRow struct {
 	Slug string
 }
 
+// Serialize MCP-enable writes and deletion without blocking FK KEY SHARE
+// locks when an MCP server concurrently switches to this toolset backend.
 func (q *Queries) ResolveToolsetsForWrite(ctx context.Context, arg ResolveToolsetsForWriteParams) ([]ResolveToolsetsForWriteRow, error) {
 	rows, err := q.db.Query(ctx, resolveToolsetsForWrite, arg.ProjectID, arg.Slugs)
 	if err != nil {

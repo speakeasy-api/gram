@@ -454,7 +454,6 @@ func TestSyncApplications_RPC(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, fetched.Connection.ApplicationsSync.SyncedAt)
 	require.Nil(t, fetched.Connection.ApplicationsSync.RequestedAt)
-	require.Equal(t, 21600, fetched.Connection.ApplicationsSync.IntervalSeconds)
 
 	before, err := audittest.AuditLogCountByAction(ctx, si.conn.conn, audit.ActionIdentityProviderConnectionSyncApplications)
 	require.NoError(t, err)

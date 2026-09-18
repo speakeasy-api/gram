@@ -4215,7 +4215,7 @@ examples:
         application/json: {"org_url": "https://blank-jury.name"}
       responses:
         "200":
-          application/json: {"applications_sync": {"interval_seconds": 964391}, "checklist": [{"description": "draw negligible pleased after nearly uniform", "key": "<key>", "title": "<value>"}], "client_id_submitted": true, "created_at": "2026-03-17T04:19:21.535Z", "dpop_required": true, "granted_scopes": [], "id": "785762cf-7d7e-4cc8-ba09-26ffbbbf8f51", "issuer_url": "https://clear-footrest.biz", "jwks_url": "https://hairy-bowler.biz", "listing_mode": "custom_app", "missing_scopes": ["<value 1>"], "org_url": "https://firm-celsius.net", "organization_id": "<id>", "provider": "okta", "required_scopes": ["<value 1>", "<value 2>"], "status": "verified", "updated_at": "2026-10-06T09:08:45.322Z", "verification_reasons": ["read_failed:okta.groups.read"]}
+          application/json: {"applications_sync": {}, "checklist": [{"description": "draw negligible pleased after nearly uniform", "key": "<key>", "title": "<value>"}], "client_id_submitted": true, "created_at": "2026-03-17T04:19:21.535Z", "dpop_required": true, "granted_scopes": [], "id": "785762cf-7d7e-4cc8-ba09-26ffbbbf8f51", "issuer_url": "https://clear-footrest.biz", "jwks_url": "https://hairy-bowler.biz", "listing_mode": "custom_app", "missing_scopes": ["<value 1>"], "org_url": "https://firm-celsius.net", "organization_id": "<id>", "provider": "okta", "required_scopes": ["<value 1>", "<value 2>"], "status": "verified", "updated_at": "2026-10-06T09:08:45.322Z", "verification_reasons": ["read_failed:okta.groups.read"]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -8064,7 +8064,7 @@ examples:
           include_removed: false
       responses:
         "200":
-          application/json: {"applications": [{"features": [], "first_seen_at": "2025-12-02T16:07:57.768Z", "group_assignments": 499923, "label": "<value>", "last_seen_at": "2025-12-08T11:57:52.885Z", "name": "<value>", "okta_app_id": "<id>", "sign_on_mode": "<value>", "status": "<value>", "user_assignments": 948170}], "sync": {"interval_seconds": 800214}}
+          application/json: {"applications": [{"features": [], "first_seen_at": "2025-12-02T16:07:57.768Z", "group_assignments": 499923, "label": "<value>", "last_seen_at": "2025-12-08T11:57:52.885Z", "name": "<value>", "okta_app_id": "<id>", "sign_on_mode": "<value>", "status": "<value>", "user_assignments": 948170}], "sync": {}}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -9404,7 +9404,7 @@ examples:
         application/json: {"id": "bd4f43dc-03e0-47bb-a1b2-3b14b2ee055d"}
       responses:
         "200":
-          application/json: {"applications_sync": {"interval_seconds": 718757}, "checklist": [{"description": "juvenile whenever yum", "key": "<key>", "title": "<value>"}], "client_id_submitted": false, "created_at": "2025-12-22T22:28:13.302Z", "dpop_required": true, "granted_scopes": [], "id": "71d30187-8971-4caf-8b04-bd98850f709d", "issuer_url": "https://vague-underpants.name/", "jwks_url": "https://putrid-schedule.com/", "listing_mode": "custom_app", "missing_scopes": ["<value 1>", "<value 2>"], "org_url": "https://strange-ice-cream.com", "organization_id": "<id>", "provider": "okta", "required_scopes": ["<value 1>", "<value 2>"], "status": "pending", "updated_at": "2024-04-13T10:30:54.744Z", "verification_reasons": ["missing_scope"]}
+          application/json: {"applications_sync": {}, "checklist": [{"description": "juvenile whenever yum", "key": "<key>", "title": "<value>"}], "client_id_submitted": false, "created_at": "2025-12-22T22:28:13.302Z", "dpop_required": true, "granted_scopes": [], "id": "71d30187-8971-4caf-8b04-bd98850f709d", "issuer_url": "https://vague-underpants.name/", "jwks_url": "https://putrid-schedule.com/", "listing_mode": "custom_app", "missing_scopes": ["<value 1>", "<value 2>"], "org_url": "https://strange-ice-cream.com", "organization_id": "<id>", "provider": "okta", "required_scopes": ["<value 1>", "<value 2>"], "status": "pending", "updated_at": "2024-04-13T10:30:54.744Z", "verification_reasons": ["missing_scope"]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -9881,7 +9881,7 @@ examples:
         application/json: {"id": "4e9e21f2-d91a-4fdd-bd2f-1bf6769f9d5d"}
       responses:
         "200":
-          application/json: {"applications_sync": {"interval_seconds": 255887}, "checklist": [{"description": "pulp but whether lest on", "key": "<key>", "title": "<value>"}], "client_id_submitted": true, "created_at": "2024-12-21T18:46:41.853Z", "dpop_required": true, "granted_scopes": [], "id": "46d39253-d76d-4e02-b982-b341f96413d9", "issuer_url": "https://inexperienced-following.info/", "jwks_url": "https://slimy-netsuke.com/", "listing_mode": "oin", "missing_scopes": ["<value 1>", "<value 2>", "<value 3>"], "org_url": "https://menacing-resolve.com/", "organization_id": "<id>", "provider": "okta", "required_scopes": ["<value 1>", "<value 2>"], "status": "verified", "updated_at": "2026-01-24T18:07:57.149Z", "verification_reasons": []}
+          application/json: {"applications_sync": {}, "checklist": [{"description": "pulp but whether lest on", "key": "<key>", "title": "<value>"}], "client_id_submitted": true, "created_at": "2024-12-21T18:46:41.853Z", "dpop_required": true, "granted_scopes": [], "id": "46d39253-d76d-4e02-b982-b341f96413d9", "issuer_url": "https://inexperienced-following.info/", "jwks_url": "https://slimy-netsuke.com/", "listing_mode": "oin", "missing_scopes": ["<value 1>", "<value 2>", "<value 3>"], "org_url": "https://menacing-resolve.com/", "organization_id": "<id>", "provider": "okta", "required_scopes": ["<value 1>", "<value 2>"], "status": "verified", "updated_at": "2026-01-24T18:07:57.149Z", "verification_reasons": []}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -10553,7 +10553,7 @@ examples:
         application/json: {"client_id": "<id>", "id": "74101fc1-d56d-433b-ad4f-89c9eca4a82b"}
       responses:
         "200":
-          application/json: {"applications_sync": {"interval_seconds": 449073}, "checklist": [], "client_id_submitted": true, "created_at": "2024-12-04T05:26:37.900Z", "dpop_required": true, "granted_scopes": ["<value 1>", "<value 2>"], "id": "cc1cb8a1-6eed-49de-b041-9d710e14f8bc", "issuer_url": "https://dramatic-cardboard.org/", "jwks_url": "https://punctual-duffel.org/", "listing_mode": "custom_app", "missing_scopes": ["<value 1>", "<value 2>", "<value 3>"], "org_url": "https://sociable-cinder.biz/", "organization_id": "<id>", "provider": "okta", "required_scopes": ["<value 1>"], "status": "verified", "updated_at": "2025-11-17T07:48:16.690Z", "verification_reasons": []}
+          application/json: {"applications_sync": {}, "checklist": [], "client_id_submitted": true, "created_at": "2024-12-04T05:26:37.900Z", "dpop_required": true, "granted_scopes": ["<value 1>", "<value 2>"], "id": "cc1cb8a1-6eed-49de-b041-9d710e14f8bc", "issuer_url": "https://dramatic-cardboard.org/", "jwks_url": "https://punctual-duffel.org/", "listing_mode": "custom_app", "missing_scopes": ["<value 1>", "<value 2>", "<value 3>"], "org_url": "https://sociable-cinder.biz/", "organization_id": "<id>", "provider": "okta", "required_scopes": ["<value 1>"], "status": "verified", "updated_at": "2025-11-17T07:48:16.690Z", "verification_reasons": []}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -10637,7 +10637,7 @@ examples:
         application/json: {"id": "2c4c51e3-3e27-44ca-95e5-d8d65dae937a"}
       responses:
         "200":
-          application/json: {"applications_sync": {"interval_seconds": 955614}, "checklist": [{"description": "pfft coagulate than within", "key": "<key>", "title": "<value>"}], "client_id_submitted": false, "created_at": "2026-08-03T00:08:01.699Z", "dpop_required": false, "granted_scopes": ["<value 1>", "<value 2>"], "id": "7cf5aa3f-4237-4128-b142-d7761e6cbf51", "issuer_url": "https://infinite-diversity.com/", "jwks_url": "https://excellent-signature.net", "listing_mode": "custom_app", "missing_scopes": [], "org_url": "https://lustrous-expansion.net/", "organization_id": "<id>", "provider": "okta", "required_scopes": [], "status": "pending", "updated_at": "2025-06-26T07:50:43.284Z", "verification_reasons": []}
+          application/json: {"applications_sync": {}, "checklist": [{"description": "pfft coagulate than within", "key": "<key>", "title": "<value>"}], "client_id_submitted": false, "created_at": "2026-08-03T00:08:01.699Z", "dpop_required": false, "granted_scopes": ["<value 1>", "<value 2>"], "id": "7cf5aa3f-4237-4128-b142-d7761e6cbf51", "issuer_url": "https://infinite-diversity.com/", "jwks_url": "https://excellent-signature.net", "listing_mode": "custom_app", "missing_scopes": [], "org_url": "https://lustrous-expansion.net/", "organization_id": "<id>", "provider": "okta", "required_scopes": [], "status": "pending", "updated_at": "2025-06-26T07:50:43.284Z", "verification_reasons": []}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -11698,7 +11698,7 @@ examples:
         application/json: {"id": "e0b3f9d6-8625-4460-bb63-fac2bdfff33e"}
       responses:
         "200":
-          application/json: {"applications_sync": {"interval_seconds": 917938}, "checklist": [{"description": "gadzooks chasuble as nor between fatally a until kindheartedly", "key": "<key>", "title": "<value>"}], "client_id_submitted": true, "created_at": "2026-12-19T16:46:29.312Z", "dpop_required": false, "granted_scopes": [], "id": "9d5e4a27-a83b-420e-bc94-8942ba440e43", "issuer_url": "https://firm-swing.name", "jwks_url": "https://warped-expansion.biz", "listing_mode": "oin", "missing_scopes": ["<value 1>", "<value 2>", "<value 3>"], "org_url": "https://formal-procurement.org", "organization_id": "<id>", "provider": "okta", "required_scopes": [], "status": "verified", "updated_at": "2024-10-22T22:51:40.381Z", "verification_reasons": []}
+          application/json: {"applications_sync": {}, "checklist": [{"description": "gadzooks chasuble as nor between fatally a until kindheartedly", "key": "<key>", "title": "<value>"}], "client_id_submitted": true, "created_at": "2026-12-19T16:46:29.312Z", "dpop_required": false, "granted_scopes": [], "id": "9d5e4a27-a83b-420e-bc94-8942ba440e43", "issuer_url": "https://firm-swing.name", "jwks_url": "https://warped-expansion.biz", "listing_mode": "oin", "missing_scopes": ["<value 1>", "<value 2>", "<value 3>"], "org_url": "https://formal-procurement.org", "organization_id": "<id>", "provider": "okta", "required_scopes": [], "status": "verified", "updated_at": "2024-10-22T22:51:40.381Z", "verification_reasons": []}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":

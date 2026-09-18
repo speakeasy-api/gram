@@ -2272,8 +2272,6 @@ type IdentityProviderConnectionChecklistItemResponseBody struct {
 // IdentityProviderConnectionApplicationsSyncResponseBody is used to define
 // fields on response body types.
 type IdentityProviderConnectionApplicationsSyncResponseBody struct {
-	// How often the snapshot is reconciled, in seconds.
-	IntervalSeconds *int `form:"interval_seconds,omitempty" json:"interval_seconds,omitempty" xml:"interval_seconds,omitempty"`
 	// ISO 8601 timestamp when the last completed run started. Omitted until the
 	// first run.
 	SyncedAt *string `form:"synced_at,omitempty" json:"synced_at,omitempty" xml:"synced_at,omitempty"`
@@ -7356,9 +7354,6 @@ func ValidateIdentityProviderConnectionChecklistItemResponseBody(body *IdentityP
 // ValidateIdentityProviderConnectionApplicationsSyncResponseBody runs the
 // validations defined on IdentityProviderConnectionApplicationsSyncResponseBody
 func ValidateIdentityProviderConnectionApplicationsSyncResponseBody(body *IdentityProviderConnectionApplicationsSyncResponseBody) (err error) {
-	if body.IntervalSeconds == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("interval_seconds", "body"))
-	}
 	if body.SyncedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.synced_at", *body.SyncedAt, goa.FormatDateTime))
 	}

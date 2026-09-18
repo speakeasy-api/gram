@@ -9,13 +9,9 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * Cadence and watermark of the scheduled applications snapshot.
+ * Watermarks of the scheduled applications snapshot. The snapshot is reconciled on a fixed platform-wide schedule.
  */
 export type IdentityProviderConnectionApplicationsSync = {
-  /**
-   * How often the snapshot is reconciled, in seconds.
-   */
-  intervalSeconds: number;
   /**
    * ISO 8601 timestamp of the last syncApplications call; a request newer than synced_at runs on the next coordinator pass.
    */
@@ -30,7 +26,6 @@ export type IdentityProviderConnectionApplicationsSync = {
 export const IdentityProviderConnectionApplicationsSync$inboundSchema:
   z.ZodMiniType<IdentityProviderConnectionApplicationsSync, unknown> = z.pipe(
     z.object({
-      interval_seconds: z.int(),
       requested_at: z.optional(
         z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
       ),
@@ -40,7 +35,6 @@ export const IdentityProviderConnectionApplicationsSync$inboundSchema:
     }),
     z.transform((v) => {
       return remap$(v, {
-        "interval_seconds": "intervalSeconds",
         "requested_at": "requestedAt",
         "synced_at": "syncedAt",
       });

@@ -644,14 +644,15 @@ WHERE c.provider = 'okta'
   AND (
     o.applications_synced_at IS NULL
     OR o.applications_sync_requested_at > o.applications_synced_at
-    OR o.applications_synced_at + make_interval(secs => o.applications_sync_interval_seconds) <= clock_timestamp()
+    OR o.applications_synced_at + make_interval(secs => $1::int) <= clock_timestamp()
   )
-  AND NOT (c.id = ANY ($1::uuid[]))
+  AND NOT (c.id = ANY ($2::uuid[]))
 ORDER BY o.applications_synced_at ASC NULLS FIRST, c.id ASC
-LIMIT $2
+LIMIT $3
 `
 
 type ListSyncCandidatesParams struct {
+	SyncIntervalSeconds  int32
 	ExcludeConnectionIds []uuid.UUID
 	LimitCount           int32
 }
@@ -662,11 +663,12 @@ type ListSyncCandidatesRow struct {
 	OrganizationSlug string
 }
 
-// Verified connections whose snapshot is stale or was requested after the
-// last run started. Due-ness is evaluated on the database clock; excluded
-// ids are the ones this coordinator pass already attempted.
+// Verified connections whose snapshot is older than the platform-wide
+// interval or was requested after the last run started. Due-ness is
+// evaluated on the database clock; excluded ids are the ones this
+// coordinator pass already attempted.
 func (q *Queries) ListSyncCandidates(ctx context.Context, arg ListSyncCandidatesParams) ([]ListSyncCandidatesRow, error) {
-	rows, err := q.db.Query(ctx, listSyncCandidates, arg.ExcludeConnectionIds, arg.LimitCount)
+	rows, err := q.db.Query(ctx, listSyncCandidates, arg.SyncIntervalSeconds, arg.ExcludeConnectionIds, arg.LimitCount)
 	if err != nil {
 		return nil, err
 	}

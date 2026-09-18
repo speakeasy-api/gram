@@ -1,6 +1,7 @@
--- Verified connections whose snapshot is stale or was requested after the
--- last run started. Due-ness is evaluated on the database clock; excluded
--- ids are the ones this coordinator pass already attempted.
+-- Verified connections whose snapshot is older than the platform-wide
+-- interval or was requested after the last run started. Due-ness is
+-- evaluated on the database clock; excluded ids are the ones this
+-- coordinator pass already attempted.
 -- name: ListSyncCandidates :many
 SELECT
     c.id AS connection_id
@@ -19,7 +20,7 @@ WHERE c.provider = 'okta'
   AND (
     o.applications_synced_at IS NULL
     OR o.applications_sync_requested_at > o.applications_synced_at
-    OR o.applications_synced_at + make_interval(secs => o.applications_sync_interval_seconds) <= clock_timestamp()
+    OR o.applications_synced_at + make_interval(secs => @sync_interval_seconds::int) <= clock_timestamp()
   )
   AND NOT (c.id = ANY (@exclude_connection_ids::uuid[]))
 ORDER BY o.applications_synced_at ASC NULLS FIRST, c.id ASC

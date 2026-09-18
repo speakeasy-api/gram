@@ -2272,8 +2272,6 @@ type IdentityProviderConnectionChecklistItemResponseBody struct {
 // IdentityProviderConnectionApplicationsSyncResponseBody is used to define
 // fields on response body types.
 type IdentityProviderConnectionApplicationsSyncResponseBody struct {
-	// How often the snapshot is reconciled, in seconds.
-	IntervalSeconds int `form:"interval_seconds" json:"interval_seconds" xml:"interval_seconds"`
 	// ISO 8601 timestamp when the last completed run started. Omitted until the
 	// first run.
 	SyncedAt *string `form:"synced_at,omitempty" json:"synced_at,omitempty" xml:"synced_at,omitempty"`
