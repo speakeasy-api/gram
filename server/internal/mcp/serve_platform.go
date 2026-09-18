@@ -477,18 +477,19 @@ func (s *Service) callPlatformToolsetTool(
 		})
 	}()
 
-	s.scanEvaluator.Scan(ctx, bytes.NewReader(requestBodyBytes), mcpriskscan.Event{
+	s.scanEvaluator.Scan(ctx, mcpriskscan.NewRequest(ctx, mcpriskscan.Event{
 		Surface:        mcpriskscan.SurfacePlatformMCP,
 		Method:         mcpriskscan.MethodToolsCall,
 		OrganizationID: descriptor.OrganizationID,
 		ProjectID:      descriptor.ProjectID,
 		ServerID:       "",
+		MetaServerID:   "",
 		ToolsetID:      "",
 		ToolName:       descriptor.Name,
 		ResourceURI:    "",
 		PromptName:     "",
-		Phase:          mcpriskscan.PhaseBeforeExecution,
-	})
+		ChatID:         chatID,
+	}, mcpriskscan.BorrowPayload(requestBodyBytes)))
 	if err := s.toolProxy.Do(ctx, rw, bytes.NewReader(requestBodyBytes), toolCallEnv, plan, logAttrs); err != nil {
 		failure := platformToolCallError(ctx, logger, err, attr.SlogToolName(params.Name))
 		recordToolCallErrorStatus(ctx, rw, failure)

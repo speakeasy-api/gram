@@ -404,7 +404,7 @@ func TestE2E_ExternalMCP_Proxy_StreamableHTTP(t *testing.T) {
 		require.Equal(t, config.toolset.ID.String(), event[attr.ToolsetIDKey])
 		require.Equal(t, "proxy", event[attr.ToolNameKey], "external scans identify the stable URN, not the placeholder descriptor name")
 		require.Equal(t, mcpriskscan.MethodToolsCall, event["gram.mcp.risk.scan.method"])
-		require.Equal(t, mcpriskscan.PhaseBeforeExecution, event["gram.mcp.risk.scan.phase"])
+		require.Equal(t, mcpriskscan.PhaseRequest, event["gram.mcp.risk.scan.phase"])
 	}
 }
 

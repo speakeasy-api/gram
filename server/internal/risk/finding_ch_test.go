@@ -231,6 +231,61 @@ func TestFindingCHWriter_ProcessBatch_MapsShadow(t *testing.T) {
 	require.True(t, rows[1].Shadow)
 }
 
+func TestFindingCHWriter_ProcessBatch_CarriedAttributionNeedsNoAnchor(t *testing.T) {
+	t.Parallel()
+	w, ins := newCHWriter(t)
+	f := chFinding()
+	f.SetChatMessageId("")
+	f.SetAttribution(riskv1.Finding_Attribution_builder{
+		ChatId:           new("carried-chat"),
+		UserId:           new("validated-user"),
+		ExternalUserId:   new("external-user"),
+		AssistantId:      new("assistant"),
+		MessageCreatedAt: new("2026-06-27T14:00:00+02:00"),
+		ChatSource:       new("carried-source"),
+		Team:             new("security"),
+		UserEmail:        new("user@example.com"),
+	}.Build())
+	f.SetExecution(riskv1.Finding_Execution_builder{
+		ExecutionId:      new("execution"),
+		McpServerId:      new("server"),
+		MetaMcpServerId:  new("meta-server"),
+		ToolsetId:        new("toolset"),
+		ToolName:         new("run"),
+		Phase:            new("request"),
+		MediationSurface: new("hosted_mcp"),
+		Method:           new("tools/call"),
+		PrincipalKind:    new("user_session"),
+		IdentityStamped:  new(true),
+	}.Build())
+	f.SetEnforcementOutcome(riskv1.Finding_ENFORCEMENT_OUTCOME_DENIED)
+
+	requireNoRejects(t, processBatch(t, w, t.Context(), []*riskv1.Finding{f}))
+	rows := chRows(t, ins)
+	require.Len(t, rows, 1)
+	row := rows[0]
+	require.Empty(t, row.ChatMessageID)
+	require.Equal(t, "carried-chat", row.ChatID)
+	require.Equal(t, "validated-user", row.UserID)
+	require.Equal(t, "external-user", row.ExternalUserID)
+	require.Equal(t, "assistant", row.AssistantID)
+	require.Equal(t, "carried-source", row.ChatSource)
+	require.Equal(t, "security", row.Team)
+	require.Equal(t, "user@example.com", row.UserEmail)
+	require.Equal(t, time.Date(2026, 6, 27, 12, 0, 0, 0, time.UTC), row.MessageCreatedAt)
+	require.Equal(t, "execution", row.ExecutionID)
+	require.Equal(t, "server", row.MCPServerID)
+	require.Equal(t, "meta-server", row.MetaMCPServerID)
+	require.Equal(t, "toolset", row.ToolsetID)
+	require.Equal(t, "run", row.ToolName)
+	require.Equal(t, "request", row.Phase)
+	require.Equal(t, "hosted_mcp", row.MediationSurface)
+	require.Equal(t, "tools/call", row.MCPMethod)
+	require.Equal(t, "user_session", row.PrincipalKind)
+	require.True(t, row.IdentityStamped)
+	require.Equal(t, "denied", row.EnforcementOutcome)
+}
+
 // match_redacted is the shared maskdisplay partial mask, per source: an
 // account_identity email keeps only the domain (the local part — the PII —
 // is never stored), a judge match displays as nothing, and shadow_mcp passes
