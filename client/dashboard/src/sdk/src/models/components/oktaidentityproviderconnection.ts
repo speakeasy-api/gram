@@ -13,6 +13,10 @@ import {
   IdentityProviderConnectionActiveKey$inboundSchema,
 } from "./identityproviderconnectionactivekey.js";
 import {
+  IdentityProviderConnectionApplicationsSync,
+  IdentityProviderConnectionApplicationsSync$inboundSchema,
+} from "./identityproviderconnectionapplicationssync.js";
+import {
   IdentityProviderConnectionChecklistItem,
   IdentityProviderConnectionChecklistItem$inboundSchema,
 } from "./identityproviderconnectionchecklistitem.js";
@@ -99,6 +103,10 @@ export type OktaIdentityProviderConnection = {
    * Admin-entered Okta AI agent ID. Display only.
    */
   agentId?: string | undefined;
+  /**
+   * Watermarks of the scheduled applications snapshot. The snapshot is reconciled on a fixed platform-wide schedule.
+   */
+  applicationsSync: IdentityProviderConnectionApplicationsSync;
   /**
    * Console steps for the connection's listing mode, in order.
    */
@@ -211,6 +219,7 @@ export const OktaIdentityProviderConnection$inboundSchema: z.ZodMiniType<
     active_key: z.optional(IdentityProviderConnectionActiveKey$inboundSchema),
     agent_app_id: z.optional(z.string()),
     agent_id: z.optional(z.string()),
+    applications_sync: IdentityProviderConnectionApplicationsSync$inboundSchema,
     checklist: z.array(IdentityProviderConnectionChecklistItem$inboundSchema),
     client_id: z.optional(z.string()),
     client_id_submitted: z.boolean(),
@@ -245,6 +254,7 @@ export const OktaIdentityProviderConnection$inboundSchema: z.ZodMiniType<
       "active_key": "activeKey",
       "agent_app_id": "agentAppId",
       "agent_id": "agentId",
+      "applications_sync": "applicationsSync",
       "client_id": "clientId",
       "client_id_submitted": "clientIdSubmitted",
       "created_at": "createdAt",

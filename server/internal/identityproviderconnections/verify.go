@@ -111,7 +111,7 @@ func verifyConnection(ctx context.Context, client okta.Client) (*verificationOut
 func confirmReads(ctx context.Context, client okta.Client, granted []string) ([]string, error) {
 	failed := []string{}
 	if slices.Contains(granted, "okta.apps.read") {
-		_, err := client.ListApps(ctx, okta.ListAppsRequest{Query: "", Status: "", Limit: 1})
+		_, err := client.ListApps(ctx, okta.ListAppsRequest{Query: "", Status: "", Limit: 1, MaxPages: 0})
 		switch {
 		case isCredentialRejection(err):
 			return nil, ErrCredentialRejected

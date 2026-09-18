@@ -40,6 +40,14 @@ type Service interface {
 	// key material, and tombstone the connection so a new one can be created.
 	// Idempotent. Requires org:admin.
 	Revoke(context.Context, *RevokePayload) (res *OktaIdentityProviderConnection, err error)
+	// Run the applications snapshot on the next coordinator pass, within minutes,
+	// instead of at the next scheduled interval. The connection must be verified.
+	// Rate limited per organization. Requires org:admin.
+	SyncApplications(context.Context, *SyncApplicationsPayload) (res *OktaIdentityProviderConnection, err error)
+	// List the applications snapshot for the connection with live assignment
+	// counts and the last reconcile run. The connection must be verified. Requires
+	// org:admin.
+	ListApplications(context.Context, *ListApplicationsPayload) (res *ListIdentityProviderConnectionApplicationsResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -62,7 +70,7 @@ const ServiceName = "identityProviderConnections"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [6]string{"create", "submitClientId", "verify", "get", "recordAgent", "revoke"}
+var MethodNames = [8]string{"create", "submitClientId", "verify", "get", "recordAgent", "revoke", "syncApplications", "listApplications"}
 
 // CreatePayload is the payload type of the identityProviderConnections service
 // create method.
@@ -101,6 +109,40 @@ type IdentityProviderConnectionActiveKey struct {
 	ActivatedAt string
 }
 
+// One Okta application in the snapshot, keyed by its Okta id.
+type IdentityProviderConnectionApplication struct {
+	// Okta application id.
+	OktaAppID string
+	// Admin-facing label. Admin-editable; never a key.
+	Label string
+	// Okta application template name.
+	Name       string
+	SignOnMode string
+	// ACTIVE or INACTIVE.
+	Status   string
+	Features []string
+	// Live direct and group-derived user assignments.
+	UserAssignments int
+	// Live group assignments.
+	GroupAssignments int
+	FirstSeenAt      string
+	LastSeenAt       string
+	// Set when the application disappeared from a run; only returned with
+	// include_removed.
+	RemovedAt *string
+}
+
+// Watermarks of the scheduled applications snapshot. The snapshot is
+// reconciled on a fixed platform-wide schedule.
+type IdentityProviderConnectionApplicationsSync struct {
+	// ISO 8601 timestamp when the last completed run started. Omitted until the
+	// first run.
+	SyncedAt *string
+	// ISO 8601 timestamp of the last syncApplications call; a request newer than
+	// synced_at runs on the next coordinator pass.
+	RequestedAt *string
+}
+
 // One step the organization administrator completes in the identity provider's
 // console. Ordered; keys are stable across responses.
 type IdentityProviderConnectionChecklistItem struct {
@@ -110,6 +152,54 @@ type IdentityProviderConnectionChecklistItem struct {
 	Title string
 	// What to do in the console, including any value copied from this connection.
 	Description string
+}
+
+// One applications snapshot run and the changes it applied.
+type IdentityProviderConnectionReconcileRun struct {
+	// Run ID.
+	ID string
+	// running, succeeded, or failed.
+	Status    string
+	StartedAt string
+	// Omitted while running.
+	FinishedAt *string
+	// Applications in the snapshot after skipping Okta-internal ones.
+	ApplicationsSeen    int
+	ApplicationsAdded   int
+	ApplicationsRemoved int
+	AssignmentsAdded    int
+	AssignmentsRemoved  int
+	// Okta-internal application ids left out of the snapshot.
+	SkippedAppIds []string
+	// Whether a listing hit the page or application cap; nothing missing from a
+	// truncated listing is removed.
+	Truncated bool
+	// Typed reason when the run failed. rate_limited and okta_unreachable are
+	// retried before being recorded; superseded means a newer run applied first;
+	// discarded means the connection stopped being verified during the run;
+	// interrupted means the worker died.
+	Error *string
+}
+
+// ListApplicationsPayload is the payload type of the
+// identityProviderConnections service listApplications method.
+type ListApplicationsPayload struct {
+	SessionToken *string
+	// Connection ID.
+	ID string
+	// Include applications that disappeared from a run.
+	IncludeRemoved bool
+}
+
+// ListIdentityProviderConnectionApplicationsResult is the result type of the
+// identityProviderConnections service listApplications method.
+type ListIdentityProviderConnectionApplicationsResult struct {
+	// Applications ordered by label, live rows first. Capped at 2000 rows, the
+	// same cap a run applies.
+	Applications []*IdentityProviderConnectionApplication
+	Sync         *IdentityProviderConnectionApplicationsSync
+	// Omitted before the first run.
+	LastRun *IdentityProviderConnectionReconcileRun
 }
 
 // OktaIdentityProviderConnection is the result type of the
@@ -163,9 +253,10 @@ type OktaIdentityProviderConnection struct {
 	AgentAppID *string
 	ActiveKey  *IdentityProviderConnectionActiveKey
 	// Console steps for the connection's listing mode, in order.
-	Checklist []*IdentityProviderConnectionChecklistItem
-	CreatedAt string
-	UpdatedAt string
+	Checklist        []*IdentityProviderConnectionChecklistItem
+	ApplicationsSync *IdentityProviderConnectionApplicationsSync
+	CreatedAt        string
+	UpdatedAt        string
 }
 
 // RecordAgentPayload is the payload type of the identityProviderConnections
@@ -196,6 +287,14 @@ type SubmitClientIDPayload struct {
 	ID string
 	// Okta application client ID (0oa...).
 	ClientID string
+}
+
+// SyncApplicationsPayload is the payload type of the
+// identityProviderConnections service syncApplications method.
+type SyncApplicationsPayload struct {
+	SessionToken *string
+	// Connection ID.
+	ID string
 }
 
 // VerifyPayload is the payload type of the identityProviderConnections service

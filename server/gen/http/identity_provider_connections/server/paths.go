@@ -36,3 +36,13 @@ func RecordAgentIdentityProviderConnectionsPath() string {
 func RevokeIdentityProviderConnectionsPath() string {
 	return "/rpc/identityProviderConnections.revoke"
 }
+
+// SyncApplicationsIdentityProviderConnectionsPath returns the URL path to the identityProviderConnections service syncApplications HTTP endpoint.
+func SyncApplicationsIdentityProviderConnectionsPath() string {
+	return "/rpc/identityProviderConnections.syncApplications"
+}
+
+// ListApplicationsIdentityProviderConnectionsPath returns the URL path to the identityProviderConnections service listApplications HTTP endpoint.
+func ListApplicationsIdentityProviderConnectionsPath() string {
+	return "/rpc/identityProviderConnections.listApplications"
+}

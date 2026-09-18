@@ -10,6 +10,7 @@ package client
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -1605,6 +1606,551 @@ func DecodeRevokeResponse(decoder func(*http.Response) goahttp.Decoder, restoreB
 	}
 }
 
+// BuildSyncApplicationsRequest instantiates a HTTP request object with method
+// and path set to call the "identityProviderConnections" service
+// "syncApplications" endpoint
+func (c *Client) BuildSyncApplicationsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SyncApplicationsIdentityProviderConnectionsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("identityProviderConnections", "syncApplications", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSyncApplicationsRequest returns an encoder for requests sent to the
+// identityProviderConnections syncApplications server.
+func EncodeSyncApplicationsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*identityproviderconnections.SyncApplicationsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("identityProviderConnections", "syncApplications", "*identityproviderconnections.SyncApplicationsPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewSyncApplicationsRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("identityProviderConnections", "syncApplications", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSyncApplicationsResponse returns a decoder for responses returned by
+// the identityProviderConnections syncApplications endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeSyncApplicationsResponse may return the following errors:
+//   - "failed_precondition" (type *goa.ServiceError): http.StatusPreconditionFailed
+//   - "rate_limit_exceeded" (type *goa.ServiceError): http.StatusTooManyRequests
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - error: internal error
+func DecodeSyncApplicationsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SyncApplicationsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "syncApplications", err)
+			}
+			err = ValidateSyncApplicationsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "syncApplications", err)
+			}
+			res := NewSyncApplicationsOktaIdentityProviderConnectionOK(&body)
+			return res, nil
+		case http.StatusPreconditionFailed:
+			var (
+				body SyncApplicationsFailedPreconditionResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "syncApplications", err)
+			}
+			err = ValidateSyncApplicationsFailedPreconditionResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "syncApplications", err)
+			}
+			return nil, NewSyncApplicationsFailedPrecondition(&body)
+		case http.StatusTooManyRequests:
+			var (
+				body SyncApplicationsRateLimitExceededResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "syncApplications", err)
+			}
+			err = ValidateSyncApplicationsRateLimitExceededResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "syncApplications", err)
+			}
+			return nil, NewSyncApplicationsRateLimitExceeded(&body)
+		case http.StatusUnauthorized:
+			var (
+				body SyncApplicationsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "syncApplications", err)
+			}
+			err = ValidateSyncApplicationsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "syncApplications", err)
+			}
+			return nil, NewSyncApplicationsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SyncApplicationsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "syncApplications", err)
+			}
+			err = ValidateSyncApplicationsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "syncApplications", err)
+			}
+			return nil, NewSyncApplicationsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SyncApplicationsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "syncApplications", err)
+			}
+			err = ValidateSyncApplicationsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "syncApplications", err)
+			}
+			return nil, NewSyncApplicationsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SyncApplicationsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "syncApplications", err)
+			}
+			err = ValidateSyncApplicationsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "syncApplications", err)
+			}
+			return nil, NewSyncApplicationsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SyncApplicationsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "syncApplications", err)
+			}
+			err = ValidateSyncApplicationsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "syncApplications", err)
+			}
+			return nil, NewSyncApplicationsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SyncApplicationsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "syncApplications", err)
+			}
+			err = ValidateSyncApplicationsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "syncApplications", err)
+			}
+			return nil, NewSyncApplicationsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SyncApplicationsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "syncApplications", err)
+			}
+			err = ValidateSyncApplicationsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "syncApplications", err)
+			}
+			return nil, NewSyncApplicationsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SyncApplicationsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("identityProviderConnections", "syncApplications", err)
+				}
+				err = ValidateSyncApplicationsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("identityProviderConnections", "syncApplications", err)
+				}
+				return nil, NewSyncApplicationsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SyncApplicationsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("identityProviderConnections", "syncApplications", err)
+				}
+				err = ValidateSyncApplicationsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("identityProviderConnections", "syncApplications", err)
+				}
+				return nil, NewSyncApplicationsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("identityProviderConnections", "syncApplications", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SyncApplicationsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "syncApplications", err)
+			}
+			err = ValidateSyncApplicationsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "syncApplications", err)
+			}
+			return nil, NewSyncApplicationsGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body SyncApplicationsUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "syncApplications", err)
+			}
+			err = ValidateSyncApplicationsUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "syncApplications", err)
+			}
+			return nil, NewSyncApplicationsUnavailable(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("identityProviderConnections", "syncApplications", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildListApplicationsRequest instantiates a HTTP request object with method
+// and path set to call the "identityProviderConnections" service
+// "listApplications" endpoint
+func (c *Client) BuildListApplicationsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListApplicationsIdentityProviderConnectionsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("identityProviderConnections", "listApplications", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListApplicationsRequest returns an encoder for requests sent to the
+// identityProviderConnections listApplications server.
+func EncodeListApplicationsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*identityproviderconnections.ListApplicationsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("identityProviderConnections", "listApplications", "*identityproviderconnections.ListApplicationsPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		values := req.URL.Query()
+		values.Add("id", p.ID)
+		values.Add("include_removed", fmt.Sprintf("%v", p.IncludeRemoved))
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListApplicationsResponse returns a decoder for responses returned by
+// the identityProviderConnections listApplications endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeListApplicationsResponse may return the following errors:
+//   - "failed_precondition" (type *goa.ServiceError): http.StatusPreconditionFailed
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - error: internal error
+func DecodeListApplicationsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListApplicationsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "listApplications", err)
+			}
+			err = ValidateListApplicationsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "listApplications", err)
+			}
+			res := NewListApplicationsListIdentityProviderConnectionApplicationsResultOK(&body)
+			return res, nil
+		case http.StatusPreconditionFailed:
+			var (
+				body ListApplicationsFailedPreconditionResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "listApplications", err)
+			}
+			err = ValidateListApplicationsFailedPreconditionResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "listApplications", err)
+			}
+			return nil, NewListApplicationsFailedPrecondition(&body)
+		case http.StatusUnauthorized:
+			var (
+				body ListApplicationsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "listApplications", err)
+			}
+			err = ValidateListApplicationsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "listApplications", err)
+			}
+			return nil, NewListApplicationsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListApplicationsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "listApplications", err)
+			}
+			err = ValidateListApplicationsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "listApplications", err)
+			}
+			return nil, NewListApplicationsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListApplicationsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "listApplications", err)
+			}
+			err = ValidateListApplicationsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "listApplications", err)
+			}
+			return nil, NewListApplicationsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListApplicationsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "listApplications", err)
+			}
+			err = ValidateListApplicationsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "listApplications", err)
+			}
+			return nil, NewListApplicationsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListApplicationsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "listApplications", err)
+			}
+			err = ValidateListApplicationsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "listApplications", err)
+			}
+			return nil, NewListApplicationsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListApplicationsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "listApplications", err)
+			}
+			err = ValidateListApplicationsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "listApplications", err)
+			}
+			return nil, NewListApplicationsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListApplicationsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "listApplications", err)
+			}
+			err = ValidateListApplicationsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "listApplications", err)
+			}
+			return nil, NewListApplicationsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListApplicationsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("identityProviderConnections", "listApplications", err)
+				}
+				err = ValidateListApplicationsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("identityProviderConnections", "listApplications", err)
+				}
+				return nil, NewListApplicationsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListApplicationsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("identityProviderConnections", "listApplications", err)
+				}
+				err = ValidateListApplicationsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("identityProviderConnections", "listApplications", err)
+				}
+				return nil, NewListApplicationsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("identityProviderConnections", "listApplications", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListApplicationsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "listApplications", err)
+			}
+			err = ValidateListApplicationsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "listApplications", err)
+			}
+			return nil, NewListApplicationsGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body ListApplicationsUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "listApplications", err)
+			}
+			err = ValidateListApplicationsUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "listApplications", err)
+			}
+			return nil, NewListApplicationsUnavailable(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("identityProviderConnections", "listApplications", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalIdentityProviderConnectionActiveKeyResponseBodyToIdentityproviderconnectionsIdentityProviderConnectionActiveKey
 // builds a value of type
 // *identityproviderconnections.IdentityProviderConnectionActiveKey from a
@@ -1631,6 +2177,19 @@ func unmarshalIdentityProviderConnectionChecklistItemResponseBodyToIdentityprovi
 		Key:         *v.Key,
 		Title:       *v.Title,
 		Description: *v.Description,
+	}
+
+	return res
+}
+
+// unmarshalIdentityProviderConnectionApplicationsSyncResponseBodyToIdentityproviderconnectionsIdentityProviderConnectionApplicationsSync
+// builds a value of type
+// *identityproviderconnections.IdentityProviderConnectionApplicationsSync from
+// a value of type *IdentityProviderConnectionApplicationsSyncResponseBody.
+func unmarshalIdentityProviderConnectionApplicationsSyncResponseBodyToIdentityproviderconnectionsIdentityProviderConnectionApplicationsSync(v *IdentityProviderConnectionApplicationsSyncResponseBody) *identityproviderconnections.IdentityProviderConnectionApplicationsSync {
+	res := &identityproviderconnections.IdentityProviderConnectionApplicationsSync{
+		SyncedAt:    v.SyncedAt,
+		RequestedAt: v.RequestedAt,
 	}
 
 	return res
@@ -1689,6 +2248,61 @@ func unmarshalOktaIdentityProviderConnectionResponseBodyToIdentityproviderconnec
 			continue
 		}
 		res.Checklist[i] = unmarshalIdentityProviderConnectionChecklistItemResponseBodyToIdentityproviderconnectionsIdentityProviderConnectionChecklistItem(val)
+	}
+	res.ApplicationsSync = unmarshalIdentityProviderConnectionApplicationsSyncResponseBodyToIdentityproviderconnectionsIdentityProviderConnectionApplicationsSync(v.ApplicationsSync)
+
+	return res
+}
+
+// unmarshalIdentityProviderConnectionApplicationResponseBodyToIdentityproviderconnectionsIdentityProviderConnectionApplication
+// builds a value of type
+// *identityproviderconnections.IdentityProviderConnectionApplication from a
+// value of type *IdentityProviderConnectionApplicationResponseBody.
+func unmarshalIdentityProviderConnectionApplicationResponseBodyToIdentityproviderconnectionsIdentityProviderConnectionApplication(v *IdentityProviderConnectionApplicationResponseBody) *identityproviderconnections.IdentityProviderConnectionApplication {
+	res := &identityproviderconnections.IdentityProviderConnectionApplication{
+		OktaAppID:        *v.OktaAppID,
+		Label:            *v.Label,
+		Name:             *v.Name,
+		SignOnMode:       *v.SignOnMode,
+		Status:           *v.Status,
+		UserAssignments:  *v.UserAssignments,
+		GroupAssignments: *v.GroupAssignments,
+		FirstSeenAt:      *v.FirstSeenAt,
+		LastSeenAt:       *v.LastSeenAt,
+		RemovedAt:        v.RemovedAt,
+	}
+	res.Features = make([]string, len(v.Features))
+	for i, val := range v.Features {
+		res.Features[i] = val
+	}
+
+	return res
+}
+
+// unmarshalIdentityProviderConnectionReconcileRunResponseBodyToIdentityproviderconnectionsIdentityProviderConnectionReconcileRun
+// builds a value of type
+// *identityproviderconnections.IdentityProviderConnectionReconcileRun from a
+// value of type *IdentityProviderConnectionReconcileRunResponseBody.
+func unmarshalIdentityProviderConnectionReconcileRunResponseBodyToIdentityproviderconnectionsIdentityProviderConnectionReconcileRun(v *IdentityProviderConnectionReconcileRunResponseBody) *identityproviderconnections.IdentityProviderConnectionReconcileRun {
+	if v == nil {
+		return nil
+	}
+	res := &identityproviderconnections.IdentityProviderConnectionReconcileRun{
+		ID:                  *v.ID,
+		Status:              *v.Status,
+		StartedAt:           *v.StartedAt,
+		FinishedAt:          v.FinishedAt,
+		ApplicationsSeen:    *v.ApplicationsSeen,
+		ApplicationsAdded:   *v.ApplicationsAdded,
+		ApplicationsRemoved: *v.ApplicationsRemoved,
+		AssignmentsAdded:    *v.AssignmentsAdded,
+		AssignmentsRemoved:  *v.AssignmentsRemoved,
+		Truncated:           *v.Truncated,
+		Error:               v.Error,
+	}
+	res.SkippedAppIds = make([]string, len(v.SkippedAppIds))
+	for i, val := range v.SkippedAppIds {
+		res.SkippedAppIds[i] = val
 	}
 
 	return res

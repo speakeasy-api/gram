@@ -509,6 +509,13 @@ const (
 	ExternalCredentialIDKey           = attribute.Key("gram.external_credential.id")
 	GcpKmsKeyVersionKey               = attribute.Key("gram.gcp_kms.key_version")
 	IdentityProviderConnectionIDKey   = attribute.Key("gram.identity_provider_connection.id")
+	OktaApplicationsSeenKey           = attribute.Key("gram.okta_applications.seen")
+	OktaApplicationsAddedKey          = attribute.Key("gram.okta_applications.added")
+	OktaApplicationsRemovedKey        = attribute.Key("gram.okta_applications.removed")
+	OktaAssignmentsAddedKey           = attribute.Key("gram.okta_applications.assignments_added")
+	OktaAssignmentsRemovedKey         = attribute.Key("gram.okta_applications.assignments_removed")
+	OktaApplicationsTruncatedKey      = attribute.Key("gram.okta_applications.truncated")
+	OktaReconcileRunIDKey             = attribute.Key("gram.okta_applications.run_id")
 	GCPImpersonateServiceAccountKey   = attribute.Key("gram.gcp.impersonate_service_account")
 	WorkOSDirectoryGroupIDKey         = attribute.Key("gram.workos.directory_group_id")
 	OutcomeKey                        = attribute.Key("gram.outcome")
@@ -2006,6 +2013,21 @@ func IdentityProviderConnectionID(v string) attribute.KeyValue {
 }
 func SlogIdentityProviderConnectionID(v string) slog.Attr {
 	return slog.String(string(IdentityProviderConnectionIDKey), v)
+}
+func SlogOktaApplicationsSeen(v int) slog.Attr  { return slog.Int(string(OktaApplicationsSeenKey), v) }
+func SlogOktaApplicationsAdded(v int) slog.Attr { return slog.Int(string(OktaApplicationsAddedKey), v) }
+func SlogOktaApplicationsRemoved(v int) slog.Attr {
+	return slog.Int(string(OktaApplicationsRemovedKey), v)
+}
+func SlogOktaAssignmentsAdded(v int) slog.Attr { return slog.Int(string(OktaAssignmentsAddedKey), v) }
+func SlogOktaAssignmentsRemoved(v int) slog.Attr {
+	return slog.Int(string(OktaAssignmentsRemovedKey), v)
+}
+func SlogOktaApplicationsTruncated(v bool) slog.Attr {
+	return slog.Bool(string(OktaApplicationsTruncatedKey), v)
+}
+func SlogOktaReconcileRunID(v string) slog.Attr {
+	return slog.String(string(OktaReconcileRunIDKey), v)
 }
 
 func ExternalCredentialID(v string) attribute.KeyValue { return ExternalCredentialIDKey.String(v) }

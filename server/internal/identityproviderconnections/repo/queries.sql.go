@@ -865,6 +865,53 @@ func (q *Queries) RecordIdentityProviderConnectionVerificationFailure(ctx contex
 	return i, err
 }
 
+const requestOktaApplicationsSync = `-- name: RequestOktaApplicationsSync :one
+UPDATE okta_identity_provider_connections
+SET applications_sync_requested_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE identity_provider_connection_id = $1
+  AND organization_id = $2
+  AND deleted IS FALSE
+RETURNING identity_provider_connection_id, identity_provider_connections_provider, organization_id, attachment_scope, org_url, issuer_url, issuer_url_override_reason, ownership_claimed, remote_session_issuer_id, remote_session_client_id, dpop_required, granted_scopes, observed_admin_roles, listing_mode, agent_id, agent_app_id, applications_synced_at, applications_sync_requested_at, created_at, updated_at, deleted_at, deleted
+`
+
+type RequestOktaApplicationsSyncParams struct {
+	IdentityProviderConnectionID uuid.UUID
+	OrganizationID               string
+}
+
+// A request newer than the watermark keeps the connection due even when a
+// run was in flight when it arrived.
+func (q *Queries) RequestOktaApplicationsSync(ctx context.Context, arg RequestOktaApplicationsSyncParams) (OktaIdentityProviderConnection, error) {
+	row := q.db.QueryRow(ctx, requestOktaApplicationsSync, arg.IdentityProviderConnectionID, arg.OrganizationID)
+	var i OktaIdentityProviderConnection
+	err := row.Scan(
+		&i.IdentityProviderConnectionID,
+		&i.IdentityProviderConnectionsProvider,
+		&i.OrganizationID,
+		&i.AttachmentScope,
+		&i.OrgUrl,
+		&i.IssuerUrl,
+		&i.IssuerUrlOverrideReason,
+		&i.OwnershipClaimed,
+		&i.RemoteSessionIssuerID,
+		&i.RemoteSessionClientID,
+		&i.DpopRequired,
+		&i.GrantedScopes,
+		&i.ObservedAdminRoles,
+		&i.ListingMode,
+		&i.AgentID,
+		&i.AgentAppID,
+		&i.ApplicationsSyncedAt,
+		&i.ApplicationsSyncRequestedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const revokeIdentityProviderConnection = `-- name: RevokeIdentityProviderConnection :one
 UPDATE identity_provider_connections
 SET status = 'revoked',
