@@ -111,7 +111,7 @@ In production the SDK caches flag definitions (polled every minute) and evaluate
 
 ### Targeting rule for org and project flags
 
-In the PostHog condition set, match by the `organization` group type and target "organization key is one of ..." (stored as `$group_key`); use the `slug` group key for project scope. Never target a group property such as `organization_slug`, a cohort, or person properties on a server-evaluated flag: the server passes group keys only, so those conditions call PostHog on every evaluation and miss most orgs, in the dashboard too.
+In the PostHog condition set, match by the `organization` group type and target "organization key is one of ..." (stored as `$group_key`); use the `slug` group key for project scope. Never target a group property such as `organization_slug`, a cohort, or person properties, except person properties a caller supplies through `IsFlagEnabledLocal`: the server otherwise passes group keys only, so those conditions call PostHog on every evaluation and miss most orgs, in the dashboard too.
 
 ### Provider surface
 
@@ -130,9 +130,11 @@ Fail closed: treat Indeterminate and errors as "unavailable", never as an explic
 **1. Declare the constant** in [server/internal/feature/flags.go](../../../server/internal/feature/flags.go) with a comment saying where it is evaluated and how it is targeted:
 
 ```go
-// FlagMyNewFeature gates X. Evaluated server-side; targeted by PostHog
-// organization group (org slug). Fails closed. Removed once X is GA.
-FlagMyNewFeature Flag = "my-new-feature" // must match the key in PostHog
+const (
+    // FlagMyNewFeature gates X. Evaluated server-side; targeted by PostHog
+    // organization group (org slug). Fails closed. Removed once X is GA.
+    FlagMyNewFeature Flag = "my-new-feature" // must match the key in PostHog
+)
 ```
 
 **2. Create the flag in PostHog before the gating code merges**; a missing key evaluates as Indeterminate and the gate stays closed. Write the description like `gram-budgets` (org-scoped) or `risk-async-scan-shadow` (person-property, local-only): what it gates, where it is evaluated, how it is targeted, fail-closed behaviour.
