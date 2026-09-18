@@ -18,7 +18,11 @@ type ClaudeCodeLog struct{}
 const claudeCodeScopePrefix = "com.anthropic.claude_code"
 
 func isClaudeCodeScope(name string) bool {
-	return strings.HasPrefix(name, claudeCodeScopePrefix)
+	// The root itself, or a dot-delimited descendant of it. A bare prefix test
+	// would also claim a scope that merely starts with the same letters, such
+	// as com.anthropic.claude_code_vendor, which is somebody else's.
+	return name == claudeCodeScopePrefix ||
+		strings.HasPrefix(name, claudeCodeScopePrefix+".")
 }
 
 func (ClaudeCodeLog) AppliesTo(record *otelv1.InboundLogRecord) bool {
@@ -373,11 +377,18 @@ func claudeCodeAttribution(record *otelv1.InboundLogRecord, apiKey, toolKey stri
 // claudeCodeContent reads the first of keys that carries content, treating
 // Claude Code's redaction sentinel as nothing stated at all.
 func claudeCodeContent(record *otelv1.InboundLogRecord, keys ...string) (string, string) {
-	key, value := getOneLogAttrAny(record, keys...)
-	if value == claudeCodeRedacted {
-		return "", ""
+	// Per key rather than one lookup across all of them: a redacted value on an
+	// earlier key says nothing, and the later keys may still carry something.
+	// Stopping at the first key present would lose, say, an error_type sitting
+	// behind a redacted error.
+	for _, candidate := range keys {
+		key, value := getOneLogAttrAny(record, candidate)
+		if key == "" || value == "" || value == claudeCodeRedacted {
+			continue
+		}
+		return key, value
 	}
-	return key, value
+	return "", ""
 }
 
 // BodyRepeatsEventName reports whether a log body is only the event's name
