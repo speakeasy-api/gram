@@ -183,8 +183,14 @@ budget and the fine-tune never trained with it. The reply's
 there). `usage.prompt_tokens` / `usage.completion_tokens` and `model` are
 read when present. Response bodies are read up to 1 MiB.
 
-`ParseVerdict` takes the span from the first `{` to the last `}`, decodes it
-as a JSON object, and requires all four risk keys. Each value is either
+`ParseVerdict` walks the reply once, delimiting each candidate JSON object by
+brace depth (braces inside strings are ignored), decodes each candidate once
+and returns the first that carries all four risk keys. Objects that decode but
+lack a key (a stray `{}` in surrounding prose) are skipped, and a candidate
+that fails to decode restarts the walk at the next inner `{` so prose with an
+unmatched brace cannot swallow the real object. At most 64 candidates are
+tried, which bounds a brace-heavy malformed reply to a few linear passes.
+Each value is either
 `{"score": 0|1, "reasoning": "…"}` or a bare score; scores may be numbers,
 numeric strings or booleans. Reasoning is trimmed and capped at 500 runes.
 Anything else is an error wrapping `ErrParse`.
