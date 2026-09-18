@@ -68,7 +68,7 @@ func (a *AnalyzeBatch) publishLLMScanRequests(ctx context.Context, args AnalyzeB
 			continue
 		}
 		chatMessageID, contentPartID := msg.anchorIDStrings()
-		provenance := batchRiskProvenance(args, msg, asyncStreamExecutionPath, requestID.String())
+		provenance := batchRiskProvenance(args, msg, llmAnalyzerStreamExecutionPath, requestID.String())
 		body, toolCalls := llmMessageInput(msg)
 
 		publishResults = append(publishResults, a.llmPub.Publish(ctx, riskv1.LLMAnalysis_builder{
@@ -85,7 +85,7 @@ func (a *AnalyzeBatch) publishLLMScanRequests(ctx context.Context, args AnalyzeB
 			OriginRiskPolicyId:      new(args.RiskPolicyID.String()),
 			OriginRiskPolicyVersion: &args.PolicyVersion,
 			MessageLinkReason:       &provenance.MessageLinkReason,
-			ExecutionPath:           new(asyncStreamExecutionPath),
+			ExecutionPath:           new(llmAnalyzerStreamExecutionPath),
 			ToolCallId:              &provenance.ToolCallID,
 			HookSource:              &msg.Source,
 			PolicyLinkReason:        nil,
