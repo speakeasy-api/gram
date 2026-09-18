@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	skillsservice "github.com/speakeasy-api/gram/server/internal/skills"
 	skillsrepo "github.com/speakeasy-api/gram/server/internal/skills/repo"
+	"github.com/speakeasy-api/gram/server/internal/skills/skilldiff"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -209,7 +210,7 @@ func TestPlatformMCPSkillsToolsRefuseReadablyWhenTheCapabilityIsOff(t *testing.T
 
 // Authorization is the acting user's, not the surface's. A connection whose
 // user only holds skill:read can inspect existing skills but cannot author one.
-func TestPlatformMCPSkillReadsAllowSkillReaderButWritesStillRequireAdmin(t *testing.T) {
+func TestPlatformMCPSkillReadsAllowSkillReaderButWritesRequireSkillWrite(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
@@ -252,9 +253,126 @@ func TestPlatformMCPSkillReadsAllowSkillReaderButWritesStillRequireAdmin(t *test
 	require.Equal(t, skill.ID.String(), read.Skill.ID)
 	require.Equal(t, manifest, read.LatestVersion.Content)
 
+	feedbackRow, err := queries.CreateSkillFeedback(ctx, skillsrepo.CreateSkillFeedbackParams{
+		ID: uuid.NullUUID{}, ProjectID: fixture.project.ID,
+		SkillID: uuid.NullUUID{UUID: skill.ID, Valid: true}, SkillVersionID: uuid.NullUUID{UUID: version.ID, Valid: true},
+		SkillName: skill.Name, Source: string(skillsservice.FeedbackSourceDev), Outcome: string(skillsservice.FeedbackOutcomeDidNotHelp),
+		Note: pgtype.Text{String: "Add an escalation step.", Valid: true}, SessionID: pgtype.Text{String: "private-session", Valid: true},
+		UserID: pgtype.Text{String: "private-user", Valid: true}, UserEmail: pgtype.Text{String: "private@example.test", Valid: true},
+	})
+	require.NoError(t, err)
+	proposedContent := skillsFixtureManifest("reader-visible", "Visible to a permitted reader.", "Read-only body with an escalation step.")
+	proposedDiff, err := skilldiff.Unified(manifest, proposedContent)
+	require.NoError(t, err)
+	suggestion, err := queries.CreateSkillEditSuggestion(ctx, skillsrepo.CreateSkillEditSuggestionParams{
+		Rationale: "Agents need an escalation step.", ScoredSessionCount: 1,
+		BaseVersionID: version.ID, ProjectID: fixture.project.ID, SkillID: skill.ID,
+	})
+	require.NoError(t, err)
+	change, err := queries.CreateSkillEditSuggestionChange(ctx, skillsrepo.CreateSkillEditSuggestionChangeParams{
+		ProposedDiff: proposedDiff, Rationale: suggestion.Rationale, Position: 0,
+		ProjectID: fixture.project.ID, SuggestionID: suggestion.ID,
+	})
+	require.NoError(t, err)
+	linked, err := queries.LinkSkillEditSuggestionFeedback(ctx, skillsrepo.LinkSkillEditSuggestionFeedbackParams{
+		ChangeID: change.ID, ProjectID: fixture.project.ID, FeedbackIds: []uuid.UUID{feedbackRow.ID},
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, linked)
+
+	feedback := callSkillsTool[ListSkillFeedbackOutput](t, ctx, fixture.session, "list_skill_feedback", map[string]any{
+		"project_slug": fixture.project.Slug,
+		"skill_id":     skill.ID.String(),
+		"limit":        1,
+	})
+	require.Equal(t, skill.ID.String(), feedback.SkillID)
+	require.EqualValues(t, 1, feedback.Counts.Total)
+	require.Len(t, feedback.Feedback, 1)
+	require.Equal(t, "Add an escalation step.", feedback.Feedback[0].Note)
+	feedbackJSON, err := json.Marshal(feedback)
+	require.NoError(t, err)
+	require.NotContains(t, string(feedbackJSON), "private-session")
+	require.NotContains(t, string(feedbackJSON), "private-user")
+	require.NotContains(t, string(feedbackJSON), "private@example.test")
+
+	suggestions := callSkillsTool[ListSkillSuggestionsOutput](t, ctx, fixture.session, "list_skill_suggestions", map[string]any{
+		"project_slug": fixture.project.Slug,
+		"skill_id":     skill.ID.String(),
+	})
+	require.EqualValues(t, 1, suggestions.TotalOpenCount)
+	require.Len(t, suggestions.Suggestions, 1)
+	require.Empty(t, suggestions.Suggestions[0].ProposedContent)
+	require.EqualValues(t, 1, suggestions.Suggestions[0].FeedbackCount)
+	require.Len(t, suggestions.Suggestions[0].Changes, 1)
+	require.Equal(t, change.ID.String(), suggestions.Suggestions[0].Changes[0].ID)
+
+	withProposedContent := callSkillsTool[ListSkillSuggestionsOutput](t, ctx, fixture.session, "list_skill_suggestions", map[string]any{
+		"project_slug":             fixture.project.Slug,
+		"skill_id":                 skill.ID.String(),
+		"include_proposed_content": true,
+	})
+	require.Len(t, withProposedContent.Suggestions, 1)
+	require.Equal(t, proposedContent, withProposedContent.Suggestions[0].ProposedContent)
+
+	suggestionFeedback := callSkillsTool[ListSkillSuggestionFeedbackOutput](t, ctx, fixture.session, "list_skill_suggestion_feedback", map[string]any{
+		"project_slug": fixture.project.Slug,
+		"change_id":    change.ID.String(),
+		"limit":        1,
+	})
+	require.Equal(t, change.ID.String(), suggestionFeedback.ChangeID)
+	require.Len(t, suggestionFeedback.Feedback, 1)
+	suggestionFeedbackJSON, err := json.Marshal(suggestionFeedback)
+	require.NoError(t, err)
+	require.NotContains(t, string(suggestionFeedbackJSON), "private-session")
+	require.NotContains(t, string(suggestionFeedbackJSON), "private-user")
+	require.NotContains(t, string(suggestionFeedbackJSON), "private@example.test")
+
 	refusal := callSkillsRefusal(t, ctx, fixture.session, "create_skill", map[string]any{
 		"project_slug": fixture.project.Slug,
-		"content":      skillsFixtureManifest("reader-write", "Must remain admin-only in this PR.", "Body."),
+		"content":      skillsFixtureManifest("reader-write", "Requires skill write access.", "Body."),
+	})
+	require.Equal(t, "forbidden", refusal.Code)
+}
+
+func TestPlatformMCPSkillWriterCanAuthorButCannotDistribute(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	fixture := newSkillsVerticalFixture(t, ctx, "platform_mcp_skills_writer", skillsVerticalOptions{capabilityEnabled: true, grantSkillRead: true, grantSkillWrite: true})
+	created := callSkillsTool[SkillAuthoringResult](t, ctx, fixture.session, "create_skill", map[string]any{
+		"project_slug": fixture.project.Slug,
+		"content":      skillsFixtureManifest("delegated-writer", "Authored with skill write.", "Body."),
+	})
+	require.True(t, created.CreatedSkill)
+
+	current := callSkillsTool[GetSkillOutput](t, ctx, fixture.session, "get_skill", map[string]any{
+		"project_slug": fixture.project.Slug,
+		"skill_id":     created.Skill.ID,
+	})
+	require.Equal(t, created.Version.ID, current.LatestVersion.ID)
+
+	revised := callSkillsTool[SkillAuthoringResult](t, ctx, fixture.session, "add_skill_version", map[string]any{
+		"project_slug":               fixture.project.Slug,
+		"skill_id":                   created.Skill.ID,
+		"content":                    skillsFixtureManifest("delegated-writer", "Authored with delegated skill write.", "Revised body."),
+		"expected_latest_version_id": current.LatestVersion.ID,
+	})
+	require.True(t, revised.CreatedVersion)
+
+	updated := callSkillsTool[UpdateSkillMetadataOutput](t, ctx, fixture.session, "update_skill_metadata", map[string]any{
+		"project_slug":               fixture.project.Slug,
+		"skill_id":                   created.Skill.ID,
+		"display_name":               "Delegated writer updated",
+		"summary":                    "Updated with delegated skill write.",
+		"expected_latest_version_id": revised.Version.ID,
+	})
+	require.Equal(t, "Delegated writer updated", updated.Skill.DisplayName)
+	require.Equal(t, "Updated with delegated skill write.", updated.Skill.Summary)
+
+	refusal := callSkillsRefusal(t, ctx, fixture.session, "distribute_skill", map[string]any{
+		"project_slug": fixture.project.Slug,
+		"skill_id":     created.Skill.ID,
+		"plugin":       "marketing",
 	})
 	require.Equal(t, "permission_denied", refusal.Code)
 }
@@ -269,8 +387,19 @@ func TestPlatformMCPSkillsToolsRefuseAUserWithoutGrants(t *testing.T) {
 		"project_slug": fixture.project.Slug,
 		"content":      skillsFixtureManifest("ungranted", "Written without grants.", "Body."),
 	})
-
 	require.Equal(t, "forbidden", refusal.Code)
+
+	for _, call := range []struct {
+		name      string
+		arguments map[string]any
+	}{
+		{name: "list_skill_feedback", arguments: map[string]any{"project_slug": fixture.project.Slug, "skill_id": uuid.NewString()}},
+		{name: "list_skill_suggestions", arguments: map[string]any{"project_slug": fixture.project.Slug}},
+		{name: "list_skill_suggestion_feedback", arguments: map[string]any{"project_slug": fixture.project.Slug, "change_id": uuid.NewString()}},
+	} {
+		refusal = callSkillsRefusal(t, ctx, fixture.session, call.name, call.arguments)
+		require.Equal(t, "forbidden", refusal.Code, call.name)
+	}
 
 	skills, err := skillsrepo.New(fixture.conn).ListSkills(ctx, skillsrepo.ListSkillsParams{ProjectID: fixture.project.ID, PageLimit: 10})
 	require.NoError(t, err)
@@ -297,8 +426,9 @@ type skillsVerticalOptions struct {
 	capabilityEnabled bool
 	// grantAdmin gives the acting user real organization-admin grants. Off, the
 	// call travels the whole path and is refused by RBAC at the end of it.
-	grantAdmin     bool
-	grantSkillRead bool
+	grantAdmin      bool
+	grantSkillRead  bool
+	grantSkillWrite bool
 }
 
 func newSkillsVerticalFixture(t *testing.T, ctx context.Context, name string, options skillsVerticalOptions) *skillsVerticalFixture {
@@ -353,13 +483,20 @@ func newSkillsVerticalFixture(t *testing.T, ctx context.Context, name string, op
 		// assigning one is what makes this "authenticated but unauthorized"
 		// rather than an organization that predates RBAC.
 		require.NoError(t, authz.SeedSystemRoleGrants(ctx, conn, principal.OrganizationID))
+		grantedScopes := make([]authz.Scope, 0, 2)
 		if options.grantSkillRead {
-			selector, marshalErr := authz.NewSelector(authz.ScopeSkillRead, project.ID.String()).MarshalJSON()
+			grantedScopes = append(grantedScopes, authz.ScopeSkillRead)
+		}
+		if options.grantSkillWrite {
+			grantedScopes = append(grantedScopes, authz.ScopeSkillWrite)
+		}
+		for _, grantedScope := range grantedScopes {
+			selector, marshalErr := authz.NewSelector(grantedScope, project.ID.String()).MarshalJSON()
 			require.NoError(t, marshalErr)
 			_, grantErr := accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
 				OrganizationID: principal.OrganizationID,
 				PrincipalUrn:   urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID),
-				Scope:          string(authz.ScopeSkillRead),
+				Scope:          string(grantedScope),
 				Selectors:      selector,
 			})
 			require.NoError(t, grantErr)
@@ -406,7 +543,7 @@ func newSkillsVerticalFixture(t *testing.T, ctx context.Context, name string, op
 	)
 
 	runtimeAuthorizer := Authorizer(&testAuthorizer{})
-	if options.grantSkillRead {
+	if options.grantSkillRead || options.grantSkillWrite {
 		runtimeAuthorizer = NewLiveOrgAdminAuthorizer(conn, authzEngine)
 	}
 	runtime := NewRuntimeWithLifecycle(
