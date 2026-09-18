@@ -115,6 +115,7 @@ func (s *Service) scanHookEventForEnforcement(ctx context.Context, ev hookevents
 		Text:        text,
 		MessageType: messageType,
 		ToolName:    toolName,
+		ToolCallID:  toolCallID,
 	})
 	if err != nil {
 		s.logger.WarnContext(ctx, "risk scan failed for hook event",
@@ -181,11 +182,33 @@ func hookEventToolCallID(ev hookevents.Event, toolName string) string {
 // audit reason is rendered verbatim. The audit reason itself is what gets
 // stored in ClickHouse traces — the user_message override only affects what
 // the agent / end user sees.
-func renderUserBlockReason(userMessage *string, auditReason string) string {
+//
+// A fail-closed deny from the LLM analyzer lane is not a policy match, so it
+// renders the "analysis unavailable" copy instead: the policy's user_message
+// describes a violation that did not happen, and the audit reason carries the
+// technical classification that operators, not agents, need.
+func renderUserBlockReason(scanResult *risk.ScanResult, auditReason string) string {
+	if scanResult.AnalysisUnavailable() {
+		return analysisUnavailableReason(scanResult)
+	}
+	return renderPolicyUserMessage(scanResult.UserMessage, auditReason)
+}
+
+// renderPolicyUserMessage applies a policy's user_message override to a deny
+// that has no ScanResult behind it (the shadow-MCP guard); the audit reason
+// is rendered verbatim when there is none.
+func renderPolicyUserMessage(userMessage *string, auditReason string) string {
 	if userMessage != nil && *userMessage != "" {
 		return *userMessage
 	}
 	return auditReason
+}
+
+// analysisUnavailableReason is the user-facing deny copy for a fail-closed
+// result: the LLM analyzer could not be consulted, so the policy denied
+// without a finding.
+func analysisUnavailableReason(scanResult *risk.ScanResult) string {
+	return fmt.Sprintf("Risk analysis is temporarily unavailable; this action was denied by policy %q.", scanResult.PolicyName)
 }
 
 // warnMatchMaxLen bounds the matched value shown in a challenge warning. The
