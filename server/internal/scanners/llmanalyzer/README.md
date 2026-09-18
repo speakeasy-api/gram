@@ -50,7 +50,7 @@ dispatchLLMEnforcement ─► enforcereply.Dispatcher ─► topic gram-risk-v1-
    │                          (reply URN travels as the gram-reply-urn attribute)
    ▼
 streams: llmanalyzer.EnforceHandler (sub gram-risk-v1-llm-enforcer, ack 30 s, DLQ after 5 deliveries)
-   │  Analyzer.Analyze(lane=sync)
+   │  Analyzer.Analyze(scan_mode=sync)
    ▼
 EnforcementReply{scanner: LLM_ANALYZER, status: OK|ERROR|DEAD_LETTER} ─► Redis inbox
    │  dispatcher waits up to 20 s (enforcereply.DefaultLLMAnalyzerWaitTimeout, wired in start.go)
@@ -86,7 +86,7 @@ publishLLMScanRequests: one LLMAnalysis per message ─► topic gram-risk-v1-ll
    │  execution_path=llm_analyzer_stream, sources = covered subset; no inline scan, no legacy publishes
    ▼
 streams: llmanalyzer.Handler (sub gram-risk-v1-llm-analyzer, ack 60 s, 7 d retention, no DLQ)
-   │  Analyzer.Analyze(lane=async)
+   │  Analyzer.Analyze(scan_mode=async)
    ▼
 scanners.PublishFindings ─► Finding topic ─► FindingCHWriter ─► ClickHouse risk_findings (source=llm_analyzer)
 ```
@@ -265,23 +265,24 @@ model) fails streams startup with `create risk llm client: …`.
 
 Tracer and meter name: `github.com/speakeasy-api/gram/server/internal/scanners/llmanalyzer`.
 
-Metrics. `org`, `slug`, `lane`, `model` below stand for `gram.org.id`,
-`gram.org.slug`, `gram.risk.lane` (`sync` | `async`) and
+Metrics. `org`, `slug`, `mode`, `model` below stand for `gram.org.id`,
+`gram.org.slug`, `gram.risk.scan_mode` (`sync` | `async`; distinct from
+the dispatcher's `lane`, which is scanner + policy) and
 `gram.risk.llm.model`.
 
 | Metric                                    | Kind      | Dimensions                                                                                                                                                       | Where          |
 | ----------------------------------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
-| `risk.llm.requests`                       | counter   | org, slug, lane, model, `gram.outcome` ∈ `success` \| `failure` \| `timeout` \| `rate_limited`                                                                   | streams        |
+| `risk.llm.requests`                       | counter   | org, slug, mode, model, `gram.outcome` ∈ `success` \| `failure` \| `timeout` \| `rate_limited`                                                                   | streams        |
 | `risk.llm.duration` (s)                   | histogram | same as requests; buckets 0.25, 0.5, 1, 2, 3, 5, 8, 10, 12, 15, 20                                                                                               | streams        |
-| `risk.llm.tokens`                         | counter   | org, slug, lane, model, `gram.risk.llm.token_kind` ∈ `input` \| `output` (successful calls only, not cache hits)                                                 | streams        |
-| `risk.llm.retries`                        | counter   | org, slug, lane, model (recorded only when > 0)                                                                                                                  | streams        |
-| `risk.llm.parse_failures`                 | counter   | org, slug, lane, model                                                                                                                                           | streams        |
-| `risk.llm.cache`                          | counter   | org, lane, `gram.risk.llm.cache_result` ∈ `hit` \| `miss` \| `error`                                                                                             | streams        |
-| `risk.llm.policy_evaluations`             | counter   | org, `gram.risk.policy_id`, lane, `gram.outcome` ∈ `clean` \| `matched` \| `dead_letter` (sync) or `published` (async)                                           | server, worker |
+| `risk.llm.tokens`                         | counter   | org, slug, mode, model, `gram.risk.llm.token_kind` ∈ `input` \| `output` (successful calls only, not cache hits)                                                 | streams        |
+| `risk.llm.retries`                        | counter   | org, slug, mode, model (recorded only when > 0)                                                                                                                  | streams        |
+| `risk.llm.parse_failures`                 | counter   | org, slug, mode, model                                                                                                                                           | streams        |
+| `risk.llm.cache`                          | counter   | org, slug, mode, `gram.risk.llm.cache_result` ∈ `hit` \| `miss` \| `error`                                                                                       | streams        |
+| `risk.llm.policy_evaluations`             | counter   | org, `gram.risk.policy_id`, mode, `gram.outcome` ∈ `clean` \| `matched` \| `dead_letter` (sync) or `published` (async)                                           | server, worker |
 | `risk.llm.policy_duration` (s)            | histogram | same as policy_evaluations, sync only; includes the wait for the reply                                                                                           | server         |
-| `risk.enforcement.llm.requests`           | counter   | lane=`sync`, `gram.outcome` ∈ `ok` \| `error` \| `dead_letter` (reply status)                                                                                    | streams        |
-| `risk.enforcement.llm.stale_dropped`      | counter   | lane=`sync`                                                                                                                                                      | streams        |
-| `risk.enforcement.llm.reply_write_errors` | counter   | lane=`sync`                                                                                                                                                      | streams        |
+| `risk.enforcement.llm.requests`           | counter   | mode=`sync`, `gram.outcome` ∈ `ok` \| `error` \| `dead_letter` (reply status)                                                                                    | streams        |
+| `risk.enforcement.llm.stale_dropped`      | counter   | mode=`sync`                                                                                                                                                      | streams        |
+| `risk.enforcement.llm.reply_write_errors` | counter   | mode=`sync`                                                                                                                                                      | streams        |
 | `risk.enforcement.pubsub_degraded`        | counter   | `lane` = `ENFORCEMENT_SCANNER_LLM_ANALYZER`, `reason`, `gram.risk.enforcement.fail_mode` = `closed` (shared with legacy lanes)                                   | server         |
 | `risk.async_scan.handler_messages`        | counter   | org, `scanner` = `llm_analyzer`, `engine` = `real`, `gram.outcome` ∈ `ok` \| `scan_error` \| `publish_error` \| `disabled`, `gate_reason` = `not_gated` (shared) | streams        |
 
@@ -295,13 +296,13 @@ rendered user prompt per completed analysis on both lanes, with
 Spans:
 
 - `risk.llm.analyze` (`Analyzer.Analyze`): org, slug, `gram.project.id`,
-  lane, `gram.risk.llm.truncated`, `gram.risk.llm.cached`, model,
+  mode, `gram.risk.llm.truncated`, `gram.risk.llm.cached`, model,
   `gram.risk.llm.flagged_count`; on failure `RecordError`, `Error` status and
   `gram.risk.llm.dead_letter_reason`.
-- `risk.llm.complete` (`Client.Complete`): org, slug, lane, model,
+- `risk.llm.complete` (`Client.Complete`): org, slug, mode, model,
   `gram.outcome`, `gram.risk.llm.attempts`, `gram.risk.llm.prompt_tokens`,
   `gram.risk.llm.completion_tokens`.
-- `risk.llm.enforce` (`EnforceHandler.Handle`): org, slug, project, lane,
+- `risk.llm.enforce` (`EnforceHandler.Handle`): org, slug, project, mode,
   `gram.outcome`, `gram.risk.llm.finding_count`.
 - `risk.scanForEnforcement` (API server) carries `gram.risk.llm_mode`; its
   per-policy `risk.scanPolicy` children are unchanged.
