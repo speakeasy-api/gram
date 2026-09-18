@@ -551,7 +551,7 @@ function DataExportsInner(): JSX.Element {
           setConfigureTarget({ projectSlug: newExportProject.slug })
         }
       >
-        New export
+        New data export
       </Button>
     </RequireScope>
   ) : null;
