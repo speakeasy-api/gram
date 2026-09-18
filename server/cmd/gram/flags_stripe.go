@@ -80,6 +80,12 @@ func stripeFlags() []cli.Flag {
 			EnvVars: []string{"STRIPE_METER_EVENT_NAME_RISK_CLI_DESTRUCTIVE"},
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "stripe-meter-event-name-risk-llm-analyzer",
+			Aliases: []string{"stripe.meter_event_name_risk_llm_analyzer"},
+			Usage:   "The Stripe fine-tuned risk model analyzer meter event name; empty disables export for this meter",
+			EnvVars: []string{"STRIPE_METER_EVENT_NAME_RISK_LLM_ANALYZER"},
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:    "stripe-portal-configuration-id",
 			Aliases: []string{"stripe.portal_configuration_id"},
 			Usage:   "The controlled Stripe customer portal configuration ID",

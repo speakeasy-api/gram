@@ -41,6 +41,7 @@ var (
 	GcpIamCredentialV1                     = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.gcp_iam_credential_event_v1", "Emitted when changes to GCP IAM external credentials are made")
 	GcpKmsKeyV1                            = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.gcp_kms_key_event_v1", "Emitted when changes to GCP KMS external keys are made")
 	JsonWebKeyV1                           = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.json_web_key_event_v1", "Emitted when changes to published JSON Web Keys are made")
+	IdentityProviderConnectionV1           = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.identity_provider_connection_event_v1", "Emitted when an organization creates, verifies, annotates, or revokes an identity provider connection")
 	JsonWebKeySetV1                        = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.json_web_key_set_event_v1", "Emitted when changes to JSON Web Key Sets are made")
 	KillswitchV1                           = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.killswitch_event_v1", "Emitted when killswitches are activated, changed, deactivated, or expire")
 	LiteLLMInstanceV1                      = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.litellm_instance_event_v1", "Emitted when changes to LiteLLM instances are made")

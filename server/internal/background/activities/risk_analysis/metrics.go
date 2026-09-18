@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/risk/recommendedscopes"
+	"github.com/speakeasy-api/gram/server/internal/scanners/llmanalyzer"
 )
 
 const (
@@ -23,6 +24,7 @@ const (
 	meterRiskRecommendedScopePrefiltered        = "risk.recommended_scope.messages_prefiltered"
 	meterRiskRecommendedScopeFindingsSuppressed = "risk.recommended_scope.findings_suppressed"
 	meterRiskShadowMCPResolution                = "risk.shadow_mcp.resolution"
+	meterRiskLLMPolicyEvaluations               = "risk.llm.policy_evaluations"
 )
 
 type riskMetrics struct {
@@ -33,6 +35,7 @@ type riskMetrics struct {
 	recommendedScopeMessagesPrefiltered metric.Int64Counter
 	recommendedScopeFindingsSuppressed  metric.Int64Counter
 	shadowMCPResolution                 metric.Int64Counter
+	llmPolicyEvaluations                metric.Int64Counter
 }
 
 func newRiskMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *riskMetrics {
@@ -104,6 +107,15 @@ func newRiskMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *ri
 		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterRiskShadowMCPResolution), attr.SlogError(err))
 	}
 
+	llmPolicyEvaluations, err := meter.Int64Counter(
+		meterRiskLLMPolicyEvaluations,
+		metric.WithDescription("Policy evaluations routed to the fine-tuned LLM risk analyzer, by lane and outcome"),
+		metric.WithUnit("{evaluation}"),
+	)
+	if err != nil {
+		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterRiskLLMPolicyEvaluations), attr.SlogError(err))
+	}
+
 	return &riskMetrics{
 		scanEvents:                          scanEvents,
 		scanDuration:                        scanDuration,
@@ -112,6 +124,7 @@ func newRiskMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *ri
 		recommendedScopeMessagesPrefiltered: recommendedScopeMessagesPrefiltered,
 		recommendedScopeFindingsSuppressed:  recommendedScopeFindingsSuppressed,
 		shadowMCPResolution:                 shadowMCPResolution,
+		llmPolicyEvaluations:                llmPolicyEvaluations,
 	}
 }
 
@@ -177,5 +190,22 @@ func (m *riskMetrics) RecordRecommendedScopeSuppressed(ctx context.Context, orgI
 		attr.OrganizationID(orgID),
 		attribute.String("risk.category", string(cat)),
 		attribute.Int("risk.recommended_scopes.version", recommendedscopes.Version),
+	))
+}
+
+// RecordLLMPolicyEvaluation counts the policy evaluations the batch lane
+// routed to the fine-tuned LLM risk analyzer, one per published message so
+// the count lines up with the consumer's per-request outcomes. The batch side
+// only knows whether the requests were published; verdict outcomes are
+// recorded by the consumer.
+func (m *riskMetrics) RecordLLMPolicyEvaluation(ctx context.Context, orgID string, policyID string, outcome string, count int) {
+	if m == nil || m.llmPolicyEvaluations == nil || count <= 0 {
+		return
+	}
+	m.llmPolicyEvaluations.Add(ctx, int64(count), metric.WithAttributes(
+		attr.OrganizationID(orgID),
+		attr.RiskPolicyID(policyID),
+		attr.RiskScanMode(llmanalyzer.ScanModeAsync),
+		attr.Outcome(outcome),
 	))
 }

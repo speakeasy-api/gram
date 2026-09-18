@@ -175,6 +175,21 @@ func (q *Queries) CreateMCPServer(ctx context.Context, arg CreateMCPServerParams
 	return i, err
 }
 
+const deleteAssistantMCPServersByMCPServer = `-- name: DeleteAssistantMCPServersByMCPServer :exec
+DELETE FROM assistant_mcp_servers
+WHERE mcp_server_id = $1 AND project_id = $2
+`
+
+type DeleteAssistantMCPServersByMCPServerParams struct {
+	McpServerID uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+func (q *Queries) DeleteAssistantMCPServersByMCPServer(ctx context.Context, arg DeleteAssistantMCPServersByMCPServerParams) error {
+	_, err := q.db.Exec(ctx, deleteAssistantMCPServersByMCPServer, arg.McpServerID, arg.ProjectID)
+	return err
+}
+
 const deleteMCPServer = `-- name: DeleteMCPServer :one
 UPDATE mcp_servers
 SET deleted_at = clock_timestamp()

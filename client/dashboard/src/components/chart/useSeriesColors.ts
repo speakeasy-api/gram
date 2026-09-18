@@ -1,5 +1,10 @@
 import { useIsDarkTheme } from "@/lib/theme";
-import { otherSeriesForTheme, seriesForTheme } from "./palette";
+import {
+  otherSeriesForTheme,
+  seriesForTheme,
+  type Trend,
+  trendForTheme,
+} from "./palette";
 
 export { useIsDarkTheme } from "@/lib/theme";
 
@@ -17,4 +22,11 @@ export function useSeriesColors(): string[] {
 // recedes behind the named series on both canvases.
 export function useOtherSeriesColor(): string {
   return otherSeriesForTheme(useIsDarkTheme());
+}
+
+// The up/down/flat trend trio for the resolved theme. Trend colors annotate
+// SVG strokes and inline figures rather than CSS-styled text, so they can't
+// follow the theme through a token and are resolved here like the series ramp.
+export function useTrendColors(): Trend {
+  return trendForTheme(useIsDarkTheme());
 }

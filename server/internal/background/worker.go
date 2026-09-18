@@ -144,6 +144,12 @@ type WorkerOptions struct {
 	// retroactive exclusion changes into ClickHouse: the reconcile activity
 	// gets no ClickHouse repo and degrades to its Postgres phases.
 	DisableRiskRetroReconcile bool
+
+	// LLMAnalyzerEnabled reports whether the streams process has a fine-tuned
+	// risk model configured (GRAM_RISK_LLM_URL). When false, batch scans for
+	// organizations on the LLM analyzer flag fall back to the legacy engines
+	// instead of publishing requests nobody evaluates.
+	LLMAnalyzerEnabled bool
 }
 
 // defaultFingerprinter merges WorkerOptions fingerprinters: the override wins
@@ -217,6 +223,7 @@ func ForDeploymentProcessing(
 			PromptInjectionAnalysis: gcp.NewNoopPublisher[*riskv1.PromptInjectionAnalysis](),
 			PromptPolicyAnalysis:    gcp.NewNoopPublisher[*riskv1.PromptPolicyAnalysis](),
 			CustomRulesAnalysis:     gcp.NewNoopPublisher[*riskv1.CustomRulesAnalysis](),
+			LLMAnalysis:             gcp.NewNoopPublisher[*riskv1.LLMAnalysis](),
 			RiskFindings:            gcp.NewNoopPublisher[*riskv1.Finding](),
 			MeterReadings:           gcp.NewNoopPublisher[*meteringv1.MeterReading](),
 			TelemetryLogs:           gcp.NewNoopPublisher[*telemetryv1.LogRecord](),
@@ -228,6 +235,7 @@ func ForDeploymentProcessing(
 		TrialEmailsService:        nil,
 		RiskFingerprinter:         risk.Fingerprinter{},
 		DisableRiskRetroReconcile: false,
+		LLMAnalyzerEnabled:        false,
 	}
 }
 
@@ -304,6 +312,7 @@ func NewTemporalWorker(
 		TrialEmailsService:           nil,
 		RiskFingerprinter:            risk.Fingerprinter{},
 		DisableRiskRetroReconcile:    false,
+		LLMAnalyzerEnabled:           false,
 	}
 
 	for _, o := range options {
@@ -356,6 +365,7 @@ func NewTemporalWorker(
 			TrialEmailsService:           conv.Default(o.TrialEmailsService, opts.TrialEmailsService),
 			RiskFingerprinter:            defaultFingerprinter(o.RiskFingerprinter, opts.RiskFingerprinter),
 			DisableRiskRetroReconcile:    conv.Default(o.DisableRiskRetroReconcile, opts.DisableRiskRetroReconcile),
+			LLMAnalyzerEnabled:           conv.Default(o.LLMAnalyzerEnabled, opts.LLMAnalyzerEnabled),
 		}
 	}
 
@@ -459,6 +469,7 @@ func NewTemporalWorker(
 		opts.GitHubEvidenceToken,
 		opts.RiskFingerprinter,
 		opts.DisableRiskRetroReconcile,
+		opts.LLMAnalyzerEnabled,
 		idTokenVerifier,
 		opts.IssuerMetadataRefresher,
 		remoteSessionEnricher,
@@ -497,6 +508,9 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.GetAIIntegrationsCandidates)
 	temporalWorker.RegisterActivity(activities.GetDeviceIntegrationSyncCandidates)
 	temporalWorker.RegisterActivity(activities.RunDeviceIntegrationSync)
+	temporalWorker.RegisterActivity(activities.GetOktaApplicationSyncCandidates)
+	temporalWorker.RegisterActivity(activities.RunOktaApplicationSync)
+	temporalWorker.RegisterActivity(activities.FinalizeOktaApplicationSync)
 	temporalWorker.RegisterActivity(activities.RefreshBillingUsage)
 	temporalWorker.RegisterActivity(activities.SnapshotBillingCycleUsage)
 	temporalWorker.RegisterActivity(activities.ListWeeklyUsageSummaryTargets)
@@ -630,6 +644,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(AIUsagePollerCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(DeviceIntegrationSyncCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(DeviceIntegrationSyncWorkflow)
+	temporalWorker.RegisterWorkflow(OktaApplicationSyncCoordinatorWorkflow)
+	temporalWorker.RegisterWorkflow(OktaApplicationSyncWorkflow)
 	temporalWorker.RegisterWorkflow(AIUsagePollerWorkflow)
 	temporalWorker.RegisterWorkflow(RefreshBillingUsageWorkflow)
 	temporalWorker.RegisterWorkflow(WeeklyUsageSummaryWorkflow)
@@ -751,6 +767,12 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 	if err := AddDeviceIntegrationSyncCoordinatorSchedule(ctx, env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(ctx, "failed to add device integration sync schedule", attr.SlogError(err))
+		}
+	}
+
+	if err := AddOktaApplicationSyncCoordinatorSchedule(ctx, env); err != nil {
+		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
+			logger.ErrorContext(ctx, "failed to add okta application sync schedule", attr.SlogError(err))
 		}
 	}
 

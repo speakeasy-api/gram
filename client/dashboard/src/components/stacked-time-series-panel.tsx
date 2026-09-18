@@ -29,6 +29,10 @@ import {
   useOtherSeriesColor,
   useSeriesColors,
 } from "@/components/chart/useSeriesColors";
+import {
+  type SeriesStyle,
+  useSeriesFocus,
+} from "@/components/chart/seriesFocus";
 import { cn } from "@/lib/utils";
 import { type TimeSeriesStack } from "./stacked-time-series";
 
@@ -141,6 +145,7 @@ type Stack = {
   key: string;
   label: string;
   rollup?: boolean;
+  unset?: boolean;
   byBucket: Map<number, number>;
   exactByBucket?: Map<number, bigint>;
 };
@@ -186,6 +191,7 @@ function rolledUpStacks(
         key: s.key ?? s.label,
         label: s.label,
         rollup: s.rollup,
+        unset: s.unset,
         byBucket,
         exactByBucket,
       };
@@ -226,18 +232,21 @@ function stackValues(
   return { data };
 }
 
-// The bar color for a stack: an explicitly-flagged top-N roll-up stays
-// neutral (the theme-resolved rollup color), everything else walks the
-// palette — a real group that merely DISPLAYS as "Other" keeps its own color,
-// so callers must mark their rollup series (see TimeSeriesStack.rollup).
-function stackColor(
-  stack: { label: string; rollup?: boolean },
+// How a stack is painted: an explicitly-flagged "unset" group draws hollow in
+// the neutral — it is the absence of a category, so it neither fills nor
+// spends a real hue; an explicitly-flagged top-N roll-up fills with the same
+// neutral; everything else walks the palette. A real group that merely
+// DISPLAYS as "Other" keeps its own color, so callers must mark their rollup
+// and unset series (see TimeSeriesStack.rollup / .unset).
+function stackStyle(
+  stack: { label: string; rollup?: boolean; unset?: boolean },
   index: number,
   colors: string[],
   otherColor: string,
-): string {
-  if (stack.rollup) return otherColor;
-  return colors[index % colors.length]!;
+): SeriesStyle {
+  if (stack.unset) return { color: otherColor, outline: true };
+  if (stack.rollup) return { color: otherColor };
+  return { color: colors[index % colors.length]! };
 }
 
 // A palette color at ~13% alpha, for de-emphasizing non-hovered series.
@@ -259,6 +268,7 @@ export function StackedTimeSeriesPanel({
   emptyMessage,
   loading,
   onSelectRange,
+  onSelectSeries,
 }: {
   title: string;
   headerHint: ReactNode;
@@ -277,12 +287,25 @@ export function StackedTimeSeriesPanel({
   emptyMessage: string;
   loading: boolean;
   onSelectRange?: (start: Date, end: Date) => void;
+  /**
+   * Clicking a bar SEGMENT selects that series — the same act as clicking its
+   * row in the table beside the chart. When set, it takes the click and
+   * `onSelectRange` is left to dragging (and to clicking the empty space above
+   * a bar, which names a bucket but no series).
+   */
+  onSelectSeries?: (key: string) => void;
 }): JSX.Element {
   const [granularity, setGranularity] = useState<Granularity>("day");
   const [cumulative, setCumulative] = useState(false);
   // Legend state is keyed by stable series identity, never display labels.
   const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(new Set());
-  const [focusKey, setFocusKey] = useState<string | null>(null);
+  // Focus (the spotlighted series) is shared with a sibling table when a
+  // SeriesFocus provider is above the panel, so hovering a bar segment also
+  // dims the table's other rows. Standalone panels keep it local.
+  const sharedFocus = useSeriesFocus();
+  const [localFocusKey, setLocalFocusKey] = useState<string | null>(null);
+  const focusKey = sharedFocus ? sharedFocus.focusKey : localFocusKey;
+  const setFocusKey = sharedFocus ? sharedFocus.setFocusKey : setLocalFocusKey;
   const chartRef = useRef<ChartJS<"bar" | "line", number[], string> | null>(
     null,
   );
@@ -342,7 +365,7 @@ export function StackedTimeSeriesPanel({
         type: "bar" as const,
         stack: "__series_stack__",
         order: 2,
-        base: stackColor(s, totalSeries ? i + 1 : i, seriesColors, otherColor),
+        base: stackStyle(s, totalSeries ? i + 1 : i, seriesColors, otherColor),
       };
     });
 
@@ -353,7 +376,7 @@ export function StackedTimeSeriesPanel({
       | (ChartDataset<"line", number[]> & {
           key: string;
           exactData?: string[];
-          base: string;
+          base: SeriesStyle;
         })
       | undefined;
     if (rolledTotal) {
@@ -361,7 +384,7 @@ export function StackedTimeSeriesPanel({
         key: rolledTotal.key,
         label: rolledTotal.label,
         ...stackValues(rolledTotal, buckets, cumulative),
-        base: seriesColors[0]!,
+        base: { color: seriesColors[0]! },
         type: "line",
         borderColor: seriesColors[0]!,
         backgroundColor: "transparent",
@@ -393,6 +416,22 @@ export function StackedTimeSeriesPanel({
     totalSeries,
   ]);
 
+  // Publish the color each stack was painted in, so a sibling table can dot
+  // its rows to match. Keyed on the rolled datasets, so it only republishes
+  // when the stacks or the resolved theme actually change.
+  const publishStyles = sharedFocus?.setStyleByKey;
+  useEffect(() => {
+    publishStyles?.(new Map(rolled.datasets.map((d) => [d.key, d.base])));
+  }, [publishStyles, rolled.datasets]);
+
+  // A drill or a range change swaps the whole cast of series. A focus key left
+  // over from the previous set matches nothing in the new one, which would
+  // leave a sibling table fading every one of its rows against a series that
+  // is no longer on screen — so the focus is dropped with the old datasets.
+  useEffect(() => {
+    setFocusKey(null);
+  }, [rolled.datasets, setFocusKey]);
+
   const focus =
     focusKey !== null && !hiddenKeys.has(focusKey) ? focusKey : null;
   const chart = useMemo(
@@ -401,13 +440,29 @@ export function StackedTimeSeriesPanel({
         labels: rolled.labels,
         datasets: rolled.datasets.map(({ base, ...dataset }) => {
           const color =
-            focus === null || dataset.key === focus ? base : dimmed(base);
+            focus === null || dataset.key === focus
+              ? base.color
+              : dimmed(base.color);
           if (dataset.type === "line") {
             return {
               ...dataset,
               hidden: hiddenKeys.has(dataset.key),
               borderColor: color,
               backgroundColor: "transparent",
+            };
+          }
+          // An "unset" stack draws hollow: a box outlined in the neutral
+          // rather than filled with it.
+          if (base.outline) {
+            return {
+              ...dataset,
+              hidden: hiddenKeys.has(dataset.key),
+              backgroundColor: "transparent",
+              borderColor: color,
+              borderWidth: 1,
+              // Chart.js skips the shared edge between stacked bars unless
+              // every side is asked for explicitly.
+              borderSkipped: false as const,
             };
           }
           return {
@@ -511,20 +566,42 @@ export function StackedTimeSeriesPanel({
     return {
       responsive: true,
       maintainAspectRatio: false,
-      // Clicking a bar drills the page's period down to that bucket. The
-      // zoomed view re-buckets daily so a week/month bar expands into its
-      // days instead of one lone bar.
+      // Clicking a bar SEGMENT selects its series when the caller takes
+      // series clicks — the chart's equivalent of clicking that series' row
+      // in the table below. Otherwise (and anywhere no segment was hit) the
+      // click drills the page's period down to that bucket; the zoomed view
+      // re-buckets daily so a week/month bar expands into its days instead of
+      // one lone bar.
       onClick: (_event, elements) => {
         if (didDragRef.current) return;
-        const index = elements[0]?.index;
-        if (index !== undefined) drillToBuckets(index, index);
+        const hit = elements[0];
+        if (hit === undefined) return;
+        if (onSelectSeries) {
+          const key = rolled.datasets[hit.datasetIndex]?.key;
+          if (key !== undefined) {
+            onSelectSeries(key);
+            return;
+          }
+        }
+        drillToBuckets(hit.index, hit.index);
       },
+      // Hovering a bar segment spotlights its series the same way hovering
+      // its legend entry does — and, under a SeriesFocus provider, dims the
+      // sibling table's other rows.
       onHover: (event, elements) => {
         const target = event.native?.target;
         if (target instanceof HTMLElement) {
           target.style.cursor =
-            onSelectRange && elements.length > 0 ? "pointer" : "default";
+            (onSelectRange || onSelectSeries) && elements.length > 0
+              ? "pointer"
+              : "default";
         }
+        const datasetIndex = elements[0]?.datasetIndex;
+        setFocusKey(
+          datasetIndex === undefined
+            ? null
+            : (rolled.datasets[datasetIndex]?.key ?? null),
+        );
       },
       plugins: {
         // The canvas legend can't style hover or read as clickable — an HTML
@@ -575,6 +652,8 @@ export function StackedTimeSeriesPanel({
     isDark,
     drillToBuckets,
     onSelectRange,
+    onSelectSeries,
+    setFocusKey,
     formatValue,
     formatExactValue,
     formatAxisValue,
@@ -624,6 +703,7 @@ export function StackedTimeSeriesPanel({
               className="relative"
               style={{ height: 280 }}
               onMouseDown={handleChartMouseDown}
+              onMouseLeave={() => setFocusKey(null)}
             >
               <Chart<"bar" | "line", number[], string>
                 ref={chartRef}
@@ -665,7 +745,11 @@ export function StackedTimeSeriesPanel({
                   >
                     <span
                       className={cn("size-2.5", hidden && "opacity-40")}
-                      style={{ backgroundColor: dataset.base }}
+                      style={
+                        dataset.base.outline
+                          ? { border: `1px solid ${dataset.base.color}` }
+                          : { backgroundColor: dataset.base.color }
+                      }
                     />
                     {dataset.label}
                   </button>

@@ -13,6 +13,9 @@ import (
 
 // Fixtures seeds a Fake with in-memory Okta data.
 type Fixtures struct {
+	// Users are directory users returned by ListUsers.
+	Users []User
+
 	// Apps are the applications returned by ListApps and GetApp.
 	Apps []App
 
@@ -32,10 +35,12 @@ type Fixtures struct {
 // Fake is an in-memory Client for tests and local development. It matches
 // on Query, Status, and Search only.
 type Fake struct {
-	mu       sync.Mutex
-	fixtures Fixtures
-	calls    []string
-	err      error
+	mu         sync.Mutex
+	fixtures   Fixtures
+	calls      []string
+	err        error
+	methodErrs map[string]error
+	appErrs    map[string]map[string]error
 }
 
 var _ Client = (*Fake)(nil)
@@ -47,7 +52,44 @@ func NewFake(fixtures Fixtures) *Fake {
 	if fixtures.AppGroups == nil {
 		fixtures.AppGroups = map[string][]AppGroup{}
 	}
-	return &Fake{mu: sync.Mutex{}, fixtures: fixtures, calls: nil, err: nil}
+	return &Fake{mu: sync.Mutex{}, fixtures: fixtures, calls: nil, err: nil, methodErrs: map[string]error{}, appErrs: map[string]map[string]error{}}
+}
+
+// SetFixtures replaces the in-memory data for subsequent calls.
+func (f *Fake) SetFixtures(fixtures Fixtures) {
+	if fixtures.AppUsers == nil {
+		fixtures.AppUsers = map[string][]AppUser{}
+	}
+	if fixtures.AppGroups == nil {
+		fixtures.AppGroups = map[string][]AppGroup{}
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.fixtures = fixtures
+}
+
+// SetAppError makes one per-app method ("ListAppUsers" or "ListAppGroups")
+// fail with err for appID only, until cleared with nil.
+func (f *Fake) SetAppError(name, appID string, err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.appErrs == nil {
+		f.appErrs = map[string]map[string]error{}
+	}
+	if err == nil {
+		delete(f.appErrs[name], appID)
+		return
+	}
+	if f.appErrs[name] == nil {
+		f.appErrs[name] = map[string]error{}
+	}
+	f.appErrs[name][appID] = err
+}
+
+func (f *Fake) appError(name, appID string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.appErrs[name][appID]
 }
 
 // SetError makes every subsequent call fail with err until cleared with nil.
@@ -55,6 +97,21 @@ func (f *Fake) SetError(err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.err = err
+}
+
+// SetMethodError makes one method (by name, for example "ListApps") fail with
+// err until cleared with nil; SetError takes precedence.
+func (f *Fake) SetMethodError(name string, err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if err == nil {
+		delete(f.methodErrs, name)
+		return
+	}
+	if f.methodErrs == nil {
+		f.methodErrs = make(map[string]error)
+	}
+	f.methodErrs[name] = err
 }
 
 // Calls returns the method names invoked so far, in order.
@@ -68,7 +125,10 @@ func (f *Fake) record(name string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls = append(f.calls, name)
-	return f.err
+	if f.err != nil {
+		return f.err
+	}
+	return f.methodErrs[name]
 }
 
 func (f *Fake) ListApps(_ context.Context, req ListAppsRequest) ([]App, error) {
@@ -121,6 +181,9 @@ func (f *Fake) ListAppUsers(_ context.Context, req ListAppUsersRequest) ([]AppUs
 	if err := validateAppID(req.AppID); err != nil {
 		return nil, err
 	}
+	if err := f.appError("ListAppUsers", req.AppID); err != nil {
+		return nil, err
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return slices.Clone(f.fixtures.AppUsers[req.AppID]), nil
@@ -131,6 +194,9 @@ func (f *Fake) ListAppGroups(_ context.Context, req ListAppGroupsRequest) ([]App
 		return nil, err
 	}
 	if err := validateAppID(req.AppID); err != nil {
+		return nil, err
+	}
+	if err := f.appError("ListAppGroups", req.AppID); err != nil {
 		return nil, err
 	}
 	f.mu.Lock()
@@ -179,4 +245,17 @@ func (f *Fake) VerifyScopes(_ context.Context, required []string) (*ScopeVerific
 		return &ScopeVerification{Granted: granted, Missing: missing, DPoPBound: false, ExpiresAt: time.Time{}}, nil
 	}
 	return &ScopeVerification{Granted: granted, Missing: missing, DPoPBound: true, ExpiresAt: time.Now().Add(time.Hour)}, nil
+}
+
+func (f *Fake) ListUsers(_ context.Context, req ListUsersRequest) ([]User, error) {
+	if err := f.record("ListUsers"); err != nil {
+		return nil, err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	users := f.fixtures.Users
+	if req.Limit > 0 && req.Limit < len(users) {
+		users = users[:req.Limit]
+	}
+	return slices.Clone(users), nil
 }
