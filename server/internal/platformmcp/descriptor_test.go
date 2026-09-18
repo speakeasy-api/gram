@@ -235,6 +235,7 @@ func TestEveryExternalToolUsesAKnownAuthorizationPolicy(t *testing.T) {
 	}
 	for _, name := range []string{
 		"get_platform_context", "list_projects", "find_mcp", "get_mcp",
+		"request_mcp_review", "get_my_mcp_review_request",
 		"search_gram_docs", "list_skills", "get_skill", "list_skill_versions",
 		"list_skill_feedback", "list_skill_suggestions", "list_skill_suggestion_feedback",
 		"create_skill", "add_skill_version", "update_skill_metadata",
