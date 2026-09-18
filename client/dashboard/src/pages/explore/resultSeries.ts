@@ -15,7 +15,7 @@ import {
 // quickly, and past this many lines nothing is readable anyway.
 export const MAX_SERIES = 12;
 
-export interface Series {
+interface Series {
   label: string;
   unit: string;
   /** One point per bucket, null where the series had no row. */

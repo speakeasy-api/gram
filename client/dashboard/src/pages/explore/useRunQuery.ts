@@ -9,10 +9,10 @@ import {
   type UseQueryResult,
 } from "@tanstack/react-query";
 
-export const EXPLORE_QUERY_KEY = "explore-query";
+const EXPLORE_QUERY_KEY = "explore-query";
 
 /** The query as it keys the cache: the body with its dates as text. */
-export function queryKeyBody(body: AnalyticsQueryPayload): unknown {
+function queryKeyBody(body: AnalyticsQueryPayload): unknown {
   return { ...body, from: body.from.toISOString(), to: body.to.toISOString() };
 }
 

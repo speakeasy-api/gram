@@ -48,7 +48,7 @@ export const WINDOW_OPTIONS: { value: WindowPreset; label: string }[] = [
 // Queries run as you build, and the dataset is scanned across the whole
 // window however selective the filters are, so the window opens short and
 // widening it is the moment someone chooses to pay for more.
-export const DEFAULT_WINDOW: WindowPreset = "24h";
+const DEFAULT_WINDOW: WindowPreset = "24h";
 
 const WINDOW_SECONDS: Record<WindowPreset, number> = {
   "1h": 3_600,
@@ -114,7 +114,7 @@ export function autoGrain(window: WindowPreset): Grain {
 }
 
 /** Whether the chart type renders a bucketed timeseries. */
-export function isTimeseries(chartType: ChartType): boolean {
+function isTimeseries(chartType: ChartType): boolean {
   return chartType === "line" || chartType === "area" || chartType === "bar";
 }
 
@@ -140,7 +140,7 @@ export function dimensionFields(
 }
 
 /** The dataset's numeric quantities. */
-export function measureFields(
+function measureFields(
   dataset: AnalyticsDataset | undefined,
 ): AnalyticsField[] {
   return (dataset?.fields ?? []).filter((field) => field.role === "measure");
