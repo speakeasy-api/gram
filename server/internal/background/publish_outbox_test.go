@@ -161,7 +161,10 @@ func TestPublishOutboxWorkflow_ExitsAfterBusyBatchBudget(t *testing.T) {
 	t.Parallel()
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
-	calls := registerDrain(env, func(int) (relay.DrainResult, error) {
+	calls := registerDrain(env, func(call int) (relay.DrainResult, error) {
+		if call > publishOutboxMaxBatches {
+			return relay.DrainResult{}, haltLoop()
+		}
 		return relay.DrainResult{Published: 50, HasMore: true}, nil
 	})
 	env.ExecuteWorkflow(PublishOutboxWorkflow)
@@ -173,7 +176,10 @@ func TestPublishOutboxWorkflow_ExitsAfterIdleLifetime(t *testing.T) {
 	t.Parallel()
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
-	calls := registerDrain(env, func(int) (relay.DrainResult, error) {
+	calls := registerDrain(env, func(call int) (relay.DrainResult, error) {
+		if call > int(publishOutboxMaxLifetime/publishOutboxIdleInterval) {
+			return relay.DrainResult{}, haltLoop()
+		}
 		return relay.DrainResult{HasMore: false}, nil
 	})
 	env.ExecuteWorkflow(PublishOutboxWorkflow)
