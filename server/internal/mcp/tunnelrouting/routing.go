@@ -111,25 +111,43 @@ func SelectRoute(clientAffinityKey string, candidates []string, exclude map[stri
 	return available[index.Int64()], true
 }
 
-// BusyResponseRejection converts an exhausted internal capacity response to a
-// transport-neutral JSON-RPC error for POST requests. GET and DELETE retain
-// their HTTP response semantics; the gateway supplies their generic body.
-func BusyResponseRejection(resp *http.Response) *proxy.RejectError {
+// GatewayFailureRejection converts a gateway 502 that the retry policy could
+// not recover into a transport-neutral JSON-RPC error for POST requests: a
+// busy gateway (every session at its substream cap) or a substream that broke
+// mid-flight because the agent's tunnel session closed. Both are conditions on
+// the customer's side of the tunnel; surfacing them as a bare 502 makes a
+// customer outage indistinguishable from a platform fault in 5xx telemetry.
+// GET and DELETE retain their HTTP response semantics; the gateway supplies
+// their generic body.
+func GatewayFailureRejection(resp *http.Response) *proxy.RejectError {
 	if resp == nil ||
 		resp.Request == nil ||
 		resp.Request.Method != http.MethodPost ||
-		resp.StatusCode != http.StatusBadGateway ||
-		resp.Header.Get(ErrorHeader) != wire.TunnelErrorTunnelBusy {
+		resp.StatusCode != http.StatusBadGateway {
 		return nil
 	}
 
-	return &proxy.RejectError{
-		Code:    proxy.RejectCodeServerError,
-		Message: "The MCP server is temporarily unavailable. Please retry.",
-		Data: map[string]any{
-			"code":      "service_unavailable",
-			"retryable": true,
-		},
+	switch resp.Header.Get(ErrorHeader) {
+	case wire.TunnelErrorTunnelBusy:
+		return &proxy.RejectError{
+			Code:    proxy.RejectCodeServerError,
+			Message: "The MCP server is temporarily unavailable. Please retry.",
+			Data: map[string]any{
+				"code":      "service_unavailable",
+				"retryable": true,
+			},
+		}
+	case wire.TunnelErrorSubstreamFailed:
+		return &proxy.RejectError{
+			Code:    proxy.RejectCodeServerError,
+			Message: "The connection to the MCP server was interrupted. Please retry.",
+			Data: map[string]any{
+				"code":      "upstream_disconnected",
+				"retryable": true,
+			},
+		}
+	default:
+		return nil
 	}
 }
 

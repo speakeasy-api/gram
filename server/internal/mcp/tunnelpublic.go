@@ -440,7 +440,7 @@ func (s *Service) serveTunneledPublicInit(
 
 	committed := false
 	p.UpstreamResponseInterceptor = func(ctx context.Context, resp *http.Response) error {
-		if rejection := tunnelrouting.BusyResponseRejection(resp); rejection != nil {
+		if rejection := tunnelrouting.GatewayFailureRejection(resp); rejection != nil {
 			return rejection
 		}
 		stripPublicResponseHeaders(resp)
@@ -694,7 +694,7 @@ func (s *Service) serveTunneledPublicSession(
 
 	isDelete := r.Method == http.MethodDelete
 	p.UpstreamResponseInterceptor = func(ctx context.Context, resp *http.Response) error {
-		if rejection := tunnelrouting.BusyResponseRejection(resp); rejection != nil {
+		if rejection := tunnelrouting.GatewayFailureRejection(resp); rejection != nil {
 			return rejection
 		}
 		stripPublicResponseHeaders(resp)
