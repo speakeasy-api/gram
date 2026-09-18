@@ -699,8 +699,11 @@ func TestPresidioClientTruncatesOversizedMessages(t *testing.T) {
 	// Build an input that is double the limit and contains a multibyte rune
 	// straddling the truncation point so we exercise the UTF-8 walk-back.
 	body := strings.Repeat("a", presidioMaxMessageBytes-1) + "€" + strings.Repeat("b", presidioMaxMessageBytes)
-	_, err := client.AnalyzeBatch(t.Context(), []string{body}, nil, 0, nil)
+	results, err := client.AnalyzeBatch(t.Context(), []string{body}, nil, 0, nil)
 	require.NoError(t, err)
+
+	require.Len(t, results, 1)
+	assert.False(t, results[0].Completed, "unscanned tails must not establish clean checkpoints")
 
 	// Truncation walks back to a rune start, so we land strictly inside the
 	// cap (the "€" occupies 3 bytes starting at presidioMaxMessageBytes-1).

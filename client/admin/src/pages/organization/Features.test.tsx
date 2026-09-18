@@ -104,6 +104,11 @@ const TOGGLE_FEATURES = [
     label: "Platform MCP access",
   },
   {
+    featureName: "network_ingress",
+    enabledKey: "networkIngressEnabled",
+    label: "Tailscale private access",
+  },
+  {
     featureName: "remote_session_auto_refresh",
     enabledKey: "remoteSessionAutoRefreshEnabled",
     label: "Automatic Remote Session Refresh",
@@ -133,7 +138,6 @@ const OMITTED_FEATURES = {
   skill_capture_metadata_only: "omitted",
   remote_session_auto_refresh_enforced: "omitted",
   consent_tool_filtering: "omitted",
-  network_ingress: "omitted",
 } as const satisfies Record<Exclude<FeatureName, ToggleFeatureName>, "omitted">;
 
 function jsonResponse(body: unknown, status = 200): Response {

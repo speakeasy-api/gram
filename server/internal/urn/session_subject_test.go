@@ -531,6 +531,8 @@ func TestParseSessionSubject_RejectsMalformedWorkloadIDs(t *testing.T) {
 	for name, input := range map[string]string{
 		"no issuer reference":    "workload:repo-acme-payments-api",
 		"issuer is not a uuid":   "workload:not-a-uuid:repo:acme/payments-api",
+		"uppercase issuer":       "workload:0192F4C8-1A2B-7C3D-8E4F-5A6B7C8D9E0F:repo:acme/payments-api",
+		"braced issuer":          "workload:{0192f4c8-1a2b-7c3d-8e4f-5a6b7c8d9e0f}:repo:acme/payments-api",
 		"empty external subject": "workload:0192f4c8-1a2b-7c3d-8e4f-5a6b7c8d9e0f:",
 		// No workload_issuers row has the nil uuid, so it is rejected even
 		// though it parses.

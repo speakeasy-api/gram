@@ -14,18 +14,16 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/network_ingress"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/networkingress/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures/productfeaturestest"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
-func TestCreateIngressRequiresEntitlementAndRollout(t *testing.T) {
+func TestCreateIngressRequiresEntitlement(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 	payload := &gen.CreateIngressPayload{Provider: networkingress.ProviderTailscale, Hostname: "private-mcp", OauthClientID: "client", OauthClientSecret: "secret"}
@@ -35,11 +33,6 @@ func TestCreateIngressRequiresEntitlementAndRollout(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeForbidden)
 
 	productfeaturestest.Enable(t, ctx, ti.conn, ti.features, ti.orgID, productfeatures.FeatureNetworkIngress)
-	ti.flags.SetFlag(feature.FlagNetworkIngressRollout, ti.orgID, false)
-	_, err = ti.service.CreateIngress(ctx, payload)
-	requireOopsCode(t, err, oops.CodeForbidden)
-
-	ti.flags.SetFlag(feature.FlagNetworkIngressRollout, ti.orgID, true)
 	result, err := ti.service.CreateIngress(ctx, payload)
 	require.NoError(t, err)
 	require.True(t, result.CredentialsConfigured)
@@ -113,7 +106,7 @@ func TestNetworkModeAdmissionLockSerializesIngressDisable(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 	ti.create(t, ctx)
-	admission := networkingress.NewExpansionAdmission(ti.features, ti.flags, orgrepo.New(ti.conn), true, true)
+	admission := networkingress.NewExpansionAdmission(ti.features, true, true)
 	finalizeNetworkAccess, err := admission.PrepareNetworkAccess(ctx, networkaccess.EligibilityInput{OrganizationID: ti.orgID, Mode: networkaccess.ModeDual})
 	require.NoError(t, err)
 
@@ -167,7 +160,6 @@ func TestDisableAndDeleteRemainAvailableAfterGateRemoval(t *testing.T) {
 	ctx, ti := newTestService(t)
 	created := ti.create(t, ctx)
 	productfeaturestest.Disable(t, ctx, ti.conn, ti.features, ti.orgID, productfeatures.FeatureNetworkIngress)
-	ti.flags.SetFlag(feature.FlagNetworkIngressRollout, ti.orgID, false)
 
 	// Existing desired state and deletion impact remain visible so the dashboard
 	// can explain what is still enforced and offer safe recovery.

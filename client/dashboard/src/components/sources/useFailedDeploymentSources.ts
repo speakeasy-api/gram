@@ -22,6 +22,11 @@ export interface UseFailedDeploymentSourcesResult {
   generalErrors: DeploymentLogEvent[];
   deployment: Deployment | undefined;
   isLoading: boolean;
+  /**
+   * The toolset list failed, so every `toolCount` is a floor of zero rather
+   * than a fact. Callers must not treat zero as "unused" while this is set.
+   */
+  toolCountsUnknown: boolean;
 }
 
 export interface ComputeFailedSourcesResult {
@@ -68,7 +73,14 @@ export function useFailedDeploymentSources(
     },
   );
 
-  const { data: toolsetsData } = useListToolsets();
+  // Toolsets only supply per-source tool counts, so a failed list degrades
+  // to unknown counts (reported below) rather than taking the caller's page
+  // down.
+  const { data: toolsetsData, isError: toolsetsError } = useListToolsets(
+    undefined,
+    undefined,
+    { throwOnError: false },
+  );
 
   const result = useMemo(() => {
     if (!deployment || !logs) {
@@ -93,6 +105,7 @@ export function useFailedDeploymentSources(
     ...result,
     deployment,
     isLoading: deploymentLoading || logsLoading,
+    toolCountsUnknown: toolsetsError && !toolsetsData,
   };
 }
 

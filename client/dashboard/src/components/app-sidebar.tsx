@@ -15,6 +15,7 @@ import { useMemo, useState } from "react";
 import { Button } from "./ui/Button";
 import { FeatureRequestModal } from "./FeatureRequestModal";
 import { SidebarBrandHeader } from "./sidebar-brand-header";
+import { DevSidebarSlot } from "@/dev/sidebar-slot";
 import { Icon } from "@/components/ui/Icon";
 import { InsightsDockResumeButton } from "./insights-dock-resume-button";
 import { Link } from "react-router";
@@ -301,11 +302,17 @@ export function AppSidebar({
       <SidebarContent className="pt-2">{sidebarContent}</SidebarContent>
       <SidebarFooter className="border-t">
         <FreeTierExceededNotification />
-        <div className="mb-2 flex flex-col gap-1.5">
+        {/* Every card here is conditional — the trial banner, the guide CTA,
+            and the dock's resume button (absent while the dock is open). When
+            they all stand down the wrapper renders empty, and its margin was
+            left behind as a band of blank space above the user menu, so it
+            hides itself instead. */}
+        <div className="mb-2 flex flex-col gap-1.5 empty:hidden">
           <TrialStatusCard />
           <ProjectGuideSidebarCta />
           <InsightsDockResumeButton />
         </div>
+        {DevSidebarSlot && <DevSidebarSlot />}
         <SidebarUserMenu />
       </SidebarFooter>
       <FeatureRequestModal

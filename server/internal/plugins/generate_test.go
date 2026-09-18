@@ -3021,6 +3021,142 @@ func TestMCPFingerprintsIsolatesChangePerPlugin(t *testing.T) {
 	require.Equal(t, base["plugin-b"], changedFP["plugin-b"], "untouched plugin's fingerprint must be stable")
 }
 
+func TestGeneratePlatformMCPPackageEmitsExistingServersWorkflow(t *testing.T) {
+	t.Parallel()
+	files, err := PublicPlatformMCPFiles("https://app.example.com", "17")
+	require.NoError(t, err)
+	const path = "skills/add-existing-mcp-servers/SKILL.md"
+	content := files["speakeasy/"+path]
+	require.NotEmpty(t, content)
+	require.Equal(t, content, files["agent-plugins/speakeasy/"+path])
+	workflow := string(content)
+	for _, required := range []string{
+		"name: add-existing-mcp-servers", "claude mcp list",
+		"OWN Speakeasy connection", "Before any local discovery",
+		"health-checks", "launch stdio processes", "BEFORE filtering",
+		"explicit informed consent", "user-sanitized manual inventory",
+		"process side effects",
+		"If discovery succeeds but returns no entries", "normal catalogue path",
+		"Do not claim import completion for an empty inventory",
+		"`registration.status: registered`", "`registration.components_complete: true`",
+		"`model: dashboard_managed`", "Do not require or invent a registration record",
+		"pending or incomplete registration", "must not be reported as already present or complete",
+		"Skip provider attachment for anonymous servers",
+		"inspection reports an authentication requirement and advertises a supported identity provider",
+		"`authentication: authentication_required`", "`oauth_discovery: available_dcr`",
+		"`available` alone or `incomplete` does not establish support",
+		"list_projects", "find_mcp", "get_mcp", "inspect_mcp_candidate",
+		"register_remote_mcp", "Never copy local credentials",
+		"Every selected supported server", "localhost", "stdio",
+		"obtain explicit permission", "current CLI user, working directory",
+		"Do not inspect credential files", "forward raw output",
+		"Never manufacture a safe URL", "not hostname or display name",
+		"connected Speakeasy management endpoint", "not display name alone",
+		"Confirm candidate selection and destination", "`truncated: true`",
+		"Follow every `next_cursor`", "Never combine `query` and `cursor`",
+		"explicit confirmation of the exact inspected batch and project",
+		"Catalogue substitutions require separate confirmation",
+		"Preserve all logical-operation inputs and the same idempotency key on retries",
+		"Continue independent items after failure", "Server validation remains authoritative",
+		"including already-present entries and uncertain write outcomes",
+		"Do not use cached preflight results as final evidence", "Zero selections is not success",
+		"Report registration and authentication/readiness separately",
+		"exact server-returned Speakeasy setup/authorization links",
+		"separate explicit consent for provider attachment", "Leave local config unchanged",
+	} {
+		require.Contains(t, workflow, required)
+	}
+	require.NotContains(t, workflow, "speakeasy-skill-feedback")
+	require.NotContains(t, workflow, "claude mcp add")
+	require.NotContains(t, workflow, "claude mcp remove")
+}
+
+// These are packaged-instruction regressions, not simulated agent/tool executions.
+func TestGeneratePlatformMCPExistingServersCatalogPreference(t *testing.T) {
+	t.Parallel()
+	files, err := PublicPlatformMCPFiles("https://app.example.com", "17")
+	require.NoError(t, err)
+	path := "skills/add-existing-mcp-servers/SKILL.md"
+	content := files["speakeasy/"+path]
+	require.NotEmpty(t, content)
+	require.Equal(t, content, files["agent-plugins/speakeasy/"+path])
+	workflow := string(content)
+	for _, scenario := range []struct {
+		name         string
+		instructions []string
+	}{
+		{"different endpoint found by synthetic service alias", []string{
+			"Search exact endpoint identity FIRST", "search local non-secret alias/provider/name SECONDARY",
+			"only inputs are optional `query`, `provider_key` and `cursor`",
+			"Follow `next_cursor` with the same `query` and `provider_key`",
+			"A URL search miss does not rule out a reviewed alternative",
+			"an absent `canonical_url` is unknown, not a match",
+			"region, product and tools differences", "explicitly mark unknown differences",
+		}},
+		{"ambiguous or declined synthetic alternatives", []string{
+			"never silently substitute based on a name", "ask for one exact candidate",
+			"Catalogue substitutions require separate confirmation",
+			"If the user declines, no suitable match exists", "offer the original safe direct remote path",
+			"Unresolved ambiguity must not trigger a catalogue write",
+		}},
+		{"accepted alternative uses reviewed registration", []string{
+			"call `register_catalog_mcp`", "only declared `non_secret_config`",
+			"Never create a custom direct-remote entry for a confirmed catalogue replacement",
+			"import does not require readiness or plugin distribution",
+		}},
+		{"two configurations of one catalogue reference require persisted evidence", []string{
+			"Two configurations of one catalogue reference are not the same target",
+			"source/reference alone cannot prove configuration equivalence",
+			"match fresh inventory `registration.id` to the receipt's returned `registration_id`",
+			"Receipt-ID correlation alone is not persisted configuration proof",
+			"do not invent fields or claim current configuration was read back",
+			"configuration equivalence remains unverified and requires manual resolution, not automatic reuse",
+			"do not claim already present or create a duplicate",
+		}},
+		{"reused wrong configuration returns matching registration ID", []string{
+			"reuse an existing registration for the same source/reference with different configuration unchanged",
+			"Neither a new receipt nor `replayed: false` proves that the submitted configuration took effect",
+			"Require server-backed evidence of the registration's exact effective confirmed configuration",
+			"even when the returned ID matches the receipt and live status is registered with complete components",
+		}},
+		{"race or unknown existing registration cannot prove creation", []string{
+			"A concurrent registration after preflight, an unknown existing registration or an uncertain write outcome",
+			"must not be treated as newly created or correctly configured from the receipt",
+			"keep it unverified, do not create a duplicate, and offer manual dashboard resolution",
+		}},
+		{"empty request and configless candidate are not persisted proof", []string{
+			"Distinguish a configless candidate from an empty submitted `non_secret_config`",
+			"omitted values can use declared defaults",
+			"absent/empty `configuration` only describes the current candidate",
+			"inventory does not bind persisted configuration to that inspected candidate version",
+			"even an apparently configless candidate remains unverified/manual resolution",
+		}},
+		{"declined catalogue needs separate inspected direct batch consent", []string{
+			"call `inspect_mcp_candidate` with the original `remote_url`",
+			"After declining a catalogue candidate, require explicit confirmation of the inspected direct target, destination project and exact direct batch before `register_remote_mcp`",
+			"declining the candidate is not consent to the fallback",
+		}},
+		{"confirmed catalogue target already present", []string{
+			"Recheck existing registrations after substitution",
+			"Deduplicate confirmed catalogue targets across aliases too",
+			"do not register again", "pending/incomplete or uncertain identity blocks duplicate creation",
+			"do not verify against the original URL when the confirmed replacement differs",
+			"Every selected supported server must be confirmed present",
+		}},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			t.Parallel()
+			for _, instruction := range scenario.instructions {
+				require.Contains(t, workflow, instruction)
+			}
+		})
+	}
+	require.Less(t, strings.Index(workflow, "Search exact endpoint identity FIRST"), strings.Index(workflow, "search local non-secret alias/provider/name SECONDARY"))
+	require.NotContains(t, workflow, "`lookup_url`")
+	require.NotContains(t, workflow, "This proves which request produced that registration")
+	require.NotContains(t, workflow, "Without correlated operation evidence for an existing registration")
+}
+
 func TestGeneratePlatformMCPPackageEmitsReviewedShadowWorkflow(t *testing.T) {
 	t.Parallel()
 

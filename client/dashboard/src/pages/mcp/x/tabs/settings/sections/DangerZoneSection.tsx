@@ -1,7 +1,9 @@
 import { RequireScope } from "@/components/require-scope";
 import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
+import { useIsSpeakeasyStaff } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
+import { UNPROXIED_DELETE_STAFF_ONLY_MESSAGE } from "@/pages/sources/unproxied-mcp/hooks";
 import { useRoutes } from "@/routes";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import type {
@@ -14,8 +16,10 @@ import {
   invalidateAllGetMcpServer,
 } from "@gram/client/react-query/getMcpServer.js";
 import { invalidateAllMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
-import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
-import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSessionIssuers.js";
+import {
+  invalidateAllMcpServers,
+  useMcpServers,
+} from "@gram/client/react-query/mcpServers.js";
 import { useUpdateMcpServerMutation } from "@gram/client/react-query/updateMcpServer.js";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
@@ -27,6 +31,13 @@ import { useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { DangerSettingsSection } from "@/components/detail/settings-section";
+import { DeleteSourceBackedServerDialogContent } from "./DeleteSourceBackedServerDialogContent";
+import {
+  linkedMcpServersFilter,
+  serversBackedBySameSource,
+  type SourceBackedDeleteTarget,
+} from "./sourceDelete";
+import { invalidateWrapperDeleteAuthViews } from "./sourceInvalidation";
 
 function mcpServerVisibilityUpdateForm(
   mcpServer: McpServer,
@@ -82,16 +93,93 @@ function ServerControlRow({
   );
 }
 
+const SOURCE_KIND_LABEL: Record<SourceBackedDeleteTarget["kind"], string> = {
+  remote: "remote MCP source",
+  tunneled: "tunneled MCP source",
+  unproxied: "unproxied MCP source",
+};
+
+function deleteRowCopy(
+  deleteTarget: SourceBackedDeleteTarget | undefined,
+  sourceUnavailable: boolean,
+  staffOnly: boolean,
+): {
+  title: string;
+  description: string;
+} {
+  if (staffOnly) {
+    return {
+      title: "Delete MCP Server and Source",
+      description: `${UNPROXIED_DELETE_STAFF_ONLY_MESSAGE} Deleting this server would also delete the unproxied MCP source behind it.`,
+    };
+  }
+  if (sourceUnavailable && !deleteTarget) {
+    return {
+      title: "Delete MCP Server",
+      description:
+        "The source behind this server could not be loaded, so deleting removes only this server and its endpoints. This action cannot be undone.",
+    };
+  }
+  if (!deleteTarget) {
+    return {
+      title: "Delete MCP Server",
+      description:
+        "Permanently remove this server and all of its endpoints. This action cannot be undone.",
+    };
+  }
+  return {
+    title: "Delete MCP Server and Source",
+    description: `Permanently remove this server, the ${SOURCE_KIND_LABEL[deleteTarget.kind]} behind it, every other server backed by that source, and all of their endpoints. This action cannot be undone.`,
+  };
+}
+
 export function DangerZoneSection({
   mcpServer,
   endpoints,
+  deleteTarget,
+  sourceUnavailable = false,
 }: {
   mcpServer: McpServer;
   endpoints: McpEndpoint[];
+  /**
+   * The source row behind a remote/tunneled/unproxied server, once loaded.
+   * Deleting such a server must delete its source too, so the button waits
+   * for this rather than fall back to a wrapper-only delete that would
+   * orphan the source.
+   */
+  deleteTarget?: SourceBackedDeleteTarget;
+  /**
+   * The source row failed to load (already gone, or not readable). The
+   * wrapper-only delete is then the only way to clear the server, so it is
+   * allowed rather than leaving the button disabled forever.
+   */
+  sourceUnavailable?: boolean;
 }): JSX.Element {
   const navigate = useNavigate();
   const routes = useRoutes();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+
+  const linkedFilter = linkedMcpServersFilter(mcpServer);
+  const isSourceBacked = linkedFilter !== null;
+  const linkedQuery = useMcpServers(linkedFilter ?? undefined, undefined, {
+    enabled: isSourceBacked,
+  });
+  const linkedMcpServers = serversBackedBySameSource(
+    mcpServer,
+    linkedQuery.data?.mcpServers ?? [],
+  );
+  // The unproxied source delete is staff-only server-side. Refuse up front
+  // rather than let the cascade delete the wrappers and then be turned away.
+  const isSpeakeasyStaff = useIsSpeakeasyStaff();
+  const staffOnly = deleteTarget?.kind === "unproxied" && !isSpeakeasyStaff;
+  // A refetch in flight means the sibling list may be about to change; wait
+  // for it so the dialog opens on the current set.
+  const deleteReady =
+    !staffOnly &&
+    (!isSourceBacked ||
+      (!!deleteTarget && linkedQuery.isSuccess && !linkedQuery.isFetching) ||
+      sourceUnavailable);
+  const deleteRow = deleteRowCopy(deleteTarget, sourceUnavailable, staffOnly);
   const [pendingAvailability, setPendingAvailability] =
     useState<McpServerVisibility | null>(null);
   const queryClient = useQueryClient();
@@ -178,7 +266,11 @@ export function DangerZoneSection({
                 <Text muted small>
                   {enabled ? "Enabled" : "Disabled"}
                 </Text>
-                <RequireScope scope="mcp:write" level="component">
+                <RequireScope
+                  scope="mcp:write"
+                  resourceId={mcpServer.projectId}
+                  level="component"
+                >
                   <Switch
                     checked={enabled}
                     disabled={isUpdatingVisibility}
@@ -189,13 +281,18 @@ export function DangerZoneSection({
               </ServerControlRow>
 
               <ServerControlRow
-                title="Delete MCP Server"
-                description="Permanently remove this server and all of its endpoints. This action cannot be undone."
+                title={deleteRow.title}
+                description={deleteRow.description}
               >
-                <RequireScope scope="mcp:write" level="component">
+                <RequireScope
+                  scope="mcp:write"
+                  resourceId={mcpServer.projectId}
+                  level="component"
+                >
                   <Button
                     variant="destructive-primary"
                     size="md"
+                    disabled={!deleteReady}
                     onClick={() => setDeleteDialogOpen(true)}
                   >
                     <Button.LeftIcon>
@@ -206,6 +303,29 @@ export function DangerZoneSection({
                 </RequireScope>
               </ServerControlRow>
             </div>
+            {linkedQuery.isError && (
+              // The delete stays disabled until the sibling list loads, since
+              // the dialog must show what the cascade removes; say why, and
+              // offer a way out other than reloading the page.
+              <Alert variant="error" dismissible={false}>
+                <Stack gap={2}>
+                  <Text small>
+                    Could not load the other servers backed by this source, so
+                    deletion is unavailable.
+                  </Text>
+                  <div>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={linkedQuery.isFetching}
+                      onClick={() => void linkedQuery.refetch()}
+                    >
+                      <Button.Text>Retry</Button.Text>
+                    </Button>
+                  </div>
+                </Stack>
+              </Alert>
+            )}
             {updateVisibility.isError && (
               <Alert variant="error" dismissible={false}>
                 {updateVisibility.error.message}
@@ -216,15 +336,27 @@ export function DangerZoneSection({
       </DangerSettingsSection>
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <Dialog.Content className="max-w-2xl!">
-          <DeleteMcpServerDialogContent
-            mcpServer={mcpServer}
-            endpoints={endpoints}
-            onClose={() => setDeleteDialogOpen(false)}
-            onSuccess={() => {
-              setDeleteDialogOpen(false);
-              void navigate(routes.mcp.href());
-            }}
-          />
+          {deleteTarget ? (
+            <DeleteSourceBackedServerDialogContent
+              target={deleteTarget}
+              linkedMcpServers={linkedMcpServers}
+              onClose={() => setDeleteDialogOpen(false)}
+              onSuccess={() => {
+                setDeleteDialogOpen(false);
+                void navigate(routes.mcp.href());
+              }}
+            />
+          ) : (
+            <DeleteMcpServerDialogContent
+              mcpServer={mcpServer}
+              endpoints={endpoints}
+              onClose={() => setDeleteDialogOpen(false)}
+              onSuccess={() => {
+                setDeleteDialogOpen(false);
+                void navigate(routes.mcp.href());
+              }}
+            />
+          )}
         </Dialog.Content>
       </Dialog>
       <ServerAvailabilityDialog
@@ -306,7 +438,7 @@ function DeleteMcpServerDialogContent({
       await Promise.all([
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
         invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
-        invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
+        invalidateWrapperDeleteAuthViews(queryClient, { refetchType: "all" }),
       ]);
       toast.success("MCP server deleted");
       onSuccess();

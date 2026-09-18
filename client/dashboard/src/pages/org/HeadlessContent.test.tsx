@@ -4,11 +4,6 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { HeadlessContent } from "./HeadlessContent";
 import { MemoryRouter } from "react-router";
 
-vi.mock("@/components/require-scope", () => ({
-  RequireScope: ({ children }: { children: React.ReactNode }) => (
-    <>{children}</>
-  ),
-}));
 vi.mock("@/components/mode-switch-starfield", () => ({
   ModeSwitchStarfield: () => null,
 }));
@@ -46,7 +41,7 @@ describe("HeadlessContent", () => {
     ).toBeTruthy();
     expect(
       screen.getByText(
-        "Administer the control plane from the agent you already work in. Deploy and Manage MCP gateway servers, Review security policies and deep dive your AI usage data.",
+        "Use the control plane from the agent you already work in. Your role decides which projects, MCP servers, plugins, skills and operational data you can access.",
       ),
     ).toBeTruthy();
   });

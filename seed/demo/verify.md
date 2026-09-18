@@ -29,11 +29,11 @@ human in the local organization, not through impersonation.
 A check FAILS when the page shows an empty state, an error boundary, or zero
 where a value is expected.
 
-0. **Network Access safety**: with `gram-network-ingress-rollout` absent or off
-   for the demo organization, `/domains` retains the custom-domain surface but
-   shows no Tailscale setup controls. Generic MCP server settings show no Network
-   access mutation section. Confirm there is no `network_ingress` entitlement,
-   ingress row, credential, or related console/network error.
+0. **Network Access safety**: with no `network_ingress` entitlement for the demo
+   organization, `/domains` retains the custom-domain surface but shows no
+   Tailscale setup controls. Generic MCP server settings show no Network access
+   mutation section. Confirm there is no ingress row, credential, or related
+   console/network error.
 
 1. **Agent sessions list** — sessions list shows ~180 sessions with varied
    titles ("Incident triage… #10xx"), spread over the last ~2 weeks, owners
@@ -83,14 +83,26 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     field. The organization **MCP Sessions** page shows the same five
     connections and the same two badges.
 
-11. **External OAuth settings** — open **MCP → Acme OAuth Discovery →
+11. **Workload sessions** — on the project **MCP Sessions** page, two rows show
+    a workflow icon instead of an avatar and a blue **Workload** badge reading
+    `Acme CI · Agent …`. One names the active managed agent, the other the
+    suspended one, which the badge says in parentheses. Hovering a badge shows
+    the issuer URL on `ci-identity.example.com`, the full `repo:acme/…` subject,
+    and an **Admitted by** line: the payments workload lists two admissions
+    (this project and the organization), the docs workload one. Opening a row's
+    **Revoke** dialog lists the stop controls narrowest first, marks
+    **Withdraw the admission** and **Delete the issuer** as the two that stop
+    the workload reconnecting, and says the rest are not yet available in the
+    dashboard.
+
+12. **External OAuth settings** — open **MCP → Acme OAuth Discovery →
     Authentication** (`/mcp/acme-oauth-discovery/authentication`). The page
     shows the existing Gram-hosted metadata configuration, recommends
     provider-hosted metadata, and offers **Review update**. Opening the review
     starts with the fictional `https://auth.example.com` issuer; live discovery
     does not need to succeed for this seeded-page check.
 
-12. **Killswitches on the identity Access tab (local rewritten seed only)** —
+13. **Killswitches on the identity Access tab (local rewritten seed only)** —
     Killswitch management intentionally rejects demo/support sessions. Verify this
     contract in the local organization after `mise run seed`, not through the
     demo-org impersonation flow. **Secure** carries no Killswitch entry: open
@@ -115,13 +127,13 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     `/<org>/killswitch` forwards to **Identities**; and
     `/<org>/killswitch/<killswitchId>?range=…` forwards onto its subject's
     Access tab with that record open and the range still applied.
-13. **Audit logs** — Killswitch history contributes nine rows: six
+14. **Audit logs** — Killswitch history contributes nine rows: six
     **activated**, one **changed**, one **lifted/deactivated**, and one
     **expired**. Mutation rows name the same fictional operator and prescription
     version as their Killswitch history entries; the expiry row is attributed to
     **System**, follows the bounded row's deadline, and exposes no internal note
     in the organization-visible audit snapshot.
-14. **Employee Shadow AI** — open **Employee Enrollment**, then Priya's detail
+15. **Employee Shadow AI** — open **Employee Enrollment**, then Priya's detail
     page. The Shadow AI section lists Claude Code, Cursor, Codex, and Ollama in
     deterministic last-seen order, spans Harness and Local model categories,
     and shows two devices where applicable. Installed / Running signals,
@@ -129,7 +141,7 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     hardware identifiers. Jonas's detail shows Claude Code, Cursor, and Aider,
     proving each page is filtered to its canonical enrolled-user identity.
 
-15. **Gateway overview Activity** — open MCP → **Acme Agent Gateway** → Overview.
+16. **Gateway overview Activity** — open MCP → **Acme Agent Gateway** → Overview.
     The Activity section shows non-zero tool calls over the last 7 days, a
     Gateway tool usage chart with all four tools populated, the three discovery tools
     decreasing (list_servers > describe_server > describe_tools) and
@@ -143,7 +155,7 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     Gateway (not Shadow MCP) and link back to the gateway, and each member
     dispatch carries a "via Acme Agent Gateway" marker. Back on the MCP
     listing, the gateway card shows no "never used" marker.
-16. **Organization setup board** — with the `gram-setup-board` flag enabled,
+17. **Organization setup board** — with the `gram-setup-board` flag enabled,
     open `/acme-demo/setup/board`. Confirm all four columns render, Priya owns
     Set up observability in other platforms, `security-owner@demo.getgram.ai` owns Configure
     integrations in Awaiting Support, and Set up identity provider and Set up
@@ -152,7 +164,7 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     four tasks. As a platform admin, enable **Show hidden tasks** and confirm
     all three appear with a Hidden badge.
 
-17. **Managed agents (local rewritten seed only)** — run `mise run seed` and
+18. **Managed agents (local rewritten seed only)** — run `mise run seed` and
     use an ordinary human session in the local organization, with permission to
     view all agents and authorize credentials (for example, the local seeded
     admin). Shared demo impersonation remains intentionally restricted by the
@@ -260,7 +272,7 @@ Connector` appears under **Inactive** with no connections. Its row menu's
       shared SQL. Local-only developer keys may be restored by
       `RunLocalFixtures`; do not mistake those for managed-agent seed keys.
 
-18. **Billing meter usage** — select a custom trailing 14-day window. Storage
+19. **Billing meter usage** — select a custom trailing 14-day window. Storage
     shows s-tokens of stored content, bandwidth shows ingress and egress bytes,
     and risk content shows all six scanners. Department breakdown includes
     missing attribution and a remainder. Chart series and table totals sum to

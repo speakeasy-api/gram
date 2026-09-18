@@ -167,7 +167,8 @@ func NewClient(logger *slog.Logger, client *guardian.HTTPClient, signer remotese
 }
 
 // parseOrgURL accepts an https origin, or an http origin on a loopback host
-// for local stubs, with no path, query, fragment, or userinfo.
+// for local stubs, with no path, query, fragment, or userinfo, and returns
+// it in RFC 3986 canonical form.
 func parseOrgURL(raw string) (*url.URL, error) {
 	orgURL, err := url.Parse(raw)
 	if err != nil || orgURL.Hostname() == "" || orgURL.Opaque != "" {
@@ -186,14 +187,19 @@ func parseOrgURL(raw string) (*url.URL, error) {
 	switch orgURL.Scheme {
 	case "https":
 	case "http":
-		if !isLoopbackHost(orgURL.Hostname()) {
+		if !isLoopbackHost(strings.ToLower(orgURL.Hostname())) {
 			return nil, fmt.Errorf("okta: org url %q must use https", raw)
 		}
 	default:
 		return nil, fmt.Errorf("okta: org url %q must use https", raw)
 	}
-	orgURL.Path, orgURL.RawPath = "", ""
-	return orgURL, nil
+	// RFC 9449 §4.2, §4.3: canonicalize the origin once so every wire URI is byte-identical to its proof htu.
+	canonical, err := url.Parse(dpop.HTU(orgURL))
+	if err != nil {
+		return nil, fmt.Errorf("okta: invalid org url %q", raw)
+	}
+	canonical.Path, canonical.RawPath = "", ""
+	return canonical, nil
 }
 
 // validateAppID rejects ids that would not stay a single opaque path segment.

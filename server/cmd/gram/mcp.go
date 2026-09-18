@@ -43,7 +43,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/modelkeys"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
-	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -235,6 +234,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		roleClient, authz.EngineOpts{
 			AdmitPrincipalCredential:         runtimepolicy.AdmitPrincipalCredential,
 			AdmitPrincipalCredentialWithDBTX: runtimepolicy.AdmitPrincipalCredentialWithDBTX,
+			AdmitWorkloadSession:             runtimepolicy.AdmitWorkloadSession,
 			DevMode:                          serviceEnv == "local",
 		})
 
@@ -308,7 +308,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	// Private ingress expansion is never admitted here: the lifecycle
 	// reconciler is a Temporal worker this tier does not run. Observation and
 	// containment still resolve through the same admission checks.
-	admission := networkingress.NewExpansionAdmission(productFeatures, featureFlags, orgRepo.New(db), false, c.Bool("network-ingress-enabled"))
+	admission := networkingress.NewExpansionAdmission(productFeatures, false, c.Bool("network-ingress-enabled"))
 	metadata := mcpmetadata.NewService(logger, tracerProvider, meterProvider, db, sessionManager, serverURL, siteURL, cacheImpl, authzEngine, auditLogger, admission.CheckExpansion)
 	runtime, err := buildMCPServerRuntime(mcpServerRuntimeDependencies{Logger: logger, DB: db, Encryption: enc, MCP: mcpService, Metadata: metadata})
 	if err != nil {

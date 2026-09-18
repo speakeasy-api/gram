@@ -117,6 +117,7 @@ func TestAuthenticatedUserAdapterDeriveCandidates(t *testing.T) {
 		"assistant":    testIdentity(t, mcpidentity.KindAssistant, ""),
 		"agent":        testIdentity(t, mcpidentity.KindAgent, ""),
 		"chat session": testIdentity(t, mcpidentity.KindChatSession, ""),
+		"workload":     testIdentity(t, mcpidentity.KindWorkload, ""),
 	} {
 		result, err := adapter.DeriveCandidates(t.Context(), organization, identity)
 		require.NoError(t, err, name)

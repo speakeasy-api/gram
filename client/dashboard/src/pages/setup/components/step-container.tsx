@@ -5,11 +5,15 @@ import { useJourneyView } from "./journey-steps";
 
 const StepSupportContext = createContext<(() => void) | undefined>(undefined);
 
-export function StepSupportButton(): JSX.Element | null {
+function StepSupportButton(): JSX.Element | null {
   const onSupport = useContext(StepSupportContext);
 
   return onSupport ? (
-    <Button variant="secondary" onClick={onSupport}>
+    <Button
+      variant="secondary"
+      onClick={onSupport}
+      className="focus-visible:ring-2 focus-visible:ring-offset-3"
+    >
       Get support
     </Button>
   ) : null;
@@ -71,7 +75,11 @@ export function StepContainer({
   // until the last one, where the task is marked done. A card whose primary
   // action does real work (distributing servers) keeps its own label.
   const actions = isLastStep ? (
-    <Button onClick={onContinue} disabled={!canContinue || isLoading}>
+    <Button
+      onClick={onContinue}
+      disabled={!canContinue || isLoading}
+      className="focus-visible:ring-2 focus-visible:ring-offset-3"
+    >
       {isLoading ? "Loading..." : (markDoneLabel ?? "Mark done")}
     </Button>
   ) : (
@@ -80,10 +88,12 @@ export function StepContainer({
         const next = journey.steps[currentPosition + 1];
         if (next) journey.setActiveIndex(next.index);
       }}
-      className="gap-1.5"
+      className="gap-1.5 focus-visible:ring-2 focus-visible:ring-offset-3"
     >
       Next step
-      <ArrowRight className="h-4 w-4" />
+      <Button.RightIcon>
+        <ArrowRight className="h-4 w-4" aria-hidden="true" />
+      </Button.RightIcon>
     </Button>
   );
 
@@ -111,9 +121,11 @@ export function StepContainer({
             <Button
               variant="tertiary"
               onClick={() => journey.setActiveIndex(previousStep.index)}
-              className="text-muted-foreground hover:text-foreground gap-1.5 md:hidden"
+              className="text-muted-foreground hover:text-foreground gap-1.5 focus-visible:ring-2 focus-visible:ring-offset-3 md:hidden"
             >
-              <ArrowLeft className="h-4 w-4" />
+              <Button.LeftIcon>
+                <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+              </Button.LeftIcon>
               Back
             </Button>
           ) : null}

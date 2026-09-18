@@ -18,6 +18,10 @@ import { ClientDetailSheet } from "@/components/sessions/ClientDetailSheet";
 import { RevokeClientDialog } from "@/components/sessions/RevokeClientDialog";
 import { RevokeSessionDialog } from "@/components/sessions/RevokeSessionDialog";
 import { RevokeSessionsDialog } from "@/components/sessions/RevokeSessionsDialog";
+import {
+  WorkloadIcon,
+  WorkloadSessionBadge,
+} from "@/components/sessions/WorkloadSession";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { Icon } from "@/components/ui/Icon";
 import { MoreActions } from "@/components/ui/MoreActions";
@@ -264,6 +268,7 @@ function GroupIcon({
   group: ConnectionGroup;
   grouping: ConnectionGrouping;
 }): JSX.Element {
+  if (group.workload) return <WorkloadIcon />;
   if (group.identity) {
     return (
       <PersonIcon label={group.label} photoUrl={group.identity.photoUrl} />
@@ -284,6 +289,22 @@ function GroupIcon({
   // Provider groups have neither an identity nor a registration to show, but
   // the cell still has to be occupied or every column after it shifts left.
   return <span className="size-6 shrink-0" />;
+}
+
+function SubRowIcon({
+  session,
+  label,
+  childIsPerson,
+}: {
+  session: UserSession;
+  label: string;
+  childIsPerson: boolean;
+}): JSX.Element {
+  if (!childIsPerson) return <ClientIcon label={label} />;
+  if (session.workload) return <WorkloadIcon />;
+  return (
+    <PersonIcon label={label} photoUrl={session.subjectPhotoUrl ?? undefined} />
+  );
 }
 
 /**
@@ -339,15 +360,15 @@ function ConnectionSubRow({
         <span />
 
         <span className="border-border flex min-w-0 items-center gap-2 border-l pl-3">
-          {childIsPerson ? (
-            <PersonIcon
-              label={label}
-              photoUrl={session.subjectPhotoUrl ?? undefined}
-            />
-          ) : (
-            <ClientIcon label={label} />
-          )}
+          <SubRowIcon
+            session={session}
+            label={label}
+            childIsPerson={childIsPerson}
+          />
           <span className="text-foreground truncate text-sm">{label}</span>
+          {childIsPerson && session.workload ? (
+            <WorkloadSessionBadge workload={session.workload} />
+          ) : null}
           {childIsPerson && killswitch ? (
             <KillswitchUserStatusIcon
               badge={killswitch.badge}
@@ -596,6 +617,9 @@ function ConnectionGroupRow({
                 href={groupKillswitch.accessHref}
               />
             ) : null}
+            {group.workload ? (
+              <WorkloadSessionBadge workload={group.workload} />
+            ) : null}
             {/* Absent unless the row names a registration, which is what
                 grouping by agent makes it. */}
             <ClientCredentialBadge
@@ -708,6 +732,7 @@ function ConnectionGroupRow({
 
       <RevokeSessionsDialog
         sessionIds={group.revocableIds}
+        workload={group.workload}
         newKillswitchHref={groupKillswitch?.createHref}
         open={revokeAllOpen}
         onOpenChange={setRevokeAllOpen}
