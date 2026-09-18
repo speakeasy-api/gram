@@ -1,6 +1,14 @@
 import { MemoryRouter, useLocation } from "react-router";
 import { TelemetryStateProvider, nullTelemetry } from "./Telemetry";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  type MockInstance,
+  vi,
+} from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 
 import { AuthProvider } from "./AuthProvider";
@@ -13,7 +21,7 @@ const mocks = vi.hoisted(() => ({
   switchScopes: vi.fn(),
 }));
 
-let replaceSpy: ReturnType<typeof vi.spyOn> | undefined;
+let replaceSpy: MockInstance | undefined;
 
 // Slugs derived from the live router location, as the real hook derives them
 // from the URL: the portable-path tests below navigate mid-render, and a
