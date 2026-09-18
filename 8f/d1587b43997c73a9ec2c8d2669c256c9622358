@@ -1,0 +1,22 @@
+server/internal/platformmcp/adapters.go
+  h_9630b74bdac540 713
+server/internal/platformmcp/operational_reads_integration_test.go
+  h_9630b74bdac540 384
+server/internal/platformmcp/diagnostics_test.go
+  h_9630b74bdac540 47-55,63,162-169
+  h_9630b74bdac540 56-62,67-70
+server/internal/platformmcp/diagnostics.go
+  h_9630b74bdac540 71-85,98,109,170,223,391
+  h_9630b74bdac540 226-228,395-397
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8fd1587b43997c73a9ec2c8d2669c256c9622358",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
