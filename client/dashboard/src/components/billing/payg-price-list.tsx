@@ -11,10 +11,9 @@ import { useGetUsageTiers } from "@gram/client/react-query/getUsageTiers.js";
 
 /**
  * The server-owned PAYG rates, shown while the product trial that converts to
- * pay as you go is running: the metered price per million tokens under
- * management, plus the provider-cost pass-through lines. The product feature
- * list stays off this section — it describes the plan's contents, not what
- * the organization will be charged.
+ * pay as you go is running: metered token management, risk scanning, and MCP
+ * gateway egress, plus provider-cost pass-through lines. The product feature
+ * list stays off this section — it describes the plan's contents, not prices.
  */
 export function PaygPriceList(): JSX.Element | null {
   const { trial } = useSession();
@@ -51,17 +50,25 @@ function PaygPriceListBody(): JSX.Element | null {
 }
 
 function PaygRates({ payg }: { payg: TierLimits }): JSX.Element {
-  const rate = formatExactUsd(payg.tumPricePerMillionUsd);
   const passThroughLines = payg.includedBullets ?? [];
 
   return (
     <Stack gap={4}>
-      {rate !== null && (
-        <Stack gap={1}>
-          <Text className="font-medium">Tokens under management</Text>
-          <Text muted>{rate} per million tokens</Text>
-        </Stack>
-      )}
+      <MeteredRate
+        label="Tokens under management"
+        price={payg.tumPricePerMillionUsd}
+        unit="per million tokens"
+      />
+      <MeteredRate
+        label="Risk scanning"
+        price={payg.riskScanPricePerMillionUsd}
+        unit="per million tokens scanned"
+      />
+      <MeteredRate
+        label="MCP gateway"
+        price={payg.mcpEgressPricePerGibUsd}
+        unit="per GiB of egress"
+      />
       {passThroughLines.length > 0 && (
         <ul className="space-y-1">
           {passThroughLines.map((item) => (
@@ -73,6 +80,28 @@ function PaygRates({ payg }: { payg: TierLimits }): JSX.Element {
           ))}
         </ul>
       )}
+    </Stack>
+  );
+}
+
+function MeteredRate({
+  label,
+  price,
+  unit,
+}: {
+  label: string;
+  price: string | undefined;
+  unit: string;
+}): JSX.Element | null {
+  const rate = formatExactUsd(price);
+  if (rate === null) return null;
+
+  return (
+    <Stack gap={1}>
+      <Text className="font-medium">{label}</Text>
+      <Text muted>
+        {rate} {unit}
+      </Text>
     </Stack>
   );
 }

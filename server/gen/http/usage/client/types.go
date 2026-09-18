@@ -3700,6 +3700,10 @@ type TierLimitsResponseBody struct {
 	AddOnBullets []string `form:"add_on_bullets,omitempty" json:"add_on_bullets,omitempty" xml:"add_on_bullets,omitempty"`
 	// Exact USD list price per million tokens under management (optional)
 	TumPricePerMillionUsd *string `form:"tum_price_per_million_usd,omitempty" json:"tum_price_per_million_usd,omitempty" xml:"tum_price_per_million_usd,omitempty"`
+	// Exact USD list price per million tokens scanned for risk (optional)
+	RiskScanPricePerMillionUsd *string `form:"risk_scan_price_per_million_usd,omitempty" json:"risk_scan_price_per_million_usd,omitempty" xml:"risk_scan_price_per_million_usd,omitempty"`
+	// Exact USD list price per GiB of MCP gateway egress (optional)
+	McpEgressPricePerGibUsd *string `form:"mcp_egress_price_per_gib_usd,omitempty" json:"mcp_egress_price_per_gib_usd,omitempty" xml:"mcp_egress_price_per_gib_usd,omitempty"`
 }
 
 // NewSetBillingMetadataRequestBody builds the HTTP request body from the

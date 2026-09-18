@@ -35,6 +35,8 @@ var TierLimits = Type("TierLimits", func() {
 	Attribute("included_bullets", ArrayOf(String), "Included items bullets of the tier")
 	Attribute("add_on_bullets", ArrayOf(String), "Add-on items bullets of the tier (optional)")
 	Attribute("tum_price_per_million_usd", String, "Exact USD list price per million tokens under management (optional)")
+	Attribute("risk_scan_price_per_million_usd", String, "Exact USD list price per million tokens scanned for risk (optional)")
+	Attribute("mcp_egress_price_per_gib_usd", String, "Exact USD list price per GiB of MCP gateway egress (optional)")
 
 	Required("base_price", "included_tool_calls", "included_servers", "included_credits", "price_per_additional_tool_call", "price_per_additional_server", "feature_bullets", "included_bullets")
 })

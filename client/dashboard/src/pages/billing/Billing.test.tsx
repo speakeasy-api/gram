@@ -250,6 +250,8 @@ describe("Billing", () => {
             "Platform-initiated inference billed at provider cost",
           ],
           tumPricePerMillionUsd: "0.35",
+          riskScanPricePerMillionUsd: "3.50",
+          mcpEgressPricePerGibUsd: "20",
         },
       },
       isLoading: false,
