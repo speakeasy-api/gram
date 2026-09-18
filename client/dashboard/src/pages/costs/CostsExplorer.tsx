@@ -1033,13 +1033,20 @@ export function CostsExplorer(): JSX.Element {
     drillIntoDim(dataGroupBy, row.groupValue, row.dimensionValues);
 
   // Drill from a clicked bar segment. The chart identifies a stack by its
-  // display label (it merges raw values that display the same), so find the
-  // row that label came from and drill it exactly as a row click would.
-  // The "Other" fold and any label with no surviving row simply don't drill.
+  // display label, so find the row that label came from and drill it exactly
+  // as a row click would. The "Other" fold and any label with no surviving row
+  // simply don't drill.
+  //
+  // The chart merges raw values that display the same into one segment, and a
+  // merged segment has no single row to drill — picking the first would take
+  // the user somewhere narrower than the bar they clicked, with no sign that
+  // the rest was dropped. Those segments don't drill either; their rows in the
+  // table below still do, one raw value at a time.
   const drillIntoSeries = (label: string) => {
-    const row = rows.find(
+    const matches = rows.filter(
       (r) => displayName(dataGroupBy, r.groupValue) === label,
     );
+    const row = matches.length === 1 ? matches[0] : undefined;
     if (row && canDrill && isDrillableValue(row.groupValue)) drillInto(row);
   };
 

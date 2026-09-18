@@ -154,7 +154,7 @@ export function CostBreakdownChart({
     return (
       <StackedTimeSeriesPanel
         title="Work Delivered Over Time"
-        headerHint="Work delivered over time, stacked by the selected breakdown. Click or drag on the chart to zoom to a period."
+        headerHint="Work delivered over time, stacked by the selected breakdown. Click a bar segment to drill into its group; drag across the chart to zoom to a period."
         bucketsMs={bucketsMs}
         stacks={isError ? [] : stacks}
         formatValue={formatWorkUnits}
@@ -173,7 +173,7 @@ export function CostBreakdownChart({
   return (
     <StackedTimeSeriesPanel
       title="Cost Over Time"
-      headerHint="Spend over time, stacked by the selected breakdown. Click or drag on the chart to zoom to a period."
+      headerHint="Spend over time, stacked by the selected breakdown. Click a bar segment to drill into its group; drag across the chart to zoom to a period."
       bucketsMs={bucketsMs}
       stacks={isError ? [] : stacks}
       formatValue={formatCost}

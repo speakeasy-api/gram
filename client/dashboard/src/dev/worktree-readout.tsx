@@ -23,7 +23,10 @@ export function DevWorktreeReadout({
 
   return (
     <div className="group/worktree relative h-8 group-data-[collapsible=icon]:hidden">
-      <div className="group-hover/worktree:border-border group-hover/worktree:bg-card absolute inset-x-0 top-0 z-20 flex max-w-full flex-col gap-0.5 overflow-hidden border border-transparent px-1.5 py-1 font-mono text-[10px] leading-none transition-[max-width] duration-150 group-hover/worktree:max-w-[32rem] group-hover/worktree:shadow-md">
+      {/* w-max, not inset-x-0: pinning both edges would hold the box at the
+          sidebar's width, so the hover max-width would have nothing to expand
+          into and a long branch name would stay truncated. */}
+      <div className="group-hover/worktree:border-border group-hover/worktree:bg-card absolute top-0 left-0 z-20 flex w-max max-w-full flex-col gap-0.5 overflow-hidden border border-transparent px-1.5 py-1 font-mono text-[10px] leading-none transition-[max-width] duration-150 group-hover/worktree:max-w-[32rem] group-hover/worktree:shadow-md">
         <ReadoutLine Icon={FolderGit2Icon} value={__GRAM_DEV_WORKTREE__} />
         <ReadoutLine
           Icon={GitBranchIcon}

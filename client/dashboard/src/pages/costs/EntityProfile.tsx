@@ -196,6 +196,11 @@ function findVerticalScrollParent(el: HTMLElement | null): HTMLElement | null {
   return root;
 }
 
+// How far above the breakdown section a drill lands, so the section's heading
+// isn't flush against the top of the scrollport. Doubles as the tolerance for
+// "is the reader looking at the breakdown?" — see the scroll effects below.
+const BREAKDOWN_LEAD_IN = 12;
+
 // ── EntityProfile ───────────────────────────────────────────────────────────
 
 export type EntityProfileProps = {
@@ -406,7 +411,11 @@ export function EntityProfile({
     const root = findVerticalScrollParent(pinSentinelRef.current);
     if (!root) return;
     const record = (): void => {
-      wasInBreakdownRef.current = root.scrollTop >= breakdownTop(root);
+      // The same lead-in the drill scrolls to, as tolerance: landing 12px
+      // above the section still counts as being in it, so a second drill in a
+      // row doesn't read as "they scrolled away" and jump to the top.
+      wasInBreakdownRef.current =
+        root.scrollTop >= breakdownTop(root) - BREAKDOWN_LEAD_IN;
     };
     record();
     root.addEventListener("scroll", record, { passive: true });
@@ -420,11 +429,11 @@ export function EntityProfile({
       window.scrollTo(0, 0);
       return;
     }
-    // A small lead-in so the section's heading isn't flush against the top.
     root.scrollTop = wasInBreakdownRef.current
-      ? Math.max(breakdownTop(root) - 12, 0)
+      ? Math.max(breakdownTop(root) - BREAKDOWN_LEAD_IN, 0)
       : 0;
-    wasInBreakdownRef.current = root.scrollTop >= breakdownTop(root);
+    wasInBreakdownRef.current =
+      root.scrollTop >= breakdownTop(root) - BREAKDOWN_LEAD_IN;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- breakdownTop only reads refs
   }, [pathKey]);
 

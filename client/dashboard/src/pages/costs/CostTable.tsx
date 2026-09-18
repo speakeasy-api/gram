@@ -642,7 +642,10 @@ export function CostTable({
             <button
               key={row.groupValue}
               type="button"
-              disabled={!drillable}
+              // aria-disabled, not disabled: a natively disabled button gets
+              // no pointer events at all, which would cost a non-drillable row
+              // its hover link to the chart. The click stays guarded below.
+              aria-disabled={!drillable}
               onClick={() => {
                 if (drillable) onDrill(row);
               }}

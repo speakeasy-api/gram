@@ -424,6 +424,14 @@ export function StackedTimeSeriesPanel({
     publishStyles?.(new Map(rolled.datasets.map((d) => [d.key, d.base])));
   }, [publishStyles, rolled.datasets]);
 
+  // A drill or a range change swaps the whole cast of series. A focus key left
+  // over from the previous set matches nothing in the new one, which would
+  // leave a sibling table fading every one of its rows against a series that
+  // is no longer on screen — so the focus is dropped with the old datasets.
+  useEffect(() => {
+    setFocusKey(null);
+  }, [rolled.datasets, setFocusKey]);
+
   const focus =
     focusKey !== null && !hiddenKeys.has(focusKey) ? focusKey : null;
   const chart = useMemo(

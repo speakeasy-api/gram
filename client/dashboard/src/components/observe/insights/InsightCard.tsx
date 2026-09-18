@@ -68,7 +68,7 @@ export function InsightCard({
 /**
  * A headline number with the shape of the window behind it.
  *
- * The sparkline is drawn as an inline SVG polyline: it carries no axes, no
+ * The sparkline is drawn as an inline SVG path: it carries no axes, no
  * tooltip and no interaction, so a charting runtime would be weight without
  * benefit — the point is the silhouette next to the number.
  */
