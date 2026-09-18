@@ -29,7 +29,10 @@ type scanner interface {
 
 type transcriptStore interface {
 	ResolveActor(context.Context, Config, Frame) (string, error)
-	Save(context.Context, Config, Frame, string) error
+	// Save archives the frame's conversation messages that are not yet stored
+	// and returns the index, within conversationMessages(frame.Messages), of
+	// the first message it had not seen before.
+	Save(context.Context, Config, Frame, string) (int, error)
 }
 
 // Service archives transcripts and runs the existing risk-policy scanner.
@@ -44,21 +47,35 @@ func NewService(db *pgxpool.Pool, writer *chat.ChatMessageWriter, scanner scanne
 	return &Service{store: &postgresStore{db: db, writer: writer}, scanner: scanner}
 }
 
-// Process stores the supplied history and returns a verdict for all known content.
+// Process stores the history the frame adds and returns a verdict for it.
+//
+// Every frame carries the whole transcript the model is about to read, so the
+// content to judge is what this frame adds to stored history plus the current
+// turn: the messages after the last assistant reply. The current turn is
+// always judged, even when a redelivery has already stored it, so a denied
+// frame stays denied when it is sent again. Earlier turns were judged when
+// they first arrived.
 func (s *Service) Process(ctx context.Context, config Config, frame Frame) (Verdict, error) {
 	userID, err := s.store.ResolveActor(ctx, config, frame)
 	if err != nil {
 		return Verdict{}, fmt.Errorf("resolve inference hook actor: %w", err)
 	}
-	inputs, err := policyInputs(frame.Messages)
+	messages := conversationMessages(frame.Messages)
+	if _, err := policyInputs(messages); err != nil {
+		return Verdict{}, fmt.Errorf("decode inference transcript: %w", err)
+	}
+	newStart, err := s.store.Save(ctx, config, frame, userID)
+	if err != nil {
+		return Verdict{}, fmt.Errorf("store inference transcript: %w", err)
+	}
+	scanStart := min(newStart, currentTurnStart(messages))
+	inputs, err := policyInputs(messages[scanStart:])
 	if err != nil {
 		return Verdict{}, fmt.Errorf("decode inference transcript: %w", err)
 	}
-	if err := s.store.Save(ctx, config, frame, userID); err != nil {
-		return Verdict{}, fmt.Errorf("store inference transcript: %w", err)
-	}
 	verdict := Verdict{Action: "allow", DenyReason: "", ReferenceID: ""}
-	for index, input := range inputs {
+	for offset, input := range inputs {
+		index := scanStart + offset
 		if err := ctx.Err(); err != nil {
 			return Verdict{}, fmt.Errorf("inference policy deadline: %w", err)
 		}
@@ -157,8 +174,10 @@ type postgresStore struct {
 func (s *postgresStore) ResolveActor(ctx context.Context, config Config, frame Frame) (string, error) {
 	// Resolve the configured project on every request, including connection tests,
 	// so deleted projects and accidentally crossed organization bindings fail closed.
-	_, err := projectsrepo.New(s.db).GetProjectByIDAndOrganizationID(ctx, projectsrepo.GetProjectByIDAndOrganizationIDParams{ID: config.ProjectID,
-		OrganizationID: config.OrganizationID})
+	_, err := projectsrepo.New(s.db).GetProjectByIDAndOrganizationID(ctx, projectsrepo.GetProjectByIDAndOrganizationIDParams{
+		ID:             config.ProjectID,
+		OrganizationID: config.OrganizationID,
+	})
 	if err != nil {
 		return "", fmt.Errorf("validate inference project: %w", err)
 	}
@@ -184,9 +203,9 @@ func (s *postgresStore) ResolveActor(ctx context.Context, config Config, frame F
 	return conversation.UserID.String, nil
 }
 
-func (s *postgresStore) Save(ctx context.Context, config Config, frame Frame, userID string) error {
+func (s *postgresStore) Save(ctx context.Context, config Config, frame Frame, userID string) (int, error) {
 	if len(frame.Messages) == 0 {
-		return nil
+		return 0, nil
 	}
 	// The external user label is displayed in conversation views. Keep the
 	// stable provider actor ID in conversationID, independently of this label.
@@ -212,7 +231,7 @@ func (s *postgresStore) Save(ctx context.Context, config Config, frame Frame, us
 		PreferStoredTitle: true,
 	})
 	if err != nil {
-		return fmt.Errorf("upsert inference conversation: %w", err)
+		return 0, fmt.Errorf("upsert inference conversation: %w", err)
 	}
 	// When this frame omits the actor email, use the label preserved on the
 	// conversation (written by an earlier frame that had one) so new messages
@@ -222,7 +241,7 @@ func (s *postgresStore) Save(ctx context.Context, config Config, frame Frame, us
 	if externalUserIDForMessages == "" {
 		chat, err := chatrepo.New(s.db).GetChat(ctx, chatrepo.GetChatParams{ID: chatID, ProjectID: config.ProjectID})
 		if err != nil {
-			return fmt.Errorf("load inference conversation label: %w", err)
+			return 0, fmt.Errorf("load inference conversation label: %w", err)
 		}
 		if chat.ExternalUserID.Valid {
 			externalUserIDForMessages = chat.ExternalUserID.String
@@ -233,29 +252,29 @@ func (s *postgresStore) Save(ctx context.Context, config Config, frame Frame, us
 	if err := chatrepo.New(s.db).UpdateInferenceMessageAttribution(ctx, chatrepo.UpdateInferenceMessageAttributionParams{
 		ChatID: chatID, ProjectID: uuid.NullUUID{UUID: config.ProjectID, Valid: true}, ActorEmail: conv.ToPGTextEmpty(conv.NormalizeEmail(frame.Actor.EmailAddress)), UserID: conv.ToPGTextEmpty(userID), Source: inferenceSource(frame.Source.Application),
 	}); err != nil {
-		return fmt.Errorf("refresh inference message attribution: %w", err)
+		return 0, fmt.Errorf("refresh inference message attribution: %w", err)
 	}
 
-	storedCount, err := chatrepo.New(s.db).CountInferenceMessages(ctx, chatrepo.CountInferenceMessagesParams{ChatID: chatID, ProjectID: uuid.NullUUID{UUID: config.ProjectID, Valid: true}})
+	messages := conversationMessages(frame.Messages)
+	hashes := make([][]byte, len(messages))
+	for index, msg := range messages {
+		hashes[index] = contentHash(msg)
+	}
+	start, prev, err := s.alignFrame(ctx, config, chatID, hashes)
 	if err != nil {
-		return fmt.Errorf("count stored inference messages: %w", err)
+		return 0, err
 	}
-	messages := make([]Message, 0, len(frame.Messages))
-	for _, msg := range frame.Messages {
-		if msg.Role == "user" || msg.Role == "assistant" {
-			messages = append(messages, msg)
-		}
-	}
-	writes := make([]chat.ExternalMessageWrite, 0, max(0, len(messages)-int(storedCount)))
+	writes := make([]chat.ExternalMessageWrite, 0, max(0, len(messages)-start))
 	parts := make(map[uuid.UUID][]chatrepo.CreateChatContentPartParams)
-	for index := int(storedCount); index < len(messages); index++ {
+	for index := start; index < len(messages); index++ {
 		msg := messages[index]
-		// The ordinal makes concurrent deliveries and retries share the same unique
-		// identity even when a later delivery changes earlier message details.
-		id := fmt.Sprintf("anthropic-inference:%d", index)
+		// The chained identity makes concurrent deliveries and retries share the
+		// same rows, while identical messages at different positions stay apart.
+		prev = chainHash(prev, hashes[index])
+		id := messageIdentityID(prev)
 		rows, attachments, err := storageBlocks(msg, id)
 		if err != nil {
-			return fmt.Errorf("decode inference storage blocks: %w", err)
+			return 0, fmt.Errorf("decode inference storage blocks: %w", err)
 		}
 		for rowIndex, row := range rows {
 			externalID := fmt.Sprintf("%s/block:%d", id, rowIndex)
@@ -266,7 +285,7 @@ func (s *postgresStore) Save(ctx context.Context, config Config, frame Frame, us
 			}
 			messageID, err := uuid.NewV7()
 			if err != nil {
-				return fmt.Errorf("generate inference message ID: %w", err)
+				return 0, fmt.Errorf("generate inference message ID: %w", err)
 			}
 			createdAt := conv.ToPGTimestamptz(now.Add(time.Duration(len(writes)) * time.Microsecond))
 			if rowIndex == len(rows)-1 && len(attachments) > 0 {
@@ -276,12 +295,12 @@ func (s *postgresStore) Save(ctx context.Context, config Config, frame Frame, us
 				}
 				urls, err := s.writer.WriteContentPartAssets(ctx, config.ProjectID, chatID, contents)
 				if err != nil {
-					return fmt.Errorf("store inference attachments: %w", err)
+					return 0, fmt.Errorf("store inference attachments: %w", err)
 				}
 				for i, attachment := range attachments {
 					metadata, err := json.Marshal(map[string]string{"display_path": attachment.FileName})
 					if err != nil {
-						return fmt.Errorf("encode inference attachment metadata: %w", err)
+						return 0, fmt.Errorf("encode inference attachment metadata: %w", err)
 					}
 					parts[messageID] = append(parts[messageID], chatrepo.CreateChatContentPartParams{
 						ChatID: chatID, ProjectID: config.ProjectID, Kind: message.PromptAttachment,
@@ -317,7 +336,7 @@ func (s *postgresStore) Save(ctx context.Context, config Config, frame Frame, us
 					UserAgent:         pgtype.Text{String: "", Valid: false},
 					IpAddress:         pgtype.Text{String: "", Valid: false},
 					Source:            conv.ToPGText(inferenceSource(frame.Source.Application)),
-					ContentHash:       nil,
+					ContentHash:       conv.Ternary(rowIndex == len(rows)-1, hashes[index], nil),
 					Generation:        0,
 					CreatedAt:         createdAt,
 				},
@@ -332,9 +351,41 @@ func (s *postgresStore) Save(ctx context.Context, config Config, frame Frame, us
 		}
 	}
 	if _, err := s.writer.WriteExternalWithContentParts(ctx, config.ProjectID, writes, parts); err != nil {
-		return fmt.Errorf("write inference messages: %w", err)
+		return 0, fmt.Errorf("write inference messages: %w", err)
 	}
-	return nil
+	return start, nil
+}
+
+// alignFrame locates the incoming transcript within stored history. A frame
+// that shares no message with stored history is continued by count: history
+// stored before content hashing carries ordinals rather than hashes, and a
+// client that rewrote every stored message in place is still sending the same
+// conversation, so its history is not archived a second time.
+func (s *postgresStore) alignFrame(ctx context.Context, config Config, chatID uuid.UUID, hashes [][]byte) (int, []byte, error) {
+	rows, err := chatrepo.New(s.db).ListInferenceMessageIdentities(ctx, chatrepo.ListInferenceMessageIdentitiesParams{
+		ChatID: chatID, ProjectID: uuid.NullUUID{UUID: config.ProjectID, Valid: true}, RowLimit: alignmentWindow,
+	})
+	if err != nil {
+		return 0, nil, fmt.Errorf("list stored inference messages: %w", err)
+	}
+	if len(rows) == 0 {
+		return 0, nil, nil
+	}
+	stored := make([]messageIdentity, 0, len(rows))
+	for index := len(rows) - 1; index >= 0; index-- {
+		identity := parseMessageIdentity(rows[index].ExternalMessageID.String, rows[index].ContentHash)
+		if identity.content != nil {
+			stored = append(stored, identity)
+		}
+	}
+	if start, prev, ok := alignTranscript(stored, hashes); ok {
+		return start, prev, nil
+	}
+	storedCount, err := chatrepo.New(s.db).CountInferenceMessages(ctx, chatrepo.CountInferenceMessagesParams{ChatID: chatID, ProjectID: uuid.NullUUID{UUID: config.ProjectID, Valid: true}})
+	if err != nil {
+		return 0, nil, fmt.Errorf("count stored inference messages: %w", err)
+	}
+	return min(int(storedCount), len(hashes)), nil, nil
 }
 
 // Include the actor because Claude Code session ids can be client asserted.

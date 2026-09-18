@@ -57,16 +57,23 @@ to Anthropic inference. The ingestion origin remains `anthropic-inference`.
 - Conversation identity is scoped to the project, Anthropic tenant, and actor.
   Client-asserted session identifiers cannot join another actor's conversation.
   Missing session identifiers or actor identities fall back to the request identifier.
-- Storage appends by message count: if seven messages are stored and the next
-  delivery contains ten, only its last three messages are appended. Deliveries
-  with the same or fewer messages append nothing. Existing message contents are
-  immutable; edits, tool-detail enrichment, and compacted history are not reconciled.
+- Storage appends what a delivery adds to stored history. Each stored message
+  carries a hash of its role and content, and a delivery is aligned by locating
+  the newest stored message in it: everything after that point is new. Claude's
+  rolling compaction, which replaces early turns with a summary and keeps recent
+  turns verbatim, therefore adds only the genuinely new turn; the summary is not
+  archived. A delivery with the same or fewer messages appends nothing. Existing
+  message contents are immutable; a delivery that rewrites a stored message in
+  place is continued by message count, and edits are not reconciled.
 - User emails resolve only against connected users in the configured organization.
   If an actor stops resolving, its conversation retains the last known user for
   both enforcement and stored-message attribution. Actors with no known identity
   receive organization-wide policies; another actor's identity is never borrowed.
-- The shared risk scanner evaluates every known content block with its native
-  scope: user, assistant, tool request, tool response, or prompt attachment.
+- The shared risk scanner evaluates the content a delivery adds plus the
+  current turn — the messages after the last assistant reply — each block with
+  its native scope: user, assistant, tool request, tool response, or prompt
+  attachment. Earlier turns were evaluated when they first arrived; the current
+  turn is always evaluated, so a redelivered frame that was denied stays denied.
   Block, warn, and quarantine matches deny the current inference. There is no
   interactive warning acknowledgement in this protocol. Quarantine matches here
   deny the frame; this receiver does not create a persistent session quarantine.

@@ -2707,6 +2707,50 @@ func (q *Queries) ListClaudeUserMessagesForPromptAttachmentParent(ctx context.Co
 	return items, nil
 }
 
+const listInferenceMessageIdentities = `-- name: ListInferenceMessageIdentities :many
+SELECT external_message_id, content_hash
+FROM chat_messages
+WHERE chat_id = $1 AND project_id = $2
+  AND origin = 'anthropic-inference' AND external_message_id IS NOT NULL
+  AND external_message_id NOT LIKE '%/block:%'
+ORDER BY created_at DESC, id DESC
+LIMIT $3
+`
+
+type ListInferenceMessageIdentitiesParams struct {
+	ChatID    uuid.UUID
+	ProjectID uuid.NullUUID
+	RowLimit  int32
+}
+
+type ListInferenceMessageIdentitiesRow struct {
+	ExternalMessageID pgtype.Text
+	ContentHash       []byte
+}
+
+// The newest message-level rows of an inference conversation, used to align
+// an incoming transcript against what is already stored. Block rows share
+// their parent's identity and carry no hash, so they are excluded.
+func (q *Queries) ListInferenceMessageIdentities(ctx context.Context, arg ListInferenceMessageIdentitiesParams) ([]ListInferenceMessageIdentitiesRow, error) {
+	rows, err := q.db.Query(ctx, listInferenceMessageIdentities, arg.ChatID, arg.ProjectID, arg.RowLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListInferenceMessageIdentitiesRow
+	for rows.Next() {
+		var i ListInferenceMessageIdentitiesRow
+		if err := rows.Scan(&i.ExternalMessageID, &i.ContentHash); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listLatestGenerationChatMessages = `-- name: ListLatestGenerationChatMessages :many
 SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.tool_call_summaries, cm.content_hash, cm.generation, cm.replayed, cm.created_at, cm.risk_analyzed_at FROM chat_messages cm
 WHERE cm.chat_id = $1

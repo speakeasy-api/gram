@@ -22,9 +22,10 @@ type memoryStore struct {
 func (s *memoryStore) ResolveActor(_ context.Context, _ Config, _ Frame) (string, error) {
 	return s.userID, nil
 }
-func (s *memoryStore) Save(_ context.Context, _ Config, frame Frame, _ string) error {
+
+func (s *memoryStore) Save(_ context.Context, _ Config, frame Frame, _ string) (int, error) {
 	s.saved = append(s.saved, frame)
-	return s.err
+	return 0, s.err
 }
 
 type recordingScanner struct {
@@ -152,4 +153,56 @@ func TestServicePreservesRawToolInvocationIDs(t *testing.T) {
 		{kind: message.ToolResponse, tool: "read_file", text: "output", toolCallID: " call-1 "},
 		{kind: message.User, tool: "", text: "continue", toolCallID: ""},
 	}, scanner.inputs)
+}
+
+type deltaStore struct {
+	memoryStore
+	newStart int
+}
+
+func (s *deltaStore) Save(ctx context.Context, config Config, frame Frame, userID string) (int, error) {
+	_, err := s.memoryStore.Save(ctx, config, frame, userID)
+	return s.newStart, err
+}
+
+func TestServiceScansOnlyNewMessagesAndTheCurrentTurn(t *testing.T) {
+	t.Parallel()
+	frame := exampleFrame()
+	frame.Messages = []Message{
+		textMessage("user", "old prompt"), textMessage("assistant", "old reply"),
+		textMessage("user", "second prompt"), textMessage("assistant", "second reply"),
+		textMessage("user", "new prompt"),
+	}
+	scanner := &recordingScanner{inputs: nil, userIDs: nil, result: nil, err: nil}
+	service := &Service{store: &deltaStore{memoryStore: memoryStore{saved: nil, userID: "", err: nil}, newStart: 4}, scanner: scanner}
+	_, err := service.Process(t.Context(), Config{}, frame)
+	require.NoError(t, err)
+	require.Len(t, scanner.inputs, 1)
+	require.Equal(t, "new prompt", scanner.inputs[0].text)
+
+	// A frame that adds an assistant reply and a tool result is judged from the
+	// first new message, which precedes the current turn.
+	scanner.inputs = nil
+	service.store = &deltaStore{memoryStore: memoryStore{saved: nil, userID: "", err: nil}, newStart: 3}
+	_, err = service.Process(t.Context(), Config{}, frame)
+	require.NoError(t, err)
+	require.Len(t, scanner.inputs, 2)
+	require.Equal(t, "second reply", scanner.inputs[0].text)
+	require.Equal(t, "new prompt", scanner.inputs[1].text)
+}
+
+func TestServiceStillDeniesRedeliveredCurrentTurn(t *testing.T) {
+	t.Parallel()
+	frame := exampleFrame()
+	frame.Messages = []Message{textMessage("user", "old prompt"), textMessage("assistant", "old reply"), textMessage("user", "blocked prompt")}
+	result := new(risk.ScanResult)
+	result.Action = "block"
+	scanner := &recordingScanner{inputs: nil, userIDs: nil, result: result, err: nil}
+	// Everything in the frame is already stored, as after a redelivery.
+	service := &Service{store: &deltaStore{memoryStore: memoryStore{saved: nil, userID: "", err: nil}, newStart: 3}, scanner: scanner}
+	verdict, err := service.Process(t.Context(), Config{}, frame)
+	require.NoError(t, err)
+	require.Equal(t, "deny", verdict.Action)
+	require.Len(t, scanner.inputs, 1)
+	require.Equal(t, "blocked prompt", scanner.inputs[0].text)
 }

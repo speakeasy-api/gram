@@ -1869,6 +1869,18 @@ WHERE chat_id = @chat_id AND project_id = @project_id
     OR (source = 'anthropic-inference' AND @source::text <> 'anthropic-inference')
   );
 
+-- name: ListInferenceMessageIdentities :many
+-- The newest message-level rows of an inference conversation, used to align
+-- an incoming transcript against what is already stored. Block rows share
+-- their parent's identity and carry no hash, so they are excluded.
+SELECT external_message_id, content_hash
+FROM chat_messages
+WHERE chat_id = @chat_id AND project_id = @project_id
+  AND origin = 'anthropic-inference' AND external_message_id IS NOT NULL
+  AND external_message_id NOT LIKE '%/block:%'
+ORDER BY created_at DESC, id DESC
+LIMIT @row_limit;
+
 -- name: CountInferenceMessages :one
 SELECT count(*) FROM chat_messages
 WHERE chat_id = @chat_id AND project_id = @project_id
