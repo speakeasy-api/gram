@@ -268,6 +268,7 @@ func TestFederatedExchangeErrorClassification(t *testing.T) {
 		{&tokenExchangeUnavailableError{err: errors.New("transport detail")}, ErrFederatedUnavailable},
 		{newTokenEndpointError(503, "503", []byte("upstream detail")), ErrFederatedUnavailable},
 		{newTokenEndpointError(429, "429", nil), ErrFederatedUnavailable},
+		{newTokenEndpointError(http.StatusRequestTimeout, "408", nil), ErrFederatedUnavailable},
 		{newTokenEndpointError(400, "400", []byte(`{"error":"invalid_client","error_description":"secret"}`)), ErrFederatedConfiguration},
 		{newTokenEndpointError(400, "400", []byte(`{"error":"invalid_grant","error_description":"secret"}`)), ErrFederatedIdentity},
 	} {

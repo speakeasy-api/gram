@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"slices"
 	"strings"
@@ -432,7 +433,7 @@ func classifyFederatedExchangeError(err error) error {
 		return ErrFederatedUnavailable
 	}
 	var endpoint *tokenEndpointError
-	if errors.As(err, &endpoint) && (endpoint.statusCode >= 500 || endpoint.statusCode == 429) {
+	if errors.As(err, &endpoint) && (endpoint.statusCode >= 500 || endpoint.statusCode == http.StatusTooManyRequests || endpoint.statusCode == http.StatusRequestTimeout) {
 		return ErrFederatedUnavailable
 	}
 	var oauth oautherr.RFC6749Error

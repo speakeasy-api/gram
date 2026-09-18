@@ -39,6 +39,36 @@ func (f federatedLoginConsumerFunc) ConsumeFederatedLogin(ctx context.Context, l
 	return f(ctx, login)
 }
 
+func TestFederatedLoginWrongPKCEVerifier(t *testing.T) {
+	t.Parallel()
+	runFederatedLogin(t, "wrong_verifier", nil)
+}
+
+func TestFederatedLoginUserSnapshotDetectsSameValueUpdate(t *testing.T) {
+	t.Parallel()
+	// Use the browser suite's cloned database and pgxpool autocommit, not a
+	// wrapping transaction: xmin must change even when the email does not.
+	ctx, f := newFederationLoginFixture(t, true)
+	queries := usersrepo.New(f.ti.conn)
+	user, err := queries.GetUser(ctx, mockidp.MockUserID)
+	require.NoError(t, err)
+	params := usersrepo.SnapshotOrganizationUsersFixtureParams{UserID: mockidp.MockUserID, OrganizationIds: []string{f.organizationID, f.otherOrg}}
+	before, err := queries.SnapshotOrganizationUsersFixture(ctx, params)
+	require.NoError(t, err)
+	require.NotEmpty(t, before)
+	unchanged, err := queries.SnapshotOrganizationUsersFixture(ctx, params)
+	require.NoError(t, err)
+	require.Equal(t, before, unchanged, "reads must not change the snapshot")
+	err = queries.SetOrganizationUserEmailFixture(ctx, usersrepo.SetOrganizationUserEmailFixtureParams{Email: user.Email, UserID: mockidp.MockUserID, OrganizationID: f.organizationID})
+	require.NoError(t, err)
+	after, err := queries.SnapshotOrganizationUsersFixture(ctx, params)
+	require.NoError(t, err)
+	require.NotEqual(t, before, after, "same-value autocommit updates must change xmin")
+	unchangedUser, err := queries.GetUser(ctx, mockidp.MockUserID)
+	require.NoError(t, err)
+	require.Equal(t, user, unchangedUser, "the update must preserve visible user values")
+}
+
 func TestFederatedLoginBrowserBinding(t *testing.T) {
 	t.Parallel()
 	for _, scenario := range []string{"missing_cookie", "wrong_cookie", "expired_state"} {
@@ -160,8 +190,14 @@ func runFederatedLogin(t *testing.T, scenario string, rotate federationRotation)
 	require.NoError(t, err)
 	beforeUsers, err := usersrepo.New(ti.conn).SnapshotOrganizationUsersFixture(ctx, usersrepo.SnapshotOrganizationUsersFixtureParams{UserID: mockidp.MockUserID, OrganizationIds: []string{f.organizationID, f.otherOrg}})
 	require.NoError(t, err)
-	req, id, nonce, state, cookie := f.begin(t, ctx, scenario == "first_party")
+	req, id, nonce, challenge, state, cookie := f.begin(t, ctx, scenario == "first_party")
 	switch scenario {
+	case "wrong_verifier":
+		// Keep RFC 7636 syntax valid so rejection happens at the provider.
+		const wrongVerifier = "wrong-but-nonempty-verifier-with-at-least-43-characters"
+		require.NotEqual(t, wrongVerifier, state.Federation.Verifier)
+		state.Federation.Verifier = wrongVerifier
+		require.NoError(t, ti.authnChallengeCache.Store(ctx, state))
 	case "expired_state":
 		state.CreatedAt = time.Now().Add(-state.TTL() - time.Minute)
 		require.NoError(t, ti.authnChallengeCache.Store(ctx, state))
@@ -190,7 +226,7 @@ func runFederatedLogin(t *testing.T, scenario string, rotate federationRotation)
 	if scenario == "other_provider_token" {
 		tokenIssuer = f.otherProviderURL
 	}
-	provider.issueCode(t, "one-use-code", federationToken{nonce: tokenNonce, email: email, issuer: tokenIssuer, verified: scenario != "unverified_email", secret: expectedSecret})
+	provider.issueCode(t, "one-use-code", federationToken{challenge: challenge, expectPKCERejection: scenario == "wrong_verifier", nonce: tokenNonce, email: email, issuer: tokenIssuer, verified: scenario != "unverified_email", secret: expectedSecret})
 	callbackQuery := url.Values{"state": {id}, "code": {"one-use-code"}, "iss": {provider.URL}}
 	if scenario == "missing_response_issuer" {
 		callbackQuery.Del("iss")
@@ -343,7 +379,7 @@ func newFederationLoginFixture(t *testing.T, memberAllowed bool) (context.Contex
 }
 
 // begin checks the bootstrap-to-browser transition, PKCE, and cookie security.
-func (f *federationLoginFixture) begin(t *testing.T, ctx context.Context, firstParty bool) (*http.Request, string, string, mcp.AuthnChallengeState, *http.Cookie) {
+func (f *federationLoginFixture) begin(t *testing.T, ctx context.Context, firstParty bool) (*http.Request, string, string, string, mcp.AuthnChallengeState, *http.Cookie) {
 	t.Helper()
 	ti, provider := f.ti, f.provider
 	var err error
@@ -397,5 +433,5 @@ func (f *federationLoginFixture) begin(t *testing.T, ctx context.Context, firstP
 	require.Equal(t, http.SameSiteLaxMode, cookie.SameSite)
 	require.Contains(t, cookie.Name, "__Host-")
 	require.Error(t, ti.service.HandleIDPCallback(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, bootstrap.String(), nil).WithContext(ctx)), "bootstrap is single-use")
-	return req, id, nonce, state, cookie
+	return req, id, nonce, upstream.Query().Get("code_challenge"), state, cookie
 }

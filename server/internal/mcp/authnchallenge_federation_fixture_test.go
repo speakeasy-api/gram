@@ -5,6 +5,8 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -24,11 +26,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// A code permanently binds the claims and client credentials for one exchange.
+// A code permanently binds the claims, client credentials, and PKCE challenge for one exchange.
 // There is deliberately no provider-wide current nonce or current secret.
 type federationToken struct {
-	nonce, email, issuer, secret string
-	verified                     bool
+	nonce, email, issuer, secret, challenge string
+	expectPKCERejection                     bool
+	verified                                bool
 }
 
 type federationTokenRequest struct {
@@ -78,6 +81,7 @@ func (p *federationProvider) issueCode(t *testing.T, code string, token federati
 	t.Helper()
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	require.NotEmpty(t, token.challenge, "issued codes must bind an authorization challenge")
 	require.False(t, p.issued[code], "authorization codes must never be reused")
 	p.issued[code] = true
 	p.codes[code] = token
@@ -109,6 +113,18 @@ func (p *federationProvider) serveHTTP(issuer string, w http.ResponseWriter, r *
 		if parseErr != nil || !exists || !basic || id != "selected-client" || secret != token.secret || request.verifier == "" {
 			p.errors = append(p.errors, fmt.Errorf("invalid token exchange (parsed=%t, known code=%t, basic=%t, client=%t, secret=%t, PKCE=%t)", parseErr == nil, exists, basic, id == "selected-client", secret == token.secret, request.verifier != ""))
 			http.Error(w, "invalid token exchange", http.StatusBadRequest)
+			return
+		}
+		digest := sha256.Sum256([]byte(request.verifier))
+		validPKCE := base64.RawURLEncoding.EncodeToString(digest[:]) == token.challenge
+		if validPKCE == token.expectPKCERejection {
+			p.errors = append(p.errors, fmt.Errorf("unexpected PKCE result (valid=%t, expected rejection=%t)", validPKCE, token.expectPKCERejection))
+		}
+		if !validPKCE {
+			w.WriteHeader(http.StatusBadRequest)
+			if err := json.NewEncoder(w).Encode(map[string]string{"error": "invalid_grant"}); err != nil {
+				p.errors = append(p.errors, err)
+			}
 			return
 		}
 		raw, err := jwt.Signed(p.signer).Claims(jwt.Claims{Issuer: token.issuer, Subject: "upstream-human", Audience: jwt.Audience{"selected-client"}, IssuedAt: jwt.NewNumericDate(time.Now()), Expiry: jwt.NewNumericDate(time.Now().Add(time.Minute))}).Claims(map[string]any{"nonce": token.nonce, "email": token.email, "email_verified": token.verified}).Serialize()
@@ -161,7 +177,8 @@ func TestFederatedLoginCredentialRotation(t *testing.T) {
 		require.NotEmpty(t, id)
 		require.NotEmpty(t, nonce)
 		require.NotEqual(t, oldCallback.URL.Query().Get("state"), id)
-		provider.issueCode(t, "rotated-one-use-code", federationToken{nonce: nonce, email: mockidp.MockUserEmail, issuer: provider.URL, verified: true, secret: "rotated-secret"})
+		require.Equal(t, "S256", upstream.Query().Get("code_challenge_method"))
+		provider.issueCode(t, "rotated-one-use-code", federationToken{challenge: upstream.Query().Get("code_challenge"), nonce: nonce, email: mockidp.MockUserEmail, issuer: provider.URL, verified: true, secret: "rotated-secret"})
 		query := url.Values{"state": {id}, "code": {"rotated-one-use-code"}, "iss": {provider.URL}}
 		callback := httptest.NewRequest(http.MethodGet, ti.serverURL.String()+"/mcp/idp_callback?"+query.Encode(), nil).WithContext(ctx)
 		require.Len(t, begin.Result().Cookies(), 1)
