@@ -1356,6 +1356,12 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 	}
 	pubs = append(pubs, labelledStop{label: "customRulesAnalysis", pub: customRulesAnalysis})
 
+	llmAnalysis, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &riskv1.LLMAnalysis{})
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for llm analysis: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "llmAnalysis", pub: llmAnalysis})
+
 	riskFindings, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &riskv1.Finding{})
 	if err != nil {
 		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for risk findings: %w", err)
@@ -1459,6 +1465,7 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 		PromptInjectionAnalysis: promptInjectionAnalysis,
 		PromptPolicyAnalysis:    promptPolicyAnalysis,
 		CustomRulesAnalysis:     customRulesAnalysis,
+		LLMAnalysis:             llmAnalysis,
 		RiskFindings:            riskFindings,
 		MeterReadings:           meterReadings,
 		TelemetryLogs:           telemetryLogs,

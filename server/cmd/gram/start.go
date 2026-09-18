@@ -620,6 +620,7 @@ func serverFlags() []cli.Flag {
 	flags = append(flags, pulseMCPFlags()...)
 	flags = append(flags, svixFlags()...)
 	flags = append(flags, riskReconcileFlags()...)
+	flags = append(flags, riskLLMFlags()...)
 	return flags
 }
 
@@ -1910,6 +1911,7 @@ func newStartCommand() *cli.Command {
 						TrialEmailsService:           trialEmailsService,
 						RiskFingerprinter:            riskFingerprinter,
 						DisableRiskRetroReconcile:    c.Bool("disable-clickhouse-risk-retro-reconcile"),
+						LLMAnalyzerEnabled:           llmAnalyzerConfigFromCLI(c).Enabled(),
 					})
 					executor, err := newNetworkIngressExecutor(logger, meterProvider, db, encryptionClient, k8sClient, networkIngressConfig)
 					if err != nil {
