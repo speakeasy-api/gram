@@ -21,10 +21,25 @@ type Scope struct {
 // every request; nothing is stored.
 type SourceQuery func(scope Scope) squirrel.SelectBuilder
 
+// toolCallEventTypes are the observations of one tool call: the call itself
+// (semantic-convention and Codex producers name it so), its result, and the
+// decision that admitted or blocked it. A blocked call is a decision alone,
+// and it is still a call, so every predicate over tool calls admits all
+// three. The two spellings below must stay in step.
+var toolCallEventTypes = []string{"tool_call", "tool_call_result", "tool_decision"}
+
+const toolCallEventTypesSQL = "event_type IN ('tool_call', 'tool_call_result', 'tool_decision')"
+
 // dedupedAgentEvents is the innermost scan every event dataset starts from:
 // the tenancy and window filter, then LIMIT 1 BY record_id so a redelivered
 // record counts once before anything is aggregated. No aggregate function can
 // express that, which is why it lives here and not in a measure.
+//
+// The rows are ordered by observation time first. LIMIT BY keeps whichever
+// row it meets first, and without an order that is whichever row ClickHouse
+// happened to read first, so a record re-emitted with a correction could
+// survive as its stale copy. Newest observed wins, which is also the rule
+// every argMax downstream applies.
 func dedupedAgentEvents(scope Scope, extra ...squirrel.Sqlizer) squirrel.SelectBuilder {
 	builder := sq.Select("*").
 		From("agent_events").
@@ -35,7 +50,9 @@ func dedupedAgentEvents(scope Scope, extra ...squirrel.Sqlizer) squirrel.SelectB
 	for _, condition := range extra {
 		builder = builder.Where(condition)
 	}
-	return builder.Suffix("LIMIT 1 BY organization_id, project_id, record_id")
+	return builder.
+		OrderBy("observed_at_unix_nano DESC").
+		Suffix("LIMIT 1 BY organization_id, project_id, record_id")
 }
 
 // sessionsSource collapses agent_events to one row per session. Dimensions
@@ -56,7 +73,7 @@ func sessionsSource(scope Scope) squirrel.SelectBuilder {
 		"argMaxIf(surface, observed_at_unix_nano, surface != '') AS surface",
 		"argMaxIf(provider, observed_at_unix_nano, provider != '') AS provider",
 		"uniqExactIf(turn_id, turn_id != '') AS turn_count",
-		"uniqExactIf(event_id, event_type LIKE 'tool_call%') AS tool_call_count",
+		"uniqExactIf(event_id, "+toolCallEventTypesSQL+") AS tool_call_count",
 	).
 		FromSelect(dedupedAgentEvents(scope, squirrel.NotEq{"session_id": ""}), "deduped").
 		GroupBy("organization_id", "project_id", "session_id")
@@ -65,8 +82,9 @@ func sessionsSource(scope Scope) squirrel.SelectBuilder {
 // toolCallsSource collapses agent_events to one row per tool call. Pre- and
 // post-observations of one call are separate rows by design (the canonical
 // event type is part of identity), so argMax by observation time resolves to
-// the terminal observation. A call that was blocked and never completed keeps
-// its pre-observation, which is the point.
+// the terminal observation. A call that was blocked never ran, so its only
+// observation is the decision that blocked it: that row alone is the call,
+// and its outcome resolves to rejected.
 func toolCallsSource(scope Scope) squirrel.SelectBuilder {
 	return sq.Select(
 		"organization_id",
@@ -84,7 +102,7 @@ func toolCallsSource(scope Scope) squirrel.SelectBuilder {
 		"max(occurred_at_unix_nano) AS ended_at",
 	).
 		FromSelect(dedupedAgentEvents(scope,
-			squirrel.Like{"event_type": "tool_call%"},
+			squirrel.Eq{"event_type": toolCallEventTypes},
 			squirrel.NotEq{"event_id": ""},
 		), "deduped").
 		GroupBy("organization_id", "project_id", "event_id")

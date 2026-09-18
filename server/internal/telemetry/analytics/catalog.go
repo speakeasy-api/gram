@@ -149,6 +149,9 @@ type Catalog struct {
 func NewCatalog(datasets ...*Dataset) (*Catalog, error) {
 	seen := make(map[string]struct{}, len(datasets))
 	for _, ds := range datasets {
+		if ds == nil {
+			return nil, fmt.Errorf("catalog: nil dataset")
+		}
 		if err := ds.validate(); err != nil {
 			return nil, err
 		}
@@ -212,10 +215,24 @@ func (d *Dataset) validate() error {
 		if f.Name == timeBucketColumn {
 			return fmt.Errorf("catalog: dataset %q field %q collides with the time bucket column", d.Name, f.Name)
 		}
+		// Every capability describe publishes must be one the compiler can
+		// honour, so the declared enums are the only values a field may carry.
+		switch f.Type {
+		case TypeString, TypeInt64, TypeFloat64:
+		default:
+			return fmt.Errorf("catalog: dataset %q field %q has unknown type %q", d.Name, f.Name, f.Type)
+		}
 		switch f.Role {
 		case RoleDimension:
 			if len(f.Operators) == 0 || len(f.Aggregations) != 0 {
 				return fmt.Errorf("catalog: dataset %q dimension %q must declare operators and no aggregations", d.Name, f.Name)
+			}
+			for _, op := range f.Operators {
+				switch op {
+				case OperatorEquals, OperatorIn:
+				default:
+					return fmt.Errorf("catalog: dataset %q dimension %q has unknown operator %q", d.Name, f.Name, op)
+				}
 			}
 		case RoleMeasure:
 			if len(f.Aggregations) == 0 || len(f.Operators) != 0 {
@@ -223,6 +240,13 @@ func (d *Dataset) validate() error {
 			}
 			if f.Type == TypeString {
 				return fmt.Errorf("catalog: dataset %q measure %q cannot be a string", d.Name, f.Name)
+			}
+			for _, agg := range f.Aggregations {
+				switch agg {
+				case AggregationSum, AggregationAvg, AggregationMin, AggregationMax, AggregationP50, AggregationP95, AggregationP99:
+				default:
+					return fmt.Errorf("catalog: dataset %q measure %q has unknown aggregation %q", d.Name, f.Name, agg)
+				}
 			}
 		default:
 			return fmt.Errorf("catalog: dataset %q field %q has unknown role %q", d.Name, f.Name, f.Role)

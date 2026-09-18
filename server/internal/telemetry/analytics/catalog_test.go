@@ -66,6 +66,11 @@ func TestNewCatalogRejectsHalfDeclaredDatasets(t *testing.T) {
 		{name: "it rejects a field named like the time bucket", mutate: func(d *Dataset) { d.Fields[0].Name = timeBucketColumn }, want: "time bucket"},
 		{name: "it rejects a dataset with no source query", mutate: func(d *Dataset) { d.Source = nil }, want: "no source query"},
 		{name: "it rejects an unknown kind", mutate: func(d *Dataset) { d.Kind = "table" }, want: "unknown kind"},
+		{name: "it rejects an unknown field type", mutate: func(d *Dataset) { d.Fields[0].Type = "uuid" }, want: "unknown type"},
+		{name: "it rejects an unknown operator", mutate: func(d *Dataset) { d.Fields[0].Operators = []Operator{"like"} }, want: "unknown operator"},
+		{name: "it rejects an unknown aggregation", mutate: func(d *Dataset) {
+			d.Fields[0] = Field{Name: "n", Type: TypeInt64, Role: RoleMeasure, Unit: "", Operators: nil, Aggregations: []Aggregation{"median"}, Expr: "n"}
+		}, want: "unknown aggregation"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -76,6 +81,12 @@ func TestNewCatalogRejectsHalfDeclaredDatasets(t *testing.T) {
 			require.ErrorContains(t, err, tc.want)
 		})
 	}
+
+	t.Run("it rejects a nil dataset instead of panicking", func(t *testing.T) {
+		t.Parallel()
+		_, err := NewCatalog(nil)
+		require.ErrorContains(t, err, "nil dataset")
+	})
 
 	t.Run("it rejects two datasets with one name", func(t *testing.T) {
 		t.Parallel()

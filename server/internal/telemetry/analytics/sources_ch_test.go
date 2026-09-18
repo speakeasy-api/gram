@@ -81,14 +81,25 @@ func TestSourceQueriesAgainstClickHouse(t *testing.T) {
 	trailingHook := agentEventFixture(orgID, "r8", "s1", "", "r8", "", base+4)
 	trailingHook.RawEventName = "hook_execution_complete"
 	trailingHook.Model = ""
+	// The same record again, observed later and carrying a correction. Only
+	// the newer copy may survive the collapse.
+	reemitted := agentEventFixture(orgID, "r1", "s1", "t1", "r1", "api_request", base)
+	reemitted.ObservedAtUnixNano = base + 100
+	reemitted.Text = "re-emitted"
+	// A call that was blocked: the decision is its only observation.
+	blocked := agentEventFixture(orgID, "r9", "s1", "t1", "tc2", "tool_decision", base+3)
+	blocked.ToolName = "Write"
+	blocked.Outcome = "rejected"
 
 	rows := []chrepo.AgentEventRow{
 		agentEventFixture(orgID, "r1", "s1", "t1", "r1", "api_request", base),
-		// The same delivery again: a redelivered record counts once.
-		agentEventFixture(orgID, "r1", "s1", "t1", "r1", "api_request", base),
+		// The same record again: a redelivered record counts once.
+		reemitted,
 		// Two observations of one tool call: two rows by design, one call.
 		preCall,
 		postCall,
+		// A blocked call is a decision alone, and still a call.
+		blocked,
 		agentEventFixture(orgID, "r4", "s1", "t2", "r4", "api_request", base+3),
 		// How a real session ends: a hook or MCP event with no model on it.
 		trailingHook,
@@ -128,7 +139,7 @@ func TestSourceQueriesAgainstClickHouse(t *testing.T) {
 		require.Len(t, got, 2)
 		require.Equal(t, "s1", got[0].id)
 		require.Equal(t, uint64(2), got[0].turns, "t1 and t2, with the redelivered record counted once")
-		require.Equal(t, uint64(1), got[0].toolCalls, "two observations of tc1 are one call")
+		require.Equal(t, uint64(2), got[0].toolCalls, "two observations of tc1 are one call, and the blocked tc2 is another")
 		require.Equal(t, base, got[0].startedAt)
 		require.Equal(t, base+4, got[0].endedAt, "the out-of-window row does not stretch the session")
 		require.Equal(t, "dev@example.com", got[0].user)
@@ -142,7 +153,7 @@ func TestSourceQueriesAgainstClickHouse(t *testing.T) {
 		t.Parallel()
 		query, args, err := toolCallsSource(scope).ToSql()
 		require.NoError(t, err)
-		result, err := conn.Query(t.Context(), query, args...)
+		result, err := conn.Query(t.Context(), query+" ORDER BY tool_call_id", args...)
 		require.NoError(t, err)
 		defer func() { require.NoError(t, result.Close()) }()
 
@@ -158,7 +169,7 @@ func TestSourceQueriesAgainstClickHouse(t *testing.T) {
 		}
 		require.NoError(t, result.Err())
 
-		require.Len(t, got, 1)
+		require.Len(t, got, 2)
 		require.Equal(t, "tc1", got[0].id)
 		require.Equal(t, "Bash", got[0].tool)
 		require.Equal(t, "assistants-dev", got[0].mcpServer, "the terminal observation names the MCP server")
@@ -168,5 +179,34 @@ func TestSourceQueriesAgainstClickHouse(t *testing.T) {
 		require.Equal(t, int64(5_000_000), got[0].durationNano)
 		require.Equal(t, base+1, got[0].startedAt)
 		require.Equal(t, base+2, got[0].endedAt)
+
+		// The blocked call never ran: one observation, and its status is the
+		// decision that stopped it, not an empty string a filter cannot reach.
+		require.Equal(t, "tc2", got[1].id)
+		require.Equal(t, "Write", got[1].tool)
+		require.Equal(t, "rejected", got[1].status)
+		require.Zero(t, got[1].durationNano)
+		require.Equal(t, base+3, got[1].startedAt)
+		require.Equal(t, base+3, got[1].endedAt)
+	})
+
+	t.Run("deduped keeps one copy of a re-emitted record, the latest observed", func(t *testing.T) {
+		t.Parallel()
+		// Every measure above is idempotent under duplicates by design, so the
+		// collapse cannot be seen through them. Read the scan itself.
+		inner, args, err := dedupedAgentEvents(scope).ToSql()
+		require.NoError(t, err)
+		result, err := conn.Query(t.Context(), "SELECT record_id, text FROM ("+inner+") WHERE record_id = 'r1'", args...)
+		require.NoError(t, err)
+		defer func() { require.NoError(t, result.Close()) }()
+
+		var copies []string
+		for result.Next() {
+			var recordID, text string
+			require.NoError(t, result.Scan(&recordID, &text))
+			copies = append(copies, text)
+		}
+		require.NoError(t, result.Err())
+		require.Equal(t, []string{"re-emitted"}, copies, "one copy survives, and it is the one observed last")
 	})
 }
