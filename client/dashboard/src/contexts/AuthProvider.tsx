@@ -315,10 +315,15 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     const requestedOrganization = session.organizations.find(
       (organization) => organization.slug === orgSlug,
     );
+    const requestedProjectSlug =
+      projectSlug ??
+      (!isExactOrgRoutePath && pathParts[1] !== "projects"
+        ? pathParts[1]
+        : undefined);
     const requestedProjectExists =
-      !projectSlug ||
+      !requestedProjectSlug ||
       requestedOrganization?.projects.some(
-        (project) => project.slug === projectSlug,
+        (project) => project.slug === requestedProjectSlug,
       );
     const destination = safeRedirectPath(
       location.pathname + location.search + location.hash,
@@ -377,7 +382,13 @@ function OrganizationScopeSwitch({
   fallbackDestination: string;
 }): JSX.Element {
   const client = useSdkClient();
-  const started = useRef(false);
+  const requestRef = useRef<
+    | {
+        attempt: string;
+        promise: ReturnType<typeof client.auth.switchScopes>;
+      }
+    | undefined
+  >(undefined);
   const attempt = organizationScopeSwitchAttempt(organizationId, destination);
   const [alreadyAttempted] = useState(() => {
     try {
@@ -397,26 +408,38 @@ function OrganizationScopeSwitch({
       }
       return;
     }
-    if (started.current) return;
-    started.current = true;
 
-    try {
-      sessionStorage.setItem(ORGANIZATION_SCOPE_SWITCH_KEY, attempt);
-    } catch {
-      // sessionStorage unavailable; the in-memory guard still prevents duplicates.
+    let cancelled = false;
+    let request = requestRef.current;
+    if (!request || request.attempt !== attempt) {
+      try {
+        sessionStorage.setItem(ORGANIZATION_SCOPE_SWITCH_KEY, attempt);
+      } catch {
+        // sessionStorage unavailable; the in-memory request still prevents duplicates.
+      }
+      request = {
+        attempt,
+        promise: client.auth.switchScopes({ organizationId }),
+      };
+      requestRef.current = request;
     }
 
-    void client.auth
-      .switchScopes({ organizationId })
-      .then(() => window.location.replace(destination))
+    void request.promise
+      .then(() => {
+        if (!cancelled) window.location.replace(destination);
+      })
       .catch((switchError: unknown) => {
         try {
           sessionStorage.removeItem(ORGANIZATION_SCOPE_SWITCH_KEY);
         } catch {
           // sessionStorage unavailable
         }
-        setError(switchError);
+        if (!cancelled) setError(switchError);
       });
+
+    return () => {
+      cancelled = true;
+    };
   }, [alreadyAttempted, attempt, client, destination, organizationId]);
 
   if (alreadyAttempted) {

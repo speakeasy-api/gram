@@ -13,6 +13,8 @@ const mocks = vi.hoisted(() => ({
   switchScopes: vi.fn(),
 }));
 
+let replaceSpy: ReturnType<typeof vi.spyOn> | undefined;
+
 // Slugs derived from the live router location, as the real hook derives them
 // from the URL: the portable-path tests below navigate mid-render, and a
 // frozen orgSlug would send the post-navigation render down the wrong gate.
@@ -327,6 +329,8 @@ describe("AuthProvider cross-organization links", () => {
   afterEach(() => {
     cleanup();
     sessionStorage.clear();
+    replaceSpy?.mockRestore();
+    replaceSpy = undefined;
   });
 
   it("switches scope before opening a project link from another organization", async () => {
@@ -336,7 +340,7 @@ describe("AuthProvider cross-organization links", () => {
         whitelisted: true,
       }),
     );
-    const replace = vi
+    replaceSpy = vi
       .spyOn(window.location, "replace")
       .mockImplementation(() => {});
     const destination =
@@ -348,10 +352,45 @@ describe("AuthProvider cross-organization links", () => {
       expect(mocks.switchScopes).toHaveBeenCalledWith({
         organizationId: OTHER_ORG.id,
       });
-      expect(replace).toHaveBeenCalledWith(destination);
+      expect(replaceSpy).toHaveBeenCalledWith(destination);
     });
     expect(screen.queryByTestId("app")).toBeNull();
-    replace.mockRestore();
+  });
+
+  it("does not switch scope for a stale legacy foreign project", () => {
+    mocks.sessionData.mockReturnValue(
+      gatedSession({
+        organizations: [ORG, OTHER_ORG],
+        whitelisted: true,
+      }),
+    );
+
+    renderGate("/other-org/missing-project/mcp");
+
+    expect(mocks.switchScopes).not.toHaveBeenCalled();
+    expect(screen.getByTestId("location").textContent).toBe("/test-org");
+  });
+
+  it("switches scope for a valid legacy foreign project", async () => {
+    mocks.sessionData.mockReturnValue(
+      gatedSession({
+        organizations: [ORG, OTHER_ORG],
+        whitelisted: true,
+      }),
+    );
+    replaceSpy = vi
+      .spyOn(window.location, "replace")
+      .mockImplementation(() => {});
+    const destination = "/other-org/other-project/mcp";
+
+    renderGate(destination);
+
+    await waitFor(() => {
+      expect(mocks.switchScopes).toHaveBeenCalledWith({
+        organizationId: OTHER_ORG.id,
+      });
+      expect(replaceSpy).toHaveBeenCalledWith(destination);
+    });
   });
 
   it("does not combine the active organization with a stale foreign project", () => {
@@ -400,6 +439,32 @@ describe("AuthProvider cross-organization links", () => {
     expect(mocks.switchScopes).not.toHaveBeenCalled();
     expect(screen.getByTestId("location").textContent).toBe("/test-org");
     expect(sessionStorage.getItem("organizationScopeSwitchAttempt")).toBeNull();
+  });
+
+  it("ignores a completed scope switch after the pending route unmounts", async () => {
+    let resolveSwitch: (() => void) | undefined;
+    mocks.switchScopes.mockReturnValue(
+      new Promise<void>((resolve) => {
+        resolveSwitch = resolve;
+      }),
+    );
+    mocks.sessionData.mockReturnValue(
+      gatedSession({
+        organizations: [ORG, OTHER_ORG],
+        whitelisted: true,
+      }),
+    );
+    replaceSpy = vi
+      .spyOn(window.location, "replace")
+      .mockImplementation(() => {});
+
+    const page = renderGate("/other-org/projects/other-project/mcp");
+    await waitFor(() => expect(mocks.switchScopes).toHaveBeenCalledTimes(1));
+    page.unmount();
+    resolveSwitch?.();
+
+    await Promise.resolve();
+    expect(replaceSpy).not.toHaveBeenCalled();
   });
 
   it("shows an error and clears the retry marker when switching fails", async () => {
