@@ -4080,48 +4080,6 @@ WHERE s.organization_id = @organization_id::text
   )
 RETURNING s.*;
 
--- name: RecordTrustedDelegationOfflineRefusal :one
--- A refused request never erases a previously usable credential.
-INSERT INTO trusted_issuer_sessions AS s (
-  organization_id, remote_session_client_id, subject_urn,
-  offline_access_refused_at, offline_access_request_config_hash,
-  credential_config_hash, observation_status, observed_at
-)
-SELECT @organization_id::text, @client_id::uuid, @subject_urn::text,
-  clock_timestamp(), @config_hash::text, @config_hash::text, 'refused', clock_timestamp()
-WHERE EXISTS (
-    SELECT 1 FROM organization_metadata AS o
-    JOIN remote_session_clients AS c ON c.organization_id = o.id
-    JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
-    WHERE o.id = @organization_id::text AND o.disabled_at IS NULL
-      AND c.id = @client_id::uuid AND c.project_id IS NULL AND c.deleted IS FALSE
-      AND i.project_id IS NULL AND (i.organization_id = o.id OR i.organization_id IS NULL)
-      AND i.deleted IS FALSE
-      AND EXISTS (SELECT 1 FROM user_session_issuers AS usi
-        WHERE usi.organization_id = o.id AND usi.project_id IS NULL AND usi.deleted IS FALSE
-          AND usi.trusted_remote_session_client_id = c.id
-          AND usi.trusted_remote_session_issuer_id = i.id)
-      AND EXISTS (SELECT 1 FROM users AS u
-        JOIN organization_user_relationships AS m ON m.user_id = u.id AND m.organization_id = o.id
-        WHERE 'user:' || u.id = @subject_urn::text AND u.deleted_at IS NULL
-          AND u.workos_deleted_at IS NULL AND m.deleted IS FALSE)
-  )
-  AND (@expected_generation::bigint = 0 OR EXISTS (
-    SELECT 1 FROM trusted_issuer_sessions AS current
-    WHERE current.organization_id = @organization_id::text
-      AND current.remote_session_client_id = @client_id::uuid
-      AND current.subject_urn = @subject_urn::text AND current.project_id IS NULL
-      AND current.deleted IS FALSE AND COALESCE(current.credential_generation, 1) = @expected_generation::bigint))
-ON CONFLICT (remote_session_client_id, subject_urn) WHERE deleted IS FALSE
-DO UPDATE SET offline_access_refused_at = clock_timestamp(),
-  offline_access_request_config_hash = @config_hash::text,
-  observation_status = 'refused', observed_at = clock_timestamp(),
-  updated_at = clock_timestamp()
-WHERE s.organization_id = @organization_id::text AND s.project_id IS NULL
-  AND COALESCE(s.credential_generation, 1) = @expected_generation::bigint
-  AND (s.credential_config_hash IS NULL OR s.credential_config_hash = @config_hash::text)
-RETURNING s.*;
-
 -- name: ClearExpiredTrustedDelegationAssertion :execrows
 UPDATE trusted_issuer_sessions AS s
 SET identity_assertion_encrypted = NULL, identity_assertion_expires_at = NULL,

@@ -197,11 +197,13 @@ func TestDelegationServiceConcurrentRefresh(t *testing.T) {
 	winner := make(chan outcome, 1)
 	go func() { a, err := s.Resolve(t.Context(), b, allow); winner <- outcome{a, err} }()
 	<-started
-	var wg sync.WaitGroup
+	losers := make(chan error, 16)
 	for range 16 {
-		wg.Go(func() { _, err := s.Resolve(t.Context(), b, allow); require.ErrorIs(t, err, ErrDelegationTemporary) })
+		go func() { _, err := s.Resolve(t.Context(), b, allow); losers <- err }()
 	}
-	wg.Wait()
+	for range 16 {
+		require.ErrorIs(t, <-losers, ErrDelegationTemporary)
+	}
 	require.Equal(t, int64(1), posts.Load())
 	close(release)
 	result := <-winner
@@ -916,6 +918,150 @@ func TestDelegationServicePrePOSTAttempt(t *testing.T) {
 			if name != "success" {
 				require.Zero(t, posts)
 				require.True(t, store.attemptedAt.IsZero())
+				require.Equal(t, uuid.Nil, store.rows[b].claim)
+			}
+			if name == "database failure" || name == "CAS conflict" {
+				store.attemptError = nil
+				store.attemptConflict = false
+				_, err = s.Resolve(t.Context(), b, allow)
+				require.NoError(t, err)
+				require.Equal(t, 1, posts)
+			}
+		})
+	}
+}
+
+func TestDelegationServiceLoadsProviderAfterClaim(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"fresh provider", "changed registration", "deleted", "invalid", "temporary"} {
+		t.Run(name, func(t *testing.T) {
+			s, store, p, b, allow := newDelegationUnitFixture(t)
+			require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "id", "refresh", 30*time.Second), true))
+			fresh := *p
+			fresh.metadata.TokenEndpoint = "https://issuer.example/new-token"
+			want := ErrDelegationConfiguration
+			s.loadProvider = func(context.Context, string, uuid.UUID, uuid.UUID) (*FederatedProvider, error) {
+				require.NotEqual(t, uuid.Nil, store.rows[b].claim, "full provider must be loaded after claim")
+				switch name {
+				case "changed registration":
+					fresh.client.ClientID = "replacement-client"
+				case "deleted":
+					return nil, pgx.ErrNoRows
+				case "invalid":
+					return nil, ErrFederatedConfiguration
+				case "temporary":
+					return nil, errors.New("discovery unavailable")
+				}
+				return &fresh, nil
+			}
+			posts := 0
+			s.refreshIdentity = func(_ context.Context, got *FederatedProvider, _, _, _ string) (*FederatedRefreshResult, error) {
+				posts++
+				require.Same(t, &fresh, got)
+				return delegationRenewal(p, s.now(), "new-id", "rotation"), nil
+			}
+			_, err := s.Resolve(t.Context(), b, allow)
+			if name == "fresh provider" {
+				require.NoError(t, err)
+				require.Equal(t, 1, posts)
+			} else {
+				if name == "temporary" {
+					want = ErrDelegationTemporary
+				}
+				require.ErrorIs(t, err, want)
+				require.Zero(t, posts)
+			}
+			require.Equal(t, uuid.Nil, store.rows[b].claim)
+		})
+	}
+}
+
+func TestDelegationServiceInitialAuthorizationErrors(t *testing.T) {
+	t.Parallel()
+	for _, cause := range []error{ErrDelegationTemporary, errors.New("dependency unavailable"), ErrDelegationConfiguration, ErrDelegationReauthentication} {
+		t.Run(cause.Error(), func(t *testing.T) {
+			s, store, p, b, _ := newDelegationUnitFixture(t)
+			require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "id", "refresh", time.Hour), true))
+			before := store.rows[b]
+			a, err := s.Resolve(t.Context(), b, delegationTestAuthority(func(context.Context, DelegationBinding) error {
+				return fmt.Errorf("authorization: %w", cause)
+			}))
+			want := ErrDelegationTemporary
+			if definitiveDelegationFailure(cause) {
+				want = ErrDelegationConfiguration
+			}
+			require.ErrorIs(t, err, want)
+			require.Empty(t, a.Value())
+			require.Equal(t, before, store.rows[b])
+		})
+	}
+}
+
+func TestDelegationServiceOfflineStatusInvalidPolicy(t *testing.T) {
+	t.Parallel()
+	for _, retained := range []bool{false, true} {
+		t.Run(fmt.Sprint(retained), func(t *testing.T) {
+			s, _, p, b, _ := newDelegationUnitFixture(t)
+			if retained {
+				require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "id", "refresh", time.Hour), true))
+			}
+			p.client.Scope = []string{"openid"}
+			require.Empty(t, p.OfflineConfigurationHash())
+			status, err := s.OfflineStatus(t.Context(), p, b.HumanID)
+			require.ErrorIs(t, err, ErrDelegationConfiguration)
+			require.Equal(t, DelegationOfflineStatus{}, status)
+		})
+	}
+}
+
+type delegationAttemptHookStore struct {
+	delegationStore
+	beforeAttempt    func()
+	finishContextErr error
+}
+
+func (s *delegationAttemptHookStore) markRefreshAttempt(ctx context.Context, b DelegationBinding, generation int64, claim uuid.UUID, now time.Time) (bool, error) {
+	s.beforeAttempt()
+	return s.delegationStore.markRefreshAttempt(ctx, b, generation, claim, now)
+}
+
+func (s *delegationAttemptHookStore) finish(ctx context.Context, b DelegationBinding, generation int64, claim uuid.UUID, next delegationCredential) (bool, error) {
+	s.finishContextErr = ctx.Err()
+	return s.delegationStore.finish(ctx, b, generation, claim, next)
+}
+
+func TestDelegationServiceAttemptFailureReleaseSafety(t *testing.T) {
+	t.Parallel()
+	for _, superseded := range []bool{false, true} {
+		t.Run(fmt.Sprint(superseded), func(t *testing.T) {
+			s, store, p, b, allow := newDelegationUnitFixture(t)
+			require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "id", "refresh", 30*time.Second), true))
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			var callback delegationCredential
+			hook := &delegationAttemptHookStore{delegationStore: store}
+			hook.beforeAttempt = func() {
+				if superseded {
+					require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "callback-id", "callback-refresh", time.Hour), true))
+					callback = store.rows[b]
+				} else {
+					store.attemptError = errors.New("database unavailable")
+				}
+				cancel()
+			}
+			s.store = hook
+			s.refreshIdentity = func(context.Context, *FederatedProvider, string, string, string) (*FederatedRefreshResult, error) {
+				t.Fatal("failed attempt must not POST")
+				return nil, nil
+			}
+			_, err := s.Resolve(ctx, b, allow)
+			require.ErrorIs(t, err, ErrDelegationTemporary)
+			require.NoError(t, hook.finishContextErr, "claim release must survive caller cancellation")
+			require.Equal(t, uuid.Nil, store.rows[b].claim)
+			if superseded {
+				require.Equal(t, callback, store.rows[b], "release must not overwrite a newer callback")
+			} else {
+				require.Equal(t, "refresh", delegationPlain(t, s, store.rows[b].refresh))
 			}
 		})
 	}

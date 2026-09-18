@@ -108,6 +108,8 @@ func TestGetClientDelegationStatusCurrentObservationsOnly(t *testing.T) {
 	require.Equal(t, "observed", got.Status)
 	require.Len(t, got.Observations, 1)
 	require.Equal(t, int64(1), got.Observations[0].Count)
+	require.Equal(t, "durable_credential_present", got.Observations[0].Status)
+	require.NotNil(t, got.Observations[0].LastObservedAt)
 	require.NotNil(t, got.Observations[0].LastCredentialObtainedAt)
 	require.NotNil(t, got.Observations[0].LastRefreshSucceededAt)
 	require.NotEqual(t, *got.Observations[0].LastCredentialObtainedAt, *got.Observations[0].LastRefreshSucceededAt)

@@ -6,8 +6,13 @@ import (
 	"testing"
 	"time"
 
+	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/client"
+	temporalmocks "go.temporal.io/sdk/mocks"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/worker"
 )
@@ -113,4 +118,74 @@ func TestTrustedDelegationCleanupBudgetResetsPerAttempt(t *testing.T) {
 	require.ErrorContains(t, env.GetWorkflowError(), "per-attempt batch budget exhausted")
 	require.Equal(t, []int32{1, 2, 3}, attempts)
 	require.Equal(t, []int64{50_000, 50_000, 50_000}, rowsPerAttempt)
+}
+
+func TestTrustedDelegationCleanupSchedule(t *testing.T) {
+	t.Parallel()
+	failure := errors.New("unavailable")
+	for _, tc := range []struct {
+		name                 string
+		createErr, updateErr error
+	}{
+		{name: "create"},
+		{name: "existing", createErr: temporal.ErrScheduleAlreadyRunning},
+		{name: "create failure", createErr: failure},
+		{name: "update failure", createErr: temporal.ErrScheduleAlreadyRunning, updateErr: failure},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := &temporalmocks.Client{}
+			sc := &temporalmocks.ScheduleClient{}
+			handle := &temporalmocks.ScheduleHandle{}
+			env := tenv.NewEnvironment(c, "test", "cleanup-test")
+			id := "v1:trusted-delegation-cleanup:cleanup-test"
+			c.On("ScheduleClient").Return(sc).Once()
+			sc.On("Create", mock.Anything, mock.MatchedBy(func(options client.ScheduleOptions) bool {
+				require.Equal(t, id, options.ID)
+				require.Equal(t, time.Hour-time.Second, options.CatchupWindow)
+				require.Equal(t, time.Hour, options.Spec.Intervals[0].Every)
+				action := options.Action.(*client.ScheduleWorkflowAction)
+				require.Equal(t, 40*time.Minute, action.WorkflowRunTimeout)
+				require.Equal(t, "cleanup-test", action.TaskQueue)
+				return true
+			})).Return(nil, tc.createErr).Once()
+			if errors.Is(tc.createErr, temporal.ErrScheduleAlreadyRunning) {
+				sc.On("GetHandle", mock.Anything, id).Return(handle).Once()
+				handle.On("Update", mock.Anything, mock.MatchedBy(func(options client.ScheduleUpdateOptions) bool {
+					state := &client.ScheduleState{Paused: true, Note: "operator pause"}
+					spec := &client.ScheduleSpec{Intervals: []client.ScheduleIntervalSpec{{Every: time.Hour}}}
+					update, err := options.DoUpdate(client.ScheduleUpdateInput{Description: client.ScheduleDescription{Schedule: client.Schedule{
+						Action: &client.ScheduleWorkflowAction{TaskQueue: "cleanup-test", WorkflowRunTimeout: 35 * time.Minute},
+						Policy: &client.SchedulePolicies{CatchupWindow: 24 * time.Hour}, State: state, Spec: spec,
+					}}})
+					require.NoError(t, err)
+					require.Equal(t, 40*time.Minute, update.Schedule.Action.(*client.ScheduleWorkflowAction).WorkflowRunTimeout)
+					require.Equal(t, time.Hour-time.Second, update.Schedule.Policy.CatchupWindow)
+					require.Equal(t, state, update.Schedule.State)
+					require.Equal(t, spec, update.Schedule.Spec)
+					// A subsequent startup must not write an already reconciled schedule.
+					unchanged := *update.Schedule
+					update, err = options.DoUpdate(client.ScheduleUpdateInput{Description: client.ScheduleDescription{Schedule: unchanged}})
+					require.Nil(t, update)
+					require.ErrorIs(t, err, temporal.ErrSkipScheduleUpdate)
+					require.Equal(t, state, unchanged.State)
+
+					update, err = options.DoUpdate(client.ScheduleUpdateInput{Description: client.ScheduleDescription{Schedule: client.Schedule{
+						Action: &client.ScheduleWorkflowAction{TaskQueue: "other-queue"},
+					}}})
+					require.Nil(t, update)
+					require.ErrorContains(t, err, "owned by another task queue")
+					return true
+				})).Return(tc.updateErr).Once()
+			}
+			err := AddTrustedDelegationCleanupSchedule(t.Context(), env)
+			if tc.createErr == failure || tc.updateErr == failure {
+				require.ErrorIs(t, err, failure)
+			} else {
+				require.NoError(t, err)
+			}
+			c.AssertExpectations(t)
+			sc.AssertExpectations(t)
+			handle.AssertExpectations(t)
+		})
+	}
 }

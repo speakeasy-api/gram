@@ -141,6 +141,10 @@ func (s *DelegationService) OfflineStatus(ctx context.Context, p *FederatedProvi
 	if p == nil || !validDelegationBinding(delegationBinding(p, humanID)) {
 		return DelegationOfflineStatus{}, ErrDelegationConfiguration
 	}
+	hash := p.OfflineConfigurationHash()
+	if hash == "" {
+		return DelegationOfflineStatus{}, ErrDelegationConfiguration
+	}
 	b := delegationBinding(p, humanID)
 	if err := s.store.clearExpired(ctx, b, s.now()); err != nil {
 		return DelegationOfflineStatus{}, ErrDelegationTemporary
@@ -152,7 +156,6 @@ func (s *DelegationService) OfflineStatus(ctx context.Context, p *FederatedProvi
 	if err != nil {
 		return DelegationOfflineStatus{}, ErrDelegationTemporary
 	}
-	hash := p.OfflineConfigurationHash()
 	return DelegationOfflineStatus{UsableRefresh: c.config == p.DelegationConfigurationHash() && usableRefresh(c, s.now()), Refused: c.requestConfig == hash && !c.refusedAt.IsZero()}, nil
 }
 
@@ -330,7 +333,10 @@ func (s *DelegationService) Resolve(ctx context.Context, b DelegationBinding, au
 		return DelegationAssertion{}, ErrDelegationConfiguration
 	}
 	if err := authority.AuthorizeDelegation(ctx, b); err != nil {
-		return DelegationAssertion{}, ErrDelegationConfiguration
+		if definitiveDelegationFailure(err) {
+			return DelegationAssertion{}, ErrDelegationConfiguration
+		}
+		return DelegationAssertion{}, ErrDelegationTemporary
 	}
 	p, err := s.loadBinding(ctx, b.OrganizationID, b.IssuerID, b.ClientID)
 	if err != nil {
@@ -376,13 +382,6 @@ func (s *DelegationService) Resolve(ctx context.Context, b DelegationBinding, au
 	if !usableRefresh(c, now) {
 		return DelegationAssertion{}, ErrDelegationReauthentication
 	}
-	p, err = s.loadProvider(ctx, b.OrganizationID, b.IssuerID, b.ClientID)
-	if err != nil {
-		return DelegationAssertion{}, ErrDelegationTemporary
-	}
-	if p == nil || p.DelegationConfigurationHash() != c.config {
-		return DelegationAssertion{}, ErrDelegationConfiguration
-	}
 	claim := uuid.New()
 	acquired, err := s.store.claim(ctx, b, c.generation, claim, now)
 	if err != nil || !acquired {
@@ -390,8 +389,31 @@ func (s *DelegationService) Resolve(ctx context.Context, b DelegationBinding, au
 	}
 	// Re-read after durable ownership. A concurrent callback can supersede us.
 	c, err = s.store.load(ctx, b)
-	if err != nil || c.claim != claim || c.config != p.DelegationConfigurationHash() {
+	if err != nil || c.claim != claim {
 		return DelegationAssertion{}, ErrDelegationTemporary
+	}
+	// Until the POST starts, releasing our own claim cannot replay a spent token.
+	// A callback or revocation that supersedes us is protected by finish's CAS.
+	refreshStarted := false
+	defer func() {
+		if !refreshStarted {
+			releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+			defer cancel()
+			next := eraseExpiredDelegationSecrets(c, s.now())
+			next.claim = uuid.Nil
+			_, _ = s.store.finish(releaseCtx, b, c.generation, claim, next)
+		}
+	}()
+	// Load full discovery and credentials only after obtaining durable ownership.
+	p, err = s.loadProvider(ctx, b.OrganizationID, b.IssuerID, b.ClientID)
+	if err != nil {
+		if definitiveDelegationFailure(err) {
+			return DelegationAssertion{}, ErrDelegationConfiguration
+		}
+		return DelegationAssertion{}, ErrDelegationTemporary
+	}
+	if p == nil || p.DelegationConfigurationHash() != c.config {
+		return DelegationAssertion{}, ErrDelegationConfiguration
 	}
 	refresh, err := s.decrypt(c.refresh)
 	if err != nil {
@@ -412,6 +434,7 @@ func (s *DelegationService) Resolve(ctx context.Context, b DelegationBinding, au
 	if err != nil || !marked {
 		return DelegationAssertion{}, ErrDelegationTemporary
 	}
+	refreshStarted = true
 	result, refreshErr := s.refreshIdentity(ctx, p, refresh, subject, nonce)
 	// The caller's timeout must not prevent recording rotation or quarantining
 	// an ambiguous generation. This bounded write is still CAS protected.
