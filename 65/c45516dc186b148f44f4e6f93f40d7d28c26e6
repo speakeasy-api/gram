@@ -1,0 +1,27 @@
+server/internal/demoseed/clickhouse.sql
+  s_7fdecb48b43fe7::t_f4daa06f0a9b6e 1409,2120
+server/internal/mcp/serve_platform.go
+  s_7fdecb48b43fe7::t_b3d502ec631335 491-492
+server/internal/risk/chrepo/list.go
+  s_7fdecb48b43fe7::t_681809b220834e 185-195,278,280,303,305,343,348,350
+server/internal/risk/finding_ch.go
+  s_7fdecb48b43fe7::t_75ff9e1611e07e 280
+server/internal/risk/list_ch_test.go
+  s_7fdecb48b43fe7::t_cb180fff40243f 77-98,100
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "65c45516dc186b148f44f4e6f93f40d7d28c26e6",
+  "prompts": {},
+  "sessions": {
+    "s_7fdecb48b43fe7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bf058b0c-2e83-40c5-b904-7bbe807d7039",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
