@@ -28,7 +28,13 @@ import (
 func provisionManagedClient(t *testing.T, ctx context.Context, ti *testInstance, slug string) (string, *provisiontest.Fixture) {
 	t.Helper()
 
-	issuer, err := ti.service.CreateIssuer(ctx, newCreateIssuerPayload(slug, nil))
+	return provisionManagedClientForPayload(t, ctx, ti, newCreateIssuerPayload(slug, nil))
+}
+
+func provisionManagedClientForPayload(t *testing.T, ctx context.Context, ti *testInstance, payload *orgissuersgen.CreateIssuerPayload) (string, *provisiontest.Fixture) {
+	t.Helper()
+
+	issuer, err := ti.service.CreateIssuer(ctx, payload)
 	require.NoError(t, err)
 
 	fx := provisiontest.Provision(t, ctx, ti.conn, activeOrganizationID(t, ctx), uuid.MustParse(issuer.ID), testServerURL)
@@ -154,6 +160,46 @@ func TestManagedClient_RefusesIssuerMutations(t *testing.T) {
 	require.NoError(t, err)
 	_, err = ti.service.UpdateIssuer(ctx, &orgissuersgen.UpdateIssuerPayload{ID: other.ID, Name: &name})
 	require.NoError(t, err)
+}
+
+// Refreshing discovered metadata rewrites the same endpoints UpdateIssuer is
+// refused on, so it is refused for a managed issuer too.
+func TestManagedClient_RefusesIssuerMetadataRefresh(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	upstream := fakeIssuerServer(t, nil)
+
+	payload := newCreateIssuerPayload("managed-guard-refresh-issuer", nil)
+	payload.Issuer = upstream.URL
+	stale := "https://stale.example.com/authorize"
+	payload.AuthorizationEndpoint = &stale
+	issuerID, _ := provisionManagedClientForPayload(t, ctx, ti, payload)
+
+	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionIssuerUpdate)
+	require.NoError(t, err)
+
+	_, err = ti.service.RefreshIssuerMetadata(ctx, &orgissuersgen.RefreshIssuerMetadataPayload{ID: issuerID, SessionToken: nil, ApikeyToken: nil})
+	requireOopsCode(t, err, oops.CodeConflict)
+	require.ErrorContains(t, err, "managed by an identity provider connection")
+
+	still, err := ti.service.GetIssuer(ctx, &orgissuersgen.GetIssuerPayload{ID: issuerID, SessionToken: nil, ApikeyToken: nil})
+	require.NoError(t, err)
+	require.NotNil(t, still.AuthorizationEndpoint)
+	require.Equal(t, stale, *still.AuthorizationEndpoint, "refresh must not overwrite a managed issuer's endpoints")
+	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionIssuerUpdate)
+	require.NoError(t, err)
+	require.Equal(t, before, after)
+
+	// An unrelated issuer in the same organization still refreshes.
+	other := newCreateIssuerPayload("managed-guard-refresh-unrelated", nil)
+	other.Issuer = upstream.URL
+	other.AuthorizationEndpoint = &stale
+	created, err := ti.service.CreateIssuer(ctx, other)
+	require.NoError(t, err)
+	refreshed, err := ti.service.RefreshIssuerMetadata(ctx, &orgissuersgen.RefreshIssuerMetadataPayload{ID: created.ID, SessionToken: nil, ApikeyToken: nil})
+	require.NoError(t, err)
+	require.Equal(t, upstream.URL+"/authorize", *refreshed.Issuer.AuthorizationEndpoint)
 }
 
 // A managed client's JWKS document is served with the short freshness window,
