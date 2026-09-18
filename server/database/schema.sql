@@ -8992,10 +8992,11 @@ CREATE INDEX IF NOT EXISTS killswitch_operations_expires_at_idx ON killswitch_op
 -- Application transactions retain tombstone generations and reject stale completion.
 CREATE UNIQUE INDEX IF NOT EXISTS remote_session_clients_id_issuer_key ON remote_session_clients (id, remote_session_issuer_id);
 
--- One row per identity provider connection x upstream resource (the resource
--- indicator at a remote authorization server). A row exists exactly when the
--- organization administrator confirmed in the identity provider's console
--- that the AI agent is connected to that resource; reset deletes it. Who
+-- One Okta agent-to-resource connection per identity provider connection x
+-- upstream resource (the resource indicator at a remote authorization
+-- server). A row exists exactly when the organization administrator confirmed
+-- in the Okta console that the AI agent is connected to that resource; reset
+-- deletes it. Who
 -- confirmed and when lives in the audit log. The audience is the resource
 -- app's XAA issuer URL as typed into the identity provider, which the token
 -- exchange needs and no metadata exposes; the identity provider app id is the
@@ -9004,7 +9005,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS remote_session_clients_id_issuer_key ON remote
 -- exchange path: a read model, not a history. Readiness is derived at read
 -- time and nothing here is consulted by the exchange path. Several MCP
 -- servers that share an upstream share one row.
-CREATE TABLE IF NOT EXISTS xaa_resource_readiness (
+CREATE TABLE IF NOT EXISTS okta_resource_connections (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
   identity_provider_connection_id uuid NOT NULL,
@@ -9021,21 +9022,21 @@ CREATE TABLE IF NOT EXISTS xaa_resource_readiness (
   last_error_reason TEXT,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  CONSTRAINT xaa_resource_readiness_pkey PRIMARY KEY (id),
-  CONSTRAINT xaa_resource_readiness_resource_check CHECK (resource <> ''),
-  CONSTRAINT xaa_resource_readiness_audience_check CHECK (audience <> ''),
-  CONSTRAINT xaa_resource_readiness_okta_application_id_check CHECK (okta_application_id IS NULL OR okta_application_id <> ''),
-  CONSTRAINT xaa_resource_readiness_last_exchange_outcome_check CHECK (last_exchange_outcome IS NULL OR last_exchange_outcome IN ('succeeded', 'broken', 'failed')),
-  CONSTRAINT xaa_resource_readiness_resource_key UNIQUE (organization_id, identity_provider_connection_id, remote_session_issuer_id, resource),
-  CONSTRAINT xaa_resource_readiness_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT xaa_resource_readiness_connection_tenant_fkey FOREIGN KEY (organization_id, identity_provider_connection_id) REFERENCES identity_provider_connections (organization_id, id) ON DELETE CASCADE,
-  CONSTRAINT xaa_resource_readiness_remote_session_issuer_id_fkey FOREIGN KEY (remote_session_issuer_id) REFERENCES remote_session_issuers (id) ON DELETE CASCADE
+  CONSTRAINT okta_resource_connections_pkey PRIMARY KEY (id),
+  CONSTRAINT okta_resource_connections_resource_check CHECK (resource <> ''),
+  CONSTRAINT okta_resource_connections_audience_check CHECK (audience <> ''),
+  CONSTRAINT okta_resource_connections_okta_application_id_check CHECK (okta_application_id IS NULL OR okta_application_id <> ''),
+  CONSTRAINT okta_resource_connections_last_exchange_outcome_check CHECK (last_exchange_outcome IS NULL OR last_exchange_outcome IN ('succeeded', 'broken', 'failed')),
+  CONSTRAINT okta_resource_connections_resource_key UNIQUE (organization_id, identity_provider_connection_id, remote_session_issuer_id, resource),
+  CONSTRAINT okta_resource_connections_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT okta_resource_connections_connection_tenant_fkey FOREIGN KEY (organization_id, identity_provider_connection_id) REFERENCES identity_provider_connections (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT okta_resource_connections_remote_session_issuer_id_fkey FOREIGN KEY (remote_session_issuer_id) REFERENCES remote_session_issuers (id) ON DELETE CASCADE
 );
 
 -- Serves the cascade from remote_session_issuers; the connection cascade is
 -- served by the unique key.
-CREATE INDEX IF NOT EXISTS xaa_resource_readiness_remote_session_issuer_idx
-ON xaa_resource_readiness (remote_session_issuer_id);
+CREATE INDEX IF NOT EXISTS okta_resource_connections_remote_session_issuer_idx
+ON okta_resource_connections (remote_session_issuer_id);
 
 CREATE TABLE IF NOT EXISTS remote_session_ema_bindings (
   id uuid NOT NULL DEFAULT generate_uuidv7(),

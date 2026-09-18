@@ -1636,6 +1636,22 @@ type OktaIdentityProviderConnection struct {
 	Deleted                             bool
 }
 
+type OktaResourceConnection struct {
+	ID                           uuid.UUID
+	OrganizationID               string
+	IdentityProviderConnectionID uuid.UUID
+	RemoteSessionIssuerID        uuid.UUID
+	Resource                     string
+	Audience                     string
+	OktaApplicationID            pgtype.Text
+	LastExchangeOutcome          pgtype.Text
+	LastExchangeAt               pgtype.Timestamptz
+	VerifiedAt                   pgtype.Timestamptz
+	LastErrorReason              pgtype.Text
+	CreatedAt                    pgtype.Timestamptz
+	UpdatedAt                    pgtype.Timestamptz
+}
+
 type OpenrouterApiKey struct {
 	OrganizationID string
 	KeyType        string
@@ -3572,20 +3588,4 @@ type WorkosUserSync struct {
 	LastEventID  string
 	CreatedAt    pgtype.Timestamptz
 	UpdatedAt    pgtype.Timestamptz
-}
-
-type XaaResourceReadiness struct {
-	ID                           uuid.UUID
-	OrganizationID               string
-	IdentityProviderConnectionID uuid.UUID
-	RemoteSessionIssuerID        uuid.UUID
-	Resource                     string
-	Audience                     string
-	OktaApplicationID            pgtype.Text
-	LastExchangeOutcome          pgtype.Text
-	LastExchangeAt               pgtype.Timestamptz
-	VerifiedAt                   pgtype.Timestamptz
-	LastErrorReason              pgtype.Text
-	CreatedAt                    pgtype.Timestamptz
-	UpdatedAt                    pgtype.Timestamptz
 }
