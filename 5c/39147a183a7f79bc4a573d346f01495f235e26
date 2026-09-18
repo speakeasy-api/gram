@@ -1,0 +1,23 @@
+.changeset/tunnel-drop-retryable-error.md
+  s_6018a91b3dbabe::t_6bf00eaac56c61 5
+server/internal/mcp/tunnelrouting/routing.go
+  s_6018a91b3dbabe::t_ef684ca7328829 120-121,145,148
+server/internal/mcp/tunnelrouting/routing_test.go
+  s_6018a91b3dbabe::t_543b697c22f1cf 125,134,137
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "5c39147a183a7f79bc4a573d346f01495f235e26",
+  "prompts": {},
+  "sessions": {
+    "s_6018a91b3dbabe": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "86debe54-fcdf-4bd2-88ea-77c14c25ffc2",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
