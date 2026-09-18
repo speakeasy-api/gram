@@ -1739,6 +1739,24 @@ pubsub:
         name: gram-telemetry-v1-log-record
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-telemetry-v1-tool-call-log-relay
+      topic_proto_message: gram-telemetry-v1-log-record
+    name: gram-telemetry-v1-tool-call-log-relay
+    spec:
+      ackDeadlineSeconds: 60
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-telemetry-v1-tool-call-log-relay-dlq
+        maxDeliveryAttempts: 10
+      messageRetentionDuration: 604800s
+      retainAckedMessages: true
+      retryPolicy:
+        maximumBackoff: 60s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-telemetry-v1-log-record
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-webhooks-v1-svix-relay
       topic_proto_message: gram-webhooks-v1-event
     name: gram-webhooks-v1-svix-relay
@@ -2097,6 +2115,13 @@ pubsub:
         encoding: BINARY
         schemaRef:
           name: gram-telemetry-v1-log-record
+  - labels:
+      dlq_for: gram-telemetry-v1-tool-call-log-relay
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-telemetry-v1-tool-call-log-relay
+    name: gram-telemetry-v1-tool-call-log-relay-dlq
+    spec:
+      messageRetentionDuration: 604800s
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-webhooks-v1-event
