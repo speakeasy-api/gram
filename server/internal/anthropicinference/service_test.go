@@ -221,8 +221,8 @@ func TestServiceStillDeniesRedeliveredCurrentTurn(t *testing.T) {
 	result := new(risk.ScanResult)
 	result.Action = "block"
 	scanner := &recordingScanner{inputs: nil, userIDs: nil, result: result, err: nil}
-	// Everything in the frame is already stored, as after a redelivery.
-	service := &Service{store: &deltaStore{memoryStore: memoryStore{accepted: transcriptHashes(frame.Messages[:2]), saved: nil, userID: "", err: nil}, newStart: 3}, scanner: scanner}
+	// Everything in the frame is already stored and accepted, as after a redelivery.
+	service := &Service{store: &deltaStore{memoryStore: memoryStore{accepted: transcriptHashes(frame.Messages), saved: nil, userID: "", err: nil}, newStart: 3}, scanner: scanner}
 	verdict, err := service.Process(t.Context(), Config{}, frame)
 	require.NoError(t, err)
 	require.Equal(t, "deny", verdict.Action)
