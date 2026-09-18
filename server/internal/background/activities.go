@@ -94,6 +94,7 @@ type Publishers struct {
 	PromptInjectionAnalysis gcp.Publisher[*riskv1.PromptInjectionAnalysis]
 	PromptPolicyAnalysis    gcp.Publisher[*riskv1.PromptPolicyAnalysis]
 	CustomRulesAnalysis     gcp.Publisher[*riskv1.CustomRulesAnalysis]
+	LLMAnalysis             gcp.Publisher[*riskv1.LLMAnalysis]
 	RiskFindings            gcp.Publisher[*riskv1.Finding]
 	MeterReadings           gcp.Publisher[*meteringv1.MeterReading]
 	TelemetryLogs           gcp.Publisher[*telemetryv1.LogRecord]
@@ -242,6 +243,7 @@ func NewActivities(
 	githubEvidenceToken string,
 	riskFingerprinter risk.Fingerprinter,
 	disableRiskRetroReconcile bool,
+	llmAnalyzerEnabled bool,
 	idTokenVerifier remotesessions.IDTokenVerifier,
 	issuerMetadataRefresher *remotesessions.IssuerMetadataRefresher,
 	remoteSessionEnricher *remotesessions.SessionEnricher,
@@ -282,6 +284,7 @@ func NewActivities(
 		publishers.PromptInjectionAnalysis,
 		publishers.PromptPolicyAnalysis,
 		publishers.CustomRulesAnalysis,
+		publishers.LLMAnalysis,
 		publishers.RiskFindings,
 		customRuleScanner,
 		celEng,
@@ -290,6 +293,7 @@ func NewActivities(
 			evaluator: risk.NewPolicyBypassEvaluator(logger, db),
 		},
 		riskRecorder,
+		llmAnalyzerEnabled,
 	)
 	if err != nil {
 		panic(fmt.Errorf("new analyze batch: %w", err))

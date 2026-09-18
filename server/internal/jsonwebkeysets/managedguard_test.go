@@ -10,6 +10,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/json_web_key_sets"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections/provisiontest"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
 // provisionManagedSet runs the real identity provider connection provisioner
@@ -90,4 +91,54 @@ func TestCreateSet_RefusesManagedBackingKey(t *testing.T) {
 	set := createSet(t, ctx, ti, "own-set", own.ID)
 	_, err = ti.service.UpdateSet(adminCtx(t, ctx), &gen.UpdateSetPayload{ID: set.ID, Name: set.Name, ExternalKeyID: fx.Client.ExternalKeyID.String(), SessionToken: nil})
 	requireOopsCode(t, err, oops.CodeConflict)
+}
+
+// Once the connection is tombstoned its set drops out of the list and becomes
+// deletable after its client is gone, while key publication stays refused.
+func TestManagedSet_DeletableOnceConnectionTombstoned(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	fx := provisionManagedSet(t, ctx, ti)
+	setID := fx.Client.JSONWebKeySetID.String()
+
+	err := ti.service.DeleteSet(adminCtx(t, ctx), &gen.DeleteSetPayload{ID: setID, SessionToken: nil})
+	requireOopsCode(t, err, oops.CodeConflict)
+
+	provisiontest.SoftDeleteConnection(t, ctx, ti.conn, ti.orgID, fx.ConnectionID)
+
+	require.NotContains(t, listSetIDs(t, ctx, ti), setID, "a leftover set is hidden from the list")
+	fetched, err := ti.service.GetSet(readCtx(t, ctx), &gen.GetSetPayload{ID: setID, SessionToken: nil})
+	require.NoError(t, err)
+	require.Equal(t, setID, fetched.ID, "the leftover stays reachable by id")
+
+	_, err = ti.service.PublishKey(adminCtx(t, ctx), &gen.PublishKeyPayload{SetID: setID, SessionToken: nil})
+	requireOopsCode(t, err, oops.CodeConflict)
+	other := createBackedGcpKmsKey(t, ctx, ti, "managed-tombstone-other")
+	_, err = ti.service.UpdateSet(adminCtx(t, ctx), &gen.UpdateSetPayload{ID: setID, Name: "renamed", ExternalKeyID: other.ID, SessionToken: nil})
+	requireOopsCode(t, err, oops.CodeConflict)
+
+	// The leftover client still signs with the set; it goes first.
+	err = ti.service.DeleteSet(adminCtx(t, ctx), &gen.DeleteSetPayload{ID: setID, SessionToken: nil})
+	requireOopsCode(t, err, oops.CodeConflict)
+	require.ErrorContains(t, err, "still in use by a remote session client")
+	affected, err := remotesessionsrepo.New(ti.conn).SoftDeleteRemoteSessionClientFixture(ctx, fx.Client.ClientRowID)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, affected)
+
+	require.NoError(t, ti.service.DeleteSet(adminCtx(t, ctx), &gen.DeleteSetPayload{ID: setID, SessionToken: nil}))
+	_, err = ti.service.GetSet(readCtx(t, ctx), &gen.GetSetPayload{ID: setID, SessionToken: nil})
+	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+func listSetIDs(t *testing.T, ctx context.Context, ti *testInstance) []string {
+	t.Helper()
+
+	result, err := ti.service.ListSets(readCtx(t, ctx), &gen.ListSetsPayload{SessionToken: nil})
+	require.NoError(t, err)
+	ids := make([]string, 0, len(result.Sets))
+	for _, set := range result.Sets {
+		ids = append(ids, set.ID)
+	}
+	return ids
 }

@@ -17,7 +17,9 @@ import (
 	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections/provisiontest"
+	idprepo "github.com/speakeasy-api/gram/server/internal/identityproviderconnections/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
@@ -162,6 +164,58 @@ func TestManagedClient_RefusesIssuerMutations(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// An issuer a live Okta connection references is pinned even without a managed
+// client on it, and the pin lifts once the connection is tombstoned.
+func TestOktaConnection_PinsIssuerUntilTombstoned(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	organizationID := activeOrganizationID(t, ctx)
+
+	issuer, err := ti.service.CreateIssuer(ctx, newCreateIssuerPayload("okta-pinned-issuer", nil))
+	require.NoError(t, err)
+	client, err := ti.service.CreateClient(ctx, newCreateClientPayload(issuer.ID, nil, nil))
+	require.NoError(t, err)
+
+	connectionID := provisiontest.CreateConnection(t, ctx, ti.conn, organizationID, identityproviderconnections.ProviderOkta)
+	_, err = idprepo.New(ti.conn).CreateOktaIdentityProviderConnection(ctx, idprepo.CreateOktaIdentityProviderConnectionParams{
+		IdentityProviderConnectionID: connectionID,
+		OrganizationID:               organizationID,
+		OrgUrl:                       issuer.Issuer,
+		IssuerUrl:                    issuer.Issuer,
+		RemoteSessionIssuerID:        uuid.MustParse(issuer.ID),
+		RemoteSessionClientID:        uuid.MustParse(client.ID),
+		ListingMode:                  identityproviderconnections.ListingModeCustomApp,
+	})
+	require.NoError(t, err)
+
+	name := "renamed"
+	tokenEndpoint := "https://attacker.example/token"
+	_, err = ti.service.UpdateIssuer(ctx, &orgissuersgen.UpdateIssuerPayload{ID: issuer.ID, Name: &name})
+	requireOopsCode(t, err, oops.CodeConflict)
+	_, err = ti.service.UpdateIssuer(ctx, &orgissuersgen.UpdateIssuerPayload{ID: issuer.ID, TokenEndpoint: &tokenEndpoint})
+	requireOopsCode(t, err, oops.CodeConflict)
+	slug := "okta-pinned-reslug"
+	_, err = ti.service.UpdateIssuer(ctx, &orgissuersgen.UpdateIssuerPayload{ID: issuer.ID, Slug: &slug})
+	requireOopsCode(t, err, oops.CodeConflict)
+	projectID := createProject(t, ctx, ti.conn, "okta-pinned-project").String()
+	_, err = ti.service.MoveIssuer(ctx, &orgissuersgen.MoveIssuerPayload{ID: issuer.ID, ProjectID: &projectID})
+	requireOopsCode(t, err, oops.CodeConflict)
+	target, err := ti.service.CreateIssuer(ctx, newCreateIssuerPayload("okta-pinned-migrate-target", nil))
+	require.NoError(t, err)
+	_, err = ti.service.MigrateIssuer(ctx, &orgissuersgen.MigrateIssuerPayload{SourceID: issuer.ID, TargetID: target.ID, SessionToken: nil, ApikeyToken: nil})
+	requireOopsCode(t, err, oops.CodeConflict)
+
+	still, err := ti.service.GetIssuer(ctx, &orgissuersgen.GetIssuerPayload{ID: issuer.ID, SessionToken: nil, ApikeyToken: nil})
+	require.NoError(t, err)
+	require.Equal(t, "okta-pinned-issuer", still.Slug)
+	require.Equal(t, "https://idp.example.com/token", *still.TokenEndpoint)
+
+	provisiontest.SoftDeleteConnection(t, ctx, ti.conn, organizationID, connectionID)
+	_, err = ti.service.UpdateIssuer(ctx, &orgissuersgen.UpdateIssuerPayload{ID: issuer.ID, Name: &name})
+	require.NoError(t, err)
+}
+
 // Refreshing discovered metadata rewrites the same endpoints UpdateIssuer is
 // refused on, so it is refused for a managed issuer too.
 func TestManagedClient_RefusesIssuerMetadataRefresh(t *testing.T) {
@@ -266,4 +320,60 @@ func TestManagedClient_RegistrationReplaceRefusesManagedRow(t *testing.T) {
 	after, err := repo.New(ti.conn).GetRemoteSessionClientForRotation(ctx, fx.Client.ClientRowID)
 	require.NoError(t, err)
 	require.Equal(t, currentClientID, after.RemoteSessionClient.ClientID)
+}
+
+// Once the connection is tombstoned its client drops out of the lists and
+// becomes deletable, while every other mutation stays refused. The issuer
+// hides with it and lists again, deletable, once the client is gone.
+func TestManagedClient_DeletableOnceConnectionTombstoned(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	organizationID := activeOrganizationID(t, ctx)
+	ti.enableCustomerManagedKeys(t, ctx, organizationID)
+
+	issuerID, fx := provisionManagedClient(t, ctx, ti, "managed-tombstone-issuer")
+	clientID := fx.Client.ClientRowID.String()
+
+	err := ti.service.DeleteClient(ctx, &orgclientsgen.DeleteClientPayload{ID: clientID, SessionToken: nil, ApikeyToken: nil})
+	requireOopsCode(t, err, oops.CodeConflict)
+
+	provisiontest.SoftDeleteConnection(t, ctx, ti.conn, organizationID, fx.ConnectionID)
+
+	listed, err := ti.service.ListClients(ctx, &orgclientsgen.ListClientsPayload{IssuerID: issuerID, Cursor: nil, Limit: nil, SessionToken: nil, ApikeyToken: nil})
+	require.NoError(t, err)
+	require.Empty(t, listed.Items, "a leftover client is hidden from the list")
+	require.NotContains(t, listIssuerIDs(t, ctx, ti), issuerID, "an issuer with only leftover clients is hidden")
+
+	got, err := ti.service.GetClient(ctx, &orgclientsgen.GetClientPayload{ID: clientID, SessionToken: nil, ApikeyToken: nil})
+	require.NoError(t, err)
+	require.Equal(t, clientID, got.ID, "the leftover stays reachable by id")
+
+	method := "client_secret_basic"
+	_, err = ti.service.UpdateClient(ctx, &orgclientsgen.UpdateClientPayload{ID: clientID, TokenEndpointAuthMethod: &method})
+	requireOopsCode(t, err, oops.CodeConflict)
+	_, err = ti.service.RotateClient(ctx, &orgclientsgen.RotateClientPayload{ID: clientID})
+	requireOopsCode(t, err, oops.CodeConflict)
+	setID := createJsonWebKeySet(t, ctx, ti.conn, organizationID, "managed-tombstone-set")
+	_, err = ti.service.AttachClientKeySet(ctx, &orgclientsgen.AttachClientKeySetPayload{ID: clientID, JSONWebKeySetID: setID.String()})
+	requireOopsCode(t, err, oops.CodeConflict)
+
+	require.NoError(t, ti.service.DeleteClient(ctx, &orgclientsgen.DeleteClientPayload{ID: clientID, SessionToken: nil, ApikeyToken: nil}))
+	_, err = ti.service.GetClient(ctx, &orgclientsgen.GetClientPayload{ID: clientID, SessionToken: nil, ApikeyToken: nil})
+	requireOopsCode(t, err, oops.CodeNotFound)
+
+	require.Contains(t, listIssuerIDs(t, ctx, ti), issuerID, "the issuer lists again once its leftover client is gone")
+	require.NoError(t, ti.service.DeleteIssuer(ctx, &orgissuersgen.DeleteIssuerPayload{ID: issuerID, SessionToken: nil, ApikeyToken: nil}))
+}
+
+func listIssuerIDs(t *testing.T, ctx context.Context, ti *testInstance) []string {
+	t.Helper()
+
+	result, err := ti.service.ListIssuers(ctx, &orgissuersgen.ListIssuersPayload{Cursor: nil, Limit: nil, SessionToken: nil, ApikeyToken: nil})
+	require.NoError(t, err)
+	ids := make([]string, 0, len(result.Items))
+	for _, item := range result.Items {
+		ids = append(ids, item.Issuer.ID)
+	}
+	return ids
 }

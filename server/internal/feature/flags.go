@@ -173,6 +173,9 @@ const (
 	// plugins.canaryHooksOrgSlugs), independent of this flag, so a PostHog outage
 	// can't strand it on stale hooks.
 	FlagHooksRollout Flag = "hooks-rollout"
+
+	// FlagOktaConnections gates creating Okta connections while the integration is dogfooded.
+	FlagOktaConnections Flag = "okta-connections"
 )
 
 // Variants of FlagAssistantPlatformMCP. Anything else — no variant, an

@@ -46,6 +46,29 @@ type IdentityProviderConnection struct {
 	Deleted        bool
 }
 
+type OktaIdentityProviderConnection struct {
+	IdentityProviderConnectionID        uuid.UUID
+	IdentityProviderConnectionsProvider string
+	OrganizationID                      string
+	AttachmentScope                     pgtype.Text
+	OrgUrl                              string
+	IssuerUrl                           string
+	IssuerUrlOverrideReason             pgtype.Text
+	OwnershipClaimed                    bool
+	RemoteSessionIssuerID               uuid.UUID
+	RemoteSessionClientID               uuid.UUID
+	DpopRequired                        bool
+	GrantedScopes                       []string
+	ObservedAdminRoles                  []string
+	ListingMode                         string
+	AgentID                             pgtype.Text
+	AgentAppID                          pgtype.Text
+	CreatedAt                           pgtype.Timestamptz
+	UpdatedAt                           pgtype.Timestamptz
+	DeletedAt                           pgtype.Timestamptz
+	Deleted                             bool
+}
+
 type RemoteSessionClient struct {
 	ID                              uuid.UUID
 	ProjectID                       uuid.NullUUID

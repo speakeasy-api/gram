@@ -65,6 +65,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
+	"github.com/speakeasy-api/gram/server/internal/scanners/llmanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	piopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptinjection/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
@@ -440,10 +441,11 @@ func newStreamsCommand() *cli.Command {
 			riskRecorder := metering.NewRiskRecorder(riskMeterPub)
 
 			gitleaksHandler := gitleaks.NewHandler(logger, findingsPub, riskRecorder)
+			replyWriter := enforcereply.NewWriter(redisClient)
 			gitleaksEnforceHandler, err := gitleaks.NewEnforceHandler(
 				logger,
 				meterProvider,
-				enforcereply.NewWriter(redisClient),
+				replyWriter,
 				func(tenantID string, message []byte) (string, error) {
 					sum, _, fingerprintErr := riskFingerprinter.TenantedHS256(tenantID, message)
 					return risk.EncodeFingerprint(sum), fingerprintErr
@@ -460,6 +462,22 @@ func newStreamsCommand() *cli.Command {
 			promptPolicyScanner := promptpolicy.NewScanner(logger, ppopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, judgeRateLimiter).Evaluate)
 			promptPolicyStubScanner := promptpolicy.NewScanner(logger, promptpolicy.NoopEvaluator)
 			promptPolicyHandler := promptpolicy.NewHandler(logger, meterProvider, promptPolicyScanner, promptPolicyStubScanner, findingsPub, scanners.NewAsyncShadowGate(logger, featureFlags, replicaDB), riskRecorder)
+
+			// Fine-tuned risk model analyzer: both its lanes run here. Without a
+			// model URL the analyzer is disabled and its handlers ack untouched.
+			riskLLMConfig := llmAnalyzerConfigFromCLI(c)
+			var riskLLMCompleter llmanalyzer.Completer
+			if riskLLMConfig.Enabled() {
+				riskLLMClient, err := llmanalyzer.NewClient(logger, tracerProvider, meterProvider, guardianPolicy, riskLLMConfig)
+				if err != nil {
+					return fmt.Errorf("create risk llm client: %w", err)
+				}
+				riskLLMCompleter = riskLLMClient
+			} else {
+				logger.WarnContext(ctx, "LLM analyzer disabled: GRAM_RISK_LLM_URL empty")
+			}
+			llmAnalyzer := llmanalyzer.NewAnalyzer(logger, tracerProvider, riskLLMCompleter)
+			llmAnalyzerHandler := llmanalyzer.NewHandler(logger, meterProvider, llmAnalyzer, findingsPub, riskRecorder)
 
 			// Custom-rules shadow-mode subscriber: loads a project's selected CEL
 			// detection rules from the read replica (caching their compilation) and
@@ -613,8 +631,10 @@ func newStreamsCommand() *cli.Command {
 
 				mustReceive(rg, &riskv1.GitleaksAnalysis{}, &riskv1.GitleaksAnalyzer{}, gitleaksHandler)
 				mustReceive(rg, &riskv1.GitleaksEnforcement{}, &riskv1.GitleaksEnforcer{}, gitleaksEnforceHandler)
+				mustReceive(rg, &riskv1.LLMEnforcement{}, &riskv1.LLMEnforcer{}, llmanalyzer.NewEnforceHandler(logger, tracerProvider, meterProvider, llmAnalyzer, replyWriter, llmanalyzer.WithRiskRecorder(riskRecorder)))
 				mustReceive(rg, &riskv1.PromptInjectionAnalysis{}, &riskv1.PromptInjectionAnalyzer{}, promptInjectionHandler)
 				mustReceive(rg, &riskv1.PromptPolicyAnalysis{}, &riskv1.PromptPolicyAnalyzer{}, promptPolicyHandler)
+				mustReceive(rg, &riskv1.LLMAnalysis{}, &riskv1.LLMAnalyzer{}, llmAnalyzerHandler)
 				mustReceive(rg, &riskv1.CustomRulesAnalysis{}, &riskv1.CustomRulesAnalyzer{}, customRulesHandler)
 
 				mustReceive(rg, &telemetryv1.LogRecord{}, &telemetryv1.Noop{}, new(subscribers.NoopHandler[*telemetryv1.LogRecord]))

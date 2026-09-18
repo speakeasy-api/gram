@@ -3,8 +3,13 @@
 package managedrows
 
 import (
-	"github.com/google/uuid"
+	"context"
+	"errors"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+
+	"github.com/speakeasy-api/gram/server/internal/managedrows/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -16,6 +21,29 @@ func Error(subject string) error {
 // RequireUnmanaged refuses a row carrying identity_provider_connection_id.
 func RequireUnmanaged(id uuid.NullUUID, subject string) error {
 	if id.Valid {
+		return Error(subject)
+	}
+
+	return nil
+}
+
+// RequireDeletable refuses a row whose connection is still live. A row left
+// behind by a tombstoned connection is the organization's to remove.
+func RequireDeletable(ctx context.Context, db repo.DBTX, organizationID string, id uuid.NullUUID, subject string) error {
+	if !id.Valid {
+		return nil
+	}
+
+	deleted, err := repo.New(db).IdentityProviderConnectionIsDeleted(ctx, repo.IdentityProviderConnectionIsDeletedParams{
+		ID:             id.UUID,
+		OrganizationID: organizationID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return Error(subject)
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "check identity provider connection")
+	case !deleted:
 		return Error(subject)
 	}
 

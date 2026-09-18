@@ -804,9 +804,11 @@ func (h *proxyHarness) materializeFinding(messageID uuid.UUID) {
 		gcp.NewNoopPublisher[*riskv1.PromptInjectionAnalysis](),
 		gcp.NewNoopPublisher[*riskv1.PromptPolicyAnalysis](),
 		gcp.NewNoopPublisher[*riskv1.CustomRulesAnalysis](),
+		gcp.NewNoopPublisher[*riskv1.LLMAnalysis](),
 		gcp.NewNoopPublisher[*riskv1.Finding](),
 		customRules, celEngine, nil, nil,
 		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		false,
 	)
 	require.NoError(h.t, err)
 	var suite testsuite.WorkflowTestSuite

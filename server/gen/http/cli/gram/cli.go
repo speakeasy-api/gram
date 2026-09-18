@@ -46,6 +46,7 @@ import (
 	hooksc "github.com/speakeasy-api/gram/server/gen/http/hooks/client"
 	hooksservernamesc "github.com/speakeasy-api/gram/server/gen/http/hooks_server_names/client"
 	identityc "github.com/speakeasy-api/gram/server/gen/http/identity/client"
+	identityproviderconnectionsc "github.com/speakeasy-api/gram/server/gen/http/identity_provider_connections/client"
 	instancesc "github.com/speakeasy-api/gram/server/gen/http/instances/client"
 	integrationsc "github.com/speakeasy-api/gram/server/gen/http/integrations/client"
 	jsonwebkeysetsc "github.com/speakeasy-api/gram/server/gen/http/json_web_key_sets/client"
@@ -134,6 +135,7 @@ func UsageCommands() []string {
 		"hooks-server-names (list|upsert|delete)",
 		"hooks (claude|cursor|codex|ingest|upload-skill-content|skill-feedback|logs|metrics)",
 		"identity resolve",
+		"identity-provider-connections (create|submit-client-id|verify|get|record-agent|revoke)",
 		"instances get-instance",
 		"integrations (get|list)",
 		"json-web-key-sets (create-set|update-set|list-sets|get-set|get-set-delete-preflight|delete-set|list-keys|publish-key|activate-key|retire-key|revoke-key)",
@@ -1390,6 +1392,32 @@ func ParseEndpoint(
 		identityResolveUrnFlag          = identityResolveFlags.String("urn", "REQUIRED", "")
 		identityResolveApikeyTokenFlag  = identityResolveFlags.String("apikey-token", "", "")
 		identityResolveSessionTokenFlag = identityResolveFlags.String("session-token", "", "")
+
+		identityProviderConnectionsFlags = flag.NewFlagSet("identity-provider-connections", flag.ContinueOnError)
+
+		identityProviderConnectionsCreateFlags            = flag.NewFlagSet("create", flag.ExitOnError)
+		identityProviderConnectionsCreateBodyFlag         = identityProviderConnectionsCreateFlags.String("body", "REQUIRED", "")
+		identityProviderConnectionsCreateSessionTokenFlag = identityProviderConnectionsCreateFlags.String("session-token", "", "")
+
+		identityProviderConnectionsSubmitClientIDFlags            = flag.NewFlagSet("submit-client-id", flag.ExitOnError)
+		identityProviderConnectionsSubmitClientIDBodyFlag         = identityProviderConnectionsSubmitClientIDFlags.String("body", "REQUIRED", "")
+		identityProviderConnectionsSubmitClientIDSessionTokenFlag = identityProviderConnectionsSubmitClientIDFlags.String("session-token", "", "")
+
+		identityProviderConnectionsVerifyFlags            = flag.NewFlagSet("verify", flag.ExitOnError)
+		identityProviderConnectionsVerifyBodyFlag         = identityProviderConnectionsVerifyFlags.String("body", "REQUIRED", "")
+		identityProviderConnectionsVerifySessionTokenFlag = identityProviderConnectionsVerifyFlags.String("session-token", "", "")
+
+		identityProviderConnectionsGetFlags            = flag.NewFlagSet("get", flag.ExitOnError)
+		identityProviderConnectionsGetIDFlag           = identityProviderConnectionsGetFlags.String("id", "", "")
+		identityProviderConnectionsGetSessionTokenFlag = identityProviderConnectionsGetFlags.String("session-token", "", "")
+
+		identityProviderConnectionsRecordAgentFlags            = flag.NewFlagSet("record-agent", flag.ExitOnError)
+		identityProviderConnectionsRecordAgentBodyFlag         = identityProviderConnectionsRecordAgentFlags.String("body", "REQUIRED", "")
+		identityProviderConnectionsRecordAgentSessionTokenFlag = identityProviderConnectionsRecordAgentFlags.String("session-token", "", "")
+
+		identityProviderConnectionsRevokeFlags            = flag.NewFlagSet("revoke", flag.ExitOnError)
+		identityProviderConnectionsRevokeBodyFlag         = identityProviderConnectionsRevokeFlags.String("body", "REQUIRED", "")
+		identityProviderConnectionsRevokeSessionTokenFlag = identityProviderConnectionsRevokeFlags.String("session-token", "", "")
 
 		instancesFlags = flag.NewFlagSet("instances", flag.ContinueOnError)
 
@@ -4495,6 +4523,14 @@ func ParseEndpoint(
 	identityFlags.Usage = identityUsage
 	identityResolveFlags.Usage = identityResolveUsage
 
+	identityProviderConnectionsFlags.Usage = identityProviderConnectionsUsage
+	identityProviderConnectionsCreateFlags.Usage = identityProviderConnectionsCreateUsage
+	identityProviderConnectionsSubmitClientIDFlags.Usage = identityProviderConnectionsSubmitClientIDUsage
+	identityProviderConnectionsVerifyFlags.Usage = identityProviderConnectionsVerifyUsage
+	identityProviderConnectionsGetFlags.Usage = identityProviderConnectionsGetUsage
+	identityProviderConnectionsRecordAgentFlags.Usage = identityProviderConnectionsRecordAgentUsage
+	identityProviderConnectionsRevokeFlags.Usage = identityProviderConnectionsRevokeUsage
+
 	instancesFlags.Usage = instancesUsage
 	instancesGetInstanceFlags.Usage = instancesGetInstanceUsage
 
@@ -5187,6 +5223,8 @@ func ParseEndpoint(
 			svcf = hooksFlags
 		case "identity":
 			svcf = identityFlags
+		case "identity-provider-connections":
+			svcf = identityProviderConnectionsFlags
 		case "instances":
 			svcf = instancesFlags
 		case "integrations":
@@ -6080,6 +6118,28 @@ func ParseEndpoint(
 			switch epn {
 			case "resolve":
 				epf = identityResolveFlags
+
+			}
+
+		case "identity-provider-connections":
+			switch epn {
+			case "create":
+				epf = identityProviderConnectionsCreateFlags
+
+			case "submit-client-id":
+				epf = identityProviderConnectionsSubmitClientIDFlags
+
+			case "verify":
+				epf = identityProviderConnectionsVerifyFlags
+
+			case "get":
+				epf = identityProviderConnectionsGetFlags
+
+			case "record-agent":
+				epf = identityProviderConnectionsRecordAgentFlags
+
+			case "revoke":
+				epf = identityProviderConnectionsRevokeFlags
 
 			}
 
@@ -8641,6 +8701,28 @@ func ParseEndpoint(
 			case "resolve":
 				endpoint = c.Resolve()
 				data, err = identityc.BuildResolvePayload(*identityResolveUrnFlag, *identityResolveApikeyTokenFlag, *identityResolveSessionTokenFlag)
+			}
+		case "identity-provider-connections":
+			c := identityproviderconnectionsc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "create":
+				endpoint = c.Create()
+				data, err = identityproviderconnectionsc.BuildCreatePayload(*identityProviderConnectionsCreateBodyFlag, *identityProviderConnectionsCreateSessionTokenFlag)
+			case "submit-client-id":
+				endpoint = c.SubmitClientID()
+				data, err = identityproviderconnectionsc.BuildSubmitClientIDPayload(*identityProviderConnectionsSubmitClientIDBodyFlag, *identityProviderConnectionsSubmitClientIDSessionTokenFlag)
+			case "verify":
+				endpoint = c.Verify()
+				data, err = identityproviderconnectionsc.BuildVerifyPayload(*identityProviderConnectionsVerifyBodyFlag, *identityProviderConnectionsVerifySessionTokenFlag)
+			case "get":
+				endpoint = c.Get()
+				data, err = identityproviderconnectionsc.BuildGetPayload(*identityProviderConnectionsGetIDFlag, *identityProviderConnectionsGetSessionTokenFlag)
+			case "record-agent":
+				endpoint = c.RecordAgent()
+				data, err = identityproviderconnectionsc.BuildRecordAgentPayload(*identityProviderConnectionsRecordAgentBodyFlag, *identityProviderConnectionsRecordAgentSessionTokenFlag)
+			case "revoke":
+				endpoint = c.Revoke()
+				data, err = identityproviderconnectionsc.BuildRevokePayload(*identityProviderConnectionsRevokeBodyFlag, *identityProviderConnectionsRevokeSessionTokenFlag)
 			}
 		case "instances":
 			c := instancesc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -15781,6 +15863,142 @@ func identityResolveUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity resolve --urn \"user:user_01abc\" --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+// identityProviderConnectionsUsage displays the usage of the
+// identity-provider-connections command and its subcommands.
+func identityProviderConnectionsUsage() {
+	fmt.Fprintln(os.Stderr, `Manage the organization's Okta connection: provision the private_key_jwt credential, submit the Okta client ID, verify granted scopes, and revoke.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] identity-provider-connections COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    create: Create the organization's Okta connection. Discovers the org's authorization server, provisions a signing key and JWKS URL, and returns the console checklist. Requires org:admin and the okta-connections rollout. One live connection per organization; creation is rate limited.`)
+	fmt.Fprintln(os.Stderr, `    submit-client-id: Record the client ID of the Okta API Services application and verify it. Allowed once, while the connection is pending; revoke and recreate to change it. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    verify: Re-verify the connection against Okta: mint a token, confirm each required scope with a read, and record the outcome. Rate limited per organization. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    get: Get a connection by ID, or the organization's live Okta connection when no ID is given. Session only; requires org:read.`)
+	fmt.Fprintln(os.Stderr, `    record-agent: Record the Okta AI agent ID and the application it is bound to, for display. Okta does not expose these through its API. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    revoke: Revoke the connection: withdraw every signing key from the JWKS, disable the key material, and tombstone the connection so a new one can be created. Idempotent. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s identity-provider-connections COMMAND --help\n", os.Args[0])
+}
+func identityProviderConnectionsCreateUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] identity-provider-connections create", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create the organization's Okta connection. Discovers the org's authorization server, provisions a signing key and JWKS URL, and returns the console checklist. Requires org:admin and the okta-connections rollout. One live connection per organization; creation is rate limited.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity-provider-connections create --body '{\n      \"listing_mode\": \"oin\",\n      \"org_url\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func identityProviderConnectionsSubmitClientIDUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] identity-provider-connections submit-client-id", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Record the client ID of the Okta API Services application and verify it. Allowed once, while the connection is pending; revoke and recreate to change it. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity-provider-connections submit-client-id --body '{\n      \"client_id\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
+}
+
+func identityProviderConnectionsVerifyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] identity-provider-connections verify", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Re-verify the connection against Okta: mint a token, confirm each required scope with a read, and record the outcome. Rate limited per organization. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity-provider-connections verify --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
+}
+
+func identityProviderConnectionsGetUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] identity-provider-connections get", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get a connection by ID, or the organization's live Okta connection when no ID is given. Session only; requires org:read.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity-provider-connections get --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+func identityProviderConnectionsRecordAgentUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] identity-provider-connections record-agent", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Record the Okta AI agent ID and the application it is bound to, for display. Okta does not expose these through its API. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity-provider-connections record-agent --body '{\n      \"agent_app_id\": \"abc123\",\n      \"agent_id\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
+}
+
+func identityProviderConnectionsRevokeUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] identity-provider-connections revoke", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Revoke the connection: withdraw every signing key from the JWKS, disable the key material, and tombstone the connection so a new one can be created. Idempotent. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity-provider-connections revoke --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
 }
 
 // instancesUsage displays the usage of the instances command and its

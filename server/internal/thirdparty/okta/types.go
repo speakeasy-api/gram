@@ -10,6 +10,7 @@ import (
 
 // Client is the Okta Management API surface used by Gram.
 type Client interface {
+	ListUsers(ctx context.Context, req ListUsersRequest) ([]User, error)
 	ListApps(ctx context.Context, req ListAppsRequest) ([]App, error)
 	GetApp(ctx context.Context, appID string) (*App, error)
 	ListAppUsers(ctx context.Context, req ListAppUsersRequest) ([]AppUser, error)
@@ -192,4 +193,16 @@ func (e *APIError) Error() string {
 func IsNotFound(err error) bool {
 	var apiErr *APIError
 	return errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound
+}
+
+// User is an Okta directory user.
+type User struct {
+	ID string `json:"id"`
+}
+
+// ListUsersRequest reads only the first page of directory users.
+// This bounded read requires okta.users.read, not okta.apps.read.
+type ListUsersRequest struct {
+	// Limit is the page size; zero uses the Okta default.
+	Limit int
 }

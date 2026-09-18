@@ -13,7 +13,8 @@ import (
 )
 
 // requireIssuerWithoutManagedClients refuses an issuer write while a managed
-// client in the organization is registered against it.
+// client in the organization is registered against it or a live Okta
+// connection pins it.
 func requireIssuerWithoutManagedClients(ctx context.Context, logger *slog.Logger, txRepo *repo.Queries, issuerID uuid.UUID, organizationID string) error {
 	managed, err := txRepo.ManagedRemoteSessionClientExistsForIssuer(ctx, repo.ManagedRemoteSessionClientExistsForIssuerParams{
 		RemoteSessionIssuerID: issuerID,
@@ -23,6 +24,16 @@ func requireIssuerWithoutManagedClients(ctx context.Context, logger *slog.Logger
 		return oops.E(oops.CodeUnexpected, err, "check for managed remote session clients").LogError(ctx, logger)
 	}
 	if managed {
+		return managedrows.Error("this identity provider")
+	}
+	pinned, err := txRepo.OktaIdentityProviderConnectionReferencesIssuer(ctx, repo.OktaIdentityProviderConnectionReferencesIssuerParams{
+		RemoteSessionIssuerID: issuerID,
+		OrganizationID:        organizationID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "check for identity provider connections").LogError(ctx, logger)
+	}
+	if pinned {
 		return managedrows.Error("this identity provider")
 	}
 

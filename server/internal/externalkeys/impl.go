@@ -614,7 +614,7 @@ func (s *Service) deleteExternalKey(ctx context.Context, provider, rawID string)
 		return oops.E(oops.CodeUnexpected, err, "error deleting external key").LogError(ctx, logger)
 	}
 
-	if err := managedrows.RequireUnmanaged(locked.IdentityProviderConnectionID, "this external key"); err != nil {
+	if err := managedrows.RequireDeletable(ctx, dbtx, authCtx.ActiveOrganizationID, locked.IdentityProviderConnectionID, "this external key"); err != nil {
 		return err
 	}
 

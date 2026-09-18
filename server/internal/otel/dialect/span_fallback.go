@@ -77,3 +77,97 @@ func (f Fallback) ResponseID(span *otelv1.InboundSpan) (string, string, error) {
 		return d.ResponseID(span)
 	})
 }
+
+// The agent-vocabulary accessors, each taking the first candidate that
+// answered, exactly like the identity accessors above.
+func (f Fallback) Provider(span *otelv1.InboundSpan) (string, string, error) {
+	return firstFallback(f, span, func(d SpanDialect, r *otelv1.InboundSpan) (string, string, error) { return d.Provider(r) })
+}
+
+func (f Fallback) Surface(span *otelv1.InboundSpan) (string, string, error) {
+	return firstFallback(f, span, func(d SpanDialect, r *otelv1.InboundSpan) (string, string, error) { return d.Surface(r) })
+}
+
+func (f Fallback) EventName(span *otelv1.InboundSpan) (string, string, error) {
+	return firstFallback(f, span, func(d SpanDialect, r *otelv1.InboundSpan) (string, string, error) { return d.EventName(r) })
+}
+
+func (f Fallback) EventType(span *otelv1.InboundSpan) (string, string, error) {
+	return firstFallback(f, span, func(d SpanDialect, r *otelv1.InboundSpan) (string, string, error) { return d.EventType(r) })
+}
+
+func (f Fallback) SubjectID(span *otelv1.InboundSpan) (string, string, error) {
+	return firstFallback(f, span, func(d SpanDialect, r *otelv1.InboundSpan) (string, string, error) { return d.SubjectID(r) })
+}
+
+func (f Fallback) TurnID(span *otelv1.InboundSpan) (string, string, error) {
+	return firstFallback(f, span, func(d SpanDialect, r *otelv1.InboundSpan) (string, string, error) { return d.TurnID(r) })
+}
+
+func (f Fallback) Model(span *otelv1.InboundSpan) (string, string, error) {
+	return firstFallback(f, span, func(d SpanDialect, r *otelv1.InboundSpan) (string, string, error) { return d.Model(r) })
+}
+
+func (f Fallback) ToolName(span *otelv1.InboundSpan) (string, string, error) {
+	return firstFallback(f, span, func(d SpanDialect, r *otelv1.InboundSpan) (string, string, error) { return d.ToolName(r) })
+}
+
+func (f Fallback) Outcome(span *otelv1.InboundSpan) (string, string, error) {
+	return firstFallback(f, span, func(d SpanDialect, r *otelv1.InboundSpan) (string, string, error) { return d.Outcome(r) })
+}
+
+func (f Fallback) OutcomeMessage(span *otelv1.InboundSpan) (string, string, error) {
+	return firstFallback(f, span, func(d SpanDialect, r *otelv1.InboundSpan) (string, string, error) { return d.OutcomeMessage(r) })
+}
+
+func (f Fallback) Text(span *otelv1.InboundSpan) (string, string, error) {
+	return firstFallback(f, span, func(d SpanDialect, r *otelv1.InboundSpan) (string, string, error) { return d.Text(r) })
+}
+
+func (f Fallback) QuerySource(span *otelv1.InboundSpan) (string, string, error) {
+	return firstFallback(f, span, func(d SpanDialect, r *otelv1.InboundSpan) (string, string, error) { return d.QuerySource(r) })
+}
+
+func (f Fallback) SkillName(span *otelv1.InboundSpan) (string, string, error) {
+	return firstFallback(f, span, func(d SpanDialect, r *otelv1.InboundSpan) (string, string, error) { return d.SkillName(r) })
+}
+
+func (f Fallback) AgentName(span *otelv1.InboundSpan) (string, string, error) {
+	return firstFallback(f, span, func(d SpanDialect, r *otelv1.InboundSpan) (string, string, error) { return d.AgentName(r) })
+}
+
+func (f Fallback) MCPServerName(span *otelv1.InboundSpan) (string, string, error) {
+	return firstFallback(f, span, func(d SpanDialect, r *otelv1.InboundSpan) (string, string, error) { return d.MCPServerName(r) })
+}
+
+func (f Fallback) MCPToolName(span *otelv1.InboundSpan) (string, string, error) {
+	return firstFallback(f, span, func(d SpanDialect, r *otelv1.InboundSpan) (string, string, error) { return d.MCPToolName(r) })
+}
+
+func (f Fallback) ExternalOrgID(span *otelv1.InboundSpan) (string, string, error) {
+	return firstFallback(f, span, func(d SpanDialect, r *otelv1.InboundSpan) (string, string, error) { return d.ExternalOrgID(r) })
+}
+
+func (f Fallback) DurationNano(span *otelv1.InboundSpan) (string, int64, error) {
+	return firstFallback(f, span, func(d SpanDialect, r *otelv1.InboundSpan) (string, int64, error) { return d.DurationNano(r) })
+}
+
+func (f Fallback) InputTokens(span *otelv1.InboundSpan) (string, int64, error) {
+	return firstFallback(f, span, func(d SpanDialect, r *otelv1.InboundSpan) (string, int64, error) { return d.InputTokens(r) })
+}
+
+func (f Fallback) OutputTokens(span *otelv1.InboundSpan) (string, int64, error) {
+	return firstFallback(f, span, func(d SpanDialect, r *otelv1.InboundSpan) (string, int64, error) { return d.OutputTokens(r) })
+}
+
+func (f Fallback) CacheReadTokens(span *otelv1.InboundSpan) (string, int64, error) {
+	return firstFallback(f, span, func(d SpanDialect, r *otelv1.InboundSpan) (string, int64, error) { return d.CacheReadTokens(r) })
+}
+
+func (f Fallback) CacheWriteTokens(span *otelv1.InboundSpan) (string, int64, error) {
+	return firstFallback(f, span, func(d SpanDialect, r *otelv1.InboundSpan) (string, int64, error) { return d.CacheWriteTokens(r) })
+}
+
+func (f Fallback) CostUSD(span *otelv1.InboundSpan) (string, float64, error) {
+	return firstFallback(f, span, func(d SpanDialect, r *otelv1.InboundSpan) (string, float64, error) { return d.CostUSD(r) })
+}
