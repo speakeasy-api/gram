@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/stretchr/testify/require"
 )
@@ -16,6 +17,13 @@ type scannerFunc func(context.Context, risk.RealtimeScanRequest) (*risk.ScanResu
 func (f scannerFunc) ScanForInferenceEnforcement(ctx context.Context, r risk.RealtimeScanRequest) (*risk.InferenceScanOutcome, error) {
 	result, err := f(ctx, r)
 	return &risk.InferenceScanOutcome{Result: result, Complete: err == nil}, err
+}
+
+func (f scannerFunc) HasAcknowledgedChallenge(context.Context, uuid.UUID, string, string, string, string) bool {
+	return false
+}
+
+func (f scannerFunc) RecordPolicyChallenge(context.Context, string, uuid.UUID, string, string, string, string, string, string, string) {
 }
 
 func TestAcceptedPrefix(t *testing.T) {

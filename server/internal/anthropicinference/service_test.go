@@ -55,6 +55,10 @@ type recordingScanner struct {
 	result       *risk.ScanResult
 	incomplete   bool
 	err          error
+
+	acknowledged      bool
+	recordedChallenge bool
+	challengedTools   []string
 }
 
 func (s *recordingScanner) ScanForInferenceEnforcement(_ context.Context, request risk.RealtimeScanRequest) (*risk.InferenceScanOutcome, error) {
@@ -62,6 +66,15 @@ func (s *recordingScanner) ScanForInferenceEnforcement(_ context.Context, reques
 	s.userIDs = append(s.userIDs, request.Provenance.UserID)
 	s.operationIDs = append(s.operationIDs, request.Provenance.OperationID)
 	return &risk.InferenceScanOutcome{Result: s.result, Complete: !s.incomplete && s.err == nil}, s.err
+}
+
+func (s *recordingScanner) HasAcknowledgedChallenge(_ context.Context, _ uuid.UUID, _, _, _, _ string) bool {
+	return s.acknowledged
+}
+
+func (s *recordingScanner) RecordPolicyChallenge(_ context.Context, _ string, _ uuid.UUID, _, _, toolName, _, _, _, _ string) {
+	s.recordedChallenge = true
+	s.challengedTools = append(s.challengedTools, toolName)
 }
 
 func exampleFrame() Frame {

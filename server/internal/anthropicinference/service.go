@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math"
+	"net/url"
 	"slices"
 	"strings"
 	"time"
@@ -15,6 +17,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -27,6 +31,11 @@ import (
 
 type scanner interface {
 	ScanForInferenceEnforcement(context.Context, risk.RealtimeScanRequest) (*risk.InferenceScanOutcome, error)
+	// HasAcknowledgedChallenge reports whether the user already approved this
+	// exact call through a warn policy's acknowledgement link.
+	HasAcknowledgedChallenge(ctx context.Context, projectID uuid.UUID, userID, policyID, toolName, callFingerprint string) bool
+	// RecordPolicyChallenge upserts the challenged-state row behind that link.
+	RecordPolicyChallenge(ctx context.Context, organizationID string, projectID uuid.UUID, userID, policyID, toolName, policyName, entity, ruleID, callFingerprint string)
 }
 
 type transcriptStore interface {
@@ -42,12 +51,23 @@ type transcriptStore interface {
 type Service struct {
 	store   transcriptStore
 	scanner scanner
+	logger  *slog.Logger
+	// cache and siteURL back the warn acknowledgement link. Without both, a
+	// warn match degrades to a plain deny rather than allowing.
+	cache   cache.Cache
+	siteURL *url.URL
 }
 
 // NewService uses the shared chat writer so captured messages receive the same
 // storage, metering, and asynchronous analysis as other imported conversations.
-func NewService(db *pgxpool.Pool, writer *chat.ChatMessageWriter, scanner scanner) *Service {
-	return &Service{store: &postgresStore{db: db, writer: writer}, scanner: scanner}
+func NewService(logger *slog.Logger, db *pgxpool.Pool, writer *chat.ChatMessageWriter, scanner scanner, cacheAdapter cache.Cache, siteURL *url.URL) *Service {
+	return &Service{
+		store:   &postgresStore{db: db, writer: writer},
+		scanner: scanner,
+		logger:  logger.With(attr.SlogComponent("anthropic-inference")),
+		cache:   cacheAdapter,
+		siteURL: siteURL,
+	}
 }
 
 // Process archives attempts independently of enforcement. Only a successfully
@@ -131,9 +151,22 @@ func (s *Service) Process(ctx context.Context, config Config, frame Frame) (Verd
 			result = outcome.Result
 		}
 		if result != nil && (result.Action == "block" || result.Action == "warn" || result.Action == "quarantine") {
-			// The protocol has no acknowledgement flow; warn policies deny this call.
+			if result.Action == "warn" {
+				// An approved challenge clears only this identical call, so the
+				// rest of the transcript is still scanned.
+				if s.warnAcknowledged(ctx, config, userID, result, input.tool) {
+					continue
+				}
+				// A warn still denies here — the protocol has no interactive
+				// prompt — but the deny carries a link the user can approve.
+				if reason, ok := s.warnChallengeReason(ctx, config, userID, result, input.tool); ok {
+					verdict.Action = "deny"
+					verdict.DenyReason = reason
+					return verdict, nil
+				}
+			}
 			verdict.Action = "deny"
-			verdict.DenyReason = conv.Default(conv.PtrValOr(result.UserMessage, ""), "This request was blocked by your organization's security policy.")
+			verdict.DenyReason = conv.Default(conv.PtrValOr(result.UserMessage, ""), defaultDenyReason)
 			return verdict, nil
 		}
 	}

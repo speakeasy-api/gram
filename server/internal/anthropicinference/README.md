@@ -100,8 +100,23 @@ to Anthropic inference. The ingestion origin remains `anthropic-inference`.
   current turn (messages after the last assistant reply) is always scanned.
 - Each block keeps its native scope: user, assistant, tool request, tool response,
   or prompt attachment. Block, warn, and quarantine matches deny the current
-  inference. There is no interactive warning acknowledgement or persistent
-  session quarantine here. A corrected retry can succeed.
+  inference. There is no persistent session quarantine here, and no interactive
+  prompt: the protocol's only user-facing channel is `deny_reason`. A corrected
+  retry can succeed.
+- A warn match denies, but its `deny_reason` carries the same acknowledgement
+  link the local hook transports mint. The user opens it, approves, and retries;
+  the retry carries no token, so the acknowledgement record — scoped to that
+  user, policy, tool, and exact content — is what lets it through. Denials are
+  repeated until it is approved. Because the deny happens before inference, the
+  model never reads this text, so the link is safe to put in front of the user
+  here in a way it is not in an agent-visible tool result. An unresolved actor
+  has nobody to bind an approval to, so its warn degrades to a plain deny rather
+  than allowing. The link is budgeted against the 500-character `deny_reason`
+  bound, truncating a long `user_message` rather than the URL.
+- An approved warn establishes acceptance like any other allowed delivery, so
+  the conversation stays usable instead of re-challenging on the next turn once
+  the acknowledgement's own window lapses. A policy, grant, or exclusion change
+  invalidates that checkpoint and re-challenges the content.
 - Concurrent deliveries use optimistic compare-and-swap (CAS), scoped to the
   project/actor/session conversation. Loading a checkpoint retains its exact
   stored bytes, not a pooled connection. Archival and scanning run without a
