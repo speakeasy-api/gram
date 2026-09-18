@@ -139,8 +139,9 @@ func (r userSessionRefreshReplay) CacheKey() string { return r.Key }
 func (r userSessionRefreshReplay) TTL() time.Duration { return refreshTokenReplayGracePeriod }
 
 // HandleToken implements the OAuth 2.1 token endpoint (RFC 6749 §4.1.3 /
-// §6). Mounted at `POST /mcp/{mcpSlug}/token`. Loads the endpoint and hands
-// the request to ServeToken.
+// §6). Mounted at `POST /mcp/{mcpSlug}/token` on the MCP host and, when one is
+// configured, on the token host (TokenHost). Loads the endpoint and hands the
+// request to ServeToken.
 func (s *Service) HandleToken(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	mcpSlug := chi.URLParam(r, "mcpSlug")
@@ -232,6 +233,13 @@ func (s *Service) tokenGrantFor(r *http.Request, grantType string, creds present
 		return tokenGrant{clientAuth: tokenClientAuthRequired, resolveMode: lookupClientOnly, authenticated: s.handleTokenRefreshTokenGrant, clientless: nil}, true
 	case oauthwire.GrantTypeJWTBearer:
 		if creds.presented() || r.Header.Get("Authorization") != "" {
+			// The token host exists for the clientless assertion grant. An
+			// ID-JAG exchange has no reason to use a host kept apart from MCP
+			// traffic, so there it is unsupported, and a new authenticated
+			// grant stays off that host until it is admitted deliberately.
+			if _, onTokenHost := tokenHostBaseURL(r.Context()); onTokenHost {
+				return tokenGrant{clientAuth: tokenClientAuthUndeclared, resolveMode: "", authenticated: nil, clientless: nil}, false
+			}
 			// An assertion grant starts a new authorization at the token
 			// endpoint, so it applies current CIMD admission and resolves
 			// current client metadata before authenticating the client.
