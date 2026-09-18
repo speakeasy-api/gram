@@ -755,6 +755,15 @@ func newStripeCatalog(c *cli.Context) metering.StripeCatalog {
 				return "", nil
 			}
 			return name, nil
+		case metering.RiskLLMAnalyzer():
+			if !meterExportEnabled {
+				return "", nil
+			}
+			name := c.String("stripe-meter-event-name-risk-llm-analyzer")
+			if !stripeclient.IsConfigured(name) {
+				return "", nil
+			}
+			return name, nil
 		default:
 			return "", errors.New("meter definition is not mapped to Stripe")
 		}
