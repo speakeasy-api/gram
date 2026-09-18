@@ -1,0 +1,19 @@
+.changeset/tunnel-drop-retryable-error.md
+  s_6018a91b3dbabe::t_ecc927e6151c37 1-5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "7262207534f98ba51d214d853181dd3db0ecf728",
+  "prompts": {},
+  "sessions": {
+    "s_6018a91b3dbabe": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "86debe54-fcdf-4bd2-88ea-77c14c25ffc2",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
