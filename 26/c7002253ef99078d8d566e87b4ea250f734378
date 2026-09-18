@@ -1,0 +1,14 @@
+server/internal/mcp/serve_platform_test.go
+  h_9630b74bdac540 471
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "26c7002253ef99078d8d566e87b4ea250f734378",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
