@@ -45,6 +45,20 @@ func decodeKeys(t *testing.T, value any) []string {
 // serialized shape. The projection is positive: a field that is not listed here
 // is not served, so a future addition has to be made deliberately in this test
 // before it can reach a caller.
+func TestDelegatedDiagnosticsToolsRequireProjectReadDiscovery(t *testing.T) {
+	t.Parallel()
+
+	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	for _, name := range []string{"get_project_overview", "get_mcp_diagnostics", "list_recent_tool_calls"} {
+		descriptor := descriptorByName(t, registrar, name)
+		require.Equal(t, ExternalAuthorizationMember, descriptor.Meta.Authorization)
+		require.Equal(t, ProjectScopeExplicit, descriptor.Meta.ProjectScope)
+		require.Equal(t, discoveryProjectRead, descriptor.Meta.DiscoveryScopes)
+		require.NotNil(t, descriptor.Annotations)
+		require.True(t, descriptor.Annotations.ReadOnlyHint)
+	}
+}
+
 func TestGetProjectOverviewOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 	t.Parallel()
 
