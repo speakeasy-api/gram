@@ -205,25 +205,6 @@ const redactedValue = "<redacted>"
 // same way, which the dedupe key depends on.
 var secretMarkers = []string{"token", "secret", "key", "pass", "auth", "cred", "header", "bearer"}
 
-// RedactCommand renders a stdio launch command with credential-shaped
-// material removed, keeping the structure that identifies the server. Real
-// commands routinely carry secrets — `npx -y mcp-remote https://h/sse
-// --header "Authorization: Bearer <tok>"`, `--api-key=…`, `TOKEN=… npx …` —
-// and the stored reference reaches the review queue, the audit feed, and the
-// webhook stream.
-//
-// Three shapes are redacted: the value of a secret-named flag (the flag name
-// is kept and its value folded into it as `--flag=<redacted>`, whatever form
-// the value arrived in), the value of a secret-named NAME=value environment
-// prefix, and the query/userinfo/fragment of any URL-shaped token — the same
-// treatment RedactServerURL gives an endpoint reference. Whitespace is
-// collapsed, so the output doubles as a dedupe key: two invocations of the
-// same server with rotated tokens redact identically.
-//
-// A redacted secret value is always emitted joined to its flag, never as a
-// free-standing token: identity resolution reads the redacted form, and a bare
-// `<redacted>` sitting before the package spec would be taken for the package
-// itself, attributing the evidence to the wrong artifact.
 // ContainsPlaintextHTTPURL reports whether a command includes an absolute
 // plaintext HTTP URL in a standalone or flag value. It intentionally uses the
 // same tokenization and quoting rules as RedactCommand so a URL cannot pass
@@ -245,6 +226,25 @@ func ContainsPlaintextHTTPURL(raw string) bool {
 	return false
 }
 
+// RedactCommand renders a stdio launch command with credential-shaped
+// material removed, keeping the structure that identifies the server. Real
+// commands routinely carry secrets — `npx -y mcp-remote https://h/sse
+// --header "Authorization: Bearer <tok>"`, `--api-key=…`, `TOKEN=… npx …` —
+// and the stored reference reaches the review queue, the audit feed, and the
+// webhook stream.
+//
+// Three shapes are redacted: the value of a secret-named flag (the flag name
+// is kept and its value folded into it as `--flag=<redacted>`, whatever form
+// the value arrived in), the value of a secret-named NAME=value environment
+// prefix, and the query/userinfo/fragment of any URL-shaped token — the same
+// treatment RedactServerURL gives an endpoint reference. Whitespace is
+// collapsed, so the output doubles as a dedupe key: two invocations of the
+// same server with rotated tokens redact identically.
+//
+// A redacted secret value is always emitted joined to its flag, never as a
+// free-standing token: identity resolution reads the redacted form, and a bare
+// `<redacted>` sitting before the package spec would be taken for the package
+// itself, attributing the evidence to the wrong artifact.
 func RedactCommand(raw string) string {
 	fields := strings.Fields(raw)
 	out := make([]string, 0, len(fields))

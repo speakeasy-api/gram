@@ -545,10 +545,7 @@ func TestResolve_CompleteSemverStillPins(t *testing.T) {
 	}
 }
 
-// A launch command routinely embeds credentials. The redacted form keeps the
-// structure that identifies the server — launcher, package, flags — while
-// every secret-shaped value is removed, and it collapses whitespace so it
-// doubles as a dedupe key.
+// Plaintext endpoint URLs are rejected wherever a stdio command can carry one.
 func TestContainsPlaintextHTTPURLMatchesCommandURLShapes(t *testing.T) {
 	t.Parallel()
 
@@ -567,6 +564,10 @@ func TestContainsPlaintextHTTPURLMatchesCommandURLShapes(t *testing.T) {
 	}
 }
 
+// A launch command routinely embeds credentials. The redacted form keeps the
+// structure that identifies the server — launcher, package, flags — while
+// every secret-shaped value is removed, and it collapses whitespace so it
+// doubles as a dedupe key.
 func TestRedactCommand_StripsSecretShapedValues(t *testing.T) {
 	t.Parallel()
 
