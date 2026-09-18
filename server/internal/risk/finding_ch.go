@@ -121,6 +121,10 @@ func (w *FindingCHWriter) ProcessBatch(ctx context.Context, messages []*riskv1.F
 	if err != nil {
 		return nil, err
 	}
+	carriedChatProjects, err := w.carriedChatProjects(ctx, messages)
+	if err != nil {
+		return nil, err
+	}
 
 	rows := make([]chrepo.RiskFindingRow, 0, len(messages))
 	for msgIdx, message := range messages {
@@ -280,6 +284,18 @@ func (w *FindingCHWriter) ProcessBatch(ctx context.Context, messages []*riskv1.F
 			chatSource = chat.CanonicalSource(a.GetChatSource())
 			team = a.GetTeam()
 			userEmail = a.GetUserEmail()
+			// A carried chat is trusted only when it belongs to the finding's
+			// own project, the same rule the anchor lookups apply. Otherwise
+			// every chat-derived field is dropped: the finding still lands,
+			// unattributed, rather than carrying another tenant's user.
+			if chatID != "" {
+				carriedChatID, parseErr := uuid.Parse(chatID)
+				if parseErr != nil || findingProjectErr != nil || carriedChatProjects[carriedChatID] != findingProjectID {
+					logger.WarnContext(ctx, "finding carried a chat outside its project; dropping attribution", attr.SlogProjectID(message.GetProjectId()))
+					w.metrics.RecordFindingCHUnverifiedAttribution(ctx)
+					chatID, userID, externalUserID, assistantID, chatSource, team, userEmail = "", "", "", "", "", "", ""
+				}
+			}
 			if raw := a.GetMessageCreatedAt(); raw != "" {
 				t, err := time.Parse(time.RFC3339, raw)
 				if err != nil {
@@ -423,6 +439,54 @@ func (w *FindingCHWriter) ProcessBatch(ctx context.Context, messages []*riskv1.F
 // simply get no attribution, but a query error fails the batch for
 // redelivery: attribution is stamped once at ingest and a transient Postgres
 // blip must not persist permanently unattributed rows.
+// carriedChatProjects resolves the project of every chat named by carried
+// attribution in the batch, bounded to the batch's project ids. Without a
+// database nothing can be verified, so every carried chat is unverifiable.
+func (w *FindingCHWriter) carriedChatProjects(ctx context.Context, messages []*riskv1.Finding) (map[uuid.UUID]uuid.UUID, error) {
+	if w.db == nil {
+		return nil, nil
+	}
+	var chatIDs, projectIDs []uuid.UUID
+	seenChats := make(map[uuid.UUID]struct{})
+	seenProjects := make(map[uuid.UUID]struct{})
+	for _, message := range messages {
+		if !message.HasAttribution() {
+			continue
+		}
+		chatID, err := uuid.Parse(message.GetAttribution().GetChatId())
+		if err != nil {
+			continue
+		}
+		projectID, err := uuid.Parse(message.GetProjectId())
+		if err != nil {
+			continue
+		}
+		if _, ok := seenChats[chatID]; !ok {
+			seenChats[chatID] = struct{}{}
+			chatIDs = append(chatIDs, chatID)
+		}
+		if _, ok := seenProjects[projectID]; !ok {
+			seenProjects[projectID] = struct{}{}
+			projectIDs = append(projectIDs, projectID)
+		}
+	}
+	if len(chatIDs) == 0 {
+		return nil, nil
+	}
+	rows, err := repo.New(w.db).ListChatProjectsByIDs(ctx, repo.ListChatProjectsByIDsParams{
+		Ids:        chatIDs,
+		ProjectIds: projectIDs,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("verify carried chat attribution: %w", err)
+	}
+	out := make(map[uuid.UUID]uuid.UUID, len(rows))
+	for _, row := range rows {
+		out[row.ID] = row.ProjectID
+	}
+	return out, nil
+}
+
 func (w *FindingCHWriter) chatMessageAttribution(ctx context.Context, messages []*riskv1.Finding, projectIDs []uuid.UUID) (map[uuid.UUID]repo.GetChatMessageAttributionRow, error) {
 	ids := findingAnchorIDs(messages, func(message *riskv1.Finding) string {
 		return message.GetChatMessageId()

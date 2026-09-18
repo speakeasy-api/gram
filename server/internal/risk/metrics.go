@@ -80,6 +80,16 @@ func (m *metrics) RecordFindingCHSkipped(ctx context.Context, reason string) {
 	m.chMessagesSkipped.Add(ctx, 1, metric.WithAttributes(attr.Reason(reason)))
 }
 
+// RecordFindingCHUnverifiedAttribution records a finding whose carried chat
+// attribution named a chat outside the finding's project and was dropped. A
+// sustained non-zero rate points at a producer stamping the wrong chat.
+func (m *metrics) RecordFindingCHUnverifiedAttribution(ctx context.Context) {
+	if m.chMessagesSkipped == nil {
+		return
+	}
+	m.chMessagesSkipped.Add(ctx, 1, metric.WithAttributes(attr.Reason("unverified_carried_chat")))
+}
+
 // RecordFindingCHExcluded records a risk finding message that was annotated as
 // excluded (excluded_at/exclusion_id set) rather than dropped before insert.
 func (m *metrics) RecordFindingCHExcluded(ctx context.Context) {

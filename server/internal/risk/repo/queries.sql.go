@@ -2665,6 +2665,47 @@ func (q *Queries) ListActiveSessionQuarantinesPage(ctx context.Context, arg List
 	return items, nil
 }
 
+const listChatProjectsByIDs = `-- name: ListChatProjectsByIDs :many
+SELECT id, project_id
+FROM chats
+WHERE id = ANY($1::uuid[])
+  AND project_id = ANY($2::uuid[])
+`
+
+type ListChatProjectsByIDsParams struct {
+	Ids        []uuid.UUID
+	ProjectIds []uuid.UUID
+}
+
+type ListChatProjectsByIDsRow struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Verifies carried finding attribution: a producer-asserted chat id is only
+// trusted when the chat belongs to the finding's own project, the same rule
+// the anchor lookups above apply. Scoped to the batch's project ids; the
+// caller re-checks each finding's project against the returned row.
+func (q *Queries) ListChatProjectsByIDs(ctx context.Context, arg ListChatProjectsByIDsParams) ([]ListChatProjectsByIDsRow, error) {
+	rows, err := q.db.Query(ctx, listChatProjectsByIDs, arg.Ids, arg.ProjectIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListChatProjectsByIDsRow
+	for rows.Next() {
+		var i ListChatProjectsByIDsRow
+		if err := rows.Scan(&i.ID, &i.ProjectID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listChatTitlesByIDs = `-- name: ListChatTitlesByIDs :many
 SELECT c.id, c.title
 FROM chats c
