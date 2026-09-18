@@ -890,20 +890,20 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 		// through to the shadow-MCP guard below: an ack clears the risk
 		// challenge but must never bypass unapproved-toolset validation.
 		if scanResult := s.scanToolRequestForEnforcement(ctx, ev); scanResult != nil &&
-			(scanResult.Action != "warn" || !s.warnAcknowledged(ctx, ev.Event, scanResult, ev.ToolName)) {
+			(!scanResult.IsWarnChallenge() || !s.warnAcknowledged(ctx, ev.Event, scanResult, ev.ToolName)) {
 			// Unacknowledged warn → deny + out-of-band acknowledgement link
 			// (challenge). Claude is unified with Cursor/Codex on the link flow
 			// rather than the native permissionDecision "ask", which
 			// `--dangerously-skip-permissions` bypasses. No ack link buildable
 			// (missing site URL / cache / user) → fall through to a hard block
 			// (fail-safe): a warn must never silently allow.
-			if scanResult.Action == "warn" {
+			if scanResult.IsWarnChallenge() {
 				if agentReason, userReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, ev.ToolName); ok {
 					return constructWarnChallengeResponse(payload.HookEventName, agentReason, userReason), nil
 				}
 			}
 			auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
+			userReason := renderUserBlockReason(scanResult, auditReason)
 			// Surface the block reason on the trace summary so the dashboard
 			// shows why the call was denied. Always store the technical reason
 			// — the user_message override is for the agent-facing response only.
