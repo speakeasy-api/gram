@@ -1,7 +1,7 @@
 import type { DateRangePreset } from "@/elements";
 import { type AccessMember } from "@gram/client/models/components/accessmember.js";
 import {
-  LogFilterOperator as Operator,
+  Operator,
   type LogFilter,
 } from "@gram/client/models/components/logfilter.js";
 import type { FilterChip } from "@/components/observe/ObserveFilterBar";

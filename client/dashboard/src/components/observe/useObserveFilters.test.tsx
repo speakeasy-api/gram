@@ -5,7 +5,7 @@ import { MemoryRouter, useNavigate } from "react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { Role } from "@gram/client/models/components/role.js";
-import { LogFilterOperator as Operator } from "@gram/client/models/components/logfilter.js";
+import { Operator } from "@gram/client/models/components/logfilter.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
 import { DEFAULT_HOOK_TYPES } from "./observeFilterConstants";

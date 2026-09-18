@@ -1,4 +1,4 @@
-import { LogFilterOperator as Op } from "@gram/client/models/components/logfilter";
+import { Operator as Op } from "@gram/client/models/components/logfilter";
 import type { ActiveLogFilter } from "./log-filter-types";
 
 /**

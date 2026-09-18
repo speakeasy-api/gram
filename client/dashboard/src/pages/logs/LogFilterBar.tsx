@@ -20,7 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/Select";
 import { cn } from "@/lib/utils";
-import { LogFilterOperator as Op } from "@gram/client/models/components/logfilter";
+import { Operator as Op } from "@gram/client/models/components/logfilter";
 import { Command as CmdkRoot } from "cmdk";
 import { Search, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";

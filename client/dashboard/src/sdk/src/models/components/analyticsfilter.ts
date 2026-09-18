@@ -3,19 +3,10 @@
  */
 
 import * as z from "zod/v4-mini";
-import { ClosedEnum } from "../../types/enums.js";
-
-/**
- * Operator the dimension admits, per describe
- */
-export const Operator = {
-  Equals: "equals",
-  In: "in",
-} as const;
-/**
- * Operator the dimension admits, per describe
- */
-export type Operator = ClosedEnum<typeof Operator>;
+import {
+  AnalyticsFilterOperator,
+  AnalyticsFilterOperator$outboundSchema,
+} from "./analyticsfilteroperator.js";
 
 /**
  * A filter on a dimension. All filters are ANDed.
@@ -26,25 +17,17 @@ export type AnalyticsFilter = {
    */
   field: string;
   /**
-   * Operator the dimension admits, per describe
-   */
-  operator: Operator;
-  /**
    * equals takes exactly one value; in matches any of them.
    */
   values: Array<string>;
+  operator: AnalyticsFilterOperator;
 };
-
-/** @internal */
-export const Operator$outboundSchema: z.ZodMiniEnum<typeof Operator> = z.enum(
-  Operator,
-);
 
 /** @internal */
 export type AnalyticsFilter$Outbound = {
   field: string;
-  operator: string;
   values: Array<string>;
+  operator: string;
 };
 
 /** @internal */
@@ -53,8 +36,8 @@ export const AnalyticsFilter$outboundSchema: z.ZodMiniType<
   AnalyticsFilter
 > = z.object({
   field: z.string(),
-  operator: Operator$outboundSchema,
   values: z.array(z.string()),
+  operator: AnalyticsFilterOperator$outboundSchema,
 });
 
 export function analyticsFilterToJSON(

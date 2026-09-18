@@ -1,6 +1,6 @@
 import type { ComponentType } from "react";
 import type { DateRangePreset } from "@/elements";
-import { LogFilterOperator as Operator } from "@gram/client/models/components/logfilter";
+import { Operator } from "@gram/client/models/components/logfilter";
 import type { MultiSelectGroup } from "@/components/ui/MultiSelect";
 
 /**

@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router";
-import { LogFilterOperator as Operator } from "@gram/client/models/components/logfilter";
+import { Operator } from "@gram/client/models/components/logfilter";
 import {
   isValidPreset,
   safeBase64Decode,

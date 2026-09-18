@@ -70268,18 +70268,13 @@ components:
           type: string
           description: Dimension to filter on
           example: surface
-        operator:
-          type: string
-          description: Operator the dimension admits, per describe
-          enum:
-            - equals
-            - in
         values:
           type: array
           items:
             type: string
           description: equals takes exactly one value; in matches any of them.
           minItems: 1
+        operator: {$ref: "#/components/schemas/AnalyticsFilterOperator"}
       description: A filter on a dimension. All filters are ANDed.
       required:
         - field
@@ -96746,6 +96741,7 @@ components:
     KillswitchHistoryAction: {type: string, enum: [created, edited, lifted, expired, restored]}
     KillswitchOverlapStatus: {type: string, enum: [active, scheduled]}
     KillswitchConflictName: {type: string, enum: [operation_conflict, version_conflict]}
+    AnalyticsFilterOperator: {type: string, enum: [equals, in]}
     KillswitchScopeAllServersType: {type: string, enum: [all_servers]}
     KillswitchScopeSelectedServersType: {type: string, enum: [selected_servers]}
     KillswitchScheduleStartNow: {type: string, enum: [now]}

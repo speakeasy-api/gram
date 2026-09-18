@@ -8,7 +8,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/Sheet";
-import type { LogFilterOperator as Operator } from "@gram/client/models/components/logfilter";
+import type { Operator } from "@gram/client/models/components/logfilter";
 import type { ActiveLogFilter } from "@/pages/logs/log-filter-types";
 import { FilterControl } from "./FilterControl";
 import { CustomFilterChip } from "./FilterChip";
