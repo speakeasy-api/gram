@@ -64,6 +64,16 @@ CREATE TABLE IF NOT EXISTS organization_metadata (
 
   scim_enabled boolean DEFAULT FALSE,
   sso_enabled boolean DEFAULT FALSE,
+
+  -- Which flow created the organization, written by that flow. NULL means
+  -- nothing recorded it: every organization created before this column existed,
+  -- plus rows first written by WorkOS organization sync, which learns that an
+  -- organization exists without learning what asked for it.
+  -- Informational only — no trial, entitlement or onboarding decision reads it.
+  -- Allowed values live in application code rather than a CHECK, so a new flow
+  -- needs no migration.
+  creation_source TEXT,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   disabled_at timestamptz,
