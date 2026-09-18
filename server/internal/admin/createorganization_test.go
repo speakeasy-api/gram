@@ -219,6 +219,11 @@ func TestCreateOrganization_CreatesInWorkOSAndInGram(t *testing.T) {
 	require.Equal(t, 0, res.MemberCount, "an admin-created organization starts empty")
 	require.Nil(t, res.DisabledAt)
 
+	// Informational: the operator reading this organization later can tell it
+	// came from the admin app rather than from someone signing themselves up.
+	require.NotNil(t, res.CreationSource)
+	require.Equal(t, orgprovision.SourcePlatformAdmin, *res.CreationSource)
+
 	// An operator creating an organization is not saying anything about paid
 	// tier, the book-a-demo waiver, or a trial. Each of these is a separate
 	// grant with its own endpoint.
@@ -260,11 +265,16 @@ func TestCreateOrganization_CreatesInWorkOSAndInGram(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, res.ID, detail.ID)
 	require.Equal(t, res.Slug, detail.Slug)
+	require.NotNil(t, detail.CreationSource)
+	require.Equal(t, orgprovision.SourcePlatformAdmin, *detail.CreationSource)
 
 	list, err := svc.ListOrganizations(ctx, &gen.ListOrganizationsPayload{})
 	require.NoError(t, err)
 	require.Len(t, list.Organizations, 1)
 	require.Equal(t, res.ID, list.Organizations[0].ID)
+	// The list does not select it, so an absent source on a row from here says
+	// nothing about the organization. Only the record read answers the question.
+	require.Nil(t, list.Organizations[0].CreationSource)
 }
 
 // TestCreateOrganization_WebhookAfterwardsDoesNotDuplicate is the ordering the
@@ -295,6 +305,12 @@ func TestCreateOrganization_WebhookAfterwardsDoesNotDuplicate(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, res.Slug, after.Slug, "the sync must not move the slug of an organization the operator already sees")
 	require.False(t, after.Whitelisted)
+
+	// The sync records no source, and its upsert passes null rather than an
+	// empty string. A COALESCE the wrong way round here would erase the one
+	// thing about this organization's origin that was ever written down.
+	require.NotNil(t, after.CreationSource, "a later webhook must not clear the recorded creation source")
+	require.Equal(t, orgprovision.SourcePlatformAdmin, *after.CreationSource)
 }
 
 // TestCreateOrganization_WebhookThatWonTheRaceIsUpdatedNotDuplicated is the
@@ -319,6 +335,7 @@ func TestCreateOrganization_WebhookThatWonTheRaceIsUpdatedNotDuplicated(t *testi
 	derivedID := orgid.FromWorkOSID(workosOrgID)
 	seeded, err := orgrepo.New(conn).GetOrganizationMetadata(ctx, derivedID)
 	require.NoError(t, err, "the sync must have created the row this test is about")
+	require.False(t, seeded.CreationSource.Valid, "the sync learns of an organization without learning what asked for it")
 
 	res, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{Name: "Race Co", AdminSessionToken: nil})
 	require.NoError(t, err, "a create that collides with the sync must not surface a unique violation")
@@ -334,6 +351,12 @@ func TestCreateOrganization_WebhookThatWonTheRaceIsUpdatedNotDuplicated(t *testi
 	// The slug is in the organization's URL. Re-deriving one here would find the
 	// base taken by this very row and write a suffixed variant over it.
 	require.Equal(t, seeded.Slug, res.Slug, "a create landing on an existing row must keep its slug")
+
+	// The operator did create this organization, whichever writer inserted the
+	// row first. Leaving the source unrecorded here would make the answer an
+	// operator reads depend on a race they cannot see.
+	require.NotNil(t, res.CreationSource, "a create landing on a row the sync inserted must still record the source")
+	require.Equal(t, orgprovision.SourcePlatformAdmin, *res.CreationSource)
 
 	// The sync's cursor is the record of which events have been applied.
 	// Nothing in this handler may roll it back.
