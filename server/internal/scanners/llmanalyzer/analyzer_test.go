@@ -301,7 +301,7 @@ func TestAnalyze_CapsToolCallIDsHeadAndTailWithTheCalls(t *testing.T) {
 		OrgID:       "org-1",
 		OrgSlug:     "acme",
 		ProjectID:   "proj-1",
-		Lane:        "sync",
+		ScanMode:    llmanalyzer.ScanModeSync,
 		Message:     judgemessage.NewForToolCalls(calls),
 		ToolCallIDs: ids,
 	}

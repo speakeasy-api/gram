@@ -74,12 +74,12 @@ func TestEnforceHandler_WritesOKReplyWithFindings(t *testing.T) {
 
 	calls := stub.CallsSnapshot()
 	require.Len(t, calls, 1)
-	require.Equal(t, llmanalyzer.CallInfo{OrgID: "org-enforce", OrgSlug: "acme", Lane: llmanalyzer.LaneSync}, calls[0].Info)
+	require.Equal(t, llmanalyzer.CallInfo{OrgID: "org-enforce", OrgSlug: "acme", ScanMode: llmanalyzer.ScanModeSync}, calls[0].Info)
 	require.Contains(t, calls[0].Messages[1].Content, "<content>\n"+body+"\n</content>")
 
 	data := collectMetrics(t, reader)
 	require.Equal(t, int64(1), counterValue(t, data, "risk.enforcement.llm.requests",
-		attr.RiskLane(llmanalyzer.LaneSync), attr.Outcome(llmanalyzer.EnforceOutcomeOK)))
+		attr.RiskScanMode(llmanalyzer.ScanModeSync), attr.Outcome(llmanalyzer.EnforceOutcomeOK)))
 }
 
 func TestEnforceHandler_CleanVerdictRepliesOKWithoutFindings(t *testing.T) {
@@ -117,7 +117,7 @@ func TestEnforceHandler_ReportsTimeoutAsErrorReply(t *testing.T) {
 
 	data := collectMetrics(t, reader)
 	require.Equal(t, int64(1), counterValue(t, data, "risk.enforcement.llm.requests",
-		attr.RiskLane(llmanalyzer.LaneSync), attr.Outcome(llmanalyzer.EnforceOutcomeError)))
+		attr.RiskScanMode(llmanalyzer.ScanModeSync), attr.Outcome(llmanalyzer.EnforceOutcomeError)))
 }
 
 func TestEnforceHandler_ClassifiesUpstreamAndParseFailures(t *testing.T) {
@@ -201,7 +201,7 @@ func TestEnforceHandler_DisabledAnalyzerRepliesDeadLetter(t *testing.T) {
 
 	data := collectMetrics(t, reader)
 	require.Equal(t, int64(1), counterValue(t, data, "risk.enforcement.llm.requests",
-		attr.RiskLane(llmanalyzer.LaneSync), attr.Outcome(llmanalyzer.EnforceOutcomeDeadLetter)))
+		attr.RiskScanMode(llmanalyzer.ScanModeSync), attr.Outcome(llmanalyzer.EnforceOutcomeDeadLetter)))
 }
 
 func TestEnforceHandler_AcknowledgesStaleRequest(t *testing.T) {
@@ -218,7 +218,7 @@ func TestEnforceHandler_AcknowledgesStaleRequest(t *testing.T) {
 	require.Empty(t, stub.CallsSnapshot(), "stale requests must not spend model budget")
 
 	data := collectMetrics(t, reader)
-	require.Equal(t, int64(1), counterValue(t, data, "risk.enforcement.llm.stale_dropped", attr.RiskLane(llmanalyzer.LaneSync)))
+	require.Equal(t, int64(1), counterValue(t, data, "risk.enforcement.llm.stale_dropped", attr.RiskScanMode(llmanalyzer.ScanModeSync)))
 	require.Equal(t, int64(0), counterValue(t, data, "risk.enforcement.llm.requests"))
 }
 
@@ -250,7 +250,7 @@ func TestEnforceHandler_AcknowledgesReplyWriteFailure(t *testing.T) {
 	require.NoError(t, err, "a reply the requester can no longer receive must not be redelivered")
 
 	data := collectMetrics(t, reader)
-	require.Equal(t, int64(1), counterValue(t, data, "risk.enforcement.llm.reply_write_errors", attr.RiskLane(llmanalyzer.LaneSync)))
+	require.Equal(t, int64(1), counterValue(t, data, "risk.enforcement.llm.reply_write_errors", attr.RiskScanMode(llmanalyzer.ScanModeSync)))
 	require.Equal(t, int64(1), counterValue(t, data, "risk.enforcement.llm.requests", attr.Outcome(llmanalyzer.EnforceOutcomeOK)))
 }
 
