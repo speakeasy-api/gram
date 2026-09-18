@@ -197,6 +197,10 @@ type Service interface {
 	// Returns totals-only ordinary meter usage for an organization over a bounded
 	// UTC-day window.
 	GetMeterUsage(context.Context, *GetMeterUsagePayload) (res *AdminMeterUsageResponse, err error)
+	// Read the shared support catalog and product coverage.
+	GetSupportMatrix(context.Context, *GetSupportMatrixPayload) (res *SupportMatrix, err error)
+	// Save coverage against the last read revision; rejects concurrent changes.
+	UpdateSupportMatrix(context.Context, *UpdateSupportMatrixPayload) (res *SupportMatrix, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -219,7 +223,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [50]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizationActivity", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage"}
+var MethodNames = [52]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizationActivity", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSupportMatrix", "updateSupportMatrix"}
 
 // AdminBulkUpdateAccountTypeResult is the result type of the admin service
 // bulkUpdateAccountType method.
@@ -871,6 +875,12 @@ type GetStripeSubscriptionPayload struct {
 	OrganizationID    string
 }
 
+// GetSupportMatrixPayload is the payload type of the admin service
+// getSupportMatrix method.
+type GetSupportMatrixPayload struct {
+	AdminSessionToken *string
+}
+
 // GlobalRemoteSessionIssuer is the result type of the admin service
 // getGlobalIssuer method.
 type GlobalRemoteSessionIssuer struct {
@@ -1296,6 +1306,55 @@ type StartTrialPayload struct {
 	Days int
 }
 
+type SupportCapability struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Group string `json:"group"`
+}
+
+type SupportDraft struct {
+	Mappings   map[string]*SupportMapping         `json:"mappings"`
+	References map[string]map[string]*SupportFact `json:"references"`
+}
+
+type SupportFact struct {
+	Status string `json:"status"`
+	Note   string `json:"note"`
+	Verify bool   `json:"verify"`
+}
+
+type SupportMapping struct {
+	Applicability string                  `json:"applicability"`
+	Conditions    string                  `json:"conditions"`
+	Facts         map[string]*SupportFact `json:"facts"`
+}
+
+// SupportMatrix is the result type of the admin service getSupportMatrix
+// method.
+type SupportMatrix struct {
+	Methods      []*SupportMethod     `json:"methods"`
+	Products     []*SupportPlatform   `json:"products"`
+	Capabilities []*SupportCapability `json:"capabilities"`
+	Draft        *SupportDraft        `json:"draft"`
+	Revision     string               `json:"revision"`
+}
+
+type SupportMethod struct {
+	ID     string                  `json:"id"`
+	Name   string                  `json:"name"`
+	Vendor string                  `json:"vendor"`
+	Plans  string                  `json:"plans"`
+	Facts  map[string]*SupportFact `json:"facts"`
+}
+
+type SupportPlatform struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Vendor  string `json:"vendor"`
+	Family  string `json:"family"`
+	Surface string `json:"surface"`
+}
+
 // TriggerOrganizationChatAnalysisPayload is the payload type of the admin
 // service triggerOrganizationChatAnalysis method.
 type TriggerOrganizationChatAnalysisPayload struct {
@@ -1402,6 +1461,14 @@ type UpdateOrganizationPayload struct {
 	AccountType *string
 	// New whitelisted flag.
 	Whitelisted *bool
+}
+
+// UpdateSupportMatrixPayload is the payload type of the admin service
+// updateSupportMatrix method.
+type UpdateSupportMatrixPayload struct {
+	AdminSessionToken *string
+	Revision          string
+	Draft             *SupportDraft
 }
 
 // UploadImageResult is the result type of the admin service

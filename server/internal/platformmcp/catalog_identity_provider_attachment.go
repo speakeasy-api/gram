@@ -397,17 +397,19 @@ func (s *CatalogIdentityProviderAttachmentService) createAndAttachClient(ctx con
 		secret = conv.ToPGText(ciphertext)
 	}
 	client, err := q.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
-		ProjectID:               conv.ToNullUUID(project.ID),
-		OrganizationID:          conv.ToPGText(principal.OrganizationID),
-		RemoteSessionIssuerID:   issuerID,
-		ClientID:                registered.ClientID,
-		ClientSecretEncrypted:   secret,
-		ClientIDIssuedAt:        conv.ToPGTimestamptz(time.Now().UTC()),
-		ClientSecretExpiresAt:   registered.ClientSecretExpiresAt,
-		TokenEndpointAuthMethod: optionalText(registered.TokenEndpointAuthMethod),
-		Scope:                   append([]string(nil), resource.ScopesSupported...),
-		Audience:                pgtype.Text{},
-		LegacyCallbackUrl:       false,
+		ProjectID:                    conv.ToNullUUID(project.ID),
+		OrganizationID:               conv.ToPGText(principal.OrganizationID),
+		RemoteSessionIssuerID:        issuerID,
+		ClientID:                     registered.ClientID,
+		ClientSecretEncrypted:        secret,
+		ClientIDIssuedAt:             conv.ToPGTimestamptz(time.Now().UTC()),
+		ClientSecretExpiresAt:        registered.ClientSecretExpiresAt,
+		TokenEndpointAuthMethod:      optionalText(registered.TokenEndpointAuthMethod),
+		Scope:                        append([]string(nil), resource.ScopesSupported...),
+		Audience:                     pgtype.Text{},
+		LegacyCallbackUrl:            false,
+		JsonWebKeySetID:              uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		IdentityProviderConnectionID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
 	if err != nil {
 		return false, fmt.Errorf("create identity-provider client: %w", err)

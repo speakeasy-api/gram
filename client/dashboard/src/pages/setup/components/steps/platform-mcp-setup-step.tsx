@@ -1,7 +1,9 @@
-import { Button } from "@/components/ui/Button";
 import { PlatformMCPOnboardingContent } from "@/pages/org/PlatformMCP";
 import { RequireScope } from "@/components/require-scope";
-import { StepSupportButton } from "../step-container";
+import { AddExistingMCPServers } from "../add-existing-mcp-servers";
+import { StepContainer } from "../step-container";
+
+import { StepSection } from "../step-section";
 
 interface PlatformMCPSetupStepProps {
   onComplete: () => void;
@@ -13,22 +15,26 @@ export function PlatformMCPSetupStep({
   currentProjectSlug,
 }: PlatformMCPSetupStepProps): JSX.Element {
   return (
-    <div className="flex flex-col gap-6">
+    <StepContainer
+      icon={null}
+      title="Platform MCP"
+      description="Manage MCPs, Risk Policies and explore logs in your favorite agent."
+      onContinue={onComplete}
+    >
       <RequireScope scope="org:admin" level="page">
-        <PlatformMCPOnboardingContent
-          currentProjectSlug={currentProjectSlug}
-          embeddedInProjectSetup
-          onSetupComplete={onComplete}
-        />
+        <StepSection
+          index={1}
+          slug="set-up-platform-mcp"
+          title="Set up Platform MCP"
+        >
+          <PlatformMCPOnboardingContent
+            currentProjectSlug={currentProjectSlug}
+            embeddedInProjectSetup
+            onSetupComplete={onComplete}
+          />
+        </StepSection>
+        <AddExistingMCPServers currentProjectSlug={currentProjectSlug} />
       </RequireScope>
-      <div className="flex justify-end border-t pt-6">
-        <div className="flex gap-3">
-          <StepSupportButton />
-          <Button variant="secondary" onClick={onComplete}>
-            Mark done
-          </Button>
-        </div>
-      </div>
-    </div>
+    </StepContainer>
   );
 }

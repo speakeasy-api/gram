@@ -224,6 +224,8 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 		Scope:                           payload.Scope,
 		Audience:                        conv.PtrToPGText(payload.Audience),
 		LegacyCallbackUrl:               false,
+		JsonWebKeySetID:                 uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		IdentityProviderConnectionID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create remote session client").LogError(ctx, logger)

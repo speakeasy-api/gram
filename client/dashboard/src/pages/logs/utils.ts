@@ -10,25 +10,6 @@ export function formatNanoTimestamp(nanos: string): string {
 }
 
 /**
- * Get severity color class
- */
-export function getSeverityColorClass(severity?: string): string {
-  switch (severity?.toUpperCase()) {
-    case "ERROR":
-    case "FATAL":
-      return "text-destructive-default";
-    case "WARN":
-      return "text-warning-default";
-    case "DEBUG":
-      return "text-muted-foreground";
-    case "INFO":
-    case undefined:
-    default:
-      return "text-foreground";
-  }
-}
-
-/**
  * Format a log record body for display
  */
 export function formatLogBody(log: TelemetryLogRecord): string {

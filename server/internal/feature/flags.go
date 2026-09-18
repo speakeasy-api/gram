@@ -94,6 +94,17 @@ const (
 	// Key matches the dashboard's page-level flag so a single PostHog flag
 	// controls both the UI and the API surface.
 	FlagRiskWatchdog Flag = "gram-risk-watchdog"
+	// FlagRiskLLMAnalyzer routes an organization's secret, PII, prompt
+	// injection and destructive tool call detection through the fine-tuned
+	// risk model instead of the gitleaks, Presidio, prompt-injection and
+	// destructive-tool analyzers, on both the realtime enforcement lane and
+	// the batch flag lane. Policies keep their configured sources; the flag
+	// swaps the engine behind them. Targeted by PostHog organization group
+	// (org slug), like FlagBudgets. Fails closed to the legacy analyzers when
+	// the flag is off, absent or the provider errors. Removed at GA, or
+	// promoted to a productfeatures entitlement if the analyzer becomes a
+	// sold capability.
+	FlagRiskLLMAnalyzer Flag = "gram-risk-llm-analyzer"
 
 	// FlagCanonicalIdentityFold serves cost analytics (telemetry.query /
 	// telemetry.listSessions) email filters and group-bys through the
@@ -150,11 +161,6 @@ const (
 	// state from before. Fails closed: research must not run while the state
 	// of its stop control is unknown.
 	FlagMCPResearchKill Flag = "gram-mcp-research-kill"
-
-	// FlagNetworkIngressRollout is temporary release clearance for private
-	// network expansion. It is evaluated against the canonical organization
-	// group and never substitutes for RBAC or the durable product entitlement.
-	FlagNetworkIngressRollout Flag = "gram-network-ingress-rollout"
 
 	// FlagHooksRollout gates the phased rollout of new observability (hooks)
 	// plugin generator versions. Unlike the other flags it is consulted via its

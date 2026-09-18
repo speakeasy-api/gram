@@ -630,7 +630,7 @@ var File_gram_metering_v1_meter_reading_proto protoreflect.FileDescriptor
 
 const file_gram_metering_v1_meter_reading_proto_rawDesc = "" +
 	"\n" +
-	"$gram/metering/v1/meter_reading.proto\x12\x10gram.metering.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xf1\x05\n" +
+	"$gram/metering/v1/meter_reading.proto\x12\x10gram.metering.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xf0\x05\n" +
 	"\fMeterReading\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12'\n" +
 	"\x0forganization_id\x18\x02 \x01(\tR\x0eorganizationId\x12\x1d\n" +
@@ -661,7 +661,8 @@ const file_gram_metering_v1_meter_reading_proto_rawDesc = "" +
 	"\x10KIND_UNSPECIFIED\x10\x00\x12\x0e\n" +
 	"\n" +
 	"KIND_USAGE\x10\x01\x12\x13\n" +
-	"\x0fKIND_ADJUSTMENT\x10\x02:\v\x8a\xb5\x18\a\x12\x05\b\x80\xbd\xa3\x01BEZCgithub.com/speakeasy-api/gram/infra/gen/gram/metering/v1;meteringv1b\beditionsp\xe9\a"
+	"\x0fKIND_ADJUSTMENT\x10\x02:\n" +
+	"\x8a\xb5\x18\x06\x12\x04\b\x80\x8c\x15BEZCgithub.com/speakeasy-api/gram/infra/gen/gram/metering/v1;meteringv1b\beditionsp\xe9\a"
 
 var file_gram_metering_v1_meter_reading_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_gram_metering_v1_meter_reading_proto_msgTypes = make([]protoimpl.MessageInfo, 2)

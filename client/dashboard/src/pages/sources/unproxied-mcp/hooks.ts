@@ -1,7 +1,15 @@
+import { useIsSpeakeasyStaff } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { formatRemoteMcpDisplay } from "@/lib/sources";
+import {
+  deleteSourceCascade,
+  fetchLinkedMcpServers,
+} from "@/pages/mcp/x/tabs/settings/sections/sourceDelete";
+import { invalidateWrapperDeleteAuthViews } from "@/pages/mcp/x/tabs/settings/sections/sourceInvalidation";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { UnproxiedMcpServer } from "@gram/client/models/components/unproxiedmcpserver.js";
+import { invalidateAllGetUnproxiedMcpServer } from "@gram/client/react-query/getUnproxiedMcpServer.js";
+import { invalidateAllMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { invalidateAllUnproxiedMcpServers } from "@gram/client/react-query/unproxiedMcpServers.js";
 import {
@@ -83,6 +91,68 @@ export function useCreateUnproxiedMcpSource(): UseMutationResult<
           refetchType: "all",
         }),
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
+      ]);
+    },
+  });
+}
+
+export type DeleteUnproxiedMcpSourceVariables = {
+  unproxiedMcpServerId: string;
+};
+
+// Mirrors server/internal/access.RequireStaffForUnproxiedMcp so the wrappers
+// are never deleted ahead of a source delete that is bound to be refused.
+export const UNPROXIED_DELETE_STAFF_ONLY_MESSAGE =
+  "Unproxied MCP servers can only be deleted by Speakeasy staff.";
+
+export function useDeleteUnproxiedMcpSource(): UseMutationResult<
+  void,
+  Error,
+  DeleteUnproxiedMcpSourceVariables
+> {
+  const client = useSdkClient();
+  const queryClient = useQueryClient();
+  const isSpeakeasyStaff = useIsSpeakeasyStaff();
+
+  return useMutation({
+    mutationFn: async ({ unproxiedMcpServerId }) => {
+      if (!isSpeakeasyStaff) {
+        throw new Error(UNPROXIED_DELETE_STAFF_ONLY_MESSAGE);
+      }
+      // Soft-delete each linked mcp_server first; the backend's FK is
+      // ON DELETE RESTRICT, so the source delete would fail while any wrapper
+      // still references it.
+      await deleteSourceCascade({
+        listLinked: () =>
+          fetchLinkedMcpServers(client, queryClient, { unproxiedMcpServerId }),
+        deleteMcpServer: (id) => client.mcpServers.delete({ id }),
+        deleteSource: () =>
+          client.unproxiedMcp.deleteServer({ id: unproxiedMcpServerId }),
+        sourceLabel: "unproxied MCP source",
+      });
+    },
+    onSuccess: async () => {
+      // Mark stale only: the deleted server's queries are still mounted until
+      // the caller navigates away (see useDeleteRemoteMcpSource).
+      await Promise.all([
+        invalidateAllUnproxiedMcpServers(queryClient, {
+          refetchType: "none",
+        }),
+        invalidateAllMcpServers(queryClient, { refetchType: "none" }),
+        invalidateWrapperDeleteAuthViews(queryClient, { refetchType: "none" }),
+      ]);
+    },
+    onError: async () => {
+      // A partial run left some wrappers gone and the source in place. Refetch
+      // so the open dialog lists what remains before the user retries, and so
+      // the still-mounted Authentication section drops the issuer and client
+      // bindings the deleted wrappers took with them.
+      await Promise.all([
+        invalidateAllMcpServers(queryClient, { refetchType: "all" }),
+        invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
+        invalidateAllGetUnproxiedMcpServer(queryClient, { refetchType: "all" }),
+        invalidateAllUnproxiedMcpServers(queryClient, { refetchType: "all" }),
+        invalidateWrapperDeleteAuthViews(queryClient, { refetchType: "all" }),
       ]);
     },
   });

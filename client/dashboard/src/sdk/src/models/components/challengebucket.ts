@@ -31,6 +31,7 @@ export const PrincipalType = {
   ApiKey: "api_key",
   Assistant: "assistant",
   Agent: "agent",
+  Workload: "workload",
 } as const;
 /**
  * Kind of principal.

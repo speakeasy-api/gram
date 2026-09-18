@@ -126,6 +126,11 @@ func (c Canonical) String() string {
 	return c.scheme + "://" + authority + c.path
 }
 
+// Scheme is the lowercased scheme, "http" or "https".
+func (c Canonical) Scheme() string {
+	return c.scheme
+}
+
 // MatchCandidates returns every literal spelling a stored issuer may carry that
 // this URL should match.
 //

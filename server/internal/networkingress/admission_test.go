@@ -2,7 +2,6 @@ package networkingress_test
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"testing"
 
@@ -10,35 +9,28 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/network_ingress"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
-	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures/productfeaturestest"
 )
 
-type errorFlagProvider struct{ *feature.InMemory }
-
-func (*errorFlagProvider) EvaluateFlag(context.Context, feature.Flag, string, map[string]string) (feature.Evaluation, error) {
-	return feature.EvaluationIndeterminate, errors.New("flag service unavailable")
-}
-
-func TestExpansionAdmissionDeniesIndeterminateAndErrors(t *testing.T) {
+func TestExpansionAdmissionRequiresEntitlement(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
+	admission := networkingress.NewExpansionAdmission(ti.features, true, true)
 
-	missing := networkingress.NewExpansionAdmission(ti.features, &feature.InMemory{}, orgrepo.New(ti.conn), true, true)
-	require.Error(t, missing.CheckExpansion(ctx, ti.orgID))
+	productfeaturestest.Disable(t, ctx, ti.conn, ti.features, ti.orgID, productfeatures.FeatureNetworkIngress)
+	require.ErrorContains(t, admission.CheckExpansion(ctx, ti.orgID), "network ingress entitlement is disabled")
 
-	failing := networkingress.NewExpansionAdmission(ti.features, &errorFlagProvider{InMemory: &feature.InMemory{}}, orgrepo.New(ti.conn), true, true)
-	require.Error(t, failing.CheckExpansion(ctx, ti.orgID))
+	productfeaturestest.Enable(t, ctx, ti.conn, ti.features, ti.orgID, productfeatures.FeatureNetworkIngress)
+	require.NoError(t, admission.CheckExpansion(ctx, ti.orgID))
 }
 
 func TestNetworkModeAdmissionRequiresEnabledIngress(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
-	admission := networkingress.NewExpansionAdmission(ti.features, ti.flags, orgrepo.New(ti.conn), true, true)
+	admission := networkingress.NewExpansionAdmission(ti.features, true, true)
 	finalize, err := admission.PrepareNetworkAccess(ctx, networkaccess.EligibilityInput{OrganizationID: ti.orgID, Mode: networkaccess.ModeDual})
 	require.NoError(t, err)
 
@@ -58,8 +50,18 @@ func TestNetworkModeAdmissionRequiresReconcilerReadiness(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 	ti.create(t, ctx)
-	admission := networkingress.NewExpansionAdmission(ti.features, ti.flags, orgrepo.New(ti.conn), false, true)
+	admission := networkingress.NewExpansionAdmission(ti.features, false, true)
 	finalize, err := admission.PrepareNetworkAccess(ctx, networkaccess.EligibilityInput{OrganizationID: ti.orgID, Mode: networkaccess.ModeDual})
+	require.Error(t, err)
+	require.Error(t, finalize.Finalize(ctx, nil))
+
+	admission.SetReconcilerReady(true)
+	finalize, err = admission.PrepareNetworkAccess(ctx, networkaccess.EligibilityInput{OrganizationID: ti.orgID, Mode: networkaccess.ModeDual})
+	require.NoError(t, err)
+	require.NoError(t, finalizeNetworkAccessInTransaction(ctx, ti, finalize))
+
+	admission.SetReconcilerReady(false)
+	finalize, err = admission.PrepareNetworkAccess(ctx, networkaccess.EligibilityInput{OrganizationID: ti.orgID, Mode: networkaccess.ModeDual})
 	require.Error(t, err)
 	require.Error(t, finalize.Finalize(ctx, nil))
 }
@@ -68,8 +70,7 @@ func TestNetworkModePublicRecoveryNeedsNoGates(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 	productfeaturestest.Disable(t, ctx, ti.conn, ti.features, ti.orgID, productfeatures.FeatureNetworkIngress)
-	ti.flags.SetFlag(feature.FlagNetworkIngressRollout, ti.orgID, false)
-	admission := networkingress.NewExpansionAdmission(ti.features, ti.flags, orgrepo.New(ti.conn), false, true)
+	admission := networkingress.NewExpansionAdmission(ti.features, false, true)
 	finalize, err := admission.PrepareNetworkAccess(ctx, networkaccess.EligibilityInput{OrganizationID: ti.orgID, Mode: networkaccess.ModePublicOnly})
 	require.NoError(t, err)
 	require.NoError(t, finalize.Finalize(ctx, nil))

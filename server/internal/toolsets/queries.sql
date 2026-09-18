@@ -421,3 +421,7 @@ WHERE t.project_id = @project_id
     WHERE tv2.toolset_id = t.id
       AND tv2.deleted IS FALSE
   );
+
+-- name: DeleteAssistantToolsetsByToolset :exec
+DELETE FROM assistant_toolsets
+WHERE toolset_id = @toolset_id AND project_id = @project_id;

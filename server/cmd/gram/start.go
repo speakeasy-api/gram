@@ -29,6 +29,7 @@ import (
 	"go.temporal.io/sdk/client"
 	goahttp "goa.design/goa/v3/http"
 
+	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/server/internal/about"
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/agent"
@@ -103,7 +104,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/openrouterkeys"
 	"github.com/speakeasy-api/gram/server/internal/organizations"
-	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	otelsvc "github.com/speakeasy-api/gram/server/internal/otel"
 	otelchrepo "github.com/speakeasy-api/gram/server/internal/otel/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/packages"
@@ -291,13 +291,17 @@ func networkIngressLifecycleDeliveryReady(reconcileQueue, temporalQueue string, 
 	if reconcileQueue == "" {
 		return false, nil
 	}
-	if reconcileQueue == temporalQueue {
-		return true, nil
-	}
-	if devSingleProcess {
+	if devSingleProcess && reconcileQueue != temporalQueue {
 		return false, fmt.Errorf("dev-single-process requires private ingress reconciliation task queue %q to match Temporal task queue %q", reconcileQueue, temporalQueue)
 	}
-	return false, nil
+	return true, nil
+}
+
+// networkIngressAdmissionReady verifies that lifecycle requests have a
+// configured consumer path. A separate queue is owned by the dedicated worker;
+// a shared queue becomes ready only after this process registers the reconciler.
+func networkIngressAdmissionReady(reconcileQueue, temporalQueue string, lifecycleReady, temporalConfigured bool) bool {
+	return lifecycleReady && temporalConfigured && reconcileQueue != temporalQueue
 }
 
 // probeDrainTimeout bounds the wait for automatic remote-session verifications
@@ -923,7 +927,12 @@ func newStartCommand() *cli.Command {
 				logger.ErrorContext(ctx, "pub/sub enforcement disabled: create reply inbox", attr.SlogError(inboxErr))
 			} else {
 				var dispatcherErr error
-				enforcementDispatcher, dispatcherErr = enforcereply.NewDispatcher(ctx, logger, meterProvider, psbroker, enforcementInbox, enforcereply.DispatcherConfig{WaitTimeout: 0})
+				enforcementDispatcher, dispatcherErr = enforcereply.NewDispatcher(ctx, logger, meterProvider, psbroker, enforcementInbox, enforcereply.DispatcherConfig{
+					WaitTimeout: 0,
+					LaneWaitTimeout: map[riskv1.EnforcementScanner]time.Duration{ //nolint:exhaustive // an override list is partial by definition; other lanes use WaitTimeout
+						riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_LLM_ANALYZER: enforcereply.DefaultLLMAnalyzerWaitTimeout,
+					},
+				})
 				if dispatcherErr != nil {
 					logger.ErrorContext(ctx, "pub/sub enforcement disabled: create dispatcher", attr.SlogError(dispatcherErr))
 					_ = enforcementInbox.Close()
@@ -938,6 +947,7 @@ func newStartCommand() *cli.Command {
 				authz.EngineOpts{
 					AdmitPrincipalCredential:         runtimepolicy.AdmitPrincipalCredential,
 					AdmitPrincipalCredentialWithDBTX: runtimepolicy.AdmitPrincipalCredentialWithDBTX,
+					AdmitWorkloadSession:             runtimepolicy.AdmitWorkloadSession,
 					DevMode:                          c.String("environment") == "local",
 				})
 
@@ -1123,9 +1133,14 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
-			networkIngressReconcilerReady := networkIngressConfig.MutationReady() && networkIngressLifecycleReady && k8sClient.Clientset != nil && k8sClient.DynamicClient != nil
+			networkIngressReconcilerReady := networkIngressAdmissionReady(
+				networkIngressConfig.ReconcileTaskQueue,
+				c.String("temporal-task-queue"),
+				networkIngressLifecycleReady,
+				temporalEnv != nil,
+			)
 			networkIngressEnabled := c.Bool("network-ingress-enabled")
-			networkIngressAdmission := networkingress.NewExpansionAdmission(productFeatures, featureFlags, orgRepo.New(db), networkIngressReconcilerReady, networkIngressEnabled)
+			networkIngressAdmission := networkingress.NewExpansionAdmission(productFeatures, networkIngressReconcilerReady, networkIngressEnabled)
 			mcpMetadataService := mcpmetadata.NewService(logger, tracerProvider, meterProvider, db, sessionManager, serverURL, siteURL, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger, networkIngressAdmission.CheckExpansion)
 
 			litellmCalls := callcache.New(cache.NewRedisCacheAdapter(redisClient))
@@ -1713,7 +1728,12 @@ func newStartCommand() *cli.Command {
 			usage.Attach(mux, usage.NewService(logger, tracerProvider, db, sessionManager, billingRepo, serverURL, siteURL, posthogClient, openRouter, openRouterKeyRefresher, stripeClient, authzEngine, telemetryrepo.New(chDB), auditLogger, featureFlags, productFeatures, trialEmailNotifier, meterReadConn))
 			tm.Attach(mux, telemSvc)
 			functions.Attach(mux, functions.NewService(logger, tracerProvider, db, encryptionClient, tigrisStore))
-			otelsvc.Attach(mux, otelsvc.NewService(logger, tracerProvider, db, chDB, sessionManager, authzEngine, otelsvc.FeatureChecker(logsEnabled), publishers.OTELSpans, publishers.OTELLogs, publishers.OTELMetrics))
+			otelService := otelsvc.NewService(logger, tracerProvider, db, chDB, sessionManager, authzEngine, otelsvc.FeatureChecker(logsEnabled), publishers.OTELSpans, publishers.OTELLogs, publishers.OTELMetrics)
+			// Exports accepted on /otel/v1/* also run the hooks telemetry
+			// writers, so usage and cost attribution do not depend on which
+			// OTLP ingest edge a producer is configured with.
+			otelService.SetHooksSink(hooksService)
+			otelsvc.Attach(mux, otelService)
 
 			// riskSignaler.Shutdown is intentionally NOT registered as a shutdownFunc.
 			// runShutdown runs every func concurrently, which races temporalClient.Close()
@@ -1911,6 +1931,8 @@ func newStartCommand() *cli.Command {
 						return
 					}
 					temporalWorker.RegisterNetworkIngress(executor, networkIngressConfig.ReconcileTaskQueue)
+					networkIngressAdmission.SetReconcilerReady(true)
+					defer networkIngressAdmission.SetReconcilerReady(false)
 					if err := temporalWorker.Run(workerInterruptCh); err != nil {
 						logger.ErrorContext(ctx, "temporal worker failed", attr.SlogError(err))
 					}

@@ -19,10 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpkms"
 )
 
-const (
-	clientAssertionLifetime = 60 * time.Second
-	clientAssertionType     = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
-)
+const clientAssertionLifetime = 60 * time.Second
 
 type ClientAssertionRequest struct {
 	RemoteSessionClientID uuid.UUID

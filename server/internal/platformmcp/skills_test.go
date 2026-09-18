@@ -29,18 +29,21 @@ const (
 )
 
 type recordingSkillsManagement struct {
-	created             *genskills.CreatePayload
-	addedVersion        *genskills.AddVersionPayload
-	updated             *genskills.UpdatePayload
-	distributed         *genskills.DistributePayload
-	skill               *types.Skill
-	latestVersion       *types.SkillVersion
-	recordResult        *genskills.RecordSkillResult
-	distribution        *types.SkillDistribution
-	err                 error
-	assistantCount      int64
-	listVersionsOut     *genskills.ListSkillVersionsResult
-	pluginDistributions []*types.PluginSkillDistribution
+	created                   *genskills.CreatePayload
+	addedVersion              *genskills.AddVersionPayload
+	updated                   *genskills.UpdatePayload
+	distributed               *genskills.DistributePayload
+	skill                     *types.Skill
+	latestVersion             *types.SkillVersion
+	recordResult              *genskills.RecordSkillResult
+	distribution              *types.SkillDistribution
+	err                       error
+	assistantCount            int64
+	listVersionsOut           *genskills.ListSkillVersionsResult
+	listFeedbackOut           *genskills.ListSkillFeedbackResult
+	listSuggestionsOut        *genskills.ListSkillSuggestionsResult
+	listSuggestionFeedbackOut *genskills.ListSkillSuggestionFeedbackResult
+	pluginDistributions       []*types.PluginSkillDistribution
 }
 
 func (s *recordingSkillsManagement) Create(_ context.Context, payload *genskills.CreatePayload) (*genskills.RecordSkillResult, error) {
@@ -94,6 +97,27 @@ func (s *recordingSkillsManagement) ListVersions(_ context.Context, _ *genskills
 		return nil, s.err
 	}
 	return s.listVersionsOut, nil
+}
+
+func (s *recordingSkillsManagement) ListFeedback(_ context.Context, _ *genskills.ListFeedbackPayload) (*genskills.ListSkillFeedbackResult, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	return s.listFeedbackOut, nil
+}
+
+func (s *recordingSkillsManagement) ListSuggestions(_ context.Context, _ *genskills.ListSuggestionsPayload) (*genskills.ListSkillSuggestionsResult, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	return s.listSuggestionsOut, nil
+}
+
+func (s *recordingSkillsManagement) ListSuggestionFeedback(_ context.Context, _ *genskills.ListSuggestionFeedbackPayload) (*genskills.ListSkillSuggestionFeedbackResult, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	return s.listSuggestionFeedbackOut, nil
 }
 
 func (s *recordingSkillsManagement) ListDistributions(_ context.Context, _ *genskills.ListDistributionsPayload) (*genskills.ListSkillDistributionsResult, error) {
@@ -354,6 +378,43 @@ func TestGetSkillTruncatesContentAtTheReadCeiling(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, result.LatestVersion.Content, maxSkillContentBytes)
 	require.True(t, result.LatestVersion.ContentTruncated)
+}
+
+func TestSkillInsightReadsProjectPrivacySafeServiceResults(t *testing.T) {
+	t.Parallel()
+
+	note := "Prefer a clearer first step"
+	versionID := testSkillVersionID
+	reviewedAt := "2026-08-21T00:00:00Z"
+	feedback := &genskills.SkillFeedback{ID: "feedback", Source: genskills.SkillFeedbackSource("assistant"), Outcome: genskills.SkillFeedbackOutcome("partially_helped"), Note: &note, SkillVersionID: &versionID, ReviewedAt: &reviewedAt, CreatedAt: "2026-08-20T00:00:00Z"}
+	change := &types.SkillEditSuggestionChange{ID: "change", SuggestionID: "suggestion", ProposedDiff: "@@", Rationale: "clarify", AppliesCleanly: true, FeedbackCount: 1, FeedbackSessionCount: 1, CreatedAt: "2026-08-20T00:00:00Z"}
+	suggestion := &types.SkillEditSuggestion{ID: "suggestion", SkillID: testSkillID, SkillName: "add-mcp", SkillDisplayName: "Add MCP", BaseVersionID: testSkillVersionID, Changes: []*types.SkillEditSuggestionChange{change}, ProposedContent: "content", AppliesCleanly: true, Rationale: "clarify", Status: "open", FeedbackCount: 1, FeedbackSessionCount: 1, ScoredSessionCount: 2, ApprovedByUserID: nil, ApprovedAt: nil, CreatedAt: "2026-08-20T00:00:00Z", UpdatedAt: "2026-08-20T00:00:00Z"}
+	skills := &recordingSkillsManagement{
+		listFeedbackOut:           &genskills.ListSkillFeedbackResult{Counts: &genskills.SkillFeedbackCounts{Total: 1, PartiallyHelped: 1}, Metrics: &genskills.SkillFeedbackMetrics{WindowStart: "start", WindowEnd: "end", FeedbackInWindow: 1}, Timeline: []*genskills.SkillFeedbackTimelinePoint{{BucketStart: "day", FeedbackCount: 1}}, Feedback: []*genskills.SkillFeedback{feedback}, NextCursor: nil},
+		listSuggestionsOut:        &genskills.ListSkillSuggestionsResult{Suggestions: []*types.SkillEditSuggestion{suggestion}, TotalOpenCount: 1, NextCursor: nil},
+		listSuggestionFeedbackOut: &genskills.ListSkillSuggestionFeedbackResult{Feedback: []*genskills.SkillFeedback{feedback}},
+	}
+	service := testSkillsService(t, skills)
+
+	feedbackOutput, err := service.ListSkillFeedback(t.Context(), testPrincipal(), ListSkillFeedbackInput{ProjectSlug: testSkillProjectSlug, SkillID: testSkillID})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), feedbackOutput.Counts.Total)
+	require.Equal(t, note, feedbackOutput.Feedback[0].Note)
+	require.Equal(t, reviewedAt, feedbackOutput.Feedback[0].ReviewedAt)
+
+	suggestionsOutput, err := service.ListSkillSuggestions(t.Context(), testPrincipal(), ListSkillSuggestionsInput{ProjectSlug: testSkillProjectSlug})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), suggestionsOutput.TotalOpenCount)
+	require.Equal(t, "change", suggestionsOutput.Suggestions[0].Changes[0].ID)
+	require.Empty(t, suggestionsOutput.Suggestions[0].ProposedContent)
+
+	suggestionsWithContent, err := service.ListSkillSuggestions(t.Context(), testPrincipal(), ListSkillSuggestionsInput{ProjectSlug: testSkillProjectSlug, IncludeProposedContent: true})
+	require.NoError(t, err)
+	require.Equal(t, "content", suggestionsWithContent.Suggestions[0].ProposedContent)
+
+	evidenceOutput, err := service.ListSkillSuggestionFeedback(t.Context(), testPrincipal(), ListSkillSuggestionFeedbackInput{ProjectSlug: testSkillProjectSlug, ChangeID: "11111111-1111-4111-8111-111111111111"})
+	require.NoError(t, err)
+	require.Equal(t, "feedback", evidenceOutput.Feedback[0].ID)
 }
 
 func TestDistributeSkillResolvesAnExactTargetAndEchoesIt(t *testing.T) {

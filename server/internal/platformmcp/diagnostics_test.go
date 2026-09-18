@@ -1,6 +1,7 @@
 package platformmcp
 
 import (
+	"context"
 	"encoding/json"
 	"sort"
 	"testing"
@@ -117,6 +118,36 @@ func TestGetMCPDiagnosticsOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 		"clients_truncated",
 		"attribution", "fault", "reason", "readiness_exonerates", "scope",
 	}, decodeKeys(t, output))
+}
+
+type diagnosticsProjectReader struct {
+	output ListProjectsOutput
+}
+
+func (r diagnosticsProjectReader) ListProjects(context.Context, Principal, ListProjectsInput) (ListProjectsOutput, error) {
+	return r.output, nil
+}
+
+func (diagnosticsProjectReader) FindMCP(context.Context, Principal, FindMCPInput) (FindMCPOutput, error) {
+	return FindMCPOutput{}, nil
+}
+
+func (diagnosticsProjectReader) GetMCP(context.Context, Principal, GetMCPInput) (MCP, error) {
+	return MCP{}, nil
+}
+
+func TestOrganizationProjectIDsReportsPermissionFilteredScopeAsPartial(t *testing.T) {
+	t.Parallel()
+
+	service := &DiagnosticsService{reader: diagnosticsProjectReader{output: ListProjectsOutput{
+		Projects:              []Project{{ID: "visible-project"}},
+		authorizationFiltered: true,
+	}}}
+
+	ids, partial, err := service.organizationProjectIDs(t.Context(), Principal{})
+	require.NoError(t, err)
+	require.Equal(t, []string{"visible-project"}, ids)
+	require.True(t, partial)
 }
 
 func TestDiagnosticsReadinessKeepsUnmanagedMCPUnsupportedWithoutRetry(t *testing.T) {

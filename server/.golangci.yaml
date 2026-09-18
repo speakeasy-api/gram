@@ -93,7 +93,7 @@ linters:
       - path: internal/dns/net_resolver\.go
         linters:
           - wrapcheck
-      - path: _test\.go|internal/oauthtest
+      - path: _test\.go|internal/oauthtest|internal/identityproviderconnections/provisiontest
         linters:
           - exhaustruct
           - gosec
@@ -490,6 +490,8 @@ linters:
         - "github.com/speakeasy-api/gram/server/internal/oops.C("
         - "github.com/speakeasy-api/gram/server/internal/oops.E("
         - "github.com/speakeasy-api/gram/server/internal/oops.Permanent("
+        - "github.com/speakeasy-api/gram/server/internal/managedrows.RequireUnmanaged("
+        - "github.com/speakeasy-api/gram/server/internal/managedrows.Error("
         - "github.com/speakeasy-api/gram/server/internal/httpcache.WriteCacheableJSON("
         - "github.com/speakeasy-api/gram/server/internal/platformtools/core.DecodeInput("
         - "github.com/speakeasy-api/gram/server/internal/platformtools/core.EncodeResult("

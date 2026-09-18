@@ -40,6 +40,7 @@ export function CostBreakdownChart({
   loading,
   isError,
   onSelectRange,
+  onSelectSeries,
 }: {
   // The main breakdown query's response — its timeseries carries one daily,
   // gap-filled cost series per group on a shared bucket grid.
@@ -58,8 +59,11 @@ export function CostBreakdownChart({
   // The slice query failed — say so instead of the benign empty state, so the
   // chart agrees with the table's error message below it.
   isError?: boolean;
-  // Narrows the page's date range to a clicked bar or dragged span.
+  // Narrows the page's date range to a dragged span.
   onSelectRange: (start: Date, end: Date) => void;
+  // Drills into a clicked bar segment's group, by its display label — the
+  // same act as clicking that group's row in the table below.
+  onSelectSeries?: (label: string) => void;
 }): JSX.Element {
   // The axis grid: every series shares the same zero-filled buckets, so the
   // first series carries the full grid.
@@ -82,6 +86,9 @@ export function CostBreakdownChart({
     // legend toggle hide both. The server's own remainder row never becomes a
     // named stack: it seeds the chart's rollup below.
     const byLabel = new Map<string, number[]>();
+    // The unattributed group — spend with no value on this axis. The panel
+    // draws it hollow rather than giving it a hue of its own.
+    const unsetLabels = new Set<string>();
     let rollupSeed: number[] | null = null;
     for (const s of series) {
       const values = s.points.map((p) =>
@@ -94,6 +101,7 @@ export function CostBreakdownChart({
         continue;
       }
       const label = displayName(groupBy, s.groupValue);
+      if (s.groupValue === "") unsetLabels.add(label);
       const merged = byLabel.get(label);
       if (merged) {
         values.forEach((v, i) => {
@@ -113,7 +121,11 @@ export function CostBreakdownChart({
         total: values.reduce((sum, v) => sum + v, 0),
       }))
       .sort((a, b) => b.total - a.total)
-      .map(({ label, series: values }) => ({ label, series: values }));
+      .map(({ label, series: values }) => ({
+        label,
+        series: values,
+        unset: unsetLabels.has(label),
+      }));
     // Skip the rollup when it would hold a single client series and there is
     // no server remainder to carry — an "Other" of one is noise.
     if (rollupSeed === null && all.length <= MAX_CHART_STACKS + 1) return all;
@@ -142,7 +154,7 @@ export function CostBreakdownChart({
     return (
       <StackedTimeSeriesPanel
         title="Work Delivered Over Time"
-        headerHint="Work delivered over time, stacked by the selected breakdown. Click or drag on the chart to zoom to a period."
+        headerHint="Work delivered over time, stacked by the selected breakdown. Click a bar segment to drill into its group; drag across the chart to zoom to a period."
         bucketsMs={bucketsMs}
         stacks={isError ? [] : stacks}
         formatValue={formatWorkUnits}
@@ -154,13 +166,14 @@ export function CostBreakdownChart({
         }
         loading={loading}
         onSelectRange={onSelectRange}
+        onSelectSeries={onSelectSeries}
       />
     );
   }
   return (
     <StackedTimeSeriesPanel
       title="Cost Over Time"
-      headerHint="Spend over time, stacked by the selected breakdown. Click or drag on the chart to zoom to a period."
+      headerHint="Spend over time, stacked by the selected breakdown. Click a bar segment to drill into its group; drag across the chart to zoom to a period."
       bucketsMs={bucketsMs}
       stacks={isError ? [] : stacks}
       formatValue={formatCost}
@@ -170,6 +183,7 @@ export function CostBreakdownChart({
       }
       loading={loading}
       onSelectRange={onSelectRange}
+      onSelectSeries={onSelectSeries}
     />
   );
 }

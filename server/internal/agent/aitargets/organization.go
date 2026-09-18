@@ -27,7 +27,11 @@ import (
 // running and not merely installed.
 //
 // 5: Pi joined the catalog, so a device running it no longer scans clean.
-const DefaultsVersion int32 = 5
+//
+// 6: the current ChatGPT app became its own target under the bundle id it
+// moved to, and the ChatGPT gateway documents moved onto it, leaving Classic
+// a scan target the gateway cannot single out.
+const DefaultsVersion int32 = 6
 
 // Source says where a target in an organization's list comes from.
 type Source string

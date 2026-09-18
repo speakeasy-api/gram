@@ -137,6 +137,16 @@ webhooks-catalog:
 otel-collector:
   - "otel-collector/**"
 
+# PRs that change rendered dashboard UI. Gates the automatic `preview` label
+# in .github/workflows/pr.yaml. Deliberately narrower than the `client`
+# filter, which also matches ".github/**" and the root lockfiles and so would
+# put a preview environment on every CI or dependency PR.
+preview-ui:
+  - "client/admin/**/*.tsx"
+  - "client/dashboard/**/*.tsx"
+  - "client/admin/**/*.css"
+  - "client/dashboard/**/*.css"
+
 # Paths that were moved or retired. PRs must not add or modify files here —
 # stale generators, cherry-picks, or muscle memory can silently resurrect a
 # directory after it was relocated (e.g. client/sdk lived on for a year after

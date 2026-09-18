@@ -8,6 +8,14 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
+  ToolUsageClientSummary,
+  ToolUsageClientSummary$inboundSchema,
+} from "./toolusageclientsummary.js";
+import {
+  ToolUsageClientToolBreakdownRow,
+  ToolUsageClientToolBreakdownRow$inboundSchema,
+} from "./toolusageclienttoolbreakdownrow.js";
+import {
   ToolUsageTargetSummary,
   ToolUsageTargetSummary$inboundSchema,
 } from "./toolusagetargetsummary.js";
@@ -40,6 +48,14 @@ import {
  * Target-aware MCP and tool usage metrics
  */
 export type GetToolUsageSummaryResult = {
+  /**
+   * Per-tool usage rows grouped by MCP client
+   */
+  clientToolBreakdown: Array<ToolUsageClientToolBreakdownRow>;
+  /**
+   * Top MCP clients for the selected filters and time range
+   */
+  clients: Array<ToolUsageClientSummary>;
   /**
    * Time-series usage buckets grouped by target
    */
@@ -76,6 +92,10 @@ export const GetToolUsageSummaryResult$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    client_tool_breakdown: z.array(
+      ToolUsageClientToolBreakdownRow$inboundSchema,
+    ),
+    clients: z.array(ToolUsageClientSummary$inboundSchema),
     target_time_series: z.array(ToolUsageTargetTimeSeriesPoint$inboundSchema),
     target_tool_breakdown: z.array(
       ToolUsageTargetToolBreakdownRow$inboundSchema,
@@ -88,6 +108,7 @@ export const GetToolUsageSummaryResult$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "client_tool_breakdown": "clientToolBreakdown",
       "target_time_series": "targetTimeSeries",
       "target_tool_breakdown": "targetToolBreakdown",
       "user_time_series": "userTimeSeries",
