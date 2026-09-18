@@ -1,0 +1,92 @@
+package background
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"time"
+
+	"go.temporal.io/api/enums/v1"
+	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/workflow"
+
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
+)
+
+const (
+	trustedDelegationCleanupBatchSize          int32 = 500
+	trustedDelegationCleanupMaxBatches               = 100
+	trustedDelegationCleanupActivityTimeout          = 10 * time.Minute
+	trustedDelegationCleanupMaxAttempts              = 3
+	trustedDelegationCleanupRetryInterval            = time.Minute
+	trustedDelegationCleanupBackoffCoefficient       = 2
+	trustedDelegationCleanupSchedulingMargin         = 7 * time.Minute
+)
+
+// TrustedDelegationCleanupWorkflow erases unusable credentials, never renews them.
+// One global hourly sweep, one activity, no per-human schedules or request-path
+// signals. Temporal actions/month per namespace: ~720 starts + 720 activities
+// = 1,440 normally (2,880 with all three attempts), fixed rather than per user.
+// Each preview task queue adds its own fixed schedule. The activity drains at
+// most 50,000 rows per hour; monitor saturation to keep erasure within 24 hours.
+func TrustedDelegationCleanupWorkflow(ctx workflow.Context) error {
+	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: trustedDelegationCleanupActivityTimeout,
+		RetryPolicy: &temporal.RetryPolicy{
+			MaximumAttempts:    trustedDelegationCleanupMaxAttempts,
+			InitialInterval:    trustedDelegationCleanupRetryInterval,
+			BackoffCoefficient: trustedDelegationCleanupBackoffCoefficient,
+		},
+	})
+	var a *Activities
+	return workflow.ExecuteActivity(ctx, a.CleanupTrustedDelegationCredentials).Get(ctx, nil)
+}
+
+// CleanupTrustedDelegationCredentials bounds both transactions and total work.
+// Retries are safe: the SQL only selects rows with secrets still to erase.
+func (a *Activities) CleanupTrustedDelegationCredentials(ctx context.Context) error {
+	return cleanupTrustedDelegationBatches(ctx, repo.New(a.db).CleanupTrustedDelegationCredentialsBatch)
+}
+
+func cleanupTrustedDelegationBatches(ctx context.Context, cleanup func(context.Context, int32) (int64, error)) error {
+	for range trustedDelegationCleanupMaxBatches {
+		n, err := cleanup(ctx, trustedDelegationCleanupBatchSize)
+		if err != nil {
+			return fmt.Errorf("cleanup trusted delegation credentials: %w", err)
+		}
+		if n < int64(trustedDelegationCleanupBatchSize) {
+			return nil
+		}
+	}
+	return fmt.Errorf("trusted delegation credential cleanup batch budget exhausted")
+}
+
+// Include every attempt, intervening backoff, and queue/workflow-task headroom.
+func trustedDelegationCleanupRunTimeout() time.Duration {
+	budget := trustedDelegationCleanupMaxAttempts * trustedDelegationCleanupActivityTimeout
+	interval := trustedDelegationCleanupRetryInterval
+	for attempt := 1; attempt < trustedDelegationCleanupMaxAttempts; attempt++ {
+		budget += interval
+		interval *= trustedDelegationCleanupBackoffCoefficient
+	}
+	return budget + trustedDelegationCleanupSchedulingMargin
+}
+
+func AddTrustedDelegationCleanupSchedule(ctx context.Context, temporalEnv *tenv.Environment) error {
+	id := fmt.Sprintf("v1:trusted-delegation-cleanup:%s", temporalEnv.Queue())
+	_, err := temporalEnv.Client().ScheduleClient().Create(ctx, client.ScheduleOptions{
+		ID:      id,
+		Overlap: enums.SCHEDULE_OVERLAP_POLICY_SKIP,
+		Spec:    client.ScheduleSpec{Intervals: []client.ScheduleIntervalSpec{{Every: time.Hour}}},
+		Action: &client.ScheduleWorkflowAction{
+			ID: id + "/scheduled", Workflow: TrustedDelegationCleanupWorkflow,
+			TaskQueue: string(temporalEnv.Queue()), WorkflowRunTimeout: trustedDelegationCleanupRunTimeout(),
+		},
+	})
+	if err != nil && !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
+		return fmt.Errorf("create trusted delegation cleanup schedule: %w", err)
+	}
+	return nil
+}

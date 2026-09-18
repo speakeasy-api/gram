@@ -1,4 +1,5 @@
-// Non-consuming per-card consent actions; only approve/deny consumes the challenge, so at most one client grant is minted.
+// Per-card consent actions do not consume challenges. Delegation retry consumes
+// and rotates the challenge; approve/deny remain the only grant-minting actions.
 
 package mcp
 
@@ -75,6 +76,12 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		return oops.E(oops.CodeUnauthorized, nil, "authn challenge subject is not resolved").LogError(ctx, logger)
 	}
 	subject := *challengeState.Subject
+
+	// Delegation retry is an authorization action, not a downstream card action.
+	// It uses only the already validated challenge identity and original issuer/client binding.
+	if r.PostForm.Get("action") == "retry_delegation" {
+		return s.retryFederatedDelegation(w, r, endpoint, challengeState)
+	}
 
 	clients, err := s.remoteChallengeMgr.ListClients(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
 	if err != nil {
@@ -225,7 +232,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		return nil
 
 	default:
-		return oops.E(oops.CodeBadRequest, nil, `action must be "connect", "refresh", "validate", "disconnect", or "set_auto_refresh"`).LogError(ctx, logger)
+		return oops.E(oops.CodeBadRequest, nil, `action must be "connect", "refresh", "validate", "disconnect", "set_auto_refresh", or "retry_delegation"`).LogError(ctx, logger)
 	}
 }
 

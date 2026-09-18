@@ -431,6 +431,26 @@ var _ = Service("organizationRemoteSessionClients", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "OrganizationRemoteSessionClient"}`)
 	})
 
+	Method("getClientDelegationStatus", func() {
+		Security(security.Session)
+		Description("Read sanitized delegation observations for the current upstream configuration in the last 30 days. Requires org:admin. Never exercises credentials; presence is not proof of future refresh success.")
+		Payload(func() {
+			Attribute("id", String, "The remote_session_client id.", func() { Format(FormatUUID) })
+			Required("id")
+			security.SessionPayload()
+		})
+		Result(OrganizationClientDelegationStatus)
+		HTTP(func() {
+			GET("/rpc/organizationRemoteSessionClients.getDelegationStatus")
+			Param("id")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "getOrganizationRemoteSessionClientDelegationStatus")
+		Meta("openapi:extension:x-speakeasy-name-override", "getDelegationStatus")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "OrganizationRemoteSessionClientDelegationStatus"}`)
+	})
+
 	Method("getClientDeletePreflight", func() {
 		Description("Authoritative impact summary for deleting a remote_session_client: associated session count, affected MCP server names, and trusted identity-provider login references that must be explicitly unlinked before deletion. Requires org:read.")
 

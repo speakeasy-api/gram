@@ -3660,3 +3660,389 @@ WHERE id = @id AND organization_id = @organization_id AND project_id IS NULL;
 -- name: SoftDeleteOrganizationRemoteSessionClientFixture :exec
 UPDATE remote_session_clients SET deleted_at = clock_timestamp()
 WHERE id = @id AND organization_id = @organization_id AND project_id IS NULL;
+
+-- Trusted delegation credentials are organization-scoped, never project-scoped.
+-- name: GetTrustedDelegationCredential :one
+SELECT s.* FROM trusted_issuer_sessions AS s
+WHERE s.organization_id = @organization_id::text
+  AND s.remote_session_client_id = @client_id::uuid
+  AND s.subject_urn = @subject_urn::text AND s.project_id IS NULL AND s.deleted IS FALSE
+  AND EXISTS (
+    SELECT 1 FROM organization_metadata AS o
+    JOIN remote_session_clients AS c ON c.organization_id = o.id
+    JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+    WHERE o.id = @organization_id::text AND o.disabled_at IS NULL
+      AND c.id = @client_id::uuid AND c.remote_session_issuer_id = @issuer_id::uuid
+      AND c.project_id IS NULL AND c.deleted IS FALSE
+      AND i.project_id IS NULL AND (i.organization_id = o.id OR i.organization_id IS NULL)
+      AND i.deleted IS FALSE
+      AND EXISTS (SELECT 1 FROM user_session_issuers AS usi
+        WHERE usi.organization_id = o.id AND usi.project_id IS NULL AND usi.deleted IS FALSE
+          AND usi.trusted_remote_session_client_id = c.id
+          AND usi.trusted_remote_session_issuer_id = i.id)
+      AND EXISTS (SELECT 1 FROM users AS u
+        JOIN organization_user_relationships AS m ON m.user_id = u.id AND m.organization_id = o.id
+        WHERE 'user:' || u.id = @subject_urn::text AND u.deleted_at IS NULL
+          AND u.workos_deleted_at IS NULL AND m.deleted IS FALSE)
+  );
+
+-- name: UpsertTrustedDelegationCredential :one
+-- Expected generation is zero for absence. Prepare explicit fields, including
+-- preserved refresh tokens, then re-read and prepare again after a CAS miss.
+-- Refresh completion also advances generation, preventing stale preservation.
+INSERT INTO trusted_issuer_sessions AS s (
+  organization_id, remote_session_client_id, subject_urn,
+  identity_assertion_encrypted, identity_assertion_expires_at, refresh_token_encrypted, refresh_expires_at, upstream_subject_encrypted, nonce_encrypted, credential_config_hash, observation_status, observed_at, credential_obtained_at, last_refresh_succeeded_at, retry_after, offline_access_refused_at, offline_access_request_config_hash
+)
+SELECT @organization_id::text, @client_id::uuid, @subject_urn::text,
+  sqlc.narg(identity_assertion_encrypted), sqlc.narg(identity_assertion_expires_at), sqlc.narg(refresh_token_encrypted), sqlc.narg(refresh_expires_at), sqlc.narg(upstream_subject_encrypted), sqlc.narg(nonce_encrypted), sqlc.narg(credential_config_hash), sqlc.narg(observation_status), sqlc.narg(observed_at), sqlc.narg(credential_obtained_at), sqlc.narg(last_refresh_succeeded_at), sqlc.narg(retry_after), sqlc.narg(offline_access_refused_at), sqlc.narg(offline_access_request_config_hash)
+WHERE EXISTS (
+    SELECT 1 FROM organization_metadata AS o
+    JOIN remote_session_clients AS c ON c.organization_id = o.id
+    JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+    WHERE o.id = @organization_id::text AND o.disabled_at IS NULL
+      AND c.id = @client_id::uuid AND c.remote_session_issuer_id = @issuer_id::uuid
+      AND c.project_id IS NULL AND c.deleted IS FALSE
+      AND i.project_id IS NULL AND (i.organization_id = o.id OR i.organization_id IS NULL)
+      AND i.deleted IS FALSE
+      AND EXISTS (SELECT 1 FROM user_session_issuers AS usi
+        WHERE usi.organization_id = o.id AND usi.project_id IS NULL AND usi.deleted IS FALSE
+          AND usi.trusted_remote_session_client_id = c.id
+          AND usi.trusted_remote_session_issuer_id = i.id)
+      AND EXISTS (SELECT 1 FROM users AS u
+        JOIN organization_user_relationships AS m ON m.user_id = u.id AND m.organization_id = o.id
+        WHERE 'user:' || u.id = @subject_urn::text AND u.deleted_at IS NULL
+          AND u.workos_deleted_at IS NULL AND m.deleted IS FALSE)
+  )
+  AND (@expected_generation::bigint = 0 OR EXISTS (
+    SELECT 1 FROM trusted_issuer_sessions AS current
+    WHERE current.organization_id = @organization_id::text
+      AND current.remote_session_client_id = @client_id::uuid
+      AND current.subject_urn = @subject_urn::text AND current.project_id IS NULL
+      AND current.deleted IS FALSE AND COALESCE(current.credential_generation, 1) = @expected_generation::bigint))
+ON CONFLICT (remote_session_client_id, subject_urn) WHERE deleted IS FALSE
+DO UPDATE SET
+  identity_assertion_encrypted = EXCLUDED.identity_assertion_encrypted,
+  identity_assertion_expires_at = EXCLUDED.identity_assertion_expires_at,
+  refresh_token_encrypted = EXCLUDED.refresh_token_encrypted,
+  refresh_expires_at = EXCLUDED.refresh_expires_at,
+  upstream_subject_encrypted = EXCLUDED.upstream_subject_encrypted,
+  nonce_encrypted = EXCLUDED.nonce_encrypted,
+  credential_config_hash = EXCLUDED.credential_config_hash,
+  observation_status = EXCLUDED.observation_status,
+  observed_at = EXCLUDED.observed_at,
+  credential_obtained_at = EXCLUDED.credential_obtained_at,
+  last_refresh_succeeded_at = EXCLUDED.last_refresh_succeeded_at,
+  retry_after = EXCLUDED.retry_after,
+  offline_access_refused_at = EXCLUDED.offline_access_refused_at,
+  offline_access_request_config_hash = EXCLUDED.offline_access_request_config_hash,
+  credential_generation = COALESCE(s.credential_generation, 1) + 1,
+  refresh_claim_id = NULL, updated_at = clock_timestamp()
+WHERE s.organization_id = @organization_id::text AND s.project_id IS NULL
+  AND COALESCE(s.credential_generation, 1) = @expected_generation::bigint
+RETURNING s.*;
+
+-- name: ClaimTrustedDelegationRefresh :one
+-- No lease expiry or timeout authorizes another POST for this generation.
+UPDATE trusted_issuer_sessions AS s
+SET refresh_claim_id = @refresh_claim_id::uuid,
+    credential_generation = COALESCE(s.credential_generation, 1) + 1,
+    updated_at = clock_timestamp()
+WHERE s.organization_id = @organization_id::text
+  AND s.remote_session_client_id = @client_id::uuid
+  AND s.subject_urn = @subject_urn::text AND s.project_id IS NULL AND s.deleted IS FALSE
+  AND COALESCE(s.credential_generation, 1) = @expected_generation::bigint AND s.refresh_claim_id IS NULL
+  AND s.refresh_token_encrypted IS NOT NULL
+  AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > clock_timestamp())
+  AND (s.retry_after IS NULL OR s.retry_after <= clock_timestamp())
+  AND EXISTS (
+    SELECT 1 FROM organization_metadata AS o
+    JOIN remote_session_clients AS c ON c.organization_id = o.id
+    JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+    WHERE o.id = @organization_id::text AND o.disabled_at IS NULL
+      AND c.id = @client_id::uuid AND c.remote_session_issuer_id = @issuer_id::uuid
+      AND c.project_id IS NULL AND c.deleted IS FALSE
+      AND i.project_id IS NULL AND (i.organization_id = o.id OR i.organization_id IS NULL)
+      AND i.deleted IS FALSE
+      AND EXISTS (SELECT 1 FROM user_session_issuers AS usi
+        WHERE usi.organization_id = o.id AND usi.project_id IS NULL AND usi.deleted IS FALSE
+          AND usi.trusted_remote_session_client_id = c.id
+          AND usi.trusted_remote_session_issuer_id = i.id)
+      AND EXISTS (SELECT 1 FROM users AS u
+        JOIN organization_user_relationships AS m ON m.user_id = u.id AND m.organization_id = o.id
+        WHERE 'user:' || u.id = @subject_urn::text AND u.deleted_at IS NULL
+          AND u.workos_deleted_at IS NULL AND m.deleted IS FALSE)
+  )
+RETURNING s.*;
+
+-- name: MarkTrustedDelegationRefreshAttempt :execrows
+-- Claim ownership is not evidence of an outbound request. Stamp only after
+-- credential decryption succeeds, immediately before the provider POST.
+UPDATE trusted_issuer_sessions AS s
+SET last_refresh_attempt_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE s.organization_id = @organization_id::text
+  AND s.remote_session_client_id = @client_id::uuid
+  AND s.subject_urn = @subject_urn::text AND s.project_id IS NULL AND s.deleted IS FALSE
+  AND COALESCE(s.credential_generation, 1) = @expected_generation::bigint
+  AND s.refresh_claim_id = @refresh_claim_id::uuid
+  AND EXISTS (SELECT 1 FROM remote_session_clients AS c
+    WHERE c.id = s.remote_session_client_id AND c.organization_id = s.organization_id
+      AND c.project_id IS NULL AND c.remote_session_issuer_id = @issuer_id::uuid);
+
+-- name: CompleteTrustedDelegationRefresh :one
+-- Retain the claim for ambiguous outcomes; only definitive completion releases
+-- it. Explicit fields allow rotation without inventing an assertion.
+UPDATE trusted_issuer_sessions AS s SET
+  identity_assertion_encrypted = sqlc.narg(identity_assertion_encrypted),
+  identity_assertion_expires_at = sqlc.narg(identity_assertion_expires_at),
+  refresh_token_encrypted = sqlc.narg(refresh_token_encrypted),
+  refresh_expires_at = sqlc.narg(refresh_expires_at),
+  upstream_subject_encrypted = sqlc.narg(upstream_subject_encrypted),
+  nonce_encrypted = sqlc.narg(nonce_encrypted),
+  credential_config_hash = sqlc.narg(credential_config_hash),
+  observation_status = sqlc.narg(observation_status),
+  observed_at = sqlc.narg(observed_at),
+  credential_obtained_at = sqlc.narg(credential_obtained_at),
+  last_refresh_succeeded_at = sqlc.narg(last_refresh_succeeded_at),
+  retry_after = sqlc.narg(retry_after),
+  offline_access_refused_at = sqlc.narg(offline_access_refused_at),
+  offline_access_request_config_hash = sqlc.narg(offline_access_request_config_hash),
+  credential_generation = COALESCE(s.credential_generation, 1) + 1,
+  refresh_claim_id = sqlc.narg(next_refresh_claim_id)::uuid, updated_at = clock_timestamp()
+WHERE s.organization_id = @organization_id::text
+  AND s.remote_session_client_id = @client_id::uuid
+  AND s.subject_urn = @subject_urn::text AND s.project_id IS NULL AND s.deleted IS FALSE
+  AND COALESCE(s.credential_generation, 1) = @expected_generation::bigint
+  AND s.refresh_claim_id = @refresh_claim_id::uuid
+  AND EXISTS (
+    SELECT 1 FROM organization_metadata AS o
+    JOIN remote_session_clients AS c ON c.organization_id = o.id
+    JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+    WHERE o.id = @organization_id::text AND o.disabled_at IS NULL
+      AND c.id = @client_id::uuid AND c.remote_session_issuer_id = @issuer_id::uuid
+      AND c.project_id IS NULL AND c.deleted IS FALSE
+      AND i.project_id IS NULL AND (i.organization_id = o.id OR i.organization_id IS NULL)
+      AND i.deleted IS FALSE
+      AND EXISTS (SELECT 1 FROM user_session_issuers AS usi
+        WHERE usi.organization_id = o.id AND usi.project_id IS NULL AND usi.deleted IS FALSE
+          AND usi.trusted_remote_session_client_id = c.id
+          AND usi.trusted_remote_session_issuer_id = i.id)
+      AND EXISTS (SELECT 1 FROM users AS u
+        JOIN organization_user_relationships AS m ON m.user_id = u.id AND m.organization_id = o.id
+        WHERE 'user:' || u.id = @subject_urn::text AND u.deleted_at IS NULL
+          AND u.workos_deleted_at IS NULL AND m.deleted IS FALSE)
+  )
+RETURNING s.*;
+
+-- name: RecordTrustedDelegationOfflineRefusal :one
+-- A refused request never erases a previously usable credential.
+INSERT INTO trusted_issuer_sessions AS s (
+  organization_id, remote_session_client_id, subject_urn,
+  offline_access_refused_at, offline_access_request_config_hash,
+  credential_config_hash, observation_status, observed_at
+)
+SELECT @organization_id::text, @client_id::uuid, @subject_urn::text,
+  clock_timestamp(), @config_hash::text, @config_hash::text, 'refused', clock_timestamp()
+WHERE EXISTS (
+    SELECT 1 FROM organization_metadata AS o
+    JOIN remote_session_clients AS c ON c.organization_id = o.id
+    JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+    WHERE o.id = @organization_id::text AND o.disabled_at IS NULL
+      AND c.id = @client_id::uuid AND c.project_id IS NULL AND c.deleted IS FALSE
+      AND i.project_id IS NULL AND (i.organization_id = o.id OR i.organization_id IS NULL)
+      AND i.deleted IS FALSE
+      AND EXISTS (SELECT 1 FROM user_session_issuers AS usi
+        WHERE usi.organization_id = o.id AND usi.project_id IS NULL AND usi.deleted IS FALSE
+          AND usi.trusted_remote_session_client_id = c.id
+          AND usi.trusted_remote_session_issuer_id = i.id)
+      AND EXISTS (SELECT 1 FROM users AS u
+        JOIN organization_user_relationships AS m ON m.user_id = u.id AND m.organization_id = o.id
+        WHERE 'user:' || u.id = @subject_urn::text AND u.deleted_at IS NULL
+          AND u.workos_deleted_at IS NULL AND m.deleted IS FALSE)
+  )
+  AND (@expected_generation::bigint = 0 OR EXISTS (
+    SELECT 1 FROM trusted_issuer_sessions AS current
+    WHERE current.organization_id = @organization_id::text
+      AND current.remote_session_client_id = @client_id::uuid
+      AND current.subject_urn = @subject_urn::text AND current.project_id IS NULL
+      AND current.deleted IS FALSE AND COALESCE(current.credential_generation, 1) = @expected_generation::bigint))
+ON CONFLICT (remote_session_client_id, subject_urn) WHERE deleted IS FALSE
+DO UPDATE SET offline_access_refused_at = clock_timestamp(),
+  offline_access_request_config_hash = @config_hash::text,
+  observation_status = 'refused', observed_at = clock_timestamp(),
+  updated_at = clock_timestamp()
+WHERE s.organization_id = @organization_id::text AND s.project_id IS NULL
+  AND COALESCE(s.credential_generation, 1) = @expected_generation::bigint
+  AND (s.credential_config_hash IS NULL OR s.credential_config_hash = @config_hash::text)
+RETURNING s.*;
+
+-- name: ClearExpiredTrustedDelegationAssertion :execrows
+UPDATE trusted_issuer_sessions AS s
+SET identity_assertion_encrypted = NULL, identity_assertion_expires_at = NULL,
+    updated_at = clock_timestamp()
+WHERE s.organization_id = @organization_id::text
+  AND s.remote_session_client_id = @client_id::uuid
+  AND s.subject_urn = @subject_urn::text AND s.project_id IS NULL AND s.deleted IS FALSE
+  AND EXISTS (SELECT 1 FROM remote_session_clients AS c
+    WHERE c.id = s.remote_session_client_id AND c.organization_id = s.organization_id
+      AND c.project_id IS NULL AND c.remote_session_issuer_id = @issuer_id::uuid)
+  AND s.identity_assertion_encrypted IS NOT NULL
+  AND (s.identity_assertion_expires_at IS NULL OR s.identity_assertion_expires_at <= clock_timestamp());
+
+-- name: RevokeTrustedDelegationCredential :execrows
+-- Works after trust removal; revocation never reads secrets.
+UPDATE trusted_issuer_sessions AS s SET
+  identity_assertion_encrypted = NULL,
+  identity_assertion_expires_at = NULL,
+  refresh_token_encrypted = NULL,
+  refresh_expires_at = NULL,
+  upstream_subject_encrypted = NULL,
+  nonce_encrypted = NULL,
+  credential_config_hash = NULL,
+  credential_obtained_at = NULL,
+  last_refresh_succeeded_at = NULL,
+  retry_after = NULL,
+  offline_access_refused_at = NULL,
+  offline_access_request_config_hash = NULL,
+  observation_status = 'reauthentication_required', observed_at = clock_timestamp(),
+  credential_generation = COALESCE(s.credential_generation, 1) + 1,
+  refresh_claim_id = NULL, updated_at = clock_timestamp()
+WHERE s.organization_id = @organization_id::text
+  AND s.remote_session_client_id = @client_id::uuid
+  AND s.subject_urn = @subject_urn::text AND s.project_id IS NULL AND s.deleted IS FALSE
+  AND EXISTS (SELECT 1 FROM remote_session_clients AS c
+    WHERE c.id = s.remote_session_client_id AND c.organization_id = s.organization_id
+      AND c.project_id IS NULL AND c.remote_session_issuer_id = @issuer_id::uuid);
+
+-- name: CleanupTrustedDelegationCredentialsBatch :one
+-- Maintenance-only cross-tenant erasure. Include inactive rows and use bounded
+-- row locking. Orphans are deleted even without ciphertext: subject_urn is personal
+-- data. Live expired credentials are erased without releasing refresh claims.
+WITH cleanup_budget AS (
+  SELECT @batch_size::int AS batch_size
+), expired_ids AS MATERIALIZED (
+  -- Bound each indexed scan before combining it with lifecycle cleanup.
+  (SELECT s.id FROM trusted_issuer_sessions AS s
+   WHERE s.identity_assertion_encrypted IS NOT NULL
+     AND (s.identity_assertion_expires_at IS NULL OR s.identity_assertion_expires_at <= statement_timestamp())
+   ORDER BY s.identity_assertion_expires_at NULLS FIRST, s.id LIMIT (SELECT batch_size FROM cleanup_budget))
+  UNION
+  (SELECT s.id FROM trusted_issuer_sessions AS s
+   WHERE s.refresh_token_encrypted IS NOT NULL AND s.refresh_expires_at <= statement_timestamp()
+   ORDER BY s.refresh_expires_at, s.id LIMIT (SELECT batch_size FROM cleanup_budget))
+  UNION
+  (SELECT s.id FROM trusted_issuer_sessions AS s
+   WHERE s.identity_assertion_encrypted IS NULL AND s.refresh_token_encrypted IS NULL
+     AND (s.upstream_subject_encrypted IS NOT NULL OR s.nonce_encrypted IS NOT NULL)
+   ORDER BY s.id LIMIT (SELECT batch_size FROM cleanup_budget))
+), expired_candidates AS MATERIALIZED (
+  SELECT s.id, (s.project_id IS NOT NULL OR s.deleted OR NOT EXISTS (
+    SELECT 1 FROM organization_metadata AS o
+    JOIN remote_session_clients AS c ON c.organization_id = o.id
+    JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+    WHERE o.id = s.organization_id AND o.disabled_at IS NULL
+      AND c.id = s.remote_session_client_id AND c.project_id IS NULL AND c.deleted IS FALSE
+      AND i.project_id IS NULL AND (i.organization_id = o.id OR i.organization_id IS NULL)
+      AND i.deleted IS FALSE
+      AND EXISTS (SELECT 1 FROM user_session_issuers AS usi
+        WHERE usi.organization_id = o.id AND usi.project_id IS NULL AND usi.deleted IS FALSE
+          AND usi.trusted_remote_session_client_id = c.id
+          AND usi.trusted_remote_session_issuer_id = i.id)
+      AND EXISTS (SELECT 1 FROM users AS u
+        JOIN organization_user_relationships AS m ON m.user_id = u.id AND m.organization_id = o.id
+        WHERE 'user:' || u.id = s.subject_urn AND u.deleted_at IS NULL
+          AND u.workos_deleted_at IS NULL AND m.deleted IS FALSE)
+  )) AS orphaned
+  FROM trusted_issuer_sessions AS s
+  JOIN expired_ids AS e ON e.id = s.id
+  ORDER BY s.id LIMIT (SELECT batch_size FROM cleanup_budget)
+  FOR UPDATE OF s SKIP LOCKED
+), remaining_budget AS (
+  SELECT ((SELECT batch_size FROM cleanup_budget) - count(*))::bigint AS remaining FROM expired_candidates
+), lifecycle_candidates AS MATERIALIZED (
+  -- Do not rescan active lifecycles while a full expiration batch is available.
+  SELECT s.id, true AS orphaned
+  FROM trusted_issuer_sessions AS s
+  WHERE (s.project_id IS NOT NULL OR s.deleted OR NOT EXISTS (
+    SELECT 1 FROM organization_metadata AS o
+    JOIN remote_session_clients AS c ON c.organization_id = o.id
+    JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+    WHERE o.id = s.organization_id AND o.disabled_at IS NULL
+      AND c.id = s.remote_session_client_id AND c.project_id IS NULL AND c.deleted IS FALSE
+      AND i.project_id IS NULL AND (i.organization_id = o.id OR i.organization_id IS NULL)
+      AND i.deleted IS FALSE
+      AND EXISTS (SELECT 1 FROM user_session_issuers AS usi
+        WHERE usi.organization_id = o.id AND usi.project_id IS NULL AND usi.deleted IS FALSE
+          AND usi.trusted_remote_session_client_id = c.id
+          AND usi.trusted_remote_session_issuer_id = i.id)
+      AND EXISTS (SELECT 1 FROM users AS u
+        JOIN organization_user_relationships AS m ON m.user_id = u.id AND m.organization_id = o.id
+        WHERE 'user:' || u.id = s.subject_urn AND u.deleted_at IS NULL
+          AND u.workos_deleted_at IS NULL AND m.deleted IS FALSE)
+  ))
+    AND NOT EXISTS (SELECT 1 FROM expired_candidates AS e WHERE e.id = s.id)
+  ORDER BY s.id
+  LIMIT (SELECT remaining FROM remaining_budget)
+  FOR UPDATE OF s SKIP LOCKED
+), candidates AS (
+  SELECT id, orphaned FROM expired_candidates
+  UNION ALL
+  SELECT id, orphaned FROM lifecycle_candidates
+), erased AS (
+  DELETE FROM trusted_issuer_sessions AS s USING candidates AS c
+  WHERE s.id = c.id AND c.orphaned
+  RETURNING s.id
+), expired AS (
+UPDATE trusted_issuer_sessions AS s SET
+  identity_assertion_encrypted = CASE WHEN c.orphaned OR s.identity_assertion_expires_at IS NULL OR s.identity_assertion_expires_at <= clock_timestamp() THEN NULL ELSE s.identity_assertion_encrypted END,
+  identity_assertion_expires_at = CASE WHEN c.orphaned OR s.identity_assertion_expires_at IS NULL OR s.identity_assertion_expires_at <= clock_timestamp() THEN NULL ELSE s.identity_assertion_expires_at END,
+  refresh_token_encrypted = CASE WHEN c.orphaned OR s.refresh_expires_at <= clock_timestamp() THEN NULL ELSE s.refresh_token_encrypted END,
+  refresh_expires_at = CASE WHEN c.orphaned OR s.refresh_expires_at <= clock_timestamp() THEN NULL ELSE s.refresh_expires_at END,
+  upstream_subject_encrypted = CASE WHEN c.orphaned OR ((s.identity_assertion_encrypted IS NULL OR s.identity_assertion_expires_at IS NULL OR s.identity_assertion_expires_at <= clock_timestamp()) AND (s.refresh_token_encrypted IS NULL OR s.refresh_expires_at <= clock_timestamp())) THEN NULL ELSE s.upstream_subject_encrypted END,
+  nonce_encrypted = CASE WHEN c.orphaned OR ((s.identity_assertion_encrypted IS NULL OR s.identity_assertion_expires_at IS NULL OR s.identity_assertion_expires_at <= clock_timestamp()) AND (s.refresh_token_encrypted IS NULL OR s.refresh_expires_at <= clock_timestamp())) THEN NULL ELSE s.nonce_encrypted END,
+  refresh_claim_id = CASE WHEN c.orphaned THEN NULL ELSE s.refresh_claim_id END,
+  credential_generation = CASE WHEN c.orphaned OR s.refresh_expires_at <= clock_timestamp() THEN COALESCE(s.credential_generation, 1) + 1 ELSE s.credential_generation END,
+  updated_at = clock_timestamp()
+FROM candidates AS c WHERE s.id = c.id AND NOT c.orphaned
+RETURNING s.id
+)
+SELECT ((SELECT count(*) FROM erased) + (SELECT count(*) FROM expired))::bigint AS affected_rows;
+
+-- name: CountTrustedDelegationObservations :many
+-- Status reads never exercise or disclose credentials. Ignore prior configs.
+SELECT CASE
+    WHEN s.observation_status IN ('durable_credential_present', 'assertion_only') THEN
+      CASE WHEN s.refresh_token_encrypted IS NOT NULL
+          AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > clock_timestamp())
+        THEN 'durable_credential_present'
+        WHEN s.identity_assertion_encrypted IS NOT NULL AND s.identity_assertion_expires_at > clock_timestamp()
+        THEN 'assertion_only'
+        ELSE 'reauthentication_required' END
+    ELSE coalesce(s.observation_status, 'unknown')
+  END::text AS observation_status, count(*)::bigint AS observation_count,
+  max(s.observed_at)::timestamptz AS last_observed_at,
+  max(s.credential_obtained_at)::timestamptz AS last_credential_obtained_at,
+  max(s.last_refresh_succeeded_at)::timestamptz AS last_refresh_succeeded_at
+FROM trusted_issuer_sessions AS s
+WHERE s.organization_id = @organization_id::text
+  AND s.remote_session_client_id = @client_id::uuid AND s.project_id IS NULL
+  AND s.deleted IS FALSE AND s.credential_config_hash = @config_hash::text
+  AND s.observed_at >= @observed_since::timestamptz
+  AND EXISTS (
+    SELECT 1 FROM organization_metadata AS o
+    JOIN remote_session_clients AS c ON c.organization_id = o.id
+    JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+    WHERE o.id = s.organization_id AND o.disabled_at IS NULL
+      AND c.id = s.remote_session_client_id AND c.project_id IS NULL AND c.deleted IS FALSE
+      AND i.project_id IS NULL AND (i.organization_id = o.id OR i.organization_id IS NULL)
+      AND i.deleted IS FALSE
+      AND EXISTS (SELECT 1 FROM user_session_issuers AS usi
+        WHERE usi.organization_id = o.id AND usi.project_id IS NULL AND usi.deleted IS FALSE
+          AND usi.trusted_remote_session_client_id = c.id
+          AND usi.trusted_remote_session_issuer_id = i.id)
+      AND EXISTS (SELECT 1 FROM users AS u
+        JOIN organization_user_relationships AS m ON m.user_id = u.id AND m.organization_id = o.id
+        WHERE 'user:' || u.id = s.subject_urn AND u.deleted_at IS NULL
+          AND u.workos_deleted_at IS NULL AND m.deleted IS FALSE)
+  )
+GROUP BY 1;

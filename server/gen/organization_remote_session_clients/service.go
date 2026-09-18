@@ -26,6 +26,10 @@ type Service interface {
 	// Get a remote_session_client in the caller's organization by id. Requires
 	// org:read.
 	GetClient(context.Context, *GetClientPayload) (res *types.RemoteSessionClient, err error)
+	// Read sanitized delegation observations for the current upstream
+	// configuration in the last 30 days. Requires org:admin. Never exercises
+	// credentials; presence is not proof of future refresh success.
+	GetClientDelegationStatus(context.Context, *GetClientDelegationStatusPayload) (res *OrganizationClientDelegationStatus, err error)
 	// Authoritative impact summary for deleting a remote_session_client:
 	// associated session count, affected MCP server names, and trusted
 	// identity-provider login references that must be explicitly unlinked before
@@ -100,7 +104,7 @@ const ServiceName = "organizationRemoteSessionClients"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [12]string{"listClients", "getClient", "getClientDeletePreflight", "listClientMcpServers", "createClient", "createCimdClient", "updateClient", "attachClientKeySet", "detachClientKeySet", "rotateClient", "deleteClient", "removeClientFromMcpServer"}
+var MethodNames = [13]string{"listClients", "getClient", "getClientDelegationStatus", "getClientDeletePreflight", "listClientMcpServers", "createClient", "createCimdClient", "updateClient", "attachClientKeySet", "detachClientKeySet", "rotateClient", "deleteClient", "removeClientFromMcpServer"}
 
 // AttachClientKeySetPayload is the payload type of the
 // organizationRemoteSessionClients service attachClientKeySet method.
@@ -174,6 +178,21 @@ type CreateClientPayload struct {
 	ClientSecretExpiresAt *string
 }
 
+// Sanitized count of the latest observation per human, not a history of token
+// requests.
+type DelegationStatusCount struct {
+	// Observed delegation outcome.
+	Status string
+	// Number of humans with this latest outcome.
+	Count int64
+	// Most recent matching observation.
+	LastObservedAt *string
+	// Most recent credential acquisition, distinct from renewal.
+	LastCredentialObtainedAt *string
+	// Most recent successful assertion renewal.
+	LastRefreshSucceededAt *string
+}
+
 // DeleteClientPayload is the payload type of the
 // organizationRemoteSessionClients service deleteClient method.
 type DeleteClientPayload struct {
@@ -190,6 +209,14 @@ type DetachClientKeySetPayload struct {
 	ID           string
 	SessionToken *string
 	ApikeyToken  *string
+}
+
+// GetClientDelegationStatusPayload is the payload type of the
+// organizationRemoteSessionClients service getClientDelegationStatus method.
+type GetClientDelegationStatusPayload struct {
+	// The remote_session_client id.
+	ID           string
+	SessionToken *string
 }
 
 // GetClientDeletePreflightPayload is the payload type of the
@@ -244,6 +271,16 @@ type ListOrganizationRemoteSessionClientsResult struct {
 	Items []*OrganizationRemoteSessionClient
 	// Cursor for the next page; empty when exhausted.
 	NextCursor *string
+}
+
+// OrganizationClientDelegationStatus is the result type of the
+// organizationRemoteSessionClients service getClientDelegationStatus method.
+type OrganizationClientDelegationStatus struct {
+	// Whether any current observations exist.
+	Status string
+	// Inclusive observation window start.
+	WindowStart  string
+	Observations []*DelegationStatusCount
 }
 
 // OrganizationClientDeletePreflight is the result type of the

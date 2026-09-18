@@ -16,7 +16,17 @@ type EphemeralFederatedCredentials struct {
 	refreshToken     string
 	expiresIn        int
 	refreshExpiresIn int64
+	refreshExpiresAt *time.Time
 	receivedAt       time.Time
+}
+
+// RefreshExpiresAt distinguishes an unknown lifetime from an explicitly expired grant.
+func (c EphemeralFederatedCredentials) RefreshExpiresAt() *time.Time {
+	if c.refreshExpiresAt == nil {
+		return nil
+	}
+	value := *c.refreshExpiresAt
+	return &value
 }
 
 func (c EphemeralFederatedCredentials) IDToken() string              { return c.idToken }
@@ -53,7 +63,7 @@ func (i *FederatedIdentity) DiscardCredentials() {
 	if i == nil || i.credentials == nil {
 		return
 	}
-	*i.credentials = EphemeralFederatedCredentials{idToken: "", refreshToken: "", expiresIn: 0, refreshExpiresIn: 0, receivedAt: time.Time{}}
+	*i.credentials = EphemeralFederatedCredentials{idToken: "", refreshToken: "", expiresIn: 0, refreshExpiresIn: 0, refreshExpiresAt: nil, receivedAt: time.Time{}}
 	i.credentials = nil
 }
 

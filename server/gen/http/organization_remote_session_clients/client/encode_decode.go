@@ -502,6 +502,241 @@ func DecodeGetClientResponse(decoder func(*http.Response) goahttp.Decoder, resto
 	}
 }
 
+// BuildGetClientDelegationStatusRequest instantiates a HTTP request object
+// with method and path set to call the "organizationRemoteSessionClients"
+// service "getClientDelegationStatus" endpoint
+func (c *Client) BuildGetClientDelegationStatusRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetClientDelegationStatusOrganizationRemoteSessionClientsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("organizationRemoteSessionClients", "getClientDelegationStatus", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetClientDelegationStatusRequest returns an encoder for requests sent
+// to the organizationRemoteSessionClients getClientDelegationStatus server.
+func EncodeGetClientDelegationStatusRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*organizationremotesessionclients.GetClientDelegationStatusPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("organizationRemoteSessionClients", "getClientDelegationStatus", "*organizationremotesessionclients.GetClientDelegationStatusPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		values := req.URL.Query()
+		values.Add("id", p.ID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetClientDelegationStatusResponse returns a decoder for responses
+// returned by the organizationRemoteSessionClients getClientDelegationStatus
+// endpoint. restoreBody controls whether the response body should be restored
+// after having been read.
+// DecodeGetClientDelegationStatusResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetClientDelegationStatusResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetClientDelegationStatusResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionClients", "getClientDelegationStatus", err)
+			}
+			err = ValidateGetClientDelegationStatusResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionClients", "getClientDelegationStatus", err)
+			}
+			res := NewGetClientDelegationStatusOrganizationClientDelegationStatusOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetClientDelegationStatusUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionClients", "getClientDelegationStatus", err)
+			}
+			err = ValidateGetClientDelegationStatusUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionClients", "getClientDelegationStatus", err)
+			}
+			return nil, NewGetClientDelegationStatusUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetClientDelegationStatusForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionClients", "getClientDelegationStatus", err)
+			}
+			err = ValidateGetClientDelegationStatusForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionClients", "getClientDelegationStatus", err)
+			}
+			return nil, NewGetClientDelegationStatusForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetClientDelegationStatusBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionClients", "getClientDelegationStatus", err)
+			}
+			err = ValidateGetClientDelegationStatusBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionClients", "getClientDelegationStatus", err)
+			}
+			return nil, NewGetClientDelegationStatusBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetClientDelegationStatusNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionClients", "getClientDelegationStatus", err)
+			}
+			err = ValidateGetClientDelegationStatusNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionClients", "getClientDelegationStatus", err)
+			}
+			return nil, NewGetClientDelegationStatusNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetClientDelegationStatusConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionClients", "getClientDelegationStatus", err)
+			}
+			err = ValidateGetClientDelegationStatusConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionClients", "getClientDelegationStatus", err)
+			}
+			return nil, NewGetClientDelegationStatusConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetClientDelegationStatusUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionClients", "getClientDelegationStatus", err)
+			}
+			err = ValidateGetClientDelegationStatusUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionClients", "getClientDelegationStatus", err)
+			}
+			return nil, NewGetClientDelegationStatusUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetClientDelegationStatusInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionClients", "getClientDelegationStatus", err)
+			}
+			err = ValidateGetClientDelegationStatusInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionClients", "getClientDelegationStatus", err)
+			}
+			return nil, NewGetClientDelegationStatusInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetClientDelegationStatusInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizationRemoteSessionClients", "getClientDelegationStatus", err)
+				}
+				err = ValidateGetClientDelegationStatusInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizationRemoteSessionClients", "getClientDelegationStatus", err)
+				}
+				return nil, NewGetClientDelegationStatusInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetClientDelegationStatusUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizationRemoteSessionClients", "getClientDelegationStatus", err)
+				}
+				err = ValidateGetClientDelegationStatusUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizationRemoteSessionClients", "getClientDelegationStatus", err)
+				}
+				return nil, NewGetClientDelegationStatusUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("organizationRemoteSessionClients", "getClientDelegationStatus", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetClientDelegationStatusGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionClients", "getClientDelegationStatus", err)
+			}
+			err = ValidateGetClientDelegationStatusGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionClients", "getClientDelegationStatus", err)
+			}
+			return nil, NewGetClientDelegationStatusGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("organizationRemoteSessionClients", "getClientDelegationStatus", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildGetClientDeletePreflightRequest instantiates a HTTP request object with
 // method and path set to call the "organizationRemoteSessionClients" service
 // "getClientDeletePreflight" endpoint
@@ -2941,6 +3176,22 @@ func unmarshalRemoteSessionClientResponseBodyToTypesRemoteSessionClient(v *Remot
 		for i, val := range v.Scope {
 			res.Scope[i] = val
 		}
+	}
+
+	return res
+}
+
+// unmarshalDelegationStatusCountResponseBodyToOrganizationremotesessionclientsDelegationStatusCount
+// builds a value of type
+// *organizationremotesessionclients.DelegationStatusCount from a value of type
+// *DelegationStatusCountResponseBody.
+func unmarshalDelegationStatusCountResponseBodyToOrganizationremotesessionclientsDelegationStatusCount(v *DelegationStatusCountResponseBody) *organizationremotesessionclients.DelegationStatusCount {
+	res := &organizationremotesessionclients.DelegationStatusCount{
+		Status:                   *v.Status,
+		Count:                    *v.Count,
+		LastObservedAt:           v.LastObservedAt,
+		LastCredentialObtainedAt: v.LastCredentialObtainedAt,
+		LastRefreshSucceededAt:   v.LastRefreshSucceededAt,
 	}
 
 	return res

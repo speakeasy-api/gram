@@ -36463,6 +36463,96 @@ paths:
             x-speakeasy-name-override: get
             x-speakeasy-react-hook:
                 name: OrganizationRemoteSessionClient
+    /rpc/organizationRemoteSessionClients.getDelegationStatus:
+        get:
+            description: Read sanitized delegation observations for the current upstream configuration in the last 30 days. Requires org:admin. Never exercises credentials; presence is not proof of future refresh success.
+            operationId: getOrganizationRemoteSessionClientDelegationStatus
+            parameters:
+                - allowEmptyValue: true
+                  description: The remote_session_client id.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The remote_session_client id.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/OrganizationClientDelegationStatus'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: getClientDelegationStatus organizationRemoteSessionClients
+            tags:
+                - organizationRemoteSessionClients
+            x-speakeasy-name-override: getDelegationStatus
+            x-speakeasy-react-hook:
+                name: OrganizationRemoteSessionClientDelegationStatus
     /rpc/organizationRemoteSessionClients.getDeletePreflight:
         get:
             description: 'Authoritative impact summary for deleting a remote_session_client: associated session count, affected MCP server names, and trusted identity-provider login references that must be explicitly unlinked before deletion. Requires org:read.'
@@ -77968,6 +78058,42 @@ components:
                     description: Whether the challenge is now declined.
             required:
                 - declined
+        DelegationStatusCount:
+            type: object
+            properties:
+                count:
+                    type: integer
+                    description: Number of humans with this latest outcome.
+                    format: int64
+                    minimum: 0
+                last_credential_obtained_at:
+                    type: string
+                    description: Most recent credential acquisition, distinct from renewal.
+                    format: date-time
+                last_observed_at:
+                    type: string
+                    description: Most recent matching observation.
+                    format: date-time
+                last_refresh_succeeded_at:
+                    type: string
+                    description: Most recent successful assertion renewal.
+                    format: date-time
+                status:
+                    type: string
+                    description: Observed delegation outcome.
+                    enum:
+                        - durable_credential_present
+                        - assertion_only
+                        - offline_unsupported
+                        - offline_not_requested
+                        - refused
+                        - reauthentication_required
+                        - temporary_failure
+                        - configuration_failure
+            description: Sanitized count of the latest observation per human, not a history of token requests.
+            required:
+                - status
+                - count
         DeleteAiScanTargetRequestBody:
             type: object
             properties:
@@ -86849,6 +86975,28 @@ components:
                 - webhooks_enabled
                 - created_at
                 - updated_at
+        OrganizationClientDelegationStatus:
+            type: object
+            properties:
+                observations:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/DelegationStatusCount'
+                status:
+                    type: string
+                    description: Whether any current observations exist.
+                    enum:
+                        - unknown
+                        - observed
+                window_start:
+                    type: string
+                    description: Inclusive observation window start.
+                    format: date-time
+            description: Latest per-human observations for the current client configuration within 30 days. Unknown when no matching observations exist. Credential presence does not guarantee future renewal.
+            required:
+                - status
+                - window_start
+                - observations
         OrganizationClientDeletePreflight:
             type: object
             properties:
