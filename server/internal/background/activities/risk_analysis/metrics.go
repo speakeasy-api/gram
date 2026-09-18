@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/risk/recommendedscopes"
+	"github.com/speakeasy-api/gram/server/internal/scanners/llmanalyzer"
 )
 
 const (
@@ -204,7 +205,7 @@ func (m *riskMetrics) RecordLLMPolicyEvaluation(ctx context.Context, orgID strin
 	m.llmPolicyEvaluations.Add(ctx, int64(count), metric.WithAttributes(
 		attr.OrganizationID(orgID),
 		attr.RiskPolicyID(policyID),
-		attr.RiskLane("async"),
+		attr.RiskScanMode(llmanalyzer.ScanModeAsync),
 		attr.Outcome(outcome),
 	))
 }
