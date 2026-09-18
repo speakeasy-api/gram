@@ -416,7 +416,7 @@ func TestRotateClient_OverlapsThenRevokes(t *testing.T) {
 
 	rotatingKMS := &hookedKMSClients{inner: provisiontest.NewKMSClients(t)}
 	rotator := provisiontest.NewProvisioner(t, ti.conn, rotatingKMS.Factory, testServerURL, credentialID)
-	params := identityproviderconnections.RotateClientParams{OrganizationID: ti.orgID, ConnectionID: connectionID, Provider: identityproviderconnections.ProviderOkta}
+	params := identityproviderconnections.RotateClientParams{OrganizationID: ti.orgID, ConnectionID: connectionID, Provider: identityproviderconnections.ProviderOkta, ActiveKid: before.ActiveKid}
 	_, err = rotator.RotateClient(ctx, params)
 	var pending *identityproviderconnections.RotationPendingError
 	require.ErrorAs(t, err, &pending)
@@ -443,7 +443,7 @@ func TestRotateClient_OverlapsThenRevokes(t *testing.T) {
 		AgeSeconds:      int32(identityproviderconnections.ManagedJWKSCacheTTL / time.Second),
 	})
 	require.NoError(t, err)
-	after, err := rotator.RotateClient(ctx, identityproviderconnections.RotateClientParams{OrganizationID: ti.orgID, ConnectionID: connectionID, Provider: identityproviderconnections.ProviderOkta})
+	after, err := rotator.RotateClient(ctx, params)
 	require.NoError(t, err)
 
 	require.Equal(t, before.ClientRowID, after.ClientRowID)
@@ -475,6 +475,13 @@ func TestRotateClient_OverlapsThenRevokes(t *testing.T) {
 		states[key.Kid] = key.State
 	}
 	require.Equal(t, map[string]string{before.ActiveKid: "retired", after.ActiveKid: "active"}, states)
+
+	// Activation succeeded, but the caller lost the response and retries.
+	retried, err := rotator.RotateClient(ctx, params)
+	require.NoError(t, err)
+	require.Equal(t, after.ActiveKid, retried.ActiveKid)
+	require.Equal(t, after.ExternalKeyID, retried.ExternalKeyID)
+	require.Len(t, rotatingKMS.Created(), 1)
 
 	revoked, err := rotator.RevokeClient(ctx, ti.orgID, connectionID)
 	require.NoError(t, err)
@@ -511,11 +518,11 @@ func TestRotateClient_RefusesRepublishedMaterial(t *testing.T) {
 
 	kms := &hookedKMSClients{inner: provisiontest.NewKMSClients(t)}
 	provisioner := provisiontest.NewProvisioner(t, ti.conn, kms.Factory, testServerURL, credentialID)
-	_, err := provisioner.ProvisionClient(ctx, oktaParams(ti.orgID, connectionID, issuerID))
+	before, err := provisioner.ProvisionClient(ctx, oktaParams(ti.orgID, connectionID, issuerID))
 	require.NoError(t, err)
 
 	// The same factory serves the same in-process key, so the kid repeats.
-	_, err = provisioner.RotateClient(ctx, identityproviderconnections.RotateClientParams{OrganizationID: ti.orgID, ConnectionID: connectionID, Provider: identityproviderconnections.ProviderOkta})
+	_, err = provisioner.RotateClient(ctx, identityproviderconnections.RotateClientParams{OrganizationID: ti.orgID, ConnectionID: connectionID, Provider: identityproviderconnections.ProviderOkta, ActiveKid: before.ActiveKid})
 	require.ErrorIs(t, err, identityproviderconnections.ErrKeyAlreadyPublished)
 	require.Len(t, kms.Created(), 2)
 	require.Equal(t, kms.Created()[1:], kms.Disabled())
@@ -733,7 +740,7 @@ func TestRotateClient_RefusesCredentialMutatedUnderLock(t *testing.T) {
 	}
 	rotator := provisiontest.NewProvisioner(t, ti.conn, kms.Factory, testServerURL, credentialID)
 
-	_, err = rotator.RotateClient(ctx, identityproviderconnections.RotateClientParams{OrganizationID: ti.orgID, ConnectionID: connectionID, Provider: identityproviderconnections.ProviderOkta})
+	_, err = rotator.RotateClient(ctx, identityproviderconnections.RotateClientParams{OrganizationID: ti.orgID, ConnectionID: connectionID, Provider: identityproviderconnections.ProviderOkta, ActiveKid: before.ActiveKid})
 	require.ErrorIs(t, err, identityproviderconnections.ErrSigningCredentialUnusable)
 	require.Len(t, kms.Created(), 1)
 	require.Equal(t, kms.Created(), kms.Disabled())
@@ -778,7 +785,7 @@ func TestRotateClient_ConcurrentRetriesAndRevocation(t *testing.T) {
 	require.NoError(t, err)
 	kms := &hookedKMSClients{inner: provisiontest.NewKMSClients(t)}
 	rotator := provisiontest.NewProvisioner(t, ti.conn, kms.Factory, testServerURL, credentialID)
-	params := identityproviderconnections.RotateClientParams{OrganizationID: ti.orgID, ConnectionID: connectionID, Provider: identityproviderconnections.ProviderOkta}
+	params := identityproviderconnections.RotateClientParams{OrganizationID: ti.orgID, ConnectionID: connectionID, Provider: identityproviderconnections.ProviderOkta, ActiveKid: before.ActiveKid}
 	results := make(chan error, 4)
 	for range 4 {
 		go func() { _, err := rotator.RotateClient(ctx, params); results <- err }()
@@ -821,6 +828,90 @@ func TestRotateClient_ConcurrentRetriesAndRevocation(t *testing.T) {
 	doc, err := remotesessionsrepo.New(ti.conn).GetRemoteSessionClientJsonWebKeySetDocument(ctx, before.ClientRowID)
 	require.NoError(t, err)
 	require.JSONEq(t, `{"keys":[]}`, string(doc.Document))
+}
+
+// Once the pending key is activated, every caller retrying the same rotation
+// gets the rotated client back: no second key, no restarted cache wait. A kid
+// that was never in the set is refused rather than treated as complete.
+func TestRotateClient_ConcurrentRetriesAfterActivationAreIdempotent(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestDB(t)
+	issuerID := createIssuer(t, ctx, ti.conn, ti.orgID, noProject, tokenEndpoint)
+	credentialID := provisiontest.CreatePlatformSigningCredential(t, ctx, ti.conn)
+	connectionID := provisiontest.CreateConnection(t, ctx, ti.conn, ti.orgID, identityproviderconnections.ProviderOkta)
+	initial := provisiontest.NewProvisioner(t, ti.conn, provisiontest.NewKMSClients(t).Factory, testServerURL, credentialID)
+	before, err := initial.ProvisionClient(ctx, oktaParams(ti.orgID, connectionID, issuerID))
+	require.NoError(t, err)
+
+	kms := &hookedKMSClients{inner: provisiontest.NewKMSClients(t)}
+	rotator := provisiontest.NewProvisioner(t, ti.conn, kms.Factory, testServerURL, credentialID)
+	params := identityproviderconnections.RotateClientParams{OrganizationID: ti.orgID, ConnectionID: connectionID, Provider: identityproviderconnections.ProviderOkta, ActiveKid: before.ActiveKid}
+	_, err = rotator.RotateClient(ctx, params)
+	var pending *identityproviderconnections.RotationPendingError
+	require.ErrorAs(t, err, &pending)
+	require.Len(t, kms.Created(), 1)
+	require.NoError(t, repo.New(ti.conn).BackdatePendingRotationPublication(ctx, repo.BackdatePendingRotationPublicationParams{
+		JsonWebKeySetID: before.JSONWebKeySetID,
+		OrganizationID:  ti.orgID,
+		AgeSeconds:      int32(identityproviderconnections.ManagedJWKSCacheTTL / time.Second),
+	}))
+
+	// Two callers retry the same pending rotation once the cache window closed.
+	type outcome struct {
+		client *identityproviderconnections.ManagedClient
+		err    error
+	}
+	results := make(chan outcome, 2)
+	for range 2 {
+		go func() {
+			client, err := rotator.RotateClient(ctx, params)
+			results <- outcome{client: client, err: err}
+		}()
+	}
+	var activeKid string
+	for range 2 {
+		got := <-results
+		require.NoError(t, got.err)
+		require.NotEqual(t, before.ActiveKid, got.client.ActiveKid)
+		if activeKid == "" {
+			activeKid = got.client.ActiveKid
+		}
+		require.Equal(t, activeKid, got.client.ActiveKid, "both retriers observe the same activated key")
+	}
+	require.Len(t, kms.Created(), 1, "the loser must not publish another key")
+	require.Empty(t, kms.Disabled())
+
+	// A late third retry is just as idempotent.
+	retried, err := rotator.RotateClient(ctx, params)
+	require.NoError(t, err)
+	require.Equal(t, activeKid, retried.ActiveKid)
+	require.Len(t, kms.Created(), 1)
+
+	keys, err := jwksrepo.New(ti.conn).ListJsonWebKeys(ctx, jwksrepo.ListJsonWebKeysParams{JsonWebKeySetID: before.JSONWebKeySetID, OrganizationID: ti.orgID, IncludeRevoked: false})
+	require.NoError(t, err)
+	states := map[string]string{}
+	for _, key := range keys {
+		states[key.Kid] = key.State
+	}
+	require.Equal(t, map[string]string{before.ActiveKid: "retired", activeKid: "active"}, states)
+
+	// A kid the set never held is neither a fresh rotation nor a finished one.
+	for _, kid := range []string{"", "never-published"} {
+		unknown := params
+		unknown.ActiveKid = kid
+		_, err = rotator.RotateClient(ctx, unknown)
+		require.ErrorIs(t, err, identityproviderconnections.ErrActiveKidUnknown)
+	}
+	require.Len(t, kms.Created(), 1)
+
+	// Rotating away from the now-active key starts a new rotation.
+	nextKMS := &hookedKMSClients{inner: provisiontest.NewKMSClients(t)}
+	next := params
+	next.ActiveKid = activeKid
+	_, err = provisiontest.NewProvisioner(t, ti.conn, nextKMS.Factory, testServerURL, credentialID).RotateClient(ctx, next)
+	require.ErrorAs(t, err, &pending)
+	require.Len(t, nextKMS.Created(), 1)
+	require.Len(t, kms.Created(), 1)
 }
 
 // The advertised JWKS URL must be fetchable over TLS, so a plaintext server

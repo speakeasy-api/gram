@@ -104,7 +104,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/openrouterkeys"
 	"github.com/speakeasy-api/gram/server/internal/organizations"
-	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	otelsvc "github.com/speakeasy-api/gram/server/internal/otel"
 	otelchrepo "github.com/speakeasy-api/gram/server/internal/otel/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/packages"
@@ -935,6 +934,7 @@ func newStartCommand() *cli.Command {
 				authz.EngineOpts{
 					AdmitPrincipalCredential:         runtimepolicy.AdmitPrincipalCredential,
 					AdmitPrincipalCredentialWithDBTX: runtimepolicy.AdmitPrincipalCredentialWithDBTX,
+					AdmitWorkloadSession:             runtimepolicy.AdmitWorkloadSession,
 					DevMode:                          c.String("environment") == "local",
 				})
 
@@ -1127,7 +1127,7 @@ func newStartCommand() *cli.Command {
 				temporalEnv != nil,
 			)
 			networkIngressEnabled := c.Bool("network-ingress-enabled")
-			networkIngressAdmission := networkingress.NewExpansionAdmission(productFeatures, featureFlags, orgRepo.New(db), networkIngressReconcilerReady, networkIngressEnabled)
+			networkIngressAdmission := networkingress.NewExpansionAdmission(productFeatures, networkIngressReconcilerReady, networkIngressEnabled)
 			mcpMetadataService := mcpmetadata.NewService(logger, tracerProvider, meterProvider, db, sessionManager, serverURL, siteURL, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger, networkIngressAdmission.CheckExpansion)
 
 			litellmCalls := callcache.New(cache.NewRedisCacheAdapter(redisClient))

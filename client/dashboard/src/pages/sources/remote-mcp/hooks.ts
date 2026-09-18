@@ -1,6 +1,11 @@
 import { useFetcher } from "@/contexts/Fetcher";
 import { useIsPlatformAdmin } from "@/contexts/Auth";
 import {
+  deleteSourceCascade,
+  fetchLinkedMcpServers,
+} from "@/pages/mcp/x/tabs/settings/sections/sourceDelete";
+import { invalidateWrapperDeleteAuthViews } from "@/pages/mcp/x/tabs/settings/sections/sourceInvalidation";
+import {
   useProjectSlugForRequests,
   useSdkClient,
   useSlugs,
@@ -13,6 +18,7 @@ import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { RemoteMcpServer } from "@gram/client/models/components/remotemcpserver.js";
 import { invalidateAllMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
+import { invalidateAllGetRemoteMcpServer } from "@gram/client/react-query/getRemoteMcpServer.js";
 import { invalidateAllRemoteMcpServers } from "@gram/client/react-query/remoteMcpServers.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
 import { invalidateAllRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
@@ -115,6 +121,60 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
         );
       }
       await Promise.all(invalidations);
+    },
+  });
+}
+
+export type DeleteRemoteMcpSourceVariables = {
+  remoteMcpServerId: string;
+};
+
+export function useDeleteRemoteMcpSource(): UseMutationResult<
+  void,
+  Error,
+  DeleteRemoteMcpSourceVariables
+> {
+  const client = useSdkClient();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ remoteMcpServerId }) => {
+      // Soft-delete each linked mcp_server first; the server-side handler
+      // cascades to its mcp_endpoints. Only then does the source go.
+      await deleteSourceCascade({
+        listLinked: () =>
+          fetchLinkedMcpServers(client, queryClient, { remoteMcpServerId }),
+        deleteMcpServer: (id) => client.mcpServers.delete({ id }),
+        deleteSource: () =>
+          client.remoteMcp.deleteServer({ id: remoteMcpServerId }),
+        sourceLabel: "remote MCP source",
+      });
+    },
+    onSuccess: async () => {
+      // Mark stale only (refetchType "none"): the deleted server's own queries
+      // are still mounted on its detail page until the caller navigates away,
+      // and force-refetching them here would block mutateAsync on requests for
+      // a resource that no longer exists. Consumers refetch on their next
+      // mount after navigation.
+      await Promise.all([
+        invalidateAllRemoteMcpServers(queryClient, { refetchType: "none" }),
+        invalidateAllMcpServers(queryClient, { refetchType: "none" }),
+        invalidateAllMcpEndpoints(queryClient, { refetchType: "none" }),
+        invalidateWrapperDeleteAuthViews(queryClient, { refetchType: "none" }),
+      ]);
+    },
+    onError: async () => {
+      // A partial run left some wrappers gone and the source in place. Refetch
+      // so the open dialog lists what remains before the user retries, and so
+      // the still-mounted Authentication section drops the issuer and client
+      // bindings the deleted wrappers took with them.
+      await Promise.all([
+        invalidateAllMcpServers(queryClient, { refetchType: "all" }),
+        invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
+        invalidateAllGetRemoteMcpServer(queryClient, { refetchType: "all" }),
+        invalidateAllRemoteMcpServers(queryClient, { refetchType: "all" }),
+        invalidateWrapperDeleteAuthViews(queryClient, { refetchType: "all" }),
+      ]);
     },
   });
 }

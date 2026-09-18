@@ -38,6 +38,7 @@ func TestClassifyIdentityCoverage(t *testing.T) {
 		{name: "assistant", source: testIdentity(t, mcpidentity.KindAssistant, ""), result: unsupported, err: nil, want: mcpmetrics.KillswitchIdentityAssistant},
 		{name: "agent", source: testIdentity(t, mcpidentity.KindAgent, ""), result: unsupported, err: nil, want: mcpmetrics.KillswitchIdentityAgent},
 		{name: "chat session", source: testIdentity(t, mcpidentity.KindChatSession, ""), result: unsupported, err: nil, want: mcpmetrics.KillswitchIdentityChatSession},
+		{name: "workload", source: testIdentity(t, mcpidentity.KindWorkload, ""), result: unsupported, err: nil, want: mcpmetrics.KillswitchIdentityWorkload},
 		{name: "no provenance", source: nil, result: zero, err: nil, want: mcpmetrics.KillswitchIdentityUnattributed},
 		{name: "opaque zero value", source: mcpidentity.Identity{}, result: unsupported, err: nil, want: mcpmetrics.KillswitchIdentityUnattributed},
 		{name: "infrastructure failure", source: testIdentity(t, mcpidentity.KindUserSession, "user_01J8EXAMPLE"), result: zero, err: fmt.Errorf("membership lookup: %w", errors.New("closed")), want: mcpmetrics.KillswitchIdentityUnavailable},

@@ -12,7 +12,7 @@ import {
   meterPoints,
   type AdminMeterUsage,
   type MeterGranularity,
-} from "./meterUsage";
+} from "./meterUsageUtils";
 import { inclusiveEnd } from "./billingUsageSearch";
 
 export function MeterUsageChart({

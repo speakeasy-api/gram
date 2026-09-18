@@ -5,9 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -239,9 +241,11 @@ func (c *Client) fetchUsageEventsPage(ctx context.Context, payload filteredUsage
 		}
 	}
 	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {
+		body, _ := io.ReadAll(io.LimitReader(res.Body, maxHTTPErrorBody))
 		return nil, &HTTPError{
 			StatusCode: res.StatusCode,
 			Status:     res.Status,
+			Body:       strings.TrimSpace(guardian.PrintableBodySnippet(body)),
 		}
 	}
 
@@ -252,6 +256,10 @@ func (c *Client) fetchUsageEventsPage(ctx context.Context, payload filteredUsage
 
 	return &decoded, nil
 }
+
+// maxHTTPErrorBody bounds how much of an error response is kept for the
+// error message.
+const maxHTTPErrorBody = 512
 
 func parseRetryAfter(value string) time.Duration {
 	if value == "" {

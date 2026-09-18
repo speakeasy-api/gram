@@ -158,6 +158,10 @@ type stubOkta struct {
 	srv   *httptest.Server
 	clock *fakeClock
 
+	// origin is the URL the client believes it is talking to; proofs and
+	// assertion audiences are checked against it rather than the listener.
+	origin string
+
 	mu                   sync.Mutex
 	requireTokenNonce    bool
 	rotateTokenNonce     bool
@@ -165,6 +169,7 @@ type stubOkta struct {
 	lastAppsQuery        url.Values
 	groupsQueries        []url.Values
 	emitResourceNonce    string
+	emitTokenNonce       string
 	requireResourceNonce bool
 	resourceNonce        string
 	grantedScopes        []string
@@ -174,6 +179,7 @@ type stubOkta struct {
 	tokenRateLimitRemaining int
 	tokenRateLimitReset     int64
 	proofJTIs               map[string]bool
+	issuedNonces            map[string]bool
 	assertionJTIs           map[string]bool
 	tokens                  map[string]string
 	tokenCount              int
@@ -201,12 +207,14 @@ func newStubOkta(t *testing.T, clock *fakeClock) *stubOkta {
 		t:                       t,
 		srv:                     nil,
 		clock:                   clock,
+		origin:                  "",
 		mu:                      sync.Mutex{},
 		requireTokenNonce:       true,
 		rotateTokenNonce:        false,
 		tokenNonce:              "nonce-1",
 		lastAppsQuery:           nil,
 		emitResourceNonce:       "",
+		emitTokenNonce:          "",
 		requireResourceNonce:    false,
 		resourceNonce:           "",
 		grantedScopes:           strings.Fields(stubScopes),
@@ -215,6 +223,7 @@ func newStubOkta(t *testing.T, clock *fakeClock) *stubOkta {
 		tokenRateLimitRemaining: 0,
 		tokenRateLimitReset:     0,
 		proofJTIs:               map[string]bool{},
+		issuedNonces:            map[string]bool{},
 		assertionJTIs:           map[string]bool{},
 		tokens:                  map[string]string{},
 		tokenCount:              0,
@@ -244,8 +253,25 @@ func newStubOkta(t *testing.T, clock *fakeClock) *stubOkta {
 	mux.HandleFunc("GET /api/v1/groups", s.resource(s.handleListGroups))
 	mux.HandleFunc("GET /", s.resource(s.handleOverride))
 	s.srv = httptest.NewServer(mux)
+	s.origin = s.srv.URL
 	t.Cleanup(s.srv.Close)
 	return s
+}
+
+// setOrigin records the origin the client addresses when a test transport
+// rewrites requests onto the listener.
+func (s *stubOkta) setOrigin(origin string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.origin = origin
+}
+
+// issueNonce sends a DPoP-Nonce and remembers it as one the stub solicited.
+func (s *stubOkta) issueNonce(w http.ResponseWriter, nonce string) {
+	s.mu.Lock()
+	s.issuedNonces[nonce] = true
+	s.mu.Unlock()
+	w.Header().Set("DPoP-Nonce", nonce)
 }
 
 func (s *stubOkta) setApps(apps []appJSON) {
@@ -351,6 +377,13 @@ func (s *stubOkta) setEmitResourceNonce(nonce string) {
 	s.emitResourceNonce = nonce
 }
 
+// setEmitTokenNonce adds a DPoP-Nonce to successful token responses (RFC 9449 §8.2).
+func (s *stubOkta) setEmitTokenNonce(nonce string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.emitTokenNonce = nonce
+}
+
 // setScopeErrorCode picks the OAuth error for an all-ungranted scope request;
 // Okta returns invalid_scope or consent_required depending on the org.
 func (s *stubOkta) setScopeErrorCode(code string) {
@@ -392,7 +425,12 @@ func (s *stubOkta) rejectProof(w http.ResponseWriter, status int, description st
 
 // verifyProof checks a DPoP proof and records it; false means the error was written.
 func (s *stubOkta) verifyProof(w http.ResponseWriter, r *http.Request, accessToken string) (proofRecord, string, bool) {
-	raw := r.Header.Get("DPoP")
+	// RFC 9449 §4.3 step 1: exactly one DPoP header field.
+	values := r.Header.Values("DPoP")
+	if len(values) != 1 {
+		return s.rejectProof(w, http.StatusBadRequest, fmt.Sprintf("expected one DPoP header, got %d", len(values)))
+	}
+	raw := values[0]
 	if raw == "" {
 		return s.rejectProof(w, http.StatusBadRequest, "missing proof")
 	}
@@ -431,10 +469,18 @@ func (s *stubOkta) verifyProof(w http.ResponseWriter, r *http.Request, accessTok
 	}
 	thumbprint := base64.RawURLEncoding.EncodeToString(thumb)
 
+	s.mu.Lock()
+	origin := s.origin
+	solicited := claims.Nonce == "" || s.issuedNonces[claims.Nonce]
+	s.mu.Unlock()
 	// EscapedPath keeps the wire form so escaped ids compare against the signed htu.
-	expectedHTU := s.srv.URL + r.URL.EscapedPath()
+	expectedHTU := origin + r.URL.EscapedPath()
 	if claims.HTM != r.Method || claims.HTU != expectedHTU {
 		return s.rejectProof(w, http.StatusBadRequest, "htm/htu mismatch")
+	}
+	// RFC 9449 §8: a nonce claim is only ever one the server supplied.
+	if !solicited {
+		return s.rejectProof(w, http.StatusBadRequest, "unsolicited nonce")
 	}
 	if accessToken == "" {
 		if claims.ATH != "" {
@@ -485,17 +531,18 @@ func (s *stubOkta) handleToken(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, redirect, http.StatusTemporaryRedirect)
 		return
 	}
+
+	// The proof is verified and its jti burned before throttling so a retry must sign a fresh one.
+	proof, thumbprint, ok := s.verifyProof(w, r, "")
+	if !ok {
+		return
+	}
 	if throttle {
 		s.writeJSON(w, http.StatusTooManyRequests, map[string]string{"errorCode": "E0000047", "errorSummary": "API call exceeded rate limit due to too many requests."})
 		return
 	}
 	if err := r.ParseForm(); err != nil {
 		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_request", "error_description": err.Error()})
-		return
-	}
-
-	proof, thumbprint, ok := s.verifyProof(w, r, "")
-	if !ok {
 		return
 	}
 
@@ -527,7 +574,10 @@ func (s *stubOkta) handleToken(w http.ResponseWriter, r *http.Request) {
 		s.writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid_client", "error_description": "bad assertion signature"})
 		return
 	}
-	if claims.Issuer != stubClientID || claims.Subject != stubClientID || !claims.Audience.Contains(s.srv.URL+tokenEndpointPath) {
+	s.mu.Lock()
+	audience := s.origin + tokenEndpointPath
+	s.mu.Unlock()
+	if claims.Issuer != stubClientID || claims.Subject != stubClientID || !claims.Audience.Contains(audience) {
 		s.writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid_client", "error_description": "assertion claims mismatch"})
 		return
 	}
@@ -545,13 +595,13 @@ func (s *stubOkta) handleToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.mu.Lock()
-	requireNonce, nonce, granted, tokenType, scopeErr := s.requireTokenNonce, s.tokenNonce, s.grantedScopes, s.tokenType, s.scopeErrorCode
+	requireNonce, nonce, granted, tokenType, scopeErr, emitNonce := s.requireTokenNonce, s.tokenNonce, s.grantedScopes, s.tokenType, s.scopeErrorCode, s.emitTokenNonce
 	if s.rotateTokenNonce {
 		s.tokenNonce = "rotated-" + uuid.NewString()
 	}
 	s.mu.Unlock()
 	if requireNonce && proof.nonce != nonce {
-		w.Header().Set("DPoP-Nonce", nonce)
+		s.issueNonce(w, nonce)
 		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "use_dpop_nonce", "error_description": "Authorization server requires nonce in DPoP proof."})
 		return
 	}
@@ -577,6 +627,10 @@ func (s *stubOkta) handleToken(w http.ResponseWriter, r *http.Request) {
 	s.tokens[token] = thumbprint
 	s.mu.Unlock()
 
+	// RFC 9449 §8.2: a nonce on a successful response is used on the next request without a challenge.
+	if emitNonce != "" {
+		s.issueNonce(w, emitNonce)
+	}
 	s.writeJSON(w, http.StatusOK, map[string]any{
 		"access_token": token,
 		"token_type":   tokenType,
@@ -587,6 +641,11 @@ func (s *stubOkta) handleToken(w http.ResponseWriter, r *http.Request) {
 
 func (s *stubOkta) resource(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// RFC 9449 §4.3 step 1: exactly one DPoP header field, checked before the token lookup.
+		if n := len(r.Header.Values("DPoP")); n != 1 {
+			s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_dpop_proof", "error_description": fmt.Sprintf("expected one DPoP header, got %d", n)})
+			return
+		}
 		scheme, token, _ := strings.Cut(r.Header.Get("Authorization"), " ")
 		s.mu.Lock()
 		thumb, known := s.tokens[token]
@@ -610,7 +669,7 @@ func (s *stubOkta) resource(next http.HandlerFunc) http.HandlerFunc {
 		requireNonce, nonce := s.requireResourceNonce, s.resourceNonce
 		s.mu.Unlock()
 		if requireNonce && proof.nonce != nonce {
-			w.Header().Set("DPoP-Nonce", nonce)
+			s.issueNonce(w, nonce)
 			w.Header().Set("WWW-Authenticate", `DPoP error="use_dpop_nonce"`)
 			s.writeJSON(w, http.StatusUnauthorized, map[string]string{"errorCode": "E0000011", "errorSummary": "nonce required"})
 			return
@@ -618,6 +677,7 @@ func (s *stubOkta) resource(next http.HandlerFunc) http.HandlerFunc {
 
 		s.mu.Lock()
 		if s.emitResourceNonce != "" {
+			s.issuedNonces[s.emitResourceNonce] = true
 			w.Header().Set("DPoP-Nonce", s.emitResourceNonce)
 		}
 		if s.rateLimitLimit > 0 {

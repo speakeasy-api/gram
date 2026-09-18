@@ -1,0 +1,28 @@
+import { describe, expect, it } from "vitest";
+import { deploymentStatusBadge } from "./sourceVersions";
+
+describe("deploymentStatusBadge", () => {
+  it("lets the active deployment outrank its completed status", () => {
+    expect(deploymentStatusBadge("completed", true)).toEqual({
+      variant: "success",
+      label: "Active",
+    });
+    expect(deploymentStatusBadge("completed", false)).toEqual({
+      variant: "neutral",
+      label: "Completed",
+    });
+  });
+
+  it("reads failed and in-flight statuses by tone", () => {
+    expect(deploymentStatusBadge("failed", false).variant).toBe("destructive");
+    expect(deploymentStatusBadge("pending", false)).toEqual({
+      variant: "warning",
+      label: "Pending",
+    });
+    // "created" is the initial status; it has no label of its own.
+    expect(deploymentStatusBadge("created", false)).toEqual({
+      variant: "warning",
+      label: "created",
+    });
+  });
+});

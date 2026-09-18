@@ -1,39 +1,44 @@
-import type { Deployment } from "@gram/client/models/components/deployment.js";
-import type { Toolset } from "@gram/client/models/components/toolset.js";
-import type { UploadOpenAPIv3Result } from "@gram/client/models/components/uploadopenapiv3result.js";
 import React from "react";
-import { StepperContext } from "./use-stepper";
+import {
+  StepperContext,
+  type ExistingDocument,
+  type StepperContextApiMeta,
+} from "./use-stepper";
 
 type StepperSubscriber = (cb: (step: number) => void) => () => void;
-
-type StepperContextApiMeta = {
-  file: File | null;
-  uploadResult: UploadOpenAPIv3Result | null;
-  assetName: string | null;
-  deployment: Deployment | null;
-  toolset: Toolset | null;
-};
 
 type StepperContextProviderProps = {
   children: React.ReactNode;
   step: number;
+  /** When set, the flow uploads a new version of this document. */
+  existingDocument?: ExistingDocument | null;
 };
+
+function initialMeta(
+  existingDocument: ExistingDocument | null,
+): StepperContextApiMeta {
+  return {
+    file: null,
+    uploadResult: null,
+    assetName: null,
+    deployment: null,
+    toolset: null,
+    existingDocument,
+  };
+}
 
 export const StepperContextProvider: React.FC<StepperContextProviderProps> = ({
   step: initialStep,
+  existingDocument = null,
   children,
 }) => {
   const [state, setState] = React.useState<"idle" | "completed" | "error">(
     "idle",
   );
 
-  const meta = React.useRef<StepperContextApiMeta>({
-    file: null,
-    uploadResult: null,
-    assetName: null,
-    deployment: null,
-    toolset: null,
-  });
+  const meta = React.useRef<StepperContextApiMeta>(
+    initialMeta(existingDocument),
+  );
 
   const steps = React.useRef<Set<number>>(new Set());
   const step = React.useRef(initialStep);
@@ -78,15 +83,9 @@ export const StepperContextProvider: React.FC<StepperContextProviderProps> = ({
   const reset = React.useCallback(() => {
     step.current = initialStep;
     setState("idle");
-    meta.current = {
-      file: null,
-      uploadResult: null,
-      assetName: null,
-      deployment: null,
-      toolset: null,
-    };
+    meta.current = initialMeta(existingDocument);
     subscribers.current.forEach((cb) => cb(step.current));
-  }, [initialStep]);
+  }, [initialStep, existingDocument]);
 
   return (
     <StepperContext.Provider

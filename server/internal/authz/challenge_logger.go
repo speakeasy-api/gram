@@ -218,6 +218,12 @@ func authorizationChallengePrincipal(ctx context.Context, authCtx *contextvalues
 		principalURN = actor.String()
 		principalType = authzrepo.PrincipalTypeAgent
 	}
+	// A workload actor carries neither a UserID nor an APIKeyID, so without
+	// this arm its challenges would be logged against an empty user principal.
+	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok && actor.Type == urn.PrincipalTypeWorkload {
+		principalURN = actor.String()
+		principalType = authzrepo.PrincipalTypeWorkload
+	}
 	return principalURN, principalType
 }
 

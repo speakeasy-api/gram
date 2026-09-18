@@ -744,6 +744,9 @@ func (s *Service) RefreshIssuerMetadata(ctx context.Context, payload *orgissuers
 	if !sameMetadataRefreshSnapshot(locked, existing) {
 		return nil, oops.E(oops.CodeConflict, nil, "%s", refreshConflictMessage).LogError(ctx, logger)
 	}
+	if err := requireIssuerWithoutManagedClients(ctx, logger, txRepo, issuerID, authCtx.ActiveOrganizationID); err != nil {
+		return nil, err
+	}
 
 	beforeView := mv.BuildRemoteSessionIssuerView(locked)
 

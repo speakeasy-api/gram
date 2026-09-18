@@ -44,6 +44,7 @@ func TestIdentityForValidatedSession(t *testing.T) {
 		{name: "api key never carries an acting user", subject: urn.NewAPIKeySubject(uuid.MustParse("11111111-1111-1111-1111-111111111111")), wantKind: mcpidentity.KindAPIKey},
 		{name: "agent never carries an acting user", subject: urn.NewAgentSubject(uuid.MustParse("22222222-2222-2222-2222-222222222222")), wantKind: mcpidentity.KindAgent},
 		{name: "anonymous never carries an acting user", subject: urn.NewAnonymousSubject("session_01J8EXAMPLE"), wantKind: mcpidentity.KindAnonymous},
+		{name: "workload never carries an acting user", subject: urn.NewWorkloadSubject(uuid.MustParse("33333333-3333-3333-3333-333333333333"), "repo:acme/payments-api:ref:refs/heads/main"), wantKind: mcpidentity.KindWorkload},
 	}
 
 	for _, tt := range tests {

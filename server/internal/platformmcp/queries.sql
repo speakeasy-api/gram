@@ -798,10 +798,52 @@ WHERE remote_mcp_server_id = @remote_mcp_server_id
   AND deleted IS FALSE
 ORDER BY id;
 
+-- name: ListPlatformMCPInventoryAuthorizationCandidates :many
+SELECT m.id, m.project_id
+FROM mcp_servers AS m
+JOIN projects AS project
+  ON project.id = m.project_id
+ AND project.organization_id = @organization_id
+ AND project.deleted IS FALSE
+WHERE m.deleted IS FALSE
+ORDER BY m.id;
+
+-- name: ListPlatformMCPInventoryAuthorizationCandidatePage :many
+-- Lightweight, bounded candidate selection before live RBAC evaluation. Match
+-- the inventory projection's safe project/cursor/query filters and search order
+-- so hidden resources do not consume caller-visible result pages.
+SELECT m.id, m.project_id
+FROM mcp_servers AS m
+JOIN projects AS project
+  ON project.id = m.project_id
+ AND project.organization_id = @organization_id
+ AND project.deleted IS FALSE
+WHERE m.deleted IS FALSE
+  AND (sqlc.narg(project_id)::uuid IS NULL OR m.project_id = sqlc.narg(project_id)::uuid)
+  AND (sqlc.narg(after_mcp_id)::uuid IS NULL OR m.id > sqlc.narg(after_mcp_id)::uuid)
+  AND (
+      @query_text::text = ''
+      OR m.id::text ILIKE '%' || @query_text::text || '%'
+      OR COALESCE(m.name, '') ILIKE '%' || @query_text::text || '%'
+      OR COALESCE(m.slug, '') ILIKE '%' || @query_text::text || '%'
+  )
+ORDER BY
+    CASE
+        WHEN @query_text::text <> ''
+         AND (m.id::text = @query_text::text OR LOWER(COALESCE(m.name, '')) = LOWER(@query_text::text) OR LOWER(COALESCE(m.slug, '')) = LOWER(@query_text::text))
+        THEN 0
+        ELSE 1
+    END,
+    m.id ASC
+LIMIT LEAST(GREATEST(@limit_value::integer, 1), 1001);
+
 -- name: ListPlatformMCPInventory :many
 -- One bounded, tenant-qualified inventory projection for every Platform MCP
--- read surface. It reads persisted readiness/distribution state only; it never
--- contacts a remote MCP or provider.
+-- read surface. Callers supply the live RBAC-filtered MCP IDs so authorization
+-- is applied before LIMIT/cursor pagination. It reads persisted readiness and
+-- distribution state only; it never contacts a remote MCP or provider.
+-- skip_authorization_filter is reserved for trusted internal services whose own
+-- authorization boundary is broader than this member-facing read path.
 SELECT
     m.id AS mcp_server_id,
     m.project_id,
@@ -866,6 +908,7 @@ LEFT JOIN LATERAL (
     LIMIT 1
 ) AS readiness ON TRUE
 WHERE m.deleted IS FALSE
+  AND (@skip_authorization_filter::boolean OR m.id = ANY(@allowed_mcp_ids::uuid[]))
   AND (sqlc.narg(project_id)::uuid IS NULL OR m.project_id = sqlc.narg(project_id)::uuid)
   AND (sqlc.narg(after_mcp_id)::uuid IS NULL OR m.id > sqlc.narg(after_mcp_id)::uuid)
   AND (
@@ -2770,6 +2813,139 @@ WHERE p.project_id = @project_id
   AND (NOT @use_after::boolean OR p.id > @after_id)
 ORDER BY p.id ASC
 LIMIT @result_limit;
+
+-- name: ListPlatformMCPAssignedPluginInventory :many
+-- Member-facing plugin inventory. A row is visible only when the package is
+-- published and at least one current assignment matches the authenticated
+-- caller's server-resolved principals. Assignment identities and counts never
+-- cross this query boundary.
+SELECT
+    p.id,
+    p.name,
+    p.slug,
+    p.description,
+    COALESCE(p.is_default, FALSE) AS is_default,
+    (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
+    (
+      SELECT count(*)
+      FROM skill_distributions sd
+      JOIN skills sk
+        ON sk.id = sd.skill_id
+        AND sk.project_id = sd.project_id
+        AND sk.archived_at IS NULL
+      WHERE sd.plugin_id = p.id
+        AND sd.project_id = p.project_id
+        AND sd.channel = 'plugin'
+        AND sd.assistant_id IS NULL
+        AND sd.revoked_at IS NULL
+    ) AS skill_count,
+    (gc.id IS NOT NULL)::boolean AS repository_connected,
+    TRUE::boolean AS published
+FROM plugins p
+JOIN projects
+  ON projects.id = p.project_id
+  AND projects.organization_id = p.organization_id
+  AND projects.deleted IS FALSE
+JOIN plugin_github_connections gc
+  ON gc.project_id = p.project_id
+  AND gc.marketplace_token IS NOT NULL
+WHERE p.project_id = @project_id
+  AND p.organization_id = @organization_id
+  AND p.deleted IS FALSE
+  AND COALESCE(gc.published_mcp_fingerprints ->> p.slug, '') <> ''
+  AND EXISTS (
+    SELECT 1
+    FROM plugin_assignments pa
+    WHERE pa.plugin_id = p.id
+      AND pa.organization_id = @organization_id
+      AND pa.principal_urn = ANY(@principal_urns::text[])
+  )
+  AND (NOT @use_after::boolean OR p.id > @after_id)
+ORDER BY p.id ASC
+LIMIT @result_limit;
+
+-- name: ResolvePlatformMCPAssignedPluginTarget :many
+-- Exact member target resolution over the same assigned, published set as the
+-- member list. Missing, unpublished, unassigned, and cross-tenant targets all
+-- collapse to the same not-found result.
+SELECT
+    p.id,
+    p.name,
+    p.slug,
+    p.description,
+    COALESCE(p.is_default, FALSE) AS is_default,
+    (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
+    (
+      SELECT count(*)
+      FROM skill_distributions sd
+      JOIN skills sk
+        ON sk.id = sd.skill_id
+        AND sk.project_id = sd.project_id
+        AND sk.archived_at IS NULL
+      WHERE sd.plugin_id = p.id
+        AND sd.project_id = p.project_id
+        AND sd.channel = 'plugin'
+        AND sd.assistant_id IS NULL
+        AND sd.revoked_at IS NULL
+    ) AS skill_count
+FROM plugins p
+JOIN projects
+  ON projects.id = p.project_id
+  AND projects.organization_id = p.organization_id
+  AND projects.deleted IS FALSE
+JOIN plugin_github_connections gc
+  ON gc.project_id = p.project_id
+  AND gc.marketplace_token IS NOT NULL
+WHERE p.project_id = @project_id
+  AND p.organization_id = @organization_id
+  AND p.deleted IS FALSE
+  AND COALESCE(gc.published_mcp_fingerprints ->> p.slug, '') <> ''
+  AND EXISTS (
+    SELECT 1
+    FROM plugin_assignments pa
+    WHERE pa.plugin_id = p.id
+      AND pa.organization_id = @organization_id
+      AND pa.principal_urn = ANY(@principal_urns::text[])
+  )
+  AND (
+    p.id::text = @target::text
+    OR lower(p.slug) = lower(@target::text)
+    OR lower(p.name) = lower(@target::text)
+  )
+ORDER BY p.id
+LIMIT 2;
+
+-- name: GetPlatformMCPInstallTarget :one
+-- Tenant-scoped exact MCP target plus its canonical public endpoint. Disabled
+-- and unproxied servers deliberately expose no endpoint even if an endpoint row
+-- remains, because neither can be dispatched through Gram's public MCP route.
+SELECT
+    m.name,
+    m.slug,
+    CASE
+      WHEN m.visibility <> 'disabled'
+        AND m.unproxied_mcp_server_id IS NULL
+      THEN COALESCE(endpoint.slug, '')
+      ELSE ''
+    END::text AS endpoint_slug
+FROM mcp_servers m
+JOIN projects project
+  ON project.id = m.project_id
+  AND project.organization_id = @organization_id
+  AND project.deleted IS FALSE
+LEFT JOIN LATERAL (
+  SELECT e.slug
+  FROM mcp_endpoints e
+  WHERE e.mcp_server_id = m.id
+    AND e.project_id = m.project_id
+    AND e.custom_domain_id IS NULL
+    AND e.deleted IS FALSE
+  ORDER BY e.created_at ASC, e.id ASC
+  LIMIT 1
+) endpoint ON TRUE
+WHERE m.id = @mcp_server_id
+  AND m.project_id = @project_id
+  AND m.deleted IS FALSE;
 
 -- name: GetPlatformMCPPluginInventoryItem :one
 SELECT

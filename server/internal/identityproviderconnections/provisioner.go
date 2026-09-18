@@ -65,6 +65,7 @@ var (
 	ErrClientIDRequired            = errors.New("identityproviderconnections: client id is required")
 	ErrClientIDAlreadySet          = errors.New("identityproviderconnections: client id was already submitted")
 	ErrClientIDInUse               = errors.New("identityproviderconnections: client id is already registered against this issuer")
+	ErrActiveKidUnknown            = errors.New("identityproviderconnections: active kid was never published into the managed set")
 )
 
 // ManagedJWKSCacheTTL is the publish-before-sign window advertised by the JWKS endpoint.
@@ -145,6 +146,12 @@ type RotateClientParams struct {
 	OrganizationID string
 	ConnectionID   uuid.UUID
 	Provider       string
+
+	// ActiveKid is the key the caller saw active and wants retired. Once it is
+	// no longer active the rotation is complete, so a retry after a lost
+	// response, or two callers retrying the same rotation, return the current
+	// client without publishing another key.
+	ActiveKid string
 }
 
 // ManagedClient describes a connection's managed registration.
@@ -360,7 +367,8 @@ func (p *Provisioner) provisionRows(ctx context.Context, params ProvisionClientP
 }
 
 // RotateClient first commits a pending key, leaving the current signer unchanged.
-// Retry after RotationPendingError.ReadyAt to activate the same key. Publication
+// Retry after RotationPendingError.ReadyAt with the same params to activate the
+// same key; a retry after activation returns the rotated client. Publication
 // and activation never share a transaction and no call waits for the cache TTL.
 func (p *Provisioner) RotateClient(ctx context.Context, params RotateClientParams) (*ManagedClient, error) {
 	if err := validateProvider(params.Provider); err != nil {
@@ -416,12 +424,15 @@ func (p *Provisioner) rotateRows(ctx context.Context, params RotateClientParams)
 	if err != nil {
 		return fmt.Errorf("load rotation keys: %w", err)
 	}
-	key, hasActive := pendingAndActive(keys)
+	key, active := pendingAndActive(keys)
+	// A revoked client must not be resurrected by a delayed rotation request.
+	if active.ID == uuid.Nil {
+		return ErrNotProvisioned
+	}
+	if active.Kid != params.ActiveKid {
+		return p.requireRotationComplete(ctx, jq, set.ID, params)
+	}
 	if key.ID == uuid.Nil {
-		// A revoked client must not be resurrected by a delayed rotation request.
-		if !hasActive {
-			return ErrNotProvisioned
-		}
 		// Release the locks: the key is created outside any transaction.
 		if err := dbtx.Rollback(ctx); err != nil {
 			return fmt.Errorf("release rotation locks: %w", err)
@@ -505,19 +516,30 @@ func (p *Provisioner) rotateRows(ctx context.Context, params RotateClientParams)
 	return nil
 }
 
-// pendingAndActive picks the pending key, if any, and reports whether an active one exists.
-func pendingAndActive(keys []jwksrepo.JsonWebKey) (jwksrepo.JsonWebKey, bool) {
-	var pending jwksrepo.JsonWebKey
-	hasActive := false
+// pendingAndActive picks the pending and active keys, zero when absent.
+func pendingAndActive(keys []jwksrepo.JsonWebKey) (pending, active jwksrepo.JsonWebKey) {
 	for _, candidate := range keys {
-		if candidate.State == "active" {
-			hasActive = true
-		}
-		if candidate.State == "pending" {
+		switch candidate.State {
+		case "active":
+			active = candidate
+		case "pending":
 			pending = candidate
 		}
 	}
-	return pending, hasActive
+	return pending, active
+}
+
+// requireRotationComplete treats a caller whose kid is no longer active as a
+// finished rotation, unless the kid was never in the set at all.
+func (p *Provisioner) requireRotationComplete(ctx context.Context, jq *jwksrepo.Queries, setID uuid.UUID, params RotateClientParams) error {
+	known, err := jq.JsonWebKeyKidExistsInSet(ctx, jwksrepo.JsonWebKeyKidExistsInSetParams{JsonWebKeySetID: setID, OrganizationID: params.OrganizationID, Kid: params.ActiveKid})
+	if err != nil {
+		return fmt.Errorf("check rotation source kid: %w", err)
+	}
+	if !known {
+		return ErrActiveKidUnknown
+	}
+	return nil
 }
 
 // publishRotationKey creates the KMS key with no row locks held, then re-locks
@@ -582,9 +604,16 @@ func (p *Provisioner) publishRotationRows(ctx context.Context, params RotateClie
 	if err != nil {
 		return nil, fmt.Errorf("re-read rotation keys: %w", err)
 	}
-	pending, hasActive := pendingAndActive(keys)
-	if !hasActive {
+	pending, active := pendingAndActive(keys)
+	if active.ID == uuid.Nil {
 		return nil, ErrNotProvisioned
+	}
+	if active.Kid != params.ActiveKid {
+		// Another caller finished the rotation while the key was being created.
+		if err := p.requireRotationComplete(ctx, jq, set.ID, params); err != nil {
+			return nil, err
+		}
+		return nil, &adoptedError{client: nil}
 	}
 	if pending.ID != uuid.Nil {
 		// Someone else published while the key was being created: adopt theirs.
@@ -881,7 +910,12 @@ func (p *Provisioner) ClientJSONWebKeySetURL(ctx context.Context, organizationID
 
 // GetManagedClient returns the connection's managed registration, or ErrNotProvisioned.
 func (p *Provisioner) GetManagedClient(ctx context.Context, organizationID string, connectionID uuid.UUID) (*ManagedClient, error) {
-	return p.lookupManagedClient(ctx, repo.New(p.db), organizationID, connectionID)
+	return p.GetManagedClientTx(ctx, p.db, organizationID, connectionID)
+}
+
+// GetManagedClientTx is GetManagedClient on the caller's connection or transaction.
+func (p *Provisioner) GetManagedClientTx(ctx context.Context, dbtx repo.DBTX, organizationID string, connectionID uuid.UUID) (*ManagedClient, error) {
+	return p.lookupManagedClient(ctx, repo.New(dbtx), organizationID, connectionID)
 }
 
 // adoptedError carries a concurrently provisioned client out of provisionRows.

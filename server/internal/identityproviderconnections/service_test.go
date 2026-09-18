@@ -1094,3 +1094,38 @@ func TestCreate_SingleConnectionPoolIsUnavailable(t *testing.T) {
 	require.NoError(t, err)
 	require.Zero(t, count)
 }
+
+// Every mutation that holds the row lock must finish with only that one pool
+// connection available to it.
+func TestMutations_CompleteWithOneSparePoolConnection(t *testing.T) {
+	t.Parallel()
+	ctx, si := newTestServiceWithPoolLimit(t, nil, 2)
+	created := createConnection(t, ctx, si, fullOrgURL)
+
+	held, err := si.conn.conn.Acquire(ctx)
+	require.NoError(t, err)
+	t.Cleanup(held.Release)
+
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	agentID := "0oaagent000000000001"
+	recorded, err := si.svc.RecordAgent(ctx, &gen.RecordAgentPayload{SessionToken: nil, ID: created.ID, AgentID: &agentID, AgentAppID: nil})
+	require.NoError(t, err)
+	require.Equal(t, agentID, conv.PtrValOr(recorded.AgentID, ""))
+
+	submitClientID(t, ctx, si, created.ID)
+
+	verified, err := si.svc.Verify(ctx, &gen.VerifyPayload{SessionToken: nil, ID: created.ID})
+	require.NoError(t, err)
+	require.Equal(t, identityproviderconnections.StatusVerified, verified.Status)
+
+	revoked, err := si.svc.Revoke(ctx, &gen.RevokePayload{SessionToken: nil, ID: created.ID})
+	require.NoError(t, err)
+	require.Equal(t, identityproviderconnections.StatusRevoked, revoked.Status)
+
+	again, err := si.svc.Revoke(ctx, &gen.RevokePayload{SessionToken: nil, ID: created.ID})
+	require.NoError(t, err)
+	require.Equal(t, identityproviderconnections.StatusRevoked, again.Status)
+	require.NoError(t, ctx.Err())
+}

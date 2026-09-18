@@ -13,6 +13,7 @@ import {
   CalculatorIcon,
   FolderIcon,
   KeyRoundIcon,
+  Grid2X2Icon,
 } from "lucide-react";
 
 export const ADMIN_NAV_GROUPS = [
@@ -45,6 +46,12 @@ export const ADMIN_NAV_GROUPS = [
   {
     label: "Platform Management",
     items: [
+      {
+        to: "/integration-coverage",
+        label: "Support matrix",
+        keywords: "support matrix products capabilities integrations",
+        icon: Grid2X2Icon,
+      },
       {
         to: "/remote-session-issuers",
         label: "Remote Session Issuers",

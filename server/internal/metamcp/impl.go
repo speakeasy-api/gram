@@ -640,6 +640,10 @@ func (s *Service) AddMetaMcpMember(ctx context.Context, payload *gen.AddMetaMcpM
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid meta_mcp_server_id").LogError(ctx, logger)
 	}
 
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, metaID.String(), authCtx.ProjectID.String())); err != nil {
+		return nil, err
+	}
+
 	mcpServerID, err := uuid.Parse(payload.McpServerID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid mcp_server_id").LogError(ctx, logger)

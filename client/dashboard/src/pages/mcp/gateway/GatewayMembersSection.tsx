@@ -832,10 +832,13 @@ export function AddServersSheet({
     {
       label: "Hosted remotely",
       description:
-        "Add a server that already runs elsewhere by its URL, proxied or not.",
+        "Add a server that already runs elsewhere by its URL, proxied through Gram.",
       Icon: Cloud,
       group: "Recommended",
-      href: routes.mcp.add.remote.href(),
+      href:
+        routes.mcp.add.remote.href() +
+        "?attachToGateway=" +
+        encodeURIComponent(gatewayId),
       allowed: canCreate,
     },
     ...(telemetry.isFeatureEnabled(TUNNELED_MCP_FEATURE_FLAG)
@@ -846,7 +849,10 @@ export function AddServersSheet({
               "Connect a server running inside your own network through a tunnel.",
             Icon: Cable,
             group: "Recommended",
-            href: routes.mcp.add.tunneled.href(),
+            href:
+              routes.mcp.add.tunneled.href() +
+              "?attachToGateway=" +
+              encodeURIComponent(gatewayId),
             allowed: canCreate,
           },
         ]
@@ -856,8 +862,11 @@ export function AddServersSheet({
       description: "Upload an OpenAPI document to generate tools.",
       Icon: FileCode,
       group: "Advanced",
-      href: routes.mcp.add.openapi.href(),
-      allowed: canWriteProject,
+      href:
+        routes.mcp.add.openapi.href() +
+        "?attachToGateway=" +
+        encodeURIComponent(gatewayId),
+      allowed: canWriteProject && canCreate,
     },
     {
       label: "From an existing source",
@@ -865,7 +874,10 @@ export function AddServersSheet({
         "Build a server from an OpenAPI document or function this project already has.",
       Icon: Boxes,
       group: "Advanced",
-      href: routes.mcp.add.fromSource.href(),
+      href:
+        routes.mcp.add.fromSource.href() +
+        "?attachToGateway=" +
+        encodeURIComponent(gatewayId),
       allowed: canCreate,
     },
     ...(telemetry.isFeatureEnabled("gram-functions")
@@ -875,8 +887,11 @@ export function AddServersSheet({
             description: "Create tools with TypeScript functions.",
             Icon: Code,
             group: "Advanced",
-            href: routes.mcp.add.function.href(),
-            allowed: canWriteProject,
+            href:
+              routes.mcp.add.function.href() +
+              "?attachToGateway=" +
+              encodeURIComponent(gatewayId),
+            allowed: canWriteProject && canCreate,
           },
         ]
       : []),
@@ -925,13 +940,17 @@ export function AddServersSheet({
               <DropdownMenuTrigger
                 asChild
                 disabled={
-                  busy || !creationOptions.some((option) => option.allowed)
+                  busy ||
+                  !canWrite ||
+                  !creationOptions.some((option) => option.allowed)
                 }
               >
                 <Button
                   variant="primary"
                   disabled={
-                    busy || !creationOptions.some((option) => option.allowed)
+                    busy ||
+                    !canWrite ||
+                    !creationOptions.some((option) => option.allowed)
                   }
                 >
                   <Button.LeftIcon>
@@ -965,9 +984,9 @@ export function AddServersSheet({
                             key={option.href}
                             className="items-start"
                             textValue={option.label}
-                            disabled={busy || !option.allowed}
+                            disabled={busy || !canWrite || !option.allowed}
                             onSelect={() => {
-                              if (!busy && option.allowed)
+                              if (!busy && canWrite && option.allowed)
                                 void navigate(option.href);
                             }}
                           >

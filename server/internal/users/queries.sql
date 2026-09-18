@@ -77,6 +77,7 @@ WHERE u.workos_id = ANY(@workos_ids::text[])
 SELECT u.* FROM users u
 JOIN organization_user_relationships our ON our.user_id = u.id
 WHERE lower(u.email) = lower(@email)
+  AND u.deleted_at IS NULL
   AND our.organization_id = @organization_id
   AND our.deleted_at IS NULL
 ORDER BY (u.email = lower(@email)) DESC, u.created_at, u.id
