@@ -57,11 +57,12 @@ export function NetworkAccessSection({
   mcpServer: McpServer;
   endpoints: McpEndpoint[];
 }): JSX.Element | null {
-  const { rolloutEnabled, canManageIngress } = useNetworkIngressRollout();
+  const { status: rolloutStatus, canManageIngress } =
+    useNetworkIngressRollout();
   const hasStoredPrivateMode =
     mcpServer.networkAccessMode !== McpServerNetworkAccessMode.PublicOnly;
 
-  if (!rolloutEnabled && !hasStoredPrivateMode) {
+  if (rolloutStatus === "disabled" && !hasStoredPrivateMode) {
     return null;
   }
 

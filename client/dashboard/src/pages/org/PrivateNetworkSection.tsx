@@ -299,7 +299,8 @@ function ConfiguredPrivateNetwork({
 
 export function PrivateNetworkSection(): JSX.Element | null {
   const organization = useOrganization();
-  const { rolloutEnabled, canManageIngress } = useNetworkIngressRollout();
+  const { status: rolloutStatus, canManageIngress } =
+    useNetworkIngressRollout();
   const features = useProductFeatures(
     { organizationId: organization.id },
     undefined,
@@ -317,7 +318,7 @@ export function PrivateNetworkSection(): JSX.Element | null {
   const [setupOpen, setSetupOpen] = useState(false);
 
   if (!canManageIngress) return null;
-  if (!rolloutEnabled && !ingress) return null;
+  if (rolloutStatus === "disabled" && !ingress) return null;
 
   return (
     <SettingsSection>
@@ -333,7 +334,7 @@ export function PrivateNetworkSection(): JSX.Element | null {
           ingress={ingress}
           statusStale={ingressResult.isError}
         />
-      ) : ingressResult.isLoading || features.isLoading ? (
+      ) : ingressResult.isPending || features.isPending ? (
         <SettingsSection.Panel>
           <SettingsSection.Body>
             <Text small muted>

@@ -80,7 +80,7 @@ const PRODUCT_FEATURES = {
     enabledKey: "networkIngressEnabled",
     label: "Tailscale private access",
     description:
-      "Allows this organization to connect Tailscale and configure private MCP access.",
+      "Allows this organization to connect Tailscale and configure private MCP access where the deployment's private ingress runtime and reconciler are enabled.",
   },
   remote_session_auto_refresh: {
     kind: "toggle",

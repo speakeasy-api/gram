@@ -8,6 +8,12 @@ import { NetworkAccessSection } from "./NetworkAccessSection";
 const testState = vi.hoisted(() => ({
   entitled: true,
   featureStatus: "success" as "pending" | "success" | "error",
+  rolloutStatus: undefined as
+    | "loading"
+    | "enabled"
+    | "disabled"
+    | "error"
+    | undefined,
   featureFetching: false,
   orgAdmin: true,
   ingressEnabled: true,
@@ -57,6 +63,26 @@ vi.mock("@/contexts/Auth", () => ({
 
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: () => testState.orgAdmin }),
+}));
+
+vi.mock("@/hooks/useNetworkIngressRollout", () => ({
+  useNetworkIngressRollout: () => {
+    const status =
+      testState.rolloutStatus ??
+      (testState.featureStatus === "pending"
+        ? "loading"
+        : testState.featureStatus === "error"
+          ? "error"
+          : testState.entitled
+            ? "enabled"
+            : "disabled");
+
+    return {
+      status,
+      rolloutEnabled: status === "enabled",
+      canManageIngress: testState.orgAdmin,
+    };
+  },
 }));
 
 vi.mock("@/hooks/useToolsetUrl", () => ({
@@ -186,6 +212,7 @@ const endpoints: McpEndpoint[] = [
 beforeEach(() => {
   testState.entitled = true;
   testState.featureStatus = "success";
+  testState.rolloutStatus = undefined;
   testState.featureFetching = false;
   testState.orgAdmin = true;
   testState.ingressEnabled = true;
@@ -212,6 +239,29 @@ describe("NetworkAccessSection", () => {
 
     expect(container.textContent).toBe("");
   });
+
+  it.each(["loading", "error"] as const)(
+    "keeps the section visible while entitlement lookup is %s",
+    (status) => {
+      testState.rolloutStatus = status;
+      testState.featureStatus = status === "loading" ? "pending" : "error";
+
+      render(
+        <NetworkAccessSection mcpServer={baseServer} endpoints={endpoints} />,
+      );
+
+      expect(
+        screen.getByRole("combobox", { name: "Network access mode" }),
+      ).toBeTruthy();
+      expect(
+        screen.getByText(
+          status === "loading"
+            ? /Checking private network availability/
+            : /Private network availability could not be checked/,
+        ),
+      ).toBeTruthy();
+    },
+  );
 
   it("keeps a stored private mode visible when the staff entitlement is disabled", () => {
     testState.entitled = false;

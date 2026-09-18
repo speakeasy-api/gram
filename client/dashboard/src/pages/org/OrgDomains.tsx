@@ -618,7 +618,10 @@ function OrgDomainsInner() {
   const productTier = useProductTier();
   const { hasScope } = useRBAC();
   const canManageDomains = hasScope("org:admin");
-  const { adminRolloutEnabled: showNetworkAccess } = useNetworkIngressRollout();
+  const { status: networkIngressRolloutStatus, canManageIngress } =
+    useNetworkIngressRollout();
+  const showNetworkAccess =
+    canManageIngress && networkIngressRolloutStatus !== "disabled";
   const queryClient = useQueryClient();
   const [isAddDomainDialogOpen, setIsAddDomainDialogOpen] = useState(false);
   const [copiedRecordValue, setCopiedRecordValue] = useState<string | null>(

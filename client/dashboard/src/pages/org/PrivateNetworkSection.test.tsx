@@ -8,7 +8,9 @@ const state = vi.hoisted(() => ({
   entitled: true,
   featuresError: false,
   featuresAvailable: true,
+  featuresLoading: false,
   ingressError: false,
+  ingressPending: false,
   ingressOptions: undefined as
     | {
         refetchInterval?: (query: {
@@ -52,8 +54,10 @@ vi.mock("@gram/client/react-query/productFeatures.js", () => ({
       ? { networkIngressEnabled: state.entitled }
       : undefined,
     isLoading: false,
+    isPending: state.featuresLoading,
     isError: state.featuresError,
-    isSuccess: state.featuresAvailable && !state.featuresError,
+    isSuccess:
+      state.featuresAvailable && !state.featuresError && !state.featuresLoading,
   }),
 }));
 
@@ -65,6 +69,7 @@ vi.mock("@gram/client/react-query/networkIngress.js", () => ({
       data: { ingress: state.ingress },
       error: state.ingressError ? new Error("unavailable") : null,
       isLoading: false,
+      isPending: state.ingressPending,
       isError: state.ingressError,
     };
   },
@@ -120,7 +125,9 @@ beforeEach(() => {
   state.entitled = true;
   state.featuresError = false;
   state.featuresAvailable = true;
+  state.featuresLoading = false;
   state.ingressError = false;
+  state.ingressPending = false;
   state.ingressOptions = undefined;
   state.deleteMutate.mockReset();
   state.ingress = undefined;
@@ -140,6 +147,23 @@ describe("PrivateNetworkSection", () => {
     const { container } = render(<PrivateNetworkSection />);
     expect(container.textContent).toBe("");
   });
+
+  it.each(["features", "ingress"] as const)(
+    "renders the loading panel while %s are loading",
+    (loadingQuery) => {
+      if (loadingQuery === "features") {
+        state.featuresLoading = true;
+      } else {
+        state.ingressPending = true;
+      }
+
+      render(<PrivateNetworkSection />);
+
+      expect(
+        screen.getByText("Loading private network settings..."),
+      ).toBeTruthy();
+    },
+  );
 
   it("explains that the private hostname is shared across the organization", () => {
     render(<PrivateNetworkSection />);
