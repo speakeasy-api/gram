@@ -9,7 +9,12 @@ func getOneAttr(span *otelv1.InboundSpan, keys ...string) (key string, value str
 				continue
 			}
 
-			return desired, kv.GetValue().GetStringValue()
+			// An empty value states nothing, so keep looking. Without this a
+			// present-but-empty first key would shadow a later one that does
+			// carry an answer, and the log accessor already skips empties.
+			if value := kv.GetValue().GetStringValue(); value != "" {
+				return desired, value
+			}
 		}
 	}
 

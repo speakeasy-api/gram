@@ -193,7 +193,9 @@ func (SemconvSpan) Text(*otelv1.InboundSpan) (string, string, error) {
 // practically unreachable overflow.
 func (SemconvSpan) DurationNano(span *otelv1.InboundSpan) (string, int64, error) {
 	start, end := span.GetStartTimeUnixNano(), span.GetEndTimeUnixNano()
-	if end <= start {
+	// A zero start is a start the producer never stated, not the epoch.
+	// Subtracting it would report the time since 1970 as the duration.
+	if start == 0 || end <= start {
 		return "", 0, nil
 	}
 	return "end_time_unix_nano", unixNano(end) - unixNano(start), nil
