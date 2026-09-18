@@ -602,6 +602,14 @@ func newStreamsCommand() *cli.Command {
 				guardianPolicy,
 			)
 
+			toolCallLogRelayHandler := otelsvc.NewToolCallLogRelayHandler(
+				logger,
+				meterProvider,
+				db,
+				encryptionClient,
+				guardianPolicy,
+			)
+
 			// Start subscription receivers in this block
 			{
 				mustReceive(rg, &pingv2.Message{}, &pingv2.Processor{}, ping.NewHandler(logger, slog.LevelDebug))
@@ -617,6 +625,7 @@ func newStreamsCommand() *cli.Command {
 				mustReceive(rg, &riskv1.CustomRulesAnalysis{}, &riskv1.CustomRulesAnalyzer{}, customRulesHandler)
 
 				mustReceive(rg, &telemetryv1.LogRecord{}, &telemetryv1.Noop{}, new(subscribers.NoopHandler[*telemetryv1.LogRecord]))
+				mustReceiveBatchWithResult(rg, &telemetryv1.LogRecord{}, &telemetryv1.ToolCallLogRelay{}, toolCallLogRelayHandler, gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
 
 				mustReceive(rg, &webhooksv1.Event{}, &webhooksv1.SvixRelay{}, webhookEventHandler)
 

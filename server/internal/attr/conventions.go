@@ -689,9 +689,12 @@ const (
 	TelemetryPublishFailedCountKey = attribute.Key("gram.telemetry.publish_failed_count")
 	TelemetryCHOperationKey        = attribute.Key("gram.telemetry.ch.operation")
 	TelemetryCHRowCountKey         = attribute.Key("gram.telemetry.ch.row_count")
-	OTELSpanEnricherNameKey        = attribute.Key("gram.otel.span_enricher_name")
-	OTELLogEnricherNameKey         = attribute.Key("gram.otel.log_enricher_name")
-	OTELMetricEnricherNameKey      = attribute.Key("gram.otel.metric_enricher_name")
+	// TelemetryLogIDKey is the telemetry_logs row id. Relayed tool-call logs
+	// carry it so a destination can dedupe redeliveries of the same row.
+	TelemetryLogIDKey         = attribute.Key("gram.telemetry.log.id")
+	OTELSpanEnricherNameKey   = attribute.Key("gram.otel.span_enricher_name")
+	OTELLogEnricherNameKey    = attribute.Key("gram.otel.log_enricher_name")
+	OTELMetricEnricherNameKey = attribute.Key("gram.otel.metric_enricher_name")
 
 	// GenAI semantic convention keys (OTel GenAI semconv - experimental)
 	// See: https://opentelemetry.io/docs/specs/semconv/gen-ai/
@@ -995,6 +998,10 @@ func TelemetryCHOperation(v string) attribute.KeyValue { return TelemetryCHOpera
 func TelemetryCHRowCount(v int) attribute.KeyValue { return TelemetryCHRowCountKey.Int(v) }
 func SlogTelemetryCHRowCount(v int) slog.Attr {
 	return slog.Int(string(TelemetryCHRowCountKey), v)
+}
+
+func SlogTelemetryLogID(v string) slog.Attr {
+	return slog.String(string(TelemetryLogIDKey), v)
 }
 
 func OTELLogEnricherName(v string) attribute.KeyValue { return OTELLogEnricherNameKey.String(v) }

@@ -5,11 +5,13 @@ import "fmt"
 const (
 	DataSourceProductTelemetry = "product_telemetry"
 	DataSourceRiskFindings     = "risk_findings"
+	DataSourceToolCallLogs     = "tool_call_logs"
 )
 
 var validDataSources = map[string]struct{}{
 	DataSourceProductTelemetry: {},
 	DataSourceRiskFindings:     {},
+	DataSourceToolCallLogs:     {},
 }
 
 // NormalizeDataSource validates and returns a supported data export source.

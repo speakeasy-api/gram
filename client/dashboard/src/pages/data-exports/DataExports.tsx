@@ -63,11 +63,19 @@ const DATA_SOURCE_OPTIONS: DataSourceOption[] = [
     value: DataSource.RiskFindings,
     label: "Risk findings",
   },
+  {
+    value: DataSource.ToolCallLogs,
+    label: "Tool call logs",
+  },
 ];
 
 function renderDataSourceDescription(
   dataSource: DataSourceValue,
-  links: { eventFeed?: string; riskPolicies?: string } = {},
+  links: {
+    eventFeed?: string;
+    riskPolicies?: string;
+    toolLogs?: string;
+  } = {},
 ): ReactNode {
   if (dataSource === DataSource.ProductTelemetry) {
     return (
@@ -84,8 +92,29 @@ function renderDataSourceDescription(
         ) : (
           "Event Feed"
         )}{" "}
-        shows. Tool call logs that are recorded for hosted or proxied MCP
-        servers are not part of this stream.
+        shows. Tool call logs recorded for hosted or proxied MCP servers ship
+        under Tool call logs instead.
+      </>
+    );
+  }
+
+  if (dataSource === DataSource.ToolCallLogs) {
+    return (
+      <>
+        OTLP logs for every tool call Gram runs, hosted and proxied MCP servers
+        included, carrying the status, timing, and caller of successful and
+        failed calls alike. These are the same records{" "}
+        {links.toolLogs ? (
+          <Link
+            to={links.toolLogs}
+            className="pointer-events-auto relative z-30 text-link-primary"
+          >
+            Tool Logs
+          </Link>
+        ) : (
+          "Tool Logs"
+        )}{" "}
+        shows.
       </>
     );
   }
@@ -152,6 +181,7 @@ type VisualSource = {
 type ExportMapDescriptionLinks = {
   eventFeed: string;
   riskPolicies: (project: ProjectEntry) => string;
+  toolLogs: (project: ProjectEntry) => string;
 };
 
 function visualSource(
@@ -164,6 +194,7 @@ function visualSource(
     detail: renderDataSourceDescription(route.dataSource, {
       eventFeed: links?.eventFeed,
       riskPolicies: links?.riskPolicies(project),
+      toolLogs: links?.toolLogs(project),
     }),
   };
 }
@@ -307,6 +338,9 @@ function DataExportsInner(): JSX.Element {
       eventFeed: `/${organization.slug}/data/event-feed`,
       riskPolicies: defaultProject
         ? `/${organization.slug}/projects/${defaultProject.slug}/risk-policies?tab=policies`
+        : undefined,
+      toolLogs: defaultProject
+        ? `/${organization.slug}/projects/${defaultProject.slug}/logs`
         : undefined,
     }),
   }));
@@ -544,6 +578,8 @@ function DataExportsInner(): JSX.Element {
             eventFeed: `/${organization.slug}/data/event-feed`,
             riskPolicies: (project) =>
               `/${organization.slug}/projects/${project.slug}/risk-policies?tab=policies`,
+            toolLogs: (project) =>
+              `/${organization.slug}/projects/${project.slug}/logs`,
           }}
           mutating={mutating}
           onConfigure={(project, route) =>

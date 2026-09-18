@@ -75961,6 +75961,7 @@ components:
                     enum:
                         - product_telemetry
                         - risk_findings
+                        - tool_call_logs
                 enabled:
                     type: boolean
                     description: Whether the route is enabled.
@@ -77914,6 +77915,7 @@ components:
                     enum:
                         - product_telemetry
                         - risk_findings
+                        - tool_call_logs
                 enabled:
                     type: boolean
                     description: Whether the route is enabled.
@@ -98308,6 +98310,7 @@ components:
                     enum:
                         - product_telemetry
                         - risk_findings
+                        - tool_call_logs
                 enabled:
                     type: boolean
                     description: Whether the route is enabled.
@@ -99387,6 +99390,7 @@ components:
                     enum:
                         - product_telemetry
                         - risk_findings
+                        - tool_call_logs
                 enabled:
                     type: boolean
                     description: Whether the route is enabled.

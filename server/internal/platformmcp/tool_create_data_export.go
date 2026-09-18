@@ -50,7 +50,7 @@ type CreateDataExportInput struct {
 	ProjectSlug   string `json:"project_slug,omitempty" jsonschema:"project slug that will export telemetry; supply exactly one project selector"`
 	Name          string `json:"name" jsonschema:"display name for the OTEL destination"`
 	EndpointURL   string `json:"endpoint_url" jsonschema:"HTTP or HTTPS OTEL collector endpoint without credentials, query parameters, or fragments"`
-	DataSource    string `json:"data_source" jsonschema:"data to export: product_telemetry or risk_findings"`
+	DataSource    string `json:"data_source" jsonschema:"data to export: product_telemetry, risk_findings, or tool_call_logs"`
 	SensitiveData string `json:"sensitive_data,omitempty" jsonschema:"whether sensitive fields are included: exclude (default) or include"`
 	Enabled       *bool  `json:"enabled,omitempty" jsonschema:"whether delivery starts immediately; defaults to true"`
 	Confirmed     bool   `json:"confirmed" jsonschema:"true only after the user explicitly confirms the project, endpoint, data source, enabled state, and sensitive-data policy"`
@@ -196,7 +196,7 @@ func registerDataExportMutationTool(reg *Registrar, reader *PostgresReader) {
 	addTool(reg, &mcp.Tool{
 		Name:        "create_data_export",
 		Title:       "Create a Data Export",
-		Description: "Create one OTEL destination and connect one project's product telemetry or risk findings to it. Before calling, show the user the exact project, endpoint, data source, enabled state, and whether sensitive fields are included, then obtain explicit confirmation. Constraints: header secrets are never accepted in chat; the destination is created without headers and the returned management URL is where the user securely adds any required authentication. One route per project and data source is allowed.",
+		Description: "Create one OTEL destination and connect one project's product telemetry, risk findings, or tool call logs to it. Before calling, show the user the exact project, endpoint, data source, enabled state, and whether sensitive fields are included, then obtain explicit confirmation. Constraints: header secrets are never accepted in chat; the destination is created without headers and the returned management URL is where the user securely adds any required authentication. One route per project and data source is allowed.",
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input CreateDataExportInput) (*mcp.CallToolResult, CreateDataExportOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {

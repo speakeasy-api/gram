@@ -50,6 +50,7 @@ flowchart LR
   t_gram_risk_v1_prompt_injection_analysis(["gram-risk-v1-prompt-injection-analysis<br/>(topic)"]):::topic
   t_gram_risk_v1_prompt_policy_analysis(["gram-risk-v1-prompt-policy-analysis<br/>(topic)"]):::topic
   t_gram_telemetry_v1_log_record(["gram-telemetry-v1-log-record<br/>(topic)"]):::topic
+  t_gram_telemetry_v1_tool_call_log_relay_dlq(["gram-telemetry-v1-tool-call-log-relay-dlq<br/>(dlq)"]):::dlq
   t_gram_webhooks_v1_event(["gram-webhooks-v1-event<br/>(topic)"]):::topic
   t_gram_webhooks_v1_svix_relay_dlq(["gram-webhooks-v1-svix-relay-dlq<br/>(dlq)"]):::dlq
   s_gram_authz_v1_challenge_ch_writer["gram-authz-v1-challenge-ch-writer<br/>(sub)"]:::sub
@@ -76,6 +77,7 @@ flowchart LR
   s_gram_risk_v1_prompt_injection_analyzer["gram-risk-v1-prompt-injection-analyzer<br/>(sub)"]:::sub
   s_gram_risk_v1_prompt_policy_analyzer["gram-risk-v1-prompt-policy-analyzer<br/>(sub)"]:::sub
   s_gram_telemetry_v1_noop["gram-telemetry-v1-noop<br/>(sub)"]:::sub
+  s_gram_telemetry_v1_tool_call_log_relay["gram-telemetry-v1-tool-call-log-relay<br/>(sub)"]:::sub
   s_gram_webhooks_v1_svix_relay["gram-webhooks-v1-svix-relay<br/>(sub)"]:::sub
 
   p0[/"📤<br/>server/internal/authz/challenge_logger.go"/]:::go
@@ -152,6 +154,8 @@ flowchart LR
   t_gram_risk_v1_prompt_injection_analysis --> s_gram_risk_v1_prompt_injection_analyzer
   t_gram_risk_v1_prompt_policy_analysis --> s_gram_risk_v1_prompt_policy_analyzer
   t_gram_telemetry_v1_log_record --> s_gram_telemetry_v1_noop
+  t_gram_telemetry_v1_log_record --> s_gram_telemetry_v1_tool_call_log_relay
+  s_gram_telemetry_v1_tool_call_log_relay -. dead-letter .-> t_gram_telemetry_v1_tool_call_log_relay_dlq
   t_gram_webhooks_v1_event --> s_gram_webhooks_v1_svix_relay
   s_gram_webhooks_v1_svix_relay -. dead-letter .-> t_gram_webhooks_v1_svix_relay_dlq
   c17[\"📥<br/>server/cmd/gram/streams.go<br/>authz.NewChallengeCHWriter<br/>(batch)"\]:::go
@@ -202,8 +206,10 @@ flowchart LR
   s_gram_risk_v1_prompt_policy_analyzer --> c39
   c40[\"📥<br/>server/cmd/gram/streams.go<br/>new"\]:::go
   s_gram_telemetry_v1_noop --> c40
-  c41[\"📥<br/>server/cmd/gram/streams.go<br/>webhookEventHandler"\]:::go
-  s_gram_webhooks_v1_svix_relay --> c41
+  c41[\"📥<br/>server/cmd/gram/streams.go<br/>toolCallLogRelayHandler<br/>(batch)"\]:::go
+  s_gram_telemetry_v1_tool_call_log_relay --> c41
+  c42[\"📥<br/>server/cmd/gram/streams.go<br/>webhookEventHandler"\]:::go
+  s_gram_webhooks_v1_svix_relay --> c42
 ```
 
 ## Topics
@@ -245,6 +251,7 @@ flowchart LR
 | [`gram-risk-v1-prompt-injection-analysis`](../infra/proto/gram/risk/v1/prompt_injection_analysis.proto) | topic | 7d | [`server/internal/background/activities/risk_analysis/scan_prompt_injection.go`](../server/internal/background/activities/risk_analysis/scan_prompt_injection.go) |
 | [`gram-risk-v1-prompt-policy-analysis`](../infra/proto/gram/risk/v1/prompt_policy_analysis.proto) | topic | 7d | [`server/internal/background/activities/risk_analysis/prompt_judge_batch.go`](../server/internal/background/activities/risk_analysis/prompt_judge_batch.go) |
 | [`gram-telemetry-v1-log-record`](../infra/proto/gram/telemetry/v1/log_record.proto) | topic | 7d | [`server/internal/telemetry/log_publisher.go`](../server/internal/telemetry/log_publisher.go) |
+| [`gram-telemetry-v1-tool-call-log-relay-dlq`](../infra/proto/gram/telemetry/v1/tool_call_log_relay.proto) | DLQ | 7d | — |
 | [`gram-webhooks-v1-event`](../infra/proto/gram/webhooks/v1/event.proto) | topic | 7d | [`server/internal/outbox/webhooks.go`](../server/internal/outbox/webhooks.go) |
 | [`gram-webhooks-v1-svix-relay-dlq`](../infra/proto/gram/webhooks/v1/svix_relay.proto) | DLQ | 7d | — |
 
@@ -276,6 +283,7 @@ flowchart LR
 | [`gram-risk-v1-prompt-injection-analyzer`](../infra/proto/gram/risk/v1/prompt_injection_analyzer.proto) | `gram-risk-v1-prompt-injection-analysis` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-risk-v1-prompt-policy-analyzer`](../infra/proto/gram/risk/v1/prompt_policy_analyzer.proto) | `gram-risk-v1-prompt-policy-analysis` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-telemetry-v1-noop`](../infra/proto/gram/telemetry/v1/noop.proto) | `gram-telemetry-v1-log-record` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
+| [`gram-telemetry-v1-tool-call-log-relay`](../infra/proto/gram/telemetry/v1/tool_call_log_relay.proto) | `gram-telemetry-v1-log-record` | 1m | `gram-telemetry-v1-tool-call-log-relay-dlq` | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-webhooks-v1-svix-relay`](../infra/proto/gram/webhooks/v1/svix_relay.proto) | `gram-webhooks-v1-event` | 1m | `gram-webhooks-v1-svix-relay-dlq` | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 
 ## Notes
