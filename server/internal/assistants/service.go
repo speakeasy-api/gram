@@ -766,9 +766,12 @@ type resolvedToolsetInsert struct {
 // resolveToolsetRefsForWrite validates that every user-supplied slug exists
 // within the project and returns the FK ids to persist. Failing fast here
 // turns silent dispatch-time errors ("unknown toolset") into 400s at
-// create/update time.
+// create/update time. Resolve and lock targets in the write transaction before
+// touching the assistant or attachments: toolsets first, then MCP servers, each
+// ordered by ID. Deletion takes the target lock before detaching assistants too.
 func (s *ServiceCore) resolveToolsetRefsForWrite(
 	ctx context.Context,
+	tx pgx.Tx,
 	projectID uuid.UUID,
 	refs []*types.AssistantToolsetRef,
 ) ([]resolvedToolsetInsert, error) {
@@ -796,7 +799,7 @@ func (s *ServiceCore) resolveToolsetRefsForWrite(
 		}
 	}
 
-	queries := assistantrepo.New(s.db)
+	queries := assistantrepo.New(tx)
 	toolsetIDs := map[string]uuid.UUID{}
 	toolsetRows, err := queries.ResolveToolsetsForWrite(ctx, assistantrepo.ResolveToolsetsForWriteParams{
 		ProjectID: projectID,
@@ -866,6 +869,7 @@ type resolvedMcpServerInsert struct {
 // ("unknown mcp server") into 400s at create/update time.
 func (s *ServiceCore) resolveMcpServerRefsForWrite(
 	ctx context.Context,
+	tx pgx.Tx,
 	projectID uuid.UUID,
 	refs []*types.AssistantMCPServerRef,
 ) ([]resolvedMcpServerInsert, error) {
@@ -893,7 +897,7 @@ func (s *ServiceCore) resolveMcpServerRefsForWrite(
 		}
 	}
 
-	queries := assistantrepo.New(s.db)
+	queries := assistantrepo.New(tx)
 	serverIDs := map[string]uuid.UUID{}
 	serverRows, err := queries.ResolveMcpServersForWrite(ctx, assistantrepo.ResolveMcpServersForWriteParams{
 		ProjectID: projectID,
@@ -1234,20 +1238,20 @@ func (s *ServiceCore) CreateAssistant(
 		return assistantRecord{}, fmt.Errorf("create assistant: missing user id")
 	}
 
-	resolved, err := s.resolveToolsetRefsForWrite(ctx, projectID, toolsets)
-	if err != nil {
-		return assistantRecord{}, err
-	}
-	resolvedMcpServers, err := s.resolveMcpServerRefsForWrite(ctx, projectID, mcpServers)
-	if err != nil {
-		return assistantRecord{}, err
-	}
-
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return assistantRecord{}, fmt.Errorf("begin assistant tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+
+	resolved, err := s.resolveToolsetRefsForWrite(ctx, tx, projectID, toolsets)
+	if err != nil {
+		return assistantRecord{}, err
+	}
+	resolvedMcpServers, err := s.resolveMcpServerRefsForWrite(ctx, tx, projectID, mcpServers)
+	if err != nil {
+		return assistantRecord{}, err
+	}
 
 	queries := assistantrepo.New(tx)
 	created, err := queries.CreateAssistant(ctx, assistantrepo.CreateAssistantParams{
@@ -1360,9 +1364,15 @@ func (s *ServiceCore) UpdateAssistant(
 	maxConcurrency *int,
 	status *string,
 ) (assistantRecord, error) {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return assistantRecord{}, fmt.Errorf("begin assistant tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
 	var resolved []resolvedToolsetInsert
 	if toolsets != nil {
-		r, err := s.resolveToolsetRefsForWrite(ctx, projectID, toolsets)
+		r, err := s.resolveToolsetRefsForWrite(ctx, tx, projectID, toolsets)
 		if err != nil {
 			return assistantRecord{}, err
 		}
@@ -1370,18 +1380,12 @@ func (s *ServiceCore) UpdateAssistant(
 	}
 	var resolvedMcpServers []resolvedMcpServerInsert
 	if mcpServers != nil {
-		r, err := s.resolveMcpServerRefsForWrite(ctx, projectID, mcpServers)
+		r, err := s.resolveMcpServerRefsForWrite(ctx, tx, projectID, mcpServers)
 		if err != nil {
 			return assistantRecord{}, err
 		}
 		resolvedMcpServers = r
 	}
-
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return assistantRecord{}, fmt.Errorf("begin assistant tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
 
 	queries := assistantrepo.New(tx)
 	updated, err := queries.UpdateAssistant(ctx, assistantrepo.UpdateAssistantParams{
