@@ -42,8 +42,8 @@ func (s *Service) HandleFirstPartyConnect(w http.ResponseWriter, r *http.Request
 // This is deliberately decoupled from the dashboard session: the subject is
 // stamped onto the challenge by HandleIDPCallback from authoritative IDP
 // claims, and the only state is the challenge in Redis keyed by the OIDC
-// `state` param. Nothing here reads, sets, or clears a cookie, so opening this
-// page can never touch the dashboard's session (and the org-membership gate in
+// `state` param. Federation uses a separate short-lived browser-binding cookie,
+// never the dashboard session (and the org-membership gate in
 // HandleIDPCallback enforces access once the IDP identifies the user).
 //
 // No ClientID/RedirectURI: a first-party challenge has no MCP client to grant
@@ -66,6 +66,7 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 		return oops.E(oops.CodeUnauthorized, err, "capture OAuth endpoint authority").LogError(ctx, logger)
 	}
 	challengeState := AuthnChallengeState{
+		Federation: nil,
 
 		ID:                       challengeID,
 		FlowID:                   flowID,
@@ -94,6 +95,16 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 
 	s.metrics.RecordOAuthFlowStarted(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug)
 
+	federatedURL, err := s.prepareFederatedLogin(ctx, endpoint, &challengeState)
+	if err != nil {
+		return oops.E(oops.CodeUnauthorized, nil, "Federated login configuration is unavailable. Restart login or contact your administrator").LogError(ctx, logger)
+	}
+	if federatedURL != nil {
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Referrer-Policy", "no-referrer")
+		http.Redirect(w, r, federatedURL.String(), http.StatusFound)
+		return nil
+	}
 	callbackURL, err := endpoint.IDPCallbackURL(s.serverURL.String())
 	if err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)

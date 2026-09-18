@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -28,12 +29,13 @@ import (
 // route is still accepted, but the toolset is resolved from the stored
 // AuthnChallengeState.
 //
-// It drives the IDP wire calls through s.identityResolver (WorkOS-backed)
-// and runs the standard user bootstrap (UpsertUser, posthog signup, WorkOS
-// membership sync).
+// Without a trusted client it drives the unchanged WorkOS bootstrap. With an
+// explicit trusted client it verifies OIDC identity and resolves an existing
+// provisioned human without creating or synchronizing users.
 //
-// Side effects on success: UpsertUser, AuthnChallengeState rewrite (subject
-// stamped). The IDP tokens are consumed and discarded; no chat session
+// Side effects on success: AuthnChallengeState rewrite (subject stamped);
+// WorkOS alone may upsert users. Federation offers ephemeral credentials only
+// to an explicitly installed, post-authorization consumer. No chat session
 // persists.
 func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
@@ -129,6 +131,47 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	// sees the same origin whichever way the flow goes.
 	baseURL := challengeState.mintOriginOr(s.serverURL.String())
 
+	// Resolve through the live endpoint organization; a callback cannot select
+	// a provider, and an in-flight challenge can never switch to or from WorkOS.
+	provider, trustedIssuerID, trustedClientID, configuration, err := s.federatedProvider(ctx, endpoint)
+	if err != nil || (provider == nil) != (challengeState.Federation == nil) {
+		return oops.E(oops.CodeUnauthorized, nil, "Login configuration changed. Restart login or contact your administrator").LogError(ctx, logger)
+	}
+	if federation := challengeState.Federation; federation != nil {
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Referrer-Policy", "no-referrer")
+		for _, parameter := range []string{"state", "code", "iss", "error", "federated_start"} {
+			if len(q[parameter]) > 1 {
+				return oops.E(oops.CodeUnauthorized, nil, "Invalid login response").LogError(ctx, logger)
+			}
+		}
+		callbackURL, callbackErr := endpoint.IDPCallbackURL(s.serverURL.String())
+		if callbackErr != nil || federation.OrganizationID != endpoint.OrganizationID || federation.IssuerID != trustedIssuerID || federation.ClientID != trustedClientID || federation.Configuration != configuration || federation.CallbackURL != callbackURL || challengeState.CreatedAt.IsZero() || time.Since(challengeState.CreatedAt) > challengeState.TTL() {
+			return oops.E(oops.CodeUnauthorized, nil, "Login configuration changed or expired. Restart login").LogError(ctx, logger)
+		}
+		if q.Get("federated_start") == "1" && federation.BrowserHash == "" && q.Get("code") == "" && q.Get("error") == "" {
+			if err := s.startFederatedLogin(w, r, &challengeState, provider); err != nil {
+				return oops.E(oops.CodeUnauthorized, nil, "Federated login is unavailable. Restart login or contact your administrator").LogError(ctx, logger)
+			}
+			return nil
+		}
+		if err := validateFederatedBrowser(r, challengeState); err != nil {
+			return oops.E(oops.CodeUnauthorized, nil, "Login browser binding is invalid. Restart login").LogError(ctx, logger)
+		}
+		http.SetCookie(w, federatedBrowserCookie(challengeState.ID, "", -1))
+		if err := provider.ValidateResponseIssuer(q.Get("iss")); err != nil {
+			return oops.E(oops.CodeUnauthorized, nil, "Login provider response is invalid. Restart login").LogError(ctx, logger)
+		}
+		// Provider errors are untrusted input, not safe browser/log messages.
+		// WorkOS error propagation below is intentionally unchanged.
+		if q.Get("error") != "" {
+			if q.Get("error") == "access_denied" {
+				return oops.E(oops.CodeForbidden, nil, "Login was declined").LogError(ctx, logger)
+			}
+			return oops.E(oops.CodeUnauthorized, nil, "Federated login failed. Contact your administrator").LogError(ctx, logger)
+		}
+	}
+
 	// If the IDP returned an error (user cancelled at the IDP, IDP refused
 	// to authenticate, etc.) per OAuth 2.0, forward it back to the MCP
 	// client with the same error code so the client can render an
@@ -191,23 +234,36 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 		return oops.E(oops.CodeBadRequest, nil, "code is required").LogError(ctx, logger)
 	}
 
-	// Exchange the authorization code for user identity via WorkOS.
-	idpUser, err := s.identityResolver.ExchangeCodeForTokens(ctx, code)
-	if err != nil {
-		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
-		return oops.E(oops.CodeUnauthorized, err, "failed to exchange IDP code").LogError(ctx, logger)
+	var federatedIdentity *remotesessions.FederatedIdentity
+	var gramUserID string
+	impersonated := false
+	if federation := challengeState.Federation; federation != nil {
+		verified, err := s.remoteChallengeMgr.ExchangeFederatedCode(ctx, provider, federation.CallbackURL, code, federation.Nonce, federation.Verifier)
+		if err != nil {
+			return oops.E(oops.CodeUnauthorized, nil, "Federated identity verification failed. Restart login or contact your administrator").LogError(ctx, logger)
+		}
+		defer verified.DiscardCredentials()
+		federatedIdentity = verified
+		gramUserID, err = s.resolveFederatedHuman(ctx, endpoint, verified)
+		if err != nil {
+			return err
+		}
+		// Hold only in this stack frame until organization authorization below.
+	} else {
+		// Preserve WorkOS bootstrap and membership synchronization unchanged.
+		idpUser, err := s.identityResolver.ExchangeCodeForTokens(ctx, code)
+		if err != nil {
+			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
+			return oops.E(oops.CodeUnauthorized, err, "failed to exchange IDP code").LogError(ctx, logger)
+		}
+		login, err := s.identityResolver.CompleteIDPLogin(ctx, idpUser, identity.IDPLoginOptions{SkipMembershipSync: false})
+		if err != nil {
+			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
+			return oops.E(oops.CodeUnexpected, err, "failed to bootstrap user").LogError(ctx, logger)
+		}
+		gramUserID = login.UserID
+		impersonated = idpUser.ImpersonatorEmail() != ""
 	}
-
-	// The shared post-IDP bootstrap: UpsertUser, posthog signup event, WorkOS
-	// membership sync and a fresh user-info read, exactly as dashboard logins
-	// run it. A failed sync fails the flow rather than falling back to local
-	// rows, so membership is never granted on unverified data.
-	login, err := s.identityResolver.CompleteIDPLogin(ctx, idpUser, identity.IDPLoginOptions{SkipMembershipSync: false})
-	if err != nil {
-		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
-		return oops.E(oops.CodeUnexpected, err, "failed to bootstrap user").LogError(ctx, logger)
-	}
-	gramUserID := login.UserID
 
 	// Validate the user belongs to the endpoint's organization before
 	// issuing a token. The mcp:connect RBAC policy operates at org level;
@@ -225,6 +281,24 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 		return oops.E(oops.CodeForbidden, nil, "user is not a member of this MCP server's organization").LogError(ctx, logger)
 	}
 
+	if federation := challengeState.Federation; federation != nil {
+		// A provider call may outlive a rotation or administrative unlink. Check
+		// again before any credential handoff or consent state is produced.
+		current, issuerID, clientID, version, err := s.federatedProvider(ctx, endpoint)
+		if err != nil || current == nil || issuerID != federation.IssuerID || clientID != federation.ClientID || version != federation.Configuration {
+			return oops.E(oops.CodeUnauthorized, nil, "Login configuration changed. Restart login").LogError(ctx, logger)
+		}
+		if s.federatedLoginConsumer != nil {
+			err := s.federatedLoginConsumer.ConsumeFederatedLogin(ctx, AuthorizedFederatedLogin{
+				OrganizationID: endpoint.OrganizationID, UserID: gramUserID, UserSessionIssuerID: challengeState.UserSessionIssuerID,
+				TrustedIssuerID: federation.IssuerID, TrustedClientID: federation.ClientID, Identity: federatedIdentity,
+			})
+			if err != nil {
+				return oops.E(oops.CodeUnauthorized, nil, "Login credential handoff failed. Restart login").LogError(ctx, logger)
+			}
+		}
+	}
+
 	// Mint a fresh state ID so the /connect URL we redirect to is NOT the
 	// same value that just bounced through the IDP. The IDP-returned state
 	// is consumed; the new ID is what /connect's GetAndDelete will burn.
@@ -235,7 +309,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	challengeState.ID = uuid.NewString()
 	challengeState.Subject = &subject
 	challengeState.AuthorizerUserID = gramUserID
-	impersonated := idpUser.ImpersonatorEmail() != ""
+	challengeState.Federation = nil // Drop nonce, PKCE and browser state before consent.
 	challengeState.AuthorizerImpersonated = &impersonated
 	if err := s.authnChallengeCache.Store(ctx, challengeState); err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
