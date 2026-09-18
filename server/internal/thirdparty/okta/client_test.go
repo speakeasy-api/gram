@@ -7,8 +7,11 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -19,10 +22,22 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
+	"github.com/speakeasy-api/gram/server/internal/dpop"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
+
+// tokenProofs returns the proofs the stub verified on the token endpoint, in order.
+func tokenProofs(tc testClient) []proofRecord {
+	var out []proofRecord
+	for _, p := range tc.stub.recordedProofs() {
+		if p.method == http.MethodPost {
+			out = append(out, p)
+		}
+	}
+	return out
+}
 
 func listApps(t *testing.T, tc testClient) []App {
 	t.Helper()
@@ -272,7 +287,7 @@ func TestClient_ResourceSecondNonceChallengeReturnsErrorWithoutRemint(t *testing
 		calls++
 		n := calls
 		mu.Unlock()
-		w.Header().Set("DPoP-Nonce", fmt.Sprintf("rs-%d", n))
+		tc.stub.issueNonce(w, fmt.Sprintf("rs-%d", n))
 		w.Header().Set("WWW-Authenticate", `DPoP error="use_dpop_nonce"`)
 		w.WriteHeader(http.StatusUnauthorized)
 		_, _ = w.Write([]byte(`{"errorCode":"E0000011","errorSummary":"nonce required"}`))
@@ -819,6 +834,157 @@ func TestClient_TokenEndpoint429BacksOffWithFreshAssertion(t *testing.T) {
 		seen[jti] = true
 	}
 	require.Equal(t, stubCounts{tokenRequests: 4, assertionsSeen: 2, issuedTokens: 1}, tc.stub.counts())
+
+	// RFC 9449 §7.3, §11.1: every attempt, throttled ones included, signed a fresh proof.
+	var proofJTIs []string
+	for _, p := range tokenProofs(tc) {
+		proofJTIs = append(proofJTIs, p.jti)
+	}
+	require.Len(t, proofJTIs, 4)
+	require.Len(t, slices.Compact(slices.Sorted(slices.Values(proofJTIs))), 4)
+}
+
+// RFC 9449 §8.2: a nonce on a successful token response is used on the next
+// token request with no challenge round trip and no extra assertion.
+func TestClient_Token_NonceFromSuccessfulResponseSkipsChallenge(t *testing.T) {
+	t.Parallel()
+	tc := newDefaultTestClient(t)
+	tc.stub.setApps(stubApps(1))
+	tc.stub.setEmitTokenNonce("nonce-2")
+
+	listApps(t, tc)
+	require.Equal(t, 2, tc.signer.Calls())
+	require.Equal(t, "nonce-2", tc.currentNonce())
+
+	tc.stub.setTokenNonce("nonce-2")
+	tc.clock.advance(time.Hour)
+	listApps(t, tc)
+	require.Equal(t, 3, tc.signer.Calls())
+	require.Equal(t, stubCounts{tokenRequests: 3, assertionsSeen: 3, issuedTokens: 2}, tc.stub.counts())
+
+	proofs := tokenProofs(tc)
+	require.Len(t, proofs, 3)
+	require.Equal(t, []string{"", "nonce-1", "nonce-2"}, []string{proofs[0].nonce, proofs[1].nonce, proofs[2].nonce})
+}
+
+// RFC 9449 §4.3 step 1: a request with two DPoP header fields is rejected.
+func TestStub_RejectsDuplicateDPoPHeader(t *testing.T) {
+	t.Parallel()
+	tc := newDefaultTestClient(t)
+	tc.stub.setApps(stubApps(1))
+	listApps(t, tc)
+	token := tc.stub.issuedTokens()[0]
+
+	target := tc.client.apiURL("/api/v1/apps", "", nil)
+	proof, err := tc.client.key.Proof(http.MethodGet, target, dpop.ProofOptions{AccessToken: token, Nonce: "", IssuedAt: tc.clock.Now()})
+	require.NoError(t, err)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, target.String(), nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "DPoP "+token)
+	req.Header.Add("DPoP", proof)
+	req.Header.Add("DPoP", proof)
+
+	status, body := stubRoundTrip(t, req)
+	require.Equal(t, http.StatusBadRequest, status)
+	require.Contains(t, body, "expected one DPoP header, got 2")
+}
+
+// RFC 9449 §8: the stub refuses a nonce claim it never issued.
+func TestStub_RejectsUnsolicitedNonce(t *testing.T) {
+	t.Parallel()
+	tc := newDefaultTestClient(t)
+	tc.stub.setApps(stubApps(1))
+	listApps(t, tc)
+	token := tc.stub.issuedTokens()[0]
+
+	target := tc.client.apiURL("/api/v1/apps", "", nil)
+	proof, err := tc.client.key.Proof(http.MethodGet, target, dpop.ProofOptions{AccessToken: token, Nonce: "made-up", IssuedAt: tc.clock.Now()})
+	require.NoError(t, err)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, target.String(), nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "DPoP "+token)
+	req.Header.Set("DPoP", proof)
+
+	status, body := stubRoundTrip(t, req)
+	require.Equal(t, http.StatusBadRequest, status)
+	require.Contains(t, body, "unsolicited nonce")
+}
+
+func stubRoundTrip(t *testing.T, req *http.Request) (int, string) {
+	t.Helper()
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer func() { require.NoError(t, resp.Body.Close()) }()
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	return resp.StatusCode, string(body)
+}
+
+// rewriteTransport records each wire URL and delivers the request to the
+// stub listener instead of the host the client addressed.
+type rewriteTransport struct {
+	listener *url.URL
+
+	mu   sync.Mutex
+	urls []string
+}
+
+func (rt *rewriteTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	rt.mu.Lock()
+	rt.urls = append(rt.urls, req.URL.String())
+	rt.mu.Unlock()
+	clone := req.Clone(req.Context())
+	clone.URL.Scheme, clone.URL.Host, clone.Host = rt.listener.Scheme, rt.listener.Host, ""
+	resp, err := http.DefaultTransport.RoundTrip(clone)
+	if err != nil {
+		return nil, fmt.Errorf("rewrite transport: %w", err)
+	}
+	return resp, nil
+}
+
+func (rt *rewriteTransport) URLs() []string {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	return slices.Clone(rt.urls)
+}
+
+// RFC 9449 §4.2, §4.3: the org URL is canonicalized once so every wire URI
+// is byte-identical to the htu the proof was signed over.
+func TestNewClient_CanonicalOrgURLMatchesProofHTU(t *testing.T) {
+	t.Parallel()
+	tc := newDefaultTestClient(t)
+	tc.stub.setApps(stubApps(1))
+	tc.stub.setOrigin("https://example.okta.com")
+
+	cfg := tc.client.cfg
+	cfg.OrgURL = "https://Example.okta.com:443"
+	client, err := NewClient(testenv.NewLogger(t), tc.client.httpClient, tc.signer, cfg)
+	require.NoError(t, err)
+	impl, ok := client.(*httpClient)
+	require.True(t, ok)
+	require.Equal(t, "https://example.okta.com", impl.orgURL.String())
+	require.Equal(t, "https://example.okta.com"+tokenEndpointPath, impl.audience)
+	impl.now = tc.clock.Now
+	transport := &rewriteTransport{listener: mustParseURL(t, tc.stub.srv.URL), mu: sync.Mutex{}, urls: nil}
+	impl.httpClient.Transport = transport
+
+	apps, err := impl.ListApps(t.Context(), ListAppsRequest{Query: "", Status: "ACTIVE", Limit: 5})
+	require.NoError(t, err)
+	require.Len(t, apps, 1)
+
+	wire := transport.URLs()
+	proofs := tc.stub.recordedProofs()
+	require.Len(t, wire, 3, "nonce challenge, token, resource")
+	require.Len(t, proofs, 3)
+	for i, raw := range wire {
+		u := mustParseURL(t, raw)
+		require.Equal(t, "example.okta.com", u.Host, raw)
+		require.Equal(t, "https", u.Scheme, raw)
+		htu, _, _ := strings.Cut(raw, "?")
+		require.Equal(t, htu, proofs[i].htu, raw)
+		require.Equal(t, dpop.HTU(u), proofs[i].htu, raw)
+	}
+	require.Contains(t, wire[2], "?")
 }
 
 func TestClient_TokenEndpoint429ExhaustedReturnsError(t *testing.T) {

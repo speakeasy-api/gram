@@ -137,7 +137,7 @@ describe("Add servers sheet", () => {
         ],
         [
           "Hosted remotely",
-          "Add a server that already runs elsewhere by its URL, proxied or not.",
+          "Add a server that already runs elsewhere by its URL, proxied through Gram.",
         ],
         [
           "Reachable through a tunnel",
@@ -548,7 +548,7 @@ describe("Add servers sheet", () => {
           screen
             .getByRole("menuitem", { name: new RegExp(`^${label}`) })
             .getAttribute("aria-disabled") === "true",
-        ).toBe(scope === "project:write");
+        ).toBe(true);
       }
     },
   );
@@ -576,12 +576,12 @@ describe("Add servers sheet", () => {
 
   it.each([
     ["From the catalog", "/catalog?attachToGateway=gateway"],
-    ["Hosted remotely", "/remote"],
-    ["Reachable through a tunnel", "/tunneled"],
-    ["From your API", "/openapi"],
-    ["From an existing source", "/fromSource"],
-    ["Write custom code", "/function"],
-  ])("opens %s directly without an all-route attach handoff", (label, href) => {
+    ["Hosted remotely", "/remote?attachToGateway=gateway"],
+    ["Reachable through a tunnel", "/tunneled?attachToGateway=gateway"],
+    ["From your API", "/openapi?attachToGateway=gateway"],
+    ["From an existing source", "/fromSource?attachToGateway=gateway"],
+    ["Write custom code", "/function?attachToGateway=gateway"],
+  ])("opens %s with gateway context", (label, href) => {
     setup();
     fireEvent.pointerDown(screen.getByRole("button", { name: "Add new" }), {
       button: 0,
@@ -775,27 +775,28 @@ it.each([{ toolsetsFailed: true }, { toolsetsLoading: true }])(
   },
 );
 
-it.each([
-  ["project:read:project", true],
-  ["mcp:write:gateway", true],
-  ["project:write:project", false],
-] as const)("matches catalog browse access for %s", (grant, allowed) => {
-  permissions.scopes = new Set([grant]);
-  setup();
-  fireEvent.pointerDown(screen.getByRole("button", { name: "Add new" }), {
-    button: 0,
-    ctrlKey: false,
-    pointerType: "mouse",
-  });
-  const item = screen.getByRole("menuitem", { name: /^From the catalog/ });
-  expect(item.getAttribute("aria-disabled") === "true").toBe(!allowed);
-  fireEvent.click(item);
-  if (allowed)
+it.each([["project:read:project", "mcp:write:gateway"], ["mcp:write:gateway"]])(
+  "allows catalog browsing with gateway write and grants %j",
+  (...grants) => {
+    permissions.scopes = new Set(grants);
+    setup();
+    expect(
+      (screen.getByRole("button", { name: "Add new" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Add new" }), {
+      button: 0,
+      ctrlKey: false,
+      pointerType: "mouse",
+    });
+    const item = screen.getByRole("menuitem", { name: /^From the catalog/ });
+    expect(item.getAttribute("aria-disabled")).not.toBe("true");
+    fireEvent.click(item);
     expect(permissions.navigate).toHaveBeenCalledWith(
       "/catalog?attachToGateway=gateway",
     );
-  else expect(permissions.navigate).not.toHaveBeenCalled();
-});
+  },
+);
 
 it.each([
   [true, { toolsetsLoading: true }],
@@ -822,5 +823,22 @@ it.each([
     expect(
       screen.queryByRole("button", { name: "Add selected servers" }),
     ).toBeNull();
+  },
+);
+
+it.each(["project:read:project", "project:write:project"])(
+  "prevents gateway creation navigation without gateway write despite %s",
+  (grant) => {
+    permissions.scopes = new Set([grant]);
+    setup();
+    const trigger = screen.getByRole("button", { name: "Add new" });
+    expect((trigger as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.pointerDown(trigger, {
+      button: 0,
+      ctrlKey: false,
+      pointerType: "mouse",
+    });
+    expect(screen.queryByRole("menuitem")).toBeNull();
+    expect(permissions.navigate).not.toHaveBeenCalled();
   },
 );

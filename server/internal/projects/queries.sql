@@ -33,6 +33,15 @@ WHERE organization_id = @organization_id
 ORDER BY id ASC
 LIMIT @limit_value;
 
+-- name: ListProjectsByOrganizationPage :many
+SELECT *
+FROM projects
+WHERE organization_id = @organization_id
+  AND deleted IS FALSE
+  AND id > @after_id
+ORDER BY id ASC
+LIMIT LEAST(GREATEST(@limit_value::integer, 1), 100);
+
 -- GetFirstProject returns any non-deleted project. Used by the hooks
 -- local-dev session-cache fallback to pick a target project without
 -- needing to know which org owns it. Local-dev only.

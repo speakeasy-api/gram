@@ -67,6 +67,8 @@ type Endpoints struct {
 	StartTrial                            goa.Endpoint
 	ChangeTrialEndDate                    goa.Endpoint
 	GetMeterUsage                         goa.Endpoint
+	GetSupportMatrix                      goa.Endpoint
+	UpdateSupportMatrix                   goa.Endpoint
 }
 
 // UploadPlatformImageRequestData holds both the payload and the HTTP request
@@ -142,6 +144,8 @@ func NewEndpoints(s Service) *Endpoints {
 		StartTrial:                            NewStartTrialEndpoint(s, a.APIKeyAuth),
 		ChangeTrialEndDate:                    NewChangeTrialEndDateEndpoint(s, a.APIKeyAuth),
 		GetMeterUsage:                         NewGetMeterUsageEndpoint(s, a.APIKeyAuth),
+		GetSupportMatrix:                      NewGetSupportMatrixEndpoint(s, a.APIKeyAuth),
+		UpdateSupportMatrix:                   NewUpdateSupportMatrixEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -197,6 +201,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.StartTrial = m(e.StartTrial)
 	e.ChangeTrialEndDate = m(e.ChangeTrialEndDate)
 	e.GetMeterUsage = m(e.GetMeterUsage)
+	e.GetSupportMatrix = m(e.GetSupportMatrix)
+	e.UpdateSupportMatrix = m(e.UpdateSupportMatrix)
 }
 
 // NewLoginEndpoint returns an endpoint function that calls the method "login"
@@ -1307,5 +1313,51 @@ func NewGetMeterUsageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) g
 			return nil, err
 		}
 		return s.GetMeterUsage(ctx, p)
+	}
+}
+
+// NewGetSupportMatrixEndpoint returns an endpoint function that calls the
+// method "getSupportMatrix" of service "admin".
+func NewGetSupportMatrixEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetSupportMatrixPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetSupportMatrix(ctx, p)
+	}
+}
+
+// NewUpdateSupportMatrixEndpoint returns an endpoint function that calls the
+// method "updateSupportMatrix" of service "admin".
+func NewUpdateSupportMatrixEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*UpdateSupportMatrixPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.UpdateSupportMatrix(ctx, p)
 	}
 }

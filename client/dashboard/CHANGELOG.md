@@ -1,5 +1,11 @@
 # dashboard
 
+## 0.121.1
+
+### Patch Changes
+
+- bba144d: Show the no-data state on a tool usage timeline whose every bucket is empty, rather than a labelled but blank chart, and stop the log detail sheet from holding the previous record's payload on screen while the next one is highlighted — one call's arguments could appear under another call's heading
+
 ## 0.121.0
 
 ### Minor Changes

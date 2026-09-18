@@ -38,6 +38,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/jwtclaims"
@@ -103,6 +104,7 @@ func handleToolsCall(
 	auditLogger *audit.Logger,
 	platformExtras []platformtools.ExternalTool,
 	clientInfoStore sessionClientInfoStore,
+	scan mcpriskscan.Evaluator,
 ) (json.RawMessage, error) {
 	var params toolsCallParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
@@ -437,7 +439,27 @@ func handleToolsCall(
 		telemLogger.Log(ctx, params)
 	}()
 
-	err = toolProxy.Do(ctx, rw, bytes.NewBuffer(params.Arguments), toolCallEnv, plan, logAttrs)
+	serverID := ""
+	if payload.mcpServerID != nil {
+		serverID = payload.mcpServerID.String()
+	}
+	toolName := descriptor.Name
+	if plan.Kind == gateway.ToolKindExternalMCP {
+		toolName = descriptor.URN.Name
+	}
+	scan.Scan(ctx, bytes.NewReader(params.Arguments), mcpriskscan.Event{
+		Surface:        mcpriskscan.SurfaceHostedMCP,
+		Method:         mcpriskscan.MethodToolsCall,
+		OrganizationID: descriptor.OrganizationID,
+		ProjectID:      descriptor.ProjectID,
+		ServerID:       serverID,
+		ToolsetID:      toolset.ID,
+		ToolName:       toolName,
+		ResourceURI:    "",
+		PromptName:     "",
+		Phase:          mcpriskscan.PhaseBeforeExecution,
+	})
+	err = toolProxy.Do(ctx, rw, bytes.NewReader(params.Arguments), toolCallEnv, plan, logAttrs)
 	if err != nil {
 		if rejected, ok := toolCallRejection(ctx, logger, err, attr.SlogToolName(params.Name)); ok {
 			recordToolCallErrorStatus(ctx, rw, rejected)

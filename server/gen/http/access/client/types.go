@@ -17850,8 +17850,8 @@ func ValidateAuthzChallengeResponseBody(body *AuthzChallengeResponseBody) (err e
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.timestamp", *body.Timestamp, goa.FormatDateTime))
 	}
 	if body.PrincipalType != nil {
-		if !(*body.PrincipalType == "user" || *body.PrincipalType == "api_key" || *body.PrincipalType == "assistant" || *body.PrincipalType == "agent") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.principal_type", *body.PrincipalType, []any{"user", "api_key", "assistant", "agent"}))
+		if !(*body.PrincipalType == "user" || *body.PrincipalType == "api_key" || *body.PrincipalType == "assistant" || *body.PrincipalType == "agent" || *body.PrincipalType == "workload") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.principal_type", *body.PrincipalType, []any{"user", "api_key", "assistant", "agent", "workload"}))
 		}
 	}
 	if body.Operation != nil {
@@ -17935,8 +17935,8 @@ func ValidateChallengeBucketResponseBody(body *ChallengeBucketResponseBody) (err
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.first_seen", *body.FirstSeen, goa.FormatDateTime))
 	}
 	if body.PrincipalType != nil {
-		if !(*body.PrincipalType == "user" || *body.PrincipalType == "api_key" || *body.PrincipalType == "assistant" || *body.PrincipalType == "agent") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.principal_type", *body.PrincipalType, []any{"user", "api_key", "assistant", "agent"}))
+		if !(*body.PrincipalType == "user" || *body.PrincipalType == "api_key" || *body.PrincipalType == "assistant" || *body.PrincipalType == "agent" || *body.PrincipalType == "workload") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.principal_type", *body.PrincipalType, []any{"user", "api_key", "assistant", "agent", "workload"}))
 		}
 	}
 	if body.Operation != nil {

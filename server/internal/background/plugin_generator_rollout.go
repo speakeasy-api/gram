@@ -72,7 +72,12 @@ type PluginGeneratorRolloutResult struct {
 	// unchanged-fingerprint skips and go unnoticed. logSummary always
 	// reports a non-zero count here.
 	Conflicted int
-	Failed     int
+	// Rejected counts candidates whose publish actor is no longer a member of
+	// the organization (see ErrTypePluginActorNotMember). The candidate query
+	// picks a current member on the next tick, so this is a warning, not a
+	// failure.
+	Rejected int
+	Failed   int
 }
 
 func ExecutePluginGeneratorRolloutWorkflow(ctx context.Context, env *tenv.Environment, input PluginGeneratorRolloutInput) (client.WorkflowRun, error) {
@@ -110,6 +115,7 @@ func PluginGeneratorRolloutWorkflow(ctx workflow.Context, input PluginGeneratorR
 		Published:  input.Carried.Published,
 		Skipped:    input.Carried.Skipped,
 		Conflicted: input.Carried.Conflicted,
+		Rejected:   input.Carried.Rejected,
 		Failed:     input.Carried.Failed,
 	}
 
@@ -120,12 +126,13 @@ func PluginGeneratorRolloutWorkflow(ctx workflow.Context, input PluginGeneratorR
 	// never becomes Published on its own (see ErrGitHubRepoConflict), so silence
 	// here would mean it's stuck forever with no signal.
 	logSummary := func() {
-		if result.Published > 0 || result.Failed > 0 || result.Conflicted > 0 {
+		if result.Published > 0 || result.Failed > 0 || result.Conflicted > 0 || result.Rejected > 0 {
 			workflow.GetLogger(ctx).Info("plugin generator rollout complete",
 				"scanned", result.Scanned,
 				"published", result.Published,
 				"skipped", result.Skipped,
 				"conflicted", result.Conflicted,
+				"rejected", result.Rejected,
 				"failed", result.Failed,
 			)
 		}
@@ -192,6 +199,11 @@ func PluginGeneratorRolloutWorkflow(ctx workflow.Context, input PluginGeneratorR
 						workflow.GetLogger(ctx).Warn("plugin project publish blocked: github repo conflict", "error", err)
 						continue
 					}
+					if errors.As(err, &appErr) && appErr.Type() == bgactivities.ErrTypePluginActorNotMember {
+						result.Rejected++
+						workflow.GetLogger(ctx).Warn("plugin project publish skipped: actor is not an organization member", "error", err)
+						continue
+					}
 					result.Failed++
 					workflow.GetLogger(ctx).Error("plugin project publish failed", "error", err)
 					continue
@@ -220,7 +232,7 @@ func AddPluginGeneratorRolloutSchedule(ctx context.Context, temporalEnv *tenv.En
 	action := &client.ScheduleWorkflowAction{
 		ID:                 pluginGeneratorRolloutWorkflowID,
 		Workflow:           PluginGeneratorRolloutWorkflow,
-		Args:               []any{PluginGeneratorRolloutInput{BatchSize: 0, CommitMessage: "", AfterProjectID: nil, Carried: PluginGeneratorRolloutResult{Scanned: 0, Published: 0, Skipped: 0, Conflicted: 0, Failed: 0}}},
+		Args:               []any{PluginGeneratorRolloutInput{BatchSize: 0, CommitMessage: "", AfterProjectID: nil, Carried: PluginGeneratorRolloutResult{Scanned: 0, Published: 0, Skipped: 0, Conflicted: 0, Rejected: 0, Failed: 0}}},
 		TaskQueue:          string(temporalEnv.Queue()),
 		WorkflowRunTimeout: 6 * time.Hour,
 	}

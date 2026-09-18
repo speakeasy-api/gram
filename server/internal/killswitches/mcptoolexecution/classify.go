@@ -37,6 +37,8 @@ func ClassifyPrincipalCoverage(source any, result killswitches.PrincipalCandidat
 		return mcpmetrics.KillswitchIdentityAgent
 	case mcpidentity.KindChatSession:
 		return mcpmetrics.KillswitchIdentityChatSession
+	case mcpidentity.KindWorkload:
+		return mcpmetrics.KillswitchIdentityWorkload
 	default:
 		return mcpmetrics.KillswitchIdentityUnattributed
 	}

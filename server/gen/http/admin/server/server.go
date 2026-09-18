@@ -71,6 +71,8 @@ type Server struct {
 	StartTrial                            http.Handler
 	ChangeTrialEndDate                    http.Handler
 	GetMeterUsage                         http.Handler
+	GetSupportMatrix                      http.Handler
+	UpdateSupportMatrix                   http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -150,6 +152,8 @@ func New(
 			{"StartTrial", "POST", "/admin/trial.start"},
 			{"ChangeTrialEndDate", "POST", "/admin/trial.changeEndDate"},
 			{"GetMeterUsage", "GET", "/admin/organizations.getMeterUsage"},
+			{"GetSupportMatrix", "GET", "/admin/supportMatrix.get"},
+			{"UpdateSupportMatrix", "POST", "/admin/supportMatrix.update"},
 		},
 		Login:                                 NewLoginHandler(e.Login, mux, decoder, encoder, errhandler, formatter),
 		Callback:                              NewCallbackHandler(e.Callback, mux, decoder, encoder, errhandler, formatter),
@@ -201,6 +205,8 @@ func New(
 		StartTrial:                            NewStartTrialHandler(e.StartTrial, mux, decoder, encoder, errhandler, formatter),
 		ChangeTrialEndDate:                    NewChangeTrialEndDateHandler(e.ChangeTrialEndDate, mux, decoder, encoder, errhandler, formatter),
 		GetMeterUsage:                         NewGetMeterUsageHandler(e.GetMeterUsage, mux, decoder, encoder, errhandler, formatter),
+		GetSupportMatrix:                      NewGetSupportMatrixHandler(e.GetSupportMatrix, mux, decoder, encoder, errhandler, formatter),
+		UpdateSupportMatrix:                   NewUpdateSupportMatrixHandler(e.UpdateSupportMatrix, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -259,6 +265,8 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.StartTrial = m(s.StartTrial)
 	s.ChangeTrialEndDate = m(s.ChangeTrialEndDate)
 	s.GetMeterUsage = m(s.GetMeterUsage)
+	s.GetSupportMatrix = m(s.GetSupportMatrix)
+	s.UpdateSupportMatrix = m(s.UpdateSupportMatrix)
 }
 
 // MethodNames returns the methods served.
@@ -316,6 +324,8 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountStartTrialHandler(mux, h.StartTrial)
 	MountChangeTrialEndDateHandler(mux, h.ChangeTrialEndDate)
 	MountGetMeterUsageHandler(mux, h.GetMeterUsage)
+	MountGetSupportMatrixHandler(mux, h.GetSupportMatrix)
+	MountUpdateSupportMatrixHandler(mux, h.UpdateSupportMatrix)
 }
 
 // Mount configures the mux to serve the admin endpoints.
@@ -3004,6 +3014,112 @@ func NewGetMeterUsageHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getMeterUsage")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetSupportMatrixHandler configures the mux to serve the "admin" service
+// "getSupportMatrix" endpoint.
+func MountGetSupportMatrixHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/supportMatrix.get", f)
+}
+
+// NewGetSupportMatrixHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "getSupportMatrix" endpoint.
+func NewGetSupportMatrixHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetSupportMatrixRequest(mux, decoder)
+		encodeResponse = EncodeGetSupportMatrixResponse(encoder)
+		encodeError    = EncodeGetSupportMatrixError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getSupportMatrix")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountUpdateSupportMatrixHandler configures the mux to serve the "admin"
+// service "updateSupportMatrix" endpoint.
+func MountUpdateSupportMatrixHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/supportMatrix.update", f)
+}
+
+// NewUpdateSupportMatrixHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "updateSupportMatrix" endpoint.
+func NewUpdateSupportMatrixHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeUpdateSupportMatrixRequest(mux, decoder)
+		encodeResponse = EncodeUpdateSupportMatrixResponse(encoder)
+		encodeError    = EncodeUpdateSupportMatrixError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "updateSupportMatrix")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {
