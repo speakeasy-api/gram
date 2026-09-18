@@ -299,15 +299,16 @@ function ConfiguredPrivateNetwork({
 
 export function PrivateNetworkSection(): JSX.Element | null {
   const organization = useOrganization();
-  const { adminRolloutEnabled: rolloutEnabled } = useNetworkIngressRollout();
+  const { status: rolloutStatus, canManageIngress } =
+    useNetworkIngressRollout();
   const features = useProductFeatures(
     { organizationId: organization.id },
     undefined,
-    { enabled: rolloutEnabled, throwOnError: false },
+    { throwOnError: false },
   );
   const entitled = features.data?.networkIngressEnabled === true;
   const ingressResult = useNetworkIngress(undefined, undefined, {
-    enabled: rolloutEnabled,
+    enabled: canManageIngress,
     retry: (failureCount) => failureCount < 2,
     throwOnError: false,
     refetchInterval: (query) =>
@@ -316,7 +317,8 @@ export function PrivateNetworkSection(): JSX.Element | null {
   const ingress = ingressResult.data?.ingress;
   const [setupOpen, setSetupOpen] = useState(false);
 
-  if (!rolloutEnabled) return null;
+  if (!canManageIngress) return null;
+  if (rolloutStatus === "disabled" && !ingress) return null;
 
   return (
     <SettingsSection>
@@ -332,7 +334,7 @@ export function PrivateNetworkSection(): JSX.Element | null {
           ingress={ingress}
           statusStale={ingressResult.isError}
         />
-      ) : ingressResult.isLoading || features.isLoading ? (
+      ) : ingressResult.isPending || features.isPending ? (
         <SettingsSection.Panel>
           <SettingsSection.Body>
             <Text small muted>
@@ -355,11 +357,7 @@ export function PrivateNetworkSection(): JSX.Element | null {
         <InlineEmptyState
           icon="network"
           heading="No private network connected"
-          description={
-            entitled
-              ? "Connect a Tailscale tailnet to create private URLs for this organization."
-              : "Private network access is not enabled for this organization."
-          }
+          description="Connect a Tailscale tailnet to create private URLs for this organization."
           action={
             entitled ? (
               <RequireScope scope="org:admin" level="component">
