@@ -30,7 +30,9 @@ import { RiskBadge, RevealSecretButton } from "./chatRisk";
 import {
   getMatchStrings,
   highlightMatches,
+  needsWholeMessageMask,
   resultsAreSensitive,
+  sectionRiskLabel,
   useRowReveal,
 } from "./chatHelpers";
 import { toolSectionRiskMatches, type ToolRiskField } from "./toolRisk";
@@ -102,10 +104,7 @@ function toSectionRisk(
     matchingResults.set(result.id, result);
     return {
       value,
-      label:
-        result.ruleId && result.ruleId !== "llm_judge"
-          ? result.ruleId
-          : result.source,
+      label: sectionRiskLabel(result),
       onExclude:
         openExclusion && result.ruleId !== "llm_judge"
           ? () => openExclusion(result)
@@ -187,7 +186,13 @@ function CompactMessageRow({
           )}
         >
           {hasDetailedRisk
-            ? highlightMatches(text, matches, sensitive && !revealed, sensitive)
+            ? highlightMatches(
+                text,
+                matches,
+                sensitive && !revealed,
+                sensitive,
+                needsWholeMessageMask(riskResults),
+              )
             : text}
         </p>
 

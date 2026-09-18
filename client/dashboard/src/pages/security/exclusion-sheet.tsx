@@ -47,7 +47,7 @@ import { EventMatchDialog, MaskedMatch } from "./risk-ui";
 import {
   getCategoryCodeForFinding,
   getRuleTitleFallback,
-  isJudgeSource,
+  isRationaleSource,
 } from "./risk-utils";
 import { useRBAC } from "@/hooks/useRBAC";
 import { invalidateExclusionSurfaces } from "./exclusion-invalidation";
@@ -617,11 +617,12 @@ function SelectedFindingRow({ result }: { result: RiskResult }): JSX.Element {
 }
 
 // The evidence cell for a context row, mirroring the findings tables: judge
-// findings show their rationale and open the flagged event in a dialog, other
-// findings go through the audited click-to-reveal. Chat surfaces carry the
-// plaintext on the finding itself, so there is nothing left to reveal there.
+// and LLM analyzer findings show their rationale (and, for a judge, open the
+// flagged event in a dialog), other findings go through the audited
+// click-to-reveal. Chat surfaces carry the plaintext on the finding itself, so
+// there is nothing left to reveal there.
 function SelectedFindingMatch({ result }: { result: RiskResult }): JSX.Element {
-  if (isJudgeSource(result.source)) {
+  if (isRationaleSource(result.source)) {
     return (
       <EventMatchDialog
         resultId={result.id}

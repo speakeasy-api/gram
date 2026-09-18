@@ -14,7 +14,12 @@ import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { format } from "date-fns";
 import type { ReactNode } from "react";
 import { CategoryLabel } from "../risk-ui";
-import { getRuleTitleFallback, isShadowMcpSource } from "../risk-utils";
+import {
+  getRuleTitleFallback,
+  isRationaleSource,
+  isShadowMcpSource,
+} from "../risk-utils";
+import { isLlmAnalyzerRuleId } from "../rule-ids";
 import { hasRevealableEvent, isRedactionFingerprint } from "../unmask";
 import {
   isRestorable,
@@ -128,7 +133,14 @@ function SuppressionSection({
   );
 }
 
+// The rule row shows the raw id so it can be pasted into an exclusion
+// expression. The LLM analyzer's ids name the engine (`secret.llm`) and its
+// single rule per category only restates the category above, so the row
+// carries the rule's label instead. Its description is the model's reasoning
+// for this one finding, which the row title says outright — as it does for a
+// judge verdict — rather than the static rule blurb every other source stores.
 function FindingSection({ finding }: { finding: RiskResult }): JSX.Element {
+  const llmRule = isLlmAnalyzerRuleId(finding.ruleId);
   return (
     <div className="space-y-4">
       <DetailRow label="Category">
@@ -136,11 +148,23 @@ function FindingSection({ finding }: { finding: RiskResult }): JSX.Element {
       </DetailRow>
       {finding.ruleId && (
         <DetailRow label="Rule">
-          <span className="font-mono break-all">{finding.ruleId}</span>
+          {llmRule ? (
+            getRuleTitleFallback(finding.ruleId)
+          ) : (
+            <span className="font-mono break-all">{finding.ruleId}</span>
+          )}
         </DetailRow>
       )}
       {finding.description && (
-        <DetailRow label="Description">{finding.description}</DetailRow>
+        <DetailRow
+          label={
+            isRationaleSource(finding.source)
+              ? "Why this was flagged"
+              : "Description"
+          }
+        >
+          {finding.description}
+        </DetailRow>
       )}
       {finding.confidence != null && (
         <DetailRow label="Confidence">
