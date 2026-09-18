@@ -107,7 +107,7 @@ func (m *tunnelManager) buildProxy(
 	)
 	p.UpstreamResponseRetryer = tunnelrouting.Retryer(m.routes, tunnelID, addr, clientAffinityKey, m.forwardToken)
 	p.UpstreamResponseInterceptor = func(_ context.Context, resp *http.Response) error {
-		if rejection := tunnelrouting.BusyResponseRejection(resp); rejection != nil {
+		if rejection := tunnelrouting.GatewayFailureRejection(resp); rejection != nil {
 			return rejection
 		}
 		return nil

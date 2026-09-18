@@ -1,3 +1,4 @@
+import { shellQuote } from "@/lib/shell";
 import { CodeBlock, type CodeBlockSlot } from "@/components/code";
 import { DetailSidebarInfoLabel } from "@/components/detail/detail-sidebar-nav";
 import { Input } from "@/components/ui/Input";
@@ -546,8 +547,4 @@ function indentSnippet(value: string, spaces: number): string {
 
 function shellEscape(value: string): string {
   return value.replace(/'/g, "'\\''");
-}
-
-function shellQuote(value: string): string {
-  return `'${shellEscape(value)}'`;
 }

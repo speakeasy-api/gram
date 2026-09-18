@@ -371,15 +371,21 @@ const (
 	// McpEntryPointKey is the bounded entry-point dimension on the
 	// mcp.toolset_slug_fallback counter: which public surface resolved a
 	// request through the legacy toolsets.mcp_slug lookup.
-	McpEntryPointKey              = attribute.Key("gram.mcp.entry_point")
-	McpRequestedTagsKey           = attribute.Key("gram.mcp.requested_tags")
-	McpToolsReturnedKey           = attribute.Key("gram.mcp.tools_returned")
-	McpToolsFilteredKey           = attribute.Key("gram.mcp.tools_filtered")
-	McpServerIDKey                = attribute.Key("gram.mcp_server.id")
-	MetaMcpServerIDKey            = attribute.Key("gram.meta_mcp_server.id")
-	MetaMemberBackendKey          = attribute.Key("gram.meta.member.backend")
-	MetaDispatchOutcomeKey        = attribute.Key("gram.meta.dispatch.outcome")
-	McpURLKey                     = attribute.Key("gram.mcp.url")
+	McpEntryPointKey       = attribute.Key("gram.mcp.entry_point")
+	McpRequestedTagsKey    = attribute.Key("gram.mcp.requested_tags")
+	McpToolsReturnedKey    = attribute.Key("gram.mcp.tools_returned")
+	McpToolsFilteredKey    = attribute.Key("gram.mcp.tools_filtered")
+	McpServerIDKey         = attribute.Key("gram.mcp_server.id")
+	MetaMcpServerIDKey     = attribute.Key("gram.meta_mcp_server.id")
+	MetaMemberBackendKey   = attribute.Key("gram.meta.member.backend")
+	MetaDispatchOutcomeKey = attribute.Key("gram.meta.dispatch.outcome")
+	McpURLKey              = attribute.Key("gram.mcp.url")
+	// McpClientNameKey / McpClientVersionKey carry the MCP caller's
+	// self-reported identity from the initialize handshake (or the
+	// per-request _meta hint). Untrusted client input: attribution only,
+	// never authorization.
+	McpClientNameKey              = attribute.Key("gram.mcp.client.name")
+	McpClientVersionKey           = attribute.Key("gram.mcp.client.version")
 	ToolVariationsGroupIDKey      = attribute.Key("gram.tool_variations_group.id")
 	MetricNameKey                 = attribute.Key("gram.metric.name")
 	MimeTypeKey                   = attribute.Key("mime.type")
@@ -501,6 +507,8 @@ const (
 	WorkOSSCIMEnabledKey              = attribute.Key("gram.workos.scim_enabled")
 	WorkOSDirectoryUserIDKey          = attribute.Key("gram.workos.directory_user_id")
 	ExternalCredentialIDKey           = attribute.Key("gram.external_credential.id")
+	GcpKmsKeyVersionKey               = attribute.Key("gram.gcp_kms.key_version")
+	IdentityProviderConnectionIDKey   = attribute.Key("gram.identity_provider_connection.id")
 	GCPImpersonateServiceAccountKey   = attribute.Key("gram.gcp.impersonate_service_account")
 	WorkOSDirectoryGroupIDKey         = attribute.Key("gram.workos.directory_group_id")
 	OutcomeKey                        = attribute.Key("gram.outcome")
@@ -559,6 +567,9 @@ const (
 	RiskStartPosKey                = attribute.Key("gram.risk.start_pos")
 	RiskEndPosKey                  = attribute.Key("gram.risk.end_pos")
 	RiskEnforcementTruncatedKey    = attribute.Key("gram.risk.enforcement_truncated")
+	RiskScanModeKey                = attribute.Key("gram.risk.scan_mode")
+	RiskLLMTokenKindKey            = attribute.Key("gram.risk.llm.token_kind")
+	RiskLLMModelKey                = attribute.Key("gram.risk.llm.model")
 	SecretNameKey                  = attribute.Key("gram.secret.name")
 	SecurityPlacementKey           = attribute.Key("gram.security.placement")
 	SecuritySchemeKey              = attribute.Key("gram.security.scheme")
@@ -1984,6 +1995,18 @@ func SlogWorkOSOrganizationID(v string) slog.Attr {
 func WorkOSUserID(v string) attribute.KeyValue { return WorkOSUserIDKey.String(v) }
 func SlogWorkOSUserID(v string) slog.Attr      { return slog.String(string(WorkOSUserIDKey), v) }
 
+func GcpKmsKeyVersion(v string) attribute.KeyValue { return GcpKmsKeyVersionKey.String(v) }
+func SlogGcpKmsKeyVersion(v string) slog.Attr {
+	return slog.String(string(GcpKmsKeyVersionKey), v)
+}
+
+func IdentityProviderConnectionID(v string) attribute.KeyValue {
+	return IdentityProviderConnectionIDKey.String(v)
+}
+func SlogIdentityProviderConnectionID(v string) slog.Attr {
+	return slog.String(string(IdentityProviderConnectionIDKey), v)
+}
+
 func ExternalCredentialID(v string) attribute.KeyValue { return ExternalCredentialIDKey.String(v) }
 func SlogExternalCredentialID(v string) slog.Attr {
 	return slog.String(string(ExternalCredentialIDKey), v)
@@ -2304,6 +2327,21 @@ func SlogRiskStartPos(v int64) slog.Attr      { return slog.Int64(string(RiskSta
 func RiskEndPos(v int64) attribute.KeyValue { return RiskEndPosKey.Int64(v) }
 func SlogRiskEndPos(v int64) slog.Attr      { return slog.Int64(string(RiskEndPosKey), v) }
 
+// RiskScanMode is how a risk scan was invoked: "sync" for realtime
+// enforcement, "async" for batch scans. Distinct from the enforcement
+// dispatcher's lane (scanner + policy).
+func RiskScanMode(v string) attribute.KeyValue { return RiskScanModeKey.String(v) }
+func SlogRiskScanMode(v string) slog.Attr      { return slog.String(string(RiskScanModeKey), v) }
+
+// RiskLLMTokenKind distinguishes "input" from "output" tokens on risk model
+// token counters.
+func RiskLLMTokenKind(v string) attribute.KeyValue { return RiskLLMTokenKindKey.String(v) }
+func SlogRiskLLMTokenKind(v string) slog.Attr      { return slog.String(string(RiskLLMTokenKindKey), v) }
+
+// RiskLLMModel is the served model name the risk analyzer called.
+func RiskLLMModel(v string) attribute.KeyValue { return RiskLLMModelKey.String(v) }
+func SlogRiskLLMModel(v string) slog.Attr      { return slog.String(string(RiskLLMModelKey), v) }
+
 func SecretName(v string) attribute.KeyValue { return SecretNameKey.String(v) }
 func SlogSecretName(v string) slog.Attr      { return slog.String(string(SecretNameKey), v) }
 
@@ -2408,6 +2446,14 @@ func SlogToolsetMCPEnabled(v bool) slog.Attr      { return slog.Bool(string(Tool
 
 func McpURL(v string) attribute.KeyValue { return McpURLKey.String(v) }
 func SlogMcpURL(v string) slog.Attr      { return slog.String(string(McpURLKey), v) }
+
+func McpClientName(v string) attribute.KeyValue { return McpClientNameKey.String(v) }
+func SlogMcpClientName(v string) slog.Attr      { return slog.String(string(McpClientNameKey), v) }
+
+func McpClientVersion(v string) attribute.KeyValue { return McpClientVersionKey.String(v) }
+func SlogMcpClientVersion(v string) slog.Attr {
+	return slog.String(string(McpClientVersionKey), v)
+}
 
 func McpMethod(v string) attribute.KeyValue { return McpMethodKey.String(v) }
 func SlogMcpMethod(v string) slog.Attr      { return slog.String(string(McpMethodKey), v) }

@@ -43,7 +43,14 @@ from pystreams.risk.handler import PresidioHandler
 from pystreams.risk.metering import METER_PUBLISH_TIMEOUT_SECONDS
 from pystreams.risk.replywriter import ReplyWriter
 
-from . import flags_control, flags_enforce, flags_gcp, flags_presidio, flags_service
+from . import (
+    flags_control,
+    flags_enforce,
+    flags_gcp,
+    flags_presidio,
+    flags_role,
+    flags_service,
+)
 from .receiver import ReceiverGroup
 
 METER_PUBLISHER_OPTIONS = PublisherOptions(
@@ -61,6 +68,7 @@ METER_PUBLISHER_OPTIONS = PublisherOptions(
     "multi",
     params=[
         *flags_service.service_options(),
+        *flags_role.role_options(),
         *flags_control.server_options(),
         *flags_gcp.pubsub_options(),
         *flags_presidio.presidio_options(),
@@ -81,6 +89,8 @@ async def multi(
     pretty_log: bool,
     enable_tracing: bool,
     enable_metrics: bool,
+    # Receiver role
+    role: str,
     # GCP options
     gcp_project_id: str | None,
     pubsub_emulator_host: str | None,
@@ -109,6 +119,14 @@ async def multi(
         },
     )
     logger: structlog.stdlib.BoundLogger = structlog.get_logger()
+
+    if role == "enforcement" and (
+        not redis_addr or not risk_fingerprint_pepper_keyring
+    ):
+        raise click.UsageError(
+            "--redis-addr and --risk-fingerprint-pepper-keyring are required "
+            "when --role=enforcement"
+        )
 
     otel_options = otel.OTelOptions(
         service_name="gram-pystreams",
@@ -146,9 +164,11 @@ async def multi(
         async with AsyncExitStack() as stack:
             stack.enter_context(broker)
             health_state = HealthState()
-            findings_publisher = await pubsub_publisher_for_message_async(
-                broker, finding_pb2.Finding
-            )
+            findings_publisher = None
+            if role in ("all", "analysis"):
+                findings_publisher = await pubsub_publisher_for_message_async(
+                    broker, finding_pb2.Finding
+                )
             # Isolate best-effort usage backlog from finding delivery.
             meter_broker = stack.enter_context(
                 _build_broker(
@@ -167,7 +187,9 @@ async def multi(
             # exists so a startup failure cannot leak pool workers.
             enforce_redis = None
             enforce_fingerprinter = None
-            if redis_addr and risk_fingerprint_pepper_keyring:
+            if role in ("all", "enforcement") and (
+                redis_addr and risk_fingerprint_pepper_keyring
+            ):
                 host, sep, port = redis_addr.rpartition(":")
                 if not sep or "]" in port or (":" in host and "[" not in host):
                     # Bare hostname, or an IPv6 literal without a port.
@@ -190,7 +212,7 @@ async def multi(
                 enforce_fingerprinter = parse_pepper_keyring(
                     risk_fingerprint_pepper_keyring
                 )
-            else:
+            elif role == "all":
                 logger.info(
                     "presidio enforcement lane disabled",
                     reason="redis address or fingerprint pepper keyring not configured",
@@ -219,9 +241,11 @@ async def multi(
             if os.environ.get("GRAM_PYSTREAMS_DETECT_BLOCKING"):
                 activate_blocking_detection(logger=logger)
 
-            presidio_handler = PresidioHandler(
-                logger, findings_publisher, meter_publisher, presidio_scanner
-            )
+            presidio_handler = None
+            if findings_publisher is not None:
+                presidio_handler = PresidioHandler(
+                    logger, findings_publisher, meter_publisher, presidio_scanner
+                )
 
             enforce_handler = None
             if enforce_redis is not None and enforce_fingerprinter is not None:
@@ -257,45 +281,77 @@ async def multi(
 
                 receivers = ReceiverGroup(task_group=tg, broker=broker, logger=logger)
 
-                # Register subscription receivers here. Each call resolves a
-                # subscriber and starts consuming with per-message tracing.
-                await receivers.receive(
-                    ping_pb2.Message,
-                    processor_pb2.PyProcessor,
-                    PingHandler(logger, ping_log_level).handle,
+                await _register_receivers(
+                    role=role,
+                    receivers=receivers,
+                    logger=logger,
+                    ping_log_level=ping_log_level,
+                    presidio_handler=presidio_handler,
+                    enforce_handler=enforce_handler,
+                    scan_workers=scan_workers,
+                    max_scan_concurrency=max_scan_concurrency,
+                    max_inflight=max_inflight,
                 )
-                # Admit only as many messages as the scan pool can plausibly
-                # serve: 2 handlers per scan slot keeps the pool fed while one
-                # message's findings publish, and everything past the cap waits
-                # at the broker — visible as subscription backlog and
-                # redeliverable — instead of in-process, where 50 handlers
-                # racing 2 workers spent whole slot budgets queued (the
-                # process_duration >> scan_duration gap).
-                if max_inflight is None:
-                    scan_slots = scan_workers if scan_workers > 0 else 2
-                    max_inflight = max(4, 2 * scan_slots)
-                await receivers.receive(
-                    presidio_analysis_pb2.PresidioAnalysis,
-                    presidio_analyzer_pb2.PresidioAnalyzer,
-                    presidio_handler.handle,
-                    max_concurrency=max_inflight,
-                )
-                if enforce_handler is not None:
-                    # Enforcement shares the scan pool with batch, so it gets
-                    # roughly one handler per slot (floored at two so a reply
-                    # write can overlap a scan); excess waits at the broker.
-                    if scan_workers > 0:
-                        enforce_slots = scan_workers
-                    else:
-                        enforce_slots = max_scan_concurrency or 2
-                    await receivers.receive(
-                        presidio_enforcement_pb2.PresidioEnforcement,
-                        presidio_enforcer_pb2.PresidioEnforcer,
-                        enforce_handler.handle,
-                        max_concurrency=max(2, enforce_slots),
-                    )
 
                 health_state.set_ready()
+
+
+async def _register_receivers(
+    *,
+    role: str,
+    receivers: ReceiverGroup,
+    logger: structlog.stdlib.BoundLogger,
+    ping_log_level: int,
+    presidio_handler: PresidioHandler | None,
+    enforce_handler: PresidioEnforceHandler | None,
+    scan_workers: int,
+    max_scan_concurrency: int | None,
+    max_inflight: int | None,
+) -> None:
+    """Register only the subscriptions assigned to this process role."""
+    if role in ("all", "analysis"):
+        assert presidio_handler is not None
+        await receivers.receive(
+            ping_pb2.Message,
+            processor_pb2.PyProcessor,
+            PingHandler(logger, ping_log_level).handle,
+        )
+        # Admit only as many messages as the scan pool can plausibly serve:
+        # 2 handlers per scan slot keeps the pool fed while one message's
+        # findings publish. Excess backlog waits at the broker instead of
+        # spending the scan slot budget queued in-process.
+        if max_inflight is None:
+            scan_slots = scan_workers if scan_workers > 0 else 2
+            max_inflight = max(4, 2 * scan_slots)
+        await receivers.receive(
+            presidio_analysis_pb2.PresidioAnalysis,
+            presidio_analyzer_pb2.PresidioAnalyzer,
+            presidio_handler.handle,
+            max_concurrency=max_inflight,
+        )
+
+    if role in ("all", "enforcement") and enforce_handler is not None:
+        if scan_workers > 0:
+            enforce_slots = scan_workers
+        else:
+            enforce_slots = max_scan_concurrency or 2
+        if role == "enforcement":
+            # Dedicated fleet: enforcement owns its scan pool, so mirror the
+            # analysis sizing at 2 handlers per slot. That overlaps a reply
+            # write with the next scan and keeps the pool fed; excess waits at
+            # the broker.
+            enforce_max = max(4, 2 * enforce_slots)
+        else:
+            # Shared pool (role=all): cap at roughly one handler per slot,
+            # floored at two so a reply write can overlap a scan, so
+            # enforcement does not starve batch analysis on the shared pool.
+            enforce_max = max(2, enforce_slots)
+        await receivers.receive(
+            presidio_enforcement_pb2.PresidioEnforcement,
+            presidio_enforcer_pb2.PresidioEnforcer,
+            enforce_handler.handle,
+            max_concurrency=enforce_max,
+        )
 
 
 def _build_broker(

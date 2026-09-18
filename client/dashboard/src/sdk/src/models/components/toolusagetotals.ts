@@ -13,6 +13,14 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
  */
 export type ToolUsageTotals = {
   /**
+   * Number of tool usage events a policy denied
+   */
+  blockedCount: number;
+  /**
+   * Fraction of all tool usage events a policy denied
+   */
+  blockedRate: number;
+  /**
    * Total number of tool usage events
    */
   eventCount: number;
@@ -48,6 +56,8 @@ export const ToolUsageTotals$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    blocked_count: z.int(),
+    blocked_rate: z.number(),
     event_count: z.int(),
     failure_count: z.int(),
     failure_rate: z.number(),
@@ -58,6 +68,8 @@ export const ToolUsageTotals$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "blocked_count": "blockedCount",
+      "blocked_rate": "blockedRate",
       "event_count": "eventCount",
       "failure_count": "failureCount",
       "failure_rate": "failureRate",

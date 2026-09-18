@@ -27,6 +27,11 @@ import (
 // burning retries every tick.
 const ErrTypeGitHubRepoConflict = "PluginGitHubRepoConflict"
 
+// ErrTypePluginActorNotMember tags the non-retryable Temporal application
+// error returned when the publish actor is not a member of the organization:
+// the actor is fixed for the workflow run, so a retry fails the same way.
+const ErrTypePluginActorNotMember = "PluginActorNotMember"
+
 type PluginPublishClient interface {
 	PublishProject(ctx context.Context, input plugins.PublishProjectInput) (*plugins.PublishProjectResult, error)
 }
@@ -136,6 +141,9 @@ func (p *PluginPublisher) PublishProject(ctx context.Context, input plugins.Publ
 				detail = se.String()
 			}
 			return nil, temporal.NewNonRetryableApplicationError(detail, ErrTypeGitHubRepoConflict, err)
+		}
+		if errors.Is(err, plugins.ErrPluginAPIKeyCreatorNotMember) {
+			return nil, temporal.NewNonRetryableApplicationError(err.Error(), ErrTypePluginActorNotMember, err)
 		}
 		return nil, fmt.Errorf("publish plugin project: %w", err)
 	}

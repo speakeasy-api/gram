@@ -3,6 +3,7 @@ package hooks
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"strconv"
 	"time"
 
@@ -48,6 +49,16 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 	// Tee the export into the OTel event feed pipeline before the per-client
 	// split below, so every client's records in the batch are mirrored.
 	s.teeOTELLogsToEventFeed(ctx, payload, orgID, projectID)
+	s.ingestOTLPLogs(ctx, logger, payload, orgID, *authCtx.ProjectID)
+	return nil
+}
+
+// ingestOTLPLogs runs the hooks telemetry writers for one authenticated OTLP
+// logs export: the Codex split, Claude session attribution, and the
+// telemetry_logs inserts. Shared by the hooks endpoint and the native /otel
+// ingest sink, which has already published the export to the event feed.
+func (s *Service) ingestOTLPLogs(ctx context.Context, logger *slog.Logger, payload *gen.LogsPayload, orgID string, projectUUID uuid.UUID) {
+	projectID := projectUUID.String()
 
 	// Codex resources persist as a raw log stream like Claude's; they carry no
 	// Claude session to seed, so they skip the attribution path below. Split
@@ -59,7 +70,7 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 		s.writeCodexOTELLogsToClickHouse(ctx, codexPayload, orgID, projectID)
 	}
 	if claudePayload == nil {
-		return nil
+		return
 	}
 	payload = claudePayload
 
@@ -191,7 +202,7 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 			if _, err := s.repo.LinkChatUserAccount(ctx, repo.LinkChatUserAccountParams{
 				UserAccountID: conv.StringToNullUUID(completeMetadata.UserAccountID),
 				ID:            sessionIDToUUID(completeMetadata.SessionID),
-				ProjectID:     *authCtx.ProjectID,
+				ProjectID:     projectUUID,
 			}); err != nil {
 				linkFailed = true
 				sessionLogger.ErrorContext(ctx, "failed to backfill chat account link",
@@ -244,8 +255,6 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 			attr.SlogEvent("claude_logs_no_session"),
 		)
 	}
-
-	return nil
 }
 
 // sessionEnrichesAttribution reports whether this OTEL batch carries an identity
@@ -766,6 +775,13 @@ func (s *Service) Metrics(ctx context.Context, payload *gen.MetricsPayload) erro
 	orgID := authCtx.ActiveOrganizationID
 	projectID := authCtx.ProjectID.String()
 
+	s.ingestOTLPMetrics(ctx, logger, payload, orgID, projectID)
+	return nil
+}
+
+// ingestOTLPMetrics runs the hooks metrics writers for one authenticated OTLP
+// metrics export. Shared by the hooks endpoint and the native /otel ingest sink.
+func (s *Service) ingestOTLPMetrics(ctx context.Context, logger *slog.Logger, payload *gen.MetricsPayload, orgID string, projectID string) {
 	// Codex metrics (event counters, not token usage) must not run through the
 	// Claude usage extractor — it would find no claude_code.* metrics and can
 	// reject on temporality. Persist them verbatim instead, splitting per
@@ -783,7 +799,7 @@ func (s *Service) Metrics(ctx context.Context, payload *gen.MetricsPayload) erro
 		s.writeCodexMetricsToClickHouse(ctx, codexMetrics, orgID, projectID)
 	}
 	if claudeMetrics == nil {
-		return nil
+		return
 	}
 	payload = claudeMetrics
 
@@ -795,6 +811,4 @@ func (s *Service) Metrics(ctx context.Context, payload *gen.MetricsPayload) erro
 
 	// Write metrics to ClickHouse
 	s.writeMetricsToClickHouse(ctx, payload, orgID, projectID)
-
-	return nil
 }

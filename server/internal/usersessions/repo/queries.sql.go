@@ -156,7 +156,8 @@ INSERT INTO user_session_issuers (
     authn_challenge_mode,
     session_duration,
     client_id_metadata_admission_mode,
-    trusted_remote_session_issuer_id
+    trusted_remote_session_issuer_id,
+    trusted_remote_session_client_id
 )
 VALUES (
     NULL,
@@ -165,7 +166,8 @@ VALUES (
     $3,
     $4,
     'open',
-    $5::uuid
+    $5::uuid,
+    $6::uuid
 )
 RETURNING id, project_id, organization_id, attachment_scope, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, trusted_remote_session_issuer_id, trusted_remote_session_client_id, created_at, updated_at, deleted_at, deleted
 `
@@ -176,6 +178,7 @@ type CreateOrganizationUserSessionIssuerParams struct {
 	AuthnChallengeMode           string
 	SessionDuration              pgtype.Interval
 	TrustedRemoteSessionIssuerID uuid.NullUUID
+	TrustedRemoteSessionClientID uuid.NullUUID
 }
 
 func (q *Queries) CreateOrganizationUserSessionIssuer(ctx context.Context, arg CreateOrganizationUserSessionIssuerParams) (UserSessionIssuer, error) {
@@ -185,6 +188,7 @@ func (q *Queries) CreateOrganizationUserSessionIssuer(ctx context.Context, arg C
 		arg.AuthnChallengeMode,
 		arg.SessionDuration,
 		arg.TrustedRemoteSessionIssuerID,
+		arg.TrustedRemoteSessionClientID,
 	)
 	var i UserSessionIssuer
 	err := row.Scan(
@@ -2347,8 +2351,187 @@ func (q *Queries) ListUserSessionsByProjectID(ctx context.Context, arg ListUserS
 	return items, nil
 }
 
+const listWorkloadSessionAdmissions = `-- name: ListWorkloadSessionAdmissions :many
+SELECT wia.workload_issuer_id,
+       wia.subject,
+       wia.id,
+       wia.project_id,
+       wia.name
+FROM workload_identity_admissions AS wia
+JOIN workload_issuers AS wi
+  ON wi.organization_id = wia.organization_id
+  AND wi.id = wia.workload_issuer_id
+  AND wi.deleted IS FALSE
+JOIN (
+       SELECT unnest($1::uuid[]) AS workload_issuer_id,
+              unnest($2::text[]) AS subject
+     ) AS w
+  ON w.workload_issuer_id = wia.workload_issuer_id
+  AND w.subject = wia.subject
+WHERE wia.organization_id = $3::text
+  AND (wia.project_id = $4::uuid OR wia.project_id IS NULL)
+  AND wia.deleted IS FALSE
+ORDER BY wia.project_id NULLS LAST, wia.created_at ASC, wia.id ASC
+`
+
+type ListWorkloadSessionAdmissionsParams struct {
+	WorkloadIssuerIds []uuid.UUID
+	Subjects          []string
+	OrganizationID    string
+	ProjectID         uuid.UUID
+}
+
+type ListWorkloadSessionAdmissionsRow struct {
+	WorkloadIssuerID uuid.UUID
+	Subject          string
+	ID               uuid.UUID
+	ProjectID        uuid.NullUUID
+	Name             pgtype.Text
+}
+
+// The admissions currently letting one page of workloads in, so an operator can
+// see every row they would have to withdraw to keep a workload out. A workload
+// admitted at both tiers reconnects through whichever one is left.
+//
+// Tenancy matches WorkloadIdentityIsAdmitted: the caller's own project tier and
+// the organization tier, never a sibling project's. Admissions under a deleted
+// issuer admit nothing, so they are left out.
+func (q *Queries) ListWorkloadSessionAdmissions(ctx context.Context, arg ListWorkloadSessionAdmissionsParams) ([]ListWorkloadSessionAdmissionsRow, error) {
+	rows, err := q.db.Query(ctx, listWorkloadSessionAdmissions,
+		arg.WorkloadIssuerIds,
+		arg.Subjects,
+		arg.OrganizationID,
+		arg.ProjectID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListWorkloadSessionAdmissionsRow
+	for rows.Next() {
+		var i ListWorkloadSessionAdmissionsRow
+		if err := rows.Scan(
+			&i.WorkloadIssuerID,
+			&i.Subject,
+			&i.ID,
+			&i.ProjectID,
+			&i.Name,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listWorkloadSessionLabels = `-- name: ListWorkloadSessionLabels :many
+SELECT w.workload_issuer_id::uuid AS workload_issuer_id,
+       w.subject::text AS subject,
+       wi.name AS workload_issuer_name,
+       wi.issuer AS workload_issuer_url,
+       a.id AS agent_id,
+       a.name AS agent_name,
+       a.suspended_at AS agent_suspended_at,
+       a.revoked_at AS agent_revoked_at
+FROM (
+       SELECT unnest($1::uuid[]) AS workload_issuer_id,
+              unnest($2::text[]) AS subject
+     ) AS w
+LEFT JOIN workload_issuers AS wi
+  ON wi.id = w.workload_issuer_id
+  AND wi.organization_id = $3::text
+  AND (wi.project_id = $4::uuid OR wi.project_id IS NULL)
+  AND wi.deleted IS FALSE
+LEFT JOIN workload_issuers AS live
+  ON live.id = w.workload_issuer_id
+  AND live.organization_id = $3::text
+  AND live.deleted IS FALSE
+LEFT JOIN workload_agent_assignments AS wa
+  ON wa.organization_id = $3::text
+  AND wa.workload_issuer_id = w.workload_issuer_id
+  AND wa.subject = w.subject
+  AND wa.deleted IS FALSE
+  AND live.id IS NOT NULL
+LEFT JOIN agents AS a
+  ON a.organization_id = wa.organization_id
+  AND a.id = wa.agent_id
+  AND a.deleted IS FALSE
+`
+
+type ListWorkloadSessionLabelsParams struct {
+	WorkloadIssuerIds []uuid.UUID
+	Subjects          []string
+	OrganizationID    string
+	ProjectID         uuid.UUID
+}
+
+type ListWorkloadSessionLabelsRow struct {
+	WorkloadIssuerID   uuid.UUID
+	Subject            string
+	WorkloadIssuerName pgtype.Text
+	WorkloadIssuerUrl  pgtype.Text
+	AgentID            uuid.NullUUID
+	AgentName          pgtype.Text
+	AgentSuspendedAt   pgtype.Timestamptz
+	AgentRevokedAt     pgtype.Timestamptz
+}
+
+// Resolves the workloads behind one page of workload sessions into something
+// an operator can read: the issuer's name and URL, and the agent the workload
+// inherits its authority from.
+//
+// Takes the page's workloads as parallel arrays so each issuer stays paired
+// with its own subject. A workload is the pair (issuer, subject); matching the
+// two independently would attribute one issuer's subject to another.
+//
+// The issuer is read at the caller's own tiers only, so a project-tier issuer
+// belonging to a sibling project stays unnamed. The assignment and agent are
+// organization-scoped, like the workload principal they describe.
+//
+// Liveness is a second lookup rather than the named one above: an issuer this
+// caller may not name can still be live, and deleting an issuer withdraws the
+// authority of every workload it vouched for. Matching ResolveWorkloadAgentAssignment,
+// an assignment under a deleted issuer resolves to no agent, so the row cannot
+// advertise authority the workload has already lost.
+func (q *Queries) ListWorkloadSessionLabels(ctx context.Context, arg ListWorkloadSessionLabelsParams) ([]ListWorkloadSessionLabelsRow, error) {
+	rows, err := q.db.Query(ctx, listWorkloadSessionLabels,
+		arg.WorkloadIssuerIds,
+		arg.Subjects,
+		arg.OrganizationID,
+		arg.ProjectID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListWorkloadSessionLabelsRow
+	for rows.Next() {
+		var i ListWorkloadSessionLabelsRow
+		if err := rows.Scan(
+			&i.WorkloadIssuerID,
+			&i.Subject,
+			&i.WorkloadIssuerName,
+			&i.WorkloadIssuerUrl,
+			&i.AgentID,
+			&i.AgentName,
+			&i.AgentSuspendedAt,
+			&i.AgentRevokedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockOrganizationUserSessionIssuer = `-- name: LockOrganizationUserSessionIssuer :one
-SELECT id
+SELECT id, project_id, organization_id, attachment_scope, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, trusted_remote_session_issuer_id, trusted_remote_session_client_id, created_at, updated_at, deleted_at, deleted
 FROM user_session_issuers
 WHERE id = $1
   AND project_id IS NULL
@@ -2362,11 +2545,27 @@ type LockOrganizationUserSessionIssuerParams struct {
 	OrganizationID string
 }
 
-func (q *Queries) LockOrganizationUserSessionIssuer(ctx context.Context, arg LockOrganizationUserSessionIssuerParams) (uuid.UUID, error) {
+func (q *Queries) LockOrganizationUserSessionIssuer(ctx context.Context, arg LockOrganizationUserSessionIssuerParams) (UserSessionIssuer, error) {
 	row := q.db.QueryRow(ctx, lockOrganizationUserSessionIssuer, arg.ID, arg.OrganizationID)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
+	var i UserSessionIssuer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.AttachmentScope,
+		&i.Slug,
+		&i.AuthnChallengeMode,
+		&i.SessionDuration,
+		&i.Classification,
+		&i.ClientIDMetadataAdmissionMode,
+		&i.TrustedRemoteSessionIssuerID,
+		&i.TrustedRemoteSessionClientID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const lockUserSessionIssuer = `-- name: LockUserSessionIssuer :one
@@ -2917,10 +3116,15 @@ SET
         WHEN BTRIM($5::text) = '' THEN NULL
         ELSE $5::text::uuid
     END,
+    trusted_remote_session_client_id = CASE
+        WHEN $6::text IS NULL THEN trusted_remote_session_client_id
+        WHEN BTRIM($6::text) = '' THEN NULL
+        ELSE $6::text::uuid
+    END,
     updated_at = clock_timestamp()
-WHERE id = $6
+WHERE id = $7
   AND project_id IS NULL
-  AND organization_id = $7::text
+  AND organization_id = $8::text
   AND deleted IS FALSE
 RETURNING id, project_id, organization_id, attachment_scope, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, trusted_remote_session_issuer_id, trusted_remote_session_client_id, created_at, updated_at, deleted_at, deleted
 `
@@ -2931,6 +3135,7 @@ type UpdateOrganizationUserSessionIssuerParams struct {
 	SessionDuration               pgtype.Interval
 	ClientIDMetadataAdmissionMode pgtype.Text
 	TrustedRemoteSessionIssuerID  pgtype.Text
+	TrustedRemoteSessionClientID  pgtype.Text
 	ID                            uuid.UUID
 	OrganizationID                string
 }
@@ -2942,6 +3147,7 @@ func (q *Queries) UpdateOrganizationUserSessionIssuer(ctx context.Context, arg U
 		arg.SessionDuration,
 		arg.ClientIDMetadataAdmissionMode,
 		arg.TrustedRemoteSessionIssuerID,
+		arg.TrustedRemoteSessionClientID,
 		arg.ID,
 		arg.OrganizationID,
 	)

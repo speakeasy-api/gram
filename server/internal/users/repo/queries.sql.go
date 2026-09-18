@@ -52,6 +52,7 @@ const getConnectedUserByEmail = `-- name: GetConnectedUserByEmail :one
 SELECT u.id, u.email, u.display_name, u.photo_url, u.admin, u.last_login, u.workos_id, u.workos_created_at, u.workos_updated_at, u.workos_deleted_at, u.deleted_at, u.created_at, u.updated_at FROM users u
 JOIN organization_user_relationships our ON our.user_id = u.id
 WHERE lower(u.email) = lower($1)
+  AND u.deleted_at IS NULL
   AND our.organization_id = $2
   AND our.deleted_at IS NULL
 ORDER BY (u.email = lower($1)) DESC, u.created_at, u.id

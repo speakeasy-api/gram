@@ -38,6 +38,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -114,11 +115,154 @@ func TestLiveExternalAuthorizationUsesCurrentMemberGrants(t *testing.T) {
 	require.Equal(t, memberID, authCtx.UserID)
 	require.Equal(t, organizationSlug, authCtx.OrganizationSlug)
 
+	require.NoError(t, authorizer.AuthorizeExternalCall(prepared, principal, ExternalAuthorizationMember))
+	require.ErrorIs(t, authorizer.AuthorizeExternalCall(contextvalues.SetAuthContext(ctx, authCtx), principal, ExternalAuthorizationMember), ErrUnavailable)
 	err = authorizer.AuthorizeExternalCall(prepared, principal, ExternalAuthorizationOrgAdmin)
 	var denied *ExternalAuthorizationError
 	require.ErrorAs(t, err, &denied)
 	require.Equal(t, "org:admin", denied.RequiredScope)
 	require.Equal(t, "https://app.example.test/"+organizationSlug+"/request-access?resource_id="+organizationID+"&scope=org%3Aadmin", denied.RequestAccessURL)
+}
+
+func TestMemberResourceDiscoveryUsesLiveRBAC(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_member_discovery")
+	require.NoError(t, err)
+	principal, allowedProject := seedRegistrationLifecycle(t, ctx, conn)
+	seedPlatformMCPAuthorizationMember(t, ctx, conn, principal.OrganizationID, principal.UserID, authz.SystemRoleMember)
+	deniedProject, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name: "Hidden project", Slug: "hidden-" + uuid.NewString()[:8], OrganizationID: principal.OrganizationID,
+	})
+	require.NoError(t, err)
+	seedRegistrationEligibleCohort(t, ctx, conn, deniedProject.ID)
+
+	allowedInventory, err := platformrepo.New(conn).ListPlatformMCPInventoryAuthorizationCandidates(ctx, principal.OrganizationID)
+	require.NoError(t, err)
+	var allowedMCPID, deniedMCPID uuid.UUID
+	for _, candidate := range allowedInventory {
+		switch candidate.ProjectID {
+		case allowedProject.ID:
+			allowedMCPID = candidate.ID
+		case deniedProject.ID:
+			deniedMCPID = candidate.ID
+		}
+	}
+	require.NotEqual(t, uuid.Nil, allowedMCPID)
+	require.NotEqual(t, uuid.Nil, deniedMCPID)
+
+	grant := func(scope authz.Scope, selector authz.Selector) {
+		encoded, encodeErr := selector.MarshalJSON()
+		require.NoError(t, encodeErr)
+		_, grantErr := accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
+			OrganizationID: principal.OrganizationID,
+			PrincipalUrn:   urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID),
+			Scope:          string(scope),
+			Selectors:      encoded,
+		})
+		require.NoError(t, grantErr)
+	}
+	grant(authz.ScopeProjectRead, authz.NewSelector(authz.ScopeProjectRead, allowedProject.ID.String()))
+	// Put more than one internal page of hidden projects before a second visible
+	// project. list_projects must keep scanning after the first 100 candidates,
+	// without letting hidden rows consume the caller-visible response limit.
+	for i := 1; i <= projectCandidatePageSize+1; i++ {
+		_, err := testrepo.New(conn).CreateProjectFixture(ctx, testrepo.CreateProjectFixtureParams{
+			ID:             uuid.MustParse(fmt.Sprintf("00000000-0000-4000-8000-%012x", i)),
+			Name:           fmt.Sprintf("Hidden project %03d", i),
+			Slug:           fmt.Sprintf("hidden-project-%03d", i),
+			OrganizationID: principal.OrganizationID,
+		})
+		require.NoError(t, err)
+	}
+	lateVisibleID := uuid.MustParse("ffffffff-ffff-4fff-bfff-fffffffffffe")
+	_, err = testrepo.New(conn).CreateProjectFixture(ctx, testrepo.CreateProjectFixtureParams{
+		ID: lateVisibleID, Name: "Late visible project", Slug: "late-visible-project", OrganizationID: principal.OrganizationID,
+	})
+	require.NoError(t, err)
+	grant(authz.ScopeProjectRead, authz.NewSelector(authz.ScopeProjectRead, lateVisibleID.String()))
+
+	mcpSelector := authz.NewSelector(authz.ScopeMCPRead, allowedMCPID.String())
+	mcpSelector[authz.SelectorKeyProjectID] = allowedProject.ID.String()
+	grant(authz.ScopeMCPRead, mcpSelector)
+
+	// A large unrelated catalogue must not expand the live RBAC check set for a
+	// project-scoped lookup or a selective organization-wide search.
+	unrelatedToolsetID := uuid.New()
+	_, err = testrepo.New(conn).CreateToolsetFixture(ctx, testrepo.CreateToolsetFixtureParams{
+		ID: unrelatedToolsetID, OrganizationID: principal.OrganizationID, ProjectID: deniedProject.ID,
+		Name: "Unrelated catalogue toolset", Slug: "unrelated-catalogue-toolset",
+	})
+	require.NoError(t, err)
+	inserted, err := testrepo.New(conn).CreateMCPServerCatalogueFixtures(ctx, testrepo.CreateMCPServerCatalogueFixturesParams{
+		ProjectID: deniedProject.ID, NamePrefix: "Unrelated server ", SlugPrefix: "unrelated-server-",
+		ToolsetID: uuid.NullUUID{UUID: unrelatedToolsetID, Valid: true}, Visibility: "private", ServerCount: maxInventoryAuthorizationCandidates + 1,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, maxInventoryAuthorizationCandidates+1, inserted)
+
+	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient())
+	prepared, err := NewLiveOrgAdminAuthorizer(conn, engine).PrepareExternalContext(ctx, principal)
+	require.NoError(t, err)
+	reader := NewPostgresReader(testenv.NewLogger(t), conn).WithAuthorization(engine)
+	reader.setInventoryCursorKey("member-discovery-key")
+
+	projects, err := reader.ListProjects(prepared, principal, ListProjectsInput{Limit: 1})
+	require.NoError(t, err)
+	require.Equal(t, []Project{{ID: allowedProject.ID.String(), Name: allowedProject.Name, Slug: allowedProject.Slug}}, projects.Projects)
+	require.True(t, projects.authorizationFiltered)
+	require.True(t, projects.Truncated)
+	encodedProjects, err := json.Marshal(projects)
+	require.NoError(t, err)
+	require.NotContains(t, string(encodedProjects), "filtered", "member responses must not disclose hidden projects")
+
+	projects, err = reader.ListProjects(prepared, principal, ListProjectsInput{Limit: 2})
+	require.NoError(t, err)
+	require.Equal(t, []Project{
+		{ID: allowedProject.ID.String(), Name: allowedProject.Name, Slug: allowedProject.Slug},
+		{ID: lateVisibleID.String(), Name: "Late visible project", Slug: "late-visible-project"},
+	}, projects.Projects)
+	require.True(t, projects.authorizationFiltered)
+	require.False(t, projects.Truncated)
+
+	inventory, err := reader.FindMCP(prepared, principal, FindMCPInput{Query: "cohort"})
+	require.NoError(t, err)
+	require.Len(t, inventory.MCPs, 1)
+	require.Equal(t, allowedMCPID.String(), inventory.MCPs[0].ID)
+
+	_, err = reader.FindMCP(prepared, principal, FindMCPInput{Query: "unrelated server"})
+	require.ErrorIs(t, err, ErrUnavailable, "an over-cap candidate set must fail closed")
+
+	for _, query := range []string{"", "cohort"} {
+		for _, selector := range []FindMCPInput{
+			{ProjectID: allowedProject.ID.String(), Query: query},
+			{ProjectSlug: allowedProject.Slug, Query: query},
+		} {
+			visible, err := reader.FindMCP(prepared, principal, selector)
+			require.NoError(t, err)
+			require.Len(t, visible.MCPs, 1)
+			require.Equal(t, allowedMCPID.String(), visible.MCPs[0].ID)
+		}
+		for _, selector := range []FindMCPInput{
+			{ProjectID: deniedProject.ID.String(), Query: query},
+			{ProjectSlug: deniedProject.Slug, Query: query},
+			{ProjectID: uuid.NewString(), Query: query},
+			{ProjectSlug: "missing-project", Query: query},
+		} {
+			hidden, err := reader.FindMCP(prepared, principal, selector)
+			require.ErrorIs(t, err, ErrForbidden, "hidden and missing projects must return the same error")
+			require.Equal(t, FindMCPOutput{}, hidden)
+		}
+	}
+
+	for _, target := range []GetMCPInput{
+		{ProjectID: deniedProject.ID.String(), MCPID: deniedMCPID.String()},
+		{ProjectID: deniedProject.ID.String(), MCPID: uuid.NewString()},
+	} {
+		_, err = reader.GetMCP(prepared, principal, target)
+		require.ErrorIs(t, err, ErrForbidden, "hidden and missing MCPs must return the same error")
+	}
 }
 
 func TestLiveOrganizationSelectorAdmitsMembersWithoutOrgAdmin(t *testing.T) {
@@ -1207,16 +1351,17 @@ func TestPlatformMCPInventoryReturnsDashboardManagedRemoteUpstreamURL(t *testing
 
 	inventory := platformrepo.New(conn)
 	rows, err := inventory.ListPlatformMCPInventory(ctx, platformrepo.ListPlatformMCPInventoryParams{
-		OrganizationID:       principal.OrganizationID,
-		ConnectionID:         uuid.NullUUID{UUID: connectionIDFromPrincipal(t, principal), Valid: true},
-		ConnectionGeneration: uuid.NullUUID{UUID: connectionIDFromPrincipalGeneration(t, principal), Valid: true},
-		UserID:               pgtype.Text{},
-		ActingSurface:        pgtype.Text{},
-		ProjectID:            uuid.NullUUID{UUID: project.ID, Valid: true},
-		AfterMcpID:           uuid.NullUUID{},
-		QueryText:            "Registration cohort server",
-		ReadinessState:       pgtype.Text{},
-		LimitValue:           10,
+		OrganizationID:          principal.OrganizationID,
+		ConnectionID:            uuid.NullUUID{UUID: connectionIDFromPrincipal(t, principal), Valid: true},
+		ConnectionGeneration:    uuid.NullUUID{UUID: connectionIDFromPrincipalGeneration(t, principal), Valid: true},
+		SkipAuthorizationFilter: true,
+		UserID:                  pgtype.Text{},
+		ActingSurface:           pgtype.Text{},
+		ProjectID:               uuid.NullUUID{UUID: project.ID, Valid: true},
+		AfterMcpID:              uuid.NullUUID{},
+		QueryText:               "Registration cohort server",
+		ReadinessState:          pgtype.Text{},
+		LimitValue:              10,
 	})
 	require.NoError(t, err)
 	require.Len(t, rows, 1)

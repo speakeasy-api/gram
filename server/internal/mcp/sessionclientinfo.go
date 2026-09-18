@@ -24,6 +24,29 @@ type sessionClientInfoStore interface {
 	Load(ctx context.Context, projectID uuid.UUID, toolsetSlug, sessionID string, nowMillis int64) (sessionclientinfo.Info, error)
 }
 
+// internalClientInfoScope is the scope for callers that never handshake —
+// agent workflows dispatching through the hosted path. Nothing is ever stored
+// under it, so resolution always misses and those calls stay unattributed.
+const internalClientInfoScope = "internal:"
+
+// metaClientInfoScope keys a gateway session's client-info record. The ":"
+// prefix cannot collide with a toolset slug, which never contains one.
+func metaClientInfoScope(metaServerID uuid.UUID) string {
+	return "meta:" + metaServerID.String()
+}
+
+// sessionClientInfoScope is the key a session's client-info record lives under.
+// Records are per (project, scope, session), and the hosted path scopes by
+// toolset slug. A caller that handshakes once for several toolsets — the
+// gateway — sets its own scope instead, so every dispatch in that session
+// resolves the identity the handshake recorded.
+func sessionClientInfoScope(payload *mcpInputs) string {
+	if payload.clientInfoScope != "" {
+		return payload.clientInfoScope
+	}
+	return payload.toolset
+}
+
 // storeSessionClientInfo records what a client reported about itself at
 // initialize. A client that reports neither a name nor a protocol version
 // leaves no record, and a write failure is logged rather than surfaced: losing
@@ -41,7 +64,7 @@ func storeSessionClientInfo(ctx context.Context, logger *slog.Logger, store sess
 		return
 	}
 
-	err := store.Store(ctx, payload.projectID, payload.toolset, payload.sessionID, sessionclientinfo.Info{
+	err := store.Store(ctx, payload.projectID, sessionClientInfoScope(payload), payload.sessionID, sessionclientinfo.Info{
 		Name:            name,
 		Version:         mcprequests.SanitizeClientInfoField(version),
 		ProtocolVersion: protocolVersion,
@@ -88,7 +111,7 @@ func resolveClientIdentity(ctx context.Context, logger *slog.Logger, store sessi
 		return identity, ""
 	}
 
-	info, err := store.Load(ctx, payload.projectID, payload.toolset, payload.sessionID, time.Now().UnixMilli())
+	info, err := store.Load(ctx, payload.projectID, sessionClientInfoScope(payload), payload.sessionID, time.Now().UnixMilli())
 	switch {
 	case errors.Is(err, sessionclientinfo.ErrNotFound):
 		// An unknown caller is ordinary: no Redis, an evicted record, or a

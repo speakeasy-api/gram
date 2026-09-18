@@ -30,9 +30,29 @@ func TestTailscaleNetworkIngressProvisionerApplyObserveAndDelete(t *testing.T) {
 	first, err := provisioner.Apply(t.Context(), desired)
 	require.NoError(t, err)
 	require.Equal(t, NetworkIngressStatusPending, first.Status)
+	service, err := typed.CoreV1().Services(desired.Resources.Namespace).Get(t.Context(), desired.Resources.AttestorService, metav1.GetOptions{})
+	require.NoError(t, err)
+	service.Annotations["controller.example/preserved"] = "true"
+	service.Annotations["tailscale.com/controller-state"] = "preserved"
+	service.Annotations[tailscaleExposeAnnotation] = "true"
+	service.Annotations[tailscaleHostnameAnnotation] = "unexpected-hostname"
+	service.Annotations[tailscaleProxyGroupAnnotation] = "unexpected-proxy-group"
+	service.Annotations[tailscaleTagsAnnotation] = "tag:unexpected"
+	service.Annotations[networkIngressIDLabel] = "wrong-ingress-id"
+	_, err = typed.CoreV1().Services(desired.Resources.Namespace).Update(t.Context(), service, metav1.UpdateOptions{})
+	require.NoError(t, err)
 	second, err := provisioner.Apply(t.Context(), desired)
 	require.NoError(t, err)
 	require.Equal(t, NetworkIngressStatusPending, second.Status)
+	service, err = typed.CoreV1().Services(desired.Resources.Namespace).Get(t.Context(), desired.Resources.AttestorService, metav1.GetOptions{})
+	require.NoError(t, err)
+	require.Equal(t, "true", service.Annotations["controller.example/preserved"])
+	require.Equal(t, "preserved", service.Annotations["tailscale.com/controller-state"])
+	require.NotContains(t, service.Annotations, tailscaleExposeAnnotation)
+	require.NotContains(t, service.Annotations, tailscaleHostnameAnnotation)
+	require.NotContains(t, service.Annotations, tailscaleProxyGroupAnnotation)
+	require.NotContains(t, service.Annotations, tailscaleTagsAnnotation)
+	require.Equal(t, desired.ID.String(), service.Annotations[networkIngressIDLabel])
 
 	secret, err := typed.CoreV1().Secrets("tailscale").Get(t.Context(), desired.Resources.CredentialsSecret, metav1.GetOptions{})
 	require.NoError(t, err)
@@ -80,6 +100,9 @@ func TestTailscaleNetworkIngressProvisionerApplyObserveAndDelete(t *testing.T) {
 	caSecret, err := typed.CoreV1().Secrets(desired.Resources.Namespace).Get(t.Context(), desired.Resources.AttestorCASecret, metav1.GetOptions{})
 	require.NoError(t, err)
 	require.Equal(t, []byte("test-ca"), caSecret.Data["ca.crt"])
+	service, err = typed.CoreV1().Services(desired.Resources.Namespace).Get(t.Context(), desired.Resources.AttestorService, metav1.GetOptions{})
+	require.NoError(t, err)
+	require.Equal(t, desired.ID.String(), service.Annotations[networkIngressIDLabel])
 
 	attestorPolicy, err := typed.NetworkingV1().NetworkPolicies(desired.Resources.Namespace).Get(t.Context(), desired.Resources.AttestorNetworkPolicy, metav1.GetOptions{})
 	require.NoError(t, err)
@@ -312,7 +335,7 @@ func TestTailscaleNetworkIngressProvisionerRefusesUnownedResources(t *testing.T)
 
 	err = provisioner.Delete(t.Context(), desired.Resources)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "refuse to delete unowned namespace")
+	require.Contains(t, err.Error(), "refuse to delete namespace with invalid ownership")
 	_, err = typed.CoreV1().Namespaces().Get(t.Context(), desired.Resources.Namespace, metav1.GetOptions{})
 	require.NoError(t, err)
 }
@@ -519,7 +542,9 @@ func TestTailscaleNetworkIngressDeleteRefusesUnownedTerminatingResource(t *testi
 	t.Parallel()
 	provisioner, typed, _, desired := newTestTailscaleProvisioner(t)
 	now := metav1.Now()
-	_, err := typed.NetworkingV1().Ingresses(desired.Resources.Namespace).Create(t.Context(), &networkingv1.Ingress{ObjectMeta: metav1.ObjectMeta{Name: desired.Resources.Ingress, DeletionTimestamp: &now}}, metav1.CreateOptions{})
+	_, err := typed.CoreV1().Namespaces().Create(t.Context(), &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: desired.Resources.Namespace, Labels: ingressLabels(desired)}}, metav1.CreateOptions{})
+	require.NoError(t, err)
+	_, err = typed.NetworkingV1().Ingresses(desired.Resources.Namespace).Create(t.Context(), &networkingv1.Ingress{ObjectMeta: metav1.ObjectMeta{Name: desired.Resources.Ingress, DeletionTimestamp: &now}}, metav1.CreateOptions{})
 	require.NoError(t, err)
 	typed.ClearActions()
 	err = provisioner.Delete(t.Context(), desired.Resources)
@@ -527,6 +552,42 @@ func TestTailscaleNetworkIngressDeleteRefusesUnownedTerminatingResource(t *testi
 	require.NotErrorIs(t, err, ErrNetworkIngressDeletionPending)
 	for _, action := range typed.Actions() {
 		require.NotEqual(t, "delete", action.GetVerb())
+	}
+}
+
+func TestTailscaleNetworkIngressDeletePreservesUnownedNamespace(t *testing.T) {
+	t.Parallel()
+	provisioner, typed, dynamicClient, desired := newTestTailscaleProvisioner(t)
+	foreignOwner := uuid.NewString()
+	_, err := typed.CoreV1().Namespaces().Create(t.Context(), &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: desired.Resources.Namespace, Labels: map[string]string{managedByLabelKey: networkIngressManagedBy, networkIngressIDLabel: foreignOwner}}}, metav1.CreateOptions{})
+	require.NoError(t, err)
+	_, err = dynamicClient.Resource(tailnetGVR).Create(t.Context(), tailnetObject(desired), metav1.CreateOptions{})
+	require.NoError(t, err)
+
+	require.NoError(t, provisioner.Delete(t.Context(), desired.Resources))
+	namespace, err := typed.CoreV1().Namespaces().Get(t.Context(), desired.Resources.Namespace, metav1.GetOptions{})
+	require.NoError(t, err)
+	require.Equal(t, foreignOwner, namespace.Labels[networkIngressIDLabel])
+	_, err = dynamicClient.Resource(tailnetGVR).Get(t.Context(), desired.Resources.Tailnet, metav1.GetOptions{})
+	require.True(t, k8serrors.IsNotFound(err))
+}
+
+func TestTailscaleNetworkIngressDeleteRejectsInvalidNamespaceOwnership(t *testing.T) {
+	t.Parallel()
+	for _, ownerID := range []string{"", uuid.Nil.String()} {
+		t.Run(ownerID, func(t *testing.T) {
+			t.Parallel()
+			provisioner, typed, dynamicClient, desired := newTestTailscaleProvisioner(t)
+			_, err := typed.CoreV1().Namespaces().Create(t.Context(), &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: desired.Resources.Namespace, Labels: map[string]string{managedByLabelKey: networkIngressManagedBy, networkIngressIDLabel: ownerID}}}, metav1.CreateOptions{})
+			require.NoError(t, err)
+			_, err = dynamicClient.Resource(tailnetGVR).Create(t.Context(), tailnetObject(desired), metav1.CreateOptions{})
+			require.NoError(t, err)
+
+			err = provisioner.Delete(t.Context(), desired.Resources)
+			require.ErrorContains(t, err, "refuse to delete namespace with invalid ownership")
+			_, err = dynamicClient.Resource(tailnetGVR).Get(t.Context(), desired.Resources.Tailnet, metav1.GetOptions{})
+			require.NoError(t, err)
+		})
 	}
 }
 
@@ -538,7 +599,14 @@ func TestTailscaleNetworkIngressDeleteChecksNamespaceAbsence(t *testing.T) {
 	require.NoError(t, err)
 	require.ErrorIs(t, provisioner.Delete(t.Context(), desired.Resources), ErrNetworkIngressDeletionPending)
 	require.NoError(t, typed.Tracker().Delete(corev1.SchemeGroupVersion.WithResource("namespaces"), "", desired.Resources.Namespace))
+	typed.ClearActions()
+	typed.PrependReactor("get", "ingresses", func(ktesting.Action) (bool, runtime.Object, error) {
+		return true, nil, k8serrors.NewForbidden(networkingv1.Resource("ingresses"), desired.Resources.Ingress, errors.New("per-ingress RoleBinding was deleted with namespace"))
+	})
 	require.NoError(t, provisioner.Delete(t.Context(), desired.Resources))
+	for _, action := range typed.Actions() {
+		require.False(t, action.GetVerb() == "get" && action.GetResource().Resource == "ingresses")
+	}
 }
 
 func TestTailscaleNetworkIngressCleanupWithoutApplyConfiguration(t *testing.T) {

@@ -14,6 +14,7 @@ class EnforcementScanner(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     ENFORCEMENT_SCANNER_PRESIDIO: _ClassVar[EnforcementScanner]
     ENFORCEMENT_SCANNER_PROMPT_INJECTION: _ClassVar[EnforcementScanner]
     ENFORCEMENT_SCANNER_JUDGE: _ClassVar[EnforcementScanner]
+    ENFORCEMENT_SCANNER_LLM_ANALYZER: _ClassVar[EnforcementScanner]
 
 class EnforcementStatus(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
@@ -26,13 +27,14 @@ ENFORCEMENT_SCANNER_GITLEAKS: EnforcementScanner
 ENFORCEMENT_SCANNER_PRESIDIO: EnforcementScanner
 ENFORCEMENT_SCANNER_PROMPT_INJECTION: EnforcementScanner
 ENFORCEMENT_SCANNER_JUDGE: EnforcementScanner
+ENFORCEMENT_SCANNER_LLM_ANALYZER: EnforcementScanner
 ENFORCEMENT_STATUS_UNSPECIFIED: EnforcementStatus
 ENFORCEMENT_STATUS_OK: EnforcementStatus
 ENFORCEMENT_STATUS_ERROR: EnforcementStatus
 ENFORCEMENT_STATUS_DEAD_LETTER: EnforcementStatus
 
 class EnforcementFinding(_message.Message):
-    __slots__ = ("rule_id", "category", "score", "start_pos", "end_pos", "surface", "field", "path", "tool_call_id", "masked_preview", "fingerprint")
+    __slots__ = ("rule_id", "category", "score", "start_pos", "end_pos", "surface", "field", "path", "tool_call_id", "masked_preview", "fingerprint", "description")
     RULE_ID_FIELD_NUMBER: _ClassVar[int]
     CATEGORY_FIELD_NUMBER: _ClassVar[int]
     SCORE_FIELD_NUMBER: _ClassVar[int]
@@ -44,6 +46,7 @@ class EnforcementFinding(_message.Message):
     TOOL_CALL_ID_FIELD_NUMBER: _ClassVar[int]
     MASKED_PREVIEW_FIELD_NUMBER: _ClassVar[int]
     FINGERPRINT_FIELD_NUMBER: _ClassVar[int]
+    DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
     rule_id: str
     category: str
     score: float
@@ -55,7 +58,8 @@ class EnforcementFinding(_message.Message):
     tool_call_id: str
     masked_preview: str
     fingerprint: str
-    def __init__(self, rule_id: _Optional[str] = ..., category: _Optional[str] = ..., score: _Optional[float] = ..., start_pos: _Optional[int] = ..., end_pos: _Optional[int] = ..., surface: _Optional[str] = ..., field: _Optional[str] = ..., path: _Optional[str] = ..., tool_call_id: _Optional[str] = ..., masked_preview: _Optional[str] = ..., fingerprint: _Optional[str] = ...) -> None: ...
+    description: str
+    def __init__(self, rule_id: _Optional[str] = ..., category: _Optional[str] = ..., score: _Optional[float] = ..., start_pos: _Optional[int] = ..., end_pos: _Optional[int] = ..., surface: _Optional[str] = ..., field: _Optional[str] = ..., path: _Optional[str] = ..., tool_call_id: _Optional[str] = ..., masked_preview: _Optional[str] = ..., fingerprint: _Optional[str] = ..., description: _Optional[str] = ...) -> None: ...
 
 class EnforcementDiagnostics(_message.Message):
     __slots__ = ("scan_duration_ms", "consumer_id", "delivery_attempt")

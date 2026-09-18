@@ -118,6 +118,12 @@ TEMPORAL_ADDRESS = "{{env.TEMPORAL_HOST}}:{{env.TEMPORAL_PORT}}"
 PRESIDIO_PORT = "5050"
 PRESIDIO_ANALYZER_URL = "http://127.0.0.1:{{env.PRESIDIO_PORT}}"
 
+## Fine-tuned risk LLM analyzer (OpenAI-compatible chat endpoint, URL includes
+## /v1). An empty URL disables it; real values belong in mise.local.toml.
+GRAM_RISK_LLM_URL = ""
+GRAM_RISK_LLM_MODEL = "risk-judge-4b"
+GRAM_RISK_LLM_API_KEY = ""
+
 ##########################################
 ## Gram server, admin and worker config ##
 ##########################################
@@ -222,6 +228,11 @@ OTLP_HTTP_PORT = "4318"
 OTEL_EXPORTER_OTLP_ENDPOINT = "http://{{env.OTLP_GRPC_HOST}}:{{env.OTLP_GRPC_PORT}}"
 OTEL_EXPORTER_OTLP_PROTOCOL = "grpc"
 OTEL_RESOURCE_ATTRIBUTES = "worktree=main"
+## Where the shared collector's demo-activity pipeline posts rewritten Claude
+## Code logs (see local/otel/gram-demo-forward.yaml). host.docker.internal
+## because localhost inside that container is the container; the port follows
+## this worktree's, which git:workinit remaps for parallel trees.
+GRAM_DEMO_OTLP_LOGS_ENDPOINT = "https://host.docker.internal:{{env.GRAM_SERVER_PORT}}/rpc/hooks.otel/v1/logs"
 ## Change these to 0 to disable OpenTelemetry traces and metrics to be emitted.
 GRAM_ENABLE_OTEL_TRACES = 1
 GRAM_ENABLE_OTEL_METRICS = 1

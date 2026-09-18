@@ -28,6 +28,7 @@ const (
 	EnforcementScanner_ENFORCEMENT_SCANNER_PRESIDIO         EnforcementScanner = 2
 	EnforcementScanner_ENFORCEMENT_SCANNER_PROMPT_INJECTION EnforcementScanner = 3
 	EnforcementScanner_ENFORCEMENT_SCANNER_JUDGE            EnforcementScanner = 4
+	EnforcementScanner_ENFORCEMENT_SCANNER_LLM_ANALYZER     EnforcementScanner = 5
 )
 
 // Enum value maps for EnforcementScanner.
@@ -38,6 +39,7 @@ var (
 		2: "ENFORCEMENT_SCANNER_PRESIDIO",
 		3: "ENFORCEMENT_SCANNER_PROMPT_INJECTION",
 		4: "ENFORCEMENT_SCANNER_JUDGE",
+		5: "ENFORCEMENT_SCANNER_LLM_ANALYZER",
 	}
 	EnforcementScanner_value = map[string]int32{
 		"ENFORCEMENT_SCANNER_UNSPECIFIED":      0,
@@ -45,6 +47,7 @@ var (
 		"ENFORCEMENT_SCANNER_PRESIDIO":         2,
 		"ENFORCEMENT_SCANNER_PROMPT_INJECTION": 3,
 		"ENFORCEMENT_SCANNER_JUDGE":            4,
+		"ENFORCEMENT_SCANNER_LLM_ANALYZER":     5,
 	}
 )
 
@@ -130,6 +133,7 @@ type EnforcementFinding struct {
 	xxx_hidden_ToolCallId    *string                `protobuf:"bytes,9,opt,name=tool_call_id,json=toolCallId"`
 	xxx_hidden_MaskedPreview *string                `protobuf:"bytes,10,opt,name=masked_preview,json=maskedPreview"`
 	xxx_hidden_Fingerprint   *string                `protobuf:"bytes,11,opt,name=fingerprint"`
+	xxx_hidden_Description   *string                `protobuf:"bytes,12,opt,name=description"`
 	XXX_raceDetectHookData   protoimpl.RaceDetectHookData
 	XXX_presence             [1]uint32
 	unknownFields            protoimpl.UnknownFields
@@ -262,59 +266,74 @@ func (x *EnforcementFinding) GetFingerprint() string {
 	return ""
 }
 
+func (x *EnforcementFinding) GetDescription() string {
+	if x != nil {
+		if x.xxx_hidden_Description != nil {
+			return *x.xxx_hidden_Description
+		}
+		return ""
+	}
+	return ""
+}
+
 func (x *EnforcementFinding) SetRuleId(v string) {
 	x.xxx_hidden_RuleId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 12)
 }
 
 func (x *EnforcementFinding) SetCategory(v string) {
 	x.xxx_hidden_Category = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 12)
 }
 
 func (x *EnforcementFinding) SetScore(v float64) {
 	x.xxx_hidden_Score = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 12)
 }
 
 func (x *EnforcementFinding) SetStartPos(v int32) {
 	x.xxx_hidden_StartPos = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 12)
 }
 
 func (x *EnforcementFinding) SetEndPos(v int32) {
 	x.xxx_hidden_EndPos = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 12)
 }
 
 func (x *EnforcementFinding) SetSurface(v string) {
 	x.xxx_hidden_Surface = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 12)
 }
 
 func (x *EnforcementFinding) SetField(v string) {
 	x.xxx_hidden_Field = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 12)
 }
 
 func (x *EnforcementFinding) SetPath(v string) {
 	x.xxx_hidden_Path = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 12)
 }
 
 func (x *EnforcementFinding) SetToolCallId(v string) {
 	x.xxx_hidden_ToolCallId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 12)
 }
 
 func (x *EnforcementFinding) SetMaskedPreview(v string) {
 	x.xxx_hidden_MaskedPreview = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 9, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 9, 12)
 }
 
 func (x *EnforcementFinding) SetFingerprint(v string) {
 	x.xxx_hidden_Fingerprint = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 10, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 10, 12)
+}
+
+func (x *EnforcementFinding) SetDescription(v string) {
+	x.xxx_hidden_Description = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 11, 12)
 }
 
 func (x *EnforcementFinding) HasRuleId() bool {
@@ -394,6 +413,13 @@ func (x *EnforcementFinding) HasFingerprint() bool {
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 10)
 }
 
+func (x *EnforcementFinding) HasDescription() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 11)
+}
+
 func (x *EnforcementFinding) ClearRuleId() {
 	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 0)
 	x.xxx_hidden_RuleId = nil
@@ -449,6 +475,11 @@ func (x *EnforcementFinding) ClearFingerprint() {
 	x.xxx_hidden_Fingerprint = nil
 }
 
+func (x *EnforcementFinding) ClearDescription() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 11)
+	x.xxx_hidden_Description = nil
+}
+
 type EnforcementFinding_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
@@ -463,6 +494,10 @@ type EnforcementFinding_builder struct {
 	ToolCallId    *string
 	MaskedPreview *string
 	Fingerprint   *string
+	// Model rationale for the finding, limited to 500 Unicode characters. Set
+	// only by the LLM analyzer lane. It may paraphrase the flagged content, so
+	// it is treated with the same care as masked_preview.
+	Description *string
 }
 
 func (b0 EnforcementFinding_builder) Build() *EnforcementFinding {
@@ -470,48 +505,52 @@ func (b0 EnforcementFinding_builder) Build() *EnforcementFinding {
 	b, x := &b0, m0
 	_, _ = b, x
 	if b.RuleId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 12)
 		x.xxx_hidden_RuleId = b.RuleId
 	}
 	if b.Category != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 12)
 		x.xxx_hidden_Category = b.Category
 	}
 	if b.Score != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 12)
 		x.xxx_hidden_Score = *b.Score
 	}
 	if b.StartPos != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 12)
 		x.xxx_hidden_StartPos = *b.StartPos
 	}
 	if b.EndPos != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 12)
 		x.xxx_hidden_EndPos = *b.EndPos
 	}
 	if b.Surface != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 12)
 		x.xxx_hidden_Surface = b.Surface
 	}
 	if b.Field != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 12)
 		x.xxx_hidden_Field = b.Field
 	}
 	if b.Path != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 12)
 		x.xxx_hidden_Path = b.Path
 	}
 	if b.ToolCallId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 12)
 		x.xxx_hidden_ToolCallId = b.ToolCallId
 	}
 	if b.MaskedPreview != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 9, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 9, 12)
 		x.xxx_hidden_MaskedPreview = b.MaskedPreview
 	}
 	if b.Fingerprint != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 10, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 10, 12)
 		x.xxx_hidden_Fingerprint = b.Fingerprint
+	}
+	if b.Description != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 11, 12)
+		x.xxx_hidden_Description = b.Description
 	}
 	return m0
 }
@@ -908,7 +947,7 @@ var File_gram_risk_v1_enforcement_reply_proto protoreflect.FileDescriptor
 
 const file_gram_risk_v1_enforcement_reply_proto_rawDesc = "" +
 	"\n" +
-	"$gram/risk/v1/enforcement_reply.proto\x12\fgram.risk.v1\"\xc4\x02\n" +
+	"$gram/risk/v1/enforcement_reply.proto\x12\fgram.risk.v1\"\xe6\x02\n" +
 	"\x12EnforcementFinding\x12\x17\n" +
 	"\arule_id\x18\x01 \x01(\tR\x06ruleId\x12\x1a\n" +
 	"\bcategory\x18\x02 \x01(\tR\bcategory\x12\x14\n" +
@@ -922,7 +961,8 @@ const file_gram_risk_v1_enforcement_reply_proto_rawDesc = "" +
 	"toolCallId\x12%\n" +
 	"\x0emasked_preview\x18\n" +
 	" \x01(\tR\rmaskedPreview\x12 \n" +
-	"\vfingerprint\x18\v \x01(\tR\vfingerprint\"\x8e\x01\n" +
+	"\vfingerprint\x18\v \x01(\tR\vfingerprint\x12 \n" +
+	"\vdescription\x18\f \x01(\tR\vdescription\"\x8e\x01\n" +
 	"\x16EnforcementDiagnostics\x12(\n" +
 	"\x10scan_duration_ms\x18\x01 \x01(\x03R\x0escanDurationMs\x12\x1f\n" +
 	"\vconsumer_id\x18\x02 \x01(\tR\n" +
@@ -935,13 +975,14 @@ const file_gram_risk_v1_enforcement_reply_proto_rawDesc = "" +
 	"\x06reason\x18\x04 \x01(\tR\x06reason\x12<\n" +
 	"\bfindings\x18\x05 \x03(\v2 .gram.risk.v1.EnforcementFindingR\bfindings\x12F\n" +
 	"\vdiagnostics\x18\x06 \x01(\v2$.gram.risk.v1.EnforcementDiagnosticsR\vdiagnostics\x12\x1b\n" +
-	"\tpolicy_id\x18\a \x01(\tR\bpolicyId*\xc6\x01\n" +
+	"\tpolicy_id\x18\a \x01(\tR\bpolicyId*\xec\x01\n" +
 	"\x12EnforcementScanner\x12#\n" +
 	"\x1fENFORCEMENT_SCANNER_UNSPECIFIED\x10\x00\x12 \n" +
 	"\x1cENFORCEMENT_SCANNER_GITLEAKS\x10\x01\x12 \n" +
 	"\x1cENFORCEMENT_SCANNER_PRESIDIO\x10\x02\x12(\n" +
 	"$ENFORCEMENT_SCANNER_PROMPT_INJECTION\x10\x03\x12\x1d\n" +
-	"\x19ENFORCEMENT_SCANNER_JUDGE\x10\x04*\x94\x01\n" +
+	"\x19ENFORCEMENT_SCANNER_JUDGE\x10\x04\x12$\n" +
+	" ENFORCEMENT_SCANNER_LLM_ANALYZER\x10\x05*\x94\x01\n" +
 	"\x11EnforcementStatus\x12\"\n" +
 	"\x1eENFORCEMENT_STATUS_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15ENFORCEMENT_STATUS_OK\x10\x01\x12\x1c\n" +

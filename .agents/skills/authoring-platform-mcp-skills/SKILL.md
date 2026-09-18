@@ -41,7 +41,7 @@ description: Inspect an explicit AICP project's Platform MCP state before propos
 ---
 ```
 
-4. Write for an agent using only the authenticated Platform MCP tools. Name real tools exactly; verify them in `server/internal/platformmcp/tool_*.go` and their registration in `server/internal/platformmcp/tools.go` rather than inventing APIs.
+4. Write for an agent using authenticated Platform MCP tools. An explicitly reviewed workflow may also use local discovery after informed consent for its actual effects (including health-check connections and stdio process launches before filtering), with a sanitized manual-inventory alternative. Never promise side-effect-free discovery, read credential files, transfer credentials or edit local configuration. The executing client must first successfully call `list_projects` through its own Speakeasy connection; dashboard install intent and another client's authentication are insufficient. All management mutations still require authenticated Platform MCP tools. Name real tools exactly; verify them in `server/internal/platformmcp/tool_*.go` and their registration in `server/internal/platformmcp/tools.go` rather than inventing APIs.
 5. Anchor the skill in a common dashboard outcome. Preserve the dashboard's explicit target selection, secure handoffs, confirmations, and evidence checks rather than inventing a shortcut with weaker controls.
 6. Keep authority explicit: package installation grants no access; live OAuth, entitlement, membership, `org:admin`, generation, and revocation checks remain authoritative.
 7. Separate reads, user choices, secure browser handoffs, confirmation, mutation, and post-mutation verification. Never treat copy/download/install intent as runtime evidence.

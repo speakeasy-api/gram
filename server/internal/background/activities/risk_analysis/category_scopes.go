@@ -10,6 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/recommendedscopes"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
+	"github.com/speakeasy-api/gram/server/internal/scanners/llmanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
@@ -26,6 +27,10 @@ var sourceCategories = map[string][]categories.Category{
 	SourceCLIDestructive:            {categories.CategoryCLIDestructive},
 	SourceCustom:                    {categories.CategoryCustom},
 	promptpolicy.Source:             {categories.CategoryPromptPolicy},
+	// The LLM analyzer stands in for gitleaks, presidio, prompt_injection,
+	// destructive_tool and cli_destructive policies, so it can emit any
+	// category those sources' findings resolve to.
+	llmanalyzer.Source: {categories.CategorySecrets, categories.CategoryPII, categories.CategoryPromptInjection, categories.CategoryDestructiveTool, categories.CategoryCLIDestructive},
 }
 
 // SourceCategories returns the categories a detector source can emit.

@@ -62,7 +62,7 @@ export function StepSection({
           <div className="flex items-center gap-2">
             <h3
               id={headingId}
-              className="text-foreground text-sm leading-7 font-semibold"
+              className="text-foreground text-lg leading-7 font-semibold"
             >
               {title}
             </h3>

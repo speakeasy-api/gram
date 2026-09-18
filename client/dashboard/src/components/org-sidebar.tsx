@@ -11,11 +11,12 @@ import {
 } from "@/components/ui/Sidebar";
 import { useIsPlatformAdmin, useOrganization } from "@/contexts/Auth";
 
-import { SidebarBrandHeader } from "./sidebar-brand-header";
 import { Icon } from "@/components/ui/Icon";
 import { RequireScope } from "@/components/require-scope";
 import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { ScopeGatedNavGroup } from "@/components/scope-gated-nav-group";
+import { SidebarBrandHeader } from "./sidebar-brand-header";
+import { DevSidebarSlot } from "@/dev/sidebar-slot";
 import { SidebarFooterAction } from "./sidebar-footer-action";
 import { SidebarNavSkeleton } from "./sidebar-nav-skeleton";
 import { SidebarUserMenu } from "./sidebar-user-menu";
@@ -69,7 +70,10 @@ export function OrgSidebar({
     },
   );
   const isPlatformAdmin = useIsPlatformAdmin();
-  const { adminRolloutEnabled: showNetworkAccess } = useNetworkIngressRollout();
+  const { status: networkIngressRolloutStatus, canManageIngress } =
+    useNetworkIngressRollout();
+  const showNetworkAccess =
+    canManageIngress && networkIngressRolloutStatus !== "disabled";
   const isDeviceAgentEnabled =
     telemetry.isFeatureEnabled("gram-device-agent") ?? false;
 
@@ -299,6 +303,7 @@ export function OrgSidebar({
             labelClassName="mode-shimmer"
           />
         )}
+        {DevSidebarSlot && <DevSidebarSlot />}
         <SidebarUserMenu />
       </SidebarFooter>
     </Sidebar>
