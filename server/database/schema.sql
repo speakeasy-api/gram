@@ -3482,6 +3482,10 @@ CREATE TABLE IF NOT EXISTS chats (
   summary text,
   summary_generated_at timestamptz,
 
+  -- Versioned hashes of the last successfully evaluated inference frame.
+  -- Archival alone must never advance this checkpoint.
+  inference_accepted_checkpoint bytea,
+
   -- Personal-account tracking: the external AI account (user_accounts row) this
   -- session belongs to. Join to user_accounts for provider, account_type
   -- (team/personal), external_org_id, the owning employee, etc. — set by ingest.
