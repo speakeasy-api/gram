@@ -40,12 +40,16 @@ export function ExploreResults({
   const primary = drawsChart ? chart : summary;
   // Refining an existing result keeps it on screen; only the first result
   // for a query shape blanks the panel.
-  const refining = primary.isFetching && primary.data !== undefined;
+  // A timeseries whose summary order or limit changed refetches the summary
+  // alone, so busy has to watch both requests or the panel would swap the
+  // table underneath without ever saying it was working.
+  const busy = primary.isFetching || (drawsChart && summary.isFetching);
+  const refining = busy && primary.data !== undefined;
 
   return (
     <section
       className="border-border bg-card flex flex-col gap-4 border p-5"
-      aria-busy={primary.isFetching}
+      aria-busy={busy}
     >
       <div className="flex items-center justify-between gap-4">
         <span className="text-eyebrow">Results</span>
@@ -105,7 +109,12 @@ function ResultsBody({
       </>
     );
   }
-  if (spec.chartType === "number") {
+  // Nothing measured means rows, so a number spec that lost its last measure
+  // tables what came back instead of drawing an empty group.
+  if (
+    spec.chartType === "number" &&
+    completeMeasures(spec.measures).length > 0
+  ) {
     return (
       <ResultNumbers dataset={dataset} spec={spec} row={primary.data.rows[0]} />
     );

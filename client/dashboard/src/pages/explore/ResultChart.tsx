@@ -58,8 +58,8 @@ export function ResultChart({
 
   const datasets = useMemo<TimeseriesDataset[]>(
     () =>
-      series.map((one, index) => {
-        const color = colors[index % colors.length]!;
+      series.map((one) => {
+        const color = colors[paletteIndex(one.label, colors.length)]!;
         const base = {
           label: one.label,
           data: one.points,
@@ -139,4 +139,18 @@ export function ResultChart({
       />
     </div>
   );
+}
+
+/**
+ * The palette slot a series keeps. Results reorder by total as a query is
+ * refined, so an index would hand the same tuple a different colour and read
+ * as a different series. Hashing the label pins it instead.
+ */
+function paletteIndex(label: string, count: number): number {
+  let hash = 2166136261;
+  for (let i = 0; i < label.length; i++) {
+    hash ^= label.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return Math.abs(hash) % count;
 }
