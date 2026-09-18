@@ -103,19 +103,21 @@ func TestService_SetAIToolDecision_EnforceableForAVerifiedMatcher(t *testing.T) 
 }
 
 // TestService_ListAIDetections_UnenforceableToolReadsUnreviewed: a tool that
-// publishes no client ID metadata document cannot be recognized at the
-// gateway, so no decision about it can mean anything. The inventory reads
-// unreviewed rather than reporting a verdict enforcement cannot deliver, and
-// the decision is refused outright rather than stored and then ignored.
+// carries no matcher at all, neither a client ID metadata document nor a
+// reported client name, cannot be recognized at either enforcement layer, so
+// no decision about it can mean anything. A local model runner never calls the
+// gateway and is the case in point. The inventory reads unreviewed rather than
+// reporting a verdict enforcement cannot deliver, and the decision is refused
+// outright rather than stored and then ignored.
 func TestService_ListAIDetections_UnenforceableToolReadsUnreviewed(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
 	ctx, orgID, _ := withUniqueDetectionOrg(t, ctx, ti)
-	seedAIDetection(t, ctx, ti, orgID, "cursor", "serial-1", "alex@example.com", "installed", "harness", "", time.Now().UTC())
+	seedAIDetection(t, ctx, ti, orgID, "ollama", "serial-1", "alex@example.com", "installed", "local_model", "", time.Now().UTC())
 
 	_, err := ti.service.SetAIToolDecision(ctx, &gen.SetAIToolDecisionPayload{
-		TargetID:     "cursor",
+		TargetID:     "ollama",
 		Decision:     "blocked",
 		Rationale:    nil,
 		SessionToken: nil,
