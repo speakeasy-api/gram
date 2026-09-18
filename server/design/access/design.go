@@ -1343,7 +1343,7 @@ var AuthzChallengeModel = Type("AuthzChallenge", func() {
 	Attribute("principal_urn", String, "Principal URN e.g. user:<uuid> or api_key:<id>.")
 	Attribute("principal_type", String, func() {
 		Description("Kind of principal.")
-		Enum("user", "api_key", "assistant", "agent")
+		Enum("user", "api_key", "assistant", "agent", "workload")
 	})
 	Attribute("user_email", String, "Email when available.")
 	Attribute("photo_url", String, "User avatar URL when available.")
@@ -1404,7 +1404,7 @@ var ChallengeBucketModel = Type("ChallengeBucket", func() {
 	Attribute("principal_urn", String, "Principal URN e.g. user:<uuid> or api_key:<id>.")
 	Attribute("principal_type", String, func() {
 		Description("Kind of principal.")
-		Enum("user", "api_key", "assistant", "agent")
+		Enum("user", "api_key", "assistant", "agent", "workload")
 	})
 	Attribute("user_email", String, "Email when available.")
 	Attribute("photo_url", String, "User avatar URL when available.")
