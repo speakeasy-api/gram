@@ -9,6 +9,7 @@ import (
 // EphemeralFederatedCredentials is available only through the explicit,
 // post-authorization handoff. Getters intentionally return raw secrets: a
 // consumer must not log them and owns any separately authorized retention.
+// This is a single-owner, synchronous handoff; do not share it across goroutines.
 // Formatting and serialization of the envelope itself are always redacted.
 type EphemeralFederatedCredentials struct {
 	idToken          string
@@ -30,6 +31,7 @@ func (c EphemeralFederatedCredentials) LogValue() slog.Value         { return sl
 
 // WithCredentials consumes the envelope at most once, even if the consumer
 // fails. Call only after provisioned-human resolution and organization access.
+// The identity and consumer are single-owner and synchronous, not concurrency-safe.
 // A nil consumer discards credentials; login never requires a consumer.
 func (i *FederatedIdentity) WithCredentials(consume func(EphemeralFederatedCredentials) error) error {
 	if i == nil || i.credentials == nil || i.credentials.idToken == "" {
@@ -45,11 +47,13 @@ func (i *FederatedIdentity) WithCredentials(consume func(EphemeralFederatedCrede
 
 // DiscardCredentials releases the request-local envelope. Callers should defer
 // this immediately after a successful exchange, including on access denial.
+// This releases references only: it does not zero immutable strings or revoke
+// tokens, and cannot erase copies already retained by a consumer.
 func (i *FederatedIdentity) DiscardCredentials() {
 	if i == nil || i.credentials == nil {
 		return
 	}
-	*i.credentials = EphemeralFederatedCredentials{}
+	*i.credentials = EphemeralFederatedCredentials{idToken: "", refreshToken: "", expiresIn: 0, refreshExpiresIn: 0, receivedAt: time.Time{}}
 	i.credentials = nil
 }
 

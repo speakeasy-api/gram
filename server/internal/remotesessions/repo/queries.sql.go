@@ -7706,6 +7706,31 @@ func (q *Queries) RotateLocalFixtureOrganizationRemoteSessionClient(ctx context.
 	return i, err
 }
 
+const setOrganizationRemoteSessionClientCredentialsFixture = `-- name: SetOrganizationRemoteSessionClientCredentialsFixture :exec
+UPDATE remote_session_clients
+SET client_id = coalesce($1::text, client_id),
+    client_secret_encrypted = coalesce($2::text, client_secret_encrypted)
+WHERE id = $3 AND organization_id = $4 AND project_id IS NULL
+`
+
+type SetOrganizationRemoteSessionClientCredentialsFixtureParams struct {
+	ClientID              pgtype.Text
+	ClientSecretEncrypted pgtype.Text
+	ID                    uuid.UUID
+	OrganizationID        pgtype.Text
+}
+
+// Test fixture: change an organization-level login client during a browser flow.
+func (q *Queries) SetOrganizationRemoteSessionClientCredentialsFixture(ctx context.Context, arg SetOrganizationRemoteSessionClientCredentialsFixtureParams) error {
+	_, err := q.db.Exec(ctx, setOrganizationRemoteSessionClientCredentialsFixture,
+		arg.ClientID,
+		arg.ClientSecretEncrypted,
+		arg.ID,
+		arg.OrganizationID,
+	)
+	return err
+}
+
 const setOrganizationRemoteSessionClientJsonWebKeySet = `-- name: SetOrganizationRemoteSessionClientJsonWebKeySet :one
 UPDATE remote_session_clients AS c
 SET
@@ -8189,6 +8214,21 @@ func (q *Queries) SetRemoteSessionValidationTrackingFixture(ctx context.Context,
 		arg.ID,
 		arg.ProjectID,
 	)
+	return err
+}
+
+const softDeleteOrganizationRemoteSessionClientFixture = `-- name: SoftDeleteOrganizationRemoteSessionClientFixture :exec
+UPDATE remote_session_clients SET deleted_at = clock_timestamp()
+WHERE id = $1 AND organization_id = $2 AND project_id IS NULL
+`
+
+type SoftDeleteOrganizationRemoteSessionClientFixtureParams struct {
+	ID             uuid.UUID
+	OrganizationID pgtype.Text
+}
+
+func (q *Queries) SoftDeleteOrganizationRemoteSessionClientFixture(ctx context.Context, arg SoftDeleteOrganizationRemoteSessionClientFixtureParams) error {
+	_, err := q.db.Exec(ctx, softDeleteOrganizationRemoteSessionClientFixture, arg.ID, arg.OrganizationID)
 	return err
 }
 

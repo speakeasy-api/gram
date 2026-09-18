@@ -12,6 +12,16 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const clearOrganizationDirectoryUserLinksFixture = `-- name: ClearOrganizationDirectoryUserLinksFixture :exec
+UPDATE directory_users SET user_id = NULL WHERE organization_id = $1
+`
+
+// Test fixture: exercise email fallback without a direct Gram user link.
+func (q *Queries) ClearOrganizationDirectoryUserLinksFixture(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, clearOrganizationDirectoryUserLinksFixture, organizationID)
+	return err
+}
+
 const closeDirectoryUserGroupMembership = `-- name: CloseDirectoryUserGroupMembership :execrows
 UPDATE directory_user_group_memberships
 SET deleted_at = COALESCE(deleted_at, clock_timestamp()),
@@ -140,6 +150,15 @@ func (q *Queries) DeleteDirectoryUserByWorkOSID(ctx context.Context, arg DeleteD
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const deleteOrganizationDirectoryUsersFixture = `-- name: DeleteOrganizationDirectoryUsersFixture :exec
+DELETE FROM directory_users WHERE organization_id = $1
+`
+
+func (q *Queries) DeleteOrganizationDirectoryUsersFixture(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, deleteOrganizationDirectoryUsersFixture, organizationID)
+	return err
 }
 
 const directoryAttributeValueExists = `-- name: DirectoryAttributeValueExists :one
@@ -789,6 +808,25 @@ func (q *Queries) ResolveIDJAGUsersByEmail(ctx context.Context, arg ResolveIDJAG
 		return nil, err
 	}
 	return items, nil
+}
+
+const setOrganizationDirectoryUserDeletionFixture = `-- name: SetOrganizationDirectoryUserDeletionFixture :exec
+UPDATE directory_users
+SET deleted_at = CASE WHEN $1::boolean THEN clock_timestamp() ELSE deleted_at END,
+    workos_deleted_at = CASE WHEN $2::boolean THEN clock_timestamp() ELSE workos_deleted_at END
+WHERE organization_id = $3
+`
+
+type SetOrganizationDirectoryUserDeletionFixtureParams struct {
+	LocalDeleted   bool
+	WorkosDeleted  bool
+	OrganizationID string
+}
+
+// Test fixture: independently exercise local and upstream deletion markers.
+func (q *Queries) SetOrganizationDirectoryUserDeletionFixture(ctx context.Context, arg SetOrganizationDirectoryUserDeletionFixtureParams) error {
+	_, err := q.db.Exec(ctx, setOrganizationDirectoryUserDeletionFixture, arg.LocalDeleted, arg.WorkosDeleted, arg.OrganizationID)
+	return err
 }
 
 const upsertDirectoryGroup = `-- name: UpsertDirectoryGroup :one

@@ -235,7 +235,9 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	if forceIDP {
 		federatedURL, err := s.prepareFederatedLogin(ctx, endpoint, &challengeState)
 		if err != nil {
-			return oops.E(oops.CodeUnauthorized, nil, "Federated login configuration is unavailable. Restart login or contact your administrator").LogError(ctx, logger)
+			_, _ = s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+challengeState.ID)
+			failureCode, cause := federatedFailure(err)
+			return s.finishFederatedFailure(w, r, endpoint, challengeState, mcpmetrics.OAuthFlowStageAuthorize, failureCode, cause, "Federated login configuration is unavailable. Restart login or contact your administrator", false)
 		}
 		if federatedURL != nil {
 			w.Header().Set("Cache-Control", "no-store")

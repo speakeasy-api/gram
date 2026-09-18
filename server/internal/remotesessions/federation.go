@@ -18,12 +18,15 @@ import (
 	"github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
 // Federation errors deliberately omit upstream response bodies and credentials.
 var (
 	ErrFederatedConfiguration = errors.New("federated identity provider configuration is unavailable or invalid")
+	ErrFederatedSigning       = errors.New("federated identity provider signing failed")
+	ErrFederatedUnavailable   = errors.New("federated identity provider is temporarily unavailable")
 	ErrFederatedIdentity      = errors.New("federated identity provider authentication failed")
 )
 
@@ -36,6 +39,8 @@ type FederatedProvider struct {
 	metadata       rfc8414Document
 	fingerprint    string
 }
+
+func (p *FederatedProvider) MarshalJSON() ([]byte, error) { return []byte("{}"), nil }
 
 func (p *FederatedProvider) String() string      { return "[federated provider]" }
 func (p *FederatedProvider) GoString() string    { return p.String() }
@@ -76,7 +81,14 @@ func (m *ChallengeManager) LoadFederatedProvider(ctx context.Context, organizati
 	if discoveryErr != nil {
 		return nil, ErrFederatedConfiguration
 	}
-	return newFederatedProvider(organizationID, row.RemoteSessionIssuer, row.RemoteSessionClient, doc)
+	p, err := newFederatedProvider(organizationID, row.RemoteSessionIssuer, row.RemoteSessionClient, doc)
+	if err != nil {
+		return nil, err
+	}
+	if err := m.preflightFederatedSigner(p); err != nil {
+		return nil, err
+	}
+	return p, nil
 }
 
 func newFederatedProvider(organizationID string, issuer repo.RemoteSessionIssuer, client repo.RemoteSessionClient, doc rfc8414Document) (*FederatedProvider, error) {
@@ -93,7 +105,15 @@ func newFederatedProvider(organizationID string, issuer repo.RemoteSessionIssuer
 			return nil, ErrFederatedConfiguration
 		}
 	}
-	if !slices.Contains(client.Scope, "openid") || !slices.Contains(client.Scope, "email") {
+	jwksURL, err := url.Parse(doc.JwksURI)
+	if err != nil || jwksURL.Scheme != "https" {
+		return nil, ErrFederatedConfiguration
+	}
+	if doc.ResponseTypesSupported != nil && !slices.Contains(doc.ResponseTypesSupported, "code") {
+		return nil, ErrFederatedConfiguration
+	}
+	effectiveScopes := federatedScopes(issuer, client)
+	if !slices.Contains(effectiveScopes, "openid") || !slices.Contains(effectiveScopes, "email") {
 		return nil, ErrFederatedConfiguration
 	}
 	if len(doc.CodeChallengeMethodsSupported) > 0 && !slices.Contains(doc.CodeChallengeMethodsSupported, "S256") {
@@ -108,7 +128,7 @@ func newFederatedProvider(organizationID string, issuer repo.RemoteSessionIssuer
 		secret = "present"
 	}
 	method, err := ResolveTokenEndpointAuthMethod(client.TokenEndpointAuthMethod.String, secret)
-	if err != nil {
+	if err != nil || method == TokenEndpointAuthMethodNone {
 		return nil, ErrFederatedConfiguration
 	}
 	if method == TokenEndpointAuthMethodPrivateKeyJWT && !client.JsonWebKeySetID.Valid {
@@ -123,15 +143,17 @@ func newFederatedProvider(organizationID string, issuer repo.RemoteSessionIssuer
 	// Exclude JWKS cache contents/timestamps but bind secret rotations and live
 	// registration, trust, endpoint and metadata policy changes.
 	snapshot := struct {
-		Organization               string
-		Client                     repo.RemoteSessionClient
-		IssuerID                   uuid.UUID
-		Issuer                     string
-		IssuerVersion              string
-		Authorization, Token, JWKS string
-		Tunnel                     uuid.NullUUID
-		Metadata                   rfc8414Document
-	}{Organization: organizationID, Client: client, IssuerID: issuer.ID, Issuer: issuer.Issuer, IssuerVersion: federatedIssuerVersion(issuer), Authorization: issuer.AuthorizationEndpoint.String, Token: issuer.TokenEndpoint.String, JWKS: issuer.JwksUri.String, Tunnel: issuer.TunneledMcpServerID, Metadata: doc}
+		Organization  string                  `json:"Organization"`
+		Client        federatedClientSnapshot `json:"Client"`
+		IssuerID      uuid.UUID               `json:"IssuerID"`
+		Issuer        string                  `json:"Issuer"`
+		IssuerVersion string                  `json:"IssuerVersion"`
+		Authorization string                  `json:"Authorization"`
+		Token         string                  `json:"Token"`
+		JWKS          string                  `json:"JWKS"`
+		Tunnel        uuid.NullUUID           `json:"Tunnel"`
+		Metadata      rfc8414Document         `json:"Metadata"`
+	}{Organization: organizationID, Client: federatedClientSnapshot(client), IssuerID: issuer.ID, Issuer: issuer.Issuer, IssuerVersion: federatedIssuerVersion(issuer), Authorization: issuer.AuthorizationEndpoint.String, Token: issuer.TokenEndpoint.String, JWKS: issuer.JwksUri.String, Tunnel: issuer.TunneledMcpServerID, Metadata: doc}
 	encoded, err := json.Marshal(snapshot)
 	if err != nil {
 		return nil, ErrFederatedConfiguration
@@ -152,14 +174,18 @@ func (p *FederatedProvider) BuildAuthorizationURL(callbackURL, state, nonce, ver
 	if err != nil {
 		return nil, ErrFederatedConfiguration
 	}
-	scope := make([]string, 0, len(p.client.Scope))
-	for _, item := range p.client.Scope {
+	effectiveScopes := federatedScopes(p.issuer, p.client)
+	scope := make([]string, 0, len(effectiveScopes))
+	for _, item := range effectiveScopes {
 		if item != "offline_access" {
 			scope = append(scope, item)
 		}
 	}
 	q := u.Query()
-	// No downstream scopes, provider-specific interceptors, or offline policy.
+	// Preserve endpoint query parameters used for provider routing, but remove
+	// parameters that could change login, consent, or requested access policy.
+	// AICP sets the core OAuth/OIDC parameters below; endpoint metadata must not
+	// supply an alternate request object or opt this flow into offline consent.
 	removedParameters := []string{
 		"prompt",
 		"access_type",
@@ -198,7 +224,7 @@ func validFederatedVerifier(verifier string) bool {
 		return false
 	}
 	for _, c := range verifier {
-		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || strings.ContainsRune("-._~", c)) {
+		if (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') && (c < '0' || c > '9') && !strings.ContainsRune("-._~", c) {
 			return false
 		}
 	}
@@ -225,6 +251,9 @@ func (m *ChallengeManager) ExchangeFederatedCode(ctx context.Context, p *Federat
 	if _, err := p.BuildAuthorizationURL(callbackURL, "validation", nonce, verifier); err != nil {
 		return nil, err
 	}
+	if err := m.preflightFederatedSigner(p); err != nil {
+		return nil, err
+	}
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	if err := m.validateFederatedMetadataHosts(ctx, p.issuer, p.metadata); err != nil {
@@ -239,7 +268,7 @@ func (m *ChallengeManager) ExchangeFederatedCode(ctx context.Context, p *Federat
 		}
 	}
 	method, err := ResolveTokenEndpointAuthMethod(p.client.TokenEndpointAuthMethod.String, secret)
-	if err != nil {
+	if err != nil || method == TokenEndpointAuthMethodNone {
 		return nil, ErrFederatedConfiguration
 	}
 	audience, err := ResolveTokenEndpointAuthAudience(p.client.TokenEndpointAuthAudienceFormat.String, p.issuer.Issuer, p.metadata.TokenEndpoint)
@@ -254,7 +283,7 @@ func (m *ChallengeManager) ExchangeFederatedCode(ctx context.Context, p *Federat
 	exchangeState := RemoteLoginState{RedirectURI: callbackURL, CodeVerifier: verifier, TokenEndpoint: p.metadata.TokenEndpoint} //nolint:exhaustruct // Not a persisted remote-session challenge.
 	tok, err := m.exchangeCode(ctx, doer, exchangeState, tokenEndpointClientAuth{Method: method, RemoteSessionClientID: p.client.ID, OrganizationID: p.organizationID, JSONWebKeySetID: p.client.JsonWebKeySetID.UUID, ClientID: p.client.ClientID, ClientSecret: secret, AssertionAudience: audience, AssertionSigner: m.assertions}, "", code)
 	if err != nil {
-		return nil, ErrFederatedIdentity
+		return nil, classifyFederatedExchangeError(err)
 	}
 	identity, err := m.verifyFederatedIdentity(ctx, p, tok, code, nonce, doer)
 	if err != nil {
@@ -376,3 +405,39 @@ func validFederatedTokenHash(claim, value, algorithm string) bool {
 }
 
 var _ fmt.GoStringer = (*FederatedProvider)(nil)
+
+func federatedScopes(issuer repo.RemoteSessionIssuer, client repo.RemoteSessionClient) []string {
+	if len(issuer.ScopeOverride) > 0 {
+		return issuer.ScopeOverride
+	}
+	return client.Scope
+}
+
+// Preflight only known local availability; never sign or contact KMS at authorize.
+func (m *ChallengeManager) preflightFederatedSigner(p *FederatedProvider) error {
+	if p.client.TokenEndpointAuthMethod.String == string(TokenEndpointAuthMethodPrivateKeyJWT) && !tokenEndpointSignerAvailable(m.assertions) {
+		return ErrFederatedUnavailable
+	}
+	return nil
+}
+
+func classifyFederatedExchangeError(err error) error {
+	if _, ok := errors.AsType[*tokenEndpointSigningError](err); ok {
+		if errors.Is(err, errTokenEndpointSigningUnavailable) {
+			return ErrFederatedUnavailable
+		}
+		return ErrFederatedSigning
+	}
+	if _, ok := errors.AsType[*tokenExchangeUnavailableError](err); ok {
+		return ErrFederatedUnavailable
+	}
+	var endpoint *tokenEndpointError
+	if errors.As(err, &endpoint) && (endpoint.statusCode >= 500 || endpoint.statusCode == 429) {
+		return ErrFederatedUnavailable
+	}
+	var oauth oautherr.RFC6749Error
+	if errors.As(err, &oauth) && (oauth.Code == oautherr.CodeInvalidClient || oauth.Code == "unauthorized_client") {
+		return ErrFederatedConfiguration
+	}
+	return ErrFederatedIdentity
+}

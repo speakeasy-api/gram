@@ -131,44 +131,54 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	// sees the same origin whichever way the flow goes.
 	baseURL := challengeState.mintOriginOr(s.serverURL.String())
 
+	finishFederation := func(code oops.Code, cause error, message string, declined bool) error {
+		return s.finishFederatedFailure(w, r, endpoint, challengeState, mcpmetrics.OAuthFlowStageIDPCallback, code, cause, message, declined)
+	}
+	failFederationDependency := func(err error, message string) error {
+		code, cause := federatedFailure(err)
+		return finishFederation(code, cause, message, false)
+	}
 	// Resolve through the live endpoint organization; a callback cannot select
 	// a provider, and an in-flight challenge can never switch to or from WorkOS.
 	provider, trustedIssuerID, trustedClientID, configuration, err := s.federatedProvider(ctx, endpoint)
-	if err != nil || (provider == nil) != (challengeState.Federation == nil) {
-		return oops.E(oops.CodeUnauthorized, nil, "Login configuration changed. Restart login or contact your administrator").LogError(ctx, logger)
+	if err != nil {
+		return failFederationDependency(err, "Login configuration is unavailable. Restart login or contact your administrator")
+	}
+	if (provider == nil) != (challengeState.Federation == nil) {
+		return finishFederation(oops.CodeFailedPrecondition, remotesessions.ErrFederatedConfiguration, "Login configuration changed. Restart login or contact your administrator", false)
 	}
 	if federation := challengeState.Federation; federation != nil {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		for _, parameter := range []string{"state", "code", "iss", "error", "federated_start"} {
 			if len(q[parameter]) > 1 {
-				return oops.E(oops.CodeUnauthorized, nil, "Invalid login response").LogError(ctx, logger)
+				return finishFederation(oops.CodeUnauthorized, remotesessions.ErrFederatedIdentity, "Invalid login response", false)
 			}
 		}
 		callbackURL, callbackErr := endpoint.IDPCallbackURL(s.serverURL.String())
 		if callbackErr != nil || federation.OrganizationID != endpoint.OrganizationID || federation.IssuerID != trustedIssuerID || federation.ClientID != trustedClientID || federation.Configuration != configuration || federation.CallbackURL != callbackURL || challengeState.CreatedAt.IsZero() || time.Since(challengeState.CreatedAt) > challengeState.TTL() {
-			return oops.E(oops.CodeUnauthorized, nil, "Login configuration changed or expired. Restart login").LogError(ctx, logger)
+			return finishFederation(oops.CodeFailedPrecondition, remotesessions.ErrFederatedConfiguration, "Login configuration changed or expired. Restart login", false)
 		}
 		if q.Get("federated_start") == "1" && federation.BrowserHash == "" && q.Get("code") == "" && q.Get("error") == "" {
 			if err := s.startFederatedLogin(w, r, &challengeState, provider); err != nil {
-				return oops.E(oops.CodeUnauthorized, nil, "Federated login is unavailable. Restart login or contact your administrator").LogError(ctx, logger)
+				return failFederationDependency(err, "Federated login is unavailable. Restart login or contact your administrator")
 			}
 			return nil
 		}
 		if err := validateFederatedBrowser(r, challengeState); err != nil {
-			return oops.E(oops.CodeUnauthorized, nil, "Login browser binding is invalid. Restart login").LogError(ctx, logger)
+			return finishFederation(oops.CodeUnauthorized, remotesessions.ErrFederatedIdentity, "Login browser binding is invalid. Restart login", false)
 		}
 		http.SetCookie(w, federatedBrowserCookie(challengeState.ID, "", -1))
 		if err := provider.ValidateResponseIssuer(q.Get("iss")); err != nil {
-			return oops.E(oops.CodeUnauthorized, nil, "Login provider response is invalid. Restart login").LogError(ctx, logger)
+			return finishFederation(oops.CodeUnauthorized, remotesessions.ErrFederatedIdentity, "Login provider response is invalid. Restart login", false)
 		}
 		// Provider errors are untrusted input, not safe browser/log messages.
 		// WorkOS error propagation below is intentionally unchanged.
 		if q.Get("error") != "" {
 			if q.Get("error") == "access_denied" {
-				return oops.E(oops.CodeForbidden, nil, "Login was declined").LogError(ctx, logger)
+				return finishFederation(oops.CodeForbidden, nil, "Login was declined", true)
 			}
-			return oops.E(oops.CodeUnauthorized, nil, "Federated login failed. Contact your administrator").LogError(ctx, logger)
+			return finishFederation(oops.CodeGatewayError, errors.New("federated provider returned an error"), "Federated login failed. Contact your administrator", false)
 		}
 	}
 
@@ -229,6 +239,9 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 
 	code := q.Get("code")
 	if code == "" {
+		if challengeState.Federation != nil {
+			return finishFederation(oops.CodeBadRequest, remotesessions.ErrFederatedIdentity, "Invalid login response", false)
+		}
 		// IDP returned neither code nor error — a broken IDP redirect.
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 		return oops.E(oops.CodeBadRequest, nil, "code is required").LogError(ctx, logger)
@@ -240,13 +253,17 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	if federation := challengeState.Federation; federation != nil {
 		verified, err := s.remoteChallengeMgr.ExchangeFederatedCode(ctx, provider, federation.CallbackURL, code, federation.Nonce, federation.Verifier)
 		if err != nil {
-			return oops.E(oops.CodeUnauthorized, nil, "Federated identity verification failed. Restart login or contact your administrator").LogError(ctx, logger)
+			return failFederationDependency(err, "Federated identity verification failed. Restart login or contact your administrator")
 		}
 		defer verified.DiscardCredentials()
 		federatedIdentity = verified
 		gramUserID, err = s.resolveFederatedHuman(ctx, endpoint, verified)
 		if err != nil {
-			return err
+			var failure *oops.ShareableError
+			if errors.As(err, &failure) && failure.Code == oops.CodeForbidden {
+				return finishFederation(oops.CodeForbidden, errors.New("federated user is not provisioned"), "Your account is not provisioned for this organization. Contact your administrator", false)
+			}
+			return failFederationDependency(err, "Identity verification is temporarily unavailable. Restart login")
 		}
 		// Hold only in this stack frame until organization authorization below.
 	} else {
@@ -273,10 +290,16 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	// (e.g. the toolset is exposed to the wrong audience), not a user decline.
 	member, err := s.identityResolver.IsOrganizationMember(ctx, endpoint.OrganizationID, gramUserID)
 	if err != nil {
+		if challengeState.Federation != nil {
+			return failFederationDependency(err, "Organization membership verification is temporarily unavailable. Restart login")
+		}
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 		return oops.E(oops.CodeUnexpected, err, "failed to check organization membership").LogError(ctx, logger)
 	}
 	if !member {
+		if challengeState.Federation != nil {
+			return finishFederation(oops.CodeForbidden, errors.New("federated organization membership denied"), "Your account is not provisioned for this organization. Contact your administrator", false)
+		}
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 		return oops.E(oops.CodeForbidden, nil, "user is not a member of this MCP server's organization").LogError(ctx, logger)
 	}
@@ -285,8 +308,11 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 		// A provider call may outlive a rotation or administrative unlink. Check
 		// again before any credential handoff or consent state is produced.
 		current, issuerID, clientID, version, err := s.federatedProvider(ctx, endpoint)
-		if err != nil || current == nil || issuerID != federation.IssuerID || clientID != federation.ClientID || version != federation.Configuration {
-			return oops.E(oops.CodeUnauthorized, nil, "Login configuration changed. Restart login").LogError(ctx, logger)
+		if err != nil {
+			return failFederationDependency(err, "Login configuration is unavailable. Restart login")
+		}
+		if current == nil || issuerID != federation.IssuerID || clientID != federation.ClientID || version != federation.Configuration {
+			return finishFederation(oops.CodeFailedPrecondition, remotesessions.ErrFederatedConfiguration, "Login configuration changed. Restart login", false)
 		}
 		if s.federatedLoginConsumer != nil {
 			err := s.federatedLoginConsumer.ConsumeFederatedLogin(ctx, AuthorizedFederatedLogin{
@@ -294,7 +320,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 				TrustedIssuerID: federation.IssuerID, TrustedClientID: federation.ClientID, Identity: federatedIdentity,
 			})
 			if err != nil {
-				return oops.E(oops.CodeUnauthorized, nil, "Login credential handoff failed. Restart login").LogError(ctx, logger)
+				return finishFederation(oops.CodeUnavailable, errors.New("federated credential handoff failed"), "Login credential handoff failed. Restart login", false)
 			}
 		}
 	}

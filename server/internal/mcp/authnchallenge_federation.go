@@ -4,12 +4,14 @@ import (
 	"context"
 	"crypto/subtle"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/idjag"
@@ -32,7 +34,7 @@ type FederatedChallenge struct {
 func (s *Service) federatedProvider(ctx context.Context, endpoint *ResolvedMcpEndpoint) (*remotesessions.FederatedProvider, uuid.UUID, uuid.UUID, string, error) {
 	row, err := usersessionsrepo.New(s.db).GetUserSessionIssuerByID(ctx, usersessionsrepo.GetUserSessionIssuerByIDParams{ID: endpoint.UserSessionIssuerID, ProjectID: endpoint.ProjectID, OrganizationID: endpoint.OrganizationID})
 	if err != nil {
-		return nil, uuid.Nil, uuid.Nil, "", err
+		return nil, uuid.Nil, uuid.Nil, "", fmt.Errorf("resolve federated login provider: %w", err)
 	}
 	if !row.TrustedRemoteSessionClientID.Valid {
 		return nil, uuid.Nil, uuid.Nil, "", nil
@@ -40,9 +42,18 @@ func (s *Service) federatedProvider(ctx context.Context, endpoint *ResolvedMcpEn
 	if row.ProjectID.Valid || !row.OrganizationID.Valid || row.OrganizationID.String != endpoint.OrganizationID || !row.TrustedRemoteSessionIssuerID.Valid || s.remoteChallengeMgr == nil {
 		return nil, uuid.Nil, uuid.Nil, "", errors.New("invalid federated issuer configuration")
 	}
+	// Reject an unusable callback before discovery or any provider traffic. This
+	// check is deliberately after the unlinked branch, preserving WorkOS HTTP dev.
+	callback, err := endpoint.IDPCallbackURL(s.serverURL.String())
+	if err != nil {
+		return nil, uuid.Nil, uuid.Nil, "", remotesessions.ErrFederatedConfiguration
+	}
+	if _, err := federatedCallbackURL(callback); err != nil {
+		return nil, uuid.Nil, uuid.Nil, "", fmt.Errorf("resolve federated login provider: %w", err)
+	}
 	provider, err := s.remoteChallengeMgr.LoadFederatedProvider(ctx, endpoint.OrganizationID, row.TrustedRemoteSessionIssuerID.UUID, row.TrustedRemoteSessionClientID.UUID)
 	if err != nil {
-		return nil, uuid.Nil, uuid.Nil, "", err
+		return nil, uuid.Nil, uuid.Nil, "", fmt.Errorf("resolve federated login provider: %w", err)
 	}
 	version := provider.Fingerprint() + ":" + row.UpdatedAt.Time.UTC().Format(time.RFC3339Nano)
 	return provider, row.TrustedRemoteSessionIssuerID.UUID, row.TrustedRemoteSessionClientID.UUID, version, nil
@@ -60,6 +71,10 @@ func (s *Service) prepareFederatedLogin(ctx context.Context, endpoint *ResolvedM
 	if err != nil {
 		return nil, err
 	}
+	target, err := federatedCallbackURL(callback)
+	if err != nil {
+		return nil, err
+	}
 	nonce, err := generateOpaqueToken()
 	if err != nil {
 		return nil, err
@@ -70,11 +85,7 @@ func (s *Service) prepareFederatedLogin(ctx context.Context, endpoint *ResolvedM
 	}
 	state.Federation = &FederatedChallenge{OrganizationID: endpoint.OrganizationID, IssuerID: issuerID, ClientID: clientID, Configuration: version, CallbackURL: callback, Nonce: nonce, Verifier: verifier, BrowserHash: ""}
 	if err := s.authnChallengeCache.Store(ctx, *state); err != nil {
-		return nil, err
-	}
-	target, err := url.Parse(callback)
-	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("store federated login challenge: %w", err)
 	}
 	target.RawQuery = url.Values{"state": {state.ID}, "federated_start": {"1"}}.Encode()
 	return target, nil
@@ -103,10 +114,10 @@ func (s *Service) startFederatedLogin(w http.ResponseWriter, r *http.Request, st
 	state.Federation.BrowserHash = sha256Hex(browser)
 	target, err := provider.BuildAuthorizationURL(state.Federation.CallbackURL, state.ID, state.Federation.Nonce, state.Federation.Verifier)
 	if err != nil {
-		return err
+		return fmt.Errorf("build federated authorization URL: %w", err)
 	}
 	if err := s.authnChallengeCache.Store(r.Context(), *state); err != nil {
-		return err
+		return fmt.Errorf("store bound federated login challenge: %w", err)
 	}
 	http.SetCookie(w, federatedBrowserCookie(state.ID, browser, int(state.TTL().Seconds())))
 	w.Header().Set("Cache-Control", "no-store")
@@ -175,4 +186,72 @@ type AuthorizedFederatedLogin struct {
 // before serving requests. A failed consumer fails login without minting a session.
 func (s *Service) SetFederatedLoginConsumer(consumer FederatedLoginConsumer) {
 	s.federatedLoginConsumer = consumer
+}
+
+// Only the upstream AICP callback requires HTTPS. Downstream MCP clients retain
+// their registered redirect policy, including native loopback redirects.
+func federatedCallbackURL(callback string) (*url.URL, error) {
+	target, err := url.Parse(callback)
+	if err != nil || target.Scheme != "https" || target.Hostname() == "" || target.User != nil || target.Fragment != "" {
+		return nil, remotesessions.ErrFederatedConfiguration
+	}
+	return target, nil
+}
+
+// Never retain arbitrary upstream error strings: they may contain credentials.
+func federatedFailure(cause error) (oops.Code, error) {
+	if errors.Is(cause, remotesessions.ErrFederatedSigning) {
+		return oops.CodeUnexpected, remotesessions.ErrFederatedSigning
+	}
+	if errors.Is(cause, remotesessions.ErrFederatedUnavailable) {
+		return oops.CodeUnavailable, remotesessions.ErrFederatedUnavailable
+	}
+	if errors.Is(cause, remotesessions.ErrFederatedConfiguration) {
+		return oops.CodeFailedPrecondition, remotesessions.ErrFederatedConfiguration
+	}
+	if errors.Is(cause, remotesessions.ErrFederatedIdentity) {
+		return oops.CodeUnauthorized, remotesessions.ErrFederatedIdentity
+	}
+	return oops.CodeUnavailable, errors.New("federated login dependency unavailable")
+}
+
+// Call only for a consumed callback (or a failed preparation whose state was
+// removed), so retries and replays cannot inflate terminal flow counters.
+func (s *Service) finishFederatedFailure(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, stage mcpmetrics.OAuthFlowStage, code oops.Code, cause error, message string, declined bool) error {
+	ctx := r.Context()
+	oauthCode := "server_error"
+	if declined || code == oops.CodeForbidden || code == oops.CodeUnauthorized {
+		oauthCode = "access_denied"
+	}
+	if code == oops.CodeUnavailable {
+		oauthCode = "temporarily_unavailable"
+	}
+	var responseErr error
+	var redirect string
+	if !state.FirstParty {
+		issuer, err := endpoint.RootURL(state.mintOriginOr(s.serverURL.String()))
+		if err == nil {
+			redirect, err = buildClientRedirect(clientRedirectParams{RedirectURI: state.RedirectURI, Issuer: issuer, Code: "", State: state.State, ErrorCode: oauthCode, ErrorDescription: message})
+		}
+		if err != nil {
+			responseErr = oops.E(oops.CodeUnexpected, nil, "Unable to return login error to client")
+			declined = false
+		}
+	}
+	if declined {
+		s.metrics.RecordOAuthFlowDeclined(ctx, state.UserSessionIssuerID.String(), endpoint.Slug, stage)
+	} else {
+		s.metrics.RecordOAuthFlowFailed(ctx, state.UserSessionIssuerID.String(), endpoint.Slug, stage)
+	}
+	failure := oops.E(code, cause, "%s", message).LogError(ctx, s.logger)
+	if responseErr != nil {
+		return responseErr
+	}
+	if state.FirstParty {
+		return failure
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Referrer-Policy", "no-referrer")
+	http.Redirect(w, r, redirect, http.StatusFound)
+	return nil
 }

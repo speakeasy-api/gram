@@ -34,11 +34,15 @@ func federatedPublicPolicy(t *testing.T) *guardian.Policy {
 }
 
 func TestFederatedEndpointHostPolicy(t *testing.T) {
+	t.Parallel()
 	p := federatedFixture(t)
 	m := &ChallengeManager{policy: federatedPublicPolicy(t)}
 	require.NoError(t, m.validateFederatedMetadataHosts(t.Context(), p.issuer, p.metadata))
 	for _, name := range []string{"issuer", "authorization", "token", "jwks"} {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			p := federatedFixture(t)
+			m := &ChallengeManager{policy: federatedPublicPolicy(t)}
 			issuer, doc := p.issuer, p.metadata
 			switch name {
 			case "issuer":
@@ -65,6 +69,7 @@ func TestFederatedEndpointHostPolicy(t *testing.T) {
 }
 
 func TestFederatedMetadataCache(t *testing.T) {
+	t.Parallel()
 	mr := miniredis.RunT(t)
 	redisClient := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { require.NoError(t, redisClient.Close()) })
@@ -123,6 +128,7 @@ func TestFederatedMetadataCache(t *testing.T) {
 }
 
 func TestFederatedIssuerVersion(t *testing.T) {
+	t.Parallel()
 	p := federatedFixture(t)
 	original := federatedIssuerVersion(p.issuer)
 	changed := p.issuer
@@ -150,6 +156,7 @@ func TestFederatedIssuerVersion(t *testing.T) {
 }
 
 func TestFederatedAuthorizationReservedParameters(t *testing.T) {
+	t.Parallel()
 	p := federatedFixture(t)
 	p.metadata.AuthorizationEndpoint += "?prompt=consent&scope=offline_access&client_id=attacker&nonce=wrong&code_challenge=wrong&code_challenge_method=plain&response_mode=fragment&response_type=token&request=attacker&request_uri=https%3A%2F%2Fattacker.example.test&approval_prompt=force&include_granted_scopes=true&tenant_hint=allowed"
 	u, err := p.BuildAuthorizationURL("https://gram.example.test/callback", "state", "nonce", strings.Repeat("a", 43))

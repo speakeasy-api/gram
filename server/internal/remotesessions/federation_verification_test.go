@@ -14,6 +14,7 @@ import (
 )
 
 func TestFederatedSignatureVerification(t *testing.T) {
+	t.Parallel()
 	key, keys, _ := newRSAKeyPolicyFixture(t, 2048)
 	other, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
@@ -40,6 +41,7 @@ func TestFederatedSignatureVerification(t *testing.T) {
 		{name: "missing issued at", signingKey: key, alg: jose.RS256, claim: "iat"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			options := (&jose.SignerOptions{}).WithHeader("kid", "example-key")
 			for name, value := range test.headers {
 				options = options.WithHeader(name, value)
@@ -73,6 +75,7 @@ func TestFederatedSignatureVerification(t *testing.T) {
 }
 
 func TestFederatedCredentialsHandoff(t *testing.T) {
+	t.Parallel()
 	credentials := EphemeralFederatedCredentials{idToken: "secret-id-token", refreshToken: "secret-refresh-token", expiresIn: 3600}
 	identity := &FederatedIdentity{Subject: "subject", credentials: &credentials}
 	for _, value := range []any{credentials, &credentials, identity, *identity} {

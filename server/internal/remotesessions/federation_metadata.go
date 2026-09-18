@@ -16,8 +16,8 @@ import (
 const federatedMetadataTTL = time.Minute
 
 type federatedMetadataCacheEntry struct {
-	Document  rfc8414Document
-	ExpiresAt time.Time
+	Document  rfc8414Document `json:"Document"`
+	ExpiresAt time.Time       `json:"ExpiresAt"`
 }
 
 // updated_at changes on JWKS cache writes as well as administrator edits. Bind
@@ -25,17 +25,17 @@ type federatedMetadataCacheEntry struct {
 // Ownership, attachment tier, stored metadata/policies and tunnel are included.
 func federatedIssuerVersion(issuer repo.RemoteSessionIssuer) string {
 	issuer.Jwks = nil
-	issuer.JwksFetchedAt = pgtype.Timestamptz{}
-	issuer.JwksCacheExpiresAt = pgtype.Timestamptz{}
-	issuer.JwksLastErrorAt = pgtype.Timestamptz{}
-	issuer.JwksLastError = pgtype.Text{}
-	issuer.JwksEtag = pgtype.Text{}
-	issuer.MetadataFetchedAt = pgtype.Timestamptz{}
-	issuer.MetadataLastErrorAt = pgtype.Timestamptz{}
-	issuer.MetadataLastError = pgtype.Text{}
-	issuer.MetadataLastErrorUrl = pgtype.Text{}
-	issuer.UpdatedAt = pgtype.Timestamptz{}
-	encoded, _ := json.Marshal(issuer)
+	issuer.JwksFetchedAt = pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
+	issuer.JwksCacheExpiresAt = pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
+	issuer.JwksLastErrorAt = pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
+	issuer.JwksLastError = pgtype.Text{String: "", Valid: false}
+	issuer.JwksEtag = pgtype.Text{String: "", Valid: false}
+	issuer.MetadataFetchedAt = pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
+	issuer.MetadataLastErrorAt = pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
+	issuer.MetadataLastError = pgtype.Text{String: "", Valid: false}
+	issuer.MetadataLastErrorUrl = pgtype.Text{String: "", Valid: false}
+	issuer.UpdatedAt = pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
+	encoded, _ := json.Marshal(federatedIssuerSnapshot(issuer))
 	sum := sha256.Sum256(encoded)
 	return hex.EncodeToString(sum[:])
 }
