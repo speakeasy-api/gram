@@ -10,9 +10,11 @@ type TimestampedLineDataset = ChartDataset<
 
 // Editorial severity-first ramp from the shared chart palette: the worst
 // category (secrets) takes the one red accent, the next tiers take the
-// severity oranges, and the rest walk the neutral ink ramp (lightness repeats
-// are fine — lines read by legend label, not hue). No category takes a grey:
-// grey is reserved for the dimmed/inactive state in the exposure bar.
+// severity oranges, and the rest walk the categorical ramp (hue repeats are
+// fine — lines read by legend label, not hue). No category takes a grey: grey
+// is reserved for the dimmed/inactive state in the exposure bar. Every index
+// here must exist in SERIES; a slot past its end silently drops the line back
+// to Chart.js's own default color.
 function riskCategoryChartColors(
   series: readonly string[],
 ): Array<{ category: RuleCategory; color: string }> {
@@ -29,7 +31,7 @@ function riskCategoryChartColors(
     { category: "destructive_tool", color: series[1]! },
     { category: "cli_destructive", color: series[2]! },
     { category: "account_identity", color: series[3]! },
-    { category: "custom", color: series[7]! },
+    { category: "custom", color: series[6]! },
   ];
 }
 
