@@ -363,6 +363,7 @@ trackedFiles:
   src/funcs/organizationRemoteSessionClientsDelete.ts: {}
   src/funcs/organizationRemoteSessionClientsDetachKeySet.ts: {}
   src/funcs/organizationRemoteSessionClientsGet.ts: {}
+  src/funcs/organizationRemoteSessionClientsGetDelegationStatus.ts: {}
   src/funcs/organizationRemoteSessionClientsGetDeletePreflight.ts: {}
   src/funcs/organizationRemoteSessionClientsList.ts: {}
   src/funcs/organizationRemoteSessionClientsListMcpServers.ts: {}
@@ -895,6 +896,7 @@ trackedFiles:
   src/models/components/dataexportroute.ts: {}
   src/models/components/deactivateprescriptionrequestbody.ts: {}
   src/models/components/declineriskpolicychallengeresponsebody.ts: {}
+  src/models/components/delegationstatuscount.ts: {}
   src/models/components/deleteaiscantargetrequestbody.ts: {}
   src/models/components/deleteaiscantargetresult.ts: {}
   src/models/components/deleteconfigrequestbody.ts: {}
@@ -1279,6 +1281,7 @@ trackedFiles:
   src/models/components/onboardingstatusresult.ts: {}
   src/models/components/openapiv3deploymentasset.ts: {}
   src/models/components/organization.ts: {}
+  src/models/components/organizationclientdelegationstatus.ts: {}
   src/models/components/organizationclientdeletepreflight.ts: {}
   src/models/components/organizationentry.ts: {}
   src/models/components/organizationinvitation.ts: {}
@@ -1960,6 +1963,7 @@ trackedFiles:
   src/models/operations/getonboardingstatus.ts: {}
   src/models/operations/getorganization.ts: {}
   src/models/operations/getorganizationremotesessionclient.ts: {}
+  src/models/operations/getorganizationremotesessionclientdelegationstatus.ts: {}
   src/models/operations/getorganizationremotesessionclientdeletepreflight.ts: {}
   src/models/operations/getorganizationremotesessionissuer.ts: {}
   src/models/operations/getorganizationremotesessionissuerdeletepreflight.ts: {}
@@ -2949,6 +2953,8 @@ trackedFiles:
   src/react-query/organization.ts: {}
   src/react-query/organizationRemoteSessionClient.core.ts: {}
   src/react-query/organizationRemoteSessionClient.ts: {}
+  src/react-query/organizationRemoteSessionClientDelegationStatus.core.ts: {}
+  src/react-query/organizationRemoteSessionClientDelegationStatus.ts: {}
   src/react-query/organizationRemoteSessionClientDeletePreflight.core.ts: {}
   src/react-query/organizationRemoteSessionClientDeletePreflight.ts: {}
   src/react-query/organizationRemoteSessionClientMcpServers.core.ts: {}
@@ -6269,6 +6275,18 @@ examples:
       responses:
         "200":
           application/json: {"client_id": "<id>", "client_id_issued_at": "2026-08-05T17:38:32.468Z", "created_at": "2026-02-20T07:04:22.319Z", "id": "024cc325-1f90-498e-aecb-ea584625122a", "organization_id": "<id>", "project_id": "77459054-4a9f-4e85-9042-8486e09f6d2a", "remote_session_issuer_id": "885d8829-eace-40f5-afa1-4df5c095fdce", "updated_at": "2026-11-02T11:34:00.635Z", "user_session_issuer_ids": ["ca0426f3-0f39-4c5b-b757-16fd349e47b0"]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  getOrganizationRemoteSessionClientDelegationStatus:
+    speakeasy-default-get-organization-remote-session-client-delegation-status:
+      parameters:
+        query:
+          id: "7cdc760e-cbf3-4228-b23e-1c83c68d91e5"
+      responses:
+        "200":
+          application/json: {"observations": [{"count": 86367, "status": "refused"}], "status": "observed", "window_start": "2026-08-15T05:25:09.572Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":

@@ -58,7 +58,7 @@ type rfc8414Document struct {
 	ServiceDocumentation              string   `json:"service_documentation"`
 	OpPolicyURI                       string   `json:"op_policy_uri"`
 	OpTosURI                          string   `json:"op_tos_uri"`
-	ScopesSupported                   []string `json:"scopes_supported"`
+	ScopesSupported                   []string `json:"scopes_supported,omitzero"`
 	GrantTypesSupported               []string `json:"grant_types_supported"`
 	ResponseTypesSupported            []string `json:"response_types_supported"`
 	TokenEndpointAuthMethodsSupported []string `json:"token_endpoint_auth_methods_supported"`

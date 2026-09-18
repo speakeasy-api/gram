@@ -533,6 +533,7 @@ func NewTemporalWorker(
 	// Killswitch maintenance activities
 	temporalWorker.RegisterActivity(activities.RecordDueKillswitchExpiries)
 	temporalWorker.RegisterActivity(activities.CleanupExpiredKillswitchOperations)
+	temporalWorker.RegisterActivity(activities.CleanupTrustedDelegationCredentials)
 	// Publish outbox relay activities
 	temporalWorker.RegisterActivity(activities.DrainPublishOutbox)
 	temporalWorker.RegisterActivity(activities.GCPublishOutboxDeadLetters)
@@ -659,6 +660,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(CancelAssistantsSubscriptionWorkflow)
 	// Killswitch expiry history and receipt retention
 	temporalWorker.RegisterWorkflow(KillswitchMaintenanceWorkflow)
+	temporalWorker.RegisterWorkflow(TrustedDelegationCleanupWorkflow)
 	// Publish outbox -> Pub/Sub workflow and dead letter GC
 	temporalWorker.RegisterWorkflow(PublishOutboxWorkflow)
 	temporalWorker.RegisterWorkflow(PublishOutboxGCWorkflow)
@@ -779,6 +781,10 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 				logger.ErrorContext(ctx, "failed to kick assistant runtime image recycle", attr.SlogError(err))
 			}
 		}
+	}
+
+	if err := AddTrustedDelegationCleanupSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add trusted delegation cleanup schedule", attr.SlogError(err))
 	}
 
 	if err := AddKillswitchMaintenanceSchedule(ctx, env); err != nil {

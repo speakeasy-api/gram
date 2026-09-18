@@ -325,7 +325,7 @@ type federationLoginFixture struct {
 	toolsetSlug, downstreamClientID    string
 }
 
-func newFederationLoginFixture(t *testing.T, memberAllowed bool) (context.Context, *federationLoginFixture) {
+func newFederationLoginFixture(t *testing.T, memberAllowed bool, offline ...bool) (context.Context, *federationLoginFixture) {
 	t.Helper()
 	provider := newFederationProvider(t)
 	var err error
@@ -363,7 +363,11 @@ func newFederationLoginFixture(t *testing.T, memberAllowed bool) (context.Contex
 	// Insert an unselected client first: selection must follow the explicit FK.
 	_, err = remotesessionsrepo.New(ti.conn).CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{OrganizationID: conv.ToPGText(ac.ActiveOrganizationID), RemoteSessionIssuerID: remote.ID, ClientID: "not-selected", ClientSecretEncrypted: conv.ToPGText(secret), TokenEndpointAuthMethod: conv.ToPGText("client_secret_basic"), Scope: []string{"openid"}})
 	require.NoError(t, err)
-	client, err := remotesessionsrepo.New(ti.conn).CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{OrganizationID: conv.ToPGText(ac.ActiveOrganizationID), RemoteSessionIssuerID: remote.ID, ClientID: "selected-client", ClientSecretEncrypted: conv.ToPGText(secret), TokenEndpointAuthMethod: conv.ToPGText("client_secret_basic"), Scope: []string{"openid", "email"}})
+	scopes := []string{"openid", "email"}
+	if len(offline) > 0 && offline[0] {
+		scopes = append(scopes, "offline_access", "profile")
+	}
+	client, err := remotesessionsrepo.New(ti.conn).CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{OrganizationID: conv.ToPGText(ac.ActiveOrganizationID), RemoteSessionIssuerID: remote.ID, ClientID: "selected-client", ClientSecretEncrypted: conv.ToPGText(secret), TokenEndpointAuthMethod: conv.ToPGText("client_secret_basic"), Scope: scopes})
 	require.NoError(t, err)
 	issuer, err := usersessionsrepo.New(ti.conn).CreateOrganizationUserSessionIssuer(ctx, usersessionsrepo.CreateOrganizationUserSessionIssuerParams{OrganizationID: conv.ToPGText(ac.ActiveOrganizationID), Slug: "federation-" + uuid.NewString(), AuthnChallengeMode: "chain", SessionDuration: pgtype.Interval{Microseconds: int64(8 * time.Hour / time.Microsecond), Valid: true}, TrustedRemoteSessionIssuerID: uuid.NullUUID{UUID: remote.ID, Valid: true}, TrustedRemoteSessionClientID: uuid.NullUUID{UUID: client.ID, Valid: true}})
 	require.NoError(t, err)
@@ -412,6 +416,8 @@ func (f *federationLoginFixture) begin(t *testing.T, ctx context.Context, firstP
 	require.NoError(t, err)
 	require.Equal(t, provider.URL+"/authorize", upstream.Scheme+"://"+upstream.Host+upstream.Path)
 	require.Equal(t, "selected-client", upstream.Query().Get("client_id"))
+	require.NotContains(t, upstream.Query().Get("scope"), "offline_access", "unknown human always starts with minimal login")
+	require.Empty(t, upstream.Query().Get("prompt"))
 	require.Equal(t, ti.serverURL.String()+"/mcp/idp_callback", upstream.Query().Get("redirect_uri"))
 	id := upstream.Query().Get("state")
 	require.NotEmpty(t, id)
