@@ -3573,3 +3573,22 @@ type WorkosUserSync struct {
 	CreatedAt    pgtype.Timestamptz
 	UpdatedAt    pgtype.Timestamptz
 }
+
+type XaaResourceReadiness struct {
+	ID                           uuid.UUID
+	OrganizationID               string
+	ProjectID                    uuid.UUID
+	McpServerID                  uuid.UUID
+	IdentityProviderConnectionID uuid.UUID
+	ResourceSource               string
+	ScopePolicy                  pgtype.Text
+	ConnectionConfirmedAt        pgtype.Timestamptz
+	ConnectionConfirmedBy        pgtype.Text
+	ResourceXaaConfirmedAt       pgtype.Timestamptz
+	LastExchangeOutcome          pgtype.Text
+	LastExchangeAt               pgtype.Timestamptz
+	VerifiedAt                   pgtype.Timestamptz
+	LastErrorReason              pgtype.Text
+	CreatedAt                    pgtype.Timestamptz
+	UpdatedAt                    pgtype.Timestamptz
+}

@@ -8992,6 +8992,45 @@ CREATE INDEX IF NOT EXISTS killswitch_operations_expires_at_idx ON killswitch_op
 -- Application transactions retain tombstone generations and reject stale completion.
 CREATE UNIQUE INDEX IF NOT EXISTS remote_session_clients_id_issuer_key ON remote_session_clients (id, remote_session_issuer_id);
 
+-- One row per MCP server x identity provider connection recording what the
+-- organization administrator confirmed in the identity provider's console and
+-- what the exchange path later observed. Readiness is derived at read time;
+-- nothing here is consulted by the exchange path and confirmation alone never
+-- makes a server verified. mcp_servers is project-scoped, so tenancy is pinned
+-- through the (organization_id, project_id) and (project_id, mcp_server_id)
+-- composite keys.
+CREATE TABLE IF NOT EXISTS xaa_resource_readiness (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  mcp_server_id uuid NOT NULL,
+  identity_provider_connection_id uuid NOT NULL,
+  -- custom: the admin enables Cross App Access on the resource app by hand;
+  -- oin: the listing ships with it enabled.
+  resource_source TEXT NOT NULL DEFAULT 'custom',
+  scope_policy TEXT,
+  connection_confirmed_at timestamptz,
+  connection_confirmed_by TEXT,
+  resource_xaa_confirmed_at timestamptz,
+  -- Written by the exchange path: a typed outcome, never a raw provider body.
+  last_exchange_outcome TEXT,
+  last_exchange_at timestamptz,
+  verified_at timestamptz,
+  last_error_reason TEXT,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT xaa_resource_readiness_pkey PRIMARY KEY (id),
+  CONSTRAINT xaa_resource_readiness_resource_source_check CHECK (resource_source IN ('custom', 'oin')),
+  CONSTRAINT xaa_resource_readiness_server_connection_key UNIQUE (organization_id, project_id, mcp_server_id, identity_provider_connection_id),
+  CONSTRAINT xaa_resource_readiness_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT xaa_resource_readiness_organization_project_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT xaa_resource_readiness_project_server_fkey FOREIGN KEY (project_id, mcp_server_id) REFERENCES mcp_servers (project_id, id) ON DELETE CASCADE,
+  CONSTRAINT xaa_resource_readiness_connection_tenant_fkey FOREIGN KEY (organization_id, identity_provider_connection_id) REFERENCES identity_provider_connections (organization_id, id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS xaa_resource_readiness_connection_idx
+ON xaa_resource_readiness (organization_id, identity_provider_connection_id);
+
 CREATE TABLE IF NOT EXISTS remote_session_ema_bindings (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
