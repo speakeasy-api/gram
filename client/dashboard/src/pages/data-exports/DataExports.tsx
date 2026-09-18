@@ -116,7 +116,7 @@ function renderDataSourceDescription(
   if (dataSource === DataSource.ToolCallLogs) {
     return (
       <>
-        OTLP logs for every tool call Gram runs on your hosted and proxied MCP
+        OTLP logs for every tool call served for hosted or proxied MCP
         servers, successes and failures alike. These are the same records the{" "}
         {links.toolLogs ? (
           <Link
