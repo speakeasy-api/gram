@@ -11,21 +11,10 @@ import (
 
 type Query struct {
 	ID uuid.UUID
-
-	checked bool
-	err     error
 }
 
 func NewQuery(id uuid.UUID) Query {
-	a := Query{
-		ID:      id,
-		checked: false,
-		err:     nil,
-	}
-
-	_ = a.validate()
-
-	return a
+	return Query{ID: id}
 }
 
 func ParseQuery(value string) (Query, error) {
@@ -46,6 +35,12 @@ func ParseQuery(value string) (Query, error) {
 	id, err := uuid.Parse(parts[1])
 	if err != nil {
 		return Query{}, fmt.Errorf("%w: invalid query uuid", ErrInvalid)
+	}
+
+	// This type treats the nil uuid as invalid, so it must not survive a
+	// parse and turn up as a valid-looking urn later.
+	if id == uuid.Nil {
+		return Query{}, fmt.Errorf("%w: empty query uuid", ErrInvalid)
 	}
 
 	return NewQuery(id), nil
@@ -140,16 +135,12 @@ func (u *Query) UnmarshalText(text []byte) error {
 	return nil
 }
 
+// validate reads the current ID every call. ID is exported and mutable, so a
+// cached verdict could outlive the value it judged and report a zeroed urn as
+// valid.
 func (u *Query) validate() error {
-	if u.checked {
-		return u.err
-	}
-
-	u.checked = true
-
 	if u.ID == uuid.Nil {
-		u.err = fmt.Errorf("%w: empty id", ErrInvalid)
-		return u.err
+		return fmt.Errorf("%w: empty id", ErrInvalid)
 	}
 
 	return nil

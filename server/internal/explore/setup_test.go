@@ -87,6 +87,10 @@ func asMember(t *testing.T, ctx context.Context, ti *testInstance, userID string
 	require.True(t, ok)
 	copied := *authCtx
 	copied.UserID = userID
+	// auditBase writes ActorDisplayName from Email, so leaving the admin
+	// fixture's address here would audit a member's write under the admin.
+	memberEmail := userID + "@example.com"
+	copied.Email = &memberEmail
 	ctx = contextvalues.SetAuthContext(ctx, &copied)
 	grants := append([]authz.Grant{authz.NewGrant(authz.ScopeProjectRead, ti.projectID.String())}, extra...)
 	return authztest.WithExactGrants(t, ctx, grants...)

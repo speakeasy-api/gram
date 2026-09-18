@@ -152,8 +152,6 @@ func TestUpdateQuery(t *testing.T) {
 		before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionQueryUpdate)
 		require.NoError(t, err)
 
-		spec := validSpec()
-		spec["chart_type"] = "line"
 		updated, err := ti.service.UpdateQuery(ctx, &gen.UpdateQueryPayload{ID: created.ID, Name: "after", Dataset: "tool_calls", Spec: map[string]any{
 			"chart_type": "table", "window": "24h", "dimensions": []any{"tool_name", "status"}, "ungrouped": true,
 		}, SessionToken: nil, ProjectSlugInput: nil})
