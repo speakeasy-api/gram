@@ -1,6 +1,6 @@
 // OAuth 2.1 token endpoint (RFC 6749 §4.1.3 / §6) for the issuer-gated
-// authn-challenge surface. HandleToken dispatches on grant_type to one of
-// the two grant handlers below; both mint and persist an RFC 6749 §5.1
+// authn-challenge surface. ServeToken dispatches on grant_type to one of the
+// grant handlers below, each of which mints and persists an RFC 6749 §5.1
 // response through mintSession.
 
 package mcp
@@ -139,11 +139,8 @@ func (r userSessionRefreshReplay) CacheKey() string { return r.Key }
 func (r userSessionRefreshReplay) TTL() time.Duration { return refreshTokenReplayGracePeriod }
 
 // HandleToken implements the OAuth 2.1 token endpoint (RFC 6749 §4.1.3 /
-// §6). Mounted at `POST /mcp/{mcpSlug}/token`. Performs the common upfront
-// work — parse form, load toolset, authenticate the client — then
-// dispatches on grant_type to handleTokenAuthorizationCodeGrant or
-// handleTokenRefreshTokenGrant. Both grant handlers mint and persist the
-// RFC 6749 §5.1 response through mintSession.
+// §6). Mounted at `POST /mcp/{mcpSlug}/token`. Loads the endpoint and hands
+// the request to ServeToken.
 func (s *Service) HandleToken(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	mcpSlug := chi.URLParam(r, "mcpSlug")
@@ -158,13 +155,99 @@ func (s *Service) HandleToken(w http.ResponseWriter, r *http.Request) error {
 	return s.ServeToken(w, r, endpoint)
 }
 
+// tokenClientAuth is what a token grant requires of the calling client. The
+// zero value declares nothing, and serveTokenGrant refuses a grant carrying
+// it, so a grant that omits its requirement fails closed.
+type tokenClientAuth int
+
+const (
+	// tokenClientAuthUndeclared is the zero value and is never dispatched.
+	tokenClientAuthUndeclared tokenClientAuth = iota
+
+	// tokenClientAuthRequired runs client resolution, CIMD admission, client
+	// authentication and the Shadow AI block check before the grant handler.
+	tokenClientAuthRequired
+
+	// tokenClientAuthNone dispatches without resolving or authenticating a
+	// client, for a caller that holds no client registration.
+	tokenClientAuthNone
+)
+
+type tokenGrantAuthenticatedHandler func(
+	ctx context.Context,
+	w http.ResponseWriter,
+	r *http.Request,
+	endpoint *ResolvedMcpEndpoint,
+	clientRow *usersessions_repo.UserSessionClient,
+	baseURL string,
+	presentedAuthMethod string,
+	logger *slog.Logger,
+) error
+
+type tokenGrantClientlessHandler func(
+	ctx context.Context,
+	w http.ResponseWriter,
+	r *http.Request,
+	endpoint *ResolvedMcpEndpoint,
+	creds presentedClientCredentials,
+	baseURL string,
+	logger *slog.Logger,
+) error
+
+// tokenGrant is one grant_type branch of the token endpoint.
+type tokenGrant struct {
+	// clientAuth states the branch's client-authentication requirement and
+	// selects which handler runs.
+	clientAuth tokenClientAuth
+
+	// resolveMode is how the presented client_id is resolved when clientAuth
+	// is tokenClientAuthRequired.
+	resolveMode clientIDResolveMode
+
+	// authenticated handles the grant once the client has authenticated. Set
+	// only when clientAuth is tokenClientAuthRequired.
+	authenticated tokenGrantAuthenticatedHandler
+
+	// clientless handles the grant without a client. Set only when clientAuth
+	// is tokenClientAuthNone.
+	clientless tokenGrantClientlessHandler
+}
+
+// tokenGrantFor selects the branch for a token request, or reports false for
+// a grant_type this endpoint does not support.
+//
+// The JWT bearer grant has two callers. One presenting any client
+// authentication is an ID-JAG exchange and is always fully authenticated, so
+// a client_id on that grant never yields a clientless session. One presenting
+// none takes the clientless branch, which refuses the request until a
+// clientless assertion grant is accepted there.
+func (s *Service) tokenGrantFor(r *http.Request, grantType string, creds presentedClientCredentials) (tokenGrant, bool) {
+	switch grantType {
+	// Authorization-code and refresh grants continue an authorization that
+	// already passed admission, so they resolve the client from the database
+	// only.
+	case oauthwire.GrantTypeAuthorizationCode:
+		return tokenGrant{clientAuth: tokenClientAuthRequired, resolveMode: lookupClientOnly, authenticated: s.handleTokenAuthorizationCodeGrant, clientless: nil}, true
+	case oauthwire.GrantTypeRefreshToken:
+		return tokenGrant{clientAuth: tokenClientAuthRequired, resolveMode: lookupClientOnly, authenticated: s.handleTokenRefreshTokenGrant, clientless: nil}, true
+	case oauthwire.GrantTypeJWTBearer:
+		if creds.presented() || r.Header.Get("Authorization") != "" {
+			// An assertion grant starts a new authorization at the token
+			// endpoint, so it applies current CIMD admission and resolves
+			// current client metadata before authenticating the client.
+			return tokenGrant{clientAuth: tokenClientAuthRequired, resolveMode: resolveClientCIMD, authenticated: s.handleTokenJWTBearerGrant, clientless: nil}, true
+		}
+		return tokenGrant{clientAuth: tokenClientAuthNone, resolveMode: "", authenticated: nil, clientless: refuseClientlessTokenGrant}, true
+	default:
+		return tokenGrant{clientAuth: tokenClientAuthUndeclared, resolveMode: "", authenticated: nil, clientless: nil}, false
+	}
+}
+
 // ServeToken is the post-resolution entry point for the OAuth 2.1
 // token endpoint, shared by /mcp's HandleToken (toolset-keyed) and
-// /x/mcp's mcp_endpoint-keyed route registration. Performs the common
-// upfront work — parse form, authenticate the client — then dispatches
-// on grant_type to handleTokenAuthorizationCodeGrant or
-// handleTokenRefreshTokenGrant. Both grant handlers mint and persist the
-// RFC 6749 §5.1 response through mintSession.
+// /x/mcp's mcp_endpoint-keyed route registration. Parses the form and
+// dispatches on grant_type before any client authentication, so each grant
+// branch applies its own client-authentication requirement.
 func (s *Service) ServeToken(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
 	ctx := r.Context()
 
@@ -177,45 +260,105 @@ func (s *Service) ServeToken(w http.ResponseWriter, r *http.Request, endpoint *R
 
 	grantType := r.PostForm.Get("grant_type")
 	creds := extractClientCredentials(r)
-	presentedAuthMethod := creds.method
-	clientID, reason := resolvePresentedClientID(creds)
-	if reason != "" {
-		logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, reason)
-		return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "client_id is required")
+	grant, ok := s.tokenGrantFor(r, grantType, creds)
+	if !ok {
+		clientID, _ := resolvePresentedClientID(creds)
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth token request rejected", clientID, creds.method, grantType, "unsupported_grant_type")
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "unsupported_grant_type", "unsupported grant_type")
 	}
+	return s.serveTokenGrant(ctx, w, r, endpoint, logger, grantType, creds, grant)
+}
 
+// serveTokenGrant applies grant's client-authentication requirement and runs
+// its handler. A grant that does not declare a requirement, or lacks the
+// handler its requirement calls for, is refused without running anything.
+func (s *Service) serveTokenGrant(
+	ctx context.Context,
+	w http.ResponseWriter,
+	r *http.Request,
+	endpoint *ResolvedMcpEndpoint,
+	logger *slog.Logger,
+	grantType string,
+	creds presentedClientCredentials,
+	grant tokenGrant,
+) error {
 	// Base URL the AS metadata advertises — equals the JWT `iss` claim so
 	// the two sides of the contract stay aligned across custom domains.
 	// Computed before client authentication because an assertion's aud is
 	// checked against URLs derived from it.
 	baseURL := s.BaseURLForRequest(r)
-	// Authorization-code and refresh grants continue an authorization that
-	// already passed admission. An assertion grant starts a new authorization
-	// at the token endpoint, so it applies current CIMD admission and resolves
-	// current client metadata before authenticating the client.
-	resolveMode := lookupClientOnly
-	if grantType == oauthwire.GrantTypeJWTBearer {
-		resolveMode = resolveClientCIMD
+
+	switch {
+	case grant.clientAuth == tokenClientAuthRequired && grant.authenticated != nil:
+		clientRow, err := s.authenticateTokenClient(ctx, w, r, endpoint, logger, grantType, creds, grant.resolveMode, baseURL)
+		if clientRow == nil {
+			return err
+		}
+		return grant.authenticated(ctx, w, r, endpoint, clientRow, baseURL, creds.method, logger)
+	case grant.clientAuth == tokenClientAuthNone && grant.clientless != nil:
+		return grant.clientless(ctx, w, r, endpoint, creds, baseURL, logger)
+	default:
+		err := fmt.Errorf("token grant %q has client authentication %d without a matching handler", grantType, grant.clientAuth)
+		return oops.E(oops.CodeUnexpected, err, "dispatch token grant").LogError(ctx, logger)
+	}
+}
+
+// refuseClientlessTokenGrant answers a JWT bearer request that presents no
+// client authentication with the response a missing client_id produces,
+// since no clientless grant is accepted yet.
+func refuseClientlessTokenGrant(
+	ctx context.Context,
+	w http.ResponseWriter,
+	r *http.Request,
+	_ *ResolvedMcpEndpoint,
+	creds presentedClientCredentials,
+	_ string,
+	logger *slog.Logger,
+) error {
+	logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", creds.clientID, creds.method, r.PostForm.Get("grant_type"), "missing_client_id")
+	return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "client_id is required")
+}
+
+// authenticateTokenClient resolves and authenticates the client a token
+// request presents. It returns the authenticated client row, or nil once it
+// has written the refusal, in which case the error is the result of writing
+// it.
+func (s *Service) authenticateTokenClient(
+	ctx context.Context,
+	w http.ResponseWriter,
+	r *http.Request,
+	endpoint *ResolvedMcpEndpoint,
+	logger *slog.Logger,
+	grantType string,
+	creds presentedClientCredentials,
+	resolveMode clientIDResolveMode,
+	baseURL string,
+) (*usersessions_repo.UserSessionClient, error) {
+	presentedAuthMethod := creds.method
+	clientID, reason := resolvePresentedClientID(creds)
+	if reason != "" {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, reason)
+		return nil, writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "client_id is required")
 	}
 	clientRow, err := s.resolveUserSessionClient(ctx, logger, endpoint, clientID, resolveMode)
 	if err != nil {
 		if admissionErr, ok := errors.AsType[*admission.DenialError](err); ok {
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, "cimd_admission_denied")
-			return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", admissionErr.Description())
+			return nil, writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", admissionErr.Description())
 		}
 		if _, ok := errors.AsType[*oauthwire.Error](err); ok {
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, "cimd_metadata_invalid")
-			return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", clientAuthFailureDescription)
+			return nil, writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", clientAuthFailureDescription)
 		}
 		if errors.Is(err, errCIMDFetchFailed) {
 			logger.InfoContext(ctx, "cimd document fetch failed", attr.SlogError(err))
-			return writeTokenError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "failed to fetch client metadata document")
+			return nil, writeTokenError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "failed to fetch client metadata document")
 		}
 		if errors.Is(err, pgx.ErrNoRows) {
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, "unknown_client_id")
-			return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", clientAuthFailureDescription)
+			return nil, writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", clientAuthFailureDescription)
 		}
-		return oops.E(oops.CodeUnexpected, err, "lookup user session client").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "lookup user session client").LogError(ctx, logger)
 	}
 	// The `disabled` admission mode is an off switch, so it applies to the
 	// token leg too: an operator who turns CIMD off for an issuer expects
@@ -245,7 +388,7 @@ func (s *Service) ServeToken(w http.ResponseWriter, r *http.Request, endpoint *R
 		}
 		if mode == admission.ModeDisabled {
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, "cimd_admission_disabled")
-			return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "this server does not accept client ID metadata documents")
+			return nil, writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "this server does not accept client ID metadata documents")
 		}
 	}
 	// Authentication is decided by the method the row persisted, not by
@@ -253,7 +396,7 @@ func (s *Service) ServeToken(w http.ResponseWriter, r *http.Request, endpoint *R
 	// serves every registration source. Shared with the revocation endpoint.
 	if reason := s.authenticateOAuthClient(ctx, logger, endpoint, clientAssertionAtToken, clientRow, creds, baseURL); reason != "" {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, reason)
-		return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", clientAuthFailureDescription)
+		return nil, writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", clientAuthFailureDescription)
 	}
 	logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authenticated", clientID, presentedAuthMethod, grantType, "")
 
@@ -276,25 +419,15 @@ func (s *Service) ServeToken(w http.ResponseWriter, r *http.Request, endpoint *R
 			if grantType == oauthwire.GrantTypeAuthorizationCode {
 				s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageToken)
 			}
-			return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", blockedErr.Description())
+			return nil, writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", blockedErr.Description())
 		}
 		if errors.Is(err, ErrAIToolBlockCheckUnavailable) {
-			return writeTokenError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "cannot determine whether this client is permitted right now")
+			return nil, writeTokenError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "cannot determine whether this client is permitted right now")
 		}
-		return oops.E(oops.CodeUnexpected, err, "check ai tool gateway block").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "check ai tool gateway block").LogError(ctx, logger)
 	}
 
-	switch grantType {
-	case oauthwire.GrantTypeAuthorizationCode:
-		return s.handleTokenAuthorizationCodeGrant(ctx, w, r, endpoint, clientRow, baseURL, presentedAuthMethod, logger)
-	case oauthwire.GrantTypeRefreshToken:
-		return s.handleTokenRefreshTokenGrant(ctx, w, r, endpoint, clientRow, baseURL, presentedAuthMethod, logger)
-	case oauthwire.GrantTypeJWTBearer:
-		return s.handleTokenJWTBearerGrant(ctx, w, r, endpoint, clientRow, baseURL, presentedAuthMethod, logger)
-	default:
-		logOAuthClientCredentialEvent(ctx, logger, r, "oauth token request rejected", clientID, presentedAuthMethod, grantType, "unsupported_grant_type")
-		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "unsupported_grant_type", "unsupported grant_type")
-	}
+	return clientRow, nil
 }
 
 // handleTokenJWTBearerGrant exchanges an authenticated ID-JAG for a

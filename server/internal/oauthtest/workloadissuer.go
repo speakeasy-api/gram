@@ -51,9 +51,17 @@ func DiscoverWorkloadJWKSURI(t *testing.T, issuer *devidptest.Instance) string {
 func MintWorkloadAssertion(t *testing.T, issuer *devidptest.Instance, claims jwt.Claims) string {
 	t.Helper()
 
+	return MintTypedWorkloadAssertion(t, issuer, "JWT", claims)
+}
+
+// MintTypedWorkloadAssertion is MintWorkloadAssertion with typ as the JOSE
+// typ header.
+func MintTypedWorkloadAssertion(t *testing.T, issuer *devidptest.Instance, typ string, claims jwt.Claims) string {
+	t.Helper()
+
 	signer, err := jose.NewSigner(
 		jose.SigningKey{Algorithm: jose.RS256, Key: issuer.SigningKey()},
-		(&jose.SignerOptions{}).WithType("JWT").WithHeader(jose.HeaderKey("kid"), issuer.KeyID()),
+		(&jose.SignerOptions{}).WithType(jose.ContentType(typ)).WithHeader(jose.HeaderKey("kid"), issuer.KeyID()),
 	)
 	require.NoError(t, err, "build signer")
 

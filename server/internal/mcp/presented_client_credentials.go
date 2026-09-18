@@ -26,6 +26,12 @@ type presentedClientCredentials struct {
 	assertion privatekeyjwt.Assertion
 }
 
+// presented reports whether the request offered any client authentication
+// parameter at all, valid or not.
+func (c presentedClientCredentials) presented() bool {
+	return c.clientID != "" || c.secret != "" || c.assertion.Presented()
+}
+
 // extractClientCredentials reads every client authentication parameter a
 // request can carry. HTTP Basic still wins for the client_id and secret when
 // both it and form parameters are present, so existing clients keep their
