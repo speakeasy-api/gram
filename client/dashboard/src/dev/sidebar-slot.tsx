@@ -23,11 +23,11 @@ const isTest = import.meta.env.MODE === "test";
 const enabled = import.meta.env.DEV && !isTest;
 
 /**
- * What the sidebar's brand row shows in place of the logo during development:
- * a developer's local slot when they have one, otherwise the stock worktree
- * readout. `undefined` in production builds and under vitest, which is the
- * brand row's signal to render the logo.
+ * What the sidebar footer shows above the user menu during development: a
+ * developer's local slot when they have one, otherwise the stock worktree
+ * readout. `undefined` in production builds and under vitest, where the
+ * footer renders nothing extra.
  */
-export const DevBrandSlot: React.ComponentType | undefined = enabled
+export const DevSidebarSlot: React.ComponentType | undefined = enabled
   ? (Object.values(localSlots)[0]?.DevSlot ?? DevWorktreeReadout)
   : undefined;

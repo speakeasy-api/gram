@@ -1,3 +1,10 @@
+import {
+  DRAW_POINTS,
+  movingAverage,
+  resample,
+  SMOOTH_WINDOW,
+  smoothPath,
+} from "@/components/chart/sparkline-math";
 import { Icon } from "@/components/ui/Icon";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
@@ -109,11 +116,13 @@ export function MetricSpark({
           className="h-8 w-24 shrink-0"
           aria-hidden
         >
-          <polyline
-            points={points}
+          <path
+            d={points}
             fill="none"
             stroke={stroke}
             strokeWidth={1.5}
+            strokeLinejoin="round"
+            strokeLinecap="round"
             vectorEffect="non-scaling-stroke"
           />
         </svg>
@@ -122,17 +131,29 @@ export function MetricSpark({
   );
 }
 
-/** Maps a series into the sparkline viewBox; null when there is nothing to draw. */
+/**
+ * Maps a series into the sparkline viewBox as a smoothed path; null when there
+ * is nothing to draw.
+ *
+ * These windows hold a point per hour, and plotting every one of them straight
+ * made a 96px-wide picket fence — all noise, no silhouette, which is the only
+ * thing this line is for. So it takes the same treatment as the cost
+ * sparklines: a moving average to take the hourly jitter out, a resample down
+ * to a few control points, and a curve through those.
+ */
 function sparkPoints(series: number[]): string | null {
   if (series.length < 2) return null;
-  const max = Math.max(...series);
-  const min = Math.min(...series);
+  const smoothed = resample(
+    movingAverage(series, SMOOTH_WINDOW),
+    Math.min(DRAW_POINTS, series.length),
+  );
+  const max = Math.max(...smoothed);
+  const min = Math.min(...smoothed);
   const span = max - min || 1;
-  return series
-    .map((point, index) => {
-      const x = (index / (series.length - 1)) * 100;
-      const y = 32 - ((point - min) / span) * 30 - 1;
-      return `${x.toFixed(2)},${y.toFixed(2)}`;
-    })
-    .join(" ");
+  return smoothPath(
+    smoothed.map((point, index) => ({
+      x: (index / (smoothed.length - 1)) * 100,
+      y: 32 - ((point - min) / span) * 30 - 1,
+    })),
+  );
 }

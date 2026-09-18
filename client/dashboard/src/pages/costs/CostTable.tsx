@@ -19,17 +19,20 @@ import {
 } from "@/components/agent-providers/AgentProviderIcon";
 import { Gutter, SortHeader, SUBGRID_ROW_CLASS } from "./gridTable";
 import { Sparkline } from "./Sparkline";
-import { trendDirection, trendOf } from "./sparkline-math";
+import { trendDirection, trendOf } from "@/components/chart/sparkline-math";
 import {
   costMeasureLabel,
   ESTIMATED_COST_TOOLTIP,
   isMeteredBilling,
 } from "@/components/estimated-cost-utils";
-import { TREND } from "@/components/chart/palette";
+import { type Trend } from "@/components/chart/palette";
+import { useTrendColors } from "@/components/chart/useSeriesColors";
+import { useSeriesFocus } from "@/components/chart/seriesFocus";
 import {
   displayName,
   formatWorkUnits,
   isAttributionDim,
+  isDrillableValue,
   llmTokens,
 } from "./taxonomy";
 
@@ -58,10 +61,11 @@ function rowTokensPerUnit(row: QueryRow): number | null {
 
 // Bucket the cost into three bands by its position in the column's range:
 // lowest third → muted green, middle → neutral (default text), highest →
-// muted red — the shared TREND tokens.
-function costColor(t: number): string | undefined {
-  if (t >= 2 / 3) return TREND.up; // high cost
-  if (t <= 1 / 3) return TREND.down; // low cost
+// muted red — the shared TREND tokens, resolved for the current theme by the
+// caller (the light pair is too dark to read on a dark canvas).
+function costColor(t: number, trend: Trend): string | undefined {
+  if (t >= 2 / 3) return trend.up; // high cost
+  if (t <= 1 / 3) return trend.down; // low cost
   return undefined; // neutral
 }
 
@@ -131,13 +135,6 @@ const TEAM_WIDE_USAGE_TOOLTIP =
   "gateway) carry no user identity, so their usage can't be attributed to an " +
   "individual and is grouped here.";
 
-// "" is the "(unset)" bucket — a real slice (everyone missing this attribute),
-// so it stays drillable. Only "Other" — the synthetic top-N overflow rollup of
-// many distinct values — can't map back to a single filter, so it's inert.
-function isDrillableValue(groupValue: string): boolean {
-  return groupValue !== "Other";
-}
-
 // The provider logo for a model value (claude-* → Claude, gpt-* → OpenAI, …).
 function ModelIcon({
   model,
@@ -159,11 +156,15 @@ function ModelIcon({
 // Track order: gutter | name | Total Cost | % Share | Cost/session | Chats |
 // Tool calls | Tokens | Trend | gutter. Name sizes to its content (min 120px so
 // short names aren't cramped, capped at 24rem so long emails truncate rather
-// than dominate). The 7 numeric/trend columns are `minmax(max-content,1fr)`:
-// never narrower than their content, but they grow equally to fill the row, so
+// than dominate). The 6 numeric columns are `minmax(max-content,1fr)`: never
+// narrower than their content, but they grow equally to fill the row, so
 // leftover width on wide viewports spreads across the columns instead of pooling
-// in a dead right gutter. Fixed 8px gutters keep row hover + dividers full-bleed.
-const COLUMNS = "8px minmax(120px,24rem) repeat(7,minmax(max-content,1fr)) 8px";
+// in a dead right gutter. Trend is the one column whose header is wider than
+// anything it holds, so it gets the sparkline's own width as its floor instead —
+// otherwise a heading pushes the whole table into horizontal scroll on a laptop
+// viewport. Fixed 8px gutters keep row hover + dividers full-bleed.
+const COLUMNS =
+  "8px minmax(120px,24rem) repeat(6,minmax(max-content,1fr)) minmax(96px,1fr) 8px";
 
 const PAGE_SIZE = 10;
 
@@ -287,6 +288,12 @@ export function CostTable({
     dir: "desc",
   });
   const [page, setPage] = useState(0);
+  // The chart above publishes the color it painted each stack in, keyed by the
+  // stack's display label — the same label these rows show — so a row can wear
+  // its segment's color and fade while another segment is hovered. Null when
+  // the table renders without a chart beside it.
+  const seriesFocus = useSeriesFocus();
+  const trend = useTrendColors();
   // A confidently metered view shows real cost, so the estimate caveat is hidden.
   const showCostEstimate = !isMeteredBilling(billingMode);
 
@@ -502,7 +509,7 @@ export function CostTable({
           ? (unitCost - minUnitCost) / (maxUnitCost - minUnitCost)
           : 0.5;
       const unitColor =
-        isOther || unitCost === null ? undefined : costColor(unitT);
+        isOther || unitCost === null ? undefined : costColor(unitT, trend);
       return (
         <>
           <span className="text-left font-medium tabular-nums whitespace-nowrap">
@@ -540,13 +547,13 @@ export function CostTable({
       <>
         <span
           className="text-left font-medium tabular-nums whitespace-nowrap"
-          style={isOther ? undefined : { color: costColor(costT) }}
+          style={isOther ? undefined : { color: costColor(costT, trend) }}
         >
           {formatCost(cost)}
         </span>
         <span
           className="text-left tabular-nums whitespace-nowrap"
-          style={isOther ? undefined : { color: costColor(costT) }}
+          style={isOther ? undefined : { color: costColor(costT, trend) }}
         >
           {totalCost > 0 ? `${((cost / totalCost) * 100).toFixed(1)}%` : "—"}
         </span>
@@ -592,8 +599,10 @@ export function CostTable({
         </span>
         {measureHeaders()}
         <span className="flex items-center gap-1">
+          {/* "Trend" alone — the period is the one the whole page is already
+              set to, and the legend tooltip beside it says so. */}
           <HeaderButton
-            label="Trend This Period"
+            label="Trend"
             sortKey="trend"
             sort={sort}
             onSort={onSort}
@@ -601,9 +610,9 @@ export function CostTable({
           <LegendTooltip
             intro="over the selected range"
             items={[
-              { key: "Green", label: "trending down", color: TREND.down },
-              { key: "Red", label: "trending up", color: TREND.up },
-              { key: "Grey", label: "no clear trend", color: TREND.flat },
+              { key: "Green", label: "trending down", color: trend.down },
+              { key: "Red", label: "trending up", color: trend.up },
+              { key: "Grey", label: "no clear trend", color: trend.flat },
             ]}
           />
         </span>
@@ -622,6 +631,13 @@ export function CostTable({
       ) : (
         pageRows.map((row, i) => {
           const drillable = canDrill && isDrillableValue(row.groupValue);
+          const seriesKey = displayName(groupBy, row.groupValue);
+          const seriesStyle = seriesFocus?.styleByKey.get(seriesKey);
+          // Hovering a bar segment spotlights its row: every other row fades
+          // back. Rows the chart folded into "Other" (or dropped past its
+          // stack limit) have no color and simply never spotlight.
+          const faded =
+            seriesFocus?.focusKey != null && seriesFocus.focusKey !== seriesKey;
           return (
             <button
               key={row.groupValue}
@@ -630,15 +646,43 @@ export function CostTable({
               onClick={() => {
                 if (drillable) onDrill(row);
               }}
+              // The inverse of hovering a bar segment: spotlight this row's
+              // series in the chart above and fade the other rows here.
+              // A row the chart never drew (past its stack limit) has nothing
+              // to spotlight, so it leaves the focus alone rather than dimming
+              // everything.
+              onMouseEnter={() =>
+                seriesStyle && seriesFocus?.setFocusKey(seriesKey)
+              }
+              onMouseLeave={() => seriesFocus?.setFocusKey(null)}
               className={cn(
-                "grid w-full items-center py-4 text-left text-sm transition-colors",
+                "grid w-full items-center py-4 text-left text-sm transition-[background-color,opacity]",
                 SUBGRID_ROW_CLASS,
                 (safePage * PAGE_SIZE + i) % 2 === 1 && "bg-muted/25",
                 drillable ? "hover:bg-muted cursor-pointer" : "cursor-default",
+                faded && "opacity-35",
               )}
             >
               <Gutter />
               <div className="flex min-w-0 items-center gap-2">
+                {/* The chart's swatch for this row, so a bar segment and its
+                    row read as the same thing — hollow for the unset group,
+                    exactly as the chart draws it. The slot is held even when
+                    the row has no swatch, so names stay aligned down the
+                    column. */}
+                {seriesFocus && (
+                  <span
+                    aria-hidden="true"
+                    className="size-2.5 shrink-0"
+                    style={
+                      seriesStyle?.outline
+                        ? { border: `1px solid ${seriesStyle.color}` }
+                        : seriesStyle
+                          ? { backgroundColor: seriesStyle.color }
+                          : undefined
+                    }
+                  />
+                )}
                 {showModelIcon && (
                   <ModelIcon
                     model={row.groupValue}
