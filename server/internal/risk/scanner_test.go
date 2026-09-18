@@ -1509,6 +1509,7 @@ func TestScanner_CustomDetectionScopeLimitsIncompleteEvaluation(t *testing.T) {
 		{name: "in scope", kind: message.ToolRequest, complete: false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			outcome, err := scanner.ScanForInferenceEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "deploy ACME-ABC12345 now", tc.kind, "Bash"))
 			require.NoError(t, err)
 			require.NotNil(t, outcome)
