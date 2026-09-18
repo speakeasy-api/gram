@@ -22955,6 +22955,608 @@ paths:
       x-speakeasy-name-override: resolve
       x-speakeasy-react-hook:
         name: Identity
+  /rpc/identityProviderConnections.create:
+    post:
+      description: Create the organization's Okta connection. Discovers the org's authorization server, provisions a signing key and JWKS URL, and returns the console checklist. Requires org:admin and the okta-connections rollout. One live connection per organization; creation is rate limited.
+      operationId: createIdentityProviderConnection
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateIdentityProviderConnectionRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OktaIdentityProviderConnection'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "412":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'failed_precondition: resource is not in a valid state for this operation'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'rate_limit_exceeded: rate limit exceeded'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: create identityProviderConnections
+      tags:
+        - identityProviderConnections
+      x-speakeasy-name-override: create
+      x-speakeasy-react-hook:
+        name: CreateIdentityProviderConnection
+  /rpc/identityProviderConnections.get:
+    get:
+      description: Get a connection by ID, or the organization's live Okta connection when no ID is given. Session only; requires org:read.
+      operationId: getIdentityProviderConnection
+      parameters:
+        - allowEmptyValue: true
+          description: Connection ID. Omit to fetch the organization's live connection.
+          in: query
+          name: id
+          schema:
+            description: Connection ID. Omit to fetch the organization's live connection.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetIdentityProviderConnectionResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: get identityProviderConnections
+      tags:
+        - identityProviderConnections
+      x-speakeasy-name-override: get
+      x-speakeasy-react-hook:
+        name: IdentityProviderConnection
+  /rpc/identityProviderConnections.recordAgent:
+    post:
+      description: Record the Okta AI agent ID and the application it is bound to, for display. Okta does not expose these through its API. Requires org:admin.
+      operationId: recordIdentityProviderConnectionAgent
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecordIdentityProviderConnectionAgentRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OktaIdentityProviderConnection'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: recordAgent identityProviderConnections
+      tags:
+        - identityProviderConnections
+      x-speakeasy-name-override: recordAgent
+      x-speakeasy-react-hook:
+        name: RecordIdentityProviderConnectionAgent
+  /rpc/identityProviderConnections.revoke:
+    post:
+      description: 'Revoke the connection: withdraw every signing key from the JWKS, disable the key material, and tombstone the connection so a new one can be created. Idempotent. Requires org:admin.'
+      operationId: revokeIdentityProviderConnection
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RevokeIdentityProviderConnectionRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OktaIdentityProviderConnection'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: revoke identityProviderConnections
+      tags:
+        - identityProviderConnections
+      x-speakeasy-name-override: revoke
+      x-speakeasy-react-hook:
+        name: RevokeIdentityProviderConnection
+  /rpc/identityProviderConnections.submitClientId:
+    post:
+      description: Record the client ID of the Okta API Services application and verify it. Allowed once, while the connection is pending; revoke and recreate to change it. Requires org:admin.
+      operationId: submitIdentityProviderConnectionClientId
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitIdentityProviderConnectionClientIDRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OktaIdentityProviderConnection'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "412":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'failed_precondition: resource is not in a valid state for this operation'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'rate_limit_exceeded: rate limit exceeded'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: submitClientId identityProviderConnections
+      tags:
+        - identityProviderConnections
+      x-speakeasy-name-override: submitClientId
+      x-speakeasy-react-hook:
+        name: SubmitIdentityProviderConnectionClientId
+  /rpc/identityProviderConnections.verify:
+    post:
+      description: 'Re-verify the connection against Okta: mint a token, confirm each required scope with a read, and record the outcome. Rate limited per organization. Requires org:admin.'
+      operationId: verifyIdentityProviderConnection
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyIdentityProviderConnectionRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OktaIdentityProviderConnection'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "412":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'failed_precondition: resource is not in a valid state for this operation'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'rate_limit_exceeded: rate limit exceeded'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: verify identityProviderConnections
+      tags:
+        - identityProviderConnections
+      x-speakeasy-name-override: verify
+      x-speakeasy-react-hook:
+        name: VerifyIdentityProviderConnection
   /rpc/instances.get:
     get:
       description: Load all relevant data for an instance of a toolset and environment
@@ -71652,6 +72254,20 @@ components:
       required:
         - remote_session_issuer_id
         - client_id
+    CreateIdentityProviderConnectionRequestBody:
+      type: object
+      properties:
+        listing_mode:
+          type: string
+          description: Checklist template. Defaults to custom_app.
+          enum:
+            - custom_app
+            - oin
+        org_url:
+          type: string
+          description: Okta org URL, for example https://example.okta.com. Must be https with no path; the host must be an Okta-owned domain.
+      required:
+        - org_url
     CreateIngressRequestBody:
       type: object
       properties:
@@ -75740,6 +76356,12 @@ components:
         - time_series
         - skill_time_series
         - skill_breakdown
+    GetIdentityProviderConnectionResult:
+      type: object
+      properties:
+        connection:
+          $ref: '#/components/schemas/OktaIdentityProviderConnection'
+      description: The organization's Okta connection, or nothing when none is connected.
     GetInstanceResult:
       type: object
       properties:
@@ -77243,6 +77865,42 @@ components:
         - emails
         - external_user_ids
         - directory
+    IdentityProviderConnectionActiveKey:
+      type: object
+      properties:
+        activated_at:
+          type: string
+          description: ISO 8601 timestamp when the key became the signer.
+          format: date-time
+        id:
+          type: string
+          description: JSON Web Key row ID.
+          format: uuid
+        kid:
+          type: string
+          description: Key ID as published in the JWKS document.
+      description: The published signing key the identity provider currently trusts. Omitted after revocation.
+      required:
+        - id
+        - kid
+        - activated_at
+    IdentityProviderConnectionChecklistItem:
+      type: object
+      properties:
+        description:
+          type: string
+          description: What to do in the console, including any value copied from this connection.
+        key:
+          type: string
+          description: Stable step identifier.
+        title:
+          type: string
+          description: Short step title.
+      description: One step the organization administrator completes in the identity provider's console. Ordered; keys are stable across responses.
+      required:
+        - key
+        - title
+        - description
     InferenceSpendCap:
       type: object
       properties:
@@ -81700,6 +82358,129 @@ components:
         - total_tool_calls
         - failed_tool_calls
         - avg_latency_ms
+    OktaIdentityProviderConnection:
+      type: object
+      properties:
+        active_key:
+          $ref: '#/components/schemas/IdentityProviderConnectionActiveKey'
+        agent_app_id:
+          type: string
+          description: Admin-entered Okta application ID the AI agent is bound to. Display only.
+        agent_id:
+          type: string
+          description: Admin-entered Okta AI agent ID. Display only.
+        checklist:
+          type: array
+          items:
+            $ref: '#/components/schemas/IdentityProviderConnectionChecklistItem'
+          description: Console steps for the connection's listing mode, in order.
+        client_id:
+          type: string
+          description: Okta application client ID. Omitted until submitted.
+        client_id_submitted:
+          type: boolean
+          description: Whether the real Okta client ID has replaced the provisioning placeholder.
+        created_at:
+          type: string
+          format: date-time
+        dpop_required:
+          type: boolean
+          description: Whether Okta issued a DPoP-bound token at the last verification.
+        granted_scopes:
+          type: array
+          items:
+            type: string
+          description: Scopes Okta granted at the last verification.
+        id:
+          type: string
+          description: Connection ID.
+          format: uuid
+        issuer_url:
+          type: string
+          description: Discovered authorization server issuer. Equal to org_url by construction.
+        jwks_url:
+          type: string
+          description: Public JWKS URL the Okta app is configured to trust for private_key_jwt.
+        last_error:
+          type: string
+          description: 'Why the last verification did not complete: Okta rejected the credential, or could not be reached. Omitted when it completed.'
+          enum:
+            - credential_rejected
+            - okta_unreachable
+        last_verified_at:
+          type: string
+          description: ISO 8601 timestamp of the last verification that found every required scope granted. Omitted until then.
+          format: date-time
+        listing_mode:
+          type: string
+          description: 'Which checklist template applies: custom_app when the admin creates the API Services app by hand, oin when the Speakeasy OIN listing is added from the catalog.'
+          enum:
+            - custom_app
+            - oin
+        missing_scopes:
+          type: array
+          items:
+            type: string
+          description: Required scopes Okta did not grant at the last verification.
+        org_url:
+          type: string
+          description: Okta org URL, for example https://example.okta.com.
+        organization_id:
+          type: string
+          description: Organization the connection belongs to.
+        provider:
+          type: string
+          description: Identity provider; always okta.
+          enum:
+            - okta
+        required_scopes:
+          type: array
+          items:
+            type: string
+          description: Okta API scopes the integration needs.
+        status:
+          type: string
+          description: Connection state. pending until the client ID is submitted and verified; verified when every required scope is granted over DPoP; degraded when verification found gaps (see verification_reasons); revoked once the credential was withdrawn.
+          enum:
+            - pending
+            - verified
+            - degraded
+            - revoked
+        updated_at:
+          type: string
+          format: date-time
+        verification_reasons:
+          type: array
+          items:
+            type: string
+            enum:
+              - missing_scope
+              - missing_role
+              - dpop_not_bound
+              - key_not_fetched
+              - read_failed:okta.apps.read
+              - read_failed:okta.users.read
+              - read_failed:okta.groups.read
+          description: Typed reasons recorded by the last verification; empty when verified or not yet verified. missing_role is reserved for a later release.
+      description: 'An organization''s Okta connection: the service application Gram authenticates to the Okta Management API with, its verification state, and the console checklist. Never carries key material or tokens.'
+      required:
+        - id
+        - organization_id
+        - provider
+        - status
+        - org_url
+        - issuer_url
+        - listing_mode
+        - jwks_url
+        - client_id_submitted
+        - dpop_required
+        - required_scopes
+        - granted_scopes
+        - missing_scopes
+        - verification_reasons
+        - checklist
+        - created_at
+        - updated_at
     OnboardingHookEvent:
       type: object
       properties:
@@ -83979,6 +84760,21 @@ components:
         - id
         - decision
         - rationale
+    RecordIdentityProviderConnectionAgentRequestBody:
+      type: object
+      properties:
+        agent_app_id:
+          type: string
+          description: Okta application ID the agent is bound to. Empty clears it.
+        agent_id:
+          type: string
+          description: Okta AI agent ID. Empty clears it.
+        id:
+          type: string
+          description: Connection ID.
+          format: uuid
+      required:
+        - id
     RecordInstallIntentRequestBody:
       type: object
       properties:
@@ -85159,6 +85955,15 @@ components:
       description: Result type for revoking all of a client's remote_sessions.
       required:
         - revoked_count
+    RevokeIdentityProviderConnectionRequestBody:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Connection ID.
+          format: uuid
+      required:
+        - id
     RevokeSessionRequestBody:
       type: object
       properties:
@@ -89790,6 +90595,19 @@ components:
       required:
         - id
         - feedback
+    SubmitIdentityProviderConnectionClientIDRequestBody:
+      type: object
+      properties:
+        client_id:
+          type: string
+          description: Okta application client ID (0oa...).
+        id:
+          type: string
+          description: Connection ID.
+          format: uuid
+      required:
+        - id
+        - client_id
     SubmitRiskBlockFeedbackRequestBody:
       type: object
       properties:
@@ -94945,6 +95763,15 @@ components:
       description: Result of a live probe that Gram can assume the identity the credential names.
       required:
         - verified
+    VerifyIdentityProviderConnectionRequestBody:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Connection ID.
+          format: uuid
+      required:
+        - id
     VerifyKmsKeyResult:
       type: object
       properties:
@@ -95280,6 +96107,8 @@ tags:
     description: Receives hook events from coding assistants for tool usage observability.
   - name: identity
     description: Resolves the identifiers Gram records activity under into a single identity.
+  - name: identityProviderConnections
+    description: 'Manage the organization''s Okta connection: provision the private_key_jwt credential, submit the Okta client ID, verify granted scopes, and revoke.'
   - name: instances
     description: Consumer APIs for interacting with all relevant data for an instance of a toolset and environment.
   - name: integrations

@@ -400,11 +400,18 @@ func (q *Queries) GetGcpKmsKeyForVerify(ctx context.Context, arg GetGcpKmsKeyFor
 
 const listExternalKeys = `-- name: ListExternalKeys :many
 SELECT id, organization_id, project_id, external_credential_id, provider, algorithm, name, customer_grant_reference, identity_provider_connection_id, created_at, updated_at, deleted_at, deleted
-FROM external_keys
-WHERE organization_id = $1
-  AND deleted IS FALSE
-  AND ($2::text IS NULL OR provider = $2::text)
-ORDER BY id DESC
+FROM external_keys AS ek
+WHERE ek.organization_id = $1
+  AND ek.deleted IS FALSE
+  AND ($2::text IS NULL OR ek.provider = $2::text)
+  AND NOT EXISTS (
+    SELECT 1
+    FROM identity_provider_connections AS ipc
+    WHERE ipc.id = ek.identity_provider_connection_id
+      AND ipc.organization_id = ek.organization_id
+      AND ipc.deleted IS TRUE
+  )
+ORDER BY ek.id DESC
 `
 
 type ListExternalKeysParams struct {
@@ -412,6 +419,8 @@ type ListExternalKeysParams struct {
 	Provider       pgtype.Text
 }
 
+// Keys left behind by a tombstoned identity provider connection are hidden;
+// they stay reachable by id so the organization can delete them.
 func (q *Queries) ListExternalKeys(ctx context.Context, arg ListExternalKeysParams) ([]ExternalKey, error) {
 	rows, err := q.db.Query(ctx, listExternalKeys, arg.OrganizationID, arg.Provider)
 	if err != nil {

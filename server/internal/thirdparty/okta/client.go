@@ -874,3 +874,11 @@ func newAPIError(method, path string, status int, body []byte) *APIError {
 	}
 	return &APIError{Method: method, Path: "/" + strings.TrimLeft(path, "/"), StatusCode: status, ErrorCode: code, Summary: summary}
 }
+
+// ListUsers reads a single page; pagination links are deliberately not followed.
+func (c *httpClient) ListUsers(ctx context.Context, req ListUsersRequest) ([]User, error) {
+	q := url.Values{}
+	setLimit(q, req.Limit)
+	users, _, err := getJSON[[]User](ctx, c, c.apiURL("/api/v1/users", "", q))
+	return users, err
+}

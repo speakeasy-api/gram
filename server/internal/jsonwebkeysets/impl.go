@@ -420,7 +420,7 @@ func (s *Service) DeleteSet(ctx context.Context, payload *gensvc.DeleteSetPayloa
 		return oops.E(oops.CodeUnexpected, err, "error deleting key set").LogError(ctx, logger)
 	}
 
-	if err := managedrows.RequireUnmanaged(locked.IdentityProviderConnectionID, "this key set"); err != nil {
+	if err := managedrows.RequireDeletable(ctx, dbtx, authCtx.ActiveOrganizationID, locked.IdentityProviderConnectionID, "this key set"); err != nil {
 		return err
 	}
 
