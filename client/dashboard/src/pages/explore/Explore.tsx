@@ -23,7 +23,7 @@ import { useRunQuery } from "./useRunQuery";
 
 // A burst of edits is one query: the builder waits this long after the last
 // keystroke before asking.
-export const QUERY_DEBOUNCE_MS = 300;
+const QUERY_DEBOUNCE_MS = 300;
 
 // Explore: ask questions of this project's agent activity. The page is
 // strictly project-scoped — the active project is the only one queried — and

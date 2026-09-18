@@ -48,7 +48,7 @@ export const WINDOW_OPTIONS: { value: WindowPreset; label: string }[] = [
 // Queries run as you build, and the dataset is scanned across the whole
 // window however selective the filters are, so the window opens short and
 // widening it is the moment someone chooses to pay for more.
-export const DEFAULT_WINDOW: WindowPreset = "24h";
+const DEFAULT_WINDOW: WindowPreset = "24h";
 
 const WINDOW_SECONDS: Record<WindowPreset, number> = {
   "1h": 3_600,
