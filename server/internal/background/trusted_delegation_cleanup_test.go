@@ -61,7 +61,7 @@ func TestCleanupTrustedDelegationBatches(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, 2, calls)
 	})
-	t.Run("bounded saturation", func(t *testing.T) {
+	t.Run("per-attempt saturation", func(t *testing.T) {
 		calls := 0
 		err := cleanupTrustedDelegationBatches(t.Context(), func(_ context.Context, limit int32) (int64, error) {
 			calls++
@@ -87,4 +87,30 @@ func TestTrustedDelegationCleanupRunTimeout(t *testing.T) {
 	// Three ten-minute attempts, one- and two-minute backoffs, seven minutes
 	// of headroom for queueing and workflow tasks.
 	require.Equal(t, 40*time.Minute, trustedDelegationCleanupRunTimeout())
+}
+
+// Exercise the actual workflow retry policy and batch loop together: saturation
+// is retryable, and every activity attempt gets all 100 batches again.
+func TestTrustedDelegationCleanupBudgetResetsPerAttempt(t *testing.T) {
+	t.Parallel()
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	env.SetWorkerOptions(worker.Options{DeadlockDetectionTimeout: 5 * time.Second})
+	var rowsPerAttempt []int64
+	var attempts []int32
+	env.RegisterActivityWithOptions(func(ctx context.Context) error {
+		attempts = append(attempts, activity.GetInfo(ctx).Attempt)
+		var rows int64
+		err := cleanupTrustedDelegationBatches(ctx, func(_ context.Context, limit int32) (int64, error) {
+			rows += int64(limit)
+			return int64(limit), nil
+		})
+		rowsPerAttempt = append(rowsPerAttempt, rows)
+		return err
+	}, activity.RegisterOptions{Name: "CleanupTrustedDelegationCredentials"})
+	env.ExecuteWorkflow(TrustedDelegationCleanupWorkflow)
+	require.True(t, env.IsWorkflowCompleted())
+	require.ErrorContains(t, env.GetWorkflowError(), "per-attempt batch budget exhausted")
+	require.Equal(t, []int32{1, 2, 3}, attempts)
+	require.Equal(t, []int64{50_000, 50_000, 50_000}, rowsPerAttempt)
 }
