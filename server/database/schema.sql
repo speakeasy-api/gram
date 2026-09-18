@@ -9023,7 +9023,7 @@ CREATE TABLE IF NOT EXISTS okta_resource_connections (
   CONSTRAINT okta_resource_connections_remote_session_issuer_id_fkey FOREIGN KEY (remote_session_issuer_id) REFERENCES remote_session_issuers (id) ON DELETE CASCADE,
   -- The app instance must be one the snapshot holds for this connection; a
   -- row outlives the instance with the reference cleared.
-  CONSTRAINT okta_resource_connections_okta_application_fkey FOREIGN KEY (organization_id, identity_provider_connection_id, okta_application_id) REFERENCES okta_applications (organization_id, identity_provider_connection_id, okta_app_id) ON DELETE SET NULL
+  CONSTRAINT okta_resource_connections_okta_application_fkey FOREIGN KEY (organization_id, identity_provider_connection_id, okta_application_id) REFERENCES okta_applications (organization_id, identity_provider_connection_id, okta_app_id) ON DELETE SET NULL (okta_application_id)
 );
 
 -- Serves the cascade from remote_session_issuers; the connection cascade is
