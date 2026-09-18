@@ -2,7 +2,11 @@ import { useOrganization } from "@/contexts/Auth";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useRBAC } from "@/hooks/useRBAC";
 
-type NetworkIngressRolloutStatus = "loading" | "enabled" | "disabled" | "error";
+export type NetworkIngressRolloutStatus =
+  | "loading"
+  | "enabled"
+  | "disabled"
+  | "error";
 
 export function useNetworkIngressRollout(): {
   status: NetworkIngressRolloutStatus;
