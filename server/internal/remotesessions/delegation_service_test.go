@@ -1079,3 +1079,107 @@ func TestDelegationServiceAttemptFailureReleaseSafety(t *testing.T) {
 		})
 	}
 }
+
+// Pause the second load after durable claim acquisition to exercise competing writes.
+type delegationRereadHookStore struct {
+	delegationStore
+	loads            int
+	beforeReread     func()
+	rereadError      error
+	finishCalls      int
+	finishContextErr error
+	finishDeadline   time.Time
+}
+
+func (s *delegationRereadHookStore) load(ctx context.Context, b DelegationBinding) (delegationCredential, error) {
+	s.loads++
+	if s.loads == 2 {
+		s.beforeReread()
+		if s.rereadError != nil {
+			return delegationCredential{}, s.rereadError
+		}
+	}
+	return s.delegationStore.load(ctx, b)
+}
+
+func (s *delegationRereadHookStore) finish(ctx context.Context, b DelegationBinding, generation int64, claim uuid.UUID, next delegationCredential) (bool, error) {
+	s.finishCalls++
+	s.finishContextErr = ctx.Err()
+	s.finishDeadline, _ = ctx.Deadline()
+	return s.delegationStore.finish(ctx, b, generation, claim, next)
+}
+
+func TestDelegationServicePostClaimRereadReleaseSafety(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name      string
+		cancel    bool
+		supersede string
+		readFails bool
+	}{
+		{name: "read failure", readFails: true},
+		{name: "canceled read", cancel: true, readFails: true},
+		{name: "callback before failed read", supersede: "callback", readFails: true},
+		{name: "callback before mismatched read", supersede: "callback"},
+		{name: "revocation before failed read", supersede: "revoke", readFails: true},
+		{name: "revocation before mismatched read", supersede: "revoke"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s, store, p, b, allow := newDelegationUnitFixture(t)
+			require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "id", "refresh", 30*time.Second), true))
+			callbackService := *s
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			started, release := make(chan struct{}), make(chan struct{})
+			hook := &delegationRereadHookStore{delegationStore: store, beforeReread: func() { close(started); <-release }}
+			if tc.readFails {
+				hook.rereadError = errors.New("database unavailable")
+			}
+			s.store = hook
+			var posts atomic.Int32
+			s.refreshIdentity = func(context.Context, *FederatedProvider, string, string, string) (*FederatedRefreshResult, error) {
+				posts.Add(1)
+				return delegationRenewal(p, s.now(), "renewed-id", ""), nil
+			}
+			done := make(chan error, 1)
+			go func() { _, err := s.Resolve(ctx, b, allow); done <- err }()
+			<-started
+			claimed, err := store.load(t.Context(), b)
+			require.NoError(t, err)
+			require.NotEqual(t, uuid.Nil, claimed.claim)
+			switch tc.supersede {
+			case "callback":
+				require.NoError(t, callbackService.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "callback-id", "callback-refresh", time.Hour), true))
+			case "revoke":
+				require.NoError(t, store.revoke(t.Context(), b))
+			}
+			winner, err := store.load(t.Context(), b)
+			require.NoError(t, err)
+			if tc.cancel {
+				cancel()
+			}
+			close(release)
+			require.ErrorIs(t, <-done, ErrDelegationTemporary)
+			require.Zero(t, posts.Load(), "pre-dispatch failure must not POST")
+			require.Equal(t, 1, hook.finishCalls)
+			require.NoError(t, hook.finishContextErr, "cleanup must survive cancellation")
+			require.False(t, hook.finishDeadline.IsZero(), "cleanup must be bounded")
+			require.WithinDuration(t, time.Now().Add(5*time.Second), hook.finishDeadline, time.Second)
+			after, err := store.load(t.Context(), b)
+			require.NoError(t, err)
+			if tc.supersede != "" {
+				require.Equal(t, winner, after, "cleanup must not overwrite callback or revocation")
+			} else {
+				want := claimed
+				want.claim = uuid.Nil
+				want.generation++
+				require.Equal(t, want, after, "cleanup must preserve the unspent credentials")
+				assertion, err := s.Resolve(t.Context(), b, allow)
+				require.NoError(t, err)
+				require.Equal(t, "renewed-id", assertion.Value())
+				require.Equal(t, int32(1), posts.Load())
+			}
+		})
+	}
+}
