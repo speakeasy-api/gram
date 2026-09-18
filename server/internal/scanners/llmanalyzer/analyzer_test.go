@@ -2,6 +2,7 @@ package llmanalyzer_test
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -275,6 +276,45 @@ func TestAnalyze_SynthesizesSingleToolCallIDWhenExtraIDs(t *testing.T) {
 	require.Len(t, calls, 1)
 	require.Contains(t, calls[0].Messages[1].Content, `"id": "toolu_0000001"`)
 	require.NotContains(t, calls[0].Messages[1].Content, "call_first")
+}
+
+func TestAnalyze_CapsToolCallIDsHeadAndTailWithTheCalls(t *testing.T) {
+	t.Parallel()
+
+	stub := &llmanalyzer.StubCompleter{
+		Response:         llmanalyzer.VerdictJSON(nil, ""),
+		Err:              nil,
+		PromptTokens:     0,
+		CompletionTokens: 0,
+		Model:            "",
+		Calls:            nil,
+		ParseFailures:    0,
+	}
+	const total = 60
+	calls := make([]judgemessage.ToolCall, 0, total)
+	ids := make([]string, 0, total)
+	for i := range total {
+		calls = append(calls, judgemessage.NewToolCall("Read", `{}`))
+		ids = append(ids, fmt.Sprintf("call_%03d", i))
+	}
+	req := llmanalyzer.Request{
+		OrgID:       "org-1",
+		OrgSlug:     "acme",
+		ProjectID:   "proj-1",
+		ScanMode:    llmanalyzer.ScanModeSync,
+		Message:     judgemessage.NewForToolCalls(calls),
+		ToolCallIDs: ids,
+	}
+	analysis := newAnalyzer(t, stub).Analyze(t.Context(), req)
+	require.True(t, analysis.Truncated)
+
+	prompt := stub.CallsSnapshot()[0].Messages[1].Content
+	require.Contains(t, prompt, `"id": "call_000"`, "head keeps its harness ids")
+	require.Contains(t, prompt, `"id": "call_024"`)
+	require.Contains(t, prompt, `"id": "call_035"`, "tail keeps its harness ids")
+	require.Contains(t, prompt, `"id": "call_059"`)
+	require.NotContains(t, prompt, `"id": "call_030"`, "dropped middle calls carry no id")
+	require.NotContains(t, prompt, "toolu_", "no synthetic ids once the real ones align")
 }
 
 func TestAnalyze_SynthesizesToolCallIDsWhenMisaligned(t *testing.T) {
