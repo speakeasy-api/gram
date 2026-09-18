@@ -10,7 +10,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/speakeasy-api/gram/server/internal/issuerurl"
 	"github.com/speakeasy-api/gram/server/internal/workloadidentity/repo"
 )
 
@@ -40,6 +39,9 @@ type ResolveIssuerParams struct {
 // ResolveIssuerByURL returns the workload issuer row this tenant trusts for an
 // issuer identifier, or ErrIssuerNotFound.
 //
+// A plain-http issuer is refused before the store, so a hand-written http row
+// can never resolve.
+//
 // Nothing here fetches, probes, or discovers. A caller holding an unresolvable
 // URL learns only that we have no row for it, which is what stops a
 // request-supplied issuer from turning into an outbound request.
@@ -48,9 +50,9 @@ type ResolveIssuerParams struct {
 // tenant's own project or organization, so no shared catalog exists that a
 // customer could silently land on.
 func ResolveIssuerByURL(ctx context.Context, db repo.DBTX, params ResolveIssuerParams) (repo.WorkloadIssuer, error) {
-	canonical, err := issuerurl.Parse(params.IssuerURL)
+	canonical, err := ParseIssuerURL(params.IssuerURL)
 	if err != nil {
-		return repo.WorkloadIssuer{}, fmt.Errorf("%w: %w", ErrIssuerURLInvalid, err)
+		return repo.WorkloadIssuer{}, err
 	}
 
 	// Checked after the parse and before the store, so a caller with no

@@ -3,8 +3,10 @@ package workload
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
+	"github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
 
 	assertioncore "github.com/speakeasy-api/gram/server/internal/usersessions/assertion"
@@ -13,6 +15,17 @@ import (
 )
 
 const maxAssertionBytes = 8 * 1024
+
+// nonBearerTypes are JOSE typ values, normalized by normalizeMediaType, of
+// credentials that must never be exchanged as a bearer grant:
+//   - wit+jwt: a WIMSE Workload Identity Token, valid only together with proof
+//     of possession of its bound key (draft-ietf-wimse-workload-creds).
+//   - at+jwt: an access token issued by another authorization server
+//     (RFC 9068).
+var nonBearerTypes = map[string]struct{}{
+	"wit+jwt": {},
+	"at+jwt":  {},
+}
 
 // Result describes a verified workload assertion. Admission of the subject
 // and issuance of credentials remain separate caller decisions.
@@ -57,6 +70,12 @@ func (v *Verifier) Verify(ctx context.Context, raw string, expect Expectation) (
 	if err != nil {
 		return nil, rejectWith(ReasonMalformed, err)
 	}
+	// typ is a header, so refusing it before signature verification keeps the
+	// signature-before-claims order and spends no key fetch on a token that
+	// can never be accepted.
+	if err := checkBearerType(token); err != nil {
+		return nil, err
+	}
 	var claims jwt.Claims
 	var extra replayIDClaims
 	if err := assertioncore.VerifiedClaims(ctx, v.keys, expect.KeySource, token, &claims, &extra); err != nil {
@@ -93,6 +112,35 @@ func (v *Verifier) Verify(ctx context.Context, raw string, expect Expectation) (
 		return nil, reject(ReasonReplayed, "assertion identifier has already been presented")
 	}
 	return &Result{ExpiresAt: expiresAt, ReusedAssertion: !claimed}, nil
+}
+
+// checkBearerType refuses a denylisted typ. A missing typ and every other
+// value pass: platforms do not send a consistent one, so none is required.
+func checkBearerType(token *jwt.JSONWebToken) error {
+	if len(token.Headers) == 0 {
+		return nil
+	}
+	value, present := token.Headers[0].ExtraHeaders[jose.HeaderType]
+	if !present {
+		return nil
+	}
+	typ, ok := value.(string)
+	if !ok {
+		return reject(ReasonMalformed, "typ header must be a string")
+	}
+	if _, denied := nonBearerTypes[normalizeMediaType(typ)]; denied {
+		return reject(ReasonTypeNotBearer, "typ %q is not a bearer assertion", typ)
+	}
+	return nil
+}
+
+// normalizeMediaType compares typ values per RFC 7515 section 4.1.9: media
+// types are case-insensitive, the "application/" prefix is optional, and
+// parameters do not change the type.
+func normalizeMediaType(typ string) string {
+	base, _, _ := strings.Cut(typ, ";")
+	base = strings.ToLower(strings.TrimSpace(base))
+	return strings.TrimPrefix(base, "application/")
 }
 
 func reasonForClaimError(err error) Reason {

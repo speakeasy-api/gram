@@ -2,8 +2,10 @@ package mcp_test
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
+	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -21,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/workload"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/replay"
+	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
 )
 
 // The external subject the issuer vouches for.
@@ -124,13 +127,21 @@ func newLiveWorkloadProject(t *testing.T, conn *pgxpool.Pool, organizationID str
 func (f liveWorkloadFixture) seedIssuer(t *testing.T, organizationID string, projectID uuid.NullUUID) uuid.UUID {
 	t.Helper()
 
+	return f.seedIssuerRow(t, organizationID, projectID, f.issuer.OAuth21URL, f.jwksURI)
+}
+
+// seedIssuerRow registers an issuer row with the given identifier and
+// jwks_uri, for tests that need a row registration would never write.
+func (f liveWorkloadFixture) seedIssuerRow(t *testing.T, organizationID string, projectID uuid.NullUUID, issuerURL, jwksURI string) uuid.UUID {
+	t.Helper()
+
 	var id uuid.UUID
 	err := f.conn.QueryRow( //nolint:glint // notestingrawsql: no create query exists yet; writes belong to the management API milestone
 		t.Context(), `
 		INSERT INTO workload_issuers (organization_id, project_id, name, issuer, jwks_uri)
 		VALUES ($1, $2, $3, $4, $5)
 		RETURNING id
-	`, organizationID, projectID, "live-issuer", f.issuer.OAuth21URL, f.jwksURI).Scan(&id)
+	`, organizationID, projectID, "live-issuer", issuerURL, jwksURI).Scan(&id)
 	require.NoError(t, err)
 
 	return id
@@ -170,7 +181,15 @@ func (f liveWorkloadFixture) endpoint(organizationID string, projectID uuid.UUID
 func (f liveWorkloadFixture) present(t *testing.T, endpoint *mcp.ResolvedMcpEndpoint) error {
 	t.Helper()
 
-	raw := oauthtest.MintWorkloadAssertion(t, f.issuer, oauthtest.WorkloadClaims(f.issuer, liveWorkloadSubject, liveWorkloadAudience))
+	return f.presentClaims(t, endpoint, oauthtest.WorkloadClaims(f.issuer, liveWorkloadSubject, liveWorkloadAudience))
+}
+
+// presentClaims signs the given claims with the issuer's key and runs them
+// through every admission stage.
+func (f liveWorkloadFixture) presentClaims(t *testing.T, endpoint *mcp.ResolvedMcpEndpoint, claims jwt.Claims) error {
+	t.Helper()
+
+	raw := oauthtest.MintWorkloadAssertion(t, f.issuer, claims)
 
 	err := mcp.AdmitWorkloadAssertion(t.Context(), f.conn, f.verifier, endpoint, []string{
 		liveWorkloadAudience,
@@ -259,4 +278,42 @@ func TestWorkloadAssertionPipeline_OrganizationTierAdmissionAdmitsEveryProject(t
 
 	require.NoError(t, f.present(t, f.endpoint(f.organizationID, f.projectID)))
 	require.NoError(t, f.present(t, f.endpoint(f.organizationID, other)))
+}
+
+// A row whose jwks_uri is plain http is refused at key source construction,
+// by name and before any connection, even though the issuer itself is https
+// and the workload is admitted.
+func TestWorkloadAssertionPipeline_PlainHTTPJwksURIIsRefusedWithoutFetching(t *testing.T) {
+	t.Parallel()
+
+	f := newLiveWorkloadFixture(t)
+	plainJWKSURI := "http://" + strings.TrimPrefix(f.jwksURI, "https://")
+	require.True(t, strings.HasPrefix(f.jwksURI, "https://"), "the fixture's jwks_uri must be https for this downgrade to mean anything")
+	issuerID := f.seedIssuerRow(t, f.organizationID, uuid.NullUUID{}, f.issuer.OAuth21URL, plainJWKSURI)
+	f.seedAdmission(t, f.organizationID, uuid.NullUUID{}, issuerID)
+
+	err := f.present(t, f.endpoint(f.organizationID, f.projectID))
+
+	require.ErrorIs(t, err, workloadidentity.ErrJWKSURINotHTTPS)
+	require.Equal(t, f.connectionsAtSetup, f.issuer.Connections(), "a plain-http jwks_uri must be refused before any connection is attempted")
+}
+
+// An assertion naming a plain-http issuer is untrusted even when a row for
+// that exact http issuer exists and admits the subject.
+func TestWorkloadAssertionPipeline_PlainHTTPIssuerIsUntrusted(t *testing.T) {
+	t.Parallel()
+
+	f := newLiveWorkloadFixture(t)
+	plainIssuer := "http://" + strings.TrimPrefix(f.issuer.OAuth21URL, "https://")
+	require.True(t, strings.HasPrefix(f.issuer.OAuth21URL, "https://"), "the fixture's issuer must be https for this downgrade to mean anything")
+	issuerID := f.seedIssuerRow(t, f.organizationID, uuid.NullUUID{}, plainIssuer, f.jwksURI)
+	f.seedAdmission(t, f.organizationID, uuid.NullUUID{}, issuerID)
+
+	claims := oauthtest.WorkloadClaims(f.issuer, liveWorkloadSubject, liveWorkloadAudience)
+	claims.Issuer = plainIssuer
+	err := f.presentClaims(t, f.endpoint(f.organizationID, f.projectID), claims)
+
+	require.ErrorIs(t, err, mcp.ErrWorkloadIssuerUntrusted)
+	require.ErrorIs(t, err, workloadidentity.ErrIssuerURLNotHTTPS)
+	require.Equal(t, f.connectionsAtSetup, f.issuer.Connections(), "a plain-http issuer must be refused before any connection is attempted")
 }
