@@ -1,3 +1,4 @@
+import { useProject } from "@/contexts/Auth";
 import { analyticsQuery } from "@gram/client/funcs/analyticsQuery.js";
 import type { AnalyticsQueryPayload } from "@gram/client/models/components/analyticsquerypayload.js";
 import type { AnalyticsQueryResult } from "@gram/client/models/components/analyticsqueryresult.js";
@@ -26,14 +27,22 @@ function queryKeyBody(body: AnalyticsQueryPayload): unknown {
  *
  * The generated hook keys its cache on the session alone and ignores the
  * body, which is why this drives useQuery directly. Windows resolve
- * hour-aligned, so keys are stable within the hour.
+ * hour-aligned, so keys are stable within the hour. The project joins the key
+ * because the same body asked in two projects is two different questions, and
+ * a shared key would serve one project's rows to the other until they went
+ * stale.
  */
 export function useRunQuery(
   body: AnalyticsQueryPayload | null,
 ): UseQueryResult<AnalyticsQueryResult, Error> {
   const client = useGramContext();
+  const project = useProject();
   return useQuery({
-    queryKey: [EXPLORE_QUERY_KEY, body === null ? null : queryKeyBody(body)],
+    queryKey: [
+      EXPLORE_QUERY_KEY,
+      project.id,
+      body === null ? null : queryKeyBody(body),
+    ],
     enabled: body !== null,
     retry: false,
     staleTime: 60_000,

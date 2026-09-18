@@ -6,10 +6,13 @@ import { useEffect, useState } from "react";
  * value as given so consumers never see an undefined settle.
  */
 export function useDebouncedValue<T>(value: T, delayMs: number): T {
-  const [debounced, setDebounced] = useState(value);
+  // Both wrapped in functions: React reads a bare function as a lazy
+  // initializer and as a setter updater, so a function-valued T would be
+  // called instead of stored.
+  const [debounced, setDebounced] = useState<T>(() => value);
 
   useEffect(() => {
-    const timer = setTimeout(() => setDebounced(value), delayMs);
+    const timer = setTimeout(() => setDebounced(() => value), delayMs);
     return () => clearTimeout(timer);
   }, [value, delayMs]);
 

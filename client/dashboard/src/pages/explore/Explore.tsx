@@ -139,7 +139,12 @@ function ExploreWorkbench({
   // Queries run as you build: every spec is structurally valid, so the only
   // question is when. The settled spec trails the builder by the debounce,
   // and each new one supersedes the request in flight.
-  const settled = useDebouncedValue(spec, QUERY_DEBOUNCE_MS);
+  const debounced = useDebouncedValue(spec, QUERY_DEBOUNCE_MS);
+  // A catalog that arrives after mount leaves the debounced value holding the
+  // mount-time null while spec is already usable, which would claim there are
+  // no datasets for the length of the delay. The spec itself covers that
+  // window; afterwards the debounce governs as before.
+  const settled = debounced ?? spec;
   const chartBody = useMemo(
     () =>
       settled && hasChartShape(settled)
