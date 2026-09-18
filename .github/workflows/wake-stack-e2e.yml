@@ -24,6 +24,8 @@ on:
       - compose.yml
       - mise.toml
       - .mise-tasks/zero/remap-ports.mts
+      - .mise-tasks/git/workinit.sh
+      - .mise-tasks/start/worker.sh
       - .mise-tasks/git/worksync.sh
       - .mise-tasks/git/workboot.sh
       - .mise-tasks/test/wake-stack.sh
