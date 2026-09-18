@@ -325,6 +325,36 @@ func TestPolicy_DialerContext(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestPolicy_ClientRedirectRefusalIsNotRetried(t *testing.T) {
+	t.Parallel()
+
+	var hits int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		http.Redirect(w, r, "/elsewhere", http.StatusFound)
+	}))
+	defer server.Close()
+
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+	require.NoError(t, err)
+	errRefused := errors.New("redirect refused")
+	retry := guardian.DefaultRetryConfig()
+	retry.WaitMin = time.Millisecond
+	retry.WaitMax = time.Millisecond
+	client := policy.Client(guardian.WithRetryConfig(retry), guardian.WithCheckRedirect(func(*http.Request, []*http.Request) error {
+		return errRefused
+	}))
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL, nil)
+	require.NoError(t, err)
+	resp, err := client.Do(req)
+	if resp != nil {
+		require.NoError(t, resp.Body.Close())
+	}
+	require.ErrorIs(t, err, errRefused)
+	require.Equal(t, 1, hits, "a refused redirect is deterministic and must not be retried")
+}
+
 func TestPolicy_HTTPClientWithCustomPolicy(t *testing.T) {
 	t.Parallel()
 

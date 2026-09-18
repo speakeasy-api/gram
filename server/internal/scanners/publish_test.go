@@ -231,6 +231,7 @@ func TestFindingSurface(t *testing.T) {
 		{source: "presidio", field: "", path: "", want: "content"},
 		{source: "prompt_injection", field: "", path: "", want: "content"},
 		{source: "llm_judge", field: "", path: "", want: "none"},
+		{source: "llm_analyzer", field: "", path: "", want: "none"},
 		{source: "shadow_mcp", field: "", path: "", want: "derived"},
 		{source: "account_identity", field: "", path: "", want: "derived"},
 		{source: "destructive_tool", field: "", path: "", want: "derived"},

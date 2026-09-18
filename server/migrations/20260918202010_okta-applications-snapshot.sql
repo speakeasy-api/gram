@@ -1,7 +1,7 @@
 -- atlas:txmode none
 
 -- Modify "okta_identity_provider_connections" table
-ALTER TABLE "okta_identity_provider_connections" ADD CONSTRAINT "okta_identity_provider_connections_sync_interval_check" CHECK (applications_sync_interval_seconds >= 300), ADD COLUMN "applications_sync_interval_seconds" integer NOT NULL DEFAULT 21600, ADD COLUMN "applications_synced_at" timestamptz NULL, ADD COLUMN "applications_sync_requested_at" timestamptz NULL;
+ALTER TABLE "okta_identity_provider_connections" ADD COLUMN "applications_synced_at" timestamptz NULL, ADD COLUMN "applications_sync_requested_at" timestamptz NULL;
 -- Create index "okta_identity_provider_connections_applications_synced_at_idx" to table: "okta_identity_provider_connections"
 CREATE INDEX CONCURRENTLY "okta_identity_provider_connections_applications_synced_at_idx" ON "okta_identity_provider_connections" ("applications_synced_at") WHERE (deleted IS FALSE);
 -- Create index "okta_identity_provider_connections_org_connection_key" to table: "okta_identity_provider_connections"

@@ -1627,7 +1627,6 @@ type OktaIdentityProviderConnection struct {
 	ListingMode                         string
 	AgentID                             pgtype.Text
 	AgentAppID                          pgtype.Text
-	ApplicationsSyncIntervalSeconds     int32
 	ApplicationsSyncedAt                pgtype.Timestamptz
 	ApplicationsSyncRequestedAt         pgtype.Timestamptz
 	CreatedAt                           pgtype.Timestamptz
