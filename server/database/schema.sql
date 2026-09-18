@@ -9018,13 +9018,16 @@ CREATE TABLE IF NOT EXISTS okta_resource_connections (
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   CONSTRAINT okta_resource_connections_pkey PRIMARY KEY (id),
-  CONSTRAINT okta_resource_connections_resource_check CHECK (resource <> ''),
-  CONSTRAINT okta_resource_connections_audience_check CHECK (audience <> ''),
-  CONSTRAINT okta_resource_connections_okta_application_id_check CHECK (okta_application_id IS NULL OR okta_application_id <> ''),
+  CONSTRAINT okta_resource_connections_resource_check CHECK (btrim(resource) <> ''),
+  CONSTRAINT okta_resource_connections_audience_check CHECK (btrim(audience) <> ''),
+  CONSTRAINT okta_resource_connections_okta_application_id_check CHECK (okta_application_id IS NULL OR btrim(okta_application_id) <> ''),
   CONSTRAINT okta_resource_connections_resource_key UNIQUE (organization_id, identity_provider_connection_id, remote_session_issuer_id, resource),
   CONSTRAINT okta_resource_connections_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT okta_resource_connections_connection_tenant_fkey FOREIGN KEY (organization_id, identity_provider_connection_id) REFERENCES identity_provider_connections (organization_id, id) ON DELETE CASCADE,
-  CONSTRAINT okta_resource_connections_remote_session_issuer_id_fkey FOREIGN KEY (remote_session_issuer_id) REFERENCES remote_session_issuers (id) ON DELETE CASCADE
+  CONSTRAINT okta_resource_connections_connection_tenant_fkey FOREIGN KEY (organization_id, identity_provider_connection_id) REFERENCES okta_identity_provider_connections (organization_id, identity_provider_connection_id) ON DELETE CASCADE,
+  CONSTRAINT okta_resource_connections_remote_session_issuer_id_fkey FOREIGN KEY (remote_session_issuer_id) REFERENCES remote_session_issuers (id) ON DELETE CASCADE,
+  -- The app instance must be one the snapshot holds for this connection; a
+  -- row outlives the instance with the reference cleared.
+  CONSTRAINT okta_resource_connections_okta_application_fkey FOREIGN KEY (organization_id, identity_provider_connection_id, okta_application_id) REFERENCES okta_applications (organization_id, identity_provider_connection_id, okta_app_id) ON DELETE SET NULL
 );
 
 -- Serves the cascade from remote_session_issuers; the connection cascade is
