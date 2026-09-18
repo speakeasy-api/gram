@@ -725,7 +725,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, basePr
 		customResult, scanErr := s.scanCustomRules(ctx, policy, view)
 		s.recordRealtimeResult(ctx, metering.RiskCustomRules(), provenance, customResult, scanStarted)
 		customFindings, err = customResult.Findings, scanErr
-		if err != nil || !customResult.Completed {
+		if categoryScope.SourceInScope(view, ra.SourceCustom) && (err != nil || !customResult.Completed) {
 			incomplete.Store(true)
 		}
 		if err != nil {

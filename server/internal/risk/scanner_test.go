@@ -1442,3 +1442,78 @@ func TestScanner_CustomDetectionScopeNarrowsEnforcement(t *testing.T) {
 	require.Equal(t, risk_analysis.SourceCustom, result.Source)
 	require.Equal(t, "custom.acme_token", result.RuleID)
 }
+
+func TestScanner_CustomDetectionScopeLimitsIncompleteEvaluation(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	require.NotNil(t, authCtx.ProjectID)
+
+	_, err := riskrepo.New(ti.conn).CreateCustomDetectionRule(ctx, riskrepo.CreateCustomDetectionRuleParams{
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		RuleID:         "custom.acme_token",
+		Title:          "ACME token",
+		Description:    "ACME token",
+		// A malformed stored rule simulates custom analyzer failure.
+		DetectionExpr: pgtype.Text{String: `invalid CEL expression`, Valid: true},
+		Severity:      "high",
+	})
+	require.NoError(t, err)
+
+	analyzerConfig, err := risk_analysis.WithDetectionScopes(nil, []risk_analysis.DetectionScopeConfig{
+		{Category: "custom", ScopeInclude: `kind in ["tool_request"]`, ScopeExempt: ""},
+	})
+	require.NoError(t, err)
+
+	policyID := uuid.New()
+	_, err = riskrepo.New(ti.conn).CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{
+		ID:                   policyID,
+		ProjectID:            *authCtx.ProjectID,
+		OrganizationID:       authCtx.ActiveOrganizationID,
+		Name:                 "custom scoped",
+		Sources:              []string{},
+		PresidioEntities:     nil,
+		PromptInjectionRules: nil,
+		DisabledRules:        nil,
+		CustomRuleIds:        []string{"custom.acme_token"},
+		AnalyzerConfig:       analyzerConfig,
+		Enabled:              true,
+		Action:               "block",
+		AudienceType:         "everyone",
+		AutoName:             false,
+		UserMessage:          pgtype.Text{},
+	})
+	require.NoError(t, err)
+	grantRiskPolicyToAllUsers(t, ti, ctx, authCtx.ActiveOrganizationID, policyID)
+
+	scanner, err := risk.NewScanner(
+		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
+		ti.conn,
+		newTestCustomRuleAnalyzer(t, ti.conn),
+		nil,
+		nil,
+		nil,
+		nil,
+		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+	require.NoError(t, err)
+
+	for _, tc := range []struct {
+		name     string
+		kind     message.Type
+		complete bool
+	}{
+		{name: "out of scope", kind: message.User, complete: true},
+		{name: "in scope", kind: message.ToolRequest, complete: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			outcome, err := scanner.ScanForInferenceEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "deploy ACME-ABC12345 now", tc.kind, "Bash"))
+			require.NoError(t, err)
+			require.NotNil(t, outcome)
+			require.Nil(t, outcome.Result, "broken custom rules preserve fail-open disposition")
+			require.Equal(t, tc.complete, outcome.Complete, "only required custom evaluation gates acceptance")
+		})
+	}
+}
