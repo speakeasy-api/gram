@@ -140,6 +140,7 @@ describe("ExportMap", () => {
             eventFeed: "/event-feed",
             riskPolicies: (candidate) =>
               `/projects/${candidate.slug}/risk-policies?tab=policies`,
+            toolLogs: (candidate) => `/projects/${candidate.slug}/logs`,
           }}
           {...callbacks}
         />

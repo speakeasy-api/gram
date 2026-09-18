@@ -120,9 +120,20 @@ func TestToolCallLogRelayHandlerRedactsToolIOForExcludingDestinations(t *testing
 		it                   string
 		includeSensitiveData bool
 		wantArguments        string
+		wantResult           string
 	}{
-		{it: "keeps tool IO when the destination includes sensitive data", includeSensitiveData: true, wantArguments: `{"query":"secret"}`},
-		{it: "redacts tool IO when the destination excludes sensitive data", includeSensitiveData: false, wantArguments: redactedSensitiveDataValue},
+		{
+			it:                   "keeps tool IO when the destination includes sensitive data",
+			includeSensitiveData: true,
+			wantArguments:        `{"query":"secret"}`,
+			wantResult:           `{"rows":["secret"]}`,
+		},
+		{
+			it:                   "redacts tool IO when the destination excludes sensitive data",
+			includeSensitiveData: false,
+			wantArguments:        redactedSensitiveDataValue,
+			wantResult:           redactedSensitiveDataValue,
+		},
 	} {
 		t.Run(tt.it, func(t *testing.T) {
 			t.Parallel()
@@ -136,6 +147,7 @@ func TestToolCallLogRelayHandlerRedactsToolIOForExcludingDestinations(t *testing
 
 			record := toolCallLogTestRecord("tool-1", testLogOrganizationID, testLogProjectID, "tool_call", map[string]any{
 				string(attr.GenAIToolCallArgumentsKey): `{"query":"secret"}`,
+				string(attr.GenAIToolCallResultKey):    `{"rows":["secret"]}`,
 				string(attr.ToolNameKey):               "search_logs",
 			})
 			messages, failures := toolCallLogRelayTestMessages(record)
@@ -149,6 +161,7 @@ func TestToolCallLogRelayHandlerRedactsToolIOForExcludingDestinations(t *testing
 
 			attributes := toolCallLogTestAttributeMap(delivered[0])
 			require.Equal(t, tt.wantArguments, attributes[string(attr.GenAIToolCallArgumentsKey)].GetStringValue())
+			require.Equal(t, tt.wantResult, attributes[string(attr.GenAIToolCallResultKey)].GetStringValue())
 			// A non-sensitive attribute on the same record is untouched either way.
 			require.Equal(t, "search_logs", attributes[string(attr.ToolNameKey)].GetStringValue())
 		})
@@ -167,9 +180,13 @@ func TestToolCallLogRelayHandlerConvertsRowShapeToOTLP(t *testing.T) {
 
 	record := toolCallLogTestRecord("tool-1", testLogOrganizationID, testLogProjectID, "tool_call", map[string]any{
 		string(attr.HTTPResponseStatusCodeKey): 500,
-		"gram.test.ratio":                      0.25,
-		"gram.test.flag":                       true,
-		"gram.test.list":                       []any{"a", "b"},
+		// Nanosecond timestamps are past 2^53, where float64 stops holding
+		// integers exactly. Every row carries one, so a float round trip in
+		// the decoder would corrupt them all.
+		string(attr.TimeUnixNanoKey): int64(1789691307487308787),
+		"gram.test.ratio":            0.25,
+		"gram.test.flag":             true,
+		"gram.test.list":             []any{"a", "b"},
 	})
 	record.SetSeverityText("ERROR")
 	record.SetTraceId("72208a3b8032e3c9f99cff91650d177e")
@@ -195,6 +212,7 @@ func TestToolCallLogRelayHandlerConvertsRowShapeToOTLP(t *testing.T) {
 	// Whole numbers must not arrive as doubles: a status code rendered as
 	// 5e+02 is unusable for a destination filtering on it.
 	require.Equal(t, int64(500), attributes[string(attr.HTTPResponseStatusCodeKey)].GetIntValue())
+	require.Equal(t, int64(1789691307487308787), attributes[string(attr.TimeUnixNanoKey)].GetIntValue())
 	require.InDelta(t, 0.25, attributes["gram.test.ratio"].GetDoubleValue(), 0.0001)
 	require.True(t, attributes["gram.test.flag"].GetBoolValue())
 	require.Len(t, attributes["gram.test.list"].GetArrayValue().GetValues(), 2)
@@ -205,6 +223,55 @@ func TestToolCallLogRelayHandlerConvertsRowShapeToOTLP(t *testing.T) {
 	resourceAttributes := requests[0].request.GetResourceLogs()[0].GetResource().GetAttributes()
 	require.Len(t, resourceAttributes, 1)
 	require.Equal(t, string(attr.ServiceNameKey), resourceAttributes[0].GetKey())
+}
+
+func TestToolCallLogRelayHandlerKeepsRecordsUnderTheirOwnResource(t *testing.T) {
+	t.Parallel()
+
+	capture := &logRelayRequestCapture{mu: sync.Mutex{}, requests: nil}
+	server := httptest.NewServer(http.HandlerFunc(capture.handler))
+	t.Cleanup(server.Close)
+
+	handler := newToolCallLogRelayTestHandler(t)
+	cacheToolCallLogTestDestination(t, handler, testLogOrganizationID, testLogProjectID, server.URL, nil, true)
+
+	// Resource attributes carry the deployment, so one project's batch can
+	// span several. Stamping the whole export with the first row's resource
+	// would misattribute the rest.
+	first := toolCallLogTestRecord("deploy-a", testLogOrganizationID, testLogProjectID, "tool_call", nil)
+	first.SetResourceAttributesJson(`{"service.name":"gram-server","gram.deployment.id":"deployment-a"}`)
+	second := toolCallLogTestRecord("deploy-b", testLogOrganizationID, testLogProjectID, "tool_call", nil)
+	second.SetResourceAttributesJson(`{"service.name":"gram-server","gram.deployment.id":"deployment-b"}`)
+
+	messages, failures := toolCallLogRelayTestMessages(first, second)
+	require.NoError(t, handler.handleBatch(t.Context(), messages))
+	for _, failure := range failures {
+		require.NoError(t, failure)
+	}
+
+	requests := capture.snapshot()
+	require.Len(t, requests, 1)
+	resourceLogs := requests[0].request.GetResourceLogs()
+	require.Len(t, resourceLogs, 2)
+
+	deploymentByBody := make(map[string]string, 2)
+	for _, resourceLog := range resourceLogs {
+		var deployment string
+		for _, keyValue := range resourceLog.GetResource().GetAttributes() {
+			if keyValue.GetKey() == "gram.deployment.id" {
+				deployment = keyValue.GetValue().GetStringValue()
+			}
+		}
+		for _, scopeLogs := range resourceLog.GetScopeLogs() {
+			for _, record := range scopeLogs.GetLogRecords() {
+				deploymentByBody[record.GetBody().GetStringValue()] = deployment
+			}
+		}
+	}
+	require.Equal(t, map[string]string{
+		"deploy-a": "deployment-a",
+		"deploy-b": "deployment-b",
+	}, deploymentByBody)
 }
 
 func TestToolCallLogRelayHandlerSkipsProjectsWithoutARoute(t *testing.T) {

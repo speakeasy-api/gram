@@ -177,6 +177,7 @@ type VisualSource = {
 type ExportMapDescriptionLinks = {
   eventFeed: string;
   riskPolicies: (project: ProjectEntry) => string;
+  toolLogs: (project: ProjectEntry) => string;
 };
 
 function visualSource(
@@ -189,6 +190,7 @@ function visualSource(
     detail: renderDataSourceDescription(route.dataSource, {
       eventFeed: links?.eventFeed,
       riskPolicies: links?.riskPolicies(project),
+      toolLogs: links?.toolLogs(project),
     }),
   };
 }
@@ -326,6 +328,9 @@ function DataExportsInner(): JSX.Element {
   );
   const defaultProject =
     projects.find((project) => project.slug === "default") ?? projects[0];
+  // Tool Logs is per-project, so the link follows the project being
+  // configured when the sheet has one; the unscoped picker falls back.
+  const toolLogsProject = configureState?.project ?? defaultProject;
   const linkedDataSourceOptions = DATA_SOURCE_OPTIONS.map((source) => ({
     ...source,
     description: renderDataSourceDescription(source.value, {
@@ -333,8 +338,8 @@ function DataExportsInner(): JSX.Element {
       riskPolicies: defaultProject
         ? `/${organization.slug}/projects/${defaultProject.slug}/risk-policies?tab=policies`
         : undefined,
-      toolLogs: defaultProject
-        ? `/${organization.slug}/projects/${defaultProject.slug}/logs`
+      toolLogs: toolLogsProject
+        ? `/${organization.slug}/projects/${toolLogsProject.slug}/logs`
         : undefined,
     }),
   }));
@@ -572,6 +577,8 @@ function DataExportsInner(): JSX.Element {
             eventFeed: `/${organization.slug}/data/event-feed`,
             riskPolicies: (project) =>
               `/${organization.slug}/projects/${project.slug}/risk-policies?tab=policies`,
+            toolLogs: (project) =>
+              `/${organization.slug}/projects/${project.slug}/logs`,
           }}
           mutating={mutating}
           onConfigure={(project, route) =>

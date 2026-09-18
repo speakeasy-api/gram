@@ -296,27 +296,41 @@ func buildToolCallLogRelayExport(
 	observedAt time.Time,
 	includeSensitiveData bool,
 ) (*collectorlogsv1.ExportLogsServiceRequest, error) {
-	// Resource attributes are per-row in telemetry_logs but constant across a
-	// project's tool call rows (service name and version), so the first row
-	// supplies the resource for the whole export rather than fragmenting it
-	// into one ResourceLogs per record.
-	resource, err := toolCallLogResource(messages[0].record)
-	if err != nil {
-		return nil, err
+	type toolCallLogResourceGroup struct {
+		resource *resourcev1.Resource
+		records  []*logsv1.LogRecord
 	}
 
-	records := make([]*logsv1.LogRecord, len(messages))
-	for i, message := range messages {
+	// Resource attributes are per-row in telemetry_logs and carry the
+	// deployment, so one batch can legitimately span several. Grouping by the
+	// stored payload keeps each record under the resource it was written with
+	// instead of stamping the whole export with the first row's.
+	indexes := make(map[string]int)
+	groups := make([]toolCallLogResourceGroup, 0, 1)
+	for _, message := range messages {
 		record, err := toolCallLogRecord(message.record, observedAt)
 		if err != nil {
 			return nil, err
 		}
-		records[i] = record
+
+		key := message.record.GetResourceAttributesJson()
+		index, ok := indexes[key]
+		if !ok {
+			resource, err := toolCallLogResource(message.record)
+			if err != nil {
+				return nil, err
+			}
+			index = len(groups)
+			indexes[key] = index
+			groups = append(groups, toolCallLogResourceGroup{resource: resource, records: nil})
+		}
+		groups[index].records = append(groups[index].records, record)
 	}
 
-	request := &collectorlogsv1.ExportLogsServiceRequest{
-		ResourceLogs: []*logsv1.ResourceLogs{{
-			Resource: resource,
+	resourceLogs := make([]*logsv1.ResourceLogs, len(groups))
+	for i, group := range groups {
+		resourceLogs[i] = &logsv1.ResourceLogs{
+			Resource: group.resource,
 			ScopeLogs: []*logsv1.ScopeLogs{{
 				Scope: &commonv1.InstrumentationScope{
 					Name:                   toolCallLogScopeName,
@@ -324,12 +338,14 @@ func buildToolCallLogRelayExport(
 					Attributes:             nil,
 					DroppedAttributesCount: 0,
 				},
-				LogRecords: records,
+				LogRecords: group.records,
 				SchemaUrl:  "",
 			}},
 			SchemaUrl: "",
-		}},
+		}
 	}
+
+	request := &collectorlogsv1.ExportLogsServiceRequest{ResourceLogs: resourceLogs}
 	if !includeSensitiveData {
 		redactSensitiveOTLP(request)
 	}
@@ -407,7 +423,12 @@ func decodeTelemetryAttributes(payload string) (map[string]any, error) {
 		return make(map[string]any), nil
 	}
 	attributes := make(map[string]any)
-	if err := json.Unmarshal([]byte(payload), &attributes); err != nil {
+	decoder := json.NewDecoder(strings.NewReader(payload))
+	// Nanosecond timestamps run to ~1.8e18, past the 2^53 where float64 stops
+	// representing integers exactly, so decoding through the default float64
+	// would silently round them. json.Number defers the conversion.
+	decoder.UseNumber()
+	if err := decoder.Decode(&attributes); err != nil {
 		return nil, fmt.Errorf("unmarshal telemetry attributes: %w", err)
 	}
 	return attributes, nil
@@ -436,9 +457,9 @@ func telemetryKeyValues(attributes map[string]any) []*commonv1.KeyValue {
 }
 
 // telemetryAnyValue converts one decoded JSON attribute value into OTLP.
-// Unmarshalling into `any` yields only these shapes, so the default arm is
-// unreachable for well-formed input and exists to keep an unexpected value
-// representable rather than dropped.
+// Decoding into `any` with UseNumber yields only these shapes, so the default
+// arm is unreachable for well-formed input and exists to keep an unexpected
+// value representable rather than dropped.
 func telemetryAnyValue(value any) *commonv1.AnyValue {
 	switch typed := value.(type) {
 	case nil:
@@ -447,14 +468,18 @@ func telemetryAnyValue(value any) *commonv1.AnyValue {
 		return &commonv1.AnyValue{Value: &commonv1.AnyValue_StringValue{StringValue: typed}}
 	case bool:
 		return &commonv1.AnyValue{Value: &commonv1.AnyValue_BoolValue{BoolValue: typed}}
-	case float64:
-		// Attributes written as Go integers round-trip through JSON as
-		// float64. Emitting them as OTLP doubles would render timestamps and
-		// status codes as 1.6e+18, so whole numbers go back out as integers.
-		if typed == float64(int64(typed)) {
-			return &commonv1.AnyValue{Value: &commonv1.AnyValue_IntValue{IntValue: int64(typed)}}
+	case json.Number:
+		// Integers go back out as integers: emitting them as OTLP doubles
+		// would render a status code as 5e+02 and a timestamp as 1.8e+18.
+		if integer, err := typed.Int64(); err == nil {
+			return &commonv1.AnyValue{Value: &commonv1.AnyValue_IntValue{IntValue: integer}}
 		}
-		return &commonv1.AnyValue{Value: &commonv1.AnyValue_DoubleValue{DoubleValue: typed}}
+		if float, err := typed.Float64(); err == nil {
+			return &commonv1.AnyValue{Value: &commonv1.AnyValue_DoubleValue{DoubleValue: float}}
+		}
+		// Neither form fits, so the literal travels as written rather than
+		// being rounded into one that does.
+		return &commonv1.AnyValue{Value: &commonv1.AnyValue_StringValue{StringValue: typed.String()}}
 	case []any:
 		items := make([]*commonv1.AnyValue, len(typed))
 		for i, item := range typed {
