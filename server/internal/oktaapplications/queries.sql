@@ -337,6 +337,14 @@ SET status = @status,
 WHERE id = @id
   AND organization_id = @organization_id;
 
+-- Test fixture: holds the connection row without blocking FK checks, so a
+-- test can queue Run and revoke behind it in a chosen order.
+-- name: HoldSyncConnectionFixture :one
+SELECT id
+FROM identity_provider_connections
+WHERE id = @connection_id
+FOR NO KEY UPDATE;
+
 -- Close only attempts covered by this terminal activity failure. Retrying this
 -- statement cannot rewrite a finished run or touch a subsequently started run.
 -- name: FinalizeInterruptedReconcileRuns :execrows

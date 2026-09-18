@@ -204,29 +204,13 @@ func (s *Syncer) Run(ctx context.Context, connectionID uuid.UUID, final bool) er
 	}
 	logger = logger.With(attr.SlogOrganizationID(target.OrganizationID))
 
-	interrupted, err := s.repo.FailInterruptedReconcileRuns(ctx, repo.FailInterruptedReconcileRunsParams{
-		OrganizationID:               target.OrganizationID,
-		IdentityProviderConnectionID: target.ConnectionID,
-	})
+	run, opened, err := s.openRun(ctx, target)
 	if err != nil {
-		return retryable(fmt.Errorf("close interrupted runs: %w", err))
+		return retryable(err)
 	}
-	for range interrupted {
-		s.metrics.record(ctx, reasonInterrupted, false)
-	}
-	if _, err := s.repo.PruneReconcileRuns(ctx, repo.PruneReconcileRunsParams{
-		OrganizationID:               target.OrganizationID,
-		IdentityProviderConnectionID: target.ConnectionID,
-		Before:                       pgtype.Timestamptz{Time: time.Now().Add(-runRetention).UTC(), Valid: true, InfinityModifier: pgtype.Finite},
-	}); err != nil {
-		return retryable(fmt.Errorf("prune reconcile runs: %w", err))
-	}
-	run, err := s.repo.CreateReconcileRun(ctx, repo.CreateReconcileRunParams{
-		OrganizationID:               target.OrganizationID,
-		IdentityProviderConnectionID: target.ConnectionID,
-	})
-	if err != nil {
-		return retryable(fmt.Errorf("create reconcile run: %w", err))
+	if !opened {
+		logger.InfoContext(ctx, "okta application sync skipped: connection revoked before the run opened")
+		return nil
 	}
 	logger = logger.With(attr.SlogOktaReconcileRunID(run.ID.String()))
 
@@ -245,7 +229,7 @@ func (s *Syncer) Run(ctx context.Context, connectionID uuid.UUID, final bool) er
 			s.clients.Forget(target.RemoteSessionClientID)
 		}
 		if retry && !final {
-			if _, ferr := s.finish(ctx, s.repo, run, snap, emptyDiff(), "failed", reason); ferr != nil {
+			if _, ferr := s.finish(ctx, s.repo, run, snap, emptyDiff(), "failed", reason); ferr != nil && !errors.Is(ferr, pgx.ErrNoRows) {
 				logger.ErrorContext(ctx, "record failed run", attr.SlogError(ferr))
 			}
 			s.metrics.record(ctx, reason, snap.Truncated())
@@ -285,6 +269,58 @@ func (s *Syncer) Run(ctx context.Context, connectionID uuid.UUID, final bool) er
 		attr.SlogOktaApplicationsTruncated(snap.Truncated()),
 	)
 	return nil
+}
+
+// openRun closes interrupted runs, prunes history, and inserts the new run
+// under the connection row lock revoke takes, so a revoke that lands after
+// GetSyncTarget cannot be followed by a run row it never deleted.
+func (s *Syncer) openRun(ctx context.Context, target repo.GetSyncTargetRow) (repo.OktaApplicationReconcileRun, bool, error) {
+	var none repo.OktaApplicationReconcileRun
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return none, false, fmt.Errorf("begin open run: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	q := s.repo.WithTx(tx)
+
+	_, err = q.LockSyncConnection(ctx, repo.LockSyncConnectionParams{
+		ConnectionID:   target.ConnectionID,
+		OrganizationID: target.OrganizationID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return none, false, nil
+	}
+	if err != nil {
+		return none, false, fmt.Errorf("lock connection: %w", err)
+	}
+	interrupted, err := q.FailInterruptedReconcileRuns(ctx, repo.FailInterruptedReconcileRunsParams{
+		OrganizationID:               target.OrganizationID,
+		IdentityProviderConnectionID: target.ConnectionID,
+	})
+	if err != nil {
+		return none, false, fmt.Errorf("close interrupted runs: %w", err)
+	}
+	if _, err := q.PruneReconcileRuns(ctx, repo.PruneReconcileRunsParams{
+		OrganizationID:               target.OrganizationID,
+		IdentityProviderConnectionID: target.ConnectionID,
+		Before:                       pgtype.Timestamptz{Time: time.Now().Add(-runRetention).UTC(), Valid: true, InfinityModifier: pgtype.Finite},
+	}); err != nil {
+		return none, false, fmt.Errorf("prune reconcile runs: %w", err)
+	}
+	run, err := q.CreateReconcileRun(ctx, repo.CreateReconcileRunParams{
+		OrganizationID:               target.OrganizationID,
+		IdentityProviderConnectionID: target.ConnectionID,
+	})
+	if err != nil {
+		return none, false, fmt.Errorf("create reconcile run: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return none, false, fmt.Errorf("commit open run: %w", err)
+	}
+	for range interrupted {
+		s.metrics.record(ctx, reasonInterrupted, false)
+	}
+	return run, true, nil
 }
 
 func (s *Syncer) client(target repo.GetSyncTargetRow) (okta.Client, error) {
@@ -515,7 +551,8 @@ func listAppGroups(ctx context.Context, client okta.Client, appID string) ([]okt
 // apply writes the snapshot in one transaction under the connection row lock:
 // upsert what was seen, remove what was not, record the run, and advance the
 // watermark to the run's start. A run that started before an already-applied
-// one is superseded; a connection revoked meanwhile discards the run.
+// one, or whose row was closed by finalization, is superseded; a connection
+// revoked meanwhile discards the run.
 func (s *Syncer) apply(ctx context.Context, target repo.GetSyncTargetRow, run repo.OktaApplicationReconcileRun, snap Snapshot) (Diff, error) {
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -646,6 +683,9 @@ func (s *Syncer) apply(ctx context.Context, target repo.GetSyncTargetRow, run re
 	}
 
 	if _, err := s.finish(ctx, q, run, snap, diff, "succeeded", ""); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return Diff{}, errSuperseded
+		}
 		return Diff{}, err
 	}
 	advanced, err := q.MarkApplicationsSynced(ctx, repo.MarkApplicationsSyncedParams{
@@ -685,12 +725,18 @@ func chunks[T any](items []T, size int) func(yield func([]T) bool) {
 }
 
 // FinalizeFailure fences attempts still executing after Temporal has exhausted
-// retries. cutoff is fixed by the workflow when it observes terminal failure,
-// not by this retryable activity, so retries cannot cover newer attempts.
-func (s *Syncer) FinalizeFailure(ctx context.Context, connectionID uuid.UUID, cutoff time.Time) error {
+// retries. Both times are fixed by the workflow, not by this retryable
+// activity: cutoff (the observed failure) bounds which running rows close,
+// startedAt (recorded before the first attempt) is as far as the watermark
+// moves, so a sync requested during the attempt stays due.
+func (s *Syncer) FinalizeFailure(ctx context.Context, connectionID uuid.UUID, startedAt, cutoff time.Time) error {
 	// Match PostgreSQL timestamp precision so a retried payload with nanoseconds
 	// compares equal to the watermark written by its first attempt.
+	startedAt = startedAt.UTC().Truncate(time.Microsecond)
 	cutoff = cutoff.UTC().Truncate(time.Microsecond)
+	if cutoff.Before(startedAt) {
+		cutoff = startedAt
+	}
 	target, err := s.repo.GetSyncTarget(ctx, connectionID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
@@ -720,7 +766,7 @@ func (s *Syncer) FinalizeFailure(ctx context.Context, connectionID uuid.UUID, cu
 	if err != nil {
 		return fmt.Errorf("read finalization watermark: %w", err)
 	}
-	if syncedAt.Valid && !syncedAt.Time.Before(cutoff) {
+	if syncedAt.Valid && !syncedAt.Time.Before(startedAt) {
 		return nil
 	}
 	if _, err := q.FinalizeInterruptedReconcileRuns(ctx, repo.FinalizeInterruptedReconcileRunsParams{
@@ -729,9 +775,12 @@ func (s *Syncer) FinalizeFailure(ctx context.Context, connectionID uuid.UUID, cu
 		return fmt.Errorf("close terminal attempts: %w", err)
 	}
 	if _, err := q.MarkApplicationsSynced(ctx, repo.MarkApplicationsSyncedParams{
-		OrganizationID: target.OrganizationID, IdentityProviderConnectionID: connectionID, SyncedAt: optionalTime(cutoff),
+		OrganizationID: target.OrganizationID, IdentityProviderConnectionID: connectionID, SyncedAt: optionalTime(startedAt),
 	}); err != nil {
 		return fmt.Errorf("advance terminal watermark: %w", err)
 	}
-	return tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit failure finalization: %w", err)
+	}
+	return nil
 }

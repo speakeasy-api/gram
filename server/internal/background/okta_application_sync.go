@@ -137,6 +137,7 @@ func OktaApplicationSyncWorkflow(ctx workflow.Context, connectionID string) erro
 	})
 
 	var a *Activities
+	startedAt := workflow.Now(ctx)
 	if err := workflow.ExecuteActivity(ctx, a.RunOktaApplicationSync, connectionID).Get(ctx, nil); err != nil {
 		// Activity timeout/worker death cannot reliably execute activity-local
 		// cleanup. Cancellation also needs a fresh context for durable cleanup.
@@ -148,7 +149,7 @@ func OktaApplicationSyncWorkflow(ctx workflow.Context, connectionID string) erro
 			RetryPolicy:            &temporal.RetryPolicy{InitialInterval: time.Second, MaximumInterval: time.Minute},
 		})
 		if finalErr := workflow.ExecuteActivity(finalCtx, a.FinalizeOktaApplicationSync, activities.FinalizeOktaApplicationSyncInput{
-			ConnectionID: connectionID, Cutoff: workflow.Now(ctx),
+			ConnectionID: connectionID, StartedAt: startedAt, Cutoff: workflow.Now(ctx),
 		}).Get(finalCtx, nil); finalErr != nil {
 			return fmt.Errorf("finalize okta application sync: %w", errors.Join(err, finalErr))
 		}

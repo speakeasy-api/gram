@@ -442,6 +442,22 @@ func (q *Queries) GetSyncTarget(ctx context.Context, connectionID uuid.UUID) (Ge
 	return i, err
 }
 
+const holdSyncConnectionFixture = `-- name: HoldSyncConnectionFixture :one
+SELECT id
+FROM identity_provider_connections
+WHERE id = $1
+FOR NO KEY UPDATE
+`
+
+// Test fixture: holds the connection row without blocking FK checks, so a
+// test can queue Run and revoke behind it in a chosen order.
+func (q *Queries) HoldSyncConnectionFixture(ctx context.Context, connectionID uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, holdSyncConnectionFixture, connectionID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const listApplications = `-- name: ListApplications :many
 SELECT
     a.id, a.organization_id, a.identity_provider_connection_id, a.okta_app_id, a.label, a.name, a.sign_on_mode, a.status, a.features, a.okta_created_at, a.okta_last_updated_at, a.first_seen_at, a.last_seen_at, a.removed_at, a.created_at, a.updated_at

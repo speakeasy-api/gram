@@ -222,21 +222,28 @@ func TestOktaApplicationSyncWorkflowFinalizesTerminalTimeout(t *testing.T) {
 	env := suite.NewTestWorkflowEnvironment()
 	id := "11111111-1111-1111-1111-111111111111"
 	var attempts, finalized int
-	var cutoff time.Time
-	env.RegisterActivityWithOptions(func(context.Context, string) error {
+	var first activities.FinalizeOktaApplicationSyncInput
+	var firstAttemptAt time.Time
+	env.RegisterActivityWithOptions(func(ctx context.Context, _ string) error {
 		attempts++
+		if attempts == 1 {
+			firstAttemptAt = activity.GetInfo(ctx).ScheduledTime
+		}
 		return temporal.NewTimeoutError(enums.TIMEOUT_TYPE_START_TO_CLOSE, nil)
 	}, activity.RegisterOptions{Name: "RunOktaApplicationSync"})
 	env.RegisterActivityWithOptions(func(ctx context.Context, input activities.FinalizeOktaApplicationSyncInput) error {
 		require.NoError(t, ctx.Err())
 		require.Equal(t, id, input.ConnectionID)
+		require.False(t, input.StartedAt.IsZero())
 		require.False(t, input.Cutoff.IsZero())
+		require.False(t, input.StartedAt.After(firstAttemptAt), "the watermark bound precedes the first attempt")
+		require.True(t, input.Cutoff.After(input.StartedAt))
 		finalized++
 		if finalized == 1 {
-			cutoff = input.Cutoff
+			first = input
 			return errors.New("transient finalization failure")
 		}
-		require.Equal(t, cutoff, input.Cutoff, "retries must not move the finalization fence")
+		require.Equal(t, first, input, "retries must not move the finalization fence")
 		return nil
 	}, activity.RegisterOptions{Name: "FinalizeOktaApplicationSync"})
 	env.ExecuteWorkflow(OktaApplicationSyncWorkflow, id)
