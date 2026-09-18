@@ -21,17 +21,29 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 )
 
-// SupportedGrantTypes / SupportedResponseTypes / SupportedAuthMethods /
-// SupportedCodeChallengeMethods are the OAuth values the user-session AS
-// supports. Mirrored into the RFC 8414 metadata document by
-// mcp.HandleGetAuthorizationServer; enforced on the /register and
-// /authorize handlers by the typed request Validate methods.
 var (
-	SupportedGrantTypes = []string{
+	// RegistrableGrantTypes is what a self-registering client may claim in a
+	// /register request. It is not what this authorization server advertises:
+	// mcp.HandleGetAuthorizationServer builds the RFC 8414 grant list per
+	// endpoint, so a grant can be claimable here without being advertised, and
+	// the reverse.
+	//
+	// jwt-bearer is claimable because the ID-JAG exchange authenticates a
+	// registered client. The workload grant shares that grant_type but takes
+	// no client at all: a request presenting client credentials is always
+	// handled as ID-JAG, so claiming jwt-bearer here grants nothing on the
+	// workload path.
+	RegistrableGrantTypes = []string{
 		oauthwire.GrantTypeAuthorizationCode,
 		oauthwire.GrantTypeRefreshToken,
 		oauthwire.GrantTypeJWTBearer,
 	}
+
+	// SupportedResponseTypes, SupportedAuthMethods and
+	// SupportedCodeChallengeMethods are the OAuth values the user-session AS
+	// supports. Mirrored into the RFC 8414 metadata document by
+	// mcp.HandleGetAuthorizationServer; enforced on the /register and
+	// /authorize handlers by the typed request Validate methods.
 	SupportedResponseTypes = []string{oauthwire.ResponseTypeCode}
 
 	// SupportedAuthMethods is the user-session AS's own accepted
@@ -125,6 +137,10 @@ func (r *RegistrationRequest) Validate(supportedGrantTypes, supportedAuthMethods
 			return fmt.Errorf("validate redirect_uri: %w", err)
 		}
 	}
+	// An unrecognised grant_type is refused rather than dropped. RFC 7591 §2
+	// would allow dropping it, but a client that believes it registered a
+	// grant it was never given fails later at the token endpoint, with nothing
+	// pointing back at registration.
 	for _, gt := range r.GrantTypes {
 		if !slices.Contains(supportedGrantTypes, gt) {
 			return &oauthwire.Error{Code: "invalid_client_metadata", Description: fmt.Sprintf("unsupported grant_type %q", gt)}

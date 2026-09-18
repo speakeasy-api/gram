@@ -103,7 +103,7 @@ func (s *Service) ServeRegister(w http.ResponseWriter, r *http.Request, endpoint
 	}
 
 	req.SetDefaults()
-	if err := req.Validate(usersessions.SupportedGrantTypes, usersessions.SupportedAuthMethods); err != nil {
+	if err := req.Validate(usersessions.RegistrableGrantTypes, usersessions.SupportedAuthMethods); err != nil {
 		if oauthErr, ok := errors.AsType[*oauthwire.Error](err); ok {
 			return writeDCRError(ctx, w, logger, oauthErr.Code, oauthErr.Description)
 		}
