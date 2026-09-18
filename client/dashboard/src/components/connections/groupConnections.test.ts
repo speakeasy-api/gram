@@ -47,6 +47,53 @@ function session(overrides: Partial<UserSession> = {}) {
 }
 
 describe("groupConnections", () => {
+  it("files workload sessions under their workload, apart from people", () => {
+    const workload = {
+      workloadIssuerId: "11111111-1111-4111-8111-111111111111",
+      externalSubject: "repo:acme/payments-api:ref:refs/heads/main",
+      workloadIssuerName: "GitHub Actions",
+      agentId: "agent-1",
+      agentName: "Deploy bot",
+      agentStatus: "active" as const,
+      admissions: [],
+    };
+    const subjectUrn = `workload:${workload.workloadIssuerId}:${workload.externalSubject}`;
+    const groups = groupConnections(
+      [
+        session({
+          id: "w-1",
+          subjectUrn,
+          subjectType: "workload",
+          // No display name, so the assertion below exercises the workload
+          // label branch rather than passing through subjectDisplayName.
+          subjectDisplayName: undefined,
+          workload,
+        }),
+        session({
+          id: "w-2",
+          subjectUrn,
+          subjectType: "workload",
+          // No display name, so the assertion below exercises the workload
+          // label branch rather than passing through subjectDisplayName.
+          subjectDisplayName: undefined,
+          workload,
+        }),
+        session({ id: "u-1" }),
+      ],
+      "subject",
+      { now: NOW },
+    );
+
+    const workloadGroup = groups.find((group) => group.key === subjectUrn);
+    expect(workloadGroup?.label).toBe(workload.externalSubject);
+    expect(workloadGroup?.workload).toEqual(workload);
+    expect(workloadGroup?.identity).toBeUndefined();
+    expect(workloadGroup?.revocableIds).toEqual(["w-1", "w-2"]);
+
+    const personGroup = groups.find((group) => group.key === "user:someone");
+    expect(personGroup?.workload).toBeUndefined();
+  });
+
   // The credential kind reaches an agent row from whichever source the caller
   // has: the MCP server tab hands over registration records, while the
   // organization and employee pages pass sessions alone.

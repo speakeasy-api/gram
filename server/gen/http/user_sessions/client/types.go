@@ -874,6 +874,10 @@ type UserSessionResponseBody struct {
 	// tools. A session can have several: an issuer may have more than one
 	// remote_session_client attached.
 	Upstreams []*UserSessionUpstreamResponseBody `form:"upstreams,omitempty" json:"upstreams,omitempty" xml:"upstreams,omitempty"`
+	// Set only when subject_type is 'workload': the external issuer that vouched
+	// for the machine, the subject it asserted, and the agent the workload
+	// inherits its authority from.
+	Workload *UserSessionWorkloadResponseBody `form:"workload,omitempty" json:"workload,omitempty" xml:"workload,omitempty"`
 }
 
 // UserSessionUpstreamResponseBody is used to define fields on response body
@@ -906,6 +910,44 @@ type UserSessionUpstreamResponseBody struct {
 	LastUsedAt *string `form:"last_used_at,omitempty" json:"last_used_at,omitempty" xml:"last_used_at,omitempty"`
 	// Scopes held by this upstream session.
 	Scopes []string `form:"scopes,omitempty" json:"scopes,omitempty" xml:"scopes,omitempty"`
+}
+
+// UserSessionWorkloadResponseBody is used to define fields on response body
+// types.
+type UserSessionWorkloadResponseBody struct {
+	// The workload_issuers row that vouched for the workload.
+	WorkloadIssuerID *string `form:"workload_issuer_id,omitempty" json:"workload_issuer_id,omitempty" xml:"workload_issuer_id,omitempty"`
+	// The sub claim the workload issuer asserted, exactly as minted. Together with
+	// workload_issuer_id this is the workload's identity.
+	ExternalSubject *string `form:"external_subject,omitempty" json:"external_subject,omitempty" xml:"external_subject,omitempty"`
+	// The operator-chosen name of the workload issuer. Null when the issuer has
+	// been deleted or belongs to another project.
+	WorkloadIssuerName *string `form:"workload_issuer_name,omitempty" json:"workload_issuer_name,omitempty" xml:"workload_issuer_name,omitempty"`
+	// The workload issuer's issuer identifier (its iss). Null under the same
+	// conditions as workload_issuer_name.
+	WorkloadIssuerURL *string `form:"workload_issuer_url,omitempty" json:"workload_issuer_url,omitempty" xml:"workload_issuer_url,omitempty"`
+	// The agent this workload is assigned to, whose policy it inherits. Null when
+	// the workload has no live assignment.
+	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
+	// Name of the assigned agent.
+	AgentName *string `form:"agent_name,omitempty" json:"agent_name,omitempty" xml:"agent_name,omitempty"`
+	// Lifecycle state of the assigned agent.
+	AgentStatus *string `form:"agent_status,omitempty" json:"agent_status,omitempty" xml:"agent_status,omitempty"`
+	// Every admission currently letting this workload in, from this project and
+	// from the organization. Withdrawing one leaves the others admitting it. Empty
+	// when nothing admits the workload any more.
+	Admissions []*UserSessionWorkloadAdmissionResponseBody `form:"admissions,omitempty" json:"admissions,omitempty" xml:"admissions,omitempty"`
+}
+
+// UserSessionWorkloadAdmissionResponseBody is used to define fields on
+// response body types.
+type UserSessionWorkloadAdmissionResponseBody struct {
+	// The workload_identity_admissions row.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Whether the admission belongs to this project or to the whole organization.
+	Tier *string `form:"tier,omitempty" json:"tier,omitempty" xml:"tier,omitempty"`
+	// The operator-chosen label for the admission.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 }
 
 // UserSessionFacetOptionResponseBody is used to define fields on response body
@@ -2690,6 +2732,11 @@ func ValidateUserSessionResponseBody(body *UserSessionResponseBody) (err error) 
 			}
 		}
 	}
+	if body.Workload != nil {
+		if err2 := ValidateUserSessionWorkloadResponseBody(body.Workload); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
 	return
 }
 
@@ -2737,6 +2784,62 @@ func ValidateUserSessionUpstreamResponseBody(body *UserSessionUpstreamResponseBo
 	}
 	if body.LastUsedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_used_at", *body.LastUsedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateUserSessionWorkloadResponseBody runs the validations defined on
+// UserSessionWorkloadResponseBody
+func ValidateUserSessionWorkloadResponseBody(body *UserSessionWorkloadResponseBody) (err error) {
+	if body.WorkloadIssuerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("workload_issuer_id", "body"))
+	}
+	if body.ExternalSubject == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("external_subject", "body"))
+	}
+	if body.Admissions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("admissions", "body"))
+	}
+	if body.WorkloadIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.workload_issuer_id", *body.WorkloadIssuerID, goa.FormatUUID))
+	}
+	if body.WorkloadIssuerURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.workload_issuer_url", *body.WorkloadIssuerURL, goa.FormatURI))
+	}
+	if body.AgentID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
+	}
+	if body.AgentStatus != nil {
+		if !(*body.AgentStatus == "active" || *body.AgentStatus == "suspended" || *body.AgentStatus == "revoked") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.agent_status", *body.AgentStatus, []any{"active", "suspended", "revoked"}))
+		}
+	}
+	for _, e := range body.Admissions {
+		if e != nil {
+			if err2 := ValidateUserSessionWorkloadAdmissionResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateUserSessionWorkloadAdmissionResponseBody runs the validations
+// defined on UserSessionWorkloadAdmissionResponseBody
+func ValidateUserSessionWorkloadAdmissionResponseBody(body *UserSessionWorkloadAdmissionResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Tier == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tier", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.Tier != nil {
+		if !(*body.Tier == "project" || *body.Tier == "organization") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.tier", *body.Tier, []any{"project", "organization"}))
+		}
 	}
 	return
 }

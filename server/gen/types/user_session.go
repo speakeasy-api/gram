@@ -68,4 +68,8 @@ type UserSession struct {
 	// tools. A session can have several: an issuer may have more than one
 	// remote_session_client attached.
 	Upstreams []*UserSessionUpstream
+	// Set only when subject_type is 'workload': the external issuer that vouched
+	// for the machine, the subject it asserted, and the agent the workload
+	// inherits its authority from.
+	Workload *UserSessionWorkload
 }

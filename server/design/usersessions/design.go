@@ -190,8 +190,55 @@ var UserSession = Type("UserSession", func() {
 		Format(FormatDateTime)
 	})
 	Attribute("upstreams", ArrayOf(UserSessionUpstream), "The upstream providers Gram holds tokens for on this session's subject, through the same issuer. Empty when the session reaches only Gram-native tools. A session can have several: an issuer may have more than one remote_session_client attached.")
+	Attribute("workload", UserSessionWorkload, "Set only when subject_type is 'workload': the external issuer that vouched for the machine, the subject it asserted, and the agent the workload inherits its authority from.")
 
 	Required("id", "user_session_issuer_id", "subject_urn", "jti", "refresh_expires_at", "expires_at", "created_at", "updated_at", "issuer_slug", "subject_type", "upstreams")
+})
+
+// UserSessionWorkload labels a workload session. A workload is identified by
+// the pair (workload issuer, external subject); the subject alone names nothing,
+// since every issuer mints its own.
+var UserSessionWorkload = Type("UserSessionWorkload", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("The workload behind a workload session.")
+
+	Attribute("workload_issuer_id", String, "The workload_issuers row that vouched for the workload.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("external_subject", String, "The sub claim the workload issuer asserted, exactly as minted. Together with workload_issuer_id this is the workload's identity.")
+	Attribute("workload_issuer_name", String, "The operator-chosen name of the workload issuer. Null when the issuer has been deleted or belongs to another project.")
+	Attribute("workload_issuer_url", String, "The workload issuer's issuer identifier (its iss). Null under the same conditions as workload_issuer_name.", func() {
+		Format(FormatURI)
+	})
+	Attribute("agent_id", String, "The agent this workload is assigned to, whose policy it inherits. Null when the workload has no live assignment.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("agent_name", String, "Name of the assigned agent.")
+	Attribute("agent_status", String, "Lifecycle state of the assigned agent.", func() {
+		Enum("active", "suspended", "revoked")
+	})
+	Attribute("admissions", ArrayOf(UserSessionWorkloadAdmission), "Every admission currently letting this workload in, from this project and from the organization. Withdrawing one leaves the others admitting it. Empty when nothing admits the workload any more.")
+
+	Required("workload_issuer_id", "external_subject", "admissions")
+})
+
+// UserSessionWorkloadAdmission is one admission that lets a workload exchange
+// its platform token for a Gram session.
+var UserSessionWorkloadAdmission = Type("UserSessionWorkloadAdmission", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("An admission that lets a workload in.")
+
+	Attribute("id", String, "The workload_identity_admissions row.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("tier", String, "Whether the admission belongs to this project or to the whole organization.", func() {
+		Enum("project", "organization")
+	})
+	Attribute("name", String, "The operator-chosen label for the admission.")
+
+	Required("id", "tier")
 })
 
 // UserSessionUpstream is the outbound leg of a brokered connection. A
