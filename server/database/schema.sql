@@ -3150,6 +3150,18 @@ CREATE TABLE IF NOT EXISTS trusted_issuer_sessions (
   offline_access_refused_at timestamptz,
   -- Non-secret configuration fingerprint used to invalidate refusal suppression.
   offline_access_request_config_hash TEXT,
+  -- Claims never expire: an ambiguous rotating POST cannot be replayed.
+  -- Nullable during expansion; readers treat legacy NULL as generation 1.
+  credential_generation bigint DEFAULT 1,
+  refresh_claim_id uuid,
+  upstream_subject_encrypted TEXT,
+  nonce_encrypted TEXT,
+  credential_config_hash TEXT,
+  observation_status TEXT,
+  observed_at timestamptz,
+  credential_obtained_at timestamptz,
+  last_refresh_succeeded_at timestamptz,
+  retry_after timestamptz,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -3169,6 +3181,18 @@ CREATE INDEX IF NOT EXISTS trusted_issuer_sessions_organization_id_idx
 ON trusted_issuer_sessions (organization_id);
 CREATE INDEX IF NOT EXISTS trusted_issuer_sessions_project_id_idx
 ON trusted_issuer_sessions (project_id);
+
+-- Independent bounded cleanup scans avoid an expiration/lifecycle OR over all rows.
+CREATE INDEX IF NOT EXISTS trusted_issuer_sessions_assertion_cleanup_idx
+ON trusted_issuer_sessions (identity_assertion_expires_at NULLS FIRST, id)
+WHERE identity_assertion_encrypted IS NOT NULL;
+CREATE INDEX IF NOT EXISTS trusted_issuer_sessions_refresh_cleanup_idx
+ON trusted_issuer_sessions (refresh_expires_at, id)
+WHERE refresh_token_encrypted IS NOT NULL;
+CREATE INDEX IF NOT EXISTS trusted_issuer_sessions_metadata_cleanup_idx
+ON trusted_issuer_sessions (id)
+WHERE identity_assertion_encrypted IS NULL AND refresh_token_encrypted IS NULL
+  AND (upstream_subject_encrypted IS NOT NULL OR nonce_encrypted IS NOT NULL);
 
 -- One live credential per client and human, independent of downstream resources.
 CREATE UNIQUE INDEX IF NOT EXISTS trusted_issuer_sessions_client_subject_key
