@@ -122,7 +122,7 @@ func TestGatewayFailureRejectionLeavesBusyGetAsHTTPResponse(t *testing.T) {
 	require.Nil(t, GatewayFailureRejection(resp))
 }
 
-func TestGatewayFailureRejectionMapsSubstreamFailedPostToRetryableError(t *testing.T) {
+func TestGatewayFailureRejectionMapsSubstreamFailedPostToNonRetryableError(t *testing.T) {
 	t.Parallel()
 
 	resp := tunnelErrorResponseForMethod(wire.TunnelErrorSubstreamFailed, http.MethodPost)
@@ -131,10 +131,10 @@ func TestGatewayFailureRejectionMapsSubstreamFailedPostToRetryableError(t *testi
 	rejection := GatewayFailureRejection(resp)
 	require.NotNil(t, rejection)
 	require.Equal(t, proxy.RejectCodeServerError, rejection.Code)
-	require.Equal(t, "The connection to the MCP server was interrupted. Please retry.", rejection.Message)
+	require.Equal(t, "The connection to the MCP server was interrupted before it responded. The request may have already run.", rejection.Message)
 	require.Equal(t, map[string]any{
 		"code":      "upstream_disconnected",
-		"retryable": true,
+		"retryable": false,
 	}, rejection.Data)
 }
 

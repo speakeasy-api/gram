@@ -117,6 +117,8 @@ func SelectRoute(clientAffinityKey string, candidates []string, exclude map[stri
 // mid-flight because the agent's tunnel session closed. Both are conditions on
 // the customer's side of the tunnel; surfacing them as a bare 502 makes a
 // customer outage indistinguishable from a platform fault in 5xx telemetry.
+// Only the busy case is marked retryable: a broken substream may have already
+// delivered the request to the backend, so replaying it could double-execute.
 // GET and DELETE retain their HTTP response semantics; the gateway supplies
 // their generic body.
 func GatewayFailureRejection(resp *http.Response) *proxy.RejectError {
@@ -140,10 +142,10 @@ func GatewayFailureRejection(resp *http.Response) *proxy.RejectError {
 	case wire.TunnelErrorSubstreamFailed:
 		return &proxy.RejectError{
 			Code:    proxy.RejectCodeServerError,
-			Message: "The connection to the MCP server was interrupted. Please retry.",
+			Message: "The connection to the MCP server was interrupted before it responded. The request may have already run.",
 			Data: map[string]any{
 				"code":      "upstream_disconnected",
-				"retryable": true,
+				"retryable": false,
 			},
 		}
 	default:
