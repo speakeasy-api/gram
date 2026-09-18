@@ -57,7 +57,11 @@ const (
 	chatAnalysisSweepWorkflowID = chatAnalysisSweepScheduleID + "/scheduled"
 	// chatAnalysisSweepInterval is how often the estate is swept for work no
 	// signal ever arrived for and for reservations whose owner died.
-	chatAnalysisSweepInterval   = 15 * time.Minute
+	chatAnalysisSweepInterval = 15 * time.Minute
+
+	// Allow lateness up to one interval minus 1s; skip older missed ticks.
+	chatAnalysisSweepCatchupWindow = chatAnalysisSweepInterval - time.Second
+
 	chatAnalysisSweepRunTimeout = 60 * time.Minute
 	// chatAnalysisPublishPasses bounds how many passes, the first included,
 	// one reserved batch gets while its evaluations keep reporting model
@@ -322,7 +326,8 @@ func AddChatAnalysisSweepSchedule(ctx context.Context, temporalEnv *tenv.Environ
 	}
 
 	_, err := scheduleClient.Create(ctx, client.ScheduleOptions{
-		ID: chatAnalysisSweepScheduleID,
+		CatchupWindow: chatAnalysisSweepCatchupWindow,
+		ID:            chatAnalysisSweepScheduleID,
 		// A tick that overlaps the previous one would re-signal projects the
 		// running sweep is still working through, so a slow sweep skips rather
 		// than doubles.
@@ -336,6 +341,7 @@ func AddChatAnalysisSweepSchedule(ctx context.Context, temporalEnv *tenv.Environ
 			DoUpdate: func(input client.ScheduleUpdateInput) (*client.ScheduleUpdate, error) {
 				input.Description.Schedule.Spec = &spec
 				input.Description.Schedule.Action = action
+				setScheduleCatchup(&input.Description.Schedule, chatAnalysisSweepCatchupWindow)
 				return &client.ScheduleUpdate{Schedule: &input.Description.Schedule, TypedSearchAttributes: nil}, nil
 			},
 		}); err != nil {

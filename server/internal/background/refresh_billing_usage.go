@@ -38,6 +38,11 @@ const (
 	refreshBillingUsageBatchWorstCaseRetryWindow = 28 * time.Minute
 	refreshBillingUsageWorkflowRunTimeout        = 40 * time.Minute
 	refreshBillingUsagesWaitInterval             = 10 * time.Second
+
+	refreshBillingUsageScheduleInterval = time.Hour
+
+	// Allow lateness up to one interval minus 1s; skip older missed ticks.
+	refreshBillingUsageCatchupWindow = refreshBillingUsageScheduleInterval - time.Second
 )
 
 type RefreshBillingUsageInput struct {
@@ -225,12 +230,13 @@ func AddRefreshBillingUsageSchedule(ctx context.Context, temporalEnv *tenv.Envir
 	scheduleID := "v1:refresh-billing-usage-schedule"
 	workflowID := "v1:refresh-billing-usage-schedule/scheduled"
 
-	_, err := temporalEnv.Client().ScheduleClient().Create(ctx, client.ScheduleOptions{
-		ID: scheduleID,
+	_, err := createScheduleWithCatchup(ctx, temporalEnv.Client().ScheduleClient(), client.ScheduleOptions{
+		CatchupWindow: refreshBillingUsageCatchupWindow,
+		ID:            scheduleID,
 		Spec: client.ScheduleSpec{
 			Intervals: []client.ScheduleIntervalSpec{
 				{
-					Every: 1 * time.Hour, // This should run minimum hourly to maintain fresh period usage cache
+					Every: refreshBillingUsageScheduleInterval,
 				},
 			},
 		},
