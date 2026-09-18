@@ -1,4 +1,4 @@
-h1:NalObRCfLsUMd8i+wod3eVgOkYbR8xs2m5n2DJCB8sg=
+h1:d7qRU6xw33Gi+pkmlAzhayGsOnRi40FzCooAC6Z+O/o=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -418,3 +418,4 @@ h1:NalObRCfLsUMd8i+wod3eVgOkYbR8xs2m5n2DJCB8sg=
 20260917200501_identity_provider_connections.sql h1:jtWjsnvoRbzi1XpRW1TAJpPK3pRKQbUwOahF1aajZzE=
 20260918124537_inference_accepted_checkpoint.sql h1:6rOZUoM2Ku856mhkRAAYSS4RzwnbFH6/Zfp2CXNVzWo=
 20260918202010_okta-applications-snapshot.sql h1:Ngerd55h8cij458VkhZKO8YtvmBKJ37cWIFg/bFPsgI=
+20260918203040_okta-resource-connections.sql h1:imUM10KHuUufvUoWz7FIOCG0rXyOwLZ/1OJ1bgYYMBk=
